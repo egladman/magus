@@ -2431,10 +2431,16 @@ shows what it is doing.`,
 			Name:  "pause",
 			Short: "Hold jobs' holders off the machine budget until resumed",
 			Description: "Mark each job paused, so `magus job exec` and the guard refuse its holder's next magus run with one " +
-				"line naming the pause and `magus job resume <job>`. Nothing is preempted: a run already holding the budget " +
-				"finishes. A holder may not pause or resume a job; that is a person's or the orchestrator's. Pausing is how a " +
-				"person gets one job out of a bind without stopping every other.",
-			Usage: "magus job pause <job>... [flags]",
+				"line naming who paused it, why, and `magus job resume <job>`. The pause records its owner (the caller's " +
+				"session, or the person at the terminal) and --reason. While it holds, the read sweep and `magus job prune " +
+				"--all` leave the row alone; past --until the pause lapses and both may end it again. Nothing is preempted: " +
+				"a run already holding the budget finishes. A holder may not pause or resume a job; that is a person's or " +
+				"the orchestrator's. Pausing is how a person gets one job out of a bind without stopping every other.",
+			Flags: []cmdline.Flag{
+				{Name: "reason", Kind: cmdline.String, Doc: "Why the job is paused, which the holder's refusal and the row show (required)"},
+				{Name: "until", Kind: cmdline.String, Doc: "Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds until resumed"},
+			},
+			Usage: "magus job pause <job>... --reason <text> [--until <duration|time>] [flags]",
 		},
 		{
 			Name:  "resume",
@@ -2469,7 +2475,7 @@ shows what it is doing.`,
 		{Comment: "Preview that change", Command: "magus job apply -f job.json --dry-run"},
 		{Comment: "Grade a job's checks in a merged tree", Command: "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{Comment: "See which jobs a prune would end", Command: "magus job prune --dry-run"},
-		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core && magus job resume session-load/core"},
+		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core"},
 	},
 }
 

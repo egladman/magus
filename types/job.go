@@ -827,6 +827,11 @@ type Job struct {
 	// Paused is the unix second a person paused the job, zero while it is not. A claim the
 	// holder already has finishes; exec and the guard refuse its next magus run.
 	Paused int64 `json:"paused,omitzero" yaml:"paused,omitempty"`
+	// PausedBy is who paused the job, PauseReason why, and PausedUntil the unix second the
+	// pause lapses, zero for none (see [Job.PausedAt]). Set with Paused and cleared with it.
+	PausedBy    Origin `json:"paused_by,omitzero"    yaml:"paused_by,omitempty"`
+	PauseReason string `json:"pause_reason,omitempty" yaml:"pause_reason,omitempty"`
+	PausedUntil int64  `json:"paused_until,omitzero" yaml:"paused_until,omitempty"`
 	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
 	// Prior holds the attempts before it, newest last, at most three, as structured
 	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
@@ -1203,6 +1208,10 @@ const (
 	ClaimOutput ClaimKind = "output"
 	// ClaimReleased is a path the job's own holder released in this attempt.
 	ClaimReleased ClaimKind = "released"
+	// ClaimDeadHolder is a write path of the live job it names whose holder is dead: its
+	// session ended, or it made no judged call past the silence bound with no background
+	// command running.
+	ClaimDeadHolder ClaimKind = "dead"
 )
 
 // ClaimEvidence is a parsed `because`: the kind and what it names, empty for released.
@@ -1225,7 +1234,7 @@ func ParseClaimEvidence(because string) (ClaimEvidence, error) {
 	e := ClaimEvidence{Kind: ClaimKind(kind), Subject: strings.TrimSpace(subject)}
 	switch {
 	case !e.Kind.Valid():
-		return e, fmt.Errorf("%q names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target> or released", because)
+		return e, fmt.Errorf("%q names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target>, dead:<job> or released", because)
 	case e.Kind == ClaimReleased && e.Subject != "":
 		return e, fmt.Errorf("%q: released names nothing after it", because)
 	case e.Kind != ClaimReleased && e.Subject == "":
@@ -1890,6 +1899,17 @@ type JobRelease struct {
 	// Revoked is a path taken from a job a holder had taken, by a writer other than that
 	// holder: the orchestrator revoking it rather than the worker giving it up.
 	Revoked bool `json:"revoked,omitempty" yaml:"revoked,omitempty"`
+	// TakenBy is the job magus granted the path to because this row's holder was dead, and
+	// DeadBecause why magus judged it dead. Both are empty on any other release.
+	TakenBy     string `json:"taken_by,omitempty"     yaml:"taken_by,omitempty"`
+	DeadBecause string `json:"dead_because,omitempty" yaml:"dead_because,omitempty"`
+}
+
+// PausedAt reports whether a person's pause holds the job at now, unix seconds. Past
+// PausedUntil it has lapsed: the holder runs again, and the sweep and `magus job prune`
+// may end the row.
+func (u Job) PausedAt(now int64) bool {
+	return u.Paused != 0 && (u.PausedUntil == 0 || now < u.PausedUntil)
 }
 
 // JobUnattributedWrite is one path a lease owns that somebody outside it wrote, and

@@ -1232,3 +1232,34 @@ func TestDeclarationCarriesMaxClaims(t *testing.T) {
 	Declaration{ID: "worker"}.ApplySpec(&row)
 	assert.Zero(t, row.MaxClaims)
 }
+
+// A pause holds until its bound and not a second past it; a pause naming no bound holds
+// until it is lifted.
+func TestJobPausedAtLapsesAtItsBound(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		row  Job
+		want bool
+	}{
+		"not paused":       {row: Job{PausedUntil: 200}, want: false},
+		"paused, no bound": {row: Job{Paused: 10, PauseReason: "busy"}, want: true},
+		"inside its bound": {row: Job{Paused: 10, PauseReason: "busy", PausedUntil: 101}, want: true},
+		"at its bound":     {row: Job{Paused: 10, PauseReason: "busy", PausedUntil: 100}, want: false},
+	}
+	for name, c := range cases {
+		assert.Equal(t, c.want, c.row.PausedAt(100), name)
+	}
+}
+
+func TestParseClaimEvidenceReadsADeadHolder(t *testing.T) {
+	t.Parallel()
+
+	e, err := ParseClaimEvidence("dead:api/migrate")
+	require.NoError(t, err)
+	assert.Equal(t, ClaimEvidence{Kind: ClaimDeadHolder, Subject: "api/migrate"}, e)
+	assert.Equal(t, "dead:api/migrate", e.String())
+
+	_, err = ParseClaimEvidence("dead")
+	assert.EqualError(t, err, `"dead" names no dead subject`)
+}

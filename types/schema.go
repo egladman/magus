@@ -86,7 +86,7 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"worktree": 13, "validated": 13, "waivers": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claims": 13, "max_claims": 13, "paused": 13, "weight": 13},
+	Added:   map[string]int{"worktree": 13, "validated": 13, "waivers": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claims": 13, "max_claims": 13, "paused": 13, "paused_by": 13, "pause_reason": 13, "paused_until": 13, "weight": 13},
 	// The four boundary renames and completion_gates, names only the JSON document an
 	// older magus kept the plan in carried.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},

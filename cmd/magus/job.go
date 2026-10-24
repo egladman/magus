@@ -2452,17 +2452,41 @@ func refusePaused(store *job.Store, id string) error {
 	if err != nil {
 		return fmt.Errorf("magus job exec: read whether %s is paused: %w", id, err)
 	}
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 && rows[i].Paused != 0 {
-		return types.ExitError{Code: cache.ExitCodeMachineBusy, Err: errors.New("magus job exec: " + job.PausedLine(id))}
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 && rows[i].PausedAt(time.Now().Unix()) {
+		return types.ExitError{Code: cache.ExitCodeMachineBusy, Err: fmt.Errorf("magus job exec: %s", job.PausedLine(rows[i]))}
 	}
 	return nil
+}
+
+// parsePauseUntil reads --until as the unix second the pause lapses: a duration from now
+// or an RFC3339 instant. Empty is zero, a pause with no bound.
+func parsePauseUntil(raw string, now time.Time) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d <= 0 {
+			return 0, exit.Usagef("magus job pause: --until %q is not ahead of now; write a positive duration (2h) or a later instant", raw)
+		}
+		return now.Add(d).Unix(), nil
+	}
+	if at, err := time.Parse(time.RFC3339, raw); err == nil {
+		return at.Unix(), nil
+	}
+	return 0, exit.Usagef("magus job pause: --until %q is neither a duration nor an RFC3339 instant; write 2h or 2006-01-02T15:04:05Z", raw)
 }
 
 // jobPause is `magus job pause` and `magus job resume`, which verb says.
 func jobPause(ctx context.Context, root, verb string, args []string) error {
 	spec := jobCommandSpec()
 	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == verb })]
+	var reason, until string
 	ids, err := cmdParse("job "+verb, args, func(fs *flag.FlagSet) {
+		if verb == "pause" {
+			fs.StringVar(&reason, "reason", "", "")
+			fs.StringVar(&until, "until", "", "")
+		}
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: "+child.Usage)
 			fmt.Fprintln(os.Stderr, "")
@@ -2475,15 +2499,23 @@ func jobPause(ctx context.Context, root, verb string, args []string) error {
 	if len(ids) == 0 {
 		return exit.Usagef("magus job %s: requires at least one job (`%s` lists them)", verb, hint.LsJobs)
 	}
+	lapse, err := parsePauseUntil(until, time.Now())
+	if err != nil {
+		return err
+	}
+	if verb == "pause" && strings.TrimSpace(reason) == "" {
+		return exit.Usagef("magus job pause: requires --reason, which the holder's refusal and the row show")
+	}
 	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
 	if err != nil {
 		return err
 	}
-	change := store.Pause
+	var rows []types.Job
 	if verb == "resume" {
-		change = store.Resume
+		rows, err = store.Resume(ctx, ids...)
+	} else {
+		rows, err = store.Pause(ctx, reason, lapse, ids...)
 	}
-	rows, err := change(ctx, ids...)
 	if err != nil {
 		return fmt.Errorf("magus job %s: %w", verb, err)
 	}
@@ -2496,10 +2528,14 @@ func jobPause(ctx context.Context, root, verb string, args []string) error {
 		return emitNames(os.Stdout, ids)
 	case outputText:
 		for _, row := range rows {
-			if row.Paused != 0 {
-				fmt.Printf("paused %s; its holder's next magus run is refused until `%s`\n", row.ID, hint.BinaryName()+" job resume "+row.ID)
-			} else {
+			switch {
+			case row.Paused == 0:
 				fmt.Printf("resumed %s\n", row.ID)
+			case row.PausedUntil != 0:
+				fmt.Printf("paused %s until %s; its holder's next magus run is refused until then or `%s job resume %s`\n",
+					row.ID, time.Unix(row.PausedUntil, 0).UTC().Format(time.RFC3339), hint.BinaryName(), row.ID)
+			default:
+				fmt.Printf("paused %s; its holder's next magus run is refused until `%s job resume %s`\n", row.ID, hint.BinaryName(), row.ID)
 			}
 		}
 		return nil

@@ -1233,11 +1233,12 @@ func TestJobPauseRefusesExecUntilResume(t *testing.T) {
 	root := repo.Root()
 
 	captureStdout(t, func() {
-		require.NoError(t, jobPause(t.Context(), root, "pause", []string{row.ID}))
+		require.NoError(t, jobPause(t.Context(), root, "pause", []string{"--reason", "release build", "--until", "1h", row.ID}))
 	})
 	err := jobExec(t.Context(), root, []string{row.ID})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), row.ID+" is paused")
+	assert.Contains(t, err.Error(), row.ID+" is paused by ")
+	assert.Contains(t, err.Error(), ": release build (until ")
 	assert.Contains(t, err.Error(), "job resume "+row.ID)
 	bindCheckout(t, cacheDir, row.ID)
 	err = jobExec(t.Context(), root, []string{"--timeout", "1m", "--", "true"})
@@ -1999,4 +2000,22 @@ func TestPrintJobWorktreeNamesTheCheckoutBootstrap(t *testing.T) {
 	out.Reset()
 	printJobWorktree(&out, row, "")
 	assert.Contains(t, out.String(), "runs magus from PATH", "a forker on PATH needs no build")
+}
+
+func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	cases := map[string]int64{
+		"":                     0,
+		"2h":                   now.Add(2 * time.Hour).Unix(),
+		"2027-01-15T09:00:00Z": 1_800_003_600,
+	}
+	for raw, want := range cases {
+		got, err := parsePauseUntil(raw, now)
+		require.NoError(t, err, raw)
+		assert.Equal(t, want, got, raw)
+	}
+	for _, raw := range []string{"-2h", "tomorrow"} {
+		_, err := parsePauseUntil(raw, now)
+		assert.Error(t, err, raw)
+	}
 }

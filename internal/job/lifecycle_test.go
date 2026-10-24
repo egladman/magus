@@ -1268,6 +1268,31 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 	}
 }
 
+// A paused row outlives the read sweep and `prune --all` while its pause holds; past its
+// bound both end it as they would any row.
+func TestPausedJobOutlivesTheSweepAndPruneUntilItsPauseLapses(t *testing.T) {
+	const now = int64(100_000)
+	old := now - int64((3 * time.Hour).Seconds())
+	s, _ := sweepStore(t, now, 2*time.Hour)
+	s.landed = func(context.Context, types.Job) string { return "" }
+	plant(t, s,
+		types.Job{ID: "held", State: types.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now + 60},
+		types.Job{ID: "lapsed", State: types.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now - 60},
+		types.Job{ID: "taken", State: types.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy"},
+		types.Job{ID: "taken-lapsed", State: types.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now},
+	)
+
+	rows := states(t, s)
+	assert.Equal(t, types.StateDeclared, rows["held"].State, "the sweep leaves a paused row alone")
+	assert.Equal(t, types.StateNoReturn, rows["lapsed"].State)
+	assert.Equal(t, "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)", rows["lapsed"].EndReason)
+
+	got, err := s.Prune(t.Context(), PruneOptions{All: true})
+	require.NoError(t, err)
+	assert.Equal(t, []Ending{{ID: "taken-lapsed", Reason: "taken, then untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"}}, got,
+		"--all skips a paused row until its pause lapses")
+}
+
 func TestJobPruneKeepsAJobQueuedOnALiveDependency(t *testing.T) {
 	const now = int64(100_000)
 	old := now - int64((3 * time.Hour).Seconds())
