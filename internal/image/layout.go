@@ -3,7 +3,6 @@ package image
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 )
 
 const (
