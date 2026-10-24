@@ -863,7 +863,7 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 		rpcerr.FormatConnect.Write(w, r, u.Err())
 	})
 	for name := range procedureNeeds {
-		if path := "/" + string(name) + "/"; path != statusPath {
+		if path := fmt.Sprintf("/%s/", string(name)); path != statusPath {
 			f.service(path, refuseConnect)
 		}
 	}

@@ -3,6 +3,7 @@ package file
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ func writeAtomic(path string, r io.Reader, perm os.FileMode, sync bool) (err err
 	}
 	// Same directory, because rename is atomic only within one filesystem and
 	// os.TempDir is routinely another mount.
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp.*")
+	tmp, err := os.CreateTemp(dir, fmt.Sprintf(".%s.tmp.*", filepath.Base(path)))
 	if err != nil {
 		return err
 	}

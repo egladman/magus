@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +24,7 @@ func TestSpellOverrideFindings(t *testing.T) {
 	}
 	shipped, _, err := remotespell.Shipped("go", "golang")
 	require.NoError(t, err)
-	stamp := "// magus:origin " + shipped.String() + "\n"
+	stamp := fmt.Sprintf("// magus:origin %s\n", shipped.String())
 	cfg := func(path string) config.SpellsConfig {
 		return config.SpellsConfig{Imports: map[string]config.SpellImport{
 			"magus/spell/go":         {Path: path},
@@ -55,10 +56,9 @@ func TestSpellOverrideFindings(t *testing.T) {
 		body, err := os.ReadFile(p)
 		require.NoError(t, err)
 		older := digest.FromString("an older release").String()
-		require.NoError(t, os.WriteFile(p, append([]byte("// magus:origin ghcr.io/egladman/magus/spells/go@"+older+"\n"), body[len(stamp):]...), 0o644))
+		require.NoError(t, os.WriteFile(p, append([]byte(fmt.Sprintf("// magus:origin ghcr.io/egladman/magus/spells/go@%s\n", older)), body[len(stamp):]...), 0o644))
 		details, advice := spellOverrideFindings(root, cfg("old/go"))
-		assert.Equal(t, []string{"magus/spell/go changed since old/go was pulled (" + older[:len("sha256:")+12] + " -> " + shipped.Digest.String()[:len("sha256:")+12] +
-			"); `magus spell pull magus/spell/go <empty dir>` writes the current copy to diff against"}, details)
+		assert.Equal(t, []string{fmt.Sprintf("magus/spell/go changed since old/go was pulled (%s -> %s); `magus spell pull magus/spell/go <empty dir>` writes the current copy to diff against", older[:len("sha256:")+12], shipped.Digest.String()[:len("sha256:")+12])}, details)
 		assert.Equal(t, 1, advice)
 	})
 

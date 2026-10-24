@@ -1,6 +1,7 @@
 package langservice
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -236,7 +237,7 @@ func ModuleCallCandidates() []string {
 	for _, m := range modules {
 		out = append(out, m.Name)
 		for _, f := range m.Fields {
-			out = append(out, m.Name+`\`+f.Name)
+			out = append(out, fmt.Sprintf(`%s\%s`, m.Name, f.Name))
 		}
 		for _, meth := range m.Methods {
 			if name, _, ok := strings.Cut(meth.Sig, "("); ok {

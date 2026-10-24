@@ -814,7 +814,7 @@ func isSubset(ids, of []string) bool {
 
 // eventKey is the identity a load dedups on: (session, host, kind, ref).
 func eventKey(session string, ev AgentEvent) string {
-	return session + "\x00" + ev.Host + "\x00" + ev.Kind + "\x00" + ev.Ref
+	return fmt.Sprintf("%s\x00%s\x00%s\x00%s", session, ev.Host, ev.Kind, ev.Ref)
 }
 
 // EachAgentEvent yields every loaded event in the fold with its session, in fold order.

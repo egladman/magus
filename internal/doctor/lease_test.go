@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -196,7 +197,7 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 		Name:    "bound-lease",
 		Status:  types.CheckFail,
 		Message: `lease "adj/live" is bound here and live, but has no registered base, so the guard denies every write until one is recorded`,
-		Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
+		Details: []string{fmt.Sprintf("record one: %s, then exec it on this lease", hint.VCSCheckpoint.With("-o", "name"))},
 	}, got)
 }
 

@@ -1,6 +1,7 @@
 package difftui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -37,7 +38,7 @@ const (
 // file is the most dangerous one. Same wording `magus diff` prints, same reason.
 var unrankedBanner = []string{
 	"UNRANKED: no symbol index, so there is no consequence to rank by.",
-	"This is path order, not a ranking. `" + hint.GraphBuild.String() + "` gives it one.",
+	fmt.Sprintf("This is path order, not a ranking. `%s` gives it one.", hint.GraphBuild.String()),
 }
 
 // Chrome is how many rows a frame spends on things that are not changeset rows, so a caller
@@ -152,9 +153,7 @@ func lineText(r Row) string {
 	if r.Emph.Empty() {
 		return tty.Colorize(r.Text, base)
 	}
-	return paint(r.Text[:r.Emph.Start], base) +
-		paint(r.Text[r.Emph.Start:r.Emph.End], emph) +
-		paint(r.Text[r.Emph.End:], base)
+	return fmt.Sprintf("%s%s%s", paint(r.Text[:r.Emph.Start], base), paint(r.Text[r.Emph.Start:r.Emph.End], emph), paint(r.Text[r.Emph.End:], base))
 }
 
 // paint styles a piece of a line, and leaves an empty piece empty rather than emitting a pair of

@@ -219,7 +219,7 @@ func gradeSignature(ctx context.Context, res Resolver, note string, a Anchor) an
 		return anchorFinding{
 			code:    CodeUnverifiableAnchor,
 			message: fmt.Sprintf("anchor %s:%s has no recorded signature", a.Kind, a.Target),
-			hint:    "It was recorded before notes graded symbols by signature; `magus notes edit " + note + "` records it once a person has re-read the note.",
+			hint:    fmt.Sprintf("It was recorded before notes graded symbols by signature; `magus notes edit %s` records it once a person has re-read the note.", note),
 		}
 	}
 	current, err := res.Signature(ctx, a)
@@ -249,7 +249,7 @@ func driftHint(name string, a Anchor) string {
 	} else if a.Commit != "" {
 		hint += fmt.Sprintf(" It was last reviewed at %s.", a.Commit)
 	}
-	return hint + " If it still holds, `magus notes edit " + name + "` records what it reads now; if it does not, this is the moment to fix the prose. Nothing re-records it for you."
+	return fmt.Sprintf("%s If it still holds, `magus notes edit %s` records what it reads now; if it does not, this is the moment to fix the prose. Nothing re-records it for you.", hint, name)
 }
 
 // degradeHint names the coarser anchor this one falls back to, and says what to do.

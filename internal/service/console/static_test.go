@@ -1,6 +1,7 @@
 package console
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +51,7 @@ func TestAppRouteWithoutTrailingSlashRedirects(t *testing.T) {
 	for _, app := range KnownApps {
 		w := get(t, h, "/console/"+app)
 		assert.Equal(t, http.StatusFound, w.Code, "%s must canonicalize", app)
-		assert.Equal(t, "/console/"+app+"/", w.Header().Get("Location"), app)
+		assert.Equal(t, fmt.Sprintf("/console/%s/", app), w.Header().Get("Location"), app)
 	}
 }
 
@@ -267,7 +268,7 @@ func TestSymlinksLeavingTheConsoleDirAreNotServed(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(outside, "index.html"), filepath.Join(dir, KnownApps[0], "index.html")))
 	h := StaticHandler(dir)
 
-	for _, p := range []string{"/console/leak.js", "/console/linked/secret.js", "/console/linked/", "/console/" + KnownApps[0] + "/"} {
+	for _, p := range []string{"/console/leak.js", "/console/linked/secret.js", "/console/linked/", fmt.Sprintf("/console/%s/", KnownApps[0])} {
 		w := get(t, h, p)
 		assert.NotContains(t, w.Body.String(), "SECRET", p)
 		assert.NotEqual(t, http.StatusOK, w.Code, p)

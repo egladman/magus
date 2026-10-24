@@ -308,7 +308,7 @@ func (w *binaryAnswerWalk) load(importPath string) *buzzModule {
 
 // reaches reports whether fn in m reaches a binaryAnswers member.
 func (w *binaryAnswerWalk) reaches(m *buzzModule, fn string) bool {
-	key := m.path + "\x00" + fn
+	key := fmt.Sprintf("%s\x00%s", m.path, fn)
 	if v, ok := w.memo[key]; ok {
 		return v
 	}

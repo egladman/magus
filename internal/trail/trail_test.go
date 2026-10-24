@@ -2,6 +2,7 @@ package trail
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -283,7 +284,7 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &got))
 	assert.Equal(t, want, got.AgentFacts)
 	for _, key := range []string{"thread", "thread_from", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
-		assert.Contains(t, string(raw), `"`+key+`"`, "the facts sit inline in the request blob")
+		assert.Contains(t, string(raw), fmt.Sprintf(`"%s"`, key), "the facts sit inline in the request blob")
 	}
 }
 
@@ -296,7 +297,7 @@ func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
 	raw, err := ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
 	for _, key := range []string{"thread", "thread_from", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
-		assert.NotContains(t, string(raw), `"`+key+`"`)
+		assert.NotContains(t, string(raw), fmt.Sprintf(`"%s"`, key))
 	}
 }
 

@@ -75,9 +75,9 @@ func (p Prover) Place(ctx context.Context, root string, paths []string) (risk.Pl
 		modRel := relDir(root, dir)
 		switch {
 		case m == nil:
-			pl.Unplaced[rel] = "go list failed in module " + modRel + ", so what compiles or embeds it is unknown: " + failed[dir]
+			pl.Unplaced[rel] = fmt.Sprintf("go list failed in module %s, so what compiles or embeds it is unknown: %s", modRel, failed[dir])
 		case m.poison != "":
-			pl.Unplaced[rel] = "go list reported a load error in module " + modRel + ", so its reverse dependencies cannot be trusted: " + m.poison
+			pl.Unplaced[rel] = fmt.Sprintf("go list reported a load error in module %s, so its reverse dependencies cannot be trusted: %s", modRel, m.poison)
 		default:
 			if hit, why, ok := m.place(abs, modRel); ok {
 				pl.Packages[rel] = hit
@@ -152,7 +152,7 @@ func (m *goModule) place(abs, modRel string) (hit risk.PackageHit, why string, o
 	h, found := m.files[abs]
 	if !found && isGo {
 		if _, err := os.Stat(abs); err == nil {
-			return risk.PackageHit{}, "compiled into no package of module " + modRel + " (testdata, or a directory go does not build)", false
+			return risk.PackageHit{}, fmt.Sprintf("compiled into no package of module %s (testdata, or a directory go does not build)", modRel), false
 		}
 		// Deleted: its package's importers are what can break.
 		for path, pkg := range m.primary {
@@ -172,16 +172,16 @@ func (m *goModule) place(abs, modRel string) (hit risk.PackageHit, why string, o
 		return risk.PackageHit{}, "excluded by build constraints on this platform, so its tests cannot run here", false
 	}
 	if gen, ok := m.generators[h.pkg]; ok {
-		return risk.PackageHit{}, h.pkg + " is reachable only from go:generate program " + gen + ", so it is generator code", false
+		return risk.PackageHit{}, fmt.Sprintf("%s is reachable only from go:generate program %s, so it is generator code", h.pkg, gen), false
 	}
 	hit = risk.PackageHit{Package: h.pkg, Module: modRel, TestOnly: h.role == goTestOnly}
 	switch {
 	case !isGo:
-		hit.Why = "embedded by Go package " + h.pkg + " (go:embed)"
+		hit.Why = fmt.Sprintf("embedded by Go package %s (go:embed)", h.pkg)
 	case h.role == goTestOnly:
-		hit.Why = "test file of Go package " + h.pkg + ": only that package's tests compile it"
+		hit.Why = fmt.Sprintf("test file of Go package %s: only that package's tests compile it", h.pkg)
 	default:
-		hit.Why = "Go package " + h.pkg + ": its tests and every package importing it"
+		hit.Why = fmt.Sprintf("Go package %s: its tests and every package importing it", h.pkg)
 	}
 	return hit, "", true
 }
@@ -258,7 +258,7 @@ func listImportPaths(ctx context.Context, dir string, env map[string]string, pat
 	cmd.Dir = dir
 	cmd.Env = os.Environ()
 	for k, v := range env {
-		cmd.Env = append(cmd.Env, k+"="+v)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 	out, err := cmd.Output()
 	if err != nil {
@@ -368,7 +368,7 @@ func newGoModule(dir string, pkgs []goPackage) *goModule {
 	for _, p := range pkgs {
 		if m.poison == "" {
 			if msg := goLoadError(p); msg != "" {
-				m.poison = p.ImportPath + ": " + msg
+				m.poison = fmt.Sprintf("%s: %s", p.ImportPath, msg)
 			}
 		}
 		switch {

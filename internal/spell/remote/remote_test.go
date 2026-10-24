@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -58,7 +59,7 @@ func (r *registry) serve(w http.ResponseWriter, req *http.Request) {
 	last := p[strings.LastIndex(p, "/")+1:]
 	switch {
 	case p == "/v2/":
-		w.Header().Set("WWW-Authenticate", `Bearer realm="https://`+req.Host+`/token",service="`+req.Host+`"`)
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="https://%s/token",service="%s"`, req.Host, req.Host))
 		w.WriteHeader(http.StatusUnauthorized)
 	case p == "/token":
 		if u, pw, _ := req.BasicAuth(); r.user != "" && (u != r.user || pw != r.pass) {
@@ -530,7 +531,7 @@ func TestShippedMatchesBuild(t *testing.T) {
 		assert.Equal(t, built, shipped, dir)
 		_, d, err := built.Manifest()
 		require.NoError(t, err)
-		assert.Equal(t, "ghcr.io/egladman/magus/spells/"+dir+"@"+d.String(), ref.String())
+		assert.Equal(t, fmt.Sprintf("ghcr.io/egladman/magus/spells/%s@%s", dir, d.String()), ref.String())
 		assert.Equal(t, map[string]string{
 			ocispec.AnnotationTitle:  dir,
 			ocispec.AnnotationSource: "https://github.com/egladman/magus",
@@ -552,7 +553,7 @@ func TestEjectReadsBackAsItsOrigin(t *testing.T) {
 		got, err := os.ReadFile(filepath.Join(dst, name))
 		require.NoError(t, err)
 		if name == "spell.buzz" {
-			embedded = append([]byte("// magus:origin "+ref.String()+"\n"), embedded...)
+			embedded = append([]byte(fmt.Sprintf("// magus:origin %s\n", ref.String())), embedded...)
 		}
 		assert.Equal(t, string(embedded), string(got), name)
 	}

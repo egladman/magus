@@ -4,6 +4,7 @@ package spawn
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -86,7 +87,7 @@ func commandLine(name string, args []string) string {
 	parts = append(parts, name)
 	for _, a := range args {
 		if strings.ContainsAny(a, " \t\n") {
-			parts = append(parts, `"`+a+`"`)
+			parts = append(parts, fmt.Sprintf("%c%s%c", '"', a, '"'))
 		} else {
 			parts = append(parts, a)
 		}

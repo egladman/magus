@@ -1,6 +1,7 @@
 package hint
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -156,7 +157,7 @@ func foreignScriptsIndex(t *testing.T, root string) string {
 	cacheDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Dir(ScriptsIndexPath(cacheDir)), 0o755))
 	require.NoError(t, os.WriteFile(ScriptsIndexPath(cacheDir),
-		[]byte(`{"format":999,"root":"`+root+`","serves":{}}`), 0o600))
+		[]byte(fmt.Sprintf(`{"format":999,"root":"%s","serves":{}}`, root)), 0o600))
 	return cacheDir
 }
 

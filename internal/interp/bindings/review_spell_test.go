@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -345,10 +346,10 @@ func TestOpenedByViewerIsUnknownWhenEitherNameIsMissing(t *testing.T) {
 // spell accepts only the verdict it should have received.
 func TestPublishSendsTheResolvedVerdictNotTheRequestedOne(t *testing.T) {
 	accepting := func(verdict types.ReviewVerdict) {
-		withReviewSpell(t, `
+		withReviewSpell(t, fmt.Sprintf(`
 export fun publish_review(target: Target, req: PublishReviewRequest) > Ack {
-    return Ack{ ok = req.verdict == "`+string(verdict)+`" };
-}`)
+    return Ack{ ok = req.verdict == "%s" };
+}`, string(verdict)))
 	}
 
 	accepting(types.VerdictComment)

@@ -50,9 +50,9 @@ func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (
 		if c.Username == "" && c.Password == "" {
 			return "", fmt.Errorf("oci: %s asks for Basic credentials and none are configured", ref.Registry)
 		}
-		return "Basic " + base64.StdEncoding.EncodeToString([]byte(c.Username+":"+c.Password)), nil
+		return "Basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Username, c.Password))), nil
 	}
-	key := tokenKey{realm: ch.realm, service: ch.service, scope: "repository:" + ref.Repository + ":" + actions}
+	key := tokenKey{realm: ch.realm, service: ch.service, scope: fmt.Sprintf("repository:%s:%s", ref.Repository, actions)}
 	c.mu.Lock()
 	cached, ok := c.tokens[key]
 	c.mu.Unlock()
@@ -81,7 +81,7 @@ func (c *Client) challenge(ctx context.Context, host string) (challenge, error) 
 	if ok {
 		return cached, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/v2/", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://%s/v2/", host), nil)
 	if err != nil {
 		return challenge{}, err
 	}

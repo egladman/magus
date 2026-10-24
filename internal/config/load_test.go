@@ -324,9 +324,9 @@ func TestEmptyDocumentIsNotAnError(t *testing.T) {
 func TestUnknownKeyMessage(t *testing.T) {
 	// Three list items each carrying two unknown keys, placed on the lines of the report
 	// this layout was written against: env at 16, 21, 26 and base at 17, 22, 27.
-	sample := "required_version: \">= 0.4.4\"\n" + strings.Repeat("#\n", 12) +
-		"spells:\n  allow_shadow:\n" +
-		strings.Repeat("    - env: X\n      base: y\n      name: spells/a\n      reason: r\n    #\n", 3)
+	sample := fmt.Sprintf("required_version: \">= 0.4.4\"\n%sspells:\n  allow_shadow:\n%s",
+		strings.Repeat("#\n", 12),
+		strings.Repeat("    - env: X\n      base: y\n      name: spells/a\n      reason: r\n    #\n", 3))
 	const devBuild, release = "v0.4.3-122-g1a2b3c4", "v0.4.3"
 	cases := map[string]struct {
 		doc        string
@@ -585,7 +585,7 @@ func TestQueueCarryApprovals(t *testing.T) {
 			cfg, err := LoadWorkspaceOnly(root)
 			if tc.wantErr != "" {
 				require.ErrorIs(t, err, types.CarryApprovalsInvalid)
-				assert.Equal(t, "config: "+filepath.Join(root, Filename)+": "+types.DiagnosticErrorf(types.CarryApprovalsInvalid, "%s", tc.wantErr).Error(), err.Error())
+				assert.Equal(t, fmt.Sprintf("config: %s: %s", filepath.Join(root, Filename), types.DiagnosticErrorf(types.CarryApprovalsInvalid, "%s", tc.wantErr).Error()), err.Error())
 				return
 			}
 			require.NoError(t, err)

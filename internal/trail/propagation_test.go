@@ -1,6 +1,7 @@
 package trail
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -32,14 +33,14 @@ func TestParseTraceparent(t *testing.T) {
 		},
 		"unset":                {"", Spawn{}},
 		"a future version":     {"01-" + trace + "-" + span + "-01", Spawn{}},
-		"an all-zero trace id": {"00-" + strings.Repeat("0", 32) + "-" + span + "-01", Spawn{}},
-		"an all-zero span id":  {"00-" + trace + "-" + strings.Repeat("0", 16) + "-01", Spawn{}},
-		"uppercase hex":        {"00-" + strings.ToUpper(trace) + "-" + span + "-01", Spawn{}},
-		"a short trace id":     {"00-" + trace[:31] + "-" + span + "-01", Spawn{}},
+		"an all-zero trace id": {fmt.Sprintf("00-%s-%s-01", strings.Repeat("0", 32), span), Spawn{}},
+		"an all-zero span id":  {fmt.Sprintf("00-%s-%s-01", trace, strings.Repeat("0", 16)), Spawn{}},
+		"uppercase hex":        {fmt.Sprintf("00-%s-%s-01", strings.ToUpper(trace), span), Spawn{}},
+		"a short trace id":     {fmt.Sprintf("00-%s-%s-01", trace[:31], span), Spawn{}},
 		"a long span id":       {"00-" + trace + "-" + span + "0-01", Spawn{}},
 		"a missing field":      {"00-" + trace + "-" + span, Spawn{}},
 		"an extra field":       {"00-" + trace + "-" + span + "-01-x", Spawn{}},
-		"not hex at all":       {"00-" + strings.Repeat("z", 32) + "-" + span + "-01", Spawn{}},
+		"not hex at all":       {fmt.Sprintf("00-%s-%s-01", strings.Repeat("z", 32), span), Spawn{}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tc.want, parseTraceparent(tc.value))

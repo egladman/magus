@@ -2,6 +2,7 @@ package secret
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -87,7 +88,7 @@ func TestEndpointRejectsMissingToken(t *testing.T) {
 	// Same port, no token: what another process on the machine can reach unaided.
 	u, err := url.Parse(base)
 	require.NoError(t, err)
-	resp, err := http.Get("http://" + u.Host + "/v1/models")
+	resp, err := http.Get(fmt.Sprintf("http://%s/v1/models", u.Host))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -107,7 +108,7 @@ func TestEndpointWrongTokenRejected(t *testing.T) {
 	u, err := url.Parse(base)
 	require.NoError(t, err)
 
-	resp, err := http.Get("http://" + u.Host + "/00000000000000000000000000000000/v1/models")
+	resp, err := http.Get(fmt.Sprintf("http://%s/00000000000000000000000000000000/v1/models", u.Host))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -443,7 +444,7 @@ func TestEndpointTokenAloneIsRedactable(t *testing.T) {
 	tok := strings.TrimPrefix(u.Path, "/")
 	require.NotEmpty(t, tok)
 
-	line := "GET /" + tok + "/v1/models HTTP/1.1"
+	line := fmt.Sprintf("GET /%s/v1/models HTTP/1.1", tok)
 	assert.NotContains(t, res.RedactString(line), tok, "the endpoint token survived redaction")
 }
 

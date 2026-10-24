@@ -15,7 +15,7 @@ import (
 func EnvName(prefix string, parts ...string) string {
 	body := strings.Join(parts, "_")
 	if prefix != "" {
-		body = prefix + "_" + body
+		body = fmt.Sprintf("%s_%s", prefix, body)
 	}
 	body = strings.ReplaceAll(body, "-", "_")
 	return strings.ToUpper(body)

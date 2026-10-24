@@ -3,11 +3,11 @@ package sandbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -106,7 +106,7 @@ func confinedHelper(t *testing.T, p *Policy, mode, path string) (int, string) {
 
 func runHelper(t *testing.T, cmd *exec.Cmd, mode, path string) (int, string) {
 	t.Helper()
-	cmd.Env = append(os.Environ(), helperEnv+"="+mode, helperPathEnv+"="+path)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", helperEnv, mode), fmt.Sprintf("%s=%s", helperPathEnv, path))
 	out, err := cmd.CombinedOutput()
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -176,7 +176,7 @@ func TestCommandProcGrantKeepsAnOutsideProcessesEnvironClosed(t *testing.T) {
 	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), filesystem.Rule{Path: "/proc", Read: true})}}
 	code, out := confinedHelper(t, p, "read", "/proc/self/environ")
 	assert.Equal(t, 0, code, "the child reads its own environment: %s", out)
-	code, out = confinedHelper(t, p, "read", "/proc/"+strconv.Itoa(os.Getpid())+"/environ")
+	code, out = confinedHelper(t, p, "read", fmt.Sprintf("/proc/%d/environ", os.Getpid()))
 	assert.Equal(t, exitDenied, code, "and not the unconfined test process's: %s", out)
 }
 

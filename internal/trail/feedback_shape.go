@@ -1,6 +1,7 @@
 package trail
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"strings"
@@ -84,21 +85,21 @@ func commandShape(cmd syntax.Command) string {
 	case *syntax.CallExpr:
 		return callShape(c.Args)
 	case *syntax.BinaryCmd:
-		return stmtShape(c.X) + " " + c.Op.String() + " " + stmtShape(c.Y)
+		return fmt.Sprintf("%s %s %s", stmtShape(c.X), c.Op.String(), stmtShape(c.Y))
 	case *syntax.Subshell:
-		return "( " + stmtsShape(c.Stmts) + " )"
+		return fmt.Sprintf("( %s )", stmtsShape(c.Stmts))
 	case *syntax.Block:
-		return "{ " + stmtsShape(c.Stmts) + " }"
+		return fmt.Sprintf("{ %s }", stmtsShape(c.Stmts))
 	case *syntax.IfClause:
-		return "if " + stmtsShape(c.Cond) + " ; then " + stmtsShape(c.Then) + " ; fi"
+		return fmt.Sprintf("if %s ; then %s ; fi", stmtsShape(c.Cond), stmtsShape(c.Then))
 	case *syntax.WhileClause:
 		kw := "while"
 		if c.Until {
 			kw = "until"
 		}
-		return kw + " " + stmtsShape(c.Cond) + " ; do " + stmtsShape(c.Do) + " ; done"
+		return fmt.Sprintf("%s %s ; do %s ; done", kw, stmtsShape(c.Cond), stmtsShape(c.Do))
 	case *syntax.ForClause:
-		return "for <loop> ; do " + stmtsShape(c.Do) + " ; done"
+		return fmt.Sprintf("for <loop> ; do %s ; done", stmtsShape(c.Do))
 	case *syntax.TimeClause:
 		return "time " + stmtShape(c.Stmt)
 	case *syntax.DeclClause:

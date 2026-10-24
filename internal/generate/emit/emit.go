@@ -84,8 +84,8 @@ type Marker struct {
 // CommentMarker("#", "subcommands") for shell.
 func CommentMarker(comment, name string) Marker {
 	return Marker{
-		Begin: comment + " magus-utils:" + name + ":begin",
-		End:   comment + " magus-utils:" + name + ":end",
+		Begin: fmt.Sprintf("%s magus-utils:%s:begin", comment, name),
+		End:   fmt.Sprintf("%s magus-utils:%s:end", comment, name),
 	}
 }
 

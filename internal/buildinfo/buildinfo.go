@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strconv"
 	"sync"
 )
 
@@ -103,9 +102,7 @@ func computeFile() string {
 	if err != nil {
 		return unverifiable
 	}
-	h := sha256.Sum256([]byte(exe + "\x00" +
-		strconv.FormatInt(fi.Size(), 10) + "\x00" +
-		strconv.FormatInt(fi.ModTime().UnixNano(), 10)))
+	h := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d\x00%d", exe, fi.Size(), fi.ModTime().UnixNano())))
 	return "dev-bin-" + hex.EncodeToString(h[:8])
 }
 

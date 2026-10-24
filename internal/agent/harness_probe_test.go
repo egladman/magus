@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,17 +64,17 @@ func bytesTrimNewline(b []byte) []byte {
 // command string to run.
 func writeProbeableHarness(t *testing.T, root, id, command string) {
 	t.Helper()
-	body := `{
+	body := fmt.Sprintf(`{
   "schema_version": 2,
-  "id": "` + id + `",
-  "display": {"name": "` + id + `"},
-  "config": {"path": "` + id + `/hooks.json"},
+  "id": "%[1]s",
+  "display": {"name": "%[1]s"},
+  "config": {"path": "%[1]s/hooks.json"},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [{
     "path": ["hooks", "before"],
-    "entries": [{"match": "run", "commands": [{"type": "command", "command": "` + command + `"}]}]
+    "entries": [{"match": "run", "commands": [{"type": "command", "command": "%[2]s"}]}]
   }]
-}`
+}`, id, command)
 	registerHarnessSpell(t, id, body)
 	mergeHarness(t, root, id)
 }
@@ -157,7 +158,7 @@ func TestVerifyHarnessProbeUsesTheExplicitWorkingDirectory(t *testing.T) {
 	bin := t.TempDir()
 	shim := filepath.Join(bin, "magus")
 	require.NoError(t, os.WriteFile(shim, []byte("#!/bin/sh\n[ \"$1\" = buzz ] && [ \"$2\" = -C ] && [ \"$3\" = . ] || exit 8\nexec ./magus \"$@\"\n"), 0o755))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", fmt.Sprintf("%s%c%s", bin, os.PathListSeparator, os.Getenv("PATH")))
 	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	writeProbeableHarness(t, w.Root(), "explicit-directory", "magus buzz -C . -s magus-command.buzz")
 	result, err := VerifyHarness(untimedProbes(), w.Root(), "explicit-directory")
@@ -343,7 +344,7 @@ func TestVerifyHarnessProbeNeverRunsACommittedProgram(t *testing.T) {
 	root := w.Root()
 	writeSilentMagus(w)
 	marker := filepath.Join(t.TempDir(), "ran")
-	w.WriteExecutable("pwn.sh", "#!/bin/sh\ntouch "+marker+"\n")
+	w.WriteExecutable("pwn.sh", fmt.Sprintf("#!/bin/sh\ntouch %s\n", marker))
 	writeProbeableHarness(t, root, "pwn", "./pwn.sh magus-command.buzz")
 
 	_, err := VerifyHarness(untimedProbes(), root, "pwn")
@@ -359,10 +360,10 @@ func TestVerifyHarnessProbeSkipsARelativePathEntry(t *testing.T) {
 	root := w.Root()
 	writeSilentMagus(w)
 	marker := filepath.Join(t.TempDir(), "ran")
-	w.WriteExecutable("bin/magus", "#!/bin/sh\ntouch "+marker+"\n")
+	w.WriteExecutable("bin/magus", fmt.Sprintf("#!/bin/sh\ntouch %s\n", marker))
 	writeProbeableHarness(t, root, "relpath", "magus buzz -s magus-command.buzz")
 	tools := buildMinimalPATH(t, "sh", "touch")
-	t.Setenv("PATH", "bin"+string(os.PathListSeparator)+tools)
+	t.Setenv("PATH", fmt.Sprintf("bin%c%s", os.PathListSeparator, tools))
 
 	_, err := VerifyHarness(untimedProbes(), root, "relpath")
 	require.NoError(t, err)

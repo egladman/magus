@@ -5,6 +5,7 @@ package spawn
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,13 +124,13 @@ func TestAGroupWatchIsReleasedBeforeTheLeaderIsReaped(t *testing.T) {
 	var events []string
 	watch := func(name string) groupWatch {
 		return func(pgid int, command string) func() {
-			events = append(events, name+" watches "+strconv.Itoa(pgid)+" ("+command+")")
+			events = append(events, fmt.Sprintf("%s watches %d (%s)", name, pgid, command))
 			return func() {
 				state := "reaped"
 				if syscall.Kill(pgid, 0) == nil {
 					state = "unreaped"
 				}
-				events = append(events, name+" released "+strconv.Itoa(pgid)+" "+state)
+				events = append(events, fmt.Sprintf("%s released %d %s", name, pgid, state))
 			}
 		}
 	}
@@ -139,9 +140,9 @@ func TestAGroupWatchIsReleasedBeforeTheLeaderIsReaped(t *testing.T) {
 	require.NoError(t, err)
 	pgid := strings.TrimSpace(res.Stdout)
 	assert.Equal(t, []string{
-		"outer watches " + pgid + ` (sh -c "echo $$")`,
-		"inner watches " + pgid + ` (sh -c "echo $$")`,
-		"inner released " + pgid + " unreaped",
-		"outer released " + pgid + " unreaped",
+		fmt.Sprintf(`outer watches %s (sh -c "echo $$")`, pgid),
+		fmt.Sprintf(`inner watches %s (sh -c "echo $$")`, pgid),
+		fmt.Sprintf("inner released %s unreaped", pgid),
+		fmt.Sprintf("outer released %s unreaped", pgid),
 	}, events)
 }

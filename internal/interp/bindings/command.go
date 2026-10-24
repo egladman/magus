@@ -410,7 +410,7 @@ func warnCharmConflicts(ctx context.Context, base []string, charms map[string]sp
 		if winner == "" {
 			winner = "another active charm"
 		}
-		sig := strings.Join(base, "\x00") + "|" + c.Name + ">" + winner
+		sig := fmt.Sprintf("%s|%s>%s", strings.Join(base, "\x00"), c.Name, winner)
 		if _, seen := charmConflictWarned.LoadOrStore(sig, struct{}{}); seen {
 			continue
 		}
@@ -447,7 +447,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		slices.Sort(keys)
 		overrides = make([]string, 0, len(env))
 		for _, k := range keys {
-			overrides = append(overrides, k+"="+env[k])
+			overrides = append(overrides, fmt.Sprintf("%s=%s", k, env[k]))
 		}
 	}
 	res, err := spawn.Exec(ctx, cmd, args, spawn.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture, Quiet: quiet})
@@ -572,6 +572,6 @@ func joinNonEmpty(a, b string) string {
 	case b == "":
 		return a
 	default:
-		return a + "\n" + b
+		return fmt.Sprintf("%s\n%s", a, b)
 	}
 }

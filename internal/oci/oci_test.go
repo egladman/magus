@@ -128,11 +128,11 @@ func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	switch {
 	case p == "/v2/":
 		r.pings++
-		realm := "https://" + req.Host + "/token"
+		realm := fmt.Sprintf("https://%s/token", req.Host)
 		if r.realm != "" {
 			realm = r.realm
 		}
-		w.Header().Set("WWW-Authenticate", `Bearer realm="`+realm+`",service="`+req.Host+`"`)
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s",service="%s"`, realm, req.Host))
 		if r.basicOnly {
 			w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
 		}
@@ -495,7 +495,7 @@ func TestAuthorizeFollowsARealmOnAnotherHost(t *testing.T) {
 			return
 		}
 		q := req.URL.Query()
-		asked = append(asked, q.Get("service")+" "+q.Get("scope"))
+		asked = append(asked, fmt.Sprintf("%s %s", q.Get("service"), q.Get("scope")))
 		_, _ = fmt.Fprintf(w, `{"access_token":"tok-%s"}`, q.Get("scope"))
 	}))
 	t.Cleanup(auth.Close)

@@ -13,6 +13,7 @@
 package journal
 
 import (
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -169,7 +170,7 @@ var invSeq atomic.Uint64
 // NewInvocationID mints a short, process-unique invocation id (time + counter). It is
 // opaque, used only to group and address one run command's events.
 func NewInvocationID() string {
-	return "inv" + strconv.FormatInt(nowMillis(), 36) + strconv.FormatUint(invSeq.Add(1), 36)
+	return fmt.Sprintf("inv%s%s", strconv.FormatInt(nowMillis(), 36), strconv.FormatUint(invSeq.Add(1), 36))
 }
 
 // nowMillis is the one wall-clock read in this package (unix milliseconds).

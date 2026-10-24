@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cmp"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -138,7 +139,7 @@ func feedbackObservation(base string, e Event) (types.TrailObservation, bool) {
 		At: e.Ts, Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
 		Command: req.Command, Path: req.Path,
 		Decision: resp.Decision, Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,
-		Nexts: servedNexts(resp.Reason + "\n" + resp.Context),
+		Nexts: servedNexts(fmt.Sprintf("%s\n%s", resp.Reason, resp.Context)),
 	}
 	if req.Command != "" {
 		obs.Shape = CommandShape(req.Command)

@@ -19,10 +19,10 @@ type gapResolver struct {
 	decls map[string]string
 }
 
-func (r gapResolver) NodeID(a Anchor) string { return string(a.Kind) + ":" + a.Target }
+func (r gapResolver) NodeID(a Anchor) string { return fmt.Sprintf("%s:%s", string(a.Kind), a.Target) }
 
 func (r gapResolver) Declaration(_ context.Context, file, name string) (Anchor, error) {
-	key, ok := r.decls[file+"#"+name]
+	key, ok := r.decls[fmt.Sprintf("%s#%s", file, name)]
 	if !ok {
 		return Anchor{}, fmt.Errorf("%s declares no symbol named %q", file, name)
 	}

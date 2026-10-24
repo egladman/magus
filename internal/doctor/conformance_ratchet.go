@@ -135,7 +135,7 @@ func conformanceProposal(row types.ConformanceRow, percentile float64, path stri
 // conformanceRowName renders a key the way types does for its own errors; that helper is
 // unexported there.
 func conformanceRowName(k types.ConformanceKey) string {
-	name := string(k.Metric) + " " + string(k.Population)
+	name := fmt.Sprintf("%s %s", string(k.Metric), string(k.Population))
 	if k.Scope != "" {
 		name += " " + k.Scope
 	}

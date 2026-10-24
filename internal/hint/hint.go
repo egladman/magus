@@ -23,6 +23,7 @@
 package hint
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"runtime"
@@ -365,7 +366,7 @@ func PortabilityGap(cmd Invocation, host Variant) string {
 	if wrote == VariantUnknown || host == VariantUnknown || wrote == host {
 		return ""
 	}
-	return path.Base(cmd.Name) + " is spelled for " + wrote.String() + " and this host is " + host.String()
+	return fmt.Sprintf("%s is spelled for %s and this host is %s", path.Base(cmd.Name), wrote.String(), host.String())
 }
 
 // InferVariant reads a command's flags and reports which family it was SPELLED for, or
@@ -734,7 +735,7 @@ func (t *Translator) suggestSearch(sa searchArgs) []Suggestion {
 	}
 	if prose {
 		return []Suggestion{{
-			Run:        "magus query kind=" + types.KindDocSection + " " + quoted(pats[0]) + scope,
+			Run:        fmt.Sprintf("magus query kind=%s %s%s", types.KindDocSection, quoted(pats[0]), scope),
 			Why:        "markdown headings are indexed as doc sections, so the query lands on the passage instead of the whole file",
 			Confidence: ConfidenceMedium,
 			Hedge:      hedge(hedgeProse, sa),
@@ -749,7 +750,7 @@ func (t *Translator) suggestSearch(sa searchArgs) []Suggestion {
 		return []Suggestion{{
 			// One query, joined with |: space-separated matchers AND, and the
 			// grammar has no + join.
-			Run:        "magus query " + matcherArg("id=~"+strings.Join(pats, "|")) + scope,
+			Run:        fmt.Sprintf("magus query %s%s", matcherArg("id=~"+strings.Join(pats, "|")), scope),
 			Why:        "one query covers every -e pattern as an id regex alternation",
 			Confidence: ConfidenceLow,
 			Hedge:      hedge(hedgeQuery, sa),
@@ -811,14 +812,14 @@ func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Sug
 	switch {
 	case diagnosticCodeRe.MatchString(pat):
 		return []Suggestion{{
-			Run:        "magus query " + pat + scope,
+			Run:        fmt.Sprintf("magus query %s%s", pat, scope),
 			Why:        "a diagnostic code has a graph node with its docs",
 			Confidence: ConfidenceHigh,
 			Hedge:      hedge("If it misses, the code is not one this workspace defines.", sa),
 		}}
 	case buzzOpRe.MatchString(pat):
 		return []Suggestion{{
-			Run:        "magus query " + pat + scope,
+			Run:        fmt.Sprintf("magus query %s%s", pat, scope),
 			Why:        "a Buzz op resolves to the spell functions defining it; refs covers compiled-language symbols only",
 			Confidence: ConfidenceHigh,
 			Hedge:      hedge(hedgeQuery, sa),
@@ -838,7 +839,7 @@ func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Sug
 				Hedge:      hedge(hedgeRefs, sa),
 			},
 			{
-				Run:        "magus query " + pat + scope,
+				Run:        fmt.Sprintf("magus query %s%s", pat, scope),
 				Why:        "a domain entity (project, target, spell, op, diagnostic, doc) is query's side of the graph",
 				Confidence: ConfidenceLow,
 				Hedge:      hedge(hedgeQuery, sa),
@@ -853,14 +854,14 @@ func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Sug
 		return out
 	case hasRegexMeta(pat) && !sa.fixed:
 		return []Suggestion{{
-			Run:        "magus query " + matcherArg("id=~"+pat) + scope,
+			Run:        fmt.Sprintf("magus query %s%s", matcherArg("id=~"+pat), scope),
 			Why:        "the pattern is a regex, and id=~ runs it over node ids",
 			Confidence: ConfidenceLow,
 			Hedge:      hedge(hedgeQuery, sa),
 		}}
 	default:
 		return []Suggestion{{
-			Run:        "magus query " + quoted(pat) + scope,
+			Run:        fmt.Sprintf("magus query %s%s", quoted(pat), scope),
 			Why:        "query matches node ids, labels, and docs",
 			Confidence: ConfidenceLow,
 			Hedge:      hedge(hedgeQuery, sa),
@@ -909,7 +910,7 @@ func (t *Translator) suggestFind(args []string) []Suggestion {
 	scope := t.scope(paths)
 	if re, ok := globToRe(glob, !pathGlob, foldCase); ok {
 		return []Suggestion{{
-			Run:        "magus query kind=" + types.KindFile + " " + matcherArg("id=~"+re) + scope,
+			Run:        fmt.Sprintf("magus query kind=%s %s%s", types.KindFile, matcherArg("id=~"+re), scope),
 			Why:        "file nodes are indexed by path, and the glob converts to an id regex",
 			Confidence: ConfidenceHigh,
 			Hedge:      hedgeFile,
@@ -918,7 +919,7 @@ func (t *Translator) suggestFind(args []string) []Suggestion {
 	// The glob does not convert cleanly; a bare file listing, scoped when the
 	// search path maps to a project, is the honest remainder.
 	return []Suggestion{{
-		Run:        "magus query kind=" + types.KindFile + scope,
+		Run:        fmt.Sprintf("magus query kind=%s%s", types.KindFile, scope),
 		Why:        "the glob has no clean regex form, so list file nodes and narrow from there",
 		Confidence: ConfidenceLow,
 		Hedge:      hedgeFile,
@@ -965,13 +966,13 @@ scan:
 		}
 	}
 	if len(exts) > 0 {
-		re := `\.` + regexp.QuoteMeta(exts[0]) + `$`
+		re := fmt.Sprintf(`\.%s$`, regexp.QuoteMeta(exts[0]))
 		if len(exts) > 1 {
 			quotedExts := make([]string, len(exts))
 			for i, e := range exts {
 				quotedExts[i] = regexp.QuoteMeta(e)
 			}
-			re = `\.(` + strings.Join(quotedExts, "|") + `)$`
+			re = fmt.Sprintf(`\.(%s)$`, strings.Join(quotedExts, "|"))
 		}
 		matchers := matcherArg("id=~" + re)
 		why := "file nodes are indexed by path, and -e is exactly an extension match"
@@ -990,13 +991,13 @@ scan:
 				}
 				pat = re
 			}
-			matchers = matcherArg("id=~"+pat) + " " + matchers
+			matchers = fmt.Sprintf("%s %s", matcherArg("id=~"+pat), matchers)
 			why = "matchers AND: fd's pattern and its -e extension each become an id regex"
 			conf = ConfidenceMedium
 			paths = operands[1:]
 		}
 		return []Suggestion{{
-			Run:        "magus query kind=" + types.KindFile + " " + matchers + t.scope(paths),
+			Run:        fmt.Sprintf("magus query kind=%s %s%s", types.KindFile, matchers, t.scope(paths)),
 			Why:        why,
 			Confidence: conf,
 			Hedge:      hedgeFile,
@@ -1011,14 +1012,14 @@ scan:
 		re, ok := globToRe(pat, false, false)
 		if !ok {
 			return []Suggestion{{
-				Run:        "magus query kind=" + types.KindFile + scope,
+				Run:        fmt.Sprintf("magus query kind=%s%s", types.KindFile, scope),
 				Why:        "the glob has no clean regex form, so list file nodes and narrow from there",
 				Confidence: ConfidenceLow,
 				Hedge:      hedgeFile,
 			}}
 		}
 		return []Suggestion{{
-			Run:        "magus query kind=" + types.KindFile + " " + matcherArg("id=~"+re) + scope,
+			Run:        fmt.Sprintf("magus query kind=%s %s%s", types.KindFile, matcherArg("id=~"+re), scope),
 			Why:        "file nodes are indexed by path, and the glob converts to an id regex",
 			Confidence: ConfidenceHigh,
 			Hedge:      hedgeFile,
@@ -1026,7 +1027,7 @@ scan:
 	}
 	// fd patterns are regexes already, so the pattern passes through as one.
 	return []Suggestion{{
-		Run:        "magus query kind=" + types.KindFile + " " + matcherArg("id=~"+pat) + scope,
+		Run:        fmt.Sprintf("magus query kind=%s %s%s", types.KindFile, matcherArg("id=~"+pat), scope),
 		Why:        "file nodes are indexed by path, and fd's pattern is already a regex over names",
 		Confidence: ConfidenceMedium,
 		Hedge:      hedgeFile,
@@ -1112,7 +1113,7 @@ func (t *Translator) scope(paths []string) string {
 	if len(matched) != 1 {
 		return ""
 	}
-	return " " + matcherArg("project=~^"+regexp.QuoteMeta(matched[0])+"(/|$)")
+	return " " + matcherArg(fmt.Sprintf("project=~^%s(/|$)", regexp.QuoteMeta(matched[0])))
 }
 
 // fileLooking reports an operand that names a single file rather than a
@@ -1170,14 +1171,14 @@ func shellUnsafeInDoubles(s string) bool {
 }
 
 func singleQuoted(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
 }
 
 func quoted(pat string) string {
 	if shellUnsafeInDoubles(pat) {
 		return singleQuoted(pat)
 	}
-	return `"` + pat + `"`
+	return fmt.Sprintf("%c%s%c", '"', pat, '"')
 }
 
 // matcherArg quotes a query matcher only when the shell would split or
@@ -1188,7 +1189,7 @@ func matcherArg(m string) string {
 	case shellUnsafeInDoubles(m):
 		return singleQuoted(m)
 	case strings.ContainsAny(m, " |(){}[]<>&;!*?'"):
-		return `"` + m + `"`
+		return fmt.Sprintf("%c%s%c", '"', m, '"')
 	}
 	return m
 }

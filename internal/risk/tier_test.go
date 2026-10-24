@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -173,7 +174,7 @@ func TestAssessTierRules(t *testing.T) {
 	for _, tc := range cases {
 		for outcome, tier := range tc.want {
 			for _, unbounded := range []string{"", "change", "path"} {
-				name := tc.name + "/" + outcome
+				name := fmt.Sprintf("%s/%s", tc.name, outcome)
 				if unbounded != "" {
 					name += "/unbounded by the " + unbounded
 					tier = types.RiskFull
@@ -300,7 +301,7 @@ func gateLines(rep types.RiskReport) []string {
 	out := rep.Commands()
 	for i, g := range rep.Gate {
 		if g.Op != "" {
-			out[i] += " (" + g.Op + " narrowed to " + strings.Join(g.Packages, " ") + ")"
+			out[i] += fmt.Sprintf(" (%s narrowed to %s)", g.Op, strings.Join(g.Packages, " "))
 		}
 	}
 	return out

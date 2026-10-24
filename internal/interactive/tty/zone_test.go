@@ -420,7 +420,7 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 	assert.Equal(t, 1, scrollTop(s))
 	assert.Equal(t, 17-borderRows, scrollBottom(s))
 	// The border marks where the scrolling stops.
-	assert.Equal(t, boxTL+strings.Repeat(boxH, 77)+boxTR, s.Row(18-borderRows), "the top rule spans the region, corners included")
+	assert.Equal(t, fmt.Sprintf("%s%s%s", boxTL, strings.Repeat(boxH, 77), boxTR), s.Row(18-borderRows), "the top rule spans the region, corners included")
 	// Both consumers are visible at once, in acquisition order.
 	assert.Equal(t, "pool 6/8 running   2 ok  1 failed", bandRow(s, 18-borderRowsPerEdge))
 	assert.Equal(t, "[fail] test std (ran, 4.1s)", bandRow(s, 19-borderRowsPerEdge))

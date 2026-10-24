@@ -127,7 +127,7 @@ func TestEveryProcedureHasANeed(t *testing.T) {
 		for i := range fd.Services().Len() {
 			sd := fd.Services().Get(i)
 			seen[sd.FullName()] = true
-			needs, err := serviceNeeds("/" + string(sd.FullName()) + "/")
+			needs, err := serviceNeeds(fmt.Sprintf("/%s/", string(sd.FullName())))
 			if assert.NoError(t, err, sd.FullName()) {
 				for path, need := range needs {
 					assert.NoError(t, need.Validate(), path)
@@ -491,7 +491,7 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 	require.NoError(t, err)
 
 	call := func(method, body string) []byte {
-		req, err := http.NewRequest(http.MethodPost, base+"/"+tokenv1alpha1connect.TokenServiceName+"/"+method, strings.NewReader(body))
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s/%s", base, tokenv1alpha1connect.TokenServiceName, method), strings.NewReader(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+op)
@@ -507,12 +507,12 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 	var minted struct {
 		Secret string `json:"secret"`
 	}
-	require.NoError(t, json.Unmarshal(call("CreateToken", `{"name":"from-console","grant":{"console":"LEVEL_WRITE"},"expireTime":"`+exp+`"}`), &minted))
+	require.NoError(t, json.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"from-console","grant":{"console":"LEVEL_WRITE"},"expireTime":"%s"}`, exp)), &minted))
 	require.NotEmpty(t, minted.Secret)
 	var doomed struct {
 		Secret string `json:"secret"`
 	}
-	require.NoError(t, json.Unmarshal(call("CreateToken", `{"name":"doomed","grant":{"console":"LEVEL_READ"},"expireTime":"`+exp+`"}`), &doomed))
+	require.NoError(t, json.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"doomed","grant":{"console":"LEVEL_READ"},"expireTime":"%s"}`, exp)), &doomed))
 	call("RevokeToken", `{"name":"doomed"}`)
 	list := call("ListTokens", `{}`)
 

@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -146,7 +147,7 @@ func floorCheck(t *testing.T, requiredVersion string) types.Check {
 	dir := t.TempDir()
 	yaml := "concurrency: 2\n"
 	if requiredVersion != "" {
-		yaml += "required_version: \"" + requiredVersion + "\"\n"
+		yaml += fmt.Sprintf("required_version: \"%s\"\n", requiredVersion)
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(yaml), 0o600))
 

@@ -41,7 +41,7 @@ func (a Align) delimiterCell(width int) string {
 	case Right:
 		return strings.Repeat("-", width-1) + ":"
 	case Center:
-		return ":" + strings.Repeat("-", width-2) + ":"
+		return fmt.Sprintf(":%s:", strings.Repeat("-", width-2))
 	}
 	return strings.Repeat("-", width)
 }
@@ -55,7 +55,7 @@ func (a Align) pad(cell string, width int) string {
 	case Right:
 		return strings.Repeat(" ", spare) + cell
 	case Center:
-		return strings.Repeat(" ", spare/2) + cell + strings.Repeat(" ", spare-spare/2)
+		return fmt.Sprintf("%s%s%s", strings.Repeat(" ", spare/2), cell, strings.Repeat(" ", spare-spare/2))
 	}
 	return cell + strings.Repeat(" ", spare)
 }
@@ -186,7 +186,7 @@ func TableLines(header []string, align []Align, rows [][]string) []string {
 		for i := range header {
 			padded[i] = alignAt(align, i).pad(cells[i], widths[i])
 		}
-		return "| " + strings.Join(padded, " | ") + " |"
+		return fmt.Sprintf("| %s |", strings.Join(padded, " | "))
 	}
 	delimiters := make([]string, len(header))
 	for i, w := range widths {
@@ -285,7 +285,7 @@ func (b *Builder) Bytes() []byte { return b.buf.Bytes() }
 func (b *Builder) WriteTo(w io.Writer) (int64, error) { return b.buf.WriteTo(w) }
 
 // Code renders s as inline code.
-func Code(s string) string { return "`" + s + "`" }
+func Code(s string) string { return fmt.Sprintf("`%s`", s) }
 
 // Codes renders labels as comma-separated inline code (a table cell of
 // anchors), or "" when there are none.
@@ -298,10 +298,10 @@ func Codes(labels []string) string {
 }
 
 // Bold renders s bold.
-func Bold(s string) string { return "**" + s + "**" }
+func Bold(s string) string { return fmt.Sprintf("**%s**", s) }
 
 // Link renders a markdown link.
-func Link(text, href string) string { return "[" + text + "](" + href + ")" }
+func Link(text, href string) string { return fmt.Sprintf("[%s](%s)", text, href) }
 
 // WithContents returns doc with a "## Contents" list of its second-level headings inserted
 // before the first of them, so a reader who opens a long document partway through still

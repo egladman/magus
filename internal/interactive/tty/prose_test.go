@@ -3,6 +3,7 @@ package tty
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestFoldProseLeavesAWordWiderThanTheBudgetWhole(t *testing.T) {
 	t.Parallel()
 	// Cutting one would break a path or a URL the reader has to copy.
 	long := "https://example.invalid/a/very/long/path/that/exceeds/the/budget"
-	lines := foldProse("", "see "+long+" for more", 20)
+	lines := foldProse("", fmt.Sprintf("see %s for more", long), 20)
 	assert.Contains(t, lines, long)
 }
 

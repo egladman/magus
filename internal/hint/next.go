@@ -1,6 +1,7 @@
 package hint
 
 import (
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -157,7 +158,7 @@ func NextForFailure(project, target, ref string) []types.NextStep {
 	if project != "" && target != "" {
 		next = append(next, breadcrumb("run-explain-target", Explain,
 			"a target that fails on its inputs is explained by what feeds it, which the node names.",
-			"target:"+project+":"+target))
+			fmt.Sprintf("target:%s:%s", project, target)))
 	}
 	return capNext(next)
 }
@@ -555,7 +556,7 @@ func NextForSlotWait(profile string, args []string) types.NextStep {
 	}
 	return types.NextStep{
 		ID:   "concurrency-profile",
-		Run:  BinaryName() + " " + strings.Join(quoted, " "),
+		Run:  fmt.Sprintf("%s %s", BinaryName(), strings.Join(quoted, " ")),
 		Argv: append([]string{BinaryName()}, rerun...),
 	}
 }
@@ -573,9 +574,9 @@ func Render(next []types.NextStep, why func(types.NextStep) string) string {
 	var b strings.Builder
 	b.WriteString("\nnext:\n")
 	for _, n := range next {
-		b.WriteString("  " + n.Run + "\n")
+		fmt.Fprintf(&b, "  %s\n", n.Run)
 		if w := why(n); w != "" {
-			b.WriteString("      " + w + "\n")
+			fmt.Fprintf(&b, "      %s\n", w)
 		}
 	}
 	return b.String()

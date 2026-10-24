@@ -1028,7 +1028,7 @@ func defaultText(defaults reflect.Value, goPath string) string {
 	for _, name := range strings.Split(goPath, ".") {
 		v = v.FieldByName(name)
 		if !v.IsValid() {
-			panic("config: schema field " + goPath + " is not in Config; regenerate schema/gen")
+			panic(fmt.Sprintf("config: schema field %s is not in Config; regenerate schema/gen", goPath))
 		}
 	}
 	if v.IsZero() {

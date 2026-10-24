@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -82,7 +83,7 @@ func RecordEnvDropped(ctx context.Context, p *Policy, cmd string) {
 	names := slices.Clone(p.EnvDropped)
 	slices.Sort(names)
 	// The empty variable name separates these keys from MGS2013's per-variable reads.
-	if !p.withheld.firstReport(project + "\x00" + target + "\x00\x00" + strings.Join(names, "\x00")) {
+	if !p.withheld.firstReport(fmt.Sprintf("%s\x00%s\x00\x00%s", project, target, strings.Join(names, "\x00"))) {
 		return
 	}
 	slog.InfoContext(ctx, types.FormatDiagnostic(types.EnvStripped,
@@ -126,7 +127,7 @@ func (w *withheldReads) firstReport(key string) bool {
 // target and variable.
 func RecordEnvWithheld(ctx context.Context, p *Policy, name string) {
 	project, target, _ := journal.StepFromContext(ctx)
-	if !p.withheld.firstReport(project + "\x00" + target + "\x00" + name) {
+	if !p.withheld.firstReport(fmt.Sprintf("%s\x00%s\x00%s", project, target, name)) {
 		return
 	}
 	slog.WarnContext(ctx, types.FormatDiagnostic(types.EnvReadWithheld,

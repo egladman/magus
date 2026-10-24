@@ -16,7 +16,7 @@ import (
 // worktree reuses the fold the others already paid for. One file per kind, so a reader
 // of the few gate results never decodes the agent events beside them.
 func foldCachePath(dir, kind string) string {
-	return filepath.Join(dir, ".fold-"+kind+".json")
+	return filepath.Join(dir, fmt.Sprintf(".fold-%s.json", kind))
 }
 
 // foldCacheFormat changes whenever the cached shape or what decides an entry's validity

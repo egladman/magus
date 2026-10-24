@@ -2,6 +2,7 @@ package playground
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -98,8 +99,8 @@ func TestSourceFromFragment(t *testing.T) {
 	}{
 		"share button":      {shared, "buzz fibo(20)", true},
 		"no leading hash":   {"source=" + payload, "buzz fibo(20)", true},
-		"docs deep link":    {"#source=" + shareRaw + base64.RawURLEncoding.EncodeToString([]byte("buzz fibo(20)")), "buzz fibo(20)", true},
-		"among other keys":  {"#tab=console&source=" + payload + "&x=1", "buzz fibo(20)", true},
+		"docs deep link":    {fmt.Sprintf("#source=%s%s", shareRaw, base64.RawURLEncoding.EncodeToString([]byte("buzz fibo(20)"))), "buzz fibo(20)", true},
+		"among other keys":  {fmt.Sprintf("#tab=console&source=%s&x=1", payload), "buzz fibo(20)", true},
 		"empty":             {"", "", false},
 		"hash only":         {"#", "", false},
 		"no source key":     {"#tab=console", "", false},

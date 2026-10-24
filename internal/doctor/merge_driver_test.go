@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os/exec"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestCheckOwedRegeneration(t *testing.T) {
 		Message: "1 regeneration(s) a merge kept one side for have not run, so those generated files are stale",
 		Details: []string{
 			hint.Run.With("generate:rw", ".") + " (1 kept file(s): MAGUS.md)",
-			"settle them with `" + hint.VCSResolve.String() + "`, which runs them, stages the result and clears the record",
+			fmt.Sprintf("settle them with `%s`, which runs them, stages the result and clears the record", hint.VCSResolve.String()),
 			"record: " + path,
 		},
 	}, r.checkOwedRegeneration())
@@ -77,7 +78,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 			"git config diff.typescript.xfuncname",
 			"git config diff.buzz.xfuncname",
 			"git config diff.yaml.xfuncname",
-			"install them with `" + hint.Init.With("--vcs", "git") + "`",
+			fmt.Sprintf("install them with `%s`", hint.Init.With("--vcs", "git")),
 		},
 	}, r.checkMergeDriverLoads())
 

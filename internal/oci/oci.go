@@ -142,7 +142,7 @@ func isRegistryHost(host string) bool {
 }
 
 func (r Reference) String() string {
-	s := r.Registry + "/" + r.Repository
+	s := fmt.Sprintf("%s/%s", r.Registry, r.Repository)
 	if r.Tag != "" {
 		s += ":" + r.Tag
 	}
@@ -362,7 +362,7 @@ func (c *Client) newGetRequest(ctx context.Context, ref Reference, auth, path st
 }
 
 func (c *Client) base(ref Reference) string {
-	return "https://" + ref.Registry + "/v2/" + ref.Repository
+	return fmt.Sprintf("https://%s/v2/%s", ref.Registry, ref.Repository)
 }
 
 // Layer is one named payload in an artifact. Name becomes the layer descriptor's title
@@ -614,7 +614,7 @@ func (c *Client) putBlob(ctx context.Context, ref Reference, auth string, payloa
 }
 
 func (c *Client) blobExists(ctx context.Context, ref Reference, auth string, d digest.Digest) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, c.base(ref)+"/blobs/"+d.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, fmt.Sprintf("%s/blobs/%s", c.base(ref), d.String()), nil)
 	if err != nil {
 		return false, err
 	}
@@ -630,7 +630,7 @@ func (c *Client) blobExists(ctx context.Context, ref Reference, auth string, d d
 func (c *Client) putManifest(ctx context.Context, ref Reference, auth, tag string, body []byte) error {
 	dest := ref
 	dest.Tag = tag
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.base(ref)+"/manifests/"+tag, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("%s/manifests/%s", c.base(ref), tag), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -655,5 +655,5 @@ func statusLine(resp *http.Response) string {
 	if detail == "" {
 		return resp.Status
 	}
-	return resp.Status + ": " + detail
+	return fmt.Sprintf("%s: %s", resp.Status, detail)
 }

@@ -1,6 +1,7 @@
 package bindgen
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -166,7 +167,9 @@ func TestObjectEnumFieldsCrossAsTheResolversCase(t *testing.T) {
 // value it was asked for, so a test reads which resolver call an encoder made.
 type namingEnums struct{}
 
-func (namingEnums) Case(enum, value string) vm.Value { return vm.StrValue(enum + "." + value) }
+func (namingEnums) Case(enum, value string) vm.Value {
+	return vm.StrValue(fmt.Sprintf("%s.%s", enum, value))
+}
 
 func objectMap(t *testing.T, v vm.Value) map[string]any {
 	t.Helper()

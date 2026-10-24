@@ -117,7 +117,7 @@ func executable(pid int) (os.FileInfo, error) {
 
 // procPath is /proc/<pid>/<elem...>.
 func procPath(pid int, elem ...string) string {
-	return procRoot + "/" + strconv.Itoa(pid) + "/" + strings.Join(elem, "/")
+	return fmt.Sprintf("%s/%d/%s", procRoot, pid, strings.Join(elem, "/"))
 }
 
 const procRoot = "/proc"

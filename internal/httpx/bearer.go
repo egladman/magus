@@ -184,7 +184,7 @@ func grantBelow(need types.Need, held types.Grant) rpcerr.Error {
 	if heldText == "" {
 		heldText = "nothing"
 	}
-	msg := "this route needs " + need.String() + " and the token presented holds " + heldText
+	msg := fmt.Sprintf("this route needs %s and the token presented holds %s", need.String(), heldText)
 	switch {
 	case need.Scope == types.ScopeTokens:
 		msg += "; only the operator token reaches it, used from the user's own shell"

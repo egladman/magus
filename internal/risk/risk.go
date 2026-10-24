@@ -70,7 +70,7 @@ type Classified struct {
 func (c Classified) LowRisk() bool { return c.Class != ClassCode }
 
 // Line is the path's verdict line: `<path>: <class> (<why>)`.
-func (c Classified) Line() string { return c.Path + ": " + c.Class.String() + " (" + c.Why + ")" }
+func (c Classified) Line() string { return fmt.Sprintf("%s: %s (%s)", c.Path, c.Class.String(), c.Why) }
 
 // Delta is the per-path verdict over one delta.
 type Delta struct {
@@ -108,7 +108,7 @@ func (s Scope) WorkspaceGlobs() []string {
 		if s.Dir == "" || s.Dir == "." {
 			out[i] = g
 		} else {
-			out[i] = s.Dir + "/" + g
+			out[i] = fmt.Sprintf("%s/%s", s.Dir, g)
 		}
 	}
 	return out
@@ -215,7 +215,7 @@ func (c Classifier) classify(ctx context.Context, p, role, rev string) (Class, s
 		return ClassGenerated, "magus maintains it outside any target"
 	}
 	if glob, origin, ok := MatchScopes(c.Prose, p); ok {
-		return ClassProse, "matches " + quoteGlob(glob) + " (" + origin + ")"
+		return ClassProse, fmt.Sprintf("matches %s (%s)", quoteGlob(glob), origin)
 	}
 	// Comment-only detection needs the language's comment and string syntax, and every
 	// language gets it the same way: a syntax the language's SPELL declared
@@ -265,7 +265,7 @@ func (c Classifier) Merge(ctx context.Context, path, base, merged string, optIn 
 		return v, true
 	}
 	if glob, origin, ok := MatchScopes(optIn, path); ok {
-		return Classified{Path: path, Class: ClassCode, Why: "matches " + quoteGlob(glob) + " (" + origin + ")"}, true
+		return Classified{Path: path, Class: ClassCode, Why: fmt.Sprintf("matches %s (%s)", quoteGlob(glob), origin)}, true
 	}
 	return v, false
 }
@@ -285,7 +285,7 @@ func (c Classifier) Edit(ctx context.Context, path string, old, cur []byte) Clas
 }
 
 // quoteGlob quotes a glob for the attribution line.
-func quoteGlob(glob string) string { return `"` + glob + `"` }
+func quoteGlob(glob string) string { return fmt.Sprintf("%c%s%c", '"', glob, '"') }
 
 // CommentOnlyDeclared reports whether two sources of a declared language differ only in
 // comments: both strip to byte-identical text. No token-stream normalization happens:

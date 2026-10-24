@@ -15,7 +15,7 @@ func ParseOrigin(base string) (string, error) {
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", fmt.Errorf("httpx: origin: %q is not a valid absolute URL", base)
 	}
-	return u.Scheme + "://" + u.Host, nil
+	return fmt.Sprintf("%s://%s", u.Scheme, u.Host), nil
 }
 
 // CORS locks every wrapped response to a single site origin and answers the OPTIONS

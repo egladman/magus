@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
@@ -23,6 +24,6 @@ func (r *runner) checkBriefFormat(_ []*types.Project) types.Check {
 	format, from := job.ResolveBriefFormat(types.Job{}, agents.BriefFormat)
 	return types.Check{
 		Name: name, Status: types.CheckOK,
-		Message: "a brief to a job row that names no brief_format is " + string(format) + ", " + from,
+		Message: fmt.Sprintf("a brief to a job row that names no brief_format is %s, %s", string(format), from),
 	}
 }

@@ -208,16 +208,16 @@ func describeDeltas(members []Member) []MemberDelta {
 		env := envMap(id.Env)
 		for _, k := range varyingEnv {
 			if v, ok := env[k]; ok {
-				delta = append(delta, k+"="+v)
+				delta = append(delta, fmt.Sprintf("%s=%s", k, v))
 			} else {
 				delta = append(delta, k+"(unset)")
 			}
 		}
 		if portsVary {
-			delta = append(delta, "ports=["+strings.Join(id.Ports, ",")+"]")
+			delta = append(delta, fmt.Sprintf("ports=[%s]", strings.Join(id.Ports, ",")))
 		}
 		if volsVary {
-			delta = append(delta, "volumes=["+strings.Join(id.Volumes, ",")+"]")
+			delta = append(delta, fmt.Sprintf("volumes=[%s]", strings.Join(id.Volumes, ",")))
 		}
 		out[i] = MemberDelta{Name: m.Name, Delta: delta}
 	}

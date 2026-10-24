@@ -1,6 +1,7 @@
 package emit
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,11 +78,11 @@ func TestGoTemplate(t *testing.T) {
 
 func TestRegion(t *testing.T) {
 	m := CommentMarker("#", "subcommands")
-	src := "before\n    " + m.Begin + "\nstale\nlines\n    " + m.End + "\nafter"
+	src := fmt.Sprintf("before\n    %s\nstale\nlines\n    %s\nafter", m.Begin, m.End)
 
 	got, err := Region(src, m, "fresh")
 	require.NoError(t, err)
-	assert.Equal(t, "before\n    "+m.Begin+"\nfresh\n    "+m.End+"\nafter", got,
+	assert.Equal(t, fmt.Sprintf("before\n    %s\nfresh\n    %s\nafter", m.Begin, m.End), got,
 		"both marker lines and their indentation must survive")
 
 	// Idempotent: replacing with what is already there is a no-op.
@@ -96,10 +97,10 @@ func TestRegionRefusesAmbiguity(t *testing.T) {
 	m := CommentMarker("#", "list")
 	for name, src := range map[string]string{
 		"no markers at all": "just some text",
-		"begin only":        "a\n" + m.Begin + "\nb",
-		"end only":          "a\n" + m.End + "\nb",
-		"reversed":          m.End + "\nbody\n" + m.Begin,
-		"duplicate begin":   m.Begin + "\nx\n" + m.Begin + "\ny\n" + m.End,
+		"begin only":        fmt.Sprintf("a\n%s\nb", m.Begin),
+		"end only":          fmt.Sprintf("a\n%s\nb", m.End),
+		"reversed":          fmt.Sprintf("%s\nbody\n%s", m.End, m.Begin),
+		"duplicate begin":   fmt.Sprintf("%s\nx\n%s\ny\n%s", m.Begin, m.Begin, m.End),
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Region(src, m, "body")
@@ -160,7 +161,7 @@ func TestGoTemplateSurfacesAWriteFailure(t *testing.T) {
 // would rebuild the world on a target that changed nothing.
 func TestRegionIsIdempotent(t *testing.T) {
 	m := CommentMarker("#", "subcommands")
-	src := "before\n" + m.Begin + "\nstale\n" + m.End + "\nafter\n"
+	src := fmt.Sprintf("before\n%s\nstale\n%s\nafter\n", m.Begin, m.End)
 
 	once, err := Region(src, m, "run\ntest")
 	require.NoError(t, err)
@@ -189,7 +190,7 @@ func TestRegionIsIdempotent(t *testing.T) {
 // first instead of discovering it in a corrupted artifact.
 func TestRegionTreatsAMarkerInAStringLiteralAsAMarker(t *testing.T) {
 	m := CommentMarker("//", "list")
-	src := "package p\n\nconst doc = \"" + m.Begin + "\"\n" + m.End + "\ntail\n"
+	src := fmt.Sprintf("package p\n\nconst doc = \"%s\"\n%s\ntail\n", m.Begin, m.End)
 
 	out, err := Region(src, m, "BODY")
 	require.NoError(t, err, "the quoted marker is matched, not skipped")
@@ -203,7 +204,7 @@ func TestRegionTreatsAMarkerInAStringLiteralAsAMarker(t *testing.T) {
 // deleting hand-written content the generator does not own.
 func TestRegionRefusesADuplicateEndMarker(t *testing.T) {
 	m := CommentMarker("#", "list")
-	src := m.Begin + "\nbody\n" + m.End + "\nkeep me\n" + m.End + "\n"
+	src := fmt.Sprintf("%s\nbody\n%s\nkeep me\n%s\n", m.Begin, m.End, m.End)
 
 	_, err := Region(src, m, "new")
 	require.Error(t, err, "two end markers is ambiguous, and guessing would delete 'keep me'")

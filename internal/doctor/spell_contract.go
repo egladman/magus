@@ -52,7 +52,7 @@ func checkSpellContract(spells []*spells.Spell) types.Check {
 			// Reported, not failed: see the note above on the magusfile spell.
 			hooks = append(hooks, "targets supplied by the magusfile, not the spell")
 		}
-		details = append(details, sn+": "+strings.Join(hooks, ", "))
+		details = append(details, fmt.Sprintf("%s: %s", sn, strings.Join(hooks, ", ")))
 	}
 	sort.Strings(details)
 

@@ -1,5 +1,7 @@
 package langservice
 
+import "fmt"
+
 // Hover is the information shown when the pointer rests on a symbol: a Title (a
 // signature or qualified name) and a longer Doc. A nil *Hover means nothing to show.
 type Hover struct {
@@ -59,7 +61,7 @@ func HoverAt(src string, offset int) *Hover {
 		if s.Sig != "" {
 			return &Hover{Title: s.Sig}
 		}
-		return &Hover{Title: string(s.Kind) + " " + s.Name}
+		return &Hover{Title: fmt.Sprintf("%s %s", string(s.Kind), s.Name)}
 	}
 
 	// A builtin global.
@@ -79,7 +81,7 @@ func memberHover(mod Module, name string) *Hover {
 	}
 	for _, f := range mod.Fields {
 		if f.Name == name {
-			title := mod.Name + `\` + f.Name
+			title := fmt.Sprintf(`%s\%s`, mod.Name, f.Name)
 			if f.Type != "" {
 				title += ": " + f.Type
 			}

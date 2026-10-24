@@ -667,13 +667,8 @@ func (e *s3Emulator) verifySigV4(r *http.Request, body []byte) error {
 		}
 		fmt.Fprintf(&hb, "%s:%s\n", name, val)
 	}
-	canonicalRequest := r.Method + "\n" +
-		r.URL.EscapedPath() + "\n" +
-		canonicalQuery(r.URL.Query()) + "\n" +
-		hb.String() + "\n" +
-		signed + "\n" +
-		payloadHash
-	stringToSign := "AWS4-HMAC-SHA256\n" + amzdate + "\n" + scope + "\n" + sha256Hex([]byte(canonicalRequest))
+	canonicalRequest := fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s", r.Method, r.URL.EscapedPath(), canonicalQuery(r.URL.Query()), hb.String(), signed, payloadHash)
+	stringToSign := fmt.Sprintf("AWS4-HMAC-SHA256\n%s\n%s\n%s", amzdate, scope, sha256Hex([]byte(canonicalRequest)))
 
 	kDate := hmacSum([]byte("AWS4"+e.secret), datestamp)
 	kRegion := hmacSum(kDate, e.region)
@@ -709,7 +704,7 @@ func canonicalQuery(q url.Values) string {
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		for _, v := range q[k] {
-			parts = append(parts, awsURIEncode(k)+"="+awsURIEncode(v))
+			parts = append(parts, fmt.Sprintf("%s=%s", awsURIEncode(k), awsURIEncode(v)))
 		}
 	}
 	return strings.Join(parts, "&")
@@ -734,7 +729,7 @@ func awsURIEncode(s string) string {
 func (e *s3Emulator) writeListing(w http.ResponseWriter, r *http.Request) {
 	prefix := r.URL.Query().Get("prefix")
 	marker := r.URL.Query().Get("marker")
-	bucketPath := "/" + e.bucket + "/"
+	bucketPath := fmt.Sprintf("/%s/", e.bucket)
 
 	e.mu.Lock()
 	var keys []string
@@ -763,9 +758,9 @@ func (e *s3Emulator) writeListing(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult>`)
 	fmt.Fprintf(&b, "<Name>%s</Name><Prefix>%s</Prefix><IsTruncated>%t</IsTruncated>", e.bucket, prefix, truncated)
 	for _, k := range keys {
-		mt := e.mtimes["/"+e.bucket+"/"+k]
+		mt := e.mtimes[fmt.Sprintf("/%s/%s", e.bucket, k)]
 		fmt.Fprintf(&b, "<Contents><Key>%s</Key><LastModified>%s</LastModified><Size>%d</Size></Contents>",
-			k, mt.UTC().Format("2006-01-02T15:04:05.000Z"), len(e.objects["/"+e.bucket+"/"+k]))
+			k, mt.UTC().Format("2006-01-02T15:04:05.000Z"), len(e.objects[fmt.Sprintf("/%s/%s", e.bucket, k)]))
 	}
 	b.WriteString(`</ListBucketResult>`)
 	e.mu.Unlock()

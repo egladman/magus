@@ -321,7 +321,7 @@ func decodeSkillVariant(v vm.Value) (types.SkillVariant, error) {
 
 func describeValue(v vm.Value) string {
 	if enum, name, ok := v.EnumCase(); ok {
-		return enum + "." + name
+		return fmt.Sprintf("%s.%s", enum, name)
 	}
 	return v.Kind()
 }
@@ -335,7 +335,7 @@ func enumCaseValues(ctx context.Context, sess *buzz.Session, def vm.Value, cases
 		if i > 0 {
 			src.WriteString(", ")
 		}
-		src.WriteString(tierEnumGlobal + "." + c)
+		fmt.Fprintf(&src, "%s.%s", tierEnumGlobal, c)
 	}
 	src.WriteString("];")
 	sess.SetGlobal(tierEnumGlobal, def)

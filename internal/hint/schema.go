@@ -68,8 +68,7 @@ func RejectUnknownKeys(present, known []string, where string) error {
 // IgnoredKeyAdvice explains an ignored key, so the reader stops hunting a typo that is
 // not there.
 func IgnoredKeyAdvice() string {
-	return "nothing known is close to it, so this magus probably predates it; upgrade with `" +
-		SelfUpdate.String() + "`, or delete the key if the workspace does not need it"
+	return fmt.Sprintf("nothing known is close to it, so this magus probably predates it; upgrade with `%s`, or delete the key if the workspace does not need it", SelfUpdate.String())
 }
 
 // undefinedMagus matches the checker's errors for a program that names magus without

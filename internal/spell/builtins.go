@@ -137,7 +137,7 @@ func loadShipped() shippedSpells {
 			continue
 		}
 		if err != nil {
-			panic("magus/spell: read shipped spell " + dir + ": " + err.Error())
+			panic(fmt.Sprintf("magus/spell: read shipped spell %s: %s", dir, err.Error()))
 		}
 		start := time.Now()
 		spec, err := compileBuiltin(ctx, string(src))
@@ -145,7 +145,7 @@ func loadShipped() shippedSpells {
 			continue
 		}
 		if err != nil {
-			panic("magus/spell: load built-in " + dir + ": " + err.Error())
+			panic(fmt.Sprintf("magus/spell: load built-in %s: %s", dir, err.Error()))
 		}
 		if prev, dup := out.dirs[spec.Name]; dup {
 			panic(fmt.Sprintf("magus/spell: spells/%s and spells/%s both register %q", prev, dir, spec.Name))

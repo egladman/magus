@@ -3,6 +3,7 @@ package textrank
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestIndexScoreHandComputed(t *testing.T) {
 func termFields(h Hit) []string {
 	var out []string
 	for _, ts := range h.Terms {
-		out = append(out, ts.Term+"/"+ts.Field)
+		out = append(out, fmt.Sprintf("%s/%s", ts.Term, ts.Field))
 	}
 	return out
 }

@@ -1,6 +1,7 @@
 package deps
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -40,7 +41,7 @@ func TestDockerfilesCopyLocalReplaces(t *testing.T) {
 		require.NoError(t, err)
 		lines := strings.Split(string(dockerfile), "\n")
 		for _, dir := range dirs {
-			want := "COPY " + dir + "/go.mod " + dir + "/"
+			want := fmt.Sprintf("COPY %[1]s/go.mod %[1]s/", dir)
 			assert.Contains(t, lines, want, "%s copies no go.mod for the local replace %s", name, dir)
 		}
 	}

@@ -1,6 +1,7 @@
 package hint
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -61,7 +62,7 @@ func ResolveBinaryNameFrom(argv0 string) {
 		// would type there; an absolute path from anywhere else is an installed magus
 		// on PATH, and spelling it in full costs more context than it buys.
 		if wd, err := os.Getwd(); err == nil && wd == filepath.Dir(argv0) {
-			invokedAs.Store("." + string(filepath.Separator) + base)
+			invokedAs.Store(fmt.Sprintf(".%c%s", filepath.Separator, base))
 			return
 		}
 		invokedAs.Store(DefaultBinaryName)

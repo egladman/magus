@@ -120,7 +120,7 @@ var ThemeVariants = []ThemeVariant{
 // VariantPath names the file one variant of a picture is written to, given the
 // unsuffixed name and the variant's suffix.
 func VariantPath(path, suffix string) string {
-	return strings.TrimSuffix(path, ".svg") + suffix + ".svg"
+	return fmt.Sprintf("%s%s.svg", strings.TrimSuffix(path, ".svg"), suffix)
 }
 
 // resolve turns one run's attributes into the fill, background, weight and

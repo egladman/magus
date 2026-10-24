@@ -73,9 +73,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any { proc\exec("go"
 		assert.Equal(t, types.Check{
 			Name:   "manifest-scripts",
 			Status: types.CheckFail,
-			Message: "3 call(s) run a script a manifest defines, so its steps, inputs and outputs are " +
-				"invisible to the cache key; declare those steps in the magusfile (see " +
-				types.CodeURL(types.ManifestScriptDelegation) + ")",
+			Message: fmt.Sprintf("3 call(s) run a script a manifest defines, so its steps, inputs and outputs are "+
+				"invisible to the cache key; declare those steps in the magusfile (see %s)", types.CodeURL(types.ManifestScriptDelegation)),
 			Details: []string{
 				"web: target \"build\" runs `pnpm run build`, script \"build\" its typescript manifest defines (runner `pnpm run`) (web/magusfile.buzz)",
 				"web: target \"lint\" runs `poe lint`, script \"lint\" its python manifest defines (runner `poe`) (web/magusfile.buzz)",

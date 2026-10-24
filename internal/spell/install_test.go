@@ -2,6 +2,7 @@ package spell
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -237,7 +238,7 @@ func layOutWorktreeSet(t *testing.T, names ...string) map[string]string {
 		admin := filepath.Join(primary, ".git", "worktrees", name)
 		require.NoError(t, os.MkdirAll(admin, 0o755))
 		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+admin+"\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte(fmt.Sprintf("gitdir: %s\n", admin)), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(admin, "gitdir"), []byte(filepath.Join(dir, ".git")+"\n"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(admin, "commondir"), []byte("../..\n"), 0o644))
 		out[name] = dir

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"time"
@@ -140,9 +141,9 @@ func LatestCheckpoints(fold Fold) []CheckpointRecord {
 func checkpointKey(c Checkpoint) string {
 	switch {
 	case c.HostSession != "":
-		return "session\x00" + c.Host + "\x00" + c.HostSession
+		return fmt.Sprintf("session\x00%s\x00%s", c.Host, c.HostSession)
 	case c.Tree.Branch != "":
-		return "branch\x00" + c.Workspace + "\x00" + c.Tree.Branch
+		return fmt.Sprintf("branch\x00%s\x00%s", c.Workspace, c.Tree.Branch)
 	default:
 		return "workspace\x00" + c.Workspace
 	}

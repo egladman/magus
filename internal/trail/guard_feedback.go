@@ -2,6 +2,7 @@ package trail
 
 import (
 	"cmp"
+	"fmt"
 	"iter"
 	"slices"
 	"strings"
@@ -82,7 +83,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		if response.Decision != "deny" || response.Rule == "" {
 			continue
 		}
-		fingerprint := response.Rule + "\x00" + request.Tool
+		fingerprint := fmt.Sprintf("%s\x00%s", response.Rule, request.Tool)
 		c := candidates[fingerprint]
 		if c == nil {
 			c = &candidate{GuardFeedback: GuardFeedback{Rule: response.Rule, Tool: request.Tool}, perSession: map[sessionKey]int{}, followed: map[sessionKey]bool{}}
@@ -102,7 +103,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 			if c.followed[key] {
 				c.FollowedSessions++
 			}
-			c.Evidence = append(c.Evidence, key.host+":"+key.session+" ("+itoa(count)+" denials)")
+			c.Evidence = append(c.Evidence, fmt.Sprintf("%s:%s (%d denials)", key.host, key.session, count))
 		}
 		slices.Sort(c.Evidence)
 		out = append(out, c.GuardFeedback)
@@ -114,7 +115,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		if c := cmp.Compare(b.Denied, a.Denied); c != 0 {
 			return c
 		}
-		return cmp.Compare(a.Rule+"\x00"+a.Tool, b.Rule+"\x00"+b.Tool)
+		return cmp.Compare(fmt.Sprintf("%s\x00%s", a.Rule, a.Tool), fmt.Sprintf("%s\x00%s", b.Rule, b.Tool))
 	})
 	return out, nil
 }
@@ -193,20 +194,4 @@ func agentCommands(base string, events []Event) iter.Seq[agentCommand] {
 func isMagusRunRequest(command string) bool {
 	fields := strings.Fields(command)
 	return len(fields) >= 2 && fields[0] == "magus" && fields[1] == "run"
-}
-
-func itoa(v int) string {
-	// A tiny local formatter avoids making the aggregation depend on CLI output
-	// helpers. The range is bounded by the retained trail window.
-	if v == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for v > 0 {
-		i--
-		b[i] = byte('0' + v%10)
-		v /= 10
-	}
-	return string(b[i:])
 }

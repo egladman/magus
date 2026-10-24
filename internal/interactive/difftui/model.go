@@ -530,7 +530,7 @@ func hunkHeading(h *Hunk) string {
 	if h.Declaration == "" {
 		return at
 	}
-	return at + "  " + h.Declaration
+	return fmt.Sprintf("%s  %s", at, h.Declaration)
 }
 
 // foldReason says WHY a file is folded, because the two reasons send the reader to different
@@ -608,7 +608,7 @@ func (m *Model) rebuild() {
 			if m.viewed[h.Digest] {
 				mark = "[x]"
 			}
-			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: mark + " " + hunkHeading(h)})
+			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: fmt.Sprintf("%s %s", mark, hunkHeading(h))})
 			for li, l := range h.Lines {
 				var emph changeset.Span
 				if li < len(h.Emph) {

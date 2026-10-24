@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -136,9 +137,9 @@ func machineService(t *testing.T, marker, log string) spells.Service {
 		t.Skip("needs sh")
 	}
 	return spells.Service{
-		Start:     spells.Command{Bin: "sh", Args: []string{"-c", "touch " + marker + "; echo start >> " + log}},
+		Start:     spells.Command{Bin: "sh", Args: []string{"-c", fmt.Sprintf("touch %s; echo start >> %s", marker, log)}},
 		Readiness: spells.Command{Bin: "test", Args: []string{"-e", marker}},
-		Stop:      spells.Command{Bin: "sh", Args: []string{"-c", "rm -f " + marker + "; echo stop >> " + log}},
+		Stop:      spells.Command{Bin: "sh", Args: []string{"-c", fmt.Sprintf("rm -f %s; echo stop >> %s", marker, log)}},
 		Idle:      "10ms",
 	}
 }

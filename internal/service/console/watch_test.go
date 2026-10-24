@@ -2,6 +2,7 @@ package console
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,7 +39,7 @@ func TestJobFeedAttributesAChangeToTheWritePathThatCoversIt(t *testing.T) {
 	retick := time.NewTicker(200 * time.Millisecond)
 	defer retick.Stop()
 	deadline := time.After(5 * time.Second)
-	rewrite := func() { _ = os.WriteFile(target, []byte("// "+time.Now().String()+"\n"), 0o644) }
+	rewrite := func() { _ = os.WriteFile(target, []byte(fmt.Sprintf("// %s\n", time.Now().String())), 0o644) }
 	rewrite()
 	for {
 		select {
@@ -92,7 +93,7 @@ func TestJobFeedInvalidateSignalsOnGraphRelevantChange(t *testing.T) {
 	retick := time.NewTicker(200 * time.Millisecond)
 	defer retick.Stop()
 	deadline := time.After(5 * time.Second)
-	rewrite := func() { _ = os.WriteFile(buzz, []byte("// changed "+time.Now().String()+"\n"), 0o644) }
+	rewrite := func() { _ = os.WriteFile(buzz, []byte(fmt.Sprintf("// changed %s\n", time.Now().String())), 0o644) }
 	rewrite()
 	for {
 		select {
