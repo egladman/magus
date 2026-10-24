@@ -111,7 +111,7 @@ func (v jjVCS) StrandedRevisions(ctx context.Context, dir string, bases ...strin
 	for _, b := range bases {
 		reach += " | " + b
 	}
-	revset := "::@ ~ ::(" + reach + `) ~ (@ & empty() & description(exact:""))`
+	revset := fmt.Sprintf("::@ ~ ::(%s) ~ (@ & empty() & description(exact:\"\"))", reach)
 	out, err := vcsOutput(ctx, dir, "jj", "log", "--no-graph", "-r", revset, "-T", `commit_id ++ "\n"`)
 	if err != nil {
 		return nil, fmt.Errorf("jj log -r %q: %w", revset, err)
@@ -398,7 +398,7 @@ func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []st
 	if err != nil {
 		return "", err
 	}
-	forkPoint := "heads(::" + base + " & ::" + head + ")"
+	forkPoint := fmt.Sprintf("heads(::%s & ::%s)", base, head)
 	args := []string{"diff", "--git", "--from", forkPoint, "--to", head}
 	if len(paths) > 0 {
 		// Prefixed for the reason DirtyDiff prefixes: the command runs from the workspace root,
@@ -425,7 +425,7 @@ func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []s
 	if err != nil {
 		return nil, fmt.Errorf("locate repository root: %w", err)
 	}
-	args := append([]string{"diff", "--name-only", "--from", "heads(::" + base + " & ::" + head + ")", "--to", head},
+	args := append([]string{"diff", "--name-only", "--from", fmt.Sprintf("heads(::%s & ::%s)", base, head), "--to", head},
 		jjRootPaths(paths)...)
 	out, err := vcsOutput(ctx, root, "jj", args...)
 	if err != nil {
@@ -440,7 +440,7 @@ func (v jjVCS) RangeCommits(ctx context.Context, dir, base, head string, paths [
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
-	args := append([]string{"log", "-r", base + ".." + head, "--no-graph", "-T", `commit_id ++ "\n"`},
+	args := append([]string{"log", "-r", fmt.Sprintf("%s..%s", base, head), "--no-graph", "-T", `commit_id ++ "\n"`},
 		jjRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, "jj", args...)
 	if err != nil {
@@ -468,7 +468,7 @@ func (v jjVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string)
 	if err := checkRequiredRevsetRef(ancestor, descendant); err != nil {
 		return false, err
 	}
-	out, err := vcsOutput(ctx, dir, "jj", "log", "-r", ancestor+" & ::"+descendant, "--no-graph", "-T", "commit_id")
+	out, err := vcsOutput(ctx, dir, "jj", "log", "-r", fmt.Sprintf("%s & ::%s", ancestor, descendant), "--no-graph", "-T", "commit_id")
 	if err != nil {
 		return false, fmt.Errorf("jj log %s & ::%s: %w", ancestor, descendant, err)
 	}
@@ -1155,7 +1155,7 @@ func (v jjVCS) RunMergeDriver(ctx context.Context, root string, paths []string) 
 		if kv.key == "merge-tools.magus.program" {
 			value = strconv.Quote(driverExe(ctx, root, jjTracks))
 		}
-		config = append(config, "--config", kv.key+"="+value)
+		config = append(config, "--config", fmt.Sprintf("%s=%s", kv.key, value))
 	}
 	for _, p := range paths {
 		argv := slices.Concat(config, []string{"resolve", "--tool", "magus", "--", "root-file:" + strconv.Quote(p)})
@@ -1206,7 +1206,7 @@ func (v jjVCS) repoMergeTool(ctx context.Context, root string) (string, error) {
 func jjMergeToolListing() string {
 	lines := make([]string, len(jjMergeTool))
 	for i, kv := range jjMergeTool {
-		lines[i] = kv.key + " = " + kv.value
+		lines[i] = fmt.Sprintf("%s = %s", kv.key, kv.value)
 	}
 	slices.Sort(lines)
 	return strings.Join(lines, "\n")

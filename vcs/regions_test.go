@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -429,7 +430,7 @@ func TestPlacementSkipsGoStringsAndComments(t *testing.T) {
 	body := "package a\n\nfunc A() {\n\trun(`\nvar i = 0;\nfunc fake() {\n`)\n\tx()\n}\n\n/*\ntype T struct {\n*/\n\nvar after = 1\n"
 	var funcnames []string
 	for _, f := range gitFuncnames {
-		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+		funcnames = append(funcnames, "-c", fmt.Sprintf("%s=%s", f.key(), f.pattern))
 	}
 	got, err := gitPlaceLines(t.Context(), t.TempDir(), "golang", funcnames, []byte(body))
 	require.NoError(t, err)
@@ -482,7 +483,7 @@ func TestPurePlacementMatchesGit(t *testing.T) {
 	}
 	var funcnames []string
 	for _, f := range gitFuncnames {
-		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+		funcnames = append(funcnames, "-c", fmt.Sprintf("%s=%s", f.key(), f.pattern))
 	}
 	for _, d := range types.DiffDrivers {
 		t.Run(d.Name, func(t *testing.T) {
@@ -523,7 +524,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 func TestPlaceProjectKeys(t *testing.T) {
 	var funcnames []string
 	for _, f := range gitFuncnames {
-		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+		funcnames = append(funcnames, "-c", fmt.Sprintf("%s=%s", f.key(), f.pattern))
 	}
 	for _, tc := range []struct {
 		name string
@@ -593,7 +594,7 @@ func TestRegionsBetweenNamesProjectKeys(t *testing.T) {
 func TestPlaceYAMLKeys(t *testing.T) {
 	var funcnames []string
 	for _, f := range gitFuncnames {
-		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+		funcnames = append(funcnames, "-c", fmt.Sprintf("%s=%s", f.key(), f.pattern))
 	}
 	body := "# config\nversion: 1\njobs:\n  stale_after: 2h\n  nested:\n    deep: 1\nlist:\n  - a\nblock: |\n  text: here\n"
 	got, err := gitPlaceLines(t.Context(), t.TempDir(), "yaml", funcnames, []byte(body))

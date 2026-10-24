@@ -1159,7 +1159,9 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 // git, sl and jj all read a .gitignore of plain globs.
 func ignoreRule(b parityBackend, pattern string) (name, body string) {
 	if b.name == "hg" {
-		return ".hgignore", "syntax: glob\n" + pattern + "\n"
+		return ".hgignore", fmt.Sprintf(`syntax: glob
+%s
+`, pattern)
 	}
 	return ".gitignore", pattern + "\n"
 }
@@ -1705,7 +1707,7 @@ func TestParityPreserveOfACleanTreeIsEmpty(t *testing.T) {
 // which is why a handle is documented as opaque.
 func gitReadback(t *testing.T, dir, handle, path string) string {
 	t.Helper()
-	return vcsTestOutput(t, dir, "git", "show", handle+":"+path)
+	return vcsTestOutput(t, dir, "git", "show", fmt.Sprintf("%s:%s", handle, path))
 }
 
 func hgReadback(t *testing.T, dir, handle, path string) string {
@@ -2149,7 +2151,7 @@ func TestParityCapabilityMatrix(t *testing.T) {
 	}
 	for _, b := range parityBackends() {
 		for _, p := range probes {
-			t.Run(b.name+"/"+p.method, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", b.name, p.method), func(t *testing.T) {
 				row, ok := capabilityMatrix[p.capability]
 				require.Truef(t, ok, "%s has a probe but no row in the matrix", p.capability)
 				err := p.call(b.drv, t.TempDir())

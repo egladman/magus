@@ -35,7 +35,7 @@ var (
 
 // section wraps body, which ends in a newline, in m's unstamped banner and end lines.
 func (m managedMarkers) section(body string) string {
-	return m.banner(stamp.Writer{}) + body + m.end + "\n"
+	return fmt.Sprintf("%s%s%s\n", m.banner(stamp.Writer{}), body, m.end)
 }
 
 // banner is m's opening line, naming w as the writer when w is known. The stamp sits on
@@ -75,7 +75,7 @@ func sectionBanner(path, text string, m managedMarkers, body string, j stamp.Jud
 	}
 	if len(spans) == 1 {
 		head, rest, _ := strings.Cut(text[spans[0].start:spans[0].end], "\n")
-		if rest == body+m.end+"\n" || rest == body+m.end {
+		if rest == fmt.Sprintf("%s%s\n", body, m.end) || rest == body+m.end {
 			return head + "\n", nil
 		}
 	}
@@ -153,7 +153,7 @@ func replaceManagedSection(text, newSection string, m managedMarkers) (string, e
 	if body != "" {
 		body = "\n" + body
 	}
-	return head + newSection + body, nil
+	return fmt.Sprintf(`%s%s%s`, head, newSection, body), nil
 }
 
 // span is one managed section's half-open byte range, from the start of its begin line
@@ -428,7 +428,7 @@ func renderManagedFile(path, current string, m managedMarkers, body string, kind
 	if err != nil {
 		return "", err
 	}
-	next, err := replaceManagedSection(text, banner+body+m.end+"\n", m)
+	next, err := replaceManagedSection(text, fmt.Sprintf("%s%s%s\n", banner, body, m.end), m)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}

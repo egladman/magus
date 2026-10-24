@@ -121,7 +121,7 @@ func dirName(id string) string {
 	if !fs.ValidPath(base) || base == "." {
 		base = "repo"
 	}
-	return base + "-" + hex.EncodeToString(sum[:])[:12]
+	return fmt.Sprintf("%s-%s", base, hex.EncodeToString(sum[:])[:12])
 }
 
 // Adopt moves a legacy store directory onto dir so records written under an older key
@@ -198,7 +198,7 @@ func remoteIdentity(u string) string {
 		u = rest
 	} else if host, path, ok := strings.Cut(u, ":"); ok && scpLikeHost(host) {
 		// scp-like: user@host:path/to/repo, where a colon does a slash's job.
-		u = host + "/" + path
+		u = fmt.Sprintf("%s/%s", host, path)
 	} else {
 		return ""
 	}
@@ -221,7 +221,7 @@ func remoteIdentity(u string) string {
 	// case-insensitive on some forges. Folding it would merge two repositories that
 	// differ by case on a forge where that is a real distinction, and merging is the
 	// one error with no recovery.
-	return strings.ToLower(host) + "/" + path
+	return fmt.Sprintf("%s/%s", strings.ToLower(host), path)
 }
 
 // hostPart is everything before the first path separator, which is the only region a

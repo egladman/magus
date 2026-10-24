@@ -242,11 +242,11 @@ func TestHgHistoryFollowsPathsAndFirstParent(t *testing.T) {
 // next commit starts.
 func TestParseHgHistoryRefusesABadCount(t *testing.T) {
 	rec := strings.Join([]string{"id", "s", "n", "e", "2026-01-02T03:04:05Z", "", "msg"}, commitDelim)
-	got, err := parseHgHistory(rec + commitDelim + "2" + commitDelim + "a" + commitDelim)
+	got, err := parseHgHistory(fmt.Sprintf("%s%s2%sa%s", rec, commitDelim, commitDelim, commitDelim))
 	assert.Nil(t, got)
 	require.Error(t, err)
 
-	got, err = parseHgHistory(rec + commitDelim + "1" + commitDelim + "a" + commitDelim)
+	got, err = parseHgHistory(fmt.Sprintf("%s%s1%sa%s", rec, commitDelim, commitDelim, commitDelim))
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, []string{"a"}, got[0].Files)
