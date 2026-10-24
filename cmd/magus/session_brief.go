@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -83,6 +84,9 @@ type sessionBrief struct {
 	// spent the window on work this session cannot touch.
 	OtherLeases int            `json:"other_leases,omitempty"`
 	Failures    []briefFailure `json:"failures,omitempty"`
+	// Unintegrated are the finished jobs whose branches hold commits this checkout has not
+	// got, nil when none wait. Without a count here, nothing reminds a session they exist.
+	Unintegrated *briefUnintegrated `json:"unintegrated,omitempty"`
 	// GuardWiring is the host hook config paths in this checkout that invoke magus.
 	// Empty means the rules exist here and nothing runs them.
 	GuardWiring []string `json:"guard_wiring,omitempty"`
@@ -114,6 +118,16 @@ type sessionBrief struct {
 	// about to open. That is the whole reason transcripts are loaded at all, and a brief
 	// that omitted it would leave the evidence sitting in a store nobody reads.
 	Recent []briefSession `json:"recent,omitempty"`
+}
+
+// briefUnintegrated counts finished branches off the base, against the thresholds at which a
+// fork advises and refuses; Unknown says why they could not be counted.
+type briefUnintegrated struct {
+	Count    int      `json:"count"`
+	Branches []string `json:"branches,omitempty"`
+	AdviseAt int      `json:"advise_at"`
+	RefuseAt int      `json:"refuse_at"`
+	Unknown  string   `json:"unknown,omitempty"`
 }
 
 // briefSession is one earlier session reduced to what makes it worth opening: who it was,
@@ -247,6 +261,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 		brief.readVCS(ctx, res, ws)
 	}
 	brief.Leases, brief.OtherLeases = briefLeases(ctx, root)
+	brief.Unintegrated = unintegratedBranches(ctx, root)
 	brief.Failures = lastRunFailures(root)
 	if wired, err := workspace.WiredHarnesses(ws); err == nil {
 		brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, wired...))
@@ -508,6 +523,7 @@ func (b sessionBrief) Text() string {
 	b.writePromptCache(&s)
 	b.writeFailures(&s)
 	b.writeLeases(&s)
+	b.writeUnintegrated(&s)
 	b.writeFeedback(&s)
 	b.writeRecent(&s)
 
@@ -617,6 +633,47 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 	}
 	if b.OtherLeases > 0 {
 		briefLine(s, "%d other leases: `%s`", b.OtherLeases, hint.LsJobs.String())
+	}
+}
+
+// unintegratedBranches counts the finished branches waiting off this checkout's revision,
+// nil when none wait. A count that could not be read says why rather than reading as zero.
+func unintegratedBranches(ctx context.Context, root string) *briefUnintegrated {
+	out := &briefUnintegrated{AdviseAt: globalCfg.Jobs.IntegrateAdviseAt, RefuseAt: globalCfg.Jobs.IntegrateRefuseAt}
+	store, err := openJobs(ctx, root, jobOpen{})
+	if err != nil {
+		out.Unknown = err.Error()
+		return out
+	}
+	var waiting []job.Unintegrated
+	waiting, err = store.UnintegratedBranches(ctx)
+	switch {
+	case err != nil:
+		out.Unknown = err.Error()
+		return out
+	case len(waiting) == 0:
+		return nil
+	}
+	out.Count = len(waiting)
+	for _, w := range waiting {
+		out.Branches = append(out.Branches, w.Branch)
+	}
+	return out
+}
+
+func (b sessionBrief) writeUnintegrated(s *strings.Builder) {
+	u := b.Unintegrated
+	switch {
+	case u == nil:
+		return
+	case u.Unknown != "":
+		briefLine(s, "finished branches off the base: unknown, %s", u.Unknown)
+		return
+	}
+	briefLine(s, "finished branches off the base: %d (a fork advises at %d, refuses at %d): %s",
+		u.Count, u.AdviseAt, u.RefuseAt, strings.Join(u.Branches, ", "))
+	if u.Count >= u.AdviseAt {
+		briefLine(s, "  integrate them: `%s` with a record naming them in integrates", hint.JobFork.With("--stdin", "--checkout", "<dir>"))
 	}
 }
 

@@ -1405,6 +1405,7 @@ github.com/egladman/magus/types.Declaration.Follows field string "json:\"follows
 github.com/egladman/magus/types.Declaration.FreshReason field string "json:\"fresh_reason,omitempty\""
 github.com/egladman/magus/types.Declaration.Goals field []Goal "json:\"goals,omitempty\""
 github.com/egladman/magus/types.Declaration.ID field string "json:\"id\" schema:\"leaseid\""
+github.com/egladman/magus/types.Declaration.Integrates field []string "json:\"integrates,omitempty\""
 github.com/egladman/magus/types.Declaration.LegacyDenyPaths field []string "json:\"forbidden_paths,omitempty\""
 github.com/egladman/magus/types.Declaration.LegacyModel field string "json:\"tier,omitempty\""
 github.com/egladman/magus/types.Declaration.LegacyReadPaths field []string "json:\"focus,omitempty\""
@@ -2504,6 +2505,8 @@ github.com/egladman/magus/types.Job.Goals field []Goal "json:\"goals,omitempty\"
 github.com/egladman/magus/types.Job.HardPaths method func() []string
 github.com/egladman/magus/types.Job.Holder field JobHolder "json:\"holder,omitempty\" yaml:\"holder,omitempty\""
 github.com/egladman/magus/types.Job.ID field string "json:\"id\" yaml:\"id\""
+github.com/egladman/magus/types.Job.Integrates field []string "json:\"integrates,omitempty\" yaml:\"integrates,omitempty\""
+github.com/egladman/magus/types.Job.Integrating method func() bool
 github.com/egladman/magus/types.Job.Integration field *JobIntegration "json:\"integration,omitempty\" yaml:\"integration,omitempty\""
 github.com/egladman/magus/types.Job.LastRun field *JobRun "json:\"last_run,omitempty\" yaml:\"last_run,omitempty\""
 github.com/egladman/magus/types.Job.MaxAttempts field int "json:\"max_attempts,omitempty\" yaml:\"max_attempts,omitempty\""
@@ -5128,6 +5131,7 @@ github.com/egladman/magus/types.VCSUnsupportedError.Error method(ptr) func() str
 github.com/egladman/magus/types.VCSUnsupportedError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.VCSUnsupportedError.VCS field string
 github.com/egladman/magus/types.ValidDriftPolicy func(s DriftPolicy) bool
+github.com/egladman/magus/types.ValidIntegratedBranch func(b string) bool
 github.com/egladman/magus/types.ValidJobID func(id string) bool
 github.com/egladman/magus/types.ValidJobState func(s JobState) bool
 github.com/egladman/magus/types.ValidateCharmName func(name string) error

@@ -304,6 +304,10 @@ func unknownParams(params map[string]any) error {
 	if dir, ok := params["checkout"]; ok {
 		return fmt.Errorf("job: a put names checkout %v, which only a fork makes, `%s` makes it", dir, hint.JobFork.With("<job>", "--checkout", fmt.Sprint(dir)))
 	}
+	if branches, ok := params["integrates"]; ok {
+		return fmt.Errorf("job: a put names integrates %v, which only a fork takes, since the fork computes the job's write paths from those branches: `%s` with a record naming them",
+			branches, hint.JobFork.With("--stdin"))
+	}
 	var unknown []string
 	for key := range params {
 		if key == "op" || key == "id" || slices.Contains(mergeFields, key) {

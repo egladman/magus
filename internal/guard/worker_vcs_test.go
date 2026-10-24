@@ -3,6 +3,7 @@ package guard
 import (
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -114,4 +115,27 @@ func TestWorkerVCSOp(t *testing.T) {
 	t.Run("anything else is not version control", func(t *testing.T) {
 		assert.Empty(t, op(t, "rm -rf build"))
 	})
+}
+
+func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
+	row := types.Job{ID: "integrate", Integrates: []string{"done-a", "done-b"}}
+	merge := func(line string, row types.Job) bool {
+		cmds, ok := ParseCommands(line)
+		require.True(t, ok, line)
+		require.Len(t, cmds, 1, line)
+		return integrationMerge(cmds[0], row)
+	}
+	for _, line := range []string{"git merge --no-ff done-a", "git merge done-b --no-ff", "git merge --no-ff --no-edit done-a"} {
+		assert.True(t, merge(line, row), line)
+	}
+	for _, line := range []string{
+		// A fast-forward hides that the branch was integrated; an unlisted branch, an octopus
+		// merge, a strategy option, a squash, a relocation or another verb widens what runs.
+		"git merge done-a", "git merge --no-ff other", "git merge --no-ff done-a done-b",
+		"git merge --no-ff -X theirs done-a", "git merge --no-ff --squash done-a",
+		"git -C ../x merge --no-ff done-a", "git rebase --no-ff done-a", "hg merge --no-ff done-a",
+	} {
+		assert.False(t, merge(line, row), line)
+	}
+	assert.False(t, merge("git merge --no-ff done-a", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }

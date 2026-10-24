@@ -82,6 +82,13 @@
       },
       "description": "DependsOn names the lease ids that must land before this one."
     },
+    "integrates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Integrates names the branches this job merges; see [Job.Integrates]."
+    },
     "breaks": {
       "type": "array",
       "items": {

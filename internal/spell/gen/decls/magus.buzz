@@ -1182,6 +1182,7 @@ export object Job {
     softPaths: [str] = [],
     readPaths: [str] = [],
     dependsOn: [str] = [],
+    integrates: [str] = [],
     breaks: [str] = [],
     model: str = "",
     modelTier: JobModelTier? = null,

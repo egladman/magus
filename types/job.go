@@ -737,6 +737,11 @@ type Job struct {
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	// Integrates names the finished branches an integration job merges into its checkout,
+	// with `git merge --no-ff`. A row naming any is an integration job: its write paths are
+	// the files those branches changed since its checkpoint, computed at fork, and a live
+	// lease on one of them is a note rather than a refusal, since the merge settles it.
+	Integrates []string `json:"integrates,omitempty" yaml:"integrates,omitempty"`
 	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
 	// this job breaking. Empty means the job breaks nothing on its own authority: a break
 	// outside the list is a finding for the root, not a decision for the worker.
@@ -1044,6 +1049,8 @@ type Declaration struct {
 	ReadPaths []string `json:"read_paths,omitempty" schema:"writepath"`
 	// DependsOn names the lease ids that must land before this one.
 	DependsOn []string `json:"depends_on,omitempty" schema:"leaseid"`
+	// Integrates names the branches this job merges; see [Job.Integrates].
+	Integrates []string `json:"integrates,omitempty"`
 	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
 	// this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks].
 	Breaks []string `json:"breaks,omitempty"`
@@ -1192,6 +1199,19 @@ func (r Declaration) Problems() JobProblems {
 			invalid(fmt.Sprintf("depends_on[%d]", i), fmt.Sprintf("depends_on[%d] %q is not a lease id", i, dep),
 				"name the id of a job that must land first")
 		}
+	}
+	for i, branch := range r.Integrates {
+		at := fmt.Sprintf("integrates[%d]", i)
+		switch b := strings.TrimSpace(branch); {
+		case !ValidIntegratedBranch(b):
+			invalid(at, fmt.Sprintf("%s %q is not a branch name a merge can take", at, branch),
+				"name a local branch, such as the one a finished job committed on")
+		case slices.Contains(r.Integrates[:i], branch):
+			invalid(at, fmt.Sprintf("%s %q is named twice", at, branch), "drop the repeat")
+		}
+	}
+	if len(r.Integrates) > 0 && r.ReadOnly {
+		invalid("read_only", "an integration job merges branches, so it writes", "drop read_only, or drop integrates")
 	}
 	if r.State != "" && !ValidJobState(r.State) {
 		invalid("state", fmt.Sprintf("state %q is not a job state", r.State), "use one of "+JobStateVocabulary())
@@ -1567,6 +1587,7 @@ func (r Declaration) Apply(u *Job) {
 	u.SoftPaths = trimmedNonEmpty(r.SoftPaths)
 	u.ReadPaths = trimmedNonEmpty(r.ReadPaths)
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
+	u.Integrates = trimmedNonEmpty(r.Integrates)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
 	u.Model = strings.TrimSpace(r.Model)
 	u.BriefFormat = r.BriefFormat
@@ -2306,6 +2327,17 @@ func starStarShape(glob string) (prefix, last string, ok bool) {
 	return "", "", false
 }
 
+// Integrating reports whether the row is an integration job: one that names branches to merge.
+func (u Job) Integrating() bool { return len(u.Integrates) > 0 }
+
+// ValidIntegratedBranch reports whether b can name a branch an integration job merges: no
+// leading dash, which git would read as an option, and nothing git refuses in a ref name.
+func ValidIntegratedBranch(b string) bool {
+	return b != "" && !strings.HasPrefix(b, "-") && !strings.HasSuffix(b, ".lock") && !strings.HasSuffix(b, "/") &&
+		!strings.Contains(b, "..") && !strings.Contains(b, "@{") &&
+		!strings.ContainsFunc(b, func(r rune) bool { return r <= ' ' || r == 0x7f || strings.ContainsRune(`~^:?*[\`, r) })
+}
+
 // HardPaths is WritePaths without the soft entries: the paths the row claims against other
 // rows. Every overlap check reads this, never WritePaths.
 func (u Job) HardPaths() []string {
@@ -2326,6 +2358,7 @@ func (u Job) Clone() Job {
 	c.SoftPaths = slices.Clone(u.SoftPaths)
 	c.ReadPaths = slices.Clone(u.ReadPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
+	c.Integrates = slices.Clone(u.Integrates)
 	c.Breaks = slices.Clone(u.Breaks)
 	c.Goals = cloneGoals(u.Goals)
 	c.Releases = slices.Clone(u.Releases)

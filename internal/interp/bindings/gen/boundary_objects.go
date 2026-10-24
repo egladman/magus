@@ -3863,6 +3863,11 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
 	}
 	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
+	itemsIntegrates := make([]vm.Value, len(v.Integrates))
+	for indexIntegrates := range v.Integrates {
+		itemsIntegrates[indexIntegrates] = vm.StrValue(v.Integrates[indexIntegrates])
+	}
+	out.MapSet("integrates", vm.ListValue(itemsIntegrates))
 	itemsBreaks := make([]vm.Value, len(v.Breaks))
 	for indexBreaks := range v.Breaks {
 		itemsBreaks[indexBreaks] = vm.StrValue(v.Breaks[indexBreaks])

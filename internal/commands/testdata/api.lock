@@ -24,6 +24,8 @@ config dry_run
 config hints.enabled
 config history_path
 config jobs.default_timeout
+config jobs.integrate_advise_at
+config jobs.integrate_refuse_at
 config jobs.max_claim_files
 config jobs.max_claim_projects
 config jobs.max_depth

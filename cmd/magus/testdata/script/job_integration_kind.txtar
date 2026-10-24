@@ -1,0 +1,110 @@
+# A record naming integrates is an integration job. Its write paths are computed at the
+# fork from what the branches changed since the checkpoint, never declared; a live job
+# holding one of those files is a note naming the holder, never a refusal; and a whole
+# magusfile is allowed, since the merge writes the merged file. Finished branches off the
+# base are counted: from jobs.integrate_advise_at a fork of any other job advises the
+# integration fork, and from jobs.integrate_refuse_at it is refused until one names them.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+exec git switch -q -c done-a
+cp $WORK/pricing-a pricing.txt
+exec git commit -q -am 'raise prices'
+exec git switch -q -c done-b main
+cp $WORK/magusfile-b magusfile.buzz
+exec git commit -q -am 'add a lint target'
+exec git switch -q main
+
+# A live job on main holds the file done-a changed.
+exec magus job fork editor --write-paths pricing.txt --check 'test .' --criteria 'edit pricing'
+
+# One finished branch off the base reaches integrate_advise_at: the next fork advises.
+stdin $WORK/done-a.json
+exec magus job fork --stdin
+exec magus job fork reader --read-only --criteria 'read the tax code'
+stderr 'advice: 1 finished branch\(es\) wait off the base \(jobs.integrate_advise_at 1, jobs.integrate_refuse_at 2\): done-a \(job done-a, 1 commit\(s\)\)'
+stderr '"integrates":\["done-a"\]'
+stderr 'magus job fork --stdin --checkout <dir>'
+
+# The brief counts them too.
+exec magus session --brief
+stdout '^finished branches off the base: 1 \(a fork advises at 1, refuses at 2\): done-a$'
+
+# Two reach integrate_refuse_at: a fork of anything but an integration job is refused.
+stdin $WORK/done-b.json
+exec magus job fork --stdin
+! exec magus job fork writer --read-only --criteria 'read the tests'
+stderr '2 finished branch\(es\) wait off the base'
+stderr 'done-a \(job done-a, 1 commit\(s\)\), done-b \(job done-b, 1 commit\(s\)\)'
+
+# An integration job naming write paths is refused: they are computed, never declared.
+stdin $WORK/declares-paths.json
+! exec magus job fork --stdin
+stderr 'computed here, so the record names none: drop write_paths'
+
+# A branch that resolves to nothing is refused rather than read as an empty merge.
+stdin $WORK/missing.json
+! exec magus job fork --stdin
+stderr 'integrates: branch no-such-branch: '
+
+# The integration fork computes its write set from both branches. The whole magusfile is
+# allowed, and editor's hold on pricing.txt is a note, not MGS3032.
+stdin $WORK/integrate.json
+exec magus job fork --stdin
+stderr 'note: the record names no checkpoint, so the branches were compared with this checkout.s revision [0-9a-f]{40}'
+stdout '^forked integrate, declared, with 2 write path\(s\)'
+stdout 'note: editor \(declared\) holds "pricing.txt", which the merge writes as "pricing.txt": the merge settles it'
+! stderr 'MGS3032|MGS3036'
+exec magus describe job integrate
+stdout '^  magusfile.buzz$'
+stdout '^  pricing.txt$'
+
+# Named by a live integration job, the branches no longer count, and forks go through.
+exec magus job fork writer --read-only --criteria 'read the tests'
+! stderr 'advice:'
+
+-- pricing-a --
+apples 2
+-- magusfile-b --
+import "magus";
+
+// test has nothing to check; the jobs here only declare.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+}
+-- done-a.json --
+{"schema_version": 13, "id": "done-a", "state": "pass", "criteria": "raise prices", "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
+-- done-b.json --
+{"schema_version": 13, "id": "done-b", "state": "pass", "criteria": "add a lint target", "write_paths": ["magusfile.buzz#lint"], "check": {"target": "test", "project": "."}}
+-- declares-paths.json --
+{"schema_version": 13, "id": "integrate", "integrates": ["done-a"], "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
+-- missing.json --
+{"schema_version": 13, "id": "integrate", "integrates": ["no-such-branch"], "check": {"target": "test", "project": "."}}
+-- integrate.json --
+{"schema_version": 13, "id": "integrate", "criteria": "merge the finished branches", "integrates": ["done-a", "done-b"], "check": {"target": "test", "project": "."}}
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+jobs:
+  integrate_advise_at: 1
+  integrate_refuse_at: 2
+-- shop/pricing.txt --
+apples 1
+-- shop/magusfile.buzz --
+import "magus";
+
+// test has nothing to check; the jobs here only declare.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}
+-- shop/.gitattributes --
+*.buzz diff=buzz

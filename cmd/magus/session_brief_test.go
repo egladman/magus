@@ -359,3 +359,25 @@ func briefClock() sessions.PromptCacheClock {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	return sessions.PromptCacheAt("s1", last, last.Add(7*time.Minute))
 }
+
+// Finished branches off the base are counted against the fork thresholds, and an unread
+// count says why rather than reading as none waiting.
+func TestSessionBriefCountsFinishedBranchesOffTheBase(t *testing.T) {
+	t.Parallel()
+
+	var below strings.Builder
+	sessionBrief{Unintegrated: &briefUnintegrated{Count: 2, Branches: []string{"done-a", "done-b"}, AdviseAt: 5, RefuseAt: 10}}.writeUnintegrated(&below)
+	assert.Equal(t, "finished branches off the base: 2 (a fork advises at 5, refuses at 10): done-a, done-b\n", below.String())
+
+	var at strings.Builder
+	sessionBrief{Unintegrated: &briefUnintegrated{Count: 1, Branches: []string{"done-a"}, AdviseAt: 1, RefuseAt: 2}}.writeUnintegrated(&at)
+	assert.Contains(t, at.String(), "integrate them: `"+hint.JobFork.With("--stdin", "--checkout", "<dir>")+"`")
+
+	var unknown strings.Builder
+	sessionBrief{Unintegrated: &briefUnintegrated{Unknown: "version control is disabled here"}}.writeUnintegrated(&unknown)
+	assert.Equal(t, "finished branches off the base: unknown, version control is disabled here\n", unknown.String())
+
+	var none strings.Builder
+	sessionBrief{}.writeUnintegrated(&none)
+	assert.Empty(t, none.String())
+}

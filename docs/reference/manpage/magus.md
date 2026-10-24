@@ -378,6 +378,12 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_JOBS_MAX_CLAIM_PROJECTS**
 : How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter (default: 1). Config file key: **jobs.max_claim_projects**.
 
+**MAGUS_JOBS_INTEGRATE_ADVISE_AT**
+: How many finished branches may wait off the base before a fork of anything but an integration job advises forking one. Default 5; workspace only (default: 5). Config file key: **jobs.integrate_advise_at**.
+
+**MAGUS_JOBS_INTEGRATE_REFUSE_AT**
+: The count past which such a fork is refused until an integration job names the branches; it must exceed IntegrateAdviseAt. Default 10; workspace only (default: 10). Config file key: **jobs.integrate_refuse_at**.
+
 **MAGUS_CONCURRENCY**
 : Caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set. Config file key: **concurrency**.
 

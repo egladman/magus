@@ -1237,6 +1237,34 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS)
+	switch {
+	case len(row.Integrates) > 0:
+		if len(row.WritePaths) > 0 {
+			return exit.Usagef("magus job fork: an integration job's write paths are the files its branches changed, computed here, so the record names none: drop write_paths")
+		}
+		paths, base, err := job.IntegrationWritePaths(ctx, root, row.Checkpoint, row.Integrates)
+		if err != nil {
+			return exit.Usagef("magus job fork: integrates: %s", err)
+		}
+		if len(paths) == 0 {
+			return exit.Usagef("magus job fork: integrates: %s change nothing since %s, so there is nothing to merge", strings.Join(row.Integrates, ", "), base)
+		}
+		if row.Checkpoint == "" {
+			slog.InfoContext(ctx, fmt.Sprintf("the record names no checkpoint, so the branches were compared with this checkout's revision %s, and the job starts there", base), attr.Notice("note"))
+			row.Checkpoint = base
+		}
+		row.WritePaths = paths
+	case row.Parent == "":
+		advice, refuse, err := store.IntegrationAdvice(ctx, globalCfg.Jobs)
+		switch {
+		case err != nil:
+			slog.InfoContext(ctx, "finished branches waiting off the base could not be counted", attr.Error(err), attr.Notice("note"))
+		case refuse:
+			return exit.Usagef("magus job fork: %s", advice)
+		case advice != "":
+			slog.InfoContext(ctx, advice, attr.Notice("advice"))
+		}
+	}
 	// The reader loads the graph only when a gate names a symbol, or when the deletion
 	// candidates ask for it, and the two share one load.
 	graph := newJobGraph(root, true)
@@ -1345,7 +1373,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
 		printJobWorktree(os.Stdout, stored, bootstrap)
-		printClaimNotes(os.Stdout, job.ForkNotes(ctx, store, plan, stored))
+		printClaimNotes(os.Stdout, append(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored)...))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
 			for _, claim := range derived {
@@ -1373,7 +1401,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,
-				ClaimNotes:           job.ForkNotes(ctx, store, plan, stored),
+				ClaimNotes:           append(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored)...),
 			},
 			derived,
 		})
