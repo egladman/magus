@@ -140,6 +140,13 @@ func (r *runner) checkGoCacheBudget() types.Check {
 	} else {
 		caches = append(caches, goCache{label: "golangci-lint cache", dir: dir, fix: lintCacheFix})
 	}
+	// The go spell points golangci-lint at the checkout's own cache, so that is the one a
+	// magus run fills; the user cache above grows only from runs outside magus.
+	if r.root != "" {
+		own := filepath.Join(r.root, ".magus", "golangci-lint")
+		caches = append(caches, goCache{label: "checkout golangci-lint cache", dir: own,
+			fix: fmt.Sprintf("%s=%s %s", lintCacheEnv, own, lintCacheFix)})
+	}
 	res := goCacheBudget(r.ctx, caches, budget, goCacheWalkEntries)
 	if len(notes) > 0 {
 		res.Details = append(res.Details, notes...)
