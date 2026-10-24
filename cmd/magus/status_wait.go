@@ -112,6 +112,20 @@ func awaitSeat(ctx context.Context, reader int, argv []string, claims []types.Ma
 	return err
 }
 
+// jobWeightAt is the weight of the job this caller acts under in the workspace at
+// rootOverride, 0 when it acts under none.
+func jobWeightAt(ctx context.Context, rootOverride string) float64 {
+	root, err := workspace.FindRoot(rootOverride)
+	if err != nil {
+		return 0
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return 0
+	}
+	return cache.LeaseWeight(ctx, cacheDir)
+}
+
 func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
 	st, err := queryBroker(ctx)
 	return st.Capacity, err
