@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 // JobGrant is one line of a job store's grants file: a person's approval lowering one
 // guard rule to advice for one job's calls, or the revocation of it. The last line per
 // (Job, Rule) is the grant.
@@ -20,7 +22,7 @@ type JobGrant struct {
 }
 
 // Key names the grant a line writes: a job and a rule.
-func (g JobGrant) Key() string { return g.Job + "\x00" + g.Rule }
+func (g JobGrant) Key() string { return fmt.Sprintf("%s\x00%s", g.Job, g.Rule) }
 
 // Lowers reports whether g still lowers its rule for row at now: unrevoked, unexpired,
 // and given in row's current attempt while row is still running.

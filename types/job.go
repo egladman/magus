@@ -293,7 +293,7 @@ func (c LeaseCheck) String() string {
 	if project == "" {
 		project = "."
 	}
-	line := "magus run " + c.Target + " " + project
+	line := fmt.Sprintf("magus run %s %s", c.Target, project)
 	if c.NoDefaultCharms {
 		line += " --no-default-charms"
 	}
@@ -685,7 +685,7 @@ type JobGateAttempt struct {
 func (a JobAttempt) String() string {
 	target := a.Target
 	if a.Spell != "" {
-		target = a.Spell + "::" + target
+		target = fmt.Sprintf("%s::%s", a.Spell, target)
 	}
 	return LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs}.String()
 }
@@ -1344,7 +1344,7 @@ func (r Declaration) Problems() JobProblems {
 	}
 	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
-			"use one of "+strings.Join(r.BriefFormat.Values(), ", ")+", or leave it out for magus.yaml's agents.brief_format")
+			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(r.BriefFormat.Values(), ", ")))
 	}
 	if r.Weight != nil && !ValidJobWeight(*r.Weight) {
 		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
@@ -1434,7 +1434,7 @@ func (r Declaration) claimProblems() JobProblems {
 			invalid(at+".path", fmt.Sprintf("%s %q is a pattern or a claim, and a proof covers one file", at, w.Path), "name one file")
 		}
 		if _, err := ParseClaimEvidence(w.Because); err != nil {
-			invalid(at+".because", at+": "+err.Error(), "name the proof the path rests on")
+			invalid(at+".because", fmt.Sprintf("%s: %s", at, err), "name the proof the path rests on")
 		}
 	}
 	return ps
@@ -1541,7 +1541,7 @@ func (g Goal) problems(field string) JobProblems {
 	bad := func(sub, message, fix string) {
 		at := sub
 		if field != "" {
-			at = field + "." + sub
+			at = fmt.Sprintf("%s.%s", field, sub)
 		}
 		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: at, Message: message, Fix: fix})
 	}
@@ -1592,7 +1592,7 @@ func (g Goal) problems(field string) JobProblems {
 	if err := g.Check.validScript(); err != nil {
 		bad("check.script", err.Error(), "name a target or a script, and give a script no project or charms")
 	} else if g.Check.Script == "" {
-		if _, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project); err != nil {
+		if _, err := ParseLeaseCheck(fmt.Sprintf("%s %s", g.Check.Target, g.Check.Project)); err != nil {
 			bad("check.target", err.Error(), "name one target and the project it runs in")
 		}
 	}
@@ -1720,7 +1720,7 @@ func (r Declaration) check() (LeaseCheck, bool, JobProblems) {
 		if err := r.Check.validScript(); err != nil {
 			return LeaseCheck{}, false, invalid("check.test", err, "drop test, or name a script")
 		}
-		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
+		parsed, err := ParseLeaseCheck(fmt.Sprintf("%s %s", r.Check.Target, r.Check.Project))
 		if err != nil {
 			return LeaseCheck{}, false, invalid("check.target", err, "name one target and the project it runs in")
 		}
