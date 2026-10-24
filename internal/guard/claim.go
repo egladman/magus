@@ -199,7 +199,7 @@ func namedBy(claims []string, declaration string) bool {
 }
 
 func namingClaim(claims []string, declaration string) (string, bool) {
-	i := slices.IndexFunc(claims, func(c string) bool { return types.NamesDeclaration(c, declaration) })
+	i := slices.IndexFunc(claims, func(c string) bool { return types.NamesClaimedDeclaration(c, declaration) })
 	if i < 0 {
 		return "", false
 	}

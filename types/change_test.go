@@ -70,6 +70,38 @@ func TestNamesDeclaration(t *testing.T) {
 	}
 }
 
+func TestNamedDeclarationsKeyPaths(t *testing.T) {
+	t.Parallel()
+
+	keys := []string{"project.name", "project.targets", "project.targets.release", "project.targets.release-build", "project.targets.test"}
+	for _, tc := range []struct {
+		name    string
+		claimed string
+		want    []string
+		claimsMap    bool
+	}{
+		{"an exact key wins over a sibling sharing its prefix", "project.targets.release", []string{"project.targets.release"}, true},
+		{"a map key names every entry under it", "project.targets",
+			[]string{"project.targets", "project.targets.release", "project.targets.release-build", "project.targets.test"}, true},
+		{"a segment run names the key", "targets.test", []string{"project.targets.test"}, false},
+		{"the root key claims the whole map", "project", keys, true},
+		{"a mid-path word shared by keys is several", "targets", keys[1:], false},
+		{"a key not written yet names none", "project.targets.lint", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			named := NamedDeclarations(tc.claimed, keys)
+			assert.Equal(t, tc.want, named)
+			assert.Equal(t, tc.claimsMap, ClaimsMap(tc.claimed, named))
+		})
+	}
+
+	t.Run("a declaration line keeps the identifier-bounded rule", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, []string{"func A(ctx int) {"}, NamedDeclarations("A", []string{"func A(ctx int) {", "func B() {"}))
+	})
+}
+
 func TestLocation(t *testing.T) {
 	t.Parallel()
 

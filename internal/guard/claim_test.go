@@ -172,6 +172,50 @@ func TestConfigHoldNarrowsOnFirstWrite(t *testing.T) {
 	assert.Len(t, row("cfg").WritePaths, 2, "a denied write narrows nothing")
 }
 
+const siblingKeysMagusfile = `import "magus";
+
+magus\project({
+    "name": "demo",
+    "targets": {
+        "release": {"timeout": "1m"},
+        "release-build": {"timeout": "2m"},
+    },
+});
+`
+
+// A claim on a target key names that key, not a sibling that shares its prefix: the lease
+// holding `release` may not write `release-build`, which another lease claims.
+func TestKeyClaimNamesItsOwnKey(t *testing.T) {
+	ctx, root := fleetFixture(t,
+		claimLease("rel", "magusfile.buzz#project.targets.release"),
+		claimLease("build", "magusfile.buzz#project.targets.release-build"),
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.buzz diff=buzz\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(siblingKeysMagusfile), 0o644))
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	magusfile := filepath.Join(root, "magusfile.buzz")
+	release := writeFields{OldText: `"1m"`, NewText: `"3m"`}
+	build := writeFields{OldText: `"2m"`, NewText: `"4m"`}
+
+	for _, tc := range []struct {
+		name   string
+		lease  string
+		fields writeFields
+		want   string
+	}{
+		{"release writes its own key", "rel", release, ""},
+		{"release-build writes its own key", "build", build, ""},
+		{"release writes the sibling's key", "rel", build, "deny"},
+		{"release-build writes the sibling's key", "build", release, "deny"},
+	} {
+		assert.Equal(t, tc.want, gradeLeasedEdit(ctx, Dependencies{}, tc.lease, magusfile, tc.fields).Decision, tc.name)
+	}
+}
+
 func TestApplyEdits(t *testing.T) {
 	t.Parallel()
 

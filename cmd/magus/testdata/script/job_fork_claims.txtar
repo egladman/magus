@@ -75,11 +75,13 @@ stderr '`magusfile.buzz#project.name`, `magusfile.buzz#project.targets.lint`'
 exec magus session attention
 stdout -count=1 'job wave/cfg holds magusfile.buzz'
 
-# A key claim forks; a key whose entries it would also hold is a word several share.
+# A key claim names that key and not a sibling that shares its prefix, and a map key claims
+# every entry under it.
 exec magus job fork wave/slots --criteria 'lint timeout' --write-paths 'magusfile.buzz#project.targets.lint' --check 'lint .'
-! exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .'
-stderr 'MGS3031'
-stderr '"magusfile.buzz#project.targets" names 2 declarations of magusfile.buzz'
+exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .'
+exec magus ls jobs -o name
+stdout '^wave/slots$'
+stdout '^wave/targets$'
 
 -- cfg.json --
 {"schema_version": 11, "id": "wave/cfg", "criteria": "tune buzz", "write_paths": ["**/*.buzz"],
@@ -100,6 +102,7 @@ magus\project({
     "name": "site",
     "targets": {
         "lint": {"timeout": "5m"},
+        "lint-fast": {"timeout": "1m"},
     },
 });
 
@@ -107,6 +110,10 @@ magus\project({
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("**/*.go");
     proc\exec("sh", ["-c", "for f in *.go; do test -s \"$f\" || exit 1; done"]);
+}
+
+export fun lint_fast(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("**/*.go");
 }
 -- site/run.go --
 package run
