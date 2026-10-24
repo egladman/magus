@@ -212,7 +212,7 @@ jobs:
           CHANGE: ${{ matrix.change }}
           MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
           TMPDIR: ${{ runner.temp }}
-          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
         run: magus buzz hack/ci/merge-queue.buzz -- validate --change "$CHANGE"
 
       # The directory's contents become the artifact's root: verdict.json, and
