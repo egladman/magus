@@ -582,6 +582,9 @@ type Request struct {
 	// timeout".
 	HostForegroundDefault time.Duration
 	HostForegroundMax     time.Duration
+	// HostResumesOnBackgroundFrom is types.Limits.ResumesOnBackgroundFrom as the wiring
+	// declares it. Empty, a subagent's stop with a background task running is refused.
+	HostResumesOnBackgroundFrom string
 }
 
 // hostUnnamed refuses a call from installed hook glue that did not say which agent host
@@ -714,12 +717,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
 			at := hookLocation(ctx, deps)
-			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, time.Now())
+			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, req.HostResumesOnBackgroundFrom, time.Now())
 			if !ok {
 				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
 			if !req.DryRun && !req.Observe {
-				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, v); err != nil {
+				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, req.HostResumesOnBackgroundFrom, v); err != nil {
 					v.Context = fmt.Sprintf("%smagus workspace: the job store did not end the job this session held: %s", strings.TrimPrefix(v.Context+"\n", "\n"), err)
 				}
 			}

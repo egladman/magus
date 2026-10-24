@@ -483,7 +483,7 @@ func servedFixtures() []servedFixture {
 				return Request{}, nil
 			}
 			started := bgTime(t, "2026-10-13T11:37:41.120Z")
-			v, ok := judgeStop(strict(Dependencies{}), hint.Gate{}, subagentStop(t, role.call.Agent, writeTranscript(t, bgSearchCall, bgSearchResult)), started.Add(time.Hour))
+			v, ok := judgeStop(strict(Dependencies{}), hint.Gate{}, subagentStop(t, role.call.Agent, writeTranscript(t, bgSearchCall, bgSearchResult)), "", started.Add(time.Hour))
 			require.True(t, ok)
 			require.Equal(t, decisionDeny, v.Decision)
 			assert.NotContains(t, v.Reason, "completion notice", "a subagent refused its stop cannot wait for a notice that comes after it")

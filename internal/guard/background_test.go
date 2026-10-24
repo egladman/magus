@@ -232,7 +232,7 @@ func bgCall(command string) []string {
 func TestJudgeStopLetsWorkThatEndsOnItsOwnRun(t *testing.T) {
 	started := bgTime(t, "2026-10-13T11:37:41.120Z")
 	stop := func(lines ...string) bool {
-		_, refused := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, lines...)), started.Add(time.Minute))
+		_, refused := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, lines...)), "", started.Add(time.Minute))
 		return refused
 	}
 	for _, command := range []string{

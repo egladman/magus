@@ -1523,6 +1523,7 @@ not block every tool call.`,
 		{Name: "call-timeout-ms", Kind: cmdline.Int, Doc: "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default"},
 		{Name: "foreground-default-ms", Kind: cmdline.Int, Doc: "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down"},
 		{Name: "foreground-max-ms", Kind: cmdline.Int, Doc: "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down"},
+		{Name: "resumes-on-background-from", Kind: cmdline.String, Doc: "The first host version that resumes a stopped subagent when a background task it left running completes, declared by the wiring; without it a subagent's stop with a background task running is refused"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Check one command", Command: "magus shell 'go test ./...'"},

@@ -402,7 +402,7 @@ rather than guessed. The same record keeps the model the spawn
 named, and, when the spawn's `description` reads `<parent>/<role> <job>` for a
 live job, the job its later calls are graded under, in its own worktree too.
 
-The `SubagentStop` entry judges nothing either. Its payload names the finished
+The `SubagentStop` entry also measures the subagent. Its payload names the finished
 subagent's `agent_id` and `agent_transcript_path`; magus reads the last usage
 record in that transcript's final 512 KiB and files input plus cache-read plus
 cache-write tokens as the agent's context size, which a later `SendMessage` to it
@@ -669,7 +669,11 @@ subagent's context size) and `UserPromptSubmit`. The Bash entry alone carries
 `--foreground-default-ms` and `--foreground-max-ms`, Claude Code's Bash timeout limits
 (`BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS`): the glue reads the call's
 `timeout` and `run_in_background`, which only Claude Code's Bash tool has, so no other
-host's shell entry declares them.
+host's shell entry declares them. The `Stop` and `SubagentStop` guard entries carry
+`--resumes-on-background-from 2.1.299`, the first Claude Code release that resumes a
+stopped subagent when a background task it left running completes. From that version a
+subagent's stop with a task still running stands, and the subagent keeps its job. Below
+it, or when the transcript records no version, the stop is refused.
 
 That is not the same as using everything this host offers. `PostToolUseFailure`,
 `PermissionRequest` and `PreCompact` are available and unused, on the test every
