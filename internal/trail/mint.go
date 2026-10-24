@@ -2,6 +2,7 @@ package trail
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
@@ -32,7 +33,7 @@ func AppendMint(ctx context.Context, base, action string, rec MintRecord) {
 		return
 	}
 	ref, size := WriteBlob(ctx, base, "tok", blob)
-	preview := rec.Minted.Phrase() + " " + rec.Minted.Grant.String()
+	preview := fmt.Sprintf("%s %s", rec.Minted.Phrase(), rec.Minted.Grant.String())
 	if !rec.Expires.IsZero() {
 		preview += " until " + rec.Expires.UTC().Format("2006-01-02 15:04")
 	}
