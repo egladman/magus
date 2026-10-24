@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
@@ -421,6 +423,73 @@ func warnCharmConflicts(ctx context.Context, base []string, charms map[string]sp
 	}
 }
 
+// collapseRedraws keeps only the last frame of each carriage-return redraw going to a
+// non-terminal, since a log would keep every frame of a progress bar as its own line.
+// Terminals and debug logging see every frame. Call the returned func once the command
+// ends, to write a trailing partial line.
+func collapseRedraws(ctx context.Context) (context.Context, func()) {
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		return ctx, func() {}
+	}
+	stdout, stderr := spawn.OutputWriters(ctx)
+	var flushes []func()
+	wrap := func(w io.Writer) io.Writer {
+		if tty.IsTerminalWriter(w, tty.SystemProbe) {
+			return w
+		}
+		c := &redrawCollapser{w: w}
+		flushes = append(flushes, c.flush)
+		return c
+	}
+	stdout, stderr = wrap(stdout), wrap(stderr)
+	return spawn.WithOutputWriters(ctx, stdout, stderr), func() {
+		for _, f := range flushes {
+			f()
+		}
+	}
+}
+
+// redrawCollapser buffers a line and writes only what follows its last carriage return.
+type redrawCollapser struct {
+	mu  sync.Mutex
+	w   io.Writer
+	buf []byte
+}
+
+func (c *redrawCollapser) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.buf = append(c.buf, p...)
+	for {
+		i := bytes.IndexByte(c.buf, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		line := bytes.TrimSuffix(c.buf[:i], []byte{'\r'})
+		if j := bytes.LastIndexByte(line, '\r'); j >= 0 {
+			line = line[j+1:]
+		}
+		if _, err := c.w.Write(append(bytes.Clone(line), '\n')); err != nil {
+			return len(p), err
+		}
+		c.buf = c.buf[i+1:]
+	}
+}
+
+func (c *redrawCollapser) flush() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.buf) == 0 {
+		return
+	}
+	line := c.buf
+	if j := bytes.LastIndexByte(line, '\r'); j >= 0 && j < len(line)-1 {
+		line = line[j+1:]
+	}
+	_, _ = c.w.Write(line)
+	c.buf = nil
+}
+
 // directMagusBinaryWarnOnce is process-global so the "use magus.cmd/..." hint fires
 // at most once per process, not once per command: avoids log spam in a wide run.
 var directMagusBinaryWarnOnce sync.Once
@@ -449,6 +518,11 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		for _, k := range keys {
 			overrides = append(overrides, fmt.Sprintf("%s=%s", k, env[k]))
 		}
+	}
+	if !quiet {
+		var flush func()
+		ctx, flush = collapseRedraws(ctx)
+		defer flush()
 	}
 	res, err := spawn.Exec(ctx, cmd, args, spawn.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture, Quiet: quiet})
 	if err != nil && errors.Is(err, types.ExecDenied) {

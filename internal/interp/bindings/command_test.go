@@ -28,6 +28,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExecCommandCollapsesProgressRedrawsOffATerminal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs sh")
+	}
+	script := []string{"-c", `printf 'a [0/3]\ra [1/3]\ra [3/3]\n'`}
+	var out, errOut bytes.Buffer
+	ctx := spawn.WithOutputWriters(t.Context(), &out, &errOut)
+
+	_, err := execCommand(ctx, t.TempDir(), "sh", script, nil, "", false, false)
+	require.NoError(t, err)
+	assert.Equal(t, "a [3/3]\n", out.String())
+
+	out.Reset()
+	_, err = execCommand(ctx, t.TempDir(), "sh", script, nil, "", true, false)
+	require.NoError(t, err)
+	assert.Equal(t, "a [3/3]\n", out.String(), "a captured command is collapsed in the log the same way")
+}
+
+func TestRedrawCollapserWritesAnUnterminatedLineAtTheEnd(t *testing.T) {
+	var out bytes.Buffer
+	c := &redrawCollapser{w: &out}
+	_, err := c.Write([]byte("x\r\ny [1/2]\rz [2/2]"))
+	require.NoError(t, err)
+	c.flush()
+	assert.Equal(t, "x\nz [2/2]", out.String())
+}
+
 func serviceOp() spells.Op {
 	// bin "true" exits 0, so the non-supervised fall-through fork is harmless.
 	return spells.Op{

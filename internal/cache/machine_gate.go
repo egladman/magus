@@ -379,14 +379,39 @@ type GroupHolder interface {
 
 // withStepGroups returns ctx under which every process group spawn.Exec starts rides
 // the claim claim names when the group starts, when admit can hold groups.
+//
+// A claim that reads "" while a group starts is handed back (lent, or the step ended),
+// so the group is left unheld without a warning. A broker that refuses a hold warns
+// once per step, not once per child.
 func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() string) context.Context {
 	holder, ok := admit.(GroupHolder)
 	if !ok || claim() == "" {
 		return ctx
 	}
+	var project, target string
+	if h, _ := ctx.Value(machineHoldKey{}).(*machineHold); h != nil {
+		project, target = h.claim.Project, h.claim.Target
+	}
+	var refused sync.Once
+	unheld := func(pgid int, command string, err error) {
+		refused.Do(func() {
+			slog.WarnContext(ctx, UnheldGroupWarning(project, target, pgid, command, err))
+		})
+	}
 	return spawn.WithGroupWatch(ctx, func(pgid int, command string) func() {
-		return holdStepGroup(ctx, holder, claim(), pgid, command)
+		id := claim()
+		if id == "" {
+			return func() {}
+		}
+		return holdStepGroup(ctx, holder, id, pgid, command, unheld)
 	})
+}
+
+// UnheldGroupWarning is the line said once when the broker refuses to tie a step's
+// child processes to its claim; pgid and command name the first child refused.
+func UnheldGroupWarning(project, target string, pgid int, command string, err error) string {
+	return fmt.Sprintf("child processes of %s:%s are not tied to its build claim, so they keep running if magus exits abnormally: the broker refused the hold (%v). First child: pid %d (%s).",
+		displayProject(project), target, err, pgid, command)
 }
 
 // holdStepGroup hands holder process group pgid, which the step holding claim started,
@@ -399,13 +424,12 @@ func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() str
 // leave a hold the broker recorded that this process never learns the id of, and so
 // never releases. It is bounded the way a release is, so a sick broker cannot stall the
 // step that started the group.
-func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid int, command string) (release func()) {
+func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid int, command string, unheld func(pgid int, command string, err error)) (release func()) {
 	hctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 	id, err := holder.HoldGroup(hctx, claim, pgid, command)
 	cancel()
 	if err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", pgid, command),
-			attr.Error(err))
+		unheld(pgid, command, err)
 		return func() {}
 	}
 	return func() {
