@@ -129,6 +129,7 @@ func readClaimFacts(tree string, row types.Job, seen Observed, asked []string, p
 	facts := claimFacts{seen: seen, files: map[string]sourceFacts{}, packages: map[string]goPackage{}}
 	changed := changedInside(row, seen)
 	for _, rel := range append(slices.Clone(asked), changed...) {
+		rel, _ = types.SplitClaim(rel)
 		rel = path.Clean(rel)
 		if _, ok := facts.files[rel]; !ok {
 			facts.files[rel] = readSource(tree, rel)
@@ -312,17 +313,20 @@ func proveClaim(row types.Job, rel string, e types.ClaimEvidence, facts claimFac
 		return "", fmt.Errorf("magus could not read what the job changed (%s), so nothing it changed proves %s",
 			cmp.Or(facts.seen.RegionsReason, "no diff was read"), rel)
 	}
+	// A `#declaration` claim is proved by what its file reads, and facts key files by path.
+	file, _ := types.SplitClaim(rel)
+	file = path.Clean(file)
 	switch e.Kind {
 	case types.ClaimRefs:
-		return proveRefs(rel, e.Subject, facts)
+		return proveRefs(file, e.Subject, facts)
 	case types.ClaimTest:
-		return proveTest(row, rel, path.Clean(e.Subject), facts)
+		return proveTest(row, file, path.Clean(e.Subject), facts)
 	case claimCalls:
-		return proveCalls(rel, e.Subject, facts)
+		return proveCalls(file, e.Subject, facts)
 	case claimDefines:
-		return proveDefines(row, rel, e.Subject, facts)
+		return proveDefines(row, file, e.Subject, facts)
 	case types.ClaimOutput:
-		return proveOutput(rel, e.Subject, facts)
+		return proveOutput(file, e.Subject, facts)
 	case types.ClaimReleased:
 		return proveReleased(row, rel)
 	}

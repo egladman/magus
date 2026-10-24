@@ -241,6 +241,17 @@ func TestProveClaimRefusesAnUnreadDiff(t *testing.T) {
 	assert.Contains(t, err.Error(), "could not read what the job changed")
 }
 
+// A callers-expanded claim names a declaration of its file, and the file is what proves it.
+func TestProveClaimReadsTheFileOfADeclarationClaim(t *testing.T) {
+	t.Parallel()
+
+	const claim = "internal/guard/shell.go#Shell"
+	row, facts := proofFacts(t, claim)
+	proof, err := proveClaim(row, claim, types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.VCSAdd"}, facts)
+	require.NoError(t, err)
+	assert.Contains(t, proof, "internal/guard/shell.go references hint.VCSAdd")
+}
+
 func TestProposeClaimNamesTheFirstProofOrNone(t *testing.T) {
 	t.Parallel()
 
