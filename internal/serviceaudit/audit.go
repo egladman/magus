@@ -6,6 +6,7 @@
 package serviceaudit
 
 import (
+	"fmt"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -38,7 +39,7 @@ func collectMembers(projects []*types.Project, charms []string) []identity.Membe
 					svc.Distinct = view.Distinct
 				}
 				members = append(members, identity.Member{
-					Name:    p.Path + ":" + target,
+					Name:    fmt.Sprintf("%s:%s", p.Path, target),
 					Service: svc,
 				})
 			}
