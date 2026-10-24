@@ -25,6 +25,17 @@ stdin $WORK/scout-probe.json
 exec magus shell --agent-name claude-code --observes-skill-loads
 ! stdout 'deny'
 
+# A scout whose spawn the guard never saw names its own type on each call, and writes its
+# report without a Write tool.
+stdin $WORK/unseen-scout-probe.json
+exec magus shell --agent-name claude-code --observes-skill-loads
+! stdout 'deny'
+
+# A report written outside the workspace asks for no skill, even from the root.
+stdin $WORK/root-report.json
+exec magus shell --agent-name claude-code --observes-skill-loads
+! stdout 'deny'
+
 -- magusfile.buzz --
 import "magus";
 
@@ -41,3 +52,7 @@ does this respect our current architecture patterns?
 {"session_id": "arch-1", "hook_event_name": "PostToolUse", "tool_name": "Agent", "tool_input": {"description": "scout the layout", "prompt": "list the packages", "subagent_type": "magus-scout", "run_in_background": true}, "tool_response": {"agentId": "scout01"}}
 -- scout-probe.json --
 {"session_id": "arch-1", "hook_event_name": "PreToolUse", "agent_id": "scout01", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- unseen-scout-probe.json --
+{"session_id": "arch-1", "hook_event_name": "PreToolUse", "agent_id": "scout02", "agent_type": "magus-scout", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- root-report.json --
+{"session_id": "arch-1", "hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/tmp/magus-scout-scratchpad/report.md", "content": "findings\n"}}

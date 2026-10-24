@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -241,6 +242,37 @@ func TestArchitectureUnbriefedStandsDownForAnAgentWithNoSkillTool(t *testing.T) 
 	assert.False(t, Dependencies{facts: facts, caller: job.Caller{Agent: "a1b2c3"}}.loadsSkills(), "a read-only agent type cannot load a skill")
 	assert.True(t, Dependencies{facts: facts, caller: job.Caller{Agent: "d4e5f6"}}.loadsSkills(), "an agent of no recorded type can")
 	requireArchitectureDeny(t, s.bash("d4e5f6", "ls internal"))
+}
+
+// A host names the calling subagent's type on each of its calls, so a scout whose spawn
+// the guard never saw is still known to have no Skill tool.
+func TestArchitectureUnbriefedStandsDownForAnEnvelopeNamedReadOnlyType(t *testing.T) {
+	s := newArchSession(t, strict(testDependencies()), true)
+	s.message("does this respect our current architecture patterns?")
+	scout := fmt.Sprintf(`{"session_id":%q,"hook_event_name":"PreToolUse","agent_id":"s9","agent_type":"magus-scout","tool_name":"Bash","tool_input":{"command":"ls internal"}}`, s.session)
+	assert.Equal(t, []string{"pass", ""}, decisionAndRule(s.judge(scout)))
+}
+
+// The write arm stands down where the shell arm does: a read-only agent's write and a write
+// outside the workspace both ask for a skill that cannot help.
+func TestSkillDemandsSkipWritesNoSkillCouldBrief(t *testing.T) {
+	s := newArchSession(t, strict(testDependencies()), true)
+	s.message("does this respect our current architecture patterns?")
+	report := filepath.Join(t.TempDir(), "scratchpad", "report.md")
+	assert.Equal(t, []string{"pass", ""}, decisionAndRule(s.write("", report)), "a scratchpad report is outside the workspace")
+	requireArchitectureDeny(t, s.write("", "notes.txt"), "a write inside the workspace still waits on the load")
+
+	scout := func(path string) types.GuardJudgment {
+		return s.judge(fmt.Sprintf(`{"session_id":%q,"hook_event_name":"PreToolUse","agent_id":"s9","agent_type":"magus-scout","tool_name":"Write","tool_input":{"file_path":%q,"content":"x\n"}}`, s.session, path))
+	}
+	assert.Equal(t, []string{"pass", ""}, decisionAndRule(scout("notes.txt")), "a read-only agent cannot load the architecture skill")
+	assert.Equal(t, []string{"pass", ""}, decisionAndRule(scout("check.buzz")), "nor the Buzz one")
+	assert.Equal(t, []string{"advise", string(advisoryNewSourceDir)}, decisionAndRule(scout(filepath.Join("kvdir", "kvdir.go"))),
+		"nor brief a new directory, which is still worth a word")
+}
+
+func decisionAndRule(v types.GuardJudgment) []string {
+	return []string{v.Decision, v.Rule}
 }
 
 func TestSkillsKeyNestsTheAgentUnderItsSession(t *testing.T) {
