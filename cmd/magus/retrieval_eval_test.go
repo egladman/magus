@@ -165,6 +165,35 @@ func TestRetrievalEval(t *testing.T) {
 	printComparisons(t, filepath.Join(data, "baseline.jsonl"), report)
 	if dest := evalEnv[envBaseline]; dest != "" {
 		writeRetrievalBaseline(t, root, dest, report)
+		writeRetrievalRuns(t, root, dest, runsBySet)
+	}
+}
+
+// writeRetrievalRuns writes one TREC run per config beside dest for pooling the judged
+// sets. Run.Files carries ranks without scores, so a hit scores its distance from the cut.
+func writeRetrievalRuns(t *testing.T, root, dest string, runsBySet map[rankeval.Config]map[rankeval.EvalSet][]rankeval.Run) {
+	t.Helper()
+	if !filepath.IsAbs(dest) {
+		dest = filepath.Join(root, dest)
+	}
+	stem := strings.TrimSuffix(dest, filepath.Ext(dest))
+	for _, config := range rankeval.Configs {
+		trec := rankeval.TRECRun{Tag: strings.ReplaceAll(string(config), "=", "-"), Queries: map[string][]rankeval.Hit{}}
+		for _, runs := range runsBySet[config] {
+			for _, run := range runs {
+				hits := make([]rankeval.Hit, len(run.Files))
+				for i, file := range run.Files {
+					hits[i] = rankeval.Hit{Doc: file, Score: float64(len(run.Files) - i)}
+				}
+				trec.Queries[run.Judgment.ID] = hits
+			}
+		}
+		file := fmt.Sprintf("%s.%s.run", stem, trec.Tag)
+		out, err := os.Create(file)
+		require.NoError(t, err)
+		require.NoError(t, rankeval.WriteRun(out, trec))
+		require.NoError(t, out.Close())
+		fmt.Printf("wrote the %s TREC run to %s\n", config, file)
 	}
 }
 
