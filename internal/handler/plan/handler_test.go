@@ -3,6 +3,7 @@ package plan
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,7 +97,7 @@ func planStates(p planResponse) map[string]planNode {
 func planEdgeSet(p planResponse) map[string]bool {
 	set := make(map[string]bool, len(p.Edges))
 	for _, e := range p.Edges {
-		set[e.From+" -> "+e.To] = true
+		set[fmt.Sprintf("%s -> %s", e.From, e.To)] = true
 	}
 	return set
 }

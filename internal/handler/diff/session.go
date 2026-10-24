@@ -657,7 +657,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, status)
 	default:
-		handler.Refuse(w, r, rpcerr.Invalid("unknown op "+req.Op+" (one of: cursor, viewed, comment, seen, reading, publish, reply, discard, resolve, answer)"))
+		handler.Refuse(w, r, rpcerr.Invalid(fmt.Sprintf("unknown op %s (one of: cursor, viewed, comment, seen, reading, publish, reply, discard, resolve, answer)", req.Op)))
 		return
 	}
 	if sess == nil {

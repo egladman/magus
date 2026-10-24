@@ -140,8 +140,7 @@ var serverInstructions = strings.Join([]string{
 	"You are connected to a magus workspace.",
 	"magus is a build orchestrator for multi-language monorepos.",
 	"",
-	"The workspace is the " + hint.ToolClient.String() + " tool: a Buzz program that imports \"magus\" and calls its members (" + members(clientMembers...) + "). " +
-		"Call magus\\describe.module(\"magus\") for the signatures. The tools below are the operations that module does not cover.",
+	fmt.Sprintf("The workspace is the %s tool: a Buzz program that imports \"magus\" and calls its members (%s). Call magus\\describe.module(\"magus\") for the signatures. The tools below are the operations that module does not cover.", hint.ToolClient.String(), members(clientMembers...)),
 	"",
 	toolLine(hint.ToolClient, "run Buzz against the magus client and return its value"),
 	toolLine(hint.ToolBuzz, "transform JSON with Buzz; no workspace access"),
@@ -151,9 +150,9 @@ var serverInstructions = strings.Join([]string{
 	toolLine(hint.ToolConsole, "return a local console link when a person asks to see it"),
 	"",
 	"Typical flow:",
-	"  Discover through " + hint.ToolClient.String() + " with the typed members (" + member("describe") + ".project, .graph and .file, " + member("query") + "); they return records, not CLI text.",
-	"  Run through " + hint.ToolClient.String() + " (" + members("affected", "run") + "); " + member("output") + " fetches a captured log by its ref.",
-	"  Health: " + hint.ToolClient.String() + " (" + member("doctor") + "), " + hint.ToolStatus.String() + ", " + hint.ToolConfig.String() + ".",
+	fmt.Sprintf("  Discover through %s with the typed members (%s.project, .graph and .file, %s); they return records, not CLI text.", hint.ToolClient.String(), member("describe"), member("query")),
+	fmt.Sprintf("  Run through %s (%s); %s fetches a captured log by its ref.", hint.ToolClient.String(), members("affected", "run"), member("output")),
+	fmt.Sprintf("  Health: %s (%s), %s, %s.", hint.ToolClient.String(), member("doctor"), hint.ToolStatus.String(), hint.ToolConfig.String()),
 	"",
 	"Config mutation is intentionally not exposed. Use the magus CLI for that.",
 }, "\n")
@@ -163,7 +162,7 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 	name := req.Params.ClientInfo.Name
 	ver := req.Params.ClientInfo.Version
 	if ver != "" {
-		name = name + "/" + ver
+		name = fmt.Sprintf("%s/%s", name, ver)
 	}
 	if name == "" {
 		return "unknown"

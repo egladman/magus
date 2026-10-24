@@ -13,6 +13,7 @@ package token
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -257,7 +258,7 @@ func AuditSubject(resp connect.AnyResponse) (blob []byte, preview string) {
 	}
 	preview = "token " + info.GetId()
 	if info.GetName() != "" {
-		preview += " (" + info.GetName() + ")"
+		preview += fmt.Sprintf(" (%s)", info.GetName())
 	}
 	if g, err := fromWireGrant(info.GetGrant()); err == nil && g != (types.Grant{}) {
 		preview += " " + g.String()

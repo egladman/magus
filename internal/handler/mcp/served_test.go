@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -118,7 +119,7 @@ func TestServedReportsRootSkewFromTheCallersRoots(t *testing.T) {
 	}, servedMeta(t, res))
 	assert.Equal(t, []string{
 		`{"ok":true}`,
-		"magus skew: this server serves " + root + " and your session is in " + other + "; register `./magus mcp` per checkout (magus describe harness)",
+		fmt.Sprintf("magus skew: this server serves %s and your session is in %s; register `./magus mcp` per checkout (magus describe harness)", root, other),
 	}, textParts(res))
 	assert.Nil(t, res.StructuredContent, "a host reading structured content would never show the skew line")
 }
@@ -166,6 +167,6 @@ func TestServedReportsAReplacedExecutable(t *testing.T) {
 	assert.Equal(t, []servedSkew{{Kind: "build", Executable: exe}}, servedMeta(t, res).Skew)
 	assert.Equal(t, []string{
 		`{"ok":true}`,
-		"magus skew: " + exe + " was rebuilt after this server started at v0.4.3-234; restart the MCP server",
+		fmt.Sprintf("magus skew: %s was rebuilt after this server started at v0.4.3-234; restart the MCP server", exe),
 	}, textParts(res))
 }

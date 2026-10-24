@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -135,7 +136,7 @@ func TestRegistry_HandlersReadTheDeclaredParams(t *testing.T) {
 	}
 	for _, d := range Registry {
 		for _, p := range d.Params {
-			read := bytes.Contains(sources, []byte(`"`+p.Name+`"`))
+			read := bytes.Contains(sources, []byte(fmt.Sprintf("\"%s\"", p.Name)))
 			assert.Truef(t, read,
 				"tool %q declares param %q on std.Magus, but no handler in this package reads that name; the schema advertises a param the driver ignores", d.Name, p.Name)
 		}

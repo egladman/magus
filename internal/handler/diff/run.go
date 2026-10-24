@@ -3,6 +3,7 @@ package diff
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -138,7 +139,7 @@ func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunR
 		declared = h.workspace.ProjectTargets(ctx, req.Project)
 	}
 	if !slices.Contains(declared, req.Target) {
-		out.Undeclared = req.Project + " declares no target named " + req.Target
+		out.Undeclared = fmt.Sprintf("%s declares no target named %s", req.Project, req.Target)
 		out.Available = declared
 		handler.WriteJSON(w, r, out)
 		return

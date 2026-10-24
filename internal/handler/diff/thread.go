@@ -3,6 +3,7 @@ package diff
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -111,7 +112,7 @@ func (h *ThreadHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, changeset.ErrNoThread):
 		msg := err.Error()
 		if commentsErr != nil {
-			msg += " (the review was only partly read: " + commentsErr.Error() + ")"
+			msg += fmt.Sprintf(" (the review was only partly read: %s)", commentsErr.Error())
 		}
 		handler.Refuse(w, r, rpcerr.NotFound(msg))
 	case err != nil:
