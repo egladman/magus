@@ -230,10 +230,11 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         "concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "!../internal/**/*_test.go", "!../libs/**/*_test.go", "!../cmd/**/*_test.go",
         "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../schema/**/*_test.go", "!../*_test.go"]);
+    // "reference/config *.md" matches only the Finder copies pruneContentPageCopies deletes.
     ctx.writesFiles(["reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md",
-        "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md"]);
+        "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/config *.md"]);
     // These pages contain authored text. A clean must never delete them.
-    ctx.writesFiles(["concepts/spells.md", "concepts/knowledge.md", "concepts/review.md", "reference/config *.md"], editsExistingSource: true);
+    ctx.writesFiles(["concepts/spells.md", "concepts/knowledge.md", "concepts/review.md"], editsExistingSource: true);
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-utils", "contract", "-src", "../internal/spell/contract.go",
@@ -384,7 +385,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         "reference/rules", "reference/proofread", "reference/api", "design.md"];
     // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
     ctx.writesFiles(["concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
-        "reference/config *.md", "design.md"], editsExistingSource: true);
+        "design.md"], editsExistingSource: true);
     // Tracked paths only. src/gen is gated by proto:generate and assets/gen by
     // diagrams-generate, which needs a symbol index these shards never build.
     final GENERATED = ["MAGUS.md", "glossary.md"] + CONTENT;
