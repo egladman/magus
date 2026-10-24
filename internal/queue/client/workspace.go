@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"sync"
@@ -104,7 +105,7 @@ func (w *Workspace) Sandboxes() map[string]spells.Sandbox {
 
 // regenerationKey names a target of project; an empty target names the project, whose
 // project-wide claims every one of its targets carries.
-func regenerationKey(project, target string) string { return project + ":" + target }
+func regenerationKey(project, target string) string { return fmt.Sprintf("%s:%s", project, target) }
 
 // Affected returns the projects paths reach through the project graph, and why that set
 // is not a proof when paths edit the declarations it was computed from or files no
@@ -172,7 +173,7 @@ func (w *Workspace) Generation(ctx context.Context, outputs, changed []string) (
 	var g types.Generation
 	for _, e := range entries {
 		if len(e.OutputOf) == 0 {
-			g.Unbounded = "no project declares " + e.Path + " as its output"
+			g.Unbounded = fmt.Sprintf("no project declares %s as its output", e.Path)
 			return g, nil
 		}
 		g.Units = append(g.Units, e.OutputOf...)

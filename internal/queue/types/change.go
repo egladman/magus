@@ -66,7 +66,7 @@ func (c Change) Label() string {
 	if c.Title == "" {
 		return "#" + c.ID
 	}
-	return "#" + c.ID + " (" + c.Title + ")"
+	return fmt.Sprintf("#%s (%s)", c.ID, c.Title)
 }
 
 // Check reports whether c can be handed to a version control system and used as a

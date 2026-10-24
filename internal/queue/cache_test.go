@@ -3,6 +3,7 @@ package queue
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -58,7 +59,7 @@ func startProxy(t *testing.T, upstream string, log *HookLog) *CacheReadProxy {
 
 func twirp(t *testing.T, p *CacheReadProxy, token, method, body string) (*http.Response, string) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, p.URL+strings.TrimPrefix(cacheService, "/")+method, strings.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, fmt.Sprintf("%s%s%s", p.URL, strings.TrimPrefix(cacheService, "/"), method), strings.NewReader(body))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -115,7 +116,7 @@ func TestCacheReadProxyRefusesEveryWriteAndAnythingUnknown(t *testing.T) {
 	res, _ = twirp(t, p, "", "GetCacheEntryDownloadURL", `{}`)
 	assert.Equal(t, http.StatusUnauthorized, res.StatusCode, "the port alone reads nothing")
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, p.URL+strings.TrimPrefix(cacheService, "/")+"GetCacheEntryDownloadURL", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("%s%sGetCacheEntryDownloadURL", p.URL, strings.TrimPrefix(cacheService, "/")), nil)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+p.Token)
 	get, err := http.DefaultClient.Do(req)
@@ -151,8 +152,8 @@ func TestHooksReadTheCacheThroughTheProxyAndNeverHoldTheRealToken(t *testing.T) 
 	for _, d := range []string{dir, regenDir} {
 		seen, err := os.ReadFile(filepath.Join(d, "seen"))
 		require.NoError(t, err)
-		assert.Contains(t, string(seen), "ACTIONS_RESULTS_URL="+p.URL+"\n")
-		assert.Contains(t, string(seen), "ACTIONS_RUNTIME_TOKEN="+p.Token+"\n")
+		assert.Contains(t, string(seen), fmt.Sprintf("ACTIONS_RESULTS_URL=%s\n", p.URL))
+		assert.Contains(t, string(seen), fmt.Sprintf("ACTIONS_RUNTIME_TOKEN=%s\n", p.Token))
 		assert.NotContains(t, string(seen), "real-runtime-token")
 		assert.NotContains(t, string(seen), up.URL+"/\n")
 	}

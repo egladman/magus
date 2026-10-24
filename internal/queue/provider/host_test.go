@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +30,9 @@ func retargetCalling(t *testing.T, body string) string {
 	}
 	return strings.NewReplacer(
 		`import "std";`, "import \"std\";\nimport \"mergequeue\";",
-		retarget, "export fun retarget(req: QueueRetargetRequest) > Ack !> any {\n"+body+"\n}",
+		retarget, fmt.Sprintf(`export fun retarget(req: QueueRetargetRequest) > Ack !> any {
+%s
+}`, body),
 	).Replace(script)
 }
 
@@ -37,11 +40,11 @@ func TestHostRequestSendsHeadersAndReturnsStatusAndBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusCreated)
-		_, _ = io.WriteString(w, r.Method+" "+r.Header.Get("Authorization")+" "+string(body))
+		_, _ = io.WriteString(w, fmt.Sprintf("%s %s %s", r.Method, r.Header.Get("Authorization"), string(body)))
 	}))
 	t.Cleanup(srv.Close)
-	src := retargetCalling(t, `    final res = mergequeue\request("POST", url: "`+srv.URL+`", body: "hi", headers: {"Authorization": "Bearer t"});
-    return Ack{ ok = res["status"] == 201 and res["body"] == "POST Bearer t hi" };`)
+	src := retargetCalling(t, fmt.Sprintf(`    final res = mergequeue\request("POST", url: "%s", body: "hi", headers: {"Authorization": "Bearer t"});
+    return Ack{ ok = res["status"] == 201 and res["body"] == "POST Bearer t hi" };`, srv.URL))
 	require.NoError(t, open(t, src).Retarget(context.Background(), change, "main"))
 }
 
@@ -52,7 +55,7 @@ func TestHostRequestRefusesAResponseLargerThanItsBound(t *testing.T) {
 		_, _ = w.Write(bytes.Repeat([]byte("x"), maxBody+1))
 	}))
 	t.Cleanup(srv.Close)
-	src := retargetCalling(t, `    final res = mergequeue\request("GET", url: "`+srv.URL+`");
-    return Ack{ ok = res["status"] == 200 };`)
+	src := retargetCalling(t, fmt.Sprintf(`    final res = mergequeue\request("GET", url: "%s");
+    return Ack{ ok = res["status"] == 200 };`, srv.URL))
 	require.ErrorContains(t, open(t, src).Retarget(context.Background(), change, "main"), "response larger than 33554432 bytes")
 }

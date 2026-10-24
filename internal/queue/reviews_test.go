@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,7 @@ func (r *reviewing) Reviews(context.Context, types.Change) (types.Reviews, error
 }
 
 func (r *reviewing) DismissReview(_ context.Context, _ types.Change, rv types.Review, message string) error {
-	r.dismissed = append(r.dismissed, rv.ID+": "+message)
+	r.dismissed = append(r.dismissed, fmt.Sprintf("%s: %s", rv.ID, message))
 	return nil
 }
 
@@ -76,16 +77,14 @@ func TestReviewsCarriesWhatThePolicyAllowsAndDismissesNothing(t *testing.T) {
 	assert.Equal(t, types.ReviewReport{Change: "1", Head: c.Head, Reviews: []types.ReviewVerdict{{
 		Reviewer: "ann", ReviewID: "12", Commit: carryOld, Carry: true, Tier: types.CarryProse,
 		Changed: []types.ClassifiedPath{{Path: "changes/unreleased/a.md", Tier: types.CarryProse, Why: why}},
-		Reason:  "head " + c.Head[:12] + " is " + carryOld[:12] + " rebased; changed since the approval: changes/unreleased/a.md (prose: " + why + ")",
+		Reason:  fmt.Sprintf("head %s is %s rebased; changed since the approval: changes/unreleased/a.md (prose: %s)", c.Head[:12], carryOld[:12], why),
 	}}}, got)
 	assert.Empty(t, prov.dismissed)
 	assert.Equal(t, 1, prov.nreads, "nothing to dismiss reads the head once")
 
 	var out bytes.Buffer
 	require.NoError(t, WriteReviews(&out, got))
-	assert.JSONEq(t, `{"schema":"mergequeue.reviews/v1","change":"1","head":"`+c.Head+`","reviews":[{"reviewer":"ann","review_id":"12","commit":"`+carryOld+`",`+
-		`"carry":true,"tier":"prose","changed":[{"path":"changes/unreleased/a.md","tier":"prose","why":"matches \"**/*.md\" (built-in default)"}],`+
-		`"reason":"head `+c.Head[:12]+` is `+carryOld[:12]+` rebased; changed since the approval: changes/unreleased/a.md (prose: matches \"**/*.md\" (built-in default))","dismissed":false}]}`, out.String())
+	assert.JSONEq(t, fmt.Sprintf("{\"schema\":\"mergequeue.reviews/v1\",\"change\":\"1\",\"head\":\"%s\",\"reviews\":[{\"reviewer\":\"ann\",\"review_id\":\"12\",\"commit\":\"%s\",\"carry\":true,\"tier\":\"prose\",\"changed\":[{\"path\":\"changes/unreleased/a.md\",\"tier\":\"prose\",\"why\":\"matches \\\"**/*.md\\\" (built-in default)\"}],\"reason\":\"head %s is %s rebased; changed since the approval: changes/unreleased/a.md (prose: matches \\\"**/*.md\\\" (built-in default))\",\"dismissed\":false}]}", c.Head, carryOld, c.Head[:12], carryOld[:12]), out.String())
 }
 
 // Two approvals at one commit are one classification, and each is dismissed with a
@@ -96,20 +95,19 @@ func TestReviewsDismissesWhatDoesNotCarryNamingTheFiles(t *testing.T) {
 
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Head: c.Head, Dismiss: true}, types.DefaultCarryPolicy())
 	require.NoError(t, err)
-	reason := "changed since the approval at " + carryOld[:12] + ": a.go (code: " + codeWhy + ")"
+	reason := fmt.Sprintf("changed since the approval at %s: a.go (code: %s)", carryOld[:12], codeWhy)
 	want := types.ReviewVerdict{Commit: carryOld, Tier: types.CarryCode, Changed: []types.ClassifiedPath{{Path: "a.go", Tier: types.CarryCode, Why: codeWhy}},
 		Reason: reason, Dismissed: true}
 	ann, cy := want, want
 	ann.Reviewer, ann.ReviewID, cy.Reviewer, cy.ReviewID = "ann", "12", "cy", "14"
 	assert.Equal(t, []types.ReviewVerdict{ann, cy}, got.Reviews)
-	assert.Equal(t, []string{"12: magus queue: " + reason + ". Review the head again.", "14: magus queue: " + reason + ". Review the head again."}, prov.dismissed) //nolint:fieldwise // reviewing is a provider fake wrapping a mock; its call log is not a value to compare whole
+	assert.Equal(t, []string{fmt.Sprintf("12: magus queue: %s. Review the head again.", reason), fmt.Sprintf("14: magus queue: %s. Review the head again.", reason)}, prov.dismissed) //nolint:fieldwise // reviewing is a provider fake wrapping a mock; its call log is not a value to compare whole
 	assert.Equal(t, 2, prov.nreads, "the head is read again before dismissing")
 	d.vcs.AssertNumberOfCalls(t, "MergeTrees", 1)
 
 	var out bytes.Buffer
 	require.NoError(t, WriteReviewLines(&out, got))
-	assert.Equal(t, "approval by @ann at "+carryOld[:12]+" dismissed (code): "+reason+"\n"+
-		"approval by @cy at "+carryOld[:12]+" dismissed (code): "+reason+"\n", out.String())
+	assert.Equal(t, fmt.Sprintf("approval by @ann at %s dismissed (code): %s\napproval by @cy at %s dismissed (code): %s\n", carryOld[:12], reason, carryOld[:12], reason), out.String())
 }
 
 // Only an approval still standing when the head is read again is dismissed: one gone
@@ -181,10 +179,10 @@ func TestReviewsDismissesAnApprovalAtACommitNoLongerReachable(t *testing.T) {
 
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
 	require.NoError(t, err)
-	reason := "the approved commit " + carryOld[:12] + " is no longer reachable"
+	reason := fmt.Sprintf("the approved commit %s is no longer reachable", carryOld[:12])
 	assert.Equal(t, []types.ReviewVerdict{{Reviewer: "ann", ReviewID: "12", Commit: carryOld, Tier: types.CarryCode,
 		Changed: []types.ClassifiedPath{}, Reason: reason, Dismissed: true}}, got.Reviews)
-	assert.Equal(t, []string{"12: magus queue: " + reason + ". Review the head again."}, prov.dismissed)
+	assert.Equal(t, []string{fmt.Sprintf("12: magus queue: %s. Review the head again.", reason)}, prov.dismissed)
 }
 
 // A merge of main into the change that differs from the plain merge only in generated
@@ -245,7 +243,7 @@ func TestReviewsAsksPlansListingWhenAnApprovedCommitSharesCommitsWithAQueuedChan
 	got, err := Reviews(t.Context(), d.vcs, d.facts, clone, prov, ReviewsQuery{Base: "main", Change: "1", Dismiss: true}, types.DefaultCarryPolicy())
 	require.NoError(t, err)
 	assert.Equal(t, []types.ReviewVerdict{{Reviewer: "ann", ReviewID: "12", Commit: carryOld, Carry: true, Tier: types.CarryRebase,
-		Changed: []types.ClassifiedPath{}, Reason: "head " + c.Head[:12] + " is " + carryOld[:12] + " rebased with its diff unchanged"}}, got.Reviews)
+		Changed: []types.ClassifiedPath{}, Reason: fmt.Sprintf("head %s is %s rebased with its diff unchanged", c.Head[:12], carryOld[:12])}}, got.Reviews)
 	assert.Empty(t, prov.dismissed, "the scoped listing alone would have dismissed it")
 	d.provider.AssertNumberOfCalls(t, "ListChanges", 2)
 }

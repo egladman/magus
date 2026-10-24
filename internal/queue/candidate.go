@@ -85,7 +85,7 @@ func with(ctx context.Context, v types.ReadVCS, root, onto, head string, paths [
 		if len(c.Parents) > 1 {
 			continue
 		}
-		out = append(out, short(c.ID)+" "+c.Subject)
+		out = append(out, fmt.Sprintf("%s %s", short(c.ID), c.Subject))
 		if len(out) == withLimit {
 			break
 		}
@@ -138,7 +138,7 @@ type settledSource struct {
 }
 
 // String names the path's class and why, and each region as a location with its kind.
-func (s settledSource) String() string { return s.verdict + "; " + s.res.Label() }
+func (s settledSource) String() string { return fmt.Sprintf("%s; %s", s.verdict, s.res.Label()) }
 
 // resolvedNote is how a report names what the queue settled.
 func resolvedNote(settled []settledSource) string {
@@ -296,7 +296,7 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 		if err != nil {
 			return built{}, err
 		}
-		from, err = v.CommitTree(ctx, root, magustypes.TreeCommit{CommitMeta: queueMeta("merge queue: #"+c.ID+" is stacked on "+short(mb), s.date),
+		from, err = v.CommitTree(ctx, root, magustypes.TreeCommit{CommitMeta: queueMeta(fmt.Sprintf("merge queue: #%s is stacked on %s", c.ID, short(mb)), s.date),
 			Tree: tree, Parents: []string{s.onto, mb}})
 		if err != nil {
 			return built{}, err
@@ -518,7 +518,7 @@ func tamperedRefusal(err error) error {
 	if filepath.Dir(t.File) != t.Checkout {
 		file = types.CodeSpan(filepath.Base(t.File)) + " in its git directory"
 	}
-	return &types.RefusedError{Reason: "the regeneration changed the candidate's " + file + ", which tells git where its repository is"}
+	return &types.RefusedError{Reason: fmt.Sprintf("the regeneration changed the candidate's %s, which tells git where its repository is", file)}
 }
 
 // regenerateWrites runs regenerate on regen in b's checkout and returns the declared files
@@ -535,8 +535,7 @@ func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b 
 		return nil, err
 	}
 	if len(linked) > 0 {
-		return nil, &types.RefusedError{Paths: linked, Reason: "regenerating " + strings.Join(regen, ", ") + " would write in a checkout where it holds " +
-			strings.Join(linked, ", ") + " as a symbolic link", Remedy: "Regenerate the generated files yourself and push them, or commit those paths as regular files."}
+		return nil, &types.RefusedError{Paths: linked, Reason: fmt.Sprintf("regenerating %s would write in a checkout where it holds %s as a symbolic link", strings.Join(regen, ", "), strings.Join(linked, ", ")), Remedy: "Regenerate the generated files yourself and push them, or commit those paths as regular files."}
 	}
 	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Home: b.Home, TempDir: b.TempDir, Change: s.change, Paths: regen, Units: units}); err != nil {
 		return nil, err

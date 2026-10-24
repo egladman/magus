@@ -76,13 +76,13 @@ func admission(c *types.Change, a approvalResult, caps types.Capabilities) *type
 	switch {
 	case a.Head != c.Head:
 		c.Head = a.Head
-		return decided(*c, types.DecisionWait, types.CodeWaitHeadMoved, "head moved to "+short(a.Head)+" while listing; retried next run", "")
+		return decided(*c, types.DecisionWait, types.CodeWaitHeadMoved, fmt.Sprintf("head moved to %s while listing; retried next run", short(a.Head)), "")
 	case !a.Queued:
 		return decided(*c, types.DecisionWait, types.CodeWaitWithdrawn, "its merge intent was withdrawn while listing", "")
 	case !a.Approved:
-		return decided(*c, types.DecisionWait, types.CodeWaitNotApproved, "not approved at "+short(a.reviewed)+reasonSuffix(a.Reason), "")
+		return decided(*c, types.DecisionWait, types.CodeWaitNotApproved, fmt.Sprintf("not approved at %s%s", short(a.reviewed), reasonSuffix(a.Reason)), "")
 	case !caps.Allows(c.Method):
-		return refused(*c, "the repository does not allow the "+string(c.Method)+" merge method; pick one it does")
+		return refused(*c, fmt.Sprintf("the repository does not allow the %s merge method; pick one it does", string(c.Method)))
 	}
 	return nil
 }
@@ -136,7 +136,7 @@ func carryApproval(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl 
 		for _, c := range r.Conflicts {
 			verdict.Refused = append(verdict.Refused, c.Path)
 		}
-		verdict.Reason = "the approved " + short(old) + "'s diff conflicts with " + short(newBase) + " in " + strings.Join(verdict.Refused, ", ")
+		verdict.Reason = fmt.Sprintf("the approved %s's diff conflicts with %s in %s", short(old), short(newBase), strings.Join(verdict.Refused, ", "))
 		return verdict, nil
 	}
 	tree, err := v.TreeID(ctx, cl.Root, now)
@@ -149,7 +149,7 @@ func carryApproval(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl 
 			return verdict, err
 		}
 		if len(changed) == 0 {
-			verdict.Reason = "head " + short(now) + "'s tree differs from the approved " + short(old) + " replayed, in no path the VCS names"
+			verdict.Reason = fmt.Sprintf("head %s's tree differs from the approved %s replayed, in no path the VCS names", short(now), short(old))
 			return verdict, nil
 		}
 		for _, p := range changed {
@@ -198,7 +198,7 @@ func readSide(ctx context.Context, v types.ReadVCS, root, rev, path string) []by
 // is old's absence rather than the network's.
 func replayBases(ctx context.Context, v types.ReadVCS, cl Clone, tip, old, now, stackBase string, refs []stackRef) (oldBase, newBase, why string, err error) {
 	if err := v.FetchCommit(ctx, cl.Root, cl.Remote, old); err != nil {
-		return "", "", "the approved commit " + short(old) + " is no longer reachable", nil //nolint:nilerr // an unreachable approved commit is a verdict: the approval does not carry
+		return "", "", fmt.Sprintf("the approved commit %s is no longer reachable", short(old)), nil //nolint:nilerr // an unreachable approved commit is a verdict: the approval does not carry
 	}
 	f := carryFacts{old: old}
 	if f.commits, err = v.RangeCommits(ctx, cl.Root, tip, old, nil); err != nil {
@@ -218,7 +218,7 @@ func replayBases(ctx context.Context, v types.ReadVCS, cl Clone, tip, old, now, 
 	}
 	oldBase, ok := carryBase(f)
 	if !ok {
-		return "", "", "the approved " + short(old) + "'s own diff cannot be told apart from another change's", nil
+		return "", "", fmt.Sprintf("the approved %s's own diff cannot be told apart from another change's", short(old)), nil
 	}
 	newBase = stackBase
 	if newBase == "" {
@@ -227,7 +227,7 @@ func replayBases(ctx context.Context, v types.ReadVCS, cl Clone, tip, old, now, 
 		}
 	}
 	if oldBase == "" || newBase == "" {
-		return "", "", "the approved " + short(old) + " or head " + short(now) + " merged the base's history in more than once, so no replay moves its diff", nil
+		return "", "", fmt.Sprintf("the approved %s or head %s merged the base's history in more than once, so no replay moves its diff", short(old), short(now)), nil
 	}
 	return oldBase, newBase, "", nil
 }

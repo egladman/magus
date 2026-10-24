@@ -251,7 +251,7 @@ func (d doubles) marks(fail map[string]error) *trail {
 	tr := &trail{}
 	d.provider.EXPECT().Mark(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, c types.Change, m types.Mark) error {
-			entry := c.ID + " " + string(m)
+			entry := fmt.Sprintf("%s %s", c.ID, string(m))
 			if m == types.MarkNone {
 				entry = c.ID + " none"
 			}

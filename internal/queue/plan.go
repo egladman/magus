@@ -344,7 +344,7 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 			v := decided(*c, types.DecisionKick, types.CodeKickConflict, "", conflictReport(r.in.Base, c.Head))
 			v.Reason, v.Paths, v.With = firstLine(v.Report), conf.paths, conf.with
 			if note := declinedNote(conf.declined); note != "" {
-				v.Report += "\n" + note + "\n"
+				v.Report += fmt.Sprintf("\n%s\n", note)
 			}
 			return v, nil
 		}
@@ -377,7 +377,7 @@ func decided(c types.Change, d types.Decision, code types.Code, reason, report s
 }
 
 func refused(c types.Change, reason string) *types.Verdict {
-	return decided(c, types.DecisionKick, types.CodeKickRefused, reason, "The merge queue cannot merge this change: "+reason+".\n")
+	return decided(c, types.DecisionKick, types.CodeKickRefused, reason, fmt.Sprintf("The merge queue cannot merge this change: %s.\n", reason))
 }
 
 const forkReport = "The merge queue does not merge changes from forks: it cannot push their " +

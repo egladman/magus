@@ -202,7 +202,7 @@ func newKick(base string, v types.Verdict) types.Kick {
 	case v.Code == types.CodeKickRed && v.Onto != "":
 		k.Report, k.Claim = failureReport(base, c.Head, v.Onto, v.After, "the gate failed on it and passed without it", ""), claim(v.Reason)
 	default:
-		k.Report, k.Claim = "The merge queue cannot merge this change at `"+short(c.Head)+"`.\n", claim(v.Reason)
+		k.Report, k.Claim = fmt.Sprintf("The merge queue cannot merge this change at `%s`.\n", short(c.Head)), claim(v.Reason)
 	}
 	return k
 }
