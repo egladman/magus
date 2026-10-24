@@ -118,7 +118,7 @@ func providerSignature(op providerOp) (params, returns string, err error) {
 	}
 	params = "req: " + buzzName(op.Req)
 	if op.Family != queueFamily {
-		params = "target: " + buzzName(reflect.TypeFor[types.Target]()) + ", " + params
+		params = fmt.Sprintf("target: %s, %s", buzzName(reflect.TypeFor[types.Target]()), params)
 	}
 	return params, returns, nil
 }

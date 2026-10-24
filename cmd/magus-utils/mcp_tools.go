@@ -83,7 +83,9 @@ func renderMCPTools(tools []std.MCPTool, pkg string) ([]byte, error) {
 	b.WriteString("// The MCP tool catalog, emitted from the std module descriptors. Edit the\n")
 	b.WriteString("// MCPTools declaration on the module (std/magus.go) and rerun\n")
 	b.WriteString("// `magus run mcp-tools-generate`, never this file.\n\n")
-	b.WriteString("package " + pkg + "\n\n")
+	b.WriteString(fmt.Sprintf(`package %s
+
+`, pkg))
 
 	b.WriteString("// ParamDescriptor describes a single parameter on an MCP tool.\n")
 	b.WriteString("type ParamDescriptor struct {\n")

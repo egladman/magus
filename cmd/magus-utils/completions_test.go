@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,10 +26,11 @@ func completionsDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	for name := range completionScripts {
-		body := "# leading logic\n" +
-			shellMarker.Begin + "\n" +
-			shellMarker.End + "\n" +
-			"# trailing logic\n"
+		body := fmt.Sprintf(`# leading logic
+%s
+%s
+# trailing logic
+`, shellMarker.Begin, shellMarker.End)
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
 	}
 	return dir

@@ -115,7 +115,9 @@ func renderUnreleased(frags []fragment) string {
 				if b.Len() > 0 {
 					b.WriteString("\n")
 				}
-				b.WriteString("### " + section + "\n\n")
+				b.WriteString(fmt.Sprintf(`### %s
+
+`, section))
 				opened = true
 			}
 			b.WriteString(f.entry + "\n")

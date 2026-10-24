@@ -43,7 +43,7 @@ func runBoundaryList(args []string) error {
 		// Carried as a closure rather than left for the test to look up: a method could
 		// be reached through an interface assertion, and a free function cannot.
 		rows = append(rows, fmt.Sprintf("\t{Name: %q, Zero: %s{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return %s }},",
-			e.Name, qualified, objects.call(t, "v.("+qualified+")")))
+			e.Name, qualified, objects.call(t, fmt.Sprintf("v.(%s)", qualified))))
 	}
 	sort.Strings(rows)
 
