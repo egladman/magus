@@ -268,6 +268,33 @@ func (o Observed) symbolHolds(expect types.GoalExpect, declared, from string) (b
 	}
 }
 
+// integratorTargets are the root targets an integrator runs over every merged tree.
+var integratorTargets = []string{"go-test", lintTarget}
+
+// integratorGoals are the check goals an integration row holds beyond its declaration, one
+// per [integratorTargets] entry no goal of the row already runs at the root: the integrator
+// files their runs as evidence, and a row grading them as undeclared could never pass.
+func integratorGoals(row types.Job) []types.Goal {
+	if !row.Integrating() {
+		return nil
+	}
+	declared := row.EffectiveGoals()
+	taken := make(map[string]bool, len(declared))
+	for _, g := range declared {
+		taken[g.ID] = true
+	}
+	var goals []types.Goal
+	for _, target := range integratorTargets {
+		if slices.ContainsFunc(declared, func(g types.Goal) bool {
+			return g.Kind == types.GoalKindCheck && g.Check.Target == target && g.Check.Project == "."
+		}) {
+			continue
+		}
+		goals = append(goals, unrunGoal(".", target, taken))
+	}
+	return goals
+}
+
 // covering reports whether any observed path is covered by the declared glob.
 func (o Observed) covering(declared string, paths []string) bool {
 	return slices.ContainsFunc(paths, func(p string) bool { return covers(declared, p) })
@@ -311,6 +338,8 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		// the two are the same thing to whoever is deciding whether to integrate. A job
 		// that genuinely writes nothing is read_only, which is the declaration that says so.
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s is not read-only and the result claims no changed paths at all", row.ID))
+	case row.Integrating():
+		// The change is the merge range, and its write paths were computed from it at fork.
 	default:
 		for _, p := range rep.ChangedPaths {
 			if _, ok := matching(row.WritePaths, p); ok {
@@ -326,7 +355,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.WritePaths, ", ")))
 		}
 	}
-	if !row.ReadOnly {
+	if !row.ReadOnly && !row.Integrating() {
 		v.Violations = append(v.Violations, diffViolations(row, rep, seen)...)
 		v.Violations = append(v.Violations, claimViolations(row, seen, v.FootprintUnclaimed)...)
 	}
@@ -348,7 +377,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		}
 	}
 
-	if row.Check == nil && len(row.Goals) == 0 {
+	if row.Check == nil && len(row.Goals) == 0 && !row.Integrating() {
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no check and no goal, so nothing magus can grade says it is done."+
 			" Declare one in the job record's check or goals; a fact no target checks can be shown by a script run with"+
 			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
@@ -359,7 +388,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	// declaring only `--check` reported no goals at all to anything that read Gates,
 	// which is how `describe job` came to show an empty goal list on a job with a check.
 	// The check is a goal here too, so gate_evidence may name it by its id.
-	gates := row.EffectiveGoals()
+	gates := append(row.EffectiveGoals(), integratorGoals(row)...)
 	declaredGates := make(map[string]types.Goal, len(gates))
 	for _, gate := range gates {
 		declaredGates[gate.ID] = gate

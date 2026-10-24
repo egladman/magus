@@ -198,7 +198,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 			return types.JobStatus{}, err
 		}
 	}
-	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, ev.runs()...)
+	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 
 	var taken *types.JobIntegration
 	if len(evidence) > 0 {
@@ -460,14 +460,16 @@ func readAsNow(ctx context.Context, here string, paths []string, run types.JobAt
 // staleRuns names, by [attemptKey], each of runs that read one of the job's changed paths other
 // than it reads now in tree, with why: the job wrote after the run, so the run graded
 // other files. The changed paths are those observed since the checkpoint and those the
-// result names.
-func staleRuns(ctx context.Context, tree string, seen Observed, result types.JobResult, runs ...types.JobAttempt) map[string]string {
+// result names, less those generated reports: an output the gate regenerates after the run
+// (MAGUS.md, a gen/ tree) differs from what the run read without the run having graded
+// other work.
+func staleRuns(ctx context.Context, tree string, seen Observed, result types.JobResult, generated func(string) bool, runs ...types.JobAttempt) map[string]string {
 	if tree == "" {
 		return nil
 	}
 	var changed []string
 	for _, c := range slices.Concat(seen.Changed, result.ChangedPaths) {
-		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) {
+		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
 			changed = append(changed, p)
 		}
 	}
@@ -482,6 +484,26 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 		}
 	}
 	return stale
+}
+
+// generated reports whether p, a workspace-relative slash path, is one magus maintains
+// itself or a declared output of a project in s's workspace, the test `describe file`
+// applies. A Store opened without a workspace knows only the first.
+func (s *Store) generated(p string) bool {
+	if types.IsMagusMaintained(p) {
+		return true
+	}
+	ws, _ := s.loadedWorkspace()
+	for _, project := range ws.Projects {
+		for _, refs := range project.TargetOutputs {
+			for _, ref := range refs {
+				if ref.Rooted(project.Path).Match(p) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // CurrentRun answers whether a run is current in tree: its cache key is the one its check
@@ -803,7 +825,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 			return types.JobStatus{}, err
 		}
 	}
-	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, ev.runs()...)
+	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.

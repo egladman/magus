@@ -798,9 +798,15 @@ type Unintegrated struct {
 
 // UnintegratedBranches is every job at pass or exited whose branch holds commits the
 // revision checked out at the store's root does not, in store order. A job's branch is the
-// one its standing checkout has checked out, else a branch named for the job. A branch an
-// integration job names is skipped unless that job failed or never returned: its work is
-// merged or on its way, and the integration branch counts in its place once it finishes.
+// one its standing checkout has checked out, else a branch named for the job. Skipped as
+// integrated:
+//
+//   - a branch any integration job names, whatever that job's state: a merge that failed
+//     is retried by another integration job, not by counting the branch again;
+//   - an integration job's own branch once the job passed;
+//   - a branch whose changes are on the base by content (see [changesOnBase]), as a squash
+//     merge leaves them with no commit of the branch an ancestor.
+//
 // An error means no range could be read at all: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
 	rows, err := s.List()
@@ -810,13 +816,12 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	var finished []types.Job
 	integrating := map[string]bool{}
 	for _, row := range rows {
-		finishedRow := row.State == types.StatePass || row.State == types.StateExited
-		if row.Integrating() && (row.State.Live() || finishedRow) {
-			for _, b := range row.Integrates {
-				integrating[b] = true
-			}
+		for _, b := range row.Integrates {
+			integrating[b] = true
 		}
-		if finishedRow {
+		switch {
+		case row.Integrating() && row.State == types.StatePass:
+		case row.State == types.StatePass || row.State == types.StateExited:
 			finished = append(finished, row)
 		}
 	}
@@ -838,11 +843,39 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 			continue
 		}
 		// One read per job: a branch that does not resolve errs, and nothing says where its work is.
-		if commits, err := ranges.RangeCommits(ctx, s.root, meta.ID, branch, nil); err == nil && len(commits) > 0 {
-			out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: len(commits)})
+		commits, err := ranges.RangeCommits(ctx, s.root, meta.ID, branch, nil)
+		if err != nil || len(commits) == 0 || changesOnBase(ctx, driver, ranges, s.root, meta.ID, branch) {
+			continue
 		}
+		out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: len(commits)})
 	}
 	return out, nil
+}
+
+// changesOnBase reports whether every file branch changed since it diverged from base reads
+// the same at branch as at base. Content, not ancestry or patch identity: a squash merge of
+// several branches holds no commit of any of them and no patch equal to one. A file either
+// side cannot read, a deletion among them, leaves it unproven.
+func changesOnBase(ctx context.Context, driver types.VCSDriver, ranges types.RangeReporter, root, base, branch string) bool {
+	tip, err := driver.FindCommit(ctx, root, branch)
+	if err != nil {
+		return false
+	}
+	paths, err := ranges.RangeFiles(ctx, root, base, tip.ID, nil)
+	if err != nil || len(paths) == 0 {
+		return false
+	}
+	for _, changed := range paths {
+		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
+		ours, err := driver.ReadFileAt(ctx, root, tip.ID, p)
+		if err != nil {
+			return false
+		}
+		if theirs, err := driver.ReadFileAt(ctx, root, base, p); err != nil || theirs != ours {
+			return false
+		}
+	}
+	return true
 }
 
 // IntegrationAdvice is what a fork of anything but an integration job says about the

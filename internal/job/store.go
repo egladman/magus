@@ -212,11 +212,29 @@ type Location struct {
 func NewStore(loc Location) *Store {
 	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), writer: loc.Writer,
 		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}
-	if s.writer == (types.MagusBuild{}) && !buildinfo.Modified() {
-		s.writer.Commit, s.writer.Date = buildinfo.Commit()
-	}
 	s.path, s.err = jobsPath(loc)
 	return s
+}
+
+// writerBuild is the build s's writes stamp: Location.Writer, or the running build's commit
+// when that is zero. Resolved per write rather than at NewStore because [Store.As] and
+// [Store.InWorkspace] build their views field by field, and a view that dropped a resolved
+// stamp wrote as unstamped, refused with MGS3051 under the very build that last wrote.
+func (s *Store) writerBuild() types.MagusBuild {
+	if s.writer != (types.MagusBuild{}) {
+		return s.writer
+	}
+	return runningBuild()
+}
+
+// runningBuild is this binary's commit and commit time, zero for a build from a modified
+// tree. A var so a test binary, which carries no stamp, can stand in for a stamped one.
+var runningBuild = func() types.MagusBuild {
+	var b types.MagusBuild
+	if !buildinfo.Modified() {
+		b.Commit, b.Date = buildinfo.Commit()
+	}
+	return b
 }
 
 // Actor is who this Store writes as RIGHT NOW, for a door that has to refuse before it
@@ -1209,7 +1227,7 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 	if len(changed) == 0 && !dropped && bytes.Equal(header, log.header) && !log.partial {
 		return nil
 	}
-	writer, err := newestWriter(s.path, f.Writer, s.writer)
+	writer, err := newestWriter(s.path, f.Writer, s.writerBuild())
 	if err != nil {
 		return err
 	}
