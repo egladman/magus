@@ -124,7 +124,7 @@ files.
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `merge-conflicts`      | the pull request conflicts with its base in files magus generates, which a merge driver cannot settle on the server                                      |
 | `unclaimed`            | changed files belong to no project, so no target reads them and the checks say nothing about them                                                        |
-| `target-outputs`       | a new target declares no outputs, which means it never replays from cache                                                                                |
+| `target-outputs`       | a new target declares no outputs and edits no file in place, which means it never replays from cache                                                     |
 | `skip-cache`           | a target opts out of the cache, quoting the reason magus requires for it                                                                                 |
 | `blast-radius`         | the change reaches a large share of the workspace, with the chain that pulled each project in                                                            |
 | `doctor`               | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                                                                |
