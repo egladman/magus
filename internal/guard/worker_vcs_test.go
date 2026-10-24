@@ -166,3 +166,27 @@ func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
 	}
 	assert.False(t, merge("git merge --no-ff done-a", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
+
+func TestIntegrationMergeInALoop(t *testing.T) {
+	worker := narrowLease()
+	worker.Parent = "harness"
+	worker.Integrates = []string{"done-a", "done-b"}
+	ctx, _ := fleetFixture(t, worker)
+
+	for _, command := range []string{
+		"git merge --no-ff --no-edit done-a",
+		`for b in done-a done-b; do git merge --no-ff --no-edit "$b"; done`,
+		`for b in done-b; do git merge --no-ff --no-edit $b; done`,
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
+	}
+
+	for _, command := range []string{
+		`for b in done-a other; do git merge --no-ff --no-edit "$b"; done`,
+		`for b in $(git branch --list 'done-*'); do git merge --no-ff --no-edit "$b"; done`,
+		`for b in done-*; do git merge --no-ff --no-edit "$b"; done`,
+		`git merge --no-ff --no-edit "$b"`,
+	} {
+		assert.NotEmpty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
+	}
+}
