@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -115,7 +116,7 @@ func TestReadDoesNotRegisterValuesTooShortToMask(t *testing.T) {
 	// own. Registering those would contradict the MGS2011 notice this value just fired
 	// AND put a 4-character needle into every future log line.
 	for _, form := range []string{"YWI=", "YWJh", "6162"} {
-		assert.Equal(t, "x"+form+"y", string(r.Redact([]byte("x"+form+"y"))),
+		assert.Equal(t, fmt.Sprintf("x%sy", form), string(r.Redact([]byte(fmt.Sprintf("x%sy", form)))),
 			"no encoded form of a too-short secret may be registered")
 	}
 }
