@@ -900,8 +900,8 @@ type Job struct {
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
 	// that could assert it could assert the proof it stands for. See [JobWriteProof].
 	WriteProof JobWriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
-	// Waivers are the waivable problems the declaration accepted, copied from it.
-	Waivers []JobWaiver `json:"waivers,omitempty" yaml:"waivers,omitempty"`
+	// Deviations are the permissible problems the declaration accepted, copied from it.
+	Deviations []Deviation `json:"deviations,omitempty" yaml:"deviations,omitempty"`
 	// Validated is when the store last validated the whole record, in unix seconds; zero
 	// on a row never validated. Store-stamped like Created: a declaration cannot set it.
 	Validated int64 `json:"validated,omitempty" yaml:"validated,omitempty"`
@@ -1183,8 +1183,8 @@ type Declaration struct {
 	// MaxClaims caps how many proved claims one attempt takes; zero takes the default. See
 	// [Job.MaxClaims].
 	MaxClaims int `json:"max_claims,omitempty"`
-	// Waivers accept waivable problems (see [Waivable]) on the record's own authority.
-	Waivers []JobWaiver `json:"waivers,omitempty"`
+	// Deviations accept permissible problems (see [Permissible]) on the record's own authority.
+	Deviations []Deviation `json:"deviations,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
 	// write into this path, inside the write paths of the live job ID names, by somebody
 	// other than its holder. A record carrying it declares nothing else.
@@ -1324,7 +1324,7 @@ func pathOutsideWorkspace(p string) string {
 func (r Declaration) Validate() error { return r.Problems().Err() }
 
 // Problems is every problem the record shows on its own, without a workspace: each field's
-// shape, the check, the waivers and the goals. It never stops at the first.
+// shape, the check, the deviations and the goals. It never stops at the first.
 func (r Declaration) Problems() JobProblems {
 	var ps JobProblems
 	invalid := func(field, message, fix string) {
@@ -1418,11 +1418,11 @@ func (r Declaration) Problems() JobProblems {
 			invalid(at, at+" is blank", "name the flag, key, symbol or format the job may break, or drop the entry")
 		}
 	}
-	for i, w := range r.Waivers {
-		at := fmt.Sprintf("waivers[%d]", i)
-		if !Waivable(w.Code) {
-			invalid(at+".code", fmt.Sprintf("%s waives %q, which is not a waivable code", at, w.Code),
-				fmt.Sprintf("waive only %s, %s or %s, and fix the record for anything else", WritePathTooBroad, OutputOutsideWritePaths, GateNotRun))
+	for i, w := range r.Deviations {
+		at := fmt.Sprintf("deviations[%d]", i)
+		if !Permissible(w.Code) {
+			invalid(at+".code", fmt.Sprintf("%s permits %q, which is not a permissible code", at, w.Code),
+				fmt.Sprintf("permit only %s, %s or %s, and fix the record for anything else", WritePathTooBroad, OutputOutsideWritePaths, GateNotRun))
 		}
 		if strings.TrimSpace(w.Subject) == "" {
 			invalid(at+".subject", at+" names no subject", "name the write path, `target project` or output path the problem names")
@@ -1813,7 +1813,7 @@ func (r Declaration) Apply(u *Job) {
 	u.ReadOnly = r.ReadOnly
 	u.MaxAttempts = r.MaxAttempts
 	u.MaxClaims = r.MaxClaims
-	u.Waivers = slices.Clone(r.Waivers)
+	u.Deviations = slices.Clone(r.Deviations)
 }
 
 // ApplySpec writes this declaration's spec onto a row, for `magus job apply`: as Apply, but
@@ -2586,7 +2586,7 @@ func (u Job) Clone() Job {
 	c.Claims = slices.Clone(u.Claims)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
-	c.Waivers = slices.Clone(u.Waivers)
+	c.Deviations = slices.Clone(u.Deviations)
 	if u.ModelTier != nil {
 		tier := *u.ModelTier
 		c.ModelTier = &tier

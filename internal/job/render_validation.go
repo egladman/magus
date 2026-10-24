@@ -14,7 +14,7 @@ import (
 // RenderValidation writes v for a person: every problem numbered, each as
 // `[MGSxxxx] <field>: <message>` with its fix beneath and a count of those `--fix` would
 // apply, then the record as it would be
-// stored when dryRun is set, the waived problems with their reasons, and each check that
+// stored when dryRun is set, the permitted problems with their reasons, and each check that
 // could not run. A validation with nothing to say writes nothing, except under dryRun,
 // which says the record is clean.
 //
@@ -44,12 +44,12 @@ func RenderValidation(w io.Writer, v types.JobValidation, dryRun bool) {
 			fmt.Fprintf(w, "would store:\n%s\n", stored)
 		}
 	}
-	if len(v.Waived) > 0 {
-		fmt.Fprintf(w, "waived %d:\n", len(v.Waived))
-		for _, p := range v.Waived {
+	if len(v.Permitted) > 0 {
+		fmt.Fprintf(w, "permitted %d:\n", len(v.Permitted))
+		for _, p := range v.Permitted {
 			line := fmt.Sprintf("  [%s] %s", p.Code, problemText(p))
-			if i := slices.IndexFunc(v.Job.Waivers, func(wv types.JobWaiver) bool { return wv.Waives(p) }); i >= 0 {
-				line += fmt.Sprintf(" (waived: %s)", v.Job.Waivers[i].Reason)
+			if i := slices.IndexFunc(v.Job.Deviations, func(wv types.Deviation) bool { return wv.Permits(p) }); i >= 0 {
+				line += fmt.Sprintf(" (permitted: %s)", v.Job.Deviations[i].Reason)
 			}
 			fmt.Fprintln(w, line)
 		}

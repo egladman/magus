@@ -86,10 +86,10 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"worktree": 13, "validated": 13, "waivers": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claims": 13, "max_claims": 13, "paused": 13, "paused_by": 13, "pause_reason": 13, "paused_until": 13, "weight": 13},
+	Added:   map[string]int{"worktree": 13, "validated": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claims": 13, "max_claims": 13, "paused": 13, "paused_by": 13, "pause_reason": 13, "paused_until": 13, "weight": 13},
 	// The four boundary renames and completion_gates, names only the JSON document an
-	// older magus kept the plan in carried.
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},
+	// older magus kept the plan in carried, and waivers, the name deviations had first.
+	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers"},
 	Requires: map[int]string{
 		10: "dead-job-end",
 		11: "claim-declarations",
@@ -104,9 +104,10 @@ var DeclarationSchema = SchemaLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[Declaration](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"checkout": 13, "waivers": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claim": 13, "max_claims": 13, "weight": 13},
-	// goals' spelling frozen in v11. A record sending it is refused as an unknown member.
-	Reserved: []string{"completion_gates"},
+	Added:   map[string]int{"checkout": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claim": 13, "max_claims": 13, "weight": 13},
+	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
+	// refused as an unknown member.
+	Reserved: []string{"completion_gates", "waivers"},
 	Requires: JobSchema.Requires,
 }
 

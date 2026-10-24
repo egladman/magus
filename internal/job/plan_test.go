@@ -807,17 +807,17 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
 }
 
-// The fork derives soft paths and integrator waivers, so a record projected without them
+// The fork derives soft paths and integrator deviations, so a record projected without them
 // widens or narrows the row and keeps them; one naming soft_paths for a held path decides.
 func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	t.Parallel()
 
-	waiver := types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
+	deviation := types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
 	derived := func(t *testing.T) *Store {
 		t.Helper()
 		root := loadableRepo(t)
 		rec := spec("a.go", "a_test.go", "b_test.go")
-		rec.SoftPaths, rec.Waivers = []string{"a_test.go", "b_test.go"}, []types.JobWaiver{waiver}
+		rec.SoftPaths, rec.Deviations = []string{"a_test.go", "b_test.go"}, []types.Deviation{deviation}
 		s := NewStore(tempLocation(t, root))
 		_, err := s.Update(t.Context(), "w", Declare(rec, 0))
 		require.NoError(t, err)
@@ -847,7 +847,7 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 		want.Widenings = 1
 		want.WriteProof = types.WriteProofAlone
 		want.Validated = got.Validated
-		assert.Equal(t, want, got, "the soft paths and the waiver stay")
+		assert.Equal(t, want, got, "the soft paths and the deviation stay")
 	})
 	t.Run("narrowing", func(t *testing.T) {
 		t.Parallel()

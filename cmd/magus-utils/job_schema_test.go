@@ -155,16 +155,16 @@ func TestLeaseIDPatternMatchesTheValidator(t *testing.T) {
 	assert.Equal(t, "^[./0-9a-z-]+$", leaseIDPattern())
 }
 
-func TestWaiverCodeEnumIsExactlyTheWaivableCodes(t *testing.T) {
+func TestDeviationCodeEnumIsExactlyThePermissibleCodes(t *testing.T) {
 	t.Parallel()
 
 	enum := closedSets["DiagnosticCode"]
 	require.NotEmpty(t, enum)
 	for _, c := range types.AllDiagnosticCodes() {
-		assert.Equal(t, types.Waivable(c), slices.Contains(enum, string(c)), "code %s", c)
+		assert.Equal(t, types.Permissible(c), slices.Contains(enum, string(c)), "code %s", c)
 	}
 	for _, name := range enum {
-		assert.True(t, types.Waivable(types.DiagnosticCode(name)), "enum names %s", name)
+		assert.True(t, types.Permissible(types.DiagnosticCode(name)), "enum names %s", name)
 	}
 }
 

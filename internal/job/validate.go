@@ -18,8 +18,8 @@ import (
 
 // validateMerge holds a merge into job id, against the plan rows, to every rule a stored
 // job meets, in one pass that never stops at the first problem. The result carries the row
-// as the merge would leave it, every problem left once the row's waivers apply, the
-// problems they waived, each check that could not run and why, and the write proof the row
+// as the merge would leave it, every problem left once the row's deviations apply, the
+// problems they permitted, each check that could not run and why, and the write proof the row
 // records.
 //
 // A merge that creates the row, or brings an ended one back, meets every rule. The record
@@ -114,7 +114,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	found, unchecked := workspaceProblems(ctx, store, merged, judged, updates, read)
 	ps = append(ps, found...)
 	v.Unchecked = unchecked
-	v.Problems, v.Waived = waiveBut(ps, merged.Waivers)
+	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
 	return v
 }
 
@@ -122,10 +122,10 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 // otherwise, one integration late.
 const lintTarget = "lint"
 
-// waiveBut is ps.Waive with lint exempted from globs: a gate on lint is waived only by a
-// waiver naming its exact subject, so `**` cannot hide the findings a go-test check never
+// permitBut is ps.Permit with lint exempted from globs: a gate on lint is permitted only by a
+// deviation naming its exact subject, so `**` cannot hide the findings a go-test check never
 // shows.
-func waiveBut(ps types.JobProblems, waivers []types.JobWaiver) (kept, waived types.JobProblems) {
+func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permitted types.JobProblems) {
 	isLint := func(p types.JobProblem) bool {
 		return p.Code == types.GateNotRun && strings.HasPrefix(p.Subject, lintTarget+" ")
 	}
@@ -137,10 +137,10 @@ func waiveBut(ps types.JobProblems, waivers []types.JobWaiver) (kept, waived typ
 			rest = append(rest, p)
 		}
 	}
-	exact := slices.DeleteFunc(slices.Clone(waivers), func(w types.JobWaiver) bool { return types.IsGlobMeta(w.Subject) })
-	kept, waived = rest.Waive(waivers)
-	lintKept, lintWaived := lint.Waive(exact)
-	return append(kept, lintKept...), append(waived, lintWaived...)
+	exact := slices.DeleteFunc(slices.Clone(deviations), func(w types.Deviation) bool { return types.IsGlobMeta(w.Subject) })
+	kept, permitted = rest.Permit(deviations)
+	lintKept, lintPermitted := lint.Permit(exact)
+	return append(kept, lintKept...), append(permitted, lintPermitted...)
 }
 
 // lintGoals is a lint goal per project whose lint reads Go source the row writes and which
@@ -223,21 +223,21 @@ func ExtendFootprint(root string, row types.Job, projects []*types.Project, refe
 // integratorRegenerates is the reason a record gives for an output the integrator owns.
 const integratorRegenerates = "the integrator regenerates it"
 
-// IntegratorWaivers is one waiver per output a target regenerates from row's write paths
+// IntegratorDeviations is one deviation per output a target regenerates from row's write paths
 // that sits outside them: the integrator regenerates it after the job. An output a deny
-// path touches stays its owner's, and one a waiver of row accepts already needs no new one.
-func IntegratorWaivers(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []types.JobWaiver {
-	var waivers []types.JobWaiver
+// path touches stays its owner's, and one a deviation of row accepts already needs no new one.
+func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []types.Deviation {
+	var deviations []types.Deviation
 	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
 		glob, _, _ := strings.Cut(o.Output, " !")
 		problem := types.JobProblem{Code: types.OutputOutsideWritePaths, Subject: o.Output}
-		accepted := slices.ContainsFunc(row.Waivers, func(w types.JobWaiver) bool { return w.Waives(problem) })
+		accepted := slices.ContainsFunc(row.Deviations, func(w types.Deviation) bool { return w.Permits(problem) })
 		if accepted || slices.ContainsFunc(row.DenyPaths, func(d string) bool { return types.PathsIntersect(d, glob) }) {
 			continue
 		}
-		waivers = append(waivers, types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates})
+		deviations = append(deviations, types.Deviation{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates})
 	}
-	return waivers
+	return deviations
 }
 
 // ValidateFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
@@ -428,7 +428,7 @@ func regeneratedProblems(outputs []RegeneratedOutput, deny []string) types.JobPr
 		p := types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Field: "write_paths", Subject: o.Output,
 			Message: fmt.Sprintf("%s regenerates %s from %s, inside the write paths, and %s sits outside them", o.Target, o.Output, o.Source, o.Output),
-			Fix: fmt.Sprintf(`add %q to write_paths, or waive it in waivers: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
+			Fix: fmt.Sprintf(`add %q to write_paths, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
 				o.Output, types.OutputOutsideWritePaths, o.Output),
 		}
 		glob, _, _ := strings.Cut(o.Output, " !")
@@ -440,11 +440,11 @@ func regeneratedProblems(outputs []RegeneratedOutput, deny []string) types.JobPr
 	return ps
 }
 
-// regeneratedEdit adds output to the write paths, or waives it for the integrator when it
+// regeneratedEdit adds output to the write paths, or permits it for the integrator when it
 // carries an exclusion (`gen/*.go !gen/*_test.go`), which no write path can spell.
 func regeneratedEdit(output string) *types.JobEdit {
 	if strings.Contains(output, " !") {
-		return &types.JobEdit{AddWaiver: &types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: output, Reason: integratorRegenerates}}
+		return &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: output, Reason: integratorRegenerates}}
 	}
 	return &types.JobEdit{AddWritePath: output}
 }
@@ -467,7 +467,7 @@ func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 		ps = append(ps, types.JobProblem{
 			Code: types.GateNotRun, Field: "goals", Subject: subject,
 			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a goal runs it", subject, g.Source),
-			Fix: fmt.Sprintf(`add the goal %s to goals, or waive it in waivers: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
+			Fix: fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
 				goal, types.GateNotRun, subject),
 			Edit: &types.JobEdit{AddGoal: &add},
 		})
@@ -482,7 +482,7 @@ func rowDeclaration(row types.Job) types.Declaration {
 		ID: row.ID, Parent: row.Parent, Criteria: row.Criteria, Checkpoint: row.Checkpoint,
 		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, ReadPaths: row.ReadPaths, DependsOn: row.DependsOn,
 		Breaks: row.Breaks, Model: row.Model, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
-		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Waivers: row.Waivers,
+		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
 	}
 	// A stored row renders its check into Validation too, and a record carries one spelling.
 	if row.Check != nil {

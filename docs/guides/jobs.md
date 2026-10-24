@@ -446,7 +446,7 @@ To check a record without forking it, add the global `--dry-run` flag:
 magus job fork --stdin --dry-run < job.json
 ```
 
-It prints the problems, the record as it would be stored, the problems a waiver
+It prints the problems, the record as it would be stored, the problems a deviation
 accepted, and each check that could not run. It exits 1 while any problem is left. A
 missing workspace or knowledge graph is named among the checks that could not run,
 never read as a clean record. Nothing is written, so run it as often as needed.
@@ -462,9 +462,9 @@ full.
 | [MGS3040](../reference/codes/sandbox/MGS3040.md) | A check the worker cannot run: an unknown target, a command the guard denies, or arguments that skip the tests of the packages it writes | Name a target the workspace has, with arguments that still run those tests                            |
 | [MGS3041](../reference/codes/sandbox/MGS3041.md) | A checkpoint this checkout cannot place                                                                                                  | Fork where that revision is checked out, or name the checkpoint `magus vcs checkpoint -o name` prints |
 | [MGS3042](../reference/codes/sandbox/MGS3042.md) | A fork past `jobs.max_depth` or `jobs.max_live`                                                                                          | Fork under a shallower parent, end a live job first, or change the limit in `magus.yaml`              |
-| [MGS3043](../reference/codes/sandbox/MGS3043.md) | A glob write path too broad for `jobs.max_claim_files` or `jobs.max_claim_projects`                                                      | Name the files the job edits, or waive the path                                                       |
-| [MGS3044](../reference/codes/sandbox/MGS3044.md) | A target regenerates an output from sources the job may edit, and the output is outside its write paths                                  | Add the output to the write paths, or waive it when the root regenerates it                           |
-| [MGS3045](../reference/codes/sandbox/MGS3045.md) | A ci target reads files the job may write, and neither its check nor a goal runs it                                                      | Add a goal for the target, or waive it when the root runs it after integration                        |
+| [MGS3043](../reference/codes/sandbox/MGS3043.md) | A glob write path too broad for `jobs.max_claim_files` or `jobs.max_claim_projects`                                                      | Name the files the job edits, or permit the path                                                      |
+| [MGS3044](../reference/codes/sandbox/MGS3044.md) | A target regenerates an output from sources the job may edit, and the output is outside its write paths                                  | Add the output to the write paths, or permit it when the root regenerates it                          |
+| [MGS3045](../reference/codes/sandbox/MGS3045.md) | A ci target reads files the job may write, and neither its check nor a goal runs it                                                      | Add a goal for the target, or permit it when the root runs it after integration                       |
 | [MGS3046](../reference/codes/sandbox/MGS3046.md) | A workspace file (a magusfile, `magus.yaml` or a spell source) is in the write paths while another live job works in this checkout       | Fork the job with `--checkout` into its own worktree, or leave the file out of its write paths        |
 
 The claim refusals from before this series keep their own pages:
@@ -473,26 +473,26 @@ The claim refusals from before this series keep their own pages:
 [MGS3032](../reference/codes/sandbox/MGS3032.md) for claims, and
 [MGS3036](../reference/codes/sandbox/MGS3036.md) for a whole-file configuration claim.
 
-### Waivers
+### Deviations
 
-A record can waive three problems and no others: MGS3043, MGS3044 and MGS3045. A waiver
+A record can permit three problems and no others: MGS3043, MGS3044 and MGS3045. A deviation
 names the code, the subject the problem reports, and a reason:
 
 ```json
-"waivers": [
+"deviations": [
   { "code": "MGS3043", "subject": "**/*.go", "reason": "renames the type everywhere" }
 ]
 ```
 
 The subject is what the problem names: the write path for MGS3043, the output path for
-MGS3044, and `target project` for MGS3045, such as `lint .`. A waiver matches the code
-and the subject spelled exactly, so a waiver for `**/*.go` does not cover `**/*.md`. A
-waiver on any other code is refused under MGS3037, and so is a waiver with no subject
+MGS3044, and `target project` for MGS3045, such as `lint .`. A deviation matches the code
+and the subject spelled exactly, so a deviation for `**/*.go` does not cover `**/*.md`. A
+deviation on any other code is refused under MGS3037, and so is a deviation with no subject
 or no reason.
 
-Magus checks that the reason is not blank and keeps the waiver on the stored job. It
+Magus checks that the reason is not blank and keeps the deviation on the stored job. It
 does not judge the reason. A reviewer reads it, so write it for that reader: say why
-this job needs the whole path, or who runs the output or the gate instead. A waived
+this job needs the whole path, or who runs the output or the gate instead. A permitted
 problem does not refuse the fork, and `--dry-run` lists it apart from the problems left.
 
 ### Limits on a glob write path
@@ -511,7 +511,7 @@ refuses the glob under MGS3043 and says the breadth was not judged, rather than
 passing it. A glob that begins with `**` is refused whatever it matches.
 
 The fix for an MGS3043 problem gives the narrowest write paths the job's symbol goals
-and criteria name, as a ready `write_paths` array, then the waiver that keeps the glob.
+and criteria name, as a ready `write_paths` array, then the deviation that keeps the glob.
 When the knowledge graph cannot answer the symbol goals, the fix says so; `magus graph
 build` and a fork again give a fuller list. MGS3042 reads `jobs.max_depth` and
 `jobs.max_live` the same way, and a zero limit is unlimited.

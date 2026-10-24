@@ -592,7 +592,7 @@ func widensInPlace(prev, next types.Job) bool {
 
 // keepDerived carries what the fork derived for prev onto a whole-row record that omits it,
 // so a projection never hardens a path no person decided: prev's soft paths row still
-// writes, unless row names soft_paths for a path prev held, and the [IntegratorWaivers].
+// writes, unless row names soft_paths for a path prev held, and the [IntegratorDeviations].
 func keepDerived(row *types.Job, prev types.Job) {
 	if !slices.ContainsFunc(row.SoftPaths, func(p string) bool { return slices.Contains(prev.WritePaths, p) }) {
 		for _, p := range prev.SoftPaths {
@@ -601,11 +601,11 @@ func keepDerived(row *types.Job, prev types.Job) {
 			}
 		}
 	}
-	for _, w := range prev.Waivers {
-		if w.Reason == integratorRegenerates && !slices.ContainsFunc(row.Waivers, func(have types.JobWaiver) bool {
+	for _, w := range prev.Deviations {
+		if w.Reason == integratorRegenerates && !slices.ContainsFunc(row.Deviations, func(have types.Deviation) bool {
 			return have.Code == w.Code && have.Subject == w.Subject
 		}) {
-			row.Waivers = append(row.Waivers, w)
+			row.Deviations = append(row.Deviations, w)
 		}
 	}
 }

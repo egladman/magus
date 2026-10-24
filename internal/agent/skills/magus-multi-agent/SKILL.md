@@ -364,12 +364,12 @@ an editor magus cannot attribute{{end}}.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
    - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
-Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless permitted. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
 covers claiming one declaration in a shared file and forking from a leased worker.
 
 A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
-Add the output to the write paths, or waive it when the root regenerates it after integration.
+Add the output to the write paths, or permit it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `{{cmd "describe job"}} <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote

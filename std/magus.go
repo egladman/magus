@@ -770,7 +770,7 @@ var Magus = Module{
 						"here. A put is validated whole before anything is stored, and raises every " +
 						"problem at once (codes MGS3037 through MGS3046), each with the field it is " +
 						"on and the fix. The record's schema is what `magus job fork --schema` prints. " +
-						"waivers, a list of {code, subject, reason}, keeps a write path broader than " +
+						"deviations, a list of {code, subject, reason}, keeps a write path broader than " +
 						"the workspace allows (MGS3043), an output a target regenerates outside the " +
 						"write paths (MGS3044) or a ci target the job does not run (MGS3045). " +
 						"A put that CREATES a row raises when its write_paths cover a file the " +

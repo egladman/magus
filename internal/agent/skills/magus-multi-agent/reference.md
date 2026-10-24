@@ -61,14 +61,14 @@ remains. Fix every listed problem, then fork the same record.
 
 A glob write path past `jobs.max_claim_files` (default 50 files) or `jobs.max_claim_projects`
 (default 1 project) is refused as {{mgslink "MGS3043"}}. Name the files the job edits. A sweep
-that really needs the whole glob waives it in the record:
+that really needs the whole glob permits it in the record:
 
 ```json
-"waivers": [{"code": "MGS3043", "subject": "**/*.go", "reason": "renames the type everywhere"}]
+"deviations": [{"code": "MGS3043", "subject": "**/*.go", "reason": "renames the type everywhere"}]
 ```
 
-Only {{mgslink "MGS3043"}}, {{mgslink "MGS3044"}} and {{mgslink "MGS3045"}} can be waived. The
-subject is the write path, the output path, or `target project` for MGS3045. A waiver on any other
+Only {{mgslink "MGS3043"}}, {{mgslink "MGS3044"}} and {{mgslink "MGS3045"}} can be permitted. The
+subject is the write path, the output path, or `target project` for MGS3045. A deviation on any other
 code is refused. Magus checks that the reason is not blank; a reviewer reads it.
 
 ## The exit record

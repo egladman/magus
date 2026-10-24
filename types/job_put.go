@@ -32,9 +32,9 @@ type JobPut struct {
 	DependsOn  *[]string   `json:"depends_on,omitempty"`
 	Breaks     *[]string   `json:"breaks,omitempty"`
 	Goals      *[]Goal     `json:"goals,omitempty"`
-	// Waivers replaces the row's waivers; each is validated as a declaration's would be.
-	Waivers  *[]JobWaiver `json:"waivers,omitempty"`
-	ReadOnly *bool        `json:"read_only,omitempty"`
+	// Deviations replaces the row's deviations; each is validated as a declaration's would be.
+	Deviations *[]Deviation `json:"deviations,omitempty"`
+	ReadOnly   *bool        `json:"read_only,omitempty"`
 	// MaxAttempts is how many times the job may be forked, its first fork included; 0
 	// clears the cap.
 	MaxAttempts *int `json:"max_attempts,omitempty"`

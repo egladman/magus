@@ -2313,7 +2313,7 @@ them and magus describe job prints one job's terms.`,
 				"the jobs already here, in write_proof, which `magus ls jobs` prints. The whole record is validated at once: " +
 				"a fork with problems lists every one with its code and fix and stores nothing, and the global --dry-run " +
 				"does the same without forking, printing the record as it would be stored and exiting 1 while a problem " +
-				"remains. A waiver in the record keeps a broad write path, an output a target regenerates outside the " +
+				"remains. A deviation in the record keeps a broad write path, an output a target regenerates outside the " +
 				"write paths, or a ci target the job does not run.",
 			Flags: []cmdline.Flag{
 				{Name: "schema", Kind: cmdline.Bool, Doc: "Print the JSON schema a job must satisfy, and exit"},
@@ -2331,7 +2331,7 @@ them and magus describe job prints one job's terms.`,
 				{Name: "brief-format", Kind: cmdline.String, Doc: "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides"},
 				{Name: "read-only", Kind: cmdline.Bool, Doc: "A job that gathers evidence and writes nothing"},
 				{Name: "checkout", Kind: cmdline.String, Doc: "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work"},
-				{Name: "fix", Kind: cmdline.Bool, Doc: "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's waiver), validating again until none is left, and list only the problems that remain"},
+				{Name: "fix", Kind: cmdline.Bool, Doc: "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain"},
 			},
 		},
 		{

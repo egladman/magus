@@ -29,7 +29,7 @@ type Workspace struct {
 // jobs.max_claim_files or jobs.max_claim_projects allow, as WritePathTooBroad. A job's edit
 // is one change a reviewer reads; a write path past either bound claims files nobody meant
 // to edit, and blocks every sibling that needs one of them. A sweep that truly needs more
-// says so in a waiver. The bounds come from the workspace's own magus.yaml, and one that
+// says so in a deviation. The bounds come from the workspace's own magus.yaml, and one that
 // cannot be read is a problem of the row rather than a default.
 func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Workspace, read SymbolReader) types.JobProblems {
 	if row.ReadOnly {
@@ -96,7 +96,7 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 }
 
 // broadClaimFix measures the narrowest cover once and returns the fix text for one broad
-// write path: the cover as a ready write_paths array, then the waiver that keeps the path.
+// write path: the cover as a ready write_paths array, then the deviation that keeps the path.
 func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolReader) func(string) string {
 	graphless := read == nil
 	answering := read
@@ -122,8 +122,8 @@ func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolR
 		if asksGraph && graphless {
 			b.WriteString(" (the knowledge graph did not answer the symbol goals, so only the criteria were read; `magus graph build` and fork again for a fuller list)")
 		}
-		waiver, _ := json.Marshal(types.JobWaiver{Code: types.WritePathTooBroad, Subject: wp, Reason: "<why this job needs all of it>"})
-		fmt.Fprintf(&b, "; or keep it with the waiver %s", waiver)
+		deviation, _ := json.Marshal(types.Deviation{Code: types.WritePathTooBroad, Subject: wp, Reason: "<why this job needs all of it>"})
+		fmt.Fprintf(&b, "; or keep it with the deviation %s", deviation)
 		return b.String()
 	}
 }
