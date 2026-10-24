@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"strconv"
 
@@ -19,13 +20,13 @@ const readPagingRefused = 3
 
 // readPagingKind names the tally of one caller's windows of one file.
 func readPagingKind(agent, rel string) hint.MarkerKind {
-	return hint.MarkerKind("page-" + shortHash(agent) + "-" + shortHash(rel))
+	return hint.MarkerKind(fmt.Sprintf("page-%s-%s", shortHash(agent), shortHash(rel)))
 }
 
 // readNavigationKind marks that one caller was refused a whole read of rel and served its
 // map, so the same caller asking for the same file again is let through.
 func readNavigationKind(agent, rel string) hint.MarkerKind {
-	return hint.MarkerKind("whole-read-" + shortHash(agent) + "-" + shortHash(rel))
+	return hint.MarkerKind(fmt.Sprintf("whole-read-%s-%s", shortHash(agent), shortHash(rel)))
 }
 
 // gradeReadPaging counts each new window the line reads of a mapped file, and refuses the
@@ -56,7 +57,7 @@ func gradeReadPaging(deps Dependencies, facts hint.Gate, agent, dir, command str
 			continue
 		}
 		tally := readPagingKind(agent, rel)
-		window := tally + hint.MarkerKind("-"+strconv.Itoa(first)+"-"+strconv.Itoa(last))
+		window := tally + hint.MarkerKind(fmt.Sprintf("-%s-%s", strconv.Itoa(first), strconv.Itoa(last)))
 		if facts.AlreadyFired(window) {
 			continue
 		}
@@ -77,9 +78,9 @@ func gradeReadPaging(deps Dependencies, facts hint.Gate, agent, dir, command str
 }
 
 func denyReadPaging(m fileMap, window, first int) ShellVerdict {
-	read := "`" + m.read(m.suggest(first)) + "`"
+	read := fmt.Sprintf("`%s`", m.read(m.suggest(first)))
 	return ShellVerdict{
-		Deny: "magus workspace: window " + strconv.Itoa(window) + " of " + m.rel + " pages through its " + strconv.Itoa(m.lines) + " lines; read one " + m.noun + ": " + read + ".",
+		Deny: fmt.Sprintf("magus workspace: window %s of %s pages through its %s lines; read one %s: %s.", strconv.Itoa(window), m.rel, strconv.Itoa(m.lines), m.noun, read),
 		Why:  denyReadNavigation(m).Why,
 		Rule: denyRule{Name: denyRuleReadPaging, Arg: m.rel},
 	}

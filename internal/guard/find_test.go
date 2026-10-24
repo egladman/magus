@@ -109,7 +109,7 @@ func TestListingsTheGraphAnswers(t *testing.T) {
 			continue
 		}
 		require.Equal(t, denyRuleSearchTranslation, v.Rule.Name, "%q: %s", tt.command, v.Deny)
-		assert.Contains(t, v.Deny, " "+tt.query+"` answers this search exactly.", tt.command)
+		assert.Contains(t, v.Deny, fmt.Sprintf(" %s` answers this search exactly.", tt.query), tt.command)
 		assert.NotContains(t, v.Deny, "The pipe after the search is not reproduced", "%q: the filter is part of the answer", tt.command)
 		for _, id := range tt.answer {
 			assert.Contains(t, v.Deny, "  "+id, tt.command)
@@ -128,7 +128,7 @@ func TestTrackedListingNamesWhatTheGraphLeavesOut(t *testing.T) {
 		v := Evaluate(strict(deps), command)
 		require.Equal(t, denyRuleSearchTranslation, v.Rule.Name, "%q: %s", command, v.Deny)
 		assert.Contains(t, v.Deny, "answers this search for every matching file the graph indexes.", command)
-		assert.Contains(t, v.Deny, "Version control also tracks 1 matching file the graph does not index, which the query leaves out: "+left+".", command)
+		assert.Contains(t, v.Deny, fmt.Sprintf("Version control also tracks 1 matching file the graph does not index, which the query leaves out: %s.", left), command)
 	}
 
 	// An indexed file version control does not track would make the graph answer more.

@@ -2110,7 +2110,7 @@ func (who hookAttribution) skillsKey() string {
 	if key == "" || agentID == "" {
 		return key
 	}
-	return key + "/agent/" + callerKeyEscaper.Replace(agentID)
+	return fmt.Sprintf("%s/agent/%s", key, callerKeyEscaper.Replace(agentID))
 }
 
 // FactsKey is the marker key the guard files a caller's facts under, for a reader outside
@@ -2121,7 +2121,7 @@ func FactsKey(host, callerID string) string {
 	if callerID == "" {
 		return ""
 	}
-	return callerKeyEscaper.Replace(host) + "/" + callerKeyEscaper.Replace(callerID)
+	return fmt.Sprintf("%s/%s", callerKeyEscaper.Replace(host), callerKeyEscaper.Replace(callerID))
 }
 
 // callerKey keys TEXT a caller has already rendered, a fire-once notice or a deny's full
@@ -2132,7 +2132,7 @@ func (who hookAttribution) callerKey() string {
 	if id == "" {
 		return ""
 	}
-	return callerKeyEscaper.Replace(who.Host) + "/" + callerKeyEscaper.Replace(who.Form) + "/" + callerKeyEscaper.Replace(id)
+	return fmt.Sprintf("%s/%s/%s", callerKeyEscaper.Replace(who.Host), callerKeyEscaper.Replace(who.Form), callerKeyEscaper.Replace(id))
 }
 
 type location struct {
@@ -2276,7 +2276,7 @@ func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 		return "", release
 	}
 	removeOrphanedCopies()
-	dir, err := os.MkdirTemp("", dryRunCopyPrefix+strconv.Itoa(os.Getpid())+"-")
+	dir, err := os.MkdirTemp("", fmt.Sprintf("%s%s-", dryRunCopyPrefix, strconv.Itoa(os.Getpid())))
 	if err != nil {
 		return "", release
 	}

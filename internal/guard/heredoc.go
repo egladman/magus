@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"strings"
 
@@ -156,14 +157,14 @@ func judgeHeredocWrites(ctx context.Context, deps Dependencies, req Request, who
 		case decisionDeny:
 			first, _, _ := strings.Cut(v.Reason, "\n")
 			return ShellVerdict{
-				Deny: "this heredoc writes " + w.name + ", and that write is refused [" + v.Rule + "]: " + first,
+				Deny: fmt.Sprintf("this heredoc writes %s, and that write is refused [%s]: %s", w.name, v.Rule, first),
 				Why:  "A here-document into a file is a file write, judged by the rules the host's write tool meets.\n" + v.Reason,
 				Rule: denyRule{Name: denyRuleHeredocWrite, Arg: v.Rule},
 			}
 		case decisionAdvise:
 			if advised.Context == "" {
 				advised = ShellVerdict{
-					Context: "magus workspace: this heredoc writes " + w.name + ", judged as that write [" + v.Rule + "]: " + v.Context,
+					Context: fmt.Sprintf("magus workspace: this heredoc writes %s, judged as that write [%s]: %s", w.name, v.Rule, v.Context),
 					Rule:    denyRule{Name: denyRuleHeredocWrite, Arg: v.Rule},
 				}
 			}

@@ -72,7 +72,7 @@ func gradeCompatMarker(ctx context.Context, deps Dependencies, at location, who 
 	say := fmt.Sprintf("magus workspace: this write adds %s to %s: leave it out and name it in unresolved_risks, since the root decides whether code stays for an old caller.",
 		quotedList(added), shown)
 	return writeGrade{Decision: decisionAdvise, Kind: hint.MarkerKind(denyRuleCompatMarker),
-		Key:     hint.MarkerKind(string(denyRuleCompatMarker) + "-" + lineDigest(say)),
+		Key:     hint.MarkerKind(fmt.Sprintf("%s-%s", string(denyRuleCompatMarker), lineDigest(say))),
 		Context: say,
 		Why: fmt.Sprintf("A marker labels code kept for older data, artifacts or callers, and keeping it is a judgment about who still consumes the old behavior. "+
 			"Lease %s cannot see those consumers from its write paths; the root can, and an attention row tells it this lease added one. The write itself is never refused.", lease)}
@@ -121,7 +121,7 @@ func fileCompatRow(ctx context.Context, at location, who hookAttribution, lease,
 func quotedList(items []string) string {
 	quoted := make([]string, len(items))
 	for i, s := range items {
-		quoted[i] = "`" + s + "`"
+		quoted[i] = fmt.Sprintf("`%s`", s)
 	}
 	return strings.Join(quoted, " and ")
 }

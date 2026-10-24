@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -197,7 +198,7 @@ func TestReadTranscriptReadsEachLineOnce(t *testing.T) {
 	big := strings.Repeat("x", 30_000)
 	appendLines(t, path,
 		`{"type":"assistant","message":{"model":"claude-opus-5-5","usage":{"input_tokens":10,"cache_read_input_tokens":200000,"cache_creation_input_tokens":90},"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"rg -n Judge ."}}]}}`,
-		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"`+big+`"}]}}`,
+		fmt.Sprintf("{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"%s\"}]}}", big),
 		`{"type":"assistant","isSidechain":true,"message":{"model":"claude-haiku-5-5","usage":{"input_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}`,
 	)
 	var st costState
@@ -433,7 +434,9 @@ func TestNoteForkReadsEveryShape(t *testing.T) {
 	}{
 		{"./magus job fork a1 --parent root --write-paths x.go", []string{"a1"}},
 		{"cd /r && ./magus job fork a1", []string{"a1"}},
-		{"./magus job fork --stdin <<'EOF'\n{\"schema_version\": " + strconv.Itoa(types.JobSchemaVersion) + ", \"id\": \"a2\", \"read_only\": true}\nEOF", []string{"a2"}},
+		{fmt.Sprintf(`./magus job fork --stdin <<'EOF'
+{"schema_version": %s, "id": "a2", "read_only": true}
+EOF`, strconv.Itoa(types.JobSchemaVersion)), []string{"a2"}},
 		{`client op=put id="a3" parent="root"`, []string{"a3"}},
 		{`./magus buzz -e 'import "magus"; magus\job.put("a4", opts: {"parent": "root"});'`, []string{"a4"}},
 		{"./magus job wait a1", nil},
@@ -529,9 +532,9 @@ func orchestrationLines(notes string) []string {
 		"cat internal/agent/skills/x/SKILL.md",
 		"cat " + filepath.Join(notes, "plan.md"),
 		// After a cd into the notes, a relative word is a note too.
-		"cd " + notes + " && rg attempts .",
-		"cd " + notes + " && cat RESUME.md",
-		"cd " + notes + " && rg attempts",
+		fmt.Sprintf("cd %s && rg attempts .", notes),
+		fmt.Sprintf("cd %s && cat RESUME.md", notes),
+		fmt.Sprintf("cd %s && rg attempts", notes),
 		"sed -n 1,40p " + filepath.Join(notes, "memory.md"),
 	}
 }
@@ -599,7 +602,8 @@ func TestNotesPath(t *testing.T) {
 	t.Parallel()
 	at, notes := orchestratorFixture(t)
 	worktree := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: "+filepath.Join(at.workspace, ".git", "worktrees", "w")+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), []byte(fmt.Sprintf(`gitdir: %s
+`, filepath.Join(at.workspace, ".git", "worktrees", "w"))), 0o644))
 
 	assert.True(t, notesPath(filepath.Join(notes, "plan.md"), at), "outside every checkout")
 	assert.True(t, notesPath(filepath.Join(at.workspace, "AGENTS.md"), at))

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,9 +40,9 @@ func TestLapsedJudgmentStillRefusesAPollingLoop(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	capture := filepath.Join(t.TempDir(), "tasks", "bglno2daz.output")
 	loops := []string{
-		"until [ -s " + capture + " ]; do sleep 5; done; cat " + capture,
-		"until grep -q '^summary:' " + capture + "; do sleep 5; done",
-		"while ! test -s " + capture + "; do echo waiting; sleep 5; done",
+		fmt.Sprintf("until [ -s %s ]; do sleep 5; done; cat %s", capture, capture),
+		fmt.Sprintf("until grep -q '^summary:' %s; do sleep 5; done", capture),
+		fmt.Sprintf("while ! test -s %s; do echo waiting; sleep 5; done", capture),
 	}
 	settle := func(ctx context.Context) { judgmentPhases(ctx).settle(strict(Dependencies{})) }
 	// One session, so the lapses count up past the degrade.

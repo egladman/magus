@@ -152,7 +152,7 @@ func coveredOnlyByPattern(me types.Job, rel string) bool {
 
 func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string, mine []string) writeGrade {
 	return writeGrade{Decision: decisionDeny, Rule: string(denyRuleClaimedDeclaration), Reason: denial{
-		Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, a declaration lease %s claims; "+leaseActorClause("re-partition the plan, or release "+rel+"#"+claim+" once lease "+owner.ID+" has finished with it"),
+		Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, a declaration lease %s claims; "+leaseActorClause(fmt.Sprintf("re-partition the plan, or release %s#%s once lease %s has finished with it", rel, claim, owner.ID)),
 			declaration, rel, owner.ID),
 		Why: fmt.Sprintf("You claim %s in %s. Lease %s (%s) claims it as %s#%s and is %s right now, and you are lease %s. Two agents editing one declaration is the collision a claim exists to prevent; this guard is where it gets read.\n"+
 			"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+

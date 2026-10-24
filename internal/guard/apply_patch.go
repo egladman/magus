@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -132,11 +133,11 @@ func judgePatchRest(ctx context.Context, deps Dependencies, req Request, who hoo
 		}
 		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, target, f.addedContent()); v.Decision {
 		case decisionDeny:
-			v.Reason = f.Path + ": " + v.Reason
+			v.Reason = fmt.Sprintf("%s: %s", f.Path, v.Reason)
 			return v
 		case decisionAdvise:
 			if advised.Decision == decisionPass {
-				v.Context = f.Path + ": " + v.Context
+				v.Context = fmt.Sprintf("%s: %s", f.Path, v.Context)
 				advised = v
 			}
 		}

@@ -3,6 +3,7 @@ package guard
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"path"
 	"path/filepath"
 	"slices"
@@ -128,12 +129,12 @@ func gatedVerb(command string, d Dialect) string {
 		case isPRCreate(c):
 			return "`gh pr create`"
 		case isPush(c):
-			return "`" + vcsMutation(c) + "`"
+			return fmt.Sprintf("`%s`", vcsMutation(c))
 		case filepath.Base(c.Name) == "gh" && len(c.Args) > 1 && c.Args[0] == "pr" && c.Args[1] == "merge":
 			return "`gh pr merge`"
 		case isMagusInvocation(c):
 			if verb := magusStateWrite(c.Args); verb != "" {
-				return "`magus " + verb + "`"
+				return fmt.Sprintf("`magus %s`", verb)
 			}
 		}
 	}

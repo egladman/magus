@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path"
 	"slices"
@@ -227,12 +228,12 @@ func shortHash(s string) string {
 // recordBackground files a command the agent backgrounded, for a later watcher of its
 // process to be recognized as watching the agent's own work.
 func recordBackground(facts hint.Gate, agent, command string) {
-	writeAgentMarker(facts, hint.MarkerKind(backgroundMarkerPrefix+shortHash(agent)+"-"+shortHash(command)), []byte(command))
+	writeAgentMarker(facts, hint.MarkerKind(fmt.Sprintf("%s%s-%s", backgroundMarkerPrefix, shortHash(agent), shortHash(command))), []byte(command))
 }
 
 func backgroundedCommands(facts hint.Gate, agent string) []string {
 	var out []string
-	for _, kind := range facts.Kinds(hint.MarkerKind(backgroundMarkerPrefix + shortHash(agent) + "-")) {
+	for _, kind := range facts.Kinds(hint.MarkerKind(fmt.Sprintf("%s%s-", backgroundMarkerPrefix, shortHash(agent)))) {
 		if body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind)); err == nil && len(body) > 0 {
 			out = append(out, string(body))
 		}
@@ -243,7 +244,7 @@ func backgroundedCommands(facts hint.Gate, agent string) []string {
 // liveWatches are the subject hashes of the agent's waiters that have not expired at now,
 // one entry per waiter.
 func liveWatches(facts hint.Gate, agent string, now time.Time) []string {
-	prefix := watchMarkerPrefix + shortHash(agent) + "-"
+	prefix := fmt.Sprintf("%s%s-", watchMarkerPrefix, shortHash(agent))
 	var live []string
 	for _, kind := range facts.Kinds(hint.MarkerKind(prefix)) {
 		rest := strings.TrimPrefix(string(kind), prefix)
@@ -269,7 +270,7 @@ func (w watchCall) subjectKey(now time.Time) string {
 
 // recordWatch files w as live until it expires.
 func recordWatch(facts hint.Gate, agent string, w watchCall, now time.Time) {
-	facts.Touch(hint.MarkerKind(watchMarkerPrefix + shortHash(agent) + "-" + w.subjectKey(now) + "-" + strconv.FormatInt(w.expires.Unix(), 10)))
+	facts.Touch(hint.MarkerKind(fmt.Sprintf("%s%s-%s-%s", watchMarkerPrefix, shortHash(agent), w.subjectKey(now), strconv.FormatInt(w.expires.Unix(), 10))))
 }
 
 // gradeWatch is the verdict on arming w: refused for a worker when it watches without end,
@@ -328,9 +329,9 @@ const (
 
 // monitorPileText words the pile verdict for an agent already holding live waiters.
 func monitorPileText(live int, refuse bool) string {
-	remedy := "wait on the work's own completion notice, `" + hint.JobWait.With("<job>") + "` for another agent's job, or `" + hint.Status.With("--watch=15s") + "`"
+	remedy := fmt.Sprintf("wait on the work's own completion notice, `%s` for another agent's job, or `%s`", hint.JobWait.With("<job>"), hint.Status.With("--watch=15s"))
 	if refuse {
-		return strconv.Itoa(live) + " waiters are already live for you; arm no more: " + remedy + "."
+		return fmt.Sprintf("%s waiters are already live for you; arm no more: %s.", strconv.Itoa(live), remedy)
 	}
-	return "magus workspace: " + strconv.Itoa(live) + " waiters are already live for you, and each wakes you until it expires; " + remedy + ", and end the turn when nothing else is left."
+	return fmt.Sprintf("magus workspace: %s waiters are already live for you, and each wakes you until it expires; %s, and end the turn when nothing else is left.", strconv.Itoa(live), remedy)
 }

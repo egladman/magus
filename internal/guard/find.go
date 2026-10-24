@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -97,7 +98,7 @@ func walkFiles(root string, spec walkSpec) ([]string, bool) {
 				return nil
 			}
 			depth := strings.Count(sub, "/") + 1
-			printed := r.printed + "/" + sub
+			printed := fmt.Sprintf("%s/%s", r.printed, sub)
 			if !spec.hidden && (strings.HasPrefix(d.Name(), ".") || nonCodeDirs[d.Name()]) {
 				if d.IsDir() {
 					return fs.SkipDir
@@ -137,7 +138,7 @@ func fileAnswer(ids, found []string, idRe string) (args, answer []string, ok boo
 	}
 	want := make(map[string]bool, len(found))
 	for _, rel := range found {
-		id := types.KindFile + ":" + rel
+		id := fmt.Sprintf("%s:%s", types.KindFile, rel)
 		if !held[id] {
 			return nil, nil, false
 		}
@@ -153,7 +154,7 @@ func fileAnswer(ids, found []string, idRe string) (args, answer []string, ok boo
 				}
 			}
 			if sameKeys(got, want) {
-				return []string{"query", "kind=" + types.KindFile, "'id=~" + idRe + "'", "-o", "name"}, answer, true
+				return []string{"query", "kind=" + types.KindFile, fmt.Sprintf("'id=~%s'", idRe), "-o", "name"}, answer, true
 			}
 		}
 	}
@@ -164,15 +165,14 @@ func fileAnswer(ids, found []string, idRe string) (args, answer []string, ok boo
 	for i, rel := range found {
 		quoted[i] = regexp.QuoteMeta(rel)
 	}
-	return []string{"query", "kind=" + types.KindFile, "'id=~^file:(?:" + strings.Join(quoted, "|") + ")$'", "-o", "name"}, answer, true
+	return []string{"query", "kind=" + types.KindFile, fmt.Sprintf("'id=~^file:(?:%s)$'", strings.Join(quoted, "|")), "-o", "name"}, answer, true
 }
 
 // listingTranslation words a proven listing's deny.
 func listingTranslation(args, answer []string, call string) translation {
 	return translation{
-		args: args,
-		why: "The graph holds a file node for each of the " + countNoun(len(answer), "file") + " this " + call + " prints, checked name for name, and `" +
-			hint.Explain.With("file:<path>") + "` lists what any one defines and who depends on it.",
+		args:   args,
+		why:    fmt.Sprintf("The graph holds a file node for each of the %s this %s prints, checked name for name, and `%s` lists what any one defines and who depends on it.", countNoun(len(answer), "file"), call, hint.Explain.With("file:<path>")),
 		answer: answer,
 		proven: true,
 	}
@@ -209,7 +209,7 @@ func rootPrefix(roots []walkRoot, maxDepth int) string {
 			prefix = regexp.QuoteMeta(r.rel) + "/"
 		}
 		if maxDepth > 0 {
-			prefix += `(?:[^/]+/){0,` + strconv.Itoa(maxDepth-1) + `}`
+			prefix += fmt.Sprintf("(?:[^/]+/){0,%s}", strconv.Itoa(maxDepth-1))
 		} else {
 			prefix += `(?:.*/)?`
 		}
@@ -217,7 +217,7 @@ func rootPrefix(roots []walkRoot, maxDepth int) string {
 	}
 	expr := strings.Join(slices.Compact(prefixes), "|")
 	if len(prefixes) > 1 {
-		expr = "(?:" + expr + ")"
+		expr = fmt.Sprintf("(?:%s)", expr)
 	}
 	return expr
 }
@@ -314,7 +314,7 @@ func parseFindCall(c hint.Invocation) (findCall, bool) {
 // findPathMatch is find's -path match: the whole printed path against a glob whose `*`
 // crosses `/`.
 func findPathMatch(glob string) func(string) bool {
-	re, err := regexp.Compile("^" + strings.ReplaceAll(gitGlobRegexp(glob), `(?:.*/)?`, `.*`) + "$")
+	re, err := regexp.Compile(fmt.Sprintf("^%s$", strings.ReplaceAll(gitGlobRegexp(glob), `(?:.*/)?`, `.*`)))
 	if err != nil {
 		return func(string) bool { return false }
 	}
@@ -371,7 +371,7 @@ func translateFind(deps Dependencies, dir string, c hint.Invocation) (translatio
 	}
 	idRe := ""
 	if fc.pathGlob == "" && len(fc.notNames) == 0 && len(fc.notPaths) == 0 {
-		idRe = `^file:` + rootPrefix(roots, fc.maxDepth) + globRegexp(fc.name) + `$`
+		idRe = fmt.Sprintf("^file:%s%s$", rootPrefix(roots, fc.maxDepth), globRegexp(fc.name))
 	}
 	args, answer, ok := fileAnswer(ids, found, idRe)
 	if !ok {
@@ -490,14 +490,14 @@ func translateFd(deps Dependencies, dir string, c hint.Invocation) (translation,
 	case fc.glob:
 		nameExpr = globRegexp(fc.pattern)
 	case fc.fixed:
-		nameExpr = `[^/]*` + regexp.QuoteMeta(fc.pattern) + `[^/]*`
+		nameExpr = fmt.Sprintf("[^/]*%s[^/]*", regexp.QuoteMeta(fc.pattern))
 	default:
-		nameExpr = `[^/]*(?:` + fc.pattern + `)[^/]*`
+		nameExpr = fmt.Sprintf("[^/]*(?:%s)[^/]*", fc.pattern)
 	}
 	if fc.folded && nameExpr != "" {
-		nameExpr = "(?i:" + nameExpr + ")"
+		nameExpr = fmt.Sprintf("(?i:%s)", nameExpr)
 	}
-	nameRe, err := regexp.Compile("^" + cmpOr(nameExpr, `.*`) + "$")
+	nameRe, err := regexp.Compile(fmt.Sprintf("^%s$", cmpOr(nameExpr, `.*`)))
 	if err != nil {
 		return translation{}, false
 	}
@@ -525,13 +525,13 @@ func translateFd(deps Dependencies, dir string, c hint.Invocation) (translation,
 	idRe := ""
 	switch {
 	case len(fc.exts) == 0:
-		idRe = `^file:` + rootPrefix(roots, fc.maxDepth) + nameExpr + `$`
+		idRe = fmt.Sprintf("^file:%s%s$", rootPrefix(roots, fc.maxDepth), nameExpr)
 	case fc.pattern == "":
 		quoted := make([]string, len(fc.exts))
 		for i, e := range fc.exts {
 			quoted[i] = regexp.QuoteMeta(e)
 		}
-		idRe = `^file:` + rootPrefix(roots, fc.maxDepth) + `[^/]*\.(?i:` + strings.Join(quoted, "|") + `)$`
+		idRe = fmt.Sprintf("^file:%s[^/]*\\.(?i:%s)$", rootPrefix(roots, fc.maxDepth), strings.Join(quoted, "|"))
 	}
 	args, answer, ok := fileAnswer(ids, found, idRe)
 	if !ok {
@@ -651,9 +651,9 @@ func translateRgFiles(deps Dependencies, dir string, c hint.Invocation) (transla
 	switch {
 	case len(rc.notGlobs) > 0:
 	case len(rc.globs) == 0:
-		idRe = `^file:` + rootPrefix(roots, 0) + `[^/]+$`
+		idRe = fmt.Sprintf("^file:%s[^/]+$", rootPrefix(roots, 0))
 	case len(rc.globs) == 1:
-		idRe = `^file:` + rootPrefix(roots, 0) + globRegexp(rc.globs[0]) + `$`
+		idRe = fmt.Sprintf("^file:%s%s$", rootPrefix(roots, 0), globRegexp(rc.globs[0]))
 	}
 	args, answer, ok := fileAnswer(ids, found, idRe)
 	if !ok {
@@ -735,7 +735,7 @@ func translateLs(deps Dependencies, dir string, c hint.Invocation) (translation,
 		if !ok {
 			return translation{}, false
 		}
-		args, answer, ok := fileAnswer(ids, found, `^file:`+rootPrefix(roots, 0)+`[^/]+$`)
+		args, answer, ok := fileAnswer(ids, found, fmt.Sprintf("^file:%s[^/]+$", rootPrefix(roots, 0)))
 		if !ok {
 			return translation{}, false
 		}
@@ -772,7 +772,7 @@ func dirListing(deps Dependencies, root string, rels []string) (translation, boo
 			if e.IsDir() {
 				kind = types.KindDir
 			}
-			want[kind+":"+joinRel(rel, e.Name())] = true
+			want[fmt.Sprintf("%s:%s", kind, joinRel(rel, e.Name()))] = true
 		}
 		if len(want) == 0 {
 			return translation{}, false
@@ -786,7 +786,7 @@ func dirListing(deps Dependencies, root string, rels []string) (translation, boo
 				continue
 			}
 			if child, _, nested := strings.Cut(rest, "/"); nested {
-				got[types.KindDir+":"+joinRel(rel, child)] = true
+				got[fmt.Sprintf("%s:%s", types.KindDir, joinRel(rel, child))] = true
 			} else {
 				got[id] = true
 			}
@@ -802,12 +802,11 @@ func dirListing(deps Dependencies, root string, rels []string) (translation, boo
 	slices.Sort(answer)
 	expr := strings.Join(prefixes, "|")
 	if len(prefixes) > 1 {
-		expr = "(?:" + expr + ")"
+		expr = fmt.Sprintf("(?:%s)", expr)
 	}
 	return translation{
-		args: []string{"query", "'id=~^(?:file|dir):" + expr + "[^/]+$'", "-o", "name"},
-		why: "The graph holds a node for each of the " + countNoun(len(answer), "name") + " this listing prints, checked name for name, and `" +
-			hint.Explain.With("file:<path>") + "` lists what any one defines and who depends on it.",
+		args:   []string{"query", fmt.Sprintf("'id=~^(?:file|dir):%s[^/]+$'", expr), "-o", "name"},
+		why:    fmt.Sprintf("The graph holds a node for each of the %s this listing prints, checked name for name, and `%s` lists what any one defines and who depends on it.", countNoun(len(answer), "name"), hint.Explain.With("file:<path>")),
 		answer: answer,
 		proven: true,
 	}, true
@@ -837,7 +836,7 @@ func parseLsFilesSpecs(root, dir string, rest []string) ([]lsFilesSpec, bool) {
 				return nil, false
 			}
 			expr := regexp.QuoteMeta(joinRel(rel, "")) + gitGlobRegexp(glob)
-			re, err := regexp.Compile("^" + expr + "$")
+			re, err := regexp.Compile(fmt.Sprintf("^%s$", expr))
 			if err != nil {
 				return nil, false
 			}
@@ -883,19 +882,19 @@ func pathFilter(next []hint.Invocation) (match func(string) bool, expr string, p
 	if !altsOK {
 		return nil, "", true, false
 	}
-	body := "(?:" + strings.Join(alts, ")|(?:") + ")"
+	body := fmt.Sprintf("(?:%s)", strings.Join(alts, ")|(?:"))
 	if sc.word {
-		body = `\b(?:` + body + `)\b`
+		body = fmt.Sprintf("\\b(?:%s)\\b", body)
 	}
 	if folded {
-		body = "(?i:" + body + ")"
+		body = fmt.Sprintf("(?i:%s)", body)
 	}
 	re, err := regexp.Compile(body)
 	if err != nil {
 		return nil, "", true, false
 	}
 	if !strings.ContainsAny(strings.Join(sc.patterns, ""), "^$") {
-		expr = ".*" + body + ".*"
+		expr = fmt.Sprintf(".*%s.*", body)
 	}
 	return re.MatchString, expr, true, true
 }
@@ -994,9 +993,9 @@ func translateLsFiles(deps Dependencies, dir string, c hint.Invocation, next []h
 	idRe := ""
 	switch {
 	case !piped:
-		idRe = "^file:(?:" + strings.Join(slices.Compact(exprs), "|") + ")$"
+		idRe = fmt.Sprintf("^file:(?:%s)$", strings.Join(slices.Compact(exprs), "|"))
 	case filterExpr != "" && len(specs) == 1 && strings.HasSuffix(specs[0].expr, ".*"):
-		idRe = "^file:" + strings.TrimSuffix(specs[0].expr, ".*") + filterExpr + "$"
+		idRe = fmt.Sprintf("^file:%s%s$", strings.TrimSuffix(specs[0].expr, ".*"), filterExpr)
 	}
 	args, answer, ok := fileAnswer(ids, indexed, idRe)
 	if !ok {
@@ -1012,8 +1011,7 @@ func translateLsFiles(deps Dependencies, dir string, c hint.Invocation, next []h
 	}
 	if len(excluded) > 0 {
 		tr.reach = "for every matching file the graph indexes"
-		tr.why += " Version control also tracks " + countNoun(len(excluded), "matching file") +
-			" the graph does not index, which the query leaves out: " + strings.Join(excluded, ", ") + "."
+		tr.why += fmt.Sprintf(" Version control also tracks %s the graph does not index, which the query leaves out: %s.", countNoun(len(excluded), "matching file"), strings.Join(excluded, ", "))
 	}
 	return tr, true
 }
@@ -1071,7 +1069,7 @@ func joinRel(rel, name string) string {
 	if name == "" {
 		return rel + "/"
 	}
-	return rel + "/" + name
+	return fmt.Sprintf("%s/%s", rel, name)
 }
 
 func sameKeys(a, b map[string]bool) bool {

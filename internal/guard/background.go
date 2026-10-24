@@ -163,9 +163,7 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 			return advice{
 				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; run it bounded in the background: `%s`.",
 					r.target, last.Round(time.Second), need.Round(time.Second), call.foregroundMax, execBounded(r, bound)),
-				Why: why + "\n" +
-					"Run it in the background and end your turn: its completion notice is the wait. `magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from: the host's completion notice wakes you with the result, and your stop is not refused while it runs. " +
-					"A run narrowed after `--` is priced as the whole target: no per-test durations are recorded.",
+				Why: fmt.Sprintf("%s\nRun it in the background and end your turn: its completion notice is the wait. `magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from: the host's completion notice wakes you with the result, and your stop is not refused while it runs. A run narrowed after `--` is priced as the whole target: no per-test durations are recorded.", why),
 				Key: key,
 			}
 		}
@@ -208,5 +206,5 @@ func checkTimeoutKey(r targetRun) hint.MarkerKind {
 		subject += "\x00" + path.Clean(p)
 	}
 	sum := sha256.Sum256([]byte(subject))
-	return advisoryCheckTimeout + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+	return hint.MarkerKind(fmt.Sprintf("%s-%s", advisoryCheckTimeout, hex.EncodeToString(sum[:6])))
 }

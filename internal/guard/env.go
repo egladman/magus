@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -120,5 +121,5 @@ func envOperandNames(words []string) []string {
 // denyMisconfiguredMagusEnv leads with the fix: the variable does nothing, so the
 // correction is to drop or rename it.
 func denyMisconfiguredMagusEnv(msg string) string {
-	return "[MGS1046] " + msg + "\n`" + hint.ConfigView.With("-h") + "` lists every MAGUS_* variable beside its flag."
+	return fmt.Sprintf("[MGS1046] %s\n`%s` lists every MAGUS_* variable beside its flag.", msg, hint.ConfigView.With("-h"))
 }

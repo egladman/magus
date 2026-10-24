@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -157,20 +158,18 @@ func namesAPath(s string) bool {
 // conflictRewriteDenial is the deny for a script writing rel, a file holding conflict
 // markers, or for one writing a file it does not name when rel is "".
 func conflictRewriteDenial(workspace, rel string) string {
-	what, file := "a script rewrites "+rel+", which holds merge conflict markers", rel
+	what, file := fmt.Sprintf("a script rewrites %s, which holds merge conflict markers", rel), rel
 	if rel == "" {
 		what, file = "a script resolves conflict hunks and writes a file it does not name", "<file>"
 	}
 	say := what + "; use your editor tool on it."
 	// The command names the file, so the verdict does not name it twice.
 	if cmd := resolveCommand(workspace, file); cmd != "" && rel != "" {
-		say = "a script rewrites a file holding conflict markers; resolve its hunks with `" + cmd + "`."
+		say = fmt.Sprintf("a script rewrites a file holding conflict markers; resolve its hunks with `%s`.", cmd)
 	} else if cmd != "" {
-		say = what + "; resolve its hunks with `" + cmd + "`."
+		say = fmt.Sprintf("%s; resolve its hunks with `%s`.", what, cmd)
 	}
-	return say + "\n" +
-		"A script that opens a file for writing and then raises leaves it empty, and mid-merge the working copy is the only copy of the half-resolved file.\n" +
-		"Your editor tool reads the file first and reports what it changed. Taking one side whole? `git checkout --ours` or `--theirs` names which."
+	return fmt.Sprintf("%s\nA script that opens a file for writing and then raises leaves it empty, and mid-merge the working copy is the only copy of the half-resolved file.\nYour editor tool reads the file first and reports what it changed. Taking one side whole? `git checkout --ours` or `--theirs` names which.", say)
 }
 
 // rankConflictRewrite ranks this reason over the rewrite rules' denies, which refuse the
@@ -240,9 +239,10 @@ func conflictedPolicyLead(root string, conflicted []string) string {
 	if len(conflicted) == 0 {
 		return ""
 	}
-	why := "\nOnly the built-in rules judge calls while these files the magusfile loads hold merge conflict markers: " + strings.Join(conflicted, ", ") + "."
+	why := fmt.Sprintf(`
+Only the built-in rules judge calls while these files the magusfile loads hold merge conflict markers: %s.`, strings.Join(conflicted, ", "))
 	if cmd := resolveCommand(root, conflicted[0]); cmd != "" {
-		return "workspace guard rules are off until this file is resolved: `" + cmd + "`." + why
+		return fmt.Sprintf("workspace guard rules are off until this file is resolved: `%s`.%s", cmd, why)
 	}
-	return "workspace guard rules are off until " + strings.Join(conflicted, ", ") + " holds no conflict markers." + why
+	return fmt.Sprintf("workspace guard rules are off until %s holds no conflict markers.%s", strings.Join(conflicted, ", "), why)
 }

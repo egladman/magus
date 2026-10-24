@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -166,7 +167,7 @@ func TestGradeLeasedWriteDeniesWhatItWillNotClaim(t *testing.T) {
 			assert.Contains(t, say, tc.stop, "the verdict line names what stopped the claim")
 			if tc.served {
 				require.Len(t, got.Next, 1)
-				assert.Contains(t, got.Next[0].Run, `"claim":[{"path":"`+tc.path+`"`)
+				assert.Contains(t, got.Next[0].Run, fmt.Sprintf("\"claim\":[{\"path\":\"%s\"", tc.path))
 			} else {
 				assert.Empty(t, got.Next, "a line the store would refuse is never served")
 			}

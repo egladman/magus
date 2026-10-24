@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -84,7 +85,7 @@ func denyArchitectureWithoutSkill(facts, skills hint.Gate, observesSkillLoads bo
 	const carries = "The knowledge graph answers imports, cycles, layering and coupling from the workspace's own edges; reading files does not."
 	if newDir != "" {
 		return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
-			"creating the new directory `"+newDir+"`", carries)
+			fmt.Sprintf("creating the new directory `%s`", newDir), carries)
 	}
 	if !facts.AlreadyFired(topicArchitecture) {
 		return ""

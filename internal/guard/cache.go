@@ -43,7 +43,7 @@ const workspaceCacheDirName = ".magus"
 // sibling name is still not a match: `.magus-notes` ends the segment with a character the
 // pattern refuses.
 var cacheDirSegmentRe = regexp.MustCompile(
-	`(?:^|[^A-Za-z0-9_.-])` + regexp.QuoteMeta(workspaceCacheDirName) + `(?:/|$|[^A-Za-z0-9_./-])`)
+	fmt.Sprintf("(?:^|[^A-Za-z0-9_.-])%s(?:/|$|[^A-Za-z0-9_./-])", regexp.QuoteMeta(workspaceCacheDirName)))
 
 // namesWorkspaceCacheDir reports whether a word points into the workspace's magus cache
 // dir, either by resolving inside the dir magus located or by carrying its name as a path
@@ -87,15 +87,8 @@ const advisoryMarkerDirName = "advisories"
 // dir. One text because the mistake is one mistake however it is spelled: a host's editor
 // tool and a shell redirect reach the same bytes.
 func cacheDirDenial(what string) string {
-	return fmt.Sprintf("magus guard denied a write to %s, inside this checkout's magus cache dir, which only magus writes.\n\n"+
-		"That directory is not a pile of build leftovers any more. `%s/` holds the fire-once advisory markers, the touched-project set, and the served-next journal whose entries pre-authorize commands, and the activity trail, run logs, outputs and locks sit beside them. The guard's verdicts are computed FROM those files, so editing one rewrites the evidence you are being graded by and no later verdict says so.\n\n"+
-		"The verbs that do what you were probably after:\n"+
-		"  `"+hint.JobExec.With("<job>")+"` takes a job's lease here, and writes the marker for you.\n"+
-		"  `"+hint.Clean.String()+"` removes the declared outputs.\n"+
-		"  `"+hint.QueryOutput.With("<ref>")+"` prints a run's captured log.\n"+
-		"`"+hint.Session.With("hook")+"` maintains its own markers and never needs you to edit them.\n"+
-		"READING in there is fine; it is writing that belongs to magus.",
-		what, advisoryMarkerDirName)
+	return fmt.Sprintf("magus guard denied a write to %s, inside this checkout's magus cache dir, which only magus writes.\n\nThat directory is not a pile of build leftovers any more. `%s/` holds the fire-once advisory markers, the touched-project set, and the served-next journal whose entries pre-authorize commands, and the activity trail, run logs, outputs and locks sit beside them. The guard's verdicts are computed FROM those files, so editing one rewrites the evidence you are being graded by and no later verdict says so.\n\nThe verbs that do what you were probably after:\n  `%s` takes a job's lease here, and writes the marker for you.\n  `%s` removes the declared outputs.\n  `%s` prints a run's captured log.\n`%s` maintains its own markers and never needs you to edit them.\nREADING in there is fine; it is writing that belongs to magus.",
+		what, advisoryMarkerDirName, hint.JobExec.With("<job>"), hint.Clean.String(), hint.QueryOutput.With("<ref>"), hint.Session.With("hook"))
 }
 
 // denyCacheDirPath is the file-write rule: the reason a file write into the cache dir is

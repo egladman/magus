@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -71,7 +72,7 @@ func TestEveryRuleSiteNamesACataloguedRule(t *testing.T) {
 		case !typed:
 			t.Errorf("%s files a verdict under %s, a constant of neither denyRuleName nor hint.MarkerKind", s.at, s.constant)
 		default:
-			assertCatalogued(t, catalogued, s.at+": "+s.constant, value)
+			assertCatalogued(t, catalogued, fmt.Sprintf("%s: %s", s.at, s.constant), value)
 		}
 	}
 }

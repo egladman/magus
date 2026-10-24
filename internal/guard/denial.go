@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -63,7 +64,8 @@ func (d denial) full() string {
 	if d.Why == "" {
 		return d.Say
 	}
-	return d.Say + "\n" + d.Why
+	return fmt.Sprintf(`%s
+%s`, d.Say, d.Why)
 }
 
 // verdictParts splits a reason into its verdict and its rationale. A rule that words its
@@ -105,7 +107,8 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	}
 	d, see, catches := denial{Say: reason, Why: why}, "", firstLine(reason)
 	if catalogued {
-		d, see, catches = verdictParts(reason, why), "\nsee: "+ruleDocsBase+rule+"/", doc.Catches
+		d, see, catches = verdictParts(reason, why), fmt.Sprintf(`
+see: %s%s/`, ruleDocsBase, rule), doc.Catches
 	}
 	// A rule that already carried the note shows it once, after the verdict.
 	if line := strings.TrimPrefix(note, "\n"); line != "" {
@@ -124,9 +127,11 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	// Only the same verdict and remedy from the same binary, note aside, is a repeat: a
 	// rule refusing for a second reason would have its Catches line misname it, and after
 	// a role change or a rebuild the new remedy is what the reader needs to see.
-	marker := denyMarker(rule + "-" + reasonDigest(d.Say+"\n"+command+"\n"+binaryStamp()))
+	marker := denyMarker(fmt.Sprintf("%s-%s", rule, reasonDigest(fmt.Sprintf(`%s
+%s
+%s`, d.Say, command, binaryStamp()))))
 	if preview {
-		return d.Say + note + command, "", remedy
+		return fmt.Sprintf("%s%s%s", d.Say, note, command), "", remedy
 	}
 	first := !markers.MarkFired(marker)
 	ref = storeVerdict(ctx, markers.CacheDir(), stored)
@@ -138,9 +143,10 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	hint.AppendServedNext(markers.CacheDir(), append(slices.Clone(remedy), next))
 	lead := d.Say
 	if !first {
-		lead = "denied again [" + rule + "]: " + catches
+		lead = fmt.Sprintf("denied again [%s]: %s", rule, catches)
 	}
-	return lead + note + command + "\nfull verdict: " + next.Run, ref, remedy
+	return fmt.Sprintf(`%s%s%s
+full verdict: %s`, lead, note, command, next.Run), ref, remedy
 }
 
 // storeVerdict stores a full verdict under cacheDir, and the primary checkout's cache dir
@@ -203,7 +209,7 @@ var binaryStamp = sync.OnceValue(func() string {
 	if err != nil {
 		return ""
 	}
-	return exe + "@" + strconv.FormatInt(info.ModTime().UnixNano(), 10)
+	return fmt.Sprintf("%s@%s", exe, strconv.FormatInt(info.ModTime().UnixNano(), 10))
 })
 
 // firstLine is s up to its first newline, trimmed.
@@ -249,7 +255,8 @@ func shapeAdvice(ctx context.Context, markers hint.Gate, rule, text string, whys
 	for i, p := range parts {
 		stored[i] = p
 		if why := whys[p]; why != "" {
-			stored[i], rationale = p+"\n"+why, true
+			stored[i], rationale = fmt.Sprintf(`%s
+%s`, p, why), true
 		}
 	}
 	if !rationale || preview {
@@ -257,7 +264,8 @@ func shapeAdvice(ctx context.Context, markers hint.Gate, rule, text string, whys
 	}
 	full := strings.Join(stored, "\n\n")
 	if _, ok := Rule(rule); ok {
-		full += "\nsee: " + ruleDocsBase + rule + "/"
+		full += fmt.Sprintf(`
+see: %s%s/`, ruleDocsBase, rule)
 	}
 	ref = storeVerdict(ctx, markers.CacheDir(), full)
 	if ref == "" {
@@ -266,5 +274,6 @@ func shapeAdvice(ctx context.Context, markers hint.Gate, rule, text string, whys
 	next := hint.NextForDenial(ref)
 	next.ID, next.Why = adviceVerdictID, "the ref holds this advisory's rationale, which the inline text leaves out."
 	hint.AppendServedNext(markers.CacheDir(), []types.NextStep{next})
-	return text + "\nfull advice: " + next.Run, ref
+	return fmt.Sprintf(`%s
+full advice: %s`, text, next.Run), ref
 }

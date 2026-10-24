@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -211,15 +212,14 @@ func TestResolveRefusesAFixedRule(t *testing.T) {
 		"guard-unfinished":         "a guard check",
 	} {
 		for _, d := range []Decision{Off, Advise, Deny} {
-			t.Run(name+"/"+string(d), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", name, string(d)), func(t *testing.T) {
 				got, err := Resolve(map[string]Setting{name: {Decision: d}})
 				assert.Nil(t, got)
 				var de *types.DiagnosticError
 				require.ErrorAs(t, err, &de)
 				assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
-				assert.Equal(t, `built-in rule "`+name+`" cannot be set; remove it from the declaration`, de.Msg)
-				assert.Equal(t, "it is how a workspace learns that "+what+
-					" of its own judged nothing, so it can be neither silenced nor promoted", types.DiagnosticRationale(err))
+				assert.Equal(t, fmt.Sprintf("built-in rule \"%s\" cannot be set; remove it from the declaration", name), de.Msg)
+				assert.Equal(t, fmt.Sprintf("it is how a workspace learns that %s of its own judged nothing, so it can be neither silenced nor promoted", what), types.DiagnosticRationale(err))
 			})
 		}
 	}
@@ -414,7 +414,7 @@ func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
 		var de *types.DiagnosticError
 		require.ErrorAs(t, err, &de, name)
 		assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
-		assert.Equal(t, `built-in rule "`+name+`" is a notice and never refuses; give off or advise`, de.Msg)
+		assert.Equal(t, fmt.Sprintf("built-in rule \"%s\" is a notice and never refuses; give off or advise", name), de.Msg)
 		assert.NotEmpty(t, types.DiagnosticRationale(err), name)
 
 		_, err = Resolve(map[string]Setting{name: {Decision: Advise}})

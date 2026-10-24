@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -84,9 +85,7 @@ func workspaceRelativeDir(root, path string) (string, bool) {
 
 func newSourceDirAdvice(dir string) advice {
 	return advice{
-		Say: "magus workspace: this write creates a NEW DIRECTORY, `" + dir + "`; load the magus-architecture-review skill to check that it has to exist.",
-		Why: "`" + dir + "` holds nothing yet, so this write creates whatever your language calls an importable unit (package, module, crate).\n" +
-			"Is there an existing directory whose stated purpose already covers this, and would folding it there serve callers better than a new import? A boundary that exists for one helper with two callers is one nobody asked for, and it is far cheaper to not create than to remove later.\n" +
-			"The skill answers this from the workspace's own dependency and churn data rather than from taste.",
+		Say: fmt.Sprintf("magus workspace: this write creates a NEW DIRECTORY, `%s`; load the magus-architecture-review skill to check that it has to exist.", dir),
+		Why: fmt.Sprintf("`%s` holds nothing yet, so this write creates whatever your language calls an importable unit (package, module, crate).\nIs there an existing directory whose stated purpose already covers this, and would folding it there serve callers better than a new import? A boundary that exists for one helper with two callers is one nobody asked for, and it is far cheaper to not create than to remove later.\nThe skill answers this from the workspace's own dependency and churn data rather than from taste.", dir),
 	}
 }

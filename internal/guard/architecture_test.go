@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -94,24 +95,24 @@ func (s archSession) message(text string) types.GuardJudgment {
 }
 
 func (s archSession) head(agentID string) string {
-	head := `{"session_id":"` + s.session + `","hook_event_name":"PreToolUse",`
+	head := fmt.Sprintf("{\"session_id\":\"%s\",\"hook_event_name\":\"PreToolUse\",", s.session)
 	if agentID != "" {
-		head += `"agent_id":"` + agentID + `",`
+		head += fmt.Sprintf("\"agent_id\":\"%s\",", agentID)
 	}
 	return head
 }
 
 func (s archSession) bash(agentID, command string) types.GuardJudgment {
-	return s.judge(s.head(agentID) + `"tool_name":"Bash","tool_input":{"command":"` + command + `"}}`)
+	return s.judge(fmt.Sprintf("%s\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"%s\"}}", s.head(agentID), command))
 }
 
 func (s archSession) write(agentID, path string) types.GuardJudgment {
-	return s.judge(s.head(agentID) + `"tool_name":"Write","tool_input":{"file_path":"` + path + `","content":"package x\n"}}`)
+	return s.judge(fmt.Sprintf("%s\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"%s\",\"content\":\"package x\\n\"}}", s.head(agentID), path))
 }
 
 func (s archSession) load(agentID, skill string) {
 	s.t.Helper()
-	require.Equal(s.t, "pass", s.judge(s.head(agentID)+`"tool_name":"Skill","tool_input":{"skill":"`+skill+`"}}`).Decision)
+	require.Equal(s.t, "pass", s.judge(fmt.Sprintf("%s\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"%s\"}}", s.head(agentID), skill)).Decision)
 }
 
 // requireArchitectureDeny checks the decision and the rule. A repeat deny in one session is
