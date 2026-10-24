@@ -99,6 +99,7 @@ export enum<str> ClaimKind {
     test = "test",
     output = "output",
     released = "released",
+    dead = "dead",
 }
 
 export enum<str> BriefFormat {

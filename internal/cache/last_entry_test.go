@@ -66,6 +66,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 		DurationMs:  m.DurationMs,
 		Return:      m.Return,
 		Stamps:      m.Stamps,
+		Checkout:    root,
 	}, m)
 }
 

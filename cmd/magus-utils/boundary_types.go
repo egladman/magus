@@ -628,7 +628,7 @@ var boundaryEnums = []boundaryEnum{
 		Name: "ClaimKind",
 		Type: reflect.TypeFor[types.ClaimKind](),
 		Cases: []enumCase{{"none", ""}, {"refs", "refs"}, {"test", "test"}, {"output", "output"},
-			{"released", "released"}},
+			{"released", "released"}, {"dead", "dead"}},
 	},
 	{
 		Name:  "GroupingVerdict",

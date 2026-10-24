@@ -3215,9 +3215,9 @@ func TestWorkerRegenerateWaitsOnlyForAHolderOfTheSameCopy(t *testing.T) {
 	}{
 		{"an ignored output regenerated in another checkout", func(string) string { return elsewhere }, "testdata/api.lock\n", ""},
 		{"an ignored output regenerated in the same checkout", func(root string) string { return root }, "testdata/api.lock\n",
-			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; run `magus job wait a/first`."},
+			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; magus filed an attention row for a/first, the root of lease a/first's job tree, since lease z/flag waits only on a job below it; leave the output and carry on."},
 		{"a committed output regenerated in another checkout", func(string) string { return elsewhere }, "",
-			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; run `magus job wait a/first`."},
+			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; magus filed an attention row for a/first, the root of lease a/first's job tree, since lease z/flag waits only on a job below it; leave the output and carry on."},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			first, row := regeneratingLease("a/first"), regeneratingLease("z/flag")

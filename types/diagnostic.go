@@ -951,6 +951,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SecretTooShortToMask,
 	SandboxRequired,
 	EnvReadWithheld,
+	ToolCacheUnscoped,
 	DescendantBoundaryCrossed,
 	VCSUnavailable,
 	ToolNotOnPath,
