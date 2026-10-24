@@ -109,21 +109,21 @@ says so and stays conflicted.
 | the same settle in the merge queue                            | not built |
 | claim drivers for JSON, YAML and TOML                         | not built |
 
-### Doctrine checked
+### Principles checked
 
-[Doctrine](../doctrine.md) holds each of these up against this decision.
+Each [design principle](../design.md) below is held up against this decision.
 
-- [Agents propose, humans dispose](../doctrine.md#agents-propose-humans-dispose): relied on
+- [Agents propose, humans dispose](../design/judgment/agents-propose-humans-dispose.md): relied on
   for the claim pair. The fork prints it and the person or orchestrator that declares the
   rows decides. The integration settle bends it, since a file lands merged without a person
   reading the hunk. The bend is bounded: a project opts in with `merge_low_risk`, every job
   passed, the claims are disjoint, and the merged jobs' checks run once afterward.
-- [Automation you can interrogate](../doctrine.md#automation-you-can-interrogate): relied on.
+- [Automation you can interrogate](../design/judgment/automation-you-can-interrogate.md): relied on.
   The `vcs resolve` line names each claim and job behind a settle, and the reason a file
   did not settle.
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. A claim word that
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. A claim word that
   names several declarations is refused, not guessed at.
-- [Friction that carries meaning](../doctrine.md#friction-that-carries-meaning): relied on.
+- [Friction that carries meaning](../design/principles/friction-that-carries-meaning.md): relied on.
   MGS3032 used to say `<declaration>`; it now carries the one move that clears it.
 
 ## Alternatives

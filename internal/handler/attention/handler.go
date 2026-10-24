@@ -34,7 +34,7 @@ const consoleHost = "console"
 //
 // POST {"id":"<id or prefix>","reason":"<text>"} disposes one, and is a HUMAN act. Nothing
 // magus does closes a request: an event whose whole meaning is "blocked on a person" stops
-// meaning that the moment the tool answers it (docs/doctrine.md, "Manual on purpose"). This
+// meaning that the moment the tool answers it (docs/design/judgment/manual-on-purpose.md). This
 // route exists because the console IS the person's own client, alongside the CLI, not as an
 // automation door. There is deliberately no dispose-all, no expiry and no filter that could
 // clear the queue without reading it.

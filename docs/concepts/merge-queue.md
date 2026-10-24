@@ -59,7 +59,7 @@ gh pr merge 482 --auto --squash
 
 or "Enable auto-merge" on the pull request's page. Merge intent is the author's to give
 and the queue never supplies it, which is the
-[human in the loop](../doctrine.md#human-in-the-loop) at the last step: the queue
+[human in the loop](../design/principles/human-in-the-loop.md) at the last step: the queue
 validates and lands what a person asked to land. Nothing else changes for the author:
 push fixes as usual, and a push to a queued pull request has it validated again. Once
 the queue's `merge-queue` status is main's required check, auto-merge cannot fire on its

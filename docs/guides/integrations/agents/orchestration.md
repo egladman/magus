@@ -33,7 +33,7 @@ its own figure.
 | worker       | a subagent bound to one row                     | write its row's write paths, run its row's check, exit its row          |
 | integrator   | the subagent spawned `<parent>/integrate <job>` | merge finished branches, build ./magus, regenerate, run the full checks |
 
-Above all three is the [human in the loop](../../../doctrine.md#human-in-the-loop).
+Above all three is the [human in the loop](../../../design/principles/human-in-the-loop.md).
 What lands, what is published and what a round may spend are that person's
 calls.
 
@@ -57,7 +57,7 @@ final verification, and it hands out everything else:
 6. Run `magus affected ci` once, in its own tree, after every unit lands, then
    push and open the pull request.
 
-The boundary is [the doctrine](../../../doctrine.md#the-orchestrator-plans-workers-do-the-work)
+The boundary is [a design principle](../../../design/principles/the-orchestrator-plans.md)
 "the orchestrator plans; workers do the work", and the guard's
 [orchestrator-groundwork](../../../reference/rules/orchestrator-groundwork.md)
 rule enforces it. While a row the session handed out is declared, running or

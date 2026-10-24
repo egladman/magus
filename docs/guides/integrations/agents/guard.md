@@ -829,7 +829,7 @@ A deny exits 2 with the verdict on stdout; a pass and an advise exit 0. An
 empty event passes, but one the hook cannot read fails closed as a deny:
 nothing was judged, so the call is blocked rather than cleared.
 
-A fourth decision, `ask`, is the [human in the loop](../../../doctrine.md#human-in-the-loop)
+A fourth decision, `ask`, is the [human in the loop](../../../design/principles/human-in-the-loop.md)
 made a verdict: only the person can clear the call. It also exits 2,
 so a glue that reads nothing but the exit status still stops. magus returns it only to a
 caller that passes `--renders-ask`, the claim that its reply puts the call in front of

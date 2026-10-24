@@ -328,7 +328,7 @@ long-lived process without being asked to. Two things keep this inside the
 promise rather than outside it: no capability is lost when the broker cannot
 start (the run proceeds unarbitrated and says so once), and a broker started this
 way exits by itself after ten minutes of nobody needing it. Still nothing extra
-to install; one more thing that runs. The reasoning, and the doctrine it amends,
+to install; one more thing that runs. The reasoning, and the principle it amends,
 are in [the daemon decision](guides/integrations/editor/design.md).
 
 **The upgrade path runs on a server we operate.** `magus self update` fetches

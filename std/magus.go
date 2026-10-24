@@ -344,7 +344,7 @@ var Magus = Module{
 		},
 		{
 			Name: "attention",
-			Doc:  "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, lease, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.",
+			Doc:  "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, lease, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see docs/design/judgment/manual-on-purpose.md), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -1613,7 +1613,7 @@ func MagusRun(ctx context.Context, args []string, opts map[string]any) (types.Ex
 
 // MagusAttention lists the open attention requests through a nested magus. Listing only:
 // disposal is deliberately absent from this API, because a script that closes
-// requests is the auto-disposition the doctrine's Manual-on-purpose table rules out.
+// requests is the auto-disposition docs/design/judgment/manual-on-purpose.md rules out.
 func MagusAttention(ctx context.Context, args []string, opts map[string]any) (map[string]any, error) {
 	return runMagusJSON[map[string]any](ctx, "session", append([]string{"attention"}, args...), opts)
 }

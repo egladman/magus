@@ -15,8 +15,8 @@ unattributed); `session attention` lists the requests
 agents have raised \- work blocked on input or on approval \- and
 `session dispose` closes one. Nothing closes a request automatically: there is
 no expiry, no severity inference and no auto\-dispose flag, because a request
-magus could answer by itself would not have needed a person \- see the doctrine
-page.
+magus could answer by itself would not have needed a person \- see the design
+principles.
 .PP
 Agent hosts write it. Their hooks pipe every judged command through `magus shell`,
 which records what it judged, and every attention event through `session notify`

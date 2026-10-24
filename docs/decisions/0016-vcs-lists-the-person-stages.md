@@ -59,12 +59,12 @@ quiet when its operands come from `ls-files`. A session that only coordinates ma
 | `stage-all` serves the `ls-files` pipeline (`internal/guard`)                 | done  |
 | Skills, the git guide and the landing page teach `ls-files`                   | done  |
 
-### Doctrine checked
+### Principles checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. The default
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. The default
   listing says on stderr what it left out and which flag adds it, and a backend that
   cannot answer a flag refuses it.
-- [A record of refusals](../doctrine.md#a-record-of-refusals): relied on. A staging
+- [A record of refusals](../design/refusals.md): relied on. A staging
   wrapper is added as a refusal.
 
 ## Alternatives

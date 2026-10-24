@@ -328,7 +328,7 @@ preserving, and a prompt that fires on every merge is one you learn to dismiss w
 which spends the attention it was saving for the merge that mattered.
 
 It names the command rather than running it. Notes are human-authored by construction, which is
-a [standing decision](../doctrine.md#manual-on-purpose) rather than an omission here.
+a [standing decision](../design/judgment/manual-on-purpose.md) rather than an omission here.
 
 magus asks the provider whether a review merged rather than working it out from git, and that is
 not a preference. A squash merge rewrites a branch into one new commit, so the branch tip is
@@ -447,7 +447,7 @@ something to think with while you write.
 
 ## What magus does not do
 
-Review is where the [human in the loop](../doctrine.md#human-in-the-loop) is least
+Review is where the [human in the loop](../design/principles/human-in-the-loop.md) is least
 negotiable: an agent may read and draft, and a person sends, replies and approves.
 
 - **An agent cannot publish.** An agent pairing over MCP reads the review's threads and may

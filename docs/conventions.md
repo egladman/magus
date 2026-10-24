@@ -378,6 +378,63 @@ supersedes: <what this replaces, optional>
 `magus run conventions docs` enforces all of it as the `adr-template` rule
 ([`docs/lib/adr.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/adr.buzz)).
 
+## Design pages
+
+Every page in `docs/design/principles/` and `docs/design/judgment/` states one design
+principle or judgment call, and every one follows one template, so a person or an agent
+checking a change against them finds the rule, its enforcement and its examples in the
+same place:
+
+````md
+---
+title: <the principle, sentence case>
+order: <position in its group>
+description: <the rule in one sentence>
+tags: [design, <principle or judgment>, <topics>]
+---
+
+# <the principle, sentence case>
+
+<the argument: why the rule exists and the failure it prevents>
+
+## Enforced by
+
+## Good
+
+```<lang>
+<a real example>
+```
+
+## Bad
+
+```<lang>
+<a real example>
+```
+
+<why it is bad>
+
+## See also
+````
+
+- `order` sorts the page within its group, and `description` is the line the index in
+  `docs/design.md` prints beside the title. `design-index-generate` rewrites that index
+  from the front matter, so a new page appears there on the next `magus run generate docs`.
+- The argument comes before the first H2 and may carry H3s of its own.
+- The H2 sections are exactly Enforced by, Good, Bad and See also, in that order.
+  Enforced by names the test, lint, guard rule or review step that holds the rule; a rule
+  with nothing yet says so and is listed in `docs/design/strained.md`.
+- Good and Bad each hold at least one fenced example, taken from this repository or from
+  the tool the page argues against, and Bad ends with a sentence saying why.
+- An example stays inline and short: the page is the unit a person or an agent
+  loads, and the example is the contract. Name where it came from and link the
+  package or directory that holds the rest
+  (`https://github.com/egladman/magus/tree/main/<dir>`), never a line number that
+  drifts.
+- The pages are opinionated and may speak in the first person.
+
+`magus run conventions docs` enforces the shape as the `design-template` rule
+([`docs/lib/design.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/design.buzz)).
+
 ## Writing rules
 
 Hand-written Markdown, every pull request's title and description, review replies, doc

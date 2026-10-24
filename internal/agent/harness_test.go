@@ -1334,7 +1334,7 @@ func hookCommands(t *testing.T, path string) []string {
 // config carries, as the harness spell's own mgs_getName() renders it. The glue reads the
 // host from that argument and nowhere else, and refuses a call without it (MGS3024), so a
 // config that lost it would refuse every call; one naming another host would answer in
-// that host's dialect. docs/doctrine.md, "Told, never guessed".
+// that host's dialect. docs/design/judgment/told-never-guessed.md.
 func TestShippedHostConfigsNameTheirHost(t *testing.T) {
 	for _, tc := range []struct{ id, config string }{
 		{"claude-code", filepath.Join(repoRoot, ".claude", "settings.json")},

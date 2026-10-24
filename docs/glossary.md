@@ -289,16 +289,20 @@ world? Reads stay small; acquisitions are where a tool loses its shape. See
 
 Each concept gets one name, used everywhere: target, spell, charm, op. A second
 word for the same thing is a house dialect, and it costs every reader (and every
-agent) a lookup that never ends. See [doctrine.md](doctrine.md).
+agent) a lookup that never ends. See [Design principles](design.md).
 
 ### Harness
 
-The deterministic scaffolding around a model's agent loop: checks, permission
-gates, typed contracts, leases, graph-backed answers and hooks, placed at points
-a person chose, with the model's judgment covering the steps between them. magus
+The deterministic scaffolding around the work on a change, whoever does it:
+compiler errors, formatters, linters, checks, permission gates, typed contracts,
+leases, graph-backed answers and hooks, placed at points a person chose, with
+judgment covering the steps between them. It holds a person to the green path
+the same way it holds an agent
+([A harness is not an agent thing](design/principles/a-harness-is-not-an-agent-thing.md)).
+Around a model's agent loop, magus
 supplies one (guard hooks, skills, MCP tools, job leases) and keeps it outside
 the host's loop. Some vendors use the word for the loop itself; magus keeps the
-two apart. See [doctrine.md](doctrine.md#the-outer-harness-stays-outside).
+two apart. See [The outer harness stays outside](design/judgment/the-outer-harness-stays-outside.md).
 
 - Is: code and reviewed text that answer or decide the same way every time.
 - Is not: the model, the agent loop that reads a tool call and runs it, an
@@ -311,7 +315,7 @@ two apart. See [doctrine.md](doctrine.md#the-outer-harness-stays-outside).
 
 The vocabulary of magus watching work happen: who ran what, what an agent is
 blocked on, and which agent owns which paths. The policy behind these terms
-lives in [doctrine.md](doctrine.md).
+lives in [Design principles](design.md).
 
 ### Session
 
@@ -336,7 +340,7 @@ gave a session, and is never recorded as a session.
 A durable "an agent is blocked" record, opened when a `magus session notify`
 event carries the waiting or permission outcome and held until a person disposes
 it. `magus session attention` lists what is open. Nothing closes one on its own; see
-[doctrine.md](doctrine.md).
+[Design principles](design.md).
 
 ### Dispose
 
@@ -351,7 +355,7 @@ agent handed out, with its goal, the checkpoint it was cut against, the paths it
 may write or must not touch, and the one check it runs. A job's holder is either
 a session, for work an orchestrator handed out, or the daemon, for its own
 maintenance. The store records; the agent guard is what reads those facts back
-when grading a write. See [doctrine.md](doctrine.md).
+when grading a write. See [Design principles](design.md).
 
 A job is not a run. `magus run build web` is a run, and no job exists for it. A
 job causes runs: its check executes as one, and a daemon job records the

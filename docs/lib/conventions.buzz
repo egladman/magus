@@ -11,6 +11,7 @@ import "lib/text" as _;       // escapeAttr, splitPath
 import "lib/glossary" as _;   // glossarySlug, for the goldmark anchors
 import "lib/html" as _;       // resolvePath, to resolve a relative link against its file's dir
 import "lib/adr" as _;        // adrProblems, the ADR template
+import "lib/design" as _;     // designProblems, the design page template
 
 // Convention is one section of conventions.md: the heading, its goldmark anchor, and the
 // lead paragraph as a one-line description for the popover. The conventions page is prose
@@ -288,6 +289,9 @@ export fun lintMarkdown(file: str, md: str) > [ConventionFinding] {
     }
     foreach (p in adrProblems(file, md: md)) {
         found.append(ConventionFinding{ file = file, line = p.line, rule = "adr-template", message = p.message });
+    }
+    foreach (p in designProblems(file, md: md)) {
+        found.append(ConventionFinding{ file = file, line = p.line, rule = "design-template", message = p.message });
     }
     if (isAuthoredPage(file)) {
         pageFindings(file, md: md, found: found);

@@ -23,7 +23,7 @@ import (
 // project picker are built from; until now a magusfile could reach exactly one
 // piece of it, os\stdinIsTerminal.
 //
-// THE RULE THAT SHAPES THIS MODULE: magus does not ask. Its own doctrine is that
+// THE RULE THAT SHAPES THIS MODULE: magus does not ask. Its own design principles say
 // the CLI reads context rather than prompting, because a prompt in a
 // non-interactive run does not degrade: it HANGS, and a hung CI job reports as a
 // timeout half an hour later with nothing to read. tty.Pick's own doc says the

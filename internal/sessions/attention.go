@@ -19,8 +19,7 @@ import (
 //
 // Nothing else closes one. There is no expiry, no severity inference and no
 // auto-triage, because an event whose whole meaning is "blocked on a human" stops
-// meaning that the moment the tool answers it for them; see docs/doctrine.md,
-// "Manual on purpose".
+// meaning that the moment the tool answers it for them; see docs/design/judgment/manual-on-purpose.md.
 const (
 	KindAttentionOpen    = "attention_open"
 	KindAttentionDispose = "attention_dispose"
