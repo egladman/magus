@@ -72,7 +72,7 @@ func deletionLines(candidates []types.UnreferencedEntry) []string {
 	for _, c := range shown {
 		line := c.Label
 		if c.Kind != "" {
-			line += " (" + strings.ToLower(c.Kind) + ")"
+			line += fmt.Sprintf(" (%s)", strings.ToLower(c.Kind))
 		}
 		if c.Source != "" {
 			line += " at " + c.Source

@@ -839,7 +839,7 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	_, err = s.List()
 	require.ErrorIs(t, err, file.ErrLegacyStore)
 	require.ErrorContains(t, err, "preserve it")
-	require.ErrorContains(t, err, "set it aside with `mv "+old+" "+old+".old`", "the refusal names the move made below")
+	require.ErrorContains(t, err, fmt.Sprintf("set it aside with `mv %s %s.old`", old, old), "the refusal names the move made below")
 	_, err = s.Update(t.Context(), "a", func(*types.Job) {})
 	require.ErrorIs(t, err, file.ErrLegacyStore, "a write is refused too")
 	raw, err := os.ReadFile(old)
@@ -936,7 +936,7 @@ func TestLedgerIsSharedAcrossWorktreesOfOneRepository(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(git, "worktrees", "worker", "commondir"), []byte("../..\n"), 0o644))
 	worker := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(worker, ".git"),
-		[]byte("gitdir: "+filepath.Join(git, "worktrees", "worker")+"\n"), 0o644))
+		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(git, "worktrees", "worker"))), 0o644))
 
 	base := t.TempDir()
 	orchestrator := NewStore(Location{StateBase: base, CacheDir: t.TempDir(), Root: repo})

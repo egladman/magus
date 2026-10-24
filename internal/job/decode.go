@@ -277,7 +277,7 @@ type invalidInput struct {
 }
 
 func (e *invalidInput) Error() string {
-	return "job: the " + e.what + " " + e.reason
+	return fmt.Sprintf("job: the %s %s", e.what, e.reason)
 }
 
 // asRecordInvalid is err as a JobRecordInvalid problem when it is an *invalidInput, and err

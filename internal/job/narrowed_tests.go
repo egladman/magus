@@ -100,7 +100,7 @@ func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths
 			missed = append(missed, name)
 		}
 		if len(missed) > 0 {
-			packages = append(packages, dir+" ("+summarizeTests(missed)+")")
+			packages = append(packages, fmt.Sprintf("%s (%s)", dir, summarizeTests(missed)))
 		}
 	}
 	if len(packages) == 0 {
@@ -163,7 +163,7 @@ func summarizeTests(names []string) string {
 // is short enough to paste, else dropping -run, since a package argument forwarded to
 // go-test does not scope the run.
 func widenRunFix(runArg string, notRun []string) string {
-	if covering := runArg + "|" + exactTestPattern(notRun); len(covering) <= maxPastedPattern {
+	if covering := fmt.Sprintf("%s|%s", runArg, exactTestPattern(notRun)); len(covering) <= maxPastedPattern {
 		return fmt.Sprintf("widen -run to `%s` or drop -run", covering)
 	}
 	return "drop -run, since the tests it leaves out are too many for one pattern and a package argument does not scope go-test"
@@ -180,7 +180,7 @@ func narrowSkipFix(skipArg string, skipped []string) string {
 // exactTestPattern is a pattern matching exactly the named tests.
 func exactTestPattern(names []string) string {
 	names = slices.Compact(slices.Sorted(slices.Values(names)))
-	return "^(" + strings.Join(names, "|") + ")$"
+	return fmt.Sprintf("^(%s)$", strings.Join(names, "|"))
 }
 
 // goTestFlag reads the last -name, --name, -test.name or --test.name among args, in either

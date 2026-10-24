@@ -163,7 +163,7 @@ func (o Observed) missing(kind types.GoalKind, expect types.GoalExpect) string {
 	case kind == types.GoalKindSymbol && expect == types.ExpectChanged && !o.ChangedKnown:
 		return "magus could not read what this job changed, so it cannot say whether the declared symbols moved"
 	case kind == types.GoalKindSymbol && !o.SymbolsKnown:
-		return "magus could not read the symbol graph, so it cannot say what the declared symbols are. `" + hint.GraphBuild.String() + "` builds it"
+		return fmt.Sprintf("magus could not read the symbol graph, so it cannot say what the declared symbols are. `%s` builds it", hint.GraphBuild.String())
 	}
 	return ""
 }
@@ -716,7 +716,7 @@ func resolveCheck(c types.LeaseCheck, defaults []string) types.LeaseCheck {
 		name += ":" + strings.Join(charms, ",")
 	}
 	if filtered {
-		name = spell + "::" + name
+		name = fmt.Sprintf("%s::%s", spell, name)
 	}
 	c.Target = name
 	return c
@@ -825,7 +825,7 @@ func denyViolations(row types.Job, rep types.JobResult, seen Observed) []string 
 		}
 		entries := make([]string, len(denied))
 		for i, d := range denied {
-			entries[i] = path.Clean(p) + "#" + d
+			entries[i] = fmt.Sprintf("%s#%s", path.Clean(p), d)
 		}
 		if !seen.RegionsKnown {
 			reason := cmp.Or(seen.RegionsReason, "nothing observed the tree")

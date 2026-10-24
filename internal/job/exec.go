@@ -154,7 +154,7 @@ func withFullRevision(token string, full map[string]string) string {
 	case !ok:
 		return token
 	case digest != "":
-		return id + "+" + digest
+		return fmt.Sprintf("%s+%s", id, digest)
 	default:
 		return id
 	}

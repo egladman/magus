@@ -63,7 +63,7 @@ func refuseNarrowedIn(root string, row types.Job) error {
 		if p.Code != types.JobCheckUnrunnable {
 			return fmt.Errorf("code %s, want %s", string(p.Code), string(types.JobCheckUnrunnable))
 		}
-		errs = append(errs, errors.New(p.Message+": "+p.Fix))
+		errs = append(errs, errors.New(fmt.Sprintf("%s: %s", p.Message, p.Fix)))
 	}
 	return errors.Join(errs...)
 }
@@ -196,7 +196,12 @@ func TestRefuseNarrowedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 		"_scratch/s_test.go":             "TestScratch",
 		"lib/l_test.go":                  "TestNestedModule",
 	} {
-		w.Write(rel, "package x\n\nimport \"testing\"\n\nfunc "+name+"(t *testing.T) {}\n")
+		w.Write(rel, fmt.Sprintf(`package x
+
+import "testing"
+
+func %s(t *testing.T) {}
+`, name))
 	}
 	w.Write("lib/go.mod", "module lib\n")
 
@@ -221,10 +226,10 @@ func TestRefuseNarrowedTestsCountsOnlyTestsGoTestBuilds(t *testing.T) {
 		other = "darwin"
 	}
 	w.WriteTree(map[string]string{
-		"pkg/tagged_test.go":           "//go:build integration\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestTagged(t *testing.T) {}\n",
-		"pkg/os_" + other + "_test.go": "package pkg\n\nimport \"testing\"\n\nfunc TestOtherPlatform(t *testing.T) {}\n",
-		"pkg/_ignored_test.go":         "package pkg\n\nimport \"testing\"\n\nfunc TestIgnored(t *testing.T) {}\n",
-		"pkg/.hidden_test.go":          "package pkg\n\nimport \"testing\"\n\nfunc TestHidden(t *testing.T) {}\n",
+		"pkg/tagged_test.go":                    "//go:build integration\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestTagged(t *testing.T) {}\n",
+		fmt.Sprintf("pkg/os_%s_test.go", other): "package pkg\n\nimport \"testing\"\n\nfunc TestOtherPlatform(t *testing.T) {}\n",
+		"pkg/_ignored_test.go":                  "package pkg\n\nimport \"testing\"\n\nfunc TestIgnored(t *testing.T) {}\n",
+		"pkg/.hidden_test.go":                   "package pkg\n\nimport \"testing\"\n\nfunc TestHidden(t *testing.T) {}\n",
 	})
 
 	require.NoError(t, refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")}))

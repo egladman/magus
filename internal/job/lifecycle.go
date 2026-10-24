@@ -46,9 +46,9 @@ const returnedReason = "returned: its holder filed a result, and a read-only row
 func endedReason(prev types.Job, byHolder bool) string {
 	switch {
 	case prev.Result != nil:
-		return "ended unverified: its holder filed a result and nobody ran `" + hint.JobWait.With(prev.ID) + "` on it"
+		return fmt.Sprintf("ended unverified: its holder filed a result and nobody ran `%s` on it", hint.JobWait.With(prev.ID))
 	case prev.Registered == 0:
-		return "ended with no result filed, before any holder ran `" + hint.JobExec.With(prev.ID) + "` on it"
+		return fmt.Sprintf("ended with no result filed, before any holder ran `%s` on it", hint.JobExec.With(prev.ID))
 	case gradedByHolder(prev):
 		return "ended ungraded: a read-only row declaring no check or goal has nothing magus can grade, so what it found went only to its caller"
 	case byHolder:
@@ -84,7 +84,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if ended := rows[i]; ended.State.Terminal() {
 		reason := ""
 		if ended.EndReason != "" {
-			reason = " (" + ended.EndReason + ")"
+			reason = fmt.Sprintf(" (%s)", ended.EndReason)
 		}
 		return types.Job{}, fmt.Errorf("job: %s already ended %s %s ago%s, so there is nothing to end, `%s` lists it",
 			id, ended.State, updatedAgo(ended), reason, hint.LsJobs.With("--all"))
@@ -788,7 +788,7 @@ func (s *Store) acrossCheckouts(rows []types.Job, id string, resolve AttemptReso
 			}
 		}
 		return attempt, nil
-	}, here + " or " + strings.Join(roots, ", ")
+	}, fmt.Sprintf("%s or %s", here, strings.Join(roots, ", "))
 }
 
 // GradeGates grades a job against its gates WITHOUT recording anything, so an orchestrator

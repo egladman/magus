@@ -112,7 +112,7 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		if v.Depth == 0 || run[v.Key()] {
 			return nil
 		}
-		label := v.Project.Path + ":" + v.Target
+		label := fmt.Sprintf("%s:%s", v.Project.Path, v.Target)
 		if slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
 			return nil
 		}

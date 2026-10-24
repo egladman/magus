@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,7 +89,10 @@ func TestTermsRendersReferencedOutsideAfterThePaths(t *testing.T) {
 	assert.Less(t, strings.Index(got, referencedHeading), strings.Index(got, "the only check you run"))
 
 	unknown := NewTerms(briefRow(), TermsFacts{ReferencedOutsideGap: NoSymbolIndex()}).String()
-	assert.Contains(t, unknown, "\n"+referencedHeading+"\n  unknown, "+NoSymbolIndex()+"\n",
+	assert.Contains(t, unknown, fmt.Sprintf(`
+%s
+  unknown, %s
+`, referencedHeading, NoSymbolIndex()),
 		"an unindexed graph says the list is unknown rather than dropping the heading")
 }
 

@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"go/format"
 	"os"
 	"path/filepath"
@@ -119,7 +120,7 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 		ended, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
 		assert.Empty(t, ended)
 		require.Len(t, refused, 1)
-		assert.Contains(t, refused[0].Error(), "plan/w (running, session holder, held in "+repo.Root()+"): 1 uncommitted path(s) in its write paths, first a.txt")
+		assert.Contains(t, refused[0].Error(), fmt.Sprintf("plan/w (running, session holder, held in %s): 1 uncommitted path(s) in its write paths, first a.txt", repo.Root()))
 		assert.Contains(t, refused[0].Error(), "which an agent may not")
 	}
 	requests := endRequests(t, repo.Root())

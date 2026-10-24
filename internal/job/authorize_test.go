@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -326,7 +327,7 @@ func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 			if tc.record != "" {
 				require.NoError(t, NewStore(loc).Bind(Caller{}, tc.record))
 			}
-			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+			t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
 			t.Setenv(EnvStampedLease, tc.stamped)
 			assert.Equal(t, tc.want, ActingActor(loc))
 		})
@@ -632,7 +633,7 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(trail.EnvBaggage, "")
 			if tc.baggage != "" {
-				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.baggage)
+				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.baggage))
 			}
 			cacheDir := t.TempDir()
 			if tc.bound != "" {

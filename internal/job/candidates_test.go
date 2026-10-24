@@ -59,8 +59,8 @@ func TestReferencedOutsideNamesTheTestAndRegistryOneHopOut(t *testing.T) {
 	projects := []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"mocks": {{Glob: "**/mocks_test.go"}}}}}
 	asked := map[string]bool{}
 	referrers := func(file, declaration string) map[string]int {
-		asked[file+"#"+declaration] = true
-		switch file + "#" + declaration {
+		asked[fmt.Sprintf("%s#%s", file, declaration)] = true
+		switch fmt.Sprintf("%s#%s", file, declaration) {
 		case "types/conformance.go#":
 			return map[string]int{
 				"types/conformance.go":                4,
@@ -100,7 +100,7 @@ func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
 
 	var unknown strings.Builder
 	RenderReferencedOutside(&unknown, nil, NoSymbolIndex())
-	assert.Equal(t, referencedHeading+"\n  unknown, no symbol index answered; `"+hint.GraphBuild.String()+"` builds one\n", unknown.String(),
+	assert.Equal(t, fmt.Sprintf("%s\n  unknown, no symbol index answered; `%s` builds one\n", referencedHeading, hint.GraphBuild.String()), unknown.String(),
 		"an unindexed graph says the list is unknown rather than empty")
 
 	files := []ReferencedFile{{File: "a_test.go", Count: 2, Uses: []string{"a.go"}}}

@@ -436,7 +436,7 @@ func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 		if g.IntegratorGates {
 			continue
 		}
-		subject := g.Target + " " + g.Project
+		subject := fmt.Sprintf("%s %s", g.Target, g.Project)
 		add := g.Goal
 		if g.Target == lintTarget {
 			add.Check.NoDefaultCharms = true
