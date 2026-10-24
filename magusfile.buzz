@@ -2441,8 +2441,18 @@ export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
 // Builds the linter first, then golangci-lint, go vet, markdownlint,
 // shellcheck, and actionlint. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
+//
+// Files after `--` scope it to them, as a job's lint goal passes the files it writes: each
+// tool runs over those files or the packages holding them, and only a finding at one of
+// them fails. The scoped run needs no format or generate, whose drift elsewhere in the tree
+// is not the files' to meet; harness-drift and the wasm build judge the whole tree too, so
+// they are left to bare lint, the integrator's.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(install_linter, lint_rules, harness_drift);
+    if (args.len() > 0) {
+        ctx.needs(proofreadlib\proofread_build);
+    } else {
+        ctx.needs(install_linter, lint_rules, harness_drift);
+    }
     // Not go["golangci-lint"]: that runs the stock binary off PATH. These reads key the
     // custom linter by content.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml",
@@ -2454,6 +2464,62 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.sh", "**/*.bash", ".shellcheckrc",
                    ".github/workflows/*.yaml",
                    "mise.toml", "magus.yaml");
+    if (args.len() > 0) {
+        final files = mut [<str>];
+        foreach (a in args) {
+            if (fs\exists(a)) { files.append(a); }
+        }
+        if (files.len() == 0) {
+            return;
+        }
+        golangci\linkOnce();
+        final failures = mut [<str>];
+        // The rules judge from the symbol indexes; magus\precedents freshens them, as in lint_rules.
+        _ = magus\precedents();
+        if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: {"allow_failure": true}).ok) {
+            failures.append("hack/lint/run.buzz reported findings above");
+        }
+        final libs = mut [<str>];
+        foreach (mod in fs\glob("libs/**/go.mod")) { libs.append(fs\dirname(mod.value)); }
+        final packages = golangci\packagesOf(files, libs: libs);
+        foreach (module, pkgs in packages) {
+            foreach (issue in golangci\issuesAt(module, packages: pkgs, files: files)) {
+                failures.append(issue);
+            }
+        }
+        // Each tool below prints its own findings; a failing one is named and the rest still run.
+        final tools = mut [<[str]>];
+        if (packages["."] -> root) {
+            tools.append(["go", "vet"] + root);
+        }
+        final md = files.filter(fun (i: int, f: str) > bool => f.endsWith(".md"));
+        if (md.len() > 0) {
+            tools.append(["markdownlint"] + md);
+            ctx.readsFiles("_typos.toml");
+            tools.append(["typos", "--format", "brief"] + md);
+        }
+        final shells = files.filter(fun (i: int, f: str) > bool => f.endsWith(".sh") or f.endsWith(".bash"));
+        if (shells.len() > 0) {
+            tools.append(["shellcheck"] + shells);
+        }
+        final workflows = files.filter(fun (i: int, f: str) > bool => f.startsWith(".github/workflows/") and f.endsWith(".yaml"));
+        if (workflows.len() > 0) {
+            tools.append(["actionlint"] + workflows);
+        }
+        foreach (argv in tools) {
+            if (!proc\exec(argv[0], argv.sub(1, len: argv.len() - 1), opts: {"allow_failure": true}).ok) {
+                failures.append("{argv[0]} reported findings above");
+            }
+        }
+        final fragments = files.filter(fun (i: int, f: str) > bool => f.startsWith(changelog\FRAGMENT_DIR) and f.endsWith(".md"));
+        foreach (m in changelog\lint(fragments)) {
+            failures.append(m);
+        }
+        if (failures.len() > 0) {
+            throw "lint: {failures.len()} failure(s) at the files:\n  " + failures.join("\n  ");
+        }
+        return;
+    }
     golangci\run(".", []);
     // golangci-lint stops at a go.mod, so each other module gets its own run of the
     // tree-wide conventions.

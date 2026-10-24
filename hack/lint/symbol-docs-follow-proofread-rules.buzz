@@ -10,6 +10,7 @@ import "proc";
 import "encoding/json";
 import "magus";
 import "magus/lint";
+import "hack/lint/support" as support;
 import "hack/policy/proofread" as decisions;
 import "libs/proofread/proofread" as proofread;
 
@@ -86,6 +87,7 @@ fun judgedCounts(symbols: [any]) > {str: int} {
 // symbol indexes. It reads nothing else, so its tests need no workspace.
 export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {str: str}) > [Finding] !> any {
     final found = mut [<Finding>];
+    var judgeable = true;
     foreach (lang in LANGUAGES) {
         var declared = false;
         foreach (idx in indexes) {
@@ -93,26 +95,23 @@ export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {s
                 continue;
             }
             declared = true;
-            final freshness: str = idx["freshness"] ?? "";
-            if (freshness != "up-to-date") {
-                final project: str = idx["project"]["path"] ?? ".";
-                final detail: str = idx["detail"] ?? "";
-                final rebuild = "Rebuild it with `magus graph build`, then rerun lint.";
-                final fix = if (detail != "") detail + "\n" + rebuild else rebuild;
-                found.append(Finding{ path = project,
-                    message = "the {lang} symbol index of {project} is {freshness}, so its docs cannot be judged",
-                    fix = fix });
+            final stale = support\staleness(idx, judging: "docs");
+            judgeable = judgeable and stale.judgeable;
+            foreach (f in stale.findings) {
+                found.append(f);
             }
         }
         if (!declared) {
+            judgeable = false;
             found.append(Finding{ path = ".", message = "no {lang} symbol index is declared, so no {lang} doc was judged",
                 fix = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
         } else if ((judged[lang] ?? 0) == 0) {
+            judgeable = false;
             found.append(Finding{ path = ".", message = "no {lang} symbol was judged: silence, not a pass",
                 fix = "The indexer emitted no {lang} docs or names; read `magus\\symbols()` before dropping the language." });
         }
     }
-    if (found.len() > 0) {
+    if (!judgeable) {
         return found;
     }
 
@@ -213,6 +212,16 @@ test "a stale or missing index fails instead of passing on what it lacks" {
     assert\equal(got[0].path, want: "console", message: "names the project");
     final none = judge([<any>], judged: counts(), indexes: [fresh("go")], sanctioned: {<str: str>});
     assert\equal(none.len(), want: 1, message: "no typescript index at all");
+}
+
+test "a stale index listing its changes fails at each one and still judges the rest" {
+    final stale: {str: any} = {"project": {"path": "."}, "language": "go", "freshness": "out-of-date",
+        "changed": ["cmd/magus/edited.go"], "changed_count": 1.0};
+    final got = judge([finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41")],
+        judged: counts(), indexes: [stale, fresh("typescript")], sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 2, message: "the changed file and the finding");
+    assert\equal(got[0].path, want: "cmd/magus/edited.go", message: "staleness at the file");
+    assert\equal(got[1].path, want: "cmd/magus/run.go", message: "a current file is judged");
 }
 
 test "a language with no judged symbol is silence, not a pass" {
