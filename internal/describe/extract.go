@@ -270,7 +270,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 										node.DynamicExec = true
 										continue
 									}
-									node.ExecOverrides = appendUniq(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
+									node.ExecOverrides = appendUniq(node.ExecOverrides, fmt.Sprintf("env:%s=%s", ekl.Val, evl.Val))
 								}
 							}
 						case "envInputs":
@@ -303,7 +303,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									pairs = nil
 									break
 								}
-								pairs = append(pairs, globs[i]+"="+globs[i+1])
+								pairs = append(pairs, fmt.Sprintf("%s=%s", globs[i], globs[i+1]))
 							}
 							// Committed only once the whole call is readable; an earlier
 							// ctx.observes in the same target keeps what it recorded.
