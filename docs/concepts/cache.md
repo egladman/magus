@@ -197,7 +197,7 @@ the target when one matches nothing:
 ```text
 ctx.writesFiles in target generate lists "gen/version.go" with editsExistingSource: true,
 but no file matches it in project .: an edited source must already exist. Create it, or
-drop editsExistingSource so the target produces it.
+drop editsExistingSource so the target produces it
 ```
 
 The check runs at the target, not at load, so a target that runs earlier in the same
