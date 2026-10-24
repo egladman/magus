@@ -65,6 +65,43 @@ func TestForkWorktreeRefusesACheckpointWithUncommittedChanges(t *testing.T) {
 	assert.NoDirExists(t, dir)
 }
 
+// A row forked from inside an integrator's existing checkout got no worktree record, and the
+// guard then refused magus there as a sibling; --checkout naming it adopts it instead.
+func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, _, repo := worktreeStore(t)
+	dir := filepath.Join(t.TempDir(), "integrator")
+	repo.Git("worktree", "add", "-q", "-b", "integrator", dir)
+
+	wt, made, err := s.ForkWorktree(ctx, "finish", dir, "", "")
+	require.NoError(t, err)
+	assert.False(t, made, "an adopted checkout is not the fork's to discard")
+	source := wt.Source
+	assert.True(t, samePath(repo.Root(), source), "removal runs from the primary checkout, not from inside the adopted one")
+	assert.Equal(t, types.JobWorktree{Root: dir, Source: source, Base: repo.Head(), Created: wt.Created}, wt)
+
+	linked, err := s.LinkedCheckout(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, linked)
+	primary, err := s.LinkedCheckout(ctx, repo.Root())
+	require.NoError(t, err)
+	assert.False(t, primary)
+
+	seed(t, s, types.Job{ID: "finish", State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	_, err = s.RecordWorktree(ctx, "finish", wt)
+	require.NoError(t, err)
+	owned, err := s.OwnedCheckout(dir)
+	require.NoError(t, err)
+	assert.Equal(t, dir, owned)
+	none, err := s.OwnedCheckout(repo.Root())
+	require.NoError(t, err)
+	assert.Empty(t, none)
+
+	_, _, err = s.ForkWorktree(ctx, "other", t.TempDir(), "", "")
+	require.ErrorContains(t, err, "is not a linked checkout of this repository")
+}
+
 func TestMirroredBinaryIsOnlyTheForkingCheckoutsOwnMagus(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

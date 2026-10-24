@@ -256,18 +256,18 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		}},
 		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
 			main, wt := twoCheckouts(t)
-			require.NoError(t, os.WriteFile(filepath.Join(main, "magus"), []byte("#!/bin/sh\n"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
 			t.Chdir(main)
 			// Relative, so the temp dir the fixture lives in does not read as a throwaway copy.
 			return Request{Input: "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker"},
-				filepath.Join(main, "magus") + " --root " + wt + " describe job harness/worker"
+				filepath.Join(wt, "magus") + " --root " + wt + " describe job harness/worker"
 		}},
 		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
 			main, wt := twoCheckouts(t)
-			require.NoError(t, os.WriteFile(filepath.Join(main, "magus"), []byte("#!/bin/sh\n"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
 			t.Chdir(main)
 			return Request{Input: "cd ../" + filepath.Base(wt) + " && ./magus job exec harness/worker"},
-				filepath.Join(main, "magus") + " --root " + wt + " job exec harness/worker"
+				filepath.Join(wt, "magus") + " --root " + wt + " job exec harness/worker"
 		}},
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepo(t)

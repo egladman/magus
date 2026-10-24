@@ -266,3 +266,25 @@ func TestCheckoutRulesAdviseWhenSetToAdvise(t *testing.T) {
 	sibling := advising(Dependencies{}).rankGraded(ShellVerdict{}, denyRuleSiblingCheckout, testSiblingCheckoutDeny(command), rankSiblingCheckout)
 	requireAdvisedOnce(t, sibling, denyRuleSiblingCheckout)
 }
+
+// The workspace's foreign-binary rule refuses this checkout's binary rooted at another,
+// so the denial and its remedy name the target's own binary or nothing.
+func TestSiblingCheckoutNamesTheTargetsOwnBinary(t *testing.T) {
+	main, wt := twoCheckouts(t)
+	require.NoError(t, os.WriteFile(filepath.Join(main, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	t.Chdir(main)
+	line := "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker"
+
+	denial := testSiblingCheckoutDeny(line)
+	assert.Contains(t, denial, "`"+filepath.Join(wt, "magus")+" --root "+wt+" <args>`")
+	assert.NotContains(t, denial, filepath.Join(main, "magus")+" --root")
+
+	lead, next := siblingCheckoutRemedy(main, line, DialectBash)
+	assert.Empty(t, lead, "with no binary in the target there is no command to name")
+	assert.Empty(t, next)
+
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	_, next = siblingCheckoutRemedy(main, line, DialectBash)
+	require.Len(t, next, 1)
+	assert.Equal(t, filepath.Join(wt, "magus")+" --root "+wt+" describe job harness/worker", next[0].Run)
+}

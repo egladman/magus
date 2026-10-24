@@ -122,7 +122,9 @@ type Applied struct {
 // the whole spec, so a spec field it omits is cleared, while status (state, holder,
 // registration, results, releases) is never touched. checkpoint and timeout are the two
 // exceptions: an omitted checkpoint keeps the row's, or takes checkpoint() on a new row, and
-// the deadline moves only when a record names a timeout. A new id creates the job.
+// the deadline moves only when a record names a timeout. A new id creates the job. A record
+// widening the write paths of a row that exited or ended re-declares it, so its holder takes
+// it again with `job exec` for the follow-up the wider paths allow.
 //
 // Every record is validated before any is written, each against the plan as the records
 // before it leave it, and the error joins every record's problems, each message prefixed by
@@ -130,7 +132,7 @@ type Applied struct {
 // and names both. Each record is held to [validateMerge], with its checkpoint settled in the
 // same pass. A record carrying state, enter or checkout is a JobRecordInvalid problem: state
 // is status, and an entry and a checkout are `magus job fork`'s. So is one naming a job that
-// already ended, and one dropping every write path a live job holds. Who may write a record
+// already ended without widening it, and one dropping every write path a live job holds. Who may write a record
 // is judged first: the store's authorization refuses at once, as it did before the pass.
 // dryRun returns what would be written and writes nothing, a refusal's release request
 // included.
@@ -146,6 +148,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 	plan := make([]Applied, 0, len(records))
 	merges := make([]func(*types.Job), 0, len(records))
 	proofs := make([]types.JobWriteProof, 0, len(records))
+	returning := make([]bool, 0, len(records))
 	var problems types.JobProblems
 	for _, rec := range records {
 		var ps types.JobProblems
@@ -165,15 +168,17 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		if i >= 0 {
 			prev = rows[i]
 		}
+		ended := i >= 0 && prev.State.Terminal()
+		redeclares := i >= 0 && (ended || prev.State == types.StateExited) && widensWritePaths(prev, rec)
 		switch {
 		case rec.Enter != "":
 			invalid("enter", fmt.Sprintf("the record for %s enters %s, which declares nothing to apply", rec.ID, rec.Enter),
 				fmt.Sprintf("feed it to `%s`, which records an entry", hint.JobFork.With("--stdin")))
-		case i >= 0 && prev.State.Terminal():
-			invalid("id", fmt.Sprintf("%s already ended %s, and apply changes a live job", rec.ID, prev.State),
-				fmt.Sprintf("fork a new job with `%s`", hint.JobFork.With("--stdin")))
+		case ended && !redeclares:
+			invalid("id", fmt.Sprintf("%s already ended %s, and apply changes a live job or widens an ended one", rec.ID, prev.State),
+				fmt.Sprintf("widen its write_paths to hand it back to its holder, or fork a new job with `%s`", hint.JobFork.With("--stdin")))
 		}
-		if rec.Enter != "" || i >= 0 && prev.State.Terminal() {
+		if rec.Enter != "" || ended && !redeclares {
 			problems = append(problems, prefixed(rec.ID, ps)...)
 			continue
 		}
@@ -181,6 +186,13 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		rec.Checkpoint, cps = store.DeclaredCheckpoint(ctx, rows, rec.ID, rec.Checkpoint)
 		ps = append(ps, cps...)
 		merge := specMerge(rec, i < 0, checkpoint)
+		if redeclares {
+			spec := merge
+			merge = func(u *types.Job) {
+				spec(u)
+				u.State = types.StateDeclared
+			}
+		}
 		if resolved, err := resolveMerge(ctx, refusing, rows, rec.ID, merge, read); err != nil {
 			ps = append(ps, resolveProblem(err))
 		} else {
@@ -207,6 +219,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		next.Releases = store.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
 		plan = append(plan, Applied{Prev: prev, Next: next, Created: i < 0, Changed: specChanges(prev, next)})
 		merges, proofs = append(merges, merge), append(proofs, v.WriteProof)
+		returning = append(returning, redeclares && !ended)
 		if i >= 0 {
 			rows[i] = next
 		} else {
@@ -224,9 +237,23 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		if err != nil {
 			return plan[:k], fmt.Errorf("wrote %d of %d record(s), then %s: %w", k, len(plan), plan[k].Next.ID, err)
 		}
+		// A widening alone keeps a live row's state (see widensInPlace), so the move back to
+		// declared is a write of its own.
+		if returning[k] {
+			if stored, err = store.Update(ctx, stored.ID, func(u *types.Job) { u.State = types.StateDeclared }); err != nil {
+				return plan[:k], fmt.Errorf("wrote %d of %d record(s), then re-declaring %s: %w", k, len(plan), plan[k].Next.ID, err)
+			}
+		}
 		plan[k].Next = stored
 	}
 	return plan, nil
+}
+
+// widensWritePaths reports whether rec names a write path prev's do not cover.
+func widensWritePaths(prev types.Job, rec types.Declaration) bool {
+	var next types.Job
+	rec.ApplySpec(&next)
+	return !subset(next.WritePaths, prev.WritePaths)
 }
 
 // specMerge is rec's spec as a merge: [types.Declaration.ApplySpec], plus the checkpoint a

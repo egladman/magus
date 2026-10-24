@@ -46,7 +46,8 @@ func MirroredBinary(exe, root string) string {
 // is placed only in a checkout where no build input of ./cmd/magus differs from the commit it
 // was built at (see [changedBuildInputs]): anywhere else it would judge another tree, so the
 // checkout is made with no binary and wt.Binary stays "" for [CheckoutBootstrap] to fill.
-// made is false when the job already owns the checkout at dir, which is returned as it stands. A job owning another standing checkout, a checkpoint
+// made is false when the job already owns the checkout at dir, which is returned as it stands,
+// and when dir is a linked checkout that already stands, which the job adopts as it is. A job owning another standing checkout, a checkpoint
 // carrying uncommitted changes the new checkout would not hold, a binary whose commit is
 // unrecorded, unknown to the repository or carries uncommitted changes, and a version
 // control that cannot make one are refused.
@@ -67,6 +68,10 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		}
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
 			id, owned.Root, owned.Root)
+	}
+	if _, err := os.Stat(dir); err == nil {
+		wt, err := s.adoptCheckout(ctx, id, dir)
+		return wt, false, err
 	}
 	revision, digest := types.ParseCheckpointToken(checkpoint)
 	if digest != "" {
@@ -129,6 +134,68 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		wt.Binary = placed
 	}
 	return wt, true, nil
+}
+
+// adoptCheckout records dir, a standing linked checkout of this repository, as job id's:
+// nothing is made or placed, and its base is what it has checked out. Its source is the
+// primary checkout, so removing it once the job ends never runs from inside it.
+func (s *Store) adoptCheckout(ctx context.Context, id, dir string) (types.JobWorktree, error) {
+	source, err := filepath.Abs(s.root)
+	if err != nil {
+		return types.JobWorktree{}, err
+	}
+	drv, why := resolveDriver(ctx, source)
+	if drv == nil {
+		return types.JobWorktree{}, fmt.Errorf("job: %s names the checkout %s, and %s", id, dir, why)
+	}
+	registered, err := drv.RegisteredCheckouts(ctx, source)
+	if err != nil {
+		return types.JobWorktree{}, fmt.Errorf("job: %s names the checkout %s, and the checkouts %s registers cannot be read: %w", id, dir, drv.Name(), err)
+	}
+	i := slices.IndexFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, dir) })
+	p := slices.IndexFunc(registered, func(c types.RegisteredCheckout) bool { return c.Primary })
+	if i < 0 || p < 0 {
+		return types.JobWorktree{}, fmt.Errorf("job: %s names %s as its checkout, which exists and is not a linked checkout of this repository: name a directory that does not exist yet, which the fork makes, or a linked checkout to adopt",
+			id, dir)
+	}
+	wt := types.JobWorktree{Root: dir, Source: registered[p].Root, Base: registered[i].Head, Created: time.Now().Unix()}
+	if info, err := os.Stat(filepath.Join(dir, binaryName)); err == nil && info.Mode().IsRegular() {
+		wt.Binary = filepath.Join(dir, binaryName)
+	}
+	return wt, nil
+}
+
+// OwnedCheckout is the root of the standing checkout a row records that dir lies in, "" when
+// no row records one there.
+func (s *Store) OwnedCheckout(dir string) (string, error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", err
+	}
+	for _, r := range rows {
+		if r.Worktree.Standing() && within(dir, r.Worktree.Root) {
+			return r.Worktree.Root, nil
+		}
+	}
+	return "", nil
+}
+
+// LinkedCheckout reports whether dir is the top of a linked checkout of this store's
+// repository, one that is not its primary.
+func (s *Store) LinkedCheckout(ctx context.Context, dir string) (bool, error) {
+	source, err := filepath.Abs(s.root)
+	if err != nil {
+		return false, err
+	}
+	drv, why := resolveDriver(ctx, source)
+	if drv == nil {
+		return false, errors.New(why)
+	}
+	registered, err := drv.RegisteredCheckouts(ctx, source)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, dir) }), nil
 }
 
 // moduleFiles decide the module graph a Go build resolves, at the root.
