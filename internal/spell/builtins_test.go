@@ -67,8 +67,8 @@ func TestShippedSpellsLoad(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"bash", "buf", "buzz", "cosign", "docker", "go", "markdown", "podman", "python", "rust", "typescript",
 	}, slices.Collect(maps.Keys(Builtins())))
-	assert.Equal(t, []string{"discover", "endoflife-date", "onepassword", "system-keychain"}, sourceOnly)
-	assert.Equal(t, []string{"aws", "github", "gitlab", "harness"}, nesting)
+	assert.Equal(t, []string{"endoflife-date", "onepassword", "system-keychain"}, sourceOnly)
+	assert.Equal(t, []string{"aws", "code", "github", "gitlab", "harness"}, nesting)
 }
 
 // The built-in session offers the spell type modules and nothing else, so its own

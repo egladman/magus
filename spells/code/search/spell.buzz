@@ -1,4 +1,4 @@
-// The discover module: finds the code, files and doc sections a term names, from the
+// The search module: finds the code, files and doc sections a term names, from the
 // knowledge graph rather than a text search, and opens each match one bounded layer at a
 // time, the way an agent reads outward from a hit:
 //
@@ -8,9 +8,9 @@
 //      recorded extent (def_end_line) or the section's heading level, never a guess
 //   4. around: callers, callees, references, tests, the owning project and related docs
 //
-//   import "spells/discover" as discover;
-//   final opts = discover\Options{ depth = 3 };
-//   final lines = discover\render(discover\run("parse flags", opts: opts), opts: opts);
+//   import "spells/code/search" as search;
+//   final opts = search\Options{ depth = 3 };
+//   final lines = search\render(search\run("parse flags", opts: opts), opts: opts);
 //
 // Every list is capped and counts what it cut, and a thin answer says why: a stale or
 // missing symbol index makes the verdict unknown, never an empty found. It reads the graph
@@ -24,7 +24,7 @@ import "std";
 
 import "assert";
 
-export fun mgs_getName() > str { return "discover"; }
+export fun mgs_getName() > str { return "search"; }
 
 final FOUND = "found";
 final ABSENT = "absent";
@@ -135,7 +135,7 @@ export object Answer {
     staleIndexes: [str] = [<str>],
 }
 
-// Result is one discovery, shaped as `magus query -o json` is: matchCount counts what
+// Result is one search, shaped as `magus query -o json` is: matchCount counts what
 // both graphs ranked before filters; dropped counts those --file, --grep or a duplicate
 // removed.
 export object Result {

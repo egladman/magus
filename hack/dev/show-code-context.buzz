@@ -1,7 +1,7 @@
 // Cost: two graph queries; --depth 2 and 3 add a file read per opened match, --depth 4
 // adds a neighborhood, a refs and a docs query per opened match and one describe file.
 //
-// Finds the code, files and doc sections a term names, through the discover module, and
+// Finds the code, files and doc sections a term names, through the search module, and
 // opens the first few matches layer by layer: --depth 1 lists the ranked matches as
 // path:line, 2 adds each one's line in context, 3 the whole declaration or doc section,
 // 4 its callers, callees, tests, references, owning project and docs. Every list is capped
@@ -17,7 +17,7 @@ import "encoding/yaml";
 import "std";
 import "strings";
 
-import "../../spells/discover/spell" as discover;
+import "../../spells/code/search/spell" as search;
 
 final USAGE = "usage: magus buzz hack/dev/show-code-context.buzz -- --query <terms> [--depth 1-4] [--kind <kind>] [--file <path>] [--grep <text>] [--limit <n>] [--expand <n>] [--context <n>] [--block-lines <n>] [--neighbors <n>] [--width <n>] [-o text|json|yaml|jsonl|name]";
 final HELP = "cost: two graph queries; --depth 2-3 add a file read per opened match, --depth 4 four graph reads per opened match\n{USAGE}";
@@ -31,13 +31,13 @@ fun number(values: {str: str}, flag: str, fallback: int) > int !> str {
     return n!;
 }
 
-// options reads the flags into discover\Options; a cap of 0 means no cap.
-export fun options(values: {str: str}) > discover\Options !> str {
+// options reads the flags into search\Options; a cap of 0 means no cap.
+export fun options(values: {str: str}) > search\Options !> str {
     final depth = number(values, flag: "--depth", fallback: 1);
     if (depth < 1 or depth > 4) {
         throw "show-code-context: --depth is 1 (matches), 2 (site), 3 (block) or 4 (around)\n{USAGE}";
     }
-    return discover\Options{
+    return search\Options{
         kind = values["--kind"] ?? "",
         file = values["--file"] ?? "",
         grep = values["--grep"] ?? "",
@@ -73,7 +73,7 @@ export fun main(args: [str]) > void !> any {
         throw "show-code-context: -o is {FORMATS.join("|")}, as magus's own -o; got {format}\n{USAGE}";
     }
     final opts = options(parsed.values);
-    foreach (line in emit(discover\run(terms, opts: opts), format: format, opts: opts)) {
+    foreach (line in emit(search\run(terms, opts: opts), format: format, opts: opts)) {
         std\print(line);
     }
 }
@@ -104,7 +104,7 @@ fun record(v: any) > any !> any {
 
 // emit prints r the way `magus query` prints its result for each -o: name is one node id
 // a line, jsonl one match a line.
-export fun emit(r: discover\Result, format: str, opts: discover\Options) > [str] !> any {
+export fun emit(r: search\Result, format: str, opts: search\Options) > [str] !> any {
     if (format == "json") {
         return [json\stringify(record(r), indent: "  ")];
     }
@@ -119,9 +119,9 @@ export fun emit(r: discover\Result, format: str, opts: discover\Options) > [str]
         return lines;
     }
     if (format == "name") {
-        return r.matches.map(fun (_: int, h: discover\Hit) > str => h.id);
+        return r.matches.map(fun (_: int, h: search\Hit) > str => h.id);
     }
-    return discover\render(r, opts: opts);
+    return search\render(r, opts: opts);
 }
 
 test "options refuses a depth past the last layer" {
