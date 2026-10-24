@@ -72,18 +72,18 @@ func TestMatchProject(t *testing.T) {
 	root := sep + "ws"
 	projects := []projectIndex{
 		{project: &types.Project{Path: ".", Dir: root}},
-		{project: &types.Project{Path: "gopherbuzz", Dir: root + sep + "gopherbuzz"}},
-		{project: &types.Project{Path: "foo", Dir: root + sep + "foo"}},
+		{project: &types.Project{Path: "gopherbuzz", Dir: filepath.Join(root, "gopherbuzz")}},
+		{project: &types.Project{Path: "foo", Dir: filepath.Join(root, "foo")}},
 	}
 	cases := []struct {
 		file string
 		want string
 		ok   bool
 	}{
-		{root + sep + "gopherbuzz" + sep + "compiler.go", "gopherbuzz", true}, // nested wins over root
-		{root + sep + "main.go", ".", true},                                   // root project
-		{root + sep + "foobar" + sep + "x.go", ".", true},                     // "foo" must not claim "foobar"
-		{sep + "elsewhere" + sep + "x.go", "", false},                         // outside every project
+		{filepath.Join(root, "gopherbuzz", "compiler.go"), "gopherbuzz", true}, // nested wins over root
+		{filepath.Join(root, "main.go"), ".", true},                            // root project
+		{filepath.Join(root, "foobar", "x.go"), ".", true},                     // "foo" must not claim "foobar"
+		{filepath.Join(sep, "elsewhere", "x.go"), "", false},                   // outside every project
 	}
 	for _, c := range cases {
 		got, ok := matchProject(c.file, projects)
@@ -811,7 +811,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 	root := w.Root()
 	for dir, file := range map[string]string{"svc": "main.go", "web": "index.ts"} {
 		w.Write(dir+"/magusfile.buzz", "")
-		w.Write(dir+"/"+file, "x\n")
+		w.Write(filepath.Join(dir, file), "x\n")
 	}
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("svc", WithSpell(goSpell))
@@ -1095,7 +1095,7 @@ func TestFreshenIndexesNamesNoRebuildWhenNoBuildInputChanged(t *testing.T) {
 	assert.NotContains(t, types.DiagnosticRationale(err), "build inputs")
 }
 
-var ownGoMod = []byte("module " + ownModule + "\n")
+var ownGoMod = []byte(fmt.Sprintf("module %s\n", ownModule))
 
 func TestBinaryTreeSkew(t *testing.T) {
 	unread := func() ([]string, error) { return nil, errors.New("go list failed") }
@@ -1157,7 +1157,7 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	assert.Equal(t, conformanceSkippedWhy, reasoned.Why, "-o json carries the reason beside the verdict")
 	encoded, err := json.Marshal(reasoned)
 	require.NoError(t, err)
-	assert.Contains(t, string(encoded), `"why":"`+conformanceSkippedWhy+`"`)
+	assert.Contains(t, string(encoded), fmt.Sprintf(`"why":"%s"`, conformanceSkippedWhy))
 	encoded, err = json.Marshal(d)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")

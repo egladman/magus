@@ -493,11 +493,11 @@ func chainedRunVerdict(deps Dependencies, command string, d Dialect) (ShellVerdi
 	// The pipe is served even here: it keeps the order the chain chose, and one call
 	// orders projects only by their declared edges.
 	if argv, ok := combinedStage(ch.stages); ok {
-		more = "One call runs the same target on all of them when their order does not matter: `" + hint.NextForDenyRemedy(string(denyRuleChainedRun), argv, "").Run + "`."
+		more = fmt.Sprintf("One call runs the same target on all of them when their order does not matter: `%s`.", hint.NextForDenyRemedy(string(denyRuleChainedRun), argv, "").Run)
 	}
 	return ShellVerdict{
-		Deny: "magus runs chained with `&&` or `;` run one at a time; pipe them: `" + pipe.Run + "`.",
-		Why:  chainedRunPipeNote + "\n" + more,
+		Deny: fmt.Sprintf("magus runs chained with `&&` or `;` run one at a time; pipe them: `%s`.", pipe.Run),
+		Why:  fmt.Sprintf("%s\n%s", chainedRunPipeNote, more),
 		Rule: denyRule{Name: denyRuleChainedRun},
 	}.withRemedy("magus runs chained with `&&` or `;` run one at a time; pipe them instead.", pipe), true
 }
@@ -1250,11 +1250,11 @@ func resolvedCommand(c hint.Invocation) string {
 func explainDeny(typed string, c hint.Invocation, verdict string) string {
 	resolved := resolvedCommand(c)
 	var b strings.Builder
-	b.WriteString("magus guard denied `" + elideCommand(resolved) + "`")
+	fmt.Fprintf(&b, "magus guard denied `%s`", elideCommand(resolved))
 	if strings.TrimSpace(typed) != resolved {
-		b.WriteString(" (what `" + elideCommand(strings.TrimSpace(typed)) + "` resolves to)")
+		fmt.Fprintf(&b, " (what `%s` resolves to)", elideCommand(strings.TrimSpace(typed)))
 	}
-	b.WriteString("; " + verdict)
+	fmt.Fprintf(&b, "; %s", verdict)
 	return b.String()
 }
 
@@ -1894,9 +1894,9 @@ var (
 	// instead of assembling it from grep hits. Measured over 1,499 sessions: 42% of new
 	// files were preceded by one of these, 71% in subagent sessions, where only 12.9%
 	// reached for a magus verb at all.
-	precedentSearchAdvice = "magus workspace: the knowledge graph answers \"what already does this\":\n" +
-		"  EVERY VERIFIED SITE:  " + hint.Refs.With("%s", "--occurrences") + "\n" +
-		"  DOES IT EXIST, and as what:  " + hint.Query.With("%s")
+	precedentSearchAdvice = fmt.Sprintf("magus workspace: the knowledge graph answers \"what already does this\":\n"+
+		"  EVERY VERIFIED SITE:  %s\n"+
+		"  DOES IT EXIST, and as what:  %s", hint.Refs.With("%s", "--occurrences"), hint.Query.With("%s"))
 	precedentSearchAdviceWhy = "A text match finds the name. refs finds the USES, generated and cross-language ones included, which is what a precedent hunt is actually asking for. " +
 		"An empty result means it was text rather than a symbol, and grep is right after all. " + searchColdIndexRouting
 
@@ -2010,7 +2010,7 @@ func pipeAnswer(p pipedMagus) denial {
 	// repository's target names rather than magus vocabulary, so in most workspaces that
 	// instruction names nothing. Quoting the reader's own verb identifies the command
 	// without minting a command line to copy.
-	lead := "`" + p.verb + " | " + p.filter + "` needs no pipe: "
+	lead := fmt.Sprintf("`%s | %s` needs no pipe: ", p.verb, p.filter)
 	if p.verb == "" {
 		lead = "this needs no pipe: "
 	}
@@ -2048,7 +2048,7 @@ const graphPipeBrief = "magus workspace: a graph read projects its own record wi
 // answer possible where the pipe rule needed several. Silencing and keeping are the only
 // two intents, magus has a lever for each, and both leave the full log on disk either way.
 func redirectDeny(verb, dest string) string {
-	subject := "`" + verb + " " + dest + "`"
+	subject := fmt.Sprintf("`%s %s`", verb, dest)
 	if verb == "" {
 		subject = "this redirect of magus output"
 	}
@@ -2058,7 +2058,7 @@ func redirectDeny(verb, dest string) string {
 		say = subject + " discards the diagnostics a failure prints; `--silent` keeps only those."
 		why = "`--silent` says nothing until something fails, then prints the diagnostics this would have discarded."
 	}
-	return say + "\n" + why + mintedLogNote(verb)
+	return fmt.Sprintf("%s\n%s%s", say, why, mintedLogNote(verb))
 }
 
 // A deny's remedy is the reader's own command with the refused construct replaced, and
@@ -2104,7 +2104,7 @@ func pipeRemedy(p pipedMagus) (string, []types.NextStep) {
 	if p.bin == "" || magusOutputFormat(p.args) != "" {
 		return "", nil
 	}
-	lead := "`" + p.verb + " | " + p.filter + "` needs no pipe, which would read a failing magus as exit 0."
+	lead := fmt.Sprintf("`%s | %s` needs no pipe, which would read a failing magus as exit 0.", p.verb, p.filter)
 	var flags []string
 	var why string
 	words := magusSubcommandWords(p.args)
@@ -2158,13 +2158,13 @@ func redirectRemedy(r redirectedMagus) (string, []types.NextStep) {
 	var lead, why string
 	switch {
 	case r.file == "/dev/null":
-		lead = "`" + r.verb + " " + r.dest + "` discards the diagnostics a failure prints."
+		lead = fmt.Sprintf("`%s %s` discards the diagnostics a failure prints.", r.verb, r.dest)
 		why = "--silent says nothing until something fails, then prints what the redirect would have discarded."
 		if !magusFlag(r.args, "s", "silent") {
 			flags = []string{"--silent"}
 		}
 	case r.stdout && r.file != "" && !magusFlag(r.args, "tee"):
-		lead = "`" + r.verb + " " + r.dest + "` keeps console text, which is not a format anything should parse."
+		lead = fmt.Sprintf("`%s %s` keeps console text, which is not a format anything should parse.", r.verb, r.dest)
 		why = "--tee writes the structured record to the file and still prints it."
 		switch format {
 		case "":
@@ -2190,7 +2190,7 @@ func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (strin
 	if !match.exact || match.rewrites || helpRequest(deps, c) {
 		return "", nil
 	}
-	lead := "magus guard denied `" + elideCommand(resolvedCommand(c)) + "`; the " + match.spell + " spell runs it cached, sandboxed and tracked by affected."
+	lead := fmt.Sprintf("magus guard denied `%s`; the %s spell runs it cached, sandboxed and tracked by affected.", elideCommand(resolvedCommand(c)), match.spell)
 	return lead, []types.NextStep{hint.NextForDenyRemedy(string(denyRuleRawTool),
 		hint.Run.Argv(match.spell+"::"+match.operation),
 		"the op runs the same command in the project you are in.")}
@@ -2280,10 +2280,10 @@ func probesForeignProcess(c hint.Invocation) bool {
 // filterWithoutInputDeny names the tool, since on a pipeline the reader cannot otherwise
 // tell which stage was left without input.
 func filterWithoutInputDeny(tool string) string {
-	lead := "`" + tool + "` reads a stdin nothing on this line feeds; name a file, pipe into it, or redirect one with `<`.\n"
+	lead := fmt.Sprintf("`%s` reads a stdin nothing on this line feeds; name a file, pipe into it, or redirect one with `<`.\n", tool)
 	switch stdinReaders[tool].operands {
 	case operandsAreScript:
-		lead = "`" + tool + "` reads its program from a stdin nothing on this line feeds; put the heredoc on that command (`" + tool + " - <<'EOF'` ... `EOF`), or write the program to a file and run `" + tool + " <file>`.\n"
+		lead = fmt.Sprintf("`%[1]s` reads its program from a stdin nothing on this line feeds; put the heredoc on that command (`%[1]s - <<'EOF'` ... `EOF`), or write the program to a file and run `%[1]s <file>`.\n", tool)
 	case operandsNeverInput, operandsAreCommand:
 		lead = "`" + tool + "` reads only stdin, which nothing on this line feeds; pipe into it or redirect a file with `<`.\n" +
 			"Its operands are never input. "
@@ -2569,7 +2569,7 @@ func (s referenceScript) note(root string) string {
 	if _, err := os.Stat(filepath.Join(root, s.argv[0])); err != nil {
 		return ""
 	}
-	return "\n" + s.lead + " `" + hint.Buzz.With(s.argv...) + "`"
+	return fmt.Sprintf("\n%s `%s`", s.lead, hint.Buzz.With(s.argv...))
 }
 
 // changesDirectory reports a cd or pushd anywhere on the line, or a line that does not parse.
@@ -2769,10 +2769,10 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 		// npm update` denies on the first half, and the reader was never told the
 		// second half rewrites a lockfile.
 		if isDependencyMutation(rawToolCmd) {
-			d.Say = "run it with the update charm: `" + hint.Run.With("<target>:update", "<project>") + "`."
+			d.Say = fmt.Sprintf("run it with the update charm: `%s`.", hint.Run.With("<target>:update", "<project>"))
 		}
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(work, isDependencyMutation) {
-			d.Why += "\n" + updateAdvice
+			d.Why += fmt.Sprintf("\n%s", updateAdvice)
 		}
 		v := ShellVerdict{
 			Deny: explainDeny(command, rawToolCmd, d.Say),

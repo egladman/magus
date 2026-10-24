@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -334,12 +335,12 @@ func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
 func TestBuildInputsAreTheChangedPathsALinkedPackageReaches(t *testing.T) {
 	t.Parallel()
 	root := filepath.FromSlash("/w/a")
-	listed := root + "|VERSION|banner.txt\n" +
-		filepath.Join(root, "cmd", "magus") + "\n" +
-		filepath.Join(root, "internal", "job") + "\n" +
-		"\n" +
-		filepath.FromSlash("/usr/local/go/src/fmt") + "\n" +
-		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y") + "\n"
+	listed := fmt.Sprintf("%s|VERSION|banner.txt\n%s\n%s\n\n%s\n%s\n",
+		root,
+		filepath.Join(root, "cmd", "magus"),
+		filepath.Join(root, "internal", "job"),
+		filepath.FromSlash("/usr/local/go/src/fmt"),
+		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y"))
 	scopes := packageScopes(listed, root)
 	assert.Equal(t, []string{"./", "VERSION", "banner.txt", "cmd/magus/", "internal/job/"}, scopes)
 

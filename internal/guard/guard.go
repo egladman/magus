@@ -720,7 +720,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 			if !req.DryRun && !req.Observe {
 				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, v); err != nil {
-					v.Context = strings.TrimPrefix(v.Context+"\n", "\n") + "magus workspace: the job store did not end the job this session held: " + err.Error()
+					v.Context = fmt.Sprintf("%smagus workspace: the job store did not end the job this session held: %s", strings.TrimPrefix(v.Context+"\n", "\n"), err)
 				}
 			}
 			return v
@@ -1235,8 +1235,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			case decisionAsk:
 				verdict.Decision, verdict.Context, verdict.Reason = decisionAsk, "", reason
 				if !req.RendersAsk {
-					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny("running `"+elideCommand(input)+"`")
-					whys[verdict.Reason] = reason + "\n" + askUnrendered
+					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny(fmt.Sprintf("running `%s`", elideCommand(input)))
+					whys[verdict.Reason] = fmt.Sprintf("%s\n%s", reason, askUnrendered)
 				}
 				verdict.Rule = string(denyRuleHumanOnly)
 			case decisionDeny:
@@ -1448,7 +1448,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		verdict.Decision, verdict.Context, verdict.Rule = decisionPass, "", ""
 	}
 	if g, ok := granted[verdict.Rule]; ok && verdict.Decision == decisionAdvise {
-		verdict.Context += "\n" + grantNote(g)
+		verdict.Context += fmt.Sprintf("\n%s", grantNote(g))
 	}
 	if verdict.Decision == decisionAdvise && !req.Observe {
 		verdict.Context, verdictRef = shapeAdvice(ctx, markers, verdict.Rule, verdict.Context, whys, req.DryRun)

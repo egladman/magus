@@ -130,9 +130,9 @@ func CallerClaims(ident, pkg, dir string, files []types.SymbolOccurrenceFile, de
 			}
 			because := "refs:" + ident
 			if path.Dir(f.File) != dir && pkg != "" {
-				because = "refs:" + pkg + "." + ident
+				because = fmt.Sprintf("refs:%s.%s", pkg, ident)
 			}
-			req := types.JobClaimRequest{Path: strings.ReplaceAll(f.File, "#", `\#`) + "#" + word, Because: because}
+			req := types.JobClaimRequest{Path: fmt.Sprintf("%s#%s", strings.ReplaceAll(f.File, "#", `\#`), word), Because: because}
 			if !slices.Contains(out, req) {
 				out = append(out, req)
 			}
@@ -183,7 +183,7 @@ func declarationWords(decl string) []string {
 		words = append(words, m[1])
 	}
 	if m := methodLine.FindStringSubmatch(decl); m != nil {
-		words = append(words, m[1]+") "+m[2])
+		words = append(words, fmt.Sprintf("%s) %s", m[1], m[2]))
 	}
 	return append(words, decl)
 }
