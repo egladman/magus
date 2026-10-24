@@ -861,7 +861,7 @@ github.com/egladman/magus/types.BaseRevisionMatch const JobBaseVerdict = "revisi
 github.com/egladman/magus/types.BaseUnknown const JobBaseVerdict = "unknown"
 github.com/egladman/magus/types.BearerMissing const DiagnosticCode = "MGS9011"
 github.com/egladman/magus/types.BearerRejected const DiagnosticCode = "MGS9001"
-github.com/egladman/magus/types.BeforeKey func(p *Project, target string, lookup func(path string) *Project) []TargetRef
+github.com/egladman/magus/types.BeforeKey func(p *Project, target string, lookup func(path string) *Project, args ...string) []TargetRef
 github.com/egladman/magus/types.BespokePhaseFragmentName const DiagnosticCode = "MGS1003"
 github.com/egladman/magus/types.Binding type struct
 github.com/egladman/magus/types.Binding.Name field string
@@ -1017,12 +1017,14 @@ github.com/egladman/magus/types.ChainMemory.Profile field MemoryProfile
 github.com/egladman/magus/types.ChainMemory.Sizing field MemorySizing
 github.com/egladman/magus/types.ChainMemoryMB func(p *Project, target string, lookup func(path string) *Project) (mb int, declaredBy string)
 github.com/egladman/magus/types.ChainSkipCacheOutputs func(p *Project, target string, lookup func(path string) *Project) []Glob
-github.com/egladman/magus/types.ChainSkipCacheSteps func(p *Project, target string, lookup func(path string) *Project) []ChainStep
+github.com/egladman/magus/types.ChainSkipCacheSteps func(p *Project, target string, lookup func(path string) *Project, args ...string) []ChainStep
 github.com/egladman/magus/types.ChainStep type struct
 github.com/egladman/magus/types.ChainStep.CallIndex field int "json:\"callIndex,omitzero\" yaml:\"callIndex,omitempty\""
 github.com/egladman/magus/types.ChainStep.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
 github.com/egladman/magus/types.ChainStep.Ref method func() string
+github.com/egladman/magus/types.ChainStep.Runs method func(args []string) bool
 github.com/egladman/magus/types.ChainStep.Target field string "json:\"target\"            yaml:\"target\""
+github.com/egladman/magus/types.ChainStep.WhenArgs field *bool "json:\"whenArgs,omitempty\" yaml:\"whenArgs,omitempty\""
 github.com/egladman/magus/types.ChainUpdates func(p *Project, target string, lookup func(path string) *Project) []Glob
 github.com/egladman/magus/types.ChainVisit type struct
 github.com/egladman/magus/types.ChainVisit.Depth field int

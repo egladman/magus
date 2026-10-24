@@ -2821,6 +2821,11 @@ func ObjectChainStep(v types.ChainStep) vm.Value {
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("target", vm.StrValue(v.Target))
 	out.MapSet("callIndex", vm.IntValue(int64(v.CallIndex)))
+	optWhenArgs := vm.Null
+	if v.WhenArgs != nil {
+		optWhenArgs = vm.BoolValue((*v.WhenArgs))
+	}
+	out.MapSet("whenArgs", optWhenArgs)
 	return out
 }
 
