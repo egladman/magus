@@ -1164,9 +1164,15 @@ type Declaration struct {
 // JobClaimRequest is one write path a claim record asks for, and Because the proof:
 // `refs:<symbol>`, `test:<file>`, `output:<project>:<target>` or `released`. See
 // [ParseClaimEvidence].
+//
+// Callers, given instead of Path and Because, names a symbol: `magus job apply` expands
+// the request into one per declaration holding an occurrence of it, path
+// `<file>#<declaration>` because `refs:<symbol>`, and the store proves each of those as
+// it would one written by hand.
 type JobClaimRequest struct {
-	Path    string `json:"path" schema:"writepath"`
-	Because string `json:"because" schema:"nonblank"`
+	Path    string `json:"path,omitempty" schema:"writepath"`
+	Because string `json:"because,omitempty" schema:"nonblank"`
+	Callers string `json:"callers,omitempty" schema:"nonblank"`
 }
 
 // ClaimKind is what a proved claim rests on.
@@ -1405,6 +1411,13 @@ func (r Declaration) claimProblems() JobProblems {
 	}
 	for i, w := range r.Claim {
 		at := fmt.Sprintf("claim[%d]", i)
+		if strings.TrimSpace(w.Callers) != "" {
+			if w.Path != "" || w.Because != "" {
+				invalid(at+".callers", fmt.Sprintf("%s names callers of %s and also a path or a proof, and callers expands into both", at, w.Callers),
+					"drop path and because, or drop callers")
+			}
+			continue
+		}
 		switch p := strings.TrimSpace(w.Path); {
 		case p == "":
 			invalid(at+".path", at+" names no path", "name the file to add, relative to the workspace root")

@@ -2719,13 +2719,20 @@ func applyClaim(ctx context.Context, root string, records []types.Declaration) e
 	if i < 0 {
 		return exit.Usagef("magus job apply: nothing declares job %s, so nothing claims", rec.ID)
 	}
-	asked := make([]string, len(rec.Claim))
-	for k, w := range rec.Claim {
-		asked[k] = w.Path
+	reqs, err := expandCallerClaims(ctx, root, rows[i], rec.Claim)
+	if err != nil {
+		return err
+	}
+	if len(reqs) == 0 {
+		return exit.Usagef("magus job apply: %s already holds every declaration the callers name, so nothing claims", rec.ID)
+	}
+	asked := make([]string, len(reqs))
+	for k, w := range reqs {
+		asked[k], _ = types.SplitClaim(w.Path)
 	}
 	ws := jobWorkspace(ctx, root)
 	facts := job.ObserveClaim(ctx, root, rows[i], asked, ws.Projects)
-	stored, err := store.Claim(ctx, rec.ID, rec.Claim, facts, globalCfg.Jobs, globalCfg.DryRun)
+	stored, err := store.Claim(ctx, rec.ID, reqs, facts, globalCfg.Jobs, globalCfg.DryRun)
 	if err != nil {
 		return err
 	}
@@ -2741,7 +2748,7 @@ func applyClaim(ctx context.Context, root string, records []types.Declaration) e
 		if globalCfg.DryRun {
 			verb = "would claim"
 		}
-		for _, w := range stored.Claims[len(stored.Claims)-len(rec.Claim):] {
+		for _, w := range stored.Claims[len(stored.Claims)-len(reqs):] {
 			fmt.Printf("%s %s: + %s (%s): %s\n", verb, stored.ID, w.Path, w.Evidence, w.Proof)
 		}
 		return nil
