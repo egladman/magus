@@ -576,14 +576,14 @@ func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now ti
 // parked runs when the broker first keeps it out, with the claim it cannot seat and the
 // budget as it stands. It returns the broker's answer: Granted, or the claim that does
 // not fit the whole budget.
-type MachineWait func(ctx context.Context, parked func(blocked types.MachineClaim, v types.MachineVerdict)) (blocked types.MachineClaim, v types.MachineVerdict, err error)
+type machineWait func(ctx context.Context, parked func(blocked types.MachineClaim, v types.MachineVerdict)) (blocked types.MachineClaim, v types.MachineVerdict, err error)
 
 // AwaitMachine blocks on wait, one parked ask, until the budget answers it, and returns
 // nil once it seats; the MGS3009 refusal for a claim larger than the whole budget, which
 // no wait admits; ctx's error, wrapped, when ctx ends first; or wait's own error, wrapped,
 // for the caller to decide what an absent broker means. waiting is called once, when the
 // broker parks the ask, with what keeps it out.
-func AwaitMachine(ctx context.Context, wait MachineWait, waiting func(msg string)) error {
+func AwaitMachine(ctx context.Context, wait machineWait, waiting func(msg string)) error {
 	var last types.MachineClaim
 	parked := func(blocked types.MachineClaim, v types.MachineVerdict) {
 		last = blocked

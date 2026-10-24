@@ -20,22 +20,22 @@ import (
 //
 //	go build -ldflags "-X github.com/egladman/magus/internal/buildinfo.commit=abc123 ..."
 var (
-	commit     = Unknown
-	commitDate = Unknown
+	commit     = unstamped
+	commitDate = unstamped
 )
 
-// Unknown is a stamp field no build set.
-const Unknown = "unknown"
+// unstamped is a stamp field no build set.
+const unstamped = "unknown"
 
 // Commit is the revision this binary was built from and that commit's date, RFC 3339,
-// each [Unknown] when nothing stamped it. A bare `go build` passes no -X flags, so they
+// each "unknown" when nothing stamped it. A bare `go build` passes no -X flags, so they
 // come from the VCS stamp the toolchain embeds instead. go-build's -X values win when
 // present: its sandboxed link embeds a VCS stamp from another revision.
 func Commit() (id, date string) {
-	if commit != Unknown {
+	if commit != unstamped {
 		return commit, commitDate
 	}
-	id, date = Unknown, Unknown
+	id, date = unstamped, unstamped
 	for _, s := range buildSettings() {
 		switch s.Key {
 		case "vcs.revision":

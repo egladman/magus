@@ -32,7 +32,7 @@ const SilentLeaseAfter = 30 * time.Minute
 
 // Heartbeat is one stamp: the session was judged on a call under lease at At. The last
 // stamp per (session, lease) is the entry.
-type Heartbeat struct {
+type heartbeat struct {
 	Session string
 	Lease   string
 	// Transcript is the host's transcript of the session, which the silent-row report
@@ -49,42 +49,42 @@ type heartbeatJSON struct {
 }
 
 // MarshalJSON writes At as unix seconds, which is all the throttle and the report resolve.
-func (h Heartbeat) MarshalJSON() ([]byte, error) {
+func (h heartbeat) MarshalJSON() ([]byte, error) {
 	return json.Marshal(heartbeatJSON{Session: h.Session, Lease: h.Lease, Transcript: h.Transcript, At: h.At.Unix()})
 }
 
 // UnmarshalJSON reads a stamp written by MarshalJSON.
-func (h *Heartbeat) UnmarshalJSON(b []byte) error {
+func (h *heartbeat) UnmarshalJSON(b []byte) error {
 	var raw heartbeatJSON
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	*h = Heartbeat{Session: raw.Session, Lease: raw.Lease, Transcript: raw.Transcript, At: time.Unix(raw.At, 0)}
+	*h = heartbeat{Session: raw.Session, Lease: raw.Lease, Transcript: raw.Transcript, At: time.Unix(raw.At, 0)}
 	return nil
 }
 
-func (h Heartbeat) key() string { return fmt.Sprintf("%s\x00%s", h.Session, h.Lease) }
+func (h heartbeat) key() string { return fmt.Sprintf("%s\x00%s", h.Session, h.Lease) }
 
 // heartbeatStore is the stamps of the workspace at root, one file per workspace under the
 // user state dir: a stamp is a fact about a live session, which no cache wipe should
 // invent or erase, and a lease id is unique only within its workspace.
-func heartbeatStore(root string) (file.JSONL[Heartbeat], error) {
+func heartbeatStore(root string) (file.JSONL[heartbeat], error) {
 	stateBase, err := xdg.StateDir()
 	if err != nil {
-		return file.JSONL[Heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
+		return file.JSONL[heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
 	}
 	sum := sha256.Sum256([]byte(root))
-	return file.JSONL[Heartbeat]{
+	return file.JSONL[heartbeat]{
 		Path: filepath.Join(stateBase, "magus", "heartbeat", fmt.Sprintf("%s.jsonl", hex.EncodeToString(sum[:8]))),
 		Perm: 0o600,
-		Key:  Heartbeat.key,
+		Key:  heartbeat.key,
 	}, nil
 }
 
 // stampHeartbeat records that session was judged on a call under lease at now, at most
 // once per [heartbeatInterval] for the pair. It never fails a judgment: a store error is
 // logged and the judgment goes on, since the report this feeds is shadow only.
-func stampHeartbeat(ctx context.Context, root string, h Heartbeat) {
+func stampHeartbeat(ctx context.Context, root string, h heartbeat) {
 	if root == "" || h.Session == "" || h.Lease == "" {
 		return
 	}
@@ -93,7 +93,7 @@ func stampHeartbeat(ctx context.Context, root string, h Heartbeat) {
 	}
 }
 
-func stampHeartbeatAt(ctx context.Context, root string, h Heartbeat) error {
+func stampHeartbeatAt(ctx context.Context, root string, h heartbeat) error {
 	store, err := heartbeatStore(root)
 	if err != nil {
 		return err
@@ -104,11 +104,11 @@ func stampHeartbeatAt(ctx context.Context, root string, h Heartbeat) error {
 	if err == nil && fresh(entries, h) {
 		return nil
 	}
-	if err := store.Update(ctx, func(entries []Heartbeat) []Heartbeat {
+	if err := store.Update(ctx, func(entries []heartbeat) []heartbeat {
 		if fresh(entries, h) {
 			return nil
 		}
-		return []Heartbeat{h}
+		return []heartbeat{h}
 	}); err != nil {
 		return err
 	}
@@ -119,8 +119,8 @@ func stampHeartbeatAt(ctx context.Context, root string, h Heartbeat) error {
 }
 
 // fresh reports whether entries already hold a stamp for h's pair inside the interval.
-func fresh(entries []Heartbeat, h Heartbeat) bool {
-	return slices.ContainsFunc(entries, func(e Heartbeat) bool {
+func fresh(entries []heartbeat, h heartbeat) bool {
+	return slices.ContainsFunc(entries, func(e heartbeat) bool {
 		return e.key() == h.key() && h.At.Sub(e.At) < heartbeatInterval
 	})
 }
@@ -137,14 +137,14 @@ const heartbeatRetain = 7 * 24 * time.Hour
 // compactHeartbeats rewrites the store by rename to its last line per pair, dropping each
 // stamp older than [heartbeatRetain] before now and then the oldest past
 // [heartbeatMaxEntries].
-func compactHeartbeats(ctx context.Context, store file.JSONL[Heartbeat], now time.Time) error {
+func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now time.Time) error {
 	return file.WithLock(ctx, fmt.Sprintf("%s.lock", store.Path), file.LockWait, func() error {
 		entries, err := store.Load()
 		if err != nil {
 			return err
 		}
-		kept := slices.DeleteFunc(entries, func(e Heartbeat) bool { return now.Sub(e.At) > heartbeatRetain })
-		slices.SortStableFunc(kept, func(a, b Heartbeat) int { return a.At.Compare(b.At) })
+		kept := slices.DeleteFunc(entries, func(e heartbeat) bool { return now.Sub(e.At) > heartbeatRetain })
+		slices.SortStableFunc(kept, func(a, b heartbeat) int { return a.At.Compare(b.At) })
 		kept = kept[max(0, len(kept)-heartbeatMaxEntries):]
 		lines := make([][]byte, 0, len(kept))
 		for _, e := range kept {
@@ -160,8 +160,8 @@ func compactHeartbeats(ctx context.Context, store file.JSONL[Heartbeat], now tim
 
 // newestStamp is the newest stamp under row's lease in the store of the checkout its holder
 // took it in and in workspace's, false when neither holds one.
-func newestStamp(row types.Job, workspace string) (Heartbeat, bool) {
-	var newest Heartbeat
+func newestStamp(row types.Job, workspace string) (heartbeat, bool) {
+	var newest heartbeat
 	for _, root := range slices.Compact([]string{row.CheckoutRoot, workspace}) {
 		if root == "" {
 			continue
@@ -254,7 +254,7 @@ func SilentLeases(root, cacheDir string, rows []types.Job, now time.Time, after 
 	if err != nil {
 		return nil, err
 	}
-	newest := map[string]Heartbeat{}
+	newest := map[string]heartbeat{}
 	for _, s := range stamps {
 		if cur, ok := newest[s.Lease]; !ok || s.At.After(cur.At) {
 			newest[s.Lease] = s

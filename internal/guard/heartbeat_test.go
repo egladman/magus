@@ -31,7 +31,7 @@ func TestStampHeartbeatThrottle(t *testing.T) {
 	ctx := context.Background()
 	at := time.Unix(1_800_000_000, 0)
 	stamp := func(session, lease string, after time.Duration) {
-		stampHeartbeat(ctx, root, Heartbeat{Session: session, Lease: lease, At: at.Add(after)})
+		stampHeartbeat(ctx, root, heartbeat{Session: session, Lease: lease, At: at.Add(after)})
 	}
 
 	stamp("s1", "job-a", 0)
@@ -55,9 +55,9 @@ func TestStampHeartbeatThrottle(t *testing.T) {
 func TestStampHeartbeatSkipsWhatItCannotKey(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
-	stampHeartbeat(context.Background(), root, Heartbeat{Session: "", Lease: "job-a", At: time.Now()})
-	stampHeartbeat(context.Background(), root, Heartbeat{Session: "s1", Lease: "", At: time.Now()})
-	stampHeartbeat(context.Background(), "", Heartbeat{Session: "s1", Lease: "job-a", At: time.Now()})
+	stampHeartbeat(context.Background(), root, heartbeat{Session: "", Lease: "job-a", At: time.Now()})
+	stampHeartbeat(context.Background(), root, heartbeat{Session: "s1", Lease: "", At: time.Now()})
+	stampHeartbeat(context.Background(), "", heartbeat{Session: "s1", Lease: "job-a", At: time.Now()})
 	assert.Zero(t, stampLines(t, root))
 }
 
@@ -66,16 +66,16 @@ func TestStampHeartbeatStoreErrorDoesNotPanic(t *testing.T) {
 	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
 	t.Setenv("XDG_STATE_HOME", blocker)
 	assert.NotPanics(t, func() {
-		stampHeartbeat(context.Background(), t.TempDir(), Heartbeat{Session: "s1", Lease: "job-a", At: time.Now()})
+		stampHeartbeat(context.Background(), t.TempDir(), heartbeat{Session: "s1", Lease: "job-a", At: time.Now()})
 	})
 }
 
 func TestHeartbeatJSONRoundTrip(t *testing.T) {
-	in := Heartbeat{Session: "s1", Lease: "job-a", Transcript: "/t.jsonl", At: time.Unix(1_800_000_000, 0)}
+	in := heartbeat{Session: "s1", Lease: "job-a", Transcript: "/t.jsonl", At: time.Unix(1_800_000_000, 0)}
 	raw, err := in.MarshalJSON()
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"session":"s1","lease":"job-a","transcript":"/t.jsonl","at":1800000000}`, string(raw))
-	var out Heartbeat
+	var out heartbeat
 	require.NoError(t, out.UnmarshalJSON(raw))
 	assert.True(t, in.At.Equal(out.At))
 	out.At = in.At
@@ -93,7 +93,7 @@ func TestSilentLeases(t *testing.T) {
 	live := writeTranscript(t, bgSearchCall, bgSearchResult)
 	finished := writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone)
 
-	for _, h := range []Heartbeat{
+	for _, h := range []heartbeat{
 		{Session: "s-silent", Lease: "silent", At: old},
 		{Session: "s-live", Lease: "background", Transcript: live, At: old},
 		{Session: "s-done", Lease: "finished-background", Transcript: finished, At: old},
@@ -147,7 +147,7 @@ func TestDeadHolderNeedsSilenceAndNoBackgroundCommand(t *testing.T) {
 
 	finished := writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone)
 	running := writeTranscript(t, bgSearchCall, bgSearchResult)
-	for _, h := range []Heartbeat{
+	for _, h := range []heartbeat{
 		{Session: "s-dead", Lease: "dead", Transcript: finished, At: old},
 		{Session: "s-bg", Lease: "background", Transcript: running, At: old},
 		{Session: "s-blind", Lease: "blind", At: old},
@@ -184,17 +184,17 @@ func TestStampHeartbeatCompactsPastItsBound(t *testing.T) {
 	require.NoError(t, err)
 
 	lines := make([][]byte, 0, heartbeatMaxEntries+1)
-	stale, err := json.Marshal(Heartbeat{Session: "s", Lease: "stale", At: now.Add(-heartbeatRetain - time.Hour)})
+	stale, err := json.Marshal(heartbeat{Session: "s", Lease: "stale", At: now.Add(-heartbeatRetain - time.Hour)})
 	require.NoError(t, err)
 	lines = append(lines, stale)
 	for i := range heartbeatMaxEntries {
-		line, err := json.Marshal(Heartbeat{Session: "s", Lease: fmt.Sprintf("job-%d", i), At: now.Add(time.Duration(i-heartbeatMaxEntries) * time.Second)})
+		line, err := json.Marshal(heartbeat{Session: "s", Lease: fmt.Sprintf("job-%d", i), At: now.Add(time.Duration(i-heartbeatMaxEntries) * time.Second)})
 		require.NoError(t, err)
 		lines = append(lines, line)
 	}
 	require.NoError(t, file.RewriteLines(store.Path, lines, store.Perm))
 
-	stampHeartbeat(ctx, root, Heartbeat{Session: "s", Lease: "newest", At: now})
+	stampHeartbeat(ctx, root, heartbeat{Session: "s", Lease: "newest", At: now})
 	assert.Equal(t, heartbeatMaxEntries, stampLines(t, root), "the store holds its bound, one line per pair")
 	got, err := store.Load()
 	require.NoError(t, err)

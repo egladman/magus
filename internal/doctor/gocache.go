@@ -31,7 +31,7 @@ type goCache struct {
 }
 
 // CacheSize is what a bounded walk learned about a directory.
-type CacheSize struct {
+type cacheSize struct {
 	Bytes int64
 	// Stopped is why the walk ended before the tree did: "" when it covered everything.
 	Stopped string
@@ -39,8 +39,8 @@ type CacheSize struct {
 
 // MeasureCache sums file sizes under dir until the total passes limit or maxEntries entries
 // have been visited. A missing dir measures zero.
-func MeasureCache(ctx context.Context, dir string, limit int64, maxEntries int) (CacheSize, error) {
-	var out CacheSize
+func MeasureCache(ctx context.Context, dir string, limit int64, maxEntries int) (cacheSize, error) {
+	var out cacheSize
 	entries := 0
 	errStop := errors.New("walk stopped")
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {

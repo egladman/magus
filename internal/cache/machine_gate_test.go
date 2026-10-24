@@ -53,7 +53,7 @@ func (w *budgetWait) release(id string) {
 	w.freed.Broadcast()
 }
 
-func (w *budgetWait) await(claims []types.MachineClaim) MachineWait {
+func (w *budgetWait) await(claims []types.MachineClaim) machineWait {
 	return func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
 		w.mu.Lock()
 		defer w.mu.Unlock()
