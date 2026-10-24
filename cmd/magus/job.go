@@ -2713,66 +2713,6 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	return emitFormatted(opts, report)
 }
 
-// applyClaim applies the one claim record records holds: each path proved against
-// the job's diff before the store's lock and again under it, and the proofs printed.
-func applyClaim(ctx context.Context, root string, records []types.Declaration) error {
-	if len(records) != 1 {
-		return exit.Usagef("magus job apply: a claim record applies alone, and this input holds %d records", len(records))
-	}
-	rec := records[0]
-	if err := rec.Validate(); err != nil {
-		return exit.Usagef("magus job apply: %s", err)
-	}
-	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun})
-	if err != nil {
-		return err
-	}
-	rows, err := store.List()
-	if err != nil {
-		return err
-	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
-	if i < 0 {
-		return exit.Usagef("magus job apply: nothing declares job %s, so nothing claims", rec.ID)
-	}
-	reqs, err := expandCallerClaims(ctx, root, rows[i], rec.Claim)
-	if err != nil {
-		return err
-	}
-	if len(reqs) == 0 {
-		return exit.Usagef("magus job apply: %s already holds every declaration the callers name, so nothing claims", rec.ID)
-	}
-	asked := make([]string, len(reqs))
-	for k, w := range reqs {
-		asked[k], _ = types.SplitClaim(w.Path)
-	}
-	ws := jobWorkspace(ctx, root)
-	facts := job.ObserveClaim(ctx, root, rows[i], asked, ws.Projects)
-	stored, err := store.Claim(ctx, rec.ID, reqs, facts, globalCfg.Jobs, globalCfg.DryRun)
-	if err != nil {
-		return err
-	}
-	opts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
-	switch opts.Format {
-	case outputName:
-		return emitNames(os.Stdout, []string{stored.ID})
-	case outputText:
-		verb := "claims"
-		if globalCfg.DryRun {
-			verb = "would claim"
-		}
-		for _, w := range stored.Claims[len(stored.Claims)-len(reqs):] {
-			fmt.Printf("%s %s: + %s (%s): %s\n", verb, stored.ID, w.Path, w.Evidence, w.Proof)
-		}
-		return nil
-	default:
-		return emitFormatted(opts, stored)
-	}
-}
-
 // applyClaimNotes is job.ForkNotes for each applied row, keyed by job id, against the plan
 // as the apply leaves it, so two rows of one apply note each other. A dry run's rows are
 // read as they would be written.
