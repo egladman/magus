@@ -1,5 +1,7 @@
 package deps
 
+import "fmt"
+
 // DocsURL is the canonical documentation page for one release of a package, derived
 // from its manager, name and version and never fetched: fetching would be a network
 // act, and provider I/O belongs to Buzz, not to Go. It returns "", false for an empty
@@ -17,13 +19,13 @@ func DocsURL(manager, name, version string) (string, bool) {
 	}
 	switch manager {
 	case managerGo:
-		return "https://pkg.go.dev/" + name + "@" + version, true
+		return fmt.Sprintf("https://pkg.go.dev/%s@%s", name, version), true
 	case managerNode:
-		return "https://www.npmjs.com/package/" + name + "/v/" + version, true
+		return fmt.Sprintf("https://www.npmjs.com/package/%s/v/%s", name, version), true
 	case managerPython:
-		return "https://pypi.org/project/" + normalizePython(name) + "/" + version + "/", true
+		return fmt.Sprintf("https://pypi.org/project/%s/%s/", normalizePython(name), version), true
 	case managerCargo:
-		return "https://docs.rs/" + name + "/" + version, true
+		return fmt.Sprintf("https://docs.rs/%s/%s", name, version), true
 	}
 	return "", false
 }
