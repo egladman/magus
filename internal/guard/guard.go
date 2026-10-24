@@ -838,6 +838,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		standing.endedBinding = binding.Job
 	}
 	deps.worker = standing.declared && standing.state.Live() && workerRole(standing.row, deps.caller) != ""
+	deps, granted := grantedRules(deps, location, standing)
 	// pending is the call's first deny the workspace demoted to advise. It is spoken only
 	// once every rule has had its turn, so a later deny still wins.
 	var pending heldAdvice
@@ -922,7 +923,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Decision != decisionDeny {
 			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case decisionDeny:
-				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Next: g.Next})
+				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Why: g.Why, Next: g.Next})
 			case decisionAdvise:
 				// Held by its own key when it has one; lease-state only names the rest.
 				adviceKind = cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState))
@@ -1157,6 +1158,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		denyUndeclared(input)
+		if verdict.Decision != decisionDeny {
+			if d := denyAgentGrant(input, shellD); d.refused() {
+				refuseWith(denyRuleGrantIsAPersons, d)
+			}
+		}
 		// The job store's half of the shell-command rules, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
@@ -1441,6 +1447,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	if verdict.Decision == decisionAdvise && !req.Observe && adviceRepeated(markers, who.Agent, verdict.Rule, verdict.Context) {
 		verdict.Decision, verdict.Context, verdict.Rule = decisionPass, "", ""
 	}
+	if g, ok := granted[verdict.Rule]; ok && verdict.Decision == decisionAdvise {
+		verdict.Context += "\n" + grantNote(g)
+	}
 	if verdict.Decision == decisionAdvise && !req.Observe {
 		verdict.Context, verdictRef = shapeAdvice(ctx, markers, verdict.Rule, verdict.Context, whys, req.DryRun)
 	}
@@ -1561,6 +1570,7 @@ type roleScopedRule struct {
 // and is here because a gate magus itself served is not a repeat the caller chose.
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
+		{denyRuleLeaseRowUnknown, denyUnknownRowMembers},
 		{denyRuleLeaseCheckout, denyLeaseCheckout},
 		{denyRuleLeasePaused, denyPausedLease},
 		{denyRuleLeaseGate, denyLeaseScopedGate},

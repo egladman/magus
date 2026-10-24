@@ -63,6 +63,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocArchitectureUnbriefed},
 	{doc: ruleDocPushUngated},
 	{doc: ruleDocHumanOnly},
+	{doc: ruleDocGrantIsAPersons},
 	{doc: ruleDocInlineAlias},
 	{doc: ruleDocMagusTimeout},
 	{doc: ruleDocMergeSideCheckout},
@@ -94,6 +95,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseHarness},
 	{doc: ruleDocLeasePaused},
 	{doc: ruleDocLeaseRebind},
+	{doc: ruleDocLeaseRowUnknown},
 	{doc: ruleDocLeaseUndeclared},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
@@ -616,6 +618,23 @@ var ruleDocLeasePaused = types.RuleDoc{
 var ruleDocLeaseRebind = types.RuleDoc{
 	Name:    string(denyRuleLeaseRebind),
 	Catches: "a leased worker rewriting who it is or what its own job row says",
+}
+
+var ruleDocGrantIsAPersons = types.RuleDoc{
+	Name:    string(denyRuleGrantIsAPersons),
+	Catches: "an agent running `magus job grant`, in any spelling and any role",
+	Why: "A grant is a person's one-time approval: `magus job grant <job> <rule> [--for <duration>]` lowers one rule to advice for one job's calls until the duration passes or the job ends, and `--revoke` ends it early. " +
+		"Every call the hook judges is an agent's, so a grant reaching it is not a person's, and it is refused whoever runs it, the root included. The job store also refuses a grant from a process carrying a lease, and no MCP tool exposes one. " +
+		"Only hooks-off is grantable; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when.",
+}
+
+var ruleDocLeaseRowUnknown = types.RuleDoc{
+	Name:    string(denyRuleLeaseRowUnknown),
+	Catches: "a leased call judged by a magus older than the job row it reads",
+	Why: "A row member this build does not declare may widen or narrow what the row permits, and the build cannot tell which, so judging as if the member were absent is a silent default. " +
+		"The refusal names each such member, the binary judging the call and its version, and the remedy: rebuild the ./magus the host hook runs and restart the daemon. " +
+		"Only the root can take that remedy, which ADR 0013 would make a notice; this rule denies anyway because a call the guard cannot judge has no safe default, and passing it would let an old binary approve what a newer row forbids. " +
+		"The hook does not switch to the job checkout's ./magus instead: the worker builds that binary, and the judge is never authored by the judged.",
 }
 
 var ruleDocLeaseUndeclared = types.RuleDoc{

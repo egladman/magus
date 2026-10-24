@@ -2441,6 +2441,20 @@ shows what it is doing.`,
 			Short: "Lift the pause on jobs",
 			Usage: "magus job resume <job>... [flags]",
 		},
+		{
+			Name:  "grant",
+			Short: "Lower one guard rule to advice for one job, typed by a person",
+			Description: "Record a person's one-time approval: the guard advises instead of refusing the named rule for the " +
+				"job's calls alone, until --for passes or the job ends, and the advice names who granted it and until when. " +
+				"--revoke ends a grant early. Only a grantable rule is accepted (hooks-off); any other is refused, naming " +
+				"the grantable ones. The guard refuses this verb to every agent and the job store refuses it from a process " +
+				"carrying a lease, so it is typed at a person's own terminal.",
+			Flags: []cmdline.Flag{
+				{Name: "for", Kind: cmdline.Duration, Doc: "End the grant after this long (e.g. 2h); unset, it lasts until the job ends"},
+				{Name: "revoke", Kind: cmdline.Bool, Doc: "End the job's grant of the rule"},
+			},
+			Usage: "magus job grant [--for <duration>] [--revoke] <job> <rule> [flags]",
+		},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Declare a job", Command: "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},

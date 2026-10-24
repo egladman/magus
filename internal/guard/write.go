@@ -259,6 +259,9 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	if location.cacheDir == "" {
 		return writeGrade{}
 	}
+	if d := denyUnknownRowMembers(ctx, deps, actingLease, ""); d.refused() {
+		return writeGrade{Decision: decisionDeny, Reason: d.Say, Why: d.Why, Rule: string(denyRuleLeaseRowUnknown)}
+	}
 	// The store's paths are relative to the checkout a lease was taken in, which for a
 	// worker isolated in its own worktree is not the checkout its hooks resolve, or, for a
 	// write inside it, the checkout the lease's fork made. A write outside that checkout has

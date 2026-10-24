@@ -85,8 +85,10 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobPause(ctx, root, "pause", args[1:])
 	case "resume":
 		return jobPause(ctx, root, "resume", args[1:])
+	case "grant":
+		return jobGrant(ctx, root, args[1:])
 	default:
-		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm, prune, pause or resume; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm, prune, pause, resume or grant; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
