@@ -420,6 +420,9 @@ A claim names a declaration, and the word must name exactly one declaration of i
 `ctx` or `String` names every line that holds it, so the fork is refused with
 [MGS3031](../reference/codes/sandbox/MGS3031.md), which prints words that name one each.
 A word that names none is accepted, because the declaration may not be written yet.
+A key claim in a magusfile or `magus.yaml` names its key along the dots, so
+`project.targets.release` names that key and not `project.targets.release-build`, and a
+parent key such as `project.targets` claims every entry under it.
 
 When removing a code path, flag or test reaches the goal, deleting it is a valid route:
 give the deletion to the job that owns that declaration rather than adding a parallel path.

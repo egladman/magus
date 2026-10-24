@@ -92,7 +92,7 @@ func ungradableClaimProblems(ctx context.Context, store *Store, row types.Job) t
 				all, _ = readDeclarations(ctx, driver, store.root, c.path)
 				placed[c.path] = all
 			}
-			if matched := namedDeclarations(c.decl, all); len(matched) > 1 {
+			if matched := types.NamedDeclarations(c.decl, all); len(matched) > 1 && !types.ClaimsMap(c.decl, matched) {
 				message, fix := ambiguousClaimProblem(c.path, c.decl, matched, all)
 				refuse(c.field, c.label+message, fix)
 			}
@@ -182,7 +182,7 @@ func listClaims(file string, all []string) string {
 	var claims []string
 	for _, d := range ordered {
 		word := claimWord(d, all)
-		if len(namedDeclarations(word, all)) != 1 {
+		if len(types.NamedDeclarations(word, all)) != 1 {
 			continue
 		}
 		claims = append(claims, fmt.Sprintf("`%s#%s`", file, word))
@@ -425,7 +425,7 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 			continue
 		}
 		for _, symbol := range g.Symbols {
-			if len(namedDeclarations(symbol, all)) == 1 {
+			if len(types.NamedDeclarations(symbol, all)) == 1 {
 				mine = appendUnique(mine, symbol)
 			}
 		}
@@ -458,7 +458,7 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 
 // sameDeclaration reports whether the claim words a and b name one declaration of all.
 func sameDeclaration(a, b string, all []string) bool {
-	return a == b || slices.ContainsFunc(all, func(d string) bool { return types.NamesDeclaration(a, d) && types.NamesDeclaration(b, d) })
+	return a == b || slices.ContainsFunc(all, func(d string) bool { return types.NamesClaimedDeclaration(a, d) && types.NamesClaimedDeclaration(b, d) })
 }
 
 func appendUnique(list []string, s string) []string {
@@ -490,9 +490,10 @@ func readDeclarations(ctx context.Context, driver types.VCSDriver, root, file st
 	return decls, true
 }
 
-// namedDeclarations are the entries of all that claim names.
+
+// namedDeclarations are the entries of all that claim names. PlaceDerivedClaims (plan.go) reads it too.
 func namedDeclarations(claim string, all []string) []string {
-	return slices.DeleteFunc(slices.Clone(all), func(d string) bool { return !types.NamesDeclaration(claim, d) })
+	return types.NamedDeclarations(claim, all)
 }
 
 // ambiguousClaim is the MGS3031 reason for a claim naming several declarations of file:
@@ -599,7 +600,7 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		switch {
 		case !readable:
 			notes = append(notes, fmt.Sprintf("%s does not exist yet in this checkout, so %q names a declaration once it is written", file, entry))
-		case len(namedDeclarations(decl, all)) == 0:
+		case len(types.NamedDeclarations(decl, all)) == 0:
 			notes = append(notes, fmt.Sprintf("%q names no declaration of %s yet; it holds one once written, so check the spelling", entry, file))
 		}
 	}
@@ -684,7 +685,7 @@ func unclaimedTouches(ctx context.Context, store *Store, rows []types.Job, row t
 	}
 	var claims []string
 	for _, d := range touched {
-		if d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesDeclaration(c, d) }) {
+		if d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesClaimedDeclaration(c, d) }) {
 			continue
 		}
 		claims = appendUnique(claims, fmt.Sprintf("`%s#%s`", file, claimWord(d, all)))
