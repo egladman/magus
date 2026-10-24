@@ -381,3 +381,35 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "docs/page.md") }, config.Jobs{}, nil)
 	require.NoError(t, err, "a path that names no Go package adds nothing to grade")
 }
+
+// A check scoped to the packages of the write paths leaves the rest of the suite to the
+// integration's full go-test, so it may narrow those packages' tests too. Scoped to a
+// package outside them, or leaving one of them out, it is still refused.
+func TestNarrowedTestsAcceptAWritePackageScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	root := testRoot(t).Root()
+	store := &Store{storeConfig: storeConfig{root: root}}
+	refused := func(writePaths []string, args ...string) []string {
+		var out []string
+		for _, p := range unscopedNarrowedProblems(store, types.Job{ID: "w", WritePaths: writePaths, Check: goTestCheck(args...)}) {
+			out = append(out, fmt.Sprintf("%s %s", p.Code, p.Field))
+		}
+		return out
+	}
+
+	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg", "-run", "Alpha"), "the package plus -run")
+	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg/...", "-run", "Alpha"), "the package as a pattern")
+	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg"), "the package alone")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "./other", "-run", "Alpha"), "a package outside the write paths")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go", "nested/x/deep.go"}, "./pkg", "-run", "Alpha"),
+		"a write path's package the check leaves out")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "-run", "Alpha"), "no package at all")
+}
+
+func TestGoTestPackagesReadsRelativePatterns(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []string{"./pkg", "./a/...", "."}, goTestPackages([]string{"-run", "X", "./pkg", "-count=1", "-v", "./a/...", "."}))
+	assert.Empty(t, goTestPackages([]string{"-run", "./looks/like/one", "-tags", "x"}), "a flag's value is not a package")
+}

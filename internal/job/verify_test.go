@@ -1109,3 +1109,31 @@ func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
 	assert.Equal(t, "lint", goals[0].ID)
 	assert.Empty(t, integratorGoals(acceptRow()), "a job that integrates nothing holds only what it declares")
 }
+
+// A worker that found no build seat files its checks as owed, and the integration that
+// merges its branch runs each one its own full go-test and lint do not already cover.
+func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
+	t.Parallel()
+
+	scoped := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}
+	worker := types.Job{ID: "a", Check: &scoped, Goals: []types.Goal{
+		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+		{ID: "buzz", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
+	}, Result: &types.JobResult{
+		Validation:   types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
+		GateEvidence: []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}, {GateID: "buzz", Owed: types.OwedNoSeat}},
+	}}
+	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"},
+		Result: &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out1"}}}
+	elsewhere := worker
+	elsewhere.ID = "c"
+	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}}
+	held := integratorGoals(row)
+
+	got := owedGoals(row, []types.Job{worker, paid, elsewhere}, held)
+	want := []types.Goal{
+		{ID: "buzz-test-docs", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
+	}
+	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
+	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, nil), "a job that integrates nothing owes nothing")
+}

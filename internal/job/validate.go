@@ -107,7 +107,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
 		ps = append(ps, sharedCheckoutProblems(store, rows, merged)...)
 		ps = append(ps, unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged))...)
-		ps = append(ps, narrowedTestProblems(store, merged)...)
+		ps = append(ps, unscopedNarrowedProblems(store, merged)...)
 		ps = append(ps, deniedCheckProblems(graded, store, merged)...)
 		v.WriteProof = store.WriteProof(rows, merged)
 	}
@@ -385,6 +385,85 @@ func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []stri
 		})
 	}
 	return ps, unchecked
+}
+
+// unscopedNarrowedProblems is [narrowedTestProblems] without the checks scoped to the
+// packages of row's write paths ([scopedToWritePackages]): such a check may narrow those
+// packages' tests too, since the integration that merges the job runs the full go-test.
+func unscopedNarrowedProblems(store *Store, row types.Job) types.JobProblems {
+	root := ""
+	if store != nil {
+		root = store.root
+	}
+	scoped := map[string]bool{}
+	for _, g := range row.EffectiveGoals() {
+		if g.Kind == types.GoalKindCheck && scopedToWritePackages(root, g.Check, row.WritePaths) {
+			scoped[goalCheckField(row, g)] = true
+		}
+	}
+	return slices.DeleteFunc(narrowedTestProblems(store, row), func(p types.JobProblem) bool { return scoped[p.Field] })
+}
+
+// scopedToWritePackages reports whether check is a go test naming exactly the packages of
+// writePaths: every package argument names one of them, `./dir` or `./dir/...`, and every
+// one of them is named.
+func scopedToWritePackages(root string, check types.LeaseCheck, writePaths []string) bool {
+	if root == "" || !runsGoTest(check) {
+		return false
+	}
+	patterns := goTestPackages(check.Args)
+	var dirs []string
+	for _, p := range writePaths {
+		dirs = append(dirs, writePathDirs(root, p)...)
+	}
+	if len(patterns) == 0 || len(dirs) == 0 {
+		return false
+	}
+	names := func(pattern, dir string) bool {
+		pattern = path.Clean(pattern)
+		if tree, ok := strings.CutSuffix(pattern, "/..."); ok {
+			return coversPath(tree, dir) || tree == "."
+		}
+		return pattern == dir
+	}
+	for _, pattern := range patterns {
+		if !slices.ContainsFunc(dirs, func(d string) bool { return names(pattern, d) }) {
+			return false
+		}
+	}
+	for _, d := range dirs {
+		if !slices.ContainsFunc(patterns, func(p string) bool { return names(p, d) }) {
+			return false
+		}
+	}
+	return true
+}
+
+// goTestBoolFlags are the go test and go build flags that take no value, so the argument
+// after one can be a package.
+var goTestBoolFlags = map[string]bool{
+	"a": true, "asan": true, "benchmem": true, "cover": true, "failfast": true, "fullpath": true, "json": true,
+	"msan": true, "n": true, "race": true, "short": true, "trimpath": true, "v": true, "work": true, "x": true,
+}
+
+// goTestPackages is the package arguments among go test args: the relative patterns, `.`
+// and those starting `./`, a workspace's check names. The value of a flag is never one.
+func goTestPackages(args []string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if flag, ok := strings.CutPrefix(arg, "-"); ok {
+			flag = strings.TrimPrefix(strings.TrimPrefix(flag, "-"), "test.")
+			if !strings.Contains(flag, "=") && !goTestBoolFlags[flag] {
+				i++
+			}
+			continue
+		}
+		if arg == "." || strings.HasPrefix(arg, "./") {
+			out = append(out, arg)
+		}
+	}
+	return out
 }
 
 // maxListedNames bounds the names a fix lists: a dozen show the vocabulary.

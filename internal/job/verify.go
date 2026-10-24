@@ -295,6 +295,76 @@ func integratorGoals(row types.Job) []types.Goal {
 	return goals
 }
 
+// owedGoals are the checks the jobs row merges filed as owed (see [types.OwedNoSeat]), one
+// goal per check no goal in held or before it covers. A merged job is one whose id names a
+// branch row integrates.
+func owedGoals(row types.Job, declared []types.Job, held []types.Goal) []types.Goal {
+	if !row.Integrating() {
+		return nil
+	}
+	taken := make(map[string]bool, len(held))
+	for _, g := range held {
+		taken[g.ID] = true
+	}
+	var goals []types.Goal
+	covered := func(c types.LeaseCheck) bool {
+		runs := func(g types.Goal) bool { return g.Kind == types.GoalKindCheck && checkCovers(g.Check, c) }
+		return slices.ContainsFunc(held, runs) || slices.ContainsFunc(goals, runs)
+	}
+	for _, d := range declared {
+		if d.Result == nil || !slices.Contains(row.Integrates, d.ID) {
+			continue
+		}
+		for _, c := range owedChecks(d) {
+			if covered(c) {
+				continue
+			}
+			goal := unrunGoal(cmp.Or(c.Project, "."), c.Target, taken)
+			goal.Check = c
+			goals = append(goals, goal)
+		}
+	}
+	return goals
+}
+
+// owedChecks are the checks d's result files as owed rather than citing a run.
+func owedChecks(d types.Job) []types.LeaseCheck {
+	owed := map[string]bool{}
+	if d.Result.Validation.Owed != "" {
+		owed[types.PrimaryGoalID] = true
+	}
+	for _, e := range d.Result.GateEvidence {
+		if e.Owed != "" {
+			owed[e.GateID] = true
+		}
+	}
+	var out []types.LeaseCheck
+	for _, g := range d.EffectiveGoals() {
+		if g.Kind == types.GoalKindCheck && owed[g.ID] {
+			out = append(out, g.Check)
+		}
+	}
+	return out
+}
+
+// checkCovers reports whether a run of full is also a run of c: the same script, or the
+// same target in the same project with c's args or none, since a run with no args covers
+// every package and test a narrower one selects.
+func checkCovers(full, c types.LeaseCheck) bool {
+	if full.Script != "" || c.Script != "" {
+		return types.SameLeaseCheck(&full, &c)
+	}
+	name := func(target string) string {
+		_, tail, ok := strings.Cut(target, "::")
+		if !ok {
+			return target
+		}
+		return tail
+	}
+	return name(full.Target) == name(c.Target) && path.Clean(cmp.Or(full.Project, ".")) == path.Clean(cmp.Or(c.Project, ".")) &&
+		(len(full.Args) == 0 || slices.Equal(full.Args, c.Args))
+}
+
 // covering reports whether any observed path is covered by the declared glob.
 func (o Observed) covering(declared string, paths []string) bool {
 	return slices.ContainsFunc(paths, func(p string) bool { return covers(declared, p) })
@@ -389,6 +459,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	// which is how `describe job` came to show an empty goal list on a job with a check.
 	// The check is a goal here too, so gate_evidence may name it by its id.
 	gates := append(row.EffectiveGoals(), integratorGoals(row)...)
+	gates = append(gates, owedGoals(row, declared, gates)...)
 	declaredGates := make(map[string]types.Goal, len(gates))
 	for _, gate := range gates {
 		declaredGates[gate.ID] = gate

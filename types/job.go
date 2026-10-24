@@ -574,17 +574,25 @@ type JobResult struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// GateEvidence links a goal to captured Magus output.
+// GateEvidence links a goal to captured Magus output, or says why its run is owed instead:
+// Owed names the reason, and the integration that merges the job's branch runs the goal.
 type GateEvidence struct {
 	GateID    string `json:"gate_id" yaml:"gate_id"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
+	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
 }
 
-// JobResultValidation cites the output for a job's primary check.
+// JobResultValidation cites the output for a job's primary check, or names in Owed why its
+// run is owed to the integration, as [GateEvidence] does.
 type JobResultValidation struct {
 	Command   string `json:"command" yaml:"command"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
+	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
 }
+
+// OwedNoSeat is the one reason a worker files a check as owed: the machine's build budget
+// had no seat for it, and a worker never waits for one.
+const OwedNoSeat = "no seat"
 
 // JobStatus reports the result of verifying a job.
 type JobStatus struct {

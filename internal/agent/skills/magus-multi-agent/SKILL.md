@@ -151,8 +151,10 @@ Assign the check from the pipeline the workspace composed, not from convention.
 
 - A job gets the narrowest check that covers its edits: the target from that
   decomposition. Scope it to the job's own tests with the runner's filter after `--`
-  where one exists. Never the full suite.
-- The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the
+  where one exists. A go test check naming exactly the packages of the write paths
+  (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
+- The integration job owns the full `go-test` and `lint`, and runs every check a merged
+  worker filed as owed. The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the
   whole composition.{{if .Full}} A worker hand-sequencing lint, format, and test is re-deriving an
   order the magusfile already owns, and the step it forgets fails silently by
   omission.{{end}}
