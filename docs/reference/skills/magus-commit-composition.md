@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
-| `knowledge-schema-version` | `23` |
+| `knowledge-schema-version` | `24` |
 | `skill-content` | `bf2e77ea25ea` |
 | `skill-variant` | `full` |
 

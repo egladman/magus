@@ -58,6 +58,12 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `stall_timeout`       | `MAGUS_STALL_TIMEOUT`       | `--stall-timeout`       | duration                           |
 | `target_timeout`      | `MAGUS_TARGET_TIMEOUT`      | `--target-timeout`      | duration                           |
 
+## go
+
+| Config key           | Environment variable       | Flag                   | Type |
+| -------------------- | -------------------------- | ---------------------- | ---- |
+| `go.cache_budget_mb` | `MAGUS_GO_CACHE_BUDGET_MB` | `--go-cache-budget-mb` | int  |
+
 ## hints
 
 | Config key      | Environment variable  | Flag         | Type              |
@@ -73,6 +79,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `jobs.integrate_refuse_at` | `MAGUS_JOBS_INTEGRATE_REFUSE_AT` | `--jobs-integrate-refuse-at` | int      |
 | `jobs.max_claim_files`     | `MAGUS_JOBS_MAX_CLAIM_FILES`     | `--jobs-max-claim-files`     | int      |
 | `jobs.max_claim_projects`  | `MAGUS_JOBS_MAX_CLAIM_PROJECTS`  | `--jobs-max-claim-projects`  | int      |
+| `jobs.max_claims`          | `MAGUS_JOBS_MAX_CLAIMS`          | `--jobs-max-claims`          | int      |
 | `jobs.max_depth`           | `MAGUS_JOBS_MAX_DEPTH`           | `--jobs-max-depth`           | int      |
 | `jobs.max_live`            | `MAGUS_JOBS_MAX_LIVE`            | `--jobs-max-live`            | int      |
 | `jobs.max_validations`     | `MAGUS_JOBS_MAX_VALIDATIONS`     | `--jobs-max-validations`     | int      |

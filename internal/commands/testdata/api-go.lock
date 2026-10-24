@@ -988,7 +988,6 @@ github.com/egladman/magus/types.CapPushStatusReporter const VCSCapability = "Pus
 github.com/egladman/magus/types.CapPusher const VCSCapability = "Pusher"
 github.com/egladman/magus/types.CapRangeReporter const VCSCapability = "RangeReporter"
 github.com/egladman/magus/types.CapRefreshHookInstaller const VCSCapability = "RefreshHookInstaller"
-github.com/egladman/magus/types.CapRegenHookInstaller const VCSCapability = "RegenHookInstaller"
 github.com/egladman/magus/types.CapRegionReporter const VCSCapability = "RegionReporter"
 github.com/egladman/magus/types.CapRemoteConfigReporter const VCSCapability = "RemoteConfigReporter"
 github.com/egladman/magus/types.CapRemoteReporter const VCSCapability = "RemoteReporter"
@@ -4068,8 +4067,6 @@ github.com/egladman/magus/types.RefMatch.Project field string
 github.com/egladman/magus/types.RefMatch.Target field string
 github.com/egladman/magus/types.RefreshHookInstaller type interface
 github.com/egladman/magus/types.RefreshHookInstaller.InstallRefreshHook imethod func(ctx context.Context, root string, command string) ([]string, error)
-github.com/egladman/magus/types.RegenHookInstaller type interface
-github.com/egladman/magus/types.RegenHookInstaller.InstallRegenHook imethod func(ctx context.Context, root string, command string) ([]string, error)
 github.com/egladman/magus/types.RegionChange type struct
 github.com/egladman/magus/types.RegionChange.Declaration field string "json:\"declaration,omitempty\""
 github.com/egladman/magus/types.RegionChange.Driver field string "json:\"driver,omitempty\""
@@ -5124,7 +5121,6 @@ github.com/egladman/magus/types.VCSDriver.embeds PushStatusReporter
 github.com/egladman/magus/types.VCSDriver.embeds Pusher
 github.com/egladman/magus/types.VCSDriver.embeds RangeReporter
 github.com/egladman/magus/types.VCSDriver.embeds RefreshHookInstaller
-github.com/egladman/magus/types.VCSDriver.embeds RegenHookInstaller
 github.com/egladman/magus/types.VCSDriver.embeds RegionReporter
 github.com/egladman/magus/types.VCSDriver.embeds RemoteConfigReporter
 github.com/egladman/magus/types.VCSDriver.embeds RemoteReporter

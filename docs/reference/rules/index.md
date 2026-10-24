@@ -24,6 +24,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [agent-sign-off](agent-sign-off.md)                   | an agent stamping a read receipt or closing an attention request, which only a person may do         |
 | [architecture-unbriefed](architecture-unbriefed.md)   | an agent's next call after a structure question, or a new directory, before the architecture skill   |
 | [background-left](background-left.md)                 | an agent finishing while shell commands it ran in the background are still running                   |
+| [background-silent](background-silent.md)             | a background task of the session that has written nothing for advise_minutes (30 unset)              |
 | [background-unbounded](background-unbounded.md)       | a shell command run in the background with nothing to end it                                         |
 | [backtick-substitution](backtick-substitution.md)     | a backtick command substitution, which inside double quotes runs a command                           |
 | [brief-command](brief-command.md)                     | a spawn or continuation brief that teaches a command the guard denies                                |
@@ -41,7 +42,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [dependency-install](dependency-install.md)           | a raw package install that the cached install target already runs                                    |
 | [dependency-update](dependency-update.md)             | a raw dependency update outside a target's update charm                                              |
 | [exit-status-echo](exit-status-echo.md)               | a line ending by printing an exit status, which the harness already reports                          |
-| [filter-without-input](filter-without-input.md)       | a filter with no file, pipe or redirect, which reads a stdin nothing feeds                           |
+| [filter-without-input](filter-without-input.md)       | a filter or interpreter with no file, script, pipe or redirect, which reads a stdin nothing feeds    |
 | [focus-read](focus-read.md)                           | a read outside the paths a focus lease was given                                                     |
 | [gate-repeat](gate-repeat.md)                         | the gate run a third time over a tree its last green verdict already covers                          |
 | [generated-write](generated-write.md)                 | a hand edit to a declared output, which the next run overwrites                                      |
@@ -54,11 +55,13 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [inline-alias](inline-alias.md)                       | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                   |
 | [installed-skill](installed-skill.md)                 | a write to an installed skill copy, which re-installing discards                                     |
 | [interpreter-rewrite](interpreter-rewrite.md)         | an inline interpreter rewriting a file this tree already carries                                     |
+| [interpreter-script](interpreter-script.md)           | an ad-hoc script in python, node, perl or ruby, where Buzz is the workspace's scripting language     |
 | [lease-checkout](lease-checkout.md)                   | a worker holding a checkout running magus outside it                                                 |
 | [lease-claim](lease-claim.md)                         | a leased write outside its write paths that magus proves belongs to the job                          |
 | [lease-gate](lease-gate.md)                           | a leased worker running the gate instead of the check it was assigned                                |
 | [lease-harness](lease-harness.md)                     | a leased worker rewriting the harness skill trees that steer it                                      |
 | [lease-invalid](lease-invalid.md)                     | a call naming a lease this workspace's job store does not declare                                    |
+| [lease-paused](lease-paused.md)                       | a leased worker starting a magus run while a person has its job paused                               |
 | [lease-rebind](lease-rebind.md)                       | a leased worker rewriting who it is or what its own job row says                                     |
 | [lease-undeclared](lease-undeclared.md)               | a call graded under a lease id the job store has no row for, or a binding it tombstoned              |
 | [lease-vcs](lease-vcs.md)                             | a worker lease mutating version control, or committing outside its own branch and checkout           |
@@ -78,7 +81,6 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [raw-tool](raw-tool.md)                               | a toolchain command a spell already wraps, run outside the cache                                     |
 | [read-navigation](read-navigation.md)                 | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                          |
 | [read-paging](read-paging.md)                         | a mapped file read window by window, past two windows of it                                          |
-| [scripted-rewrite](scripted-rewrite.md)               | a scripted substitute-and-write, which cannot tell your symbol from a dependency's                   |
 | [search-translation](search-translation.md)           | a text search whose pattern a graph query provably answers with the same entities                    |
 | [sed-in-place](sed-in-place.md)                       | `sed -i`, whose two spellings destroy each other's work across platforms                             |
 | [shared-stash](shared-stash.md)                       | a bare stash push or pop, on a stack every worktree shares                                           |
@@ -137,12 +139,12 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                      |
 | [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                        |
 | [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it           |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it             |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it        |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                          |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                    |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                     |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                   |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at            |
 | [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                          |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it             |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it        |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                   |

@@ -432,7 +432,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## scip
 
-magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it. scip-go loads packages through `go`, so the toolchain's version keys the index too. One run per GOOS a file suffix names, merged by magus: a single run indexes only what the host compiles, so a Mac never saw *_linux.go and nobody saw *_windows.go. GOARCH stays the host's; amd64 and arm64 pair with all three.
+magus injects MAGUS_SYMBOL_INDEX with the cache destination and records the index there as the op's output, so a checkout at the same inputs replays it rather than running scip-go; scip-go writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it. scip-go loads packages through `go`, so the toolchain's version keys the index too. One run per GOOS a file suffix names, merged by magus: a single run indexes only what the host compiles, so a Mac never saw *_linux.go and nobody saw *_windows.go. GOARCH stays the host's; amd64 and arm64 pair with all three.
 
 **Command:** `scip-go --output $MAGUS_SYMBOL_INDEX`
 
