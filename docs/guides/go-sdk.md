@@ -156,7 +156,7 @@ func Example_openAWorkspace() {
 `ws.All()` lists the projects, as above. `ListTargets` lists the targets declared
 across the workspace, with the spells that contribute each one. Here a
 `WorkspaceRegistry` attaches the copy spell to `api` in Go, in place of an import in
-`api/magusfile.buzz`.
+that project's magusfile.
 
 ```go
 // Example_listProjectsAndTargets lists every target the workspace declares, here the
