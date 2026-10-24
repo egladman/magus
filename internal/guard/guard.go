@@ -713,10 +713,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
-			if v, ok := judgeStop(deps, hint.NewGate(hookLocation(ctx, deps).cacheDir, who.callerKey()), input, time.Now()); ok {
-				return v
+			at := hookLocation(ctx, deps)
+			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, time.Now())
+			if !ok {
+				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
-			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+			if !req.DryRun && !req.Observe {
+				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, v); err != nil {
+					v.Context = strings.TrimPrefix(v.Context+"\n", "\n") + "magus workspace: the job store did not end the job this session held: " + err.Error()
+				}
+			}
+			return v
 		}
 		input = env.Value
 		req.CallBackground = req.CallBackground || env.CallBackground

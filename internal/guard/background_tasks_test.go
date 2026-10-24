@@ -369,6 +369,26 @@ func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	assert.True(t, rows[0].EndedWithSession(), rows[0].EndReason)
 }
 
+func TestJudgeEndsTheJobASubagentStopReleases(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	at := hookLocation(ctx, Dependencies{})
+	commitCheckout(t, at.workspace)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: at.workspace, CacheDir: cacheDir, Actor: &job.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	require.NoError(t, err)
+	_, err = store.Exec(t.Context(), "w")
+	require.NoError(t, err)
+	worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
+	require.NoError(t, store.Bind(worker, "w"))
+
+	v := Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, worker.Agent, writeTranscript(t)), Host: "claude-code"})
+	assert.Equal(t, decisionPass, v.Decision, v.Reason+v.Context)
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].EndedWithSession(), rows[0].EndReason)
+}
+
 // A backgrounded call nothing bounds is refused, unless it is a waiter: the waiter rules
 // judge that one, though it is unbounded too.
 func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
