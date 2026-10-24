@@ -436,18 +436,16 @@ writing a ledger line would move the bar with the byline. The person decides at 
 
 ## Open questions
 
-- **The waiver's name, and the result's.** `deviation` pairs with `violation` as MISRA C
-  pairs them: a deviation record sanctions a violation with a rationale. `waiver` already
-  exists in the job schema and the MGS3043 and MGS3044 pages, and keeping it avoids a
-  second word for one act. The run result would read `deviated` or `waived` to match.
+- **The run result's name** for a gate whose every violation a deviation permits:
+  `permitted`, matching `Deviation.Permits` and a job validation's `permitted` list.
 - **Whether `JobProblem` folds in too.** Its place is a record field, not a file path;
   folding it would make `Path` mean two things. Kept apart in the proposal.
-- **Whether `JobWaiver`'s globs carry over.** Two job codes accept a glob subject. A gate
-  waiver with a glob would accept findings nobody read, so the proposal keeps gate
-  subjects exact, which makes `Waives` branch on the waiver's use.
+- **Whether `Deviation`'s globs carry over.** Two job codes accept a glob subject. A gate
+  deviation with a glob would permit violations nobody read, so the proposal keeps gate
+  subjects exact, which makes `Permits` branch on the deviation's use.
 - **The ledger's file name**, and the name of the comparison declaration
   (`compares-base`).
-- **One line per decision or per finding.** One waiver per line, as `JobWaiver` is shaped,
+- **One line per decision or per violation.** One deviation per line, as `Deviation` is shaped,
   repeats the reason for each of the 20 findings the cantrip rename makes.
 - Whether the number holds at merge: check the base branch for the next free ADR number.
 
@@ -480,3 +478,15 @@ rename covers the `magus/lint` module and its 38 Buzz callers. "Finding" in the 
 above is the draft's word. The candidates weighed were violation, deviation,
 nonconformance, discrepancy, anomaly, defect, alert, issue, offense, hazard and result,
 counted against this tree's use of each.
+
+### 2026-10-24: the waiver is named deviation, and the job record's is renamed now
+
+Eli picked `deviation`, MISRA C's pairing: a deviation record sanctions a violation with
+its rationale. `types.JobWaiver` became `types.Deviation` in the same branch, ahead of the
+ledger, so jobs and gates share one record from the start. With it: `Waives` became
+`Permits`, `JobProblems.Waive` became `Permit`, `Waivable` became `Permissible`,
+`IntegratorWaivers` became `IntegratorDeviations`, and a job record's `waivers` key
+became `deviations`, with `waivers` reserved in the job and declaration schema ledgers.
+A validation lists `permitted` problems where it listed `waived`. A job row stored with
+`waivers` no longer reads as carrying deviations; magus is below 1.0 and ships no reader
+for the old key. "Waiver" in the text above is the draft's word.

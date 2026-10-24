@@ -110,7 +110,7 @@ them and magus describe job prints one job's terms.
 : A job this one waits on; repeatable or comma-separated
 
 **--fix**
-: Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's waiver), validating again until none is left, and list only the problems that remain
+: Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
 
 **--model** *string*
 : The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier

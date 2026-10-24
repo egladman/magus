@@ -972,7 +972,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		Breaks:      []string{" "},
 		Check:       &LeaseCheck{Target: "test", Project: "."},
 		Validation:  "magus run test .",
-		Waivers: []JobWaiver{
+		Deviations: []Deviation{
 			{Code: JobRecordInvalid, Subject: "x", Reason: "r"},
 			{Code: GateNotRun},
 		},
@@ -1001,9 +1001,9 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		"MGS3037 write_paths[1]",
 		"MGS3037 validation",
 		"MGS3037 breaks[0]",
-		"MGS3037 waivers[0].code",
-		"MGS3037 waivers[1].subject",
-		"MGS3037 waivers[1].reason",
+		"MGS3037 deviations[0].code",
+		"MGS3037 deviations[1].subject",
+		"MGS3037 deviations[1].reason",
 		"MGS3038 goals[0].paths",
 		"MGS3038 goals[1].id",
 		"MGS3038 goals[1].depends_on[0]",
@@ -1019,7 +1019,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 		ID:         "wave/a",
 		WritePaths: []string{"types/job.go"},
 		Check:      &LeaseCheck{Target: "go-test", Project: "."},
-		Waivers:    []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
+		Deviations: []Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
 		Goals:      []Goal{{ID: "names", Kind: GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{PrimaryGoalID}}},
 	}
 
@@ -1044,15 +1044,15 @@ func TestDeclarationProblemsReportsEachGoalCycleOnce(t *testing.T) {
 	assert.Contains(t, ps[0].Message, "cannot depend on itself")
 }
 
-func TestDeclarationApplyCopiesWaivers(t *testing.T) {
+func TestDeclarationApplyCopiesDeviations(t *testing.T) {
 	t.Parallel()
-	waivers := []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}}
+	deviations := []Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}}
 	var row Job
 
-	Declaration{ID: "a", Waivers: waivers}.Apply(&row)
-	waivers[0].Reason = "changed"
+	Declaration{ID: "a", Deviations: deviations}.Apply(&row)
+	deviations[0].Reason = "changed"
 
-	assert.Equal(t, "the root runs it", row.Waivers[0].Reason)
+	assert.Equal(t, "the root runs it", row.Deviations[0].Reason)
 }
 
 func TestGoalProblemsNameTheFieldUnderTheGoal(t *testing.T) {

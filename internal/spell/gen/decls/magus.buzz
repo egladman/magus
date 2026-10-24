@@ -1115,7 +1115,7 @@ export object JobEntry {
     consumed: int = 0,
 }
 
-export object JobWaiver {
+export object Deviation {
     code: str = "",
     subject: str = "",
     reason: str = "",
@@ -1233,7 +1233,7 @@ export object Job {
     unattributed: [JobUnattributedWrite] = [],
     entries: [JobEntry] = [],
     writeProof: str = "",
-    waivers: [JobWaiver] = [],
+    deviations: [Deviation] = [],
     validated: int = 0,
     reportedBase: str = "",
     baseVerdict: str = "",

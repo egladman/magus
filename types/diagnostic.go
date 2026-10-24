@@ -598,7 +598,7 @@ const WritePathConfigWholeFile DiagnosticCode = "MGS3036"
 // depends_on that is not a lease id, an unknown state, a timeout that is not a positive
 // duration, a negative max_attempts, a relative checkout, or a path outside the workspace.
 // So is a blank breaks entry, a field spelled both ways, enter mixed with a declaration, an
-// unknown member, or a waiver on a code that cannot be waived or with no reason.
+// unknown member, or a deviation on a code that cannot be permitted or with no reason.
 const JobRecordInvalid DiagnosticCode = "MGS3037"
 
 // JobGoalInvalid is a goal no evidence could ever grade: a malformed shape, a duplicate
@@ -623,16 +623,16 @@ const JobCheckpointUnplaceable DiagnosticCode = "MGS3041"
 const JobForkLimitExceeded DiagnosticCode = "MGS3042"
 
 // WritePathTooBroad is a write path that claims more than the workspace's breadth
-// thresholds allow: more projects, more files, or a leading `**`. Waivable, because a
+// thresholds allow: more projects, more files, or a leading `**`. Permissible, because a
 // sweep is sometimes the job.
 const WritePathTooBroad DiagnosticCode = "MGS3043"
 
 // OutputOutsideWritePaths is a regenerated output, built from sources inside the write
-// paths, that the write paths do not cover. Waivable when the root regenerates it.
+// paths, that the write paths do not cover. Permissible when the root regenerates it.
 const OutputOutsideWritePaths DiagnosticCode = "MGS3044"
 
 // GateNotRun is a ci target over the write paths that neither the check nor a goal runs.
-// Waivable when the root runs it.
+// Permissible when the root runs it.
 const GateNotRun DiagnosticCode = "MGS3045"
 
 // CheckoutConfigHeld is a job whose write paths cover a file the workspace loads (a

@@ -83,9 +83,9 @@ var closedSets = map[string][]string{
 	"GoalKind":    goalKindNames(),
 	"GoalExpect":  goalExpectNames(),
 	"BriefFormat": types.BriefFormat("").Values(),
-	// The only DiagnosticCode a record declares is JobWaiver.Code, so the set is the codes a
-	// waiver may name: a waiver on any other code fails the schema as it fails the decoder.
-	"DiagnosticCode": waivableCodeNames(),
+	// The only DiagnosticCode a record declares is Deviation.Code, so the set is the codes a
+	// deviation may name: a deviation on any other code fails the schema as it fails the decoder.
+	"DiagnosticCode": permissibleCodeNames(),
 }
 
 func runJobSchema(args []string) error {
@@ -422,10 +422,10 @@ func firstParagraph(doc string) string {
 	return strings.Join(strings.Fields(head), " ")
 }
 
-func waivableCodeNames() []string {
+func permissibleCodeNames() []string {
 	var names []string
 	for _, c := range types.AllDiagnosticCodes() {
-		if types.Waivable(c) {
+		if types.Permissible(c) {
 			names = append(names, string(c))
 		}
 	}

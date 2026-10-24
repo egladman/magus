@@ -462,7 +462,7 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 // as WritePathIsDirectory, project roots and the workspace root included. A write path names
 // files: a directory claims every file beneath it, so the job overlaps every job that edits
 // anything there, and the overlap report fills with pairs that share no file. Every fork door
-// runs it, and there is no waiver.
+// runs it, and there is no deviation.
 //
 // Declarable: a file, and a path that does not exist yet, which the job creates. A glob
 // whose last segments are only wildcards (`docs/**`, `docs/*`, `docs/**/*`) names everything

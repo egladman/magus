@@ -25,7 +25,7 @@ type UnrunGate struct {
 	// form the guard lets the job's worker run. Zero when IntegratorGates.
 	Goal types.Goal `json:"goal"    yaml:"goal"`
 	// IntegratorGates marks a target no form of which the guard lets a worker run, such as
-	// the build of magus itself. The integrator runs it, so no goal or waiver is asked for.
+	// the build of magus itself. The integrator runs it, so no goal or deviation is asked for.
 	IntegratorGates bool `json:"integrator_gates,omitempty" yaml:"integrator_gates,omitempty"`
 }
 

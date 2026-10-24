@@ -591,7 +591,7 @@ func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
 }
 
 // extendedFootprint is rec with the tests beside what it writes added to its write paths and
-// the outputs regenerated from them waived as the integrator's, with a note for each and a
+// the outputs regenerated from them permitted as the integrator's, with a note for each and a
 // count line. A bound caller, whose fork may not widen its boundary, and a workspace that
 // did not load are skipped.
 func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
@@ -608,10 +608,10 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 	rec.WritePaths = append(rec.WritePaths, paths...)
 	rec.SoftPaths = append(rec.SoftPaths, paths...)
 	declared.WritePaths = append(declared.WritePaths, paths...)
-	waivers := job.IntegratorWaivers(root, declared, ws.Projects, ws.Ignored)
-	rec.Waivers = append(rec.Waivers, waivers...)
-	if len(waivers) > 0 {
-		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are waived: the integrator owns them", len(waivers)))
+	deviations := job.IntegratorDeviations(root, declared, ws.Projects, ws.Ignored)
+	rec.Deviations = append(rec.Deviations, deviations...)
+	if len(deviations) > 0 {
+		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are permitted: the integrator owns them", len(deviations)))
 	}
 	return rec, notes
 }

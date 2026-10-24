@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28715
-skill_short_bytes: 21668
+skill_full_bytes: 28719
+skill_short_bytes: 21672
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `50bd5df9df94` |
+| `skill-content` | `cad3b3f0dced` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -357,12 +357,12 @@ binds its child to nothing.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
    - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
-Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless permitted. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
 covers claiming one declaration in a shared file and forking from a leased worker.
 
 A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
-Add the output to the write paths, or waive it when the root regenerates it after integration.
+Add the output to the write paths, or permit it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -845,12 +845,12 @@ an editor magus cannot attribute.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
    - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
-Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless permitted. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
 covers claiming one declaration in a shared file and forking from a leased worker.
 
 A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
-Add the output to the write paths, or waive it when the root regenerates it after integration.
+Add the output to the write paths, or permit it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote

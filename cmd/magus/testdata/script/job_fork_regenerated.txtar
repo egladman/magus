@@ -1,9 +1,9 @@
-# A writing job's fork waives, as the integrator's, each declared output a target
+# A writing job's fork permits, as the integrator's, each declared output a target
 # regenerates from sources inside its write paths when the output sits outside them: a flag
 # registry feeds a manpage in another project and a lock file beside it. It prints one line
 # counting them. An output a deny path touches is still refused (MGS3044). An output the
 # paths hold (the rules page) is not named, nor is one git ignores (coverage), nor anything
-# for a read-only job. A glob waiver in the record accepts them all. describe job carries
+# for a read-only job. A glob deviation in the record accepts them all. describe job carries
 # the block for the holder, and json gets a field. An apply that widens the paths judges
 # only the outputs the added paths bring in.
 env HOME=$WORK/home
@@ -20,15 +20,15 @@ exec git commit -q -m 'registry and its generated pages'
 ! stdout .
 stderr '^\[error\] 1 problem:$'
 stderr '^  1\. \[MGS3044\] write_paths: \.:man-generate regenerates cli/testdata/api\.lock from cli/\*\*/\*\.go'
-stderr '^waived 1:$'
-stderr 'docs/manpage/\*\.md sits outside them \(waived: the integrator regenerates it\)'
-stderr '^note: 1 regenerated output\(s\) outside the write paths are waived'
+stderr '^permitted 1:$'
+stderr 'docs/manpage/\*\.md sits outside them \(permitted: the integrator regenerates it\)'
+stderr '^note: 1 regenerated output\(s\) outside the write paths are permitted'
 exec magus ls jobs -o name
 ! stdout .
 
 exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .'
 stdout '^forked flags/shell, declared, with 2 write path\(s\)\.'
-stderr '^note: 2 regenerated output\(s\) outside the write paths are waived: the integrator owns them$'
+stderr '^note: 2 regenerated output\(s\) outside the write paths are permitted: the integrator owns them$'
 
 stdin $WORK/fork.json
 exec magus job fork --stdin
@@ -58,7 +58,7 @@ stdout '^  write_paths \+docs/manpage/\*\.md$'
 -- fork.json --
 {"schema_version": 11, "id": "flags/glob", "write_paths": ["cli/*.go", "docs/rules/*.md"],
  "check": {"target": "test", "project": "."},
- "waivers": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
+ "deviations": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
 -- fork.out --
 forked flags/glob, declared, with 2 write path(s). Its holder reads the terms with `magus describe job flags/glob` and takes it with `magus job exec flags/glob`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers

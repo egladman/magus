@@ -417,7 +417,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 				"id":    "unit",
 				"check": map[string]any{"target": "test", "project": "internal/job"},
 			}}
-		case "waivers":
+		case "deviations":
 			value = []any{map[string]any{
 				"code": string(types.WritePathTooBroad), "subject": "internal/**", "reason": "the root regenerates it",
 			}}

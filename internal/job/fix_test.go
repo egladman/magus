@@ -103,15 +103,15 @@ func TestRegeneratedProblemsLeaveADeniedOutputToJudgment(t *testing.T) {
 	}, []string{"cli/api.lock"})
 
 	assert.Equal(t, &types.JobEdit{AddWritePath: "manpage/*.1"}, ps[0].Edit)
-	assert.Equal(t, &types.JobEdit{AddWaiver: &types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: integratorRegenerates}},
-		ps[1].Edit, "an output with an exclusion no write path can spell is waived for the integrator")
+	assert.Equal(t, &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: integratorRegenerates}},
+		ps[1].Edit, "an output with an exclusion no write path can spell is permitted for the integrator")
 	assert.Nil(t, ps[2].Edit, "an output the record denies is its own decision")
 }
 
 // A Go job's fork meets the ci chain's test and build. The worker may run the test only
 // without default charms and never the build, so --fix adds the charmless test goal and the
-// build raises nothing: no waiver is left to write.
-func TestFixForkLeavesNoGateNeedingAWaiverForAGoJob(t *testing.T) {
+// build raises nothing: no deviation is left to write.
+func TestFixForkLeavesNoGateNeedingADeviationForAGoJob(t *testing.T) {
 	t.Parallel()
 
 	s, projects := validateWorkspace(t)
@@ -140,7 +140,7 @@ func TestFixForkLeavesNoGateNeedingAWaiverForAGoJob(t *testing.T) {
 			gates = append(gates, p.Subject)
 		}
 	}
-	assert.Equal(t, []string{"unit ."}, gates, "lint is added at fork and the build is the integrator's and asks for no goal or waiver")
+	assert.Equal(t, []string{"unit ."}, gates, "lint is added at fork and the build is the integrator's and asks for no goal or deviation")
 
 	fixed, _, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil, false)
 	require.NoError(t, err)
@@ -148,8 +148,8 @@ func TestFixForkLeavesNoGateNeedingAWaiverForAGoJob(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, codes(after.Problems), types.GateNotRun)
 	assert.NotContains(t, codes(after.Problems), types.JobCheckUnrunnable, "every goal --fix added is one the worker may run")
-	for _, w := range fixed.Waivers {
-		assert.NotEqual(t, types.GateNotRun, w.Code, "no gate needed a waiver")
+	for _, w := range fixed.Deviations {
+		assert.NotEqual(t, types.GateNotRun, w.Code, "no gate needed a deviation")
 	}
 }
 

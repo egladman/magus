@@ -374,7 +374,7 @@ func changedFields(prev, next types.Job) []string {
 	add("brief_format", prev.BriefFormat != next.BriefFormat)
 	add("validation", prev.Validation != next.Validation)
 	add("goals", !goalsEqual(prev.Goals, next.Goals))
-	add("waivers", !slices.Equal(prev.Waivers, next.Waivers))
+	add("deviations", !slices.Equal(prev.Deviations, next.Deviations))
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
 	add("max_attempts", prev.MaxAttempts != next.MaxAttempts)

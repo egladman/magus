@@ -74,7 +74,7 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	assert.Equal(t, "name one of its projects: ., docs", project.Fix)
 
 	regen := problemAt(t, v.Problems, types.OutputOutsideWritePaths)
-	assert.NotEmpty(t, regen.Subject, "a waivable problem names what a waiver names")
+	assert.NotEmpty(t, regen.Subject, "a permissible problem names what a deviation names")
 	assert.Contains(t, regen.Fix, `"reason":"the root regenerates it"`)
 	gate := problemAt(t, v.Problems, types.GateNotRun)
 	assert.Equal(t, "lint .", gate.Subject)
@@ -83,43 +83,43 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	assert.Equal(t, "w", v.Job.ID, "the result carries the row as it would be stored")
 }
 
-func TestValidateMergeWaivesOnlyWhatTheRecordNames(t *testing.T) {
+func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	declare := func(waivers ...types.JobWaiver) func(*types.Job) {
+	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
-			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
+			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
 	v := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
 	require.NotEmpty(t, v.Problems)
-	var waivers []types.JobWaiver
+	var deviations []types.Deviation
 	for _, p := range v.Problems {
-		require.True(t, types.Waivable(p.Code), "only waivable problems are left: %v", p)
-		waivers = append(waivers, types.JobWaiver{Code: p.Code, Subject: p.Subject, Reason: "the root regenerates and runs it"})
+		require.True(t, types.Permissible(p.Code), "only permissible problems are left: %v", p)
+		deviations = append(deviations, types.Deviation{Code: p.Code, Subject: p.Subject, Reason: "the root regenerates and runs it"})
 	}
 
-	waived := validateMerge(t.Context(), s, nil, "w", declare(waivers...), config.Jobs{}, nil)
-	assert.Empty(t, waived.Problems)
-	assert.Equal(t, v.Problems, waived.Waived)
+	permitted := validateMerge(t.Context(), s, nil, "w", declare(deviations...), config.Jobs{}, nil)
+	assert.Empty(t, permitted.Problems)
+	assert.Equal(t, v.Problems, permitted.Permitted)
 
-	stored, err := ForkMerge(t.Context(), s, "w", declare(waivers...), config.Jobs{}, nil)
+	stored, err := ForkMerge(t.Context(), s, "w", declare(deviations...), config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.NotZero(t, stored.Validated, "a validated row is stamped")
-	assert.Equal(t, waivers, stored.Waivers)
+	assert.Equal(t, deviations, stored.Deviations)
 
 	wrong := validateMerge(t.Context(), s, nil, "w2", func(u *types.Job) {
 		u.WritePaths, u.Check = []string{"cli"}, forkCheck()
-		u.Waivers = []types.JobWaiver{{Code: types.WritePathIsDirectory, Subject: "cli", Reason: "it is mine"}, {Code: types.GateNotRun, Subject: "lint ."}}
+		u.Deviations = []types.Deviation{{Code: types.WritePathIsDirectory, Subject: "cli", Reason: "it is mine"}, {Code: types.GateNotRun, Subject: "lint ."}}
 	}, config.Jobs{}, nil)
 	fields := map[string]types.DiagnosticCode{}
 	for _, p := range wrong.Problems {
 		fields[p.Field] = p.Code
 	}
-	assert.Equal(t, types.JobRecordInvalid, fields["waivers[0].code"], "a waiver on a code that is not waivable is itself a problem")
-	assert.Equal(t, types.JobRecordInvalid, fields["waivers[1].reason"], "and so is one with no reason")
-	assert.Equal(t, types.WritePathIsDirectory, fields["write_paths[0]"], "and it waives nothing")
+	assert.Equal(t, types.JobRecordInvalid, fields["deviations[0].code"], "a deviation on a code that is not permissible is itself a problem")
+	assert.Equal(t, types.JobRecordInvalid, fields["deviations[1].reason"], "and so is one with no reason")
+	assert.Equal(t, types.WritePathIsDirectory, fields["write_paths[0]"], "and it permits nothing")
 }
 
 func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
@@ -203,40 +203,40 @@ func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 	assert.Empty(t, rows, "nothing is written while any record has a problem")
 }
 
-func TestValidateMergeWaivesEveryRegeneratedOutputByGlob(t *testing.T) {
+func TestValidateMergePermitsEveryRegeneratedOutputByGlob(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	declare := func(waivers ...types.JobWaiver) func(*types.Job) {
+	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
-			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
+			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
 	bare := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
-	require.Greater(t, len(bare.Problems), 2, "several outputs and a gate stand unwaived")
+	require.Greater(t, len(bare.Problems), 2, "several outputs and a gate stand unpermitted")
 
-	outputs := validateMerge(t.Context(), s, nil, "w", declare(types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
-	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, slices.Compact(codes(outputs.Problems)), "a glob waives its own code alone")
+	outputs := validateMerge(t.Context(), s, nil, "w", declare(types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, slices.Compact(codes(outputs.Problems)), "a glob permits its own code alone")
 
 	both := validateMerge(t.Context(), s, nil, "w", declare(
-		types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"},
-		types.JobWaiver{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"},
+		types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"},
+		types.Deviation{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"},
 	), config.Jobs{}, nil)
-	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, codes(both.Problems), "lint is the one gate a glob cannot waive")
-	assert.Len(t, both.Waived, len(bare.Problems)-1)
+	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, codes(both.Problems), "lint is the one gate a glob cannot permit")
+	assert.Len(t, both.Permitted, len(bare.Problems)-1)
 
-	narrow := validateMerge(t.Context(), s, nil, "w", declare(types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
-	assert.Contains(t, codes(narrow.Problems), types.OutputOutsideWritePaths, "a glob waives only the subjects it matches")
+	narrow := validateMerge(t.Context(), s, nil, "w", declare(types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	assert.Contains(t, codes(narrow.Problems), types.OutputOutsideWritePaths, "a glob permits only the subjects it matches")
 	assert.Less(t, len(narrow.Problems), len(bare.Problems))
 }
 
-func TestIntegratorWaiversAcceptEveryOutputButADeniedOne(t *testing.T) {
+func TestIntegratorDeviationsAcceptEveryOutputButADeniedOne(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
 	row := types.Job{WritePaths: []string{"cli/registry.go"}, DenyPaths: []string{"cli/testdata/api.lock"}}
 
-	got := IntegratorWaivers(root, row, projects, ignoresCoverage)
+	got := IntegratorDeviations(root, row, projects, ignoresCoverage)
 
 	subjects := make([]string, len(got))
 	for i, w := range got {
@@ -248,8 +248,8 @@ func TestIntegratorWaiversAcceptEveryOutputButADeniedOne(t *testing.T) {
 	assert.Contains(t, subjects, "cmd/gen/*.go")
 	assert.NotContains(t, subjects, "cli/testdata/api.lock", "a denied output stays refused")
 
-	row.Waivers = got
-	assert.Empty(t, IntegratorWaivers(root, row, projects, ignoresCoverage), "an output already waived needs no second waiver")
+	row.Deviations = got
+	assert.Empty(t, IntegratorDeviations(root, row, projects, ignoresCoverage), "an output already permitted needs no second deviation")
 }
 
 func TestExtendFootprintAddsSiblingTests(t *testing.T) {
@@ -273,24 +273,24 @@ func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 	assert.Empty(t, none)
 }
 
-func TestValidateMergeWaivesLintOnlyByItsExactSubject(t *testing.T) {
+func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	declare := func(waivers ...types.JobWaiver) func(*types.Job) {
+	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
-			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
+			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
-	glob := types.JobWaiver{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"}
+	glob := types.Deviation{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"}
 	got := validateMerge(t.Context(), s, nil, "w", declare(glob), config.Jobs{}, nil)
 	lint := problemAt(t, got.Problems, types.GateNotRun)
 	assert.Equal(t, "lint .", lint.Subject, "a glob leaves the lint gate standing")
 
-	exact := types.JobWaiver{Code: types.GateNotRun, Subject: "lint .", Reason: "the root lints this one"}
+	exact := types.Deviation{Code: types.GateNotRun, Subject: "lint .", Reason: "the root lints this one"}
 	got = validateMerge(t.Context(), s, nil, "w", declare(glob, exact), config.Jobs{}, nil)
 	assert.NotContains(t, codes(got.Problems), types.GateNotRun)
-	assert.Contains(t, codes(got.Waived), types.GateNotRun)
+	assert.Contains(t, codes(got.Permitted), types.GateNotRun)
 }
 
 func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {

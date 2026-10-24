@@ -16,8 +16,8 @@ type JobProblem struct {
 	// Field is a JSON path into the record (`write_paths[2]`, `check.project`,
 	// `goals[1].symbols[0]`), empty when the problem is the record as a whole.
 	Field string `json:"field,omitempty"`
-	// Subject is what a [JobWaiver] names to waive this problem: the write path, the
-	// `target project` pair, or the output path. Empty on a problem no waiver reaches.
+	// Subject is what a [Deviation] names to permit this problem: the write path, the
+	// `target project` pair, or the output path. Empty on a problem no deviation reaches.
 	Subject string `json:"subject,omitempty"`
 	// Message says what is wrong, naming the field in its own words.
 	Message string `json:"message"`
@@ -32,7 +32,7 @@ type JobProblem struct {
 type JobEdit struct {
 	AddWritePath string     `json:"add_write_path,omitempty"`
 	AddGoal      *Goal      `json:"add_goal,omitempty"`
-	AddWaiver    *JobWaiver `json:"add_waiver,omitempty"`
+	AddDeviation *Deviation `json:"add_deviation,omitempty"`
 	// RefreshCheckpoint is the revision a moved checkpoint is replaced by. No problem carries
 	// it: only a fork into its own checkout may start from the forker's HEAD instead.
 	RefreshCheckpoint string `json:"refresh_checkpoint,omitempty"`
@@ -52,11 +52,11 @@ func (e JobEdit) Apply(d *Declaration) bool {
 			return false
 		}
 		d.Goals = append(d.Goals, *e.AddGoal)
-	case e.AddWaiver != nil:
-		if slices.Contains(d.Waivers, *e.AddWaiver) {
+	case e.AddDeviation != nil:
+		if slices.Contains(d.Deviations, *e.AddDeviation) {
 			return false
 		}
-		d.Waivers = append(d.Waivers, *e.AddWaiver)
+		d.Deviations = append(d.Deviations, *e.AddDeviation)
 	case e.RefreshCheckpoint != "":
 		if d.Checkpoint == e.RefreshCheckpoint {
 			return false
@@ -75,8 +75,8 @@ func (e JobEdit) String() string {
 		return fmt.Sprintf("added %q to write_paths", e.AddWritePath)
 	case e.AddGoal != nil:
 		return fmt.Sprintf("added the goal %q (%s)", e.AddGoal.ID, e.AddGoal.Check)
-	case e.AddWaiver != nil:
-		return fmt.Sprintf("waived %s %q (%s)", e.AddWaiver.Code, e.AddWaiver.Subject, e.AddWaiver.Reason)
+	case e.AddDeviation != nil:
+		return fmt.Sprintf("permitted %s %q (%s)", e.AddDeviation.Code, e.AddDeviation.Subject, e.AddDeviation.Reason)
 	case e.RefreshCheckpoint != "":
 		return fmt.Sprintf("refreshed the checkpoint to %s, this checkout's HEAD", e.RefreshCheckpoint)
 	}
@@ -128,48 +128,49 @@ func (ps JobProblems) Fixable() int {
 	return n
 }
 
-// Waive splits ps into the problems a waiver in ws matches by code and subject and the
-// ones it does not. A waiver on a code that is not [Waivable] matches nothing;
+// Permit splits ps into the problems a deviation in ds matches by code and subject and the
+// ones it does not. A deviation on a code that is not [Permissible] matches nothing;
 // [Declaration.Problems] reports it as JobRecordInvalid.
-func (ps JobProblems) Waive(ws []JobWaiver) (kept, waived JobProblems) {
+func (ps JobProblems) Permit(ds []Deviation) (kept, permitted JobProblems) {
 	for _, p := range ps {
-		if Waivable(p.Code) && slices.ContainsFunc(ws, func(w JobWaiver) bool { return w.Waives(p) }) {
-			waived = append(waived, p)
+		if Permissible(p.Code) && slices.ContainsFunc(ds, func(d Deviation) bool { return d.Permits(p) }) {
+			permitted = append(permitted, p)
 			continue
 		}
 		kept = append(kept, p)
 	}
-	return kept, waived
+	return kept, permitted
 }
 
-// JobWaiver accepts one waivable problem on a record's own authority, with the reason a
-// reviewer reads: "the root regenerates it", "the root runs it".
-type JobWaiver struct {
+// Deviation permits one permissible problem on a record's own authority, with the reason a
+// reviewer reads: "the root regenerates it", "the root runs it". The name is MISRA C's: a
+// deviation record sanctions a violation with its rationale.
+type Deviation struct {
 	Code    DiagnosticCode `json:"code"`
 	Subject string         `json:"subject"`
 	Reason  string         `json:"reason" schema:"nonblank"`
 }
 
-// Waives reports whether w accepts p: the same code, and a subject equal to p's or, for an
+// Permits reports whether d accepts p: the same code, and a subject equal to p's or, for an
 // output outside the write paths or an unrun gate, a glob matching it, so `**` accepts
-// every regenerated output the integrator owns in one waiver.
-func (w JobWaiver) Waives(p JobProblem) bool {
-	if w.Code != p.Code {
+// every regenerated output the integrator owns in one deviation.
+func (d Deviation) Permits(p JobProblem) bool {
+	if d.Code != p.Code {
 		return false
 	}
-	if w.Subject == p.Subject {
+	if d.Subject == p.Subject {
 		return true
 	}
 	if p.Code != OutputOutsideWritePaths && p.Code != GateNotRun {
 		return false
 	}
-	matched, _ := doublestar.Match(w.Subject, p.Subject)
+	matched, _ := doublestar.Match(d.Subject, p.Subject)
 	return matched
 }
 
-// Waivable reports whether a problem of code c may be waived: only a judgment about how
+// Permissible reports whether a problem of code c may be permitted: only a judgment about how
 // much a job takes on, never a record that is wrong.
-func Waivable(c DiagnosticCode) bool {
+func Permissible(c DiagnosticCode) bool {
 	switch c {
 	case WritePathTooBroad, OutputOutsideWritePaths, GateNotRun:
 		return true
@@ -178,12 +179,12 @@ func Waivable(c DiagnosticCode) bool {
 }
 
 // JobValidation is the result of validating a record against the workspace: the job as it
-// would be stored, every problem left after waivers, the ones waived, and each check that
+// would be stored, every problem left after deviations, the ones permitted, and each check that
 // could not run.
 type JobValidation struct {
-	Job      Job         `json:"job"`
-	Problems JobProblems `json:"problems"`
-	Waived   JobProblems `json:"waived,omitempty"`
+	Job       Job         `json:"job"`
+	Problems  JobProblems `json:"problems"`
+	Permitted JobProblems `json:"permitted,omitempty"`
 	// Unchecked names each check that could not run and why. A missing workspace or graph
 	// is said here, never read as a clean record.
 	Unchecked  []string      `json:"unchecked,omitempty"`

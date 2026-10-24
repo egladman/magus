@@ -65,10 +65,10 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	} else if ok {
 		put.Goals = &goals
 	}
-	if waivers, ok, e := decodeObjects[types.JobWaiver](params, "waivers", "waivers"); e != nil {
+	if deviations, ok, e := decodeObjects[types.Deviation](params, "deviations", "deviations"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		put.Waivers = &waivers
+		put.Deviations = &deviations
 	}
 
 	// check and validation are two spellings of one field, so a put naming each of them is
@@ -216,12 +216,12 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.Goals = goals })
 		}
 	}
-	if p.Waivers != nil {
-		waivers := slices.Clone(*p.Waivers)
-		if e := (types.Declaration{ID: "merge", Waivers: waivers}).Validate(); e != nil {
+	if p.Deviations != nil {
+		deviations := slices.Clone(*p.Deviations)
+		if e := (types.Declaration{ID: "merge", Deviations: deviations}).Validate(); e != nil {
 			err = errors.Join(err, e)
 		} else {
-			set = append(set, func(u *types.Job) { u.Waivers = waivers })
+			set = append(set, func(u *types.Job) { u.Deviations = deviations })
 		}
 	}
 	if p.Check != nil {
@@ -313,7 +313,7 @@ func declaredKeys(p types.JobPut) []string {
 		{"model", p.Model != nil}, {"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
 		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
-		{"goals", p.Goals != nil}, {"waivers", p.Waivers != nil}, {"read_only", p.ReadOnly != nil},
+		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
 		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil}, {"fresh_reason", p.FreshReason != nil},
 		{"weight", p.Weight != nil},
 	} {
@@ -328,7 +328,7 @@ func declaredKeys(p types.JobPut) []string {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "waivers", "state", "read_only",
+	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
 	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows", "fresh_reason",
 }
 

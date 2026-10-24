@@ -659,7 +659,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "jobs-max-claim-files"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_JOBS_MAX_CLAIM_FILES: MaxClaimFiles is how many files one glob write path may match before a job record refuses it as too broad (MGS3043).",
-		Doc:      "How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more waives the path. Workspace only, like StaleAfter",
+		Doc:      "How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more keeps the path with a deviation. Workspace only, like StaleAfter",
 	},
 	{
 		GoPath:   "Jobs.MaxClaimProjects",

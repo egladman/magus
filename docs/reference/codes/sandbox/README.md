@@ -164,9 +164,9 @@ Two layers run together:
 - [MGS3040](MGS3040.md): a job check its worker cannot run to a passing record.
 - [MGS3041](MGS3041.md): a job checkpoint this checkout cannot start from.
 - [MGS3042](MGS3042.md): a job fork past `jobs.max_depth` or `jobs.max_live`.
-- [MGS3043](MGS3043.md): a job write path that claims more than the workspace's breadth thresholds allow (waivable).
-- [MGS3044](MGS3044.md): a regenerated output outside a job's write paths (waivable).
-- [MGS3045](MGS3045.md): a ci gate over a job's write paths that nothing runs (waivable).
+- [MGS3043](MGS3043.md): a job write path that claims more than the workspace's breadth thresholds allow (permissible).
+- [MGS3044](MGS3044.md): a regenerated output outside a job's write paths (permissible).
+- [MGS3045](MGS3045.md): a ci gate over a job's write paths that nothing runs (permissible).
 - [MGS3046](MGS3046.md): a job holds a workspace load file in a checkout another live job is working in.
 - [MGS3051](MGS3051.md): a job store write from a magus older than the newest build that wrote it.
 

@@ -240,7 +240,7 @@ type Jobs struct {
 	MaxValidations int `json:"max_validations" yaml:"max_validations" validate:"gte=0" merge:"written"`
 	// MaxClaimFiles is how many files one glob write path may match before a job record
 	// refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep
-	// that needs more waives the path. Workspace only, like StaleAfter.
+	// that needs more keeps the path with a deviation. Workspace only, like StaleAfter.
 	MaxClaimFiles int `json:"max_claim_files" yaml:"max_claim_files" validate:"gt=0" merge:"written"`
 	// MaxClaimProjects is how many projects one glob write path may reach before a job
 	// record refuses it as too broad (MGS3043). Default 1; zero or negative is an error.

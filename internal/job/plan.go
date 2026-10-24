@@ -46,7 +46,7 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 // default_timeout when a merge that creates the row named no timeout. What it is held to is
 // [validateMerge]'s, the rules `magus job apply` shares, with the merge's checkpoint and
 // symbol goals settled in the same pass: the error joins every problem left after the row's
-// waivers, and nothing is written then. read may be nil where no graph is at hand, which
+// deviations, and nothing is written then. read may be nil where no graph is at hand, which
 // skips only the ambiguity check.
 func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.Job, error) {
 	rows, err := store.List()

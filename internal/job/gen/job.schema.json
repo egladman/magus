@@ -339,7 +339,7 @@
       "type": "integer",
       "description": "MaxClaims caps how many proved claims one attempt takes; zero takes the default. See [Job.MaxClaims]."
     },
-    "waivers": {
+    "deviations": {
       "type": "array",
       "items": {
         "type": "object",
@@ -359,7 +359,7 @@
           }
         }
       },
-      "description": "Waivers accept waivable problems (see [Waivable]) on the record's own authority."
+      "description": "Deviations accept permissible problems (see [Permissible]) on the record's own authority."
     },
     "enter": {
       "type": "string",
