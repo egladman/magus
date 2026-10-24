@@ -3,7 +3,7 @@ title: "ADR 0017: a change accepts the findings it causes"
 order: 17
 description: A deliberate protobuf rename fails buf-breaking and has no sanctioned way through the gate. This record proposes a per-project ledger of accepted findings, read by the target runner, in which an entry counts only while the change that adds it is not yet in the base. It names one target, one op and each finding it accepts, carries a reason, passes the gate green with the acceptance printed, and needs no cleanup after merge.
 tags: [adr, decision, ci, gates, compatibility, buf, breaking-changes]
-status: proposed
+status: accepted (not built)
 date: 2026-10-24
 ---
 
@@ -66,7 +66,7 @@ emitted by golangci-lint, ESLint and RuboCop formatters.
 
 ## Decision
 
-Proposed, nothing built. A project may keep a ledger of accepted findings. The target
+Accepted by Eli on 2026-10-24; nothing is built yet. A project may keep a ledger of accepted findings. The target
 runner reads it, and a gate whose every finding is accepted passes, says so, and names
 the lines that accepted it.
 
@@ -113,15 +113,15 @@ The ledger's history is the record of every break shipped on purpose and why, wh
 
 ### The gate checks both directions
 
-| check                                              | result                                                                        | State    |
-| -------------------------------------------------- | ----------------------------------------------------------------------------- | -------- |
-| a finding no live entry accepts                    | the gate fails as today, printing the line to add                             | proposed |
-| a live entry that matches no finding               | the gate fails with a new code: the acceptance is unused                      | proposed |
-| every finding accepted, at least one               | the target passes as `accepted`, never as `pass`                              | proposed |
-| an op that exits non-zero and prints no findings   | the failure stands; a crash is never accepted                                 | proposed |
-| a malformed line, an empty reason, an unknown op   | a load error ([No silent defaults](../design/judgment/no-silent-defaults.md)) | proposed |
-| a ledger entry for an op not declared a comparison | a load error                                                                  | proposed |
-| no base resolves (shallow clone, no VCS)           | an error naming the base, never "all live" or "none live"                     | proposed |
+| check                                              | result                                                                        | State   |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- | ------- |
+| a finding no live entry accepts                    | the gate fails as today, printing the line to add                             | planned |
+| a live entry that matches no finding               | the gate fails with a new code: the acceptance is unused                      | planned |
+| every finding accepted, at least one               | the target passes as `accepted`, never as `pass`                              | planned |
+| an op that exits non-zero and prints no findings   | the failure stands; a crash is never accepted                                 | planned |
+| a malformed line, an empty reason, an unknown op   | a load error ([No silent defaults](../design/judgment/no-silent-defaults.md)) | planned |
+| a ledger entry for an op not declared a comparison | a load error                                                                  | planned |
+| no base resolves (shallow clone, no VCS)           | an error naming the base, never "all live" or "none live"                     | planned |
 
 The unused check is what keeps a line honest: it cannot be added "in case", and it fails
 the moment the change it accepted is reworked away. It charges only the change that adds
@@ -129,16 +129,26 @@ the line, because only that change's lines are live.
 
 ### Only a comparison op can be accepted
 
-The spell declares that an op compares the tree against a base, and magus hands the op
-that base. `bufBreaking` gains the declaration and reads its `--against` input from the
-run's base, so the base the ledger is diffed against and the base buf compares against
-cannot disagree. `proto/magusfile.buzz` stops building `.git#ref={base}` itself. A
+The declaration folds into the one that already exists. `spells.External` names an op
+whose answer "can differ with the tree byte-identical" (`spells/descriptor.go`), today as
+`reads-external` and `mutates-external`. A comparison against the base is the third
+such relation, `compares-base`: the tree holds still and the base moves. `magus doctor`
+already reads `External` for cacheability (MGS1033), so a comparison op needs no second
+cacheability rule. magus hands an op that declares it the run's base. `bufBreaking`
+declares it and builds its `--against` input from that base, so the base the ledger is
+diffed against and the base buf compares against cannot disagree. `proto/magusfile.buzz` stops building `.git#ref={base}` itself. A
 ledger line naming an op that compares nothing is refused, because a finding about the
 tree outlives the merge and its line would charge the next change.
 
 The op names a findings format with a rule id. The first is the Code Climate record
 (`DiagnosticFormat.codeClimate`), which magus parses once for every tool that emits it;
-`bufBreaking` passes `--error-format=gitlab-code-quality`.
+`bufBreaking` passes `--error-format=gitlab-code-quality`. It records into
+`spells.Diagnostic`, whose `Code` field already holds a rule id; `spells.ParseDiagnostics`
+has no caller outside its tests today, so this is its first.
+
+`bufBreaking`'s `gha` charm swaps buf's reporter to GitHub annotations, which would leave
+magus no findings to match. It goes: magus annotates from the parsed findings through
+the CI provider spell, accepted or not.
 
 ### Every reader sees it
 
@@ -157,14 +167,32 @@ The op names a findings format with a rule id. The first is the Code Climate rec
 
 Per [Where a rule lives](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#where-a-rule-lives):
 
-| rule                                        | home                                                                          | State    |
-| ------------------------------------------- | ----------------------------------------------------------------------------- | -------- |
-| an op compares against a base; its format   | a spell declaration, checked at load                                          | proposed |
-| a finding is unaccepted, an entry is unused | a coded error from the target runner, naming the line to add or delete        | proposed |
-| the ledger's shape and its required reason  | a load error (misconfiguration)                                               | proposed |
-| who may write the ledger                    | nothing new: a leased worker writes it only if its write paths name it        | proposed |
-| who approves a line                         | the pull request review, the existing point where a person decides what lands | proposed |
-| why it is built this way                    | this record; refusal rows for the charm, the trailer and the label            | proposed |
+| rule                                        | home                                                                          | State   |
+| ------------------------------------------- | ----------------------------------------------------------------------------- | ------- |
+| an op compares against a base; its format   | a spell declaration, checked at load                                          | planned |
+| a finding is unaccepted, an entry is unused | a coded error from the target runner, naming the line to add or delete        | planned |
+| the ledger's shape and its required reason  | a load error (misconfiguration)                                               | planned |
+| who may write the ledger                    | nothing new: a leased worker writes it only if its write paths name it        | planned |
+| who approves a line                         | the pull request review, the existing point where a person decides what lands | planned |
+| why it is built this way                    | this record; refusal rows for the charm, the trailer and the label            | planned |
+
+### Build order
+
+One pull request, on this record's branch, one commit per step.
+
+| step                                                                                                                           | State   |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| 0. capture buf's Code Climate output and exit status for the cantrip rename through a magus target; keep it as the fixture     | planned |
+| 1. `spells.External` gains `compares-base`; a declaring op receives the run's base; MGS1033 counts it uncacheable              | planned |
+| 2. `DiagnosticFormat` gains the Code Climate record, parsed by `ParseDiagnostics` into rule, path, line and message            | planned |
+| 3. the ledger entry type in `types/`, its JSON on the type, the per-project loader and its load errors                         | planned |
+| 4. liveness: the ledger's added lines from the run's base, through the VCS driver, on every backend; no base is an error       | planned |
+| 5. the target runner matches findings, fails unaccepted and unused, and reports `accepted`                                     | planned |
+| 6. `accepted` reaches the run line, `-o json`, the `affected ci` summary, the CI provider's `annotate` op and the console      | planned |
+| 7. `bufBreaking` declares `compares-base` and the format, drops `gha`; `proto/magusfile.buzz` drops its hand-built `--against` | planned |
+| 8. docs, diagnostic code pages, refusal rows and a changelog fragment                                                          | planned |
+
+The cantrip pull request lands after this one and adds `proto/accepted.jsonl`.
 
 ### Doctrine checked
 
@@ -335,6 +363,14 @@ writing a ledger line would move the bar with the byline. The person decides at 
   believed but not verified here); if so, only the findings status is acceptable.
 - Whether one line per decision with a list of findings, or one line per finding, reads
   better in review. The proposal takes one per decision so the reason is written once.
-- Whether `magus` should own the base for every comparison op from day one, or only for
-  ops that declare themselves comparisons. The proposal takes the second.
 - Whether the number holds at merge: check the base branch for the next free ADR number.
+
+## Amendments
+
+### 2026-10-24: accepted, with the declaration folded into `External`
+
+Eli accepted the ledger design. The comparison declaration became a third
+`spells.External` value instead of a new field, since `External` already names an op
+whose answer moves while the tree holds still. That settles the open question of who
+owns the base: magus does, for every op declaring `compares-base`. The `gha` charm on
+`bufBreaking` is dropped, and a build order was added under Decision.
