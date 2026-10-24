@@ -434,6 +434,7 @@ tags: [design, <principle or judgment>, <topics>]
 
 `magus run conventions docs` enforces the shape as the `design-template` rule
 ([`docs/lib/design.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/design.buzz)).
+
 ## Glossary term pages
 
 Every term in the [glossary](glossary.md) has its own page, `docs/glossary/<slug>.md`, so a
@@ -555,11 +556,11 @@ to it later, a teammate or contributor who was not there, so it opens with what 
 change set out to do and why, then what it changes, then what a reviewer should weigh.
 It stays short and in the author's own words.
 
-| Part              | Required                              | What it holds                                                                                                  |
-| ----------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Lead (no heading) | yes                                   | The intent: what the change set out to do and why, and how the work came up, in one to three sentences.        |
-| What changes      | yes                                   | One bullet per change in what the code does, in the present tense: the meaning, not a list of files touched.   |
-| Considerations    | when a reviewer needs more to weigh   | One bullet each: the alternative set aside, how a claim was checked, where to start reading, unfinished work.  |
+| Part              | Required                            | What it holds                                                                                                 |
+| ----------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Lead (no heading) | yes                                 | The intent: what the change set out to do and why, and how the work came up, in one to three sentences.       |
+| What changes      | yes                                 | One bullet per change in what the code does, in the present tense: the meaning, not a list of files touched.  |
+| Considerations    | when a reviewer needs more to weigh | One bullet each: the alternative set aside, how a claim was checked, where to start reading, unfinished work. |
 
 Unfinished work under Considerations is an unchecked GitHub task that opens with what is
 missing, so a draft's next steps stay legible and cannot read as done:

@@ -19,13 +19,13 @@ That needs a clear answer to where each thing lives. Here "tool" means the
 broader agent sense, an action a model can call (an MCP tool, a host's built-in
 tool), not magus's own Go types.
 
-| layer               | what lives there                                                                                     | in magus                                                                 |
-| ------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| the application     | the facts and the work: what exists, what a change reaches, running a target                          | the graph, the cache, targets, the job store                             |
-| the harness         | what must hold whoever acts, checked deterministically before or as the action runs                    | the guard, lint and format targets, the drift gate, `affected ci`        |
-| a tool              | one typed action over the application, with its inputs and outputs declared                           | `magus run`, `magus query`, the MCP tools that mirror them               |
-| a skill             | how to combine tools for a kind of task, and why; loaded when the task calls for it                   | the installed `magus-*` skills                                           |
-| prose in context    | orientation only: where to look, what the words mean                                   | `AGENTS.md`, `MAGUS.md`                                                  |
+| layer            | what lives there                                                                    | in magus                                                          |
+| ---------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| the application  | the facts and the work: what exists, what a change reaches, running a target        | the graph, the cache, targets, the job store                      |
+| the harness      | what must hold whoever acts, checked deterministically before or as the action runs | the guard, lint and format targets, the drift gate, `affected ci` |
+| a tool           | one typed action over the application, with its inputs and outputs declared         | `magus run`, `magus query`, the MCP tools that mirror them        |
+| a skill          | how to combine tools for a kind of task, and why; loaded when the task calls for it | the installed `magus-*` skills                                    |
+| prose in context | orientation only: where to look, what the words mean                                | `AGENTS.md`, `MAGUS.md`                                           |
 
 The rule is to put each thing at the lowest layer that can carry it. A rule
 that can be checked belongs in the harness. A fact belongs in the application
@@ -59,6 +59,7 @@ matters:
 
 ```markdown
 ## IMPORTANT RULES
+
 - NEVER use sed -i. ALWAYS use the editor tool.
 - ALWAYS run the tests before committing!!!
 ```

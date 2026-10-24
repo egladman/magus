@@ -72,8 +72,7 @@ delete, and a broken new file reads as an old one in silence.
 - [Clear is better than clever](clear-is-better-than-clever.md)
 - [Break now, hold still later](break-now-hold-still-later.md)
 
-[^atwood]: Jeff Atwood, [The Best Code is No Code At
-    All](https://blog.codinghorror.com/the-best-code-is-no-code-at-all/), 2007.
+[^atwood]: Jeff Atwood, [The Best Code is No Code At All](https://blog.codinghorror.com/the-best-code-is-no-code-at-all/), 2007.
 
 [^subtract]: Adams, Converse, Hales and Klotz, [People systematically overlook
     subtractive changes](https://www.nature.com/articles/s41586-021-03380-y),

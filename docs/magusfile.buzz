@@ -403,7 +403,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // Keep in step with the files dprint.json resolves; guides/integrations/agents is its
     // own project.
     ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "concepts/**/*.md", "decisions/**/*.md",
-        "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
+        "design/**/*.md", "glossary/*.md", "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
         "guides/jobs/**/*.md", "guides/migrating/**/*.md", "guides/setup/**/*.md",
         "reference/**/*.md");
     markdown["dprint"](ctx);
