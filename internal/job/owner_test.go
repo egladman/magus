@@ -19,6 +19,20 @@ func attentionRows(t *testing.T, root string) []sessions.AttentionRequest {
 	return sessions.AttentionQueue(fold)
 }
 
+// A knock on a holder's tree root is one attention row on that root, however many callers
+// meet the same held path.
+func TestNoteHeldFilesOneRowForTheTreeRoot(t *testing.T) {
+	root := t.TempDir()
+	NoteHeld(t.Context(), root, "orchestrator", "worker needs coverage/buzz/x.lcov, held by job mover")
+	NoteHeld(t.Context(), root, "orchestrator", "worker needs coverage/buzz/x.lcov, held by job mover")
+
+	queue := attentionRows(t, root)
+	require.Len(t, queue, 1)
+	assert.Equal(t, "orchestrator", queue[0].Lease)
+	assert.Equal(t, heldSource, queue[0].Source)
+	assert.Contains(t, queue[0].Message, "held by job mover")
+}
+
 // A session that ends takes the job it was editing with it, tells the root once, and a
 // session resuming the work in the same checkout takes the row back with its next exec.
 func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
@@ -54,6 +68,25 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.StateRunning, resumed.State)
 	assert.Empty(t, resumed.EndReason)
+}
+
+// A read-only row ends with its session as a writing one does: it holds no paths, and
+// left running it would sit in the stale list until somebody pruned it.
+func TestEndSessionEndsATakenReadOnlyJob(t *testing.T) {
+	repo := execRepo(t)
+	loc := tempLocation(t, repo.Root())
+	s := NewStore(loc)
+	seed(t, s, types.Job{ID: "scout", Checkpoint: repo.Head(), State: types.StateDeclared, ReadOnly: true})
+	_, err := s.Exec(t.Context(), "scout")
+	require.NoError(t, err)
+	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, s.Bind(worker, "scout"))
+
+	ended, ok, err := s.EndSession(t.Context(), worker)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, types.StateNoReturn, ended.State)
+	assert.True(t, ended.EndedWithSession(), ended.EndReason)
 }
 
 func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {

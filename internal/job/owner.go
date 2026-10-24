@@ -15,6 +15,10 @@ import (
 // owner went away or whose deadline passed.
 const endedSource = "magus/ownership"
 
+// heldSource is the attention source of a knock: a caller outside a holder's job tree needs
+// a path or output the holder holds.
+const heldSource = "magus/held"
+
 // NoteEnded files one attention row in the repository at root saying magus ended work
 // lease owned, for whoever reads the queue: the root session, which otherwise learns of
 // it only by polling. The same message noted twice is one row (see
@@ -23,6 +27,18 @@ const endedSource = "magus/ownership"
 // Best effort: a repository with no session store, or a write that fails, files nothing,
 // since the ending itself already happened and is recorded where it happened.
 func NoteEnded(ctx context.Context, root, lease, message string) {
+	noteAttention(ctx, root, endedSource, lease, message)
+}
+
+// NoteHeld files one attention row in the repository at root for treeRoot, the root of a
+// holder's job tree, saying what a caller outside that tree needs from it: the caller
+// cannot verify or end a job outside its own tree, so only treeRoot can release it. The
+// same message noted twice is one row. Best effort, as [NoteEnded] is.
+func NoteHeld(ctx context.Context, root, treeRoot, message string) {
+	noteAttention(ctx, root, heldSource, treeRoot, message)
+}
+
+func noteAttention(ctx context.Context, root, source, lease, message string) {
 	if root == "" {
 		return
 	}
@@ -30,10 +46,10 @@ func NoteEnded(ctx context.Context, root, lease, message string) {
 	if err != nil {
 		return
 	}
-	_, _, _ = sessions.OpenRequest(dir, endedSource, sessions.AttentionOpen{
+	_, _, _ = sessions.OpenRequest(dir, source, sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeFailed),
 		Severity: string(types.SeverityWarning),
-		Source:   endedSource,
+		Source:   source,
 		Lease:    lease,
 		Message:  message,
 	}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root})

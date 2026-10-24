@@ -2374,9 +2374,12 @@ func printJobStatus(out io.Writer, s job.Status) {
 	if s.Verified {
 		fmt.Fprintf(out, "verified %s, recorded %s\n", s.Job, types.StatePass)
 	} else {
-		fmt.Fprintf(out, "rejected %s, and its state is unchanged\n", s.Job)
+		fmt.Fprintf(out, "rejected %s\n", s.Job)
 		for _, violation := range s.Violations {
 			fmt.Fprintf(out, "  %s\n", violation)
+		}
+		for _, note := range s.Notes {
+			fmt.Fprintln(out, note)
 		}
 	}
 	if s.Command != "" {

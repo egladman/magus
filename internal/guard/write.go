@@ -297,7 +297,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	}
 	me, enrolled := leaseRow(ctx, location, graded)
 	enrolled = enrolled && me.State.Live()
-	live := editingLeases(leases)
+	live := types.PathHolders(leases)
 	// A soft path its holder already wrote is owned, and only that holder's diff says so;
 	// the read costs a footprint, so it runs only for a write landing in someone's soft path.
 	if slices.ContainsFunc(live, func(u types.Job) bool {
@@ -307,7 +307,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		loc := location.jobs()
 		loc.Root, loc.DryRun = checkout, isDryRun(ctx)
 		leases = job.HardenWritten(ctx, job.NewStore(loc), leases)
-		live = editingLeases(leases)
+		live = types.PathHolders(leases)
 	}
 	if len(live) == 0 && !enrolled {
 		return adviseUnleasedWorker(actingLease)
@@ -324,7 +324,10 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		claim := func(rel string) (writeGrade, string) {
 			return gradeClaimOutside(ctx, deps, location, checkout, me, leases, rel)
 		}
-		g := gradeAgainstOwnLease(me, owners, rel, enter, func() string { return deps.revision(ctx, checkout, "") }, claim)
+		knock := func(owner types.Job, rel string) string {
+			return knockHolder(ctx, deps, me, owner, rel)
+		}
+		g := gradeAgainstOwnLease(me, owners, rel, enter, knock, func() string { return deps.revision(ctx, checkout, "") }, claim)
 		if g.Decision == decisionDeny {
 			return g
 		}
@@ -434,7 +437,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // revision the lease's checkout is on now, "" when it cannot; it is read only for a lease
 // whose recorded base diverged. claim grades a write outside the write paths that no
 // other lease owns (see gradeClaimOutside), and says what kept magus from claiming it.
-func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool), liveRevision func() string, claim func(rel string) (writeGrade, string)) writeGrade {
+func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool), knock func(owner types.Job, rel string) string, liveRevision func() string, claim func(rel string) (writeGrade, string)) writeGrade {
 	// Ahead of the exec rule below: a read-only lease has no base to exec against for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
@@ -521,15 +524,19 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 			say = fmt.Sprintf("%s is outside the paths lease %s was given (%s), and lease %s claims %s in it (%s right now)",
 				rel, me.ID, cmp.Or(strings.Join(me.WritePaths, ", "), "none"), owner.ID, decl, owner.State)
 		}
+		ago := time.Since(time.Unix(owner.Updated, 0)).Round(time.Second)
+		release := fmt.Sprintf("Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.", owner.ID, ago, hint.JobExit.With(owner.ID))
+		if root := knock(owner, rel); root != "" {
+			say = fmt.Sprintf("%s; %s", say, knockClause(root, owner))
+			release = fmt.Sprintf("Lease %s was last updated %s ago. %s, since lease %s cannot end a job outside its own tree.", owner.ID, ago, knockClause(root, owner), me.ID)
+		}
 		return writeGrade{Decision: decisionDeny, Reason: denial{
-			Say: fmt.Sprintf("magus workspace: %s; "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it"), say),
+			Say: fmt.Sprintf("magus workspace: %s; %s", say, leaseActorClause(fmt.Sprintf("re-partition the plan, or release the path once lease %s has finished with it", owner.ID))),
 			Why: fmt.Sprintf("Edit inside your own write paths. %s, which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
-				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+
+				"%s\n"+
 				"For one small change once its holder is done, enter the path instead: the client tool script `%s` records it on the job and lets one write through. A job takes %d.\n"+
 				leaseActorWhy,
-				ownership, owner.State, me.ID,
-				owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID),
-				enterCall(owner.ID, rel), job.MaxJobEntries),
+				ownership, owner.State, me.ID, release, enterCall(owner.ID, rel), job.MaxJobEntries),
 		}.full()}
 	}
 	if len(me.WritePaths) == 0 {
@@ -722,13 +729,6 @@ func enteredBefore(me types.Job, rel string) (types.JobEntry, bool) {
 func enteredPathKey(lease string, e types.JobEntry) hint.MarkerKind {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%s\x00%d", lease, e.Path, e.At))
 	return hint.MarkerKind("entered-path-" + hex.EncodeToString(sum[:6]))
-}
-
-// editingLeases are the rows a write can still collide with, the ones whose holder may be
-// writing their paths (see types.JobState.Editing). An exited row is live for its own
-// holder, see leaseRow, and claims nothing against anyone else.
-func editingLeases(leases []types.Job) []types.Job {
-	return slices.DeleteFunc(slices.Clone(leases), func(u types.Job) bool { return !u.State.Editing() })
 }
 
 // owningLeases narrows live to the rows that claim their write paths against other

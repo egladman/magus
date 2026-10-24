@@ -473,7 +473,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		case v.unchecked != nil:
 			return uncheckedDenial(v, me, checks, deps.DefaultCharms)
 		case v.held != "":
-			return heldDenial(v, me)
+			return heldDenial(v, me, knockHolder(ctx, deps, me, v.holder, fmt.Sprintf("`%s`", v.held)))
 		case v.op:
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
@@ -560,7 +560,7 @@ type rowJudge struct {
 	graph     func() (types.TargetGraphOutput, error)
 	produces  lazyProducers
 	composes  lazyProducers
-	// others are the live rows besides row, for who else holds an output a run regenerates.
+	// others are the path holders besides row, for who else holds an output a run regenerates.
 	others func() []types.Job
 }
 
@@ -570,13 +570,8 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 	return rowJudge{
 		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace, graph: graph,
 		others: sync.OnceValue(func() []types.Job {
-			var live []types.Job
-			for _, r := range actingLeaseStanding(ctx, deps, row.ID).rows {
-				if r.ID != row.ID && r.State.Live() {
-					live = append(live, r)
-				}
-			}
-			return live
+			holders := types.PathHolders(actingLeaseStanding(ctx, deps, row.ID).rows)
+			return slices.DeleteFunc(holders, func(r types.Job) bool { return r.ID == row.ID })
 		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, workspace, row.WritePaths)
@@ -708,15 +703,46 @@ func writePathsTouch(writePaths []string, pattern string) bool {
 	})
 }
 
+// knockHolder files one attention row for the root of holder's job tree saying me needs
+// what, and returns that root. A holder below me returns "" and files nothing: me reaches
+// it with `magus job wait`. So does a store it cannot read, which leaves that remedy.
+func knockHolder(ctx context.Context, deps Dependencies, me, holder types.Job, what string) string {
+	at := hookLocation(ctx, deps)
+	rows, err := leaseRows(ctx, at)
+	if err != nil || slices.ContainsFunc(types.JobAncestors(rows, holder.ID), func(a types.Job) bool { return a.ID == me.ID }) {
+		return ""
+	}
+	root, err := job.NewStore(at.jobs()).TreeRoot(holder.ID)
+	if err != nil {
+		return ""
+	}
+	if !isDryRun(ctx) {
+		job.NoteHeld(ctx, at.workspace, root, fmt.Sprintf("lease %s needs %s, which lease %s holds (%s right now): release it, end lease %s, or re-partition the plan",
+			me.ID, what, holder.ID, holder.State, holder.ID))
+	}
+	return root
+}
+
+// knockClause says where knockHolder filed its row.
+func knockClause(root string, holder types.Job) string {
+	return fmt.Sprintf("magus filed an attention row for %s, the root of lease %s's job tree", root, holder.ID)
+}
+
 // heldDenial words the refusal of a regenerate whose output another live lease holds.
-func heldDenial(v runVerdict, me types.Job) denial {
+// root is knockHolder's answer: a caller who cannot wait on the holder is told who was
+// asked instead.
+func heldDenial(v runVerdict, me types.Job, root string) denial {
 	wait := hint.JobWait.With(v.holder.ID)
 	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.WritePaths, ", "))
 	if !writePathsTouch(v.holder.WritePaths, strings.Fields(v.held)[0]) {
 		why = fmt.Sprintf("lease %s regenerates it from its own write paths too, and was declared before lease %s", v.holder.ID, me.ID)
 	}
+	next := fmt.Sprintf("run `%s`", wait)
+	if root != "" {
+		next = fmt.Sprintf("%s, since lease %s waits only on a job below it; leave the output and carry on", knockClause(root, v.holder), me.ID)
+	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` regenerates `%s` held by live lease %s; run `%s`.", v.run.target, v.held, v.holder.ID, wait),
+		Say: fmt.Sprintf("magus workspace: `%s` regenerates `%s` held by live lease %s; %s.", v.run.target, v.held, v.holder.ID, next),
 		Why: fmt.Sprintf("A lease regenerates and commits an output its own write paths regenerate, unless another live lease holds that output: %s.\n"+
 			"The first holder regenerates it and the other waits, so neither silently overwrites the other's copy. Once lease %s ends, run `%s` again; if it never needs the output, the checkout's integrator, "+integratorIs+", regenerates it after integration.",
 			why, v.holder.ID, v.run.target),
@@ -3454,7 +3480,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	me, enrolled := leaseRow(ctx, location, actingLease)
 	enrolled = enrolled && me.State.Live()
-	declaring := editingLeases(rows)
+	declaring := types.PathHolders(rows)
 	if enrolled && !me.State.Editing() {
 		declaring = append(declaring, me)
 	}
