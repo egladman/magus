@@ -9,10 +9,10 @@ package symbols
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"log/slog"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -270,7 +270,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 				if _, seen := a.defs[docPath]; seen {
 					continue
 				}
-				source := docPath + ":" + strconv.Itoa(line)
+				source := fmt.Sprintf("%s:%d", docPath, line)
 				def := types.KnowledgeSymbolDefinition{Source: source}
 				si := infoIn[docKey{doc.RelativePath, key}]
 				if si != nil {
@@ -470,8 +470,8 @@ func parseMoniker(moniker string) (info monikerInfo, ok bool) {
 		return monikerInfo{}, false
 	}
 	desc := scip.DescriptorOnlyFormatter.FormatSymbol(sym)
-	pkg := strings.TrimSpace(sym.Package.Manager + " " + sym.Package.Name)
-	info.Key = strings.TrimSpace(pkg + " " + desc)
+	pkg := strings.TrimSpace(fmt.Sprintf("%s %s", sym.Package.Manager, sym.Package.Name))
+	info.Key = strings.TrimSpace(fmt.Sprintf("%s %s", pkg, desc))
 	if n := len(sym.Descriptors); n > 0 {
 		info.Label = sym.Descriptors[n-1].Name
 		info.Callable = isCallableSuffix(sym.Descriptors[n-1].Suffix)
@@ -481,7 +481,7 @@ func parseMoniker(moniker string) (info monikerInfo, ok bool) {
 	for i := len(sym.Descriptors) - 1; i >= 0; i-- {
 		if sym.Descriptors[i].Suffix == scip.Descriptor_Namespace {
 			sym.Descriptors = sym.Descriptors[:i+1]
-			info.Namespace = strings.TrimSpace(pkg + " " + scip.DescriptorOnlyFormatter.FormatSymbol(sym))
+			info.Namespace = strings.TrimSpace(fmt.Sprintf("%s %s", pkg, scip.DescriptorOnlyFormatter.FormatSymbol(sym)))
 			break
 		}
 	}
