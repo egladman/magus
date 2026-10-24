@@ -31,11 +31,12 @@ The REPL accepts Buzz expressions and evaluates them against the magusfile runti
 
 ```buzz
 // example session
-> os\execSh("git rev-parse --short HEAD").stdout
-abc1234
-> vcs\name()
-git
-> proc\exec("go", ["build", "./..."])
+> proc\exec("go", args: ["env", "GOOS"]).stdout
+darwin
+> proc\which("git")
+/usr/bin/git
+> fs\basename("docs/guides/debugging.md")
+debugging.md
 ```
 
 The REPL treats lines starting with `//` as comments and skips them. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit. Ctrl-C clears the current line instead of quitting; pressed while a call such as `magus\run(...)` is still running, it interrupts that call instead.

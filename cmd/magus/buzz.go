@@ -285,7 +285,9 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// --embedded opts into the relaxations the magusfile engine uses, so a magus
 	// module like the docs generator (render) can be run or tested here.
 	var opts []buzz.Option
-	if bf.Embedded {
+	// -e is the one-off exception: a snippet takes the embedded rules, as python -c
+	// needs no main. Files and stdin stay strict.
+	if bf.Embedded || bf.E != "" {
 		opts = append(opts, buzz.WithEmbedded())
 	}
 	sess := buzz.NewSession(ctx, opts...)
@@ -733,7 +735,7 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "...), and the magus.* namespace are available in both.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
-	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line instead of a file")
+	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line; it takes the --embedded rules, so no main")
 	fmt.Fprintln(os.Stderr, "  -t, -test   run the file's test \"...\" {} blocks and report pass/fail")
 	fmt.Fprintln(os.Stderr, "  --check     parse and type-check the named files without running them")
 	fmt.Fprintln(os.Stderr, "  --profile   print where compile and import time went, after the script runs")
