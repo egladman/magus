@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -82,7 +83,7 @@ func TestGuardDeniesAFilterWithoutInput(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), tc.command)
 		assert.Equal(t, denyRule{Name: denyRuleFilterWithoutInput, Arg: tc.tool}, v.Rule, tc.command)
-		assert.Contains(t, v.Deny, "`"+tc.tool+"`", "the deny names the stage left without input: %s", tc.command)
+		assert.Contains(t, v.Deny, fmt.Sprintf("`%s`", tc.tool), "the deny names the stage left without input: %s", tc.command)
 	}
 }
 

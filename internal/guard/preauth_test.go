@@ -252,22 +252,22 @@ func denyRemedyFixtures() []denyRemedyFixture {
 					return "remedy-tool", []string{"check"}, target == "check", nil
 				}),
 			)
-			return Request{Input: "remedy-tool check"}, "magus run " + spellName + "::check"
+			return Request{Input: "remedy-tool check"}, fmt.Sprintf("magus run %s::check", spellName)
 		}},
 		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
 			main, wt := twoCheckouts(t)
 			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
 			t.Chdir(main)
 			// Relative, so the temp dir the fixture lives in does not read as a throwaway copy.
-			return Request{Input: "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker"},
-				filepath.Join(wt, "magus") + " --root " + wt + " describe job harness/worker"
+			return Request{Input: fmt.Sprintf("cd ../%s && ./magus describe job harness/worker", filepath.Base(wt))},
+				fmt.Sprintf("%s --root %s describe job harness/worker", filepath.Join(wt, "magus"), wt)
 		}},
 		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
 			main, wt := twoCheckouts(t)
 			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
 			t.Chdir(main)
-			return Request{Input: "cd ../" + filepath.Base(wt) + " && ./magus job exec harness/worker"},
-				filepath.Join(wt, "magus") + " --root " + wt + " job exec harness/worker"
+			return Request{Input: fmt.Sprintf("cd ../%s && ./magus job exec harness/worker", filepath.Base(wt))},
+				fmt.Sprintf("%s --root %s job exec harness/worker", filepath.Join(wt, "magus"), wt)
 		}},
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepo(t)
@@ -425,7 +425,7 @@ func rootMergeServesBaseScript(t *testing.T, ctx context.Context, deps Dependenc
 // seatWaitServesTheRun is MGS3009's remedy: the wait piped into the run that spends the seat.
 func seatWaitServesTheRun(*testing.T, context.Context, Dependencies, servedRole) (Request, []string) {
 	const run = "magus run go::go-test . -- ./internal/ledger/"
-	return Request{Input: run}, []string{hint.Status.With("--wait") + " | " + run}
+	return Request{Input: run}, []string{fmt.Sprintf("%s | %s", hint.Status.With("--wait"), run)}
 }
 
 func servedFixtures() []servedFixture {
@@ -543,7 +543,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 
 	for _, role := range roles {
 		for id, run := range templates {
-			t.Run(role.name+"/"+id, func(t *testing.T) { gradeServed(t, ctx, deps, servedAs(Request{}, role), role.name, id, run) })
+			t.Run(fmt.Sprintf("%s/%s", role.name, id), func(t *testing.T) { gradeServed(t, ctx, deps, servedAs(Request{}, role), role.name, id, run) })
 		}
 		t.Run(role.name+"/scripts", func(t *testing.T) {
 			kind, writePaths := hint.LeaseRole(fixtureRows(t, ctx), role.call.Lease)
@@ -559,7 +559,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		// A deny's remedy is graded as Judge serves it to this role: whatever it drops was
 		// never served, and whatever it keeps must pass.
 		for _, f := range denyRemedyFixtures() {
-			t.Run(role.name+"/deny-"+string(f.rule), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/deny-%s", role.name, string(f.rule)), func(t *testing.T) {
 				call, want := f.setup(t, hookLocation(ctx, Dependencies{}))
 				call = servedAs(call, role)
 				call.DryRun = true
@@ -578,7 +578,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 			})
 		}
 		for _, f := range servedFixtures() {
-			t.Run(role.name+"/"+f.name, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", role.name, f.name), func(t *testing.T) {
 				call, next := f.setup(t, ctx, deps, role)
 				call = servedAs(call, role)
 				if call.Input != "" {

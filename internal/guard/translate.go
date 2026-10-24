@@ -3,6 +3,7 @@ package guard
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -186,9 +187,9 @@ func (sc searchCall) lineRegexp() (*regexp.Regexp, bool) {
 	if !ok {
 		return nil, false
 	}
-	expr := "(?:" + strings.Join(alts, ")|(?:") + ")"
+	expr := fmt.Sprintf("(?:%s)", strings.Join(alts, ")|(?:"))
 	if sc.word {
-		expr = `\b(?:` + expr + `)\b`
+		expr = fmt.Sprintf(`\b(?:%s)\b`, expr)
 	}
 	re, err := regexp.Compile(expr)
 	return re, err == nil
@@ -354,7 +355,7 @@ func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (S
 		if tr.routes != nil {
 			js := searchJudgment{routes: tr.routes}
 			for _, r := range tr.routes {
-				js.classified = append(js.classified, "`"+strings.TrimPrefix(r.name, types.KindDiagnostic+":")+"` is a diagnostic code with a graph node")
+				js.classified = append(js.classified, fmt.Sprintf("`%s` is a diagnostic code with a graph node", strings.TrimPrefix(r.name, types.KindDiagnostic+":")))
 			}
 			if v := symbolSearchVerdict(deps, dir, asSearch(c), js, pipedInto(cmds[i+1:])); walk.settles(deps, v) {
 				return v, true
@@ -409,9 +410,8 @@ func denySearchTranslation(tr translation, piped bool) denial {
 	if tr.reach != "" {
 		reach = tr.reach
 	}
-	d := denial{Say: "this text search asks what the graph holds; `" + hint.BinaryName() + " " + strings.Join(tr.args, " ") + "` answers this search " + reach + ".\n" +
-		tr.why + "\n" +
-		answerBlock("Its answer", tr.answer) + pipeNote(piped)}
+	d := denial{Say: fmt.Sprintf("this text search asks what the graph holds; `%s %s` answers this search %s.\n%s\n%s%s",
+		hint.BinaryName(), strings.Join(tr.args, " "), reach, tr.why, answerBlock("Its answer", tr.answer), pipeNote(piped))}
 	// Why is never empty here: an empty one would have the renderer cut the answer off
 	// at the verdict's first line.
 	d.Why = "Every match this search could make is a graph node, so the answer is complete."
@@ -479,7 +479,7 @@ func parseCodeAlternative(alt string) (codeAlternative, bool) {
 	case pad == 1:
 		q.WriteString(`\d`)
 	case pad > 1:
-		q.WriteString(`\d{` + strconv.Itoa(pad) + `}`)
+		fmt.Fprintf(&q, `\d{%d}`, pad)
 	}
 	out := codeAlternative{query: collapseDigitRuns(q.String())}
 	if literal && positions == 4 {
@@ -492,7 +492,7 @@ var digitRunRe = regexp.MustCompile(`(?:\\d){2,}`)
 
 func collapseDigitRuns(s string) string {
 	return digitRunRe.ReplaceAllStringFunc(s, func(run string) string {
-		return `\d{` + strconv.Itoa(len(run)/2) + `}`
+		return fmt.Sprintf(`\d{%d}`, len(run)/2)
 	})
 }
 
@@ -533,7 +533,7 @@ func translateDiagnostics(deps Dependencies, dir string, sc searchCall) (transla
 	// Every alternative must name something the graph holds, or the search is also
 	// looking for text it does not: a retired code in a changelog, say.
 	for _, ca := range parsed {
-		re := regexp.MustCompile(`^` + ca.query + `$`)
+		re := regexp.MustCompile(fmt.Sprintf(`^%s$`, ca.query))
 		if !slices.ContainsFunc(matched, re.MatchString) {
 			return translation{}, false
 		}
@@ -548,13 +548,13 @@ func translateDiagnostics(deps Dependencies, dir string, sc searchCall) (transla
 	queries = slices.Compact(queries)
 	expr := strings.Join(queries, "|")
 	if len(queries) > 1 {
-		expr = "(?:" + expr + ")"
+		expr = fmt.Sprintf("(?:%s)", expr)
 	}
-	idRe := `^diagnostic:` + expr + `$`
+	idRe := fmt.Sprintf(`^diagnostic:%s$`, expr)
 	answer := regexp.MustCompile(idRe)
 	var selected []string
 	for _, code := range registered {
-		if answer.MatchString(types.KindDiagnostic + ":" + code) {
+		if answer.MatchString(fmt.Sprintf("%s:%s", types.KindDiagnostic, code)) {
 			selected = append(selected, code)
 		}
 	}
@@ -563,12 +563,13 @@ func translateDiagnostics(deps Dependencies, dir string, sc searchCall) (transla
 	}
 	ids := make([]string, len(selected))
 	for i, code := range selected {
-		ids[i] = types.KindDiagnostic + ":" + code
+		ids[i] = fmt.Sprintf("%s:%s", types.KindDiagnostic, code)
 	}
 	return translation{
-		args: []string{"query", "kind=" + types.KindDiagnostic, "'id=~" + idRe + "'", "-o", "name"},
-		why: "The pattern can match nothing but a diagnostic code, and it matches " + countNoun(len(matched), "registered code") + " (" + sample(matched) + "). " +
-			"The graph holds a node for every registered code, and `" + hint.Explain.With("diagnostic:<code>") + "` gives each one's page and the docs that cite it.",
+		args: []string{"query", "kind=" + types.KindDiagnostic, fmt.Sprintf("'id=~%s'", idRe), "-o", "name"},
+		why: fmt.Sprintf("The pattern can match nothing but a diagnostic code, and it matches %s (%s). "+
+			"The graph holds a node for every registered code, and `%s` gives each one's page and the docs that cite it.",
+			countNoun(len(matched), "registered code"), sample(matched), hint.Explain.With("diagnostic:<code>")),
 		answer: ids,
 	}, true
 }
@@ -651,7 +652,7 @@ func literalCodeRoutes(parsed []codeAlternative) ([]searchRoute, bool) {
 		if ca.literal == "" {
 			return nil, false
 		}
-		node := types.KindDiagnostic + ":" + ca.literal
+		node := fmt.Sprintf("%s:%s", types.KindDiagnostic, ca.literal)
 		r := searchRoute{name: node, run: hint.Explain.With(node)}
 		if !slices.Contains(routes, r) {
 			routes = append(routes, r)
@@ -750,9 +751,9 @@ func translateHeadings(deps Dependencies, dir string, sc searchCall) (translatio
 	}
 	expr := strings.Join(slices.Compact(prefixes), "|")
 	if len(prefixes) > 1 {
-		expr = "(?:" + expr + ")"
+		expr = fmt.Sprintf("(?:%s)", expr)
 	}
-	idRe := `^docsection:` + expr + `#`
+	idRe := fmt.Sprintf(`^docsection:%s#`, expr)
 	answer, err := regexp.Compile(idRe)
 	if err != nil {
 		return translation{}, false
@@ -778,9 +779,9 @@ func translateHeadings(deps Dependencies, dir string, sc searchCall) (translatio
 		total += n
 	}
 	return translation{
-		args: []string{"query", "kind=" + types.KindDocSection, "'id=~" + idRe + "'", "-o", "name"},
-		why: "The pattern selects every Markdown heading and nothing else here: " + countNoun(total, "heading line") + " across " + countNoun(len(want), "file") +
-			", one per section node the graph holds for them. `" + hint.Explain.With("docsection:<file>#<anchor>") + "` gives a section's text and links.",
+		args: []string{"query", "kind=" + types.KindDocSection, fmt.Sprintf("'id=~%s'", idRe), "-o", "name"},
+		why: fmt.Sprintf("The pattern selects every Markdown heading and nothing else here: %s across %s, one per section node the graph holds for them. `%s` gives a section's text and links.",
+			countNoun(total, "heading line"), countNoun(len(want), "file"), hint.Explain.With("docsection:<file>#<anchor>")),
 		answer: sections,
 	}, true
 }
@@ -906,7 +907,7 @@ func translateTargets(deps Dependencies, dir string, sc searchCall) (translation
 			if m == nil {
 				return translation{}, false
 			}
-			id := types.KindTarget + ":" + project + ":" + strings.ReplaceAll(m[1], "_", "-")
+			id := fmt.Sprintf("%s:%s:%s", types.KindTarget, project, strings.ReplaceAll(m[1], "_", "-"))
 			if !slices.Contains(targets, id) {
 				targets = append(targets, id)
 			}
@@ -933,7 +934,7 @@ func translateTargets(deps Dependencies, dir string, sc searchCall) (translation
 		quoted[i] = regexp.QuoteMeta(id)
 	}
 	return translation{
-		args:   []string{"query", "kind=" + types.KindTarget, "'id=~^(?:" + strings.Join(quoted, "|") + ")$'", "-o", "name"},
+		args:   []string{"query", "kind=" + types.KindTarget, fmt.Sprintf("'id=~^(?:%s)$'", strings.Join(quoted, "|")), "-o", "name"},
 		why:    why,
 		answer: targets,
 	}, true
@@ -979,12 +980,13 @@ func translateDeclarations(deps Dependencies, dir string, c hint.Invocation, sc 
 		if defined, definitive := deps.symbolDefined(m[1]); !defined || !definitive {
 			return translation{}, false
 		}
-		names = append(names, strconv.Itoa(h.line)+": "+m[1])
+		names = append(names, fmt.Sprintf("%d: %s", h.line, m[1]))
 	}
 	return translation{
-		args: []string{"explain", types.KindFile + ":" + rel},
-		why: "Every line the pattern selects declares a symbol, and the index holds each of the " + countNoun(len(names), "name") + ". " +
-			"The file node lists everything the file defines, and `" + hint.Refs.With("<name>", "--definition", "--source") + "` prints any one body.",
+		args: []string{"explain", fmt.Sprintf("%s:%s", types.KindFile, rel)},
+		why: fmt.Sprintf("Every line the pattern selects declares a symbol, and the index holds each of the %s. "+
+			"The file node lists everything the file defines, and `%s` prints any one body.",
+			countNoun(len(names), "name"), hint.Refs.With("<name>", "--definition", "--source")),
 		answer: names,
 	}, true
 }
@@ -1049,7 +1051,7 @@ func countNoun(n int, noun string) string {
 	if n == 1 {
 		return "1 " + noun
 	}
-	return strconv.Itoa(n) + " " + noun + "s"
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // sample names the first few of a list, so a wide pattern's deny stays one line.

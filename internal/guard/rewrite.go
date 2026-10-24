@@ -90,7 +90,7 @@ var awkRedirectRe = regexp.MustCompile(`\b(?:print|printf)\b[^;{}\n]*>`)
 // how a redirect spelled only inside a heredoc reached no boundary check at all: the
 // rewrite rule included the body and the write-candidate scan did not.
 func interpreterScript(args []string, heredoc string) string {
-	return strings.Join(args, "\n") + "\n" + heredoc
+	return fmt.Sprintf("%s\n%s", strings.Join(args, "\n"), heredoc)
 }
 
 // scriptWrites reports a program that would write a file, in the spelling name uses.
@@ -385,7 +385,7 @@ func destinationLiterals(script, expr string) []string {
 func assignedLiterals(script, expr string) []string {
 	out := quotedLiterals(expr)
 	for _, ident := range identRe.FindAllString(expr, -1) {
-		assign := regexp.MustCompile(`(?m)^\s*(?:(?:final|var|const|let)\s+)?` + regexp.QuoteMeta(ident) + `(?:\s*:[^=\n]*)?\s*=\s*([^=\n].*)$`)
+		assign := regexp.MustCompile(fmt.Sprintf(`(?m)^\s*(?:(?:final|var|const|let)\s+)?%s(?:\s*:[^=\n]*)?\s*=\s*([^=\n].*)$`, regexp.QuoteMeta(ident)))
 		for _, m := range assign.FindAllStringSubmatch(script, -1) {
 			out = append(out, quotedLiterals(m[1])...)
 		}
@@ -399,9 +399,9 @@ func assignedLiterals(script, expr string) []string {
 func loopIterables(script, ident string) []string {
 	id := regexp.QuoteMeta(ident)
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?m)(?:^|;)\s*(?:async\s+)?for\s+\(?(?:[A-Za-z_]\w*\s*,\s*)*` + id + `(?:\s*,\s*[A-Za-z_]\w*)*\s*\)?\s+in\s+([^\n]+)`),
-		regexp.MustCompile(`for\s*\(\s*(?:const|let|var)\s+(?:\[[^\]\n]*\b` + id + `\b[^\]\n]*\]|` + id + `)\s+of\s+([^\n]+)`),
-		regexp.MustCompile(`for(?:each)?\s+my\s+\$` + id + `\s*\(([^\n]+)`),
+		regexp.MustCompile(fmt.Sprintf(`(?m)(?:^|;)\s*(?:async\s+)?for\s+\(?(?:[A-Za-z_]\w*\s*,\s*)*%s(?:\s*,\s*[A-Za-z_]\w*)*\s*\)?\s+in\s+([^\n]+)`, id)),
+		regexp.MustCompile(fmt.Sprintf(`for\s*\(\s*(?:const|let|var)\s+(?:\[[^\]\n]*\b%[1]s\b[^\]\n]*\]|%[1]s)\s+of\s+([^\n]+)`, id)),
+		regexp.MustCompile(fmt.Sprintf(`for(?:each)?\s+my\s+\$%s\s*\(([^\n]+)`, id)),
 	}
 	var out []string
 	for _, re := range patterns {
@@ -509,8 +509,8 @@ func receiverBefore(s string, dot int) string {
 // reader routes around.
 func interpreterRewriteDenial(rel string) string {
 	return fmt.Sprintf("a script rewrites %s, a file this tree carries; use your editor tool on it.\n"+
-		"Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites.\n"+
-		"Scratch paths and scripts that CREATE a file are untouched.", rel)
+		"Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `%s` gives column-precise sites.\n"+
+		"Scratch paths and scripts that CREATE a file are untouched.", rel, hint.Refs.With("<symbol>", "--occurrences"))
 }
 
 // rewriteStaysOutside reports a line whose every in-place rewrite provably lands outside the

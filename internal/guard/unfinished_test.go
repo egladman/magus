@@ -2,10 +2,10 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -25,7 +25,7 @@ func deadPID(t *testing.T) int {
 func markOwnedBy(t *testing.T, cacheDir, key string, started time.Time, owner int) judgmentMark {
 	t.Helper()
 	m := beginJudgment(cacheDir, key, started)
-	path := filepath.Join(m.dir, strconv.FormatInt(started.UnixNano(), 10)+"-"+strconv.Itoa(owner))
+	path := filepath.Join(m.dir, fmt.Sprintf("%d-%d", started.UnixNano(), owner))
 	require.NoError(t, os.Rename(m.path, path))
 	m.path = path
 	return m

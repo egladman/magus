@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,8 +126,8 @@ func TestWorktreeRemovePassesWhenNothingCanBeLost(t *testing.T) {
 	for _, command := range []string{
 		"git worktree remove " + wt,
 		"git worktree remove --force " + wt,
-		"git -C " + r.main + " --no-pager worktree remove -f -- " + wt,
-		"cd " + r.main + " && git worktree remove ../done",
+		fmt.Sprintf("git -C %s --no-pager worktree remove -f -- %s", r.main, wt),
+		fmt.Sprintf("cd %s && git worktree remove ../done", r.main),
 		"git worktree remove ../done",
 	} {
 		assert.Equal(t, ShellVerdict{}, r.judge(command), "%q", command)
@@ -159,7 +160,7 @@ func TestWorktreeRemoveDeniesEachUnsafeCondition(t *testing.T) {
 
 	dirty := r.add("dirty")
 	require.NoError(t, os.WriteFile(filepath.Join(dirty, "a.txt"), []byte("changed\n"), 0o644))
-	assertRemovalDenied(t, r.judge("git worktree remove "+dirty), "1 modified, staged or untracked path(s), first a.txt", "git -C "+dirty+" status")
+	assertRemovalDenied(t, r.judge("git worktree remove "+dirty), "1 modified, staged or untracked path(s), first a.txt", fmt.Sprintf("git -C %s status", dirty))
 
 	untracked := r.add("untracked")
 	require.NoError(t, os.WriteFile(filepath.Join(untracked, "new.txt"), []byte("new\n"), 0o644))
@@ -180,7 +181,7 @@ func TestWorktreeRemoveDeniesEachUnsafeCondition(t *testing.T) {
 	assertRemovalDenied(t, r.judge("git worktree remove "+r.main), "it is the main worktree")
 	assertRemovalDenied(t, r.judgeFrom(filepath.Join(held), "git worktree remove "+held), "this session runs in it")
 	assertRemovalDenied(t, r.judge("git worktree remove "+r.origin.Root()), "not a worktree of this repository")
-	assertRemovalDenied(t, r.judge("cd "+r.origin.Root()+" && git worktree remove "+held), "another repository")
+	assertRemovalDenied(t, r.judge(fmt.Sprintf("cd %s && git worktree remove %s", r.origin.Root(), held)), "another repository")
 }
 
 // --force never reaches past a condition, and every failed one is listed together.
@@ -438,7 +439,7 @@ func TestWorktreeUnlockIsJudgedLikeRemove(t *testing.T) {
 
 	ahead := lock("ahead")
 	r.commit(ahead)
-	assertRemovalDenied(t, r.judge("git -C "+r.main+" worktree unlock "+ahead), "1 commit(s) on it")
+	assertRemovalDenied(t, r.judge(fmt.Sprintf("git -C %s worktree unlock %s", r.main, ahead)), "1 commit(s) on it")
 	assertRemovalDenied(t, r.judge("git worktree unlock "+r.main), "it is the main worktree")
 }
 
@@ -459,12 +460,12 @@ func TestWorktreeRemoveDeniesWhatItCannotRead(t *testing.T) {
 	assertRemovalDenied(t, off, "version control is disabled")
 
 	for command, says := range map[string]string{
-		"git worktree remove $WT":                          "not literal",
-		"git worktree remove":                              "exactly one worktree",
-		"env git worktree remove " + wt:                    "through a wrapper",
-		"if true; then git worktree remove " + wt + "; fi": "conditional",
-		"git worktree remove " + wt + " && (":              "does not parse",
-		"git --git-dir=x worktree remove " + wt:            "not knowable",
+		"git worktree remove $WT":                                   "not literal",
+		"git worktree remove":                                       "exactly one worktree",
+		"env git worktree remove " + wt:                             "through a wrapper",
+		fmt.Sprintf("if true; then git worktree remove %s; fi", wt): "conditional",
+		fmt.Sprintf("git worktree remove %s && (", wt):              "does not parse",
+		"git --git-dir=x worktree remove " + wt:                     "not knowable",
 	} {
 		assertRemovalDenied(t, r.judge(command), says)
 	}
@@ -478,34 +479,34 @@ func TestWorktreeRemoveFollowsALiteralLoop(t *testing.T) {
 	r.add("one")
 	r.add("two")
 	loop := func(words string) string {
-		return "for b in " + words + "; do git worktree remove " + r.parent + "/$b; done"
+		return fmt.Sprintf("for b in %s; do git worktree remove %s/$b; done", words, r.parent)
 	}
 
 	for _, command := range []string{
 		loop("one two"),
 		`for b in one "two"; do git worktree remove ../"${b}" --force; done`,
-		"cd " + r.parent + " && for b in one two; do git -C main worktree remove ../$b; done",
+		fmt.Sprintf("cd %s && for b in one two; do git -C main worktree remove ../$b; done", r.parent),
 	} {
 		assert.Equal(t, ShellVerdict{}, r.judge(command), "%q", command)
 	}
 
 	dirty := r.add("three")
 	require.NoError(t, os.WriteFile(filepath.Join(dirty, "a.txt"), []byte("changed\n"), 0o644))
-	assertRemovalDenied(t, r.judge(loop("one three two")), "Removing "+dirty+" is refused", "first a.txt")
+	assertRemovalDenied(t, r.judge(loop("one three two")), fmt.Sprintf("Removing %s is refused", dirty), "first a.txt")
 
 	for _, words := range []string{"$(ls)", "*", "one $W", "{one,two}", "~/one", `one\ two`, `"one two"`} {
 		assertRemovalDenied(t, r.judge(loop(words)), "a loop whose words are not all literal")
 	}
 	for _, command := range []string{
-		"for b in one two; do b=main; git worktree remove " + r.parent + "/$b; done",
-		"for b in one two; do git worktree remove " + r.parent + "/$b; break; done",
+		fmt.Sprintf("for b in one two; do b=main; git worktree remove %s/$b; done", r.parent),
+		fmt.Sprintf("for b in one two; do git worktree remove %s/$b; break; done", r.parent),
 		"f() { :; }; " + loop("one two"),
-		"for b; do git worktree remove " + r.parent + "/$b; done",
-		"while true; do git worktree remove " + r.parent + "/one; done",
+		fmt.Sprintf("for b; do git worktree remove %s/$b; done", r.parent),
+		fmt.Sprintf("while true; do git worktree remove %s/one; done", r.parent),
 	} {
 		assertRemovalDenied(t, r.judge(command), "a loop whose words are not all literal")
 	}
-	assertRemovalDenied(t, r.judge("for b in one; do git worktree remove "+r.parent+"/${b%/}; done"), "not literal")
+	assertRemovalDenied(t, r.judge(fmt.Sprintf("for b in one; do git worktree remove %s/${b%%/}; done", r.parent)), "not literal")
 }
 
 // Prune clears only records of directories already gone, and help prints usage: neither
@@ -519,7 +520,7 @@ func TestWorktreeRemoveLeavesPruneAndHelpAlone(t *testing.T) {
 	wt := r.add("gone")
 	require.NoError(t, os.RemoveAll(wt))
 	assertRemovalDenied(t, r.judge("git worktree remove "+wt), "`git worktree prune` clears the record")
-	assertRemovalDenied(t, r.judge("git worktree remove "+wt+" --help"))
+	assertRemovalDenied(t, r.judge(fmt.Sprintf("git worktree remove %s --help", wt)))
 }
 
 // The rule is wired into the hook's command arm, ranked beside the other rules that read

@@ -124,8 +124,8 @@ func gradeHookWiringWrite(workspace, actingLease string, agentAttributed bool, w
 		}.full()}
 	default:
 		return writeGrade{Decision: decisionAdvise, Kind: advisoryHookWiring,
-			Context: fmt.Sprintf("magus workspace: %s is %s; keep the guard armed and re-read it afterwards with `"+hint.Doctor.String()+"`.", writePath, what),
-			Why: "The edit takes effect at the host's next session start, and a wiring that stopped working is silent: a disarmed guard and a clean session produce the same output. " +
-				"`" + hint.Doctor.String() + "` grades the wiring and the binary it resolves. This is an advisory because the host attributes this call to no agent: a person's own session, or the orchestrator relaying for one."}
+			Context: fmt.Sprintf("magus workspace: %s is %s; keep the guard armed and re-read it afterwards with `%s`.", writePath, what, hint.Doctor.String()),
+			Why: fmt.Sprintf("The edit takes effect at the host's next session start, and a wiring that stopped working is silent: a disarmed guard and a clean session produce the same output. "+
+				"`%s` grades the wiring and the binary it resolves. This is an advisory because the host attributes this call to no agent: a person's own session, or the orchestrator relaying for one.", hint.Doctor.String())}
 	}
 }

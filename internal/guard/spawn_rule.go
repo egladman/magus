@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -260,7 +261,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
 	// A subagent handing waiting to a helper of its own, said once a session.
-	if who.Agent != "" && spawnNestedWordRe.MatchString(env.Spawn.Description+"\n"+env.Value[:min(len(env.Value), spawnWaiterHead)]) {
+	if who.Agent != "" && spawnNestedWordRe.MatchString(fmt.Sprintf("%s\n%s", env.Spawn.Description, env.Value[:min(len(env.Value), spawnWaiterHead)])) {
 		note := adviseSpawnNestedWaiter()
 		if said := deps.heldBy(gate, string(advisorySpawnNestedWaiter)).Once(advisorySpawnNestedWaiter, note.Say); said != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(advisorySpawnNestedWaiter), said, map[string]string{note.Say: note.Why}, false)
@@ -534,7 +535,7 @@ func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
 	if slash <= 0 || slash == len(fields[0])-1 || !types.ValidJobID(fields[1]) {
 		return types.Job{}, false
 	}
-	for _, id := range []string{fields[1], fields[0][:slash] + "/" + fields[1]} {
+	for _, id := range []string{fields[1], fmt.Sprintf("%s/%s", fields[0][:slash], fields[1])} {
 		if i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id }); i >= 0 {
 			return rows[i], true
 		}

@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -173,7 +174,7 @@ func TestSpawnDenyIsTheVerdictAndARef(t *testing.T) {
 	repeat := Judge(ctx, deps, req)
 	doc, ok := Rule(string(denySpawnUnbriefed))
 	require.True(t, ok)
-	assert.True(t, strings.HasPrefix(repeat.Reason, "denied again [spawn-unbriefed]: "+doc.Catches+"\nfull verdict: "), repeat.Reason)
+	assert.True(t, strings.HasPrefix(repeat.Reason, fmt.Sprintf("denied again [spawn-unbriefed]: %s\nfull verdict: ", doc.Catches)), repeat.Reason)
 }
 
 // The trail row of a denied spawn names the ref the deny cited, as a command's row does, so a
@@ -611,7 +612,7 @@ func linkedWorktree(t *testing.T, main string) string {
 	wt := filepath.Join(t.TempDir(), "worker")
 	fixtureGit(t, main, "worktree", "add", "-q", "-b", "worker", wt)
 	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"),
-		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "worker")+"\n"), 0o644))
+		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(main, ".git", "worktrees", "worker"))), 0o644))
 	return wt
 }
 
@@ -678,7 +679,7 @@ func writeTranscript(t *testing.T, lines ...string) string {
 
 func TestLastContextUsageReadsTheTail(t *testing.T) {
 	// A record bigger than the tail, so the only usage before it is out of reach.
-	filler := `{"type":"user","message":{"role":"user","content":"` + strings.Repeat("x", agentUsageTail+1024) + `"}}`
+	filler := fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"%s"}}`, strings.Repeat("x", agentUsageTail+1024))
 	cases := []struct {
 		name string
 		path func(t *testing.T) string
@@ -718,8 +719,8 @@ func TestLastContextUsageReadsTheTail(t *testing.T) {
 // named, and the context size its host last reported. Addressed by name or by id alike.
 func TestContinueTargetCarriesTheTargetsSpawnFacts(t *testing.T) {
 	continueTo := func(to string) string {
-		return `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
-			`"tool_name":"SendMessage","tool_input":{"to":"` + to + `","message":"Now fix the review comments."},"tool_use_id":"toolu_02"}`
+		return fmt.Sprintf(`{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",`+
+			`"tool_name":"SendMessage","tool_input":{"to":"%s","message":"Now fix the review comments."},"tool_use_id":"toolu_02"}`, to)
 	}
 	tokens := transcriptLastTokens
 	const title = "orchestrator/integrator guard-facts"
@@ -1188,7 +1189,7 @@ func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
 // it. An unleased spawner, the orchestrator or a person, may name any live job.
 func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 	running := func(id, parent string) types.Job {
-		return types.Job{ID: id, Parent: parent, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, Parent: parent, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	ctx, root := fleetFixture(t, running("worker-job", ""), running("victim-job", ""), running("sub-job", "worker-job"), running("grandchild-job", "sub-job"))
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
@@ -1225,7 +1226,7 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 // when neither does. The trail records which source answered.
 func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 	running := func(id string) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	ctx, _ := fleetFixture(t, running("agent-job"), running("bound-job"), running("claimed-job"))
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
@@ -1336,7 +1337,7 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 // nobody sharing its session or checkout.
 func TestExecBindsTheCallersIdentity(t *testing.T) {
 	running := func(id string) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	ctx, _ := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
 
@@ -1619,7 +1620,7 @@ func TestTranscriptUsageCodexTokenCount(t *testing.T) {
 func TestAnExitedBindingYieldsToABaggageClaim(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "s1", Agent: "a1"}
 	row := func(id string, state types.JobState) types.Job {
-		return types.Job{ID: id, State: state, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, State: state, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	for _, tc := range []struct {
 		name  string
@@ -1648,7 +1649,7 @@ func TestAnExitedBindingYieldsToABaggageClaim(t *testing.T) {
 				row("fresh-job", types.StateDeclared), row("done-job", types.StateExited))
 			bindCaller(t, ctx, who, "held-job")
 			if tc.claim != "" {
-				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
 			} else {
 				t.Setenv(trail.EnvBaggage, "")
 			}

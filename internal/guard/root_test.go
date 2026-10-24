@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -299,8 +300,8 @@ func TestGroundworkNamesTheMergeScript(t *testing.T) {
 	call := func(line, workspace string) mainCall {
 		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: delegableIntegrate, line: line, root: workspace}
 	}
-	named := "Merging job branches? `" + hint.Buzz.With("hack/dev/merge-job-branches.buzz") + "`"
-	base := "Bringing the base into a branch? `" + hint.Buzz.With("hack/dev/merge-base-into-branches.buzz", "--", "--branches", "<branch>") + "`"
+	named := fmt.Sprintf("Merging job branches? `%s`", hint.Buzz.With("hack/dev/merge-job-branches.buzz"))
+	base := fmt.Sprintf("Bringing the base into a branch? `%s`", hint.Buzz.With("hack/dev/merge-base-into-branches.buzz", "--", "--branches", "<branch>"))
 	for line, wantBase := range map[string]bool{"git cherry-pick abc123": false, "git merge job-branch": true, "git merge origin/main": true} {
 		f, ok := groundworkFinding(deny, call(line, root))
 		require.True(t, ok)
@@ -615,7 +616,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 	require.NoError(t, err)
 	root := t.TempDir()
 	file := filepath.Join(root, "magusfile.buzz")
-	require.NoError(t, os.WriteFile(file, []byte(`import "`+filepath.ToSlash(repo)+`/spells/harness/claude-code" as claude;`), 0o644))
+	require.NoError(t, os.WriteFile(file, []byte(fmt.Sprintf(`import "%s/spells/harness/claude-code" as claude;`, filepath.ToSlash(repo))), 0o644))
 	_, err = interp.Parse(t.Context(), &interp.Source{Dir: root, Files: []string{file}, Engine: "buzz"})
 	require.NoError(t, err)
 	descriptor, _, err := agent.LoadHarness(t.Context(), root, "claude-code")

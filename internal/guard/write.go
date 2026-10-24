@@ -63,8 +63,8 @@ func adviseGeneratedWrite(ctx context.Context, deps Dependencies, path string) a
 	}
 	return advice{
 		Say: fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s: edit the SOURCE instead, then %s.", f.Path, owner, regenerateAdvice(f, owner)),
-		Why: "magus read the target's declared globs, so the next run overwrites whatever you write there. Commit the regenerated file with your source change.\n" +
-			"`" + hint.DescribeFile.With("<path>") + "` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.",
+		Why: fmt.Sprintf("magus read the target's declared globs, so the next run overwrites whatever you write there. Commit the regenerated file with your source change.\n"+
+			"`%s` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", hint.DescribeFile.With("<path>")),
 	}
 }
 
@@ -94,7 +94,7 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 		}
 	}
 	if len(producers) == 0 {
-		return "run the target that produces it: `" + hint.DescribeTargets.String() + "` lists what this workspace defines"
+		return fmt.Sprintf("run the target that produces it: `%s` lists what this workspace defines", hint.DescribeTargets.String())
 	}
 	slices.SortFunc(producers, func(a, b types.FileClaim) int {
 		if n := strings.Compare(a.Project, b.Project); n != 0 {
@@ -106,7 +106,7 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 	if producer == "" {
 		producer = owner
 	}
-	return "run `" + hint.Run.With(producers[0].Target, producer) + "`"
+	return fmt.Sprintf("run `%s`", hint.Run.With(producers[0].Target, producer))
 }
 
 // workspaceDeclaresNotes reports whether THIS repository's own magus.yaml declares a shared
@@ -176,10 +176,10 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 		return ""
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: %s is in the NOTES store, and only a person writes there; ask them to run `"+hint.NotesEdit.String()+" %s`.",
-			path, strings.TrimSuffix(filepath.Base(path), ".md")),
-		Why: "A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n" +
-			"Read the store with `" + hint.NotesLs.String() + "` and `" + hint.NotesGet.With("<name>") + "`.",
+		Say: fmt.Sprintf("magus workspace: %s is in the NOTES store, and only a person writes there; ask them to run `%s %s`.",
+			path, hint.NotesEdit.String(), strings.TrimSuffix(filepath.Base(path), ".md")),
+		Why: fmt.Sprintf("A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
+			"Read the store with `%s` and `%s`.", hint.NotesLs.String(), hint.NotesGet.With("<name>")),
 	}.full()
 }
 
@@ -464,8 +464,8 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		return writeGrade{Decision: decisionDeny, Reason: denial{
 			Say: fmt.Sprintf("magus workspace: lease %s has not reported the base it landed on; run `%s` in this tree, then retry this write.",
 				me.ID, hint.JobExec.With(me.ID)),
-			Why: fmt.Sprintf("That records the base `"+hint.VCSCheckpoint.With("-o", "name")+"` names for it. Lease %s (%s) has nothing recording which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
-				me.ID, criteriaLine(me)),
+			Why: fmt.Sprintf("That records the base `%s` names for it. Lease %s (%s) has nothing recording which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
+				hint.VCSCheckpoint.With("-o", "name"), me.ID, criteriaLine(me)),
 		}.full()}
 	}
 	// A deny naming one declaration of rel is gradeDeniedDeclarations' to judge: at this,
@@ -599,7 +599,7 @@ func gradeDeniedDeclarations(ctx context.Context, checkout string, me types.Job,
 	for _, decl := range changed {
 		if claim, ok := namingClaim(denied, decl); ok {
 			return writeGrade{Decision: decisionDeny, Reason: denial{
-				Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, which your lease %s declared DENIED as %q.", decl, rel, me.ID, rel+"#"+claim),
+				Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, which your lease %s declared DENIED as %q.", decl, rel, me.ID, fmt.Sprintf("%s#%s", rel, claim)),
 				Why: fmt.Sprintf("Edit other declarations of %s, or report a checkpoint to the orchestrator and ask for the deny to be lifted before you touch this one. Lease %s: %s. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
 					rel, me.ID, criteriaLine(me)),
 			}.full()}
@@ -647,7 +647,7 @@ func changedDeclarations(ctx context.Context, checkout, rel string, fields write
 func quotedClaims(rel string, claims []string) string {
 	quoted := make([]string, len(claims))
 	for i, c := range claims {
-		quoted[i] = strconv.Quote(rel + "#" + c)
+		quoted[i] = strconv.Quote(fmt.Sprintf("%s#%s", rel, c))
 	}
 	return strings.Join(quoted, ", ")
 }
@@ -974,8 +974,8 @@ func adviseInstructionWrite(path string) advice {
 		return advice{}
 	}
 	return advice{
-		Say: "magus workspace: keep " + filepath.Base(strings.TrimSpace(path)) + " to what no tool says: it loads whole into every session on every host.",
-		Why: "A sentence here costs context forever. A rule the guard refuses or `" + hint.Doctor.String() + "` reports is restated context, and the moment a tool starts saying it, delete it here.",
+		Say: fmt.Sprintf("magus workspace: keep %s to what no tool says: it loads whole into every session on every host.", filepath.Base(strings.TrimSpace(path))),
+		Why: fmt.Sprintf("A sentence here costs context forever. A rule the guard refuses or `%s` reports is restated context, and the moment a tool starts saying it, delete it here.", hint.Doctor.String()),
 	}
 }
 
@@ -1006,9 +1006,10 @@ func adviseInstalledSkillWrite(filePath string) advice {
 	}
 	return advice{
 		Say: "magus workspace: this is an INSTALLED skill the next install overwrites; put this workspace's rules in a local skill (conventionally magus-local-development).",
-		Why: "That file is generated from magus's embedded sources and stamped with a content digest: `" + hint.Doctor.String() + "` reports your edit as stale rather than reading it, and the next `" + hint.AgentInstall.With("<dir>", "--force") + "` overwrites it. " +
-			"A skill in a directory magus does not ship is one install and verify both leave alone.\n" +
+		Why: fmt.Sprintf("That file is generated from magus's embedded sources and stamped with a content digest: `%s` reports your edit as stale rather than reading it, and the next `%s` overwrites it. "+
+			"A skill in a directory magus does not ship is one install and verify both leave alone.\n"+
 			"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format.",
+			hint.Doctor.String(), hint.AgentInstall.With("<dir>", "--force")),
 	}
 }
 
@@ -1083,10 +1084,10 @@ func adviseAgentSourceWrite(root, path string) advice {
 		return advice{}
 	}
 	return advice{
-		Say: "magus workspace: load the magus-skill-authoring skill before editing " + rel + ": it holds the method these sources are maintained by.",
-		Why: rel + " is a SOURCE of what agents are taught, and the skill is hand-authored, committed beside the installed skills. " +
-			"Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n" +
-			"Verify against a freshly built binary rather than against the docs. That is the method's first rule, and it is there because the registry once advertised a dry run that regenerated files.",
+		Say: fmt.Sprintf("magus workspace: load the magus-skill-authoring skill before editing %s: it holds the method these sources are maintained by.", rel),
+		Why: fmt.Sprintf("%s is a SOURCE of what agents are taught, and the skill is hand-authored, committed beside the installed skills. "+
+			"Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n"+
+			"Verify against a freshly built binary rather than against the docs. That is the method's first rule, and it is there because the registry once advertised a dry run that regenerated files.", rel),
 	}
 }
 
@@ -1113,9 +1114,9 @@ func adviseDescriptorWrite(root, path string) advice {
 		return advice{}
 	}
 	return advice{
-		Say: "magus workspace: " + rel + " is a GENERATOR INPUT; run `" + hint.Run.With("generate", ".") + "` once the change settles and commit the regenerated files in the SAME commit.",
-		Why: "An edit here moves files nobody types into. Measured: a one-word rename in a std/ descriptor left four generated files stale and three tests red across three commits. CI runs generate as a drift gate, so splitting them is also a red build you did not have to have.\n" +
-			"`" + hint.DescribeFile.With("<path>") + "` says whether a path is generated and by what. Load the magus-vcs-hygiene skill for the commit checklist.",
+		Say: fmt.Sprintf("magus workspace: %s is a GENERATOR INPUT; run `%s` once the change settles and commit the regenerated files in the SAME commit.", rel, hint.Run.With("generate", ".")),
+		Why: fmt.Sprintf("An edit here moves files nobody types into. Measured: a one-word rename in a std/ descriptor left four generated files stale and three tests red across three commits. CI runs generate as a drift gate, so splitting them is also a red build you did not have to have.\n"+
+			"`%s` says whether a path is generated and by what. Load the magus-vcs-hygiene skill for the commit checklist.", hint.DescribeFile.With("<path>")),
 	}
 }
 

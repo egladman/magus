@@ -45,7 +45,7 @@ func resumeTTL(acct account) promptCacheTTL {
 		}
 	}
 	if acct.loadErr != nil {
-		best.source = "magus.yaml did not load (" + acct.loadErr.Error() + "), so " + best.source
+		best.source = fmt.Sprintf("magus.yaml did not load (%s), so %s", acct.loadErr.Error(), best.source)
 	}
 	return best
 }
@@ -145,7 +145,7 @@ func continuationLink(row, ended types.Job) string {
 	}
 	for _, p := range row.WritePaths {
 		if slices.ContainsFunc(ended.WritePaths, func(q string) bool { return types.PathsIntersect(p, q) }) {
-			return "shares " + p + " with " + ended.ID
+			return fmt.Sprintf("shares %s with %s", p, ended.ID)
 		}
 	}
 	return ""
@@ -170,8 +170,8 @@ func denySpawnWarmWorker(row types.Job, w warmWorker, ttl promptCacheTTL) denial
 	return denial{
 		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s with a message (SendMessage), or set `fresh_reason` and run `%s`.",
 			row.ID, w.link, w.agent, w.left.Round(time.Second), ttl.ttl, ttl.source, w.agent, hint.JobApply.With("-f", "<record>")),
-		Why: fmt.Sprintf("Worker %s ended %s ago. ", w.agent, w.idle.Round(time.Second)) +
-			"A resumed worker reads its context at the cache-read price and has already oriented; a fresh one pays the prefix and the orientation again for code another context already holds. " +
-			"`fresh_reason` is for a context that is wrong for the job, never for one that is merely large.",
+		Why: fmt.Sprintf("Worker %s ended %s ago. "+
+			"A resumed worker reads its context at the cache-read price and has already oriented; a fresh one pays the prefix and the orientation again for code another context already holds. "+
+			"`fresh_reason` is for a context that is wrong for the job, never for one that is merely large.", w.agent, w.idle.Round(time.Second)),
 	}
 }

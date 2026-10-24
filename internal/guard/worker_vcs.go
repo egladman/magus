@@ -38,7 +38,7 @@ func workerVCSOp(c hint.Invocation) string {
 	if sub == "" || may {
 		return ""
 	}
-	return c.Name + " " + sub
+	return fmt.Sprintf("%s %s", c.Name, sub)
 }
 
 // fastForward reports `git merge --ff-only <commit>`, the recovery of a worker whose placed

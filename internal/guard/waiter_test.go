@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,7 +116,7 @@ func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 		string(denyRuleMonitorPile): {Decision: builtin.Deny},
 	}}
 	for i := range monitorPileAdvise - 1 {
-		v = judge(lowered, "sleep "+strings.Repeat("9", i+2)+" && echo tick")
+		v = judge(lowered, fmt.Sprintf("sleep %s && echo tick", strings.Repeat("9", i+2)))
 		assert.NotEqual(t, "deny", v.Decision)
 	}
 	v = judge(piled, "sleep 300")
@@ -501,7 +502,7 @@ func TestEveryServedWaitPassesTheGuardForEveryRole(t *testing.T) {
 			"wait before a build":      wait + " && magus graph build --silent",
 			"bounded background check": "./magus job exec --timeout 18m0s -- ./magus run go::go-test . -- -run TestLedger",
 		} {
-			t.Run(role.name+"/"+id, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", role.name, id), func(t *testing.T) {
 				call := servedAs(Request{}, role)
 				call.CallBackground = id == "bounded background check"
 				gradeServed(t, ctx, deps, call, role.name, id, run)

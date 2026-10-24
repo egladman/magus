@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -737,7 +738,7 @@ func TestDenyReasonsStayShort(t *testing.T) {
 // were not already looking at.
 func TestDenyDoesNotReplayALongCommand(t *testing.T) {
 	body := strings.Repeat("x = 1\n", 200)
-	v := Evaluate(strict(testDependencies()), "go run -c \""+body+"\"")
+	v := Evaluate(strict(testDependencies()), fmt.Sprintf("go run -c \"%s\"", body))
 	require.NotEmpty(t, v.Deny)
 	assert.NotContains(t, v.Deny, body, "the command is elided, not quoted back")
 	assert.Less(t, len(v.Deny), len(body), "the refusal must be shorter than what tripped it")
@@ -1476,7 +1477,7 @@ func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `"+hint.VCSLsFiles.With("-o", "name")+" | git add --pathspec-from-file=-`.")
+	assert.Contains(t, verdict.Deny, fmt.Sprintf("a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `%s | git add --pathspec-from-file=-`.", hint.VCSLsFiles.With("-o", "name")))
 	assert.Contains(t, verdict.Why, "--include-generated")
 	assert.NotContains(t, verdict.Why, "vcs add")
 	assert.Contains(t, verdict.Why, "git add -- <paths>")
@@ -1699,10 +1700,10 @@ func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 	}
 	carries := strict(Dependencies{scope: workspaceScope{root: root}})
 	bare := strict(Dependencies{scope: workspaceScope{root: t.TempDir()}})
-	rename := "\nRenaming a symbol from a script? `" + hint.Buzz.With("hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>") + "`"
-	typed := "\nReading magus output in a script? `" + hint.Buzz.With("hack/dev/example-typed-results.buzz") + "`"
-	prune := "\nFreeing disk or clearing finished worktrees? `" + hint.Buzz.With("hack/dev/prune-worktrees.buzz", "--", "--go-cache") + "`"
-	resolve := "\nSettling a conflicted file? `" + hint.Buzz.With("hack/dev/resolve-conflicts.buzz") + "`"
+	rename := fmt.Sprintf("\nRenaming a symbol from a script? `%s`", hint.Buzz.With("hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>"))
+	typed := fmt.Sprintf("\nReading magus output in a script? `%s`", hint.Buzz.With("hack/dev/example-typed-results.buzz"))
+	prune := fmt.Sprintf("\nFreeing disk or clearing finished worktrees? `%s`", hint.Buzz.With("hack/dev/prune-worktrees.buzz", "--", "--go-cache"))
+	resolve := fmt.Sprintf("\nSettling a conflicted file? `%s`", hint.Buzz.With("hack/dev/resolve-conflicts.buzz"))
 	for _, tt := range []struct {
 		command string
 		rule    denyRuleName
@@ -1866,7 +1867,7 @@ func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name)
 		require.Len(t, v.Next, 1)
 		assert.Equal(t, tc.pipe, v.Next[0].Run)
-		assert.Contains(t, v.Why, "when their order does not matter: `"+tc.combined+"`")
+		assert.Contains(t, v.Why, fmt.Sprintf("when their order does not matter: `%s`", tc.combined))
 		assert.Empty(t, Evaluate(strict(testDependencies()), tc.combined).Deny)
 	}
 
@@ -1927,7 +1928,7 @@ func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
 // The bootstrap link itself is raw-tool's, alone on its line.
 func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
 	own := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(own, "go.mod"), []byte("module "+ownModule+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(own, "go.mod"), []byte(fmt.Sprintf("module %s\n", ownModule)), 0o644))
 	deps := strict(testDependencies())
 	deps.scope = workspaceScope{root: own}
 

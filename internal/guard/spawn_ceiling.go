@@ -60,7 +60,7 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 			missing = append(missing, env.DeclaredModel)
 		}
 		if !parentKnown {
-			unknown = append(unknown, spawner.says+", "+spawner.model)
+			unknown = append(unknown, fmt.Sprintf("%s, %s", spawner.says, spawner.model))
 			missing = append(missing, spawner.model)
 		}
 		why := "is in no mgs_listModels row and no alias the declaration maps, so its model tier is unknown"

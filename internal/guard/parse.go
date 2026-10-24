@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"slices"
@@ -174,7 +175,7 @@ func unreadCommandWordAt(command string, depth int, d Dialect) (string, bool) {
 		for i, w := range call.Args {
 			words[i] = literalWord(w.Parts)
 			if !readsAsWritten(w.Parts) {
-				words[i] += unreadMark + strconv.Itoa(i) + unreadMark
+				words[i] += fmt.Sprintf("%s%d%s", unreadMark, i, unreadMark)
 			}
 		}
 		for _, inv := range peelWrappers(words, d) {
@@ -296,7 +297,7 @@ var shells = func() map[string]bool {
 	out := map[string]bool{}
 	for _, name := range []string{"sh", "bash", "zsh", "ksh", "dash"} {
 		if !wrappers[name] {
-			panic("shells: " + name + " is not a wrapper")
+			panic(fmt.Sprintf("shells: %s is not a wrapper", name))
 		}
 		out[name] = true
 	}
@@ -961,7 +962,7 @@ func hasFlag(args []string, short rune, long string) bool {
 		if a == "--" {
 			return false // everything after is an operand
 		}
-		if long != "" && (a == "--"+long || strings.HasPrefix(a, "--"+long+"=")) {
+		if long != "" && (a == "--"+long || strings.HasPrefix(a, fmt.Sprintf("--%s=", long))) {
 			return true
 		}
 		if short == 0 || len(a) < 2 || a[0] != '-' || a[1] == '-' || strings.Contains(a, "=") {
