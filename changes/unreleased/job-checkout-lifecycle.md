@@ -1,16 +1,6 @@
 ### Changed
 
-- **`job fork --checkout` copies your `./magus` when no Go build input differs.** A fork
-  whose checkpoint is past the commit `./magus` was built at no longer drops the binary
-  when the only changes are test files and changelog fragments; otherwise it still prints
-  the bootstrap line.
-- **`job rm` ends the checkout its row owns.** A clean checkout is removed with the row; one
-  holding uncommitted work or commits on no branch stays, and so does its row, with the
-  reason in the error.
-- **A `job fork --checkout` lands on a branch named after the job.** It was detached, so
-  its worker could not commit on a branch and none could be made there. git checks out a
-  new branch, hg an active bookmark shared with the source, and jj names the workspace
-  after the job. A name already taken is refused.
-- **A job id is a branch name every driver accepts.** Lowercase letters, digits, `-`, `.`
-  and `/` between segments; no segment starts with `.` or `-`, and `:` and `..` are out.
-  Uppercase and `_` ids that were valid are now refused, and the refusal names the rule.
+- **Breaking: a `job fork --checkout` lands on a branch named after the job.** git, hg and
+  jj each name it; a taken name is refused. Job ids are therefore lowercase letters,
+  digits, `-`, `.` and `/` between segments, and the refusal names the rule. `job rm` ends
+  the checkout its row owns unless it holds work.

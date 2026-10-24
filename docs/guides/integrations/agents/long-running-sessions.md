@@ -1,6 +1,6 @@
 ---
 title: Long-running sessions
-description: Which host scheduler keeps an agent session going for hours (Claude Code loops and goals, desktop and cloud scheduled tasks, Codex, Cursor, GitHub Actions), the magus commands each wake runs, the cloud risk of an unguarded clone, and what magus will not build.
+description: Which host scheduler keeps an agent session going for hours (Claude Code loops and goals, desktop and cloud scheduled tasks, Codex, Cursor, GitHub Actions), the magus commands each wake runs, the cloud risk of an unguarded clone, and what magus leaves out.
 tags:
   [
     agents,
@@ -94,7 +94,7 @@ its exec line. `./magus session --brief` is the first read of a new sitting.
 Disposing of a row stays a person's act
 ([manual on purpose](../../../doctrine.md#manual-on-purpose)).
 
-## What magus will not build
+## What magus leaves out
 
 Each row is a decision, not a gap. The decision records and the
 [record of refusals](../../../doctrine.md#a-record-of-refusals) hold the
