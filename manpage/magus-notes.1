@@ -25,8 +25,29 @@ There is no put. Notes are written by a person in their own editor and
 committed under their own name, which is what makes git attribution meaningful
 and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
 to declare where they live; with nothing declared the feature is inert.
+.SS notes ls options
+.RS
+.TP
+\fB\-\-private\fR
+Only your own notes
+.TP
+\fB\-\-reproducible\fR
+Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed
+.TP
+\fB\-\-shared\fR
+Only notes committed to this repository (your team has these)
+.TP
+\fB\-\-tag\fR \fIstring\fR
+Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)
+.RE
 .SS notes capture options
 .RS
+.TP
+\fB\-\-anchor\fR \fIstring\fR
+With \-\-gap, what the gap is about (repeatable): symbol:<key>, file:<path>#<decl>, diagnostic:<code>, or any note anchor
+.TP
+\fB\-\-gap\fR
+Capture a harness gap: positional arguments are the refs it was seen in, and every \-\-anchor must resolve
 .TP
 \fB\-\-name\fR \fIstring\fR
 Note name (defaults to review\-<patch digest>)
@@ -90,6 +111,18 @@ magus notes verify
 .PP
 .EX
 magus notes capture
+.EE
+.PP
+\fIRecord a harness gap that magus can find again\fR
+.PP
+.EX
+magus notes capture --gap --shared --title "wait poll denied as sleep" --anchor diagnostic:MGS3009 grd6392b52c2ea13c5a
+.EE
+.PP
+\fIList open gaps with their find lines\fR
+.PP
+.EX
+magus notes ls --tag gap/open
 .EE
 .PP
 .SH SEE ALSO

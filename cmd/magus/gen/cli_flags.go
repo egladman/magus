@@ -345,6 +345,10 @@ const (
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
 	FlagManInstallDryRun = "dry-run"
+	// notes capture: --anchor
+	FlagNotesCaptureAnchor = "anchor"
+	// notes capture: --gap
+	FlagNotesCaptureGap = "gap"
 	// notes capture: --name
 	FlagNotesCaptureName = "name"
 	// notes capture: --private
@@ -355,6 +359,14 @@ const (
 	FlagNotesCaptureTag = "tag"
 	// notes capture: --title
 	FlagNotesCaptureTitle = "title"
+	// notes ls: --private
+	FlagNotesLsPrivate = "private"
+	// notes ls: --reproducible
+	FlagNotesLsReproducible = "reproducible"
+	// notes ls: --shared
+	FlagNotesLsShared = "shared"
+	// notes ls: --tag
+	FlagNotesLsTag = "tag"
 	// path: --global
 	FlagPathGlobal = "global"
 	// path: --refresh
@@ -1506,13 +1518,33 @@ func BindJobPrune(fs *flag.FlagSet) *JobPruneFlags {
 	return &f
 }
 
-// NotesCaptureFlags are the flags declared for `magus notes capture`.
+// NotesLsFlags are the flags declared for `magus notes ls`.
 //
 // It does NOT carry --tag: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type NotesLsFlags struct {
+	Shared       bool // --shared
+	Private      bool // --private
+	Reproducible bool // --reproducible
+}
+
+// BindNotesLs registers `magus notes ls`'s flags on fs and returns the destination.
+func BindNotesLs(fs *flag.FlagSet) *NotesLsFlags {
+	var f NotesLsFlags
+	fs.BoolVar(&f.Shared, FlagNotesLsShared, false, "Only notes committed to this repository (your team has these)")
+	fs.BoolVar(&f.Private, FlagNotesLsPrivate, false, "Only your own notes")
+	fs.BoolVar(&f.Reproducible, FlagNotesLsReproducible, false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
+	return &f
+}
+
+// NotesCaptureFlags are the flags declared for `magus notes capture`.
+//
+// It does NOT carry --tag, --anchor: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type NotesCaptureFlags struct {
 	Title   string // --title
 	Name    string // --name
+	Gap     bool   // --gap
 	Shared  bool   // --shared
 	Private bool   // --private
 }
@@ -1522,6 +1554,7 @@ func BindNotesCapture(fs *flag.FlagSet) *NotesCaptureFlags {
 	var f NotesCaptureFlags
 	fs.StringVar(&f.Title, FlagNotesCaptureTitle, "", "Title for the note (defaults to naming the reviewed base)")
 	fs.StringVar(&f.Name, FlagNotesCaptureName, "", "Note name (defaults to review-<patch digest>)")
+	fs.BoolVar(&f.Gap, FlagNotesCaptureGap, false, "Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve")
 	fs.BoolVar(&f.Shared, FlagNotesCaptureShared, false, "Only notes committed to this repository (your team has these)")
 	fs.BoolVar(&f.Private, FlagNotesCapturePrivate, false, "Only your own notes (default for capture)")
 	return &f

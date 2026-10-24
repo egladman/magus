@@ -507,6 +507,20 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Jobs.IntegrateRefuseAt = n
 		}
 	}
+	if v := getenv("MAGUS_JOBS_MAX_CLAIMS"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_JOBS_MAX_CLAIMS: %w", err))
+		} else {
+			cfg.Jobs.MaxClaims = n
+		}
+	}
+	if v := getenv("MAGUS_GO_CACHE_BUDGET_MB"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_GO_CACHE_BUDGET_MB: %w", err))
+		} else {
+			cfg.Go.CacheBudgetMB = n
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONCURRENCY: %w", err))
