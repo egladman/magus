@@ -335,7 +335,7 @@ func enumCaseValues(ctx context.Context, sess *buzz.Session, def vm.Value, cases
 		if i > 0 {
 			src.WriteString(", ")
 		}
-		src.WriteString(fmt.Sprintf("%s.%s", tierEnumGlobal, c))
+		fmt.Fprintf(&src, "%s.%s", tierEnumGlobal, c)
 	}
 	src.WriteString("];")
 	sess.SetGlobal(tierEnumGlobal, def)
