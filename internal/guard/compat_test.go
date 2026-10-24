@@ -123,7 +123,9 @@ func TestCompatMarkerStaysQuiet(t *testing.T) {
 		assert.Equal(t, decisionAdvise, gradeLeasedEdit(dry, Dependencies{}, "lease-b", file, addsCompat).Decision)
 		assert.False(t, stallGate(hookLocation(ctx, Dependencies{}).cacheDir, "lease-b").AlreadyFired(hint.MarkerKind(denyRuleCompatMarker)))
 	})
-	assert.Empty(t, attentionRows(t, root))
+	for _, r := range attentionRows(t, root) {
+		assert.Equal(t, "magus/held", r.Source, "only the refused write's knock on lease-a files a row: %s", r.Message)
+	}
 }
 
 // Through Judge, the advisory is the verdict's and is named after the rule.

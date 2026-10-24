@@ -907,6 +907,9 @@ type landing struct {
 // stays the verdict only `magus job wait` records from the job's own evidence. Its
 // end_reason names the base commit.
 //
+// A row a person paused (see [types.Job.PausedAt]) ends by rule 1 alone until its pause
+// lapses.
+//
 // Server rows are the server's own maintenance and never swept. An exited row skips rule
 // 2: its holder already returned, and removing the worktree is the normal end of that. A
 // checkout whose stat fails for any reason but absence stays live, since magus cannot
@@ -980,6 +983,9 @@ func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, e
 			kin = "parent"
 		}
 		return fmt.Sprintf("%s %s ended as %s, and its tree ends with it", kin, a.ID, a.State), nil
+	}
+	if row.PausedAt(w.now) {
+		return "", nil
 	}
 	liveChild := x.liveChild[row.ID]
 	if l, ok := w.landed[row.ID]; ok && row.State == types.StateExited && l.updated == row.Updated && !liveChild {
@@ -1137,8 +1143,9 @@ type PruneOptions struct {
 //     opts.All is set.
 //
 // A declared or running row a holder took and touched within jobs.stale_after is never
-// ended, and neither is one it took that is not overdue unless opts.All is set. Nor is
-// any ancestor of such a row, since its tree would end with it. Server rows and rows this
+// ended, and neither is one it took that is not overdue unless opts.All is set, nor one a
+// person paused until its pause lapses, opts.All or not. Nor is any ancestor of such a
+// row, since its tree would end with it. Server rows and rows this
 // magus cannot write are left alone, as the sweep leaves them.
 //
 // A row that would end only because an ancestor this prune ends does is not ended
@@ -1262,15 +1269,16 @@ func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]
 	}
 }
 
-// worked is the ids Prune keeps: every row a holder took and may still be working, and
-// every ancestor of one.
+// worked is the ids Prune keeps: every row a holder took and may still be working, every
+// row a person paused until its pause lapses, and every ancestor of one.
 func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[string]bool {
 	kept := map[string]bool{}
 	for _, row := range rows {
-		if !Editing(row) || row.Registered == 0 {
+		paused := row.State.Live() && row.PausedAt(w.now)
+		if !paused && (!Editing(row) || row.Registered == 0) {
 			continue
 		}
-		if row.Overdue(w.now) || (all && window > 0 && w.now-row.Updated >= int64(window/time.Second)) {
+		if !paused && (row.Overdue(w.now) || (all && window > 0 && w.now-row.Updated >= int64(window/time.Second))) {
 			continue
 		}
 		kept[row.ID] = true

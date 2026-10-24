@@ -3113,6 +3113,6 @@ func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
 			continue
 		}
 		require.NotEmpty(t, reason, tt.name)
-		assert.Contains(t, reason.Say, fmt.Sprintf("held by live lease %s; run `%s`.", tt.holder, hint.JobWait.With(tt.holder)), tt.name)
+		assert.Contains(t, reason.Say, fmt.Sprintf("held by live lease %s; %s", tt.holder, knockClause(tt.holder, tt.other)), tt.name)
 	}
 }

@@ -2,12 +2,15 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,7 +114,6 @@ func TestSilentLeases(t *testing.T) {
 		{ID: "server", State: types.StateRunning, Holder: types.HolderServer},
 	}
 
-
 	got, err := SilentLeases(root, t.TempDir(), rows, now, SilentLeaseAfter)
 	require.NoError(t, err)
 	byLease := map[string]SilentLease{}
@@ -129,4 +131,73 @@ func TestSilentLeases(t *testing.T) {
 	assert.NotContains(t, byLease, "exited", "only a row still being edited is leased")
 	assert.NotContains(t, byLease, "unstamped", "a row never stamped is unobserved, not silent")
 	assert.NotContains(t, byLease, "server", "a server-held row has no session to be silent")
+}
+
+// A holder is dead only on evidence: silent past the bound with a transcript that shows no
+// background command running. An unread transcript, a running command, a recent call or a
+// row nobody took leaves it alive, since its path goes to someone else.
+func TestDeadHolderNeedsSilenceAndNoBackgroundCommand(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	checkout := t.TempDir()
+	at := location{workspace: t.TempDir(), cacheDir: t.TempDir()}
+	store := job.NewStore(at.jobs())
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	old := now.Add(-45 * time.Minute)
+
+	finished := writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone)
+	running := writeTranscript(t, bgSearchCall, bgSearchResult)
+	for _, h := range []Heartbeat{
+		{Session: "s-dead", Lease: "dead", Transcript: finished, At: old},
+		{Session: "s-bg", Lease: "background", Transcript: running, At: old},
+		{Session: "s-blind", Lease: "blind", At: old},
+		{Session: "s-recent", Lease: "recent", Transcript: finished, At: now.Add(-time.Minute)},
+		{Session: "s-untaken", Lease: "untaken", Transcript: finished, At: old},
+	} {
+		stampHeartbeat(ctx, checkout, h)
+	}
+	row := func(id string, registered int64) types.Job {
+		return types.Job{ID: id, State: types.StateRunning, Registered: registered, CheckoutRoot: checkout}
+	}
+
+	got, ok := deadHolder(store, at, row("dead", 1), now)
+	require.True(t, ok)
+	assert.Equal(t, job.DeadHolder{Row: row("dead", 1), Since: old.Unix(),
+		Why: "its session s-dead made no judged call for 45m0s, past 30m0s, and runs no background command"}, got)
+
+	for _, id := range []string{"background", "blind", "recent", "unstamped"} {
+		_, ok := deadHolder(store, at, row(id, 1), now)
+		assert.False(t, ok, id)
+	}
+	_, ok = deadHolder(store, at, row("untaken", 0), now)
+	assert.False(t, ok, "a row nobody took has no holder to die")
+}
+
+// Past heartbeatMaxEntries pairs, a stamp rewrites the store by rename to the newest pairs,
+// one line each, dropping any older than heartbeatRetain.
+func TestStampHeartbeatCompactsPastItsBound(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	store, err := heartbeatStore(root)
+	require.NoError(t, err)
+
+	lines := make([][]byte, 0, heartbeatMaxEntries+1)
+	stale, err := json.Marshal(Heartbeat{Session: "s", Lease: "stale", At: now.Add(-heartbeatRetain - time.Hour)})
+	require.NoError(t, err)
+	lines = append(lines, stale)
+	for i := range heartbeatMaxEntries {
+		line, err := json.Marshal(Heartbeat{Session: "s", Lease: fmt.Sprintf("job-%d", i), At: now.Add(time.Duration(i-heartbeatMaxEntries) * time.Second)})
+		require.NoError(t, err)
+		lines = append(lines, line)
+	}
+	require.NoError(t, file.RewriteLines(store.Path, lines, store.Perm))
+
+	stampHeartbeat(ctx, root, Heartbeat{Session: "s", Lease: "newest", At: now})
+	assert.Equal(t, heartbeatMaxEntries, stampLines(t, root), "the store holds its bound, one line per pair")
+	got, err := store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, "job-1", got[0].Lease, "the stale stamp and the oldest pair went")
+	assert.Equal(t, "newest", got[len(got)-1].Lease)
 }

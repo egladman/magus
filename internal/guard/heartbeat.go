@@ -100,29 +100,128 @@ func stampHeartbeatAt(ctx context.Context, root string, h Heartbeat) error {
 	}
 	// Read without the lock first: the file holds a line or two per live pair, and nearly
 	// every call finds its pair stamped inside the interval and goes no further.
-	if fresh(store, h) {
+	entries, err := store.Load()
+	if err == nil && fresh(entries, h) {
 		return nil
 	}
-	return store.Update(ctx, func(entries []Heartbeat) []Heartbeat {
-		for _, e := range entries {
-			if e.key() == h.key() && h.At.Sub(e.At) < heartbeatInterval {
-				return nil
-			}
+	if err := store.Update(ctx, func(entries []Heartbeat) []Heartbeat {
+		if fresh(entries, h) {
+			return nil
 		}
 		return []Heartbeat{h}
-	})
+	}); err != nil {
+		return err
+	}
+	if len(entries) < heartbeatMaxEntries {
+		return nil
+	}
+	return compactHeartbeats(ctx, store, h.At)
 }
 
-// fresh reports whether the store already holds a stamp for h's pair inside the interval.
-// An unreadable store reads as not fresh, so the locked path reports its error.
-func fresh(store file.JSONL[Heartbeat], h Heartbeat) bool {
-	entries, err := store.Load()
-	if err != nil {
-		return false
-	}
+// fresh reports whether entries already hold a stamp for h's pair inside the interval.
+func fresh(entries []Heartbeat, h Heartbeat) bool {
 	return slices.ContainsFunc(entries, func(e Heartbeat) bool {
 		return e.key() == h.key() && h.At.Sub(e.At) < heartbeatInterval
 	})
+}
+
+// heartbeatMaxEntries bounds the pairs the store keeps. The JSON Lines store already
+// rewrites itself to the last line per pair, but every session and lease adds a pair that
+// nothing ends, so past this the oldest go.
+const heartbeatMaxEntries = 1024
+
+// heartbeatRetain is how old a stamp a compaction keeps whatever the count: a lease silent
+// this long was ended by its deadline or a prune long before.
+const heartbeatRetain = 7 * 24 * time.Hour
+
+// compactHeartbeats rewrites the store by rename to its last line per pair, dropping each
+// stamp older than [heartbeatRetain] before now and then the oldest past
+// [heartbeatMaxEntries].
+func compactHeartbeats(ctx context.Context, store file.JSONL[Heartbeat], now time.Time) error {
+	return file.WithLock(ctx, fmt.Sprintf("%s.lock", store.Path), file.LockWait, func() error {
+		entries, err := store.Load()
+		if err != nil {
+			return err
+		}
+		kept := slices.DeleteFunc(entries, func(e Heartbeat) bool { return now.Sub(e.At) > heartbeatRetain })
+		slices.SortStableFunc(kept, func(a, b Heartbeat) int { return a.At.Compare(b.At) })
+		kept = kept[max(0, len(kept)-heartbeatMaxEntries):]
+		lines := make([][]byte, 0, len(kept))
+		for _, e := range kept {
+			line, err := json.Marshal(e)
+			if err != nil {
+				return err
+			}
+			lines = append(lines, line)
+		}
+		return file.RewriteLines(store.Path, lines, store.Perm)
+	})
+}
+
+// newestStamp is the newest stamp under row's lease in the store of the checkout its holder
+// took it in and in workspace's, false when neither holds one.
+func newestStamp(row types.Job, workspace string) (Heartbeat, bool) {
+	var newest Heartbeat
+	for _, root := range slices.Compact([]string{row.CheckoutRoot, workspace}) {
+		if root == "" {
+			continue
+		}
+		store, err := heartbeatStore(root)
+		if err != nil {
+			continue
+		}
+		stamps, err := store.Load()
+		if err != nil {
+			continue
+		}
+		for _, s := range stamps {
+			if s.Lease == row.ID && s.At.After(newest.At) {
+				newest = s
+			}
+		}
+	}
+	return newest, newest.Lease != ""
+}
+
+// deadOwners is each of owners other than exclude holding rel whose holder [deadHolder]
+// judges dead at now.
+func deadOwners(at location, owners []types.Job, rel, exclude string, now time.Time) []job.DeadHolder {
+	var out []job.DeadHolder
+	store := job.NewStore(at.jobs())
+	for _, row := range owners {
+		if row.ID == exclude {
+			continue
+		}
+		if _, ok, err := declarationCovering(row.HardPaths(), rel); err != nil || !ok {
+			continue
+		}
+		if d, ok := deadHolder(store, at, row, now); ok {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// deadHolder judges the holder of row dead at now: the session that took it ended, or its
+// newest stamp is older than [SilentLeaseAfter] and its transcript shows no background
+// command running. A row nobody took, a server's, and one whose transcript cannot be read
+// are never dead: magus grants a dead holder's path to someone else, so it does not guess.
+func deadHolder(store *job.Store, at location, row types.Job, now time.Time) (job.DeadHolder, bool) {
+	if !job.Editing(row) || row.Registered == 0 || row.Holder.OrSession() == types.HolderServer {
+		return job.DeadHolder{}, false
+	}
+	if since, ok := store.SessionEnded(row.ID); ok {
+		return job.DeadHolder{Row: row, Since: since, Why: "its holder's session ended"}, true
+	}
+	s, ok := newestStamp(row, at.workspace)
+	if !ok || now.Sub(s.At) <= SilentLeaseAfter || s.Transcript == "" {
+		return job.DeadHolder{}, false
+	}
+	if tasks, err := liveBackgroundTasks(s.Transcript, at.cacheDir, now); err != nil || len(tasks) > 0 {
+		return job.DeadHolder{}, false
+	}
+	return job.DeadHolder{Row: row, Since: s.At.Unix(), Why: fmt.Sprintf("its session %s made no judged call for %s, past %s, and runs no background command",
+		s.Session, now.Sub(s.At).Round(time.Second), SilentLeaseAfter)}, true
 }
 
 // SilentLease is a leased row whose session made no judged call for longer than the

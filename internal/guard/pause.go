@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -33,11 +34,11 @@ func denyPausedLease(ctx context.Context, deps Dependencies, actingLease, comman
 		return denial{}
 	}
 	standing := actingLeaseStanding(ctx, deps, actingLease)
-	if !standing.declared || standing.row.Paused == 0 {
+	if !standing.declared || !standing.row.PausedAt(time.Now().Unix()) {
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: %s.", job.PausedLine(actingLease)),
-		Why: "A person paused this job to free the machine for other work. Nothing is preempted, so a run already holding the budget finishes; wait for the resume, or exit the job with what you have.",
+		Say: fmt.Sprintf("magus workspace: %s.", job.PausedLine(standing.row)),
+		Why: "A person paused this job to free the machine for other work. Nothing is preempted, so a run already holding the budget finishes; wait for the resume or the pause's bound, or exit the job with what you have.",
 	}
 }
