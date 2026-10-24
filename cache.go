@@ -190,7 +190,7 @@ func (m *Magus) spellCaches(ctx context.Context) ([]declaredCaches, error) {
 				return nil, fmt.Errorf("magus: spell %s declares the cache %s, which locates no directory here", name, c.Env)
 			}
 			d.roots = append(d.roots, cache.SpellCacheRoot{Name: c.Env, Dir: dir, StampsUse: c.StampsUse, Skip: c.Skip})
-			d.dirs = append(d.dirs, c.Env+"="+dir)
+			d.dirs = append(d.dirs, fmt.Sprintf("%s=%s", c.Env, dir))
 		}
 		out = append(out, d)
 	}

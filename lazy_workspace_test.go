@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -36,7 +37,7 @@ func (s *lazyShards) PutShard(_ context.Context, key string, body io.Reader) err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.puts = append(s.puts, key+"="+string(b))
+	s.puts = append(s.puts, fmt.Sprintf("%s=%s", key, string(b)))
 	return nil
 }
 

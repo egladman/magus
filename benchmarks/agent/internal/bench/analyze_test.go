@@ -408,7 +408,7 @@ func compareJSON(t *testing.T, path string, got, want any) {
 			if _, ok := w[k]; !ok {
 				t.Fatalf("%s/%s: absent from the pinned output", path, k)
 			}
-			compareJSON(t, path+"/"+k, g[k], w[k])
+			compareJSON(t, fmt.Sprintf("%s/%s", path, k), g[k], w[k])
 		}
 	case []any:
 		g, ok := got.([]any)

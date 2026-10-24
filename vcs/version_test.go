@@ -3,6 +3,7 @@ package vcs
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os/exec"
 	"runtime"
 	"testing"
@@ -76,7 +77,9 @@ func TestCachedToolVersionForgetsATooOldVerdict(t *testing.T) {
 	}
 	w := testkit.NewWorkspace(t)
 	write := func(version string) {
-		w.WriteExecutable("git", "#!/bin/sh\necho 'git version "+version+"'\n")
+		w.WriteExecutable("git", fmt.Sprintf(`#!/bin/sh
+echo 'git version %s'
+`, version))
 	}
 	t.Setenv("PATH", w.Root())
 	toolProbes.Delete("git")

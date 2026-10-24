@@ -3,6 +3,7 @@ package magus
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	inspected := m.(*Magus)
 
 	tier, mode, dir := inspected.CacheDescription()
-	assert.Empty(t, tier+mode+dir, "an Inspect workspace has no cache to describe")
+	assert.Empty(t, fmt.Sprintf(`%s%s%s`, tier, mode, dir), "an Inspect workspace has no cache to describe")
 	_, _, err = inspected.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
 	assert.ErrorIs(t, inspected.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)

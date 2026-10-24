@@ -274,7 +274,7 @@ func TestSIGKILLReleasesAtOnce(t *testing.T) {
 	serve(t, addr, WithCapacity(1000, 4))
 
 	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), holderEnv+"="+addr)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", holderEnv, addr))
 	out, err := cmd.StdoutPipe()
 	require.NoError(t, err)
 	require.NoError(t, cmd.Start())

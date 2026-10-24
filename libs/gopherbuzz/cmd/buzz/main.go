@@ -191,7 +191,7 @@ func skipReason(reason string) string {
 	if reason == "" {
 		return ""
 	}
-	return " (" + reason + ")"
+	return fmt.Sprintf(" (%s)", reason)
 }
 
 // parseArgs parses the upstream-style flag set by hand: every option accepts

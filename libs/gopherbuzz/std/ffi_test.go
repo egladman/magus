@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +38,7 @@ func compileLib(t *testing.T, cc, base, csrc string) string {
 	if runtime.GOOS == "darwin" {
 		ext = ".dylib"
 	}
-	lib := filepath.Join(dir, "lib"+base+ext)
+	lib := filepath.Join(dir, fmt.Sprintf("lib%s%s", base, ext))
 	out, err := exec.Command(cc, "-shared", "-fPIC", "-o", lib, src).CombinedOutput()
 	require.NoErrorf(t, err, "cc: %s", out)
 	return lib
@@ -66,8 +67,8 @@ int *firstcell = storage;
 	defer sess.Close()
 	Register(sess)
 
-	script := `
-final lib = zdef("` + lib + `",
+	script := fmt.Sprintf(`
+final lib = zdef("%s",
     "extern int answer;"
     + "extern double ratio;"
     + "extern const char *greeting;"
@@ -77,7 +78,7 @@ export final answer = lib.answer;
 export final ratio = lib.ratio;
 export final greeting = lib.greeting;
 export final agree = lib.firstcell == lib.storage;
-`
+`, lib)
 	require.NoError(t, sess.Exec(ctx, script), "exec")
 	exp := sess.Exports()
 	answer := exp["answer"]
@@ -117,12 +118,12 @@ pt locate(double x, double y) { pt p = { x * 2.0, y + 1.0 }; return p; }
 	defer sess.Close()
 	Register(sess)
 
-	script := `
-final lib = zdef("` + lib + `", "CGPoint locate(double x, double y);");
+	script := fmt.Sprintf(`
+final lib = zdef("%s", "CGPoint locate(double x, double y);");
 final p = lib.locate(3.0, 4.0);
 export final x = p["x"];
 export final y = p["y"];
-`
+`, lib)
 	require.NoError(t, sess.Exec(ctx, script), "exec")
 	exp := sess.Exports()
 	x := exp["x"]
@@ -153,11 +154,11 @@ rect bounds(double offset) { rect r = { offset, offset + 1.0, 1920.0, 1080.0 }; 
 	defer sess.Close()
 	Register(sess)
 
-	script := `
-final lib = zdef("` + lib + `", "CGRect bounds(double offset);");
+	script := fmt.Sprintf(`
+final lib = zdef("%s", "CGRect bounds(double offset);");
 final r = lib.bounds(100.0);
 export final ok = r["x"] == 100.0 and r["y"] == 101.0 and r["w"] == 1920.0 and r["h"] == 1080.0;
-`
+`, lib)
 	require.NoError(t, sess.Exec(ctx, script), "exec")
 	ok := sess.Exports()["ok"]
 	assert.True(t, ok.IsBool(), "ok IsBool")
@@ -183,8 +184,8 @@ const char *greet(void) { return "hey"; }
 	defer sess.Close()
 	Register(sess)
 
-	script := `
-final lib = zdef("` + lib + `",
+	script := fmt.Sprintf(`
+final lib = zdef("%s",
     "fn add(a: c_int, b: c_int) c_int;"
     + "fn halve(x: f64) f64;"
     + "fn greet() [*:0]const u8;"
@@ -193,7 +194,7 @@ export final sum = lib.add(20, 22);
 export final half = lib.halve(9.0);
 export final hello = lib.greet();
 export final answer = lib.answer;
-`
+`, lib)
 	require.NoError(t, sess.Exec(ctx, script), "exec")
 	exp := sess.Exports()
 	sum := exp["sum"]
@@ -238,23 +239,7 @@ pt rec_at(double x) { pt p = { x, x * 2.0 }; return p; }
 	defer sess.Close()
 	Register(sess)
 
-	script := `
-import "ffi";
-final lib = zdef("` + lib + `", ` + "`" + `
-    const Rec = extern struct { id: c_int, score: f64 };
-    const Pt = extern struct { x: f64, y: f64 };
-    fn rec_init(r: *Rec, id: c_int, score: f64) void;
-    fn rec_score(r: *Rec) f64;
-    fn rec_at(x: f64) Pt;
-` + "`" + `);
-final lay = lib.Rec;
-final r = ffi\alloc(lay["size"]);
-lib.rec_init(r, 7, 9.5);
-export final id = ffi\read(r, lay["offsets"][0], "c_int");
-export final score = lib.rec_score(r);
-final p = lib.rec_at(3.0);
-export final py = p["y"];
-`
+	script := fmt.Sprintf("\nimport \"ffi\";\nfinal lib = zdef(\"%s\", `\n    const Rec = extern struct { id: c_int, score: f64 };\n    const Pt = extern struct { x: f64, y: f64 };\n    fn rec_init(r: *Rec, id: c_int, score: f64) void;\n    fn rec_score(r: *Rec) f64;\n    fn rec_at(x: f64) Pt;\n`);\nfinal lay = lib.Rec;\nfinal r = ffi\\alloc(lay[\"size\"]);\nlib.rec_init(r, 7, 9.5);\nexport final id = ffi\\read(r, lay[\"offsets\"][0], \"c_int\");\nexport final score = lib.rec_score(r);\nfinal p = lib.rec_at(3.0);\nexport final py = p[\"y\"];\n", lib)
 	require.NoError(t, sess.Exec(ctx, script), "exec")
 	exp := sess.Exports()
 	id := exp["id"]
@@ -334,41 +319,41 @@ func runBuzz(t *testing.T, src string) string {
 
 func TestFFIScalarCall(t *testing.T) {
 	lib := buildCLib(t)
-	got := runBuzz(t, `
-final lib = zdef("`+lib+`", "int add(int a, int b);");
+	got := runBuzz(t, fmt.Sprintf(`
+final lib = zdef("%s", "int add(int a, int b);");
 final __r = lib.add(40, 2);
-`)
+`, lib))
 	assert.Equal(t, "42", got, "add(40,2)")
 }
 
 func TestFFIFloatCall(t *testing.T) {
 	lib := buildCLib(t)
-	got := runBuzz(t, `
-final lib = zdef("`+lib+`", "double scale(double x);");
+	got := runBuzz(t, fmt.Sprintf(`
+final lib = zdef("%s", "double scale(double x);");
 final __r = lib.scale(4.0);
-`)
+`, lib))
 	assert.Contains(t, []string{"10", "10.0"}, got, "scale(4.0) = %q, want 10", got)
 }
 
 func TestFFIPointerOutParam(t *testing.T) {
 	lib := buildCLib(t)
-	got := runBuzz(t, `
+	got := runBuzz(t, fmt.Sprintf(`
 import "ffi";
-final lib = zdef("`+lib+`", "void fill(int *out);");
+final lib = zdef("%s", "void fill(int *out);");
 final p = ffi\alloc(ffi\sizeOf("int"));
 lib.fill(p);
 final __r = ffi\read(p, 0, "int");
 ffi\free(p);
-`)
+`, lib))
 	assert.Equal(t, "99", got, "fill out-param")
 }
 
 func TestFFIStructByReference(t *testing.T) {
 	lib := buildCLib(t)
 	// Build a Rec on the Buzz side, let C initialize it, read both fields back.
-	got := runBuzz(t, `
+	got := runBuzz(t, fmt.Sprintf(`
 import "ffi";
-final lib = zdef("`+lib+`", "void rec_init(void *r, int id, double score); int rec_id(void *r);");
+final lib = zdef("%s", "void rec_init(void *r, int id, double score); int rec_id(void *r);");
 final lay = ffi\structLayout(["int", "double"]);
 final r = ffi\alloc(lay["size"]);
 lib.rec_init(r, 7, 9.5);
@@ -377,19 +362,19 @@ final score = ffi\read(r, lay["offsets"][1], "double");
 final viaC = lib.rec_id(r);
 ffi\free(r);
 final __r = "{id}/{score}/{viaC}";
-`)
+`, lib))
 	assert.Equal(t, "7/9.5/7", got, "struct-by-ref")
 }
 
 func TestFFICallback(t *testing.T) {
 	lib := buildCLib(t)
-	got := runBuzz(t, `
+	got := runBuzz(t, fmt.Sprintf(`
 import "ffi";
-final lib = zdef("`+lib+`", "int apply(void *f, int x);");
+final lib = zdef("%s", "int apply(void *f, int x);");
 fun triple(n: int) > int { return n * 3; }
 final cb = ffi\callback(triple, "int", ["int"]);
 final __r = lib.apply(cb, 14);
-`)
+`, lib))
 	assert.Equal(t, "42", got, "apply(triple, 14)")
 }
 

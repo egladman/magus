@@ -98,7 +98,7 @@ func hgFamilyDiffStat(ctx context.Context, prog, dir, base string) ([]types.File
 		return nil, err
 	}
 	out, err := vcsOutputRaw(ctx, dir, prog, "diff", "--config", "diff.git=0",
-		"-r", "ancestor("+base+",.)", "-r", ".")
+		"-r", fmt.Sprintf("ancestor(%s,.)", base), "-r", ".")
 	if err != nil {
 		return nil, fmt.Errorf("%s diff ancestor(%s,.)-.: %w", prog, base, err)
 	}
@@ -140,7 +140,7 @@ func (v jjVCS) DiffStat(ctx context.Context, dir, base string) ([]types.FileStat
 	if err != nil {
 		return nil, err
 	}
-	forkID, err := jjSingleCommit(ctx, root, "heads(::"+baseID+" & ::@)")
+	forkID, err := jjSingleCommit(ctx, root, fmt.Sprintf("heads(::%s & ::@)", baseID))
 	if err != nil {
 		return nil, fmt.Errorf("merge base of %s and @: %w", base, err)
 	}
@@ -194,7 +194,7 @@ func jjSingleCommit(ctx context.Context, root, revset string) (string, error) {
 func jjFileLines(ctx context.Context, root, rev, path string) (lines int, binary bool, err error) {
 	cmd := vcsExec(ctx, "jj", "file", "show", "-r", rev, "root-file:"+strconv.Quote(path))
 	cmd.Dir = root
-	body, err := revFileOutput(cmd, "jj file show "+path+" at "+rev)
+	body, err := revFileOutput(cmd, fmt.Sprintf("jj file show %s at %s", path, rev))
 	if err != nil {
 		return 0, false, err
 	}
@@ -272,7 +272,7 @@ func equalNamePath(names string) string {
 		return ""
 	}
 	p := names[2 : 2+(n-5)/2]
-	if names != "a/"+p+" b/"+p {
+	if names != fmt.Sprintf("a/%s b/%s", p, p) {
 		return ""
 	}
 	return p

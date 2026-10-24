@@ -3,6 +3,7 @@ package figure
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -92,7 +93,7 @@ func (m mirror) record(obj *ast.ObjectDecl, got reflect.Type, at string, in decl
 		fields[strings.Split(f.Tag.Get("json"), ",")[0]] = f
 	}
 	for _, f := range obj.Fields {
-		where := obj.Name + "." + f.Name
+		where := fmt.Sprintf("%s.%s", obj.Name, f.Name)
 		gf, ok := fields[f.Name]
 		delete(fields, f.Name)
 		if _, skip := hostless[where]; skip {
@@ -133,8 +134,8 @@ func (m mirror) typed(annot string, got reflect.Type, at string, in declarations
 		assert.Equal(m.t, annot, got.Name(), "%s: an enum's case name is typed by the enum", at)
 	case strings.HasPrefix(annot, `magus\`):
 		name := strings.TrimPrefix(annot, `magus\`)
-		m.record(m.magus.objects[name], got, at+" ("+annot+")", m.magus)
+		m.record(m.magus.objects[name], got, fmt.Sprintf("%s (%s)", at, annot), m.magus)
 	default:
-		m.record(in.objects[annot], got, at+" ("+annot+")", in)
+		m.record(in.objects[annot], got, fmt.Sprintf("%s (%s)", at, annot), in)
 	}
 }

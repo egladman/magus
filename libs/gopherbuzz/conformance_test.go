@@ -255,7 +255,7 @@ func TestUpstreamCompileErrors(t *testing.T) {
 	}
 	for name := range allowed {
 		if !seen[name] {
-			regressions = append(regressions, name+": allowlisted but not found in "+errDir)
+			regressions = append(regressions, fmt.Sprintf("%s: allowlisted but not found in %s", name, errDir))
 		}
 	}
 	if len(regressions) > 0 {

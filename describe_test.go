@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -136,15 +137,15 @@ func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
 	// false that an omitempty tag names.
 	raw, err := json.Marshal(inventory[idx])
 	require.NoError(t, err)
-	assert.JSONEq(t, `{
-		"name": "`+name+`", "buzz_import": "magus/spell/`+name+`", "built_in": false,
+	assert.JSONEq(t, fmt.Sprintf(`{
+		"name": "%s", "buzz_import": "magus/spell/%s", "built_in": false,
 		"opaque": false, "version_probe": false,
 		"language": "demo", "extensions": [".demo"],
 		"syntax": {
 			"comments": {"lineComments": ["//"], "nested": false},
 			"stubs": {"kinds": ["Function"], "bodyStyle": "brace", "body": "{ todo }"}
 		}
-	}`, string(raw))
+	}`, name, name), string(raw))
 }
 
 func TestSpellToolchainsDeriveFromResolvedCommands(t *testing.T) {
@@ -773,8 +774,7 @@ func TestClassifyFiles_OutsideWorkspace(t *testing.T) {
 	out, err := ws.ClassifyFiles(context.Background(), []string{elsewhere, invented})
 	require.NoError(t, err, "ClassifyFiles")
 
-	hint := "resolves outside this workspace (" + root + "): no project here can declare it, " +
-		"so none of magus's answers about this workspace apply to it"
+	hint := fmt.Sprintf("resolves outside this workspace (%s): no project here can declare it, so none of magus's answers about this workspace apply to it", root)
 	assert.Equal(t, []types.FileEntry{
 		// Exists still answered: a real file from another checkout is a different
 		// mistake from a path that is nowhere, and the caller can tell which.
@@ -838,9 +838,12 @@ func TestClassifyFiles_DeclaredGitattributesByChange(t *testing.T) {
 
 	const user = "*.png binary\n"
 	section := func(body string) string {
-		return "# BEGIN magus-generated - do not edit this section manually\n" + body + "# END magus-generated\n"
+		return fmt.Sprintf(`# BEGIN magus-generated - do not edit this section manually
+%s# END magus-generated
+`, body)
 	}
-	committed := user + "\n" + section("a.go merge=magus\n")
+	committed := fmt.Sprintf(`%s
+%s`, user, section("a.go merge=magus\n"))
 
 	tests := []struct {
 		name    string
@@ -848,8 +851,11 @@ func TestClassifyFiles_DeclaredGitattributesByChange(t *testing.T) {
 		want    string
 	}{
 		{name: "unchanged", working: committed, want: "source"},
-		{name: "section rewritten", working: user + "\n" + section("a.go merge=magus\nb.go merge=magus\n"), want: "maintained"},
-		{name: "hand edit outside the section", working: user + "*.jpg binary\n\n" + section("a.go merge=magus\n"), want: "source"},
+		{name: "section rewritten", working: fmt.Sprintf(`%s
+%s`, user, section("a.go merge=magus\nb.go merge=magus\n")), want: "maintained"},
+		{name: "hand edit outside the section", working: fmt.Sprintf(`%s*.jpg binary
+
+%s`, user, section("a.go merge=magus\n")), want: "source"},
 		{name: "hand edit and section rewritten", working: "*.jpg binary\n\n" + section("b.go merge=magus\n"), want: "source"},
 	}
 	for _, tt := range tests {

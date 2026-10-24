@@ -95,7 +95,7 @@ func (f Field) Describe() string {
 	} else {
 		flags := "--" + f.Flag.Long
 		if f.Flag.Short != "" {
-			flags = "-" + f.Flag.Short + ", " + flags
+			flags = fmt.Sprintf("-%s, %s", f.Flag.Short, flags)
 		}
 		fmt.Fprintf(&sb, "Flags: %s\n", flags)
 	}
@@ -108,7 +108,7 @@ func flagsLabel(f FlagNames) string {
 		return "env-only"
 	}
 	if f.Short != "" {
-		return "-" + f.Short + ", --" + f.Long
+		return fmt.Sprintf("-%s, --%s", f.Short, f.Long)
 	}
 	return "--" + f.Long
 }

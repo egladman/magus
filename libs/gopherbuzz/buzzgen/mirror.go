@@ -159,7 +159,7 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 		if eerr != nil {
 			return "", "", eerr
 		}
-		return "[" + elem + "]", "[]", nil
+		return fmt.Sprintf("[%s]", elem), "[]", nil
 	case reflect.Struct:
 		if opts.TimeAsString && t == reflect.TypeOf(time.Time{}) {
 			return "str", `""`, nil
@@ -181,7 +181,7 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 		if verr != nil {
 			return "", "", fmt.Errorf("map value: %w", verr)
 		}
-		return "{" + keyT + ": " + valT + "}", "{}", nil
+		return fmt.Sprintf("{%s: %s}", keyT, valT), "{}", nil
 	case reflect.Interface:
 		// An interface field holds whatever JSON-shaped value the Go side put there,
 		// nil included, so it mirrors as a nullable `any` rather than claiming a type.
@@ -209,7 +209,7 @@ func FieldName(f reflect.StructField) string {
 		name = LowerFirstWord(f.Name)
 	}
 	if buzz.IsReservedIdent(name) || token.IsKeyword(name) {
-		return `@"` + name + `"`
+		return fmt.Sprintf(`@"%s"`, name)
 	}
 	return name
 }

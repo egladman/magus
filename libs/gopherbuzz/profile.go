@@ -41,7 +41,7 @@ func (p *Profile) Import(importPath string, outcome ImportOutcome, elapsed time.
 	if p == nil {
 		return
 	}
-	p.record("import "+importPath+" "+outcome.String(), elapsed)
+	p.record(fmt.Sprintf("import %s %s", importPath, outcome.String()), elapsed)
 }
 
 func (p *Profile) record(name string, d time.Duration) {

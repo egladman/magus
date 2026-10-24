@@ -699,7 +699,7 @@ func (v Value) stringPath(path []Value) string {
 		return fmt.Sprintf("<enum %s>", v.asEnumDef().Name)
 	case tagEnumVal:
 		ev := v.asEnumVal()
-		return ev.Enum + "." + ev.Case
+		return fmt.Sprintf("%s.%s", ev.Enum, ev.Case)
 	case tagRange:
 		r := v.asRange()
 		return fmt.Sprintf("%d..%d", r.Lo, r.Hi)
@@ -720,7 +720,7 @@ func (v Value) stringPath(path []Value) string {
 	case tagType:
 		// Printed as written in source, angle brackets included, so a failing
 		// assertion shows `<[any]>` rather than a bare type name.
-		return "<" + v.asType().name + ">"
+		return fmt.Sprintf("<%s>", v.asType().name)
 	default:
 		return "<unknown>"
 	}

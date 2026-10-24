@@ -1048,7 +1048,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 
 	fields := make([]string, len(ps))
 	for i, p := range ps {
-		fields[i] = string(p.Code) + " " + p.Field
+		fields[i] = fmt.Sprintf("%s %s", string(p.Code), p.Field)
 		assert.NotEmptyf(t, p.Message, "%s has a message", fields[i])
 		assert.NotEmptyf(t, p.Fix, "%s has a fix", fields[i])
 	}

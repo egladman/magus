@@ -1259,7 +1259,7 @@ func checkToolWindows(projects []*types.Project, versions map[string]string) err
 				if window.IsZero() {
 					continue
 				}
-				version, seen := versions[p.Path+"\x00"+s.Name()+"\x00"+tool]
+				version, seen := versions[fmt.Sprintf("%s\x00%s\x00%s", p.Path, s.Name(), tool)]
 				if !seen {
 					continue
 				}
@@ -1393,12 +1393,12 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 				if !wanted(s, tool) {
 					continue
 				}
-				r := memo[s.Name()+"\x00"+dir+"\x00"+tool]
+				r := memo[fmt.Sprintf("%s\x00%s\x00%s", s.Name(), dir, tool)]
 				// A project sharing a dir with another still needs its own gate entry.
 				if extracted != nil && r.full != "" {
-					extracted[p.Path+"\x00"+s.Name()+"\x00"+tool] = r.full
+					extracted[fmt.Sprintf("%s\x00%s\x00%s", p.Path, s.Name(), tool)] = r.full
 				}
-				vers = append(vers, s.Name()+":"+tool+":"+r.token)
+				vers = append(vers, fmt.Sprintf("%s:%s:%s", s.Name(), tool, r.token))
 			}
 		}
 		if len(vers) > 0 {
@@ -1444,7 +1444,7 @@ func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*t
 				if !wanted(s, tool) {
 					continue
 				}
-				key := s.Name() + "\x00" + dir + "\x00" + tool
+				key := fmt.Sprintf("%s\x00%s\x00%s", s.Name(), dir, tool)
 				probe := tp.memo[key]
 				if probe == nil {
 					probe = &toolProbe{}
@@ -1593,7 +1593,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 			for _, tool := range s.ToolNames() {
 				t, _ := s.Tool(tool)
 				probe, fork := t.Observe, func() (string, error) { return s.ProbeObservation(ctx, tool, p.Dir) }
-				drivenAs := s.Name() + ":" + tool
+				drivenAs := fmt.Sprintf("%s:%s", s.Name(), tool)
 				if !t.HasObservationProbe() {
 					// A tool the symbol indexer uses is observed through its version argv,
 					// for the scip op alone: only a caller scoped to that op names it.
@@ -1610,7 +1610,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				if driven != nil && !drivenHere[drivenAs] {
 					continue
 				}
-				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
+				tk := fmt.Sprintf("%s\x00%s\x00%s", s.Name(), p.Dir, tool)
 				value, hit := memo[tk]
 				if !hit {
 					probed, err := m.probeCached(ctx, probe, p.Dir, fork)
@@ -1632,7 +1632,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				if out[p.Path] == nil {
 					out[p.Path] = map[string]string{}
 				}
-				out[p.Path][s.Name()+":"+tool] = value
+				out[p.Path][fmt.Sprintf("%s:%s", s.Name(), tool)] = value
 			}
 		}
 	}
@@ -1654,13 +1654,13 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 		}
 		for _, opName := range use.Ops {
 			if op, ok := p.ResolvedSpells[i].Op(opName); ok && op.Bin != "" {
-				driven[use.Spell+":"+op.Bin] = true
+				driven[fmt.Sprintf("%s:%s", use.Spell, op.Bin)] = true
 			}
 		}
 	}
 	for _, s := range p.ResolvedSpells {
 		if op, ok := s.Op(target); ok && op.Bin != "" {
-			driven[s.Name()+":"+op.Bin] = true
+			driven[fmt.Sprintf("%s:%s", s.Name(), op.Bin)] = true
 		}
 		for _, tool := range indexerUses(s, target) {
 			driven[indexerUseKey(s, tool)] = true
@@ -1728,12 +1728,12 @@ func observationsForTarget(p *types.Project, target string, probed map[string]st
 	}
 	var out []string
 	add := func(spell, tool string) {
-		key := spell + ":" + tool
+		key := fmt.Sprintf("%s:%s", spell, tool)
 		value, ok := probed[key]
 		if !ok {
 			return
 		}
-		if line := key + ":" + value; !slices.Contains(out, line) {
+		if line := fmt.Sprintf("%s:%s", key, value); !slices.Contains(out, line) {
 			out = append(out, line)
 		}
 	}
@@ -2625,7 +2625,7 @@ func checkOutputOverlap(ctx context.Context, steps []cache.Step, out *Sink) {
 			}
 			target := tA
 			if tA != tB {
-				target = tA + "," + tB
+				target = fmt.Sprintf("%s,%s", tA, tB)
 			}
 			out.emit(ctx, report.OutputOverlapDetected{
 				ProjectA:    pA,
@@ -2755,7 +2755,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		return err
 	}
 
-	volatileTarget := s.Name() + "/" + name
+	volatileTarget := fmt.Sprintf("%s/%s", s.Name(), name)
 	// This pair's own opt-in. Read here because here is the only place that holds
 	// both halves of the (project, target) the decision is about; the Runtime holds
 	// one answer for the whole run, which is not the same question.
@@ -3199,7 +3199,7 @@ func charmedTarget(target string, charms []string) string {
 	if len(charms) == 0 {
 		return target
 	}
-	return target + ":" + strings.Join(charms, ",")
+	return fmt.Sprintf("%s:%s", target, strings.Join(charms, ","))
 }
 
 // attributeRun gives a run an invocation identity when nothing upstream gave it one, so

@@ -39,7 +39,7 @@ func hgUsername(as types.Person) ([]string, error) {
 	if as.Name == "" || as.Email == "" {
 		return nil, errors.New("vcs: acting as someone needs a name and an email")
 	}
-	return []string{"--config", "ui.username=" + as.Name + " <" + as.Email + ">"}, nil
+	return []string{"--config", fmt.Sprintf("ui.username=%s <%s>", as.Name, as.Email)}, nil
 }
 
 // writeHgMergeDriverSection routes the output and auto-resolve globs to the magus
@@ -98,13 +98,15 @@ func hgMergeDriverCommand(ctx context.Context, prog, root string) (string, error
 	if err != nil && exitCode(err) != 1 {
 		return "", fmt.Errorf("%s config merge-tools.magus.args: %w", prog, err)
 	}
-	return strings.TrimSpace(exe + " " + args), nil
+	return strings.TrimSpace(fmt.Sprintf("%s %s", exe, args)), nil
 }
 
 // writeHgRefreshSection registers an `update` hook running command in the hg-family config
 // at path, of the repository at root; prog is hg or sl. The caller holds withRepoLock.
 func writeHgRefreshSection(root, path, prog, command string, j stamp.Judge) (bool, error) {
-	body := "[hooks]\n" + hgRefreshKey + " = " + hgHookValue(prog, command) + "\n"
+	body := fmt.Sprintf(`[hooks]
+%s = %s
+`, hgRefreshKey, hgHookValue(prog, command))
 	return writeManagedSection(root, path, refreshMarkers, body, configFile, j)
 }
 
@@ -221,7 +223,7 @@ func hgRangeFiles(ctx context.Context, prog, dir, base, head string, paths []str
 	}
 	args := append([]string{"status"}, extra...)
 	args = append(args, "--no-status", "--added", "--modified", "--removed",
-		"--rev", "ancestor("+base+","+head+")", "--rev", head)
+		"--rev", fmt.Sprintf("ancestor(%s,%s)", base, head), "--rev", head)
 	args = append(args, hgRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
@@ -237,7 +239,7 @@ func hgRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, base, hea
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
-	args := append([]string{"log", "-r", "reverse(only(" + head + "," + base + "))", "--template", "{node}\n"},
+	args := append([]string{"log", "-r", fmt.Sprintf("reverse(only(%s,%s))", head, base), "--template", "{node}\n"},
 		hgRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
@@ -265,7 +267,7 @@ func hgIsAncestor(ctx context.Context, prog, dir, ancestor, descendant string) (
 	if err := checkRequiredRevsetRef(ancestor, descendant); err != nil {
 		return false, err
 	}
-	out, err := vcsOutput(ctx, dir, prog, "log", "-r", ancestor+" and ancestors("+descendant+")", "--template", "{node}")
+	out, err := vcsOutput(ctx, dir, prog, "log", "-r", fmt.Sprintf("%s and ancestors(%s)", ancestor, descendant), "--template", "{node}")
 	if err != nil {
 		return false, fmt.Errorf("%s log %s and ancestors(%s): %w", prog, ancestor, descendant, err)
 	}

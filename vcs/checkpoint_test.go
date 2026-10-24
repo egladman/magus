@@ -3,6 +3,7 @@ package vcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -147,8 +148,8 @@ func TestCheckpointTokenCoversUntrackedFiles(t *testing.T) {
 		require.True(t, first.Dirty)
 		require.Equal(t, emptyPatch, first.PatchDigest, "no tracked file moved")
 		token := first.Token()
-		assert.NotEqual(t, first.Revision+"+"+emptyPatch, token)
-		assert.Regexp(t, `^`+first.Revision+`\+[0-9a-f]{32}$`, token)
+		assert.NotEqual(t, fmt.Sprintf("%s+%s", first.Revision, emptyPatch), token)
+		assert.Regexp(t, fmt.Sprintf(`^%s\+[0-9a-f]{32}$`, first.Revision), token)
 
 		writeFile(t, dir, "new.txt", "edited\n")
 		edited, err := Checkpoint(ctx, dir, res, false)
@@ -162,7 +163,7 @@ func TestCheckpointTokenCoversUntrackedFiles(t *testing.T) {
 		tracked, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
 		require.Empty(t, tracked.UntrackedDigest)
-		assert.Equal(t, tracked.Revision+"+"+tracked.PatchDigest, tracked.Token(),
+		assert.Equal(t, fmt.Sprintf("%s+%s", tracked.Revision, tracked.PatchDigest), tracked.Token(),
 			"a tracked-only token stays the review session's patch digest")
 
 		writeFile(t, dir, "new.txt", "fresh\n")

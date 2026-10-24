@@ -154,7 +154,7 @@ func Inline(err error) string {
 	// Outermost first: an outer *Error's text contains its inner's, and once the outer is
 	// rewritten the inner's own rendering is what is left to find.
 	for _, e := range codedChain(err) {
-		text = strings.ReplaceAll(text, e.Error(), e.Msg+" ("+string(e.Code)+")")
+		text = strings.ReplaceAll(text, e.Error(), fmt.Sprintf("%s (%s)", e.Msg, string(e.Code)))
 	}
 	return text
 }

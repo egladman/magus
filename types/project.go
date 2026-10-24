@@ -354,7 +354,7 @@ func RootGlob(projectPath, glob string) string {
 	if projectPath == "" || projectPath == "." {
 		return path.Clean(glob)
 	}
-	return path.Clean(projectPath + "/" + glob)
+	return path.Clean(fmt.Sprintf("%s/%s", projectPath, glob))
 }
 
 // Glob is one declared doublestar pattern and the exclusions declared with it.
@@ -453,7 +453,7 @@ func (g Glob) String() string {
 	if len(g.Except) == 0 {
 		return g.Pattern
 	}
-	return g.Pattern + " !" + strings.Join(g.Except, " !")
+	return fmt.Sprintf("%s !%s", g.Pattern, strings.Join(g.Except, " !"))
 }
 
 // GlobStrings renders each glob with [Glob.String], for a display field that lists one

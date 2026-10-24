@@ -216,7 +216,7 @@ func describeWaitCycle(chain []string) string {
 	for _, n := range chain[1:] {
 		s += " -> " + n
 	}
-	return s + " -> " + chain[0]
+	return fmt.Sprintf("%s -> %s", s, chain[0])
 }
 
 // waitEntry blocks until e.done closes or ctx is cancelled, for the no-caller

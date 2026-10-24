@@ -3,6 +3,7 @@ package magus
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -198,8 +199,8 @@ func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
 			var again *cache.RefNotFoundError
 			require.ErrorAs(t, err, &again)
 			assert.Same(t, missing, again, "the miss is one error, not rebuilt on every unwrap")
-			assert.Contains(t, err.Error(), "recorded by "+gone+", which is no longer on disk")
-			assert.Contains(t, err.Error(), "`cd "+gone+" && magus query output "+goneRef+"`")
+			assert.Contains(t, err.Error(), fmt.Sprintf("recorded by %s, which is no longer on disk", gone))
+			assert.Contains(t, err.Error(), fmt.Sprintf("`cd %s && magus query output %s`", gone, goneRef))
 
 			err = lookup(agedRef)
 			require.ErrorIs(t, err, fs.ErrNotExist)

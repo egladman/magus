@@ -1216,7 +1216,7 @@ func (e ClaimEvidence) String() string {
 	if e.Subject == "" {
 		return string(e.Kind)
 	}
-	return string(e.Kind) + ":" + e.Subject
+	return fmt.Sprintf("%s:%s", string(e.Kind), e.Subject)
 }
 
 // ParseClaimEvidence reads a `because`. An output subject is `<project>:<target>`.

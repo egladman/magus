@@ -30,7 +30,7 @@ func bashList(commands []cmdline.Command) string {
 	for i, c := range commands {
 		names[i] = c.Name
 	}
-	return `    local subcommands="` + strings.Join(names, " ") + `"`
+	return fmt.Sprintf(`    local subcommands="%s"`, strings.Join(names, " "))
 }
 
 func zshList(commands []cmdline.Command) string {
@@ -44,7 +44,7 @@ func zshList(commands []cmdline.Command) string {
 		// would close the single-quoted string and break the script's parse.
 		desc := strings.ReplaceAll(c.Short, ":", `\:`)
 		desc = strings.ReplaceAll(desc, "'", `'\''`)
-		b.WriteString("                '" + c.Name + ":" + desc + "'\n")
+		fmt.Fprintf(&b, "                '%s:%s'\n", c.Name, desc)
 	}
 	b.WriteString("            )")
 	return b.String()
@@ -87,7 +87,7 @@ func powerShellList(commands []cmdline.Command) string {
 		cur = nil
 	}
 	for i, c := range commands {
-		cur = append(cur, "'"+c.Name+"'")
+		cur = append(cur, fmt.Sprintf("'%s'", c.Name))
 		if len(cur) == 6 || i == len(commands)-1 {
 			flush(i == len(commands)-1)
 		}

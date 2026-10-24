@@ -233,7 +233,7 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 				continue
 			}
 			// Both sides of a rename, as ChangedFiles reports them.
-			paths, err := gitOutput(ctx, dir, gitOpts{}, "diff", "--name-only", "--no-renames", "--ignore-submodules=none", base+"..."+ref)
+			paths, err := gitOutput(ctx, dir, gitOpts{}, "diff", "--name-only", "--no-renames", "--ignore-submodules=none", fmt.Sprintf("%s...%s", base, ref))
 			if err != nil {
 				// One unreachable branch is not a reason to report none: a ref can vanish
 				// between the listing and the diff, and the rest of the answer is still true.
@@ -296,7 +296,7 @@ func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []s
 	// lines unique to both sides and keeps the move legible as a move.
 	// --no-ext-diff and --no-textconv because the box's diff drivers would put their output,
 	// not git's patch, in front of the parser.
-	args := []string{"diff", "--histogram", "--no-ext-diff", "--no-textconv", base + "..." + head}
+	args := []string{"diff", "--histogram", "--no-ext-diff", "--no-textconv", fmt.Sprintf("%s...%s", base, head)}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -373,7 +373,7 @@ func (v gitVCS) RangeCommits(ctx context.Context, dir, base, head string, paths 
 	if err != nil {
 		return nil, err
 	}
-	args := append([]string{"rev-list", base + ".." + head, "--"}, paths...)
+	args := append([]string{"rev-list", fmt.Sprintf("%s..%s", base, head), "--"}, paths...)
 	out, err := gitOutput(ctx, at, gitOpts{Literal: true}, args...)
 	if err != nil {
 		return nil, fmt.Errorf("git rev-list %s..%s: %w", base, head, err)
@@ -437,7 +437,7 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 		slog.DebugContext(ctx, "cannot deepen: base ref is not a remote-tracking name", slog.String("base", base))
 		return ""
 	}
-	if _, err := gitOutput(ctx, dir, gitOpts{}, "config", "--get", "remote."+remote+".url"); err != nil {
+	if _, err := gitOutput(ctx, dir, gitOpts{}, "config", "--get", fmt.Sprintf("remote.%s.url", remote)); err != nil {
 		slog.DebugContext(ctx, "cannot deepen: base ref names no configured remote",
 			slog.String("base", base), slog.String("remote", remote))
 		return ""
@@ -703,7 +703,7 @@ func headBranch(dir string) (string, bool) {
 	}
 	// The names git's ref rules would try besides refs/heads/<name>. Any of them
 	// existing makes --abbrev-ref qualify the name, which only git spells exactly.
-	for _, other := range []string{name, "refs/" + name, "refs/tags/" + name, "refs/remotes/" + name, "refs/remotes/" + name + "/HEAD"} {
+	for _, other := range []string{name, "refs/" + name, "refs/tags/" + name, "refs/remotes/" + name, fmt.Sprintf("refs/remotes/%s/HEAD", name)} {
 		if gitRefExists(gitdir, nil, other) || gitRefExists(common, packed, other) {
 			return "", false
 		}
@@ -1557,7 +1557,7 @@ func gitManagedConfig(ctx context.Context, root string) (map[string]string, erro
 // gitConfigValues returns keys' values in one git config scope ("--local", "--worktree"),
 // or across every scope when scope is "", keyed as git spells them. An unset key is absent.
 func gitConfigValues(ctx context.Context, root, scope string, keys []string) (map[string]string, error) {
-	pattern := "^(" + strings.ReplaceAll(strings.Join(keys, "|"), ".", `\.`) + ")$"
+	pattern := fmt.Sprintf("^(%s)$", strings.ReplaceAll(strings.Join(keys, "|"), ".", `\.`))
 	args := []string{"config"}
 	if scope != "" {
 		args = append(args, scope)
@@ -1818,7 +1818,7 @@ func anchorAttrPattern(pattern string) string {
 // footprint names what a change touched and what `git diff` prints after each @@.
 type gitDiffDriver struct{ glob, driver string }
 
-func (d gitDiffDriver) line() string { return d.glob + " diff=" + d.driver }
+func (d gitDiffDriver) line() string { return fmt.Sprintf("%s diff=%s", d.glob, d.driver) }
 
 // gitDiffDrivers are the managed section's diff driver lines, one per glob of
 // types.DiffDrivers, in its order.
@@ -1837,7 +1837,7 @@ var gitDiffDrivers = func() []gitDiffDriver {
 // needs its own registration.
 type gitFuncname struct{ driver, pattern string }
 
-func (f gitFuncname) key() string { return "diff." + f.driver + ".xfuncname" }
+func (f gitFuncname) key() string { return fmt.Sprintf("diff.%s.xfuncname", f.driver) }
 
 // gitFuncnames are the patterns of the types.DiffDrivers git does not ship. The pure
 // declaration placement (types.Hunks) reads the same patterns, so a region named without
@@ -1936,7 +1936,7 @@ func localDriverExe(ctx context.Context, root string, tracks tracksFunc) string 
 // unwraps the same quoting.
 func quoteDriverExe(exe string) string {
 	if strings.ContainsAny(exe, " \t") {
-		return `"` + exe + `"`
+		return fmt.Sprintf(`"%s"`, exe)
 	}
 	return exe
 }
@@ -2012,7 +2012,7 @@ func (v gitVCS) writeGitConfig(ctx context.Context, root string, j stamp.Judge) 
 		if err != nil {
 			file = configName
 		}
-		if err := j.Check(file+" ("+gitMergeDriverKey+")", rec); err != nil {
+		if err := j.Check(fmt.Sprintf("%s (%s)", file, gitMergeDriverKey), rec); err != nil {
 			return err
 		}
 	}
@@ -2203,7 +2203,7 @@ func gitHookBody(name, command string) string {
 	if name == "post-checkout" {
 		guard = "[ \"$3\" = \"1\" ] || exit 0\n"
 	}
-	return guard + skipTrackedBinary(gitLsFiles, command, "magus"+commandArgs(command), command+gitHookSuffix) + "\n"
+	return fmt.Sprintf("%s%s\n", guard, skipTrackedBinary(gitLsFiles, command, "magus"+commandArgs(command), command+gitHookSuffix))
 }
 
 // gitHookSuffix is what gitHookBody appends to the command, so a reader can take it off.
@@ -2220,8 +2220,8 @@ func skipTrackedBinary(tracked, command, own, run string) string {
 	if filepath.IsAbs(bin) || !strings.ContainsAny(bin, "/"+string(filepath.Separator)) {
 		return run
 	}
-	notice := "magus: this branch commits " + bin + ", so the hook will not run it; run '" + own + "' with your own build"
-	return "if " + tracked + " -- " + bin + " >/dev/null 2>&1; then echo \"" + notice + "\" >&2; else " + run + "; fi"
+	notice := fmt.Sprintf("magus: this branch commits %s, so the hook will not run it; run '%s' with your own build", bin, own)
+	return fmt.Sprintf("if %s -- %s >/dev/null 2>&1; then echo \"%s\" >&2; else %s; fi", tracked, bin, notice, run)
 }
 
 // unwrapTrackedBinary returns the run line inside skipTrackedBinary's guard, or line itself
@@ -2311,11 +2311,11 @@ func (v gitVCS) InstallDriftHook(ctx context.Context, root, command string) ([]s
 // so the job can tell a push from a commit. pre-push also passes its remote and url, and the
 // command inherits the hook's stdin, where git writes the refs it pushes.
 func gitDriftHookBody(name, command string) string {
-	run := command + " " + name
+	run := fmt.Sprintf("%s %s", command, name)
 	if name == "pre-push" {
 		run += ` "$@"`
 	}
-	return skipTrackedBinary(gitLsFiles, command, "magus"+commandArgs(command)+" "+name, run+gitHookSuffix) + "\n"
+	return skipTrackedBinary(gitLsFiles, command, fmt.Sprintf("magus%s %s", commandArgs(command), name), run+gitHookSuffix) + "\n"
 }
 
 // ReadGitDriftHook returns the command of the drift hook installed for root's git
@@ -2924,7 +2924,7 @@ func (gitVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, e
 	if err := checkRev(rev); err != nil {
 		return "", err
 	}
-	return revFileOutput(gitExec(ctx, root, gitOpts{}, "show", rev+":"+path),
+	return revFileOutput(gitExec(ctx, root, gitOpts{}, "show", fmt.Sprintf("%s:%s", rev, path)),
 		fmt.Sprintf("git show %s:%s", rev, path))
 }
 
@@ -3013,7 +3013,7 @@ func (b *objectBatch) Read(rel string) (string, error) {
 }
 
 func (b *objectBatch) read(rel string) (string, error) {
-	spec := b.rev + ":" + rel
+	spec := fmt.Sprintf("%s:%s", b.rev, rel)
 	if _, err := fmt.Fprintln(b.stdin, spec); err != nil {
 		return "", fmt.Errorf("git cat-file: %w", err)
 	}
@@ -3342,7 +3342,7 @@ func dropScratchRef(ctx context.Context, dir, ref string) error {
 // a ref another process moved in between is left alone. It is housekeeping: a failure
 // costs the leftovers their cleanup and never the caller its work.
 func sweepScratchRefs(ctx context.Context, dir, kind string) {
-	prefix := "refs/magus/" + kind + "/"
+	prefix := fmt.Sprintf("refs/magus/%s/", kind)
 	listed, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "--format=%(refname) %(objectname)", prefix)
 	if err != nil {
 		return
@@ -3998,7 +3998,7 @@ func checkConfiguredRemote(ctx context.Context, dir, remote string) error {
 	if err := checkRemoteName(remote); err != nil {
 		return err
 	}
-	if _, err := gitOutput(ctx, dir, gitOpts{}, "config", "--get", "remote."+remote+".url"); err != nil {
+	if _, err := gitOutput(ctx, dir, gitOpts{}, "config", "--get", fmt.Sprintf("remote.%s.url", remote)); err != nil {
 		if exitCode(err) == 1 {
 			return fmt.Errorf("vcs: %q is not a remote this repository has configured", remote)
 		}
@@ -4080,7 +4080,7 @@ func fetchCommit(ctx context.Context, dir, remote, src string) (id string, err e
 	}
 	if _, err := gitOutput(ctx, dir, gitOpts{Isolated: true}, "fetch", "--quiet", "--no-tags",
 		"--no-write-fetch-head", "--no-recurse-submodules", "--no-auto-maintenance", "--refmap=",
-		"--", remote, "+"+src+":"+tmp); err != nil {
+		"--", remote, fmt.Sprintf("+%s:%s", src, tmp)); err != nil {
 		return "", fmt.Errorf("git fetch %s %s: %w", remote, src, err)
 	}
 	defer func() { err = errors.Join(err, dropScratchRef(ctx, dir, tmp)) }()
@@ -4108,8 +4108,8 @@ func (v gitVCS) Push(ctx context.Context, root string, p types.PushLease) error 
 	}
 	var stderr bytes.Buffer
 	cmd := gitExec(ctx, root, gitOpts{Isolated: true}, "push", "--quiet", "--porcelain", "--no-verify",
-		"--no-follow-tags", "--recurse-submodules=no", "--force-with-lease="+p.Ref+":"+p.Expected,
-		"--", p.Remote, p.To+":"+p.Ref)
+		"--no-follow-tags", "--recurse-submodules=no", fmt.Sprintf("--force-with-lease=%s:%s", p.Ref, p.Expected),
+		"--", p.Remote, fmt.Sprintf("%s:%s", p.To, p.Ref))
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err == nil {

@@ -254,7 +254,7 @@ func TestVcsDirReadsEachBackendsRepository(t *testing.T) {
 			if _, err := exec.LookPath(b.bin); err != nil {
 				t.Skipf("%s not available", b.bin)
 			}
-			t.Setenv("MAGUS_VCS_"+strings.ToUpper(b.name)+"_BASE_REF", "")
+			t.Setenv(fmt.Sprintf("MAGUS_VCS_%s_BASE_REF", strings.ToUpper(b.name)), "")
 			dir := filepath.Join(t.TempDir(), b.name)
 			require.NoError(t, os.Mkdir(dir, 0o755))
 			b.init(t, dir)
@@ -468,7 +468,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	refusal := errors.New("lease-vcs: refused")
 	var gitEnv []string
 	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, at string, env []string) error {
-		asked = append(asked, row.ID+" "+backend+" "+strings.Join(args, " ")+" "+at)
+		asked = append(asked, fmt.Sprintf("%s %s %s %s", row.ID, backend, strings.Join(args, " "), at))
 		for _, kv := range env {
 			if strings.HasPrefix(kv, "GIT_DIR=") || strings.HasPrefix(kv, "GIT_INDEX_FILE=") {
 				gitEnv = append(gitEnv, kv)

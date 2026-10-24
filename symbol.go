@@ -566,7 +566,7 @@ func indexerUses(s *spells.Spell, target string) []string {
 // "spell:bin" a build op that runs the same binary is driven under, so keying a build
 // never probes the indexer's view of it.
 func indexerUseKey(s *spells.Spell, tool string) string {
-	return s.Name() + ":" + tool + "@" + s.SymbolIndexOp()
+	return fmt.Sprintf("%s:%s@%s", s.Name(), tool, s.SymbolIndexOp())
 }
 
 // indexesDriven is, per project, the binaries the ops of idxs drive: the set
@@ -820,9 +820,9 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 				why = "cache writes are off (cache.write.enabled: false); enable them for this run"
 				writesOff = true
 			} else if s := skew(); s != "" {
-				why, skewed = why+": "+s, true
+				why, skewed = fmt.Sprintf("%s: %s", why, s), true
 			}
-			problems = append(problems, idx.projectRef().Display()+": "+why)
+			problems = append(problems, fmt.Sprintf("%s: %s", idx.projectRef().Display(), why))
 		}
 	}
 	if len(problems) == 0 {

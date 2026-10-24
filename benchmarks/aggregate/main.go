@@ -328,11 +328,11 @@ func observedVersions(results []*benchResult) string {
 	sort.Strings(tools)
 
 	var sb strings.Builder
-	sb.WriteString("  hyperfine: " + capture("hyperfine", "--version") + "\n")
+	fmt.Fprintf(&sb, "  hyperfine: %s\n", capture("hyperfine", "--version"))
 	for _, t := range tools {
 		args, ok := toolVersionArgs[t]
 		if !ok {
-			sb.WriteString("  " + t + ": " + unknown + " (no version probe)\n")
+			fmt.Fprintf(&sb, "  %s: %s (no version probe)\n", t, unknown)
 			continue
 		}
 		bin := toolBinary(t)
@@ -340,7 +340,7 @@ func observedVersions(results []*benchResult) string {
 		if bin != t {
 			label = fmt.Sprintf("%s (%s)", t, bin)
 		}
-		sb.WriteString("  " + label + ": " + capture(bin, args...) + "\n")
+		fmt.Fprintf(&sb, "  %s: %s\n", label, capture(bin, args...))
 	}
 	return sb.String()
 }
@@ -482,7 +482,7 @@ func main() {
 		}
 		md.WriteString("\n")
 		for _, n := range notes {
-			md.WriteString("> " + n + "\n")
+			fmt.Fprintf(&md, "> %s\n", n)
 		}
 		if len(notes) > 0 {
 			md.WriteString("\n")

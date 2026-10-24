@@ -222,7 +222,7 @@ func (v hgVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []st
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
-	args := []string{"diff", "--git", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
+	args := []string{"diff", "--git", "-r", fmt.Sprintf("ancestor(%s,%s)", base, head), "-r", head}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, hgGlobs(paths)...)
@@ -327,7 +327,7 @@ func hgHistory(ctx context.Context, v types.VCSDriver, prog, dir string, q types
 	if q.FirstParent {
 		revs = "_firstancestors(.)"
 	}
-	args := []string{"log", "-r", "reverse(" + revs + " - null)", "--template", hgHistoryTemplate}
+	args := []string{"log", "-r", fmt.Sprintf("reverse(%s - null)", revs), "--template", hgHistoryTemplate}
 	if q.Limit > 0 && len(q.Paths) == 0 {
 		args = append(args, "-l", strconv.Itoa(q.Limit))
 	}
@@ -403,7 +403,7 @@ func keepUnder(files, paths []string) []string {
 // contract requires for correctness under concurrent runs.
 func (v hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
 	out, err := vcsExec(ctx, "hg", "-R", dir, "log",
-		"-r", "("+sha+") and (ancestors(.) or .)",
+		"-r", fmt.Sprintf("(%s) and (ancestors(.) or .)", sha),
 		"--template", "{node}").Output()
 	if err != nil {
 		return fmt.Errorf("hg log: %w", err)
@@ -1282,7 +1282,7 @@ func (v hgVCS) StrandedRevisions(ctx context.Context, dir string, bases ...strin
 	for _, b := range bases {
 		reach += " or " + b
 	}
-	revset := "reverse(::. and draft() and not ::(" + reach + "))"
+	revset := fmt.Sprintf("reverse(::. and draft() and not ::(%s))", reach)
 	out, err := vcsOutput(ctx, dir, "hg", "log", "-r", revset, "--template", `{node}\n`)
 	if err != nil {
 		return nil, fmt.Errorf("hg log -r %q: %w", revset, err)

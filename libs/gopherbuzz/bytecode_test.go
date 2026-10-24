@@ -1304,7 +1304,7 @@ final __r = b.get();`, 99)
 func evalResult(t *testing.T, src string) vmpackage.Value {
 	t.Helper()
 	sess := newSession(context.Background())
-	require.NoErrorf(t, sess.Exec(context.Background(), "final __r = "+src+";"), "exec %q", src)
+	require.NoErrorf(t, sess.Exec(context.Background(), fmt.Sprintf("final __r = %s;", src)), "exec %q", src)
 	return sess.GetGlobal("__r")
 }
 
@@ -2068,7 +2068,7 @@ func randJITProgram(rng *rand.Rand) string {
 	}
 	lit := func() string {
 		if rng.Intn(3) == 0 {
-			return "(0 - " + num() + ")"
+			return fmt.Sprintf("(0 - %s)", num())
 		}
 		return num()
 	}
@@ -2106,7 +2106,7 @@ func randJITProgram(rng *rand.Rand) string {
 		if op == "/" || op == "%" {
 			r = divisor()
 		}
-		return operand() + " " + op + " " + r
+		return fmt.Sprintf("%s %s %s", operand(), op, r)
 	}
 	cmp := []string{"<", "<=", ">", ">=", "==", "!="}[rng.Intn(6)]
 

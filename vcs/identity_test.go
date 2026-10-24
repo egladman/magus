@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,7 @@ func clone(t *testing.T, dir, url string) string {
 	require.NoError(t, os.MkdirAll(git, 0o755))
 	body := "[core]\n\trepositoryformatversion = 0\n"
 	if url != "" {
-		body += "[remote \"origin\"]\n\turl = " + url + "\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+		body += fmt.Sprintf("[remote \"origin\"]\n\turl = %s\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n", url)
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(git, "config"), []byte(body), 0o644))
 	return dir
@@ -30,7 +31,9 @@ func hgClone(t *testing.T, dir, url string) string {
 	require.NoError(t, os.MkdirAll(hg, 0o755))
 	body := "[ui]\nusername = someone\n"
 	if url != "" {
-		body += "[paths]\ndefault = " + url + "\n"
+		body += fmt.Sprintf(`[paths]
+default = %s
+`, url)
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(hg, "hgrc"), []byte(body), 0o644))
 	return dir
@@ -43,7 +46,9 @@ func slClone(t *testing.T, dir, url string) string {
 	require.NoError(t, os.MkdirAll(sl, 0o755))
 	body := "[ui]\nusername = someone\n"
 	if url != "" {
-		body += "[paths]\ndefault = " + url + "\n"
+		body += fmt.Sprintf(`[paths]
+default = %s
+`, url)
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(sl, "config"), []byte(body), 0o644))
 	return dir
@@ -66,7 +71,7 @@ func worktree(t *testing.T, common, dir, name string) string {
 	gitdir := filepath.Join(common, "worktrees", name)
 	require.NoError(t, os.MkdirAll(gitdir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(gitdir, "commondir"), []byte("../..\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte(fmt.Sprintf("gitdir: %s\n", gitdir)), 0o644))
 	return dir
 }
 

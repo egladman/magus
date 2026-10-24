@@ -41,7 +41,7 @@ import (
 func mkGlobalWS(t *testing.T, target string) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("import \"magus\";\n\nexport fun " + target + "(ctx: magus\\Context, args: [str]) > void {}\n")
+	w.Magusfile(fmt.Sprintf("import \"magus\";\n\nexport fun %s(ctx: magus\\Context, args: [str]) > void {}\n", target))
 	return w.Root()
 }
 

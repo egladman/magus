@@ -2,6 +2,7 @@ package spells
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -183,7 +184,7 @@ func (c Command) SourcesPlaceholder() []string {
 	if c.SourcesEach {
 		mode = "each"
 	}
-	return []string{"<sources:" + mode + " " + strings.Join(c.Sources, ",") + ">"}
+	return []string{fmt.Sprintf("<sources:%s %s>", mode, strings.Join(c.Sources, ","))}
 }
 
 // Hint is one failure classification: when a command fails and Contains appears in its

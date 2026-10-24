@@ -2,6 +2,7 @@ package types
 
 import (
 	"cmp"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -321,7 +322,7 @@ type TargetRef struct {
 
 // Ref spells the reference the way the CLI takes a target ref, "project:target".
 func (r TargetRef) Ref() string {
-	return r.Project + ":" + r.Target
+	return fmt.Sprintf("%s:%s", r.Project, r.Target)
 }
 
 // Compare orders refs by project, then target.
@@ -342,7 +343,7 @@ type CrossTargetRef struct {
 // it the same way. Project is never empty on this type (a cross-project ref names
 // another project by definition), so there is no bare-name form.
 func (r CrossTargetRef) Ref() string {
-	return r.Project + ":" + r.Target
+	return fmt.Sprintf("%s:%s", r.Project, r.Target)
 }
 
 // ChainStep is one target a composed target invokes, in source order. Project is empty
@@ -369,7 +370,7 @@ func (s ChainStep) Ref() string {
 	if s.Project == "" {
 		return s.Target
 	}
-	return s.Project + ":" + s.Target
+	return fmt.Sprintf("%s:%s", s.Project, s.Target)
 }
 
 // Chain is a target's ctx.needs chain built the way its body reads: Needs("generate",

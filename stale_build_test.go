@@ -2,6 +2,7 @@ package magus
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -18,12 +19,15 @@ import (
 func sourceCheckout(t *testing.T, module string) (root, exe string) {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Write("go.mod", "module "+module+"\n\ngo 1.26\n")
+	w.Write("go.mod", fmt.Sprintf(`module %s
+
+go 1.26
+`, module))
 	return w.Root(), w.WriteExecutable("magus", "binary")
 }
 
 func builtFrom(module, pkg string) *debug.BuildInfo {
-	return &debug.BuildInfo{Path: module + "/" + pkg, Main: debug.Module{Path: module}}
+	return &debug.BuildInfo{Path: fmt.Sprintf("%s/%s", module, pkg), Main: debug.Module{Path: module}}
 }
 
 func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
@@ -59,7 +63,7 @@ func TestOwnGeneratorsAreWhatTheMagusfileRuns(t *testing.T) {
 	require.NoError(t, err)
 	for _, command := range ownGenerators {
 		words := strings.Fields(command)
-		call := `proc\exec("` + words[0] + `", ["` + strings.Join(words[1:], `", "`) + `"]);`
+		call := fmt.Sprintf(`proc\exec("%s", ["%s"]);`, words[0], strings.Join(words[1:], `", "`))
 		assert.Contains(t, string(data), call, command)
 	}
 }

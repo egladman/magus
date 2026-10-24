@@ -2,6 +2,7 @@ package types
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -19,7 +20,7 @@ func (l Location) String() string {
 	if l.Declaration == "" {
 		return l.Path
 	}
-	return l.Path + "#" + l.Declaration
+	return fmt.Sprintf("%s#%s", l.Path, l.Declaration)
 }
 
 // SplitClaim is the one parser of a write path's claim grammar: `<path>#<declaration>`

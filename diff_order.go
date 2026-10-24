@@ -3,6 +3,7 @@ package magus
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -66,7 +67,7 @@ func attachHunks(files []types.DiffFile, patch string, placesByFile map[string]m
 // read as "nothing is related". Order stays nil then, and a Note names the cause.
 func (m *Magus) attachOrder(ctx context.Context, out *types.Diff, graph *knowledge.Graph, patch, skip string) {
 	if skip != "" {
-		out.Notes = append(out.Notes, "reading order skipped: "+skip+"; rebuild with `"+hint.GraphBuild.String()+"`")
+		out.Notes = append(out.Notes, fmt.Sprintf("reading order skipped: %s; rebuild with `%s`", skip, hint.GraphBuild.String()))
 		return
 	}
 	sites, note := m.orderSites(ctx, out.Files)
@@ -262,14 +263,14 @@ func (m *Magus) orderSites(ctx context.Context, files []types.DiffFile) ([]chang
 // alone; otherwise one cause is named, the failed listing before the unreadable indexes, since
 // without a listing the unreadable ones are not all known.
 func partialOrderNote(cancelled, listed bool, unreadable []string) string {
-	rebuild := "; rebuild with `" + hint.GraphBuild.String() + "`"
+	rebuild := fmt.Sprintf("; rebuild with `%s`", hint.GraphBuild.String())
 	switch {
 	case cancelled:
 		return "reading order is partial: it was cancelled before every symbol index was read"
 	case !listed:
 		return "reading order is partial: the symbol indexes could not be listed" + rebuild
 	case len(unreadable) > 0:
-		return "reading order is partial: the symbol index of " + strings.Join(unreadable, ", ") + " could not be read" + rebuild
+		return fmt.Sprintf("reading order is partial: the symbol index of %s could not be read%s", strings.Join(unreadable, ", "), rebuild)
 	}
 	return ""
 }

@@ -331,7 +331,7 @@ func funSignature(n *ast.FunDecl) string {
 	b.WriteString("fun ")
 	b.WriteString(n.Name)
 	if len(n.TypeParams) > 0 {
-		b.WriteString("::<" + strings.Join(n.TypeParams, ", ") + ">")
+		fmt.Fprintf(&b, "::<%s>", strings.Join(n.TypeParams, ", "))
 	}
 	b.WriteString("(")
 	for i, p := range n.Params {
@@ -362,9 +362,9 @@ func declSignature(n *ast.DeclStmt) string {
 		kw = "final"
 	}
 	if n.TypeAnnot == "" {
-		return kw + " " + n.Name
+		return fmt.Sprintf("%s %s", kw, n.Name)
 	}
-	return kw + " " + n.Name + ": " + n.TypeAnnot
+	return fmt.Sprintf("%s %s: %s", kw, n.Name, n.TypeAnnot)
 }
 
 func objectSignature(n *ast.ObjectDecl) string {
@@ -372,14 +372,14 @@ func objectSignature(n *ast.ObjectDecl) string {
 		return "protocol " + n.Name
 	}
 	if len(n.Conforms) > 0 {
-		return "object<" + strings.Join(n.Conforms, ", ") + "> " + n.Name
+		return fmt.Sprintf("object<%s> %s", strings.Join(n.Conforms, ", "), n.Name)
 	}
 	return "object " + n.Name
 }
 
 func enumSignature(n *ast.EnumDecl) string {
 	if n.Backing != "" {
-		return "enum<" + n.Backing + "> " + n.Name
+		return fmt.Sprintf("enum<%s> %s", n.Backing, n.Name)
 	}
 	return "enum " + n.Name
 }

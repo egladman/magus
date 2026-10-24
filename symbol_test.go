@@ -117,7 +117,7 @@ func newTestIndexer(t *testing.T) (*symbolIndexer, *[]string, *time.Time) {
 }
 
 // indexName spells ref as project:op, for asserting which indexes ran.
-func indexName(ref indexRef) string { return ref.project + ":" + ref.op }
+func indexName(ref indexRef) string { return fmt.Sprintf("%s:%s", ref.project, ref.op) }
 
 // goIndexA and buzzIndexA are the two indexes of one project bound to go and buzz.
 var (
@@ -348,7 +348,7 @@ func indexerOnPath(t *testing.T) {
 	t.Helper()
 	bin := testkit.NewWorkspace(t)
 	bin.WriteExecutable(indexerBin, "#!/bin/sh\n")
-	t.Setenv("PATH", bin.Root()+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", fmt.Sprintf(`%s%s%s`, bin.Root(), string(os.PathListSeparator), os.Getenv("PATH")))
 }
 
 // A reader that freshens the index it reads (magus\precedents, Diff) is called from a
@@ -1016,8 +1016,7 @@ func TestFreshenIndexesNamesACodedCauseInline(t *testing.T) {
 	err := freshenIndexes(idxs, w.probe, w.build, true, noSkew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
-	assert.Equal(t, "[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); "+
-		"fix it, then `magus graph build`\n  see: "+types.CodeURL(types.SymbolIndexNotCurrent), err.Error())
+	assert.Equal(t, fmt.Sprintf("[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); fix it, then `magus graph build`\n  see: %s", types.CodeURL(types.SymbolIndexNotCurrent)), err.Error())
 	assert.Equal(t, conformanceSkippedWhy, types.DiagnosticRationale(err), "with cache writes on, the why is the skipped checks alone")
 }
 

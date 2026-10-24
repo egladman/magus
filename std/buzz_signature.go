@@ -5,6 +5,7 @@
 package std
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -19,7 +20,7 @@ func BuzzSignature(mod Module, m Method) string {
 	if m.BuzzName != "" {
 		name = m.BuzzName
 	}
-	return mod.Name + `\` + name + "(" + strings.Join(argNames(m), ", ") + ")" + returnSuffix(m)
+	return fmt.Sprintf("%s\\%s(%s)%s", mod.Name, name, strings.Join(argNames(m), ", "), returnSuffix(m))
 }
 
 // argNames lists the parameter names, marking variadic ones with a trailing "..."
@@ -33,7 +34,7 @@ func argNames(m Method) []string {
 		case a.Variadic:
 			name += "..."
 		case a.Optional:
-			name = "[" + name + "]"
+			name = fmt.Sprintf("[%s]", name)
 		}
 		args = append(args, name)
 	}

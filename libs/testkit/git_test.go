@@ -1,6 +1,7 @@
 package testkit
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,7 +43,7 @@ func TestNewRepoSetsTheFixtureConfig(t *testing.T) {
 func TestRepoGitIgnoresTheCallersGitEnvironment(t *testing.T) {
 	home := NewWorkspace(t)
 	hook := home.WriteExecutable("hooks/pre-commit", "#!/bin/sh\nexit 1\n")
-	home.Write("gitconfig", "[core]\n\thooksPath = "+filepath.Dir(hook)+"\n")
+	home.Write("gitconfig", fmt.Sprintf("[core]\n\thooksPath = %s\n", filepath.Dir(hook)))
 	t.Setenv("GIT_CONFIG_GLOBAL", home.Path("gitconfig"))
 	t.Setenv("GIT_DIR", home.Path("not-a-repo"))
 	t.Setenv("GIT_INDEX_FILE", home.Path("index"))
@@ -98,7 +99,7 @@ func TestAddWorktreeBranchesAtHeadInItsOwnDirectory(t *testing.T) {
 	moved := wt.Commit("on topic", map[string]string{"b.txt": "b"})
 	assert.Equal(t, base, r.Head(), "a commit in the worktree moved main")
 	assert.Equal(t, moved, r.Git("rev-parse", "topic"))
-	assert.Contains(t, r.Git("worktree", "list", "--porcelain"), "worktree "+wt.Root()+"\n")
+	assert.Contains(t, r.Git("worktree", "list", "--porcelain"), fmt.Sprintf("worktree %s\n", wt.Root()))
 }
 
 func TestRepoGitFailsTheTestOnError(t *testing.T) {

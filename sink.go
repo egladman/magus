@@ -492,7 +492,7 @@ func (t textEncoder) dim(s string) string {
 func (t textEncoder) step(ctx context.Context, e report.RunStep) {
 	colorize := t.term.WantsColor()
 	if e.Status == "dry" {
-		line := cache.Glyph(colorize, "dry", tty.SGRDim) + " " + e.Label + "\n"
+		line := fmt.Sprintf("%s %s\n", cache.Glyph(colorize, "dry", tty.SGRDim), e.Label)
 		if e.Project != "" && e.Target != "" {
 			line += hint.Run.With(e.Target, e.Project) + "\n"
 		}
@@ -542,7 +542,7 @@ func (t textEncoder) detach(ctx context.Context, e report.RunDetach) {
 func (t textEncoder) notice(ctx context.Context, e report.Notice) {
 	msg := e.Message
 	if e.Code != "" {
-		msg = "[" + e.Code + "] " + msg
+		msg = fmt.Sprintf("[%s] %s", e.Code, msg)
 	}
 	if r, ok := interactive.TakeHint(e.Level, msg); ok {
 		_ = t.term.Handle(ctx, r)

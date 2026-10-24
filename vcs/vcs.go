@@ -179,7 +179,7 @@ func chooseBase(runtime, global, perVCS, def string) string {
 }
 
 func perVCSEnv(name, suffix string) string {
-	return "MAGUS_VCS_" + strings.ToUpper(name) + "_" + suffix
+	return fmt.Sprintf("MAGUS_VCS_%s_%s", strings.ToUpper(name), suffix)
 }
 
 // exitCode is err's exit status, or -1 when the command did not exit normally (it never

@@ -1265,8 +1265,7 @@ func (m *Magus) describeFile(ctx context.Context, raw string, all, owners []*typ
 			Path:   path,
 			Role:   "unclaimed",
 			Exists: fileExists(filepath.FromSlash(path)),
-			Hint: "resolves outside this workspace (" + m.ws.Root + "): no project here can declare it, " +
-				"so none of magus's answers about this workspace apply to it",
+			Hint:   fmt.Sprintf("resolves outside this workspace (%s): no project here can declare it, so none of magus's answers about this workspace apply to it", m.ws.Root),
 		}
 	}
 

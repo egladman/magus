@@ -102,44 +102,46 @@ TimeoutStopSec=%s
 
 	case SupervisorLaunchd:
 		var b strings.Builder
-		b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
+		fmt.Fprintf(&b, `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>` + launchdLabel + `</string>
+  <string>%s</string>
   <key>ProgramArguments</key>
   <array>
-    <string>` + xmlText(f.Exe) + `</string>
+    <string>%s</string>
     <string>broker</string>
     <string>--idle-exit</string>
     <string>0</string>
     <string>--shutdown-grace</string>
-    <string>` + grace + `</string>
+    <string>%s</string>
     <string>--log</string>
-    <string>` + xmlText(f.Log) + `</string>
+    <string>%s</string>
   </array>
-`)
+`, launchdLabel, xmlText(f.Exe), grace, xmlText(f.Log))
 		if len(f.Env) > 0 {
 			b.WriteString("  <key>EnvironmentVariables</key>\n  <dict>\n")
 			for _, kv := range f.Env {
-				b.WriteString("    <key>" + xmlText(kv[0]) + "</key>\n    <string>" + xmlText(kv[1]) + "</string>\n")
+				fmt.Fprintf(&b, `    <key>%s</key>
+    <string>%s</string>
+`, xmlText(kv[0]), xmlText(kv[1]))
 			}
 			b.WriteString("  </dict>\n")
 		}
-		b.WriteString(`  <key>RunAtLoad</key>
+		fmt.Fprintf(&b, `  <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>ProcessType</key>
   <string>Background</string>
   <key>ExitTimeOut</key>
-  <integer>` + stopSecs + `</integer>
+  <integer>%s</integer>
   <key>StandardErrorPath</key>
-  <string>` + xmlText(f.Log) + `</string>
+  <string>%s</string>
 </dict>
 </plist>
-`)
+`, stopSecs, xmlText(f.Log))
 		path := filepath.Join(f.Home, "Library", "LaunchAgents", launchdLabel+".plist")
 		return []Unit{{Supervisor: supervisor, Path: path, Content: b.String()}}, nil
 
@@ -157,7 +159,7 @@ func systemdQuote(s string) string {
 	if !strings.ContainsAny(s, " \t\"'\\") {
 		return s
 	}
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+	return fmt.Sprintf(`"%s"`, strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s))
 }
 
 func xmlText(s string) string {

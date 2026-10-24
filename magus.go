@@ -1038,7 +1038,7 @@ func (m *Magus) AutoResolve(ctx context.Context, path string, base, ours, theirs
 		return nil, res.Label(), false
 	}
 	verdict, ok := m.AutoResolvable(ctx, path, base, res.Content)
-	report = verdict + "; " + res.Label()
+	report = fmt.Sprintf("%s; %s", verdict, res.Label())
 	if !ok {
 		return nil, report, false
 	}
@@ -1126,7 +1126,8 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 	// silently disappears from the review while the rest show up fine. Measured: it ate
 	// exactly one new file and nothing reported an error.
 	if !strings.HasSuffix(tracked, "\n") {
-		return tracked + "\n" + untracked, nil
+		return fmt.Sprintf(`%s
+%s`, tracked, untracked), nil
 	}
 	return tracked + untracked, nil
 }
@@ -1354,7 +1355,7 @@ func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, path
 		rows := strings.Split(content, "\n")
 		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", p, p, p, len(rows))
 		for _, r := range rows {
-			b.WriteString("+" + r + "\n")
+			fmt.Fprintf(&b, "+%s\n", r)
 		}
 	}
 	return b.String(), nil
@@ -1800,7 +1801,7 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 	graph *knowledge.Graph, cfg diffConfig, in conformanceInput, patchErr error,
 ) {
 	fail := func(msg string, err error) {
-		d := types.Diagnostic{Message: "the conformance checks could not run: " + msg + ": " + err.Error()}
+		d := types.Diagnostic{Message: fmt.Sprintf("the conformance checks could not run: %s: %s", msg, err.Error())}
 		out.ConformanceError = &d
 	}
 	if in.changes == nil {
@@ -1828,7 +1829,7 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		return
 	}
 	if patchErr != nil && conformance.RatchetPath != "" {
-		base, note = nil, "conformance: the patch could not be read, so what the change did to "+conformance.RatchetPath+" is unknown"
+		base, note = nil, fmt.Sprintf("conformance: the patch could not be read, so what the change did to %s is unknown", conformance.RatchetPath)
 	}
 	if note != "" {
 		out.Notes = append(out.Notes, note)
@@ -2272,7 +2273,7 @@ func (m *Magus) ExpandAffectedSet(ctx context.Context, target string, baseRef st
 	if err != nil {
 		return nil, "", false, nil, err
 	}
-	source = v.Name + " diff vs " + r.Base
+	source = fmt.Sprintf("%s diff vs %s", v.Name, r.Base)
 	if v.Source == types.VCSSourceDisabled {
 		source = "vcs disabled vs " + r.Base
 	}
@@ -2294,7 +2295,7 @@ func TargetLabel(targets []types.Target, source string) string {
 	if len(targets) == 0 {
 		label := "no projects"
 		if source != "" {
-			label += " (" + source + ")"
+			label += fmt.Sprintf(" (%s)", source)
 		}
 		return label
 	}
@@ -2303,13 +2304,13 @@ func TargetLabel(targets []types.Target, source string) string {
 	case 1:
 		label := targets[0].Path
 		if source != "" {
-			label += " (" + source + ")"
+			label += fmt.Sprintf(" (%s)", source)
 		}
 		return label
 	default:
 		label := fmt.Sprintf("%d projects", len(targets))
 		if source != "" {
-			label += " (" + source + ")"
+			label += fmt.Sprintf(" (%s)", source)
 		}
 		return label
 	}

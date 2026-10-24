@@ -3,6 +3,7 @@
 package sourcetest
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,9 +23,9 @@ func Module(t *testing.T, module string, files ...string) string {
 			t.Fatal(err)
 		}
 	}
-	write("go.mod", "module "+module+"\n")
+	write("go.mod", fmt.Sprintf("module %s\n", module))
 	for _, rel := range files {
-		write(rel, "package "+filepath.Base(filepath.Dir(filepath.Join(root, rel)))+"\n")
+		write(rel, fmt.Sprintf("package %s\n", filepath.Base(filepath.Dir(filepath.Join(root, rel)))))
 	}
 	t.Chdir(root)
 	return root

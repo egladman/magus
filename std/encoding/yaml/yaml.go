@@ -86,11 +86,11 @@ func Positions(_ context.Context, source string) (types.YAMLPositions, error) {
 		switch n.Kind {
 		case yaml.MappingNode:
 			for i := 0; i+1 < len(n.Content); i += 2 {
-				walk(n.Content[i+1], pointer+"/"+pointerEscaper.Replace(n.Content[i].Value))
+				walk(n.Content[i+1], fmt.Sprintf("%s/%s", pointer, pointerEscaper.Replace(n.Content[i].Value)))
 			}
 		case yaml.SequenceNode:
 			for i, c := range n.Content {
-				walk(c, pointer+"/"+strconv.Itoa(i))
+				walk(c, fmt.Sprintf("%s/%s", pointer, strconv.Itoa(i)))
 			}
 		}
 	}

@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 // ChainMemoryMB is the largest memory declaration in what a target will run: its own and
 // every target it composes with ctx.needs, transitively, plus the target that declared it.
 // A peak, not a maximum: one ctx.needs call's members run together and add, separate calls
@@ -50,7 +52,7 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		if proj == nil {
 			return ChainMemory{}
 		}
-		key := proj.Path + "\x00" + name
+		key := fmt.Sprintf("%s\x00%s", proj.Path, name)
 		if seen[key] {
 			return ChainMemory{} // a cycle is rejected elsewhere; here it must simply terminate
 		}

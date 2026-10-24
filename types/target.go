@@ -388,7 +388,7 @@ func CeilingExceededError(ctx context.Context, err error, target string, ceiling
 }
 
 // String returns the canonical "path:target" form.
-func (t Target) String() string { return t.Path + ":" + t.Name }
+func (t Target) String() string { return fmt.Sprintf("%s:%s", t.Path, t.Name) }
 
 // ParseTarget parses a target reference of the form "target[:charm[,charm...]]".
 // The project is supplied separately (positional), not embedded in the reference;
@@ -552,7 +552,7 @@ func (s MemorySizing) String() string {
 	if s.Fallback == "" {
 		return from
 	}
-	return from + "; " + s.Fallback
+	return fmt.Sprintf("%s; %s", from, s.Fallback)
 }
 
 // ErrSkipChain is a ChainWalkFunc's answer that keeps WalkChain from descending under the
@@ -688,7 +688,7 @@ func chainReaches(p *Project, name string, lookup func(path string) *Project) ma
 	return out
 }
 
-func chainKey(projectPath, target string) string { return projectPath + "\x00" + target }
+func chainKey(projectPath, target string) string { return fmt.Sprintf("%s\x00%s", projectPath, target) }
 
 // ChainSkipCacheSteps is the skip_cache members of target's chain that a caller must run
 // before taking target's key, in invocation order, each carrying its owning project path.

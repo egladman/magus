@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -67,23 +68,23 @@ var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	// it resolves every code's URL back to a file on disk, so a mis-routed code has no page and
 	// fails rather than shipping a dead link.
 	case strings.HasPrefix(string(c), "MGS11"):
-		return diagnosticCapabilityBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticCapabilityBase, string(c))
 	case strings.HasPrefix(string(c), "MGS9"):
-		return diagnosticAuthBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticAuthBase, string(c))
 	case strings.HasPrefix(string(c), "MGS8"):
-		return diagnosticOutputRefBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticOutputRefBase, string(c))
 	case strings.HasPrefix(string(c), "MGS7"):
-		return diagnosticKnowledgeBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticKnowledgeBase, string(c))
 	case strings.HasPrefix(string(c), "MGS6"):
-		return diagnosticCharmsBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticCharmsBase, string(c))
 	case strings.HasPrefix(string(c), "MGS5"):
-		return diagnosticServicesBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticServicesBase, string(c))
 	case strings.HasPrefix(string(c), "MGS4"):
-		return diagnosticRaceBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticRaceBase, string(c))
 	case strings.HasPrefix(string(c), "MGS1"):
-		return diagnosticMagusfileBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticMagusfileBase, string(c))
 	default:
-		return diagnosticSandboxBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticSandboxBase, string(c))
 	}
 })
 

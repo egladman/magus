@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestDiffDriverFor(t *testing.T) {
 // does: group 1 when the pattern has one, trailing space trimmed, cut at 80 bytes.
 func TestDeclarations(t *testing.T) {
 	golang, _ := MatchDiffDriver("a.go")
-	long := "func F(" + strings.Repeat("a int, ", 20) + ") {\n"
+	long := fmt.Sprintf("func F(%s) {\n", strings.Repeat("a int, ", 20))
 	lines := []string{"package a\n", "\n", "func A() {  \n", "\treturn\n", "}\n", long, "\tx()\n"}
 	assert.Equal(t, []string{"", "", "func A() {", "func A() {", "func A() {", long[:80], long[:80]}, golang.Declarations(lines))
 
@@ -124,7 +125,9 @@ func TestHunksChargeALeadingBlankLineToTheNewDeclaration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			old := "const A = 1\nconst B = 2\n"
-			cur := "const A = 1\n" + tc.insert + "const B = 2\n"
+			cur := fmt.Sprintf(`const A = 1
+%sconst B = 2
+`, tc.insert)
 			got, ok := Hunks("a.go", []byte(old), []byte(cur), golang)
 			require.True(t, ok)
 			require.Len(t, got, 1)

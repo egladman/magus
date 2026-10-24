@@ -124,7 +124,7 @@ func Environ(root string, keep ...string) ([]string, error) {
 
 	out := make([]string, 0, len(vars))
 	for k, v := range vars {
-		out = append(out, k+"="+v)
+		out = append(out, fmt.Sprintf("%s=%s", k, v))
 	}
 	slices.Sort(out)
 	return out, nil

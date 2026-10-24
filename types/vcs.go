@@ -451,7 +451,7 @@ type VCSUnsupportedError struct {
 }
 
 func (e *VCSUnsupportedError) Error() string {
-	return e.VCS + " does not support " + string(e.Capability)
+	return fmt.Sprintf("%s does not support %s", e.VCS, string(e.Capability))
 }
 
 // Unwrap returns ErrVCSUnsupported, so a caller matching it or errors.ErrUnsupported
@@ -1188,7 +1188,7 @@ type CheckoutTamperedError struct {
 }
 
 func (e *CheckoutTamperedError) Error() string {
-	return e.File + " changed since the checkout at " + e.Checkout + " was made"
+	return fmt.Sprintf("%s changed since the checkout at %s was made", e.File, e.Checkout)
 }
 
 // RevisionFetcher is the capability to bring revisions from a configured remote into the
@@ -1218,7 +1218,7 @@ type PushRejectedError struct {
 }
 
 func (e *PushRejectedError) Error() string {
-	return e.Ref + " rejected by the remote: " + e.Reason
+	return fmt.Sprintf("%s rejected by the remote: %s", e.Ref, e.Reason)
 }
 
 // PushLease is one leased update of a remote ref, for Pusher.Push.
@@ -1589,11 +1589,11 @@ func (cp VCSCheckpoint) Token() string {
 		return cp.Revision
 	}
 	if cp.UntrackedDigest == "" {
-		return cp.Revision + "+" + cp.PatchDigest
+		return fmt.Sprintf("%s+%s", cp.Revision, cp.PatchDigest)
 	}
 	// The width of PatchDigest, so every dirty token's digest reads alike.
-	sum := sha256.Sum256([]byte(cp.PatchDigest + "\x00" + cp.UntrackedDigest))
-	return cp.Revision + "+" + hex.EncodeToString(sum[:16])
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s", cp.PatchDigest, cp.UntrackedDigest)))
+	return fmt.Sprintf("%s+%s", cp.Revision, hex.EncodeToString(sum[:16]))
 }
 
 // ParseCheckpointToken splits a token [VCSCheckpoint.Token] printed into its revision and

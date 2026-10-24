@@ -806,9 +806,9 @@ func foldEvaluationReads(h *knowledge.InputHash, reads readlog.Reads, known bool
 	// through internal/proc/environ, so it is what the evaluation saw.
 	for _, name := range reads.Env {
 		if v, ok := os.LookupEnv(name); ok {
-			h.String("env:" + name + "=" + v)
+			h.String(fmt.Sprintf("env:%s=%s", name, v))
 		} else {
-			h.String("env:" + name + ":unset")
+			h.String(fmt.Sprintf("env:%s:unset", name))
 		}
 	}
 	if reads.EnvAll {

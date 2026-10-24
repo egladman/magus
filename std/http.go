@@ -800,7 +800,7 @@ type StatusError struct {
 var _ interface{ BuzzError() map[string]string } = (*StatusError)(nil)
 
 func (e *StatusError) Error() string {
-	msg := "http." + e.Method + " " + e.URL + ": server returned " + strconv.Itoa(e.Status)
+	msg := fmt.Sprintf("http.%s %s: server returned %s", e.Method, e.URL, strconv.Itoa(e.Status))
 	if e.Body != "" {
 		msg += ": " + e.Body
 	}

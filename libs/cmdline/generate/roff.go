@@ -76,7 +76,7 @@ func (w *writer) Example(lines ...string) {
 
 // B wraps text in bold roff sequences. text is plain text and is escaped.
 func (*writer) B(text string) string {
-	return `\fB` + escape(text) + `\fR`
+	return fmt.Sprintf(`\fB%s\fR`, escape(text))
 }
 
 // escape replaces roff special characters in plain text for correct man-page rendering.

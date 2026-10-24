@@ -734,7 +734,7 @@ func TestRejectImportMatchesEitherSpelling(t *testing.T) {
 		{"buzz:os", `import "os";`},
 		{"buzz:os", `import "buzz:os";`},
 	} {
-		t.Run(tc.rejected+" "+tc.imported, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s %s", tc.rejected, tc.imported), func(t *testing.T) {
 			ctx := context.Background()
 			sess := NewSession(ctx, WithEmbedded())
 			defer func() { _ = sess.Close() }()
@@ -1076,7 +1076,9 @@ func TestParity_OptionalChaining(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, "fun probe() > any {\n"+tc.src+"\n}")
+			v := evalParity(t, fmt.Sprintf(`fun probe() > any {
+%s
+}`, tc.src))
 			if tc.want == nil {
 				assert.True(t, v.IsNull(), "a null receiver yields null, it does not error")
 				return
@@ -1104,7 +1106,8 @@ fun hey(name: str = "Joe", age: int = 12, father: str?, fourth: int = 1) > str
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, decls+"\nfun probe() > str { return "+tc.call+"; }")
+			v := evalParity(t, fmt.Sprintf(`%s
+fun probe() > str { return %s; }`, decls, tc.call))
 			assert.Equal(t, tc.want, v.AsString(), "omitted slots take their declared defaults")
 		})
 	}
@@ -1163,17 +1166,17 @@ fun willFail(kind: str) > void !> str {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, decls+`
+			v := evalParity(t, fmt.Sprintf(`%s
 fun probe() > str {
     try {
-        willFail("`+tc.kind+`");
+        willFail("%s");
     } catch (_: str) {
         return "str";
     } catch (_: SomeError) {
         return "obj";
     }
     return "none";
-}`)
+}`, decls, tc.kind))
 			assert.Equal(t, tc.want, v.AsString(), "the first clause whose type matches runs")
 		})
 	}
@@ -1320,7 +1323,8 @@ func TestParity_LabeledLoops(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, "fun probe() > int {"+tc.body+"\n}")
+			v := evalParity(t, fmt.Sprintf(`fun probe() > int {%s
+}`, tc.body))
 			assert.Equal(t, tc.want, v.AsInt(), "the label selects which loop is left")
 		})
 	}
@@ -1395,7 +1399,9 @@ func TestParity_BlockExpression(t *testing.T) {
 			if body == "" {
 				body = tc.name
 			}
-			v := evalParity(t, "fun probe() > any {\n"+body+"\n}")
+			v := evalParity(t, fmt.Sprintf(`fun probe() > any {
+%s
+}`, body))
 			if tc.want == nil {
 				assert.True(t, v.IsNull(), "a block that never outs is null")
 				return
@@ -1502,7 +1508,9 @@ func TestParity_InlineIfExpression(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, "fun probe() > str {\n"+tc.body+"\n}")
+			v := evalParity(t, fmt.Sprintf(`fun probe() > str {
+%s
+}`, tc.body))
 			assert.Equal(t, tc.want, v.AsString(), "only the selected branch's value survives")
 		})
 	}
@@ -1673,7 +1681,7 @@ func TestParity_RangeMethods(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, "fun probe() > int { return "+tc.expr+"; }")
+			v := evalParity(t, fmt.Sprintf("fun probe() > int { return %s; }", tc.expr))
 			assert.Equal(t, tc.want, v.AsInt(), "a range runs from low toward high and stops before it")
 		})
 	}
@@ -2179,7 +2187,7 @@ func TestParity_MatchComparisonRules(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, "fun probe() > str { return "+tc.src+"; }")
+			v := evalParity(t, fmt.Sprintf("fun probe() > str { return %s; }", tc.src))
 			assert.Equal(t, tc.want, v.AsString(), "the rule is chosen by the operand kinds")
 		})
 	}
@@ -2310,7 +2318,9 @@ fun outer() > int {
 `
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, decls+"\nfun probe() > int {"+tc.src+"\n}")
+			v := evalParity(t, fmt.Sprintf(`%s
+fun probe() > int {%s
+}`, decls, tc.src))
 			assert.Equal(t, tc.want, v.AsInt(), "a captured local is one shared cell")
 		})
 	}
@@ -2327,7 +2337,7 @@ func TestParity_RawStringRules(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, "fun probe() > str { return "+tc.src+"; }")
+			v := evalParity(t, fmt.Sprintf("fun probe() > str { return %s; }", tc.src))
 			assert.Equal(t, tc.want, v.AsString(), "a raw string interpolates but unescapes only \\{ and \\}")
 		})
 	}
@@ -2511,7 +2521,9 @@ object Box { inner: mut Point }
 `
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalParity(t, decls+"\nfun probe() > str {"+tc.body+"\n}")
+			v := evalParity(t, fmt.Sprintf(`%s
+fun probe() > str {%s
+}`, decls, tc.body))
 			assert.NotEmpty(t, v.AsString(), "the program compiles and runs")
 		})
 	}

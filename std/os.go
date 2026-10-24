@@ -48,7 +48,7 @@ func warnIfMagusBinary(ctx context.Context, cmd string, args []string) {
 	}
 	slog.WarnContext(ctx, "proc\\exec runs magus for an invocation a typed member answers",
 		"invocation", strings.Join(append([]string{"magus"}, args...), " "),
-		"hint", "call magus\\"+member+" instead")
+		"hint", fmt.Sprintf("call magus\\%s instead", member))
 }
 
 // typedMagusMembers maps a magus invocation, by its subcommand and, where the subcommand
@@ -106,7 +106,7 @@ func typedMagusMember(args []string) string {
 	}
 	sub, rest := args[0], args[1:]
 	if len(rest) > 0 {
-		if member, ok := typedMagusMembers[sub+" "+rest[0]]; ok {
+		if member, ok := typedMagusMembers[fmt.Sprintf("%s %s", sub, rest[0])]; ok {
 			return member
 		}
 	}
@@ -543,7 +543,7 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 	merged := make([]string, len(outer), len(outer)+len(env))
 	copy(merged, outer)
 	for k, v := range env {
-		merged = append(merged, k+"="+v)
+		merged = append(merged, fmt.Sprintf("%s=%s", k, v))
 	}
 	ctx = context.WithValue(ctx, withEnvKey{}, merged)
 	_, callErr := cb.Call(ctx)

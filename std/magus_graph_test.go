@@ -327,12 +327,12 @@ func (p *precedentGraphs) ClassifyFiles(_ context.Context, paths []string) ([]ty
 // scip-go indexes it.
 func errValue(g *knowledge.Graph, file string, line int, name string) string {
 	ns := "symbol:gomod example.com/m `example.com/m/internal/a`/"
-	id := ns + name + "."
+	id := fmt.Sprintf("%s%s.", ns, name)
 	g.AddNode(types.KnowledgeNode{ID: ns, Kind: types.KindSymbol, Label: "a", Source: "internal/a/a.go:1",
 		Attrs: map[string]string{"namespace": ns, types.AttrLanguage: "go", "symbol_kind": "Package"}})
 	g.AddNode(types.KnowledgeNode{ID: "file:" + file, Kind: types.KindFile, Label: file, Source: file})
 	g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: fmt.Sprintf("%s:%d", file, line),
-		Attrs: map[string]string{"namespace": ns, types.AttrLanguage: "go", "symbol_kind": "Variable", knowledge.AttrSignature: "var " + name + " error"}})
+		Attrs: map[string]string{"namespace": ns, types.AttrLanguage: "go", "symbol_kind": "Variable", knowledge.AttrSignature: fmt.Sprintf("var %s error", name)}})
 	g.AddEdge(types.KnowledgeEdge{Source: "file:" + file, Target: "symbol:gomod std `errors`/New().", Relation: types.RelationReferences,
 		Confidence: types.ConfidenceExtracted, Score: 1, Provenance: fmt.Sprintf("scip count=1 lines=%d", line)})
 	return id
@@ -402,11 +402,11 @@ func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
 // documentedFunc declares func name in file, package internal/a, with doc as its doc comment.
 func documentedFunc(g *knowledge.Graph, file, name, doc string) string {
 	ns := "symbol:gomod example.com/m `example.com/m/internal/a`/"
-	id := ns + name + "()."
+	id := fmt.Sprintf("%s%s().", ns, name)
 	g.AddNode(types.KnowledgeNode{ID: "file:" + file, Kind: types.KindFile, Label: file, Source: file})
 	g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: file + ":3",
 		Attrs: map[string]string{"namespace": ns, types.AttrLanguage: "go", "symbol_kind": "Function",
-			knowledge.AttrSignature: "func " + name + "()", knowledge.AttrDoc: doc}})
+			knowledge.AttrSignature: fmt.Sprintf("func %s()", name), knowledge.AttrDoc: doc}})
 	return id
 }
 

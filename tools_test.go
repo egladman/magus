@@ -2,6 +2,7 @@ package magus
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -82,7 +83,7 @@ func TestSortToolRowsIsTotalOverTiedProjectAndBin(t *testing.T) {
 		sortToolRows(rows)
 		out := make([]string, len(rows))
 		for i, r := range rows {
-			out[i] = r.Project + "/" + r.Bin + "/" + r.Spell
+			out[i] = fmt.Sprintf("%s/%s/%s", r.Project, r.Bin, r.Spell)
 		}
 		return out
 	}

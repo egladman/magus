@@ -1,6 +1,9 @@
 package types
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+)
 
 // DiffHunk is one hunk of a changed file, as the unified-diff reader numbered it. Index and
 // Digest are the address the console, the read marks and Diff.Order share, so they are copied
@@ -33,7 +36,7 @@ type DiffHunkRef struct {
 
 // Key is the "path#index" that names the hunk in a report. Digest is left out, so two refs to
 // the same hunk of one patch share a Key.
-func (r DiffHunkRef) Key() string { return r.Path + "#" + strconv.Itoa(r.Index) }
+func (r DiffHunkRef) Key() string { return fmt.Sprintf("%s#%s", r.Path, strconv.Itoa(r.Index)) }
 
 // DiffOrder is the order to read a changeset's hunks in: groups of steps, each hunk placed by
 // a relationship between changed symbols. The same diff and index always give the same order.

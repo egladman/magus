@@ -142,7 +142,7 @@ func (g Grant) String() string {
 	var parts []string
 	for _, s := range scopes {
 		if l := g.Level(s); l != LevelNone {
-			parts = append(parts, string(s)+"="+l.String())
+			parts = append(parts, fmt.Sprintf("%s=%s", string(s), l.String()))
 		}
 	}
 	return strings.Join(parts, ",")
@@ -156,7 +156,7 @@ type Need struct {
 }
 
 // String renders the need as "console=write".
-func (n Need) String() string { return string(n.Scope) + "=" + n.Level.String() }
+func (n Need) String() string { return fmt.Sprintf("%s=%s", string(n.Scope), n.Level.String()) }
 
 // Validate refuses a need no grant is meant to meet or every grant meets: an unknown scope,
 // a level the scope has no meaning for, and LevelNone, which would admit any credential.
@@ -245,7 +245,7 @@ func (c Credential) Phrase() string {
 	case c.Kind == KindSocketPeer:
 		return "the socket's owner"
 	case c.Name != "" && c.ID != "":
-		return "token " + c.Name + " (" + c.ID + ")"
+		return fmt.Sprintf("token %s (%s)", c.Name, c.ID)
 	case c.Name != "":
 		return "token " + c.Name
 	case c.ID != "":
