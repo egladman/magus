@@ -4216,3 +4216,29 @@ func TestGitStagedFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"whole.txt"}, got)
 }
+
+func TestCreateCheckoutReusesABranchAtTheRevision(t *testing.T) {
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	g := gitVCS{}
+	ctx := t.Context()
+	first := filepath.Join(t.TempDir(), "first")
+	require.NoError(t, g.CreateCheckout(ctx, dir, first, "HEAD", "job-branch"))
+	require.NoError(t, g.RemoveCheckout(ctx, dir, first))
+
+	second := filepath.Join(t.TempDir(), "second")
+	require.NoError(t, g.CreateCheckout(ctx, dir, second, "HEAD", "job-branch"), "a branch still at the revision is reused")
+	branch, err := gitOutput(ctx, second, gitOpts{}, "rev-parse", "--abbrev-ref", "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, "job-branch", branch)
+	require.NoError(t, g.RemoveCheckout(ctx, dir, second))
+
+	third := filepath.Join(t.TempDir(), "third")
+	require.NoError(t, g.CreateCheckout(ctx, dir, third, "HEAD", "job-branch"))
+	_, err = gitOutput(ctx, third, gitOpts{}, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--allow-empty", "-m", "work")
+	require.NoError(t, err)
+	require.NoError(t, g.RemoveCheckout(ctx, dir, third))
+
+	fourth := filepath.Join(t.TempDir(), "fourth")
+	err = g.CreateCheckout(ctx, dir, fourth, "HEAD", "job-branch")
+	require.ErrorContains(t, err, "already exists", "a branch holding commits past the revision is never reused")
+}
