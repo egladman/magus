@@ -230,6 +230,8 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		CallTimeout:           time.Duration(sf.CallTimeoutMs) * time.Millisecond,
 		HostForegroundDefault: time.Duration(sf.ForegroundDefaultMs) * time.Millisecond,
 		HostForegroundMax:     time.Duration(sf.ForegroundMaxMs) * time.Millisecond,
+		// The first host version that resumes a stopped subagent, as the stop entries declare it.
+		HostResumesOnBackgroundFrom: sf.ResumesOnBackgroundFrom,
 	}
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
