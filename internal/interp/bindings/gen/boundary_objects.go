@@ -521,6 +521,8 @@ func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("source", vm.StrValue(v.Source))
 	out.MapSet("measure", vm.IntValue(int64(v.Measure)))
+	out.MapSet("home", vm.StrValue(v.Home))
+	out.MapSet("unshared", vm.BoolValue(v.Unshared))
 	return out
 }
 
@@ -3826,6 +3828,23 @@ func ObjectJobWaiver(v types.JobWaiver) vm.Value {
 	return out
 }
 
+func ObjectClaimEvidence(v types.ClaimEvidence, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", enums.Case("ClaimKind", string(v.Kind)))
+	out.MapSet("subject", vm.StrValue(v.Subject))
+	return out
+}
+
+func ObjectJobClaim(v types.JobClaim, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("evidence", ObjectClaimEvidence(v.Evidence, enums))
+	out.MapSet("proof", vm.StrValue(v.Proof))
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("by", ObjectOrigin(v.By))
+	return out
+}
+
 func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
@@ -3884,8 +3903,16 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("freshReason", vm.StrValue(v.FreshReason))
 	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
 	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
+	itemsClaims := make([]vm.Value, len(v.Claims))
+	for indexClaims := range v.Claims {
+		itemsClaims[indexClaims] = ObjectJobClaim(v.Claims[indexClaims], enums)
+	}
+	out.MapSet("claims", vm.ListValue(itemsClaims))
 	out.MapSet("generation", vm.IntValue(int64(v.Generation)))
 	out.MapSet("maxAttempts", vm.IntValue(int64(v.MaxAttempts)))
+	out.MapSet("maxClaims", vm.IntValue(int64(v.MaxClaims)))
+	out.MapSet("weight", vm.FloatValue(float64(v.Weight)))
+	out.MapSet("paused", vm.IntValue(int64(v.Paused)))
 	out.MapSet("attempts", vm.IntValue(int64(v.Attempts)))
 	itemsPrior := make([]vm.Value, len(v.Prior))
 	for indexPrior := range v.Prior {
