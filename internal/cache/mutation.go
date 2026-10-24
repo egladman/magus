@@ -76,7 +76,7 @@ func movedInputs(before, after sourceFingerprint) []string {
 }
 
 // checkSourceMutation reports MGS4007 when a target rewrote its own declared sources
-// without declaring them via ctx.modifiesExistingFiles. Callers invoke it only after
+// without declaring them via ctx.writesFiles with editsExistingSource. Callers invoke it only after
 // fn succeeded, so it never stacks on top of a target's own failure.
 func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceFingerprint) error {
 	if before == nil {
@@ -96,7 +96,7 @@ func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceF
 		return nil
 	}
 	return types.DiagnosticErrorf(types.UndeclaredSourceModified,
-		"%s:%s modified its declared sources %s; declare them with ctx.modifiesExistingFiles(...)",
+		"%s:%s modified its declared sources %s; declare them with ctx.writesFiles([...], editsExistingSource: true)",
 		s.ProjectPath, s.Target, joinCapped(changed, 5)).
 		WithWhy("A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them.")
 }

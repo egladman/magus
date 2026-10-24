@@ -46,7 +46,7 @@ func TestMagusContextMirrorsTheTargetContext(t *testing.T) {
 	require.Contains(t, objects, "Exec")
 
 	want := slices.DeleteFunc(TargetContextKeys(), func(k string) bool {
-		return k == ctxMarker || k == "inputs" || k == "outputs" || k == "updates"
+		return k == ctxMarker || slices.Contains(RemovedFootprintMembers(), k)
 	})
 	slices.Sort(want)
 	assert.Equal(t, want, objectMembers(objects["Context"]))

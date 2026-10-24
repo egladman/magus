@@ -709,7 +709,6 @@ func buildCtx(tr *Tracer) vm.Value {
 	c.MapSet("narrowed", fn("ctx.narrowed", func(context.Context, []vm.Value) (vm.Value, error) { return vm.BoolValue(false), nil }))
 	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
-	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))
 	c.MapSet("observes", fn("ctx.observes", retNull))
 	// Inert, like the file declarations above: a dry run holds nothing, and driving
 	// the resource fiber would run its acquire and release halves for real, which is

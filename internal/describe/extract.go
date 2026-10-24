@@ -23,6 +23,7 @@ package describe
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -204,6 +205,9 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						ctxDeclNames[me.Name] && !ctxRooted(me.Object) {
 						flagDynamic(&node, me.Name)
 					}
+					if ctxCall(e, "modifiesExistingFiles") && node.FootprintErr == nil {
+						node.FootprintErr = errors.New("ctx.modifiesExistingFiles was removed: write ctx.writesFiles([...], editsExistingSource: true)")
+					}
 					if kind, globs, ok := ioCall(e); ok {
 						// Record the callee (ctx.readsFiles) position so UnreachedIO knows this
 						// call was reached; keyed on the MemberExpr, matching its full-program scan.
@@ -214,11 +218,26 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						// flag it by kind so the load path can reject the footprint ones.
 						recognized := len(globs)
 						switch kind {
-						case "readsFiles", "writesFiles", "modifiesExistingFiles":
-							refs, crossed, err := footprintCall(globs, e.Args, projectAliases)
+						case "readsFiles", "writesFiles":
+							// The list's elements are judged here, so the call's own
+							// arguments all count as read.
+							recognized = len(e.Args)
+							fa, err := readFootprintArgs(kind, e)
+							if err != nil {
+								if node.FootprintErr == nil {
+									node.FootprintErr = err
+								}
+								break
+							}
+							if fa.dynamic {
+								flagDynamic(&node, kind)
+							}
+							refs, crossed, err := footprintCall(fa.globs, fa.items, projectAliases)
 							// A cross-project file counts as recognized (so it does NOT trip
 							// DynamicIO); a computed rel is not recognized and trips it.
-							recognized += crossed
+							if len(fa.globs)+crossed < len(fa.items) {
+								flagDynamic(&node, kind)
+							}
 							if err != nil && node.FootprintErr == nil {
 								node.FootprintErr = fmt.Errorf("ctx.%s: %w", kind, err)
 							}
@@ -229,13 +248,13 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// crossed. If one grows a field InputRef lacks, this fails to
 								// compile instead of silently zeroing it; do not collapse it
 								// into a field-by-field struct literal.
-								switch kind {
-								case "readsFiles":
+								switch {
+								case kind == "readsFiles":
 									node.ReadsFiles = types.AppendRef(node.ReadsFiles, ref)
-								case "writesFiles":
-									node.WritesFiles = types.AppendRef(node.WritesFiles, types.OutputRef(ref))
-								default:
+								case fa.editsExistingSource:
 									node.ModifiesExistingFiles = types.AppendRef(node.ModifiesExistingFiles, types.UpdateRef(ref))
+								default:
+									node.WritesFiles = types.AppendRef(node.WritesFiles, types.OutputRef(ref))
 								}
 							}
 						case "withCwd":
@@ -591,7 +610,7 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 // not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
-	"readsFiles": true, "writesFiles": true, "modifiesExistingFiles": true, "envInputs": true, "observes": true, "withEnv": true, "withCwd": true,
+	"readsFiles": true, "writesFiles": true, "envInputs": true, "observes": true, "withEnv": true, "withCwd": true,
 }
 
 // CtxDeclNames returns the declaration members this static reader recognizes. Exported
@@ -714,12 +733,66 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
 
-// footprintCall reads one ctx.readsFiles/writesFiles/modifiesExistingFiles call into
-// refs, given the literal globs ioCall collected from it. Each glob carries the "!"
-// exclusions this call declares against the same project (types.ParseGlobs): a
-// cross-project exclusion narrows only that project's globs, and nothing narrows
-// another call's. Same-project refs come first, in argument order, then each crossed
-// project's. crossed counts the <alias>.file arguments recognized.
+// footprintArgs is one ctx.readsFiles/writesFiles call as the static read sees it: the
+// list's elements, the string literals among them, and the flag.
+type footprintArgs struct {
+	items               []ast.Node
+	globs               []string
+	editsExistingSource bool
+	// dynamic is set when the list or the flag is not a literal.
+	dynamic bool
+}
+
+// readFootprintArgs reads ctx.<kind>([paths...], editsExistingSource: <bool>). A shape
+// that was never valid, or was removed, is an error naming the call to write instead; a
+// computed list or flag is not an error here but sets dynamic, which the load path
+// refuses as it refuses any computed footprint.
+func readFootprintArgs(kind string, e *ast.CallExpr) (footprintArgs, error) {
+	var fa footprintArgs
+	if len(e.Args) == 0 {
+		return fa, fmt.Errorf("ctx.%s takes a list of paths: write ctx.%s([\"...\"])", kind, kind)
+	}
+	if lit, ok := e.Args[0].(*ast.StringLit); ok {
+		return fa, fmt.Errorf("ctx.%s takes a list of paths: write ctx.%s([%q, ...])", kind, kind, lit.Val)
+	}
+	for i := 1; i < len(e.Args); i++ {
+		label := ""
+		if i < len(e.ArgNames) {
+			label = e.ArgNames[i]
+		}
+		if kind == "readsFiles" {
+			return fa, fmt.Errorf("ctx.%s takes one list of paths and no editsExistingSource", kind)
+		}
+		if label != "editsExistingSource" {
+			if label == "" {
+				return fa, fmt.Errorf("ctx.%s takes one list of paths, then editsExistingSource: true or false", kind)
+			}
+			return fa, fmt.Errorf("ctx.%s: unknown argument %s: the flag is editsExistingSource", kind, label)
+		}
+		b, ok := e.Args[i].(*ast.BoolLit)
+		if !ok {
+			fa.dynamic = true
+			continue
+		}
+		fa.editsExistingSource = b.Val
+	}
+	list, ok := e.Args[0].(*ast.ListExpr)
+	if !ok {
+		fa.dynamic = true
+		return fa, nil
+	}
+	fa.items = list.Items
+	for _, item := range list.Items {
+		if lit, ok := item.(*ast.StringLit); ok {
+			fa.globs = append(fa.globs, lit.Val)
+		}
+	}
+	return fa, nil
+}
+
+// footprintCall reads one call's list into refs. A "!" exclusion narrows only the globs
+// this call declares in the same project; nothing narrows another call's. Same-project
+// refs come first, then each crossed project's; crossed counts the <alias>.file items.
 func footprintCall(globs []string, args []ast.Node, aliases map[string]string) (refs []types.InputRef, crossed int, err error) {
 	owners := []string{""}
 	declared := map[string][]string{"": globs}

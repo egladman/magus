@@ -174,6 +174,83 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 	assert.Empty(t, plain.WritesFiles)
 }
 
+// TestFootprintListForm pins the one call shape: a list of literal paths, then an
+// optional literal editsExistingSource. Calls accumulate per target, and the flag routes
+// a call's paths to the edited set rather than the produced one.
+func TestFootprintListForm(t *testing.T) {
+	g := Extract(`import "magus";
+import "project/site";
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(["src/**", site.file("theme.css")]);
+    ctx.writesFiles(["report.json"]);
+    ctx.writesFiles(["go.mod", "go.sum"], editsExistingSource: true);
+    ctx.writesFiles(["gen/**"], editsExistingSource: false);
+}
+`)
+	format, _ := nodeByName(g, "format")
+	assert.Equal(t, types.TargetGraphNode{
+		Name:                  "format",
+		ReadsFiles:            []types.InputRef{{Glob: "src/**"}, {Project: "site", Glob: "theme.css"}},
+		WritesFiles:           []types.OutputRef{{Glob: "report.json"}, {Glob: "gen/**"}},
+		ModifiesExistingFiles: []types.UpdateRef{{Glob: "go.mod"}, {Glob: "go.sum"}},
+	}, format)
+}
+
+// TestFootprintRefusesTheRemovedForms: the variadic string form and
+// ctx.modifiesExistingFiles are gone, and each refusal names the call that replaces it.
+func TestFootprintRefusesTheRemovedForms(t *testing.T) {
+	cases := []struct {
+		name, body, want string
+	}{
+		{
+			name: "variadic writesFiles",
+			body: `ctx.writesFiles("gen/**", "dist/**");`,
+			want: `ctx.writesFiles takes a list of paths: write ctx.writesFiles(["gen/**", ...])`,
+		},
+		{
+			name: "variadic readsFiles",
+			body: `ctx.readsFiles("src/**");`,
+			want: `ctx.readsFiles takes a list of paths: write ctx.readsFiles(["src/**", ...])`,
+		},
+		{
+			name: "modifiesExistingFiles",
+			body: `ctx.modifiesExistingFiles("go.mod");`,
+			want: `ctx.modifiesExistingFiles was removed: write ctx.writesFiles([...], editsExistingSource: true)`,
+		},
+		{
+			name: "flag on readsFiles",
+			body: `ctx.readsFiles(["src/**"], editsExistingSource: true);`,
+			want: `ctx.readsFiles takes one list of paths and no editsExistingSource`,
+		},
+		{
+			name: "unknown label",
+			body: `ctx.writesFiles(["go.mod"], edits: true);`,
+			want: `ctx.writesFiles: unknown argument edits: the flag is editsExistingSource`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := Extract("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    " + tc.body + "\n}\n")
+			build, _ := nodeByName(g, "build")
+			require.EqualError(t, build.FootprintErr, tc.want)
+		})
+	}
+}
+
+// TestFootprintComputedListOrFlagIsDynamic: a list or flag the static read cannot see
+// is refused at load like any computed footprint argument.
+func TestFootprintComputedListOrFlagIsDynamic(t *testing.T) {
+	for _, body := range []string{
+		`final paths = ["gen/**"]; ctx.writesFiles(paths);`,
+		`final extra = "gen/**"; ctx.writesFiles(["dist/**", extra]);`,
+		`final edits = true; ctx.writesFiles(["go.mod"], editsExistingSource: edits);`,
+	} {
+		g := Extract("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    " + body + "\n}\n")
+		build, _ := nodeByName(g, "build")
+		assert.True(t, build.DynamicIO, "%s must flag DynamicIO", body)
+	}
+}
+
 // TestFootprintExclusionsStayWithTheirCall pins the one meaning of "!": every exclusion
 // in a call narrows every glob of that call, in any order, and none of another call's.
 // Deduplicating the flat list across calls folded the second call's exclusion onto the
@@ -181,8 +258,8 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 func TestFootprintExclusionsStayWithTheirCall(t *testing.T) {
 	g := Extract(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("a/x.go");
-    ctx.writesFiles("!a/x.go", "a/*.go");
+    ctx.writesFiles(["a/x.go"]);
+    ctx.writesFiles(["!a/x.go", "a/*.go"]);
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -200,10 +277,10 @@ func TestFootprintExclusionNarrowsOnlyItsOwnProject(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/site";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", site.file("gen/*.html"), site.file("!gen/hand.html"));
+    ctx.writesFiles(["gen/**", site.file("gen/*.html"), site.file("!gen/hand.html")]);
 }
 export fun bad(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", site.file("!gen/hand.html"));
+    ctx.writesFiles(["gen/**", site.file("!gen/hand.html")]);
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -224,7 +301,7 @@ func TestReadsWritesDynamic(t *testing.T) {
 	g := Extract(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
-    ctx.readsFiles("src/**", extra);
+    ctx.readsFiles(["src/**", extra]);
 }
 `)
 	build, _ := nodeByName(g, "build")

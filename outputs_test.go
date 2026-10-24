@@ -75,7 +75,7 @@ func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
 }
 `
 	w.Magusfile(mf)
@@ -636,8 +636,8 @@ func TestCleanSkipsUpdates(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**");
-    ctx.modifiesExistingFiles("concepts/spells.md");
+    ctx.writesFiles(["gen/**"]);
+    ctx.writesFiles(["concepts/spells.md"], editsExistingSource: true);
 }
 `
 	w.Magusfile(mf)
@@ -675,7 +675,7 @@ func TestUpdatesFoldIntoSourcesNotOutputs(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("concepts/spells.md");
+    ctx.writesFiles(["concepts/spells.md"], editsExistingSource: true);
 }
 `
 	w.Magusfile(mf)
@@ -689,6 +689,89 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 		p.TargetUpdates["generate"], "ctx.modifiesExistingFiles should resolve to the declaring project")
 	assert.NotContains(t, p.AllOutputs(), "concepts/spells.md",
 		"an update must never reach AllOutputs - that is the set clean deletes and the cache snapshots")
+}
+
+// TestFootprintDeclaredBothWaysIsRejected: a path one target both produces and edits
+// would be replayed and cleaned as an output while hashed as a source, so neither
+// meaning holds. Exact paths and overlapping globs are both caught, across calls.
+func TestFootprintDeclaredBothWaysIsRejected(t *testing.T) {
+	cases := []struct {
+		name, body, want string
+	}{
+		{
+			name: "one path",
+			body: `ctx.writesFiles(["go.mod"]);
+    ctx.writesFiles(["go.mod"], editsExistingSource: true);`,
+			want: `target "tidy": ctx.writesFiles declares "go.mod" both as produced and with editsExistingSource: true, and a path has one mode: a produced file is replayed and cleaned, an edited source is hashed and never replayed`,
+		},
+		{
+			name: "overlapping globs",
+			body: `ctx.writesFiles(["gen/**"]);
+    ctx.writesFiles(["gen/*.go"], editsExistingSource: true);`,
+			want: `target "tidy": ctx.writesFiles declares "gen/**" as produced and "gen/*.go" with editsExistingSource: true, which overlap, and a path has one mode: a produced file is replayed and cleaned, an edited source is hashed and never replayed`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeWorkspace(t, map[string]string{
+				"go.mod": "module x\n",
+				"magusfile.buzz": "import \"magus\";\nexport fun tidy(ctx: magus\\Context, args: [str]) > void {\n    " +
+					tc.body + "\n}\n",
+			})
+			_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, types.FootprintDeclaredBothWays)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+
+	t.Run("disjoint paths in one target load", func(t *testing.T) {
+		root := writeWorkspace(t, map[string]string{
+			"go.mod": "module x\n",
+			"magusfile.buzz": `import "magus";
+export fun tidy(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["report.json"]);
+    ctx.writesFiles(["go.mod", "**/*.go", "!gen/**"], editsExistingSource: true);
+    ctx.writesFiles(["gen/x.go"]);
+}
+`,
+		})
+		m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = m.Close() })
+	})
+}
+
+// TestEditedSourceMustExistBeforeTheRun: an edited source is hashed and never
+// replayed, so one that does not exist names a file the target was meant to produce.
+// The check runs before the target does, not at load, so a bootstrap target earlier in
+// the run can still create it; a produced glob matching nothing is fine.
+func TestEditedSourceMustExistBeforeTheRun(t *testing.T) {
+	root := writeWorkspace(t, map[string]string{
+		"go.mod": "module x\n",
+		"magusfile.buzz": `import "magus";
+export fun tidy(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["gen/**"]);
+    ctx.writesFiles(["go.mod", "go.sum"], editsExistingSource: true);
+}
+export fun fine(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["gen/**"]);
+    ctx.writesFiles(["go.mod", "*.mod"], editsExistingSource: true);
+}
+`,
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "a missing edited source is not a load error")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p)
+
+	require.EqualError(t, m.checkEditedSourcesExist(p, "tidy"),
+		`ctx.writesFiles in target tidy lists "go.sum" with editsExistingSource: true, but no file matches it in project .: an edited source must already exist. Create it, or drop editsExistingSource so the target produces it.`)
+	require.NoError(t, m.checkEditedSourcesExist(p, "fine"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.sum"), nil, 0o644))
+	require.NoError(t, m.checkEditedSourcesExist(p, "tidy"), "the check reads the tree as it is when the target runs")
 }
 
 // TestResolveTargetOutputs answers "where did the artifact land" from the same
