@@ -57,6 +57,29 @@ func fastForward(c hint.Invocation) bool {
 	return flag == "--ff-only" && commitID(commit)
 }
 
+// integrationMerge reports `git merge --no-ff [--no-edit] <branch>` for a branch row, an
+// integration job, names in integrates: the one merge its holder exists to run. Any other
+// branch, option or verb is judged as for every worker, so the allowance widens nothing else.
+func integrationMerge(c hint.Invocation, row types.Job) bool {
+	if c.Name != "git" || !row.Integrating() || len(c.Args) < 3 || len(c.Args) > 4 || c.Args[0] != "merge" {
+		return false
+	}
+	var noFF bool
+	branch := ""
+	for _, a := range c.Args[1:] {
+		switch {
+		case a == "--no-ff":
+			noFF = true
+		case a == "--no-edit":
+		case strings.HasPrefix(a, "-") || branch != "":
+			return false
+		default:
+			branch = a
+		}
+	}
+	return noFF && slices.Contains(row.Integrates, branch)
+}
+
 // commitID reports a full or abbreviated hexadecimal object name, as `magus version` prints a
 // build's commit.
 func commitID(s string) bool {

@@ -116,10 +116,10 @@ const maxListedClaims = 12
 // A file whose lines this checkout cannot place, or that declares nothing yet, is left
 // alone, since nothing smaller than it could be claimed. When another live job holds such a
 // file, one attention request asks it to release what it does not edit (see
-// requestRelease); a dry-run store files none. A nil store, or one with no workspace root,
-// finds nothing.
+// requestRelease); a dry-run store files none. A nil store, one with no workspace root, or an
+// integration row finds nothing: a merge writes the merged file whole (see IntegrationOverlaps).
 func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
-	if store == nil || store.root == "" {
+	if store == nil || store.root == "" || row.Integrating() {
 		return nil
 	}
 	var (
@@ -238,9 +238,10 @@ func driverPattern(p string) string {
 // sharedCheckoutProblems and the overlap report already watch; a holder that exited, whose
 // editing is over (see [Editing]); a holder blocked on
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
-// no diff driver, for which depends_on is the only move.
+// no diff driver, for which depends_on is the only move. An integration row is
+// never refused here: the merge settles a shared file, and IntegrationOverlaps notes the holder.
 func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
-	if store == nil || store.root == "" || len(row.WritePaths) == 0 {
+	if store == nil || store.root == "" || len(row.WritePaths) == 0 || row.Integrating() {
 		return nil
 	}
 	here, _ := filepath.Abs(store.root)

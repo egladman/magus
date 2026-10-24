@@ -300,6 +300,19 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be > %s (got %s)", f.Param, f.Value)
 	case "lt":
 		return fmt.Sprintf("must be < %s (got %s)", f.Param, f.Value)
+	case "gtfield":
+		// The param is the Go field name; the reader knows the yaml key.
+		var key strings.Builder
+		for i, r := range f.Param {
+			if 'A' <= r && r <= 'Z' {
+				if i > 0 {
+					key.WriteByte('_')
+				}
+				r += 'a' - 'A'
+			}
+			key.WriteRune(r)
+		}
+		return fmt.Sprintf("must be greater than %s beside it (got %s)", key.String(), f.Value)
 	case "conformance_ratchet_path":
 		return fmt.Sprintf("must be a file inside the workspace, relative to magus.yaml (got %q)", f.Value)
 	case "conformance_exclude_glob":

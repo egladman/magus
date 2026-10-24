@@ -605,6 +605,33 @@ func TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne(t *testing.T) {
 	assert.Empty(t, row.Breaks)
 }
 
+func TestDeclarationIntegratesNamesMergeableBranchesOnce(t *testing.T) {
+	t.Parallel()
+
+	ok := Declaration{ID: "integrate", Integrates: []string{"done-a", "feature/done-b"}}
+	require.NoError(t, ok.Validate())
+	var row Job
+	ok.Apply(&row)
+	assert.True(t, row.Integrating())
+	assert.Equal(t, []string{"done-a", "feature/done-b"}, row.Clone().Integrates)
+
+	for branches, want := range map[string]string{
+		"--force":       `integrates[0] "--force" is not a branch name a merge can take`,
+		"a..b":          `integrates[0] "a..b" is not a branch name a merge can take`,
+		"done done":     `integrates[0] "done done" is not a branch name a merge can take`,
+		"done-a,done-a": `integrates[1] "done-a" is named twice`,
+		"main.lock":     `integrates[0] "main.lock" is not a branch name a merge can take`,
+	} {
+		err := Declaration{ID: "integrate", Integrates: strings.Split(branches, ",")}.Validate()
+		require.Error(t, err, branches)
+		assert.Contains(t, err.Error(), want, branches)
+	}
+	err := Declaration{ID: "integrate", Integrates: []string{"done-a"}, ReadOnly: true}.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "an integration job merges branches, so it writes")
+	assert.False(t, Job{ID: "worker"}.Integrating())
+}
+
 func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 	t.Parallel()
 

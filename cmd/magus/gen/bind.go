@@ -73,6 +73,8 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.IntVar(&cfg.Jobs.MaxValidations, "jobs-max-validations", cfg.Jobs.MaxValidations, "MAGUS_JOBS_MAX_VALIDATIONS: MaxValidations is how many 'magus run's one job tree's leased workers may have going at once; a run past it waits for...")
 	fs.IntVar(&cfg.Jobs.MaxClaimFiles, "jobs-max-claim-files", cfg.Jobs.MaxClaimFiles, "MAGUS_JOBS_MAX_CLAIM_FILES: MaxClaimFiles is how many files one glob write path may match before a job record refuses it as too broad (MGS3043).")
 	fs.IntVar(&cfg.Jobs.MaxClaimProjects, "jobs-max-claim-projects", cfg.Jobs.MaxClaimProjects, "MAGUS_JOBS_MAX_CLAIM_PROJECTS: MaxClaimProjects is how many projects one glob write path may reach before a job record refuses it as too broad (MGS3...")
+	fs.IntVar(&cfg.Jobs.IntegrateAdviseAt, "jobs-integrate-advise-at", cfg.Jobs.IntegrateAdviseAt, "MAGUS_JOBS_INTEGRATE_ADVISE_AT: IntegrateAdviseAt is how many finished branches may wait off the base before a fork of anything but an integration jo...")
+	fs.IntVar(&cfg.Jobs.IntegrateRefuseAt, "jobs-integrate-refuse-at", cfg.Jobs.IntegrateRefuseAt, "MAGUS_JOBS_INTEGRATE_REFUSE_AT: IntegrateRefuseAt is the count past which such a fork is refused until an integration job names the branches; it must...")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter.")
 	fs.IntVar(&cfg.Concurrency, "j", cfg.Concurrency, "Short for --concurrency")
 	fs.TextVar(&cfg.ConcurrencyProfile, "concurrency-profile", cfg.ConcurrencyProfile, "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...")

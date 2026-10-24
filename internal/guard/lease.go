@@ -2308,7 +2308,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	creates := slices.ContainsFunc(cmds, isInit)
 	if !creates {
 		for _, c := range cmds {
-			if op := workerVCSOp(c); op != "" && !workerLands(c) {
+			if op := workerVCSOp(c); op != "" && !workerLands(c) && !integrationMerge(c, me) {
 				if cwd, _ := deps.workingDir(); isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
 					continue
 				}
@@ -2604,7 +2604,7 @@ type vcsSite struct {
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
 	op := workerVCSOp(inv)
 	switch {
-	case op == "":
+	case op == "" || integrationMerge(inv, row):
 		return vcsRefusal{}
 	case isInit(inv):
 		return initRefusal(row, inv, site, unlocated)
