@@ -62,13 +62,15 @@ func (s *server) park(p *parked) {
 		return
 	}
 	r, o := s.judgeLocked(p, s.starvedHeadLocked())
+	why := p.why
 	if o == waiting {
 		s.queue = append(s.queue, p)
 		s.armWakeLocked()
 	}
 	s.mu.Unlock()
 	if o == waiting {
-		_ = p.w.write(typeParked, p.id, p.why)
+		// A wake may answer p before this frame goes out; the client then drops it.
+		_ = p.w.write(typeParked, p.id, why)
 		return
 	}
 	_ = p.w.write(r.typ, p.id, r.body)

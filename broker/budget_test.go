@@ -144,7 +144,7 @@ func TestAParkedSeatWaitIsSeatedWhenTheSeatsRunEnds(t *testing.T) {
 
 	waiting := claimAsync(t, t.Context(), addr, second, types.MachineClaim{Target: "go-test", Invocation: "2:b"})
 	requirePending(t, waiting)
-	assert.True(t, second.seatWaiting.Load(), "the parked reply names the seat's holder")
+	require.Eventually(t, second.seatWaiting.Load, 5*time.Second, 5*time.Millisecond, "the parked reply names the seat's holder")
 
 	require.NoError(t, first.Close())
 	got := requireAnswer(t, waiting)
