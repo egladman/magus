@@ -130,8 +130,9 @@ install, [The guard](agents/guard.md) for what is denied and why,
 and Codex run, [Session load adapters](agents/session-load.md) for reading a
 host's own session log back into magus,
 [Attention hooks](agents/notifications.md) for `magus session notify`,
-and [Jobs and leases](agents/leases.md) for what an agent uses when it
-fans work out across several.
+[Jobs and leases](agents/leases.md) for what an agent uses when it
+fans work out across several, and [Long-running sessions](agents/long-running-sessions.md)
+for keeping one session going for hours.
 
 ## When a session loses its history
 
