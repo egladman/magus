@@ -21,14 +21,16 @@ func TestPauseRecordsItsOwnerReasonAndBound(t *testing.T) {
 	first := rows[0]
 	assert.NotZero(t, first.Paused)
 	assert.NotEmpty(t, first.PausedBy.User, "the pause names the account that wrote it")
-	assert.Equal(t, "release build needs the machine", first.PauseReason)
-	assert.Equal(t, until, first.PausedUntil)
+	got := first
+	got.Paused, got.PausedBy, got.Updated = 0, types.Origin{}, 0
+	assert.Equal(t, types.Job{ID: "w", State: types.StateRunning, Registered: 1,
+		PauseReason: "release build needs the machine", PausedUntil: until}, got)
 
 	rows, err = s.Pause(t.Context(), "still building", 0, "w")
 	require.NoError(t, err)
-	assert.Equal(t, first.Paused, rows[0].Paused, "pausing again keeps the first time")
-	assert.Equal(t, "still building", rows[0].PauseReason, "and takes the new reason")
-	assert.Zero(t, rows[0].PausedUntil, "and the new bound")
+	again := first
+	again.PauseReason, again.PausedUntil, again.Updated = "still building", 0, rows[0].Updated
+	assert.Equal(t, again, rows[0], "pausing again keeps the first time and takes the new reason and bound")
 
 	rows, err = s.Resume(t.Context(), "w")
 	require.NoError(t, err)
@@ -71,8 +73,8 @@ func TestPausedJobOutlivesTheSweepAndPruneUntilItsPauseLapses(t *testing.T) {
 
 	rows := states(t, s)
 	assert.Equal(t, types.StateDeclared, rows["held"].State, "the sweep leaves a paused row alone")
-	assert.Equal(t, types.StateNoReturn, rows["lapsed"].State)
-	assert.Equal(t, "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)", rows["lapsed"].EndReason)
+	assert.Equal(t, types.Job{ID: "lapsed", State: types.StateNoReturn, Updated: now, Paused: old, PauseReason: "busy", PausedUntil: now - 60,
+		EndReason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"}, rows["lapsed"])
 
 	got, err := s.Prune(t.Context(), PruneOptions{All: true})
 	require.NoError(t, err)

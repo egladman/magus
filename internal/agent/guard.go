@@ -234,9 +234,9 @@ var guardInputs = []string{"command", "path", "mcp"}
 // 32: a harness hook command runs the checkout's own ./magus when it is executable
 // and PATH's magus otherwise, so a stale binary on PATH no longer judges a newer tree.
 //
-// 33: magus-command.buzz forwards --resumes-on-background-from on a stop, which the
-// claude-code stop entries pass; a 32 copy reports it as unsupported and refuses every
-// subagent stop that leaves a background task running.
+// 33: magus-command.buzz forwards --resumes-on-background-from on a stop, which a harness's
+// stop entries pass; a 32 copy reports it as unsupported and refuses every subagent stop
+// that leaves a background task running.
 const GuardTemplateVersion = 33
 
 // GuardTemplateMarker introduces the version line each template carries, and is

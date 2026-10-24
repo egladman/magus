@@ -710,7 +710,7 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 
 	_, err := s.List()
 	require.ErrorIs(t, err, types.JobStoreWriterOlder)
-	assert.ErrorContains(t, err, fmt.Sprintf(`job: %s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
+	assert.ErrorContains(t, err, fmt.Sprintf(`%s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
 		path, types.JobSchemaVersion))
 
 	_, err = s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })

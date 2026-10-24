@@ -1390,6 +1390,7 @@ github.com/egladman/magus/types.ContextWindow.Tokens field int64
 github.com/egladman/magus/types.ContextWindow.Window field int64
 github.com/egladman/magus/types.ContextWithGraphObserver func(ctx context.Context, o Observer) context.Context
 github.com/egladman/magus/types.CountLines func(b []byte) int
+github.com/egladman/magus/types.CountTextPresence func(root string, hits []TextHit) KnowledgeTextPresence
 github.com/egladman/magus/types.Credential type struct
 github.com/egladman/magus/types.Credential.Grant field Grant "json:\"grant,omitzero\" yaml:\"grant,omitempty\""
 github.com/egladman/magus/types.Credential.ID field string "json:\"id,omitempty\" yaml:\"id,omitempty\""
@@ -4939,7 +4940,6 @@ github.com/egladman/magus/types.TermYellow const TermStyle = "33"
 github.com/egladman/magus/types.TextHit type struct
 github.com/egladman/magus/types.TextHit.Line field int
 github.com/egladman/magus/types.TextHit.Path field string
-github.com/egladman/magus/types.TextPresenceOf func(root string, hits []TextHit) KnowledgeTextPresence
 github.com/egladman/magus/types.TextPresenceSiteCap const untyped int = 10
 github.com/egladman/magus/types.ThreadInferred const ThreadSource = "inferred"
 github.com/egladman/magus/types.ThreadReported const ThreadSource = "reported"

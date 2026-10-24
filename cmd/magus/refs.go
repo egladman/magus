@@ -136,7 +136,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			matches, n, s, g, cls, textErr := textScan(ctx, searchRoot, pos[0], nil, noGenerated, classify)
 			searched, skipped, generated, classifiedFiles = n, s, g, cls
 			if textErr == nil && len(matches) > 0 {
-				presence := presenceOf(searchRoot, matches)
+				presence := missPresence(searchRoot, matches)
 				ans.Text = &presence
 			}
 		}
@@ -226,13 +226,13 @@ func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
 	return reportIndexStaleness(w, out.Answer)
 }
 
-// presenceOf reduces matches to the counts and the capped site list a symbol miss reports.
-func presenceOf(root string, matches []textindex.Match) types.KnowledgeTextPresence {
+// missPresence reduces matches to the counts and the capped site list a symbol miss reports.
+func missPresence(root string, matches []textindex.Match) types.KnowledgeTextPresence {
 	hits := make([]types.TextHit, len(matches))
 	for i, m := range matches {
 		hits[i] = types.TextHit{Path: m.Path, Line: m.Line}
 	}
-	return types.TextPresenceOf(root, hits)
+	return types.CountTextPresence(root, hits)
 }
 
 // refsMiss is what refs learned about a name no symbol node matches.

@@ -356,7 +356,7 @@ func TestWorkspaceBaseScopesAnEntryToTheCheckout(t *testing.T) {
 	p := BuildPolicy(o)
 	assert.Contains(t, p.BaseEnv, "GOLANGCI_LINT_CACHE="+cache)
 	assert.NotContains(t, p.BaseEnv, "GOLANGCI_LINT_CACHE=/shared/golangci-lint")
-	assert.NoError(t, check(p, filesystem.Write, filepath.Join(cache, "entry")))
+	require.NoError(t, check(p, filesystem.Write, filepath.Join(cache, "entry")))
 	assert.Error(t, check(p, filesystem.Write, "/shared/golangci-lint/entry"))
 
 	h := hostDirs{home: "/home/u", goos: "linux", workspace: "/ws"}
@@ -364,7 +364,7 @@ func TestWorkspaceBaseScopesAnEntryToTheCheckout(t *testing.T) {
 	assert.Empty(t, hostDirs{goos: "linux"}.base(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace}), "no workspace, no base")
 	_, _, exports := h.mergeLayers(o.Spells["lint"])
 	assert.Equal(t, map[string]string{"GOLANGCI_LINT_CACHE": "/ws/.magus/golangci-lint"}, exports)
-	assert.NoError(t, checkAllow(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace, Path: ".magus/x", Mode: spells.SandboxAccessRW}))
+	require.NoError(t, checkAllow(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace, Path: ".magus/x", Mode: spells.SandboxAccessRW}))
 	assert.Error(t, checkAllow(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace, Mode: spells.SandboxAccessRW}), "the whole checkout is not a cache")
 }
 

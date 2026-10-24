@@ -101,9 +101,19 @@ func (b MagusBuild) AcceptsReplacement(repl BuildStamp) error {
 	case repl.Commit == "" || err != nil:
 		return errors.New("the replacement reports no commit or build date, so it carries no stamp")
 	}
-	current, err := time.Parse(time.RFC3339, b.Date)
-	if b.Commit == "" || err != nil || built.After(current) {
+	current, stamped := b.stampedAt()
+	if !stamped || built.After(current) {
 		return nil
 	}
 	return fmt.Errorf("%s (built %s) is not newer than the running %s (built %s)", repl.Commit, repl.BuildDate, b.Commit, b.Date)
+}
+
+// stampedAt is the commit date the linker stamped b with, false when b carries no commit or
+// no date that parses: an unstamped build.
+func (b MagusBuild) stampedAt() (time.Time, bool) {
+	if b.Commit == "" {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339, b.Date)
+	return at, err == nil
 }

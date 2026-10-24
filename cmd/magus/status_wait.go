@@ -67,9 +67,9 @@ func withinDeadline(ctx context.Context, deadline time.Duration, snapshot func(c
 	}
 	s, serr := snapshot(ctx)
 	if serr != nil {
-		return fmt.Errorf("the build budget had no seat within %s; who holds it could not be read: %w", deadline, serr)
+		return fmt.Errorf("the build budget had no seat within %s, and who holds it could not be read: %w", deadline, serr)
 	}
-	return fmt.Errorf("the build budget had no seat within %s; it is held by %s", deadline, s.HolderList(time.Now()))
+	return fmt.Errorf("the build budget had no seat within %s, held by %s", deadline, s.HolderList(time.Now()))
 }
 
 // awaitSeat is one request the broker holds until the budget can seat claims: for a magus

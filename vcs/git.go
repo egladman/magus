@@ -1936,7 +1936,7 @@ func localDriverExe(ctx context.Context, root string, tracks tracksFunc) string 
 // unwraps the same quoting.
 func quoteDriverExe(exe string) string {
 	if strings.ContainsAny(exe, " \t") {
-		return fmt.Sprintf(`"%s"`, exe)
+		return fmt.Sprintf("%q", exe)
 	}
 	return exe
 }
@@ -2221,7 +2221,7 @@ func skipTrackedBinary(tracked, command, own, run string) string {
 		return run
 	}
 	notice := fmt.Sprintf("magus: this branch commits %s, so the hook will not run it; run '%s' with your own build", bin, own)
-	return fmt.Sprintf("if %s -- %s >/dev/null 2>&1; then echo \"%s\" >&2; else %s; fi", tracked, bin, notice, run)
+	return fmt.Sprintf("if %s -- %s >/dev/null 2>&1; then echo %q >&2; else %s; fi", tracked, bin, notice, run)
 }
 
 // unwrapTrackedBinary returns the run line inside skipTrackedBinary's guard, or line itself
@@ -3719,9 +3719,20 @@ func recordCheckout(ctx context.Context, root, dir string) (*gitCheckout, error)
 
 // branchAtRev reports whether branch exists and its tip is the commit rev resolves to.
 func branchAtRev(ctx context.Context, root, branch, rev string) (bool, error) {
-	tip, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	ref := "refs/heads/" + branch
+	// for-each-ref answers an absent ref with no line rather than an exit status, so every
+	// error is a real one; its pattern also matches refs below ref, which are not ref.
+	refs, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "for-each-ref", "--format=%(refname) %(objectname)", ref)
 	if err != nil {
-		// rev-parse --verify --quiet exits 1 with no output for an absent ref.
+		return false, fmt.Errorf("git for-each-ref %s: %w", ref, err)
+	}
+	tip := ""
+	for _, line := range strings.Split(refs, "\n") {
+		if name, id, ok := strings.Cut(line, " "); ok && name == ref {
+			tip = id
+		}
+	}
+	if tip == "" {
 		return false, nil
 	}
 	want, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "rev-parse", "--verify", rev+"^{commit}")

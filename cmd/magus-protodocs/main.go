@@ -1084,7 +1084,7 @@ func (a api) exampleJSON(inputFull string) string {
 func (f field) placeholder() string {
 	if f.RefIsEnum {
 		if f.EnumFallback != "" {
-			return fmt.Sprintf("\"%s\"", f.EnumFallback)
+			return fmt.Sprintf("%q", f.EnumFallback)
 		}
 		return `""`
 	}

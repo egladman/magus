@@ -58,7 +58,7 @@ func TestWithinDeadlineRefusesPastItNamingTheHolders(t *testing.T) {
 
 	err := withinDeadline(t.Context(), 20*time.Millisecond, full, await)
 	require.Error(t, err)
-	assert.Equal(t, "the build budget had no seat within 20ms; it is held by pid 21589 (`./magus run go-test .`) for 4m0s, pid 7 (lint docs) for 4m0s", err.Error())
+	assert.Equal(t, "the build budget had no seat within 20ms, held by pid 21589 (`./magus run go-test .`) for 4m0s, pid 7 (lint docs) for 4m0s", err.Error())
 
 	ran := false
 	require.NoError(t, withinDeadline(t.Context(), 0, full, func(ctx context.Context) error {

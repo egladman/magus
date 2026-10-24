@@ -37,13 +37,17 @@ func gateCmd(ctx context.Context, root string, args []string) error {
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
-		fmt.Fprintln(os.Stderr, "Usage: "+gateCommandSpec().Usage)
+		gateUsage()
 		return nil
 	case "waive":
 		return gateWaive(ctx, root, args[1:])
 	default:
 		return exit.Usagef("magus gate: unknown subcommand %q (want waive)", args[0])
 	}
+}
+
+func gateUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s\n", gateCommandSpec().Usage)
 }
 
 // gateCommandSpec is `magus gate` as the command registry declares it.

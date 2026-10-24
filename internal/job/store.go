@@ -1303,7 +1303,7 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 		f.Jobs = append(f.Jobs, row)
 	}
 	if lacks := f.Unmet(types.JobSchema.Features()); lacks != nil {
-		return jobsFile{}, jobsLog{}, types.DiagnosticErrorf(types.JobStoreWriterOlder, "job: %s requires %s, which this magus (schema %d) lacks, update magus",
+		return jobsFile{}, jobsLog{}, types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s requires %s, which this magus (schema %d) lacks, update magus",
 			s.path, quoteAll(lacks), types.JobSchemaVersion)
 	}
 	return f, log, nil

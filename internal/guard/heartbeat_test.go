@@ -10,7 +10,6 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,9 +121,11 @@ func TestSilentLeases(t *testing.T) {
 	}
 	assert.Len(t, byLease, 2)
 	require.Contains(t, byLease, "silent")
-	assert.Equal(t, "s-silent", byLease["silent"].Session, "the newest stamp names the session")
-	assert.Equal(t, int64(45*60), byLease["silent"].SilentSeconds)
-	assert.Contains(t, byLease["silent"].BackgroundNote, "no transcript", "an unread background state is said, not assumed")
+	silent := byLease["silent"]
+	assert.Contains(t, silent.BackgroundNote, "no transcript", "an unread background state is said, not assumed")
+	assert.True(t, old.Equal(silent.LastSeen), "the newest stamp is the one seen")
+	silent.BackgroundNote, silent.LastSeen = "", time.Time{}
+	assert.Equal(t, SilentLease{Lease: "silent", Session: "s-silent", SilentSeconds: 45 * 60}, silent, "the newest stamp names the session")
 	assert.Contains(t, byLease, "finished-background", "a transcript whose background command ended counts it dead")
 	assert.NotContains(t, byLease, "background", "a running background command counts as alive")
 	assert.NotContains(t, byLease, "recent")
@@ -184,11 +185,11 @@ func TestStampHeartbeatCompactsPastItsBound(t *testing.T) {
 	require.NoError(t, err)
 
 	lines := make([][]byte, 0, heartbeatMaxEntries+1)
-	stale, err := json.Marshal(heartbeat{Session: "s", Lease: "stale", At: now.Add(-heartbeatRetain - time.Hour)})
+	stale, err := heartbeat{Session: "s", Lease: "stale", At: now.Add(-heartbeatRetain - time.Hour)}.MarshalJSON()
 	require.NoError(t, err)
 	lines = append(lines, stale)
 	for i := range heartbeatMaxEntries {
-		line, err := json.Marshal(heartbeat{Session: "s", Lease: fmt.Sprintf("job-%d", i), At: now.Add(time.Duration(i-heartbeatMaxEntries) * time.Second)})
+		line, err := heartbeat{Session: "s", Lease: fmt.Sprintf("job-%d", i), At: now.Add(time.Duration(i-heartbeatMaxEntries) * time.Second)}.MarshalJSON()
 		require.NoError(t, err)
 		lines = append(lines, line)
 	}

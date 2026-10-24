@@ -2,7 +2,6 @@ package viewer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"

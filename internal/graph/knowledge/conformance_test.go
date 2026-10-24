@@ -767,14 +767,15 @@ func TestConformanceFileSplitNamesOneConcept(t *testing.T) {
 
 	out := g.Conformance(o)
 	row := findConformanceRow(t, out, types.ConformanceFileSplit, types.ConformancePopSource, "")
-	assert.Equal(t, []types.ConformanceItem{
+	// The distribution is the population's, which other tests pin; this one judges names.
+	row.N, row.P50, row.P90, row.P95, row.P99, row.Live, row.Value, row.Propose = 0, 0, 0, 0, 0, 0, 0, 0
+	assert.Equal(t, types.ConformanceRow{Key: key, Anchor: 1500, Known: 1, Source: row.Source, Violations: []types.ConformanceItem{
 		{ID: "internal/a/job_claim_callers.go", Source: "internal/a/job_claim_callers.go:1", Measure: 3000,
 			Home: "internal/a/job.go", Rename: "internal/a/job_claim.go"},
 		{ID: "internal/b/job_claim_callers.go", Source: "internal/b/job_claim_callers.go:1", Measure: 300,
 			Home: "internal/b/job_claim.go"},
-	}, row.Violations, "a root past 1500 passes a split by size, never a name splitting two concepts off it"+
+	}}, row, "a root past 1500 passes a split by size, never a name splitting two concepts off it"+
 		"; beside job_claim.go, job_claim_callers.go splits job_claim.go and would fit in it"+
-		"; the test and the linux build are never findings")
-	assert.Equal(t, 1, row.Known, "job_lease_store.go is known")
+		"; the test and the linux build are never findings; job_lease_store.go is known")
 	assert.Empty(t, out.Stale, "a known name finding stays past its row whatever it measures")
 }

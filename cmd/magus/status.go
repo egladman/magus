@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -84,7 +85,11 @@ func status(ctx context.Context, args []string) error {
 
 	if f.Watch == 0 {
 		snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
-		silent, silentErr := loadSilentLeases(ctx, time.Now())
+		silent, silentErr := loadSilentLeases(time.Now())
+		if errors.Is(silentErr, types.NoWorkspaceRoot) {
+			// Status runs anywhere; outside a workspace no row is leased.
+			silentErr = nil
+		}
 		if err := printStatusWithSilent(os.Stdout, snapshot, silent, silentErr, opts, f.Compact); err != nil {
 			return err
 		}
@@ -153,12 +158,12 @@ type statusReport struct {
 	SilentLeasesError    string              `json:"silent_leases_error,omitempty" yaml:"silent_leases_error,omitempty"`
 }
 
-// loadSilentLeases reads the workspace's silent leased rows. Outside a workspace there are
-// none and no error: status runs anywhere.
-func loadSilentLeases(ctx context.Context, now time.Time) ([]guard.SilentLease, error) {
+// loadSilentLeases reads the workspace's silent leased rows. Outside a workspace it returns
+// the NoWorkspaceRoot error, which the caller reads as no rows.
+func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
 	root, err := workspace.FindRoot("")
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	loc, err := jobPlace(root)
 	if err != nil {

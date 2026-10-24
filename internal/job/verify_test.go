@@ -1125,9 +1125,8 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 		return rep
 	}
 	v := verifyClaim(acceptRow(), owed(types.OwedNoSeat), types.JobAttempt{}, nil)
-	assert.True(t, v.Verified, "%q", v.Violations)
-	assert.Equal(t, []types.GateStatus{{ID: "check", Owed: types.OwedNoSeat}}, v.Gates)
-	assert.Equal(t, []string{"goal \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}, v.Notes)
+	assert.Equal(t, Status{Verified: true, Gates: []types.GateStatus{{ID: "check", Owed: types.OwedNoSeat}},
+		Notes: []string{"goal \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}}, v)
 	var out strings.Builder
 	RenderGates(&out, v)
 	assert.Contains(t, out.String(), "harness/ledger-accept: 0 of 1 goal(s) met\n  [owed] check (no seat)\n")

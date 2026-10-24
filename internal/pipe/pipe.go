@@ -919,7 +919,7 @@ func (p *pipeline) wait(ctx context.Context, stdin *os.File, dir string, n notic
 			if ctx.Err() != nil {
 				return stageOutcome{}, false, fmt.Errorf("pipe: gave up waiting on pid %d (%s) upstream of this run: %w", pending[0].PID, pending[0].Command(), ctx.Err())
 			}
-			return stageOutcome{}, false, fmt.Errorf("pipe: waiting on pid %d (%s) upstream of this run: %w", pending[0].PID, pending[0].Command(), err)
+			return stageOutcome{}, false, fmt.Errorf("waiting on pid %d (%s) upstream of this run: %w", pending[0].PID, pending[0].Command(), err)
 		}
 	}
 	red, found := firstRed(ended)

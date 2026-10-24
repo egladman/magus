@@ -2664,12 +2664,12 @@ func ParsePauseUntil(raw string, now time.Time) (int64, error) {
 	}
 	if d, err := time.ParseDuration(raw); err == nil {
 		if d <= 0 {
-			return 0, fmt.Errorf("--until %q is not ahead of now; write a positive duration (2h) or a later instant", raw)
+			return 0, fmt.Errorf("--until %q is not ahead of now, as a positive duration (2h) or a later instant is", raw)
 		}
 		return now.Add(d).Unix(), nil
 	}
 	if at, err := time.Parse(time.RFC3339, raw); err == nil {
 		return at.Unix(), nil
 	}
-	return 0, fmt.Errorf("--until %q is neither a duration nor an RFC3339 instant; write 2h or 2006-01-02T15:04:05Z", raw)
+	return 0, fmt.Errorf("--until %q is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z", raw)
 }

@@ -30,9 +30,11 @@ func TestNoteHeldFilesOneRowForTheTreeRoot(t *testing.T) {
 
 	queue := attentionRows(t, root)
 	require.Len(t, queue, 1)
-	assert.Equal(t, "orchestrator", queue[0].Lease)
-	assert.Equal(t, heldSource, queue[0].Source)
-	assert.Contains(t, queue[0].Message, "held by job mover")
+	got := queue[0]
+	assert.Contains(t, got.Message, "held by job mover")
+	// The id, the invocation and the clock are the raise's own; the message is checked above.
+	got.ID, got.Invocation, got.OpenedMs, got.Message = "", "", 0, ""
+	assert.Equal(t, sessions.AttentionRequest{Lease: "orchestrator", Source: heldSource}, got)
 }
 
 // A session that ends takes the job it was editing with it, tells the root once, and a

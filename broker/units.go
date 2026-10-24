@@ -159,7 +159,7 @@ func systemdQuote(s string) string {
 	if !strings.ContainsAny(s, " \t\"'\\") {
 		return s
 	}
-	return fmt.Sprintf(`"%s"`, strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s))
+	return fmt.Sprintf("%q", s)
 }
 
 func xmlText(s string) string {

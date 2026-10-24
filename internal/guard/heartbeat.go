@@ -30,7 +30,7 @@ const heartbeatInterval = time.Minute
 // one runs.
 const SilentLeaseAfter = 30 * time.Minute
 
-// Heartbeat is one stamp: the session was judged on a call under lease at At. The last
+// heartbeat is one stamp: the session was judged on a call under lease at At. The last
 // stamp per (session, lease) is the entry.
 type heartbeat struct {
 	Session string
@@ -148,7 +148,7 @@ func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now tim
 		kept = kept[max(0, len(kept)-heartbeatMaxEntries):]
 		lines := make([][]byte, 0, len(kept))
 		for _, e := range kept {
-			line, err := json.Marshal(e)
+			line, err := e.MarshalJSON()
 			if err != nil {
 				return err
 			}

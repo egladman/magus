@@ -1134,9 +1134,9 @@ type TextHit struct {
 	Line int
 }
 
-// TextPresenceOf counts hits and the files they fall in, keeping the first
+// CountTextPresence counts hits and the files they fall in, keeping the first
 // [TextPresenceSiteCap] as "path:line" relative to root.
-func TextPresenceOf(root string, hits []TextHit) KnowledgeTextPresence {
+func CountTextPresence(root string, hits []TextHit) KnowledgeTextPresence {
 	files := map[string]bool{}
 	var sites []string
 	for _, h := range hits {
