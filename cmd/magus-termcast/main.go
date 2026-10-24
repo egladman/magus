@@ -361,7 +361,7 @@ func split(capture string) []string {
 	segs := make([]string, 0, len(parts)-1)
 	for i, p := range parts[1:] {
 		if i == 0 {
-			p = parts[0] + prompt + p
+			p = fmt.Sprintf("%s%s%s", parts[0], prompt, p)
 		} else {
 			p = prompt + p
 		}
