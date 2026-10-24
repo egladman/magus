@@ -2789,6 +2789,11 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 			return v
 		}
 	}
+	if inv, why, ok := toolCacheUnscoped(deps.scope, command, d); ok {
+		if v, ok := held.ends(deps, toolCacheDeny(deps.scope, command, inv, why)); ok {
+			return v
+		}
+	}
 	if piped.ok {
 		lead, next := pipeRemedy(piped)
 		answer := pipeAnswer(piped)

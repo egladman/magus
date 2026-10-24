@@ -118,11 +118,18 @@ func goCacheBudget(ctx context.Context, caches []goCache, budgetMB, maxEntries i
 func (r *runner) checkGoCacheBudget() types.Check {
 	const name = "go-cache-budget"
 	budget := r.opts.cfg.Go.CacheBudgetMB
+	unscoped := lintCacheUnscoped(r.root)
 	if budget <= 0 {
+		if unscoped != "" {
+			return types.Check{Name: name, Status: types.CheckAdvice, Message: unscoped, Details: []string{unscoped}}
+		}
 		return types.Check{Name: name, Status: types.CheckOK, Message: "go.cache_budget_mb is 0: the Go caches are not measured"}
 	}
 	var caches []goCache
 	var notes []string
+	if unscoped != "" {
+		notes = append(notes, unscoped)
+	}
 	if dir, err := goEnvCache(r.ctx); err != nil {
 		notes = append(notes, fmt.Sprintf("go build cache not measured: %v", err))
 	} else {
@@ -156,6 +163,29 @@ func goEnvCache(ctx context.Context) (string, error) {
 	}
 	return dir, nil
 }
+
+// lintCacheUnscoped is the MGS2014 finding when the effective golangci-lint cache lies
+// outside the checkout at root, "" when it is inside or cannot be resolved. It reports the
+// location, not a count of paths from other checkouts: telling whose a cache entry is
+// means reading each one, which doctor does not do.
+func lintCacheUnscoped(root string) string {
+	dir, err := lintCacheDir()
+	if root == "" || err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err == nil && filepath.IsLocal(rel) {
+		return ""
+	}
+	source := lintCacheEnv + "=" + dir
+	if os.Getenv(lintCacheEnv) == "" {
+		source = fmt.Sprintf("%s is unset, so it is the shared user cache %s", lintCacheEnv, dir)
+	}
+	return fmt.Sprintf("[%s] the golangci-lint cache is outside the checkout %s (%s), so results from other checkouts can answer for this one's; `magus run golangci-lint <project>` keeps it in %s",
+		types.ToolCacheUnscoped, root, source, filepath.Join(root, ".magus", "golangci-lint"))
+}
+
+const lintCacheEnv = "GOLANGCI_LINT_CACHE"
 
 // lintCacheDir is where golangci-lint keeps its cache: GOLANGCI_LINT_CACHE, else the
 // user cache directory's golangci-lint folder. Both are the tool's own rule, and reading
