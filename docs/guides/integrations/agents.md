@@ -131,7 +131,9 @@ and Codex run, [Session load adapters](agents/session-load.md) for reading a
 host's own session log back into magus,
 [Attention hooks](agents/notifications.md) for `magus session notify`,
 [Jobs and leases](agents/leases.md) for what an agent uses when it
-fans work out across several, and [Long-running sessions](agents/long-running-sessions.md)
+fans work out across several, [How orchestration works](agents/orchestration.md)
+for the orchestrator, worker and integrator roles and what holds each one to its
+boundary, and [Long-running sessions](agents/long-running-sessions.md)
 for keeping one session going for hours.
 
 ## When a session loses its history
