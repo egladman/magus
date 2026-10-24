@@ -1009,7 +1009,7 @@ func TestGateCommitKeepsTheCallersCacheAndReportsTheExitStatus(t *testing.T) {
 func goCachingDecl(goroot string) map[string]spells.Sandbox {
 	decl := goDecl(goroot)
 	sb := decl["go"]
-	sb.Allow = append(sb.Allow, spells.SandboxAllow{Env: "GOLANGCI_LINT_CACHE", Base: "userCache", Path: "golangci-lint", Mode: spells.SandboxAccessRW})
+	sb.Allow = append(sb.Allow, spells.SandboxAllow{Env: "GOLANGCI_LINT_CACHE", Base: "workspace", Path: ".magus/golangci-lint", Mode: spells.SandboxAccessRW})
 	sb.Caches = []spells.SandboxCache{{Env: "GOCACHE", StampsUse: true}, {Env: "GOMODCACHE"}}
 	decl["go"] = sb
 	return decl

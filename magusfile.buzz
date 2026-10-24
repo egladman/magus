@@ -2322,6 +2322,9 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
     // Removed first so the link gets a fresh inode: macOS keys the code signature on the
     // inode, and an in-place rewrite gets the next exec SIGKILLed.
     fs\remove(".magus/custom-gcl");
+    // custom-gcl's version salt hashes only plugin dirs with a path, and libs/proofread
+    // enters through a go.mod replace, so a rebuilt binary would replay stale findings.
+    fs\removeAll(".magus/golangci-lint");
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 

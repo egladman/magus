@@ -206,7 +206,8 @@ type SandboxEnv struct {
 
 // SandboxAllow is one location a child may use, and how.
 //
-// The location is the value of Env when that variable is set. Otherwise it is Path:
+// The location is the value of Env when that variable is set, unless Base is workspace.
+// Otherwise it is Path:
 // relative to Base when Base is given, else absolute or starting with ~. A spell and a
 // target always name a Base, so neither spells out a home directory; magus.yaml may
 // also write $VAR into an absolute Path, where an unset variable is an error.
@@ -221,6 +222,8 @@ type SandboxAllow struct {
 	// xdgData and xdgState (the XDG layout on every OS). A $VAR is that variable's value,
 	// the first entry of a path list; unset, the entry grants nothing. binRoot is the
 	// install root of Bin found on PATH, the directory above the bin/ its symlinks resolve into.
+	// workspace is the checkout's root. Env never relocates it (the host's value would undo
+	// the scoping); the sandbox sets Env in the child to the located path instead.
 	Base string `json:"base,omitempty" yaml:"base,omitempty"`
 	// Bin is the binary a binRoot base is found from.
 	Bin string `json:"bin,omitempty" yaml:"bin,omitempty"`
@@ -255,6 +258,7 @@ const (
 	SandboxBaseXDGData    = "xdgData"
 	SandboxBaseXDGState   = "xdgState"
 	SandboxBaseBinRoot    = "binRoot"
+	SandboxBaseWorkspace  = "workspace"
 )
 
 // Sandboxes returns each spell's declared Sandbox keyed by spell name, leaving out the
