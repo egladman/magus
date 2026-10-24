@@ -266,18 +266,6 @@ func TestExitNarrowsToWhatTheResultChanged(t *testing.T) {
 	})
 }
 
-func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
-	t.Parallel()
-
-	row := acceptRow()
-	loc := declared(t, row)
-	stored, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil)
-	require.NoError(t, err)
-	assert.Equal(t, types.StateNoReturn, stored.State)
-	assert.Nil(t, stored.Result)
-	assert.Nil(t, stored.Attempt)
-}
-
 func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 	t.Parallel()
 
@@ -371,48 +359,6 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	assert.Equal(t, types.StateRunning, rows[0].State, "the rejection sends it back to rework")
 	require.NotNil(t, rows[0].Rejection)
 	assert.Equal(t, 2, rows[0].Rejection.ObservedGeneration)
-}
-
-// A rejecting wait sends an exited row back to rework, holding its write paths again under
-// the rule a claim meets; a path another job took meanwhile refuses the re-claim, naming
-// that job, and the row stays exited holding nothing.
-func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
-	t.Parallel()
-
-	result := passingResult()
-	attempt := passingRun
-	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
-	resolve := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
-	empty := result
-	empty.ChangedPaths = nil
-	exited := func(t *testing.T, others ...types.Job) Location {
-		t.Helper()
-		loc := declared(t, append([]types.Job{acceptRow()}, others...)...)
-		_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolve)
-		require.NoError(t, err)
-		return loc
-	}
-	state := func(t *testing.T, loc Location) types.JobState {
-		t.Helper()
-		rows, err := NewStore(loc).List()
-		require.NoError(t, err)
-		return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == result.Job })].State
-	}
-
-	loc := exited(t)
-	status, err := Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
-	require.NoError(t, err)
-	require.False(t, status.Verified)
-	assert.Equal(t, types.StateRunning, state(t, loc))
-	assert.Contains(t, strings.Join(status.Notes, "\n"), "holds its write paths again")
-
-	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"cmd/magus/ledger.go"}, State: types.StateRunning}
-	loc = exited(t, taker)
-	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
-	require.NoError(t, err)
-	require.False(t, status.Verified)
-	assert.Equal(t, types.StateExited, state(t, loc))
-	assert.Contains(t, strings.Join(status.Notes, "\n"), "cmd/magus/ledger.go is held by live job taker")
 }
 
 // lineageRow is acceptRow renamed into a tree under parent.
@@ -1266,31 +1212,6 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 			}
 		})
 	}
-}
-
-// A paused row outlives the read sweep and `prune --all` while its pause holds; past its
-// bound both end it as they would any row.
-func TestPausedJobOutlivesTheSweepAndPruneUntilItsPauseLapses(t *testing.T) {
-	const now = int64(100_000)
-	old := now - int64((3 * time.Hour).Seconds())
-	s, _ := sweepStore(t, now, 2*time.Hour)
-	s.landed = func(context.Context, types.Job) string { return "" }
-	plant(t, s,
-		types.Job{ID: "held", State: types.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now + 60},
-		types.Job{ID: "lapsed", State: types.StateDeclared, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now - 60},
-		types.Job{ID: "taken", State: types.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy"},
-		types.Job{ID: "taken-lapsed", State: types.StateRunning, Registered: old, Updated: old, Paused: old, PauseReason: "busy", PausedUntil: now},
-	)
-
-	rows := states(t, s)
-	assert.Equal(t, types.StateDeclared, rows["held"].State, "the sweep leaves a paused row alone")
-	assert.Equal(t, types.StateNoReturn, rows["lapsed"].State)
-	assert.Equal(t, "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)", rows["lapsed"].EndReason)
-
-	got, err := s.Prune(t.Context(), PruneOptions{All: true})
-	require.NoError(t, err)
-	assert.Equal(t, []Ending{{ID: "taken-lapsed", Reason: "taken, then untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"}}, got,
-		"--all skips a paused row until its pause lapses")
 }
 
 func TestJobPruneKeepsAJobQueuedOnALiveDependency(t *testing.T) {

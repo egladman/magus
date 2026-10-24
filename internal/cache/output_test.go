@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/xdg"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1420,4 +1422,119 @@ func TestRotateRunsAgeCapKeepsNewestEvenPastMaxAge(t *testing.T) {
 	got, err := os.ReadDir(runs)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
+}
+
+func TestReplayedPaths(t *testing.T) {
+	type counts struct{ Under, Outside int }
+	log := []byte("/src/app/a.go:1: x\n/src/app/wt/b.go:2: y\n/src/app-other/c.go:3: z\n")
+	cases := []struct {
+		name, producer, here string
+		want                 counts
+	}{
+		{name: "sibling checkout", producer: "/src/app", here: "/src/elsewhere", want: counts{Under: 2, Outside: 2}},
+		{name: "worktree nested in the producer", producer: "/src/app", here: "/src/app/wt", want: counts{Under: 2, Outside: 1}},
+		{name: "producer nested in this checkout", producer: "/src/app/wt", here: "/src/app", want: counts{Under: 1, Outside: 0}},
+		{name: "a root that is a name prefix is not a parent", producer: "/src/app-other", here: "/src/app", want: counts{Under: 1, Outside: 1}},
+		{name: "log names nothing under the producer", producer: "/opt/ci", here: "/src/app", want: counts{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			under, outside := replayedPaths(log, tc.producer, tc.here)
+			assert.Equal(t, tc.want, counts{Under: under, Outside: outside})
+		})
+	}
+}
+
+type replayReport struct {
+	Level   slog.Level
+	Message string
+}
+
+// replayReports drains the MGS8005 notices records holds.
+func replayReports(records *recordingHandler) []replayReport {
+	records.mu.Lock()
+	defer records.mu.Unlock()
+	var out []replayReport
+	for _, r := range records.records {
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == attr.NoticeKey && a.Value.String() == string(types.OutputReplayedFromAnotherCheckout) {
+				out = append(out, replayReport{Level: r.Level, Message: r.Message})
+			}
+			return true
+		})
+	}
+	records.records = nil
+	return out
+}
+
+// runPrinting runs target over the test/pkg project at root through c, printing printed
+// and writing its one output.
+func runPrinting(t *testing.T, c *Cache, root, target, printed string) Result {
+	t.Helper()
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Target = target
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
+	r, err := c.Run(t.Context(), step, func(ctx context.Context) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		fmt.Fprint(stdout, printed)
+		return os.WriteFile(out, []byte("built"), 0o644)
+	})
+	require.NoError(t, err)
+	return r
+}
+
+// Checkouts sharing one store hit each other's entries. The manifest names the producing
+// checkout, and a hit in another checkout reports MGS8005 while replaying the log as is.
+func TestCacheHitFromAnotherCheckoutReportsMGS8005(t *testing.T) {
+	store := t.TempDir()
+	rootA, rootB := t.TempDir(), t.TempDir()
+	var records recordingHandler
+	open := func() *Cache {
+		t.Helper()
+		c, err := Open(t.Context(), t.TempDir(), WithStoreDir(store), WithLocalWrite(true), WithLogger(slog.New(&records)))
+		require.NoError(t, err)
+		return c
+	}
+	cA, cB := open(), open()
+	url := types.CodeURL(types.OutputReplayedFromAnotherCheckout)
+
+	t.Run("the log names paths outside this checkout", func(t *testing.T) {
+		printed := fmt.Sprintf("%s/test/pkg/main.go:1: unused\n%s/test/pkg/main.go:2: unused\n", rootA, rootA)
+		miss := runPrinting(t, cA, rootA, "vet", printed)
+		require.False(t, miss.Hit)
+		m, err := cA.readManifest("test/pkg", miss.Hash)
+		require.NoError(t, err)
+		assert.Equal(t, rootA, m.Checkout)
+		assert.Empty(t, replayReports(&records), "a miss replays nothing")
+
+		hit := runPrinting(t, cB, rootB, "vet", "never printed: the hit does not run the target\n")
+		require.True(t, hit.Hit)
+		assert.Equal(t, []replayReport{{
+			Level: slog.LevelError,
+			Message: fmt.Sprintf("test/pkg:vet replayed a log recorded in another checkout, %s; it names 2 path(s) outside this checkout, %s, so those lines describe that checkout's files, not these; `magus run --no-cache` records this checkout's own (see %s)",
+				rootA, rootB, url),
+		}}, replayReports(&records))
+		data, desc, err := cB.outputs.ByRef(hit.Ref)
+		require.NoError(t, err)
+		assert.Equal(t, printed, string(data), "the replayed log is recorded byte for byte, never rewritten")
+		assert.True(t, desc.Cached)
+	})
+
+	t.Run("the log names no path outside this checkout", func(t *testing.T) {
+		require.False(t, runPrinting(t, cA, rootA, "build", "ok\n").Hit)
+		replayReports(&records)
+
+		require.True(t, runPrinting(t, cB, rootB, "build", "").Hit)
+		assert.Equal(t, []replayReport{{
+			Level:   slog.LevelInfo,
+			Message: fmt.Sprintf("test/pkg:build replayed a log recorded in another checkout, %s; it names 0 path(s) under that checkout (see %s)", rootA, url),
+		}}, replayReports(&records))
+	})
+
+	t.Run("a hit in the producing checkout reports nothing", func(t *testing.T) {
+		require.True(t, runPrinting(t, cA, rootA, "build", "").Hit)
+		assert.Empty(t, replayReports(&records))
+	})
 }

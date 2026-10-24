@@ -390,3 +390,15 @@ func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
 }
+
+func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	loc := declared(t, row)
+	stored, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateNoReturn, stored.State)
+	assert.Nil(t, stored.Result)
+	assert.Nil(t, stored.Attempt)
+}

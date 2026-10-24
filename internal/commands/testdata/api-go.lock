@@ -927,6 +927,10 @@ github.com/egladman/magus/types.BuildInfo.Date field string "json:\"date\" yaml:
 github.com/egladman/magus/types.BuildInfo.Fingerprint method func() string
 github.com/egladman/magus/types.BuildInfo.Version field string "json:\"version\" yaml:\"version\""
 github.com/egladman/magus/types.BuildSlotsDeadlocked const DiagnosticCode = "MGS3013"
+github.com/egladman/magus/types.BuildStamp type struct
+github.com/egladman/magus/types.BuildStamp.BuildDate field string "json:\"build_date\""
+github.com/egladman/magus/types.BuildStamp.Commit field string "json:\"commit\""
+github.com/egladman/magus/types.BuildStamp.Dirty field bool "json:\"dirty\""
 github.com/egladman/magus/types.BuildStatus type struct
 github.com/egladman/magus/types.BuildStatus.SelfUpdate field bool "json:\"selfupdate\" yaml:\"selfupdate\""
 github.com/egladman/magus/types.BundleRange type struct
@@ -3467,6 +3471,7 @@ github.com/egladman/magus/types.MachineWaiter.Target field string "json:\"target
 github.com/egladman/magus/types.MachineWaiter.Tree field string "json:\"tree,omitempty\" yaml:\"tree,omitempty\""
 github.com/egladman/magus/types.MachineWaiter.WaitedMS field int64 "json:\"waited_ms\" yaml:\"waited_ms\""
 github.com/egladman/magus/types.MagusBuild type struct
+github.com/egladman/magus/types.MagusBuild.AcceptsReplacement method func(repl BuildStamp) error
 github.com/egladman/magus/types.MagusBuild.Commit field string
 github.com/egladman/magus/types.MagusBuild.Date field string
 github.com/egladman/magus/types.MagusBuild.Version field string

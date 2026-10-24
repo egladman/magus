@@ -1,6 +1,8 @@
 package job
 
 import (
+	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -164,4 +166,46 @@ func TestNoteEndedFilesOneRowPerEnding(t *testing.T) {
 	queue := attentionRows(t, root)
 	require.Len(t, queue, 1, "two processes noting one ending raise it once")
 	assert.Equal(t, string(types.OutcomeFailed), queue[0].Outcome)
+}
+
+// A rejecting wait sends an exited row back to rework, holding its write paths again under
+// the rule a claim meets; a path another job took meanwhile refuses the re-claim, naming
+// that job, and the row stays exited holding nothing.
+func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
+	t.Parallel()
+
+	result := passingResult()
+	attempt := passingRun
+	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+	resolve := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	empty := result
+	empty.ChangedPaths = nil
+	exited := func(t *testing.T, others ...types.Job) Location {
+		t.Helper()
+		loc := declared(t, append([]types.Job{acceptRow()}, others...)...)
+		_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolve)
+		require.NoError(t, err)
+		return loc
+	}
+	state := func(t *testing.T, loc Location) types.JobState {
+		t.Helper()
+		rows, err := NewStore(loc).List()
+		require.NoError(t, err)
+		return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == result.Job })].State
+	}
+
+	loc := exited(t)
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+	require.False(t, status.Verified)
+	assert.Equal(t, types.StateRunning, state(t, loc))
+	assert.Contains(t, strings.Join(status.Notes, "\n"), "holds its write paths again")
+
+	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"cmd/magus/ledger.go"}, State: types.StateRunning}
+	loc = exited(t, taker)
+	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+	require.False(t, status.Verified)
+	assert.Equal(t, types.StateExited, state(t, loc))
+	assert.Contains(t, strings.Join(status.Notes, "\n"), "cmd/magus/ledger.go is held by live job taker")
 }
