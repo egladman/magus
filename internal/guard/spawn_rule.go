@@ -238,7 +238,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 		return refused(denySpawnUnbriefed, denial{Say: reason}), ""
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	if row, ok := spawnDuplicate(ctx, at, facts, env.Spawn.Description); ok {
+	if row, ok := spawnDuplicate(ctx, at, facts, hint.NewGate(at.cacheDir, who.callerKey()), env.Spawn.Description); ok {
 		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
 	}
 	row, titled := spawnTitleJob(ctx, at, env.Spawn.Description)
@@ -362,8 +362,36 @@ func agentIdle(facts hint.Gate, agentID string, now time.Time) *int64 {
 // starts when its call finishes, since only then does the child have an id to key it on.
 func markAgentSeen(facts hint.Gate, env hookRequest) {
 	if env.IsContinue {
-		facts.Touch(agentSeenKind(resolveAgentID(facts, env.Target)))
+		agentID := resolveAgentID(facts, env.Target)
+		facts.Touch(agentSeenKind(agentID))
+		facts.Touch(agentContinuedKind(agentID))
 	}
+}
+
+// stoppedAgentKind names the marker judgeStop touches when a subagent's stop stands.
+func stoppedAgentKind(agentID string) hint.MarkerKind {
+	return agentMarkerKind("agent-stopped-", agentID)
+}
+
+// agentContinuedKind names the marker a continue touches, which revives a stopped agent.
+// agentSeenKind cannot serve: a foreground spawn's call finishes after its child stopped.
+func agentContinuedKind(agentID string) hint.MarkerKind {
+	return agentMarkerKind("agent-continued-", agentID)
+}
+
+// stoppedAgent reports whether the host said agentID stopped, on stops, and nothing has
+// continued it since, on facts. Stops are filed under the caller key the stop hook judges
+// with, facts under the session's facts key.
+func stoppedAgent(facts, stops hint.Gate, agentID string) bool {
+	if agentID == "" {
+		return false
+	}
+	stopped, ok := stops.LastSeen(stoppedAgentKind(agentID))
+	if !ok {
+		return false
+	}
+	continued, ok := facts.LastSeen(agentContinuedKind(agentID))
+	return !ok || stopped.After(continued)
 }
 
 // agentAliasKind names the marker mapping a subagent's addressable name to its id, since a
@@ -517,9 +545,19 @@ func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
 // spawnedJob reports whether one of the spawn records in facts attributed a worker to job:
 // its title names that row of rows, and its spawner could hand the job out.
 func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
+	return spawnedJobWhere(facts, rows, job, func(spawnedAgent) bool { return true })
+}
+
+// liveSpawnedJob is spawnedJob over the agents the host has not said stopped: a stopped
+// worker holds its job no longer, so a replacement may be spawned on it.
+func liveSpawnedJob(facts, stops hint.Gate, rows []types.Job, job string) bool {
+	return spawnedJobWhere(facts, rows, job, func(rec spawnedAgent) bool { return !stoppedAgent(facts, stops, rec.ID) })
+}
+
+func spawnedJobWhere(facts hint.Gate, rows []types.Job, job string, keep func(spawnedAgent) bool) bool {
 	for _, kind := range facts.Kinds(spawnedAgentPrefix) {
 		rec, ok := readMarker[spawnedAgent](facts, kind)
-		if !ok || rec.UntrustedJob != "" {
+		if !ok || rec.UntrustedJob != "" || !keep(rec) {
 			continue
 		}
 		if row, ok := spawnTitleRow(rows, rec.Description); ok && row.ID == job {

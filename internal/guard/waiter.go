@@ -605,10 +605,10 @@ func denySpawnWaiter() denial {
 }
 
 // spawnDuplicate is the row a spawn's title names when an earlier spawn in this session was
-// already attributed to it and the row is still being worked. A running row alone is not
-// enough: a row stays running after its worker dies, and only this session's own record
-// says a worker of its own holds it.
-func spawnDuplicate(ctx context.Context, at location, facts hint.Gate, title string) (types.Job, bool) {
+// already attributed to it, the host has not said that worker stopped (on stops), and the row
+// is still being worked. A running row alone is not enough: a row stays running after its
+// worker dies, and only this session's own record says a worker of its own holds it.
+func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (types.Job, bool) {
 	row, ok := spawnTitleJob(ctx, at, title)
 	if !ok || !row.State.Editing() {
 		return types.Job{}, false
@@ -617,7 +617,7 @@ func spawnDuplicate(ctx context.Context, at location, facts hint.Gate, title str
 	if err != nil {
 		return types.Job{}, false
 	}
-	return row, spawnedJob(facts, rows, row.ID)
+	return row, liveSpawnedJob(facts, stops, rows, row.ID)
 }
 
 func denySpawnDuplicate(row types.Job) denial {

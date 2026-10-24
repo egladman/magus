@@ -95,11 +95,22 @@ const advisoryBackgroundLeft hint.MarkerKind = "background-left"
 //
 // The transcript is the host's record, read by shape; a host whose transcript records no
 // background task in that shape gets no answer, never a refusal.
+//
+// A subagent's stop that stands is recorded on said, so a later spawn on the job it held is
+// not refused as a second worker (see stoppedAgent).
 func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (types.GuardJudgment, bool) {
 	env, ok := decodeStop(raw)
 	if !ok {
 		return types.GuardJudgment{}, false
 	}
+	v, judged := judgeStopTasks(deps, said, env, now)
+	if env.AgentID != "" && v.Decision != decisionDeny {
+		said.Touch(stoppedAgentKind(env.AgentID))
+	}
+	return v, judged
+}
+
+func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, now time.Time) (types.GuardJudgment, bool) {
 	setting, ok := deps.setting(string(denyRuleBackgroundLeft))
 	if !ok || setting.Decision == builtin.Off {
 		return types.GuardJudgment{}, false
