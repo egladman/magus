@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -256,7 +257,7 @@ func TestGitDirs(t *testing.T) {
 
 	wt := t.TempDir()
 	linked := filepath.Join(repo, ".git", "worktrees", "wt")
-	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+linked+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte(fmt.Sprintf("gitdir: %s\n", linked)), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(linked, "commondir"), []byte("../..\n"), 0o644))
 	gitDir, common = gitDirs(wt)
 	assert.Equal(t, linked, gitDir)

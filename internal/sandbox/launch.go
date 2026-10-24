@@ -70,7 +70,7 @@ func encodeRules(rules []filesystem.Rule) string {
 			}
 			return "-"
 		}
-		words = append(words, flag(r.Read, "r")+flag(r.Write, "w")+flag(r.Exec, "x")+":"+r.Path)
+		words = append(words, fmt.Sprintf("%s%s%s:%s", flag(r.Read, "r"), flag(r.Write, "w"), flag(r.Exec, "x"), r.Path))
 	}
 	return strings.Join(words, ",")
 }

@@ -116,7 +116,7 @@ func normalizePath(path string) (string, error) {
 			return "", err
 		}
 		// Joined by hand: filepath.Join cleans, and cleaning before resolution is the bug.
-		path = wd + string(filepath.Separator) + path
+		path = fmt.Sprintf("%s%c%s", wd, filepath.Separator, path)
 	}
 	vol := filepath.VolumeName(path)
 	resolved := vol + string(filepath.Separator)

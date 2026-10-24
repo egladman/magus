@@ -1,6 +1,7 @@
 package env
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func TestParseRefusesMalformedPatterns(t *testing.T) {
 	for _, bad := range []string{"*", "GO*", "M*", "X_*", "AWS*", "*_TOKEN", "A*B*", "FOO*BAR", "", "A=B"} {
 		_, err := Parse([]string{"PATH", bad})
 		require.ErrorIs(t, err, ErrInvalidPattern, bad)
-		assert.ErrorContains(t, err, `"`+bad+`"`, "the error names the pattern")
+		assert.ErrorContains(t, err, fmt.Sprintf(`"%s"`, bad), "the error names the pattern")
 	}
 }
 

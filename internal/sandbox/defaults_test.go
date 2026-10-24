@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,12 +55,12 @@ func hostOptions(t *testing.T) (PolicyOptions, string) {
 		Home:         home,
 		GOOS:         "linux",
 		Environ: []string{
-			"PATH=/usr/bin:" + home + "/.local/bin:" + home + ":.:/",
+			fmt.Sprintf("PATH=/usr/bin:%[1]s/.local/bin:%[1]s:.:/", home),
 			"HOME=" + home,
 			"TMPDIR=/tmp/shared",
 			"GITHUB_TOKEN=ghp_secret",
 			"GOROOT=/usr/local/go",
-			"GOCACHE=" + root + "/gocache",
+			fmt.Sprintf("GOCACHE=%s/gocache", root),
 			"MISE_DATA_DIR=/opt/mise",
 		},
 		Sandbox: miseDecl,
@@ -140,7 +141,7 @@ func TestBuildPolicyKnowsNoToolchain(t *testing.T) {
 	}
 	environ := []string{"PATH=/usr/bin", "HOME=" + home}
 	for _, n := range names {
-		environ = append(environ, n+"="+filepath.Join(tc, "tools", n))
+		environ = append(environ, fmt.Sprintf("%s=%s", n, filepath.Join(tc, "tools", n)))
 	}
 	p := BuildPolicy(PolicyOptions{Workspace: filepath.Join(tc, "ws"), Home: home, GOOS: "linux", Environ: environ})
 
@@ -158,7 +159,7 @@ func TestBuildPolicyKnowsNoToolchain(t *testing.T) {
 // the whole home tree.
 func TestBuildPolicyPathEntries(t *testing.T) {
 	o, _ := hostOptions(t)
-	rules := pathRules("/usr/bin:"+o.Home+"/.local/bin:"+o.Home+":.:/:bin:/opt/x/", o.Home)
+	rules := pathRules(fmt.Sprintf("/usr/bin:%[1]s/.local/bin:%[1]s:.:/:bin:/opt/x/", o.Home), o.Home)
 	assert.Equal(t, []filesystem.Rule{rx("/usr/bin"), rx(o.Home + "/.local/bin"), rx("/opt/x")}, rules)
 }
 
@@ -169,7 +170,7 @@ func TestBuildPolicyBaseEnv(t *testing.T) {
 	p := BuildPolicy(o)
 
 	assert.Contains(t, p.BaseEnv, "TMPDIR="+filepath.Join(root, "tmp"))
-	assert.Contains(t, p.BaseEnv, "GOCACHE="+root+"/gocache", "the go spell passes GOCACHE through")
+	assert.Contains(t, p.BaseEnv, fmt.Sprintf("GOCACHE=%s/gocache", root), "the go spell passes GOCACHE through")
 	assert.NotContains(t, p.BaseEnv, "TMPDIR=/tmp/shared")
 	for _, kv := range p.BaseEnv {
 		assert.False(t, strings.HasPrefix(kv, "GITHUB_TOKEN="), "secret leaked: %s", kv)
@@ -396,7 +397,7 @@ func TestScopedCutsTheSpellLayer(t *testing.T) {
 	assert.ErrorIs(t, check(rustOnly, filesystem.Read, gocache), filesystem.ErrDenied)
 	require.NoError(t, check(rustOnly, filesystem.Write, registry))
 	assert.False(t, rustOnly.AllowsEnv("GOFLAGS"))
-	assert.NotContains(t, rustOnly.BaseEnv, "GOCACHE="+root+"/gocache")
+	assert.NotContains(t, rustOnly.BaseEnv, fmt.Sprintf("GOCACHE=%s/gocache", root))
 
 	target := &spells.Sandbox{Allow: []spells.SandboxAllow{{Path: filepath.Join(root, "fixtures"), Mode: spells.SandboxAccessRW}}}
 	withTarget := p.Scoped([]string{"rust"}, target)
