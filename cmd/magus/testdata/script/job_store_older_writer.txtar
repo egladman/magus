@@ -1,0 +1,53 @@
+# Every job store write stamps its build on the store's header line, and a build older
+# than the newest stamp is refused with MGS3051. This test binary carries no commit, so
+# once a stamped build has written the store it is refused that way, and the message
+# says which case fired. A read still works: the sweep it cannot write leaves the dead
+# row live and says so, on every read, so an unstamped bootstrap is never locked out.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+# No stamped build has written the store, so an unstamped one may, and stamps nothing.
+exec magus job fork scout/first --read-only --criteria 'read the tests'
+! exec sh -c 'grep -q "\"writer\"" "$(find "$XDG_STATE_HOME" -name jobs.jsonl)"'
+
+# A build from commit 8a9d, committed in 2099, writes the store.
+exec sh -c 'f=$(find "$XDG_STATE_HOME" -name jobs.jsonl) && sed "1s/}\$/,\"writer\":{\"commit\":\"8a9d\",\"time\":\"2099-01-01T00:00:00Z\"}}/" "$f" > "$f.new" && mv "$f.new" "$f"'
+
+# scout/first goes stale, so every read sweeps it, and this build cannot write the end.
+exec sleep 2
+
+! exec magus job fork scout/second --read-only --criteria 'read the tests'
+stderr '\[MGS3051\]'
+stderr 'this magus has no commit stamp'
+stderr '8a9d \(committed 2099-01-01T00:00:00Z\) last wrote'
+stderr 'rebuild ./magus'
+
+exec magus ls jobs
+stdout 'scout/first'
+! stdout 'scout/second'
+stderr '^job: left scout/first live: \[MGS3051\]'
+
+exec magus ls jobs
+stderr '^job: left scout/first live: \[MGS3051\]'
+
+# A run, the bootstrap's go-build included, never needs to write the store.
+exec magus run test .
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+jobs:
+  stale_after: 1s
+-- shop/magusfile.buzz --
+import "magus";
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}

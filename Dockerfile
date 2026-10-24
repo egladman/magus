@@ -56,8 +56,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -trimpath \
       -ldflags="-s -w -buildid= \
         -X main.version=${VERSION} \
-        -X main.commit=${COMMIT} \
-        -X main.date=${DATE}" \
+        -X github.com/egladman/magus/internal/buildinfo.commit=${COMMIT} \
+        -X github.com/egladman/magus/internal/buildinfo.commitDate=${DATE}" \
       -o /out/magus \
       ./cmd/magus
 

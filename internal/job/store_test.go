@@ -1387,3 +1387,43 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		})
 	}
 }
+
+func TestStoreRefusesAWriterOlderThanTheStamp(t *testing.T) {
+	newer := types.MagusBuild{Version: "v0.5.0", Commit: "8a9d", Date: "2026-10-22T18:40:11Z"}
+	older := types.MagusBuild{Version: "v0.4.9", Commit: "1f3c", Date: "2026-10-20T09:12:00-04:00"}
+	loc := tempLocation(t, t.TempDir())
+	loc.Writer = newer
+	_, err := NewStore(loc).Update(t.Context(), "A", func(cur *types.Job) { *cur = lease("A") })
+	require.NoError(t, err)
+
+	loc.Writer = older
+	old := NewStore(loc)
+	_, err = old.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
+	require.ErrorIs(t, err, types.JobStoreWriterOlder)
+	assert.ErrorContains(t, err, "this magus, 1f3c (committed 2026-10-20T13:12:00Z), is older than 8a9d (committed 2026-10-22T18:40:11Z)")
+	rows, err := old.List()
+	require.NoError(t, err, "a read by an older build still works")
+	assert.Len(t, rows, 1)
+
+	loc.Writer = types.MagusBuild{Version: "v0.4.9-dirty", Commit: "8a9d", Date: "2026-10-22T18:40:11Z"}
+	_, err = NewStore(loc).Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
+	require.ErrorIs(t, err, types.JobStoreWriterOlder)
+	assert.ErrorContains(t, err, "this magus has no commit stamp")
+}
+
+func TestStoreHandsTheStampToANewerWriter(t *testing.T) {
+	loc := tempLocation(t, t.TempDir())
+	for _, b := range []types.MagusBuild{
+		{Commit: "1f3c", Date: "2026-10-20T09:12:00Z"},
+		{Commit: "8a9d", Date: "2026-10-22T18:40:11Z"},
+		{Commit: "8a9d", Date: "2026-10-22T18:40:11Z"},
+	} {
+		loc.Writer = b
+		_, err := NewStore(loc).Update(t.Context(), b.Commit, func(cur *types.Job) { *cur = lease(b.Commit) })
+		require.NoError(t, err)
+	}
+	f, err := NewStore(loc).read()
+	require.NoError(t, err)
+	require.NotNil(t, f.Writer)
+	assert.Equal(t, "8a9d", f.Writer.Commit)
+}

@@ -639,6 +639,11 @@ const GateNotRun DiagnosticCode = "MGS3045"
 // magusfile, magus.yaml or spell source), forked into a checkout another live job is
 // working in: a half-saved load file stops `magus run` for every job there.
 const CheckoutConfigHeld DiagnosticCode = "MGS3046"
+
+// JobStoreWriterOlder is a write to the job store by a magus built from an older commit than
+// the newest build that wrote it, or by one that carries no commit once a stamped build has:
+// the older build judges with rules the newer code no longer applies.
+const JobStoreWriterOlder DiagnosticCode = "MGS3051"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -973,6 +978,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputOutsideWritePaths,
 	GateNotRun,
 	CheckoutConfigHeld,
+	JobStoreWriterOlder,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,
@@ -1057,6 +1063,7 @@ var retryTable = map[DiagnosticCode]RetryChange{
 	OutputOutsideWritePaths:  RetryAfterConfig,
 	GateNotRun:               RetryAfterConfig,
 	CheckoutConfigHeld:       RetryAfterConfig,
+	JobStoreWriterOlder:      RetryAfterUpgrade,
 	BearerRejected:           RetryAfterPerson,
 	NoAuthToken:              RetryAfterPerson,
 }

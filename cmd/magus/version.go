@@ -5,37 +5,21 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime/debug"
 	"strings"
 	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
 )
 
-// selfBuild is this binary's build identity. A bare `go build` passes no -X flags, so its
-// commit and date come from the VCS stamp the toolchain embeds instead. go-build's -X
-// values win when present: its sandboxed link embeds a VCS stamp from another revision.
+// selfBuild is this binary's build identity: its version, and the commit [buildinfo.Commit]
+// names.
 func selfBuild() types.MagusBuild {
-	b := types.MagusBuild{Version: version, Commit: commit, Date: buildDate}
-	if b.Commit != unknownVersion {
-		return b
-	}
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return b
-	}
-	for _, s := range info.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			b.Commit = s.Value
-		case "vcs.time":
-			b.Date = s.Value
-		}
-	}
-	return b
+	id, date := buildinfo.Commit()
+	return types.MagusBuild{Version: version, Commit: id, Date: date}
 }
 
 // builtDirty reports whether b was built from a modified tree, whose source exists only
@@ -45,19 +29,7 @@ func builtDirty(b types.MagusBuild) bool {
 	if strings.HasSuffix(b.Version, "-dirty") {
 		return true
 	}
-	if b.Version != unknownVersion {
-		return false
-	}
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return false
-	}
-	for _, s := range info.Settings {
-		if s.Key == "vcs.modified" {
-			return s.Value == "true"
-		}
-	}
-	return false
+	return b.Version == unknownVersion && buildinfo.Modified()
 }
 
 // sourceRepository is where this binary's commit can be fetched, provided it was pushed.
@@ -68,13 +40,11 @@ const sourceRepository = "https://github.com/egladman/magus"
 // sync. Named because a server reports it too, and the two must not be compared.
 const unknownVersion = "unknown"
 
-// version, commit, and buildDate are injected by the linker at build time:
+// version is injected by the linker at build time, beside buildinfo's commit stamp:
 //
-//	go build -ldflags "-X main.version=v0.1.0 -X main.commit=abc123 -X main.buildDate=2026-05-06"
+//	go build -ldflags "-X main.version=v0.1.0"
 var (
-	version   = unknownVersion
-	commit    = unknownVersion
-	buildDate = unknownVersion
+	version = unknownVersion
 	// builtBy is the CI workflow that produced this binary, as the build was told it
 	// (release.yaml passes its workflow ref in BUILT_BY), empty for a local build. A CLAIM, not proof (a signature is what proves
 	// provenance), but empty is the honest default, so a local build never asserts a

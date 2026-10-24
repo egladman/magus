@@ -1015,6 +1015,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
+	read := f
 	var ended endings
 	err = s.update(context.Background(), func(cur *jobsFile) error {
 		ended = endings{}
@@ -1035,12 +1036,16 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		}
 		return nil
 	})
-	if err != nil {
-		return jobsFile{}, false, err
-	}
 	out := s.notices
 	if out == nil {
 		out = os.Stderr
+	}
+	if errors.Is(err, types.JobStoreWriterOlder) {
+		noteLeftLive(out, dead, err)
+		return read, false, nil
+	}
+	if err != nil {
+		return jobsFile{}, false, err
 	}
 	for _, e := range dead {
 		fmt.Fprintf(out, "ended %s: %s\n", e.id, e.reason)
