@@ -6,15 +6,6 @@ import (
 	"slices"
 )
 
-// The git hooks an earlier magus settled a merge-shaped operation in.
-const (
-	HookPreMergeCommit = "pre-merge-commit"
-	HookPreCommit      = "pre-commit"
-	HookPostCommit     = "post-commit"
-	HookPostRewrite    = "post-rewrite"
-	HookPostApplypatch = "post-applypatch"
-)
-
 // HookOperation is the merge-shaped operation a hook event belongs to, and the paths
 // it changed, which bound what has to regenerate.
 type HookOperation struct {
