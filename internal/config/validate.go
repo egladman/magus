@@ -200,14 +200,14 @@ func conformanceFailures(c ConformanceConfig) []FieldFailure {
 		}
 	}
 	for _, metric := range slices.Sorted(maps.Keys(c.Checks)) {
-		field := root + ".checks." + string(metric)
+		field := fmt.Sprintf("%s.checks.%s", root, string(metric))
 		if !metric.Valid() {
 			out = append(out, FieldFailure{Field: field, Tag: "conformance_metric", Param: strings.Join(metric.Values(), " "), Value: string(metric)})
 			continue
 		}
 		pops := c.Checks[metric]
 		for _, pop := range slices.Sorted(maps.Keys(pops)) {
-			field := field + "." + string(pop)
+			field := fmt.Sprintf("%s.%s", field, string(pop))
 			if !pop.Valid() {
 				out = append(out, FieldFailure{Field: field, Tag: "conformance_population", Param: strings.Join(pop.Values(), " "), Value: string(pop)})
 				continue
@@ -242,7 +242,7 @@ func conformanceLimitFailures(field string, metric types.ConformanceMetric, l Co
 		out = append(out, FieldFailure{Field: field + ".anchor", Tag: "gte", Param: "1", Value: fmt.Sprint(l.Anchor)})
 	}
 	for _, scope := range slices.Sorted(maps.Keys(l.Scopes)) {
-		scoped := field + ".scopes." + scope
+		scoped := fmt.Sprintf("%s.scopes.%s", field, scope)
 		switch {
 		case metric != types.ConformanceDepFanout:
 			out = append(out, FieldFailure{Field: scoped, Tag: "conformance_scope_metric", Param: string(types.ConformanceDepFanout), Value: scope})
@@ -272,7 +272,7 @@ type FieldFailure struct {
 
 // String returns a human-readable description of the failure.
 func (f FieldFailure) String() string {
-	return f.Field + ": " + humanReason(f)
+	return fmt.Sprintf("%s: %s", f.Field, humanReason(f))
 }
 
 func (e *ValidationError) Error() string {
