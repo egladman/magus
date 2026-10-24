@@ -3,6 +3,7 @@ package hint
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -295,7 +296,7 @@ func MarkerPath(cacheDir, session string, kind MarkerKind) string {
 		sum := sha256.Sum256([]byte(session))
 		key = hex.EncodeToString(sum[:6])
 	}
-	return filepath.Join(cacheDir, markerDir, key+"."+string(kind))
+	return filepath.Join(cacheDir, markerDir, fmt.Sprintf("%s.%s", key, string(kind)))
 }
 
 // Kinds lists the kinds this gate's session holds a marker for whose name starts with

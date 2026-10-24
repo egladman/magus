@@ -16,6 +16,7 @@ package hint
 // output depending on it), so declare one when an emitter starts using it.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -47,14 +48,16 @@ func (c Command) With(args ...string) string { return c.WithAs(BinaryName(), arg
 // own invocation. For a renderer whose reader is not this process (a doc committed
 // to the repo, generated once and read by whoever checks it out), the live
 // BinaryName would make the file's content depend on how it happened to be built.
-func (c Command) StringAs(bin string) string { return bin + " " + strings.Join(c.tokens, " ") }
+func (c Command) StringAs(bin string) string {
+	return fmt.Sprintf("%s %s", bin, strings.Join(c.tokens, " "))
+}
 
 // WithAs is StringAs followed by trailing args.
 func (c Command) WithAs(bin string, args ...string) string {
 	if len(args) == 0 {
 		return c.StringAs(bin)
 	}
-	return c.StringAs(bin) + " " + strings.Join(args, " ")
+	return fmt.Sprintf("%s %s", c.StringAs(bin), strings.Join(args, " "))
 }
 
 // Argv renders the invocation as an argument vector, args unquoted: the form a caller
