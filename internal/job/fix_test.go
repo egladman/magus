@@ -24,7 +24,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 	require.NoError(t, err)
 	require.NotZero(t, before.Problems.Fixable(), "the record starts with mechanical problems: %v", codes(before.Problems))
 
-	fixed, edits, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil, false)
+	fixed, edits, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil)
 	require.NoError(t, err)
 
 	require.NotEmpty(t, edits)
@@ -35,7 +35,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 	assert.Equal(t, types.WritePathIsDirectory, problemAt(t, after.Problems, types.WritePathIsDirectory).Code, "a directory write path is a judgment, left alone")
 	assert.Equal(t, "cli", fixed.WritePaths[0])
 
-	again, more, err := FixFork(t.Context(), s, fixed, fixMerge, config.Jobs{}, nil, false)
+	again, more, err := FixFork(t.Context(), s, fixed, fixMerge, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, more, "a fixed record has nothing left to fix")
 	assert.Equal(t, fixed, again)
@@ -44,10 +44,10 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 	assert.Empty(t, rows, "fixing writes nothing")
 }
 
-// --fix moves a checkpoint to HEAD only when the repository holds no such revision. A
-// sibling branch is placeable for a job in its own checkout, and one carrying a digest of
-// the wrong shape still names a real revision, so neither is swapped for HEAD.
-func TestFixForkNeverSwapsHeadInForAPlaceableCheckpoint(t *testing.T) {
+// --fix never starts a job somewhere else than it was told. A sibling branch is placeable
+// for a job in its own checkout, a digest of the wrong shape still names a real revision,
+// and a revision nobody holds stays the MGS3041 error.
+func TestFixForkNeverMovesACheckpointToHead(t *testing.T) {
 	t.Parallel()
 
 	repo := testkit.NewRepo(t, loadableFiles)
@@ -68,16 +68,20 @@ func TestFixForkNeverSwapsHeadInForAPlaceableCheckpoint(t *testing.T) {
 	}
 
 	for _, token := range []string{elsewhere, elsewhere + "+not-a-digest"} {
-		fixed, edits, err := FixFork(t.Context(), s, record(token), own, config.Jobs{}, nil, true)
+		fixed, edits, err := FixFork(t.Context(), s, record(token), own, config.Jobs{}, nil)
 		require.NoError(t, err)
 		assert.NotContains(t, edits, types.JobEdit{RefreshCheckpoint: repo.Head()}, "%s names a revision the repository holds", token)
 		assert.Equal(t, token, fixed.Checkpoint)
 	}
 
-	fixed, edits, err := FixFork(t.Context(), s, record(madeUpRevision), own, config.Jobs{}, nil, true)
+	unknown := record(madeUpRevision)
+	fixed, edits, err := FixFork(t.Context(), s, unknown, own, config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Contains(t, edits, types.JobEdit{RefreshCheckpoint: repo.Head()}, "a revision nobody holds moves to HEAD")
-	assert.Equal(t, repo.Head(), fixed.Checkpoint)
+	assert.Empty(t, edits, "a revision nobody holds is an error to the forker, never moved to HEAD")
+	assert.Equal(t, unknown, fixed)
+	after, err := ValidateFork(t.Context(), s, fixed.ID, own(fixed), config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.JobCheckpointUnplaceable, problemAt(t, after.Problems, types.JobCheckpointUnplaceable).Code)
 }
 
 func TestFixApplyFixesEachRecord(t *testing.T) {
@@ -142,7 +146,7 @@ func TestFixForkLeavesNoGateNeedingAWaiverForAGoJob(t *testing.T) {
 	}
 	assert.Equal(t, []string{"unit ."}, gates, "lint is added at fork and the build is the integrator's and asks for no goal or waiver")
 
-	fixed, _, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil, false)
+	fixed, _, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil)
 	require.NoError(t, err)
 	after, err := ValidateFork(t.Context(), s, fixed.ID, fixMerge(fixed), config.Jobs{}, nil)
 	require.NoError(t, err)
