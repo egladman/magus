@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -40,9 +39,6 @@ func waitClaimWorkspace(t *testing.T) {
 	t.Chdir(repo.Root())
 }
 
-// The wait holds for what the downstream run claims: a piped `affected ci` claims one
-// seat per project it selects, as `run ci` does for the same projects, not the single
-// slot any other command waits for.
 // An integrator waits for a seat only as long as it said: past its deadline the wait is
 // refused, naming each run that held the budget. A zero deadline waits without bound.
 func TestWithinDeadlineRefusesPastItNamingTheHolders(t *testing.T) {
@@ -56,7 +52,8 @@ func TestWithinDeadlineRefusesPastItNamingTheHolders(t *testing.T) {
 		}}, nil
 	}
 	await := func(ctx context.Context) error {
-		return cache.AwaitMachine(ctx, full, []types.MachineClaim{{Slots: 1}}, func(string) {})
+		<-ctx.Done()
+		return ctx.Err()
 	}
 
 	err := withinDeadline(t.Context(), 20*time.Millisecond, full, await)
@@ -72,6 +69,9 @@ func TestWithinDeadlineRefusesPastItNamingTheHolders(t *testing.T) {
 	assert.True(t, ran, "a zero deadline sets none")
 }
 
+// The wait holds for what the downstream run claims: a piped `affected ci` claims one
+// seat per project it selects, as `run ci` does for the same projects, not the single
+// slot any other command waits for.
 func TestPipedAffectedClaimsWhatCIClaims(t *testing.T) {
 	waitClaimWorkspace(t)
 
