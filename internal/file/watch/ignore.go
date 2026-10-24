@@ -40,28 +40,6 @@ func BuiltinIgnore(absPath string) bool {
 	return project.IsIgnoreDir(base)
 }
 
-// RelativeIgnore lifts an ignore predicate so it judges a path by where it sits UNDER root
-// rather than by its absolute spelling. A path outside root is ignored: this watcher has no
-// business with it either way, and a predicate cannot honestly place it.
-//
-// THE ROOT ITSELF IS NEVER IGNORED, and that case is the whole watcher rather than an edge
-// of it: the recursive walk asks about the root first, so ignoring it prunes the tree before
-// a single directory is registered and the watcher comes up in microseconds watching
-// nothing. Measured while fixing this: a walk over a 33,960-directory worktree "registered"
-// in 47us and reported no event ever.
-func RelativeIgnore(root string, ignore func(absPath string) bool) func(absPath string) bool {
-	return func(absPath string) bool {
-		rel, err := filepath.Rel(root, absPath)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			return true
-		}
-		if rel == "." {
-			return false
-		}
-		return ignore(rel)
-	}
-}
-
 // Compose returns a predicate that returns true if any of preds returns true.
 // An empty Compose always returns false.
 func Compose(preds ...func(string) bool) func(string) bool {

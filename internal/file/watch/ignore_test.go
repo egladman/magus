@@ -57,34 +57,6 @@ func TestBuiltinIgnoreNeverJudgesAboveTheRoot(t *testing.T) {
 	}
 }
 
-func TestRelativeIgnoreJudgesUnderTheRootNotAboveIt(t *testing.T) {
-	const root = "/repo/.claude/worktrees/feature"
-	src := root + "/internal/trail/trail.go"
-
-	rel := RelativeIgnore(root, BuiltinIgnore)
-	assert.False(t, rel(src), "a source file under the root is watched wherever the root lives")
-	assert.True(t, rel(root+"/node_modules"), "a real skip dir under the root is still skipped")
-	assert.True(t, rel(root+"/.git"), "so is a dot dir under the root")
-	assert.True(t, rel(root+"/internal/trail/.DS_Store"), "and so is an editor temporary")
-	assert.True(t, rel("/elsewhere/trail.go"), "a path outside the root is not this watcher's business")
-}
-
-// THE ROOT MUST NOT BE IGNORED. The recursive walk asks about the root first, so a predicate
-// that skips it prunes the whole tree before a single directory is registered: the watcher
-// comes up reporting success, in microseconds, watching nothing at all.
-//
-// Measured while this was broken: over a 33,960-directory agent worktree, "registered in
-// 47.5us" and no event ever. With the root admitted, the same walk takes 105.9ms and the
-// first write arrives in one batch.
-func TestRelativeIgnoreAdmitsTheRootItself(t *testing.T) {
-	const root = "/repo/.claude/worktrees/feature"
-	rel := RelativeIgnore(root, BuiltinIgnore)
-
-	assert.False(t, rel(root), "ignoring the root prunes the walk before it starts")
-	assert.False(t, rel(root+"/"), "and a trailing slash is the same directory")
-	assert.False(t, rel(root+"/internal"), "so the directories under it are reached at all")
-}
-
 // FuzzIgnorePatternsMatch probes the compiled-pattern matcher with
 // arbitrary regex/glob/literal patterns and arbitrary paths. The
 // invariant is "no panic across pattern types"; an invalid regex must

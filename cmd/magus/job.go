@@ -2275,9 +2275,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 // A watcher that will not start is REPORTED and then done without: the other two sources
 // still answer, and a silently missing third is how a feed comes to show a quiet tree.
 func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() []types.Job) <-chan job.FeedEvent {
-	// RelativeIgnore, not BuiltinIgnore: an agent worktree lives under a dot-directory, and
-	// the absolute form would skip every file in the very tree this verb exists to watch.
-	w, err := watch.New(ctx, watch.WithRoot(root), watch.WithIgnore(watch.RelativeIgnore(root, watch.BuiltinIgnore)))
+	w, err := watch.New(ctx, watch.WithRoot(root), watch.WithIgnore(watch.BuiltinIgnore))
 	if err != nil {
 		fmt.Fprintf(out, "note: no file watcher here (%s), so this shows tool calls and runs only\n", err)
 		return nil

@@ -322,7 +322,7 @@ func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
 		ctx = context.Background()
 	}
 	w, err := watch.New(ctx, watch.WithRoot(e.root),
-		watch.WithIgnore(watch.RelativeIgnore(e.root, watch.BuiltinIgnore)))
+		watch.WithIgnore(watch.BuiltinIgnore))
 	if err != nil {
 		slog.With(attr.Component("server")).WarnContext(ctx, "cannot watch a failed workspace; it stays failed until `magus server reload`",
 			slog.String("root", e.root), attr.Error(err))
