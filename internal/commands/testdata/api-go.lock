@@ -95,6 +95,7 @@ github.com/egladman/magus.Magus.ComputeTargetKey method(ptr) func(ctx context.Co
 github.com/egladman/magus.Magus.ConcurrencyNudge method(ptr) func() string
 github.com/egladman/magus.Magus.Conformance method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ConformanceOutput, error)
 github.com/egladman/magus.Magus.ConformanceOptions method(ptr) func() (github.com/egladman/magus/types.ConformanceOptions, error)
+github.com/egladman/magus.Magus.Context method(ptr) func(parent context.Context) context.Context
 github.com/egladman/magus.Magus.ContextWithSecrets method(ptr) func(ctx context.Context) context.Context
 github.com/egladman/magus.Magus.CurrentRevision method(ptr) func(ctx context.Context) (name string, revision string, dirty bool)
 github.com/egladman/magus.Magus.Diff method(ptr) func(ctx context.Context, paths []string) (github.com/egladman/magus/types.Diff, error)
