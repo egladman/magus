@@ -1079,6 +1079,32 @@ func TestRowJudgeHoldersSkipAnExitedRow(t *testing.T) {
 	assert.Equal(t, []string{"running"}, ids)
 }
 
+// TestHeldDenialKnocksOnTheHoldersTreeRoot: `magus job wait` is refused a caller outside
+// the holder's tree, so a held output names the root of the holder's tree and files one
+// attention row for it; a holder below the caller is one it waits on, and nothing is filed.
+func TestHeldDenialKnocksOnTheHoldersTreeRoot(t *testing.T) {
+	orch := types.Job{ID: "orch", Criteria: "plan", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	holder := types.Job{ID: "mover", Parent: "orch", Criteria: "c", WritePaths: []string{"coverage/**"}, State: types.StateRunning, Registered: 1}
+	me := types.Job{ID: "worker", Criteria: "c", WritePaths: []string{"docs/a.md"}, State: types.StateRunning, Registered: 1}
+	child := types.Job{ID: "child", Parent: "worker", Criteria: "c", WritePaths: []string{"gen/**"}, State: types.StateRunning, Registered: 1}
+	ctx, root := fleetFixture(t, orch, holder, me, child)
+	deps := Dependencies{}
+	v := runVerdict{run: targetRun{verb: "run", target: "buzz-test"}, held: "coverage/buzz/x.lcov", holder: holder}
+
+	d := heldDenial(v, me, knockHolder(ctx, deps, me, holder, v.held))
+	assert.Contains(t, d.Say, "magus filed an attention row for orch, the root of lease mover's job tree")
+	assert.NotContains(t, d.Say, "job wait")
+	queue := heldAttention(t, root)
+	require.Len(t, queue, 1)
+	assert.Equal(t, "orch", queue[0].Lease)
+	assert.Contains(t, queue[0].Message, "coverage/buzz/x.lcov")
+
+	v.holder = child
+	d = heldDenial(v, me, knockHolder(ctx, deps, me, child, v.held))
+	assert.Contains(t, d.Say, hint.JobWait.With("child"))
+	assert.Len(t, heldAttention(t, root), 1)
+}
+
 // TestWorkerCheckOnlyJudgesTheDefaultCharms: default_charms [rw] make a plain `magus run`
 // write as surely as `:rw` on the target, so the run is held to the write paths unless it
 // passes --no-default-charms.

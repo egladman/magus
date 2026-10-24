@@ -19,6 +19,20 @@ func attentionRows(t *testing.T, root string) []sessions.AttentionRequest {
 	return sessions.AttentionQueue(fold)
 }
 
+// A knock on a holder's tree root is one attention row on that root, however many callers
+// meet the same held path.
+func TestNoteHeldFilesOneRowForTheTreeRoot(t *testing.T) {
+	root := t.TempDir()
+	NoteHeld(t.Context(), root, "orchestrator", "worker needs coverage/buzz/x.lcov, held by job mover")
+	NoteHeld(t.Context(), root, "orchestrator", "worker needs coverage/buzz/x.lcov, held by job mover")
+
+	queue := attentionRows(t, root)
+	require.Len(t, queue, 1)
+	assert.Equal(t, "orchestrator", queue[0].Lease)
+	assert.Equal(t, heldSource, queue[0].Source)
+	assert.Contains(t, queue[0].Message, "held by job mover")
+}
+
 // A session that ends takes the job it was editing with it, tells the root once, and a
 // session resuming the work in the same checkout takes the row back with its next exec.
 func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
