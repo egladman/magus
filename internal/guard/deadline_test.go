@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -361,13 +362,15 @@ func TestUnjudgedPassesAnAppendOutsideEveryCheckout(t *testing.T) {
 	require.NotEmpty(t, workspace)
 	outside := filepath.Join(t.TempDir(), "plans", "README.md")
 	nothing := func(context.Context) {}
-	appendTo := func(target string) string { return "cat >> " + target + " <<'EOF'\n\n## Decision\n\n- ship it\nEOF" }
+	appendTo := func(target string) string {
+		return fmt.Sprintf("cat >> %s <<'EOF'\n\n## Decision\n\n- ship it\nEOF", target)
+	}
 
 	for i, line := range []string{
 		appendTo(outside),
-		"cd " + filepath.Dir(outside) + " && " + appendTo("README.md"),
-		"tee -a " + outside + " <<'EOF' >/dev/null\nline\nEOF",
-		"echo done > " + outside,
+		fmt.Sprintf("cd %s && %s", filepath.Dir(outside), appendTo("README.md")),
+		fmt.Sprintf("tee -a %s <<'EOF' >/dev/null\nline\nEOF", outside),
+		fmt.Sprintf("echo done > %s", outside),
 	} {
 		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "s1"}, nothing)
 		assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
@@ -376,7 +379,7 @@ func TestUnjudgedPassesAnAppendOutsideEveryCheckout(t *testing.T) {
 
 	for i, line := range []string{
 		appendTo(filepath.Join(workspace, "notes.md")),
-		appendTo(outside) + " && touch " + outside + ".bak",
+		fmt.Sprintf("%s && touch %s.bak", appendTo(outside), outside),
 		appendTo("relative.md"),
 		"cat >> $TARGET <<'EOF'\nline\nEOF",
 	} {

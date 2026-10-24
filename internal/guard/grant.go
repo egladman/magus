@@ -55,7 +55,7 @@ func grantedRules(deps Dependencies, at location, standing leaseStanding) (Depen
 func grantNote(g types.JobGrant) string {
 	until := "until the job ends"
 	if g.Until != 0 {
-		until = "until " + time.Unix(g.Until, 0).UTC().Format(time.RFC3339) + " or the job ends"
+		until = fmt.Sprintf("until %s or the job ends", time.Unix(g.Until, 0).UTC().Format(time.RFC3339))
 	}
 	return fmt.Sprintf("magus workspace: not refused, under the grant %s typed at %s for job %s's %s, %s.",
 		g.By.Label(), time.Unix(g.At, 0).UTC().Format(time.RFC3339), g.Job, g.Rule, until)
@@ -75,7 +75,7 @@ func denyAgentGrant(command string, d Dialect) denial {
 		}
 		if words := magusSubcommandWords(c.Args); len(words) >= 2 && words[0] == "job" && words[1] == "grant" {
 			return denial{
-				Say: "magus workspace: only a person runs `" + hint.BinaryName() + " job grant`; ask the person to type it.",
+				Say: fmt.Sprintf("magus workspace: only a person runs `%s job grant`; ask the person to type it.", hint.BinaryName()),
 				Why: "A grant lowers a guard rule for one job on a person's say-so. The guard judges only agents' calls, so a grant reaching it was not a person's, and the job store refuses one from a process carrying a lease as well.",
 			}
 		}

@@ -1541,17 +1541,17 @@ func TestDenyLeaseScopedVCSKeepsARefMoveInItsCheckout(t *testing.T) {
 	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{worker}})
 	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
 	for command, remedy := range map[string]string{
-		"git switch -c topic":                  "git -C " + wt + " switch -c topic",
-		"git checkout -b topic":                "git -C " + wt + " checkout -b topic",
-		"git branch topic":                     "git -C " + wt + " branch topic",
-		"git add a.txt":                        "git -C " + wt + " add a.txt",
-		"git restore --staged a.txt":           "git -C " + wt + " restore --staged a.txt",
-		"cd " + r.main + " && git switch main": "git -C " + wt + " switch main",
+		"git switch -c topic":                           fmt.Sprintf("git -C %s switch -c topic", wt),
+		"git checkout -b topic":                         fmt.Sprintf("git -C %s checkout -b topic", wt),
+		"git branch topic":                              fmt.Sprintf("git -C %s branch topic", wt),
+		"git add a.txt":                                 fmt.Sprintf("git -C %s add a.txt", wt),
+		"git restore --staged a.txt":                    fmt.Sprintf("git -C %s restore --staged a.txt", wt),
+		fmt.Sprintf("cd %s && git switch main", r.main): fmt.Sprintf("git -C %s switch main", wt),
 	} {
 		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
 		assert.Contains(t, reason, "outside "+wt, "%q", command)
-		assert.Contains(t, reason, "`"+remedy+"`", "%q", command)
+		assert.Contains(t, reason, fmt.Sprintf("`%s`", remedy), "%q", command)
 		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, strings.Replace(command, r.main, wt, 1)), "own checkout: %q", command)
 	}
 	for _, command := range []string{"git status --short", "git log --oneline -3", "git branch --list", "git diff"} {

@@ -4,10 +4,10 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -249,15 +249,13 @@ func stageAtLapses(inARow int) lapseStage {
 
 // unjudgedNote tells a session that one of its calls went through with no rule judging it.
 func unjudgedNote() string {
-	return "This guard check did not finish within " + hookBudget.String() +
-		", so no rule judged this call; it ran because it only reads."
+	return fmt.Sprintf("This guard check did not finish within %s, so no rule judged this call; it ran because it only reads.", hookBudget)
 }
 
 // unjudgedOutsideNote tells a session that a call went through with no rule judging it
 // because it writes only outside every checkout and the workspace.
 func unjudgedOutsideNote() string {
-	return "This guard check did not finish within " + hookBudget.String() +
-		", so no rule judged this call; it ran because it writes only outside every checkout and this workspace."
+	return fmt.Sprintf("This guard check did not finish within %s, so no rule judged this call; it ran because it writes only outside every checkout and this workspace.", hookBudget)
 }
 
 // writesOnlyOutside reports a line that only reads but for file redirects and tee's files,
@@ -428,9 +426,9 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 func stallSite(stalled trail.Phase, isStalled bool, finished []trail.Phase) string {
 	switch {
 	case isStalled:
-		return "in its " + stalled.Name + " phase, " + roundBudget(time.Duration(stalled.ElapsedMs)*time.Millisecond).String() + " in"
+		return fmt.Sprintf("in its %s phase, %s in", stalled.Name, roundBudget(time.Duration(stalled.ElapsedMs)*time.Millisecond))
 	case len(finished) > 0:
-		return "after its " + finished[len(finished)-1].Name + " phase"
+		return fmt.Sprintf("after its %s phase", finished[len(finished)-1].Name)
 	}
 	return "before its first phase"
 }
@@ -440,14 +438,12 @@ func stallSite(stalled trail.Phase, isStalled bool, finished []trail.Phase) stri
 // lapsesBeforeDegrade names the cause and what to check; the session has it from then on.
 func degradedNote(call judgedCall, where string, inARow int) string {
 	if stageAtLapses(inARow) == lapseStillDegraded {
-		return "The guard is still not finishing in time (" + strconv.Itoa(inARow) + " judgments in a row), so " +
-			call.what + " ran unjudged, as the notice before said."
+		return fmt.Sprintf("The guard is still not finishing in time (%d judgments in a row), so %s ran unjudged, as the notice before said.", inARow, call.what)
 	}
-	return "The guard has run out of its " + hookBudget.String() + " budget on " + strconv.Itoa(inARow) +
-		" judgments in a row in this session, so " + call.what + " ran with no rule judging it, and so will every call " +
-		"until a judgment finishes in time. This one stalled " + where + ". A judgment this slow is a loaded machine or a " +
-		"magus built from another commit than the daemon it talks to: compare `magus version` with `magus server status`, " +
-		"and check `magus status` for what is running."
+	return fmt.Sprintf("The guard has run out of its %s budget on %d judgments in a row in this session, so %s ran with no rule judging it, and so will every call "+
+		"until a judgment finishes in time. This one stalled %s. A judgment this slow is a loaded machine or a "+
+		"magus built from another commit than the daemon it talks to: compare `magus version` with `magus server status`, "+
+		"and check `magus status` for what is running.", hookBudget, inARow, call.what, where)
 }
 
 // phaseLog collects the phases of one judgment for its trail row, the one underway, and the
@@ -643,11 +639,13 @@ func roundBudget(d time.Duration) time.Duration {
 // of time. dryRun words it for a person grading the call ahead of time: not graded.
 func lapseReason(call judgedCall, l ruleLapse, dryRun bool) string {
 	if dryRun {
-		return "magus did not finish grading " + call.what + ": " + l.what() + ", so it is not graded. " +
-			"A dry run is bounded at " + dryRunBudget.String() + " and a hook at " + hookBudget.String() + ", so a hook would deny the call as well."
+		return fmt.Sprintf("magus did not finish grading %s: %s, so it is not graded. "+
+			"A dry run is bounded at %s and a hook at %s, so a hook would deny the call as well.",
+			call.what, l.what(), dryRunBudget, hookBudget)
 	}
-	return "magus ran out of time judging " + call.what + ": " + l.what() + ". " +
-		"A call that changes state is denied rather than let through unjudged; retry it. " +
-		"The guard answers within " + hookBudget.String() + ", inside the host's hook timeout, " +
-		"because a hook the host cuts off is a call it runs with no rule applied."
+	return fmt.Sprintf("magus ran out of time judging %s: %s. "+
+		"A call that changes state is denied rather than let through unjudged; retry it. "+
+		"The guard answers within %s, inside the host's hook timeout, "+
+		"because a hook the host cuts off is a call it runs with no rule applied.",
+		call.what, l.what(), hookBudget)
 }

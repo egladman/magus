@@ -405,7 +405,7 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s declares no check; run the narrowest target covering your paths.",
 				elideCommand(command), me.ID),
-			Why: gated + " Report what that target said, and that this row names no check: " + leaseActorClause("record a check on this row") + "\n" + leaseActorWhy,
+			Why: fmt.Sprintf("%s Report what that target said, and that this row names no check: %s\n%s", gated, leaseActorClause("record a check on this row"), leaseActorWhy),
 		}
 	}
 	check := me.Validation
@@ -484,14 +484,13 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		r = v.run
 		commands := make([]string, len(checks))
 		for i, c := range checks {
-			commands[i] = "`" + checkCommand(c) + "`"
+			commands[i] = fmt.Sprintf("`%s`", checkCommand(c))
 		}
 		if buildsCheckoutBinary(ctx, judge.workspace, r) {
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
-				Why: onePerBase + "\n" +
-					"When this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `" +
-					strings.Join(placementArgv(me.ID), " ") + "`. Until then the unit is held to " + commands[0] + ", and a need for the new binary goes in your result's unresolved risks.",
+				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks.",
+					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0]),
 			}
 		}
 		if readsOwnProjects(r, me.WritePaths) {
@@ -1727,12 +1726,12 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	why := "This call acts under lease " + actingLease + ". An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible."
 	if what.why != "" {
-		why = what.why + "\n" + why
+		why = fmt.Sprintf("%s\n%s", what.why, why)
 	}
 	if what.fix == "" {
-		why += "\n" + leaseActorWhy
+		why += fmt.Sprintf("\n%s", leaseActorWhy)
 	}
-	return denial{Say: "magus workspace: `" + elideCommand(command) + "` " + what.problem + "; " + fix, Why: why}
+	return denial{Say: fmt.Sprintf("magus workspace: `%s` %s; %s", elideCommand(command), what.problem, fix), Why: why}
 }
 
 // lineBaggageLease is the lease the last BAGGAGE assignment in f names, exported,
@@ -1866,12 +1865,12 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 		if operand == "" {
 			return boundedExecRebind(h)
 		}
-		return rebind{problem: "would take the lease on another job while lease " + h.id + " is in flight", ask: "hand that job out"}
+		return rebind{problem: fmt.Sprintf("would take the lease on another job while lease %s is in flight", h.id), ask: "hand that job out"}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
 		if len(words) > 2 && descendsFrom(h.standing(), words[2]) {
 			return rebind{}
 		}
-		return rebind{problem: "would verify a job outside lease " + h.id + "'s tree", ask: "verify it"}
+		return rebind{problem: fmt.Sprintf("would verify a job outside lease %s's tree", h.id), ask: "verify it"}
 	case words[0] == hint.JobFork.Head() && words[1] == hint.JobFork.Leaf():
 		return childForkRebind(cliFork(c.Args, stdin), h, "declare a job", "fork it")
 	}
@@ -1887,8 +1886,8 @@ func boundedExecRebind(h holder) rebind {
 		return rebind{}
 	}
 	return rebind{
-		problem: "would run a command owned by lease " + owner + " while lease " + h.id + " is in flight",
-		fix:     "set BAGGAGE=" + trail.BaggageLease + "=" + h.id + " on the line so it runs under your own lease",
+		problem: fmt.Sprintf("would run a command owned by lease %s while lease %s is in flight", owner, h.id),
+		fix:     fmt.Sprintf("set BAGGAGE=%s=%s on the line so it runs under your own lease", trail.BaggageLease, h.id),
 	}
 }
 
@@ -1927,16 +1926,16 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 	held := h.standing()
 	switch {
 	case !held.declared || !held.state.Live():
-		return rebind{problem: "would " + verb + ", and lease " + h.id + " is not live to hand one out", ask: ask}
+		return rebind{problem: fmt.Sprintf("would %s, and lease %s is not live to hand one out", verb, h.id), ask: ask}
 	case f.id == "":
-		return rebind{problem: "would " + verb + " the guard cannot read", fix: "give the child an id and --parent " + h.id + ", or its record in a quoted heredoc."}
+		return rebind{problem: fmt.Sprintf("would %s the guard cannot read", verb), fix: fmt.Sprintf("give the child an id and --parent %s, or its record in a quoted heredoc.", h.id)}
 	case f.id == h.id:
 		return rebind{problem: "would rewrite the job it holds", ask: "change it"}
 	case f.parent != h.id:
-		return rebind{problem: "is outside lease " + h.id + "'s tree", ask: ask,
+		return rebind{problem: fmt.Sprintf("is outside lease %s's tree", h.id), ask: ask,
 			why: fmt.Sprintf("It would %s outside its own tree: a row a worker creates must name %s as its parent, and this one names %q.", verb, h.id, f.parent)}
 	case slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
-		return rebind{problem: "would " + verb + " over " + f.id + ", which already exists", ask: "change it",
+		return rebind{problem: fmt.Sprintf("would %s over %s, which already exists", verb, f.id), ask: "change it",
 			why: "A worker writes no row but its own and the children it hands out."}
 	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.WritePaths) > 0):
 		return rebind{problem: "would " + verb + " that can write anywhere", fix: "fork it --read-only or with --write-paths inside your own.",
@@ -2786,7 +2785,7 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 // holds none of the job's.
 func refMoveRefusal(ctx context.Context, opts types.VCSOptions, own *types.JobWorktree, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
 	sub, rest := vcsSubcommand(inv)
-	moves := inv.Name + " " + sub
+	moves := fmt.Sprintf("%s %s", inv.Name, sub)
 	if unlocated != "" {
 		return vcsRefusal{op: moves, kind: vcsOpLands, why: unlocated}
 	}
@@ -2823,11 +2822,11 @@ func mergeRefusal(operand, base string, row types.Job) string {
 	}
 	switch len(accepts) {
 	case 1:
-		return why + accepts[0] + "."
+		return fmt.Sprintf("%s%s.", why, accepts[0])
 	case 2:
-		return why + accepts[0] + ", or " + accepts[1] + "."
+		return fmt.Sprintf("%s%s, or %s.", why, accepts[0], accepts[1])
 	}
-	return why + strings.Join(accepts[:len(accepts)-1], ", ") + ", or " + accepts[len(accepts)-1] + "."
+	return fmt.Sprintf("%s%s, or %s.", why, strings.Join(accepts[:len(accepts)-1], ", "), accepts[len(accepts)-1])
 }
 
 // workerLands reports a call that lands work on the branch its checkout is on: a commit, a

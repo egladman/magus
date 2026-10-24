@@ -441,10 +441,10 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	if me.ReadOnly {
 		return writeGrade{Decision: decisionDeny, Reason: denial{
 			Say: fmt.Sprintf("magus workspace: lease %s is read_only and writes nothing; put what you found in your report instead.", me.ID),
-			Why: fmt.Sprintf("If it must write, "+leaseActorClause("clear read_only and declare write_paths for lease "+me.ID)+"\n"+
-				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
-				leaseActorWhy,
-				me.ID, criteriaLine(me), rel),
+			Why: fmt.Sprintf("If it must write, %s\n"+
+				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n%s",
+				leaseActorClause(fmt.Sprintf("clear read_only and declare write_paths for lease %s", me.ID)),
+				me.ID, criteriaLine(me), rel, leaseActorWhy),
 		}.full()}
 	}
 	// BEFORE the path checks, because a lease that has not exec'd should not be writing anywhere,

@@ -227,9 +227,9 @@ func integrationScriptNote(c mainCall) string {
 		sub, _ := vcsSubcommand(inv)
 		return inv.Name == "git" && (sub == "reset" || sub == "rebase")
 	}) {
-		return " Folding a worker's commits is the integrator's: fork an integration job (`" +
-			hint.JobFork.With("--stdin") + "` with `\"integrates\": [\"<branch>\"]`) or spawn `<root>/integrate <job>` in the job's checkout, " +
-			"which runs the fold there: `git reset --soft <checkpoint>`, then one commit."
+		return fmt.Sprintf(" Folding a worker's commits is the integrator's: fork an integration job (`%s` with `\"integrates\": [\"<branch>\"]`) "+
+			"or spawn `<root>/integrate <job>` in the job's checkout, "+
+			"which runs the fold there: `git reset --soft <checkpoint>`, then one commit.", hint.JobFork.With("--stdin"))
 	}
 	var scripts []referenceScript
 	switch {
