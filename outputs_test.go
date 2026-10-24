@@ -767,7 +767,7 @@ export fun fine(ctx: magus\Context, args: [str]) > void {
 	require.NotNil(t, p)
 
 	require.EqualError(t, m.checkEditedSourcesExist(p, "tidy"),
-		`ctx.writesFiles in target tidy lists "go.sum" with editsExistingSource: true, but no file matches it in project .: an edited source must already exist. Create it, or drop editsExistingSource so the target produces it.`)
+		`ctx.writesFiles in target tidy lists "go.sum" with editsExistingSource: true, but no file matches it in project .: an edited source must already exist. Create it, or drop editsExistingSource so the target produces it`)
 	require.NoError(t, m.checkEditedSourcesExist(p, "fine"))
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "go.sum"), nil, 0o644))

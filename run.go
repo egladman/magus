@@ -2762,7 +2762,7 @@ func (m *Magus) checkEditedSourcesExist(p *types.Project, target string) error {
 		if globMatchesAFile(dir, types.Glob{Pattern: ref.Glob, Except: ref.Except}) {
 			continue
 		}
-		return fmt.Errorf("ctx.writesFiles in target %s lists %q with editsExistingSource: true, but no file matches it in project %s: an edited source must already exist. Create it, or drop editsExistingSource so the target produces it.",
+		return fmt.Errorf("ctx.writesFiles in target %s lists %q with editsExistingSource: true, but no file matches it in project %s: an edited source must already exist. Create it, or drop editsExistingSource so the target produces it",
 			target, ref.Glob, ref.Project)
 	}
 	return nil

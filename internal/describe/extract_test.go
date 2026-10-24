@@ -237,6 +237,32 @@ func TestFootprintRefusesTheRemovedForms(t *testing.T) {
 	}
 }
 
+// TestGlobsMayOverlap pins what MGS1053 compares: exact literals, a literal against a
+// pattern with its exclusions, and patterns whose segments provably diverge.
+func TestGlobsMayOverlap(t *testing.T) {
+	glob := func(pattern string, except ...string) types.Glob {
+		return types.Glob{Pattern: pattern, Except: except}
+	}
+	cases := []struct {
+		a, b types.Glob
+		want bool
+	}{
+		{glob("go.mod"), glob("go.mod"), true},
+		{glob("go.mod"), glob("go.sum"), false},
+		{glob("gen/x.go"), glob("**/*.go"), true},
+		{glob("gen/x.go"), glob("**/*.go", "gen/**"), false},
+		{glob("gen/**"), glob("gen/*.go"), true},
+		{glob("gen/**"), glob("*.mod"), false},
+		{glob("gen/*.go"), glob("docs/*.go"), false},
+		{glob("**/*.go"), glob("gen/**"), true},
+		{glob("**/*.go", "gen/**"), glob("gen/**"), false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, GlobsMayOverlap(tc.a, tc.b), "%v vs %v", tc.a, tc.b)
+		assert.Equal(t, tc.want, GlobsMayOverlap(tc.b, tc.a), "%v vs %v", tc.b, tc.a)
+	}
+}
+
 // TestFootprintComputedListOrFlagIsDynamic: a list or flag the static read cannot see
 // is refused at load like any computed footprint argument.
 func TestFootprintComputedListOrFlagIsDynamic(t *testing.T) {

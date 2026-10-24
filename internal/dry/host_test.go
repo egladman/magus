@@ -97,7 +97,7 @@ func TestCtxDeclarationsMatchAcrossHosts(t *testing.T) {
 	// Not a fourth list: the members of the real ctx ARE the enumeration, and the two
 	// copies are measured against it. Dropped are the internal marker and the removal
 	// shims, which exist to raise a better error than either copy could.
-	notDeclarations := append([]string{"__magus_context"}, bindings.RemovedFootprintMembers()...)
+	notDeclarations := []string{"__magus_context", "inputs", "outputs", "updates", "modifiesExistingFiles"}
 	// Known absences, each a pre-existing gap this test documents rather than fixes;
 	// listing them is what keeps the rest of the members gated instead of the whole
 	// check being deleted the first time it goes red.

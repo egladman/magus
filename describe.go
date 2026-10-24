@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -27,7 +26,7 @@ import (
 func checkFootprintModes(p *types.Project, target string, outputs []types.OutputRef, updates []types.UpdateRef) error {
 	for _, out := range outputs {
 		for _, up := range updates {
-			if out.Project != up.Project || !refsOverlap(types.Glob{Pattern: out.Glob, Except: out.Except}, types.Glob{Pattern: up.Glob, Except: up.Except}) {
+			if out.Project != up.Project || !describe.GlobsMayOverlap(types.Glob{Pattern: out.Glob, Except: out.Except}, types.Glob{Pattern: up.Glob, Except: up.Except}) {
 				continue
 			}
 			const modes = "a path has one mode: a produced file is replayed and cleaned, an edited source is hashed and never replayed"
@@ -43,60 +42,6 @@ func checkFootprintModes(p *types.Project, target string, outputs []types.Output
 		}
 	}
 	return nil
-}
-
-// refsOverlap reports whether two declared globs can name one path. A literal is
-// matched exactly, exclusions included; two patterns go to types.GlobsOverlap, minus a
-// pattern the other side's exclusions already cover.
-func refsOverlap(a, b types.Glob) bool {
-	aMeta, bMeta := types.IsGlobMeta(a.Pattern), types.IsGlobMeta(b.Pattern)
-	switch {
-	case !aMeta && !bMeta:
-		return a.Pattern == b.Pattern
-	case !aMeta:
-		return b.Match(a.Pattern)
-	case !bMeta:
-		return a.Match(b.Pattern)
-	}
-	if a.Excludes(b.Pattern) || b.Excludes(a.Pattern) || segmentsDisjoint(a.Pattern, b.Pattern) {
-		return false
-	}
-	return types.GlobsOverlap(a.Pattern, b.Pattern)
-}
-
-// segmentsDisjoint proves two patterns match no common path by walking their segments up
-// to the first "**": a segment pair that cannot match one name, or one pattern ending
-// while the other goes on, rules a shared path out. GlobsOverlap stops at the first
-// metacharacter, so "gen/**" and "*.mod" would otherwise read as overlapping.
-func segmentsDisjoint(a, b string) bool {
-	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
-	for i := 0; ; i++ {
-		if i < len(as) && as[i] == "**" || i < len(bs) && bs[i] == "**" {
-			return false
-		}
-		if i == len(as) || i == len(bs) {
-			return len(as) != len(bs)
-		}
-		if !segmentsMeet(as[i], bs[i]) {
-			return true
-		}
-	}
-}
-
-// segmentsMeet reports whether two path segments can match one name; two patterns are
-// assumed to.
-func segmentsMeet(a, b string) bool {
-	switch aMeta, bMeta := types.IsGlobMeta(a), types.IsGlobMeta(b); {
-	case !aMeta && !bMeta:
-		return a == b
-	case !aMeta:
-		ok, err := path.Match(b, a)
-		return ok || err != nil
-	case !bMeta:
-		ok, err := path.Match(a, b)
-		return ok || err != nil
-	}
-	return true
 }
 
 // describeCancelled reports a Describe walk cut short by ctx, naming how far it got.

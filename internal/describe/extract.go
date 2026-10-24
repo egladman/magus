@@ -25,6 +25,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 
@@ -1118,4 +1119,58 @@ func appendUniq[T comparable](s []T, v T) []T {
 		return s
 	}
 	return append(s, v)
+}
+
+// GlobsMayOverlap reports whether two declared globs, relative to one project, can name
+// one path. A literal is matched exactly, exclusions included. Two patterns overlap
+// unless an exclusion covers one or their segments provably diverge; past that it errs
+// toward true, as [types.GlobsOverlap] does.
+func GlobsMayOverlap(a, b types.Glob) bool {
+	aMeta, bMeta := types.IsGlobMeta(a.Pattern), types.IsGlobMeta(b.Pattern)
+	switch {
+	case !aMeta && !bMeta:
+		return a.Pattern == b.Pattern
+	case !aMeta:
+		return b.Match(a.Pattern)
+	case !bMeta:
+		return a.Match(b.Pattern)
+	}
+	if a.Excludes(b.Pattern) || b.Excludes(a.Pattern) || segmentsDisjoint(a.Pattern, b.Pattern) {
+		return false
+	}
+	return types.GlobsOverlap(a.Pattern, b.Pattern)
+}
+
+// segmentsDisjoint proves two patterns match no common path by walking their segments up
+// to the first "**". GlobsOverlap stops at the first metacharacter, so "gen/**" and
+// "*.mod" would otherwise read as overlapping.
+func segmentsDisjoint(a, b string) bool {
+	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	for i := 0; ; i++ {
+		if i < len(as) && as[i] == "**" || i < len(bs) && bs[i] == "**" {
+			return false
+		}
+		if i == len(as) || i == len(bs) {
+			return len(as) != len(bs)
+		}
+		if !segmentsMeet(as[i], bs[i]) {
+			return true
+		}
+	}
+}
+
+// segmentsMeet reports whether two path segments can match one name; two patterns are
+// assumed to.
+func segmentsMeet(a, b string) bool {
+	switch aMeta, bMeta := types.IsGlobMeta(a), types.IsGlobMeta(b); {
+	case !aMeta && !bMeta:
+		return a == b
+	case !aMeta:
+		ok, err := path.Match(b, a)
+		return ok || err != nil
+	case !bMeta:
+		ok, err := path.Match(a, b)
+		return ok || err != nil
+	}
+	return true
 }

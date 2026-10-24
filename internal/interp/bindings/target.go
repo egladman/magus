@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -870,10 +869,6 @@ var removedFootprintMembers = map[string]string{
 	"updates":               "ctx.writesFiles([...], editsExistingSource: true)",
 	"modifiesExistingFiles": "ctx.writesFiles([...], editsExistingSource: true)",
 }
-
-// RemovedFootprintMembers returns the removed ctx members the target context still binds
-// to raise their replacement, sorted.
-func RemovedFootprintMembers() []string { return slices.Sorted(maps.Keys(removedFootprintMembers)) }
 
 // TargetContextKeys returns the member names bound on the magus\Context a target
 // receives, and ExecRefusedKeys those a magus\Exec refuses. Same role as
