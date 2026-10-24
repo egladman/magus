@@ -617,6 +617,12 @@ It adds these to a session:
   `confirm` holds the prompt once.
 - The session's spend, main conversation and subagents together, in the status line
   and at the top of the pane.
+- The machine build budget, read from `magus status -o json` every 15 seconds and
+  around each Bash call that runs magus: `budget 8/10 slots, 8.7/23.5 GiB` in the
+  status line, and each holder's pid, target, slots, memory, age and checkout on the
+  pane's Budget tab. When a magus run in the session fails with
+  [MGS3009](../../../reference/codes/sandbox/MGS3009.md), a band above the prompt names
+  it and who holds the budget for five minutes, and the Budget tab keeps the refusal.
 
 Every threshold is a setting in `/config`: `cacheGate`, `cacheWarnMinutes`,
 `gateMinTokens`, `cacheTtl`, `priceStepGate`, `priceStepMarginTokens`, `spawnGate`,
