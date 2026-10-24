@@ -30,6 +30,9 @@ const (
 	// ripgrep: with no path it searches the working directory unless stdin is a pipe or a
 	// file, which the guard cannot see, so only an explicit `-` proves a read.
 	operandsOrCwd
+	// An interpreter: the first positional is the script, and the rest its arguments. With
+	// none, or `-`, the program is read from stdin.
+	operandsAreScript
 )
 
 type flagKind int
@@ -72,12 +75,20 @@ type stdinReader struct {
 	// search `.` for `grep -r pat`; ugrep, like ripgrep, reads stdin only when it is a
 	// pipe or a file, which a hook cannot see.
 	recursive string
+	// Flags that read the program from stdin whatever the operands (sh -s), spelled as
+	// recursive is.
+	fromStdin string
 }
 
-// recurses reports whether an option word turns on a recursive search, alone or packed
-// into a short cluster ahead of any flag that takes the rest of the cluster as its value.
+// recurses reports whether an option word turns on a recursive search.
 func (r stdinReader) recurses(word string) bool {
-	spellings := strings.Fields(r.recursive)
+	return r.clusterHas(word, r.recursive)
+}
+
+// clusterHas reports whether an option word is one of list's spellings, alone or packed
+// into a short cluster ahead of any flag that takes the rest of the cluster as its value.
+func (r stdinReader) clusterHas(word, list string) bool {
+	spellings := strings.Fields(list)
 	if strings.HasPrefix(word, "--") {
 		name, _, _ := strings.Cut(word, "=")
 		return slices.Contains(spellings, name)
@@ -132,8 +143,76 @@ var awkReader = stdinReader{
 	},
 }
 
+// pythonReader and the other interpreters read their program from stdin given `-` or no
+// script, which is how `python3 -` with its heredoc on a later command waits forever.
+var pythonReader = stdinReader{
+	operands: operandsAreScript,
+	flags: map[flagKind]string{
+		flagBool:    "-B -b -d -E -I -i -O -P -q -R -S -s -u -v -x",
+		flagValue:   "-W -X",
+		flagProgram: "-c -m",
+		flagSettles: "-h -V --help --version",
+	},
+}
+
+var shellReader = stdinReader{
+	operands:  operandsAreScript,
+	fromStdin: "-s",
+	flags: map[flagKind]string{
+		flagBool: "-a -B -C -e -f -H -h -i -k -l -m -n -P -p -r -s -t -u -v -x " +
+			"--login --noprofile --norc --posix --restricted --verbose",
+		flagValue:   "-O -o --init-file --rcfile",
+		flagProgram: "-c",
+		flagSettles: "--help --version",
+	},
+}
+
 // stdinReaders are the tools the rule judges, keyed by base name.
 var stdinReaders = map[string]stdinReader{
+	"python":  pythonReader,
+	"python2": pythonReader,
+	"python3": pythonReader,
+	"bash":    shellReader,
+	"dash":    shellReader,
+	"ksh":     shellReader,
+	"sh":      shellReader,
+	"zsh":     shellReader,
+	"node": {
+		operands: operandsAreScript,
+		flags: map[flagKind]string{
+			flagBool:    "-i --interactive",
+			flagValue:   "-r --import --input-type --loader --require",
+			flagProgram: "-e -p --eval --print",
+			flagSettles: "-c -h -v --check --help --test --version",
+		},
+	},
+	"perl": {
+		operands: operandsAreScript,
+		flags: map[flagKind]string{
+			flagBool:    "-a -c -l -n -p -s -T -t -U -W -w -X",
+			flagValue:   "-F -I -M -m",
+			flagProgram: "-E -e",
+			flagSettles: "-h -V -v",
+		},
+	},
+	"ruby": {
+		operands: operandsAreScript,
+		flags: map[flagKind]string{
+			flagBool:    "-a -c -d -l -n -p -s -U -W -w",
+			flagValue:   "-C -E -F -I -r",
+			flagProgram: "-e",
+			flagSettles: "-h -v --help --version",
+		},
+	},
+	// read takes variable names, never input; -t bounds the wait and -u reads another fd.
+	"read": {
+		operands: operandsNeverInput,
+		flags: map[flagKind]string{
+			flagBool:    "-e -r -s",
+			flagValue:   "-a -d -i -N -n -p",
+			flagSettles: "-t -u",
+		},
+	},
 	"grep":  grepReader,
 	"egrep": grepReader,
 	"fgrep": grepReader,
@@ -412,7 +491,9 @@ var awkAssignmentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 // surroundings, reads stdin: every word classified and no operand naming its input.
 func (r stdinReader) readsStdin(words []*syntax.Word) bool {
 	var operands []operand
-	programFromFlag, optionsDone, recursive := false, false, false
+	programFromFlag, optionsDone, recursive, fromStdin := false, false, false, false
+	// After a command's or a script's first word, every word is that one's argument.
+	argumentsFollow := r.operands == operandsAreCommand || r.operands == operandsAreScript
 	for i := 0; i < len(words); i++ {
 		w := words[i]
 		text, static := staticWord(w)
@@ -425,13 +506,13 @@ func (r stdinReader) readsStdin(words []*syntax.Word) bool {
 				return false
 			}
 			operands = append(operands, operand{})
-			optionsDone = optionsDone || r.operands == operandsAreCommand
+			optionsDone = optionsDone || argumentsFollow
 			continue
 		}
 		switch {
 		case optionsDone || !isOptionWord(text, r.plusCommands):
 			operands = append(operands, operand{text: text, static: true})
-			optionsDone = optionsDone || r.operands == operandsAreCommand
+			optionsDone = optionsDone || argumentsFollow
 			continue
 		case text == "--":
 			optionsDone = true
@@ -446,8 +527,12 @@ func (r stdinReader) readsStdin(words []*syntax.Word) bool {
 		i += consumed
 		programFromFlag = programFromFlag || program
 		recursive = recursive || r.recurses(text)
+		fromStdin = fromStdin || r.clusterHas(text, r.fromStdin)
 	}
 
+	if r.operands == operandsAreScript {
+		return !programFromFlag && (fromStdin || len(operands) == 0 || operands[0].static && operands[0].text == "-")
+	}
 	program := r.program
 	if programFromFlag {
 		program = 0

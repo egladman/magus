@@ -1188,7 +1188,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// A backgrounded waiter is the waiter rules' to judge: they count it toward the pile
 		// and name what to wait on instead, which a bound would not.
 		if verdict.Decision != decisionDeny && !waits {
-			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD); d.refused() {
+			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD, backgroundLimitsOf(deps).ceiling); d.refused() {
 				refuseWith(denyRuleBackgroundUnbounded, d)
 			}
 		}
@@ -1317,6 +1317,21 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 						verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, held, string(advisoryCheckTimeout)
 					}
 				}
+			}
+		}
+		// The root's half of background-silent; a subagent's stop is background-left's. A read
+		// passes, so the task's output can still be inspected before it is stopped.
+		if setting, ok := deps.setting(string(denyRuleBackgroundSilent)); ok && setting.Decision != builtin.Off && who.Agent == "" && env.Read == "" && !req.DryRun && verdict.Decision != decisionDeny {
+			d, a := judgeBackgroundSilent(who.Transcript, backgroundLimitsOf(deps), deps.heldBy(markers, string(denyRuleBackgroundSilent)), time.Now())
+			switch {
+			case d.refused():
+				refuseWith(denyRuleBackgroundSilent, d)
+			case a.Say != "" && verdict.Decision == decisionAdvise:
+				verdict.Context += "\n\n" + a.Say
+				whys[a.Say] = a.Why
+			case a.Say != "":
+				verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, a.Say, string(denyRuleBackgroundSilent)
+				whys[a.Say] = a.Why
 			}
 		}
 		verdict = deps.gradeAdvice(verdict)

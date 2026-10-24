@@ -6,10 +6,12 @@
 package builtin
 
 import (
+	"cmp"
 	"errors"
 	"maps"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/egladman/magus/types"
@@ -27,7 +29,7 @@ const (
 
 // Setting is one rule's resolved configuration. Each parameter is a threshold the rule
 // fires at, taken only by the rules params lists for it; 0 means unset, and the binary
-// ships no number for it.
+// ships no number for it except the background rules' minutes (see Ceiling).
 type Setting struct {
 	Decision Decision `json:"decision"`
 	// Lines is the size of a whole read worth flagging.
@@ -38,6 +40,12 @@ type Setting struct {
 	Calls int `json:"calls"`
 	// Chars is the size of one tool result in characters.
 	Chars int `json:"chars"`
+	// CeilingMinutes is the bound background-unbounded's refusal offers; see Ceiling.
+	CeilingMinutes int `json:"ceiling_minutes"`
+	// AdviseMinutes and DenyMinutes are how long a background task may write nothing
+	// before background-silent advises, then refuses; see SilentAdvise and SilentDeny.
+	AdviseMinutes int `json:"advise_minutes"`
+	DenyMinutes   int `json:"deny_minutes"`
 	// Markers are text a rule notices a write adding, each matched literally. Resolve
 	// fills the rule's own list when none is declared.
 	Markers []string `json:"markers"`
@@ -48,6 +56,8 @@ type Setting struct {
 }
 
 const (
+	backgroundSilent       = "background-silent"
+	backgroundUnbounded    = "background-unbounded"
 	compatMarker           = "compat-marker"
 	modelTierContextCap    = "model-tier-context-cap"
 	orchestratorGroundwork = "orchestrator-groundwork"
@@ -77,6 +87,40 @@ var paramSpecs = []paramSpec{
 	{"tokens", 1, func(s *Setting) *int { return &s.Tokens }},
 	{"calls", 2, func(s *Setting) *int { return &s.Calls }},
 	{"chars", 1000, func(s *Setting) *int { return &s.Chars }},
+	{"ceiling_minutes", 1, func(s *Setting) *int { return &s.CeilingMinutes }},
+	{"advise_minutes", 1, func(s *Setting) *int { return &s.AdviseMinutes }},
+	{"deny_minutes", 1, func(s *Setting) *int { return &s.DenyMinutes }},
+}
+
+// The background rules' figures when the workspace sets none. A command bounded at the
+// ceiling ends before background-silent would speak of it, and the deny is twice the
+// advice so the advice had a chance to be read and acted on.
+const (
+	defaultCeilingMinutes = 30
+	defaultAdviseMinutes  = 30
+	defaultDenyMinutes    = 60
+)
+
+// Ceiling is the bound background-unbounded's refusal offers: CeilingMinutes, or 30
+// minutes when unset.
+func (s Setting) Ceiling() time.Duration {
+	return minutes(s.CeilingMinutes, defaultCeilingMinutes)
+}
+
+// SilentAdvise is how long a background task may write nothing before background-silent
+// advises: AdviseMinutes, or 30 minutes when unset.
+func (s Setting) SilentAdvise() time.Duration {
+	return minutes(s.AdviseMinutes, defaultAdviseMinutes)
+}
+
+// SilentDeny is how long a background task may write nothing before background-silent
+// refuses: DenyMinutes, or 60 minutes when unset.
+func (s Setting) SilentDeny() time.Duration {
+	return minutes(s.DenyMinutes, defaultDenyMinutes)
+}
+
+func minutes(set, fallback int) time.Duration {
+	return time.Duration(cmp.Or(set, fallback)) * time.Minute
 }
 
 // SetParam sets the numeric parameter name to n, reporting false for a name that is no
@@ -94,13 +138,15 @@ func (s *Setting) SetParam(name string, n int) bool {
 // params maps each rule that takes a parameter to the parameters it takes: a paramSpecs
 // name, or markers.
 var params = map[string][]string{
-	compatMarker:      {"markers"},
-	readNavigation:    {"lines"},
-	rootContextBudget: {"tokens"},
-	rootHeavyCommand:  {"calls"},
-	rootResultCap:     {"chars"},
-	rootRepeat:        {"calls"},
-	stall:             {"calls"},
+	backgroundSilent:    {"advise_minutes", "deny_minutes"},
+	backgroundUnbounded: {"ceiling_minutes"},
+	compatMarker:        {"markers"},
+	readNavigation:      {"lines"},
+	rootContextBudget:   {"tokens"},
+	rootHeavyCommand:    {"calls"},
+	rootResultCap:       {"chars"},
+	rootRepeat:          {"calls"},
+	stall:               {"calls"},
 }
 
 // notices names the rules that only ever state a fact, so a deny declared for one is a
@@ -211,7 +257,8 @@ var defaults = map[string]Decision{
 	// Irreversible, or a boundary someone else drew.
 	"agent-sign-off":        Deny,
 	"background-left":       Deny,
-	"background-unbounded":  Deny,
+	backgroundSilent:        Deny,
+	backgroundUnbounded:     Deny,
 	"backtick-substitution": Deny,
 	"busy-wait":             Deny,
 	"cache-dir-write":       Deny,
@@ -449,6 +496,12 @@ func validate(name string, s Setting) error {
 				"built-in rule %q: %s is %d; give %d or more, or leave it out", name, p.name, value, p.min)
 		}
 	}
+	if name == backgroundSilent && s.SilentDeny() <= s.SilentAdvise() {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q: deny_minutes (%d) must be more than advise_minutes (%d)",
+			name, int(s.SilentDeny().Minutes()), int(s.SilentAdvise().Minutes())).
+			WithWhy("the advice is what gives a stuck task's owner the chance to stop it before calls are refused; unset, they are 60 and 30")
+	}
 	if len(s.Markers) > 0 && !slices.Contains(params[name], "markers") {
 		return takesNo(name, "markers")
 	}
@@ -504,6 +557,9 @@ func Stricter(a, b Setting) Setting {
 	out.Tokens = lower(a.Tokens, b.Tokens)
 	out.Calls = lower(a.Calls, b.Calls)
 	out.Chars = lower(a.Chars, b.Chars)
+	out.CeilingMinutes = lower(a.CeilingMinutes, b.CeilingMinutes)
+	out.AdviseMinutes = lower(a.AdviseMinutes, b.AdviseMinutes)
+	out.DenyMinutes = lower(a.DenyMinutes, b.DenyMinutes)
 	out.Markers = slices.Clone(a.Markers)
 	for _, m := range b.Markers {
 		if !slices.Contains(out.Markers, m) {
