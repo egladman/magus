@@ -51,6 +51,10 @@ type Manifest struct {
 	// Stamps maps each of the step's Stamps to its digest as the run left it; see
 	// Step.Stamps.
 	Stamps map[string]string `json:"stamps,omitempty"`
+	// Checkout is the root of the checkout that produced this entry. The key names none,
+	// so any checkout sharing the store replays this log; a hit compares roots (MGS8005).
+	// Empty on entries written before the field existed.
+	Checkout string `json:"checkout,omitempty"`
 }
 
 // OutputRecord captures one declared output file.

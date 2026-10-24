@@ -823,39 +823,10 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	if c.logLevel < slog.LevelError && !c.recordsOnly && len(logData) > 0 {
 		_, _ = os.Stderr.Write(logData)
 	}
-	// A hit regenerated nothing, so reuse the existing ref for this cache key rather
-	// than minting a duplicate; persist fresh only if the store has no record yet (e.g.
-	// cache imported without its output store), storing the raw cached log verbatim.
-	ref := ""
-	if c.outputs != nil {
-		ref = c.outputs.StepRef(hash)
-		if ref == "" {
-			// A remote import ships the producer's descriptor without its output blob;
-			// completing it with the replayed log bytes makes this machine resolve the
-			// SAME ref the producer printed.
-			if adopted, ok := c.outputs.AdoptImported(hash, logData); ok {
-				ref = adopted
-			}
-		}
-	}
-	if ref == "" {
-		ref = c.recordOutput(ctx, s, hash, logData, result, nil, true)
-	} else {
-		// recordOutput is skipped, so nothing reaches the journal otherwise; a cache hit
-		// is still a target OUTCOME, and a fully-cached run would show no results.
-		journal.Emit(ctx, journal.Event{
-			Ts:         time.Now().UnixMilli(),
-			Inv:        journal.InvocationIDFromContext(ctx),
-			Project:    s.ProjectPath,
-			Target:     reproTarget(s),
-			Kind:       journal.KindResult,
-			Level:      "info",
-			Status:     journal.StatusCached,
-			Ref:        ref,
-			DurationMs: result.Duration.Milliseconds(),
-			Sizing:     journal.SizingNone,
-		})
-	}
+	c.reportReplayedCheckout(ctx, s, e.manifest.Checkout, logData)
+	// A new attempt, never an earlier one: an earlier attempt carries another run's
+	// timestamp and lease, so a job's evidence would point at a run that is not its own.
+	ref := c.recordOutput(ctx, s, hash, logData, result, nil, true)
 	attrs := append(netAttrs(netRec),
 		slog.String("project", s.ProjectPath),
 		slog.String("label", s.Label),
@@ -871,6 +842,40 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	result.Ref = ref
 	rc.fireResults(rc.step, &result, nil)
 	return result, true
+}
+
+// reportReplayedCheckout reports MGS8005 when a hit replayed a log another checkout
+// recorded: a notice naming that checkout, or an error when the log names paths
+// outside this one. The log itself replays unchanged.
+func (c *Cache) reportReplayedCheckout(ctx context.Context, s Step, producer string, log []byte) {
+	if producer == "" || s.WorkspaceRoot == "" || producer == s.WorkspaceRoot {
+		return
+	}
+	under, outside := replayedPaths(log, producer, s.WorkspaceRoot)
+	level := slog.LevelInfo
+	msg := fmt.Sprintf("%s:%s replayed a log recorded in another checkout, %s; it names %d path(s) under that checkout (see %s)",
+		s.ProjectPath, s.Target, producer, under, types.CodeURL(types.OutputReplayedFromAnotherCheckout))
+	if outside > 0 {
+		level = slog.LevelError
+		msg = fmt.Sprintf("%s:%s replayed a log recorded in another checkout, %s; it names %d path(s) outside this checkout, %s, so those lines describe that checkout's files, not these; `magus run --no-cache` records this checkout's own (see %s)",
+			s.ProjectPath, s.Target, producer, outside, s.WorkspaceRoot, types.CodeURL(types.OutputReplayedFromAnotherCheckout))
+	}
+	c.log.LogAttrs(ctx, level, msg, attr.Notice(string(types.OutputReplayedFromAnotherCheckout)))
+}
+
+// replayedPaths counts the paths under producer that log names, and how many of those
+// lie outside here. A checkout nested in the producer (a linked worktree under the
+// primary) has its own paths under the producer's root too, so those are subtracted.
+func replayedPaths(log []byte, producer, here string) (under, outside int) {
+	sep := string(filepath.Separator)
+	under = bytes.Count(log, []byte(producer+sep))
+	switch {
+	case strings.HasPrefix(producer+sep, here+sep):
+		return under, 0
+	case strings.HasPrefix(here+sep, producer+sep):
+		return under, under - bytes.Count(log, []byte(here+sep))
+	}
+	return under, under
 }
 
 // backfill hands an entry hit in tier i to every later tier that may be written, so a
@@ -981,6 +986,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			// vanishes mid-run instead of failing loudly.
 			return fail(fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err))
 		}
+		m.Checkout = s.WorkspaceRoot
 		snap, result.Outputs = m, outs
 	}
 
@@ -1115,6 +1121,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		VCSName:     s.VCSName,
 		Platform:    c.platform,
 		Lease:       c.actingLease(ctx),
+		Cached:      cacheHit,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()

@@ -325,7 +325,7 @@ func TestOutputStoreAttemptsShareOnePortableRef(t *testing.T) {
 	ref2 := mustPersist(t, s, key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build", TimestampMs: 200})
 
 	assert.Equal(t, ref1, ref2, "every execution of one cache key shares the portable ref")
-	assert.Equal(t, ref1, s.StepRef(key))
+	assert.Equal(t, PortableRef(key), ref1)
 
 	attempts, err := s.Attempts(ref1)
 	require.NoError(t, err)
@@ -427,7 +427,7 @@ func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
 		require.ErrorIs(t, err, boom)
 		hash, herr := c.hashStep(context.Background(), &step)
 		require.NoError(t, herr)
-		refs = append(refs, c.outputs.StepRef(hash))
+		refs = append(refs, PortableRef(hash))
 	}
 	assert.Equal(t, refs[0], refs[1])
 	assert.Equal(t, refs[1], refs[2], "every failing execution shares the step's portable ref")
@@ -867,9 +867,8 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ref := c.outputs.StepRef(r.Hash)
-	require.NotEmpty(t, ref)
-	data, _, err := c.outputs.ByRef(ref)
+	require.NotEmpty(t, r.Ref)
+	data, _, err := c.outputs.ByRef(r.Ref)
 	require.NoError(t, err)
 	assert.Equal(t, "no newline here", string(data), "verbatim - no newline invented")
 }
@@ -911,7 +910,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, rPass.Hit)
 
-	passRef := c.outputs.StepRef(rPass.Hash)
+	passRef := rPass.Ref
 	require.NotEmpty(t, passRef, "a passing miss should persist a ref")
 	data, meta, err := c.outputs.ByRef(passRef)
 	require.NoError(t, err)
@@ -931,8 +930,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 
 	failHash, herr := c.hashStep(context.Background(), &fail)
 	require.NoError(t, herr)
-	failRef := c.outputs.StepRef(failHash)
-	require.NotEmpty(t, failRef, "a failing run should persist a ref")
+	failRef := PortableRef(failHash)
 	fdata, fmeta, err := c.outputs.ByRef(failRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(fdata), "FAIL: assertion failed")
@@ -1078,8 +1076,12 @@ func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
 // TestCacheHitReusesTheSameRef is THE portability contract, and the easiest one to
 // break from far away: a hit must answer with the ref the miss printed. If a hit ever
 // minted a fresh id, every existing test would still pass while two machines (or the
-// same machine twice) silently stopped agreeing on what a run is called.
+// same machine twice) silently stopped agreeing on what a run is called. The hit's
+// attempt under that ref is its own: this run's lease, marked cached, never the
+// miss's attempt.
 func TestCacheHitReusesTheSameRef(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvBaggage, "")
 	root, cdir, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
@@ -1094,15 +1096,31 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 
 	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err)
-	hit, err := c2.Run(context.Background(), step, build)
+	hit, err := c2.Run(types.WithJobLease(t.Context(), "wave/hit"), step, build)
 	require.NoError(t, err)
 	require.True(t, hit.Hit, "second run must hit")
 	assert.Equal(t, miss.Ref, hit.Ref, "a hit must reuse the miss's ref, never mint a new one")
 
-	// And the ref still resolves to the captured bytes after the hit.
+	type attempt struct {
+		Ref, Project, Lease string
+		Cached, Failed      bool
+	}
+	attempts, err := c2.outputs.Attempts(hit.Ref)
+	require.NoError(t, err)
+	got := make([]attempt, 0, len(attempts))
+	for _, a := range attempts {
+		got = append(got, attempt{Ref: a.Ref, Project: a.Project, Lease: a.Lease, Cached: a.Cached, Failed: a.Failed})
+	}
+	assert.Equal(t, []attempt{
+		{Ref: miss.Ref, Project: "test/pkg", Lease: "wave/hit", Cached: true},
+		{Ref: miss.Ref, Project: "test/pkg"},
+	}, got, "the hit records a new attempt, newest first, rather than answering with the miss's")
+	assert.GreaterOrEqual(t, attempts[0].TimestampMs, attempts[1].TimestampMs)
+
+	// The bare ref answers with the hit's attempt.
 	_, desc, err := c2.outputs.ByRef(hit.Ref)
 	require.NoError(t, err)
-	assert.Equal(t, "test/pkg", desc.Project)
+	assert.Equal(t, attempts[0].Attempt, desc.Attempt)
 }
 
 // TestFailingRunRefResolves: failures are the outputs people most want to retrieve,
@@ -1403,30 +1421,4 @@ func TestRotateRunsAgeCapKeepsNewestEvenPastMaxAge(t *testing.T) {
 	got, err := os.ReadDir(runs)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-}
-
-// The outputs store is shared machine-wide, so two adopters of one imported key run
-// concurrently. AdoptImported reports only a bool, so the property is pinned by
-// occupying the fixed temp path a contended adopter would have wanted.
-func TestAdoptImportedDoesNotDependOnAFixedTempName(t *testing.T) {
-	dir := t.TempDir()
-	s := NewOutputStore(dir)
-	const key = "aabbccddeeff00112233445566778899aabbccddeeff001122334455"
-
-	// An imported step is a descriptor with no blob beside it, which is what
-	// AdoptImported completes.
-	keyDir := filepath.Join(dir, "outputs", key)
-	require.NoError(t, os.MkdirAll(keyDir, 0o755))
-	desc, err := json.Marshal(OutputDescriptor{Ref: PortableRef(key), Key: key, Project: "svc/api", Target: "test"})
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(keyDir, "attempt1"+descExt), desc, 0o644))
-	require.NoError(t, os.Mkdir(filepath.Join(keyDir, "attempt1"+outExt+".adopt.tmp"), 0o755))
-
-	ref, ok := s.AdoptImported(key, []byte("imported log\n"))
-	require.True(t, ok, "the import was reported uncompletable because one fixed temp path was taken")
-	assert.Equal(t, PortableRef(key), ref)
-
-	got, _, err := s.ByRef(ref)
-	require.NoError(t, err)
-	assert.Equal(t, "imported log\n", string(got))
 }
