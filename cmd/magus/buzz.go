@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
@@ -787,6 +788,10 @@ func buzzUsage() {
 // has to be in force before the first line runs. globalCfg is the config the open
 // would load, and an adopted workspace (server, tests) is already open.
 func buzzScriptContext(ctx context.Context, root string) (context.Context, error) {
+	// A top-level `magus buzz` is an invocation like any other. Without its own entry a
+	// magus its script spawns inherits MAGUS_LEVEL but no ancestry, and the machine gate
+	// refuses it MGS3009 under a contended budget.
+	ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), journal.NewInvocationID())
 	// --root is the directory a script runs as if started in, as -C is for make: its
 	// vcs calls, execs and relative paths resolve there, not in the process cwd.
 	if _, set := std.CwdFromContext(ctx); root != "" && !set {
