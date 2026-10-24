@@ -109,6 +109,36 @@ and the report names each one it skipped.
 - **A job's goal** on `ci` passes on the branch's newest green `ci` gate
   when the change since it is `trivial`, even if that gate predates the job.
 
+## Workers check their packages, the integration checks the tree
+
+A job's worker runs a check scoped to the packages of its write paths:
+`go::go-test . -- ./internal/job/... -run 'Wait'`, or the packages alone. The fork
+accepts a `-run` that leaves out tests of those packages only when the check names
+exactly them ([MGS3040](../../reference/codes/sandbox/MGS3040.md)). The go spell
+keeps its `./...` default under forwarded arguments, so the scope narrows the tests
+that run, not the packages that compile.
+
+The integration job, the one that merges the workers' branches, owns the full
+`go-test` and `lint` at the root. `magus job wait` grades it on both, and on every
+check a merged worker filed as owed.
+
+A worker never waits for the build budget. When its check finds no seat it
+commits and files the check as owed in its result, a normal result:
+
+```json
+{"validation": {"command": "magus run go::go-test . -- ./internal/job/...", "output_ref": "", "owed": "no seat"}}
+```
+
+`magus job wait` passes it with the goal marked `[owed] check (no seat)`, and the
+integration runs the check. An integration may not owe its own checks: it waits
+for a seat, explicitly (`magus status --wait | magus run ...`), and a wait given a
+deadline is refused past it with the runs holding the budget named.
+A gate graded on a scoped run says so beside its mark:
+
+```text
+  [met] check, a run scoped with `-- -run Wait`
+```
+
 A merge settles a conflicted file by its class alone, not its tier; see
 [auto-resolving source conflicts](../merge-queue.md#auto-resolving-source-conflicts).
 

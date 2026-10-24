@@ -240,6 +240,19 @@ func TestGraphSymbolsResolvesAPackageQualifiedName(t *testing.T) {
 	assert.Equal(t, []string{"internal/job/plan.go", "types/declare.go"}, bare.SameNameDefinitions, "a bare name is still ambiguous")
 }
 
+// A gate graded on a scoped run says so beside its mark, so an integration grade shows what
+// the run covered.
+func TestRenderGatesShowsTheScopeOfARun(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.GateStatus{
+		{ID: "check", Verified: true, OutputRef: "out1", Scope: "-- ./internal/job -run Wait"},
+		{ID: "lint", Verified: true, OutputRef: "out2"},
+	}})
+	assert.Equal(t, "unit: 2 of 2 goal(s) met\n  [met] check, a run scoped with `-- ./internal/job -run Wait`\n  [met] lint\n", out.String())
+}
+
 func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	t.Parallel()
 

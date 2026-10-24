@@ -394,9 +394,11 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	require.Len(t, v.Notes, 1)
 	assert.Equal(t, "goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped with `-- -run Spawn|Waiter`:"+
 		" -run and -skip select tests inside the packages `magus run go::go-test .` runs, so it ran every package the check does", v.Notes[0])
+	require.Len(t, v.Gates, 1)
+	assert.Equal(t, types.GateStatus{ID: "check", Verified: true, OutputRef: "a1b2c3d4", Scope: "-- -run Spawn|Waiter"}, v.Gates[0])
 	var out strings.Builder
 	RenderGates(&out, v)
-	assert.Contains(t, out.String(), "  [met] check\nnote: goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped")
+	assert.Contains(t, out.String(), "  [met] check, a run scoped with `-- -run Spawn|Waiter`\nnote: goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped")
 
 	for name, att := range map[string]types.JobAttempt{
 		"another target":  {Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "Spawn"}},

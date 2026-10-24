@@ -688,6 +688,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("no run is recorded for output ref %q", status.OutputRef))
 		return status
 	}
+	status.Scope = runScope(gate.Check, attempt)
 	if row.Created > 0 {
 		// Compared in whole seconds, the resolution the declaration is stamped in: a run in
 		// the declaring second cannot be ordered against it either way, and a check run
@@ -769,6 +770,19 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 func scopedRun(c types.LeaseCheck, a types.JobAttempt) bool {
 	return a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && runsGoTest(c) &&
 		slices.Equal(withoutTestSelection(a.ExtraArgs), withoutTestSelection(c.Args))
+}
+
+// runScope is the `--` args a's go test of c narrowed with, as `-- <args>`: a -run, a -skip
+// or a package argument. It is "" for any other run, which ran every package and test c
+// names.
+func runScope(c types.LeaseCheck, a types.JobAttempt) string {
+	if !runsGoTest(c) || len(a.ExtraArgs) == 0 {
+		return ""
+	}
+	if len(withoutTestSelection(a.ExtraArgs)) == len(a.ExtraArgs) && len(goTestPackages(a.ExtraArgs)) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("-- %s", strings.Join(a.ExtraArgs, " "))
 }
 
 // withoutTestSelection is args with every -run and -skip flag and its value dropped, read

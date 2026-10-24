@@ -651,6 +651,9 @@ type GateStatus struct {
 	ID        string `json:"id" yaml:"id"`
 	Verified  bool   `json:"verified" yaml:"verified"`
 	OutputRef string `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
+	// Scope is the `--` args the run behind OutputRef narrowed its go test with, "" when it
+	// ran every package and test its check names.
+	Scope string `json:"scope,omitempty" yaml:"scope,omitempty"`
 	// Owed is why the goal's run is owed to the integration rather than cited (see
 	// [OwedNoSeat]), "" for a goal graded on a run.
 	Owed       string   `json:"owed,omitempty" yaml:"owed,omitempty"`
