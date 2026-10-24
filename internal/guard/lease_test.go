@@ -3106,6 +3106,6 @@ func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
 			continue
 		}
 		require.NotEmpty(t, reason, tt.name)
-		assert.Contains(t, reason.Say, "held by live lease "+tt.holder+"; run `"+hint.JobWait.With(tt.holder)+"`.", tt.name)
+		assert.Contains(t, reason.Say, "held by live lease "+tt.holder+"; "+knockClause(tt.holder, tt.other), tt.name)
 	}
 }
