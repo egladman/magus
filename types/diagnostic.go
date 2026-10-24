@@ -731,6 +731,10 @@ const OutputRefMissing DiagnosticCode = "MGS8001"
 const OutputRefAmbiguous DiagnosticCode = "MGS8002"
 const OutputRefMalformed DiagnosticCode = "MGS8003"
 const OutputRefForeignMachine DiagnosticCode = "MGS8004"
+
+// OutputReplayedFromAnotherCheckout is a cache hit that replayed a log another checkout
+// recorded: a notice, or an error when the log names paths outside this checkout.
+const OutputReplayedFromAnotherCheckout DiagnosticCode = "MGS8005"
 const BearerRejected DiagnosticCode = "MGS9001"
 const InsecureTokenPermissions DiagnosticCode = "MGS9002"
 const TokenStoreTooNew DiagnosticCode = "MGS9003"
@@ -1012,6 +1016,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputRefAmbiguous,
 	OutputRefMalformed,
 	OutputRefForeignMachine,
+	OutputReplayedFromAnotherCheckout,
 	BearerRejected,
 	InsecureTokenPermissions,
 	TokenStoreTooNew,

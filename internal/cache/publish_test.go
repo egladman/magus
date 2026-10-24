@@ -210,8 +210,7 @@ func TestPublishedBundleResolvesRemotely(t *testing.T) {
 
 	hash, err := cA.hashStep(context.Background(), &step)
 	require.NoError(t, err)
-	ref := cA.outputs.StepRef(hash)
-	require.NotEmpty(t, ref)
+	ref := PortableRef(hash)
 
 	// Machine B cannot resolve it yet: a failure is never shared automatically.
 	_, cB := openSigned(t, remote, nil, trusted)
