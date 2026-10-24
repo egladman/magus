@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
@@ -479,6 +480,43 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	assert.Contains(t, stderr.String(), fmt.Sprintf(`  why: %s
   fix: %s
 `, ans.IndexCause.Why, ans.IndexCause.Fix))
+}
+
+func TestPresenceOfCapsSitesAndCountsTheRest(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "ws")
+	var matches []textindex.Match
+	for i := 1; i <= types.TextPresenceSiteCap+3; i++ {
+		matches = append(matches, textindex.Match{Path: filepath.Join(root, "pkg", "a.go"), Line: i})
+	}
+	matches = append(matches, textindex.Match{Path: filepath.Join(root, "b.go"), Line: 7})
+
+	got := presenceOf(root, matches)
+	assert.Equal(t, types.TextPresenceSiteCap+4, got.Hits)
+	assert.Equal(t, 2, got.Files)
+	require.Len(t, got.Sites, types.TextPresenceSiteCap)
+	assert.Equal(t, "pkg/a.go:1", got.Sites[0])
+	assert.Equal(t, 4, got.More)
+}
+
+// A symbol miss with text hits names the sites in the text block and in the -o json record.
+func TestReportRefsMissPrintsTextSites(t *testing.T) {
+	ans := types.ClassifyAnswer(false, "", nil)
+	ans.Text = &types.KnowledgeTextPresence{Hits: 3, Files: 2, Sites: []string{"a/b.go:4", "c.go:9"}, More: 1}
+	miss := refsMiss{name: "Foo", answer: ans, searched: 10}
+
+	var stderr bytes.Buffer
+	var err error
+	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputText}, miss) })
+	require.NoError(t, err)
+	assert.Empty(t, stdout)
+	assert.Contains(t, stderr.String(), "    a/b.go:4\n    c.go:9\n    ... and 1 more\n")
+
+	stderr.Reset()
+	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputJSON}, miss) })
+	require.NoError(t, err)
+	var record types.KnowledgeRefsOutput
+	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
+	assert.Equal(t, ans.Text, record.Answer.Text)
 }
 
 // withIndexCause diagnoses only an answer drawn from a missing or stale index; a clean
