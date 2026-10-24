@@ -95,6 +95,7 @@ func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (ty
 	if err != nil {
 		return types.GuardJudgment{}, false
 	}
+	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
 	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
 		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
@@ -122,6 +123,47 @@ func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (ty
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
 			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
 	}, true
+}
+
+// endsOnItsOwn reports a backgrounded line of runs under `magus job exec --timeout`, which
+// check-timeout serves and which stop at their deadline, or of commits whose hooks outlast a
+// foreground call. Its completion notice is how the agent hears the result, so refusing the
+// stop would only send it to kill its own check or commit.
+func endsOnItsOwn(command string) bool {
+	f, err := parseFile(command, DialectBash)
+	if err != nil {
+		return false
+	}
+	ends, work := true, false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		switch n := n.(type) {
+		case *syntax.CallExpr:
+			words := literalWords(n.Args)
+			if len(words) == 0 {
+				return true
+			}
+			name := path.Base(words[0])
+			c := hint.Invocation{Name: name, Args: words[1:]}
+			switch sub, _ := vcsSubcommand(c); {
+			case name == "magus" && boundedByJobExec(c.Args), (name == "git" || vcsGlobals[name] != nil) && committing(sub):
+				work = true
+			case !instantBuiltins[name]:
+				ends = false
+			}
+			// A job exec's command is bounded by it, so its words are not read as calls.
+			return false
+		case *syntax.WhileClause, *syntax.ForClause:
+			ends = false
+		}
+		return ends
+	})
+	return ends && work
+}
+
+// committing reports a version-control verb that records a commit through the
+// repository's hooks.
+func committing(sub string) bool {
+	return slices.Contains([]string{"commit", "ci", "merge", "cherry-pick", "revert"}, sub)
 }
 
 // sessionEnded reports whether raw ends its caller's agent session: a subagent's stop

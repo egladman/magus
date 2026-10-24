@@ -57,7 +57,7 @@ var (
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 
 	denySlotWait = "a worker waits for the build budget only in the call that spends the seat: `" + hint.Status.With("--wait") + " | " + hint.Run.String() +
-		" <your check>`. A wait on its own, a watch, or a sleep before a run reserves nothing."
+		" <your check>`. A wait that gates no magus call, a watch, or a sleep before a run waits for nothing."
 	denySlotWaitWhy = "`status --wait` piped straight into a magus run reserves the seat it sized for that run until the run claims it, so no other worker can take it in between. " +
 		"A wait that feeds no run holds nothing, so the run after it can still be refused with MGS3009, and a worker looping on reads and refusals spends turns no one who can free a seat sees."
 
@@ -65,11 +65,10 @@ var (
 		"The budget is the machine's, shared by every worktree, so it frees only as the runs holding it end."
 )
 
-// slotWaitLine reports a line that waits for room in the build budget without reserving
-// it: `magus status --wait` that pipes into no magus run, `--watch`, a status read beside
-// a sleep or inside a watcher, or a magus run after a sleep of at least sleepPollFloor,
-// which retries a run the budget refused. `status --wait | magus run ...` alone is not
-// one: the wait holds the seat for the run it feeds.
+// slotWaitLine reports a line that waits for room in the build budget for no call: `magus
+// status --wait` gating no magus call (see seatWaits), `--watch`, a status read beside a
+// sleep or inside a watcher, or a magus run after a sleep of at least sleepPollFloor, which
+// retries a run the budget refused.
 func slotWaitLine(command string, d Dialect, watcher bool) bool {
 	f, err := parseFile(command, d)
 	if err != nil {
@@ -111,24 +110,31 @@ func statusFlag(args []string, names ...string) bool {
 	})
 }
 
-// seatWaits is each `magus status --wait` on a parsed line whose stdout pipes straight
-// into a magus run or affected, and each run it feeds: the wait reserves that run's seat
-// until the run claims it. A watch reserves nothing, and neither does a wait whose output
-// goes anywhere else.
+// seatWaits is each `magus status --wait` gating a magus call on a parsed line, and each
+// call it gates: one it pipes into (MGS3009's hint, for a run or a `graph build`), which it
+// reserves the seat for, or one `&&` starts once the budget has room. A watch gates nothing,
+// and neither does a wait `;` follows, which starts the next call even if the wait failed.
 func seatWaits(f *syntax.File, d Dialect) map[*syntax.CallExpr]bool {
 	paired := map[*syntax.CallExpr]bool{}
 	syntax.Walk(f, func(n syntax.Node) bool {
-		pipe, ok := n.(*syntax.BinaryCmd)
-		if !ok || (pipe.Op != syntax.Pipe && pipe.Op != syntax.PipeAll) {
+		bin, ok := n.(*syntax.BinaryCmd)
+		if !ok {
 			return true
 		}
-		wait, run := pipeEnd(pipe.X, true), pipeEnd(pipe.Y, false)
-		if wait == nil || run == nil {
+		var wait *syntax.CallExpr
+		switch bin.Op {
+		case syntax.Pipe, syntax.PipeAll:
+			wait = pipeEnd(bin.X, true)
+		case syntax.AndStmt:
+			wait, _ = bin.X.Cmd.(*syntax.CallExpr)
+		}
+		gated := pipeEnd(bin.Y, false)
+		if wait == nil || gated == nil {
 			return true
 		}
 		if magusCallIs(wait, d, func(sub string, args []string) bool { return sub == "status" && statusFlag(args, "wait") }) &&
-			magusCallIs(run, d, func(sub string, _ []string) bool { return sub == "run" || sub == "affected" }) {
-			paired[wait], paired[run] = true, true
+			magusCallIs(gated, d, func(sub string, _ []string) bool { return sub != "status" }) {
+			paired[wait], paired[gated] = true, true
 		}
 		return true
 	})
@@ -199,7 +205,7 @@ type refusedRun struct {
 // denyRefusedRetry refuses a magus run that repeats, argv for argv, one this checkout's run
 // log recorded refused with MGS3009 inside refusedRetryWindow, when that refusal is still
 // the newest run of the command. Nothing freed a seat on the caller's behalf in between,
-// so the rerun is the poll again with the caller's turn as its loop. A run fed by a wait
+// so the rerun is the poll again with the caller's turn as its loop. A run a wait gates
 // (`magus status --wait | magus run ...`) passes, as does any line that runs no target.
 // The run log is read only for a line that runs one, and only logs written inside the
 // window are opened. Workers and orchestrators are told the same pipe: the wait holds the
@@ -225,7 +231,7 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 var denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
 
 // unwaitedRuns is the argv of each magus run or affected on a line that no `magus status
-// --wait` pipes straight into; nil for a line that runs neither.
+// --wait` gates (see seatWaits); nil for a line that runs neither.
 func unwaitedRuns(command string) [][]string {
 	f, err := parseFile(command, DialectBash)
 	if err != nil {

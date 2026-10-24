@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -125,7 +126,7 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 		return d.Say + note + command, "", remedy
 	}
 	first := !markers.MarkFired(marker)
-	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(stored))
+	ref = storeVerdict(ctx, markers.CacheDir(), stored)
 	if ref == "" {
 		hint.AppendServedNext(markers.CacheDir(), remedy)
 		return stored, "", remedy
@@ -137,6 +138,41 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 		lead = "denied again [" + rule + "]: " + catches
 	}
 	return lead + note + command + "\nfull verdict: " + next.Run, ref, remedy
+}
+
+// storeVerdict stores a full verdict under cacheDir, and the primary checkout's cache dir
+// when cacheDir is a linked worktree's, returning its ref or "". A hook stores from the
+// session's checkout, and `magus query output` run from a worker's own checkout reads only
+// that checkout's store and the primary's.
+func storeVerdict(ctx context.Context, cacheDir, verdict string) string {
+	ref, _ := trail.WriteBlob(ctx, cacheDir, verdictRefPrefix, []byte(verdict))
+	if ref == "" {
+		return ""
+	}
+	if primary, ok := primaryCacheDir(cacheDir); ok {
+		_, _ = trail.WriteBlob(ctx, primary, verdictRefPrefix, []byte(verdict))
+	}
+	return ref
+}
+
+// primaryCacheDir is cacheDir's counterpart in the primary checkout of its repository: the
+// same path relative to that checkout's root. False when cacheDir is in the primary checkout
+// already, in no git checkout, or outside its checkout's tree, where every checkout shares it.
+func primaryCacheDir(cacheDir string) (string, bool) {
+	if cacheDir == "" {
+		return "", false
+	}
+	real := realPath(cacheDir)
+	root, common, ok := gitCheckout(real)
+	if !ok || filepath.Base(common) != ".git" {
+		return "", false
+	}
+	primary := filepath.Dir(common)
+	rel, err := filepath.Rel(root, real)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || samePath(primary, root) {
+		return "", false
+	}
+	return filepath.Join(primary, rel), true
 }
 
 // namedWorkspaceRule reports whether rule is a workspace rule's own name rather than the
@@ -220,7 +256,7 @@ func shapeAdvice(ctx context.Context, markers hint.Gate, rule, text string, whys
 	if _, ok := Rule(rule); ok {
 		full += "\nsee: " + ruleDocsBase + rule + "/"
 	}
-	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(full))
+	ref = storeVerdict(ctx, markers.CacheDir(), full)
 	if ref == "" {
 		return full, ""
 	}

@@ -169,7 +169,7 @@ var ruleDocBackgroundLeft = types.RuleDoc{
 	Name:    string(denyRuleBackgroundLeft),
 	Catches: "an agent finishing while shell commands it ran in the background are still running",
 	Why: "A host does not stop a finished subagent's background tasks, and once the subagent has reported nobody is told when one ends or that it is still running: a transcript search left behind by a scout ran for four hours. " +
-		"At a subagent's stop magus reads the subagent's own transcript for the shell commands it ran in the background (run_in_background, a foreground call the host moved to the background, a watcher's command) that no completion notice, stop call or watcher expiry has ended, and refuses the stop naming each by id, start time, age and command. " +
+		"At a subagent's stop magus reads the subagent's own transcript for the shell commands it ran in the background (run_in_background, a foreground call the host moved to the background, a watcher's command) that no completion notice, stop call or watcher expiry has ended, and refuses the stop naming each by id, start time, age and command. A run under `magus job exec --timeout`, which check-timeout sends a worker to background and which stops at its deadline, and a commit the host moved to the background while its hooks run, end on their own: their completion notice is how the agent hears the result, so neither holds a stop. " +
 		"At a root session's stop it advises instead, and only of tasks older than 30 minutes: a root wakes on a task's completion notice, so a young task is one it is waiting on, and the person is there to decide. " +
 		"Reads the host's transcript by shape, so a host whose transcript records no background task in that shape is never refused. Set to advise, a subagent's stop is advised too.",
 }
@@ -657,7 +657,7 @@ var ruleDocWorkerBackgroundRun = types.RuleDoc{
 	Why: "A worker that backgrounds its check ends its turn with the run pending and parks there: nothing reports the result to the session that spawned it, and the background tasks pile up. " +
 		"It fires when the wiring reports that the host runs the call in the background, for a `magus run` or `magus affected` by a worker under a live lease that does not integrate the checkout. A run that only reports (--plan, --dry-run, --graph, --help) passes. " +
 		"A wiring that does not report how the host runs a call leaves it silent, and so does a pre-authorized next, since the host's choice is the call's and not the line's. " +
-		"The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum is one to hand back for a narrower check.",
+		"The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum runs under `magus job exec --timeout`, which this rule passes in the background: its completion notice is the wait, and background-left does not refuse the stop while it runs.",
 }
 
 var ruleDocWorktreeRemove = types.RuleDoc{
@@ -696,10 +696,10 @@ var ruleDocSleepPoll = types.RuleDoc{
 		"A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. " +
 		"Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. " +
 		"A watch (`--watch`) is not a status read, and a loop is busy-wait's. " +
-		"A worker (a session whose lease is a child row or a subagent's) never waits for the build budget, in a shell call or a watcher: `magus status --wait` or `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more. " +
-		"It commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. " +
+		"A worker (a session whose lease is a child row or a subagent's) waits for the build budget only in the call the wait gates: `magus status --wait` piped into a magus call, which reserves the seat for it (a run, an affected or a `graph build`), or followed by `&&` and the call. A `magus status --wait` that gates no magus call, `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more is refused. " +
+		"A worker that cannot wait commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. " +
 		"A `magus run` or `magus affected` whose argv matches one this checkout's run log recorded refused with MGS3009 in the last 60 seconds is the same poll with no sleep at all: it is refused with `magus status --wait | <the command>` as the next line, which waits for a seat and then runs, or for a worker with the report-and-stop above. " +
-		"A line that pipes `status --wait` into the run passes, and only run logs written inside the minute are opened. " +
+		"A line whose `status --wait` gates the run passes, and only run logs written inside the minute are opened. " +
 		"It compares argv exactly, so the same run with a flag added, removed or reordered is a different command. " +
 		"It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.",
 }
@@ -804,9 +804,9 @@ var ruleDocCheckTimeout = types.RuleDoc{
 	Catches: "a bound worker's magus run whose timeout is shorter than the target's last real run allows for",
 	Why: "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
 		"The duration is the newest run of that target and project that really ran, from the newest invocations in the repository's session store; a replay or a run refused before it started does not count. " +
-		"It names a timeout of half again that duration, rounded up to a minute and capped at the host's foreground maximum. When the last run alone took longer than the maximum it says the check cannot finish in the foreground and to ask the orchestrator for a narrower one. " +
+		"It names a timeout of half again that duration, rounded up to a minute and capped at the host's foreground maximum. When the run needs longer than the maximum it names the same run under `magus job exec --timeout`, to run in the background and wait on by its completion notice. " +
 		"It reads the host's foreground default and maximum from the wiring, which declares them, and the call's own timeout, and is silent when either limit is undeclared, when the target has no recorded run, and for anyone but a worker under a live lease that does not integrate the checkout. " +
-		"Held to one firing per target per session.",
+		"Held to one firing per target per session, refusing included: after it a rerun of the same target, narrowed or not, goes through.",
 }
 
 var ruleDocDependencyInstall = types.RuleDoc{
