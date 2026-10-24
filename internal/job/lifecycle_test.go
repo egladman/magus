@@ -1869,3 +1869,19 @@ func TestWaitEvidenceFollowsWhoMayVerify(t *testing.T) {
 	}, observeClaim(j.result), map[string]string{types.PrimaryGoalID: "here"})
 	require.ErrorContains(t, err, "a holder does not verify its own work")
 }
+
+func TestStaleRunsLeaveOutGeneratedPaths(t *testing.T) {
+	t.Parallel()
+
+	ws := Workspace{Projects: []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{
+		"index-generate": {{Glob: "MAGUS.md"}},
+		"gen":            {{Glob: "gen/*.go", Except: []string{"gen/*_test.go"}}},
+	}}}}
+	s := NewStore(tempLocation(t, t.TempDir())).InWorkspace(ws)
+	assert.True(t, s.generated("MAGUS.md"))
+	assert.True(t, s.generated("gen/a.go"))
+	assert.True(t, s.generated(".gitattributes"), "a file magus maintains itself is regenerated beside the change too")
+	assert.False(t, s.generated("gen/a_test.go"), "an output's exception is written by hand")
+	assert.False(t, s.generated("internal/job/verify.go"))
+	assert.False(t, tempStore(t, t.TempDir()).generated("MAGUS.md"), "a store opened without a workspace knows no declared output")
+}

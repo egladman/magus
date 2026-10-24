@@ -1058,3 +1058,37 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 	assert.False(t, blind.Verified, "a graph nobody read never passes a symbol goal")
 	assert.Contains(t, strings.Join(blind.Gates[1].Violations, "\n"), "could not read the symbol graph")
 }
+
+func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, WritePaths: []string{"a.go", "b.go"}, State: types.StateRunning}
+	rep := types.JobResult{
+		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
+		Job:          "integrate",
+		ChangedPaths: []string{"a.go", "MAGUS.md"},
+		GateEvidence: []types.GateEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
+	}
+	attempts := []types.JobGateAttempt{
+		{GateID: "go-test", Attempt: types.JobAttempt{Found: true, Ref: "test-ref", Project: ".", Target: "go-test"}},
+		{GateID: "lint", Attempt: types.JobAttempt{Found: true, Ref: "lint-ref", Project: ".", Target: "lint"}},
+	}
+	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil, Observed{Changed: []string{"a.go", "b.go", "c.go"}, ChangedKnown: true})
+	assert.True(t, status.Verified, "the merge range is the change, and the integrator's runs are declared evidence: %v", status.Violations)
+	require.Len(t, status.Gates, 2)
+
+	rep.GateEvidence = rep.GateEvidence[:1]
+	status = VerifyGates(row, rep, types.JobAttempt{}, attempts[:1], nil, Observed{})
+	assert.False(t, status.Verified, "the integrator's lint run is required, not optional")
+	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "lint"`)
+}
+
+func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	goals := integratorGoals(row)
+	require.Len(t, goals, 1)
+	assert.Equal(t, "lint", goals[0].ID)
+	assert.Empty(t, integratorGoals(acceptRow()), "a job that integrates nothing holds only what it declares")
+}
