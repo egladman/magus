@@ -820,6 +820,25 @@ func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
 	assert.True(t, c.Test, "the record's test reaches the row's check")
 }
 
+// An exited dependency is done editing, so nobody collecting it leaves its dependent
+// queued forever: the clock starts at the exit, and only a declared or running one holds it.
+func TestJobIdleSinceStartsAtAnExitedDependency(t *testing.T) {
+	t.Parallel()
+
+	row := Job{ID: "next", State: StateDeclared, Updated: 100, DependsOn: []string{"first"}}
+	exited := Job{ID: "first", State: StateExited, Updated: 300}
+	since, waiting := JobIdleSince([]Job{exited, row}, row)
+	assert.False(t, waiting)
+	assert.Equal(t, int64(300), since)
+	assert.True(t, JobStaleAt([]Job{exited, row}, row, 300+3600, time.Hour))
+
+	for _, state := range []JobState{StateRunning, StateDeclared} {
+		dep := Job{ID: "first", State: state, Updated: 300}
+		_, waiting = JobIdleSince([]Job{dep, row}, row)
+		assert.True(t, waiting, "a %s dependency still holds the clock", state)
+	}
+}
+
 func dependent(id string, state JobState, dependsOn string, paths ...string) Job {
 	return Job{ID: id, State: state, WritePaths: paths, DependsOn: []string{dependsOn}}
 }

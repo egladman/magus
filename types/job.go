@@ -1658,9 +1658,10 @@ func (u Job) StaleAt(observed int) bool {
 
 // JobIdleSince is when row's jobs.stale_after clock started, in unix seconds, reading its
 // dependencies from rows. A declared row nobody took is QUEUED while a job it depends on is
-// live, so waiting is true and it has no clock; once the last one ends, the clock starts at
-// the later of that end and the row's own last update. Every other row's clock is its last
-// update. A dependency no row declares never ends, so it holds nothing back.
+// still editing (declared or running), so waiting is true and it has no clock; once the last
+// one ends or exits, the clock starts at the later of that and the row's own last update, so
+// an exited dependency nobody collects cannot hold its dependent forever. Every other row's
+// clock is its last update. A dependency no row declares holds nothing back.
 func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 	since = row.Updated
 	if row.State != StateDeclared || row.Registered != 0 {
@@ -1670,7 +1671,7 @@ func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == dep })
 		switch {
 		case i < 0:
-		case rows[i].State.Live():
+		case rows[i].State.Editing():
 			return 0, true
 		default:
 			since = max(since, rows[i].Updated)
