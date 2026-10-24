@@ -366,7 +366,7 @@ func (s *session) frame() string {
 	if WantsColor(s.out, s.probe) {
 		dim = func(t string) string { return Colorize(t, SGRDim) }
 	}
-	b.WriteString(boxRule(inner, boxTL, boxTR, prompt+": "+s.filter+"_", "", dim))
+	b.WriteString(boxRule(inner, boxTL, boxTR, fmt.Sprintf("%s: %s_", prompt, s.filter), "", dim))
 	b.WriteString("\n")
 	for i := start; i < end; i++ {
 		idx := s.matches[i]

@@ -1,6 +1,7 @@
 package difftui
 
 import (
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -296,7 +297,7 @@ func TestCommentsAndPendingSuggestionsSitUnderTheirHunk(t *testing.T) {
 
 func TestLinkDecoratesOnlyTheFileHeading(t *testing.T) {
 	t.Parallel()
-	m := New(Input{Files: testFiles(), Link: func(p string) string { return "<" + p + ">" }})
+	m := New(Input{Files: testFiles(), Link: func(p string) string { return fmt.Sprintf("<%s>", p) }})
 	assert.Contains(t, fileRowText(m, RowFile, 0), "<a.go>")
 	assert.Contains(t, m.overviewRows()[0].Rendered, "<a.go>")
 	assert.Equal(t, "a.go", m.overviewRows()[0].Path, "the decoration is in Rendered and nowhere else")

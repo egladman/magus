@@ -2,6 +2,7 @@ package interactive
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestHintLogsAHintRecordOnce(t *testing.T) {
 	msg := "pass --force to replace it: " + t.Name()
 	Hint(t.Context(), msg, attr.Component("spell"))
 	Hint(t.Context(), msg)
-	assert.Equal(t, "level=INFO msg=\""+msg+"\" component=spell notice=hint\n", buf.String())
+	assert.Equal(t, fmt.Sprintf("level=INFO msg=\"%s\" component=spell notice=hint\n", msg), buf.String())
 }
 
 func TestHintLogsNothingWithHintsDisabled(t *testing.T) {

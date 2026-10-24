@@ -2,6 +2,7 @@ package tty
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -474,7 +475,7 @@ func bolden(s SGR) SGR {
 	if s == "" {
 		return SGRBold
 	}
-	return s + ";" + SGRBold
+	return SGR(fmt.Sprintf("%s;%s", s, SGRBold))
 }
 
 // style drops color when the terminal does not want it. The notifier draws
