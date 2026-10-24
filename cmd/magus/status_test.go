@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
@@ -26,6 +28,46 @@ import (
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
+
+func TestPrintSilentLeases(t *testing.T) {
+	silent := []guard.SilentLease{
+		{Lease: "job-a", Session: "s1", SilentSeconds: 2700},
+		{Lease: "job-b", Session: "s2", SilentSeconds: 4000, BackgroundNote: "the host named no transcript, so background commands were not counted"},
+	}
+	var buf bytes.Buffer
+	printSilentLeases(&buf, silent, nil)
+	out := buf.String()
+	assert.Contains(t, out, "job-a  session s1")
+	assert.Contains(t, out, "job-b  session s2")
+	assert.Contains(t, out, "no transcript")
+	assert.Contains(t, out, "nothing was ended")
+
+	buf.Reset()
+	printSilentLeases(&buf, nil, nil)
+	assert.Empty(t, buf.String(), "no silent lease prints nothing")
+
+	buf.Reset()
+	printSilentLeases(&buf, nil, errors.New("store unreadable"))
+	assert.Contains(t, buf.String(), "not read: store unreadable", "a failed read is said, not dropped")
+}
+
+func TestStatusReportInlinesTheSnapshot(t *testing.T) {
+	report := statusReport{
+		StatusSnapshot: types.StatusSnapshot{PoolError: "no pool"},
+		SilentLeases:   []guard.SilentLease{{Lease: "job-a", Session: "s1", SilentSeconds: 2700}},
+	}
+	raw, err := json.Marshal(report)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Contains(t, got, "silent_leases")
+	assert.NotContains(t, got, "StatusSnapshot", "the snapshot's fields sit at the top level")
+	assert.Contains(t, string(raw), "no pool")
+
+	raw, err = json.Marshal(statusReport{})
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "silent_leases", "no silent lease and no error adds no key")
+}
 
 func TestPrintStatusCompact(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
