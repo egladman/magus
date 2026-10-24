@@ -8,6 +8,10 @@
 //
 // Only NEW targets, read from the diff: an existing target without outputs is a decision
 // already made, and re-litigating it on every unrelated push is how a bot gets muted.
+//
+// A target that edits part of a hand-written file declares it with
+// ctx.modifiesExistingFiles, which magus hashes but never snapshots or cleans. That is a
+// declared write, not a missing one, so it is not advised on.
 import "vcs";
 import "advice";
 import "magus";
@@ -23,8 +27,22 @@ fun body(targets: [str]) > str {
         + "nothing to snapshot, so it re-runs every time, and `magus clean` cannot "
         + "remove what it wrote. If it produces a file, declare it:\n\n"
         + "```buzz\nctx.writesFiles(\"gen/**\");\n```\n\n"
+        + "If it rewrites only part of a file a person also edits, such as a generated block "
+        + "between markers, declare that instead with `ctx.modifiesExistingFiles(...)`. "
         + "If it only checks something and writes nothing, this is correct as written - "
         + "gates have no outputs. See [Cache model](https://eli.gladman.cc/magus/concepts/cache/).\n";
+}
+
+// declaresWrites reports whether a target names what it writes: whole outputs it owns, or
+// files it edits in place.
+fun declaresWrites(writes: int, modifies: int) > bool {
+    return writes > 0 or modifies > 0;
+}
+
+test "an in-place edit counts as a declared write" {
+    std\assert(declaresWrites(0, modifies: 1), message: "modifiesExistingFiles alone");
+    std\assert(declaresWrites(1, modifies: 0), message: "writesFiles alone");
+    std\assert(!declaresWrites(0, modifies: 0), message: "a gate declares neither");
 }
 
 fun main() > void !> any {
@@ -66,7 +84,7 @@ fun main() > void !> any {
     var bare = mut [];
     foreach (project in magus\describe.graph().projects) {
         foreach (t in project.nodes) {
-            if (t.writesFiles.len() != 0) { continue; }
+            if (declaresWrites(t.writesFiles.len(), modifies: t.modifiesExistingFiles.len())) { continue; }
             foreach (n in names) {
                 if (magus\canonicalName(n) != t.name) { continue; }
                 if (!advice\declaredAtBase(n, base: base)) { bare.append(project.path + ":" + t.name); }

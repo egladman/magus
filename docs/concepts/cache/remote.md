@@ -70,7 +70,7 @@ logic, so it lives in YAML where it can't branch or compute itself. The spell
 **self-gates** via `enabled()` on the configuration it was given, so the provider is a
 no-op anywhere it isn't configured (e.g. a developer machine with no credentials). It
 never gates on detecting where it runs; see
-[Told, never guessed](../../doctrine.md#told-never-guessed):
+[Told, never guessed](../../design/judgment/told-never-guessed.md):
 
 ```buzz
 // magusfile.buzz

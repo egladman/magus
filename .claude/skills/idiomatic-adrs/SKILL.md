@@ -20,7 +20,7 @@ or feature, or reopening a removed one:
 
 1. Search the records: `magus query "kind=docsection id=~decisions/ <terms>"`.
 2. Read the matching Alternatives and `not built` rows, and the refusal rows in
-   [docs/doctrine.md](../../../docs/doctrine.md#a-record-of-refusals).
+   [docs/design/refusals.md](../../../docs/design/refusals.md).
 3. Cite the number in your plan. Reopen a decision only with evidence it did not have.
 
 ## Decide whether to write one
@@ -31,7 +31,7 @@ or feature, or reopening a removed one:
 - Do not write one for research with no decision, or a choice that lives and dies in one
   pull request.
 - A measured decision not to build, with no built consequence, is one row in
-  doctrine.md's record of refusals. Link it to an ADR when one decision has several.
+  the record of refusals. Link it to an ADR when one decision has several.
 
 ## What a record owes its reader
 
@@ -42,21 +42,21 @@ or feature, or reopening a removed one:
 - **Quote the evidence.** A number needs its sample and its date. "Slow" is not evidence.
 - **Name the unknowns** under Open questions instead of deciding them quietly.
 
-## Check the decision against doctrine
+## Check the decision against the design principles
 
 Hold every record's decision against the principles in
-[docs/doctrine.md](../../../docs/doctrine.md) before accepting it. This step is
-required. Read the principles, then add a `### Doctrine checked` H3 under Decision.
+[the design principles](../../../docs/design.md) before accepting it. This step is
+required. Read the principles, then add a `### Principles checked` H3 under Decision.
 Link each principle the decision relies on or departs from, with one sentence on how.
 
 - A departure names the principle, what bends and why, and who decided. A decision that
   contradicts a principle without saying so is the defect this step exists to catch.
 - A record that touches an agent integration cites
-  [The outer harness stays outside](../../../docs/doctrine.md). Magus judges and informs.
+  [The outer harness stays outside](../../../docs/design.md). Magus judges and informs.
   It never transforms what the host's inner loop sends, and agent-loaded text stays static
   and version-controlled. That principle is on an unmerged branch
   (`feat/proofread-library-improvements-87c508`, commit 94344b71c): cite it as pending until
-  it lands in doctrine.md, then link its heading.
+  it lands in docs/design/, then link its page.
 - Principles the decision does not touch need no mention.
 
 ## Keep it true

@@ -108,16 +108,16 @@ deny would refuse every retry; the tests that pinned them showed it (a gated pus
 a person's own wiring edit refused, every `git restore` refused). They deny once their
 rule reads the remedy's effect.
 
-### Doctrine checked
+### Principles checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. Advice nobody acts
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. Advice nobody acts
   on is the warning nobody reads; a refusal with its remedy is the loud failure.
-- [Built for the expensive era](../doctrine.md#built-for-the-expensive-era): relied on. A
+- [Built for the expensive era](../design/principles/built-for-the-expensive-era.md): relied on. A
   cheaper model follows a deny with a command in it; it does not weigh advice.
-- [Automation you can interrogate](../doctrine.md#automation-you-can-interrogate): relied
+- [Automation you can interrogate](../design/judgment/automation-you-can-interrogate.md): relied
   on. `magus describe rules` lists each rule's default and the verdicts a workspace may
   give it, and a notice says why it cannot deny.
-- [A record of refusals](../doctrine.md#a-record-of-refusals): departs from ADR 0006
+- [A record of refusals](../design/refusals.md): departs from ADR 0006
   section 2, which this supersedes. Eli decided this on 2026-10-21.
 
 ## Alternatives

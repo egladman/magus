@@ -14,7 +14,7 @@ const RuleSuppressionUnused Rule = "suppression-unused"
 // everyKind is each kind a text may be judged as, for a rule that reads the
 // text's own markers rather than its prose.
 var everyKind = []Kind{
-	KindDocComment, KindReference, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
+	KindDocComment, KindReference, KindPrinciple, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
 	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindDiagnostic, KindCommitMessage, KindCLIHelp, KindIssue, KindReleaseNotes,
 	KindChangelog, KindAgentReply, KindToolDescription, KindStylesheet,
 }

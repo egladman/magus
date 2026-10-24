@@ -18,7 +18,7 @@ import (
 )
 
 // adoptionReport measures how often agents reached for the knowledge graph versus a raw text
-// search, over shell commands. It turns magus's own doctrine (query before
+// search, over shell commands. It turns magus's own principle (query before
 // grepping) into a number a user can watch move as the graph gets easier to reach.
 //
 // magus does the ANALYSIS; it never reads a specific agent host's logs, because it is

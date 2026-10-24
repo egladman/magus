@@ -2,7 +2,7 @@
 // provider host, or the http module reaching one - to the Buzz files the boundary names: a
 // provider spell, the queue's own provider script, a hack/ driver a person or workflow
 // runs, or a workflow action step. Elsewhere Go opens no provider socket either (the Go half of this
-// rule is providerio in libs/conventions); see docs/doctrine.md, "provider I/O is Buzz",
+// rule is providerio in libs/conventions); see docs/design/judgment/provider-io-is-buzz.md,
 // and plans/inflight-view-2026-09-27.md sec 3.
 //
 // Tier 1, mechanical: the fix moves the call into a file the boundary names.

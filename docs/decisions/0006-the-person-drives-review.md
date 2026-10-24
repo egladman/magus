@@ -193,7 +193,7 @@ The forces, from the tree at 002e91670:
 
 - An advise finding fails nothing. The `pr-description` target prints it with
   `magus\log.warn` and passes (`magusfile.buzz:735-758`). That is the warning nobody reads
-  in a CI log, which [No silent defaults](../doctrine.md#no-silent-defaults) rules out.
+  in a CI log, which [No silent defaults](../design/judgment/no-silent-defaults.md) rules out.
 - The pass bar is a flag, not policy. `--fail-on deny|advise|never` defaults to `never`
   (`libs/proofread/cmd/proofread/main.go:252`), so a bare run exits 0 whatever it finds.
 - How far to trust a rule is already measured, then dropped. `evidenceCeiling`
@@ -218,16 +218,16 @@ The forces, from the tree at 002e91670:
 The exit codes keep their meaning: 0 passes, 1 is a deny finding (a low grade among them),
 2 is input proofread cannot judge.
 
-#### Doctrine checked
+#### Principles checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): a kind with no minimum is an
+- [No silent defaults](../design/judgment/no-silent-defaults.md): a kind with no minimum is an
   error, and advice that changed nothing is gone from CI output.
-- [A refusal carries its reason](../doctrine.md#a-refusal-carries-its-reason): a low grade
+- [A refusal carries its reason](../design/judgment/a-refusal-carries-its-reason.md): a low grade
   names the minimum and the rules that cost the most, not only a number.
-- [Agents propose, humans dispose](../doctrine.md#agents-propose-humans-dispose): the
+- [Agents propose, humans dispose](../design/judgment/agents-propose-humans-dispose.md): the
   minimums are this repository's policy, committed by a person with a reason. No number
   measured here ships as a default in the binary, as section 2 already requires.
-- [The outer harness stays outside](../doctrine.md#the-outer-harness-stays-outside): the
+- [The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md): the
   guard reads the grade and denies or allows. It rewrites nothing the host sends.
 
 #### Alternatives

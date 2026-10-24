@@ -342,19 +342,19 @@ Choosing among them:
   through. The push gate asks an unleased session before it publishes a commit no
   passing gate covers, and a host that cannot prompt gets a deny. A rule whose
   denial a person might want to clear still denies; the person changes the rule
-  ([A record of refusals](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-record-of-refusals)).
+  ([A record of refusals](https://github.com/egladman/magus/blob/main/docs/design/refusals.md)).
 
 ### Rules that need judgment
 
-| the rule is                                          | home                                                                                                               | example here                                                                                                              |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| needed on every edit by every session                | a line in `AGENTS.md`                                                                                              | "Before fixing behavior that looks wrong, find the test that pins it."                                                    |
-| needed for one kind of task, about how to use magus  | a shipped `magus-*` skill                                                                                          | `magus-vcs-hygiene` before a commit                                                                                       |
-| needed for one kind of task, about this repository   | the local `magus-local-development` skill                                                                          | triaging a review finding against magus's own Go                                                                          |
-| a decision with alternatives and a built consequence | an ADR in `docs/decisions/`                                                                                        | ADR 0001 records what it rejected "so they are not re-proposed"                                                           |
-| a measured decision not to build, or to remove       | a row in [A record of refusals](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-record-of-refusals) | the `cd` guard rule, deleted: 207 of 238 denies already passed                                                            |
-| a standing principle about how the tool behaves      | an entry in `docs/doctrine.md` that names its mechanism                                                            | [A refusal carries its reason](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-refusal-carries-its-reason) |
-| an explanation for someone using magus               | a docs page                                                                                                        | [The guard](https://github.com/egladman/magus/blob/main/docs/guides/integrations/agents/guard.md)                         |
+| the rule is                                          | home                                                                                                 | example here                                                                                                                     |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| needed on every edit by every session                | a line in `AGENTS.md`                                                                                | "Before fixing behavior that looks wrong, find the test that pins it."                                                           |
+| needed for one kind of task, about how to use magus  | a shipped `magus-*` skill                                                                            | `magus-vcs-hygiene` before a commit                                                                                              |
+| needed for one kind of task, about this repository   | the local `magus-local-development` skill                                                            | triaging a review finding against magus's own Go                                                                                 |
+| a decision with alternatives and a built consequence | an ADR in `docs/decisions/`                                                                          | ADR 0001 records what it rejected "so they are not re-proposed"                                                                  |
+| a measured decision not to build, or to remove       | a row in [A record of refusals](https://github.com/egladman/magus/blob/main/docs/design/refusals.md) | the `cd` guard rule, deleted: 207 of 238 denies already passed                                                                   |
+| a standing principle about how the tool behaves      | a page in `docs/design/` that names its mechanism                                                    | [A refusal carries its reason](https://github.com/egladman/magus/blob/main/docs/design/judgment/a-refusal-carries-its-reason.md) |
+| an explanation for someone using magus               | a docs page                                                                                          | [The guard](https://github.com/egladman/magus/blob/main/docs/guides/integrations/agents/guard.md)                                |
 
 Choosing among them:
 
@@ -362,7 +362,7 @@ Choosing among them:
   or a hook demands it, so a rule that must hold on every edit goes in
   `AGENTS.md`, which every session reads. Every line there costs every session
   and is deleted when a tool starts saying it. The measured reach of a skill is
-  in the [record of refusals](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-record-of-refusals).
+  in the [record of refusals](https://github.com/egladman/magus/blob/main/docs/design/refusals.md).
 - A shipped skill teaches a stable procedure, so it never names this repository.
   A rule true only here goes in the local skill, stamped with its evidence and a
   retire-when condition ([`magus-workspace-rules`](https://github.com/egladman/magus/blob/main/.claude/skills/magus-workspace-rules/SKILL.md)).
@@ -375,7 +375,7 @@ Choosing among them:
 - An ADR records a decision that landed. A refusal row records one line of
   evidence for something not built, and links to an ADR when one decision has
   several.
-- A doctrine entry without an enforcing mechanism is a debt and is listed as one.
+- A design page without an enforcing mechanism is a debt and is listed as one.
   Edit the page in the same commit that changes the behavior.
 
 ### Shipped or only this repository
@@ -621,9 +621,9 @@ push reports all three:
   bytes at most. `feat(git): install version-controlled buzz hooks` passes;
   `Add git hooks.` does not. Check one with `magus run pr-title . -- "<title>"`.
 - The title and description follow the proofread rules (`pr-description`). The description
-  opens with what the change set out to do and why, says where the work left the plan
-  (Cut, Changed from plan, Not done, Not verified), keeps its claims next to their
-  evidence, and describes the situation rather than a person or the earlier code.
+  opens with what the change set out to do and why, says what it changes in meaning
+  rather than files, gathers what a reviewer should weigh under Considerations (with
+  unfinished work as unchecked tasks), keeps its claims next to their evidence, and describes the situation rather than a person or the earlier code.
   The guard's `pull-request-text` rule runs the same checks when a description is posted.
   The shape, the claim and tone rules, and the decisions they take are in [Writing rules](https://github.com/egladman/magus/blob/main/docs/conventions.md#writing-rules),
   and each rule has a [page](https://github.com/egladman/magus/blob/main/docs/reference/proofread/index.md). Check a draft with

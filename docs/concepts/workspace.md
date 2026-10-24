@@ -247,7 +247,7 @@ magus\project({
 ```
 
 `human_only` is where a
-[human in the loop](../doctrine.md#human-in-the-loop) meets cost: the reason string is what the
+[human in the loop](../design/principles/human-in-the-loop.md) meets cost: the reason string is what the
 person reads when the guard asks, and a person at their own terminal runs the target
 without being asked.
 

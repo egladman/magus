@@ -94,14 +94,14 @@ spell's own `describe` or `mark` to them. Where a zero value would admit what a 
 meant to refuse (a change's `fork`, an approval count), the decoder requires the member
 (`requiredMembers` in `cmd/magus-utils/boundary_decode.go`).
 
-### Doctrine checked
+### Principles checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): an answer the response does not
+- [No silent defaults](../design/judgment/no-silent-defaults.md): an answer the response does not
   declare is an error naming the field, where the old readers ignored unknown keys and read
   a wrong-typed one as absent.
-- [Provider I/O is Buzz](../doctrine.md#provider-io-is-buzz): the HTTP and the vendor
+- [Provider I/O is Buzz](../design/judgment/provider-io-is-buzz.md): the HTTP and the vendor
   vocabulary stay in the spell; Go only states the shape of what crosses.
-- [A copy can be the right answer](../doctrine.md#a-copy-can-be-the-right-answer): the
+- [A copy can be the right answer](../design/principles/a-copy-can-be-the-right-answer.md): the
   per-family meaning of a missing export (always active, unsupported, refuse) stays in
   each caller rather than in a flag on `CallOp`.
 

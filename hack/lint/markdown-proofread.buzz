@@ -94,9 +94,13 @@ final JUDGE = "{proofread\home}/{proofread\command}";
 // KINDS are proofread's kinds this rule runs, one judge run each.
 final KINDS = ["reference", "guide", "agent-brief", "skill-template", "changelog"];
 
-// GUIDES are the procedural pages; concepts, reference, doctrine and the decision records
+// GUIDES are the procedural pages; concepts, reference, design and the decision records
 // explain and keep the general Markdown rules.
 final GUIDES = ["docs/guides/**"];
+
+// PRINCIPLES are the design pages, each one rule argued in the author's voice; the
+// index, the standard and the refusals table beside them stay reference pages.
+final PRINCIPLES = ["docs/design/principles/*.md", "docs/design/judgment/*.md"];
 
 // FRAGMENTS are the changelog fragments: one Keep a Changelog group heading and one entry
 // each, which changes/README.md describes and hack/magusfile/changelog.buzz parses.
@@ -104,8 +108,11 @@ final FRAGMENTS = ["changes/unreleased/*.md"];
 
 // kindOf is proofread's kind for the hand-written file at rel: a skill body the
 // agent package renders, a skill or an AGENTS.md an agent loads as written, a changelog fragment, a
-// guide, or any other Markdown, which a reader looks things up in.
+// guide, a design-principle page, or any other Markdown, which a reader looks things up in.
 export fun kindOf(rel: str) > str !> any {
+    if (path\matchesAny(PRINCIPLES, path: rel)) {
+        return "principle";
+    }
     if (path\matchesAny(FRAGMENTS, path: rel)) {
         return "changelog";
     }
@@ -615,7 +622,10 @@ test "a skill body, a loaded skill, a guide and any other page each take their o
         assert\equal(kindOf(page), want: "guide", message: page);
     }
     assert\equal(kindOf("docs/concepts/cache.md"), want: "reference", message: "a concept page");
-    assert\equal(kindOf("docs/doctrine.md"), want: "reference", message: "doctrine");
+    assert\equal(kindOf("docs/design.md"), want: "reference", message: "the design index");
+    assert\equal(kindOf("docs/design/principles/clear-is-better-than-clever.md"), want: "principle", message: "a principle");
+    assert\equal(kindOf("docs/design/judgment/no-silent-defaults.md"), want: "principle", message: "a judgment call");
+    assert\equal(kindOf("docs/design/refusals.md"), want: "reference", message: "the refusals table");
     assert\equal(kindOf("changes/unreleased/affected-ci-sizes-its-gate.md"), want: "changelog", message: "a fragment");
     assert\equal(kindOf("changes/README.md"), want: "reference", message: "the fragments' own page");
 }

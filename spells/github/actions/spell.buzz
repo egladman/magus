@@ -14,7 +14,7 @@
 //
 //   if (os\env("CI_PROVIDER") == "github-actions") { magus\ci.provider(github); }
 //
-// See "Told, never guessed" in docs/doctrine.md.
+// See docs/design/judgment/told-never-guessed.md.
 //
 // The REVIEW contract for this vendor lives in spells/github/review instead, and the split is
 // the runtime rather than the vendor: every op here checks for the Actions token first, which

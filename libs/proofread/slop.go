@@ -61,9 +61,9 @@ var (
 	// prosePages are the kinds written as running prose. A guide's steps and a
 	// skill's runbook are short imperatives by rule (step-verb, terse-sentence),
 	// so a run of short sentences there is the form, not a drumbeat.
-	prosePages = []Kind{KindReference, KindChangeDescription, KindIssue, KindReleaseNotes}
+	prosePages = []Kind{KindReference, KindPrinciple, KindChangeDescription, KindIssue, KindReleaseNotes}
 	// pageKinds are the kinds that hold headings.
-	pageKinds = []Kind{KindReference, KindGuide, KindAgentBrief, KindIssue, KindReleaseNotes}
+	pageKinds = []Kind{KindReference, KindPrinciple, KindGuide, KindAgentBrief, KindIssue, KindReleaseNotes}
 )
 
 // slopChecks run after [toneChecks].

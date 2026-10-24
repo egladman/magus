@@ -192,29 +192,29 @@ fold into `magus session show` and its JSON, and metrics go through the existing
 | shadow verdicts per level, and OTEL metrics                                    | done      |
 | per-model stall ladders                                                        | not built |
 
-### Doctrine checked
+### Principles checked
 
-[Doctrine](../doctrine.md) holds each of these up against this decision.
+Each [design principle](../design.md) below is held up against this decision.
 
-- [Human-first is the AI integration](../doctrine.md#human-first-is-the-ai-integration):
+- [Human-first is the AI integration](../design/principles/human-first-is-the-ai-integration.md):
   relied on. The level is a magusfile call and the facts are `magus.yaml` keys, with no
   command-line flag that feeds a model.
-- [Friction that carries meaning](../doctrine.md#friction-that-carries-meaning): relied on.
+- [Friction that carries meaning](../design/principles/friction-that-carries-meaning.md): relied on.
   Each advisory fires once per session per threshold, because an advisory that fires on
   every call is a toll.
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. An unknown level is
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. An unknown level is
   MGS1045, a model row with no window fails at load, a declared `quota` under a metered
   environment is an error, and so is a budget `tokens` figure past every window in the
   table.
-- [Agents propose, humans dispose](../doctrine.md#agents-propose-humans-dispose): relied on.
+- [Agents propose, humans dispose](../design/judgment/agents-propose-humans-dispose.md): relied on.
   A stall files a row for the root and the person to read, and never picks the remedy.
-- [Told, never guessed](../doctrine.md#told-never-guessed): departed from, in two places.
+- [Told, never guessed](../design/judgment/told-never-guessed.md): departed from, in two places.
   Billing is read from the host's environment, and a Codex or Cursor session that records a
   spawn and has no lease is taken for a root. Both change advice only: wording, thresholds
   and an unknown thread's verdict capped at advice. Neither changes what a command does, and a
   declared value that contradicts a detected one is an error. The departure was Eli's
   decision on 2026-10-13, and `agents.billing` stays as the way to state the mode outright.
-- [The outer harness stays outside](../doctrine.md): pending, because the principle sits on
+- [The outer harness stays outside](../design.md): pending, because the principle sits on
   an unmerged branch (`feat/proofread-library-improvements-87c508`). The decision is meant to
   agree with it. The guard judges and informs, and no rule here trims, rewrites or proxies
   what the host's loop sends the model.
@@ -251,7 +251,7 @@ fold into `magus session show` and its JSON, and metrics go through the existing
 
 The stall rule's declined designs, a model that watches workers, the root as the watcher,
 and a denial from the gauge among them, are rows in
-[A record of refusals](../doctrine.md#a-record-of-refusals).
+[A record of refusals](../design/refusals.md).
 
 ## Consequences
 

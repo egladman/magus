@@ -33,7 +33,7 @@ export final TEMPLATE_PAGES = {
 };
 
 // ENVIRONMENT_DETECTION_VARS are the variables that say WHERE magus runs. A page that
-// reads one teaches the reader to sniff it (docs/doctrine.md, "Told, never guessed").
+// reads one teaches the reader to sniff it (docs/design/judgment/told-never-guessed.md).
 // conventions_test.go holds this list equal to environmentDetectionVars, which governs
 // the code.
 export final ENVIRONMENT_DETECTION_VARS = [
@@ -84,7 +84,7 @@ export fun environmentFindings(file: str, md: str) > [ConventionFinding] {
         foreach (p in [envCallPattern, envProcessPattern]) {
             foreach (m in p.matchAll(line) ?? [<[str]>]) {
                 found.append(ConventionFinding{ file = file, line = n, rule = "environment-detection",
-                    message = "reads " + m[1] + " to learn where it runs; take a flag, a charm or a magus.yaml key instead (docs/doctrine.md, \"Told, never guessed\")" });
+                    message = "reads " + m[1] + " to learn where it runs; take a flag, a charm or a magus.yaml key instead (docs/design/judgment/told-never-guessed.md)" });
             }
         }
     }

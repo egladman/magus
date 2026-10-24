@@ -86,7 +86,7 @@ func TestTenseReportsTheFutureAndTheAuthor(t *testing.T) {
 		{"won't and it'll", KindReference, "It won't retry, and it'll fail.", []string{"1:won't", "1:it'll"}},
 		{"at will", KindReference, "Rebuild at will.", nil},
 		{"the author changing code", KindReference, "We added a flag, and I have moved the cache.", []string{"1:We added", "1:I have moved"}},
-		// docs/doctrine.md speaks as the project.
+		// docs/design/ speaks as the project.
 		{"the project's voice on a page", KindReference, "We believe a warning is a bug. Our users run it in CI.", nil},
 		{"the project's voice in a pull request", KindChangeDescription, pr("- We believe the cap holds."), nil},
 		{"an opinion in a pull request", KindChangeDescription, pr("- I think my cap holds."), nil},

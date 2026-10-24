@@ -253,7 +253,7 @@ it; a composite action's `run:` steps do not see them either:
 
 A job that exports neither variable misses every read and stores nothing, and so does a
 laptop. The spell never checks whether it runs under Actions: the exported credentials are
-what switch it on (see [Told, never guessed](../../doctrine.md#told-never-guessed)).
+what switch it on (see [Told, never guessed](../../design/judgment/told-never-guessed.md)).
 
 See [Remote cache](../../concepts/cache/remote.md) for what gets stored, how entries are
 keyed, and the guarantees a shared cache does and does not give you.

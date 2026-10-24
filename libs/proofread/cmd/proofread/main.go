@@ -94,6 +94,7 @@ func kindCommand(kind proofread.Kind) (subcommand, bool) {
 var subcommands = []subcommand{
 	{"doc-comment", proofread.KindDocComment, inputSymbols, "--stdin", "judge the doc of each symbol in a JSON array on stdin"},
 	{"reference", proofread.KindReference, inputFiles, "FILE...", "judge Markdown pages a reader looks things up in"},
+	{"principle", proofread.KindPrinciple, inputFiles, "FILE...", "judge design-principle pages, argued in the author's voice"},
 	{"guide", proofread.KindGuide, inputFiles, "FILE...", "judge procedural pages, held to the guide rules too"},
 	{"agent-brief", proofread.KindAgentBrief, inputFiles, "FILE...", "judge hand-written instructions an agent loads as written"},
 	{"agent-compact", proofread.KindAgentCompact, inputFiles, "FILE...", "judge grammar-free text only an agent reads"},

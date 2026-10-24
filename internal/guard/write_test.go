@@ -239,7 +239,7 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 	})
 }
 
-// TestGradeLeasedWriteUnenrolled is the doctrine case: a writer magus cannot attribute
+// TestGradeLeasedWriteUnenrolled is the design principle's case: a writer magus cannot attribute
 // is told what it is walking into and is never stopped. magus cannot tell "not part of the
 // fleet" from "part of it and not saying so", and blocking a person in their own checkout
 // is the wrong way to be wrong.

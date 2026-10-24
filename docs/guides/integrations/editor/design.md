@@ -160,7 +160,7 @@ document went wrong.
    so this is a latency optimization rather than a requirement.
 5. A reference client living beside `docs/guides/integrations/` the way the
    OpenCode plugin does: a template the reader owns and edits, per the "the
-   host wiring is yours" entry in `docs/doctrine.md`. Shipped as POSIX sh; see
+   host wiring is yours" page in `docs/design/judgment/the-host-wiring-is-yours.md`. Shipped as POSIX sh; see
    [Reference clients](#reference-clients-shell-first) for why, and for what is
    still held back.
 
@@ -236,7 +236,7 @@ process, and prints where the parent does.
 - `magus ls` inside a `docker build` layer would leave an orphaned background
   process. A build tool that silently spawns long-lived processes is a surprise.
 - `docs/scope.md` promises the daemon "carries an asterisk". Global auto-start
-  makes it a de facto runtime requirement, which is a doctrine change rather than
+  makes it a de facto runtime requirement, which is a design principle change rather than
   a feature, and it should be made deliberately if it is made at all.
 
 ### Why the invariant fixes the documentation
@@ -394,7 +394,7 @@ The first draft led with an editor package. That was the wrong shape, and using
 the thing is what showed it.
 
 The repo's existing reference integrations (`docs/guides/integrations/agents/*.sh`)
-are POSIX sh for a reason doctrine states: the contract should be small enough to
+are POSIX sh for a reason the design principles state: the contract should be small enough to
 hold in your head. An editor package buries the ten lines that teach the contract
 under a couple of hundred lines of mode, hook, and buffer plumbing.
 `magus-events-watch.sh` is the whole contract, and an editor client is visibly

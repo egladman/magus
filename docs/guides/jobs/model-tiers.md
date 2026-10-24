@@ -24,7 +24,7 @@ never changes it afterward.
 magus does not route anything. It never picks a model for a call, retries a job
 at a dearer tier or switches a worker mid-run. A tier changes only when someone
 edits the row, the matrix function or the declaration, which keeps the choice of
-how much to spend with a [human in the loop](../../doctrine.md#human-in-the-loop).
+how much to spend with a [human in the loop](../../design/principles/human-in-the-loop.md).
 
 ## What a workspace gets by default
 

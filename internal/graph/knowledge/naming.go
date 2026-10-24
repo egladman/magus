@@ -497,6 +497,9 @@ func (collisionCheck) run(x *namingIndex) []finding {
 			if !slices.Equal(foldedWords(nameWords(n.Label)), mine) {
 				continue
 			}
+			if n.Kind == types.KindTarget && definesTarget(subj.file(), n.ID) {
+				continue
+			}
 			hit := n.Kind + " `" + n.Label + "`"
 			if n.Kind == types.KindTarget {
 				hit = n.Kind + " `" + strings.TrimPrefix(n.ID, types.KindTarget+":") + "`"
@@ -518,6 +521,13 @@ func (collisionCheck) run(x *namingIndex) []finding {
 		})
 	}
 	return out
+}
+
+// definesTarget reports whether file is the magusfile whose function declares target id: a
+// target's function and the target are one entity, so the same name is not a collision.
+func definesTarget(file, id string) bool {
+	return path.Base(file) == "magusfile.buzz" &&
+		strings.HasPrefix(id, types.KindTarget+":"+path.Dir(file)+":")
 }
 
 // nameWords splits an identifier into words: camelCase, PascalCase, snake_case, kebab-case and

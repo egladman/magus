@@ -254,13 +254,12 @@ var quotedString = regexp.MustCompile(`"([^"]+)"`)
 
 // environmentDetectionVars are the variables that say WHERE magus runs: which CI system,
 // which runner, which hosting platform or agent host. Reading one to change WHAT magus does
-// (a default, a result, which provider or feature is on) is sniffing; docs/doctrine.md,
-// "Told, never guessed", is the rule.
+// (a default, a result, which provider or feature is on) is sniffing; docs/design/judgment/told-never-guessed.md, is the rule.
 //
 // Terminal and interaction variables (TERM, TERM_SESSION_ID, WINDOWID, SSH_TTY and the like)
 // are deliberately absent. They describe the terminal in front of the person, and adapting
 // how magus talks to that terminal (color, links, hover, which prompt it can show, which
-// window a once-only notice belongs to) is the interaction the doctrine keeps. A variable a
+// window a once-only notice belongs to) is the interaction the principle keeps. A variable a
 // person sets to state what they want (NO_COLOR, MAGUS_*) is configuration, not detection.
 var environmentDetectionVars = []string{
 	"CI", "GITHUB_ACTIONS", "GITHUB_WORKFLOW_REF", "RUNNER_ENVIRONMENT", "RUNNER_OS",
@@ -385,7 +384,7 @@ func TestNoEnvironmentSniffing(t *testing.T) {
 	}
 
 	assert.Empty(t, violations,
-		"magus must not detect where it runs (docs/doctrine.md, \"Told, never guessed\").\n"+
+		"magus must not detect where it runs (docs/design/judgment/told-never-guessed.md).\n"+
 			"Reading one of these variables to pick a default, an output or a provider makes the same\n"+
 			"command behave differently on a laptop, a runner and inside an agent's shell, and nobody\n"+
 			"can see why. Take a flag, a charm or a magus.yaml key instead, and have the caller pass\n"+
@@ -987,7 +986,7 @@ var appendAllowed = map[string]string{
 //
 // Tier 1, mechanical: the fix is a call to file.AppendLines or file.AppendLinesNoSync, which
 // every hand-rolled append so far could make with its behavior unchanged. A store is JSON
-// Lines (docs/doctrine.md, "Everything is a file"), and an append is how one grows, so the
+// Lines (docs/design/principles/everything-is-a-file.md), and an append is how one grows, so the
 // one copy of the append decides the line framing, the single write per batch that keeps a
 // reader from meeting half a line, and the sync.
 func TestStoresAreJSONLines(t *testing.T) {

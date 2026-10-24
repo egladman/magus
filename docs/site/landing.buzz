@@ -557,9 +557,7 @@ std&#92;print(yaml);</code></pre>
     // glossary term (definition baked into the popover) and link inline-code domain
     // references to their reference pages. Root-relative, so "" is both this page's
     // clean directory and the base relativePath resolves from.
-    final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath("", "glossary/"));
-    html = linkRes.html;
-    site.addTermRefs(linkRes.linked, "index.html");
+    html = linkGlossaryTerms(html, site.glossaryTerms, relativePath("", "glossary/")).html;
     html = linkCodeEntities(html, site.codeEntities, "");
 
     // Title is the wordmark: renderPage renders the landing's <title> as bare "magus"
