@@ -251,6 +251,7 @@ func assembleSymbolClass(in Inputs) []Shard {
 		if io := assembleIO(in.Graph.Projects, own); len(io.Edges) > 0 {
 			shards[i].Edges = append(shards[i].Edges, io.Edges...)
 		}
+		shards[i].Edges = append(shards[i].Edges, splitEdges(sh.Nodes, sh.Edges)...)
 	}
 	var out []Shard
 	for _, sh := range shards {
@@ -862,3 +863,100 @@ func runtimeUnitID(unit string) string {
 // isRuntimeShard reports whether name is the isolated runtime shard, excluded from
 // remote export (local run history, not shareable derived data).
 func isRuntimeShard(name string) bool { return name == runtimeShardName }
+
+// The splits edge attr keys, and the classes attrSplitClass takes.
+const (
+	attrSplitSuffix  = "suffix"
+	attrSplitClass   = "class"
+	attrSplitCoupled = "coupled"
+
+	splitConcept   = "concept"
+	splitPlatform  = "platform"
+	splitGenerated = "generated"
+	splitTest      = "test"
+)
+
+// splitEdges links each file of nodes to the root splitRoot finds, with the suffix, the
+// splitClass and whether the two share a symbol: one references a declaration the other
+// defines.
+func splitEdges(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge) []types.KnowledgeEdge {
+	files := map[string]types.KnowledgeNode{}
+	for _, n := range nodes {
+		if n.Kind == types.KindFile && n.Source != "" {
+			files[n.Source] = n
+		}
+	}
+	defined, referenced := map[string]map[string]bool{}, map[string]map[string]bool{}
+	for _, e := range edges {
+		var into map[string]map[string]bool
+		switch e.Relation {
+		case types.RelationDefines:
+			into = defined
+		case types.RelationReferences:
+			into = referenced
+		default:
+			continue
+		}
+		if p, ok := parseDescriptors(e.Target); !ok || len(afterNamespace(p)) == 0 {
+			continue
+		}
+		if into[e.Source] == nil {
+			into[e.Source] = map[string]bool{}
+		}
+		into[e.Source][e.Target] = true
+	}
+	shares := func(a, b string) bool {
+		for sym := range referenced[a] {
+			if defined[b][sym] {
+				return true
+			}
+		}
+		return false
+	}
+
+	var out []types.KnowledgeEdge
+	for _, file := range slices.Sorted(maps.Keys(files)) {
+		root, suffix, ok := splitRoot(file, files)
+		if !ok {
+			continue
+		}
+		from, to := fileID(file), fileID(root)
+		e := extractedEdge(from, to, types.RelationSplits, "")
+		e.Attrs = map[string]string{
+			attrSplitSuffix:  suffix,
+			attrSplitClass:   splitClass(files[file]),
+			attrSplitCoupled: strconv.FormatBool(shares(from, to) || shares(to, from)),
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// splitRoot is the non-test file in file's directory, with its extension, whose stem is the
+// longest file's stem extends at an underscore, and the rest of file's stem after it.
+func splitRoot(file string, files map[string]types.KnowledgeNode) (root, suffix string, ok bool) {
+	dir, ext := path.Dir(file), path.Ext(file)
+	stem := strings.TrimSuffix(path.Base(file), ext)
+	for i := strings.LastIndexByte(stem, '_'); i > 0; i = strings.LastIndexByte(stem[:i], '_') {
+		candidate := path.Join(dir, stem[:i]+ext)
+		if _, exists := files[candidate]; exists && !types.IsTestPath(candidate) {
+			return candidate, stem[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
+// splitClass is why a sibling exists apart from its root: a test, generated output, a
+// platform build, or else a concept split by hand.
+func splitClass(n types.KnowledgeNode) string {
+	switch {
+	case types.IsTestPath(n.Source):
+		return splitTest
+	case n.Attrs[attrGenerated] == "true" || generatedPath(n.Source):
+		return splitGenerated
+	}
+	if _, platform := platformStem(n.Source); platform {
+		return splitPlatform
+	}
+	return splitConcept
+}

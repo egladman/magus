@@ -220,14 +220,16 @@ func conformanceFailures(c ConformanceConfig) []FieldFailure {
 
 func conformanceLimitFailures(field string, metric types.ConformanceMetric, l ConformanceLimitConfig) []FieldFailure {
 	var out []FieldFailure
-	// mode-knobs and export-scope are lists, not distributions: anchor 0 names every function
-	// shared past the coupling rule or every export nothing outside its package uses, and
-	// percentile 0 measures no proposal.
-	list := metric == types.ConformanceModeKnobs || metric == types.ConformanceExportScope
+	// The list metrics judge a norm of none, not a distribution: anchor 0 names every item
+	// holding any of what it measures, and percentile 0 measures no proposal.
+	list := slices.Contains([]types.ConformanceMetric{types.ConformanceModeKnobs, types.ConformanceExportScope,
+		types.ConformanceMainLogic, types.ConformanceStorePathExport}, metric)
+	// file-split is a floor, which a percentile cannot propose.
+	unproposed := list || metric == types.ConformanceFileSplit
 	switch {
-	case list && l.Percentile < 0:
+	case unproposed && l.Percentile < 0:
 		out = append(out, FieldFailure{Field: field + ".percentile", Tag: "gte", Param: "0", Value: fmt.Sprint(l.Percentile)})
-	case !list && l.Percentile <= 0:
+	case !unproposed && l.Percentile <= 0:
 		out = append(out, FieldFailure{Field: field + ".percentile", Tag: "gt", Param: "0", Value: fmt.Sprint(l.Percentile)})
 	}
 	if l.Percentile > 100 {
