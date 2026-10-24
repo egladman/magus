@@ -241,6 +241,14 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StrVal(ret0), nil
 	}))
+	m.MapSet("scratchCheckoutDir", vm.DirectValue("fs.scratchCheckoutDir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		purpose := ffi.Str(bzArgs, 0)
+		ret0, err := std.FsScratchCheckoutDir(ctx, purpose)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StrVal(ret0), nil
+	}))
 	m.MapSet("readLines", vm.DirectValue("fs.readLines", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.FsReadLines(ctx, path)

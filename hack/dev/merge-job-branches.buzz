@@ -4,10 +4,12 @@ import "flags";
 import "fs";
 import "io";
 import "magus";
+import "proc";
 import "serialize";
 import "std";
 import "vcs";
 import "hack/magusfile/branch-stack" as stack;
+import "hack/dev/bootstrap-checkout" as bootstrap;
 
 import "assert";
 
@@ -375,9 +377,69 @@ export fun settledByClaims(s: stack\BranchStack) > bool {
     return false;
 }
 
-fun regenerateWithMagus(base: str) > fun (dir: str) > void !> any {
+// KEPT starts the error of a run that left its tree in place for inspection; withTree
+// removes every other failing tree.
+final KEPT = "merge-job-branches: kept the merged tree ";
+
+// causeLine is the one line of text that says why a command failed: the first line naming
+// an error code or the word error or fail, else the first line that is not a JSON dump.
+export fun causeLine(text: str) > str {
+    var first = "";
+    foreach (l in lines(text)) {
+        if (l.startsWith("\{") or l.startsWith("[\{") or l.startsWith("}")) { continue; }
+        if (first == "") { first = l; }
+        final low = l.lower();
+        if (l.indexOf("MGS") != null or l.indexOf("BZZ") != null or low.indexOf("error") != null or low.indexOf("fail") != null) {
+            return clip(l);
+        }
+    }
+    return clip(first);
+}
+
+fun clip(line: str) > str {
+    if (line.len() <= 240) { return line; }
+    return line.sub(0, len: 240) + "...";
+}
+
+// keptTree is the error that leaves the tree at dir for inspection: where it is, which
+// target failed, where that target's full log is and the one line that says why.
+export fun keptTree(dir: str, target: str, text: str) > str {
+    var ref = refIn(text);
+    if (ref == "") { ref = "none printed"; }
+    return "{KEPT}{dir}\n  failed target: {target}\n  output ref: {ref} (magus query output {ref})\n  cause: {causeLine(text)}\n  remove it with: git worktree remove --force {dir}";
+}
+
+// readyFailure names the target a gateReady error stopped at: its `gate-ready: <what>: exit
+// N: ...` prefix, else the build that precedes the first of them.
+export fun readyFailure(text: str) > str {
+    final head = "gate-ready: ";
+    if (text.startsWith(head)) {
+        final stop = text.indexOf(": exit ");
+        if (stop != null) { return text.sub(head.len(), len: stop! - head.len()); }
+    }
+    return "go-build (the ./magus bootstrap)";
+}
+
+// readyAt builds a ./magus at the tree's own HEAD, plus the graph and symbol digest it
+// needs, with the recipe every gate uses.
+fun readyAt(dir: str) > [str] !> any {
+    return bootstrap\gateReady(bootstrap\liveHost(), dir: dir);
+}
+
+// regenerateWithMagus regenerates with the ./magus ready builds at the tree, since the
+// caller's binary is not at the tree's revision. Any failure keeps the tree.
+fun regenerateWithMagus(base: str, ready: fun (dir: str) > [str] !> any) > fun (dir: str) > void !> any {
     return fun (dir: str) > void !> any {
-        magus\cmd("affected", args: ["generate:rw", "--vcs-base-ref", base], opts: {"dir": dir, "root": dir, "quiet": true});
+        try {
+            ready(dir);
+        } catch (e) {
+            throw keptTree(dir, target: readyFailure("{e}"), text: "{e}");
+        }
+        final ran = proc\exec(fs\join(dir, name: "magus"), args: ["affected", "generate:rw", "--vcs-base-ref", base], dir: dir,
+            opts: {"quiet": true, "allow_failure": true});
+        if (ran.code != 0) {
+            throw keptTree(dir, target: "affected generate:rw", text: "{ran.stderr}\n{ran.stdout}");
+        }
         final changed = unstaged(dir);
         if (changed.len() == 0) { return; }
         final undeclared = mut [<str>];
@@ -470,21 +532,41 @@ export fun commitRegenerated(dir: str, s: stack\BranchStack, regenerate: fun (di
     return git(dir, args: ["rev-parse", "HEAD"]);
 }
 
-// withTree runs body in a temporary detached worktree of root at rev, and removes the
-// worktree however body ends.
+// withTree runs body in a detached worktree of root at rev in a scratch checkout dir,
+// and removes the worktree however body ends.
 fun withTree(root: str, rev: str, body: fun (dir: str) > void !> any) > void !> any {
-    final scratch = fs\tempDir("merge-job-branches-");
-    final dir = scratch + "/tree";
-    git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
+    final dir = fs\scratchCheckoutDir("merge-job-branches");
     try {
+        git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
+    } catch (e) {
+        fs\removeAll(dir);
+        throw e;
+    }
+    try {
+        requireTrusted(dir, checkouts: fs\dirname(fs\dirname(dir)));
         body(dir);
     } catch (e) {
+        if ("{e}".startsWith(KEPT)) { throw e; }
         vcs\cmd(["worktree", "remove", "--force", dir], opts: {"quiet": true, "dir": root, "allow_failure": true});
-        fs\removeAll(scratch);
+        fs\removeAll(dir);
         throw e;
     }
     git(root, args: ["worktree", "remove", "--force", dir]);
-    fs\removeAll(scratch);
+    fs\removeAll(dir);
+}
+
+// requireTrusted fails before a run in dir does: mise refuses an untrusted config, and
+// magus reports that only as a version probe failing (MGS3035).
+fun requireTrusted(dir: str, checkouts: str) > void !> any {
+    try {
+        proc\which("mise");
+    } catch {
+        return;
+    }
+    final shown = proc\exec("mise", args: ["trust", "--show"], dir: dir, opts: {"quiet": true, "allow_failure": true});
+    if ("{shown.stdout}{shown.stderr}".indexOf(": untrusted") != null) {
+        throw "merge-job-branches: mise does not trust {dir}; run `mise settings add trusted_config_paths {checkouts}` once";
+    }
 }
 
 fun refIn(text: str) > str {
@@ -739,7 +821,7 @@ export fun main(args: [str]) > void !> any {
         withTree(root, rev: plan.base, body: fun (dir: str) > void !> any {
             result = mergeLayers(dir, s: plan, into: into, settle: settleWithMagus);
             if (!allMerged(result)) { return; }
-            regenerated = commitRegenerated(dir, s: result, regenerate: regenerateWithMagus(plan.base));
+            regenerated = commitRegenerated(dir, s: result, regenerate: regenerateWithMagus(plan.base, ready: readyAt));
             git(root, args: ["branch", into, git(dir, args: ["rev-parse", "HEAD"])]);
             // A file settled by job claims is a merge no job's check has seen, so every
             // merged job's checks run on it whether or not --verify asked.
@@ -1044,6 +1126,47 @@ test "a layer settled by job claims says so, and only then does the merge owe a 
     assert\equal(settledByClaims(claimed), want: true, message: "edit-a settled one");
     assert\equal(claimed.layers[1].reason.split("\n")[1], want: line, message: "the layer lists the settle under its merge");
     fs\removeAll(root);
+}
+
+test "a failed readiness keeps the tree and names its path, target, ref and one cause line" {
+    final root = fixtureRepo();
+    final dump = `{"findings": [{"rule": "x"}, {"rule": "y"}]}` + "\n";
+    var kept = "";
+    final said = raisedBy(fun () > void !> any {
+        withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+            kept = dir;
+            regenerateWithMagus("main", ready: fun (d: str) > [str] !> any {
+                throw "gate-ready: magus run symbol-digest-generate .: exit 1: {dump}MGS8001 digest failed, output: out123abc\n{dump}";
+            })(dir);
+        });
+    });
+    assert\equal(fs\isDir(kept), want: true, message: "the tree stays");
+    assert\equal(said.startsWith("{KEPT}{kept}\n"), want: true, message: "it names the path: {said}");
+    assert\equal(said.indexOf("failed target: magus run symbol-digest-generate .\n") != null, want: true, message: "the target: {said}");
+    assert\equal(said.indexOf("output ref: out123abc (") != null, want: true, message: "the ref: {said}");
+    assert\equal(said.indexOf("cause: MGS8001 digest failed, output: out123abc\n") != null, want: true, message: "the cause: {said}");
+    assert\equal(said.indexOf("findings") == null, want: true, message: "no JSON dump: {said}");
+    vcs\cmd(["worktree", "remove", "--force", kept], opts: {"quiet": true, "dir": root});
+    fs\removeAll(root);
+}
+
+test "any other failure still removes the tree" {
+    final root = fixtureRepo();
+    var gone = "";
+    raisedBy(fun () > void !> any {
+        withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+            gone = dir;
+            throw "boom";
+        });
+    });
+    assert\equal(fs\isDir(gone), want: false, message: "the tree is gone");
+    fs\removeAll(root);
+}
+
+test "the cause line skips JSON and takes the first error line, else the first plain line" {
+    assert\equal(causeLine(`{"a": 1}` + "\nstep one\nMGS1 broke\nlater"), want: "MGS1 broke", message: "coded");
+    assert\equal(causeLine(`[{"a": 1}]` + "\nplain words\nmore"), want: "plain words", message: "plain");
+    assert\equal(readyFailure("go run: exit status 2"), want: "go-build (the ./magus bootstrap)", message: "build");
 }
 
 test "the push hint names the branch rule" {

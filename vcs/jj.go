@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -915,15 +916,15 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 	if err != nil {
 		return err
 	}
-	staging, err := os.MkdirTemp("", "magus-jj-export-")
+	staging, err := xdg.ScratchCheckoutDir("jj-export")
 	if err != nil {
 		return fmt.Errorf("jj workspace add: %w", err)
 	}
 	// jj refuses to create a workspace in a directory that already exists, so name the
-	// target inside the temp dir rather than as it.
+	// target inside the scratch dir rather than as it.
 	target := filepath.Join(staging, "tree")
-	// MkdirTemp's suffix makes the workspace name unique, so concurrent exports of the same
-	// repository cannot collide on it.
+	// The scratch dir's random name makes the workspace name unique, so concurrent exports
+	// of the same repository cannot collide on it.
 	name := "magus-export-" + filepath.Base(staging)
 	defer func() {
 		_ = os.RemoveAll(staging)

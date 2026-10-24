@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -316,7 +317,7 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: --rev needs version control, but none resolved for this workspace")
 	}
-	tmp, err := os.MkdirTemp("", "magus-graph-diff-")
+	tmp, err := xdg.ScratchCheckoutDir("graph-diff")
 	if err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: create temp tree: %w", err)
 	}

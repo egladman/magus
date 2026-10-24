@@ -612,6 +612,18 @@ try {
 }
 ```
 
+### scratchCheckoutDir
+
+Create a new empty 0700 directory for one disposable copy of a repository, in $XDG_CACHE_HOME/magus/checkouts/<purpose>, and return its path. purpose names the feature making copies and must be one path element; the parent of the result is the directory that feature cleans, and one mise trusted_config_paths entry for magus/checkouts trusts every copy. The caller removes the copy. Plain scratch files belong in temp_dir.
+
+**Signature:** `fs\scratchCheckoutDir(purpose) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `purpose` | `string` |          |             |
+
+**Returns:** string
+
 ### readLines
 
 Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.

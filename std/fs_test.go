@@ -357,6 +357,26 @@ func TestFsTempUnderAPolicyUsesItsPrivateTempDir(t *testing.T) {
 	assert.Equal(t, private, filepath.Dir(d))
 }
 
+func TestFsScratchCheckoutDir(t *testing.T) {
+	cache := filesystem.ResolveRulePath(t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", cache)
+	parent := filepath.Join(cache, "magus", "checkouts", "merge-job-branches")
+
+	dir, err := FsScratchCheckoutDir(context.Background(), "merge-job-branches")
+	require.NoError(t, err)
+	assert.Equal(t, parent, filepath.Dir(dir))
+
+	denied := sandbox.WithPolicy(context.Background(), &sandbox.Policy{
+		FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: filesystem.ResolveRulePath(t.TempDir()), Read: true, Write: true}}},
+	})
+	_, err = FsScratchCheckoutDir(denied, "graph-diff")
+	require.ErrorIs(t, err, types.PathWriteDenied)
+	assert.NoDirExists(t, filepath.Join(cache, "magus", "checkouts", "graph-diff"), "a denied call creates nothing")
+
+	_, err = FsScratchCheckoutDir(context.Background(), "a/b")
+	require.Error(t, err, "a purpose of two path elements is refused")
+}
+
 func TestFsWriteFileAtomic(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 
@@ -66,7 +67,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	if !interp.Available() {
 		return CompatReport{}, errors.New("release: compat check needs the Buzz interpreter linked")
 	}
-	scratch, err := os.MkdirTemp("", "magus-compat-")
+	scratch, err := xdg.ScratchCheckoutDir("release-compat")
 	if err != nil {
 		return CompatReport{}, fmt.Errorf("release: %w", err)
 	}

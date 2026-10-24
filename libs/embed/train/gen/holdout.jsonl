@@ -208,6 +208,7 @@
 {"group":"file:changes/unreleased/sandbox-policy-grants.md","path":"changes/unreleased/sandbox-policy-grants.md"}
 {"group":"file:changes/unreleased/sandboxed-git-no-global-config.md","path":"changes/unreleased/sandboxed-git-no-global-config.md"}
 {"group":"file:changes/unreleased/scip-claims-its-width.md","path":"changes/unreleased/scip-claims-its-width.md"}
+{"group":"file:changes/unreleased/scratch-checkouts-in-cache-home.md","path":"changes/unreleased/scratch-checkouts-in-cache-home.md"}
 {"group":"file:changes/unreleased/sdk-doctrine-refusals.md","path":"changes/unreleased/sdk-doctrine-refusals.md"}
 {"group":"file:changes/unreleased/sdk-engine-link-open-fails.md","path":"changes/unreleased/sdk-engine-link-open-fails.md"}
 {"group":"file:changes/unreleased/sdk-judge-deny.md","path":"changes/unreleased/sdk-judge-deny.md"}

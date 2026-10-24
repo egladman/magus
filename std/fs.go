@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -269,6 +270,14 @@ var Fs = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
 			Impl:    FsTempDir,
+		},
+		{
+			Name:    "scratch_checkout_dir",
+			Doc:     "Create a new empty 0700 directory for one disposable copy of a repository, in $XDG_CACHE_HOME/magus/checkouts/<purpose>, and return its path. purpose names the feature making copies and must be one path element; the parent of the result is the directory that feature cleans, and one mise trusted_config_paths entry for magus/checkouts trusts every copy. The caller removes the copy. Plain scratch files belong in temp_dir.",
+			Args:    []Arg{{Name: "purpose", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
+			Impl:    FsScratchCheckoutDir,
 		},
 		{
 			Name:    "read_lines",
@@ -1010,6 +1019,26 @@ func FsTempDir(ctx context.Context, prefix string) (string, error) {
 	dir, err := os.MkdirTemp(base, prefix)
 	if err != nil {
 		return "", fmt.Errorf("fs.temp_dir: %w", err)
+	}
+	return dir, nil
+}
+
+// FsScratchCheckoutDir is xdg.ScratchCheckoutDir subject to the sandbox write policy,
+// which judges the purpose's parent directory before anything is created.
+func FsScratchCheckoutDir(ctx context.Context, purpose string) (string, error) {
+	parent, err := xdg.ScratchCheckoutParent(purpose)
+	if err != nil {
+		return "", fmt.Errorf("fs.scratch_checkout_dir: %w", err)
+	}
+	if types.Tracing(ctx) {
+		return filepath.Join(parent, "magus-dry-run"), nil
+	}
+	if err := checkWrite(ctx, parent); err != nil {
+		return "", err
+	}
+	dir, err := xdg.ScratchCheckoutDir(purpose)
+	if err != nil {
+		return "", fmt.Errorf("fs.scratch_checkout_dir: %w", err)
 	}
 	return dir, nil
 }

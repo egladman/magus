@@ -164,6 +164,7 @@ var modules = []Module{
 			{Name: "symlink", Doc: "Create a symbolic link at link pointing to target.", Sig: "fs\\symlink(target, link)"},
 			{Name: "readlink", Doc: "Return the target of the symbolic link at path.", Sig: "fs\\readlink(path) -> string"},
 			{Name: "temp_dir", Doc: "Create a new temporary directory with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise.", Sig: "fs\\tempDir([prefix]) -> string"},
+			{Name: "scratch_checkout_dir", Doc: "Create a new empty 0700 directory for one disposable copy of a repository, in $XDG_CACHE_HOME/magus/checkouts/<purpose>, and return its path. purpose names the feature making copies and must be one path element; the parent of the result is the directory that feature cleans, and one mise trusted_config_paths entry for magus/checkouts trusts every copy. The caller removes the copy. Plain scratch files belong in temp_dir.", Sig: "fs\\scratchCheckoutDir(purpose) -> string"},
 			{Name: "read_lines", Doc: "Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.", Sig: "fs\\readLines(path) -> []string"},
 			{Name: "write_lines", Doc: "Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.", Sig: "fs\\writeLines(path, lines)"},
 		},
