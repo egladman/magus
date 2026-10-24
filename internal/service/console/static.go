@@ -2,6 +2,7 @@ package console
 
 import (
 	"bytes"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -162,7 +163,7 @@ func appRoute(consoleDir, seg string) (string, bool) {
 		if err != nil || !fi.Mode().IsRegular() {
 			return "", false
 		}
-		return "/console/" + e.Name() + "/", true
+		return fmt.Sprintf("/console/%s/", e.Name()), true
 	}
 	return "", false
 }

@@ -1,6 +1,7 @@
 package console
 
 import (
+	"fmt"
 	"net/url"
 	"runtime"
 	"slices"
@@ -49,11 +50,11 @@ func LogViewerURL(base, ref string, events []journal.Event, inv journal.Invocati
 	if err != nil {
 		return "", err
 	}
-	u := strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(ref)
+	u := fmt.Sprintf("%s/#ref=%s", strings.TrimRight(base, "/"), url.QueryEscape(ref))
 	if keyDigests != "" {
 		u += "&key=" + encodeComponent(keyDigests)
 	}
-	return u + "&data=" + encoded, nil
+	return fmt.Sprintf("%s&data=%s", u, encoded), nil
 }
 
 // KeyClassDigest is one cache-key component class and the digest of its key inputs.
@@ -71,7 +72,7 @@ type KeyClassDigest struct {
 func KeyDigestsParam(digests []KeyClassDigest) string {
 	parts := make([]string, 0, len(digests))
 	for _, d := range digests {
-		parts = append(parts, d.Class+":"+d.Digest)
+		parts = append(parts, fmt.Sprintf("%s:%s", d.Class, d.Digest))
 	}
 	return strings.Join(parts, ",")
 }
@@ -108,7 +109,7 @@ func Root(host string) string {
 	if host == "" {
 		return ""
 	}
-	return "http://" + host + "/console/"
+	return fmt.Sprintf("http://%s/console/", host)
 }
 
 // Link assembles a console app's server-origin deep link:
@@ -127,7 +128,7 @@ func Root(host string) string {
 func Link(opts LinkOpts) string {
 	var parts []string
 	for _, p := range opts.Fragment {
-		parts = append(parts, p.Key+"="+encodeComponent(p.Value))
+		parts = append(parts, fmt.Sprintf("%s=%s", p.Key, encodeComponent(p.Value)))
 	}
 	if opts.Code != "" {
 		parts = append(parts, "code="+encodeComponent(opts.Code))
@@ -136,7 +137,7 @@ func Link(opts LinkOpts) string {
 	if len(parts) > 0 {
 		frag = "#" + strings.Join(parts, "&")
 	}
-	return "http://" + opts.Host + "/console/" + opts.App + "/" + frag
+	return fmt.Sprintf("http://%s/console/%s/%s", opts.Host, opts.App, frag)
 }
 
 // AppLink is Link without an origin: /console/<app>/#<directives>.
@@ -152,13 +153,13 @@ func Link(opts LinkOpts) string {
 func AppLink(app string, fragment ...FragmentParam) string {
 	parts := make([]string, 0, len(fragment))
 	for _, p := range fragment {
-		parts = append(parts, p.Key+"="+encodeComponent(p.Value))
+		parts = append(parts, fmt.Sprintf("%s=%s", p.Key, encodeComponent(p.Value)))
 	}
 	frag := ""
 	if len(parts) > 0 {
 		frag = "#" + strings.Join(parts, "&")
 	}
-	return "/console/" + app + "/" + frag
+	return fmt.Sprintf("/console/%s/%s", app, frag)
 }
 
 // LinkTokenLifetime is how long the console token a sign-in link stands for lives, whether the
@@ -200,7 +201,7 @@ func OpenCommandAs(link, goos, bin string) string {
 		// cmd.exe never expands $(...), so the line is PowerShell's, where it does.
 		opener = "Start-Process"
 	}
-	return opener + ` "` + link + sep + "code=$(" + hint.ConfigConsoleTokenCreate.WithAs(bin, "--code", "--expires", LinkTokenExpires()) + `)"`
+	return fmt.Sprintf(`%s "%s%scode=$(%s)"`, opener, link, sep, hint.ConfigConsoleTokenCreate.WithAs(bin, "--code", "--expires", LinkTokenExpires()))
 }
 
 // encodeComponent percent-encodes s the way the browser's encodeURIComponent does, which is what

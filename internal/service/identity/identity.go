@@ -28,6 +28,7 @@ package identity
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -74,7 +75,7 @@ func (i Identity) IsContainer() bool { return i.Image != "" }
 // one "" bucket, so two unrelated `magus buzz` scripts declaring the same image still
 // share a container. Callers that can supply a root must.
 func InstanceKey(root string, s spells.Service) string {
-	return root + "\x00" + Fingerprint(s)
+	return fmt.Sprintf("%s\x00%s", root, Fingerprint(s))
 }
 
 // Fingerprint returns the exact-match sharing key: a hex hash of the service's
@@ -92,7 +93,7 @@ func Fingerprint(s spells.Service) string {
 		// A stable, field-tagged serialization so two orderings of the same flags
 		// hash equal (Parse sorts the repeatable groups) while distinct fields can
 		// never collide across the delimiters.
-		mustWrite(h, []byte("image="+id.Image+"\x00tag="+id.Tag))
+		mustWrite(h, []byte(fmt.Sprintf("image=%s\x00tag=%s", id.Image, id.Tag)))
 		writeTagged(h, "port", id.Ports)
 		writeTagged(h, "env", id.Env)
 		writeTagged(h, "vol", id.Volumes)
@@ -136,7 +137,7 @@ func ClusterKey(s spells.Service) (string, bool) {
 	if len(id.Ports) > 0 {
 		port = id.Ports[0]
 	}
-	return id.Image + "\x00" + port, true
+	return fmt.Sprintf("%s\x00%s", id.Image, port), true
 }
 
 // Parse extracts the tool-aware [Identity] from a process command using a
