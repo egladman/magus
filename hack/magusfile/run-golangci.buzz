@@ -117,10 +117,7 @@ export fun issuesAt(dir: str, packages: [str], files: [str]) > [str] !> any {
     final bin = binary();
     final args = ["run", "--config", root + "/.golangci.yml", "--output.json.path", "stdout",
         "--path-mode", "abs", "--issues-exit-code", "0"] + (if (dir != ".") libArgs(dir) else [<str>]) + packages;
-    var printed = "";
-    os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, fun () > void !> any {
-        printed = proc\exec(bin, args, root + "/" + dir, opts: {"quiet": true}).stdout;
-    });
+    final printed = proc\exec(bin, args, root + "/" + dir, opts: {"quiet": true}).stdout;
     return issuesIn(printed, root: root, files: files);
 }
 
