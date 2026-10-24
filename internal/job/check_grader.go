@@ -23,6 +23,10 @@ type CheckVerdict struct {
 	Reason string
 	// NotGraded says why no verdict on the check was reached, empty when one was.
 	NotGraded string
+	// Deferred says why the grade waits for the checkout, empty when it does not: the
+	// forking binary could not load the workspace's rules, which a binary built at the
+	// checkout may. The fork stores the row, and the grader has already said so on stderr.
+	Deferred string
 }
 
 // CheckGrader judges row's check the way the guard will judge row's holder running it in
@@ -82,6 +86,7 @@ const humanOnlyRule = "human-only"
 // graded as the row with that check, and a check two goals share is graded once. A check
 // the grader reached no verdict on is one JobUngraded problem, and grading stops there: why
 // no verdict was reached is the workspace's or the binary's, and holds for every check. A
+// deferred grade ends the grading the same way but is no problem: the row is stored. A
 // Store with no grader of its own grades with the one [SetCheckGrader] installed; with
 // neither, and for a job with no check, nothing is found.
 func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
@@ -110,6 +115,9 @@ func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types
 		which := "check"
 		if goal.ID != types.PrimaryGoalID {
 			which = fmt.Sprintf("goal %s's check", goal.ID)
+		}
+		if verdict.Deferred != "" {
+			return ps
 		}
 		if verdict.NotGraded != "" {
 			p := ungradedCheckProblem(row.ID, which, goal.Check, verdict.NotGraded)
