@@ -112,6 +112,28 @@ func TestWatcherIgnoresBuiltinPaths(t *testing.T) {
 	}
 }
 
+// A scratch checkout lives under XDG_CACHE_HOME/magus/checkouts, so its root has a dot
+// segment above it. The watcher must still report a write inside it.
+func TestWatcherUnderACacheCheckoutReportsWrites(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), ".cache", "magus", "checkouts", "merge-queue", "1", "gate-1")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+
+	w, err := New(
+		context.Background(),
+		WithRoot(root),
+		WithDebounce(50*time.Millisecond),
+		WithIgnore(BuiltinIgnore),
+	)
+	require.NoError(t, err)
+	defer w.Close()
+
+	legit := filepath.Join(root, "main.go")
+	awaitEvent(t, w, legit, func() {
+		require.NoError(t, os.WriteFile(legit, []byte("package main"), 0o644))
+	})
+}
+
 func TestWatcherDetectsNewSubdir(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -241,10 +263,10 @@ func TestBuiltinIgnore(t *testing.T) {
 		path    string
 		ignored bool
 	}{
-		{"/repo/.git/config", true},
-		{"/repo/.magus/abc", true},
-		{"/repo/node_modules/lodash/index.js", true},
-		{"/repo/api/target/debug/foo", true},
+		{"/repo/.git", true},
+		{"/repo/.magus", true},
+		{"/repo/node_modules", true},
+		{"/repo/api/target", true},
 		{"/repo/api/foo.go", false},
 		{"/repo/magus-1234-abcd.sock", true},
 		{"/repo/api/main_test.go~", true},

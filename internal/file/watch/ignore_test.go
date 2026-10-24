@@ -11,9 +11,9 @@ import (
 
 func TestBuiltinIgnore_VCSMeta(t *testing.T) {
 	for _, path := range []string{
-		"/work/.git/COMMIT_EDITMSG",
-		"/work/node_modules/pkg/index.js",
-		"/work/.magus/cache.json",
+		"/work/.git",
+		"/work/node_modules",
+		"/work/.magus",
 	} {
 		assert.True(t, BuiltinIgnore(path), "BuiltinIgnore(%q) should be true", path)
 	}
@@ -40,27 +40,31 @@ func TestCompose_Empty(t *testing.T) {
 	assert.False(t, none("anything"), "Compose() should return false for any input")
 }
 
-// A CHECKOUT UNDER A DOT-DIRECTORY IS STILL A CHECKOUT, and this is the bug that pins it.
-//
-// BuiltinIgnore walks every segment of the ABSOLUTE path and skips any dot-directory, which
-// is right for a tree inside the workspace and catastrophic for one the workspace sits
-// inside: an agent worktree at <repo>/.claude/worktrees/<name> has a dot segment above its
-// root, so every file in it was ignored and the watcher went permanently silent. Measured
-// here: the job feed reported nothing at all in an agent's own worktree.
-//
-// RelativeIgnore judges a path by where it sits UNDER the root, which is the only thing the
-// predicate was ever meant to be asking.
+// A CHECKOUT UNDER A DOT-DIRECTORY IS STILL A CHECKOUT. An agent worktree sits under
+// <repo>/.claude/worktrees and a scratch checkout under ~/.cache/magus/checkouts, so every
+// absolute path in either carries a dot segment above the root. Judging those segments
+// silenced the watcher in both: the job feed showed nothing, and CI's watch tests timed out
+// once the gate checkout moved under XDG_CACHE_HOME.
+func TestBuiltinIgnoreNeverJudgesAboveTheRoot(t *testing.T) {
+	for _, root := range []string{
+		"/repo/.claude/worktrees/feature",
+		"/home/runner/.cache/magus/checkouts/merge-queue/1/gate-1/tmp/TestX/001",
+	} {
+		assert.False(t, BuiltinIgnore(root+"/internal/trail/trail.go"), "a file under %s", root)
+		assert.False(t, BuiltinIgnore(root+"/internal"), "a directory under %s", root)
+		assert.True(t, BuiltinIgnore(root+"/node_modules"), "a skip dir under %s", root)
+		assert.True(t, BuiltinIgnore(root+"/.git"), "a dot dir under %s", root)
+	}
+}
+
 func TestRelativeIgnoreJudgesUnderTheRootNotAboveIt(t *testing.T) {
 	const root = "/repo/.claude/worktrees/feature"
 	src := root + "/internal/trail/trail.go"
 
-	assert.True(t, BuiltinIgnore(src),
-		"the absolute form skips it for a dot segment ABOVE the root, which is the bug")
-
 	rel := RelativeIgnore(root, BuiltinIgnore)
 	assert.False(t, rel(src), "a source file under the root is watched wherever the root lives")
-	assert.True(t, rel(root+"/node_modules/pkg/index.js"), "a real skip dir under the root is still skipped")
-	assert.True(t, rel(root+"/.git/HEAD"), "so is a dot dir under the root")
+	assert.True(t, rel(root+"/node_modules"), "a real skip dir under the root is still skipped")
+	assert.True(t, rel(root+"/.git"), "so is a dot dir under the root")
 	assert.True(t, rel(root+"/internal/trail/.DS_Store"), "and so is an editor temporary")
 	assert.True(t, rel("/elsewhere/trail.go"), "a path outside the root is not this watcher's business")
 }
