@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -23,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
@@ -35,6 +37,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -78,13 +81,23 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobApply(ctx, root, args[1:])
 	case "prune":
 		return jobPrune(ctx, root, args[1:])
+	case "pause":
+		return jobPause(ctx, root, "pause", args[1:])
+	case "resume":
+		return jobPause(ctx, root, "resume", args[1:])
 	default:
-		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm, prune, pause or resume; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
+// jobCommandSpec is `magus job` as the command registry declares it.
+func jobCommandSpec() cmdline.Command {
+	i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "job" })
+	return commands.Root.Children[i]
+}
+
 func jobUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|apply|exec|exit|wait|run|rm|prune> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: "+jobCommandSpec().Usage)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
@@ -93,15 +106,9 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "Kept per repository, so every worktree and clone reads one set of jobs.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  fork  declare a job, from flags or a JSON record on stdin")
-	fmt.Fprintln(os.Stderr, "  apply upsert jobs' specs from -f <file|->, keeping each job's state")
-	fmt.Fprintln(os.Stderr, "  exec  take the lease on a job here, and record the base this checkout landed on")
-	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
-	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
-	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
-	fmt.Fprintln(os.Stderr, "  run   submit one of the server's own jobs and return")
-	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
-	fmt.Fprintln(os.Stderr, "  prune end every job nobody is working, each with the reason; --all adds idle taken ones")
+	for _, c := range jobCommandSpec().Children {
+		fmt.Fprintf(os.Stderr, "  %-6s %s\n", c.Name, c.Short)
+	}
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "`"+hint.LsJobs.String()+"` lists every job in flight, and `"+hint.DescribeJob.With("<job>")+"` prints one job's terms.")
 	fmt.Fprintln(os.Stderr, "")
@@ -1556,6 +1563,9 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := refusePaused(store, pos[0]); err != nil {
+		return err
+	}
 	stored, err := store.Exec(ctx, pos[0])
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
@@ -1606,6 +1616,11 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 	if root != "" {
 		if loc, err := jobPlace(root); err == nil {
 			lease, _ = job.ActingLease(loc, spawn.Lease)
+			if lease != "" {
+				if err := refusePaused(job.NewStore(loc), lease); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -2344,6 +2359,68 @@ func printJobFootprint(out io.Writer, s job.Status) {
 			line += "  (entered: may be the entrant's write, not the holder's)"
 		}
 		fmt.Fprintf(out, "  %s\n", line)
+	}
+}
+
+// refusePaused refuses work under job id while a person has it paused.
+func refusePaused(store *job.Store, id string) error {
+	rows, err := store.List()
+	if err != nil {
+		return fmt.Errorf("magus job exec: read whether %s is paused: %w", id, err)
+	}
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 && rows[i].Paused != 0 {
+		return types.ExitError{Code: cache.ExitCodeMachineBusy, Err: errors.New("magus job exec: " + job.PausedLine(id))}
+	}
+	return nil
+}
+
+// jobPause is `magus job pause` and `magus job resume`, which verb says.
+func jobPause(ctx context.Context, root, verb string, args []string) error {
+	spec := jobCommandSpec()
+	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == verb })]
+	ids, err := cmdParse("job "+verb, args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: "+child.Usage)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, cmp.Or(child.Description, child.Short))
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return exit.Usagef("magus job %s: requires at least one job (`%s` lists them)", verb, hint.LsJobs)
+	}
+	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
+	if err != nil {
+		return err
+	}
+	change := store.Pause
+	if verb == "resume" {
+		change = store.Resume
+	}
+	rows, err := change(ctx, ids...)
+	if err != nil {
+		return fmt.Errorf("magus job %s: %w", verb, err)
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames(os.Stdout, ids)
+	case outputText:
+		for _, row := range rows {
+			if row.Paused != 0 {
+				fmt.Printf("paused %s; its holder's next magus run is refused until `%s`\n", row.ID, hint.BinaryName()+" job resume "+row.ID)
+			} else {
+				fmt.Printf("resumed %s\n", row.ID)
+			}
+		}
+		return nil
+	default:
+		return emitFormatted(opts, rows)
 	}
 }
 

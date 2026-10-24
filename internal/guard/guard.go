@@ -1540,6 +1540,7 @@ type roleScopedRule struct {
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
 		{denyRuleLeaseCheckout, denyLeaseCheckout},
+		{denyRuleLeasePaused, denyPausedLease},
 		{denyRuleLeaseGate, denyLeaseScopedGate},
 		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
 		{denyRuleName(advisoryGateRepeat), denyRepeatGate},

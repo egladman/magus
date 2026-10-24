@@ -170,7 +170,8 @@ since changed.
 The older run's verdict is about files that have already changed, so the machine spends
 its time on the newer one instead. The ordering comes from the tree and never from the
 caller: one resolved root, both invocations the whole `ci` target, later start wins.
-There is no priority to set. A sibling worktree is a different tree and still refuses, a
+There is no priority to set for this ordering; a job's pause and weight, under the
+machine budget below, never move it. A sibling worktree is a different tree and still refuses, a
 `run build` behind a `run test` still refuses, and a lock held by one of the run's own
 ancestors is still refused as [MGS3007](../reference/codes/sandbox/MGS3007.md). A holder
 that does not answer within thirty seconds is refused exactly like any other contention.
@@ -329,6 +330,13 @@ Key properties:
   for them, on the same terms as the lock. `magus status --wait` is the wait a caller
   asks for: it reserves the seat it sized for the run it pipes into, so that run is not
   refused, while a bare run still refuses at once.
+- **A person can get one job out of a bind.** `magus job pause <job>...` refuses that
+  job's holder its next magus run, through `magus job exec` and the guard, until
+  `magus job resume <job>...`; a run already holding the budget finishes, since nothing
+  is preempted. A job's `weight`, in (0,1] on its record and 0.5 when omitted, leans
+  its waiters forward: a run bound to the job asks again every 100ms (500ms under
+  `status --wait`) divided by weight/0.5, so weight 1 asks twice as often. It is a lean,
+  never a guarantee: the broker keeps no queue, and the first ask after a release wins.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
   leaves a run whose broker does not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead

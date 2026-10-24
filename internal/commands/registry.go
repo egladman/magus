@@ -2293,9 +2293,14 @@ orchestrator widens; a holder may apply only the release of its own paths.
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
 
+pause holds jobs' holders off the machine budget: their next magus run is refused
+until resume. A run already holding the budget finishes. A job's weight, in (0,1]
+on its record, leans its runs' retries ahead of other waiters; it is a lean, never
+a place in a queue.
+
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|rm|prune> [flags]",
+	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|rm|prune|pause|resume> [flags]",
 	Children: []cmdline.Command{
 		{
 			Name:  "fork",
@@ -2423,6 +2428,20 @@ shows what it is doing.`,
 			},
 			Usage: "magus job prune [--all] [flags]",
 		},
+		{
+			Name:  "pause",
+			Short: "Hold jobs' holders off the machine budget until resumed",
+			Description: "Mark each job paused, so `magus job exec` and the guard refuse its holder's next magus run with one " +
+				"line naming the pause and `magus job resume <job>`. Nothing is preempted: a run already holding the budget " +
+				"finishes. A holder may not pause or resume a job; that is a person's or the orchestrator's. Pausing is how a " +
+				"person gets one job out of a bind without stopping every other.",
+			Usage: "magus job pause <job>... [flags]",
+		},
+		{
+			Name:  "resume",
+			Short: "Lift the pause on jobs",
+			Usage: "magus job resume <job>... [flags]",
+		},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Declare a job", Command: "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
@@ -2437,6 +2456,7 @@ shows what it is doing.`,
 		{Comment: "Preview that change", Command: "magus job apply -f job.json --dry-run"},
 		{Comment: "Grade a job's checks in a merged tree", Command: "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{Comment: "See which jobs a prune would end", Command: "magus job prune --dry-run"},
+		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core && magus job resume session-load/core"},
 	},
 }
 

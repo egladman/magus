@@ -1244,6 +1244,9 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
 	}}
+	if c.machine != nil {
+		h.claim.Weight = LeaseWeight(ctx, c.dir)
+	}
 	id, release, err := c.machine.claim(ctx, h.claim)
 	if err != nil {
 		return ctx, nil, err

@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -436,6 +437,28 @@ func TestDeclarationCarriesMaxAttempts(t *testing.T) {
 	assert.Equal(t, 3, row.MaxAttempts)
 	Declaration{ID: "worker"}.ApplySpec(&row)
 	assert.Zero(t, row.MaxAttempts)
+}
+
+// A weight outside (0,1] is refused, never clamped, and an explicit 0 is out of range rather
+// than read as omitted.
+func TestDeclarationRefusesAWeightOutOfRange(t *testing.T) {
+	t.Parallel()
+
+	for _, w := range []float64{0, -0.5, 1.5, math.NaN()} {
+		assert.ErrorContains(t, Declaration{ID: "worker", Weight: &w}.Validate(), "outside (0,1]", "weight %v", w)
+	}
+	for _, w := range []float64{0.1, 0.5, 1} {
+		assert.NoError(t, Declaration{ID: "worker", Weight: &w}.Validate(), "weight %v", w)
+	}
+
+	var row Job
+	w := 0.9
+	Declaration{ID: "worker", Weight: &w}.Apply(&row)
+	assert.InDelta(t, 0.9, row.Weight, 0)
+	row.Paused = 42
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Zero(t, row.Weight, "an omitted weight clears the row's, which reads as DefaultJobWeight")
+	assert.Equal(t, int64(42), row.Paused, "apply keeps a pause")
 }
 
 // The generation and the attempt record are the store's, so a declaration never writes

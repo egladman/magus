@@ -42,6 +42,18 @@ func fastAwait(t *testing.T) {
 	t.Cleanup(func() { machineAwaitEvery = prev })
 }
 
+func TestMachineGatePollIntervalScalesWithWeight(t *testing.T) {
+	for weight, want := range map[float64]time.Duration{
+		1:    50 * time.Millisecond,
+		0.5:  100 * time.Millisecond,
+		0.25: 200 * time.Millisecond,
+		0:    100 * time.Millisecond,
+	} {
+		assert.Equal(t, want, weighted(machinePollEvery, weight), "weight %v", weight)
+	}
+	assert.Equal(t, 250*time.Millisecond, weighted(machineAwaitEvery, 1), "status --wait paces by the same rule")
+}
+
 func TestMachineGateAwaitReturnsAtOnceWhenTheBudgetSeatsIt(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	b.Assert(types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 4000, PID: 100})
