@@ -1120,7 +1120,7 @@ func TestWorkerCheckOnlyRefusesAnUncheckedRewrite(t *testing.T) {
 
 	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate:rw docs")
 	require.True(t, reason.refused(), "a rewrite the guard cannot check is refused")
-	assert.Contains(t, reason.Say, "the workspace did not load; run `")
+	assert.Contains(t, reason.Say, "the workspace did not load: magusfile: line 3: unexpected token; run `", "the Say line names the cause")
 	assert.Contains(t, reason.Say, " run figures-generate docs`.")
 	assert.Contains(t, reason.Why, "unexpected token")
 	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate docs"), "without the charm nothing is written")
@@ -1139,7 +1139,22 @@ func TestWorkerCheckOnlyRefusesAnUncheckedRewrite(t *testing.T) {
 	assert.Contains(t, briefOffCheckWhy(row, v, nil), "unexpected token")
 }
 
-// TestWorkerCheckOnlyJudgesTheCwdProject: `magus run` with no project runs the project
+// TestWorkerCheckOnlyNamesASlowOpen: a workspace open that outlasts its budget is refused
+// as slow, not as a magusfile that did not load (gap 213).
+func TestWorkerCheckOnlyNamesASlowOpen(t *testing.T) {
+	row := figuresLease()
+	ctx, _ := fleetFixture(t, row)
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, fmt.Errorf("inspect docs: %w", context.DeadlineExceeded)
+	}}
+
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run diagrams-generate:rw docs")
+	require.True(t, reason.refused())
+	assert.Contains(t, reason.Say, "opening the workspace took longer than the guard's 3.5s budget for it; run `")
+	assert.NotContains(t, reason.Say, "did not load")
+}
+
+// TestWorkerCheckOnlyJudgesTheCwdProject:`magus run` with no project runs the project
 // holding the caller's directory, so the rule judges that project, not the root.
 func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 	row := types.Job{
@@ -1250,7 +1265,7 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	}
 	t.Run("a workspace that cannot load falls back to the producer spelling", func(t *testing.T) {
 		row := figuresLease()
-		assert.Contains(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs").Say, "the workspace did not load",
+		assert.Contains(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs").Say, "the guard was handed no way to open the workspace",
 			"a rewrite is never let through unchecked")
 		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate docs"))
 		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run figures-generate docs"))
