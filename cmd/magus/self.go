@@ -31,6 +31,8 @@ func selfCmd(ctx context.Context, _ string, args []string) error {
 		return selfUpdateCmd(ctx, rest)
 	case "install-shorthand":
 		return installShorthandCmd(rest)
+	case "place":
+		return selfPlaceCmd(ctx, rest)
 	default:
 		selfCmdUsage()
 		return exit.Usagef("magus self: unknown subcommand %q (want %s)", sub, selfSubcommands())
@@ -41,9 +43,9 @@ func selfCmd(ctx context.Context, _ string, args []string) error {
 // noselfupdate binary prints does not advertise a subcommand it will refuse.
 func selfSubcommands() string {
 	if selfUpdateCompiled {
-		return "update, install-shorthand"
+		return "update, install-shorthand, place"
 	}
-	return "install-shorthand"
+	return "install-shorthand, place"
 }
 
 func selfCmdUsage() {
@@ -56,6 +58,7 @@ func selfCmdUsage() {
 		fmt.Fprintln(os.Stderr, "  update               not available (built with -tags noselfupdate)")
 	}
 	fmt.Fprintln(os.Stderr, "  install-shorthand    symlink mgs to the running binary")
+	fmt.Fprintln(os.Stderr, "  place                replace the running binary with a newer stamped build")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "To bootstrap a workspace, use: magus init")
 	fmt.Fprintln(os.Stderr, "Run 'magus self <subcommand> --help' for subcommand flags.")

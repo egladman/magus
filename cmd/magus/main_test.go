@@ -535,7 +535,12 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		{
 			name:  "self",
 			print: selfCmdUsage,
-			want:  []string{"Usage: magus self", "update", "install-shorthand", "magus init"},
+			want:  []string{"Usage: magus self", "update", "install-shorthand", "place", "magus init"},
+		},
+		{
+			name:  "place",
+			print: selfPlaceUsage,
+			want:  []string{"Usage: magus self place <binary>", "newer", "renamed"},
 		},
 		{
 			name:  "install-shorthand",
