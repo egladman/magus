@@ -6,7 +6,11 @@ namespace golangci;
 import "fs";
 import "os";
 import "proc";
+import "std";
 import "magus";
+import "encoding/json";
+
+import "assert";
 
 // binary is the workspace's custom build; it throws, naming the target that builds it, when absent.
 export fun binary() > str !> any {
@@ -15,6 +19,17 @@ export fun binary() > str !> any {
         throw "{path} is missing; build it with `magus run install-linter .`. The stock golangci-lint cannot read .golangci.yml";
     }
     return path;
+}
+
+// linkOnce links the custom build when the checkout has none, as install-linter does, but
+// without the format and generate that target runs first: a scoped lint must not fail on
+// drift elsewhere in the tree. A build already linked is kept, stale or not; bare lint
+// relinks it.
+export fun linkOnce() > void !> any {
+    final root = magus\describe.project().workspace;
+    if (!fs\exists(root + "/.magus/custom-gcl")) {
+        proc\exec("golangci-lint", ["custom"], root + "/libs/testlayout");
+    }
 }
 
 // readLibFiles declares what a lib module's run reads. Restated in full because readsFiles
@@ -42,10 +57,91 @@ export fun run(dir: str, args: [str]) > void !> any {
 // upstream Buzz, not Go's error-string idiom, so it skips errmsg. The --enable-only list
 // stays on one line: hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses it without testpair.
 export fun lintLib(dir: str, fix: bool) > void !> any {
-    final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
-    var args = mut ["--enable-only", "filenames,hostagnostic,namewords,stutter,testifylint,testlayout,testpair" + errorStrings];
+    final args = libArgs(dir).cloneMutable();
     if (fix) {
         args.append("--fix");
     }
     run(dir, args);
+}
+
+fun libArgs(dir: str) > [str] {
+    final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
+    return ["--enable-only", "filenames,hostagnostic,namewords,stutter,testifylint,testlayout,testpair" + errorStrings];
+}
+
+// packagesOf groups the Go files among files by the module holding them, "." or one of
+// libs, each module's packages relative to it as golangci-lint takes them. golangci-lint
+// stops at a go.mod, so each module runs alone.
+export fun packagesOf(files: [str], libs: [str]) > {str: [str]} {
+    final packages = mut {<str: [str]>};
+    foreach (f in files) {
+        if (!f.endsWith(".go")) {
+            continue;
+        }
+        var module = ".";
+        foreach (lib in libs) {
+            if (f.startsWith(lib + "/") and (module == "." or lib.len() > module.len())) {
+                module = lib;
+            }
+        }
+        final rel = if (module == ".") f else f.sub(module.len() + 1, len: f.len() - module.len() - 1);
+        final slash = rel.split("/");
+        final pkg = if (slash.len() == 1) "." else "./" + slash.sub(0, len: slash.len() - 1).join("/");
+        final held = packages[module] ?? [<str>];
+        if (held.indexOf(pkg) == null) {
+            packages[module] = held + [pkg];
+        }
+    }
+    return packages;
+}
+
+// issuesIn reads a `--output.json.path stdout --path-mode abs` report and keeps each issue
+// at one of files, workspace-relative under root, as `path:line: text (linter)`. An issue at
+// any other file is dropped: a package holds files the caller did not write.
+export fun issuesIn(report: str, root: str, files: [str]) > [str] !> any {
+    final doc: {str: any} = json\parse(report);
+    final issues: [any] = doc["Issues"] ?? [<any>];
+    final kept = mut [<str>];
+    foreach (issue in issues) {
+        final abs: str = issue["Pos"]["Filename"] ?? "";
+        final rel = if (abs.startsWith(root + "/")) abs.sub(root.len() + 1, len: abs.len() - root.len() - 1) else abs;
+        if (files.indexOf(rel) != null) {
+            final line = std\toInt(issue["Pos"]["Line"] ?? 0);
+            final linter: str = issue["FromLinter"] ?? "";
+            final text: str = issue["Text"] ?? "";
+            kept.append("{rel}:{line}: {text} ({linter})");
+        }
+    }
+    return kept;
+}
+
+// issuesAt runs the custom build over packages of the module at dir, lintLib's linters when
+// it is a lib, and returns [issuesIn] files. dir and files are workspace-relative.
+export fun issuesAt(dir: str, packages: [str], files: [str]) > [str] !> any {
+    final root = magus\describe.project().workspace;
+    final bin = binary();
+    final args = ["run", "--config", root + "/.golangci.yml", "--output.json.path", "stdout",
+        "--path-mode", "abs", "--issues-exit-code", "0"] + (if (dir != ".") libArgs(dir) else [<str>]) + packages;
+    var printed = "";
+    os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, fun () > void !> any {
+        printed = proc\exec(bin, args, root + "/" + dir, opts: {"quiet": true}).stdout;
+    });
+    return issuesIn(printed, root: root, files: files);
+}
+
+test "Go files group by their nearest module, as packages relative to it" {
+    final got = packagesOf(["main.go", "internal/job/a.go", "internal/job/b.go", "libs/x/y/c.go", "libs/x/d.go", "libs/xy/e.go", "README.md"],
+        libs: ["libs/x", "libs/xy"]);
+    assert\equal(got["."], want: [".", "./internal/job"], message: "the root module, one entry per package");
+    assert\equal(got["libs/x"], want: ["./y", "."], message: "relative to the lib");
+    assert\equal(got["libs/xy"], want: ["."], message: "a lib sharing a prefix is its own module");
+    assert\equal(got.len(), want: 3, message: "no module for Markdown");
+}
+
+test "only the issues at the files are kept" {
+    final mine = `{"FromLinter":"revive","Text":"mine","Pos":{"Filename":"/w/internal/job/a.go","Line":3}}`;
+    final theirs = `{"FromLinter":"revive","Text":"theirs","Pos":{"Filename":"/w/internal/job/b.go","Line":9}}`;
+    final report = "\{\"Issues\":[" + mine + "," + theirs + "]\}";
+    assert\equal(issuesIn(report, root: "/w", files: ["internal/job/a.go"]), want: ["internal/job/a.go:3: mine (revive)"], message: "one inside, one outside");
+    assert\equal(issuesIn(`{"Issues":null}`, root: "/w", files: ["a.go"]).len(), want: 0, message: "a clean run");
 }

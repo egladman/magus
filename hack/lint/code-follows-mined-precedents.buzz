@@ -6,6 +6,7 @@ import "assert";
 import "std";
 import "magus";
 import "magus/lint";
+import "hack/lint/support" as support;
 
 // FAMILIES are the precedents this repository holds itself to. dep-direction and dep-fanout
 // stay advice: depguard and importceiling enforce the layering by declaration. ctx-first and
@@ -49,6 +50,7 @@ export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any 
     final found = mut [<Finding>];
     final indexes: [any] = report["indexes"] ?? [<any>];
     final rows: [any] = report["precedents"] ?? [<any>];
+    var judgeable = true;
     foreach (lang in LANGUAGES) {
         var declared = false;
         foreach (idx in indexes) {
@@ -56,23 +58,19 @@ export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any 
                 continue;
             }
             declared = true;
-            final freshness: str = idx["freshness"] ?? "";
-            if (freshness != "up-to-date") {
-                final project: str = idx["project"]["path"] ?? ".";
-                final detail: str = idx["detail"] ?? "";
-                final rebuild = "Rebuild it with `magus graph build`, then rerun lint.";
-                final fix = if (detail != "") detail + "\n" + rebuild else rebuild;
-                found.append(Finding{ path = project,
-                    message = "the {lang} symbol index of {project} is {freshness}, so its precedents cannot be judged",
-                    fix = fix });
+            final stale = support\staleness(idx, judging: "precedents");
+            judgeable = judgeable and stale.judgeable;
+            foreach (f in stale.findings) {
+                found.append(f);
             }
         }
         if (!declared) {
+            judgeable = false;
             found.append(Finding{ path = ".", message = "no {lang} symbol index is declared, so no {lang} precedent was judged",
                 fix = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
         }
     }
-    if (found.len() > 0) {
+    if (!judgeable) {
         return found;
     }
 
@@ -182,6 +180,16 @@ test "a stale or missing index fails instead of passing on what it lacks" {
     assert\equal(got[0].path, want: "libs/x", message: "names the project");
     final none = judge(report([fresh("buzz")], departures: [<any>]), sanctioned: {<str: str>});
     assert\equal(none.len(), want: 1, message: "no go index at all");
+}
+
+test "a stale index listing its changes fails at each one and still judges the rest" {
+    final stale: {str: any} = {"project": {"path": "."}, "language": "go", "freshness": "out-of-date",
+        "changed": ["cmd/magus/edited.go"], "changed_count": 1.0};
+    final d: {str: any} = {"node": "symbol:x/magusErr.", "source": "cmd/magus/helpers.go:107"};
+    final got = judge(report([stale], departures: [d]), sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 2, message: "the changed file and the departure");
+    assert\equal(got[0].path, want: "cmd/magus/edited.go", message: "staleness at the file");
+    assert\equal(got[1].path, want: "cmd/magus/helpers.go", message: "a current file is judged");
 }
 
 test "a family the index no longer establishes fails" {
