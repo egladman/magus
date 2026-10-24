@@ -1088,7 +1088,6 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
-	read := f
 	var ended endings
 	err = s.update(context.Background(), func(cur *jobsFile) error {
 		ended = endings{}
