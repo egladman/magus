@@ -2,6 +2,7 @@ package dry
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -146,7 +147,7 @@ func sortSpellOps(ops []spellOp) {
 // wardDetail renders a diagnostic as the single-line Detail an Op of Kind "ward"
 // carries, leading with the MGSxxxx code so the console shows the code and message.
 func wardDetail(d *types.DiagnosticError) string {
-	return "[" + string(d.Code) + "] " + d.Msg
+	return fmt.Sprintf("[%s] %s", string(d.Code), d.Msg)
 }
 
 // dryRunSpell builds the dry-run plan for one spell op: the op line (Kind
@@ -169,19 +170,19 @@ func dryRunSpell(ops []spellOp, opName, output string, charms []string) Result {
 		for i := range ops {
 			names[i] = ops[i].name
 		}
-		return Result{Output: output, Diag: &Diag{Msg: "unknown op " + opName + " (one of: " + strings.Join(names, ", ") + ")"}}
+		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("unknown op %s (one of: %s)", opName, strings.Join(names, ", "))}}
 	}
 	if op.decodeErr != nil {
-		return Result{Output: output, Diag: &Diag{Msg: op.name + ": " + op.decodeErr.Error()}}
+		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, op.decodeErr.Error())}}
 	}
 	// The dry run passes no call-site args, so a NeedsArgs op is always refused, as
 	// runCommand refuses it before anything spawns.
 	if op.cmd.NeedsArgs != "" {
-		return Result{Output: output, Diag: &Diag{Msg: op.name + ": " + op.cmd.NeedsArgs}}
+		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, op.cmd.NeedsArgs)}}
 	}
 	detail, err := op.renderCommand(charms)
 	if err != nil {
-		return Result{Output: output, Diag: &Diag{Msg: op.name + ": " + err.Error()}}
+		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, err.Error())}}
 	}
 	trace := []Op{{Target: op.name, Kind: op.kind, Name: op.name, Detail: detail}}
 	for _, w := range op.wards {

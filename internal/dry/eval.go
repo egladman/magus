@@ -267,7 +267,7 @@ func plainSession(ctx context.Context, out io.Writer) *buzz.Session {
 	for _, name := range playgroundSourceModules {
 		sm, ok := std.GetSource(name)
 		if !ok {
-			panic("dry: the playground lists source module " + name + ", which std does not register")
+			panic(fmt.Sprintf("dry: the playground lists source module %s, which std does not register", name))
 		}
 		sess.SetModuleDecls(sm.ImportPath(), sm.Source)
 	}
