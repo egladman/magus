@@ -339,14 +339,14 @@ func Example_whatADiffAffects() {
 
 `std.MagusQuery` is the Go side of `magus query`: ranked matches over the workspace's
 knowledge graph, with a verdict that keeps "verified absent" apart from "not indexed".
-It reads the workspace from its context. The context `Run` hands a target carries one,
-so the query runs from inside a target written in Go:
+It reads the workspace from its context: `m.Context(ctx)` returns one carrying the
+workspace `Open` returned.
 
 ```go
-// Example_queryTheGraph asks the workspace's knowledge graph for every project, from a
-// target written in Go: the context a run hands a target carries the workspace the
-// query reads. The verdict says whether zero matches would mean absent or unknown.
-func Example_queryTheGraph() {
+// ExampleMagus_Context asks the workspace's knowledge graph for every project, on the
+// context m.Context returns. The verdict says whether zero matches would mean absent or
+// unknown.
+func ExampleMagus_Context() {
 	root, cleanup := newWorkspace(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
@@ -354,40 +354,26 @@ func Example_queryTheGraph() {
 	})
 	defer cleanup()
 
-	census := func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
-		out, err := std.MagusQuery(ctx, "kind=project", types.KnowledgeQueryOptions{})
-		if err != nil {
-			return nil, err
-		}
-		ids := make([]string, 0, len(out.Matches))
-		for _, match := range out.Matches {
-			ids = append(ids, match.ID)
-		}
-		slices.Sort(ids)
-		fmt.Println("verdict:", out.Answer.Verdict)
-		fmt.Println(strings.Join(ids, "\n"))
-		return nil, nil
-	}
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell("guide-query",
-		spells.WithTargets("census"),
-		spells.WithInvoker(census),
-	))
-	defer project.DefaultSpellRegistry().UnregisterSpell("guide-query")
-
-	reg := magus.NewWorkspaceRegistry()
-	reg.RegisterProject(".", magus.WithSpell("guide-query"))
-
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
 	}
 	defer m.Close()
 
-	if _, err := runRecorded(ctx, m, []types.Target{{Path: ".", Name: "census"}}); err != nil {
-		fmt.Println("run:", err)
+	out, err := std.MagusQuery(m.Context(ctx), "kind=project", types.KnowledgeQueryOptions{})
+	if err != nil {
+		fmt.Println("query:", err)
+		return
 	}
+	ids := make([]string, 0, len(out.Matches))
+	for _, match := range out.Matches {
+		ids = append(ids, match.ID)
+	}
+	slices.Sort(ids)
+	fmt.Println("verdict:", out.Answer.Verdict)
+	fmt.Println(strings.Join(ids, "\n"))
 	// Output:
 	// verdict: found
 	// project:.
@@ -396,10 +382,8 @@ func Example_queryTheGraph() {
 }
 ```
 
-Outside a run, a program has no exported way to put the workspace on a context:
-`types.WithWorkspace(ctx, m)` with a `*magus.Magus` fails with "this workspace has no
-knowledge graph". Until the SDK exports one, query from inside a target, as above, or
-run `magus query -o json`.
+`types.WithWorkspace(ctx, m)` is not the same: the graph doors fail on it with "this
+workspace has no knowledge graph".
 
 ## Judge a tool call before it runs
 

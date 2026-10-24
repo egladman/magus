@@ -269,13 +269,8 @@ options: `std.MagusPutJob` a `types.JobPut`, whose nil fields leave the row as i
 `std.MagusExitJob` a `types.JobResult`; `std.MagusWaitJob` a `*types.JobResult`, nil
 for the evidence the exit filed; `std.MagusQuery` a `types.KnowledgeQueryOptions`;
 `std.MagusRefs` a `types.KnowledgeRefsOptions`; and `std.MagusTrailRead` a
-`types.TrailReadOptions`. Each reads the workspace on `ctx` (`types.WithWorkspace`).
-The graph doors (`MagusQuery`, `MagusRefs`, `MagusExplain` and the other graph members)
-need the workspace view the context `Run` hands a target written in Go; a bare
-`*magus.Magus` put there with `types.WithWorkspace` fails as having no knowledge graph,
-and nothing exported builds that view outside a run. The
-[guide](../guides/go-sdk.md#query-the-graph) queries from inside a target for that
-reason.
+`types.TrailReadOptions`. Each reads the workspace on `ctx`: pass `m.Context(ctx)`, as
+the [guide](../guides/go-sdk.md#query-the-graph) does.
 A knowledge answer carries a verdict that keeps unknown apart from absent: zero matches
 with an `unknown` verdict means part of the workspace had no symbol index.
 
