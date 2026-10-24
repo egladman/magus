@@ -302,7 +302,7 @@ linters:
           # message-commands), exempt until the terse-output rewrites land. Delete an
           # entry once its file is clean; never add one.
           allow:
-            - {file: cmd/magus/gate_redundancy.go, reason: staged}
+            - {file: cmd/magus/gate.go, reason: staged}
             - {file: cmd/magus/spell.go, reason: staged}
             - {file: cmd/magus/stale_index.go, reason: staged}
             - {file: describe.go, reason: staged}
