@@ -21,12 +21,14 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // Background symbol auto-indexing keeps each symbol-capable project's SCIP index fresh
@@ -732,7 +734,17 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 	}, m.cfg.Cache.WriteEnabled(), func() string {
 		goMod, _ := os.ReadFile(filepath.Join(m.ws.Root, "go.mod"))
 		_, head, _ := m.CurrentRevision(ctx)
-		return binaryTreeSkew(goMod, types.MagusBuildFromContext(ctx).Commit, head)
+		built := types.MagusBuildFromContext(ctx).Commit
+		return binaryTreeSkew(goMod, built, head, func() ([]string, error) {
+			res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+			if err != nil {
+				return nil, err
+			}
+			if res.VCS == nil {
+				return nil, fmt.Errorf("no version control answered in %s", m.ws.Root)
+			}
+			return job.ChangedBuildInputs(ctx, res.VCS, m.ws.Root, built, head)
+		})
 	})
 }
 
@@ -827,7 +839,7 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	}
 	if skewed {
 		fix = "build ./magus at the checkout's HEAD, stop the pool parents of other builds with `magus server stop --pools`"
-		why += " A magus built at another commit than the tree records the index's run under a key the probe does not read back."
+		why += " A magus built from other build inputs than the tree's records the index's run under a key the probe does not read back."
 	}
 	return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
 		"symbol index not current for %s; %s, then `magus graph build`", strings.Join(problems, "; "), fix).
@@ -835,13 +847,27 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 }
 
 // binaryTreeSkew names a binary built at built running in magus's own checkout (goMod is its
-// go.mod) at head; "" in any other workspace, or when either is unknown or abbreviates the other.
-func binaryTreeSkew(goMod []byte, built, head string) string {
+// go.mod) at head when changed, the build inputs that differ between the two commits, is not
+// empty. It is "" in any other workspace, when either commit is unknown or abbreviates the
+// other, and when no build input changed: that binary is the one head builds. Inputs that
+// cannot be listed are named as the skew, never read as unchanged.
+func binaryTreeSkew(goMod []byte, built, head string, changed func() ([]string, error)) string {
 	if modfile.ModulePath(goMod) != ownModule || built == "" || built == "unknown" || head == "" ||
 		strings.HasPrefix(built, head) || strings.HasPrefix(head, built) {
 		return ""
 	}
-	return fmt.Sprintf("this magus was built at %.12s and the checkout is at %.12s", built, head)
+	inputs, err := changed()
+	switch {
+	case err != nil:
+		return fmt.Sprintf("this magus was built at %.12s and the checkout is at %.12s, whose build inputs could not be compared: %v", built, head, err)
+	case len(inputs) == 0:
+		return ""
+	}
+	what := inputs[0]
+	if len(inputs) > 1 {
+		what = fmt.Sprintf("%s and %d more build inputs", what, len(inputs)-1)
+	}
+	return fmt.Sprintf("this magus was built at %.12s and the checkout is at %.12s, and %s changed between them", built, head, what)
 }
 
 // conformanceSkippedWhy is the rationale every MGS7003 carries.

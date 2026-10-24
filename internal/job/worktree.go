@@ -44,7 +44,7 @@ func MirroredBinary(exe, root string) string {
 // checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
 // not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
 // is placed only in a checkout where no build input of ./cmd/magus differs from the commit it
-// was built at (see [changedBuildInputs]): anywhere else it would judge another tree, so the
+// was built at (see [ChangedBuildInputs]): anywhere else it would judge another tree, so the
 // checkout is made with no binary and wt.Binary stays "" for [CheckoutBootstrap] to fill.
 // made is false when the job already owns the checkout at dir, which is returned as it stands,
 // and when dir is a linked checkout that already stands, which the job adopts as it is. A job owning another standing checkout, a checkpoint
@@ -116,7 +116,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		// A binary whose build inputs differ from the base judges another tree, and one whose
 		// inputs cannot be compared is not shown to match; CheckoutBootstrap builds one there.
 		if built.ID != base.ID {
-			inputs, err := changedBuildInputs(ctx, drv, source, built.ID, base.ID)
+			inputs, err := ChangedBuildInputs(ctx, drv, source, built.ID, base.ID)
 			if err != nil || len(inputs) > 0 {
 				binary = ""
 			}
@@ -205,13 +205,13 @@ var moduleFiles = []string{"go.mod", "go.sum", "go.work", "go.work.sum"}
 // would take in every file at the root.
 const rootScope = "./"
 
-// changedBuildInputs are the paths differing between commits from and to, in the checkout
+// ChangedBuildInputs are the paths differing between commits from and to, in the checkout
 // at root, that can change the binary ./cmd/magus compiles to: a non-test Go file in a
 // package `go list -deps` names, a root module file, or another file in such a package's
 // directory, where go:embed reads. Each side's changes since the two diverged count. It fails
 // when either commit or the package list cannot be read, so unknown inputs never match;
 // equal commits run no process. hack/dev/bootstrap-worktree.buzz holds the same rule.
-func changedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to string) ([]string, error) {
+func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to string) ([]string, error) {
 	if from == to {
 		return nil, nil
 	}
