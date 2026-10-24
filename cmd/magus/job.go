@@ -315,12 +315,16 @@ const ownBinaryPrefix = "./"
 // taken ([job.WorkingCheckout]), the row standing in for a lease not stored yet.
 //
 // Only a deny of the check itself refuses. A deny that holds just as well for the
-// compiling check describes the binary or the workspace (a stale hook binary, rules that
-// would not load) and not the command, so it is not graded and the verdict's NotGraded
-// says why: a refusal has to come from a verdict on the check.
+// compiling check describes the binary or the workspace (a stale hook binary) and not the
+// command, so it is not graded and the verdict's NotGraded says why: a refusal has to
+// come from a verdict on the check. Rules that would not load defer the grade instead
+// (Deferred): a binary built at the checkout may load them, so the fork keeps its row.
 func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row types.Job) job.CheckVerdict {
 	if deps.LoadFailure != nil {
-		return job.CheckVerdict{NotGraded: "the workspace's rules did not load: " + deps.LoadFailure.Error()}
+		why := fmt.Sprintf("the workspace's rules did not load: %s", deps.LoadFailure)
+		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", row.Check, why),
+			attr.Notice("unchecked"))
+		return job.CheckVerdict{Deferred: why}
 	}
 	dir := job.WorkingCheckout(root, row)
 	if row.Worktree.Standing() && row.CheckoutRoot == "" {

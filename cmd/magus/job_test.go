@@ -1751,7 +1751,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	assert.Contains(t, after.Reason, "builds are refused here")
 }
 
-// A workspace whose rules did not load is not graded, and says so rather than refuse on a
+// A workspace whose rules did not load defers the grade, and says so rather than refuse on a
 // verdict nobody reached.
 func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
 	testkit.Isolate(t)
@@ -1759,9 +1759,7 @@ func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
 
 	verdict := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, t.TempDir(), row)
 
-	assert.False(t, verdict.Denied)
-	assert.Contains(t, verdict.NotGraded, "the workspace's rules did not load")
-	assert.Contains(t, verdict.NotGraded, "magusfile.buzz:3: expected ';'")
+	assert.Equal(t, job.CheckVerdict{Deferred: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"}, verdict)
 }
 
 // One judge: the check a fork grades is the check `describe job` briefs and the guard lets
