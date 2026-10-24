@@ -155,7 +155,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	queryStatus := func(path, token string) int {
 		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer reqCancel()
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+path+"?token="+token, nil)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("%s%s?token=%s", base, path, token), nil)
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
@@ -508,7 +508,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	assertRefused := func(method, path string) {
 		t.Helper()
 		resp := anonymous(method, path)
-		what := method + " " + path
+		what := fmt.Sprintf("%s %s", method, path)
 		if !assert.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound},
 			resp.StatusCode, "%s answered without a token", what) {
 			return
@@ -1053,7 +1053,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, name := range services {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, unloadedBase+"/"+name+"/Probe", strings.NewReader("{}"))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/%s/Probe", unloadedBase, name), strings.NewReader("{}"))
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+cli)
 		req.Header.Set("Content-Type", "application/json")
