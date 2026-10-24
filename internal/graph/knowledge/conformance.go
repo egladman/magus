@@ -22,7 +22,8 @@ import (
 // and judges each row against the value o.Effective enforces: the committed ratchet value,
 // else the configured anchor. A live percentile is reported and may be proposed, never
 // enforced. A key with no configured value is measured only: no violations, no proposal.
-// file-split is a floor: an item at or under its value is past it, and it proposes nothing.
+// file-split is a floor: an item at or under its value is past it, as is one whose name splits
+// more than one concept off its root, and it proposes nothing.
 // The mode-knobs row holds only the functions the coupling rule finds over-shared, so its n
 // is how many there are, zero included. A known item renamed or moved is judged under its
 // new ID when its recorded shape names it unambiguously (carryKnown).
@@ -80,7 +81,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 			}
 		} else {
 			for _, it := range items {
-				if !key.Metric.Past(it.Measure, row.Value) {
+				if !itemPast(key.Metric, it, row.Value) {
 					continue
 				}
 				if known[key.Metric][it.ID] {
@@ -677,7 +678,7 @@ func pastValue(o types.ConformanceOptions, samples map[types.ConformanceKey][]ty
 			continue
 		}
 		for _, it := range items {
-			if key.Metric.Past(it.Measure, value) {
+			if itemPast(key.Metric, it, value) {
 				mark(key.Metric, it.ID)
 			}
 		}
@@ -1054,7 +1055,8 @@ func (x *conformanceIndex) stateDirs() map[string]bool {
 }
 
 // fileSplitSamples measures each concept sibling by the lines it and its root would make as
-// one file. Home is the root; Unshared marks a sibling sharing no symbol with it.
+// one file. Home is the root; Unshared marks a sibling sharing no symbol with it, and Rename
+// the conceptName of one whose suffix is more than one segment.
 func (x *conformanceIndex) fileSplitSamples(add conformanceAdd) {
 	for id, f := range x.g.nodes {
 		if f.Kind != types.KindFile {
@@ -1075,7 +1077,26 @@ func (x *conformanceIndex) fileSplitSamples(add conformanceAdd) {
 				continue
 			}
 			add(types.ConformanceFileSplit, pop, "", types.ConformanceItem{ID: f.Source, Source: f.Source + ":1",
-				Measure: lines + rootLines, Home: root.Source, Unshared: e.Attrs[attrSplitCoupled] != "true"})
+				Measure: lines + rootLines, Home: root.Source, Unshared: e.Attrs[attrSplitCoupled] != "true",
+				Rename: conceptName(root.Source, e.Attrs[attrSplitSuffix])})
 		}
 	}
+}
+
+// conceptName is the file a sibling of root with suffix should be, or "" when suffix is one
+// segment. splitRoot takes the longest existing root, so a suffix of two segments means the
+// file its first segment names does not exist.
+func conceptName(root, suffix string) string {
+	first, _, many := strings.Cut(suffix, "_")
+	if !many {
+		return ""
+	}
+	ext := path.Ext(root)
+	return strings.TrimSuffix(root, ext) + "_" + first + ext
+}
+
+// itemPast reports whether it is past value in a row of m: by measure, or for file-split by
+// a name that splits more than one concept.
+func itemPast(m types.ConformanceMetric, it types.ConformanceItem, value int) bool {
+	return m.Past(it.Measure, value) || it.Rename != ""
 }

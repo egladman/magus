@@ -60,6 +60,7 @@ const (
 	// ConformanceFileSplit is the lines a concept sibling and its root would make as one file:
 	// R_<suffix>.go beside R.go, split by topic rather than by platform, test or generator. It is
 	// a floor: a split is owed only past the value, so a sibling at or under it belongs in R.go.
+	// Its suffix names one concept: R_X_Y.go splits R_X.go, never R.go (see [ConformanceItem]).
 	ConformanceFileSplit ConformanceMetric = "file-split"
 )
 
@@ -626,11 +627,14 @@ type ConformanceCarry struct {
 // ConformanceItem is one file, symbol, package or clone group past its row's value and not
 // known. Source is its path:line. Home is where it belongs, for a metric that names one: a
 // package directory, or for file-split the root file. Unshared marks a file-split sibling
-// that references nothing its root defines and defines nothing its root references.
+// that references nothing its root defines and defines nothing its root references. Rename
+// is the file a file-split sibling should be when its suffix after the root names more than
+// one concept: R_X_Y.go with no R_X.go is past its row whatever it measures, and names R_X.go.
 type ConformanceItem struct {
 	ID       string `json:"id"                 yaml:"id"`
 	Source   string `json:"source"             yaml:"source"`
 	Measure  int    `json:"measure"            yaml:"measure"`
 	Home     string `json:"home,omitempty"     yaml:"home,omitempty"`
 	Unshared bool   `json:"unshared,omitempty" yaml:"unshared,omitempty"`
+	Rename   string `json:"rename,omitempty"   yaml:"rename,omitempty"`
 }
