@@ -795,8 +795,24 @@ type Unintegrated struct {
 	Commits int
 }
 
+// ownTree reports whether row belongs to a job tree forked from the checkout at root. A
+// tree's checkout is the source its topmost job's worktree records, else the nearest
+// descendant's that records one. A tree none of whose jobs made a checkout cannot be told
+// from anyone's, so it counts for every checkout rather than hiding a backlog.
+func ownTree(rows []types.Job, row types.Job, root string) bool {
+	chain := append([]types.Job{row}, types.JobAncestors(rows, row.ID)...)
+	for i := len(chain) - 1; i >= 0; i-- {
+		if wt := chain[i].Worktree; wt != nil && wt.Source != "" {
+			return samePath(wt.Source, root)
+		}
+	}
+	return true
+}
+
 // UnintegratedBranches is every job at pass or exited whose branch holds commits the
-// revision checked out at the store's root does not, in store order. A job's branch is the
+// revision checked out at the store's root does not, in store order. Only jobs of a tree
+// forked from the store's root count (see [ownTree]): another checkout's backlog is its
+// own to integrate and never blocks this one. A job's branch is the
 // one its standing checkout has checked out, else a branch named for the job. Skipped as
 // integrated:
 //
@@ -821,7 +837,9 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 		switch {
 		case row.Integrating() && row.State == types.StatePass:
 		case row.State == types.StatePass || row.State == types.StateExited:
-			finished = append(finished, row)
+			if ownTree(rows, row, s.root) {
+				finished = append(finished, row)
+			}
 		}
 	}
 	if len(finished) == 0 {
