@@ -311,10 +311,10 @@ func targetSummary(t types.TargetGraphNode) string {
 		parts = append(parts, fmt.Sprintf("%s: %s", s.Spell, strings.Join(s.Ops, ", ")))
 	}
 	if len(parts) > 0 {
-		return "[" + strings.Join(parts, "; ") + "]"
+		return fmt.Sprintf("[%s]", strings.Join(parts, "; "))
 	}
 	if len(t.Dependencies) > 0 {
-		return "[needs: " + strings.Join(t.Dependencies, ", ") + "]"
+		return fmt.Sprintf("[needs: %s]", strings.Join(t.Dependencies, ", "))
 	}
 	return ""
 }

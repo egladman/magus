@@ -120,6 +120,6 @@ func generatedPage(name, ext string) bool {
 }
 
 func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "magus-manpage: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "magus-manpage: %s\n", fmt.Sprintf(format, args...))
 	os.Exit(1)
 }

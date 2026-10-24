@@ -66,7 +66,7 @@ func diffOrderTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.F
 				}
 				fact := sh.Why.Text
 				if sh.Label != "" {
-					fact = sh.Label + ": " + fact
+					fact = fmt.Sprintf("%s: %s", sh.Label, fact)
 				}
 				out[at].Facts = append(out[at].Facts, fact)
 				out[at].Hunks = append(out[at].Hunks, difftui.Hunk{

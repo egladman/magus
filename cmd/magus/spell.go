@@ -507,7 +507,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 		res.Spells = append(res.Spells, spellLockEntry{Path: path, Tag: e.Tag, Digest: e.Digest})
 	}
 	if opts.Format == outputText || opts.Format == outputName {
-		return emitItemNames(os.Stdout, res.Spells, func(e spellLockEntry) string { return e.Path + "@" + e.Digest.String() })
+		return emitItemNames(os.Stdout, res.Spells, func(e spellLockEntry) string { return fmt.Sprintf("%s@%s", e.Path, e.Digest.String()) })
 	}
 	return emitFormatted(opts, res)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -136,7 +137,7 @@ func TestCheckDriftForCommit_UnpushedNotHead(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Contains(t, notice, "git commit --fixup="+hash)
-	assert.Contains(t, notice, "rebase -i --autosquash "+hash+"^")
+	assert.Contains(t, notice, fmt.Sprintf("rebase -i --autosquash %s^", hash))
 	assert.NotContains(t, notice, "--amend")
 }
 
@@ -379,11 +380,11 @@ func TestPushedUnreadReadsExactlyThePushedRange(t *testing.T) {
 	})
 	assert.Equal(t, []unreadNotice{
 		{
-			msg:  "1 of 1 hunks of this range (" + held[:12] + "..." + sent[:12] + ") unread",
-			next: hint.Diff.With("--unread", "--rev", held[:12]+"..."+sent[:12]),
+			msg:  fmt.Sprintf("1 of 1 hunks of this range (%s...%s) unread", held[:12], sent[:12]),
+			next: hint.Diff.With("--unread", "--rev", fmt.Sprintf("%s...%s", held[:12], sent[:12])),
 		},
 		{
-			msg:  "1 of 1 hunks of this range (origin/HEAD..." + sent[:12] + ") unread",
+			msg:  fmt.Sprintf("1 of 1 hunks of this range (origin/HEAD...%s) unread", sent[:12]),
 			next: hint.Diff.With("--unread", "--rev", "origin/HEAD..."+sent[:12]),
 		},
 	}, got)
@@ -395,9 +396,10 @@ func TestPushedUnreadReadsExactlyThePushedRange(t *testing.T) {
 // sends except a deletion, and every argv it builds is one the server's job dispatch admits.
 func TestCheckDriftJobArgvHandsTheServerThePushedRefs(t *testing.T) {
 	a, b, zero := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("0", 40)
-	stdin := "refs/heads/topic " + a + " refs/heads/topic " + b + "\n" +
-		"refs/heads/new " + a + " refs/heads/new " + zero + "\n" +
-		"(delete) " + zero + " refs/heads/gone " + b + "\n"
+	stdin := fmt.Sprintf(`refs/heads/topic %s refs/heads/topic %s
+refs/heads/new %s refs/heads/new %s
+(delete) %s refs/heads/gone %s
+`, a, b, a, zero, zero, b)
 
 	cases := []struct {
 		name  string
@@ -409,11 +411,11 @@ func TestCheckDriftJobArgvHandsTheServerThePushedRefs(t *testing.T) {
 		{"commit", []string{"post-commit"}, "", []string{"server", "check-drift", "--hook=post-commit"}},
 		{"push", []string{"pre-push", "origin", "git@example.com:o/r.git"}, stdin, []string{
 			"server", "check-drift", "--hook=pre-push", "--remote=origin",
-			"--push=" + b + ":" + a, "--push=" + zero + ":" + a,
+			fmt.Sprintf("--push=%s:%s", b, a), fmt.Sprintf("--push=%s:%s", zero, a),
 		}},
 		{"push to a url", []string{"pre-push", "git@example.com:o/r.git", "git@example.com:o/r.git"}, stdin, []string{
 			"server", "check-drift", "--hook=pre-push",
-			"--push=" + b + ":" + a, "--push=" + zero + ":" + a,
+			fmt.Sprintf("--push=%s:%s", b, a), fmt.Sprintf("--push=%s:%s", zero, a),
 		}},
 	}
 	for _, tc := range cases {

@@ -299,7 +299,7 @@ func refuseAmbiguous(w io.Writer, ref string, named []string) error {
 	for _, id := range named {
 		// Single-quoted: a symbol id holds spaces and backticks, which a paste must not
 		// hand to the shell.
-		fmt.Fprintf(w, "  %s\n", hint.Refs.With("'"+strings.ReplaceAll(id, "'", `'\''`)+"'"))
+		fmt.Fprintf(w, "  %s\n", hint.Refs.With(fmt.Sprintf("'%s'", strings.ReplaceAll(id, "'", `'\''`))))
 	}
 	return exit.Reported(exit.Usage)
 }
@@ -1019,8 +1019,8 @@ func declaredOutputRefusal(ctx context.Context, ws types.WorkspaceRepository, pa
 	var by []string
 	for _, c := range e.Claims {
 		if c.Role == types.DiffRoleOutput {
-			by = append(by, strings.TrimSuffix(c.Project+":"+c.Target, ":"))
+			by = append(by, strings.TrimSuffix(fmt.Sprintf("%s:%s", c.Project, c.Target), ":"))
 		}
 	}
-	return "a declared output of " + strings.Join(by, ", ") + ": change its source and regenerate it"
+	return fmt.Sprintf("a declared output of %s: change its source and regenerate it", strings.Join(by, ", "))
 }

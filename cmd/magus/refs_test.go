@@ -41,9 +41,10 @@ func TestRefsSymbolRefusesANameSeveralDefinitionsCarry(t *testing.T) {
 	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, exit.Usage, silent.ExitCode())
-	assert.Equal(t, `magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
-  `+hint.Refs.With("'"+hintID+"'")+`
-  `+hint.Refs.With("'"+queueID+"'")+"\n", stderr.String())
+	assert.Equal(t, fmt.Sprintf(`magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
+  %s
+  %s
+`, hint.Refs.With("'"+hintID+"'"), hint.Refs.With("'"+queueID+"'")), stderr.String())
 
 	got, err := refsSymbol(&stderr, g, queueID)
 	require.NoError(t, err)
@@ -217,9 +218,13 @@ func TestWriteRefsText(t *testing.T) {
 	}
 	var b bytes.Buffer
 	require.NoError(t, writeRefsText(&b, out))
-	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\n"+
-		"referenced in 2 file(s), 3 occurrence(s):\n"+
-		"  b.go  (2)"+linesSuffix([]int{4, 9})+"\n  c.go  (1)\n", b.String())
+	assert.Equal(t, fmt.Sprintf(`symbol: symbol:a F().  (F)
+defined in:
+  a.go
+referenced in 2 file(s), 3 occurrence(s):
+  b.go  (2)%s
+  c.go  (1)
+`, linesSuffix([]int{4, 9})), b.String())
 
 	// A resolved symbol nothing references is a verified answer, unless the verdict is not.
 	out.Refs, out.FileCount, out.RefCount = nil, 0, 0
@@ -462,8 +467,8 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 		},
 	}, record)
 	assert.Contains(t, stdout, `"index_cause"`)
-	assert.Contains(t, stderr.String(), "why: "+ans.IndexCause.Why+"\n")
-	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")
+	assert.Contains(t, stderr.String(), fmt.Sprintf("why: %s\n", ans.IndexCause.Why))
+	assert.Contains(t, stderr.String(), fmt.Sprintf("fix: %s\n", ans.IndexCause.Fix))
 
 	stderr.Reset()
 	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputText}, miss) })
@@ -471,7 +476,9 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	assert.Empty(t, stdout, "text output keeps stdout for answers")
 	assert.Contains(t, stderr.String(), `magus refs: no node matches "Foo"`)
 	assert.Contains(t, stderr.String(), "outside coverage: libs/api (not-indexed)")
-	assert.Contains(t, stderr.String(), "  why: "+ans.IndexCause.Why+"\n  fix: "+ans.IndexCause.Fix+"\n")
+	assert.Contains(t, stderr.String(), fmt.Sprintf(`  why: %s
+  fix: %s
+`, ans.IndexCause.Why, ans.IndexCause.Fix))
 }
 
 // withIndexCause diagnoses only an answer drawn from a missing or stale index; a clean

@@ -644,7 +644,7 @@ func inflightDetail(c types.InflightChange, partitions int) string {
 	}
 	switch {
 	case c.Code != "" && c.Reason != "":
-		parts = append(parts, c.Code+": "+c.Reason)
+		parts = append(parts, fmt.Sprintf("%s: %s", c.Code, c.Reason))
 	case c.Code != "":
 		parts = append(parts, c.Code)
 	case c.Mark != "":
@@ -718,7 +718,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		state := orDash(string(row.lease.State))
 		if m := marks[row.lease.ID]; len(m) > 0 {
 			slices.Sort(m)
-			state += " (" + strings.Join(m, ", ") + ")"
+			state += fmt.Sprintf(" (%s)", strings.Join(m, ", "))
 		}
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
@@ -804,9 +804,9 @@ func overlapFootprintLine(f *types.JobOverlapFootprint) string {
 	case f == nil:
 		return ""
 	case f.Verdict == types.FootprintShared:
-		return "footprints: shared (" + strings.Join(f.Shared, ", ") + ")"
+		return fmt.Sprintf("footprints: shared (%s)", strings.Join(f.Shared, ", "))
 	case f.Verdict == types.FootprintUnknown:
-		return "footprints: unknown (" + f.Reason + ")"
+		return fmt.Sprintf("footprints: unknown (%s)", f.Reason)
 	}
 	return "footprints: " + f.Verdict
 }
@@ -1022,7 +1022,7 @@ type evidenceFlag map[string]string
 func (e evidenceFlag) String() string {
 	pairs := make([]string, 0, len(e))
 	for _, goal := range slices.Sorted(maps.Keys(e)) {
-		pairs = append(pairs, goal+"="+e[goal])
+		pairs = append(pairs, fmt.Sprintf("%s=%s", goal, e[goal]))
 	}
 	return strings.Join(pairs, ",")
 }
@@ -2663,7 +2663,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		var notes []string
 		records[i], notes = extendedFootprint(ctx, store, graph, root, records[i], jobWS)
 		for _, n := range notes {
-			slog.InfoContext(ctx, records[i].ID+": "+n, attr.Notice("note"))
+			slog.InfoContext(ctx, fmt.Sprintf("%s: %s", records[i].ID, n), attr.Notice("note"))
 		}
 	}
 	if fix {
@@ -2817,7 +2817,7 @@ func specChange(field string, prev, next types.Job) string {
 	if len(parts) == 0 {
 		return field + " changed"
 	}
-	return field + " " + strings.Join(parts, " ")
+	return fmt.Sprintf("%s %s", field, strings.Join(parts, " "))
 }
 
 func goalIDs(goals []types.Goal) []string {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testi
 			}
 			t.Setenv(trail.EnvBaggage, "")
 			if tc.claim != "" {
-				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
 			}
 
 			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, trail.SpawnFromEnv().Lease)

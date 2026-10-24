@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -161,10 +162,10 @@ func TestIndexCardsEverySkill(t *testing.T) {
 	defs, err := skillCatalog().EmbeddedSkills()
 	require.NoError(t, err)
 	for _, d := range defs {
-		assert.Contains(t, index, `<a class="landing-card" href="`+d.Name+`/">`, "no index card for %s", d.Name)
+		assert.Contains(t, index, fmt.Sprintf("<a class=\"landing-card\" href=\"%s/\">", d.Name), "no index card for %s", d.Name)
 	}
 	assert.Equal(t, len(defs), strings.Count(index, `class="landing-card"`), "one card per skill, no more")
-	assert.Contains(t, index, "All "+strconv.Itoa(len(defs))+" together are ")
+	assert.Contains(t, index, fmt.Sprintf("All %s together are ", strconv.Itoa(len(defs))))
 
 	fm, ok := docs.ParseFrontmatter(index)
 	require.True(t, ok)

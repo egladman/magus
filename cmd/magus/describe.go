@@ -429,7 +429,7 @@ func spellSyntaxSummary(t types.Spell) string {
 	if c := t.Syntax.Comments; c != nil {
 		openers := slices.Clone(c.LineComments)
 		for _, b := range c.BlockComments {
-			openers = append(openers, b.Open+" "+b.Close)
+			openers = append(openers, fmt.Sprintf("%s %s", b.Open, b.Close))
 		}
 		parts = append(parts, "comments "+strings.Join(openers, ", "))
 	}
@@ -468,7 +468,7 @@ func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVers
 		if t.Probe.Bin == "" {
 			out = append(out, types.SpellVersion{
 				Tool: tool, Version: t.Key.Const,
-				CacheKey: "spell:" + tool + ":version=" + t.Key.Const,
+				CacheKey: fmt.Sprintf("spell:%s:version=%s", tool, t.Key.Const),
 			})
 			continue
 		}
@@ -482,7 +482,7 @@ func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVers
 			token, _ := spells.VersionToken(v, t.Key)
 			out = append(out, types.SpellVersion{
 				Tool: tool, Version: v,
-				CacheKey: "spell:" + tool + ":version=" + token,
+				CacheKey: fmt.Sprintf("spell:%s:version=%s", tool, token),
 			})
 		}
 	}
@@ -583,7 +583,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		}
 		line := "  " + c.Name
 		if len(tags) > 0 {
-			line += "  [" + strings.Join(tags, ", ") + "]"
+			line += fmt.Sprintf("  [%s]", strings.Join(tags, ", "))
 		}
 		fmt.Println(line)
 		if c.Doc != "" {
@@ -1291,7 +1291,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 	case outputName:
 		names := make([]string, 0, len(out))
 		for _, e := range out {
-			names = append(names, e.Project+":"+e.Target)
+			names = append(names, fmt.Sprintf("%s:%s", e.Project, e.Target))
 		}
 		return emitNames(os.Stdout, names)
 	}
@@ -1716,5 +1716,5 @@ func claimLabel(c types.FileClaim) string {
 	if c.Target == "" {
 		return c.Project
 	}
-	return c.Project + ":" + c.Target
+	return fmt.Sprintf("%s:%s", c.Project, c.Target)
 }

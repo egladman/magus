@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -321,7 +322,7 @@ func flagProbes(cmd cmdline.Command) []flagProbe {
 		if len(child.Flags) == 0 {
 			continue
 		}
-		out = append(out, flagProbe{name: cmd.Name + " " + child.Name, argvs: probeArgvs(cmd.Name + " " + child.Name), buildFlags: child.BindFlags})
+		out = append(out, flagProbe{name: fmt.Sprintf("%s %s", cmd.Name, child.Name), argvs: probeArgvs(fmt.Sprintf("%s %s", cmd.Name, child.Name)), buildFlags: child.BindFlags})
 	}
 	return out
 }

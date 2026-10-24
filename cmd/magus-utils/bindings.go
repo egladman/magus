@@ -294,7 +294,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 		name = meth.BuzzName
 	}
 	fmt.Fprintf(w, "\tm.MapSet(%q, vm.DirectValue(%q, func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {\n",
-		name, m.Name+"."+name)
+		name, fmt.Sprintf("%s.%s", m.Name, name))
 
 	impl := reflect.TypeOf(meth.Impl)
 	for i, a := range meth.Args {
@@ -303,7 +303,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 			if err != nil {
 				return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
 			}
-			fmt.Fprintf(w, "\t\t%s, err := %s(%q, ffi.AnyMap(bzArgs, %d))\n", a.Name, fn, m.Name+"\\"+name, i)
+			fmt.Fprintf(w, "\t\t%s, err := %s(%q, ffi.AnyMap(bzArgs, %d))\n", a.Name, fn, fmt.Sprintf("%s\\%s", m.Name, name), i)
 			fmt.Fprintln(w, "\t\tif err != nil {")
 			fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
 			fmt.Fprintln(w, "\t\t}")
@@ -578,7 +578,7 @@ func objectName(goType reflect.Type) string {
 	case goType.Kind() == reflect.Slice && goType.Elem().Kind() == reflect.Struct && isBoundaryType(goType.Elem()):
 		// Bracketed, so the descriptor states the shape as a magusfile annotation
 		// spells it and no consumer has to reflect to recover the list-ness.
-		return "[" + buzzObjectName(goType.Elem()) + "]"
+		return fmt.Sprintf("[%s]", buzzObjectName(goType.Elem()))
 	}
 	return ""
 }
@@ -713,9 +713,9 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error)
 			return "", err
 		}
 		if e.reachesEnum(t.Elem()) {
-			return "ffi.ObjectSlice(" + src + ", func(v " + e.qualify(t.Elem()) + ") vm.Value { return " + e.call(t.Elem(), "v") + " })", nil
+			return fmt.Sprintf("ffi.ObjectSlice(%s, func(v %s) vm.Value { return %s })", src, e.qualify(t.Elem()), e.call(t.Elem(), "v")), nil
 		}
-		return "ffi.ObjectSlice(" + src + ", " + e.funcName(t.Elem()) + ")", nil
+		return fmt.Sprintf("ffi.ObjectSlice(%s, %s)", src, e.funcName(t.Elem())), nil
 	default:
 		return "", fmt.Errorf("object return %s is not a struct or slice of structs", t)
 	}
@@ -791,7 +791,7 @@ func typePackage(t reflect.Type) boundaryPackage {
 // qualifyType renders t as a generated file spells it ("types.FileInfo",
 // "queuetypes.Change").
 func qualifyType(t reflect.Type) string {
-	return typePackage(t).alias + "." + t.Name()
+	return fmt.Sprintf("%s.%s", typePackage(t).alias, t.Name())
 }
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
@@ -838,7 +838,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		fmt.Fprintf(w, "%sif !%s.IsZero() {\n", indent, value)
 		fmt.Fprintf(w, "%s\t%s = %s.Format(time.RFC3339Nano)\n", indent, formatted, value)
 		fmt.Fprintf(w, "%s}\n", indent)
-		return "vm.StrValue(" + formatted + ")", nil
+		return fmt.Sprintf("vm.StrValue(%s)", formatted), nil
 	}
 
 	if en, ok := buzzEnum(t); ok {
@@ -852,17 +852,17 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		// string is emitted bare rather than as string(s), which is redundant and what
 		// the unconvert linter exists to catch.
 		if t != reflect.TypeOf("") {
-			return "vm.StrValue(string(" + value + "))", nil
+			return fmt.Sprintf("vm.StrValue(string(%s))", value), nil
 		}
-		return "vm.StrValue(" + value + ")", nil
+		return fmt.Sprintf("vm.StrValue(%s)", value), nil
 	case reflect.Bool:
-		return "vm.BoolValue(" + value + ")", nil
+		return fmt.Sprintf("vm.BoolValue(%s)", value), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return "vm.IntValue(int64(" + value + "))", nil
+		return fmt.Sprintf("vm.IntValue(int64(%s))", value), nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "vm.IntValue(int64(" + value + "))", nil
+		return fmt.Sprintf("vm.IntValue(int64(%s))", value), nil
 	case reflect.Float32, reflect.Float64:
-		return "vm.FloatValue(float64(" + value + "))", nil
+		return fmt.Sprintf("vm.FloatValue(float64(%s))", value), nil
 	case reflect.Struct:
 		if err := e.emitStruct(t); err != nil {
 			return "", err
@@ -872,13 +872,13 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		out, index := e.name("items", path), e.name("index", path)
 		fmt.Fprintf(w, "%s%s := make([]vm.Value, len(%s))\n", indent, out, value)
 		fmt.Fprintf(w, "%sfor %s := range %s {\n", indent, index, value)
-		item, err := e.value(w, value+"["+index+"]", path+"Item", t.Elem(), indent+"\t")
+		item, err := e.value(w, fmt.Sprintf("%s[%s]", value, index), path+"Item", t.Elem(), indent+"\t")
 		if err != nil {
 			return "", err
 		}
 		fmt.Fprintf(w, "%s\t%s[%s] = %s\n", indent, out, index, item)
 		fmt.Fprintf(w, "%s}\n", indent)
-		return "vm.ListValue(" + out + ")", nil
+		return fmt.Sprintf("vm.ListValue(%s)", out), nil
 	case reflect.Map:
 		if t.Key().Kind() != reflect.String {
 			return "", fmt.Errorf("map key %s is not a string", t.Key())
@@ -901,7 +901,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		out := e.name("opt", path)
 		fmt.Fprintf(w, "%s%s := vm.Null\n", indent, out)
 		fmt.Fprintf(w, "%sif %s != nil {\n", indent, value)
-		elem, err := e.value(w, "(*"+value+")", path, t.Elem(), indent+"\t")
+		elem, err := e.value(w, fmt.Sprintf("(*%s)", value), path, t.Elem(), indent+"\t")
 		if err != nil {
 			return "", err
 		}
@@ -913,7 +913,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		// merges), so it converts by its dynamic type, the way any other untyped host
 		// value does; the mirror declares it `any?`.
 		e.usesFFI = true
-		return "ffi.AnyVal(" + value + ")", nil
+		return fmt.Sprintf("ffi.AnyVal(%s)", value), nil
 	default:
 		return "", fmt.Errorf("unsupported field type %s", t)
 	}
@@ -936,9 +936,9 @@ func (e *buzzValueEmitter) funcName(t reflect.Type) string {
 func (e *buzzValueEmitter) call(t reflect.Type, src string) string {
 	if e.reachesEnum(t) {
 		e.usesEnums = true
-		return e.funcName(t) + "(" + src + ", enums)"
+		return fmt.Sprintf("%s(%s, enums)", e.funcName(t), src)
 	}
-	return e.funcName(t) + "(" + src + ")"
+	return fmt.Sprintf("%s(%s)", e.funcName(t), src)
 }
 
 // reachesEnum reports whether encoding t writes an enum field anywhere below it. Such
@@ -1014,7 +1014,7 @@ func boundaryFields(t reflect.Type) []boundaryField {
 		}
 		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
 			for _, inner := range boundaryFields(f.Type) {
-				inner.selector = f.Name + "." + inner.selector
+				inner.selector = fmt.Sprintf("%s.%s", f.Name, inner.selector)
 				out = append(out, inner)
 			}
 			continue

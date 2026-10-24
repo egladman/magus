@@ -230,13 +230,13 @@ func renderSizing(target string, rep types.RiskReport) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
 	for _, line := range rep.Lines() {
-		b.WriteString("  " + line + "\n")
+		b.WriteString(fmt.Sprintf("  %s\n", line))
 	}
 	gate := "none"
 	if cmds := rep.Commands(); len(cmds) > 0 {
 		gate = strings.Join(cmds, " && ")
 	}
-	b.WriteString("  gate: " + gate + "\n")
+	b.WriteString(fmt.Sprintf("  gate: %s\n", gate))
 	for _, s := range rep.Gate {
 		if s.Op != "" {
 			fmt.Fprintf(&b, "  narrowed: %s in %s %s runs %d package(s): %s\n",
@@ -262,7 +262,7 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 			n, types.UndeclaredSeedingFile, strings.Join(f.rec.UndeclaredSeeds, ", "))
 	}
 	if f.identical {
-		b.WriteString("\n  delta since that gate: none; this run's input fingerprint " + shortFingerprint(g.fp) + " matches it exactly")
+		b.WriteString(fmt.Sprintf("\n  delta since that gate: none; this run's input fingerprint %s matches it exactly", shortFingerprint(g.fp)))
 		return b.String()
 	}
 	if len(f.delta) == 0 {
@@ -416,7 +416,7 @@ func gatePoolSaturated(ctx context.Context) (bool, string) {
 		return false, "no broker answered; treated as idle"
 	}
 	m := &st.Capacity
-	desc := strconv.Itoa(m.HeldSlots) + " of " + strconv.Itoa(m.BudgetSlots) + " slots held"
+	desc := fmt.Sprintf("%s of %s slots held", strconv.Itoa(m.HeldSlots), strconv.Itoa(m.BudgetSlots))
 	if !internalci.PoolSaturated(m) {
 		return false, "idle: " + desc
 	}

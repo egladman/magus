@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -63,7 +64,7 @@ func TestServerStopTerminatesLiveServer(t *testing.T) {
 // TestServerStopNoServerExitsNonzero pins the other half of the fix: stop against nothing must
 // not exit 0 silently. It returns a non-zero exit (errSilent) rather than pretending success.
 func TestServerStopNoServerExitsNonzero(t *testing.T) {
-	addr := "unix://" + proc.SockDir() + "/magus-absent-test.sock"
+	addr := fmt.Sprintf("unix://%s/magus-absent-test.sock", proc.SockDir())
 	err := serverStop(context.Background(), []string{"--socket", addr})
 	require.Error(t, err, "stop against a dead socket must report failure")
 
@@ -358,14 +359,14 @@ func reviewIn(t *testing.T, state string, threads ...types.ReviewComment) string
 // body, for the answers ReviewSpell cannot give: a malformed row, a throw, a call that waits.
 func mergedReviewAnswering(t *testing.T, body string) string {
 	t.Helper()
-	return register.Spell(t, "fake-job-review", spells.WithFuncSource(`import "magus/spell";
+	return register.Spell(t, "fake-job-review", spells.WithFuncSource(fmt.Sprintf(`import "magus/spell";
 import "http";
 export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
     return ReviewTarget{ id = "482", repo = "acme/acme", state = "merged" };
 }
 export fun review_threads(target: Target, req: ReviewRef) > any !> any {
-`+body+`
-}`))
+%s
+}`, body)))
 }
 
 // mergedReviewEvents returns the review.merged events the job left on the trail.
@@ -490,9 +491,9 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(host.Close)
-	ctx, _, m := checkReviewWorkspace(t, mergedReviewAnswering(t, `
-    http\get("`+host.URL+`");
-    return [<ReviewComment>];`), workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, mergedReviewAnswering(t, fmt.Sprintf(`
+    http\get("%s");
+    return [<ReviewComment>];`, host.URL)), workspace.WithTelemetryProvider(rec))
 	store = changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-time.Minute))
 	require.NoError(t, err)

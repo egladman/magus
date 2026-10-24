@@ -1155,24 +1155,23 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 	client := func(script string) string {
 		return fmt.Sprintf(`{"script":%q}`, `import "magus"; `+script)
 	}
-	own := `"` + wide.ID + `"`
+	own := fmt.Sprintf("\"%s\"", wide.ID)
 	for name, tc := range map[string]struct {
 		toolInput string
 		want      string
 	}{
 		"fork on another row":   {client(`magus\job.put("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
-		"fork widening its own": {client(`magus\job.put(` + own + `, opts: {"write_paths": ["**"]});`), "deny\n"},
+		"fork widening its own": {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"**\"]});", own)), "deny\n"},
 		"clearing the board":    {client(`magus\job.clear();`), "deny\n"},
 		"exec elsewhere":        {client(`magus\job.register("harness/other");`), "deny\n"},
-		"exec its own":          {client(`magus\job.register(` + own + `);`), "pass\n"},
+		"exec its own":          {client(fmt.Sprintf("magus\\job.register(%s);", own)), "pass\n"},
 		"listing the plan":      {client(`magus\job.list();`), "pass\n"},
-		"giving paths back":     {client(`magus\job.put(` + own + `, opts: {"write_paths": ["cmd/magus/**"]});`), "pass\n"},
+		"giving paths back":     {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"]});", own)), "pass\n"},
 		// A shrink beside a forged checkpoint or rewritten criteria is not a plain shrink.
-		"forging its own base":   {client(`magus\job.put(` + own + `, opts: {"write_paths": ["cmd/magus/**"], "checkpoint": "deadbeef"});`), "deny\n"},
-		"rewriting its criteria": {client(`magus\job.put(` + own + `, opts: {"write_paths": ["cmd/magus/**"], "criteria": "something else"});`), "deny\n"},
+		"forging its own base":   {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
+		"rewriting its criteria": {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"criteria\": \"something else\"});", own)), "deny\n"},
 	} {
-		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-` + name +
-			`","tool_name":"mcp__magus__client","tool_input":` + tc.toolInput + `}`
+		envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"mcp-%s\",\"tool_name\":\"mcp__magus__client\",\"tool_input\":%s}", name, tc.toolInput)
 		var out bytes.Buffer
 		err := shellStdin(ctx, strings.NewReader(envelope), &out, []string{"--lease", wide.ID, "-o", "name"})
 		if tc.want == "deny\n" {
@@ -1269,7 +1268,7 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 
 	// --lease takes no default from the environment, so a BAGGAGE claim reaches the verdict
 	// as the claim it is rather than as a flag that would outrank every record.
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+narrowLease().ID)
+	t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, narrowLease().ID))
 	var claimed bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), &claimed, []string{"-o", "json"}))
 	assert.Contains(t, claimed.String(), `"lease_from": "env"`)
@@ -1326,7 +1325,7 @@ func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 	for name, toolCall := range map[string]string{
 		"the affected gate": `"tool_name":"mcp__magus__client","tool_input":{"script":"import \"magus\"; fun main(args: [str]) > any !> str { return magus\\cmd(\"affected\", [\"ci\"]); }"}`,
 	} {
-		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-gate","` + toolCall[1:] + `}`
+		envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"mcp-gate\",\"%s}", toolCall[1:])
 		var out bytes.Buffer
 		err := shellStdin(ctx, strings.NewReader(envelope), &out, []string{"--lease", lease.ID, "-o", "name"})
 		require.Error(t, err, name)
@@ -1561,8 +1560,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 // file, which would let the two drift.
 func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
 	t.Helper()
-	envelope := `{"hook_event_name":"PreToolUse","session_id":"` + session + `","tool_name":"Skill",` +
-		`"tool_input":{"skill":"magus-multi-agent"}}`
+	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"%s\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"magus-multi-agent\"}}", session)
 	var out bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &out,
 		[]string{"--agent-name", "claude-code", "-o", "name"}))
@@ -1900,10 +1898,20 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 // committed load still has to read it as committed, not as edited.
 func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 	rule := func(ns, verdict string) string {
-		return "namespace " + ns + ";\n\nimport \"magus\";\n\nexport fun judge(req: CommandRequest) > GuardVerdict {\n    return " + verdict + ";\n}\n"
+		return fmt.Sprintf(`namespace %s;
+
+import "magus";
+
+export fun judge(req: CommandRequest) > GuardVerdict {
+    return %s;
+}
+`, ns, verdict)
 	}
 	importing := func(name string) string {
-		return "import \"magus\";\nimport \"./policy/" + name + "\" as p;\nmagus\\guard.command(p\\judge);\n"
+		return fmt.Sprintf(`import "magus";
+import "./policy/%s" as p;
+magus\guard.command(p\judge);
+`, name)
 	}
 	repo := testkit.NewRepo(t, map[string]string{
 		"magus.yaml":     "{}\n",

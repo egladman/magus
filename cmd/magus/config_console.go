@@ -36,7 +36,7 @@ func configConsoleCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Manage the console (PWA) auth tokens. These are SEPARATE from MCP connector")
 		fmt.Fprintln(os.Stderr, "tokens: a console token is refused at /mcp, and an MCP token is refused by")
-		fmt.Fprintln(os.Stderr, "the console. Mint MCP credentials with `"+hint.ConfigMCPConnectorCreate.String()+"`.")
+		fmt.Fprintln(os.Stderr, fmt.Sprintf("the console. Mint MCP credentials with `%s`.", hint.ConfigMCPConnectorCreate.String()))
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  token   create, list, or revoke console tokens")

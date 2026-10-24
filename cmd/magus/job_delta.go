@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -97,7 +98,7 @@ func readSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 			continue
 		}
 		if held(before, e.Label) && !held(after, e.Label) {
-			delta.Left = append(delta.Left, e.Label+" ("+e.Source+")")
+			delta.Left = append(delta.Left, fmt.Sprintf("%s (%s)", e.Label, e.Source))
 		}
 	}
 	slices.Sort(delta.Added)

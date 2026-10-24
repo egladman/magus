@@ -510,7 +510,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	walkRegistryCommands(commands.Root.Children, nil, func(path []string, c cmdline.Command) {
 		for _, ex := range c.Examples {
-			t.Run(strings.Join(path, "_")+"/"+ex.Comment, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", strings.Join(path, "_"), ex.Comment), func(t *testing.T) {
 				if knownBrokenExamples[ex.Command] {
 					t.Skipf("known broken in the CLI itself, tracked separately: %q", ex.Command)
 				}

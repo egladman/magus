@@ -64,7 +64,7 @@ func fixApply(ctx context.Context, store *job.Store, records []types.Declaration
 	fixed, edits := job.FixApply(ctx, store, records, globalCfg.Jobs, read, checkpoint)
 	for _, rec := range fixed {
 		for _, e := range edits[rec.ID] {
-			slog.InfoContext(ctx, rec.ID+": "+e.String(), attr.Notice("fixed"))
+			slog.InfoContext(ctx, fmt.Sprintf("%s: %s", rec.ID, e.String()), attr.Notice("fixed"))
 		}
 	}
 	return fixed

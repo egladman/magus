@@ -244,7 +244,7 @@ func printAgentInstallNextSteps(ctx context.Context, dir string, written, change
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
-	interactive.Hint(ctx, "regenerate MAGUS.md for human readers:  "+hint.DescribeGraph.With("-o", "markdown")+"  (the skills send agents to the live verbs: "+hint.DescribeTargets.String()+", "+hint.Ls.String()+")")
+	interactive.Hint(ctx, fmt.Sprintf("regenerate MAGUS.md for human readers:  %s  (the skills send agents to the live verbs: %s, %s)", hint.DescribeGraph.With("-o", "markdown"), hint.DescribeTargets.String(), hint.Ls.String()))
 	interactive.Hint(ctx, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Hint(ctx, "  \""+vcsSafetyRule+"\"")
 	interactive.Hint(ctx, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentStarter.String())
@@ -280,7 +280,7 @@ func printAgentsBlockToPaste(ctx context.Context, dir string) {
 		}
 		verb = "your AGENTS.md has an older copy: replace it BETWEEN the markers and leave the rest of the file alone"
 	}
-	interactive.Hint(ctx, "magus does not write AGENTS.md. That file is yours. If your agent host reads it, "+verb+":")
+	interactive.Hint(ctx, fmt.Sprintf("magus does not write AGENTS.md. That file is yours. If your agent host reads it, %s:", verb))
 	slog.InfoContext(ctx, "\n"+agentSkills.AgentsBlock(declaresRoutingIndex(ctx, dir)), attr.Notice(""))
 }
 
@@ -317,19 +317,27 @@ const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself
 // The magus guidance arrives inside its begin/end markers (the same bytes
 // install prints), so `magus doctor` can grade it once pasted.
 func agentStarterDoc(routingIndex bool) string {
-	return "# AGENTS.md\n\n" +
-		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
-		"     fill in the project-specific sections below. Everything outside the\n" +
-		"     magus:skills markers is yours; magus never writes this file. -->\n\n" +
-		"## Project\n\n" +
-		"<!-- What this repo is, its primary language(s), and where the entry points\n" +
-		"     and top-level layout live. A few sentences. -->\n\n" +
-		"## Conventions\n\n" +
-		"<!-- The non-obvious house rules an agent cannot infer from the code:\n" +
-		"     naming, error handling, comment style, and what NOT to touch. -->\n\n" +
-		"## Version control\n\n" +
-		"- " + vcsSafetyRule + "\n\n" +
-		agentSkills.AgentsBlock(routingIndex)
+	return fmt.Sprintf(`# AGENTS.md
+
+<!-- A starter for AI agents working in this repo. Own and edit this file:
+     fill in the project-specific sections below. Everything outside the
+     magus:skills markers is yours; magus never writes this file. -->
+
+## Project
+
+<!-- What this repo is, its primary language(s), and where the entry points
+     and top-level layout live. A few sentences. -->
+
+## Conventions
+
+<!-- The non-obvious house rules an agent cannot infer from the code:
+     naming, error handling, comment style, and what NOT to touch. -->
+
+## Version control
+
+- %s
+
+%s`, vcsSafetyRule, agentSkills.AgentsBlock(routingIndex))
 }
 
 // agentStarterCmd prints agentStarterDoc to stdout, never to a file. The starter is meant

@@ -217,7 +217,7 @@ func externDecl(m std.Method) (string, error) {
 		if a.Type == std.TypeByteSlice {
 			typ = "any"
 		}
-		p := a.Name + ": " + typ
+		p := fmt.Sprintf("%s: %s", a.Name, typ)
 		if a.Optional {
 			def, derr := buzzDefault(a)
 			if derr != nil {
@@ -400,7 +400,7 @@ func buzzReturnType(m std.Method) (string, error) {
 				return "[any]", nil
 			}
 		}
-		return "[" + first + "]", nil
+		return fmt.Sprintf("[%s]", first), nil
 	}
 	r := m.Returns[0]
 	if r.Nullable {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -217,7 +218,7 @@ func TestJobRecordsRenderFromTheirDeclaredSources(t *testing.T) {
 	for _, rec := range jobRecords {
 		body, err := renderJobSchema(rec, decls)
 		require.NoError(t, err, rec.File)
-		assert.Contains(t, string(body), `"$id": "https://magus.invalid/job/`+rec.File+`"`)
+		assert.Contains(t, string(body), fmt.Sprintf("\"$id\": \"https://magus.invalid/job/%s\"", rec.File))
 	}
 }
 
@@ -388,7 +389,13 @@ func TestAMarkerThatMarksNothingIsRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			src := "package fixture\nconst FixtureSchemaVersion = 1\ntype Inner struct{}\ntype Fixture struct {\n\t" + tc.field + "\n}\n"
+			src := fmt.Sprintf(`package fixture
+const FixtureSchemaVersion = 1
+type Inner struct{}
+type Fixture struct {
+	%s
+}
+`, tc.field)
 			_, err := renderMarkerFixture(t, src)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.want)

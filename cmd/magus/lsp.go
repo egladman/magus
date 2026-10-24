@@ -251,7 +251,7 @@ func (s *lspServer) hover(raw json.RawMessage) any {
 	if h == nil {
 		return nil
 	}
-	value := "```buzz\n" + h.Title + "\n```"
+	value := fmt.Sprintf("```buzz\n%s\n```", h.Title)
 	if h.Doc != "" {
 		value += "\n\n" + h.Doc
 	}

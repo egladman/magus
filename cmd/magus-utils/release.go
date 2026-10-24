@@ -674,7 +674,7 @@ func isReleaseAsset(name string) bool {
 // "proofread_v0.2.0_linux_amd64_static.tar.gz" both become "linux/amd64".
 func platformFromName(name, version string) string {
 	// Strip the "<tool>_<version>_" prefix and ".tar.gz" suffix.
-	tool, rest, found := strings.Cut(name, "_"+version+"_")
+	tool, rest, found := strings.Cut(name, fmt.Sprintf("_%s_", version))
 	if !found || tool == "" || strings.Contains(tool, "_") || !strings.HasSuffix(rest, ".tar.gz") {
 		return ""
 	}
@@ -690,7 +690,7 @@ func platformFromName(name, version string) string {
 	}
 	parts := strings.SplitN(mid, "_", 2)
 	if len(parts) == 2 {
-		return parts[0] + "/" + parts[1]
+		return fmt.Sprintf("%s/%s", parts[0], parts[1])
 	}
 	return mid
 }

@@ -188,7 +188,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	out = captureStdout(t, func() {
 		require.NoError(t, queryTrailPayload(ctx, "", ref, output.Options{Format: outputJSON}))
 	})
-	assert.JSONEq(t, `{"ref":"`+ref+`","output":"the full verdict"}`, out)
+	assert.JSONEq(t, fmt.Sprintf("{\"ref\":\"%s\",\"output\":\"the full verdict\"}", ref), out)
 
 	assert.Error(t, queryCmd(ctx, "", []string{"--attempts", "output", ref}), "run flags are refused on a payload")
 
@@ -197,7 +197,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 		var silent reportedExit
 		require.ErrorAs(t, queryTrailPayload(ctx, "", missing, output.Options{Format: outputText}), &silent)
 	})
-	assert.Contains(t, stderr, `no stored payload for ref "`+missing+`"`)
+	assert.Contains(t, stderr, fmt.Sprintf("no stored payload for ref \"%s\"", missing))
 }
 
 // TestShowOutputIdentity_RevisionRendering drives showOutputIdentity end to end in a real git
@@ -240,7 +240,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 		require.NoError(t, showOutputIdentity(ctx, m, ref, output.Options{}))
 	})
 	assert.Contains(t, out,
-		"recorded at "+firstRev[:12]+", you are on "+secondRev[:12]+".",
+		fmt.Sprintf("recorded at %s, you are on %s.", firstRev[:12], secondRev[:12]),
 	)
 }
 
@@ -541,7 +541,7 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 		{readQuery, "zzzunmatched", queryCmd},
 		{readExplain, "docs", explainCmd},
 	} {
-		t.Run(tc.verb+" "+tc.input, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s %s", tc.verb, tc.input), func(t *testing.T) {
 			var cmdErr error
 			want := captureStdout(t, func() { cmdErr = tc.cmd(ctx, f.root, []string{tc.input}) })
 

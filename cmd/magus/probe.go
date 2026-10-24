@@ -239,7 +239,7 @@ type statusFunc func(ctx context.Context) (*types.StatusOutput, error)
 // errNotServer is a health probe that reached a per-process proc server. It answers a
 // socket and loads no workspace, so reporting its empty workspace list as "no
 // workspaces loaded" would be a misleading readiness verdict.
-var errNotServer = errors.New("a per-process pool answered, not the server, the probes ask `" + hint.ServerStart.String() + "`")
+var errNotServer = errors.New(fmt.Sprintf("a per-process pool answered, not the server, the probes ask `%s`", hint.ServerStart.String()))
 
 // serverSnapshot asks the server for a live status snapshot: at socket when one is named,
 // otherwise at the server's own address (resolveServerAddr).
@@ -299,7 +299,7 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 	st := &types.MCPEndpointStatus{
 		Enabled: true,
 		Address: addr,
-		URL:     "http://" + addr + "/mcp",
+		URL:     fmt.Sprintf("http://%s/mcp", addr),
 	}
 	switch probeMCPReadiness(pctx, addr) {
 	case http.StatusOK:
@@ -351,7 +351,7 @@ func buildConsoleStatus(cfg config.Console, mcp *types.MCPEndpointStatus) *types
 // probe keys on the status code alone and never reads the body, so it needs no change:
 // the code is the same 200/503 gate it always was, just with a richer body alongside it.
 func probeMCPReadiness(ctx context.Context, addr string) int {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/readyz", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/readyz", addr), nil)
 	if err != nil {
 		return 0
 	}

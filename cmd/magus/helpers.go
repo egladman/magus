@@ -282,7 +282,7 @@ func listTargets(scope string, targets []types.Target, source string) {
 		label = fmt.Sprintf("%d projects", len(targets))
 	}
 	if source != "" {
-		label += " (" + source + ")"
+		label += fmt.Sprintf(" (%s)", source)
 	}
 	slog.Info("listed targets", slog.String("scope", scope), slog.String("summary", label))
 	for _, t := range targets {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,7 +68,7 @@ func TestServerLine(t *testing.T) {
 // version` stays a command a script can call in a loop.
 func TestProbeServerVersionWithNoServer(t *testing.T) {
 	defer snapshotGlobals()()
-	globalCfg.Server.Address = "unix://" + proc.SockDir() + "/magus-version-absent-test.sock"
+	globalCfg.Server.Address = fmt.Sprintf("unix://%s/magus-version-absent-test.sock", proc.SockDir())
 
 	start := time.Now()
 	assert.Equal(t, serverProbe{}, probeServerVersion(context.Background()))

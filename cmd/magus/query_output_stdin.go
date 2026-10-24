@@ -77,7 +77,7 @@ func writeRecordProvenance(w io.Writer, rec types.StoredOutput) {
 	if len(rec.ClassDigests) > 0 {
 		parts := make([]string, 0, len(rec.ClassDigests))
 		for _, c := range rec.ClassDigests {
-			parts = append(parts, c.Class+" "+c.Digest)
+			parts = append(parts, fmt.Sprintf("%s %s", c.Class, c.Digest))
 		}
 		fmt.Fprintf(w, "  key:      %s (compare with `magus describe target --cache` here)\n", strings.Join(parts, ", "))
 	}

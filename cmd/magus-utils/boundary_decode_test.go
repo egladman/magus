@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -92,7 +93,7 @@ func TestDecodeEmitterGeneratesTheContractTypes(t *testing.T) {
 		}
 		src, err := e.file()
 		require.NoError(t, err, "%s", root)
-		assert.Contains(t, string(src), "func Decode"+root.Name()+"(")
+		assert.Contains(t, string(src), fmt.Sprintf("func Decode%s(", root.Name()))
 	}
 }
 

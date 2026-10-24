@@ -370,7 +370,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 // arguments, so rerunning one probe adds an attempt under the same ref and a changed probe
 // gets a new one.
 func buzzRunKey(name, code string, args []string) string {
-	sum := sha256.Sum256([]byte("buzz\x00" + name + "\x00" + code + "\x00" + strings.Join(args, "\x00")))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("buzz\x00%s\x00%s\x00%s", name, code, strings.Join(args, "\x00"))))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -473,7 +473,7 @@ func skipReason(reason string) string {
 	if reason == "" {
 		return ""
 	}
-	return " (" + reason + ")"
+	return fmt.Sprintf(" (%s)", reason)
 }
 
 // buzzSource resolves the program text (and a name for diagnostics) from the -e

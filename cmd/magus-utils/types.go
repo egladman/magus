@@ -67,7 +67,7 @@ func mirrorOptions() buzzgen.Options {
 		if !ok {
 			return "", "", false
 		}
-		return e.Name, e.Name + "." + e.Cases[0].Name, true
+		return e.Name, fmt.Sprintf("%s.%s", e.Name, e.Cases[0].Name), true
 	}
 	return opts
 }

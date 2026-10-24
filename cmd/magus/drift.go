@@ -127,7 +127,7 @@ func parseCheckDriftArgs(args []string) (job.DriftHook, error) {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output or formatting stale, and for a push, count")
 			fmt.Fprintln(os.Stderr, "the unread hunks of each pushed range. This is the worker for")
-			fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(job.NameCheckDrift)+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("`%s`; prefer that form.", hint.JobRun.With(job.NameCheckDrift)))
 		}
 	})
 	return h, err
@@ -158,7 +158,7 @@ func pushedUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, 
 			slog.With(attr.Component("check-drift")).DebugContext(ctx, "pushed range unreadable", slog.String("base", base), attr.Error(err))
 			continue
 		}
-		if n, ok := unreadRangeNotice(label+"..."+short(p.Local), patch, viewed, verr); ok {
+		if n, ok := unreadRangeNotice(fmt.Sprintf("%s...%s", label, short(p.Local)), patch, viewed, verr); ok {
 			notices = append(notices, n)
 		}
 	}

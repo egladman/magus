@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -31,7 +32,7 @@ func graphExplorerLink(ctx context.Context, root string) string {
 	if raw == "" {
 		return ""
 	}
-	return hostedExplorerURL + "#src=" + url.QueryEscape(raw+"/"+committedGraphPath)
+	return fmt.Sprintf("%s#src=%s", hostedExplorerURL, url.QueryEscape(fmt.Sprintf("%s/%s", raw, committedGraphPath)))
 }
 
 // githubRawBase turns a github.com blob base into its raw.githubusercontent.com
@@ -87,7 +88,7 @@ func forgeBlobBase(remote, branch string) string {
 	if branch == "" || branch == "HEAD" {
 		branch = "main"
 	}
-	return "https://" + host + "/" + owner + "/" + repo + "/blob/" + branch
+	return fmt.Sprintf("https://%s/%s/%s/blob/%s", host, owner, repo, branch)
 }
 
 // parseGitRemote extracts (host, owner, repo) from an scp-style (git@host:owner/repo)

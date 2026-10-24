@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -39,9 +40,7 @@ var global globalFlags
 // outputFormatHelp names the bare -o template form explicitly, because that is how a
 // caller discovers which field names a template may use: they are the -o json keys
 // (.name), not the Go field names (.Name), and nothing else advertises that.
-var outputFormatHelp = "Output format (" + output.Join(output.Common, "|") +
-	"|template[=<go-template>]); default: text. Bare -o template lists the available " +
-	"template fields (they are the -o json names)"
+var outputFormatHelp = fmt.Sprintf("Output format (%s|template[=<go-template>]); default: text. Bare -o template lists the available template fields (they are the -o json names)", output.Join(output.Common, "|"))
 
 // bindGlobalFlags registers the flags magus accepts before its subcommand, bar the display
 // set bindDisplayFlags adds. The guard reads a magus argv with its own copy of both
@@ -242,7 +241,7 @@ func isFlagNamed(arg, name string) bool {
 // parseFlagValue returns the value of an `-name=value` or `--name=value` argument,
 // or "" when arg is not that flag.
 func parseFlagValue(arg, name string) string {
-	for _, prefix := range []string{"-" + name + "=", "--" + name + "="} {
+	for _, prefix := range []string{fmt.Sprintf("-%s=", name), fmt.Sprintf("--%s=", name)} {
 		if v, ok := strings.CutPrefix(arg, prefix); ok {
 			return v
 		}

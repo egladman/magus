@@ -165,7 +165,7 @@ func recordShowcaseSession() error {
 	if err != nil {
 		return err
 	}
-	if err := os.Setenv("PATH", repo+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+	if err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", repo, string(os.PathListSeparator), os.Getenv("PATH"))); err != nil {
 		return err
 	}
 	return recordShowcase(dir)

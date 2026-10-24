@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -45,7 +46,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false))
 	})
 	assert.NoDirExists(t, orphan)
-	assert.Equal(t, "removed skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n", out)
+	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
 
 	// A dry run names the same deletion and performs none of it.
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
@@ -55,7 +56,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true))
 	})
 	assert.DirExists(t, orphan)
-	assert.Contains(t, out, "would remove skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n")
+	assert.Contains(t, out, fmt.Sprintf("would remove skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")))
 }
 
 // TestHarnessInstallRefusesABoundJobFromEitherSource pins that a harness skill install is

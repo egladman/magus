@@ -90,8 +90,8 @@ func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "on purpose. Unreadable input is 2, so a host that blocks on 2 fails closed")
 	fmt.Fprintln(w, "when bytes were lost on the way in.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "A verdict names the rule that produced it, in brackets. `"+hint.DescribeRules.String()+"`")
-	fmt.Fprintln(w, "lists every rule this workspace enforces; `"+hint.DescribeRule.With("<name>")+"` details one.")
+	fmt.Fprintln(w, fmt.Sprintf("A verdict names the rule that produced it, in brackets. `%s`", hint.DescribeRules.String()))
+	fmt.Fprintln(w, fmt.Sprintf("lists every rule this workspace enforces; `%s` details one.", hint.DescribeRule.With("<name>")))
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
 }
@@ -167,8 +167,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
-			Reason: refusal.Error() + "\n" +
-				"Nothing was judged, so this call is blocked rather than cleared. Fix the environment the agent host runs in.",
+			Reason:        fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. Fix the environment the agent host runs in.", refusal.Error()),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
@@ -192,8 +191,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 			Decision:      "deny",
 			// "from stdin" is accurate whichever way this command is called: an operand
 			// is read off argv and cannot fail, so a read error is always the piped path.
-			Reason: "magus shell could not read its input from stdin: " + readErr.Error() + "\n" +
-				"Nothing was judged, so this call is blocked rather than cleared. Retry it.",
+			Reason: fmt.Sprintf("magus shell could not read its input from stdin: %s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", readErr.Error()),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
@@ -693,11 +691,11 @@ func writeGuardVerdict(out io.Writer, opts output.Options, verdict types.GuardJu
 	case outputText:
 		switch verdict.Decision {
 		case "deny":
-			fmt.Fprintln(out, decisionLabel("deny", verdict.Rule)+" "+verdict.Reason)
+			fmt.Fprintln(out, fmt.Sprintf("%s %s", decisionLabel("deny", verdict.Rule), verdict.Reason))
 		case "ask":
-			fmt.Fprintln(out, decisionLabel("ask", verdict.Rule)+" "+verdict.Reason)
+			fmt.Fprintln(out, fmt.Sprintf("%s %s", decisionLabel("ask", verdict.Rule), verdict.Reason))
 		case "advise":
-			fmt.Fprintln(out, decisionLabel("advise", verdict.Rule)+" "+verdict.Context)
+			fmt.Fprintln(out, fmt.Sprintf("%s %s", decisionLabel("advise", verdict.Rule), verdict.Context))
 		default:
 			fmt.Fprintln(out, "pass")
 		}
@@ -723,7 +721,7 @@ func decisionLabel(decision, rule string) string {
 	if rule == "" {
 		return decision + ":"
 	}
-	return decision + " [" + rule + "]:"
+	return fmt.Sprintf("%s [%s]:", decision, rule)
 }
 
 // guardInputLimit bounds the payload one hook call may carry.

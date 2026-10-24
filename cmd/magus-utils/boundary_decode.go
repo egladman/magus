@@ -318,7 +318,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		e.enums[en.Name] = en
 		s := "s" + name
 		fmt.Fprintf(w, "%s%s, err := decodeEnum(%s, %s, %q, enum%sValues)\n", indent, s, src, path, en.Name, en.Name)
-		ret(e.qualify(t) + "(" + s + ")")
+		ret(fmt.Sprintf("%s(%s)", e.qualify(t), s))
 		return nil
 	}
 	switch t.Kind() {
@@ -333,7 +333,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		s := "s" + name
 		fmt.Fprintf(w, "%s%s, err := decodeStr(%s, %s)\n", indent, s, src, path)
 		if t != reflect.TypeFor[string]() {
-			ret(e.qualify(t) + "(" + s + ")")
+			ret(fmt.Sprintf("%s(%s)", e.qualify(t), s))
 		} else {
 			ret(s)
 		}
@@ -387,7 +387,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		fmt.Fprintf(w, "%s\t%s := make(%s, len(%s))\n", indent, items, e.goType(t), list)
 		fmt.Fprintf(w, "%s\tfor %s, %s := range %s {\n", indent, index, item, list)
 		elemPath := fmt.Sprintf("fmt.Sprintf(\"%%s[%%d]\", %s, %s)", path, index)
-		if err := e.assign(w, item, elemPath, items+"["+index+"]", name+"Item", t.Elem(), indent+"\t\t"); err != nil {
+		if err := e.assign(w, item, elemPath, fmt.Sprintf("%s[%s]", items, index), name+"Item", t.Elem(), indent+"\t\t"); err != nil {
 			return err
 		}
 		fmt.Fprintf(w, "%s\t}\n", indent)
@@ -430,7 +430,7 @@ func (e *decodeEmitter) convert(t reflect.Type, n string) string {
 	case reflect.TypeFor[int64](), reflect.TypeFor[uint64](), reflect.TypeFor[float64]():
 		return n
 	}
-	return e.goType(t) + "(" + n + ")"
+	return fmt.Sprintf("%s(%s)", e.goType(t), n)
 }
 
 // goType renders t as the generated file spells it.
@@ -451,7 +451,7 @@ func (e *decodeEmitter) goType(t reflect.Type) string {
 	case reflect.Slice:
 		return "[]" + e.goType(t.Elem())
 	case reflect.Map:
-		return "map[" + e.goType(t.Key()) + "]" + e.goType(t.Elem())
+		return fmt.Sprintf("map[%s]%s", e.goType(t.Key()), e.goType(t.Elem()))
 	}
 	return t.String()
 }

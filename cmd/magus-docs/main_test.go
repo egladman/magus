@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,5 +41,5 @@ func TestSourceLinksNameTheFileNotTheLine(t *testing.T) {
 	if file == "" {
 		t.Skip("built with -trimpath: no absolute path to relativize")
 	}
-	assert.Equal(t, " - [source]("+docs.RepoBlob+"/"+file+")", methodSourceLink(std.Method{Impl: std.FsGlob}))
+	assert.Equal(t, fmt.Sprintf(" - [source](%s/%s)", docs.RepoBlob, file), methodSourceLink(std.Method{Impl: std.FsGlob}))
 }

@@ -583,7 +583,7 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 		fmt.Fprintf(tw, "held\t%d\t%s\n", h.PID, strings.Join(nonEmpty(
 			fmt.Sprintf("slots %d", max(h.Slots, 1)),
 			holderMemText(h),
-			holderProject(h.Project)+" "+h.Target,
+			fmt.Sprintf("%s %s", holderProject(h.Project), h.Target),
 			h.Dir, h.Command, sinceText(h.Since)), "  "))
 	}
 	for _, s := range st.Services {
@@ -1050,12 +1050,12 @@ func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now ti
 		project = "?"
 		target = "?"
 	}
-	label := project + ":" + target
+	label := fmt.Sprintf("%s:%s", project, target)
 	if showWS {
-		label = workspaceLabel(c.Workspace) + "/" + label
+		label = fmt.Sprintf("%s/%s", workspaceLabel(c.Workspace), label)
 	}
 	if d := formatDur(runningDuration(c, now)); d != "" {
-		label += "(" + d + ")"
+		label += fmt.Sprintf("(%s)", d)
 	}
 	return truncate(label, compactRunningBudget)
 }
@@ -1272,7 +1272,7 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 			vPrefix, actIndent := branchPrefix(vIndent, vLast)
 			line := truncate(lf.target, runningLineWidth)
 			if d := formatDur(lf.duration); d != "" {
-				line += " " + tty.Colorize("("+d+")", sgrPoolIdle)
+				line += " " + tty.Colorize(fmt.Sprintf("(%s)", d), sgrPoolIdle)
 			}
 			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
 			if lf.step != "" {
