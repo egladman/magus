@@ -381,6 +381,11 @@ const SandboxRequired DiagnosticCode = "MGS2012"
 // not granted; this names the variable and the target, never the value, for whoever
 // reads the run.
 const EnvReadWithheld DiagnosticCode = "MGS2013"
+
+// ToolCacheUnscoped marks a tool cache that resolves outside the checkout, where another
+// checkout's results answer for this one's. The guard names it on a direct lint run and
+// doctor on the effective cache.
+const ToolCacheUnscoped DiagnosticCode = "MGS2014"
 const DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 const VCSUnavailable DiagnosticCode = "MGS3002"
 const ToolNotOnPath DiagnosticCode = "MGS3003"
