@@ -35,7 +35,7 @@ func interval(bounds [2]*float64, digits int) string {
 	if bounds[0] == nil || bounds[1] == nil {
 		return "n/a"
 	}
-	return "[" + num(bounds[0], digits) + ", " + num(bounds[1], digits) + "]"
+	return fmt.Sprintf("[%s, %s]", num(bounds[0], digits), num(bounds[1], digits))
 }
 
 // row is a table row. An alias, not a defined type, so []row is the [][]string
@@ -212,7 +212,7 @@ func caveatLines(a *Analysis) []string {
 			small = append(small, key)
 		}
 	}
-	lines = append(lines, "Reps per cell: "+strings.Join(reps, ", ")+".")
+	lines = append(lines, fmt.Sprintf("Reps per cell: %s.", strings.Join(reps, ", ")))
 	if len(small) > 0 {
 		lines = append(lines, fmt.Sprintf("Under the %d-rep protocol: %s. Treat those deltas as directional.", minReps, strings.Join(small, ", ")))
 	}

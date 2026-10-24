@@ -662,7 +662,7 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 	arms, tasks := slices.Sorted(maps.Keys(armSet)), slices.Sorted(maps.Keys(taskSet))
 	cells := map[string]CellStats{}
 	for key, members := range c {
-		cells[key.arm+"/"+key.task] = cellStats(members)
+		cells[fmt.Sprintf("%s/%s", key.arm, key.task)] = cellStats(members)
 	}
 	summaries := map[string]ArmSummary{}
 	for _, arm := range arms {
@@ -675,7 +675,7 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 		summaries[arm] = armSummary(armRuns)
 	}
 	return &Analysis{
-		Platform:         runtime.GOOS + "/" + runtime.GOARCH + "/" + runtime.Version(),
+		Platform:         fmt.Sprintf("%s/%s/%s", runtime.GOOS, runtime.GOARCH, runtime.Version()),
 		Seed:             seed,
 		BootstrapIters:   bootstrapIters,
 		MinRelativeDelta: minRelativeDelta,
