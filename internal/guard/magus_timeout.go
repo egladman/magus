@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"slices"
 	"strconv"
@@ -271,7 +272,7 @@ func magusTimeoutVerdict(command string, d Dialect) (ShellVerdict, bool) {
 		next := boundedRun(t.argv, formatLimit(t.limit))
 		remedy := hint.NextForDenyRemedy(string(denyRuleMagusTimeout), next, "magus stops the run itself and records why.")
 		v := ShellVerdict{
-			Deny: magusTimeoutVerdictLead + "; bound the run with magus's own flag: `" + remedy.Run + "`.",
+			Deny: fmt.Sprintf("%s; bound the run with magus's own flag: `%s`.", magusTimeoutVerdictLead, remedy.Run),
 			Why:  magusTimeoutWhy + "\n" + magusTimeoutFlags,
 			Rule: rule,
 		}
@@ -279,7 +280,7 @@ func magusTimeoutVerdict(command string, d Dialect) (ShellVerdict, bool) {
 	default:
 		remedy := hint.NextForDenyRemedy(string(denyRuleMagusTimeout), t.argv, "it returns on its own.")
 		v := ShellVerdict{
-			Deny: magusTimeoutVerdictLead + "; drop the wrapper: `" + remedy.Run + "`.",
+			Deny: fmt.Sprintf("%s; drop the wrapper: `%s`.", magusTimeoutVerdictLead, remedy.Run),
 			Why:  magusTimeoutWhy + " " + magusTimeoutRead,
 			Rule: rule,
 		}

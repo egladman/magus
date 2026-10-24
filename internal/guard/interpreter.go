@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"slices"
@@ -198,9 +199,8 @@ func interpreterScriptVerdict(interp string) ShellVerdict {
 		what = interp
 	}
 	return ShellVerdict{
-		Deny: "script in Buzz, not " + what + ": `" + hint.Buzz.With("-e", "'<buzz>'") + "`; load the magus-buzz-lang skill for its syntax.",
-		Why: "The guard reads what a Buzz program does; a python, node, perl or ruby program arrives as one string it cannot follow.\n" +
-			"A script worth keeping runs as `" + hint.Buzz.With("<file>") + "`. `--version`, `python -m`, `node file.js`, `perl file.pl`, bash and sh are untouched.",
+		Deny: fmt.Sprintf("script in Buzz, not %s: `%s`; load the magus-buzz-lang skill for its syntax.", what, hint.Buzz.With("-e", "'<buzz>'")),
+		Why:  fmt.Sprintf("The guard reads what a Buzz program does; a python, node, perl or ruby program arrives as one string it cannot follow.\nA script worth keeping runs as `%s`. `--version`, `python -m`, `node file.js`, `perl file.pl`, bash and sh are untouched.", hint.Buzz.With("<file>")),
 		Rule: denyRule{Name: denyRuleInterpreterScript},
 	}
 }

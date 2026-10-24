@@ -274,8 +274,8 @@ func TestDenyRepeatGate(t *testing.T) {
 		after := time.Now().Add(time.Minute)
 		require.NoError(t, os.Chtimes(other.Path("b.go"), after, after))
 
-		placed := other.Root() + "/magus -C " + other.Root() + " affected ci"
-		assert.NotEmpty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus -C "+landing.Root()+" affected ci"),
+		placed := fmt.Sprintf("%s/magus -C %s affected ci", other.Root(), other.Root())
+		assert.NotEmpty(t, denyRepeatGate(ctx, Dependencies{}, "", fmt.Sprintf("./magus -C %s affected ci", landing.Root())),
 			"the landing checkout's own unchanged green tree is still refused")
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", placed),
 			"the landing branch's verdict does not judge a gate that runs in another checkout")
@@ -325,7 +325,7 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 	} {
 		reason := denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Equal(t, "magus workspace: `"+command+"` is the integrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", reason.Say,
+		assert.Equal(t, fmt.Sprintf("magus workspace: `%s` is the integrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", command), reason.Say,
 			"the verdict names what it refused and hands back the check to run instead")
 		assert.Contains(t, reason.Why, "harness/lease-scoped-deny", "the rationale must name the lease")
 		assert.Contains(t, reason.Why, "the check on lease", "the rationale must name the field that decided it")
@@ -483,22 +483,22 @@ func TestACheckoutHolderGatesWhereTheCallRuns(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, command := range []string{
-		"cd " + held + " && ./magus affected ci",
-		"./magus -C " + held + " affected ci",
-		"./magus --root " + held + " run ci .",
-		"cd " + other + " && ./magus -C " + held + " affected ci",
-		"cd " + held + " && ./magus affected ci && ./magus run ci .",
+		fmt.Sprintf("cd %s && ./magus affected ci", held),
+		fmt.Sprintf("./magus -C %s affected ci", held),
+		fmt.Sprintf("./magus --root %s run ci .", held),
+		fmt.Sprintf("cd %s && ./magus -C %s affected ci", other, held),
+		fmt.Sprintf("cd %s && ./magus affected ci && ./magus run ci .", held),
 	} {
 		assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, command), command)
 	}
 	for _, command := range []string{
 		"./magus affected ci",
-		"cd " + other + " && ./magus affected ci",
-		"./magus -C " + other + " affected ci",
-		"cd " + held + " && ./magus -C " + other + " affected ci",
-		"cd " + held + " && ./magus affected ci && cd " + other + " && ./magus affected ci",
-		"cd " + held + " && ./magus -C $DIR affected ci",
-		"cd " + held + " || ./magus affected ci",
+		fmt.Sprintf("cd %s && ./magus affected ci", other),
+		fmt.Sprintf("./magus -C %s affected ci", other),
+		fmt.Sprintf("cd %s && ./magus -C %s affected ci", held, other),
+		fmt.Sprintf("cd %s && ./magus affected ci && cd %s && ./magus affected ci", held, other),
+		fmt.Sprintf("cd %s && ./magus -C $DIR affected ci", held),
+		fmt.Sprintf("cd %s || ./magus affected ci", held),
 	} {
 		assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
 	}
@@ -519,7 +519,7 @@ func heldRowFixture(t *testing.T, held, worktreeRoot, role string) (context.Cont
 	row.Validation = ""
 	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
 	row.CheckoutRoot = held
-	ctx, deps := integratorFixture(t, row, "root/"+role+" "+row.ID)
+	ctx, deps := integratorFixture(t, row, fmt.Sprintf("root/%s %s", role, row.ID))
 	if worktreeRoot != "" {
 		at, ok := ctx.Value(locationKey{}).(location)
 		require.True(t, ok)
@@ -534,10 +534,10 @@ func TestDenyLeaseCheckoutPlacesACallByItsLine(t *testing.T) {
 	ctx, deps, row := heldRowFixture(t, held, held, "feat")
 
 	for _, command := range []string{
-		"cd " + held + " && ./magus run go-test .",
-		"./magus -C " + held + " run go-test .",
-		"./magus --root=" + held + " run go-test .",
-		"cd " + other + " && ./magus -C " + held + " run go-test .",
+		fmt.Sprintf("cd %s && ./magus run go-test .", held),
+		fmt.Sprintf("./magus -C %s run go-test .", held),
+		fmt.Sprintf("./magus --root=%s run go-test .", held),
+		fmt.Sprintf("cd %s && ./magus -C %s run go-test .", other, held),
 		"./magus run go-test . --plan",
 		"./magus run go-test . --dry-run",
 		"./magus --help",
@@ -548,14 +548,14 @@ func TestDenyLeaseCheckoutPlacesACallByItsLine(t *testing.T) {
 
 	for _, command := range []string{
 		"./magus run go-test .",
-		"cd " + other + " && ./magus run go-test .",
-		"./magus -C " + other + " run go-test .",
-		"cd " + held + " && ./magus -C " + other + " run go-test .",
+		fmt.Sprintf("cd %s && ./magus run go-test .", other),
+		fmt.Sprintf("./magus -C %s run go-test .", other),
+		fmt.Sprintf("cd %s && ./magus -C %s run go-test .", held, other),
 		"cd $WORKTREE && ./magus run go-test .",
 	} {
 		got := denyLeaseCheckout(ctx, deps, row.ID, command)
 		require.True(t, got.refused(), command)
-		assert.Contains(t, got.Say, "`"+filepath.Join(held, "magus")+" -C "+held+" run go-test .`", command)
+		assert.Contains(t, got.Say, fmt.Sprintf("`%s -C %s run go-test .`", filepath.Join(held, "magus"), held), command)
 	}
 }
 
@@ -584,10 +584,10 @@ func TestAnIntegratorIsJudgedWhereItsLineRuns(t *testing.T) {
 	held := markedWorkspace(t)
 	ctx, deps, row := heldRowFixture(t, held, "", "integrate")
 
-	assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, "cd "+held+" && ./magus run go-build ."), "the integrator's checkout, named on the line")
+	assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, fmt.Sprintf("cd %s && ./magus run go-build .", held)), "the integrator's checkout, named on the line")
 	assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run go-build .").refused(), "the same call from the envelope's checkout")
 
-	_, worker := workerRuns(ctx, deps, row.ID, "cd "+held+" && ./magus run go-test .")
+	_, worker := workerRuns(ctx, deps, row.ID, fmt.Sprintf("cd %s && ./magus run go-test .", held))
 	assert.False(t, worker, "the integrator's background run, named on the line, is not a worker's")
 	_, worker = workerRuns(ctx, deps, row.ID, "./magus run go-test .")
 	assert.True(t, worker, "the same run from the envelope's checkout is a worker's")
@@ -731,7 +731,7 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 	for _, s := range spellCatalog() {
 		for _, name := range s.Targets() {
 			if op, _ := s.Op(name); op.Kind == spells.OpKindInstall && install == "" {
-				install = s.Name() + "::" + name
+				install = fmt.Sprintf("%s::%s", s.Name(), name)
 			}
 		}
 	}
@@ -750,7 +750,7 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 		{"a target it needs in another project", "./magus run proofread-build libs/conventions", false},
 		{"the install target", "./magus run install .", false},
 		{"the install target on every project", "./magus run install /", false},
-		{"a spell's install op", "./magus run " + install + " docs", false},
+		{"a spell's install op", fmt.Sprintf("./magus run %s docs", install), false},
 		{"an install that re-resolves", "./magus run install:update .", true},
 		{"a target it does not compose", "./magus run lint .", true},
 		{"an op it does not compose", "./magus run golangci-lint .", true},
@@ -1007,7 +1007,7 @@ func TestWorkerCheckOnlyRefusesAnOpRewrite(t *testing.T) {
 		}
 		require.True(t, reason.refused(), tt.name)
 		assert.Contains(t, reason.Say, "runs a spell op under the rw charm", tt.name)
-		assert.True(t, strings.HasSuffix(reason.Say, " run "+tt.next+"`."), "%s: %s", tt.name, reason.Say)
+		assert.True(t, strings.HasSuffix(reason.Say, fmt.Sprintf(" run %s`.", tt.next)), "%s: %s", tt.name, reason.Say)
 		assert.Contains(t, reason.Why, "`format` calls it", tt.name)
 		assert.Contains(t, reason.Why, "MGS3001", tt.name)
 	}
@@ -1439,7 +1439,7 @@ func TestDenyLeaseScopedVCSPointsACheckoutAddAtTheFork(t *testing.T) {
 		"git worktree add " + filepath.Join(scratch, "..", "x"),
 		"git worktree add $XDG_CACHE_HOME/magus/tmp/x",
 		"hg share " + filepath.Join(scratch, "x"),
-		"git worktree add " + filepath.Join(scratch, "x") + " && git worktree add ../y",
+		fmt.Sprintf("git worktree add %s && git worktree add ../y", filepath.Join(scratch, "x")),
 	} {
 		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
 		assert.Contains(t, reason, "--checkout <dir>", "%q", command)
@@ -1449,7 +1449,7 @@ func TestDenyLeaseScopedVCSPointsACheckoutAddAtTheFork(t *testing.T) {
 
 	for _, command := range []string{
 		"git worktree add " + filepath.Join(scratch, "x"),
-		"git -C . worktree add -b y " + filepath.Join(scratch, "y") + " HEAD",
+		fmt.Sprintf("git -C . worktree add -b y %s HEAD", filepath.Join(scratch, "y")),
 		"hg share . " + filepath.Join(scratch, "x"),
 		"jj workspace add --name x " + filepath.Join(scratch, "x"),
 	} {
@@ -1520,15 +1520,15 @@ func TestDenyLeaseScopedVCSLetsAWorkerCommitInItsOwnCheckout(t *testing.T) {
 	adminDir := filepath.Join(r.main, ".git", "worktrees", "lease-job")
 	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
 	for command, deps := range map[string]Dependencies{
-		"git commit -q -m done":                                     from(wt),
-		"git add a.txt && git commit -m done":                       from(wt),
-		"git -C " + wt + " commit -m done":                          from(r.main),
-		"cd " + wt + " && git commit -m done":                       from(r.main),
-		"cd " + wt + " && git commit -m \"$msg\"":                   from(r.main),
-		"git -C " + r.main + " -C ../lease-job commit -m done":      from(t.TempDir()),
-		"GIT_DIR=" + adminDir + " git commit -m done":               from(wt),
-		"git --git-dir=" + adminDir + " commit -m done":             from(r.main),
-		"env GIT_DIR=" + adminDir + " git commit --amend --no-edit": from(wt),
+		"git commit -q -m done":                                              from(wt),
+		"git add a.txt && git commit -m done":                                from(wt),
+		fmt.Sprintf("git -C %s commit -m done", wt):                          from(r.main),
+		fmt.Sprintf("cd %s && git commit -m done", wt):                       from(r.main),
+		fmt.Sprintf("cd %s && git commit -m \"$msg\"", wt):                   from(r.main),
+		fmt.Sprintf("git -C %s -C ../lease-job commit -m done", r.main):      from(t.TempDir()),
+		fmt.Sprintf("GIT_DIR=%s git commit -m done", adminDir):               from(wt),
+		fmt.Sprintf("git --git-dir=%s commit -m done", adminDir):             from(r.main),
+		fmt.Sprintf("env GIT_DIR=%s git commit --amend --no-edit", adminDir): from(wt),
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, deps, worker.ID, command), "%q", command)
 	}
@@ -1541,24 +1541,24 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 	sibling := r.add("sibling")
 	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
 	for command, deps := range map[string]Dependencies{
-		"git commit -m done":                               from(r.main),
-		"git -C " + r.main + " commit -m done":             from(wt),
-		"cd " + sibling + " && git commit -m done":         from(wt),
-		"git -C " + sibling + " commit -m done":            from(wt),
-		"GIT_DIR=" + r.main + "/.git git commit -m done":   from(wt),
-		"git --git-dir=" + r.main + "/.git commit -m done": from(wt),
-		"git --work-tree " + wt + " commit -m done":        from(wt),
-		"GIT_WORK_TREE=" + wt + " git commit -m done":      from(wt),
-		"cd \"$dir\" && git commit -m done":                from(wt),
-		"git -C \"$dir\" commit -m done":                   from(wt),
-		"if true; then git commit -m done; fi":             from(wt),
-		"git push":                                         from(wt),
-		"git commit -m done && git push":                   from(wt),
-		"git stash push -m wip":                            from(wt),
-		"git reset --hard HEAD":                            from(wt),
-		"git checkout .":                                   from(wt),
-		"git revert HEAD":                                  from(wt),
-		"git -c alias.x=commit x -m done":                  from(wt),
+		"git commit -m done":                                        from(r.main),
+		fmt.Sprintf("git -C %s commit -m done", r.main):             from(wt),
+		fmt.Sprintf("cd %s && git commit -m done", sibling):         from(wt),
+		fmt.Sprintf("git -C %s commit -m done", sibling):            from(wt),
+		fmt.Sprintf("GIT_DIR=%s/.git git commit -m done", r.main):   from(wt),
+		fmt.Sprintf("git --git-dir=%s/.git commit -m done", r.main): from(wt),
+		fmt.Sprintf("git --work-tree %s commit -m done", wt):        from(wt),
+		fmt.Sprintf("GIT_WORK_TREE=%s git commit -m done", wt):      from(wt),
+		"cd \"$dir\" && git commit -m done":                         from(wt),
+		"git -C \"$dir\" commit -m done":                            from(wt),
+		"if true; then git commit -m done; fi":                      from(wt),
+		"git push":                                                  from(wt),
+		"git commit -m done && git push":                            from(wt),
+		"git stash push -m wip":                                     from(wt),
+		"git reset --hard HEAD":                                     from(wt),
+		"git checkout .":                                            from(wt),
+		"git revert HEAD":                                           from(wt),
+		"git -c alias.x=commit x -m done":                           from(wt),
 	} {
 		reason := denyLeaseScopedVCS(ctx, deps, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
@@ -1566,7 +1566,7 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 		assert.Contains(t, reason, "a worker under orchestrator", "%q", command)
 	}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git commit -m done"),
-		"It commits in "+r.main+", and the lease was taken in "+wt+".")
+		fmt.Sprintf("It commits in %s, and the lease was taken in %s.", r.main, wt))
 }
 
 // A worker whose shell reset to another checkout of its repository may not switch, stage or
@@ -1629,7 +1629,7 @@ func TestDenyLeaseScopedVCSGradesACherryPickAsTheCommitItRecords(t *testing.T) {
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "own branch: %q", command)
 		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
-		assert.Contains(t, reason, "It commits in "+r.main+", and the lease was taken in "+wt+".", "another checkout: %q", command)
+		assert.Contains(t, reason, fmt.Sprintf("It commits in %s, and the lease was taken in %s.", r.main, wt), "another checkout: %q", command)
 	}
 	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git cherry-pick abc123"), "the base branch")
@@ -1660,9 +1660,9 @@ func TestDenyLeaseScopedVCSLetsAWorkerMergeItsBase(t *testing.T) {
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "own branch: %q", command)
 		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
-		assert.Contains(t, reason, "It commits in "+r.main+", and the lease was taken in "+wt+".", "another checkout: %q", command)
+		assert.Contains(t, reason, fmt.Sprintf("It commits in %s, and the lease was taken in %s.", r.main, wt), "another checkout: %q", command)
 	}
-	assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git -C "+wt+" merge origin/main"), "pointed at its own checkout")
+	assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, fmt.Sprintf("git -C %s merge origin/main", wt)), "pointed at its own checkout")
 	for command, want := range map[string]string{
 		"git merge other-job":               "It merges other-job, and a worker merges only its base into its branch: origin/main",
 		"git merge a1b2c3d":                 "It merges a1b2c3d",
@@ -1686,15 +1686,15 @@ func TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout(t *testing.T) {
 	for _, command := range []string{
 		"git init -q " + scratch,
 		"git init -q -b main --template= " + scratch,
-		"git init --initial-branch=main " + scratch + "/new/repo",
-		"git -C " + scratch + " init",
-		"cd " + scratch + " && git init -q",
+		fmt.Sprintf("git init --initial-branch=main %s/new/repo", scratch),
+		fmt.Sprintf("git -C %s init", scratch),
+		fmt.Sprintf("cd %s && git init -q", scratch),
 		"hg init " + scratch,
 		"sl init " + scratch,
 		"jj git init --colocate " + scratch,
-		"git init -q " + scratch + " && git -C " + scratch + " config user.email t@example.com && git -C " + scratch + " add . && git -C " + scratch + " commit -q --allow-empty -m done",
-		"cd " + scratch + " && git init -q && git config user.name t && git commit -q --allow-empty -m done && git branch topic && git checkout -q topic",
-		"git init -q " + scratch + " && git -C " + wt + " commit -m done",
+		fmt.Sprintf("git init -q %s && git -C %s config user.email t@example.com && git -C %s add . && git -C %s commit -q --allow-empty -m done", scratch, scratch, scratch, scratch),
+		fmt.Sprintf("cd %s && git init -q && git config user.name t && git commit -q --allow-empty -m done && git branch topic && git checkout -q topic", scratch),
+		fmt.Sprintf("git init -q %s && git -C %s commit -m done", scratch, wt),
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, from, worker.ID, command), "%q", command)
 	}
@@ -1711,59 +1711,59 @@ func TestDenyLeaseScopedVCSRefusesAnInitThatReachesTheCheckout(t *testing.T) {
 	for _, command := range []string{
 		"git init",
 		"git init -q .",
-		"git init " + wt + "/sub",
-		"git init " + r.main + "/sub",
+		fmt.Sprintf("git init %s/sub", wt),
+		fmt.Sprintf("git init %s/sub", r.main),
 		"git init " + filepath.Dir(wt),
-		"git -C " + wt + " init",
-		"git -C " + scratch + " -C " + wt + " init",
-		"cd " + wt + " && git init -q",
+		fmt.Sprintf("git -C %s init", wt),
+		fmt.Sprintf("git -C %s -C %s init", scratch, wt),
+		fmt.Sprintf("cd %s && git init -q", wt),
 		"git init " + filepath.Join(wt, "..", filepath.Base(wt), "sub"),
-		"git init -q " + scratch + " && git -C " + scratch + " init " + wt + "/sub",
-		"GIT_DIR=" + wt + "/.git git init " + scratch,
-		"GIT_DIR=" + r.main + "/.git git init -q " + scratch,
-		"env GIT_DIR=" + r.main + "/.git git init " + scratch,
-		"GIT_WORK_TREE=" + wt + " git init " + scratch,
-		"GIT_COMMON_DIR=" + r.main + "/.git git init " + scratch,
-		"git --git-dir=" + r.main + "/.git init " + scratch,
-		"git --work-tree " + wt + " init " + scratch,
-		"git -c core.worktree=" + wt + " init " + scratch,
-		"git init --separate-git-dir " + wt + "/gitdir " + scratch,
+		fmt.Sprintf("git init -q %s && git -C %s init %s/sub", scratch, scratch, wt),
+		fmt.Sprintf("GIT_DIR=%s/.git git init %s", wt, scratch),
+		fmt.Sprintf("GIT_DIR=%s/.git git init -q %s", r.main, scratch),
+		fmt.Sprintf("env GIT_DIR=%s/.git git init %s", r.main, scratch),
+		fmt.Sprintf("GIT_WORK_TREE=%s git init %s", wt, scratch),
+		fmt.Sprintf("GIT_COMMON_DIR=%s/.git git init %s", r.main, scratch),
+		fmt.Sprintf("git --git-dir=%s/.git init %s", r.main, scratch),
+		fmt.Sprintf("git --work-tree %s init %s", wt, scratch),
+		fmt.Sprintf("git -c core.worktree=%s init %s", wt, scratch),
+		fmt.Sprintf("git init --separate-git-dir %s/gitdir %s", wt, scratch),
 		"git init --separate-git-dir=gitdir " + scratch,
-		"git init --sep " + scratch + "/g " + scratch,
-		"git init " + scratch + " " + wt,
+		fmt.Sprintf("git init --sep %s/g %s", scratch, scratch),
+		fmt.Sprintf("git init %s %s", scratch, wt),
 		"git init \"$dir\"",
-		"git init " + scratch + "/*",
+		fmt.Sprintf("git init %s/*", scratch),
 		"git init ~/scratch",
-		"bash -c 'git init " + scratch + "'",
-		"if true; then git init " + scratch + "; fi",
+		fmt.Sprintf("bash -c 'git init %s'", scratch),
+		fmt.Sprintf("if true; then git init %s; fi", scratch),
 		"hg init",
-		"hg --cwd " + wt + " init " + scratch,
-		"hg -R " + wt + " init " + scratch,
+		fmt.Sprintf("hg --cwd %s init %s", wt, scratch),
+		fmt.Sprintf("hg -R %s init %s", wt, scratch),
 		"hg init ssh://host/repo",
 		"jj git init",
-		"jj git init --git-repo " + r.main + " " + scratch,
+		fmt.Sprintf("jj git init --git-repo %s %s", r.main, scratch),
 		"jj git init --config-toml 'x=1' " + scratch,
-		"git init -q " + scratch + " && git -C " + scratch + " push origin HEAD",
-		"git init -q " + scratch + " && git -C " + r.main + " commit -m done",
-		"git init -q " + scratch + " && git -C " + r.main + " reset --hard",
-		"git init -q " + scratch + " && git -C " + scratch + " config core.worktree " + wt,
-		"git init -q " + scratch + " && git -C " + scratch + " -c core.worktree=" + wt + " clean -fdx",
-		"git init -q " + scratch + " && git -C " + scratch + " worktree add " + wt + "/x",
-		"git init -q " + scratch + " && git -C " + scratch + " config --global alias.x status",
-		"git init -q " + scratch + " && git --git-dir=" + r.main + "/.git -C " + scratch + " reset --hard",
-		"git init -q " + scratch + " && cd " + wt + " && git reset --hard",
-		"git init -q " + scratch + " && git stash",
+		fmt.Sprintf("git init -q %s && git -C %s push origin HEAD", scratch, scratch),
+		fmt.Sprintf("git init -q %s && git -C %s commit -m done", scratch, r.main),
+		fmt.Sprintf("git init -q %s && git -C %s reset --hard", scratch, r.main),
+		fmt.Sprintf("git init -q %s && git -C %s config core.worktree %s", scratch, scratch, wt),
+		fmt.Sprintf("git init -q %s && git -C %s -c core.worktree=%s clean -fdx", scratch, scratch, wt),
+		fmt.Sprintf("git init -q %s && git -C %s worktree add %s/x", scratch, scratch, wt),
+		fmt.Sprintf("git init -q %s && git -C %s config --global alias.x status", scratch, scratch),
+		fmt.Sprintf("git init -q %s && git --git-dir=%s/.git -C %s reset --hard", scratch, r.main, scratch),
+		fmt.Sprintf("git init -q %s && cd %s && git reset --hard", scratch, wt),
+		fmt.Sprintf("git init -q %s && git stash", scratch),
 		"git reset --hard && git init -q " + scratch,
 	} {
 		reason := denyLeaseScopedVCS(ctx, from, worker.ID, command)
 		assert.NotEmpty(t, reason, "%q", command)
 	}
 
-	reason := denyLeaseScopedVCS(ctx, from, worker.ID, "git init -q "+wt+"/sub")
+	reason := denyLeaseScopedVCS(ctx, from, worker.ID, fmt.Sprintf("git init -q %s/sub", wt))
 	assert.Contains(t, reason, "a worker creates a repository only outside its checkout, "+wt)
 	assert.Contains(t, reason, wt+"/sub lies in the lease's checkout")
 	assert.Contains(t, reason, "a worker under orchestrator")
-	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git init "+r.main+"/sub"), "lies in a checkout of the repository the lease works in")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, fmt.Sprintf("git init %s/sub", r.main)), "lies in a checkout of the repository the lease works in")
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git init "+filepath.Dir(wt)), "holds the lease's checkout")
 }
 
@@ -1836,7 +1836,7 @@ func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
 
 	r.git(wt, "checkout", "-q", "--detach")
 	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: wt}, worker.ID, "git commit -m done"),
-		"has no branch checked out; run `git switch "+worker.ID+"`, or `git switch -c "+worker.ID+"` when no such branch exists.",
+		fmt.Sprintf("has no branch checked out; run `git switch %s`, or `git switch -c %s` when no such branch exists.", worker.ID, worker.ID),
 		"a detached HEAD names the line that puts it on the job's branch")
 
 	primary := worker
@@ -2160,8 +2160,7 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	assert.Equal(t, refused, judge(write), "a write")
 	ref := verdictRef.FindString(reason)
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
-	assert.Equal(t, "magus workspace: your binding to job held-job ended when its row or its checkout was removed; `magus job exec <job>` binds you again."+
-		verdictRefLine+"magus query output "+ref, reason)
+	assert.Equal(t, fmt.Sprintf("magus workspace: your binding to job held-job ended when its row or its checkout was removed; `magus job exec <job>` binds you again.%smagus query output %s", verdictRefLine, ref), reason)
 	stored, err := trail.ReadBlob(at.cacheDir, ref)
 	require.NoError(t, err)
 	assert.Contains(t, string(stored), "A caller whose binding ended is refused rather than read as unbound", "the rationale is in the stored verdict")
@@ -2382,10 +2381,10 @@ func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
 	child := types.Job{ID: me + "/child", Parent: me, WritePaths: []string{"cmd/magus/x/**"}, State: types.StateDeclared}
 	ctx, _ := fleetFixture(t, narrowLease(), child)
 
-	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, "client op=put id="+child.ID+" enter=cmd/magus/x/a.go"))
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, fmt.Sprintf("client op=put id=%s enter=cmd/magus/x/a.go", child.ID)))
 	for _, command := range []string{
 		"client op=put id=harness/other enter=a.go",
-		"client op=put id=" + me + " enter=cmd/magus/a.go",
+		fmt.Sprintf("client op=put id=%s enter=cmd/magus/a.go", me),
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command).Say, "enter a job not forked beneath", "%q", command)
 	}
@@ -2426,27 +2425,27 @@ func TestJobToolRebindLetsAWritePathBeGivenBack(t *testing.T) {
 	ctx, _ := fleetFixture(t, wide)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"client op=put id="+wide.ID+" write_paths=cmd/magus/**"),
+		fmt.Sprintf("client op=put id=%s write_paths=cmd/magus/**", wide.ID)),
 		"dropping one of its own declarations cannot widen a role")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"client op=put id="+wide.ID+" write_paths=cmd/magus/**,internal/hint/**,docs/**"),
+		fmt.Sprintf("client op=put id=%s write_paths=cmd/magus/**,internal/hint/**,docs/**", wide.ID)),
 		"adding a declaration is a widen however it is spelled")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"client op=put id="+wide.ID+" write_paths=cmd/**"),
+		fmt.Sprintf("client op=put id=%s write_paths=cmd/**", wide.ID)),
 		"a pattern that happens to cover less is not a shrink this rule will try to prove")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"client op=put id="+wide.ID+" write_paths=cmd/magus/** validation=magus affected ci"),
+		fmt.Sprintf("client op=put id=%s write_paths=cmd/magus/** validation=magus affected ci", wide.ID)),
 		"a shrink carrying another field is not a shrink")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"client op=put id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
+		fmt.Sprintf("client op=put id=%s write_paths=cmd/magus/** checkpoint=deadbeef", wide.ID)),
 		"the checkpoint is the base this lease's work is graded against, and giving a path back is not cover for moving it")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"client op=put id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
+		fmt.Sprintf("client op=put id=%s write_paths=cmd/magus/** owned_paths=cmd/magus/**", wide.ID)),
 		"a key the store does not know is not a shrink either")
 }
 
@@ -2476,12 +2475,14 @@ func TestDenyLeaseScopedRebindHandsAChildToTheStore(t *testing.T) {
 	ctx, me, bound := childFleet(t, true)
 
 	for _, command := range []string{
-		"magus job fork " + me.ID + "/research --parent " + me.ID + " --read-only --criteria 'read the store'",
-		"./magus job fork --parent=" + me.ID + " " + me.ID + "/research --read-only",
-		"client op=put id=" + me.ID + "/research parent=" + me.ID + " read_only=true",
-		"magus job fork --stdin <<'EOF'\n{\"schema_version\": " + strconv.Itoa(types.JobSchemaVersion) + ", \"id\": \"" + me.ID + "/research\", \"parent\": \"" + me.ID + "\", \"read_only\": true}\nEOF",
-		"magus job wait " + me.ID + "/scout",
-		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths docs/**",
+		fmt.Sprintf("magus job fork %s/research --parent %s --read-only --criteria 'read the store'", me.ID, me.ID),
+		fmt.Sprintf("./magus job fork --parent=%s %s/research --read-only", me.ID, me.ID),
+		fmt.Sprintf("client op=put id=%s/research parent=%s read_only=true", me.ID, me.ID),
+		fmt.Sprintf(`magus job fork --stdin <<'EOF'
+{"schema_version": %s, "id": "%s/research", "parent": "%s", "read_only": true}
+EOF`, strconv.Itoa(types.JobSchemaVersion), me.ID, me.ID),
+		fmt.Sprintf("magus job wait %s/scout", me.ID),
+		fmt.Sprintf("magus job fork %s/wide --parent %s --write-paths docs/**", me.ID, me.ID),
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command), "%q", command)
 	}
@@ -2507,16 +2508,18 @@ func TestDenyLeaseScopedRebindRefusesWhatIsNotAChild(t *testing.T) {
 	other := "harness/other"
 
 	for command, what := range map[string]string{
-		"magus job fork " + me.ID + "/x --parent " + other + " --read-only":                   "must name " + me.ID + " as its parent",
-		"magus job fork " + me.ID + "/x --read-only":                                          "must name " + me.ID + " as its parent",
-		"client op=put id=" + me.ID + "/x parent=" + other + " read_only=true":                "must name " + me.ID + " as its parent",
-		"magus job fork " + other + " --parent " + me.ID + " --read-only":                     "already exists",
-		"magus job fork " + me.ID + " --parent " + me.ID:                                      "rewrite the job it holds",
-		"magus job fork " + me.ID + "/x --parent " + me.ID:                                    "can write anywhere",
-		"magus job fork --stdin < job.json":                                                   "cannot read",
-		"magus job fork --stdin <<EOF\n{\"id\": \"$ID\", \"parent\": \"" + me.ID + "\"}\nEOF": "cannot read",
-		"magus job wait " + other:                                                             "verify a job",
-		"magus job wait " + me.ID:                                                             "verify a job",
+		fmt.Sprintf("magus job fork %s/x --parent %s --read-only", me.ID, other):    fmt.Sprintf("must name %s as its parent", me.ID),
+		fmt.Sprintf("magus job fork %s/x --read-only", me.ID):                       fmt.Sprintf("must name %s as its parent", me.ID),
+		fmt.Sprintf("client op=put id=%s/x parent=%s read_only=true", me.ID, other): fmt.Sprintf("must name %s as its parent", me.ID),
+		fmt.Sprintf("magus job fork %s --parent %s --read-only", other, me.ID):      "already exists",
+		fmt.Sprintf("magus job fork %s --parent %s", me.ID, me.ID):                  "rewrite the job it holds",
+		fmt.Sprintf("magus job fork %s/x --parent %s", me.ID, me.ID):                "can write anywhere",
+		"magus job fork --stdin < job.json":                                         "cannot read",
+		fmt.Sprintf(`magus job fork --stdin <<EOF
+{"id": "$ID", "parent": "%s"}
+EOF`, me.ID): "cannot read",
+		"magus job wait " + other: "verify a job",
+		"magus job wait " + me.ID: "verify a job",
 	} {
 		reason := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
@@ -2528,7 +2531,7 @@ func TestDenyLeaseScopedRebindRefusesWhatIsNotAChild(t *testing.T) {
 	})
 	var refused *job.RefusedError
 	require.ErrorAs(t, err, &refused)
-	assert.Contains(t, refused.Rule, "must name "+me.ID+" as its parent", "the guard and the store say the same thing")
+	assert.Contains(t, refused.Rule, fmt.Sprintf("must name %s as its parent", me.ID), "the guard and the store say the same thing")
 }
 
 // TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot: a worker the hook identified
@@ -2539,18 +2542,22 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 	ctx, _ := fleetFixture(t, me)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
-		"magus job fork "+me.ID+"/scout --parent "+me.ID+" --read-only --model opus"))
+		fmt.Sprintf("magus job fork %s/scout --parent %s --read-only --model opus", me.ID, me.ID)))
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
-		"magus job fork "+me.ID+"/scout --parent "+me.ID+" --read-only --checkout /w/scout"),
+		fmt.Sprintf("magus job fork %s/scout --parent %s --read-only --checkout /w/scout", me.ID, me.ID)),
 		"the checkout a child works in grants it nothing")
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
-		"magus job fork --stdin <<'EOF'\n{\"schema_version\": 11, \"id\": \""+me.ID+"/probe\", \"parent\": \""+me.ID+"\", \"read_only\": true, \"check\": {\"target\": \"\", \"script\": \"probe.buzz\"}}\nEOF"),
+		fmt.Sprintf(`magus job fork --stdin <<'EOF'
+{"schema_version": 11, "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "", "script": "probe.buzz"}}
+EOF`, me.ID, me.ID)),
 		"a script check grants nothing, and it is how a read-only scout passes job wait")
 	for _, command := range []string{
-		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths cmd/magus/**",
-		"magus job fork " + me.ID + "/scout --parent " + me.ID + " --read-only --read-paths **",
-		"client op=put id=" + me.ID + "/scout parent=" + me.ID + " read_only=true state=pass",
-		"magus job fork --stdin <<'EOF'\n{\"schema_version\": 11, \"id\": \"" + me.ID + "/probe\", \"parent\": \"" + me.ID + "\", \"read_only\": true, \"check\": {\"target\": \"go-test\", \"project\": \".\"}}\nEOF",
+		fmt.Sprintf("magus job fork %s/wide --parent %s --write-paths cmd/magus/**", me.ID, me.ID),
+		fmt.Sprintf("magus job fork %s/scout --parent %s --read-only --read-paths **", me.ID, me.ID),
+		fmt.Sprintf("client op=put id=%s/scout parent=%s read_only=true state=pass", me.ID, me.ID),
+		fmt.Sprintf(`magus job fork --stdin <<'EOF'
+{"schema_version": 11, "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "go-test", "project": "."}}
+EOF`, me.ID, me.ID),
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command).Say, "nothing would grade", "%q", command)
 	}
@@ -2563,18 +2570,18 @@ func TestDenyLeaseScopedRebindLetsTheStoreGradeALineCarryingTheLease(t *testing.
 	me := narrowLease()
 	ctx, _ := fleetFixture(t, me)
 	t.Setenv(trail.EnvBaggage, "")
-	fork := "magus job fork " + me.ID + "/impl --parent " + me.ID + " --write-paths " + me.WritePaths[0] + " --check 'test .'"
+	fork := fmt.Sprintf("magus job fork %s/impl --parent %s --write-paths %s --check 'test .'", me.ID, me.ID, me.WritePaths[0])
 
 	for _, line := range []string{
-		"export BAGGAGE=" + trail.BaggageLease + "=" + me.ID + "; " + fork,
-		"BAGGAGE=" + trail.BaggageLease + "=" + me.ID + " " + fork,
+		fmt.Sprintf("export BAGGAGE=%s=%s; %s", trail.BaggageLease, me.ID, fork),
+		fmt.Sprintf("BAGGAGE=%s=%s %s", trail.BaggageLease, me.ID, fork),
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
 	}
-	other := "export BAGGAGE=" + trail.BaggageLease + "=elsewhere; " + fork
+	other := fmt.Sprintf("export BAGGAGE=%s=elsewhere; %s", trail.BaggageLease, fork)
 	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, other).Say, "nothing would grade")
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+me.ID)
+	t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, me.ID))
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, fork), "the session's own BAGGAGE is what the line starts with")
 }
 
@@ -2590,7 +2597,7 @@ func TestDenyLeaseScopedRebindLetsAHolderBoundItsOwnRun(t *testing.T) {
 	for _, line := range []string{
 		bounded,
 		"./magus job exec --timeout 20m -- ./magus run go-test . -- -run TestX",
-		"BAGGAGE=" + trail.BaggageLease + "=" + me.ID + " " + bounded,
+		fmt.Sprintf("BAGGAGE=%s=%s %s", trail.BaggageLease, me.ID, bounded),
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
 	}
@@ -2598,7 +2605,7 @@ func TestDenyLeaseScopedRebindLetsAHolderBoundItsOwnRun(t *testing.T) {
 	other := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "export BAGGAGE="+trail.BaggageLease+"=elsewhere; "+bounded)
 	require.True(t, other.refused())
 	assert.Contains(t, other.Say, "owned by lease elsewhere")
-	assert.Contains(t, other.Say, "BAGGAGE="+trail.BaggageLease+"="+me.ID, "the remedy is the holder's own")
+	assert.Contains(t, other.Say, fmt.Sprintf("BAGGAGE=%s=%s", trail.BaggageLease, me.ID), "the remedy is the holder's own")
 	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "magus job exec --timeout 1m harness/other").Say,
 		"take the lease on another job", "a job operand is still a take")
 }
@@ -2657,7 +2664,7 @@ func TestJobToolRebindIsSilentWhenTheStoreCannotAnswer(t *testing.T) {
 	ctx, _ := fleetFixture(t, done)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, done.ID,
-		"client op=put id="+done.ID+" write_paths=**"),
+		fmt.Sprintf("client op=put id=%s write_paths=**", done.ID)),
 		"a terminal row has no boundary left, so naming another lease's row would be false")
 
 	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
@@ -2950,7 +2957,7 @@ func TestDenyWriteOutsideLeaseLeavesScratchOutsideTheCheckout(t *testing.T) {
 	for _, command := range []string{
 		"rm /tmp/x",
 		"rm -rf " + scratch,
-		"mv " + filepath.Join(scratch, "a") + " " + filepath.Join(scratch, "b"),
+		fmt.Sprintf("mv %s %s", filepath.Join(scratch, "a"), filepath.Join(scratch, "b")),
 		`rm -f "$TMPDIR/foo"`,
 		`rm -f "$tmp"`,
 		"rm -rf $(mktemp -d)",
@@ -3008,7 +3015,7 @@ func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 
 	// A cd earlier on the line moves where a relative word lands.
 	assert.Contains(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "cd ../../internal/ledger && rm store.go"), "lease-a")
-	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd "+t.TempDir()+" && rm store.go"),
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", fmt.Sprintf("cd %s && rm store.go", t.TempDir())),
 		"store.go after a cd out of the checkout is the scratch directory's")
 	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd ~ && rm store.go"))
 	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd $SOMEWHERE && rm store.go"),
@@ -3106,6 +3113,6 @@ func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
 			continue
 		}
 		require.NotEmpty(t, reason, tt.name)
-		assert.Contains(t, reason.Say, "held by live lease "+tt.holder+"; run `"+hint.JobWait.With(tt.holder)+"`.", tt.name)
+		assert.Contains(t, reason.Say, fmt.Sprintf("held by live lease %s; run `%s`.", tt.holder, hint.JobWait.With(tt.holder)), tt.name)
 	}
 }

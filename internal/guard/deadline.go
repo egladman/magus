@@ -617,7 +617,7 @@ func (w lapseWording) clause(budget time.Duration) string {
 	if budget <= 0 {
 		return w.subject + " had no time left before the guard's deadline"
 	}
-	return w.subject + " did not " + w.verb + " within " + roundBudget(budget).String()
+	return fmt.Sprintf("%s did not %s within %s", w.subject, w.verb, roundBudget(budget).String())
 }
 
 // what says what ran out, and of how much: "the approved magus\guard.command rule did not

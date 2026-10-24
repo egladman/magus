@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestMagusTimeoutDeniesTowardTheRunsOwnTimeout(t *testing.T) {
 		for _, flag := range []string{"--timeout <dur>", "--target-timeout <dur>", "--stall-timeout <dur>"} {
 			assert.Contains(t, v.Why, flag, command)
 		}
-		assert.Contains(t, v.Deny, "bound the run with magus's own flag: `"+next+"`.", command)
+		assert.Contains(t, v.Deny, fmt.Sprintf("bound the run with magus's own flag: `%s`.", next), command)
 		assert.Contains(t, v.Why, "run log records no cause", command)
 	}
 }
@@ -68,7 +69,7 @@ func TestMagusTimeoutServesAReadBare(t *testing.T) {
 		assert.Equal(t, denyRuleMagusTimeout, v.Rule.Name, command)
 		require.Len(t, v.Next, 1, command)
 		assert.Equal(t, next, v.Next[0].Run, command)
-		assert.Contains(t, v.Deny, "drop the wrapper: `"+next+"`.", command)
+		assert.Contains(t, v.Deny, fmt.Sprintf("drop the wrapper: `%s`.", next), command)
 		assert.Contains(t, v.Why, "MGS3009", command)
 	}
 }

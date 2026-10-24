@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -317,7 +318,7 @@ func TestDenyUnboundedBackground(t *testing.T) {
 				return
 			}
 			require.True(t, d.refused())
-			assert.Contains(t, d.Say, "`"+tc.want+"` runs in the background")
+			assert.Contains(t, d.Say, fmt.Sprintf("`%s` runs in the background", tc.want))
 			assert.Contains(t, d.Say, "bound it at the ceiling: `magus job exec --timeout 30m -- <command>`")
 			assert.Contains(t, d.Why, "`timeout N` or `gtimeout N`", "the other remedy is behind the ref")
 		})
@@ -500,7 +501,7 @@ func TestJudgeSilentDenyLeavesTheOutputReadable(t *testing.T) {
 	assert.Contains(t, v.Reason, "output: "+output)
 	assert.Contains(t, v.Reason, "its output file stays on disk")
 
-	read := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Read","tool_input":{"file_path":"` + output + `"}}`
+	read := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"s1\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"%s\"}}", output)
 	assert.NotEqual(t, decisionDeny, judge(read).Decision, "a read of the output passes")
 	got, err := os.ReadFile(output)
 	require.NoError(t, err)

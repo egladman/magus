@@ -2,6 +2,7 @@ package guard
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,8 +82,7 @@ func TestConflictRewriteServesTheResolveScript(t *testing.T) {
 	at := conflictFixture(t)
 	placeFile(t, at.workspace, conflictScript, "")
 	got := denyConflictRewrite(at, `python3 -c "open('internal/agent/catalog.go','w').write(x)"`, DialectBash)
-	want := "a script rewrites a file holding conflict markers; resolve its hunks with `" +
-		resolveCommand(at.workspace, "internal/agent/catalog.go") + "`."
+	want := fmt.Sprintf("a script rewrites a file holding conflict markers; resolve its hunks with `%s`.", resolveCommand(at.workspace, "internal/agent/catalog.go"))
 	assert.Equal(t, want, firstLine(got))
 	assert.Contains(t, want, "hack/dev/resolve-conflicts.buzz -- --file internal/agent/catalog.go")
 	assert.LessOrEqual(t, len([]rune(want)), 160, "the verdict fits one line")
@@ -160,8 +160,7 @@ func TestConflictedPolicyLeadNamesTheFix(t *testing.T) {
 
 	placeFile(t, root, conflictScript, "")
 	got := conflictedPolicyLead(root, []string{"hack/policy/pull_requests.buzz"})
-	assert.Equal(t, "workspace guard rules are off until this file is resolved: `"+
-		resolveCommand(root, "hack/policy/pull_requests.buzz")+"`."+why, got)
+	assert.Equal(t, fmt.Sprintf("workspace guard rules are off until this file is resolved: `%s`.%s", resolveCommand(root, "hack/policy/pull_requests.buzz"), why), got)
 	assert.LessOrEqual(t, len([]rune(firstLine(got))), 160, "the lead fits one line")
 }
 

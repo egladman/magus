@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -145,7 +146,7 @@ func TestAWaitLoopIsDeniedWhicheverToolRunsIt(t *testing.T) {
 	}
 	for i, loop := range loops {
 		for name, env := range envelopes {
-			env["session_id"] = "wait-" + name + "-" + strconv.Itoa(i)
+			env["session_id"] = fmt.Sprintf("wait-%s-%s", name, strconv.Itoa(i))
 			env["hook_event_name"] = "PreToolUse"
 			env["tool_input"].(map[string]any)["command"] = loop
 			v := Judge(ctx, deps, Request{Input: hookJSON(t, env), Host: "claude-code"})

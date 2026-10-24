@@ -268,10 +268,10 @@ func stoppableTasks(tasks []backgroundTask, now time.Time) string {
 func backgroundTaskKey(kind hint.MarkerKind, t backgroundTask) hint.MarkerKind {
 	subject := t.ID
 	if subject == "" {
-		subject = t.Started.UTC().Format(time.RFC3339Nano) + "\x00" + t.Command
+		subject = fmt.Sprintf("%s\x00%s", t.Started.UTC().Format(time.RFC3339Nano), t.Command)
 	}
 	sum := sha256.Sum256([]byte(subject))
-	return kind + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+	return hint.MarkerKind(fmt.Sprintf("%s-%s", kind, hex.EncodeToString(sum[:6])))
 }
 
 // judgeBackgroundSilent is a root session's per-call word on its background tasks that
@@ -290,10 +290,7 @@ func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint
 	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
 		return !t.Expires.IsZero() || silentFor(t) < limits.advise
 	})
-	why := fmt.Sprintf("A background task's output file and event notices are the only sign it is working. One that writes nothing for %s is more likely waiting on a stdin nobody feeds, a lock, or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat that way for eight hours. ", limits.advise) +
-		fmt.Sprintf("Past %s of silence each call is advised, once per task; past %s each call but a read is refused until the task is stopped. ", limits.advise, limits.deny) +
-		"Silence is measured from the task's start, its output file's last write, and its newest event notice, whichever is latest. A watcher with an expiry is not judged: the host ends it. " +
-		"magus never stops a task itself. The figures are background-silent's advise_minutes and deny_minutes in the workspace's magus\\guard.builtins."
+	why := fmt.Sprintf("A background task's output file and event notices are the only sign it is working. One that writes nothing for %s is more likely waiting on a stdin nobody feeds, a lock, or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat that way for eight hours. Past %s of silence each call is advised, once per task; past %s each call but a read is refused until the task is stopped. Silence is measured from the task's start, its output file's last write, and its newest event notice, whichever is latest. A watcher with an expiry is not judged: the host ends it. magus never stops a task itself. The figures are background-silent's advise_minutes and deny_minutes in the workspace's magus\\guard.builtins.", limits.advise, limits.advise, limits.deny)
 	if stuck := slices.DeleteFunc(slices.Clone(tasks), func(t backgroundTask) bool { return silentFor(t) < limits.deny }); len(stuck) > 0 {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop %s before anything else:\n%s\n%s",
@@ -318,9 +315,7 @@ func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint
 // back up, so a stop is never a guess about lost output.
 func resumeAfterStop(ceiling time.Duration) string {
 	bound := fmt.Sprintf("%dm", int(ceiling.Minutes()))
-	return "Stopping ends only the process: its output file stays on disk, and reads still pass, so read it first if you need it. " +
-		"A magus run keeps its output ref and run history (`magus query output <ref>`). " +
-		fmt.Sprintf("To pick the work back up, rerun the command bounded: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", bound, bound)
+	return fmt.Sprintf("Stopping ends only the process: its output file stays on disk, and reads still pass, so read it first if you need it. A magus run keeps its output ref and run history (`magus query output <ref>`). To pick the work back up, rerun the command bounded: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", bound, bound)
 }
 
 // silentTasks lists tasks as stoppableTasks does, each with how long it has been silent

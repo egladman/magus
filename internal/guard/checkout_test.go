@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,7 +35,8 @@ func twoCheckouts(t *testing.T) (main, worktree string) {
 
 func linkGitFile(t *testing.T, dir, gitdir string) {
 	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte(fmt.Sprintf(`gitdir: %s
+`, gitdir)), 0o644))
 }
 
 // The observed command, reduced: an agent whose session is rooted in one checkout
@@ -44,7 +46,7 @@ func TestDenySiblingCheckoutBlocksAnotherCheckoutOfThisRepository(t *testing.T) 
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	got := testSiblingCheckoutDeny("cd " + wt + " && ./magus affected ci --no-default-charms -s")
+	got := testSiblingCheckoutDeny(fmt.Sprintf("cd %s && ./magus affected ci --no-default-charms -s", wt))
 
 	require.NotEmpty(t, got, "a sibling checkout is the case this rule exists for")
 	assert.Contains(t, got, wt, "the deny has to name the tree the command points at")
@@ -58,9 +60,9 @@ func TestDenySiblingCheckoutIsDirectionAgnostic(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(wt)
 
-	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+main+" && magus run test ."))
+	assert.NotEmpty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && magus run test .", main)))
 	// Another checkout is protected rather than routed, so a help request is refused too.
-	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+main+" && magus run --help"))
+	assert.NotEmpty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && magus run --help", main)))
 }
 
 // The observed failure: the host started the hook in the main checkout while the
@@ -71,11 +73,11 @@ func TestDenySiblingCheckoutJudgesFromTheCallDirectory(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	assert.Empty(t, denySiblingCheckout(wt, "cd "+wt+" && ./magus run lint .", DialectBash, nil),
+	assert.Empty(t, denySiblingCheckout(wt, fmt.Sprintf("cd %s && ./magus run lint .", wt), DialectBash, nil),
 		"a cd into the session's own worktree is not a relocation")
 	assert.Empty(t, denySiblingCheckout(wt, "cd internal && ./magus run lint .", DialectBash, nil),
 		"a relative cd stays inside the session's checkout")
-	assert.NotEmpty(t, denySiblingCheckout(wt, "cd "+main+" && ./magus run lint .", DialectBash, nil),
+	assert.NotEmpty(t, denySiblingCheckout(wt, fmt.Sprintf("cd %s && ./magus run lint .", main), DialectBash, nil),
 		"the process's own checkout is a sibling of the session's")
 	assert.NotEmpty(t, denySiblingCheckout(main, "cd ../wt-feature && ./magus run lint .", DialectBash, nil),
 		"a relative cd that leaves the session's checkout is still refused")
@@ -89,9 +91,9 @@ func TestDenySiblingCheckoutPassesAJobsOwnCheckout(t *testing.T) {
 	ownsWT := func(root string) bool { return samePath(root, wt) }
 	ownsNothing := func(string) bool { return false }
 
-	assert.Empty(t, denySiblingCheckout(main, "cd "+wt+" && ./magus run lint .", DialectBash, ownsWT),
+	assert.Empty(t, denySiblingCheckout(main, fmt.Sprintf("cd %s && ./magus run lint .", wt), DialectBash, ownsWT),
 		"the job's own checkout is not a sibling to its holder or its root")
-	assert.NotEmpty(t, denySiblingCheckout(main, "cd "+wt+" && ./magus run lint .", DialectBash, ownsNothing),
+	assert.NotEmpty(t, denySiblingCheckout(main, fmt.Sprintf("cd %s && ./magus run lint .", wt), DialectBash, ownsNothing),
 		"a checkout no job of the caller's owns is refused")
 }
 
@@ -120,7 +122,7 @@ func TestDenySiblingCheckoutAllowsADifferentRepository(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(other, ".git"), 0o755))
 	t.Chdir(main)
 
-	assert.Empty(t, testSiblingCheckoutDeny("cd "+other+" && magus run build ."))
+	assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && magus run build .", other)))
 }
 
 // A cd WITHIN the session's own checkout is not a sibling-checkout finding.
@@ -132,7 +134,7 @@ func TestDenySiblingCheckoutAllowsASubdirectoryOfThisCheckout(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sub, 0o755))
 	t.Chdir(main)
 
-	assert.Empty(t, testSiblingCheckoutDeny("cd "+sub+" && magus run test ."))
+	assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && magus run test .", sub)))
 }
 
 // Fail OPEN on every unknown. A guard that blocks because it could not read
@@ -142,19 +144,19 @@ func TestDenySiblingCheckoutFailsOpen(t *testing.T) {
 
 	t.Run("session is in no checkout at all", func(t *testing.T) {
 		t.Chdir(t.TempDir())
-		assert.Empty(t, testSiblingCheckoutDeny("cd "+wt+" && magus run test ."))
+		assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && magus run test .", wt)))
 	})
 
 	t.Run("the line does not run magus", func(t *testing.T) {
 		t.Chdir(main)
-		assert.Empty(t, testSiblingCheckoutDeny("cd "+wt+" && ls -la"),
+		assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && ls -la", wt)),
 			"naming a directory is not relocating a magus command into it")
 	})
 
 	t.Run("a .git file that is not a gitdir pointer", func(t *testing.T) {
 		t.Chdir(main)
 		require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("garbage\n"), 0o644))
-		assert.Empty(t, testSiblingCheckoutDeny("cd "+wt+" && magus run test ."))
+		assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && magus run test .", wt)))
 	})
 }
 
@@ -169,7 +171,7 @@ func TestDenySiblingCheckoutResolvesARelativeGitdir(t *testing.T) {
 	linkGitFile(t, wt, rel)
 	t.Chdir(main)
 
-	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+wt+" && ./magus affected ci"))
+	assert.NotEmpty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && ./magus affected ci", wt)))
 }
 
 // A submodule is its own repository, so its common dir is its own git dir with no
@@ -184,7 +186,7 @@ func TestDenySiblingCheckoutAllowsASubmodule(t *testing.T) {
 	linkGitFile(t, sub, gitdir)
 	t.Chdir(main)
 
-	assert.Empty(t, testSiblingCheckoutDeny("cd "+sub+" && magus run test ."))
+	assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("cd %s && magus run test .", sub)))
 }
 
 // A path inside a QUOTED ARGUMENT is not a cd, and the line that found this was a
@@ -196,8 +198,8 @@ func TestDenySiblingCheckoutIgnoresAPathInsideAQuotedArgument(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	assert.Empty(t, testSiblingCheckoutDeny(`printf '%s' "cd `+wt+` && ls" | ./magus shell`))
-	assert.Empty(t, testSiblingCheckoutDeny(`./magus notes add "compare against `+wt+`"`))
+	assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("printf '%%s' \"cd %s && ls\" | ./magus shell", wt)))
+	assert.Empty(t, testSiblingCheckoutDeny(fmt.Sprintf("./magus notes add \"compare against %s\"", wt)))
 }
 
 // Shared with magusInThrowawayCopy rather than reimplemented, so the variable
@@ -207,7 +209,7 @@ func TestDenySiblingCheckoutResolvesAnAssignedPath(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	assert.NotEmpty(t, testSiblingCheckoutDeny("WT="+wt+"; cd $WT && ./magus run lint ."))
+	assert.NotEmpty(t, testSiblingCheckoutDeny(fmt.Sprintf("WT=%s; cd $WT && ./magus run lint .", wt)))
 }
 
 // A sibling reason replaces a silence or an advisory: the advice is about a tree the
@@ -262,7 +264,7 @@ func TestCheckoutRulesAdviseWhenSetToAdvise(t *testing.T) {
 
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
-	command := "cd " + wt + " && ./magus affected ci --no-default-charms -s"
+	command := fmt.Sprintf("cd %s && ./magus affected ci --no-default-charms -s", wt)
 	sibling := advising(Dependencies{}).rankGraded(ShellVerdict{}, denyRuleSiblingCheckout, testSiblingCheckoutDeny(command), rankSiblingCheckout)
 	requireAdvisedOnce(t, sibling, denyRuleSiblingCheckout)
 }
@@ -273,10 +275,10 @@ func TestSiblingCheckoutNamesTheTargetsOwnBinary(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	require.NoError(t, os.WriteFile(filepath.Join(main, "magus"), []byte("#!/bin/sh\n"), 0o755))
 	t.Chdir(main)
-	line := "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker"
+	line := fmt.Sprintf("cd ../%s && ./magus describe job harness/worker", filepath.Base(wt))
 
 	denial := testSiblingCheckoutDeny(line)
-	assert.Contains(t, denial, "`"+filepath.Join(wt, "magus")+" --root "+wt+" <args>`")
+	assert.Contains(t, denial, fmt.Sprintf("`%s --root %s <args>`", filepath.Join(wt, "magus"), wt))
 	assert.NotContains(t, denial, filepath.Join(main, "magus")+" --root")
 
 	lead, next := siblingCheckoutRemedy(main, line, DialectBash)
@@ -286,5 +288,5 @@ func TestSiblingCheckoutNamesTheTargetsOwnBinary(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
 	_, next = siblingCheckoutRemedy(main, line, DialectBash)
 	require.Len(t, next, 1)
-	assert.Equal(t, filepath.Join(wt, "magus")+" --root "+wt+" describe job harness/worker", next[0].Run)
+	assert.Equal(t, fmt.Sprintf("%s --root %s describe job harness/worker", filepath.Join(wt, "magus"), wt), next[0].Run)
 }

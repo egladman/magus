@@ -3,6 +3,7 @@ package guard
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
 
 	"github.com/egladman/magus/internal/hint"
@@ -94,7 +95,7 @@ const (
 // input picked.
 func advisoryFocusPath(rel string) hint.MarkerKind {
 	sum := sha256.Sum256([]byte(rel))
-	return advisoryFocus + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+	return hint.MarkerKind(fmt.Sprintf("%s-%s", advisoryFocus, hex.EncodeToString(sum[:6])))
 }
 
 // adviceRepeated reports whether this caller was already given this exact advice in this
@@ -108,7 +109,7 @@ func adviceRepeated(markers hint.Gate, agent, rule, text string) bool {
 	if rule == "" || slices.Contains(enrolledAdvisories(), rule) {
 		return false
 	}
-	sum := sha256.Sum256([]byte(agent + "\x00" + rule + "\x00" + text))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s", agent, rule, text)))
 	return markers.MarkFired(hint.MarkerKind("said-" + hex.EncodeToString(sum[:8])))
 }
 
@@ -117,5 +118,5 @@ func adviceRepeated(markers hint.Gate, agent, rule, text string) bool {
 // same lease owns teaches nothing the first did not.
 func leasedPathKey(lease string) hint.MarkerKind {
 	sum := sha256.Sum256([]byte(lease))
-	return advisoryLeasedPath + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+	return hint.MarkerKind(fmt.Sprintf("%s-%s", advisoryLeasedPath, hex.EncodeToString(sum[:6])))
 }

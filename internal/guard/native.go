@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"strconv"
@@ -97,7 +98,7 @@ func shellLine(argv []string) string {
 			out[i] = a
 			continue
 		}
-		out[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+		out[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(a, "'", `'\''`))
 	}
 	return strings.Join(out, " ")
 }

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"cmp"
+	"fmt"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -134,6 +135,5 @@ func loadRestore(call judgedCall, loadFailure error, at location) string {
 		}
 		rels[i] = rel
 	}
-	return call.what + " puts back " + strings.Join(rels, ", ") + ", which the load error names as an import it cannot resolve. " +
-		"It runs although the guard policy does not load, because restoring that file is how the tree loads again."
+	return fmt.Sprintf("%s puts back %s, which the load error names as an import it cannot resolve. It runs although the guard policy does not load, because restoring that file is how the tree loads again.", call.what, strings.Join(rels, ", "))
 }

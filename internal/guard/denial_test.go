@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,11 +18,7 @@ import (
 // claudeCodeBash is a Claude Code PreToolUse event for a Bash call, in the shape the
 // host documents: https://code.claude.com/docs/en/hooks
 func claudeCodeBash(session, command string) string {
-	return `{"session_id":"` + session + `","prompt_id":"550e8400-e29b-41d4-a716-446655440000",` +
-		`"transcript_path":"/Users/dev/.claude/projects/-Users-dev-repo/` + session + `.jsonl",` +
-		`"cwd":"/Users/dev/repo","permission_mode":"default","hook_event_name":"PreToolUse",` +
-		`"tool_name":"Bash","tool_input":{"command":"` + command + `","description":"Stash local changes",` +
-		`"timeout":120000,"run_in_background":false},"tool_use_id":"toolu_01ABC123"}`
+	return fmt.Sprintf("{\"session_id\":\"%s\",\"prompt_id\":\"550e8400-e29b-41d4-a716-446655440000\",\"transcript_path\":\"/Users/dev/.claude/projects/-Users-dev-repo/%s.jsonl\",\"cwd\":\"/Users/dev/repo\",\"permission_mode\":\"default\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"%s\",\"description\":\"Stash local changes\",\"timeout\":120000,\"run_in_background\":false},\"tool_use_id\":\"toolu_01ABC123\"}", session, session, command)
 }
 
 // TestRepeatedDenyIsKeptPerCaller pins who a deny's full text is spent on: the installed
@@ -66,9 +63,8 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
 	head := `{"session_id":"` + session + `","transcript_path":"/Users/dev/.claude/projects/-Users-dev-repo/` +
 		session + `.jsonl","cwd":"/Users/dev/repo","permission_mode":"default","hook_event_name":"PreToolUse",`
-	skill := head + `"tool_name":"Skill","tool_input":{"skill":"` + multiAgentSkill.String() + `"},"tool_use_id":"toolu_01"}`
-	spawn := head + `"tool_name":"Task","tool_input":{"description":"Audit the store","prompt":"Audit internal/job",` +
-		`"subagent_type":"general-purpose"},"tool_use_id":"toolu_02"}`
+	skill := fmt.Sprintf("%s\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"%s\"},\"tool_use_id\":\"toolu_01\"}", head, multiAgentSkill.String())
+	spawn := fmt.Sprintf("%s\"tool_name\":\"Task\",\"tool_input\":{\"description\":\"Audit the store\",\"prompt\":\"Audit internal/job\",\"subagent_type\":\"general-purpose\"},\"tool_use_id\":\"toolu_02\"}", head)
 	judge := func(transport, event string) types.GuardJudgment {
 		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
 	}
@@ -134,7 +130,8 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 
 	got, ref, _ = shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "verdict."+note, "", note, nil, false)
 	require.NotEmpty(t, ref)
-	assert.Equal(t, "verdict."+note+"\nfull verdict: "+hint.NextForDenial(ref).Run, got, "a reason already carrying the note does not repeat it")
+	assert.Equal(t, fmt.Sprintf(`verdict.%s
+full verdict: %s`, note, hint.NextForDenial(ref).Run), got, "a reason already carrying the note does not repeat it")
 }
 
 // TestShapeDenyKeepsTheRationaleInTheStoredVerdict pins the inline contract: the verdict,
@@ -156,11 +153,20 @@ func TestShapeDenyKeepsTheRationaleInTheStoredVerdict(t *testing.T) {
 	} {
 		got, ref, served := shapeDeny(t.Context(), hint.NewGate(cacheDir, tc.name), string(denyRuleWholeTree), tc.reason, tc.why, note, remedy, false)
 		require.NotEmpty(t, ref, tc.name)
-		assert.Equal(t, "verdict."+note+"\nnext:\n  "+remedy[0].Run+"\nfull verdict: "+hint.NextForDenial(ref).Run, got, tc.name)
+		assert.Equal(t, fmt.Sprintf(`verdict.%s
+next:
+  %s
+full verdict: %s`, note, remedy[0].Run, hint.NextForDenial(ref).Run), got, tc.name)
 		stored, err := trail.ReadBlob(cacheDir, ref)
 		require.NoError(t, err)
-		assert.Equal(t, "verdict."+note+"\nfirst reason.\nsecond reason."+
-			"\nnext:\n  "+remedy[0].Run+"\n      reads it.\n  "+remedy[1].Run+"\n      stages it."+see, string(stored), tc.name)
+		assert.Equal(t, fmt.Sprintf(`verdict.%s
+first reason.
+second reason.
+next:
+  %s
+      reads it.
+  %s
+      stages it.%s`, note, remedy[0].Run, remedy[1].Run, see), string(stored), tc.name)
 		assert.Equal(t, remedy, served, "every next is served, so each is pre-authorized")
 	}
 }
@@ -199,8 +205,10 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	got, ref, served = shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
 	require.NotEmpty(t, ref)
 	doc, _ := Rule(string(denyRuleOutputPipe))
-	assert.Equal(t, "denied again [output-pipe]: "+doc.Catches+"\nnext:\n  ./magus run go-build . -s"+
-		"\nfull verdict: "+hint.NextForDenial(ref).Run, got)
+	assert.Equal(t, fmt.Sprintf(`denied again [output-pipe]: %s
+next:
+  ./magus run go-build . -s
+full verdict: %s`, doc.Catches, hint.NextForDenial(ref).Run), got)
 	assert.Equal(t, remedy, served)
 	assert.Equal(t, "deny-verdict", servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
 }
@@ -214,7 +222,7 @@ func TestShapeDenyRepeatsOnlyTheSameReason(t *testing.T) {
 		got, _, _ := shapeDeny(t.Context(), gate, rule, reason, "", "", nil, false)
 		return got
 	}
-	again := "denied again [" + rule + "]: "
+	again := fmt.Sprintf("denied again [%s]: ", rule)
 
 	assert.False(t, strings.HasPrefix(deny("this spawn names no model."), again))
 	assert.False(t, strings.HasPrefix(deny("this spawn runs opus, at the wrong tier."), again),

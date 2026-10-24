@@ -32,7 +32,7 @@ type humanOnlyPair struct {
 	unread bool
 }
 
-func (p humanOnlyPair) ref() string { return p.project + ":" + p.target }
+func (p humanOnlyPair) ref() string { return fmt.Sprintf("%s:%s", p.project, p.target) }
 
 // gradeHumanOnly is the verdict on command's magus runs: "deny" when any reaches a
 // human_only target through a chain, or when a leased worker names one; "ask" when a
@@ -94,11 +94,9 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 	// The worker test push-ungated uses: a row that cannot be read stays a worker. The
 	// declared reasons ride the first line, the one a fork quotes when it refuses the check.
 	if me, ok := actingLiveLease(ctx, deps, actingLease); actingLease != "" && (!ok || workerRole(me, deps.caller) != "") {
-		return decisionDeny, "`" + line + "` runs a target a person runs (" + strings.Join(reasons, "; ") +
-			"), and this session is bound to job " + actingLease +
-			"; name the run in your result's unresolved risks.\nWorkers do not spend for the orchestrator.\n" + facts.String()
+		return decisionDeny, fmt.Sprintf("`%s` runs a target a person runs (%s), and this session is bound to job %s; name the run in your result's unresolved risks.\nWorkers do not spend for the orchestrator.\n%s", line, strings.Join(reasons, "; "), actingLease, facts.String())
 	}
-	return decisionAsk, facts.String() + "Approving runs it once. To run it yourself: " + line
+	return decisionAsk, fmt.Sprintf("%sApproving runs it once. To run it yourself: %s", facts.String(), line)
 }
 
 // humanOnlyRun renders the run that names p, for the line the reason opens with.
@@ -108,7 +106,7 @@ func humanOnlyRun(p humanOnlyPair, runs []targetRun) string {
 			return strings.Join(append([]string{"magus", r.verb, r.target}, r.projects...), " ")
 		}
 	}
-	return "magus run " + p.target + " " + p.project
+	return fmt.Sprintf("magus run %s %s", p.target, p.project)
 }
 
 // phaseHumanOnlyRecord is the trail's name for the read of the knowledge store's record
@@ -224,15 +222,15 @@ func humanOnlyHistory(ctx context.Context, root string, p humanOnlyPair) string 
 	}
 	cfg, err := config.LoadWithRoot("", root)
 	if err != nil || configgen.ApplyEnv(&cfg, os.Getenv) != nil || cfg.HistoryPath == "" {
-		return "Run history unread; " + cached + "."
+		return fmt.Sprintf("Run history unread; %s.", cached)
 	}
 	var h forecast.History
 	if h.Load(ctx, cfg.HistoryPath) != nil {
-		return "Run history unread; " + cached + "."
+		return fmt.Sprintf("Run history unread; %s.", cached)
 	}
 	st, ok := h.FoldTargetHistories(p.project, p.target)
 	if !ok || st.Samples == 0 || st.P75Ms <= 0 {
-		return "No run recorded; " + cached + "."
+		return fmt.Sprintf("No run recorded; %s.", cached)
 	}
 	p75 := (time.Duration(st.P75Ms) * time.Millisecond).Round(time.Second)
 	return fmt.Sprintf("Recorded: p75 %s over %d runs; %s.", p75, st.Samples, cached)

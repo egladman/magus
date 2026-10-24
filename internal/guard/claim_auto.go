@@ -49,7 +49,7 @@ func withStop(g writeGrade, stop string) writeGrade {
 		return g
 	}
 	say, why, _ := strings.Cut(g.Reason, "\n")
-	g.Reason = denial{Say: say + " magus did not claim it on its own: " + stop + ".", Why: why}.full()
+	g.Reason = denial{Say: fmt.Sprintf("%s magus did not claim it on its own: %s.", say, stop), Why: why}.full()
 	return g
 }
 

@@ -439,9 +439,8 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	cacheDir := b.TempDir()
 	ctx := WithLocation(b.Context(), cacheDir, root, root)
 	req := Request{
-		Input: `{"hook_event_name":"PreToolUse","session_id":"bench","cwd":"` + root + `","tool_name":"TodoWrite",` +
-			`"tool_input":{"todos":[{"content":"read the guard","status":"pending"}]}}`,
-		Host: "claude-code", Form: "buzz", Session: "bench",
+		Input: fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"bench\",\"cwd\":\"%s\",\"tool_name\":\"TodoWrite\",\"tool_input\":{\"todos\":[{\"content\":\"read the guard\",\"status\":\"pending\"}]}}", root),
+		Host:  "claude-code", Form: "buzz", Session: "bench",
 	}
 	load := func(ctx context.Context) Dependencies {
 		deps, rules := NewDependencies(ctx, Wiring{Root: root, CacheDir: func(string) (string, error) { return cacheDir, nil }})

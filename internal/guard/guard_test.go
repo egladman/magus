@@ -397,7 +397,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	covered := map[string]bool{}
 	for _, tc := range cases {
 		covered[tc.rule] = true
-		t.Run(tc.rule+"/"+tc.name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s/%s", tc.rule, tc.name), func(t *testing.T) {
 			ctx, cacheDir := spawnFixture(t)
 			if tc.binary {
 				placeBinary(t, hookLocation(ctx, Dependencies{}).workspace)
@@ -506,7 +506,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			`rg "git commit -m" docs`,
 		} {
 			v := run(line)
-			assert.NotEqual(t, decisionDeny, v.Decision, line+": "+v.Reason)
+			assert.NotEqual(t, decisionDeny, v.Decision, fmt.Sprintf("%s: %s", line, v.Reason))
 		}
 		for _, line := range []string{
 			`git -C . commit -m "Fix the port."`,
@@ -537,7 +537,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			`jj describe -m "feat: add a commit-msg hook"`,
 		} {
 			v := run(line)
-			assert.NotEqual(t, decisionDeny, v.Decision, line+": "+v.Reason)
+			assert.NotEqual(t, decisionDeny, v.Decision, fmt.Sprintf("%s: %s", line, v.Reason))
 		}
 		v := run(`git commit -m "trim a fragment"`)
 		assert.Equal(t, decisionDeny, v.Decision, v.Reason)
@@ -575,12 +575,14 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		// gh edit reads the pull request's head and base from gh, which a test has no login for.
 		bin := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(bin, "gh"),
-			[]byte("#!/bin/sh\nprintf '{\"headRefOid\":\"%s\",\"baseRefName\":\"main\"}' "+head+"\n"), 0o755))
-		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			[]byte(fmt.Sprintf(`#!/bin/sh
+printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
+`, head)), 0o755))
+		t.Setenv("PATH", fmt.Sprintf("%s%s%s", bin, string(os.PathListSeparator), os.Getenv("PATH")))
 		run, cacheDir := shellAt(t, "trim-key", ws)
 		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
 		v := run(describe)
-		assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision, "judged, not failed open: "+v.Reason+v.Context)
+		assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision, fmt.Sprintf("judged, not failed open: %s%s", v.Reason, v.Context))
 
 		// A workspace that is no repository has no diff to read: the description is denied
 		// with the fetch that would make it readable, never judged on facts nobody read.
@@ -601,13 +603,13 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			cache.OutputDescriptor{Project: "libs/conventions", Target: "go-test", Failed: true})
 		require.NoError(t, err)
 		citing := func(ref string) string {
-			return `gh pr edit 9 --title "fix(cache): pin the key" --body "Warm builds hit the cache again because the key now sorts its inputs; TestKey passed (` + ref + `)."`
+			return fmt.Sprintf("gh pr edit 9 --title \"fix(cache): pin the key\" --body \"Warm builds hit the cache again because the key now sorts its inputs; TestKey passed (%s).\"", ref)
 		}
 		v = run(citing(passed.Ref))
-		assert.Equal(t, decisionPass, v.Decision, "a passing run this checkout holds: "+v.Reason+v.Context)
+		assert.Equal(t, decisionPass, v.Decision, fmt.Sprintf("a passing run this checkout holds: %s%s", v.Reason, v.Context))
 		v = run(citing(failed.Ref))
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
-		assert.Contains(t, v.Reason, "`"+failed.Ref+"` cites a failed run (libs/conventions:go-test)")
+		assert.Contains(t, v.Reason, fmt.Sprintf("`%s` cites a failed run (libs/conventions:go-test)", failed.Ref))
 		v = run(citing("outc3c3c3c3c3c3"))
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "`outc3c3c3c3c3c3` cites a run this checkout holds no record of")
@@ -620,10 +622,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.NotContains(t, v.Reason, "Skill(")
 
 		v = run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Workers miss the skill rules because the guard reads a stale copy; it reads .claude/skills/x/SKILL.md instead."`)
-		assert.Equal(t, decisionPass, v.Decision, "a path spelling a tool's name credits no one: "+v.Reason+v.Context)
+		assert.Equal(t, decisionPass, v.Decision, fmt.Sprintf("a path spelling a tool's name credits no one: %s%s", v.Reason, v.Context))
 
 		v = run(`gh pr comment 412 --body "Good catch: the map is written from two goroutines, so it takes a lock now."`)
-		assert.NotEqual(t, decisionDeny, v.Decision, "a reply is judged as a reply: "+v.Reason+v.Context)
+		assert.NotEqual(t, decisionDeny, v.Decision, fmt.Sprintf("a reply is judged as a reply: %s%s", v.Reason, v.Context))
 		v = run(`gh pr comment 412 --body "Let me delve into why the map is shared."`)
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "[buzzword]")
@@ -716,14 +718,14 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	covered["go-into-checkout"] = true
 	t.Run("go-into-checkout", func(t *testing.T) {
 		other := checkout(t, true)
-		v := judgeIn(t, checkout(t, false), "go -C "+other+" test ./...")
+		v := judgeIn(t, checkout(t, false), fmt.Sprintf("go -C %s test ./...", other))
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "runs a toolchain command in another checkout")
 
 		bare := checkout(t, false)
-		assert.Equal(t, decisionPass, judgeIn(t, checkout(t, false), "GOEXPERIMENT=jsonv2 go -C "+bare+" run -trimpath ./cmd/magus run go-build --no-cache .").Decision,
+		assert.Equal(t, decisionPass, judgeIn(t, checkout(t, false), fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", bare)).Decision,
 			"the bootstrap into a checkout with no binary passes")
-		assert.Equal(t, decisionDeny, judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
+		assert.Equal(t, decisionDeny, judgeIn(t, checkout(t, false), fmt.Sprintf("go -C %s build -o magus ./cmd/magus", bare)).Decision,
 			"a bare link is not the bootstrap")
 	})
 
@@ -1022,13 +1024,11 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	require.Equal(t, types.GuardJudgment{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionDeny,
-		Reason: "`ls jobs >f` keeps console text, which is not a format anything should parse." +
-			"\nnext:\n  magus ls jobs -o json --tee f" +
-			verdictRefLine + "magus query output " + ref,
-		Rule:      string(denyRuleOutputRedirect),
-		Lease:     v.Lease, // follows the environment the test ran in
-		LeaseFrom: v.LeaseFrom,
-		Next:      []types.NextStep{want},
+		Reason:        fmt.Sprintf("`ls jobs >f` keeps console text, which is not a format anything should parse.\nnext:\n  magus ls jobs -o json --tee f%smagus query output %s", verdictRefLine, ref),
+		Rule:          string(denyRuleOutputRedirect),
+		Lease:         v.Lease, // follows the environment the test ran in
+		LeaseFrom:     v.LeaseFrom,
+		Next:          []types.NextStep{want},
 	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
@@ -1148,7 +1148,7 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 			{decision: builtin.Off, first: decisionPass, again: decisionPass},
 			{decision: builtin.Deny, first: decisionDeny, again: decisionDeny},
 		} {
-			t.Run(string(notice.rule)+"/"+string(tt.decision), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", string(notice.rule), string(tt.decision)), func(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
 				deps := withSetting(string(notice.rule), tt.decision)
 				judge := func() types.GuardJudgment {
@@ -1504,7 +1504,9 @@ func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 	fp, _, ok := strings.Cut(string(body), "\n")
 	require.True(t, ok)
 	sentinel := filepath.Join(root, "sentinel.buzz")
-	require.NoError(t, os.WriteFile(cache, []byte(fp+"\n"+sentinel+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(cache, []byte(fmt.Sprintf(`%s
+%s
+`, fp, sentinel)), 0o644))
 
 	got, err = h.Pending(t.Context(), scope)
 	require.NoError(t, err)
