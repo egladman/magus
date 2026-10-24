@@ -562,6 +562,8 @@ type rowJudge struct {
 	composes  lazyProducers
 	// others are the path holders besides row, for who else holds an output a run regenerates.
 	others func() []types.Job
+	// ignored asks the VCS at root which paths it ignores, for job.RegeneratedOutside.
+	ignored func() func([]string) []string
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -572,6 +574,9 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 		others: sync.OnceValue(func() []types.Job {
 			holders := types.PathHolders(actingLeaseStanding(ctx, deps, row.ID).rows)
 			return slices.DeleteFunc(holders, func(r types.Job) bool { return r.ID == row.ID })
+		}),
+		ignored: sync.OnceValue(func() func([]string) []string {
+			return job.VCSIgnored(ctx, at.workspace)
 		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, workspace, row.WritePaths)
@@ -676,16 +681,28 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 // write paths cover the output, or one that regenerates it too from its own write paths
 // and was declared before the row. The first holder regenerates it and the other waits, so
 // neither silently overwrites the other's copy.
+//
+// A lease taken in another checkout holds only the outputs the change commits. One the VCS
+// ignores, such as a coverage profile, is a file of each checkout, so the two leases
+// regenerate two copies and neither overwrites the other.
 func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project) (string, types.Job) {
 	if len(own) == 0 {
 		return "", types.Job{}
 	}
+	committed := sync.OnceValue(func() []job.RegeneratedOutput {
+		kept := job.RegeneratedOutside(j.root, j.row, projects, j.ignored())
+		return slices.DeleteFunc(slices.Clone(own), func(o job.RegeneratedOutput) bool { return !slices.Contains(kept, o) })
+	})
 	for _, other := range j.others() {
 		var theirs []job.RegeneratedOutput
 		if !other.ReadOnly && (other.Created < j.row.Created || other.Created == j.row.Created && other.ID < j.row.ID) {
 			theirs = job.RegeneratedOutside(j.root, other, projects, nil)
 		}
-		for _, o := range own {
+		shared := own
+		if other.CheckoutRoot != "" && j.root != "" && !samePath(other.CheckoutRoot, j.root) {
+			shared = committed()
+		}
+		for _, o := range shared {
 			pattern := strings.Fields(o.Output)[0]
 			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {
 				return o.Output, other
