@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	MediaTypeDockerManifest     = "application/vnd.docker.distribution.manifest.v2+json"
-	MediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
+	mediaTypeDockerManifest     = "application/vnd.docker.distribution.manifest.v2+json"
+	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
 )
 
 // manifestMediaTypes are the manifest and index types Manifest accepts and PutManifest
@@ -26,8 +26,8 @@ const (
 var manifestMediaTypes = []string{
 	ocispec.MediaTypeImageManifest,
 	ocispec.MediaTypeImageIndex,
-	MediaTypeDockerManifest,
-	MediaTypeDockerManifestList,
+	mediaTypeDockerManifest,
+	mediaTypeDockerManifestList,
 }
 
 // RawManifest is a manifest or index exactly as a registry served it. Descriptor carries
@@ -58,7 +58,7 @@ func (c *Client) Manifest(ctx context.Context, ref Reference) (RawManifest, erro
 		return req, nil
 	})
 	if err != nil {
-		return RawManifest{}, fmt.Errorf("oci: fetch %s: %w", ref, err)
+		return RawManifest{}, fmt.Errorf("fetch %s: %w", ref, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -76,7 +76,7 @@ func (c *Client) Manifest(ctx context.Context, ref Reference) (RawManifest, erro
 	}
 	mediaType, err := manifestMediaType(resp.Header.Get("Content-Type"), body)
 	if err != nil {
-		return RawManifest{}, fmt.Errorf("oci: fetch %s: %w", ref, err)
+		return RawManifest{}, fmt.Errorf("fetch %s: %w", ref, err)
 	}
 	return RawManifest{
 		Descriptor: ocispec.Descriptor{MediaType: mediaType, Digest: ref.Digest, Size: int64(len(body))},
@@ -122,13 +122,13 @@ func (c *Client) FetchBlob(ctx context.Context, repo string, d ocispec.Descripto
 	}
 	vr, err := newVerifyReader(nil, d)
 	if err != nil {
-		return fmt.Errorf("oci: fetch %s blob: %w", ref, err)
+		return fmt.Errorf("fetch %s blob: %w", ref, err)
 	}
 	resp, err := c.send(ctx, ref, "pull", func(auth string) (*http.Request, error) {
 		return c.newGetRequest(ctx, ref, auth, "/blobs/"+d.Digest.String())
 	})
 	if err != nil {
-		return fmt.Errorf("oci: fetch %s blob: %w", ref, err)
+		return fmt.Errorf("fetch %s blob: %w", ref, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -172,7 +172,10 @@ func (c *Client) PushBlob(ctx context.Context, repo string, d ocispec.Descriptor
 func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descriptor, r io.Reader) error {
 	vr, err := newVerifyReader(r, d)
 	if err != nil {
-		return fmt.Errorf("oci: upload to %s: %w", ref.Repository, err)
+		return fmt.Errorf("upload to %s: %w", ref.Repository, err)
+	}
+	if n, ok := sourceLen(r); ok && n != d.Size {
+		return fmt.Errorf("oci: upload to %s: the source is %d bytes, %d declared", ref.Repository, n, d.Size)
 	}
 	have, err := c.blobExists(ctx, ref, "push,pull", d.Digest)
 	if err != nil {
@@ -181,7 +184,26 @@ func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descript
 	if have {
 		return nil
 	}
+	upload, err := c.startUpload(ctx, ref, d)
+	if err != nil {
+		return err
+	}
+	return c.sendBlob(ctx, ref, upload, d, vr)
+}
 
+// sourceLen reports how many unread bytes r holds, for the readers that know
+// (bytes.Reader, bytes.Buffer, strings.Reader).
+func sourceLen(r io.Reader) (int64, bool) {
+	l, ok := r.(interface{ Len() int })
+	if !ok {
+		return 0, false
+	}
+	return int64(l.Len()), true
+}
+
+// startUpload opens an upload session and returns the URL to PUT the blob to, with the
+// digest query set.
+func (c *Client) startUpload(ctx context.Context, ref Reference, d ocispec.Descriptor) (*url.URL, error) {
 	resp, err := c.send(ctx, ref, "push,pull", func(auth string) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base(ref)+"/blobs/uploads/", nil)
 		if err != nil {
@@ -191,35 +213,39 @@ func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descript
 		return req, nil
 	})
 	if err != nil {
-		return fmt.Errorf("oci: start upload to %s: %w", ref.Repository, err)
+		return nil, fmt.Errorf("start upload to %s: %w", ref.Repository, err)
 	}
 	// Closed AFTER the status check, not before: statusLine reads the body for whatever
 	// the registry said, and closing first discards the explanation of the very first
 	// error a misconfigured push hits.
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("oci: start upload to %s: %s", ref.Repository, statusLine(resp))
+		return nil, fmt.Errorf("oci: start upload to %s: %s", ref.Repository, statusLine(resp))
 	}
 	location := resp.Header.Get("Location")
 	if location == "" {
-		return fmt.Errorf("oci: start upload to %s: the registry returned no upload location", ref.Repository)
+		return nil, fmt.Errorf("oci: start upload to %s: the registry returned no upload location", ref.Repository)
 	}
 
 	// The location may be absolute or registry-relative, and it may already carry a query.
 	upload, err := url.Parse(location)
 	if err != nil {
-		return fmt.Errorf("oci: upload location %q: %w", location, err)
+		return nil, fmt.Errorf("oci: upload location %q: %w", location, err)
 	}
 	if !upload.IsAbs() {
 		upload.Scheme, upload.Host = "https", ref.Registry
 	}
 	if upload.Scheme != "https" {
-		return fmt.Errorf("oci: upload to %s: the registry named a %s upload location, which would send the blob unprotected", ref.Repository, upload.Scheme)
+		return nil, fmt.Errorf("oci: upload to %s: the registry named a %s upload location, which would send the blob unprotected", ref.Repository, upload.Scheme)
 	}
 	q := upload.Query()
 	q.Set("digest", d.Digest.String())
 	upload.RawQuery = q.Encode()
+	return upload, nil
+}
 
+// sendBlob sends the verified bytes to the upload URL startUpload returned.
+func (c *Client) sendBlob(ctx context.Context, ref Reference, upload *url.URL, d ocispec.Descriptor, vr *verifyReader) error {
 	put, err := http.NewRequestWithContext(ctx, http.MethodPut, upload.String(), vr)
 	if err != nil {
 		return err
@@ -237,7 +263,7 @@ func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descript
 	put.ContentLength = d.Size
 	done, err := c.do(put)
 	if err != nil {
-		return fmt.Errorf("oci: upload %s: %w", d.Digest, err)
+		return fmt.Errorf("upload %s: %w", d.Digest, err)
 	}
 	defer done.Body.Close()
 	if done.StatusCode != http.StatusCreated {
@@ -245,8 +271,8 @@ func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descript
 	}
 	// The transport sends only ContentLength bytes, so a source with more has not been
 	// read to its end yet. The registry holds the declared prefix, which hashes to d.
-	if _, err := vr.Read(make([]byte, 1)); err != io.EOF {
-		return fmt.Errorf("oci: upload %s: %w", d.Digest, err)
+	if _, err := vr.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("upload %s: %w", d.Digest, err)
 	}
 	return nil
 }
@@ -265,7 +291,7 @@ func (c *Client) PutManifest(ctx context.Context, repo, mediaType string, body [
 	}
 	for _, t := range tags {
 		if err := ValidateTag(t); err != nil {
-			return "", fmt.Errorf("oci: push to %s: %w", ref, err)
+			return "", fmt.Errorf("push to %s: %w", ref, err)
 		}
 	}
 	confirmed, err := c.putManifest(ctx, ref, digest.FromBytes(body).String(), mediaType, body)

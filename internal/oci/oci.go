@@ -1,27 +1,3 @@
-// Package oci publishes and fetches named blobs as an OCI artifact, over the registry
-// v2 HTTP API.
-//
-// It exists so a workspace can hand its knowledge graph to everyone else who works on the
-// repository without anyone rebuilding it. A registry is the right store for that: it is
-// already content-addressed, it already has a public read path, and a team that can clone
-// the repository can already reach its packages. Published spells travel the same way
-// (internal/spell/remote), pulled by manifest digest rather than by tag.
-//
-// An artifact carries SEVERAL layers, each titled, so a reader fetches the one piece it
-// is missing rather than the whole. The title is the spec's own
-// org.opencontainers.image.title annotation, which is what other OCI tooling already
-// reads as a layer's filename.
-//
-// The SHAPES come from the spec (image-spec's own Manifest, Descriptor, media types and
-// DescriptorEmptyJSON; go-digest's Digest), so nothing here transcribes a constant the
-// spec already fixes. The TRANSPORT is net/http directly rather than a registry SDK: the
-// whole protocol used here is six requests, and the clients that wrap it bring an
-// OpenPGP stack this tool has no other use for, which is future govulncheck exposure on a
-// gate that already runs it.
-//
-// What this does NOT do is the rest of OCI: no image config, no multi-arch index, no
-// referrers (ghcr.io does not implement the referrers API), no cross-repository mount, no
-// chunked upload. A caller that needs those wants a real client, not this.
 package oci
 
 import (
@@ -348,7 +324,7 @@ func (c *Client) manifest(ctx context.Context, ref Reference) (ocispec.Manifest,
 		return req, nil
 	})
 	if err != nil {
-		return ocispec.Manifest{}, nil, fmt.Errorf("oci: fetch %s: %w", ref, err)
+		return ocispec.Manifest{}, nil, fmt.Errorf("fetch %s: %w", ref, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -384,7 +360,7 @@ func (c *Client) blob(ctx context.Context, ref Reference, want ocispec.Descripto
 		return c.newGetRequest(ctx, ref, auth, "/blobs/"+want.Digest.String())
 	})
 	if err != nil {
-		return nil, fmt.Errorf("oci: fetch %s blob: %w", ref, err)
+		return nil, fmt.Errorf("fetch %s blob: %w", ref, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -556,7 +532,7 @@ func (c *Client) tagPage(ctx context.Context, repo Reference, u *url.URL) ([]str
 		return req, nil
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("oci: list %s: %w", repo, err)
+		return nil, "", fmt.Errorf("list %s: %w", repo, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -614,7 +590,7 @@ func (c *Client) blobExists(ctx context.Context, ref Reference, actions string, 
 		return req, nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("oci: probe %s: %w", d, err)
+		return false, fmt.Errorf("probe %s: %w", d, err)
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
@@ -642,7 +618,7 @@ func (c *Client) putManifest(ctx context.Context, ref Reference, reference, medi
 		return req, nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("oci: tag %s: %w", dest, err)
+		return "", fmt.Errorf("tag %s: %w", dest, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {

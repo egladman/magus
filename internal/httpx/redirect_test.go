@@ -44,20 +44,20 @@ func TestGuardRedirectStripsCredentialHeadersAcrossHosts(t *testing.T) {
 
 func TestGuardRedirectStopsAfterMaxRedirects(t *testing.T) {
 	t.Parallel()
-	via := make([]*http.Request, MaxRedirects)
+	via := make([]*http.Request, maxRedirects)
 	for i := range via {
 		via[i] = mustRequest(t, "https://a.example/x")
 	}
 	require.ErrorContains(t, GuardRedirect(mustRequest(t, "https://a.example/y"), via), "stopped after 10 redirects")
-	require.NoError(t, GuardRedirect(mustRequest(t, "https://a.example/y"), via[:MaxRedirects-1]))
+	require.NoError(t, GuardRedirect(mustRequest(t, "https://a.example/y"), via[:maxRedirects-1]))
 }
 
 func TestIsCredentialHeader(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"Authorization", "Cookie", "X-Api-Key", "X-Auth-Token", "Proxy-Authorization", "X-Secret"} {
-		assert.True(t, IsCredentialHeader(name), name)
+		assert.True(t, isCredentialHeader(name), name)
 	}
 	for _, name := range []string{"Accept", "Content-Type", "User-Agent"} {
-		assert.False(t, IsCredentialHeader(name), name)
+		assert.False(t, isCredentialHeader(name), name)
 	}
 }

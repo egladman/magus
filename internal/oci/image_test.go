@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -65,19 +66,19 @@ func TestImageManifestFetchesAnIndexByDigest(t *testing.T) {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
 	assert.Equal(t, []string{strings.Join([]string{
-		ocispec.MediaTypeImageManifest, ocispec.MediaTypeImageIndex, MediaTypeDockerManifest, MediaTypeDockerManifestList,
+		ocispec.MediaTypeImageManifest, ocispec.MediaTypeImageIndex, mediaTypeDockerManifest, mediaTypeDockerManifestList,
 	}, ", ")}, reg.accept)
 }
 
 func TestImageManifestFetchesADockerManifest(t *testing.T) {
 	reg := newInMemoryRegistry(t)
-	body := []byte(`{"schemaVersion":2,"mediaType":"` + MediaTypeDockerManifest + `"}`)
-	d, err := reg.client().PutManifest(t.Context(), reg.repo(), MediaTypeDockerManifest, body)
+	body := []byte(`{"schemaVersion":2,"mediaType":"` + mediaTypeDockerManifest + `"}`)
+	d, err := reg.client().PutManifest(t.Context(), reg.repo(), mediaTypeDockerManifest, body)
 	require.NoError(t, err)
 
 	got, err := reg.client().Manifest(t.Context(), reg.pinned(d))
 	require.NoError(t, err)
-	assert.Equal(t, ocispec.Descriptor{MediaType: MediaTypeDockerManifest, Digest: d, Size: int64(len(body))}, got.Descriptor)
+	assert.Equal(t, ocispec.Descriptor{MediaType: mediaTypeDockerManifest, Digest: d, Size: int64(len(body))}, got.Descriptor)
 }
 
 func TestImageManifestRefusesATag(t *testing.T) {
@@ -173,9 +174,7 @@ func TestImagePushBlobRefusesBytesThatMissTheDescriptor(t *testing.T) {
 	}{
 		"wrong digest": {blobDescriptor(good), []byte("the declared byteZ"), "does not match the digest", map[string][]byte{}},
 		"short":        {blobDescriptor(good), good[:5], "5 bytes, 18 declared", map[string][]byte{}},
-		// The transport sends only the declared length, so the prefix reaches the registry
-		// and is the blob the descriptor names.
-		"long": {blobDescriptor(good), append(bytes.Clone(good), 'x'), "longer than the 18 bytes declared", map[string][]byte{blobDescriptor(good).Digest.String(): good}},
+		"long":         {blobDescriptor(good), append(bytes.Clone(good), 'x'), "19 bytes, 18 declared", map[string][]byte{}},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -186,6 +185,29 @@ func TestImagePushBlobRefusesBytesThatMissTheDescriptor(t *testing.T) {
 			defer reg.mu.Unlock()
 			assert.Equal(t, tc.stored, reg.blobs)
 		})
+	}
+}
+
+func TestImagePushBlobChecksASizedSourceBeforeAnyRequest(t *testing.T) {
+	good := []byte("the declared bytes")
+	reg := newInMemoryRegistry(t)
+	err := reg.client().PushBlob(t.Context(), reg.repo(), blobDescriptor(good), bytes.NewReader(good[:5]))
+	require.ErrorContains(t, err, "5 bytes, 18 declared")
+	assert.Zero(t, reg.requestCount())
+}
+
+// A reader that cannot say its length is checked as it streams. Whatever the registry
+// stored must be the blob the descriptor names, never the overlong source.
+func TestImagePushBlobRefusesAnUnsizedSourceThatRunsLong(t *testing.T) {
+	good := []byte("the declared bytes")
+	reg := newInMemoryRegistry(t)
+	err := reg.client().PushBlob(t.Context(), reg.repo(), blobDescriptor(good), io.MultiReader(bytes.NewReader(append(bytes.Clone(good), 'x'))))
+	require.ErrorContains(t, err, "longer than the 18 bytes declared")
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	for d, b := range reg.blobs {
+		assert.Equal(t, blobDescriptor(good).Digest.String(), d)
+		assert.Equal(t, good, b)
 	}
 }
 

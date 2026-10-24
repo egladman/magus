@@ -686,4 +686,3 @@ func TestHTTPRedirectKeepsHeadersOnTheSameHost(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "k", seen.Get("X-Api-Key"))
 }
-

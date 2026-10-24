@@ -5,6 +5,9 @@ package std
 import (
 	"context"
 	"errors"
+	"fmt"
+
+	"github.com/egladman/magus/internal/image"
 
 	"github.com/egladman/magus/types"
 )
@@ -69,24 +72,38 @@ var Image = Module{
 
 // ImagePull fetches the image named by a digest reference into an OCI layout
 // at dest. A tag reference is an error; it does not relabel the platform.
-func ImagePull(ctx context.Context, reference string, platform map[string]any, dest string) (types.ImageLayout, error) {
+func ImagePull(_ context.Context, _ string, platform map[string]any, _ string) (types.ImageLayout, error) {
+	p, err := image.DecodePlatform(platform)
+	if err != nil {
+		return types.ImageLayout{}, fmt.Errorf("image.pull: %w", err)
+	}
+	if err := p.Validate(); err != nil {
+		return types.ImageLayout{}, err
+	}
 	return types.ImageLayout{}, errors.New("image.pull: not built yet")
 }
 
 // ImageWrite assembles spec into an OCI layout at dest, adding at most one
 // layer. A failed write leaves dest untouched.
-func ImageWrite(ctx context.Context, spec map[string]any, dest string) (types.ImageLayout, error) {
+func ImageWrite(_ context.Context, spec map[string]any, _ string) (types.ImageLayout, error) {
+	s, err := image.DecodeSpec(spec)
+	if err != nil {
+		return types.ImageLayout{}, err
+	}
+	if err := s.Validate(); err != nil {
+		return types.ImageLayout{}, err
+	}
 	return types.ImageLayout{}, errors.New("image.write: not built yet")
 }
 
 // ImageIndex joins single-platform layouts into one image index at dest.
 // Two layouts for the same platform are an error.
-func ImageIndex(ctx context.Context, layouts []string, dest string) (types.ImageLayout, error) {
+func ImageIndex(_ context.Context, _ []string, _ string) (types.ImageLayout, error) {
 	return types.ImageLayout{}, errors.New("image.index: not built yet")
 }
 
 // ImagePublish pushes a layout to repository under each of tags and reports
 // the digest. It refuses when MAGUS_OFFLINE is set.
-func ImagePublish(ctx context.Context, layout, repository string, tags []string, opts map[string]any) (types.ImagePublished, error) {
+func ImagePublish(_ context.Context, _, _ string, _ []string, _ map[string]any) (types.ImagePublished, error) {
 	return types.ImagePublished{}, errors.New("image.publish: not built yet")
 }

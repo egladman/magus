@@ -2,6 +2,7 @@ package image
 
 import (
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -167,19 +168,25 @@ func TestImageSpecDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeSpec: %v", err)
 	}
-	if got.Platform != (Platform{"linux", "arm64", "v8"}) || got.Base != "/b" || got.User != "u" ||
-		got.WorkingDir != "/w" || !got.ResetEntrypoint || !got.ResetCmd || got.Created != "2020-01-01T00:00:00Z" {
-		t.Errorf("scalars: %+v", got)
+	want := Spec{
+		Base:            "/b",
+		Platform:        Platform{"linux", "arm64", "v8"},
+		Files:           []File{{"s", "/d", 0o755, 1, 2}},
+		Symlinks:        []Symlink{{"/l", "t", 3, 4}},
+		Env:             map[string]string{"A": "1"},
+		UnsetEnv:        []string{"B"},
+		User:            "u",
+		WorkingDir:      "/w",
+		Entrypoint:      []string{"/e"},
+		ResetEntrypoint: true,
+		Cmd:             []string{"c"},
+		ResetCmd:        true,
+		Labels:          map[string]string{"l": "v"},
+		Annotations:     map[string]string{"a": "v"},
+		Created:         "2020-01-01T00:00:00Z",
 	}
-	if len(got.Files) != 1 || got.Files[0] != (File{"s", "/d", 0o755, 1, 2}) {
-		t.Errorf("files: %+v", got.Files)
-	}
-	if len(got.Symlinks) != 1 || got.Symlinks[0] != (Symlink{"/l", "t", 3, 4}) {
-		t.Errorf("symlinks: %+v", got.Symlinks)
-	}
-	if got.Env["A"] != "1" || got.Labels["l"] != "v" || got.Annotations["a"] != "v" ||
-		len(got.UnsetEnv) != 1 || got.Entrypoint[0] != "/e" || got.Cmd[0] != "c" {
-		t.Errorf("lists and maps: %+v", got)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("DecodeSpec:\n got %+v\nwant %+v", got, want)
 	}
 }
 

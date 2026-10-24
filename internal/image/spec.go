@@ -224,6 +224,12 @@ func DecodeSpec(m map[string]any) (Spec, error) {
 	return s, nil
 }
 
+// DecodePlatform checks the keys of a platform object and reads it; it does not
+// validate the platform.
+func DecodePlatform(m map[string]any) (Platform, error) {
+	return decodePlatform(m, nil)
+}
+
 func decodePlatform(m map[string]any, prior error) (Platform, error) {
 	d := decoder{what: "spec.platform", err: prior}
 	d.only(m, "os", "architecture", "variant")

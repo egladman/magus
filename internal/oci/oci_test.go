@@ -199,59 +199,69 @@ func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	case strings.HasSuffix(p, "/tags/list"):
 		r.serveTags(w, req)
 	case strings.Contains(p, "/blobs/"):
-		if !r.authorized(req) {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		if req.Method == http.MethodGet {
-			r.blobAuth = append(r.blobAuth, req.Header.Get("Authorization"))
-		}
-		b, ok := r.blobs[last]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if req.Method == http.MethodHead {
-			return
-		}
-		if r.blobRedirect != "" {
-			w.Header().Set("Location", r.blobRedirect+"/"+last)
-			w.WriteHeader(http.StatusTemporaryRedirect)
-			return
-		}
-		_, _ = w.Write(b)
+		r.serveBlob(w, req, last)
 	case strings.Contains(p, "/manifests/"):
-		r.manifestAuth = append(r.manifestAuth, req.Header.Get("Authorization"))
-		if !r.authorized(req) {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		if req.Method == http.MethodPut {
-			body, _ := io.ReadAll(req.Body)
-			d := digest.FromBytes(body).String()
-			r.tags[last] = body
-			// A registry also serves a manifest by its digest.
-			r.tags[d] = body
-			r.types[last], r.types[d] = req.Header.Get("Content-Type"), req.Header.Get("Content-Type")
-			if r.dockerDigest != nil {
-				w.Header().Set("Docker-Content-Digest", r.dockerDigest(body))
-			}
-			w.WriteHeader(http.StatusCreated)
-			return
-		}
-		r.accept = append(r.accept, req.Header.Get("Accept"))
-		b, ok := r.tags[last]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if ct := r.types[last]; ct != "" {
-			w.Header().Set("Content-Type", ct)
-		}
-		_, _ = w.Write(b)
+		r.serveManifest(w, req, last)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+// serveBlob answers a blob GET or HEAD; the caller holds r.mu.
+func (r *inMemoryRegistry) serveBlob(w http.ResponseWriter, req *http.Request, last string) {
+	if !r.authorized(req) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if req.Method == http.MethodGet {
+		r.blobAuth = append(r.blobAuth, req.Header.Get("Authorization"))
+	}
+	b, ok := r.blobs[last]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if req.Method == http.MethodHead {
+		return
+	}
+	if r.blobRedirect != "" {
+		w.Header().Set("Location", r.blobRedirect+"/"+last)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		return
+	}
+	_, _ = w.Write(b)
+}
+
+// serveManifest answers a manifest PUT or GET; the caller holds r.mu.
+func (r *inMemoryRegistry) serveManifest(w http.ResponseWriter, req *http.Request, last string) {
+	r.manifestAuth = append(r.manifestAuth, req.Header.Get("Authorization"))
+	if !r.authorized(req) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if req.Method == http.MethodPut {
+		body, _ := io.ReadAll(req.Body)
+		d := digest.FromBytes(body).String()
+		r.tags[last] = body
+		// A registry also serves a manifest by its digest.
+		r.tags[d] = body
+		r.types[last], r.types[d] = req.Header.Get("Content-Type"), req.Header.Get("Content-Type")
+		if r.dockerDigest != nil {
+			w.Header().Set("Docker-Content-Digest", r.dockerDigest(body))
+		}
+		w.WriteHeader(http.StatusCreated)
+		return
+	}
+	r.accept = append(r.accept, req.Header.Get("Accept"))
+	b, ok := r.tags[last]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if ct := r.types[last]; ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	_, _ = w.Write(b)
 }
 
 // serveTags answers tags/list in lexical order, after ?last= and at most pageSize per
@@ -453,7 +463,7 @@ func TestPushWritesEveryTagFromOneUpload(t *testing.T) {
 
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	assert.Equal(t, 2, reg.uploads, "the config blob and the one layer, once each") //nolint:fieldwise // inMemoryRegistry holds a server, a mutex and counters; its state is not a value to compare whole
+	assert.Equal(t, 2, reg.uploads, "the config blob and the one layer, once each")
 	assert.Equal(t, map[string][]byte{"v1": raw, "latest": raw, "stable": raw, pushed.String(): raw}, reg.tags)
 }
 
@@ -535,7 +545,7 @@ func TestTokenCarriesCredentialsOnPull(t *testing.T) {
 	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("bot:s3cret-token"))
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	assert.Equal(t, []string{"", basic}, reg.tokenAuth) //nolint:fieldwise // inMemoryRegistry holds a server, a mutex and counters; its state is not a value to compare whole
+	assert.Equal(t, []string{"", basic}, reg.tokenAuth)
 	assert.Equal(t, 2, reg.pings, "one challenge per client")
 }
 
