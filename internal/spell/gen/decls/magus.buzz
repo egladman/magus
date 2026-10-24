@@ -1081,6 +1081,7 @@ export object LeaseCheck {
     project: str = "",
     args: [str] = [],
     noDefaultCharms: bool = false,
+    test: bool = false,
 }
 
 export object Goal {

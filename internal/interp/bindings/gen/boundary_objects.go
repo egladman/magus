@@ -3505,6 +3505,7 @@ func ObjectLeaseCheck(v types.LeaseCheck) vm.Value {
 	}
 	out.MapSet("args", vm.ListValue(itemsArgs))
 	out.MapSet("noDefaultCharms", vm.BoolValue(v.NoDefaultCharms))
+	out.MapSet("test", vm.BoolValue(v.Test))
 	return out
 }
 
