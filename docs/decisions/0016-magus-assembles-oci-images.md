@@ -1,7 +1,7 @@
 ---
 title: "ADR 0016: magus assembles OCI images from built files"
 order: 16
-description: Whether magus should produce the container images a Dockerfile builds today. This record has magus assemble an OCI image layout from files a target already built, in Go, exposed to Buzz as the generated std module image with recipes written in Buzz. It is not Dockerfile support: no parser, no RUN, no container execution, no package installation, no runtime detection. It fixes the scope limits, the determinism rules and the loud-failure rules, and leaves the registry client, timestamp policy, SBOM and provenance, and the dynamic image open.
+description: Whether magus should produce the container images a Dockerfile builds today. This record has magus assemble an OCI image layout from files a target already built, in Go, exposed to Buzz as the generated std module image with recipes written in Buzz. It is not Dockerfile support: no parser, no RUN, no container execution, no package installation, no runtime detection. It fixes the scope limits, the determinism rules, the timestamp policy at Unix 0, the loud-failure rules and a registry transport that extends internal/oci, and leaves SBOM and provenance and the dynamic image open.
 tags: [adr, decision, images, oci, containers, buzz, std, release, determinism]
 status: proposed
 date: 2026-10-23
@@ -48,7 +48,7 @@ layout to a registry. `Index` joins single-platform layouts into one image index
 | `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`   | proposed |
 | The std `image` module, trampolines generated like `archive`                                  | proposed |
 | Our own static image recipe, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | proposed |
-| Registry `Pull` and `Publish` over the registry transport (open question 1)                   | proposed |
+| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                    | proposed |
 | The release path publishes the layout instead of running `docker buildx`                      | proposed |
 
 ### Go owns the rules, Buzz owns the recipe
@@ -94,7 +94,7 @@ a user needing one keeps the container engine:
   and the same digests, independent of host path, file creation order, host mtimes, umask
   and `GOMAXPROCS`. The compiler's own output is outside this claim.
 - Layer entries are sorted by destination. Gzip uses the standard library at a fixed
-  level with no name and no mtime. The exact timestamp policy is open question 2.
+  level with no name and no mtime. Timestamps are fixed at Unix 0, as decided below.
 - A base is a layout read from disk and verified: every blob is checked against its digest
   and size before use. Base layers, config and manifest bytes are reused unchanged. A
   base's platform that differs from the requested one is an error, and magus never
@@ -107,6 +107,22 @@ a user needing one keeps the container engine:
 - Every read and write goes through the sandbox checks, and every network call refuses
   when `MAGUS_OFFLINE` is set. Registry credentials are `secret.Value`, revealed only into
   the request header.
+
+### The registry transport extends internal/oci
+
+Decided by Eli on 2026-10-23. The registry transport extends `internal/oci` to carry image
+manifests, indexes and blobs, and fixes its redirect guard and offline check. The OCI
+descriptor, manifest, index and digest types are already direct dependencies.
+`go-containerregistry` is not adopted: its `pkg/authn` imports `docker/cli/cli/config`, and
+its `pkg/v1/remote` needs `authn`, so adopting it adds four modules: go-containerregistry,
+docker/cli, docker-credential-helpers and logrus. A third, separate client is not an option.
+
+### The timestamp policy is fixed at Unix 0
+
+Decided by Eli on 2026-10-23. Every layer entry has mtime Unix 0. The gzip header has mtime
+0 and no name. The config `created` field is copied from the base unless the recipe sets
+one. History entries carry no `created`. A recipe that sets `created` to a commit time puts
+that time into the target key through its input.
 
 ### Doctrine checked
 
@@ -161,24 +177,11 @@ files and settings while Go owns the bytes.
 
 ## Open questions
 
-1. **Registry transport (D2).** Two options for moving image manifests, indexes and blobs.
-   Option A adds `go-containerregistry` v0.22.1. An audit found that its `pkg/authn`
-   imports `docker/cli/cli/config` and `pkg/v1/remote` imports `authn`, so A adds four
-   modules: go-containerregistry, docker/cli, docker-credential-helpers and logrus. Option
-   B extends `internal/oci` to carry image manifests, indexes and blobs and fixes its
-   redirect guard and offline check, and is estimated at about 305 implementation lines;
-   the OCI descriptor, manifest, index and digest types are already direct dependencies.
-   A third, separate client is not an option. The recommendation is B. Eli has not decided
-   this, and the registry work waits on the decision.
-2. **Timestamp policy (D3).** Recommended: every layer entry mtime is Unix 0, the gzip
-   header mtime is 0 with no name, the config `created` is copied from the base unless the
-   spec sets one, and history entries carry no `created`. Our recipe would set `created`
-   to the commit time, entering the target key through its input. Not decided.
-3. **SBOM and provenance without buildx (D4).** Recommended: trivy generates an SPDX SBOM
+1. **SBOM and provenance without buildx (D4).** Recommended: trivy generates an SPDX SBOM
    per platform image from the layout, and `cosign attest` binds it and a SLSA provenance
    statement to the final digest. The alternative is `actions/attest-build-provenance` for
    provenance. A design is needed before code. Not decided.
-4. **The dynamic image (D5).** The cgo variant with `inotify-tools` cannot be assembled
+2. **The dynamic image (D5).** The cgo variant with `inotify-tools` cannot be assembled
    without a package artifact or a runtime. Options: drop it, ship a statically linked
    watcher instead, or keep its Dockerfile until a design exists. Recommended: decide after
    the static cutover, with download numbers. Not decided.
