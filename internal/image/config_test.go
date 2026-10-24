@@ -182,9 +182,12 @@ func TestImageConfigScratch(t *testing.T) {
 	got, err := buildConfig(nil, spec, imageTestDiffID)
 	require.NoError(t, err)
 
-	assert.Equal(t, ocispec.Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}, got.Platform)
-	assert.Equal(t, ocispec.RootFS{Type: "layers", DiffIDs: []digest.Digest{imageTestDiffID}}, got.RootFS)
-	assert.Equal(t, ocispec.ImageConfig{Cmd: []string{"ls"}}, got.Config)
+	assert.Equal(t, ocispec.Image{
+		Platform: ocispec.Platform{OS: "linux", Architecture: "arm64", Variant: "v8"},
+		RootFS:   ocispec.RootFS{Type: "layers", DiffIDs: []digest.Digest{imageTestDiffID}},
+		Config:   ocispec.ImageConfig{Cmd: []string{"ls"}},
+		History:  []ocispec.History{{CreatedBy: "magus image write"}},
+	}, got)
 }
 
 func TestImageConfigBlobBytes(t *testing.T) {

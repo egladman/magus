@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -54,7 +55,7 @@ func readLayer(t *testing.T, gzipped []byte) (entries []tarEntry, tarBytes []byt
 	tr := tar.NewReader(bytes.NewReader(tarBytes))
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return entries, tarBytes
 		}
 		if err != nil {
@@ -96,14 +97,17 @@ func TestImageLayerEntryHeaders(t *testing.T) {
 	for i, w := range want {
 		g := got[i].Header
 		w.ModTime = epoch
-		if !g.ModTime.Equal(w.ModTime) || !g.AccessTime.IsZero() || !g.ChangeTime.IsZero() {
-			t.Errorf("%s: times mod=%v access=%v change=%v", w.Name, g.ModTime, g.AccessTime, g.ChangeTime)
+		if !g.ModTime.Equal(w.ModTime) {
+			t.Errorf("%s: mod time %v, want %v", w.Name, g.ModTime, w.ModTime)
 		}
-		if g.Uname != "" || g.Gname != "" || len(g.PAXRecords) != 0 || len(g.Xattrs) != 0 {
-			t.Errorf("%s: owner names or records set: %+v", w.Name, g)
+		g.ModTime = w.ModTime
+		if len(g.PAXRecords) == 0 {
+			g.PAXRecords = nil
 		}
-		if g.Typeflag != w.Typeflag || g.Name != w.Name || g.Linkname != w.Linkname || g.Size != w.Size ||
-			g.Mode != w.Mode || g.Uid != w.Uid || g.Gid != w.Gid || g.Format != w.Format {
+		if len(g.Xattrs) == 0 {
+			g.Xattrs = nil
+		}
+		if !reflect.DeepEqual(g, w) {
 			t.Errorf("entry %d: got %+v, want %+v", i, g, w)
 		}
 	}
@@ -147,8 +151,14 @@ func TestImageLayerLongNameUsesPAX(t *testing.T) {
 		t.Fatalf("entries: %+v", got)
 	}
 	file := got[0].Header
-	if file.Name != long[1:] || file.Format != tar.FormatPAX || file.PAXRecords["path"] != long[1:] || len(file.PAXRecords) != 1 {
-		t.Errorf("long file: name %q format %v records %v", file.Name, file.Format, file.PAXRecords)
+	type longFile struct {
+		name    string
+		format  tar.Format
+		records map[string]string
+	}
+	gotLong := longFile{file.Name, file.Format, file.PAXRecords}
+	if wantLong := (longFile{long[1:], tar.FormatPAX, map[string]string{"path": long[1:]}}); !reflect.DeepEqual(gotLong, wantLong) {
+		t.Errorf("long file: got %+v, want %+v", gotLong, wantLong)
 	}
 	if got[1].Header.Format != tar.FormatUSTAR || len(got[1].Header.PAXRecords) != 0 {
 		t.Errorf("short file: format %v records %v", got[1].Header.Format, got[1].Header.PAXRecords)
@@ -190,7 +200,14 @@ func TestImageLayerGzipHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := zr.Header
-	if !h.ModTime.IsZero() && h.ModTime.Unix() != 0 || h.Name != "" || h.Comment != "" || len(h.Extra) != 0 {
+	if !h.ModTime.IsZero() && h.ModTime.Unix() != 0 {
+		t.Errorf("gzip mod time: %v", h.ModTime)
+	}
+	h.ModTime = time.Time{}
+	if h.Extra == nil {
+		h.Extra = []byte{}
+	}
+	if wantHeader := (gzip.Header{Extra: []byte{}, OS: 255}); !reflect.DeepEqual(h, wantHeader) {
 		t.Errorf("gzip header: %+v", h)
 	}
 	if want := []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 2, 255}; !bytes.Equal(gz[:10], want) {
@@ -330,7 +347,7 @@ func TestImageLayerCancellationDuringCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	cancel()
-	if _, err := r.Read(buf); err != context.Canceled {
+	if _, err := r.Read(buf); !errors.Is(err, context.Canceled) {
 		t.Fatalf("read after cancel: %v", err)
 	}
 }

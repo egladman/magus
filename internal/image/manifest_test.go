@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,8 +23,12 @@ func TestImageManifestLayers(t *testing.T) {
 	added := imageTestDescriptor(ocispec.MediaTypeImageLayerGzip, "44", 30)
 
 	with := buildManifest(cfg, base, &added, nil)
-	assert.Equal(t, []ocispec.Descriptor{base[0], base[1], added}, with.Layers)
-	assert.Equal(t, cfg, with.Config)
+	assert.Equal(t, ocispec.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config:    cfg,
+		Layers:    []ocispec.Descriptor{base[0], base[1], added},
+	}, with)
 
 	without := buildManifest(cfg, base, nil, nil)
 	assert.Equal(t, base, without.Layers)
