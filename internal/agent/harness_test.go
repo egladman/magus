@@ -750,16 +750,16 @@ const promptRules = "prefix_rule(pattern = [\"git\", \"push\"], decision = \"pro
 // prompts: a whole rules file, and one key inside a JSON config the person also edits.
 func writePromptHarness(t *testing.T, root string) {
 	t.Helper()
-	registerHarnessSpell(t, "prompter", `{
+	registerHarnessSpell(t, "prompter", fmt.Sprintf(`{
   "schema_version": 2,
   "id": "prompter",
   "display": {"name": "Prompter"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
   "prompts": [
-    {"path": ".codex/rules/magus.rules", "content": `+strconvQuote(promptRules)+`},
+    {"path": ".codex/rules/magus.rules", "content": %s},
     {"path": "opencode.json", "key": ["permission", "bash", "git push *"], "value": "ask"}
   ]
-}`)
+}`, strconvQuote(promptRules)))
 }
 
 func strconvQuote(s string) string {
@@ -1375,15 +1375,15 @@ const agentFileBody = "---\ndescription: \"x\"\n---\n\nbody\n"
 
 func writeAgentHarness(t *testing.T) {
 	t.Helper()
-	registerHarnessSpell(t, "scribe", `{
+	registerHarnessSpell(t, "scribe", fmt.Sprintf(`{
   "schema_version": 2,
   "id": "scribe",
   "display": {"name": "Scribe"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
   "agents": [
-    {"path": ".scribe/agents/magus-scout.md", "content": `+strconvQuote(agentFileBody)+`}
+    {"path": ".scribe/agents/magus-scout.md", "content": %s}
   ]
-}`)
+}`, strconvQuote(agentFileBody)))
 }
 
 // TestPlanHarnessWritesAgentFilesOnceAndThenNothing pins that a subagent file is a whole file

@@ -599,7 +599,7 @@ func TestTransportCasesCoverTheContract(t *testing.T) {
 
 	for _, input := range GuardInputs() {
 		for _, decision := range GuardDecisions() {
-			cell := input + "/" + decision
+			cell := fmt.Sprintf("%s/%s", input, decision)
 			if why, allowed := unreachableCases[cell]; allowed {
 				assert.True(t, noted[cell],
 					"%s executes no %q case and unreachableCases says it cannot (%s), but no `# case: %s unreachable - <why>`\n"+
@@ -696,7 +696,7 @@ func TestTransportCasesCoverTheHostContract(t *testing.T) {
 				continue
 			}
 			for _, decision := range GuardDecisions() {
-				cell := input + "/" + decision
+				cell := fmt.Sprintf("%s/%s", input, decision)
 				if _, unreachable := unreachableCases[cell]; unreachable {
 					continue
 				}
@@ -783,7 +783,7 @@ func buzzListBlock(t *testing.T, name string) string {
 	t.Helper()
 	body, err := os.ReadFile(crosscheckLib)
 	require.NoError(t, err, "read %s", crosscheckLib)
-	m := regexp.MustCompile(`(?s)export final ` + name + ` = [\[{](.*?)[\]}];`).FindStringSubmatch(string(body))
+	m := regexp.MustCompile(fmt.Sprintf(`(?s)export final %s = [\[{](.*?)[\]}];`, name)).FindStringSubmatch(string(body))
 	require.Len(t, m, 2, "%s declares no %s", crosscheckLib, name)
 	return m[1]
 }
