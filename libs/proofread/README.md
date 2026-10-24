@@ -161,8 +161,9 @@ hash of the rule, the match and the path that SARIF uses, and no text. On the ne
 `--record` run of the same file a fingerprint that disappeared is `fixed`, one the
 file now suppresses is `suppressed`, and one still reported is `reported`.
 `proofread stats [-o json|text]` prints each rule's counts and its
-`not_useful_rate`, (suppressed + reported) / (suppressed + reported + fixed), and
-flags a rule at or over 10% `probation` and at or over 25% `ship-off`. A run
+`not_useful_rate`, one minus precision over those counts: (suppressed + reported) /
+(suppressed + reported + fixed). It flags a rule at or over 10% `probation`
+(precision 90% or less) and at or over 25% `ship-off` (75% or less). A run
 judges again without the file's suppressions to tell `suppressed` from `fixed`, and
 a rule the run did not judge (off, `--only`, another kind) keeps its state.
 

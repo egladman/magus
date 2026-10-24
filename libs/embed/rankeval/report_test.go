@@ -85,6 +85,7 @@ func TestSummarizeOverall(t *testing.T) {
 			NDCG10:          (1 + 1/math.Log2(4)) / 3,
 			CondensedNDCG10: (1 + 1/math.Log2(3)) / 3,
 			Judged10:        (1 + 2*third) / 2,
+			Precision10:     (1 + third) / 2,
 			Recall10:        2 * third,
 			RR10:            (1 + third) / 3,
 			ZeroResult:      third,
@@ -109,6 +110,19 @@ func TestSummarizeSlices(t *testing.T) {
 	assert.Equal(t, 2, prose.Queries)
 	assert.InDelta(t, 1.0/6, prose.RR10, 1e-12)
 	assert.Nil(t, rep.Verbs, "one verb is no slice")
+}
+
+func TestPrecisionSeparatesWhatRecallTies(t *testing.T) {
+	gold := map[string]int{"file:a": 1}
+	padded := []string{"file:a", "file:u1", "file:u2", "file:u3", "file:u4", "file:u5", "file:u6", "file:u7", "file:u8", "file:u9"}
+	got := []Metrics{
+		Summarize(SetJudgedDev, []Run{run("one", SetJudgedDev, ShapeIdentifier, gold, "file:a")}).Overall,
+		Summarize(SetJudgedDev, []Run{run("ten", SetJudgedDev, ShapeIdentifier, gold, padded...)}).Overall,
+	}
+	assert.Equal(t, [][2]float64{{1, 1}, {1, 0.1}}, [][2]float64{
+		{got[0].Recall10, got[0].Precision10},
+		{got[1].Recall10, got[1].Precision10},
+	})
 }
 
 func TestSummarizeAgentAgreementIsBinaryWithNodes(t *testing.T) {
@@ -139,7 +153,7 @@ func TestSummarizeText(t *testing.T) {
 	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
 		first = append(first, strings.Fields(line)[0])
 	}
-	assert.Equal(t, []string{"==", "slice", "all", "shape=identifier", "shape=path", "shape=prose", "==", "=="}, first)
+	assert.Equal(t, []string{"==", "P@10", "slice", "all", "shape=identifier", "shape=path", "shape=prose", "==", "=="}, first)
 	assert.Contains(t, text, "== judged-holdout: sealed\n")
 	assert.Contains(t, text, "== agent-agreement (report-only): not built\n")
 }

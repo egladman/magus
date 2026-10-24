@@ -70,7 +70,7 @@ func TestTagAccuracy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := evaluate(&m, ewt(t))
+	got, classes := evaluate(&m, ewt(t))
 	if got != m.Accuracy {
 		t.Errorf("tagged %+v right; the trainer counted %+v", got, m.Accuracy)
 	}
@@ -78,8 +78,37 @@ func TestTagAccuracy(t *testing.T) {
 	uposAcc, xposAcc := float64(got.UPOS)/float64(got.Words), float64(got.XPOS)/float64(got.Words)
 	t.Logf("EWT test: UPOS %.4f, XPOS %.4f over %d tokens", uposAcc, xposAcc, got.Words)
 
+	for _, s := range classes.scores() {
+		t.Log(s)
+	}
+
 	if uposAcc < 0.93 {
 		t.Errorf("UPOS accuracy %.4f, want >= 0.93", uposAcc)
+	}
+}
+
+func TestConfusionScores(t *testing.T) {
+	c := confusion{
+		{gold: "NOUN", predicted: "NOUN"}: 8,
+		{gold: "NOUN", predicted: "VERB"}: 2,
+		{gold: "VERB", predicted: "VERB"}: 3,
+		{gold: "VERB", predicted: "NOUN"}: 1,
+		{gold: "INTJ", predicted: "NOUN"}: 1,
+	}
+
+	got := c.scores()
+	want := []classScore{
+		{upos: "INTJ", correct: 0, predicted: 0, gold: 1},
+		{upos: "NOUN", correct: 8, predicted: 10, gold: 10},
+		{upos: "VERB", correct: 3, predicted: 5, gold: 4},
+	}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("scores() = %+v, want %+v", got, want)
+	}
+
+	if got, want := want[2].String(), "VERB  precision 0.6000 (3 of 5) recall 0.7500 (3 of 4)"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
 	}
 }
 

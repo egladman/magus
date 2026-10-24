@@ -31,6 +31,12 @@ func pct(value *float64) string {
 	return strconv.FormatFloat(100.0**value, 'f', 0, 64) + "%"
 }
 
+// passAt1 is a cell's pass rate beside its counts. A run with no check is not
+// graded, so the denominator is N less the unknown outcomes.
+func passAt1(cell CellStats) string {
+	return fmt.Sprintf("%s (%d of %d)", pct(cell.PassAt1), cell.Successes, cell.N-cell.UnknownOutcomes)
+}
+
 func interval(bounds [2]*float64, digits int) string {
 	if bounds[0] == nil || bounds[1] == nil {
 		return "n/a"
@@ -116,15 +122,15 @@ func paretoSection(a *Analysis) []string {
 			arm,
 			task,
 			strconv.FormatInt(cell.N, 10),
-			pct(cell.PassAt1),
+			passAt1(cell),
 			num(cell.Metrics["total_billed_tokens"].Median, 0),
 			num(cell.MetricsSuccessOnly["total_billed_tokens"].Median, 0),
 			usd(cell.Metrics["dollars"].Median),
 		})
 	}
 	return section(
-		"Correctness against median tokens",
-		"The cost-accuracy frontier in text: pass rate beside the token spend it cost.",
+		"Pass rate beside spend",
+		"Each cell's pass@1, with its passes of its graded runs, beside the median tokens and dollars it spent.",
 		table(row{"arm", "task", "n", "pass@1", "median tokens", "median tokens (passes only)", "median $"}, rows),
 	)
 }
@@ -178,7 +184,7 @@ func passRatesSection(a *Analysis) []string {
 			arm,
 			task,
 			strconv.FormatInt(cell.K, 10),
-			pct(cell.PassAt1),
+			passAt1(cell),
 			interval(cell.PassAt1CI, 3),
 			num(&cell.PassPowK, 0),
 		})
