@@ -745,3 +745,30 @@ func TestDropRecordKeepsANewBinding(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "the record moved aside is not left behind")
 }
+
+func TestUnintegratedBranchesSkipsWorkTheBaseHolds(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	branch := func(name string, files map[string]string) {
+		repo.Git("switch", "-q", "-c", name, main)
+		repo.Commit(name, files)
+		repo.Git("switch", "-q", main)
+	}
+	branch("squashed", map[string]string{"b.txt": "b\n"})
+	branch("pending", map[string]string{"c.txt": "c\n"})
+	branch("named", map[string]string{"d.txt": "d\n"})
+	branch("integration", map[string]string{"e.txt": "e\n"})
+	repo.Commit("squash squashed", map[string]string{"b.txt": "b\n"})
+
+	seed(t, s, types.Job{ID: "squashed", State: types.StatePass})
+	seed(t, s, types.Job{ID: "pending", State: types.StateExited})
+	seed(t, s, types.Job{ID: "named", State: types.StatePass})
+	seed(t, s, types.Job{ID: "integration", State: types.StatePass, Integrates: []string{"retired"}})
+	seed(t, s, types.Job{ID: "retry", State: types.StateExited, Integrates: []string{"named"}})
+
+	got, err := s.UnintegratedBranches(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}}, got,
+		"a squash-merged branch, a branch an integration job names whatever its state, and a passed integration job's own branch are integrated")
+}
