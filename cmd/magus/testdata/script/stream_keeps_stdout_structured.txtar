@@ -109,12 +109,12 @@ export fun noticed(ctx: magus\Context, args: [str]) > void {
 }
 
 export fun overlap(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("api/shared.txt");
+    ctx.writesFiles(["api/shared.txt"]);
     proc\exec("sh", ["-c", "echo root > api/shared.txt"]);
 }
 
 export fun produce(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("lib/*.txt");
+    ctx.writesFiles(["lib/*.txt"]);
     proc\exec("sh", ["-c", "echo produced > lib/produced.txt"]);
 }
 
@@ -142,7 +142,7 @@ import "proc";
 magus\project({});
 
 export fun overlap(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("shared.txt");
+    ctx.writesFiles(["shared.txt"]);
     proc\exec("sh", ["-c", "echo api > shared.txt"]);
 }
 -- lib/magusfile.buzz --

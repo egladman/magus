@@ -70,12 +70,12 @@ magus\project({
     },
 });
 export fun first_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("src/seed.txt");
-    ctx.writesFiles("SEED.md");
+    ctx.readsFiles(["src/seed.txt"]);
+    ctx.writesFiles(["SEED.md"]);
     proc\exec("sh", ["-c", "cp src/seed.txt SEED.md"]);
 }
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("index.txt");
+    ctx.writesFiles(["index.txt"]);
     proc\exec("sh", ["-c", "cat SEED.md site/page.md > index.txt"]);
 }
 export fun audit(ctx: magus\Context, args: [str]) > void !> any {
@@ -99,8 +99,8 @@ import "proc";
 import "project/.." as ws;
 magus\project({ "depends_on": [".."], "sources": ["*.md"] });
 export fun page_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(ws\file("SEED.md"));
-    ctx.writesFiles("page.md");
+    ctx.readsFiles([ws\file("SEED.md")]);
+    ctx.writesFiles(["page.md"]);
     proc\exec("sh", ["-c", "sed 's/^/page: /' ../SEED.md > page.md"]);
 }
 export fun assemble(ctx: magus\Context, args: [str]) > void !> any {

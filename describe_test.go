@@ -1089,7 +1089,7 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("GEN.md");
+    ctx.writesFiles(["GEN.md"]);
 }
 `
 	w.Magusfile(mf)
@@ -1114,10 +1114,10 @@ func TestClassifyFiles_ExcludedOutputIsASource(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+    ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("gen/*.go");
+    ctx.readsFiles(["gen/*.go"]);
 }
 `,
 		"gen/runtime.go": "package gen\n",
@@ -1147,7 +1147,7 @@ func TestOpen_RefusesAnExclusionThatNarrowsNothing(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("!gen/runtime.go");
+    ctx.writesFiles(["!gen/runtime.go"]);
 }
 `,
 	})
@@ -1164,8 +1164,8 @@ func TestClassifyFiles_ExclusionsStayWithTheirCall(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("a/x.go");
-    ctx.writesFiles("!a/x.go", "a/*.go");
+    ctx.writesFiles(["a/x.go"]);
+    ctx.writesFiles(["!a/x.go", "a/*.go"]);
 }
 `,
 	})
@@ -1189,7 +1189,7 @@ func TestOpen_ValidatesACrossProjectExclusionAgainstItsOwnProject(t *testing.T) 
 		"magusfile.buzz": `import "magus";
 import "project/site";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", site.file("!gen/x"));
+    ctx.writesFiles(["gen/**", site.file("!gen/x")]);
 }
 `,
 		"site/magusfile.buzz": `import "magus";
@@ -1306,7 +1306,7 @@ func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("GEN.md");
+    ctx.writesFiles(["GEN.md"]);
 }
 `
 	w.Magusfile(mf)
@@ -1352,8 +1352,8 @@ func TestDescribeFileSeesCrossProjectReads(t *testing.T) {
 		"site/magusfile.buzz": `import "magus";
 import "project/../skills";
 export fun render(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(skills.file("note.md"));
-    ctx.writesFiles("gen/*.html");
+    ctx.readsFiles([skills.file("note.md")]);
+    ctx.writesFiles(["gen/*.html"]);
 }
 `,
 	}
@@ -1391,14 +1391,14 @@ func TestClassifyFiles_Claims(t *testing.T) {
 import "project/../skills";
 import "project/../dist";
 export fun render(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(skills.file("note.md"));
-    ctx.writesFiles("gen/*.html");
+    ctx.readsFiles([skills.file("note.md")]);
+    ctx.writesFiles(["gen/*.html"]);
 }
 export fun publish(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles(dist.file("index.html"));
+    ctx.writesFiles([dist.file("index.html")]);
 }
 export fun stamp(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("README.md");
+    ctx.writesFiles(["README.md"], editsExistingSource: true);
 }
 `,
 	}

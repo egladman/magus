@@ -74,7 +74,7 @@ import "magus/spell/go";
 magus\project({"spells": [go], "sources": ["**/*.md"]});
 
 export fun docs(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("notes/*.md");
+    ctx.readsFiles(["notes/*.md"]);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void !> any {

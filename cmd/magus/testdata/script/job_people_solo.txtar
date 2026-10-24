@@ -76,7 +76,7 @@ import "proc";
 
 // test runs the shell checks in test/run.sh.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("pricing/*.sh", "checkout/*.sh", "test/*.sh");
+    ctx.readsFiles(["pricing/*.sh", "checkout/*.sh", "test/*.sh"]);
     proc\exec("sh", ["test/run.sh"]);
 }
 -- shop/pricing/total.sh --
@@ -107,7 +107,7 @@ refactor/tax      -       declared  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- exec.out --
-recorded job refactor/pricing's base as a1d513296908525d76f16e0f80c672c5ec69acbb, which is the checkpoint it was handed. Nothing to reconcile; carry on.
+recorded job refactor/pricing's base as 58d5e2c343b3312b97a2ac07d85607b3044e9b7d, which is the checkpoint it was handed. Nothing to reconcile; carry on.
 took refactor/pricing in ~/src/shop-pricing; read the terms with `magus describe job refactor/pricing`
 -- describe.out --
 job: refactor/pricing

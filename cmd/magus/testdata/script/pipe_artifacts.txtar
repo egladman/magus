@@ -143,7 +143,7 @@ concurrency: 2
 import "magus";
 import "proc";
 export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("dist/*.txt");
+    ctx.writesFiles(["dist/*.txt"]);
     // Executable on purpose: the +x is what the mode case asserts survives an export
     // over an existing, non-executable destination.
     proc\exec("sh", ["-c", "mkdir -p dist && echo PRECIOUS-ARTIFACT-DATA > dist/a.txt && chmod 755 dist/a.txt"]);
@@ -152,6 +152,6 @@ export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
 import "magus";
 import "proc";
 export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("dist/*.txt");
+    ctx.writesFiles(["dist/*.txt"]);
     proc\exec("sh", ["-c", "mkdir -p dist && echo changed > dist/a.txt && chmod 755 dist/a.txt"]);
 }

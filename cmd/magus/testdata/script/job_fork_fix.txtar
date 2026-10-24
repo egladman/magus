@@ -52,13 +52,13 @@ import "proc";
 
 // check_docs reads the guides.
 export fun check_docs(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("docs/**/*.md");
+    ctx.readsFiles(["docs/**/*.md"]);
     proc\exec("sh", ["-c", "true"]);
 }
 
 // test runs the pricing scripts.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("pricing/*.sh");
+    ctx.readsFiles(["pricing/*.sh"]);
     proc\exec("sh", ["-c", "true"]);
 }
 

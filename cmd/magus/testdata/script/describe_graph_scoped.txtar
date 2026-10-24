@@ -53,14 +53,14 @@ concurrency: 2
 import "magus";
 // Builds the workspace.
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("MAGUS.md");
+    ctx.writesFiles(["MAGUS.md"]);
 }
 -- libs/foo/magusfile.buzz --
 import "magus";
 magus\project({ "depends_on": ["../..", "../../other"] });
 // Builds foo.
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("MAGUS.md");
+    ctx.writesFiles(["MAGUS.md"]);
 }
 -- other/magusfile.buzz --
 import "magus";

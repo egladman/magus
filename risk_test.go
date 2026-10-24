@@ -36,7 +36,7 @@ func TestAssessChangeTiersFromDeclarations(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 export fun render(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("docs/**/*.md");
+    ctx.readsFiles(["docs/**/*.md"]);
 }
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(render);

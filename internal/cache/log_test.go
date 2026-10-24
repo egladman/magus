@@ -326,7 +326,7 @@ func failureWithReason() slog.Record {
 		slog.String("project", "web"),
 		slog.String("target", "fmt"),
 		slog.Int64("duration", int64(time.Second)),
-		slog.String("error", "[MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)"),
+		slog.String("error", "[MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.writesFiles([...], editsExistingSource: true)"),
 		attr.Why("A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."),
 		slog.String("ref", "outbadcafe"),
 	)
@@ -346,7 +346,7 @@ func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
 		return buf.String()
 	}
 	const why = "A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."
-	cause := "  cause: [MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)\n"
+	cause := "  cause: [MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.writesFiles([...], editsExistingSource: true)\n"
 
 	assert.Contains(t, render(false, false), fmt.Sprintf(`%s       %s
   output: outbadcafe
@@ -1035,7 +1035,7 @@ func TestRepeatedCodeFoldsIntoOneFooterLine(t *testing.T) {
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
 	mutation := func(project, target string) string {
-		return fmt.Sprintf("[MGS4007] %s:%s modified its declared sources a.go; declare them with ctx.modifiesExistingFiles(...)\n  see: https://example/MGS4007/", project, target)
+		return fmt.Sprintf("[MGS4007] %s:%s modified its declared sources a.go; declare them with ctx.writesFiles([...], editsExistingSource: true)\n  see: https://example/MGS4007/", project, target)
 	}
 	steps := [][2]string{
 		{".", "format"}, {"docs", "render"}, {"web", "lint"}, {"api", "fmt"},
@@ -1143,7 +1143,7 @@ func TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage(t *testing.T) {
 // generateRoot is the root of the generate cascade below: a coded diagnostic, which
 // renders its docs URL on a second line.
 const generateRoot = "[MGS4007] .:types-generate modified its declared sources .claude/skills/magus-docs-lookup-full/SKILL.md, " +
-	".claude/skills/magus-docs-lookup/SKILL.md; declare them with ctx.modifiesExistingFiles(...)\n" +
+	".claude/skills/magus-docs-lookup/SKILL.md; declare them with ctx.writesFiles([...], editsExistingSource: true)\n" +
 	"  see: https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"
 
 // generateCascade replays a lint run in which types-generate failed and every

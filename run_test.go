@@ -416,8 +416,8 @@ func TestInputsOutputsColocation(t *testing.T) {
 	const mf = `import "magus";
 magus\project({"outputs": ["legacy/**"]});
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**", "tsconfig.json");
-    ctx.writesFiles("dist/**");
+    ctx.readsFiles(["src/**", "tsconfig.json"]);
+    ctx.writesFiles(["dist/**"]);
 }
 export fun test(ctx: magus\Context, args: [str]) > void {}
 `
@@ -462,7 +462,7 @@ func TestFootprintAlwaysKeysOnTheDefiningMagusfile(t *testing.T) {
 	// A footprint naming one unrelated file: the narrowest a target can declare.
 	const mf = `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**");
+    ctx.readsFiles(["src/**"]);
 }
 `
 	w.Magusfile(mf)
@@ -486,7 +486,7 @@ func TestComposerKeysOnAComposedSkipCacheTargetsOutput(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun index_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("MAGUS.md");
+    ctx.writesFiles(["MAGUS.md"]);
 }
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(index_generate);
@@ -518,7 +518,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 		"a target composing nothing must not inherit another target's artifact")
 }
 
-// A composed target's ctx.modifiesExistingFiles must reach the composer's
+// A composed target's editsExistingSource must reach the composer's
 // Step.Updates, or MGS4007 blames the composer for the constituent's declared
 // write: `generate` accused of modifying the CHANGELOG.md that changelog-generate
 // declares and maintains.
@@ -527,7 +527,7 @@ func TestComposerInheritsAComposedTargetsUpdates(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("CHANGELOG.md");
+    ctx.writesFiles(["CHANGELOG.md"], editsExistingSource: true);
 }
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate"));
@@ -815,7 +815,7 @@ func TestComposerKeepsTheOutputsOfWhatItComposes(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
 }
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
@@ -853,7 +853,7 @@ func TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt(t *testing.T) {
 import "./lib/index" as index;
 import "fs";
 export fun rules_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("rules.md");
+    ctx.writesFiles(["rules.md"]);
     final rules = magus\describe.rule();
     fs\writeFile("rules.md", "{rules.len()}");
 }
@@ -914,11 +914,11 @@ func TestDriftGateVerifiesItsOutputsOnlyWithoutWrite(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
     if (ctx.hasCharm("rw")) { return; }
 }
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("dist/**");
+    ctx.writesFiles(["dist/**"]);
 }
 export fun lint(ctx: magus\Context, args: [str]) > void {
     if (ctx.hasCharm("rw")) { return; }
@@ -953,7 +953,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `)
 	w.Write("magusfiles/b.buzz", `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
 }
 `)
 	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
@@ -976,17 +976,17 @@ func TestWriteGrantKeysOnlyAStepThatReadsIt(t *testing.T) {
 	const mf = `import "magus";
 export fun check(ctx: magus\Context, args: [str]) > void {}
 export fun gen(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
     if (ctx.hasCharm("rw")) { return; }
 }
 export fun tidy(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("*.txt");
+    ctx.writesFiles(["*.txt"], editsExistingSource: true);
 }
 export fun outer(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gen);
 }
 export fun built(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("dist/**");
+    ctx.writesFiles(["dist/**"]);
 }
 `
 	w.Magusfile(mf)
@@ -1018,7 +1018,7 @@ func TestInputsDynamicArgIsLoadError(t *testing.T) {
 	const mf = `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
-    ctx.readsFiles(extra);
+    ctx.readsFiles([extra]);
 }
 `
 	w.Magusfile(mf)
@@ -1930,7 +1930,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {}
 `
 	const leafMF = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("INDEX.md");
+    ctx.writesFiles(["INDEX.md"]);
 }
 `
 	w.Magusfile(rootMF)

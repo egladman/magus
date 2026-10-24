@@ -43,8 +43,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     final before = drift\hashes(generatedOutputs());
 
     ctx.needs(cursor_schemas_generate, index_generate);
-    ctx.readsFiles("guard-templates.md.tmpl", "*.buzz", "lib/*.buzz");
-    ctx.writesFiles("guard-templates.md");
+    ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz"]);
+    ctx.writesFiles(["guard-templates.md"]);
     final tmpl = fs\readFile("guard-templates.md.tmpl");
     final files = mut {<str: str>};
     foreach (name in embed\embedNames(tmpl)) {
@@ -72,9 +72,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("MAGUS.md");
-    ctx.readsFiles("magusfile.buzz", "../../../../magus.yaml", "../../../../internal/render/target_graph.go",
-                   "../../../../internal/render/md/md.go", "../../../../internal/hint/cli_command.go");
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../../../../magus.yaml", "../../../../internal/render/target_graph.go",
+                    "../../../../internal/render/md/md.go", "../../../../internal/hint/cli_command.go"]);
     index\render("docs/guides/integrations/agents");
 }
 
@@ -82,7 +82,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // It writes into the root project's testdata, where internal/agent's tests read them.
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    ctx.writesFiles("../../../../testdata/hosts/cursor/gen/*.schema.json");
+    ctx.writesFiles(["../../../../testdata/hosts/cursor/gen/*.schema.json"]);
     proc\exec("node", ["cursor-schemas.ts"], ".", {});
 }
 
@@ -133,7 +133,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(install);
     // Inputs, not outputs: an output declaration would let magus clean delete the guide pages.
-    ctx.modifiesExistingFiles("*.md", "*.ts");
+    ctx.writesFiles(["*.md", "*.ts"], editsExistingSource: true);
     markdown["dprint"](ctx);
     typescript["biome-format"](ctx);
 }

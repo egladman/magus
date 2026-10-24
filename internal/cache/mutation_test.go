@@ -58,7 +58,7 @@ func TestRunReportsUndeclaredSourceMutationWithItsReason(t *testing.T) {
 	assert.Contains(t, failure, " why="+why)
 }
 
-// The declaration is what separates a formatter from the footgun: ctx.modifiesExistingFiles
+// The declaration is what separates a formatter from the footgun: editsExistingSource
 // folds its globs into Sources, so without Step.Updates the two are indistinguishable.
 func TestRunAllowsDeclaredSourceMutation(t *testing.T) {
 	root, _, c := newMutableCache(t)
@@ -226,7 +226,7 @@ func TestRunDoesNotRecordAnEntryWhoseInputsMovedWhileItRan(t *testing.T) {
 }
 
 // formatterStep is a step that rewrites pkg/enum.go in place and declares it, the way
-// ctx.modifiesExistingFiles does: the update glob is also a source.
+// editsExistingSource does: the update glob is also a source.
 func formatterStep(t *testing.T) (root string, c *Cache, step Step) {
 	t.Helper()
 	root, c = openCache(t)

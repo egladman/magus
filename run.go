@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"maps"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/audit"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/annotate"
@@ -2715,6 +2717,9 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 		scope[i] = s.Name()
 	}
 	ctx = sandbox.WithStep(ctx, scope, p.TargetPolicies[name].Sandbox)
+	if err := m.checkEditedSourcesExist(p, name); err != nil {
+		return err
+	}
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
 	// A magusfile target whose body is provably only these calls runs them directly:
 	// evaluating the file and its imports to make them costs more than a warm install
@@ -2740,6 +2745,45 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 		return invokeSpell(ctx, p, name, s)
 	})
 	return errors.Join(err, a.Finish(ctx, name))
+}
+
+// checkEditedSourcesExist refuses a target whose editsExistingSource path or glob matches
+// no file. Checked as the target is about to run rather than at load, so a target earlier
+// in the same run can still create the file.
+func (m *Magus) checkEditedSourcesExist(p *types.Project, target string) error {
+	for _, ref := range p.TargetUpdates[target] {
+		dir := p.Dir
+		if ref.Project != p.Path {
+			owner := m.Get(ref.Project)
+			if owner == nil {
+				continue
+			}
+			dir = owner.Dir
+		}
+		if globMatchesAFile(dir, types.Glob{Pattern: ref.Glob, Except: ref.Except}) {
+			continue
+		}
+		return fmt.Errorf("ctx.writesFiles in target %s lists %q with editsExistingSource: true, but no file matches it in project %s: an edited source must already exist: create it, or drop editsExistingSource so the target produces it",
+			target, ref.Glob, ref.Project)
+	}
+	return nil
+}
+
+// globMatchesAFile reports whether g, relative to dir, matches at least one file on
+// disk; it stops at the first.
+func globMatchesAFile(dir string, g types.Glob) bool {
+	if !types.IsGlobMeta(g.Pattern) {
+		_, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(g.Pattern)))
+		return err == nil
+	}
+	found := errors.New("found")
+	err := doublestar.GlobWalk(os.DirFS(dir), g.Pattern, func(path string, d fs.DirEntry) error {
+		if d.IsDir() || g.Excludes(path) {
+			return nil
+		}
+		return found
+	})
+	return errors.Is(err, found)
 }
 
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.

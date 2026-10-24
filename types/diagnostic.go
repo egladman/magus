@@ -324,6 +324,12 @@ const SpellContractViolated DiagnosticCode = "MGS1051"
 // reads as tiered when its jobs get the default.
 const ModelTierDeclarationUnusable DiagnosticCode = "MGS1052"
 
+// FootprintDeclaredBothWays is one target declaring a path, or two overlapping globs,
+// both as produced and with editsExistingSource: true. The two modes contradict: a
+// produced file is snapshotted, replayed and cleaned, an edited source is hashed and
+// never replayed or cleaned. The load stops rather than pick one.
+const FootprintDeclaredBothWays DiagnosticCode = "MGS1053"
+
 // SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 // ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 // keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -924,6 +930,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CarryApprovalsInvalid,
 	SpellContractViolated,
 	ModelTierDeclarationUnusable,
+	FootprintDeclaredBothWays,
 	PathReadDenied,
 	PathWriteDenied,
 	EnvStripped,

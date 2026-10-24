@@ -203,8 +203,9 @@ func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) 
 
 // MagusContextSource mirrors the two maps a target receives: magus\Context, and the
 // magus\Exec its withEnv and withCwd return. A variadic member is `any`, since a Buzz fun
-// has no variadic parameter. Exec carries no declaration members, so
-// `ctx.withEnv({...}).readsFiles(...)` fails the check rather than at run time.
+// has no variadic parameter; the file footprint takes a list for that reason. Exec
+// carries no declaration members, so `ctx.withEnv({...}).readsFiles([...])` fails the
+// check rather than at run time.
 const MagusContextSource = `export object Exec {
     env: {str: str}? = null,
     cwd: str? = null,
@@ -216,12 +217,20 @@ const MagusContextSource = `export object Exec {
 export object Context {
     needs: any = null,
     glob: any = null,
-    readsFiles: any = null,
-    writesFiles: any = null,
-    modifiesExistingFiles: any = null,
     envInputs: any = null,
     observes: any = null,
 
+    // Declares the files this target reads: each is part of its cache key. Paths are
+    // globs relative to the project; "!" excludes, and <alias>.file("x") names a file of
+    // an imported project. Calls accumulate.
+    extern fun readsFiles(paths: [str]) > void;
+    // Declares the files this target writes. By default it produces them: magus owns
+    // them, keeps them out of the source hash, replays them on a cache hit and deletes
+    // them in magus clean. With editsExistingSource: true the target edits files it does
+    // not own: they must already exist, are part of its source hash, are never replayed
+    // on a cache hit and never deleted by magus clean. Calls accumulate, and one path
+    // declared in both modes is an error (MGS1053).
+    extern fun writesFiles(paths: [str], editsExistingSource: bool = false) > void;
     extern fun uses(resource: any, body: fun () > void) > void;
     extern fun hasCharm(name: str) > bool;
     extern fun narrowed() > bool;

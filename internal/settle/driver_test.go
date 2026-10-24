@@ -41,7 +41,7 @@ import "fs";
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
     fs\writeFile("gen/regenerated.txt", "the merge driver regenerated");
 }
 `)
@@ -152,7 +152,7 @@ func TestMergeDriverTreatsAnExcludedFileAsSource(t *testing.T) {
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", "!gen/hand.txt");
+    ctx.writesFiles(["gen/**", "!gen/hand.txt"]);
 }
 `)
 	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
@@ -202,7 +202,7 @@ func autoResolveWorkspace(t *testing.T) *magus.Magus {
 magus\project({"merge_low_risk": ["fixtures/**"]})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
 }
 `)
 	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))

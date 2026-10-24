@@ -287,11 +287,11 @@ func TestCheckUnreachedFootprintDecls(t *testing.T) {
 	}
 
 	t.Run("reachable declaration is clean", func(t *testing.T) {
-		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n")
+		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles([\"src/**\"]); }\n")
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("orphan in uncalled helper is flagged", func(t *testing.T) {
-		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\nfun dead() > void { ctx.writesFiles(\"dist/**\"); }\n")
+		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\nfun dead() > void { ctx.writesFiles([\"dist/**\"]); }\n")
 		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		assert.Contains(t, got.Details[0], "ctx.writesFiles")
 	})
@@ -311,7 +311,7 @@ func TestCheckCacheableSecretReads(t *testing.T) {
 	const readsSecret = "import \"magus\";\nexport fun login(ctx: magus\\Context, _a: [str]) > void { final t = magus\\secret.read(\"TOKEN\"); }\n"
 
 	t.Run("a target that reads no secret is clean", func(t *testing.T) {
-		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n", nil)
+		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles([\"src/**\"]); }\n", nil)
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("a cacheable secret read is flagged", func(t *testing.T) {

@@ -110,7 +110,7 @@ magus\project({
     "sources": ["magusfile.buzz", "src/**"],
 });
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("out/gen.txt");
+    ctx.writesFiles(["out/gen.txt"]);
 }
 -- libs/x/magusfile.buzz --
 import "magus";

@@ -60,7 +60,7 @@ import "proc";
 
 // test checks the pinned left-pad version.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("deps.txt");
+    ctx.readsFiles(["deps.txt"]);
     proc\exec("grep", ["-q", "^left-pad ", "deps.txt"]);
 }
 -- shop/api/deps.txt --
@@ -71,7 +71,7 @@ import "proc";
 
 // test checks the pinned left-pad version.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("deps.txt");
+    ctx.readsFiles(["deps.txt"]);
     proc\exec("grep", ["-q", "^left-pad ", "deps.txt"]);
 }
 -- shop/web/deps.txt --

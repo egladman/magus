@@ -22,6 +22,29 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
+// checkFootprintModes is MGS1053: target declares a path both produced and as an edited
+// source. Refs are compared once resolved to their owning project.
+func checkFootprintModes(p *types.Project, target string, outputs []types.OutputRef, updates []types.UpdateRef) error {
+	for _, out := range outputs {
+		for _, up := range updates {
+			if out.Project != up.Project || !describe.GlobsMayOverlap(types.Glob{Pattern: out.Glob, Except: out.Except}, types.Glob{Pattern: up.Glob, Except: up.Except}) {
+				continue
+			}
+			const modes = "a path has one mode: a produced file is replayed and cleaned, an edited source is hashed and never replayed"
+			name := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
+			if out.Glob == up.Glob {
+				return types.DiagnosticErrorf(types.FootprintDeclaredBothWays,
+					"%s: target %q: ctx.writesFiles declares %q both as produced and with editsExistingSource: true, and %s",
+					name, target, out.Glob, modes)
+			}
+			return types.DiagnosticErrorf(types.FootprintDeclaredBothWays,
+				"%s: target %q: ctx.writesFiles declares %q as produced and %q with editsExistingSource: true, which overlap, and %s",
+				name, target, out.Glob, up.Glob, modes)
+		}
+	}
+	return nil
+}
+
 // describeCancelled reports a Describe walk cut short by ctx, naming how far it got.
 // Returning it (rather than the truncated value alone) is the entire reason these
 // methods take a ctx: a partial inventory reporting Count: 3 is indistinguishable
@@ -329,7 +352,7 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 //
 // Mutates projects in place, honoring ctx between them. A project whose source cannot
 // be read contributes nothing, matching the static extractor's never-error contract.
-// ONE exception: a ctx.readsFiles/writesFiles/modifiesExistingFiles call with a
+// ONE exception: a ctx.readsFiles/writesFiles call with a
 // non-literal argument is a hard load error, because a computed footprint is invisible
 // to this static read and under-declaring it risks a stale cache hit. So is a call the
 // static read refused (TargetGraphNode.FootprintErr).
@@ -404,7 +427,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// describe.flagDynamic, which splits those execution overrides off as
 				// DynamicExec instead.
 				if n.DynamicIO {
-					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes take literal arguments on the target's OWN ctx: a computed value, or one reached through an alias (final c = ctx, then c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles take a literal list (and a literal editsExistingSource), and envInputs/observes take literal arguments, on the target's OWN ctx: a computed value, or one reached through an alias (final c = ctx, then c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				if n.FootprintErr != nil {
 					return fmt.Errorf("%s: target %q: %w", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, n.FootprintErr)
@@ -584,7 +607,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// abort the WHOLE workspace (doublestar rejects it mid-loop).
 					if bad, ok := escapingPattern(ref.Glob, ref.Except); ok {
 						return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
-							"%s: target %q: ctx.modifiesExistingFiles glob %q must be relative to %q and must not contain ..",
+							"%s: target %q: ctx.writesFiles glob %q with editsExistingSource: true must be relative to %q and must not contain ..",
 							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, bad, owner)
 					}
 					ref.Project = owner
@@ -597,6 +620,12 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// build order. A target that needs ordering declares ctx.needs, where a
 					// reader can see it.
 				}
+			}
+		}
+		// After every source, since calls accumulate across them.
+		for _, target := range slices.Sorted(maps.Keys(p.TargetUpdates)) {
+			if err := checkFootprintModes(p, target, p.TargetOutputs[target], p.TargetUpdates[target]); err != nil {
+				return err
 			}
 		}
 		// Run without rw, a target that declares outputs and branches on the rw charm is a
@@ -1374,12 +1403,12 @@ func (m *Magus) describeFile(ctx context.Context, raw string, all, owners []*typ
 	case types.IsMagusMaintained(path):
 		entry.Role = "maintained"
 		entry.Hint = maintainedHint
-	// Only an in-place edit reaches here with a claim: ctx.modifiesExistingFiles is
+	// Only an in-place edit reaches here with a claim: ctx.writesFiles([...], editsExistingSource: true) is
 	// deliberately neither an output nor a project-wide source, so the role stays
 	// unclaimed, but the default hint below says no project declares the path, and
 	// that sentence would send someone to ignore a file a target rewrites.
 	case len(entry.Claims) > 0:
-		entry.Hint = "no declared glob matches, but a target edits it in place (ctx.modifiesExistingFiles): magus neither replays nor cleans it, and the claims below name the target that rewrites it"
+		entry.Hint = "no declared glob matches, but a target edits it in place (ctx.writesFiles with editsExistingSource: true): magus neither replays nor cleans it, and the claims below name the target that rewrites it"
 	default:
 		entry.Hint = "no project declares this path: it invalidates no cache key, but directory containment still seeds its owning project into the affected set, so touching it reruns work; declare it, or ignore it deliberately"
 	}
@@ -1397,7 +1426,7 @@ func fileExists(p string) bool {
 // matchedClaims returns every declaration of p that names path: the project-wide
 // output globs and the source globs the cache step already rooted (magusfiles
 // included), plus the per-target ctx.writesFiles, ctx.readsFiles, and
-// ctx.modifiesExistingFiles refs, each rooted at the project its glob is relative
+// editsExistingSource refs, each rooted at the project its glob is relative
 // to and attributed to the target that declared it.
 //
 // Deliberately does NOT read p.InboundOutputs. An inbound glob is another project's
