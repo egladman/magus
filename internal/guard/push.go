@@ -60,6 +60,9 @@ const (
 	gateIncomplete
 	// gatePassed is a gate run at this commit that finished with every target passing.
 	gatePassed
+	// gateWaived is no passing gate at this commit, and a person's waiver of this commit
+	// alone (`magus gate waive`).
+	gateWaived
 )
 
 // gateCoverageAt reads the run log for gate invocations built from commit.
@@ -259,7 +262,7 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	// Unknown passes. This rule refuses on evidence or not at all: no run log, no VCS, or a
 	// host magus cannot read the revision from all mean the question was never asked, and
 	// a refusal there is one nobody can clear.
-	case gateUnknown, gatePassed:
+	case gateUnknown, gatePassed, gateWaived:
 		return "", ""
 	case gateAbsent:
 		state = "no `" + string(types.TargetCI) + "` run is recorded at this commit"
@@ -292,11 +295,12 @@ const movedPushReason = "this line pushes after a command that changes what is p
 // publishes, read in the checkout that push runs in, and that revision. gateUnknown when
 // the line relocates the push somewhere this cannot name, so the push keeps its advisory:
 // refusing it would grade a tree nobody proved it publishes. moved reports a push whose
-// line moves the revision first (movedPushReason), and then commit is "".
-func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool, replay sessions.GateRecord) {
+// line moves the revision first (movedPushReason), and then commit is "". waiver is the
+// person's waiver when cover is gateWaived.
+func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool, replay sessions.GateRecord, waiver types.GateWaiver) {
 	push, located := locatePush(command, d, cwd)
 	if !located {
-		return gateUnknown, "", false, replay
+		return gateUnknown, "", false, replay, waiver
 	}
 	at := hook
 	if push.relocated {
@@ -313,12 +317,17 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 			cover, replay = gatePassed, rec
 		}
 	}
+	if cover != gatePassed && cover != gateUnknown {
+		if w, waived := gateWaiverAt(at, commit); waived {
+			cover, waiver = gateWaived, w
+		}
+	}
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
 	// no run log still has nothing to prove.
 	if cover != gateUnknown && revisionMovesBeforePush(command, d, cwd) {
-		return cover, "", true, replay
+		return cover, "", true, replay, waiver
 	}
-	return cover, commit, false, replay
+	return cover, commit, false, replay, waiver
 }
 
 // revisionMovesBeforePush reports a push on command that runs after a command that changes

@@ -2479,6 +2479,33 @@ shows what it is doing.`,
 	},
 }
 
+var gateCommand = cmdline.Command{
+	Name:        "gate",
+	Short:       "A person's decisions about the local gate",
+	Description: "Record a person's waiver of the push gate for one commit, or revoke it.",
+	Tags:        []string{"cli", "magus gate", "gate", "push", "waiver"},
+	Usage:       "magus gate <waive> [flags]",
+	Children: []cmdline.Command{
+		{
+			Name:  "waive",
+			Short: "Let one commit be pushed with no passing gate, typed by a person",
+			Description: "Record a person's waiver for exactly one commit: push-ungated lets a push or `gh pr create` " +
+				"of that commit through and names who waived it, when and why; any other commit is still refused. " +
+				"--revoke removes the waiver. The guard refuses this verb to every agent and the store refuses it " +
+				"from a process carrying a lease, so it is typed at a person's own terminal.",
+			Flags: []cmdline.Flag{
+				{Name: "reason", Kind: cmdline.String, Doc: "Why the gate was skipped, recorded with the waiver; required unless --revoke"},
+				{Name: "revoke", Kind: cmdline.Bool, Doc: "Remove the commit's waiver"},
+			},
+			Usage: "magus gate waive <commit> (--reason <text> | --revoke) [flags]",
+		},
+	},
+	Examples: []cmdline.Example{
+		{Comment: "Push HEAD without the local gate, saying why", Command: `magus gate waive HEAD --reason "CI gates this release branch"`},
+		{Comment: "Take the waiver back", Command: "magus gate waive --revoke HEAD"},
+	},
+}
+
 var diffCommand = cmdline.Command{
 	Name:        "diff",
 	Short:       "Read the working tree's changes in the order they deserve attention",

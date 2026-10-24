@@ -617,7 +617,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 
 func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gateCoverage {
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return commit[:12] }}
-	cover, _, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
+	cover, _, _, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
 	return cover
 }
 
@@ -639,7 +639,7 @@ func TestPushCoverageNamesTheReplayedRun(t *testing.T) {
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return replayed[:12] }}
 	at := location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}
 
-	cover, _, _, replay := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
+	cover, _, _, replay, _ := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
 	assert.Equal(t, gatePassed, cover)
 	assert.Equal(t, "inv-green", replay.Inv)
 
