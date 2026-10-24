@@ -80,7 +80,7 @@ export type AgentRow = {
 
 export type Filter = 'live' | 'recent' | 'all'
 
-export type Tab = 'jobs' | 'runs' | 'agents'
+export type Tab = 'jobs' | 'runs' | 'agents' | 'budget'
 
 export type Ttl = '5m' | '1h'
 
@@ -100,6 +100,37 @@ export type CacheState = {
 // What the session has spent, in USD, priced from the rates table. isPartial: a response
 // ran on a model the table does not price, so the totals are a floor.
 export type Spend = { mainUsd: number; agentUsd: number; isPartial: boolean }
+
+// One claim on the machine build budget: an entry of broker.capacity.holders in
+// `magus status -o json`.
+export type BudgetHolder = {
+  pid: number
+  project: string
+  target: string
+  // The checkout the run started in.
+  dir: string
+  command: string
+  slots: number
+  memoryMb: number
+  // Unix milliseconds the claim was granted; 0 when the broker did not say.
+  since: number
+}
+
+// The build budget the broker arbitrates for every magus on this machine.
+export type Budget = {
+  budgetSlots: number
+  heldSlots: number
+  budgetMb: number
+  heldMb: number
+  holders: BudgetHolder[]
+}
+
+// One status read. budget is null when no broker runs, which is a budget nothing holds:
+// the broker exits once it is idle. readAt is unix milliseconds.
+export type BudgetRead = { budget: Budget | null; readAt: number }
+
+// A magus run in this session that MGS3009 refused. at is unix milliseconds.
+export type Refusal = { at: number; command: string; line: string }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -122,6 +153,10 @@ declare module 'claude-code' {
       ratesError: string | null
       // Bumped on a timer so the countdown in the band and status line redraws.
       tick: number
+      budget: BudgetRead | null
+      budgetError: string | null
+      // Newest first.
+      refusals: Refusal[]
     }
   }
 }
