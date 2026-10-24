@@ -621,6 +621,7 @@ func loadingWorkspace(t *testing.T) Dependencies {
 	}}, nil).Maybe()
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
 	ws.EXPECT().Get(".").Return(root).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
 	ws.EXPECT().Where(mock.Anything).Return(root, true).Maybe()
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
