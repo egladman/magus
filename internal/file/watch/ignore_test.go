@@ -68,7 +68,7 @@ func FuzzIgnorePatternsMatch(f *testing.F) {
 	f.Add("regex", "(", "/repo/api/main.go") // invalid regex
 	f.Add("glob", "[", "/repo/api/main.go")  // invalid glob
 	f.Fuzz(func(t *testing.T, typ, pat, abs string) {
-		if strings.IndexByte(typ+pat+abs, 0) >= 0 {
+		if strings.IndexByte(fmt.Sprintf("%s%s%s", typ, pat, abs), 0) >= 0 {
 			t.Skip()
 		}
 		match := IgnorePatterns("/repo", []types.IgnorePattern{{Type: types.PatternType(typ), Pattern: pat}})
