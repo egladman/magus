@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 4,
+    "imports": 6
+  },
+  "figure": "agent-orchestration",
+  "findings": [],
+  "stamp": "sha256:4629f60ec014e9a9fe5de54d4d8b1cf45a44c1349d505807dfe2179e3f2d4f8e"
+}

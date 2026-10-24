@@ -1,0 +1,49 @@
+namespace agentOrchestration;
+
+import "magus";
+import "magus/figure";
+
+export fun agentOrchestrationFigure() > figure\Figure !> any {
+    final store = magus\dir("internal/job");
+    final guard = magus\dir("internal/guard");
+    final broker = magus\dir("broker");
+    final sandbox = magus\dir("internal/sandbox");
+    final vcs = magus\dir("vcs");
+    final root = figure\external("Orchestrator", sub: "the root session");
+    final worker = figure\external("Worker", sub: "one row, one check");
+    final integrator = figure\external("Integrator", sub: "<parent>/integrate");
+    final bootstrap = figure\external("Worktree bootstrap", sub: "places ./magus", look: figure\Look.plain);
+    return figure\of("agent-orchestration",
+            title: "Three roles, one store, and a guard at every boundary",
+            eyebrow: "orchestration",
+            desc: "The orchestrator forks job rows into one JSON Lines store and waits on them; it "
+                + "never does groundwork. Each worker is bound to one row: its write paths, its one "
+                + "check, its own checkout. The integrator merges the finished branches with "
+                + "git merge --no-ff, regenerates once and runs the full checks. The guard reads "
+                + "the row on every write and command, the sandbox narrows a run's writes to the "
+                + "same row, and the broker holds the one build budget every checkout on the "
+                + "machine shares.")
+        .actor(root)
+        .actor(bootstrap)
+        .actor(worker)
+        .actor(integrator)
+        .box(store, label: "Job store", sub: "jobs.jsonl, one per repo", look: figure\Look.store)
+        .box(guard, label: "Guard", sub: "every write and command", focal: true)
+        .box(sandbox, label: "Sandbox", sub: "write grant from the row")
+        .box(broker, label: "Broker", sub: "one machine budget")
+        .box(vcs, label: "vcs", sub: "checkpoint, merge")
+        .edgesFromGraph()
+        .markEdge(guard, dst: store, label: "lease")
+        .markEdge(guard, dst: broker, label: "seats")
+        .flowIn(root, dst: store, label: "fork, wait")
+        .flowAcross(bootstrap, dst: worker, label: "./magus, exec")
+        .flowIn(worker, dst: guard, label: "each call")
+        .flowIn(integrator, dst: guard, label: "merge, build")
+        .zone("the roles", actors: [root, bootstrap, worker, integrator])
+        .zone("what magus holds and enforces", dirs: [store, guard, sandbox, broker, vcs])
+        .legend(figure\Look.focal, label: "the one enforcer")
+        .legend(figure\Look.store, label: "the declared rows")
+        .legend(figure\Look.external, label: "agent sessions")
+        .legend(figure\Look.plain, label: "a script")
+        .scope([store, guard, sandbox, broker, vcs]);
+}
