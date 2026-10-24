@@ -675,7 +675,7 @@ func chainSkipCacheArtifacts(p *Project, target string, lookup func(path string)
 	return CompactGlobs(out)
 }
 
-// ChainUpdates is the ctx.modifiesExistingFiles declaration of every target a target
+// ChainUpdates is the ctx.writesFiles(..., editsExistingSource: true) declaration of every target a target
 // composes with ctx.needs, transitively, as workspace-rooted globs.
 //
 // A composed target's in-place edit lands inside the composing step's run window, so

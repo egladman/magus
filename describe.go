@@ -489,7 +489,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// been walked yet.
 					if owner != p.Path {
 						// The glob half needs the same hygiene the project half just got.
-						// Nothing checked it before: ctx.writesFiles(site.file("../../etc/x"))
+						// Nothing checked it before: ctx.writesFiles([site.file("../../etc/x")])
 						// survived extraction and resolution and surfaced only once the target
 						// had already run, or, worse, made `magus clean` abort the WHOLE
 						// workspace, since clean expands globs for every project in one loop

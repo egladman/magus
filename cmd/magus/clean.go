@@ -31,7 +31,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "This removes the files matched by each project's declared Outputs globs")
 			fmt.Fprintln(os.Stderr, "- the same files the cache snapshots and replays on cache hits. Whether")
 			fmt.Fprintln(os.Stderr, "each one is regenerable is the declaration's claim, not something clean")
-			fmt.Fprintln(os.Stderr, "verifies: a file magus only modifies belongs in ctx.modifiesExistingFiles, which clean")
+			fmt.Fprintln(os.Stderr, "verifies: a file magus only modifies belongs in ctx.writesFiles(..., editsExistingSource: true), which clean")
 			fmt.Fprintln(os.Stderr, "never removes. Nor does it remove an output the VCS tracks: that file is")
 			fmt.Fprintln(os.Stderr, "committed, and deleting it would dirty the tree.")
 			fmt.Fprintln(os.Stderr, "Pass --dry-run (global flag) to preview before trusting one.")

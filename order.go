@@ -89,7 +89,7 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 			// folds composed targets' updates and skip-cache outputs into the parent
 			// (they land inside its window), but for ordering each chain member is
 			// its own node and the fold would blame a member's writes on its
-			// composer. Measured: format's modifiesExistingFiles("**/*.go") reached
+			// composer. Measured: format's writesFiles(["**/*.go"], editsExistingSource: true) reached
 			// test's writes that way and closed a declared-footprint "cycle" between
 			// test and docs content-generate that neither target declares.
 			node := cache.DeclaredNode(p, target, stepKey, m.ws.Get)

@@ -683,7 +683,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// A replay of this step would skip every composed skip_cache target, so key on
 	// their artifacts instead; see types.ChainSkipCacheOutputs.
 	sources = append(sources, types.ChainSkipCacheOutputs(p, target, m.Get)...)
-	// Per-target ctx.modifiesExistingFiles refs fold into Sources exactly as inputs do, and into
+	// Per-target ctx.writesFiles(..., editsExistingSource: true) refs fold into Sources exactly as inputs do, and into
 	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
 	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
 	// landing in the source set means editing the authored prose around a generated

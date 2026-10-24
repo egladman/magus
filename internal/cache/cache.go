@@ -190,7 +190,7 @@ type Step struct {
 	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
 	// Updates are never snapshotted, so a run records an entry only when every update
 	// file ended it with the bytes the key saw.
-	Updates []types.Glob // ctx.modifiesExistingFiles globs
+	Updates []types.Glob // ctx.writesFiles(..., editsExistingSource: true) globs
 	// OwnedOutputs spans EVERY target in EVERY project, not the running one, because
 	// ctx.needs puts a chained target's writes inside this step's window and a workspace
 	// target does the same across projects.

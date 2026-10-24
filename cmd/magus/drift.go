@@ -36,7 +36,7 @@ import (
 //     (types.StaleGeneratedOutput), the code this exact condition means everywhere else
 //     it fires.
 //   - formatting: charmless `format` was checked first and does not answer this: its
-//     ctx.modifiesExistingFiles globs are deliberately excluded from the drift-gate's
+//     ctx.writesFiles(..., editsExistingSource: true) globs are deliberately excluded from the drift-gate's
 //     declared-output hash (see MGS4007's docs on why: "so nothing snapshots, replays, or
 //     cleans them"), so nothing there ever compares pre/post bytes for them. This class
 //     runs `gofmt -l`, read-only, scoped to exactly the commit's changed Go files that
@@ -66,7 +66,7 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return nil // unversioned tree: nothing to notice
 	}
-	// The root project's OWN format target, read-time only: its ctx.modifiesExistingFiles
+	// The root project's OWN format target, read-time only: its ctx.writesFiles(..., editsExistingSource: true)
 	// declaration walked through ctx.needs (types.ChainUpdates), same as the runner folds
 	// it into a real run's Step.Updates. A workspace with no "format" target (or none at
 	// root) yields an empty set, and the formatting class simply never fires: no error,
@@ -319,7 +319,7 @@ func checkDriftForCommit(
 }
 
 // formatGovernedGoFiles narrows paths to the commit's changed Go files that the format
-// target's own ctx.modifiesExistingFiles declares governed (updateGlobs, from
+// target's own ctx.writesFiles(..., editsExistingSource: true) declares governed (updateGlobs, from
 // types.ChainUpdates). Go only: dprint/Markdown formatting is a real gap this pass does
 // not close (see the report), and narrowing first is what keeps gofmt -l from ever
 // running when nothing changed calls for it.
@@ -402,7 +402,7 @@ type driftFinding struct {
 	// with no matching declared-output change in the same commit.
 	staleProjects []string
 	// unformatted: files gofmt -l reported, scoped to the commit's changed Go files
-	// that the format target's own ctx.modifiesExistingFiles declares governed (see
+	// that the format target's own ctx.writesFiles(..., editsExistingSource: true) declares governed (see
 	// checkDriftForCommit). MGS4009 (types.UnformattedCommit): a sibling of MGS4006,
 	// not a duplicate of lint's own formatting check: this asks whether THIS COMMIT
 	// left a file it touched unformatted, not whether a file is formatted right now.

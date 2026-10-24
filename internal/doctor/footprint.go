@@ -199,7 +199,7 @@ func resolvedSpell(p *types.Project, name string) *spells.Spell {
 // declaredFileKinds is every file kind a target's own declarations name, plus whether one of
 // them is broad enough that asking the question is meaningless.
 //
-// ctx.modifiesExistingFiles counts: buildStep folds those refs into Sources exactly as
+// ctx.writesFiles(..., editsExistingSource: true) counts: buildStep folds those refs into Sources exactly as
 // inputs, so a target that declares what it EDITS has keyed those files whether or not it
 // also calls them inputs. That is the shape gofmt and dprint have, and reporting it would
 // be reporting the correct declaration.

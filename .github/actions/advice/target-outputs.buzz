@@ -10,7 +10,7 @@
 // already made, and re-litigating it on every unrelated push is how a bot gets muted.
 //
 // A target that edits part of a hand-written file declares it with
-// ctx.modifiesExistingFiles, which magus hashes but never snapshots or cleans. That is a
+// ctx.writesFiles(..., editsExistingSource: true), which magus hashes but never snapshots or cleans. That is a
 // declared write, not a missing one, so it is not advised on.
 import "vcs";
 import "advice";

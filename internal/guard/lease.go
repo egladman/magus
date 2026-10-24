@@ -1119,7 +1119,7 @@ func (r targetRun) readOnly(defaults []string) string {
 
 // writesOutside reads what a run under the rw charm writes from the workspace's
 // declarations, in every project the run selects: its target's ctx.writesFiles and
-// ctx.modifiesExistingFiles globs, and the ctx.modifiesExistingFiles globs of each step
+// ctx.writesFiles(..., editsExistingSource: true) globs, and the ctx.writesFiles(..., editsExistingSource: true) globs of each step
 // its ctx.needs chain reaches in that project. It returns the rooted globs no write path
 // covers and own does not name: own are the outputs the row's write paths regenerate,
 // which count as inside them.

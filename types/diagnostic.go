@@ -670,7 +670,7 @@ const StaleGeneratedOutput DiagnosticCode = "MGS4006"
 // Deliberately charm-agnostic. Keying on the charm was considered and rejected: a
 // charm patches args, so it cannot say whether the tool writes, and a rule keyed on
 // whether the caller TYPED the charm exempts a mutating custom charm merely because
-// someone spelled it out. ctx.modifiesExistingFiles is the declaration that answers
+// someone spelled it out. ctx.writesFiles(..., editsExistingSource: true) is the declaration that answers
 // this, which is why a formatter names its edits rather than earning an exemption.
 const UndeclaredSourceModified DiagnosticCode = "MGS4007"
 
