@@ -3,6 +3,7 @@ package magus
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -40,7 +41,7 @@ func (m *Magus) Tools(ctx context.Context, projects ...string) (types.ToolReport
 				if err := ctx.Err(); err != nil {
 					return types.ToolReport{}, err
 				}
-				k := sp.Name() + "\x00" + p.Dir + "\x00" + bin
+				k := fmt.Sprintf("%s\x00%s\x00%s", sp.Name(), p.Dir, bin)
 				r, hit := memo[k]
 				if !hit {
 					r.raw, r.err = sp.ProbeVersion(ctx, bin, p.Dir)

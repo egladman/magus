@@ -85,7 +85,7 @@ func TestProbeCacheKeyRefusesWhatItCannotEnumerate(t *testing.T) {
 	assert.False(t, ok, "govulncheck reports a database that moves on a clock")
 
 	dir = probeFixture(t, "node", []byte("\x7fELF binary"))
-	t.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+"node_modules/.bin")
+	t.Setenv("PATH", fmt.Sprintf("%s%snode_modules/.bin", os.Getenv("PATH"), string(os.PathListSeparator)))
 	_, ok = probeCacheKey(spells.Command{Bin: "node", Args: []string{"--version"}}, dir)
 	assert.False(t, ok, "a relative PATH entry resolves per directory")
 }

@@ -20,7 +20,7 @@ import (
 // goSymbol spells a scip-go moniker for a symbol in package pkg, so a test reads as the
 // declaration it stands for rather than as punctuation.
 func goSymbol(pkg, descriptors string) string {
-	return "symbol:gomod example.com/m `example.com/m/" + pkg + "`/" + descriptors
+	return fmt.Sprintf("symbol:gomod example.com/m `example.com/m/%s`/%s", pkg, descriptors)
 }
 
 // symbolNode is one indexed symbol as a graph carries it.
@@ -265,14 +265,14 @@ func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
 func conformanceHead(extra map[string]int) *knowledge.Graph {
 	var syms []types.KnowledgeSymbol
 	reader := func(pkg, name, file string, line int) types.KnowledgeSymbol {
-		ns := "gomod example.com/m `example.com/m/" + pkg + "`/"
+		ns := fmt.Sprintf("gomod example.com/m `example.com/m/%s`/", pkg)
 		return types.KnowledgeSymbol{
-			Key: ns + name + "().", Label: name, Language: "go", SymbolKind: "Function", Namespace: ns,
-			Signature: "func " + name + "(ctx context.Context) *T", Source: fmt.Sprintf("%s:%d", file, line), Defs: []string{file},
+			Key: fmt.Sprintf("%s%s().", ns, name), Label: name, Language: "go", SymbolKind: "Function", Namespace: ns,
+			Signature: fmt.Sprintf("func %s(ctx context.Context) *T", name), Source: fmt.Sprintf("%s:%d", file, line), Defs: []string{file},
 		}
 	}
 	for _, name := range []string{"Cwd", "Lease", "Root", "Base", "Charms", "Progress", "Runtime", "Writer"} {
-		syms = append(syms, reader("internal/"+name, name+"FromContext", "internal/"+name+"/ctx.go", 3))
+		syms = append(syms, reader("internal/"+name, name+"FromContext", fmt.Sprintf("internal/%s/ctx.go", name), 3))
 	}
 	syms = append(syms, reader("internal/obs", "RecorderFrom", "internal/obs/ctx.go", 3))
 	for name, line := range extra {
@@ -289,7 +289,7 @@ func conformanceHead(extra map[string]int) *knowledge.Graph {
 }
 
 func trailID(name string) string {
-	return "symbol:gomod example.com/m `example.com/m/internal/trail`/" + name + "()."
+	return fmt.Sprintf("symbol:gomod example.com/m `example.com/m/internal/trail`/%s().", name)
 }
 
 // trailPatch adds EntryPointFrom on line 5 of an existing file whose Trail, on line 3, only had
@@ -442,7 +442,7 @@ func TestAttachConformanceReportsAKnownSymbolWhoseBodyGrew(t *testing.T) {
 		sym := func(key, label, line string, end int) types.KnowledgeSymbol {
 			return types.KnowledgeSymbol{
 				Key: ns + key, Label: label, Language: "go", SymbolKind: "Function", Namespace: ns,
-				Source: file + ":" + line, DefEndLine: end, Defs: []string{file},
+				Source: fmt.Sprintf("%s:%s", file, line), DefEndLine: end, Defs: []string{file},
 			}
 		}
 		g := knowledge.NewGraph()
@@ -529,8 +529,13 @@ func TestDiffConformanceReadsTheRatchetAndItsBase(t *testing.T) {
 	require.NotNil(t, base)
 	assert.Equal(t, 80, base.Thresholds[0].Value, "a patch that leaves the record alone has it as its base")
 
-	added := "diff --git a/conformance.jsonl b/conformance.jsonl\nnew file mode 100644\n--- /dev/null\n+++ b/conformance.jsonl\n@@ -0,0 +1,3 @@\n+" +
-		strings.ReplaceAll(strings.TrimSuffix(ratchetHead, "\n"), "\n", "\n+") + "\n"
+	added := fmt.Sprintf(`diff --git a/conformance.jsonl b/conformance.jsonl
+new file mode 100644
+--- /dev/null
++++ b/conformance.jsonl
+@@ -0,0 +1,3 @@
++%s
+`, strings.ReplaceAll(strings.TrimSuffix(ratchetHead, "\n"), "\n", "\n+"))
 	_, base, _, err = diffConformance(ratchetConformance(), diffConfig{}, added, nil, readRatchet(ratchetHead))
 	require.NoError(t, err)
 	assert.Nil(t, base, "a record the change adds has no base")

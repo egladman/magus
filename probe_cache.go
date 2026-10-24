@@ -353,7 +353,7 @@ func miseEnvInputs() []string {
 		}
 		for _, name := range miseDirInputs {
 			if base, ok := strings.CutSuffix(name, ".toml"); ok {
-				out = append(out, base+"."+env+".toml")
+				out = append(out, fmt.Sprintf("%s.%s.toml", base, env))
 			}
 		}
 	}
@@ -432,7 +432,7 @@ func (m *Magus) probeCached(ctx context.Context, probe spells.Command, dir strin
 	if a, hit := m.cachedProbe(key); hit {
 		return a.out, a.err
 	}
-	return probeFlights.do(m.CacheDir()+"\x00"+key, func() (string, error) {
+	return probeFlights.do(fmt.Sprintf("%s\x00%s", m.CacheDir(), key), func() (string, error) {
 		// A flight that finished between the lookup above and this one stored its answer.
 		if a, hit := m.cachedProbe(key); hit {
 			return a.out, a.err

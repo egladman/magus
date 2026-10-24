@@ -157,7 +157,7 @@ func (l *projectLocker) publishHolds(ctx context.Context, paths []string) func()
 // false when it has published none that is live: it has not finished taking its locks,
 // has released them, or never takes any. A dead publisher's record is swept.
 func (l *projectLocker) settledProjects(procID int) ([]string, bool) {
-	matches, _ := filepath.Glob(filepath.Join(l.pipeDir(), strconv.Itoa(procID)+"-*"+holdsSuffix))
+	matches, _ := filepath.Glob(filepath.Join(l.pipeDir(), fmt.Sprintf("%s-*%s", strconv.Itoa(procID), holdsSuffix)))
 	var out []string
 	settled := false
 	for _, path := range matches {

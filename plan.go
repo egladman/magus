@@ -69,7 +69,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		}
 		switch {
 		case fellBack:
-			unboundedBy = "the VCS could not diff, so the plan holds every project (" + source + ")"
+			unboundedBy = fmt.Sprintf("the VCS could not diff, so the plan holds every project (%s)", source)
 		case res != nil:
 			unboundedBy = m.unboundedBy(res)
 		}
@@ -178,7 +178,7 @@ func (m *Magus) unboundedPaths(res *types.AffectedResult) (change string, unclai
 	}
 	if len(res.Changed) > 0 {
 		if name := m.opaqueProvider(); name != "" {
-			return "workspace provider " + name + " declares no inputs, so any file may decide the project graph", nil
+			return fmt.Sprintf("workspace provider %s declares no inputs, so any file may decide the project graph", name), nil
 		}
 	}
 	edge := m.edgeInputs()

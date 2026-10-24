@@ -100,7 +100,7 @@ func TestNoRescanningStringLoops(t *testing.T) {
 				(i > 0 && strings.Contains(lines[i-1], buzzScanOptOut)) {
 				continue
 			}
-			findings = append(findings, path+":"+itoa(i+1)+": "+strings.TrimSpace(line))
+			findings = append(findings, fmt.Sprintf("%s:%s: %s", path, itoa(i+1), strings.TrimSpace(line)))
 		}
 		return nil
 	})
@@ -234,7 +234,7 @@ func buzzListBlock(t *testing.T, name string) string {
 	t.Helper()
 	body, err := os.ReadFile(crosscheckLib)
 	require.NoError(t, err, "read %s", crosscheckLib)
-	m := regexp.MustCompile(`(?s)export final ` + name + ` = [\[{](.*?)[\]}];`).FindStringSubmatch(string(body))
+	m := regexp.MustCompile(fmt.Sprintf(`(?s)export final %s = [\[{](.*?)[\]}];`, name)).FindStringSubmatch(string(body))
 	require.Len(t, m, 2, "%s declares no %s", crosscheckLib, name)
 	return m[1]
 }
@@ -299,10 +299,10 @@ var (
 	// A call whose callee spells env or lookup (os.Getenv, os.LookupEnv, os\env, env\get,
 	// a local getenv or envOr) with a listed name as its first argument.
 	environmentDetectionCall = regexp.MustCompile(
-		`(?i:env|lookup)[\w\\]*\s*\(\s*"(` + environmentDetectionNames + `)"\s*[,)]`)
+		fmt.Sprintf(`(?i:env|lookup)[\w\\]*\s*\(\s*"(%s)"\s*[,)]`, environmentDetectionNames))
 	environmentDetectionProcessEnv = regexp.MustCompile(
-		`process\.env(?:\.|\[\s*["'])(` + environmentDetectionNames + `)\b`)
-	environmentDetectionShell = regexp.MustCompile(`\$\{?(` + environmentDetectionNames + `)\b`)
+		fmt.Sprintf(`process\.env(?:\.|\[\s*["'])(%s)\b`, environmentDetectionNames))
+	environmentDetectionShell = regexp.MustCompile(fmt.Sprintf(`\$\{?(%s)\b`, environmentDetectionNames))
 )
 
 // environmentDetectionReads returns every listed variable one line reads.
@@ -368,7 +368,7 @@ func TestNoEnvironmentSniffing(t *testing.T) {
 			slashed := filepath.ToSlash(path)
 			for n, line := range strings.Split(string(data), "\n") {
 				for _, name := range environmentDetectionReads(path, line) {
-					if _, ok := environmentDetectionAllowed[slashed+":"+name]; ok {
+					if _, ok := environmentDetectionAllowed[fmt.Sprintf("%s:%s", slashed, name)]; ok {
 						continue
 					}
 					found[i] = append(found[i], fmt.Sprintf("%s:%d: reads %s: %s",
@@ -613,7 +613,7 @@ func TestCommentsNameSymbolsThatExist(t *testing.T) {
 					if external[pkg] || ix.resolves(pkg, sym) {
 						continue
 					}
-					if _, allowed := commentSymbolAllowlist[slash+":"+pkg+"."+sym]; allowed {
+					if _, allowed := commentSymbolAllowlist[fmt.Sprintf("%s:%s.%s", slash, pkg, sym)]; allowed {
 						continue
 					}
 					score, why := ix.score(pkg, sym)
@@ -1062,7 +1062,7 @@ type appendSite struct {
 }
 
 // key is what appendAllowed names: the function, so an entry survives its lines moving.
-func (s appendSite) key() string { return s.path + ":" + s.fn }
+func (s appendSite) key() string { return fmt.Sprintf("%s:%s", s.path, s.fn) }
 
 func (s appendSite) String() string { return fmt.Sprintf("%s:%d in %s", s.path, s.line, s.fn) }
 
@@ -1098,7 +1098,7 @@ func appendSites(root string) ([]appendSite, error) {
 			}
 			name := fn.Name.Name
 			if fn.Recv != nil && len(fn.Recv.List) == 1 {
-				name = strings.TrimPrefix(gotypes.ExprString(fn.Recv.List[0].Type), "*") + "." + name
+				name = fmt.Sprintf("%s.%s", strings.TrimPrefix(gotypes.ExprString(fn.Recv.List[0].Type), "*"), name)
 			}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "O_APPEND" {

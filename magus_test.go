@@ -946,7 +946,7 @@ func floorWorkspace(t *testing.T, constraint string) string {
 	w := testkit.NewWorkspace(t)
 	yaml := ""
 	if constraint != "" {
-		yaml = "required_version: \"" + constraint + "\"\n"
+		yaml = fmt.Sprintf("required_version: \"%s\"\n", constraint)
 	}
 	w.Write("magus.yaml", yaml)
 	w.Magusfile("import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n")
@@ -1353,7 +1353,7 @@ func TestLastPassedBaseRefErrorKeepsItsText(t *testing.T) {
 
 // rangedSymbol is an indexed symbol with its definition's extent and SCIP kind.
 func rangedSymbol(id, label, source string, end int, kind string) types.KnowledgeNode {
-	n := symbolNode(id, label, source, "func "+label+"()", "")
+	n := symbolNode(id, label, source, fmt.Sprintf("func %s()", label), "")
 	n.Attrs[attrDefEndLine] = fmt.Sprint(end)
 	n.Attrs[attrSymbolKind] = kind
 	return n
@@ -1645,7 +1645,7 @@ func ExampleMagus_ExpandAffected() {
 	}
 	fmt.Println("fell back to every project:", fellBack)
 	for _, t := range targets {
-		fmt.Println(t.Path + ":" + t.Name)
+		fmt.Println(fmt.Sprintf("%s:%s", t.Path, t.Name))
 	}
 	// Output:
 	// fell back to every project: true

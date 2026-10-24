@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -476,13 +477,13 @@ func writeWorkspace(t *testing.T, files map[string]string) string {
 // crossWriter is a magusfile whose build target writes glob into the sibling project
 // named by dir.
 func crossWriter(dir, glob string) string {
-	return `import "magus";
-import "project/../` + dir + `" as owner;
+	return fmt.Sprintf(`import "magus";
+import "project/../%s" as owner;
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles(owner.file("` + glob + `"));
+    ctx.writesFiles(owner.file("%s"));
 }
-`
+`, dir, glob)
 }
 
 // TestTwoWritersClaimingOnePathAreRejected is the cache-poisoning guard. Verified before

@@ -1613,7 +1613,9 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 
 // key mirrors how probeTools records a version, so the tests exercise the real lookup
 // rather than a convenient stand-in.
-func key(project, spell, tool string) string { return project + "\x00" + spell + "\x00" + tool }
+func key(project, spell, tool string) string {
+	return fmt.Sprintf("%s\x00%s\x00%s", project, spell, tool)
+}
 
 func projectWith(path string, bounds map[string]spells.VersionBounds, sp *spells.Spell) *types.Project {
 	return &types.Project{Path: path, Dir: "/tmp/" + path, ToolBounds: bounds, ResolvedSpells: []*spells.Spell{sp}}
@@ -2061,7 +2063,7 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 
 	got := logged.String()
 	assert.Contains(t, got, "volatile target retried")
-	assert.Contains(t, got, "target="+spellName+"/flaky", "the line must name the pair, not just the project")
+	assert.Contains(t, got, fmt.Sprintf("target=%s/flaky", spellName), "the line must name the pair, not just the project")
 	assert.Contains(t, got, "status=retried_volatile")
 	assert.Contains(t, got, "reason=bootstrap")
 }

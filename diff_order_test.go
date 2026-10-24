@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,7 +72,7 @@ func orderStepPaths(o types.DiffOrder) []string {
 	for _, g := range o.Groups {
 		for _, s := range g.Steps {
 			for _, h := range s.Hunks {
-				out = append(out, string(g.Kind)+" "+h.Ref.Path+" "+string(h.Why.Relation))
+				out = append(out, fmt.Sprintf("%s %s %s", string(g.Kind), h.Ref.Path, string(h.Why.Relation)))
 			}
 		}
 	}
@@ -278,7 +279,13 @@ func TestDiffOrderRefusesAPatchPathOutsideTheWorkspace(t *testing.T) {
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	rel, err := filepath.Rel(root, filepath.Join(outside, "x.go"))
 	require.NoError(t, err)
-	patch := "diff --git a/" + filepath.ToSlash(rel) + " b/" + filepath.ToSlash(rel) + "\n--- a/" + filepath.ToSlash(rel) + "\n+++ b/" + filepath.ToSlash(rel) + "\n@@ -1,1 +1,2 @@\n package p\n+var X = 1\n"
+	patch := fmt.Sprintf(`diff --git a/%s b/%s
+--- a/%s
++++ b/%s
+@@ -1,1 +1,2 @@
+ package p
++var X = 1
+`, filepath.ToSlash(rel), filepath.ToSlash(rel), filepath.ToSlash(rel), filepath.ToSlash(rel))
 
 	moved := movedFiles(root, patch)
 

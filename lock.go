@@ -407,7 +407,7 @@ func heldBy(owner string) string {
 	if owner == "" {
 		return ""
 	}
-	return " (held by " + owner + ")"
+	return fmt.Sprintf(" (held by %s)", owner)
 }
 
 // acquire takes the project's EXCLUSIVE lock. The returned release func unlocks; call it
