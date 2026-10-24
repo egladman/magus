@@ -93,14 +93,14 @@ func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
 func TestJobEditApplyChangesTheRecordOnce(t *testing.T) {
 	goal := Goal{ID: "lint", Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint", Project: "."}}
 	waiver := JobWaiver{Code: OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: "the integrator regenerates it"}
-	edits := []JobEdit{{AddWritePath: "docs/x.md"}, {AddGoal: &goal}, {AddWaiver: &waiver}, {RefreshCheckpoint: "abc"}}
+	edits := []JobEdit{{AddWritePath: "docs/x.md"}, {AddGoal: &goal}, {AddWaiver: &waiver}}
 	var d Declaration
 
 	for _, e := range edits {
 		assert.True(t, e.Apply(&d), "%s changes the record", e)
 		assert.False(t, e.Apply(&d), "%s a second time changes nothing", e)
 	}
-	assert.Equal(t, Declaration{WritePaths: []string{"docs/x.md"}, Goals: []Goal{goal}, Waivers: []JobWaiver{waiver}, Checkpoint: "abc"}, d)
+	assert.Equal(t, Declaration{WritePaths: []string{"docs/x.md"}, Goals: []Goal{goal}, Waivers: []JobWaiver{waiver}}, d)
 	assert.False(t, JobEdit{AddGoal: &Goal{ID: "lint"}}.Apply(&d), "a goal id the record uses is left alone")
 	assert.False(t, JobEdit{}.Apply(&d))
 }

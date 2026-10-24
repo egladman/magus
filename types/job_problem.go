@@ -33,9 +33,6 @@ type JobEdit struct {
 	AddWritePath string     `json:"add_write_path,omitempty"`
 	AddGoal      *Goal      `json:"add_goal,omitempty"`
 	AddWaiver    *JobWaiver `json:"add_waiver,omitempty"`
-	// RefreshCheckpoint is the revision a moved checkpoint is replaced by. No problem carries
-	// it: only a fork into its own checkout may start from the forker's HEAD instead.
-	RefreshCheckpoint string `json:"refresh_checkpoint,omitempty"`
 }
 
 // Apply makes e on d and reports whether d changed: an entry d already holds, or a goal id
@@ -57,11 +54,6 @@ func (e JobEdit) Apply(d *Declaration) bool {
 			return false
 		}
 		d.Waivers = append(d.Waivers, *e.AddWaiver)
-	case e.RefreshCheckpoint != "":
-		if d.Checkpoint == e.RefreshCheckpoint {
-			return false
-		}
-		d.Checkpoint = e.RefreshCheckpoint
 	default:
 		return false
 	}
@@ -77,8 +69,6 @@ func (e JobEdit) String() string {
 		return fmt.Sprintf("added the goal %q (%s)", e.AddGoal.ID, e.AddGoal.Check)
 	case e.AddWaiver != nil:
 		return fmt.Sprintf("waived %s %q (%s)", e.AddWaiver.Code, e.AddWaiver.Subject, e.AddWaiver.Reason)
-	case e.RefreshCheckpoint != "":
-		return fmt.Sprintf("refreshed the checkpoint to %s, this checkout's HEAD", e.RefreshCheckpoint)
 	}
 	return "no edit"
 }

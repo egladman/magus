@@ -68,10 +68,9 @@ func TestFixForkNeverMovesACheckpointToHead(t *testing.T) {
 	}
 
 	for _, token := range []string{elsewhere, elsewhere + "+not-a-digest"} {
-		fixed, edits, err := FixFork(t.Context(), s, record(token), own, config.Jobs{}, nil)
+		fixed, _, err := FixFork(t.Context(), s, record(token), own, config.Jobs{}, nil)
 		require.NoError(t, err)
-		assert.NotContains(t, edits, types.JobEdit{RefreshCheckpoint: repo.Head()}, "%s names a revision the repository holds", token)
-		assert.Equal(t, token, fixed.Checkpoint)
+		assert.Equal(t, token, fixed.Checkpoint, "%s names a revision the repository holds", token)
 	}
 
 	unknown := record(madeUpRevision)

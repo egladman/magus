@@ -303,17 +303,6 @@ type jobsFile struct {
 	Jobs []types.Job `json:"-"`
 }
 
-// noteLeftLive reports a sweep the store's schema refused. The read goes on: failing it would
-// lock a fresh checkout's unstamped bootstrap out of every list, so the rows stay live
-// until a build that may write ends them, and every read says so.
-func noteLeftLive(out io.Writer, dead []ending, err error) {
-	ids := make([]string, len(dead))
-	for i, e := range dead {
-		ids[i] = e.id
-	}
-	fmt.Fprintf(out, "job: left %s live: %v\n", strings.Join(ids, ", "), err)
-}
-
 // jobsLog is the file a write read, so the write appends only the lines that changed.
 type jobsLog struct {
 	header []byte

@@ -68,20 +68,20 @@ type Dependencies struct {
 	SpawnRule workspace.SpawnRule
 	// ApprovedSpawnRule resolves the same rule as the approved sources register it: nil
 	// with no error when those sources are the working tree's or register none, and an
-	// error when they could not be evaluated. Resolved lazily because it can load the
-	// magusfile a second time, which only a spawn is worth. Nil when the workspace has no
-	// approval authority wired.
+	// error when they could not be evaluated. Resolved lazily, once per judgment, because it
+	// can load the magusfile a second time; the approved rules share that one load. Nil when
+	// the workspace has no approval authority wired.
 	ApprovedSpawnRule func(ctx context.Context) (workspace.SpawnRule, error)
 	// CommandRule is the working tree's magus\guard.command rule, nil when none is
 	// registered. It is called on every shell command the built-in rules let through and
 	// can only add to their verdict.
 	CommandRule workspace.CommandRule
-	// ApprovedCommandRule is ApprovedSpawnRule for the command rule, resolved per command.
+	// ApprovedCommandRule is ApprovedSpawnRule for the command rule, resolved per judgment.
 	ApprovedCommandRule func(ctx context.Context) (workspace.CommandRule, error)
 	// WriteRule is the working tree's magus\guard.write rule, nil when none is registered.
 	// It is called on every file write the built-in rules let through.
 	WriteRule workspace.WriteRule
-	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
+	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per judgment.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// mgs_listModels, nil when none does. It can load the workspace and its harness

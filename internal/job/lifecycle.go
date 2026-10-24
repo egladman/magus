@@ -1113,10 +1113,6 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	if out == nil {
 		out = os.Stderr
 	}
-	if errors.Is(err, types.JobStoreWriterOlder) {
-		noteLeftLive(out, dead, err)
-		return read, false, nil
-	}
 	if err != nil {
 		return jobsFile{}, false, err
 	}

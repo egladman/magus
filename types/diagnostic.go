@@ -652,9 +652,8 @@ const GateNotRun DiagnosticCode = "MGS3045"
 // working in: a half-saved load file stops `magus run` for every job there.
 const CheckoutConfigHeld DiagnosticCode = "MGS3046"
 
-// JobStoreWriterOlder is a write to the job store by a magus built from an older commit than
-// the newest build that wrote it, or by one that carries no commit once a stamped build has:
-// the older build judges with rules the newer code no longer applies.
+// JobStoreWriterOlder is a job store whose header requires a schema feature this magus
+// lacks: nothing is read or written until a magus that implements it runs.
 const JobStoreWriterOlder DiagnosticCode = "MGS3051"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
