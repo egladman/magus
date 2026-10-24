@@ -285,7 +285,7 @@ func (c Classifier) Edit(ctx context.Context, path string, old, cur []byte) Clas
 }
 
 // quoteGlob quotes a glob for the attribution line.
-func quoteGlob(glob string) string { return fmt.Sprintf(`"%s"`, glob) }
+func quoteGlob(glob string) string { return fmt.Sprintf("%c%s%c", '"', glob, '"') }
 
 // CommentOnlyDeclared reports whether two sources of a declared language differ only in
 // comments: both strip to byte-identical text. No token-stream normalization happens:
