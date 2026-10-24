@@ -42,6 +42,7 @@ func TestForkWorktreeMakesTheJobsCheckoutAtTheForkersRevision(t *testing.T) {
 	wt := *row.Worktree
 	assert.Equal(t, repo.Head(), wt.Base)
 	assert.FileExists(t, filepath.Join(wt.Root, "a.txt"), "the checkout holds the revision it was made at")
+	assert.Equal(t, "w1", repo.Git("-C", wt.Root, "symbolic-ref", "--short", "HEAD"), "the job commits on a branch named after it")
 	assert.Empty(t, wt.Binary)
 	assert.NoFileExists(t, filepath.Join(wt.Root, "magus"), "a forker running magus from PATH places none")
 
@@ -110,20 +111,21 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
 	built := repo.Head()
-	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	later := repo.Commit("later", map[string]string{"b.go": "package b\n"})
 
 	for name, tc := range map[string]struct {
+		id         string
 		build      types.MagusBuild
 		checkpoint string
 		base       string
 	}{
-		"the forker's revision is past the build": {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, base: later},
-		"a checkpoint past the build":             {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later, base: later},
-		"a checkpoint before the build":           {build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built, base: built},
+		"the forker's revision is past the build": {id: "past-build", build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, base: later},
+		"a checkpoint past the build":             {id: "checkpoint-past", build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later, base: later},
+		"a checkpoint before the build":           {id: "checkpoint-before", build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built, base: built},
 	} {
 		t.Run(name, func(t *testing.T) {
 			bin, ctx := forkersBinary(t, tc.build)
-			wt, made, err := s.ForkWorktree(ctx, name, filepath.Join(t.TempDir(), "w"), tc.checkpoint, bin)
+			wt, made, err := s.ForkWorktree(ctx, tc.id, filepath.Join(t.TempDir(), "w"), tc.checkpoint, bin)
 			require.NoError(t, err)
 			require.True(t, made)
 			assert.Equal(t, tc.base, wt.Base)
@@ -165,6 +167,14 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	require.True(t, made)
 	assert.Equal(t, built, wt.Base)
 	assert.FileExists(t, wt.Binary)
+
+	docsOnly := repo.Commit("notes", map[string]string{"b_test.go": "package b\n", "changes/unreleased/x.md": "x\n"})
+	bin, ctx = forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: later})
+	wt, made, err = s.ForkWorktree(ctx, "w4", filepath.Join(t.TempDir(), "w4"), docsOnly, bin)
+	require.NoError(t, err)
+	require.True(t, made)
+	assert.Equal(t, docsOnly, wt.Base)
+	assert.FileExists(t, wt.Binary, "no file a binary holds differs between the build and the checkout")
 
 	_, made, err = s.ForkWorktree(t.Context(), "w3", filepath.Join(t.TempDir(), "w3"), "", "")
 	require.NoError(t, err, "a forker running magus from PATH places nothing, so nothing is compared")
@@ -243,6 +253,7 @@ func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	dirty := forkInto(t, s, "dirty", "")
 	require.NoError(t, os.WriteFile(filepath.Join(dirty.Worktree.Root, "b.txt"), []byte("b\n"), 0o644))
 	stranded := forkInto(t, s, "stranded", "")
+	repo.Git("-C", stranded.Worktree.Root, "switch", "-q", "--detach")
 	repo.Git("-C", stranded.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "local")
 	for _, id := range []string{"dirty", "stranded"} {
 		_, err := Exit(ctx, s, id, nil, nil)
@@ -266,4 +277,27 @@ func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	changed, err = s.EndWorktrees(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, changed, "a reason that has not changed is not recorded again")
+}
+
+func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, _, _ := worktreeStore(t)
+	clean := forkInto(t, s, "clean", "")
+	dirty := forkInto(t, s, "dirty", "")
+	require.NoError(t, os.WriteFile(filepath.Join(dirty.Worktree.Root, "b.txt"), []byte("b\n"), 0o644))
+
+	_, err := s.Delete(ctx, "dirty", false)
+	require.ErrorContains(t, err, "b.txt", "a checkout holding work stays, and so does its row")
+	assert.DirExists(t, dirty.Worktree.Root)
+
+	dropped, err := s.Delete(ctx, "clean", false)
+	require.NoError(t, err)
+	assert.NoDirExists(t, clean.Worktree.Root, "a clean checkout goes with its row")
+	assert.NotZero(t, dropped.Worktree.Removed)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "dirty", rows[0].ID)
 }

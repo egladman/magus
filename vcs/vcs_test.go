@@ -2115,7 +2115,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapGeneratedPathReporter, "GeneratedPaths", func(d types.VCSDriver, dir string) error {
 			return errOf(d.GeneratedPaths(ctx, dir, "-x", []string{"a"}))
 		}},
-		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
+		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x", "") }},
 		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
 		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
 		{types.CapCheckoutProvisioner, "StrandedRevisions", func(d types.VCSDriver, dir string) error { return errOf(d.StrandedRevisions(ctx, dir, "-x")) }},

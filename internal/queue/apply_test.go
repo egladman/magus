@@ -102,7 +102,7 @@ func approvedAs(c types.Change) types.Approval {
 // rebuilds answers rebuilding c's candidate onto onto as the commit made, touching
 // touched.
 func (d doubles) rebuilds(c types.Change, onto, made string, touched ...string) {
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, onto).RunAndReturn(makeCheckout).Once()
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, onto, "").RunAndReturn(makeCheckout).Once()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil).Once()
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #"+c.ID, when)}).Return(made, nil).Once()
@@ -353,7 +353,7 @@ func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *te
 	d.caps()
 	d.bases(base, base, after)
 	d.rechecks(c, approvedAs(c))
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(func(_ context.Context, _, dir, _ string) error {
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base, "").RunAndReturn(func(_ context.Context, _, dir, _, _ string) error {
 		require.NoError(t, os.MkdirAll(dir, 0o755))
 		return os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte("<<<<<<< markers\n"), 0o644)
 	}).Once()
@@ -698,7 +698,7 @@ func generatorChange(d doubles, c types.Change, holding map[string]entry) (merge
 	touched := []string{"gen/gen.go", "gen/x.go"}
 	d.bases(base)
 	d.rechecks(c, approvedAs(c))
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(checkoutHolding(holding)).Once()
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base, "").RunAndReturn(checkoutHolding(holding)).Once()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil).Once()
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #"+c.ID, when)}).Return(merged, nil).Once()
@@ -720,8 +720,8 @@ type entry struct {
 }
 
 // checkoutHolding checks out a directory holding files.
-func checkoutHolding(files map[string]entry) func(context.Context, string, string, string) error {
-	return func(_ context.Context, _, dir, _ string) error {
+func checkoutHolding(files map[string]entry) func(context.Context, string, string, string, string) error {
+	return func(_ context.Context, _, dir, _, _ string) error {
 		for p, e := range files {
 			abs := filepath.Join(dir, filepath.FromSlash(p))
 			if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
@@ -781,7 +781,7 @@ func TestValidationsCheckedRegenerationLandsThroughAnUpdateCommit(t *testing.T) 
 	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/gone.go", "gen/run.sh", "gen/x.go"}).
 		Return(map[string]types.Writes{"gen/gone.go": {Output: true}, "gen/run.sh": {Output: true}, "gen/x.go": {Output: true}}, nil)
 	// A regular file, an executable one that was executable, and one the regeneration removed.
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, v.CandidateCommit).
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, v.CandidateCommit, "").
 		RunAndReturn(checkoutHolding(map[string]entry{"gen/x.go": {mode: 0o644}, "gen/run.sh": {mode: 0o755}})).Once()
 	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
@@ -864,7 +864,7 @@ func TestAValidationBundleApplyingCannotCheckIsRefused(t *testing.T) {
 				d.facts.EXPECT().Classify(mock.Anything, tc.changed).Return(map[string]types.Writes{"gen": {Output: true}, "gen/x.go": {Output: true}}, nil)
 			}
 			if tc.cand != nil {
-				d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, v.CandidateCommit).RunAndReturn(checkoutHolding(tc.cand)).Once()
+				d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, v.CandidateCommit, "").RunAndReturn(checkoutHolding(tc.cand)).Once()
 			}
 			d.kicks(c, types.CodeKickRefused, tc.kick)
 			a := newBatchApplier(t, d, types.VerdictBatch{Verdicts: []types.Verdict{v}, Bundles: map[string]string{"1": "/v/1/candidate.bundle"}, Done: true})
@@ -892,7 +892,7 @@ func TestAGatedMergeSettlingAGeneratedConflictMergesWithoutABundle(t *testing.T)
 	marks := d.marks(nil)
 	d.bases(base, base, after)
 	d.rechecks(c, approvedAs(c))
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout).Once()
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base, "").RunAndReturn(makeCheckout).Once()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(conflict, nil).Once()
 	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
@@ -1588,7 +1588,7 @@ func (d doubles) restacking(c types.Change, m types.MergedChange, v types.Verdic
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, mock.MatchedBy(func(tc magustypes.TreeCommit) bool {
 		return slices.Equal(tc.Parents, []string{base, m.Head})
 	})).Return(recorded, nil)
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded, "").RunAndReturn(makeCheckout)
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil)
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil)
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #"+c.ID, when)}).Return(v.CandidateCommit, nil)
@@ -1729,7 +1729,7 @@ func TestApplyProvesAReviewAcrossAMergeOfTheBaseByRegenerating(t *testing.T) {
 			d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, base, onBase).Return([]string{"docs/x.md"}, nil)
 			d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, onBase, plain).Return([]string{"a/x.go", "gen/x.go"}, nil)
 			d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"a/x.go", "docs/x.md"}).Return(types.Generation{Units: []string{"gen"}}, nil)
-			d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, plain).RunAndReturn(makeCheckout)
+			d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, plain, "").RunAndReturn(makeCheckout)
 			d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return([]string{"gen/x.go"}, nil)
 			regenerated := head("regenerated")
 			d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", when), Paths: []string{"gen/x.go"}}).Return(regenerated, nil)

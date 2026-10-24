@@ -74,7 +74,7 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
 		CommitMeta: magustypes.CommitMeta{Message: "merge queue: #2 is stacked on " + parent.Head[:12], Author: candidateIdentity, Committer: candidateIdentity, Date: when},
 		Tree:       "tip tree", Parents: []string{onto, parent.Head}}).Return(recorded, nil)
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded, "").RunAndReturn(makeCheckout)
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil)
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil)
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #2", when)}).Return(head("cand"), nil)
@@ -101,7 +101,7 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 // directory it cannot then list. Discarding the candidate removes all of it.
 func TestDiscardRemovesABoxAHookLeftUnwritable(t *testing.T) {
 	d := newDoubles(t)
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base, "").RunAndReturn(makeCheckout)
 	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
 		RunAndReturn(func(_ context.Context, _, dir string) error { return os.RemoveAll(dir) })
 	cand, err := checkout(t.Context(), d.vcs, clone.Root, t.TempDir(), "candidate-1", base)

@@ -37,10 +37,11 @@ func MirroredBinary(exe, root string) string {
 	return exe
 }
 
-// ForkWorktree makes the checkout a fork of job id names at dir, from the revision
+// ForkWorktree makes the checkout a fork of job id names at dir, on a new branch named id, from the revision
 // checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
 // not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
-// is placed only in a checkout at the commit it was built at: anywhere else its guard cannot
+// is placed only in a checkout at the commit it was built at, or at one that differs from it
+// in no file a binary holds (see [buildInputsDiffer]): anywhere else its guard cannot
 // load the tree, so the checkout is made with no binary and wt.Binary stays "" for
 // [CheckoutBootstrap] to fill. made is false when the job already owns the checkout at dir,
 // which is returned as it stands. A job owning another standing checkout, a checkpoint
@@ -105,13 +106,13 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		if err != nil {
 			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, built at %s, which %s cannot find: %w", id, binary, build.Commit, drv.Name(), err)
 		}
-		// Built elsewhere, its guard could not load the checkout; CheckoutBootstrap builds
-		// one there instead.
-		if built.ID != base.ID {
+		// Built elsewhere, its guard could not load the checkout unless nothing it compiles
+		// differs; CheckoutBootstrap builds one there instead.
+		if built.ID != base.ID && buildInputsDiffer(ctx, drv, source, built.ID, base.ID) {
 			binary = ""
 		}
 	}
-	if err := drv.CreateCheckout(ctx, source, dir, base.ID); err != nil {
+	if err := drv.CreateCheckout(ctx, source, dir, base.ID, id); err != nil {
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
 	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix()}
@@ -123,6 +124,27 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		wt.Binary = placed
 	}
 	return wt, true, nil
+}
+
+// buildInputsDiffer reports whether a binary built at built could differ from one built at
+// base. Every changed path counts except a test file and the changelog fragments, which no
+// binary holds; a diff that cannot be read counts as differing, so the caller prints the
+// bootstrap line instead of placing a binary on a guess.
+func buildInputsDiffer(ctx context.Context, drv types.VCSDriver, source, built, base string) bool {
+	// RangeFiles measures from the merge base, so both directions cover the two commits
+	// whichever is the ancestor.
+	for _, pair := range [][2]string{{built, base}, {base, built}} {
+		changed, err := drv.RangeFiles(ctx, source, pair[0], pair[1], nil)
+		if err != nil {
+			return true
+		}
+		for _, p := range changed {
+			if !strings.HasSuffix(p, "_test.go") && !strings.HasPrefix(p, "changes/") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // CheckoutBootstrapScript builds ./magus in a checkout at the checkout's own revision.

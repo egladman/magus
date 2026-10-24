@@ -432,32 +432,46 @@ func (s JobState) Editing() bool {
 // line.
 const MaxJobIDLen = 128
 
-// ValidJobID reports whether id may be stamped as a lease: letters, digits
-// and the separators -_./: a ledger row or a branch-shaped lease name uses, never empty,
-// at most [MaxJobIDLen] characters.
+// ValidJobID reports whether id may be stamped as a lease and checked out as a branch:
+// see [JobIDRule].
 //
-// The narrowness is a security property, not a naming preference. A lease id is EXEMPT
-// from the redaction internal/trail applies to every other event field, so every channel
-// that can stamp one (a lease marker, the BAGGAGE environment channel, a
-// producer's own field) has to pass its candidate through here first, or the exemption
-// becomes a way to carry a credential onto an event line.
-//
-// It lives beside [Job] rather than in the package that redacts, because the
-// ledger and the trail are two readers of one id: a validator owned by either would
-// leave the other free to accept an id the first would refuse.
-func ValidJobID(id string) bool {
-	if id == "" || len(id) > MaxJobIDLen {
-		return false
+// The narrowness is a security property: a lease id is EXEMPT from the redaction
+// internal/trail applies to every other event field, so every channel that stamps one
+// passes its candidate through here first. It lives beside [Job] because the ledger and
+// the trail both read the id.
+func ValidJobID(id string) bool { return JobIDRule(id) == "" }
+
+// JobIDRule names the rule id breaks, or returns "" for a valid id. The id is also the
+// branch ForkWorktree creates, so it is held to what every driver accepts as one:
+// lowercase letters, digits, '-' and '.', with '/' only between segments, no segment
+// empty or starting with '.' or '-', never ':' or '..', at most [MaxJobIDLen] characters.
+func JobIDRule(id string) string {
+	switch {
+	case id == "":
+		return "an id is not empty"
+	case len(id) > MaxJobIDLen:
+		return fmt.Sprintf("an id is at most %d characters", MaxJobIDLen)
+	case strings.Contains(id, ".."):
+		return "an id never contains .."
 	}
 	for _, c := range id {
 		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		case c == '-', c == '_', c == '.', c == '/', c == ':':
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '-', c == '.', c == '/':
+		case c == ':':
+			return "an id never contains ':'"
 		default:
-			return false
+			return "an id is lowercase letters, digits, '-', '.' and '/' between segments"
 		}
 	}
-	return true
+	for seg := range strings.SplitSeq(id, "/") {
+		switch {
+		case seg == "":
+			return "'/' goes between segments: an id neither starts nor ends with it, nor doubles it"
+		case seg[0] == '.' || seg[0] == '-':
+			return "no segment of an id starts with '.' or '-'"
+		}
+	}
+	return ""
 }
 
 // JobSchemaVersion is the version of the row shape this magus writes: stamped on every row
@@ -1178,9 +1192,8 @@ func (r Declaration) Problems() JobProblems {
 	invalid := func(field, message, fix string) {
 		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
 	}
-	if !ValidJobID(strings.TrimSpace(r.ID)) {
-		invalid("id", fmt.Sprintf("%q is not a lease id", r.ID),
-			fmt.Sprintf("use letters, digits and -_./: only, at most %d characters", MaxJobIDLen))
+	if rule := JobIDRule(strings.TrimSpace(r.ID)); rule != "" {
+		invalid("id", fmt.Sprintf("%q is not a lease id: %s", r.ID, rule), "name a branch-shaped id such as fix-parser or area/fix-parser")
 	}
 	if r.Enter != "" {
 		rest := r
@@ -1378,8 +1391,8 @@ func (g Goal) problems(field string) JobProblems {
 		}
 		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: at, Message: message, Fix: fix})
 	}
-	if !ValidJobID(strings.TrimSpace(g.ID)) {
-		bad("id", fmt.Sprintf("id %q is not a goal id", g.ID), "use letters, digits and -_./: only")
+	if rule := JobIDRule(strings.TrimSpace(g.ID)); rule != "" {
+		bad("id", fmt.Sprintf("id %q is not a goal id: %s", g.ID, rule), "use a lowercase, branch-shaped id")
 	}
 	// Validates what the row WILL BE, not what arrived: a declaration off the wire has not
 	// been through Resolve yet, and refusing it for naming no kind would refuse the

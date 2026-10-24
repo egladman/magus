@@ -22,9 +22,19 @@ func TestValidJobID(t *testing.T) {
 		id   string
 		want bool
 	}{
-		"plain":               {"MGS1021", true},
-		"every separator":     {"a.b:c_d-1/2", true},
+		"plain":               {"mgs1021", true},
+		"every separator":     {"a.b-1/2", true},
 		"branch shaped":       {"feat/spawn-capture", true},
+		"uppercase":           {"MGS1021", false},
+		"colon":               {"a:b", false},
+		"underscore":          {"a_b", false},
+		"double dot":          {"a..b", false},
+		"leading slash":       {"/a", false},
+		"trailing slash":      {"a/", false},
+		"doubled slash":       {"a//b", false},
+		"segment dot start":   {"a/.b", false},
+		"segment dash start":  {"a/-b", false},
+		"leading dash":        {"-a", false},
 		"at the length cap":   {strings.Repeat("u", MaxJobIDLen), true},
 		"past the length cap": {strings.Repeat("u", MaxJobIDLen+1), false},
 		"empty":               {"", false},

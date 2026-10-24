@@ -1112,16 +1112,16 @@ func (_c *MockVCSDriver_Conflicts_Call) RunAndReturn(run func(ctx context.Contex
 }
 
 // CreateCheckout provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) CreateCheckout(ctx context.Context, root string, dir string, rev string) error {
-	ret := _mock.Called(ctx, root, dir, rev)
+func (_mock *MockVCSDriver) CreateCheckout(ctx context.Context, root string, dir string, rev string, branch string) error {
+	ret := _mock.Called(ctx, root, dir, rev, branch)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateCheckout")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
-		r0 = returnFunc(ctx, root, dir, rev)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) error); ok {
+		r0 = returnFunc(ctx, root, dir, rev, branch)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1138,11 +1138,12 @@ type MockVCSDriver_CreateCheckout_Call struct {
 //   - root string
 //   - dir string
 //   - rev string
-func (_e *MockVCSDriver_Expecter) CreateCheckout(ctx interface{}, root interface{}, dir interface{}, rev interface{}) *MockVCSDriver_CreateCheckout_Call {
-	return &MockVCSDriver_CreateCheckout_Call{Call: _e.mock.On("CreateCheckout", ctx, root, dir, rev)}
+//   - branch string
+func (_e *MockVCSDriver_Expecter) CreateCheckout(ctx interface{}, root interface{}, dir interface{}, rev interface{}, branch interface{}) *MockVCSDriver_CreateCheckout_Call {
+	return &MockVCSDriver_CreateCheckout_Call{Call: _e.mock.On("CreateCheckout", ctx, root, dir, rev, branch)}
 }
 
-func (_c *MockVCSDriver_CreateCheckout_Call) Run(run func(ctx context.Context, root string, dir string, rev string)) *MockVCSDriver_CreateCheckout_Call {
+func (_c *MockVCSDriver_CreateCheckout_Call) Run(run func(ctx context.Context, root string, dir string, rev string, branch string)) *MockVCSDriver_CreateCheckout_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1160,11 +1161,16 @@ func (_c *MockVCSDriver_CreateCheckout_Call) Run(run func(ctx context.Context, r
 		if args[3] != nil {
 			arg3 = args[3].(string)
 		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -1175,7 +1181,7 @@ func (_c *MockVCSDriver_CreateCheckout_Call) Return(err error) *MockVCSDriver_Cr
 	return _c
 }
 
-func (_c *MockVCSDriver_CreateCheckout_Call) RunAndReturn(run func(ctx context.Context, root string, dir string, rev string) error) *MockVCSDriver_CreateCheckout_Call {
+func (_c *MockVCSDriver_CreateCheckout_Call) RunAndReturn(run func(ctx context.Context, root string, dir string, rev string, branch string) error) *MockVCSDriver_CreateCheckout_Call {
 	_c.Call.Return(run)
 	return _c
 }
