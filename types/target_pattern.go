@@ -82,11 +82,11 @@ func anchoredPattern(pat string, suffixShorthand bool) string {
 	quoted := regexp.QuoteMeta(pat)
 	if !strings.Contains(pat, "*") {
 		if suffixShorthand {
-			return `^.*-` + quoted + `$`
+			return fmt.Sprintf(`^.*-%s$`, quoted)
 		}
-		return `^` + quoted + `$`
+		return fmt.Sprintf(`^%s$`, quoted)
 	}
-	return `^` + strings.ReplaceAll(quoted, `\*`, `.*`) + `$`
+	return fmt.Sprintf(`^%s$`, strings.ReplaceAll(quoted, `\*`, `.*`))
 }
 
 func matchesAny(res []*regexp.Regexp, name string) bool {

@@ -333,7 +333,7 @@ func checkConformancePopulation(p ConformancePopulation) error {
 }
 
 func conformanceKeyName(k ConformanceKey) string {
-	name := string(k.Metric) + " " + string(k.Population)
+	name := fmt.Sprintf("%s %s", string(k.Metric), string(k.Population))
 	if k.Scope != "" {
 		name += " " + k.Scope
 	}

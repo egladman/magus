@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"go/scanner"
 	"go/token"
 	"regexp"
@@ -959,12 +960,12 @@ func (g KnowledgeSymbolGap) Describe() string {
 		detail = string(g.State)
 	}
 	if g.Language != "" {
-		detail = g.Language + " index " + detail
+		detail = fmt.Sprintf("%s index %s", g.Language, detail)
 	}
 	if g.Hint != "" {
 		detail += "; " + g.Hint
 	}
-	return g.Project.Display() + " (" + detail + ")"
+	return fmt.Sprintf("%s (%s)", g.Project.Display(), detail)
 }
 
 // DescribeGaps renders a gap list as "libs/api (not-indexed), docs (not-indexed)".
@@ -1002,7 +1003,7 @@ func (s KnowledgeStaleIndex) Describe() string {
 	if s.Language == "" {
 		return s.Project
 	}
-	return s.Project + " (" + s.Language + " index)"
+	return fmt.Sprintf("%s (%s index)", s.Project, s.Language)
 }
 
 // CouldHold reports whether this index could hold a symbol of language, on the same terms

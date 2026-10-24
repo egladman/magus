@@ -1,6 +1,9 @@
 package types
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // RiskTier is how much of a change's gate magus can prove unnecessary, lowest first. A
 // tier is only ever assigned on proof; a path magus cannot bound is RiskFull.
@@ -39,17 +42,17 @@ type RiskEvidence struct {
 func (e RiskEvidence) Line() string {
 	subject := e.Path
 	if subject == "" {
-		subject = strings.TrimSpace(e.Project + " " + e.Target)
+		subject = strings.TrimSpace(fmt.Sprintf("%s %s", e.Project, e.Target))
 	}
 	why := e.Why
 	if e.Class != "" {
-		why = e.Class + ": " + why
+		why = fmt.Sprintf("%s: %s", e.Class, why)
 	}
-	line := string(e.Tier) + " (" + why + ")"
+	line := fmt.Sprintf("%s (%s)", string(e.Tier), why)
 	if subject == "" {
 		return line
 	}
-	return subject + ": " + line
+	return fmt.Sprintf("%s: %s", subject, line)
 }
 
 // RiskGateStep is one runnable command of a sized gate. Argv is the whole command line;

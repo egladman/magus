@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // StatusBase holds the static portions of a StatusSnapshot: telemetry, cache, and
 // build-flag fields. It is populated by cmd/magus (which has access to the
@@ -23,7 +26,7 @@ type BuildInfo struct {
 
 // Fingerprint is the full human identity, matching what `magus --version` prints.
 func (b BuildInfo) Fingerprint() string {
-	return "magus " + b.Version + " (" + b.Commit + ") built " + b.Date
+	return fmt.Sprintf("magus %s (%s) built %s", b.Version, b.Commit, b.Date)
 }
 
 // StatusSnapshot is the canonical JSON/YAML shape returned by `magus status -o json`.

@@ -161,15 +161,15 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 
 	for _, k := range kinds {
 		t.Run(k, func(t *testing.T) {
-			require.Contains(t, tokens, "--console-node-"+k+":",
+			require.Contains(t, tokens, fmt.Sprintf("--console-node-%s:", k),
 				"tokens.css has no --console-node-%s; the kind would paint as the #888 fallback", k)
-			require.Contains(t, graphCSS, "--gk-"+k+": var(--console-node-"+k+")",
+			require.Contains(t, graphCSS, fmt.Sprintf("--gk-%s: var(--console-node-%s)", k, k),
 				"graph.css does not alias --gk-%s; main.ts reads the alias, not the token", k)
-			require.Contains(t, kindsArray, `"`+k+`"`,
+			require.Contains(t, kindsArray, fmt.Sprintf(`"%s"`, k),
 				"main.ts KINDS omits %q; the legend would not list it", k)
 			// Shape is the second channel color cannot carry (SC 1.4.1). A kind missing here
 			// falls back to a circle, which silently files it with the Code family.
-			require.Contains(t, shapesTS, "  "+k+": \"",
+			require.Contains(t, shapesTS, fmt.Sprintf("  %s: \"", k),
 				"shapes.ts SHAPE_BY_KIND omits %s; it would draw as an unexplained circle", k)
 		})
 	}
@@ -177,7 +177,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	// The dark override is a separate block that has gone stale on its own before, so every
 	// kind must appear TWICE in tokens.css: once light, once under .pf-v6-theme-dark.
 	for _, k := range kinds {
-		require.Equal(t, 2, strings.Count(tokens, "--console-node-"+k+":"),
+		require.Equal(t, 2, strings.Count(tokens, fmt.Sprintf("--console-node-%s:", k)),
 			"tokens.css must define --console-node-%s in both the light and dark blocks", k)
 	}
 
@@ -206,7 +206,7 @@ func requireNodeContrast(t *testing.T, tokens string, kinds []string) {
 		{"dark", tokens[split:], "#292929"},
 	} {
 		for _, k := range kinds {
-			t.Run(theme.name+"/"+k, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", theme.name, k), func(t *testing.T) {
 				hex, ok := nodeTokenValue(theme.css, k)
 				require.True(t, ok,
 					"no literal hex for --console-node-%s in the %s block; the palette is written as hex "+
@@ -223,7 +223,7 @@ func requireNodeContrast(t *testing.T, tokens string, kinds []string) {
 
 // nodeTokenValue pulls the hex literal off `--console-node-<kind>: #rrggbb;`.
 func nodeTokenValue(css, kind string) (string, bool) {
-	i := strings.Index(css, "--console-node-"+kind+":")
+	i := strings.Index(css, fmt.Sprintf("--console-node-%s:", kind))
 	if i < 0 {
 		return "", false
 	}

@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 // EntryPoint is where a request entered magus. magus reads it from its own dispatch,
 // never from anything the caller said about itself.
 type EntryPoint string
@@ -73,7 +75,7 @@ func phrase(what, name string) string {
 	if name == "" {
 		return ""
 	}
-	return what + " " + name
+	return fmt.Sprintf("%s %s", what, name)
 }
 
 // Names reports whether any channel of the origin (User, Host, Agent, the credential's
