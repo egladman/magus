@@ -440,7 +440,7 @@ func TestBuzzCmd_WorkDirMissingNamesTheDirectory(t *testing.T) {
 	} {
 		err := buzzCmd(t.Context(), "", args)
 		require.Error(t, err, "%v", args)
-		assert.Contains(t, err.Error(), "-C "+missing+": no such file or directory")
+		assert.Contains(t, err.Error(), fmt.Sprintf("-C %s: no such file or directory", missing))
 	}
 }
 
@@ -458,7 +458,7 @@ func TestSessionGlueAppendsTheWorkDirToTheEnvFile(t *testing.T) {
 
 	body, err := os.ReadFile(envFile)
 	require.NoError(t, err)
-	assert.Equal(t, "export A=1\nexport PATH=\""+repo+":$PATH\"\n", string(body))
+	assert.Equal(t, fmt.Sprintf("export A=1\nexport PATH=\"%s:$PATH\"\n", repo), string(body))
 }
 
 func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
@@ -961,7 +961,7 @@ func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
 	render := func(t *testing.T, command, event, decision string) string {
 		t.Helper()
 		body, _ := runGlue(t, "magus-command.buzz", glueArrangement{host: "codex", codex: true, rules: true,
-			event: `{"hook_event_name":"` + event + `","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"` + command + `"}}`})
+			event: fmt.Sprintf(`{"hook_event_name":"%s","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"%s"}}`, event, command)})
 		tmpl, err := template.New("glue").Funcs(templateFuncs()).Parse(body)
 		require.NoError(t, err)
 		var out strings.Builder
@@ -994,8 +994,8 @@ func TestGlueNeverRewritesTheCommand(t *testing.T) {
 	funcs := templateFuncs()
 	const input = `{"command":"git push","description":"push it","timeout":60000,"run_in_background":true}`
 	for _, tc := range []struct{ label, host, event string }{
-		{"claude-code", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":` + input + `}`},
-		{"codex", "codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":` + input + `}`},
+		{"claude-code", "claude-code", fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":%s}`, input)},
+		{"codex", "codex", fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":%s}`, input)},
 		{"a restated read", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`},
 	} {
 		t.Run(tc.label, func(t *testing.T) {
@@ -1114,11 +1114,11 @@ func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	t.Setenv(pprofEnv, "cpu:"+filepath.Join(dir, "top.pprof")+",mem:"+filepath.Join(dir, "own.%p"))
+	t.Setenv(pprofEnv, fmt.Sprintf("cpu:%s,mem:%s", filepath.Join(dir, "top.pprof"), filepath.Join(dir, "own.%p")))
 	stop := startProfiling()
 	inherited := os.Getenv(pprofEnv)
 	stop()
-	assert.Equal(t, "cpu:"+filepath.Join(dir, "top.pprof.%p")+",mem:"+filepath.Join(dir, "own.%p"), inherited)
+	assert.Equal(t, fmt.Sprintf("cpu:%s,mem:%s", filepath.Join(dir, "top.pprof.%p"), filepath.Join(dir, "own.%p")), inherited)
 	for _, name := range []string{"top.pprof", fmt.Sprintf("own.%d", os.Getpid())} {
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)

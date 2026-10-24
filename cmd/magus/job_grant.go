@@ -64,7 +64,7 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 	}
 	ends := "when the job ends"
 	if g.Until != 0 {
-		ends = "at " + time.Unix(g.Until, 0).Format(time.RFC3339) + " or when the job ends"
+		ends = fmt.Sprintf("at %s or when the job ends", time.Unix(g.Until, 0).Format(time.RFC3339))
 	}
 	fmt.Printf("granted %s to %s: the guard advises instead of refusing it, ending %s\n", rule, id, ends)
 	return nil
