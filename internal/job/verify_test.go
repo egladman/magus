@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -273,7 +274,7 @@ func TestVerifyNotesAMagusMaintainedPathOutsideTheWritePaths(t *testing.T) {
 
 	var out strings.Builder
 	RenderGates(&out, v)
-	assert.Contains(t, out.String(), "note: "+v.Notes[0]+"\n")
+	assert.Contains(t, out.String(), fmt.Sprintf("note: %s\n", v.Notes[0]))
 
 	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
 	v = verifyClaim(acceptRow(), rep, passingRun, nil)
