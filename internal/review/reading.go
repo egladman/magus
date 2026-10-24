@@ -1,6 +1,7 @@
 package review
 
 import (
+	"fmt"
 	"regexp"
 
 	"github.com/egladman/magus/types"
@@ -30,5 +31,5 @@ func ReadingCommand(at types.ReviewTarget, host string) string {
 	if githubLogin.MatchString(at.Viewer) {
 		who = at.Viewer
 	}
-	return "gh pr comment " + at.ID + " --repo " + at.Repo + " --body '" + who + " is reading this now'"
+	return fmt.Sprintf("gh pr comment %s --repo %s --body '%s is reading this now'", at.ID, at.Repo, who)
 }

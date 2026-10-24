@@ -49,7 +49,7 @@ func (h AnchorHit) Line() string {
 	if h.Drift == string(notes.StatusUngraded) {
 		marker = "ungraded"
 	}
-	return line + " [" + marker + "]"
+	return fmt.Sprintf("%s [%s]", line, marker)
 }
 
 // NoteDirs are the notes locations a workspace declares, as written in its config. An empty

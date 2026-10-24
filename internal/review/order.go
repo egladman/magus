@@ -117,7 +117,7 @@ func stepSignatures(rev types.Diff, step types.DiffStep) []string {
 					continue
 				}
 				for _, id := range h.Symbols {
-					key := f.Path + "\x00" + id
+					key := fmt.Sprintf("%s\x00%s", f.Path, id)
 					if seen[key] {
 						continue
 					}

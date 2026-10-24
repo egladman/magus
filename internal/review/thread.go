@@ -145,14 +145,14 @@ func ThreadRefLine(r types.DiffThreadRef) string {
 
 // ThreadLines renders a record for the person reading it in a terminal.
 func ThreadLines(t types.DiffThread) []string {
-	lines := []string{"thread " + t.ID + " on " + threadWhere(t), ""}
+	lines := []string{fmt.Sprintf("thread %s on %s", t.ID, threadWhere(t)), ""}
 	lines = append(lines, "conversation, oldest first, quoted from the review:")
 	for _, c := range t.Comments {
 		who := c.Author
 		if who == "" {
 			who = "unknown author"
 		}
-		lines = append(lines, "  "+who+":")
+		lines = append(lines, fmt.Sprintf("  %s:", who))
 		for l := range strings.SplitSeq(strings.TrimSpace(c.Body), "\n") {
 			lines = append(lines, "    > "+l)
 		}
@@ -296,7 +296,7 @@ func hunkSymbols(file types.DiffFile, head types.ReviewComment) ([]types.DiffSym
 func symbolNames(syms []types.DiffSymbol) []string {
 	out := make([]string, 0, len(syms))
 	for _, s := range syms {
-		out = append(out, "`"+changeset.SymbolName(s)+"`")
+		out = append(out, fmt.Sprintf("`%s`", changeset.SymbolName(s)))
 	}
 	return out
 }
@@ -327,7 +327,7 @@ func symbolLines(syms []types.DiffSymbol) []string {
 	for _, s := range syms {
 		facts := []string{}
 		if s.Signature != "" {
-			facts = append(facts, "defined as `"+s.Signature+"`")
+			facts = append(facts, fmt.Sprintf("defined as `%s`", s.Signature))
 		}
 		if s.Change != "" {
 			facts = append(facts, "this change: "+s.Change)
@@ -345,7 +345,7 @@ func symbolLines(syms []types.DiffSymbol) []string {
 		if callers := callerLines(s.PublicThrough); callers != "" {
 			facts = append(facts, callers)
 		}
-		out = append(out, "`"+changeset.SymbolName(s)+"` - "+strings.Join(facts, "; "))
+		out = append(out, fmt.Sprintf("`%s` - %s", changeset.SymbolName(s), strings.Join(facts, "; ")))
 	}
 	return out
 }
@@ -369,7 +369,7 @@ func callerLines(paths []types.DiffPublicPath) string {
 		if len(p.Via) > 0 {
 			name += " via " + strings.Join(p.Via, " -> ")
 		}
-		names = append(names, "`"+name+"` ("+p.Boundary+")")
+		names = append(names, fmt.Sprintf("`%s` (%s)", name, p.Boundary))
 	}
 	line := "reached through " + strings.Join(names, ", ")
 	if dropped := len(paths) - len(shown); dropped > 0 {
@@ -433,11 +433,11 @@ func threadGaps(in ThreadInput, file types.DiffFile, inChangeset bool) []string 
 		}
 	}
 	if e := rev.ConformanceError; e != nil {
-		gaps = append(gaps, "conformance: ["+e.Code+"] "+e.Message)
+		gaps = append(gaps, fmt.Sprintf("conformance: [%s] %s", e.Code, e.Message))
 	}
 	for _, u := range rev.Uncovered {
 		if u.Project == file.Project && file.Project != "" {
-			gaps = append(gaps, "conformance: not checked for `"+u.Project+"` ("+u.Reason.Sentence()+")")
+			gaps = append(gaps, fmt.Sprintf("conformance: not checked for `%s` (%s)", u.Project, u.Reason.Sentence()))
 		}
 	}
 	return append(gaps, rev.Notes...)
