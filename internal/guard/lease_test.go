@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -2132,6 +2134,88 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	assert.Equal(t, outcome{Decision: decisionPass, Rule: "", Lease: next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
 }
 
+// A holder whose job an apply widens from the orchestrator's checkout keeps its binding,
+// running or exited: the wider paths are its follow-up, and the sweeps the next reads run
+// leave the record alone, so its next write in its own checkout is graded under its job.
+func TestAWideningApplyKeepsTheHoldersBinding(t *testing.T) {
+	for _, state := range []types.JobState{types.StateRunning, types.StateExited} {
+		t.Run(string(state), func(t *testing.T) {
+			ctx, session := fleetFixture(t)
+			own := t.TempDir()
+			for _, dir := range []string{session, own} {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+			}
+			store := storeAt(ctx)
+			_, err := store.Update(ctx, "held-job", func(cur *types.Job) {
+				*cur = types.Job{ID: "held-job", Criteria: "widen me", WritePaths: []string{"std/*.go"}, State: state,
+					Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: own}
+			})
+			require.NoError(t, err)
+			_, err = store.RecordWorktree(ctx, "held-job", types.JobWorktree{Root: own, Source: session})
+			require.NoError(t, err)
+			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+			bindCaller(t, ctx, who, "held-job")
+
+			widen := types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "held-job", Criteria: "widen me",
+				Checkpoint: "rev-a", WritePaths: []string{"std/*.go", "cmd/*.go"},
+				Goals: []types.Goal{{ID: "done", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
+			_, err = job.Apply(ctx, store, []types.Declaration{widen}, config.Jobs{}, nil, nil, false)
+			require.NoError(t, err)
+			_, err = store.List()
+			require.NoError(t, err)
+
+			at := hookLocation(ctx, Dependencies{})
+			assert.Equal(t, job.Binding{Job: "held-job"}, boundJob(who, at), "the widening keeps the binding")
+			edit := map[string]any{"file_path": filepath.Join(own, "cmd", "main.go"), "old_string": "a", "new_string": "b"}
+			write := hookJSON(t, map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": own,
+				"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
+			v := Judge(ctx, Dependencies{}, Request{Input: write, Host: who.Host})
+			assert.Equal(t, []string{"held-job", ""}, []string{v.Lease, v.Rule}, "the holder's write to a widened path: %s", v.Reason)
+		})
+	}
+}
+
+// A refusal for an ended binding names `job exec` as the way back, so every spelling of
+// that command a worker types runs, as does reading the stored verdict the refusal cites.
+func TestATombstonedBindingAllowsTheFixItNames(t *testing.T) {
+	gone := t.TempDir()
+	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, CheckoutRoot: gone, Registered: 1, ReportedBase: "77aa01c"}
+	ctx, root := fleetFixture(t, held)
+	at := hookLocation(ctx, Dependencies{})
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(t, ctx, who, held.ID)
+	require.NoError(t, os.RemoveAll(gone))
+	_, err := job.NewStore(at.jobs()).List()
+	require.NoError(t, err)
+	b := boundJob(who, at)
+	require.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
+
+	client := func(script string) string {
+		return hookJSON(t, map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": root,
+			"hook_event_name": "PreToolUse", "tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; ` + script}})
+	}
+	for name, input := range map[string]string{
+		"exec":                bashCall(t, who.Session, who.Agent, "./magus job exec held-job"),
+		"exec under --root":   bashCall(t, who.Session, who.Agent, fmt.Sprintf("./magus --root %s job exec held-job", root)),
+		"exec after cd":       bashCall(t, who.Session, who.Agent, fmt.Sprintf("cd %s && ./magus --root %s job exec held-job", root, root)),
+		"exec silenced":       bashCall(t, who.Session, who.Agent, fmt.Sprintf("./magus -s --root %s job exec held-job", root)),
+		"the stored verdict":  bashCall(t, who.Session, who.Agent, "./magus query output grd94c475825232117d"),
+		"the job's terms":     bashCall(t, who.Session, who.Agent, "./magus describe job held-job"),
+		"client exec":         client(`magus\cmd("job", args: ["exec", "held-job"]);`),
+		"exec by path":        bashCall(t, who.Session, who.Agent, fmt.Sprintf("%s/magus --root %s job exec held-job", root, root)),
+		"exec under baggage":  bashCall(t, who.Session, who.Agent, "BAGGAGE=magus.lease=held-job ./magus job exec held-job"),
+		"exec running work":   bashCall(t, who.Session, who.Agent, "./magus job exec held-job -- ./magus describe job held-job"),
+		"exec with stdin":     bashCall(t, who.Session, who.Agent, "./magus job exec held-job --stdin <<'EOF'\n{}\nEOF"),
+		"exec then describe":  bashCall(t, who.Session, who.Agent, "./magus job exec held-job && ./magus describe job held-job"),
+		"exec through bash":   bashCall(t, who.Session, who.Agent, `bash -c "./magus job exec held-job"`),
+		"verdict after cd":    bashCall(t, who.Session, who.Agent, fmt.Sprintf("cd %s && ./magus query output grd94c475825232117d", root)),
+	} {
+		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host})
+		assert.NotEqual(t, string(denyRuleLeaseUndeclared), v.Rule, "%s: %s", name, v.Reason)
+	}
+}
+
 // A caller whose job ends is unbound from then on: a binding nothing released graded it
 // under a row it had finished with, so its next fork was refused as outside that row's
 // tree, and once the row was removed every shell line it ran was refused as acting under
@@ -3065,5 +3149,41 @@ func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
 		}
 		require.NotEmpty(t, reason, tt.name)
 		assert.Contains(t, reason.Say, "held by live lease "+tt.holder+"; run `"+hint.JobWait.With(tt.holder)+"`.", tt.name)
+	}
+}
+
+// An output the VCS ignores is a file of each checkout, never of the change: a lease taken
+// in another checkout regenerates its own copy, so only a holder in the same checkout, or
+// any holder of an output the change commits, makes the run wait.
+func TestWorkerRegenerateWaitsOnlyForAHolderOfTheSameCopy(t *testing.T) {
+	deps := regeneratingWorkspace(t)
+	elsewhere := t.TempDir()
+	for _, tt := range []struct {
+		name     string
+		checkout func(root string) string
+		ignore   string
+		want     string
+	}{
+		{"an ignored output regenerated in another checkout", func(string) string { return elsewhere }, "testdata/api.lock\n", ""},
+		{"an ignored output regenerated in the same checkout", func(root string) string { return root }, "testdata/api.lock\n",
+			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; run `magus job wait a/first`."},
+		{"a committed output regenerated in another checkout", func(string) string { return elsewhere }, "",
+			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; run `magus job wait a/first`."},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			first, row := regeneratingLease("a/first"), regeneratingLease("z/flag")
+			ctx, root := fleetFixture(t)
+			first.CheckoutRoot, row.CheckoutRoot = tt.checkout(root), root
+			store := storeAt(ctx)
+			for _, r := range []types.Job{first, row} {
+				_, err := store.Update(ctx, r.ID, func(cur *types.Job) { *cur = r })
+				require.NoError(t, err)
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(tt.ignore), 0o644))
+			out, err := exec.Command("git", "-C", root, "init", "-q").CombinedOutput()
+			require.NoError(t, err, "%s", out)
+
+			assert.Equal(t, tt.want, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run api-generate:rw .").Say)
+		})
 	}
 }
