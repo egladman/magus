@@ -84,7 +84,7 @@ func mintSecret(kind types.CredentialKind) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return prefix + body + check, nil
+	return fmt.Sprintf("%s%s%s", prefix, body, check), nil
 }
 
 func checksum(body string) (string, error) {
