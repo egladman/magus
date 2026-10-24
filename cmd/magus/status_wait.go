@@ -25,6 +25,9 @@ import (
 // awaitBudget is `status --wait`. The gate goes up before anything slow, since the run
 // reading the pipe looks for it once, on its way to its locks. A magus reading stdout
 // gets the seat reserved for it; anything else is only told the budget has room.
+//
+// TODO: pass status's --deadline to withinDeadline once internal/commands/registry.go
+// declares the flag; until then the wait has no bound.
 func awaitBudget(ctx context.Context, rootOverride string) error {
 	if root, err := workspace.FindRoot(rootOverride); err == nil {
 		pipe.Gate(root, globalCfg)
@@ -41,16 +44,44 @@ func awaitBudget(ctx context.Context, rootOverride string) error {
 	for i := range claims {
 		claims[i].Weight = weight
 	}
-	var err error
-	if reader == 0 {
-		err = cache.AwaitMachine(ctx, queryCapacity, claims, waiting)
-	} else {
-		err = reserveSeat(ctx, reader, argv, claims, waiting)
-	}
+	err := withinDeadline(ctx, 0, queryCapacity, func(ctx context.Context) error {
+		if reader == 0 {
+			return cache.AwaitMachine(ctx, queryCapacity, claims, waiting)
+		}
+		return reserveSeat(ctx, reader, argv, claims, waiting)
+	})
 	if err == nil && waited {
 		slog.InfoContext(ctx, fmt.Sprintf("the build budget can seat it now, after %s", time.Since(start).Round(time.Second)), attr.Notice(""), attr.Component("magus"))
 	}
 	return err
+}
+
+// withinDeadline runs wait bounded by deadline, a zero one never. Past it, the wait is
+// refused with each run snapshot shows holding the budget, so a caller that may wait says
+// how long and learns whom it waited on.
+func withinDeadline(ctx context.Context, deadline time.Duration, snapshot func(context.Context) (types.MachineSnapshot, error), wait func(context.Context) error) error {
+	if deadline <= 0 {
+		return wait(ctx)
+	}
+	bounded, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+	err := wait(bounded)
+	if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+		return err
+	}
+	s, serr := snapshot(ctx)
+	if serr != nil {
+		return fmt.Errorf("the build budget had no seat within %s; who holds it could not be read: %w", deadline, serr)
+	}
+	holders := make([]string, len(s.Holders))
+	for i, h := range s.Holders {
+		what := fmt.Sprintf("%s %s", h.Target, h.Project)
+		if h.Command != "" {
+			what = fmt.Sprintf("`%s`", h.Command)
+		}
+		holders[i] = fmt.Sprintf("pid %d (%s) for %s", h.PID, what, time.Since(h.Since).Round(time.Second))
+	}
+	return fmt.Errorf("the build budget had no seat within %s; it is held by %s", deadline, strings.Join(holders, ", "))
 }
 
 // reserveSeat waits until the broker can seat claims and has it hold the seat for the
