@@ -142,7 +142,7 @@ func (s *server) holdLocked(sess *session, h Hold) string {
 	}
 	if h.Claim != "" {
 		h.Lease = sess.hello.Lease
-		id := h.Claim + "/pgid " + strconv.Itoa(h.PGID)
+		id := fmt.Sprintf("%s/pgid %s", h.Claim, strconv.Itoa(h.PGID))
 		sess.holds[id] = &heldWork{hold: h, work: Work{
 			Kind: WorkRun, Lease: h.Lease, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command, Since: h.Held,
 		}}
@@ -333,7 +333,7 @@ func inspectProcess(pid int) (started time.Time, group int, err error) {
 // inspectLinuxProcess reads /proc/<pid>/stat: the group is its fifth field and the
 // start, in clock ticks after boot, its twenty-second.
 func inspectLinuxProcess(pid int) (time.Time, int, error) {
-	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	stat, err := os.ReadFile(fmt.Sprintf("/proc/%s/stat", strconv.Itoa(pid)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return time.Time{}, 0, errLeaderGone
 	}
@@ -545,7 +545,7 @@ func (c *Client) HoldGroup(ctx context.Context, claim string, pgid int, command 
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		hold.Root = ws.Root()
 	}
-	id := claim + "/pgid " + strconv.Itoa(pgid)
+	id := fmt.Sprintf("%s/pgid %s", claim, strconv.Itoa(pgid))
 	r := &heldRider{claim: claim, hold: hold}
 	c.mu.Lock()
 	h, ok := c.held[claim]

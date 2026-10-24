@@ -5,6 +5,7 @@ package broker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -125,7 +126,7 @@ func TestActivationServesTheSupervisorsSocket(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
-	cmd.Env = append(os.Environ(), activatedEnv+"="+addr, envListenFDs+"=1")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", activatedEnv, addr), envListenFDs+"=1")
 	cmd.ExtraFiles = []*os.File{f}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr

@@ -157,7 +157,9 @@ type HandshakeError struct {
 	Err  error
 }
 
-func (e *HandshakeError) Error() string { return "handshake via " + e.Path + ": " + e.Err.Error() }
+func (e *HandshakeError) Error() string {
+	return fmt.Sprintf("handshake via %s: %s", e.Path, e.Err.Error())
+}
 
 func (e *HandshakeError) Unwrap() error { return e.Err }
 
