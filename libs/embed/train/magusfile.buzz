@@ -28,6 +28,7 @@ magus\project({
         "teacher-parity": {"skip_cache": "reads reference vectors from the cache root, outside the tree"},
         "convert": {"skip_cache": "reads potion from the cache root and writes the table there, outside the tree"},
         "table": {"skip_cache": "hashes the table convert writes to the cache root, outside the tree"},
+        "bench": {"skip_cache": "reads the exported subsets under the cache root and writes teacher shards and runs there, outside the tree"},
     },
 });
 
@@ -160,6 +161,41 @@ export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
 // reports texts/s. Needs `-- -model <name>`.
 export fun teacher_parity(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher-parity"] + args});
+}
+
+// Runs one teacher over the external harness's exported subsets under the cache root's
+// bench/ and writes its TREC runs beside them, where `MAGUS_EXTERNAL_EVAL=all` with
+// `-run TestExternalEval` in libs/embed fuses and scores them into evals.jsonl. The
+// teacher is CodeRankEmbed with its query prompt, the ceiling, unless args name another
+// with `-model <name>`; `-subset <dir>` runs one directory instead of the five. A
+// multi-hour pass that needs the machine alone. Manual, never part of ci.
+export fun bench(ctx: magus\Context, args: [str]) > void !> any {
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
+    var model = "CodeRankEmbed";
+    final dirs: mut [str] = mut [];
+    final rest: mut [str] = mut [];
+    var skip = false;
+    foreach (i, arg in args) {
+        if (skip) {
+            skip = false;
+        } else if (arg == "-model" and i + 1 < args.len()) {
+            model = args[i + 1];
+            skip = true;
+        } else if (arg == "-subset" and i + 1 < args.len()) {
+            dirs.append(args[i + 1]);
+            skip = true;
+        } else {
+            rest.append(arg);
+        }
+    }
+    if (dirs.len() == 0) {
+        foreach (name in ["cosqa-dedup", "stackoverflow-qa", "csn-python", "csn-go", "ccr-go"]) {
+            dirs.append(fs\join(cache, "bench", name: name));
+        }
+    }
+    foreach (dir in dirs) {
+        go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "bench", "-cache", cache, "-model", model, "-subset", dir] + rest});
+    }
 }
 
 // Distills and trains the table from finished teacher runs, with the flags `embed train
