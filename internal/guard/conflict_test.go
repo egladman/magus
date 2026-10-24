@@ -98,12 +98,12 @@ func TestConflictRewriteDeniesWithoutTheWorkspaceTable(t *testing.T) {
 	assert.Equal(t, denyRuleConflictRewrite, v.Rule.Name)
 	assert.NotEmpty(t, v.Deny)
 
-	clean := judgeShellLine(t.Context(), Dependencies{}, at, at.dir, `python3 -c "open('internal/agent/clean.go','w').write(x)"`, DialectBash)
+	clean := judgeShellLine(t.Context(), Dependencies{}, at, at.dir, `awk '{print > "internal/agent/clean.go"}' in.txt`, DialectBash)
 	assert.Equal(t, denyRuleInterpreterRewrite, clean.Rule.Name, "a clean file stays interpreter-rewrite's")
 }
 
 func TestRankConflictRewrite(t *testing.T) {
-	for _, rule := range []denyRuleName{denyRuleInterpreterRewrite, denyRuleScriptedRewrite} {
+	for _, rule := range []denyRuleName{denyRuleInterpreterRewrite, denyRuleInterpreterScript} {
 		got := rankConflictRewrite(ShellVerdict{Deny: "less specific", Rule: denyRule{Name: rule}}, "conflict reason")
 		assert.Equal(t, denyRuleConflictRewrite, got.Rule.Name, "outranks %s", rule)
 	}

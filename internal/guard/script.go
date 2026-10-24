@@ -22,7 +22,7 @@ import (
 // how an agent drives magus and edits files. The rest stay inline-only, because a
 // workspace's own committed scripts legitimately run raw tools and git.
 var scriptJudgedRules = []denyRuleName{
-	denyRuleBusyWait, denyRuleScriptedRewrite, denyRuleThrowawayCopy,
+	denyRuleBusyWait, denyRuleInterpreterScript, denyRuleThrowawayCopy,
 	denyRuleOutputPipe, denyRuleOutputRedirect, denyRuleUnknownEnv,
 }
 
@@ -35,8 +35,8 @@ type scriptLang int
 const (
 	scriptNone scriptLang = iota
 	scriptShell
-	// scriptInterpreter is python, perl, ruby or node: the scripted-rewrite rule is the
-	// one inline rule that reads their programs.
+	// scriptInterpreter is python, perl, ruby or node: interpreter-script is the one inline
+	// rule that reads their programs.
 	scriptInterpreter
 	// scriptBuzz is a program `magus buzz` runs, judged by the files its fs writes replace.
 	scriptBuzz
@@ -120,7 +120,7 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 		}
 	case scriptInterpreter:
 		if scriptRewrites(body) && !allOutside(deps.scope, scriptPaths(body)) {
-			return deps.grade(ShellVerdict{Deny: denyScriptedRewrite, Why: denyScriptedRewriteWhy, Rule: denyRule{Name: denyRuleScriptedRewrite}})
+			return deps.grade(interpreterScriptVerdict(""))
 		}
 	case scriptBuzz:
 		// The verdict an inline interpreter gets for replacing a file the tree carries: fs
@@ -131,6 +131,11 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 				Rule: denyRule{Name: denyRuleInterpreterRewrite},
 			})
 		}
+		var held heldAdvice
+		if v, ok := buzzProgramSpawnVerdict(deps, &held, body); ok {
+			return v
+		}
+		return held.v
 	}
 	return ShellVerdict{}
 }

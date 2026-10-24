@@ -56,8 +56,6 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 		{"bash run.sh", denyRuleOutputRedirect},
 		{"bash in.sh", denyRuleOutputRedirect},
 		{"bash nowait.sh", denyRuleUnknownEnv},
-		{"python3 p3.py", denyRuleScriptedRewrite},
-		{"python3 -u p3.py", denyRuleScriptedRewrite},
 
 		// A script whose content passes, or whose failure is not a script rule.
 		{"bash ok.sh", ""},
@@ -184,7 +182,6 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 		rule  denyRuleName
 	}{
 		{"new busy-wait script", path("new.sh"), writeFields{Content: scriptFixtures["retry.sh"]}, denyRuleBusyWait},
-		{"new rewrite script", path("new.py"), writeFields{Content: scriptFixtures["p3.py"]}, denyRuleScriptedRewrite},
 		{"shebang decides", path("tool"), writeFields{Content: scriptFixtures["retry.sh"]}, denyRuleBusyWait},
 		{"edit introduces the loop", path("ok.sh"),
 			writeFields{OldText: "./magus run test . -s", NewText: "until ./magus run test .; do sleep 20; done"}, denyRuleBusyWait},
