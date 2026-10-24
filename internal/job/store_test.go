@@ -1411,6 +1411,31 @@ func TestStoreRefusesAWriterOlderThanTheStamp(t *testing.T) {
 	assert.ErrorContains(t, err, "this magus has no commit stamp")
 }
 
+// The fork door writes through InWorkspace and the daemon's job tool through As; each
+// builds its view field by field, and one that carried the stamp resolved at NewStore lost
+// it, refusing every write under the build that last wrote the file.
+func TestStoreViewsWriteAsTheRunningBuild(t *testing.T) {
+	stamped := types.MagusBuild{Commit: "5ad8", Date: "2026-10-23T23:09:10-04:00"}
+	was := runningBuild
+	runningBuild = func() types.MagusBuild { return stamped }
+	t.Cleanup(func() { runningBuild = was })
+
+	loc := tempLocation(t, t.TempDir())
+	s := NewStore(loc)
+	_, err := s.Update(t.Context(), "A", func(cur *types.Job) { *cur = lease("A") })
+	require.NoError(t, err)
+
+	for name, view := range map[string]*Store{"InWorkspace": s.InWorkspace(Workspace{}), "As": s.As(Actor{})} {
+		_, err := view.Update(t.Context(), name, func(cur *types.Job) { *cur = lease(name) })
+		require.NoError(t, err, name)
+	}
+	f, err := s.read()
+	require.NoError(t, err)
+	require.NotNil(t, f.Writer)
+	assert.Equal(t, "5ad8", f.Writer.Commit)
+	assert.Len(t, f.Jobs, 3)
+}
+
 func TestStoreHandsTheStampToANewerWriter(t *testing.T) {
 	loc := tempLocation(t, t.TempDir())
 	for _, b := range []types.MagusBuild{
