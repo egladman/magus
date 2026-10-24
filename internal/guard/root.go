@@ -217,10 +217,19 @@ var mergeBaseScript = referenceScript{
 
 // integrationScriptNote names the merge scripts after a merge or cherry-pick, in the
 // finding's first line so the once-per-session advice keeps them. A merge is served both:
-// the line alone cannot say whether it brings the base in or lands a job branch.
+// the line alone cannot say whether it brings the base in or lands a job branch. A reset or
+// a rebase is a root folding a worker's commits, which is the integrator's to run.
 func integrationScriptNote(c mainCall) string {
 	if c.work != delegableIntegrate {
 		return ""
+	}
+	if cmds, ok := ParseCommands(c.line); ok && slices.ContainsFunc(cmds, func(inv hint.Invocation) bool {
+		sub, _ := vcsSubcommand(inv)
+		return inv.Name == "git" && (sub == "reset" || sub == "rebase")
+	}) {
+		return " Folding a worker's commits is the integrator's: fork an integration job (`" +
+			hint.JobFork.With("--stdin") + "` with `\"integrates\": [\"<branch>\"]`) or spawn `<root>/integrate <job>` in the job's checkout, " +
+			"which runs the fold there: `git reset --soft <checkpoint>`, then one commit."
 	}
 	var scripts []referenceScript
 	switch {
