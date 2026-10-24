@@ -137,7 +137,7 @@ func Publish(dir, name, ext string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("write %s: %w", tmp.Name(), err)
 	}
 
-	path := filepath.Join(dir, name+"."+ext)
+	path := filepath.Join(dir, fmt.Sprintf("%s.%s", name, ext))
 	if err := os.Link(tmp.Name(), path); err != nil {
 		if os.IsExist(err) {
 			return fmt.Errorf("%q: %w", name, fs.ErrExist)
