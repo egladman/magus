@@ -418,7 +418,7 @@ it reports back. A brief that leaves it out gets a prose report and a row that n
 moves{{if .Full}}: the store keeps the write paths held, `{{cmd "job wait"}}`
 has nothing to verify, and nobody notices until a sibling is refused over a path
 the finished worker no longer needs{{end}}. The step: `{{cmd "job exit"}} <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
+`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
 `unresolved_risks`; `{{cmd "job exit"}} --schema` prints the shape{{if .Full}}, and
 [reference.md](reference.md) shows a record{{end}}.
 {{if .Full}}A typed result makes verification mechanical. {{end}}Keep unresolved risks mandatory{{if .Full}}, so a
