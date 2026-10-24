@@ -511,6 +511,8 @@ func orchestrationLines(notes string) []string {
 		"./magus diff --impact",
 		"./magus status",
 		"./magus affected ci",
+		// A fresh checkout runs no gate until its dependencies are installed (gap 219).
+		"./magus run install /",
 		"./magus query output grd0123456789ab",
 		"./magus query output out1 --identity",
 		`./magus buzz -e 'import "magus"; magus\job.put("a1", opts: {"parent": "root"});'`,
@@ -554,6 +556,7 @@ var groundworkLines = []struct {
 	{"./magus diff", types.DelegableDiff},
 	{"./magus run go-test . -s", types.DelegableRun},
 	{"./magus run lint docs", types.DelegableRun},
+	{"./magus run install:rw /", types.DelegableRun},
 	{"./magus affected test --silent", types.DelegableRun},
 	{`./magus buzz -e 'import "fs"; print(fs\readFile("a"));'`, types.DelegableRun},
 	{`./magus buzz -e 'import "magus"; magus\run(["test", "."]);'`, types.DelegableRun},
