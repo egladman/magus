@@ -520,10 +520,13 @@ func TestSessionBriefListsTheJobTreeForkedFromThisCheckout(t *testing.T) {
 		Next:      "waits on plan/exited (exited)",
 	}, brief.Jobs.Jobs[2])
 
+	// A CI gate's TMPDIR puts work past briefTextWidth, where briefLine clips it.
+	var planLine strings.Builder
+	briefLine(&planLine, "  plan (running) in %s", work)
 	text := brief.Text()
 	for _, want := range []string{
 		"jobs forked from this checkout:",
-		"  plan (running) in " + work,
+		planLine.String(),
 		"    plan/exited (exited) no checkout yet",
 		"      risk: merge is the root's",
 		"      next: collect it: " + hint.JobWait.With("plan/exited"),
