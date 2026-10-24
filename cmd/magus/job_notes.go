@@ -49,10 +49,9 @@ func judgedMerge(row types.Declaration) func(*types.Job) {
 	}
 }
 
-// fixFork is [job.FixFork] over the merge a fork validates, noting each edit it made. Only a
-// fork into its own checkout refreshes a checkpoint.
+// fixFork is [job.FixFork] over the merge a fork validates, noting each edit it made.
 func fixFork(ctx context.Context, store *job.Store, row types.Declaration, read job.SymbolReader) (types.Declaration, error) {
-	fixed, edits, err := job.FixFork(ctx, store, row, judgedMerge, globalCfg.Jobs, read, row.Checkout != "")
+	fixed, edits, err := job.FixFork(ctx, store, row, judgedMerge, globalCfg.Jobs, read)
 	for _, e := range edits {
 		slog.InfoContext(ctx, e.String(), attr.Notice("fixed"))
 	}

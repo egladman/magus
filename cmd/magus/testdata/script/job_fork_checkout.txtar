@@ -1,7 +1,6 @@
 # `magus job fork --checkout <dir>` makes the job's own checkout at the forker's revision
 # and records it on the job. The job is taken there and nowhere else, and once it ends
-# magus removes the checkout when it holds no work. --fix moves a checkpoint the forker
-# cannot place to its HEAD.
+# magus removes the checkout when it holds no work.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 env GIT_AUTHOR_NAME=Ana
@@ -59,15 +58,11 @@ exec magus job fork sibling --read-only --criteria 'read the pricing code' --che
 stdout '^checkout .*sibling: made for job sibling at '
 exists $WORK/sibling/magusfile.buzz
 
-# A checkpoint this checkout cannot place (MGS3041) is refused; --fix starts the job's own
-# checkout from this checkout's HEAD instead, and says so.
+# A checkpoint this checkout cannot place (MGS3041) is refused, and --fix does not move it
+# (job_fork_fix_checkpoint.txtar).
 ! exec magus job fork moved --read-only --criteria 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved
 stderr '\[MGS3041\] checkpoint: checkpoint "0123456789abcdef0123456789abcdef01234567" names no revision this repository holds'
 ! exists $WORK/moved
-exec magus job fork moved --read-only --criteria 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved --fix
-stderr '^fixed: refreshed the checkpoint to [0-9a-f]{40}, this checkout.s HEAD$'
-stdout '^checkout .*moved: made for job moved at '
-exists $WORK/moved/magusfile.buzz
 
 -- runs-rewritten --
 rewritten
