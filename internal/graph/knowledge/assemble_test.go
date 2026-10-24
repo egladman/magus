@@ -591,6 +591,9 @@ fun aFigure() > figure\Figure !> any {
 		{Key: "go/pkg-a/gadget", Label: "gadget", Language: "go", SymbolKind: "struct",
 			Source: "pkg/a/build.go:40", Defs: []string{"pkg/a/build.go"},
 			Implements: []string{"go/pkg-a/Builder"}},
+		// splits: build_cache.go beside build.go.
+		{Key: "go/pkg-a/cacheKey", Label: "cacheKey", Language: "go", SymbolKind: "function",
+			Source: "pkg/a/build_cache.go:3", Defs: []string{"pkg/a/build_cache.go"}},
 	}}
 	// depends_on, in its project -> package shape, which no other input produces.
 	in.Packages = map[string][]types.KnowledgePackage{"pkg/a": {
@@ -766,6 +769,48 @@ const (
 	benchProjects = 2000
 	benchTargets  = 8
 )
+
+// splitSymbols is one package whose root r.go has a sibling of every class, a concept
+// sibling that shares nothing with it, and a test of a sibling.
+func splitSymbols() []types.KnowledgeSymbol {
+	const (
+		pkg                       = "/internal/r"
+		root, cache, tasks, linux = "internal/r/r.go", "internal/r/r_cache.go", "internal/r/r_tasks.go", "internal/r/r_linux.go"
+		test, cacheTest, pb       = "internal/r/r_test.go", "internal/r/r_cache_test.go", "internal/r/r_grpc.pb.go"
+	)
+	return []types.KnowledgeSymbol{
+		conformancePkg(pkg, []string{root, cache, tasks, linux, test, cacheTest, pb}),
+		conformanceSym(pkg, "Do().", root, 3, 12, 600, "S1", 90, cache, test),
+		conformanceSym(pkg, "cacheKey().", cache, 3, 12, 300, "S2", 90, cacheTest),
+		conformanceSym(pkg, "Tasks().", tasks, 3, 12, 500, "S3", 90),
+		conformanceSym(pkg, "stat().", linux, 3, 5, 20, "S4", 40),
+		conformanceSym(pkg, "TestDo().", test, 3, 12, 80, "S5", 90),
+		conformanceSym(pkg, "TestCacheKey().", cacheTest, 3, 12, 60, "S6", 90),
+		conformanceSym(pkg, "Server#", pb, 3, 12, 900, "", 0),
+	}
+}
+
+func TestSplitEdges(t *testing.T) {
+	t.Parallel()
+
+	sh := assembleSymbols(".", splitSymbols(), nil)
+	got := map[string]map[string]string{}
+	for _, e := range splitEdges(sh.Nodes, sh.Edges) {
+		require.Equal(t, types.RelationSplits, e.Relation)
+		got[e.Source+" -> "+e.Target] = e.Attrs
+	}
+	split := func(suffix, class string, coupled bool) map[string]string {
+		return map[string]string{attrSplitSuffix: suffix, attrSplitClass: class, attrSplitCoupled: fmt.Sprint(coupled)}
+	}
+	assert.Equal(t, map[string]map[string]string{
+		"file:internal/r/r_cache.go -> file:internal/r/r.go":            split("cache", splitConcept, true),
+		"file:internal/r/r_tasks.go -> file:internal/r/r.go":            split("tasks", splitConcept, false),
+		"file:internal/r/r_linux.go -> file:internal/r/r.go":            split("linux", splitPlatform, false),
+		"file:internal/r/r_grpc.pb.go -> file:internal/r/r.go":          split("grpc.pb", splitGenerated, false),
+		"file:internal/r/r_test.go -> file:internal/r/r.go":             split("test", splitTest, true),
+		"file:internal/r/r_cache_test.go -> file:internal/r/r_cache.go": split("test", splitTest, true),
+	}, got)
+}
 
 func BenchmarkAssembleShards(b *testing.B) {
 	in := syntheticInputs(benchProjects, benchTargets)

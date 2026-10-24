@@ -217,6 +217,25 @@ func TestLeasedBoundarySkipsAnExitedRow(t *testing.T) {
 	assert.Equal(t, []string{"internal/hint"}, owners)
 }
 
+// A soft path is free until its holder writes it, so a sibling's terms leave it in reach.
+func TestLeasedBoundarySkipsASoftPath(t *testing.T) {
+	t.Parallel()
+
+	held := types.Job{ID: "b", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}
+	soft := held
+	soft.SoftPaths = []string{"internal/job/plan_test.go"}
+	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job/plan_test.go"}}
+	owned := func(other types.Job) []string {
+		var out []string
+		for _, b := range leasedBoundary(me, []types.Job{me, other}) {
+			out = append(out, b.Path)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"internal/job/plan.go"}, owned(soft))
+	assert.Equal(t, []string{"internal/job/plan.go", "internal/job/plan_test.go"}, owned(held), "a hardened path is owned")
+}
+
 func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	t.Parallel()
 
@@ -642,6 +661,83 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	require.NotNil(t, rows[i].Worktree)
 	assert.Equal(t, own, rows[i].Worktree.Root)
 	assert.DirExists(t, own)
+}
+
+// A row forked from inside a job's checkout got no worktree record, so the guard refused
+// its holder's magus there as a sibling; an integration row forked from the forker's own
+// linked checkout bound its integrator to the forker's tree.
+func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
+	resetWorkspaceMemo(t)
+	repo, cacheDir := execRepoFixture(t)
+	root := repo.Root()
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+	fork := func(at, stdin string, args ...string) error {
+		resetStartupSingletons()
+		writeStdin(t, stdin)
+		return jobFork(t.Context(), at, append([]string{"--stdin"}, args...))
+	}
+	record := func(id, path string) string {
+		return fmt.Sprintf(`{"schema_version": %d, "id": %q, "write_paths": [%q], "check": {"target": "test", "project": "."}}`,
+			types.JobSchemaVersion, id, path)
+	}
+
+	own := filepath.Join(t.TempDir(), "own")
+	captureStdout(t, func() { require.NoError(t, fork(root, record("integrate", "magus.yaml"), "--checkout", own)) })
+	_, err := store.Update(t.Context(), "integrate", func(u *types.Job) { u.State = types.StateExited })
+	require.NoError(t, err)
+	captureStdout(t, func() { require.NoError(t, fork(own, record("finish", "notes.txt"))) })
+	rows, err := store.List()
+	require.NoError(t, err)
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "finish" })
+	require.GreaterOrEqual(t, i, 0)
+	require.NotNil(t, rows[i].Worktree, "a fork run inside a job's checkout records it")
+	assert.True(t, rows[i].Worktree.Standing())
+	assert.Equal(t, own, rows[i].Worktree.Root)
+
+	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
+	repo.Git("branch", "done")
+	repo.Git("reset", "-q", "--hard", "HEAD~1")
+	session := repo.AddWorktree("session").Root()
+	integration := fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion)
+	err = fork(session, integration)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "the forker's own linked checkout")
+	assert.Contains(t, err.Error(), "--checkout <dir>")
+}
+
+// An integration row that exited red was refused a same-id re-fork once its branch was
+// merged ("nothing to merge"), so a small follow-up needed a second row.
+func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
+	resetWorkspaceMemo(t)
+	repo, cacheDir := execRepoFixture(t)
+	root := repo.Root()
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
+	repo.Git("branch", "done")
+	repo.Git("reset", "-q", "--hard", "HEAD~1")
+	integration := fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion)
+	fork := func() error {
+		resetStartupSingletons()
+		writeStdin(t, integration)
+		return jobFork(t.Context(), root, []string{"--stdin"})
+	}
+
+	captureStdout(t, func() { require.NoError(t, fork()) })
+	_, err := store.Update(t.Context(), "merge", func(u *types.Job) { u.State = types.StateExited })
+	require.NoError(t, err)
+	repo.Git("merge", "-q", "--ff-only", "done")
+
+	captureStdout(t, func() { require.NoError(t, fork(), "its check never passed, so the row takes the follow-up") })
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []string{"pricing.txt"}, rows[0].WritePaths, "the re-fork keeps the paths the row held")
+
+	_, err = store.Delete(t.Context(), "merge", true)
+	require.NoError(t, err)
+	err = fork()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nothing to merge", "with no row to finish, an empty merge is still refused")
 }
 
 // limitHostSpell is a harness whose host waits ten minutes at most on a foreground call.
@@ -1130,6 +1226,34 @@ func TestJobExecWritesNoMarker(t *testing.T) {
 
 // Exec takes exactly one job: the read form it had printed a binding the CLI no longer
 // holds, and a job that already ended has nothing left to take.
+func TestJobPauseRefusesExecUntilResume(t *testing.T) {
+	row := leaseRow("lease-enforcement/wave4/paused", "")
+	row.State = types.StateDeclared
+	repo, cacheDir := execRepoFixture(t, row)
+	root := repo.Root()
+
+	captureStdout(t, func() {
+		require.NoError(t, jobPause(t.Context(), root, "pause", []string{row.ID}))
+	})
+	err := jobExec(t.Context(), root, []string{row.ID})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), row.ID+" is paused")
+	assert.Contains(t, err.Error(), "job resume "+row.ID)
+	bindCheckout(t, cacheDir, row.ID)
+	err = jobExec(t.Context(), root, []string{"--timeout", "1m", "--", "true"})
+	require.Error(t, err, "a command under the paused lease is refused too")
+	assert.Contains(t, err.Error(), row.ID+" is paused")
+
+	assert.Error(t, jobPause(t.Context(), root, "resume", []string{row.ID}), "the holder does not lift its own pause")
+
+	orchestrator := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &job.Actor{}})
+	_, err = orchestrator.Resume(t.Context(), row.ID)
+	require.NoError(t, err)
+	captureStdout(t, func() {
+		require.NoError(t, jobExec(t.Context(), root, []string{row.ID}))
+	})
+}
+
 func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	done := leaseRow("lease-enforcement/wave4/done", "")
 	done.State = types.StatePass

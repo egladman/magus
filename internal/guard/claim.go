@@ -34,7 +34,7 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 	now := time.Now().Unix()
 	var others []types.Job
 	for _, u := range owners {
-		if u.ID != me.ID && !u.Overdue(now) && len(claimsOn(u.WritePaths, rel)) > 0 {
+		if u.ID != me.ID && !u.Overdue(now) && len(claimsOn(u.HardPaths(), rel)) > 0 {
 			others = append(others, u)
 		}
 	}
@@ -69,7 +69,7 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 			continue
 		}
 		for _, owner := range others {
-			if claim, ok := namingClaim(claimsOn(owner.WritePaths, rel), loc.Declaration); ok {
+			if claim, ok := namingClaim(claimsOn(owner.HardPaths(), rel), loc.Declaration); ok {
 				return denyClaimedDeclaration(me, owner, rel, claim, loc.Declaration, mine)
 			}
 		}
@@ -109,7 +109,7 @@ func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me 
 			if owner.ID == me.ID || owner.Overdue(now) {
 				continue
 			}
-			if claim, ok := namingClaim(claimsOn(owner.WritePaths, rel), decl); ok {
+			if claim, ok := namingClaim(claimsOn(owner.HardPaths(), rel), decl); ok {
 				return denyClaimedDeclaration(me, owner, rel, claim, decl, mine)
 			}
 		}
@@ -166,7 +166,7 @@ func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string,
 // file: no entry of its write paths covers rel whole.
 func soleClaim(owner types.Job, rel string) (declaration string, ok bool) {
 	var whole []string
-	for _, entry := range owner.WritePaths {
+	for _, entry := range owner.HardPaths() {
 		if _, decl := types.SplitClaim(entry); decl == "" {
 			whole = append(whole, entry)
 		}
@@ -174,7 +174,7 @@ func soleClaim(owner types.Job, rel string) (declaration string, ok bool) {
 	if _, covered, _ := declarationCovering(whole, rel); covered {
 		return "", false
 	}
-	claims := claimsOn(owner.WritePaths, rel)
+	claims := claimsOn(owner.HardPaths(), rel)
 	if len(claims) == 0 {
 		return "", false
 	}

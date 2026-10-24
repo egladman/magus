@@ -111,7 +111,6 @@ import "magus/spell/go";
 
 magus\project({ "spells": [go] });
 
-// Each exported function is a runnable target; its body calls the spell's ops.
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["go-build"](ctx);
@@ -119,8 +118,6 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](ctx); }
 
-// go-vet, golangci-lint, and govulncheck are all static analysis, so they
-// compose into the canonical `lint` target, not bespoke targets.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["go-vet"](ctx);
     go["golangci-lint"](ctx);

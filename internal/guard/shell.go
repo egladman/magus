@@ -122,7 +122,7 @@ const (
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
-	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
+	denyRuleInterpreterScript denyRuleName = "interpreter-script"
 	denyRuleRawTool           denyRuleName = "raw-tool"
 	denyRuleThrowawayCopy     denyRuleName = "throwaway-copy"
 	denyRuleSiblingCheckout   denyRuleName = "sibling-checkout"
@@ -1838,18 +1838,6 @@ var (
 	// without the portability trap or the blind write.
 	sedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
 
-	// A scripted in-place rewrite: an inline interpreter that runs a REGEX SUBSTITUTION
-	// and writes the result back. It is the same edit `sed -i` is refused for, reached by
-	// a route the sed rule cannot see, and it is how a rename escapes the graph in
-	// practice: `sed -i` is denied, so the next thing to hand is a python one-liner.
-	//
-	// Deliberately narrow. An interpreter that merely WRITES a file is ordinary authoring
-	// and must stay available; what is refused is substitute-then-write, because that is
-	// the shape that cannot tell a symbol from a word that looks like one. A rewrite of
-	// prose or a config value is caught too: the false positive costs one explanation,
-	// while the false negative silently rewrote a dependency's identifier.
-	scriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
-
 	// sourceReadRe is the fallback when the argv parse fails: an unbounded dump of a
 	// source file. Keep the extension list in sync with sourceExt in parse.go.
 	sourceReadRe = regexp.MustCompile(`\b(cat|bat|head|tail|less|more)\b[^|&;]*\.(go|buzz|ts|tsx|js|jsx|rs|py|c|h|cc|cpp|java|kt|swift|rb|cs|zig)\b`)
@@ -1935,19 +1923,6 @@ var (
 	denyNotesAuthor    = "an agent may not author a note; if it belongs in the notes, say so and let the person run it."
 	denyNotesAuthorWhy = "Notes are human-authored by design, so every spelling of the write is denied: `capture` files a review transcript as a note, which puts a person's name on prose they never read."
 
-	// Names the editor tool as the remedy, because that is the answer for most of what trips
-	// this: changing a string, a literal or a few lines in one file. The rename branch sits
-	// in the rationale and is marked as a branch.
-	//
-	// Leading with `refs --occurrences` and the `.Sum` argument was advice about renaming a
-	// SYMBOL across a tree. Read while replacing a literal in one test file, it named a tool
-	// that takes a symbol the reader does not have, and a correct deny whose remediation does
-	// not fit is one the reader learns to route around.
-	denyScriptedRewrite    = "a scripted rewrite writes before anyone reads a diff; use your editor tool."
-	denyScriptedRewriteWhy = "Your editor tool reads the file first and reports what it changed.\n" +
-		"Renaming a symbol across the tree instead? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives verified, column-precise sites to edit; run `" + hint.GraphBuild.String() + "` first if it reports not-indexed, which means unknown rather than absent.\n" +
-		"A regex cannot tell your `.Sum` from the OTel SDK's. Creating a new file, or writing under a scratch path, is untouched."
-
 	denySedInPlace    = "`sed -i` reads differently on GNU and macOS; use your editor tool."
 	denySedInPlaceWhy = "Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
 		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
@@ -1984,8 +1959,8 @@ var (
 	// fix a target just wrote into a commit about something else. Measured: one such call
 	// put 69 files (a whole regenerated docs site plus five untouched source files) into a
 	// commit about four collection methods.
-	denyStageAll    = "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `" + hint.VCSAdd.String() + "`."
-	denyStageAllWhy = "`" + hint.VCSAdd.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSAdd.With("--dry-run") + "` stages nothing.\n" +
+	denyStageAll    = "a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `" + hint.VCSLsFiles.With("-o", "name") + " | git add --pathspec-from-file=-`."
+	denyStageAllWhy = "`" + hint.VCSLsFiles.String() + "` lists the dirty source paths no other job holds and says which classes it left out and the flag that adds each (`--include-generated`, `--include-untracked`); it stages nothing, so you read the list before git does.\n" +
 		"A hand-picked `git add -- <paths>` is still fine. Targets write declared outputs as they run, so the tree is routinely dirty with files you did not edit."
 
 	// The advisory a chain keeps when a pipe of its stages would change what it does; see
@@ -2217,8 +2192,9 @@ func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (strin
 		"the op runs the same command in the project you are in.")}
 }
 
-// stageAllRemedy stages the same paths through the workspace. `git add .` is left to the
-// prose: it stages the working directory's subtree, which no vcs add spelling equals.
+// stageAllRemedy serves the list-then-stage pipeline for the same operands. `git add .` is
+// left to the prose: it stages the working directory's subtree, which no ls-files
+// spelling equals.
 func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok {
@@ -2228,21 +2204,27 @@ func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 		if c.Name != "git" || len(c.Args) == 0 || c.Args[0] != "add" || !slices.ContainsFunc(c.Args[1:], isStageAllOperand) {
 			continue
 		}
-		var paths []string
+		argv := make([]string, 0, len(c.Args)+4)
+		if slices.Contains(c.Args[1:], "-A") || slices.Contains(c.Args[1:], "--all") {
+			argv = append(argv, "--include-untracked")
+		}
+		argv = append(argv, "--include-generated")
 		for _, a := range c.Args[1:] {
 			switch {
 			case a == ".":
 				return "", nil
-			case a == "--" || isStageAllOperand(a):
+			case a == "-A" || a == "--all" || a == "--" || isStageAllOperand(a):
 			case strings.HasPrefix(a, "-"):
 				return "", nil
 			default:
-				paths = append(paths, a)
+				argv = append(argv, a)
 			}
 		}
-		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.",
-			[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
-				"vcs add stages a source change with the outputs it produced and reports anything undeclared.")}
+		argv = append(argv, "-o", "name")
+		step := hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSLsFiles.Argv(argv...),
+			"ls-files lists the source changes with the outputs they produced and names what it left out; git stages exactly that list.")
+		step.Run += " | git add --pathspec-from-file=-"
+		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.", []types.NextStep{step}
 	}
 	return "", nil
 }
@@ -2295,7 +2277,10 @@ func probesForeignProcess(c hint.Invocation) bool {
 // tell which stage was left without input.
 func filterWithoutInputDeny(tool string) string {
 	lead := "`" + tool + "` reads a stdin nothing on this line feeds; name a file, pipe into it, or redirect one with `<`.\n"
-	if stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand {
+	switch stdinReaders[tool].operands {
+	case operandsAreScript:
+		lead = "`" + tool + "` reads its program from a stdin nothing on this line feeds; put the heredoc on that command (`" + tool + " - <<'EOF'` ... `EOF`), or write the program to a file and run `" + tool + " <file>`.\n"
+	case operandsNeverInput, operandsAreCommand:
 		lead = "`" + tool + "` reads only stdin, which nothing on this line feeds; pipe into it or redirect a file with `<`.\n" +
 			"Its operands are never input. "
 	}
@@ -2554,7 +2539,6 @@ var (
 	}
 	referenceScripts = map[denyRuleName]referenceScript{
 		denyRuleSedInPlace:         renameScript,
-		denyRuleScriptedRewrite:    renameScript,
 		denyRuleInterpreterRewrite: renameScript,
 		denyRuleOutputPipe:         typedResultScript,
 		denyRuleOutputRedirect:     typedResultScript,
@@ -2706,10 +2690,15 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	if parsed && captureFilterFires(cmds, command, d) {
 		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Why: captureFilterAdviceWhy, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
-	if scriptedRewriteFires(command, d, deps.scope) && !rewriteStaysOutside(deps.scope, command, d) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denyScriptedRewrite, Why: denyScriptedRewriteWhy, Rule: denyRule{Name: denyRuleScriptedRewrite}}); ok {
+	if interp, ok := interpreterScripting(cmds, parsed, command); ok {
+		if v, ok := held.ends(deps, interpreterScriptVerdict(interp)); ok {
 			return v
 		}
+	}
+	// A Buzz program's proc calls start commands this line never spells, so each one is
+	// judged here as the line it would be typed as.
+	if v, ok := buzzSpawnVerdict(deps, held, command, d); ok {
+		return v
 	}
 	var advisory, chained ShellVerdict
 	// Held rather than returned, like the git advisories below: the rules that name a

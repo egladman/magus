@@ -170,17 +170,17 @@ type building struct {
 
 // makeCheckout creates the checkout's directory, as the version control would; the
 // queue writes into it through an os.Root.
-func makeCheckout(_ context.Context, _, dir, _ string) error { return os.MkdirAll(dir, 0o755) }
+func makeCheckout(_ context.Context, _, dir, _, _ string) error { return os.MkdirAll(dir, 0o755) }
 
 // builds answers what b says, and records each checkout's commit and head.
 func (d doubles) builds(b building) *checkouts {
 	co := &checkouts{onto: map[string]string{}, head: map[string]string{}}
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, mock.Anything).
-		RunAndReturn(func(ctx context.Context, _, dir, rev string) error {
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, mock.Anything, "").
+		RunAndReturn(func(ctx context.Context, _, dir, rev, branch string) error {
 			co.mu.Lock()
 			defer co.mu.Unlock()
 			co.onto[dir] = rev
-			if err := makeCheckout(ctx, "", dir, rev); err != nil {
+			if err := makeCheckout(ctx, "", dir, rev, branch); err != nil {
 				return err
 			}
 			for path, content := range b.files {

@@ -147,7 +147,7 @@ func liveHolders(rows []types.Job, id, file string) []types.Job {
 		if r.ID == id || !Editing(r) {
 			continue
 		}
-		if slices.ContainsFunc(r.WritePaths, func(entry string) bool {
+		if slices.ContainsFunc(r.HardPaths(), func(entry string) bool {
 			return covers(entry, file) && !releasedReach(r, entry, file)
 		}) {
 			out = append(out, r)
@@ -159,11 +159,9 @@ func liveHolders(rows []types.Job, id, file string) []types.Job {
 // dry is s as a dry run reads it: the same file and seams, with the writes a dry run must
 // not make (the sweep's, and a refusal's release request) skipped.
 func (s *Store) dry() *Store {
-	return &Store{
-		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir, stateBase: s.stateBase,
-		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, retain: s.retain, outputs: s.outputs,
-		landed: s.landed, grader: s.grader, dryRun: true, workspace: s.workspace,
-	}
+	v := s.view()
+	v.dryRun = true
+	return v
 }
 
 // requestRelease files one attention request (outcome waiting) asking holder to release

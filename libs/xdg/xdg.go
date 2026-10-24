@@ -1,9 +1,13 @@
 package xdg
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // ConfigDir returns the base directory for user config, honoring XDG_CONFIG_HOME on
@@ -37,6 +41,66 @@ func CacheDir() (string, error) {
 // resolves.
 func DataDir() (string, error) {
 	return homeDir("XDG_DATA_HOME", ".local", "share")
+}
+
+// ScratchCheckoutParent returns CacheDir()/magus/checkouts/<purpose>, the directory
+// ScratchCheckoutDir makes purpose's copies in and that feature cleans, creating nothing.
+// purpose names the feature, such as graph-diff, and must be one path element. It errors
+// when no home directory resolves or purpose is not a plain name.
+func ScratchCheckoutParent(purpose string) (string, error) {
+	if purpose == "" || purpose == "." || purpose == ".." || strings.ContainsAny(purpose, `/\`) {
+		return "", fmt.Errorf("xdg: scratch checkout purpose %q is not a single path element", purpose)
+	}
+	cache, err := CacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cache, "magus", "checkouts", purpose), nil
+}
+
+// ScratchCheckoutDir creates and returns a new empty 0700 directory for one disposable
+// copy of a repository in ScratchCheckoutParent(purpose). The caller removes the copy.
+// The cache, unlike the OS temp dir, lies outside every workspace and under one mise
+// trusted_config_paths entry. It errors as ScratchCheckoutParent does, and when
+// magus/checkouts or the purpose directory exists but is not a directory closed to other
+// users.
+func ScratchCheckoutDir(purpose string) (string, error) {
+	parent, err := ScratchCheckoutParent(purpose)
+	if err != nil {
+		return "", err
+	}
+	checkouts := filepath.Dir(parent)
+	if err := os.MkdirAll(filepath.Dir(checkouts), 0o700); err != nil {
+		return "", fmt.Errorf("xdg: create the scratch checkout root: %w", err)
+	}
+	for _, d := range []string{checkouts, parent} {
+		if err := privateDir(d); err != nil {
+			return "", err
+		}
+	}
+	tree, err := os.MkdirTemp(parent, "")
+	if err != nil {
+		return "", fmt.Errorf("xdg: create a scratch checkout: %w", err)
+	}
+	return tree, nil
+}
+
+// privateDir creates dir 0700 or accepts an existing real directory no other user can
+// enter, so a planted symlink or open directory cannot redirect a checkout. Owner goes
+// unchecked: another account's closed directory refuses this user's create anyway.
+// Windows has no such bits, and its LocalAppData is per-user.
+func privateDir(dir string) error {
+	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("xdg: create %s: %w", dir, err)
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("xdg: %w", err)
+	}
+	if !info.IsDir() || (runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0) {
+		return fmt.Errorf("xdg: %s is not a private directory of this user, remove it and let magus recreate it", dir)
+	}
+	return nil
 }
 
 func homeDir(variable string, fallback ...string) (string, error) {

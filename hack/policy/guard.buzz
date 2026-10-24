@@ -31,7 +31,9 @@
 //   worker-builds-magus (deny): a caller holding a worker lease compiling magus (`go run`,
 //     `go build` or `go install` of cmd/magus, or `magus run go-build` / `build` of the root
 //     project), the bootstrap included. The checkout's integrator builds ./magus once per base
-//     commit and hack/dev/bootstrap-worktree.buzz places it; the integrator and a person build.
+//     commit and hack/dev/bootstrap-worktree.buzz places it; the integrator and a person build,
+//     and so does a worker running go-build in a checkout its job owns when the job's write
+//     paths cover a build input of ./cmd/magus.
 //   brief-builds-magus (deny, spawn): a spawn brief that tells its worker to compile magus. A
 //     line that names the command only to forbid it ("never ...") is not graded, and an
 //     integrate spawn's brief is not either.
@@ -91,6 +93,7 @@ import "./hack/policy/verdict" as verdict;
 import "./hack/policy/gh" as gh;
 import "./hack/policy/cadence" as cadence;
 import "./hack/policy/binaries" as binaries;
+import "./hack/policy/builds" as builds;
 import "./hack/policy/stale" as stale;
 import "./hack/policy/spawn" as spawn;
 import "./hack/policy/commits" as subjects;
@@ -113,7 +116,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         lease = req.lease!.id;
     }
     final integrator = req.role == "integrator";
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts }, disk: binaries\onDisk(),
+    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
         worker: !integrator and (req.role == "worker" or req.parent != "" or req.agent != ""));
     if (denial != "") {
         return magus\guard.deny(denial);
@@ -150,6 +153,13 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return decided;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
+}
+
+fun leaseWrites(req: CommandRequest) > [str] {
+    if (req.lease == null) {
+        return [<str>];
+    }
+    return req.lease!.writePaths;
 }
 
 fun parsePrograms(req: CommandRequest) > [helpers\Program] {
@@ -256,23 +266,47 @@ fun bodyFiles(programs: [helpers\Program], dir: str) > {str: str} {
 // judgeSpawn is the spawn rule the root magusfile registers. magus\job.list answers from the
 // rows the guard pinned for this hook call, and throws when the store could not be read.
 export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
-    final facts = spawnFacts(req);
+    var jobs = [<Job>];
     var rows: [helpers\JobRow]? = null;
     var unreadable = "";
     try {
-        rows = jobRows(magus\job.list().jobs);
+        jobs = magus\job.list().jobs;
+        rows = jobRows(jobs);
     } catch (e) {
         unreadable = errorText(e);
     }
+    final facts = spawnFacts(req, ownBuild: ownsBuild(req.description, jobs: jobs, disk: binaries\onDisk()));
     return spawn\decideSpawn(facts, rows: rows, unreadable: unreadable);
 }
 
-fun spawnFacts(req: SpawnRequest) > spawn\Spawn {
+fun spawnFacts(req: SpawnRequest, ownBuild: bool = false) > spawn\Spawn {
     var lease = "";
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    return spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt, checkout = req.checkout };
+    return spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt, checkout = req.checkout, ownBuild = ownBuild };
+}
+
+// ownsBuild: the job a `<parent>/<role> <job>` title names owns a standing checkout and its
+// write paths cover a build input of ./cmd/magus there, so its worker builds ./magus.
+fun ownsBuild(title: str, jobs: [Job], disk: binaries\Disk) > bool {
+    if (helpers\titleRole(title) == "") {
+        return false;
+    }
+    final id = title.split(" ")[1];
+    foreach (row in jobs) {
+        if (row.id != id or row.worktree == null or row.worktree!.removed != 0 or row.worktree!.root == "") {
+            continue;
+        }
+        final root = row.worktree!.root;
+        final binaryScopes = disk.binaryScopes;
+        final scopes = binaryScopes(root);
+        if (scopes == null) {
+            return false;
+        }
+        return builds\ownsBuild(builds\OwnBuild{ root = root, owned = [root], inputs = builds\buildInputsAmong(row.writePaths, scopes: scopes!) });
+    }
+    return false;
 }
 
 fun jobRows(jobs: [Job]) > [helpers\JobRow] {
@@ -482,4 +516,23 @@ test "the main session's cat of a task capture outside the workspace is denied n
     std\assert(allowed.decision == "allow", message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
     fs\removeAll(ws);
     fs\removeAll(host);
+}
+
+test "a spawned job builds its own binary only from a standing checkout whose build inputs its write paths cover" {
+    final disk = binaries\Disk{
+        isCheckout = fun (dir: str) > bool { return true; },
+        hasBinary = fun (dir: str) > bool { return true; },
+        sameFile = fun (a: str, b: str) > bool { return a == b; },
+        binaryScopes = fun (root: str) > [str]? { return ["./", "internal/job/"]; },
+    };
+    final jobs = [
+        Job{ id = "own", writePaths = ["internal/job/worktree.go"], worktree = JobWorktree{ root = "/w/own" } },
+        Job{ id = "docs", writePaths = ["docs/a.md"], worktree = JobWorktree{ root = "/w/docs" } },
+        Job{ id = "shared", writePaths = ["internal/job/worktree.go"] },
+        Job{ id = "ended", writePaths = ["internal/job/worktree.go"], worktree = JobWorktree{ root = "/w/ended", removed = 1 } },
+    ];
+    std\assert(ownsBuild("orchestrator/feat own", jobs: jobs, disk: disk), message: "its own checkout and a build input");
+    foreach (title in ["orchestrator/feat docs", "orchestrator/feat shared", "orchestrator/feat ended", "orchestrator/feat missing", "build it"]) {
+        std\assert(!ownsBuild(title, jobs: jobs, disk: disk), message: title);
+    }
 }

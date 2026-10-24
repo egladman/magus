@@ -10,7 +10,7 @@ import "magus/lint";
 
 // ENFORCED are the conformance metrics this repository fails on. The rest stay advice,
 // printed and never failing: most of what they flag is a size or a shape chosen on purpose.
-export final ENFORCED = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout"];
+export final ENFORCED = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout", "main-logic", "store-path-export", "file-split"];
 
 // RATCHET is the committed record knowledge.conformance.ratchet names in magus.yaml.
 final RATCHET = "hack/policy/conformance.jsonl";
@@ -82,9 +82,12 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             final at = position(v["source"] ?? "");
             final id: str = v["id"] ?? "";
             final measure = std\toInt(v["measure"]);
+            final home: str = v["home"] ?? "";
+            final unshared: bool = v["unshared"] ?? false;
+            final past = if (metric == "file-split") "with {home} at or under the {origin} floor of {value}" else "past the {origin} ceiling of {value}";
             found.append(Finding{ path = at.path, line = at.line,
-                message = "{label}: {id} measures {measure}, past the {origin} ceiling of {value}" + because(why, metric: metric, items: [id]),
-                fix = "Bring it under {value}, or add it to a known entry in " + RATCHET + " with a reason a reviewer can check." });
+                message = "{label}: {id} measures {measure}, {past}" + because(why, metric: metric, items: [id]),
+                fix = fixFor(metric, value: value, item: Item{ home = home, measure = measure, unshared = unshared }) });
         }
     }
     final stale: [any] = report["stale"] ?? [<any>];
@@ -98,6 +101,37 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             fix = "Run `magus run format .`: it deletes what no longer violates." });
     }
     return found;
+}
+
+// Item is what fixFor reads of a violation: where the lens says it belongs ("" when it names
+// nowhere), its measure, and for file-split whether it shares nothing with its root.
+export object Item {
+    home: str = "",
+    measure: int = 0,
+    unshared: bool = false,
+}
+
+// fixFor is how to clear a violation of metric past value.
+export fun fixFor(metric: str, value: int, item: Item) > str {
+    final home = item.home;
+    final known = "or add it to a known entry in " + RATCHET + " with a reason a reviewer can check.";
+    if (metric == "file-split" and item.unshared) {
+        return "Rename it, it shares nothing with {home}: its name says it was split out of {home}, " + known;
+    }
+    if (metric == "file-split") {
+        return "Put this in {home}, which would be {item.measure} lines; a split starts past {value}, " + known;
+    }
+    if (metric == "main-logic") {
+        final where = if (home == "") "its file references no library package yet" else "{home}, which its file references most";
+        return "A main package only wires: parse flags, build dependencies, call a package, print the result. "
+            + "This computes and calls no other workspace package; move it into the package that owns its data "
+            + "({where}), " + known;
+    }
+    if (metric == "store-path-export") {
+        return "Only {home} may know where its store lives, and the measure counts the files outside it that do. "
+            + "Call {home}'s reader or writer instead, adding the verb there, then unexport this; " + known;
+    }
+    return "Bring it under {value}, " + known;
 }
 
 // uncarried is why a known item matching no sample was not followed to a new ID, keyed by
@@ -246,6 +280,22 @@ test "a violation of an enforced metric fails at its line and an advice metric d
     assert\equal(printed.len(), want: 1, message: "type-methods is printed as advice");
 }
 
+test "a boundary violation names where the item belongs" {
+    final v: {str: any} = {"id": "cmd/magus/session.go#summarize", "source": "cmd/magus/session.go:40",
+        "measure": 150.0, "home": "internal/sessions"};
+    final row: {str: any} = {"key": {"metric": "main-logic", "population": "main"}, "value": 119.0,
+        "source": "anchor", "violations": [v]};
+    final got = judge(report([fresh()], rows: [row], stale: [<any>]));
+    assert\equal(got.len(), want: 1, message: "main-logic is enforced");
+    assert\equal(got[0].fix.indexOf("(internal/sessions, which its file references most)") != null, want: true, message: got[0].fix);
+    final nowhere = fixFor("main-logic", value: 119, item: Item{});
+    assert\equal(nowhere.indexOf("(its file references no library package yet)") != null, want: true, message: nowhere);
+    final store = fixFor("store-path-export", value: 0, item: Item{ home = "internal/hint" });
+    assert\equal(store.indexOf("Only internal/hint may know where its store lives") != null, want: true, message: store);
+    assert\equal(fixFor("file-lines", value: 938, item: Item{}).indexOf("Bring it under 938, or add it") == 0, want: true,
+        message: "other metrics keep the plain fix");
+}
+
 test "a known entry that no longer violates fails at the ratchet" {
     final entry: {str: any} = {"metric": "clone-tokens", "items": ["vcs/hg.go#hgVCS.Bisect"], "reason": "driver twins"};
     final got = judge(report([fresh()], rows: [<any>], stale: [entry]));
@@ -314,4 +364,20 @@ test "an item not carried says why at its violation and at the stale entry" {
         assert\equal(f.message.indexOf("not carried from a.go#Long: its recorded shape matches a.go#Renamed, b.go#Twin") != null,
             want: true, message: f.message);
     }
+}
+
+test "a file-split violation says to merge it, or to rename it when it shares nothing" {
+    final merge: {str: any} = {"id": "internal/guard/buzz_read.go", "source": "internal/guard/buzz_read.go:1",
+        "measure": 199.0, "home": "internal/guard/buzz.go"};
+    final rename: {str: any} = {"id": "internal/guard/background_tasks.go", "source": "internal/guard/background_tasks.go:1",
+        "measure": 839.0, "home": "internal/guard/background.go", "unshared": true};
+    final row: {str: any} = {"key": {"metric": "file-split", "population": "source"}, "value": 1500.0,
+        "source": "anchor", "violations": [merge, rename]};
+    final got = judge(report([fresh()], rows: [row], stale: [<any>]));
+    assert\equal(got.len(), want: 2, message: "file-split is enforced");
+    assert\equal(got[0].message.indexOf("measures 199, with internal/guard/buzz.go at or under the anchor floor of 1500") != null,
+        want: true, message: got[0].message);
+    assert\equal(got[0].fix.indexOf("Put this in internal/guard/buzz.go, which would be 199 lines; a split starts past 1500") == 0,
+        want: true, message: got[0].fix);
+    assert\equal(got[1].fix.indexOf("Rename it, it shares nothing with internal/guard/background.go") == 0, want: true, message: got[1].fix);
 }

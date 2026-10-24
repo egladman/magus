@@ -168,6 +168,7 @@ Two layers run together:
 - [MGS3044](MGS3044.md): a regenerated output outside a job's write paths (waivable).
 - [MGS3045](MGS3045.md): a ci gate over a job's write paths that nothing runs (waivable).
 - [MGS3046](MGS3046.md): a job holds a workspace load file in a checkout another live job is working in.
+- [MGS3051](MGS3051.md): a job store write from a magus older than the newest build that wrote it.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

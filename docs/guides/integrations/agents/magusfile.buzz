@@ -121,6 +121,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 
 // The anchor `magus affected ci` keys off.
 export fun ci(ctx: magus\Context, args: [str]) > void {
+    // Before format, so dprint formats the freshly rendered page; format itself must not write the
+    // cursor schemas generate emits outside a docs worker's lease.
+    ctx.needs(generate);
     ctx.needs(format);
     ctx.needs(lint);
     ctx.needs(test);
@@ -129,8 +132,6 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // format owns this directory's Markdown; the docs project formatting it would be MGS3001.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(install);
-    // Before dprint, so it formats the freshly rendered page.
-    ctx.needs(generate);
     // Inputs, not outputs: an output declaration would let magus clean delete the guide pages.
     ctx.modifiesExistingFiles("*.md", "*.ts");
     markdown["dprint"](ctx);

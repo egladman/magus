@@ -713,10 +713,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
-			if v, ok := judgeStop(deps, hint.NewGate(hookLocation(ctx, deps).cacheDir, who.callerKey()), input, time.Now()); ok {
-				return v
+			at := hookLocation(ctx, deps)
+			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, time.Now())
+			if !ok {
+				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
-			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+			if !req.DryRun && !req.Observe {
+				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, v); err != nil {
+					v.Context = strings.TrimPrefix(v.Context+"\n", "\n") + "magus workspace: the job store did not end the job this session held: " + err.Error()
+				}
+			}
+			return v
 		}
 		input = env.Value
 		req.CallBackground = req.CallBackground || env.CallBackground
@@ -842,6 +849,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if v, refused := pending.hold(deps, ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: rule}}); refused {
 			verdict.Decision, verdict.Reason, verdict.Context = decisionDeny, v.Deny, ""
 			verdict.Rule = string(rule)
+			verdict.Next = d.Next
 			whys[v.Deny] = v.Why
 		}
 	}
@@ -914,7 +922,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Decision != decisionDeny {
 			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case decisionDeny:
-				refuse(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), g.Reason)
+				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Next: g.Next})
 			case decisionAdvise:
 				// Held by its own key when it has one; lease-state only names the rest.
 				adviceKind = cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState))
@@ -1187,7 +1195,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// A backgrounded waiter is the waiter rules' to judge: they count it toward the pile
 		// and name what to wait on instead, which a bound would not.
 		if verdict.Decision != decisionDeny && !waits {
-			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD); d.refused() {
+			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD, configuredBackgroundLimits(deps).ceiling); d.refused() {
 				refuseWith(denyRuleBackgroundUnbounded, d)
 			}
 		}
@@ -1316,6 +1324,21 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 						verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, held, string(advisoryCheckTimeout)
 					}
 				}
+			}
+		}
+		// The root's half of background-silent; a subagent's stop is background-left's. A read
+		// passes, so the task's output can still be inspected before it is stopped.
+		if setting, ok := deps.setting(string(denyRuleBackgroundSilent)); ok && setting.Decision != builtin.Off && who.Agent == "" && env.Read == "" && !req.DryRun && verdict.Decision != decisionDeny {
+			d, a := judgeBackgroundSilent(who.Transcript, configuredBackgroundLimits(deps), deps.heldBy(markers, string(denyRuleBackgroundSilent)), time.Now())
+			switch {
+			case d.refused():
+				refuseWith(denyRuleBackgroundSilent, d)
+			case a.Say != "" && verdict.Decision == decisionAdvise:
+				verdict.Context += "\n\n" + a.Say
+				whys[a.Say] = a.Why
+			case a.Say != "":
+				verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, a.Say, string(denyRuleBackgroundSilent)
+				whys[a.Say] = a.Why
 			}
 		}
 		verdict = deps.gradeAdvice(verdict)
@@ -1456,7 +1479,7 @@ func (d Dependencies) judging(dir string) judgeSource {
 // holds: Evaluate's, then the ones that read the filesystem. Each is graded before it is
 // ranked, so a demoted one outranks only an advisory.
 func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
-	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(ctx, deps, callDir, line, d))
+	v := rankOwnBuild(Evaluate(deps, hardResetAsSwitch(ctx, deps, at, callDir, line, d)), ownBuildVerdict(ctx, deps, callDir, line, d))
 	// A remedy computed from a script's line would run outside the directory and the
 	// lines around it that the script sets up.
 	script := denyScriptContent(deps, callDir, line, d)
@@ -1539,6 +1562,7 @@ type roleScopedRule struct {
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
 		{denyRuleLeaseCheckout, denyLeaseCheckout},
+		{denyRuleLeasePaused, denyPausedLease},
 		{denyRuleLeaseGate, denyLeaseScopedGate},
 		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
 		{denyRuleName(advisoryGateRepeat), denyRepeatGate},
@@ -1568,7 +1592,9 @@ func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hoo
 	}
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
 	candidates := next
-	if len(next) != 1 || !placesBinary(next[0], actingLease) {
+	// The apply line claims the acting lease itself, so the role filter, which reads every
+	// job verb as a write outside the lease, would drop the one remedy written for it.
+	if len(next) != 1 || !placesBinary(next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
 		candidates = hint.FilterServable(role, writePaths, next)
 	}
 	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})

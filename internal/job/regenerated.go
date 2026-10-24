@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 
@@ -28,6 +29,12 @@ type RegeneratedOutput struct {
 	// Source is the target's source glob that matched a written file: the most specific one
 	// when several do.
 	Source string `json:"source" yaml:"source"`
+}
+
+// Project is the project of the producing target.
+func (o RegeneratedOutput) Project() string {
+	project, _, _ := strings.Cut(o.Target, ":")
+	return project
 }
 
 // RegeneratedLimit is how many outputs a text rendering lists before it counts the rest.
@@ -188,7 +195,7 @@ func regeneratedLines(outputs []RegeneratedOutput) []string {
 		lines = append(lines, fmt.Sprintf("and %d more from %d target(s); -o json lists every one", len(rest), len(targets)))
 	}
 	return append(lines,
-		"the root regenerates these after integration: never hand-edit them; if this job must regenerate them itself, ask the root to widen the write paths")
+		"never hand-edit them: run the target named beside one and commit what it writes with the change, or leave it for the root to regenerate after integration")
 }
 
 // outputInside reports whether the row's write paths hold every file g can name, read the

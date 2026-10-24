@@ -35,6 +35,9 @@ type MachineClaim struct {
 	// Ancestors is the invocations this claim runs underneath, which do not count
 	// against it.
 	Ancestors []string `json:"ancestors,omitempty" yaml:"ancestors,omitempty"`
+	// Weight is the Job.Weight of the job the run is bound to, zero for none. It paces the
+	// claimant's own retries and nothing the budget decides.
+	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
 }
 
 // Run is the outermost invocation the claim runs underneath, or its own when it has no

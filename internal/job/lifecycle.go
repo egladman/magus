@@ -32,7 +32,7 @@ type AttemptResolver func(context.Context, string) (types.JobAttempt, error)
 
 // gradedByHolder reports whether row is read-only and declares no check or goal: magus has
 // nothing to grade it by, so the result its holder files is the grade, and [Exit] records
-// pass on it.
+// pass on it unless the result names an unresolved risk.
 func gradedByHolder(row types.Job) bool {
 	return row.ReadOnly && row.Check == nil && len(row.Goals) == 0
 }
@@ -63,7 +63,8 @@ func endedReason(prev types.Job, byHolder bool) string {
 // the output attempt resolved in the worker's checkout, so a verifier in another
 // worktree does not need that checkout's cache to reopen the evidence, and the row's write
 // paths narrow to the entries covering a path the result names. An abandonment keeps them.
-// A result on a row [gradedByHolder] records pass, since no wait could grade it.
+// A result on a row [gradedByHolder] records pass when it names no unresolved risk,
+// since no wait could grade it; one that names a risk leaves the row exited for the root to read.
 //
 // An abandonment is refused while any live job is below id, since ending id ends them;
 // [Abandon] ends a tree whose every member is named. A result is refused while a job
@@ -132,7 +133,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 			row.Attempt = nil
 		}
 		row.State = types.StateExited
-		if gradedByHolder(prev) {
+		if gradedByHolder(prev) && len(result.UnresolvedRisks) == 0 {
 			row.State = types.StatePass
 		}
 	})
@@ -197,7 +198,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 			return types.JobStatus{}, err
 		}
 	}
-	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, ev.runs()...)
+	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 
 	var taken *types.JobIntegration
 	if len(evidence) > 0 {
@@ -459,14 +460,16 @@ func readAsNow(ctx context.Context, here string, paths []string, run types.JobAt
 // staleRuns names, by [attemptKey], each of runs that read one of the job's changed paths other
 // than it reads now in tree, with why: the job wrote after the run, so the run graded
 // other files. The changed paths are those observed since the checkpoint and those the
-// result names.
-func staleRuns(ctx context.Context, tree string, seen Observed, result types.JobResult, runs ...types.JobAttempt) map[string]string {
+// result names, less those generated reports: an output the gate regenerates after the run
+// (MAGUS.md, a gen/ tree) differs from what the run read without the run having graded
+// other work.
+func staleRuns(ctx context.Context, tree string, seen Observed, result types.JobResult, generated func(string) bool, runs ...types.JobAttempt) map[string]string {
 	if tree == "" {
 		return nil
 	}
 	var changed []string
 	for _, c := range slices.Concat(seen.Changed, result.ChangedPaths) {
-		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) {
+		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
 			changed = append(changed, p)
 		}
 	}
@@ -481,6 +484,26 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 		}
 	}
 	return stale
+}
+
+// generated reports whether p, a workspace-relative slash path, is one magus maintains
+// itself or a declared output of a project in s's workspace, the test `describe file`
+// applies. A Store opened without a workspace knows only the first.
+func (s *Store) generated(p string) bool {
+	if types.IsMagusMaintained(p) {
+		return true
+	}
+	ws, _ := s.loadedWorkspace()
+	for _, project := range ws.Projects {
+		for _, refs := range project.TargetOutputs {
+			for _, ref := range refs {
+				if ref.Rooted(project.Path).Match(p) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // CurrentRun answers whether a run is current in tree: its cache key is the one its check
@@ -802,7 +825,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 			return types.JobStatus{}, err
 		}
 	}
-	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, ev.runs()...)
+	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.
@@ -1014,6 +1037,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
+	read := f
 	var ended endings
 	err = s.update(context.Background(), func(cur *jobsFile) error {
 		ended = endings{}
@@ -1034,12 +1058,16 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		}
 		return nil
 	})
-	if err != nil {
-		return jobsFile{}, false, err
-	}
 	out := s.notices
 	if out == nil {
 		out = os.Stderr
+	}
+	if errors.Is(err, types.JobStoreWriterOlder) {
+		noteLeftLive(out, dead, err)
+		return read, false, nil
+	}
+	if err != nil {
+		return jobsFile{}, false, err
 	}
 	for _, e := range dead {
 		fmt.Fprintf(out, "ended %s: %s\n", e.id, e.reason)

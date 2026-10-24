@@ -39,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 23
+const KnowledgeSchemaVersion = 24
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -185,6 +185,11 @@ const RelationDepicts RelationID = "depicts"
 // symmetric and stored once, with the lesser path as the source.
 const RelationCoChanges RelationID = "co_changes"
 
+// RelationSplits links a file to the root it was split from: R_<suffix>.go to R.go in one
+// directory, the longest such root. Its attrs say why the split exists: a class of concept,
+// platform, generated or test, and whether the two share a symbol.
+const RelationSplits RelationID = "splits"
+
 // KnowledgeEndpointShape is one permitted subject/object-kind pair for a relation.
 // These are validation shapes in the closed-world sense: unlike OWL domain/range
 // axioms, they do not infer a node's kind; they reject an edge whose already-known
@@ -301,6 +306,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	{ID: RelationAuthored, Description: "attributes a file to a git contributor", ForwardLabel: "authored", ReverseLabel: "authored by", Shapes: endpointShapes(KindAuthor, KindFile)},
 	{ID: RelationDepicts, Description: "draws a directory or project in a diagram", ForwardLabel: "depicts", ReverseLabel: "depicted by", Shapes: endpointShapes(KindFigure, KindDir, KindProject)},
 	{ID: RelationCoChanges, Description: "changed in the same commits, from git history", ForwardLabel: "changes with", ReverseLabel: "changes with", Symmetric: true, Shapes: endpointShapes(KindFile, KindFile)},
+	{ID: RelationSplits, Description: "was split out of a root file it shares a name stem with", ForwardLabel: "splits", ReverseLabel: "split into", Shapes: endpointShapes(KindFile, KindFile)},
 	{ID: RelationAnnotates, Description: "attaches a human-authored note to an existing entity", ForwardLabel: "is about", ReverseLabel: "NOTE", Shapes: endpointShapes(KindNote,
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,

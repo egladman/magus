@@ -109,6 +109,17 @@ func TestForkLimitProblemsNameTheKey(t *testing.T) {
 	assert.Empty(t, forkLimitProblems(rows, "root/a/deep/deeper", "root/a/deep", config.Jobs{}), "unset is unlimited")
 }
 
+func TestForkLimitRefusesAClaimCapPastJobsMaxClaims(t *testing.T) {
+	t.Parallel()
+
+	limits := config.Jobs{MaxClaims: 4}
+	assert.Empty(t, claimCeilingProblems(types.Job{ID: "w", MaxClaims: 4}, limits))
+	err := claimCeilingProblems(types.Job{ID: "w", MaxClaims: 5}, limits).Err()
+	require.ErrorIs(t, err, types.JobForkLimitExceeded)
+	assert.Contains(t, err.Error(), "5 claims (max_claims on job w)")
+	assert.Contains(t, err.Error(), "ceiling of 4 (jobs.max_claims in magus.yaml)")
+}
+
 func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 	t.Parallel()
 
@@ -757,7 +768,7 @@ func storeBytes(t *testing.T, s *Store) string {
 
 // Apply upserts the spec and leaves status alone: the holder keeps its job, its state and
 // its registration, where a re-fork hands the job out again as declared.
-func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
+func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 	t.Parallel()
 
 	s, _ := appliedRow(t, "a.go")
@@ -780,6 +791,63 @@ func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
 	want.Validated = got[0].Next.Validated
 	assert.Equal(t, want, got[0].Next)
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
+}
+
+// The fork derives soft paths and integrator waivers, so a record projected without them
+// widens or narrows the row and keeps them; one naming soft_paths for a held path decides.
+func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
+	t.Parallel()
+
+	waiver := types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
+	derived := func(t *testing.T) *Store {
+		t.Helper()
+		root := loadableRepo(t)
+		rec := spec("a.go", "a_test.go", "b_test.go")
+		rec.SoftPaths, rec.Waivers = []string{"a_test.go", "b_test.go"}, []types.JobWaiver{waiver}
+		s := NewStore(tempLocation(t, root))
+		_, err := s.Update(t.Context(), "w", Declare(rec, 0))
+		require.NoError(t, err)
+		_, err = s.Exec(t.Context(), "w")
+		require.NoError(t, err)
+		_, err = s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateRunning })
+		require.NoError(t, err)
+		return s
+	}
+	apply := func(t *testing.T, s *Store, rec types.Declaration) types.Job {
+		t.Helper()
+		got, err := Apply(t.Context(), s, []types.Declaration{rec}, config.Jobs{}, nil, nil, false)
+		require.NoError(t, err)
+		return got[0].Next
+	}
+
+	t.Run("widening", func(t *testing.T) {
+		t.Parallel()
+		s := derived(t)
+		before, err := s.List()
+		require.NoError(t, err)
+		got := apply(t, s, spec("a.go", "a_test.go", "b_test.go", "c.go"))
+
+		want := before[0].Clone()
+		want.WritePaths = []string{"a.go", "a_test.go", "b_test.go", "c.go"}
+		want.Updated = got.Updated
+		want.Widenings = 1
+		want.WriteProof = types.WriteProofAlone
+		want.Validated = got.Validated
+		assert.Equal(t, want, got, "the soft paths and the waiver stay")
+	})
+	t.Run("narrowing", func(t *testing.T) {
+		t.Parallel()
+		got := apply(t, derived(t), spec("a.go", "a_test.go"))
+		assert.Equal(t, []string{"a_test.go"}, got.SoftPaths, "a dropped path is no soft path, and the kept one stays soft")
+	})
+	t.Run("explicit soft paths win", func(t *testing.T) {
+		t.Parallel()
+		rec := spec("a.go", "a_test.go", "b_test.go")
+		rec.SoftPaths = []string{"a_test.go"}
+		got := apply(t, derived(t), rec)
+		assert.Equal(t, []string{"a_test.go"}, got.SoftPaths)
+		assert.Equal(t, []string{"a.go", "b_test.go"}, got.HardPaths())
+	})
 }
 
 // A worker's own row takes only the release: a spec dropping some of its paths, recorded as
@@ -863,8 +931,34 @@ func TestApplyRefusesStatusAnEndedJobAndAnUnboundedOne(t *testing.T) {
 
 	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateFail })
 	require.NoError(t, err)
-	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
 	require.ErrorContains(t, err, "w already ended fail")
+}
+
+// An integration row that exited red on a file outside its paths took the widening and
+// stayed exited, so nobody could take it again; a widened ended row is handed back too.
+func TestApplyWideningAnExitedOrEndedRowDeclaresItAgain(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []types.JobState{types.StateExited, types.StateFail} {
+		s, _ := appliedRow(t, "a.go")
+		_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = state })
+		require.NoError(t, err)
+
+		got, err := Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+		require.NoError(t, err, state)
+		assert.Equal(t, []string{"a.go", "b.go"}, got[0].Next.WritePaths, state)
+		rows, err := s.List()
+		require.NoError(t, err)
+		assert.Equal(t, types.StateDeclared, rows[0].State, "%s: the stored row is declared, not only the plan", state)
+	}
+
+	s, _ := appliedRow(t, "a.go")
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateExited })
+	require.NoError(t, err)
+	kept, err := Apply(t.Context(), s, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, kept[0].Next.State, "an exited row changed without widening stays its holder's")
 }
 
 // A new id is a fork: declared, with this checkout's checkpoint when the record names none.

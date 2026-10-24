@@ -36,7 +36,7 @@ func Quietly(run RunFunc, observe func(context.Context, slog.Handler) context.Co
 		if failure, ok := steps.first(); ok {
 			return failure
 		}
-		if Busy(err) {
+		if busy(err) {
 			// Nothing ran, the error names the holder, and Waiting may retry: a dump of
 			// the refused run's header lines per attempt would only repeat it.
 			return err

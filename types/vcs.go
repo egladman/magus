@@ -153,7 +153,6 @@ type VCSDriver interface {
 	MergeDriverInstaller
 	RefreshHookInstaller
 	DriftHookInstaller
-	RegenHookInstaller
 	RemoteReporter
 	RemoteConfigReporter
 	DefaultRefReporter
@@ -412,7 +411,6 @@ const (
 	CapMergeDriverInstaller  VCSCapability = "MergeDriverInstaller"
 	CapRefreshHookInstaller  VCSCapability = "RefreshHookInstaller"
 	CapDriftHookInstaller    VCSCapability = "DriftHookInstaller"
-	CapRegenHookInstaller    VCSCapability = "RegenHookInstaller"
 	CapRemoteReporter        VCSCapability = "RemoteReporter"
 	CapRemoteConfigReporter  VCSCapability = "RemoteConfigReporter"
 	CapDefaultRefReporter    VCSCapability = "DefaultRefReporter"
@@ -525,18 +523,6 @@ type RefreshHookInstaller interface {
 // It returns the labels of the hooks it installed, for a notice.
 type DriftHookInstaller interface {
 	InstallDriftHook(ctx context.Context, root, command string) ([]string, error)
-}
-
-// RegenHookInstaller is the capability (sibling of DriftHookInstaller) to install the
-// hooks that settle a merge-shaped operation once it has the whole tree: each runs
-// command with the hook's own name appended, and command regenerates what the operation
-// changed and stages it. The merge driver cannot do it, since it runs while the merge is
-// still writing the tree. Same managed-section contract as the other hook installers,
-// but NOT fail-open: in a hook git runs before it commits, command's failure stops the
-// commit. Callers skip the install on *VCSUnsupportedError. It returns the labels of the
-// hooks it changed, for a notice.
-type RegenHookInstaller interface {
-	InstallRegenHook(ctx context.Context, root, command string) ([]string, error)
 }
 
 // RemoteReporter is the capability to report a remote's URL. It lets callers derive a
@@ -734,6 +720,16 @@ type IgnoredFileReporter interface {
 	// IgnoredFiles returns the subset of paths the VCS ignores, as given. Paths are
 	// interpreted relative to dir. An empty paths slice returns no results.
 	IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error)
+}
+
+// StagedFileReporter is the capability to report which dirty paths are already staged
+// whole. Only git implements it: hg, sl and jj keep no index, so no path of theirs is
+// ever staged and a caller asking for the state refuses rather than answers empty.
+type StagedFileReporter interface {
+	// StagedFiles returns the repository-relative paths whose whole change is in the
+	// index, with nothing left in the working tree to stage. A path staged and then
+	// edited again is not among them.
+	StagedFiles(ctx context.Context, dir string) ([]string, error)
 }
 
 // ChangeStatus is what a commit did to one path. It exists so churn attribution can
@@ -1156,12 +1152,13 @@ type GeneratedPathReporter interface {
 // and fails with a *CheckoutTamperedError once one of them has changed. hg and jj record
 // nothing: a call in their checkouts reads the store the checkout's own files name.
 type CheckoutProvisioner interface {
-	// CreateCheckout materializes rev at dir, detached from any branch. dir must be
-	// absolute, must not exist, and must lie outside root, symlinks resolved, where
-	// discovery would index it as a copy of the workspace (MGS1002). A root that fetches
-	// missing objects on demand (a git partial clone) is refused: a merge in the checkout
-	// can then ask the remote for an object the merge itself wrote.
-	CreateCheckout(ctx context.Context, root, dir, rev string) error
+	// CreateCheckout materializes rev at dir on a new branch named branch, or on none when
+	// branch is empty; a name already taken is refused. dir must be absolute, must not
+	// exist, and must lie outside root, symlinks resolved, where discovery would index it
+	// as a copy of the workspace (MGS1002). A root that fetches missing objects on demand
+	// (a git partial clone) is refused: a merge in the checkout can then ask the remote
+	// for an object the merge itself wrote.
+	CreateCheckout(ctx context.Context, root, dir, rev, branch string) error
 	// RemoveCheckout removes the checkout at dir and its registration, whether or not the
 	// directory still exists. Commits made in it stay in the store. A checkout
 	// CreateCheckout did not make is removed only when that loses nothing: git removes a
@@ -1333,7 +1330,7 @@ func (d DriftResult) BuzzObject() BuzzObject {
 
 // ClassifyDrift names the cause of a declared output that moved, and the sentence to
 // show for it: the one place that fork is decided, so the generate gate and
-// `magus vcs add` cannot describe one condition two ways.
+// `magus vcs ls-files` cannot describe one condition two ways.
 //
 // The fork is on WHY, not on how bad it is:
 //
@@ -1378,10 +1375,9 @@ func (e *OutputDriftError) Error() string { return e.Message }
 // SplitExplainedOutputs divides the dirty declared outputs into the ones this change
 // accounts for and the ones it does not.
 //
-// It backs both `magus vcs add` and doctor's generated-drift check. Classifying by
-// declared GLOB alone answers "is this path generated" and nothing else, so `vcs add`
-// staged whatever bytes sat at an output path while claiming to stage "the generated
-// outputs a source change produced", a causal claim it never checked.
+// It backs both `magus vcs ls-files` and doctor's generated-drift check. Classifying by
+// declared GLOB alone answers "is this path generated" and nothing else, which cannot tell
+// an output a source change produced from bytes that merely sit at an output path.
 //
 // An output is EXPLAINED when some project whose output glob claims it also has a dirty
 // declared SOURCE in this change. That is MGS4006's shape. An output with no dirty input
@@ -1498,35 +1494,28 @@ func StaleSourceProjects(files []FileEntry) []string {
 	return stale
 }
 
-// StagingPlan is what `magus vcs add` decided about a working tree, as a value.
-//
-// A value rather than a pile of Printlns because the same decision has several
-// audiences: the terminal, `-o json`, and (next) a pre-commit hook that needs the
-// verdict as an exit status rather than as prose. Every one of those used to mean
-// another hand-written rendering of the same four groups, which is how `-o json` came to
-// be accepted and silently answer in text.
-type StagingPlan struct {
-	// Sources and Outputs are what staging claimed: declared sources, and the declared
-	// outputs a source change in this same set accounts for.
-	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
-	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-	// Unexplained are declared outputs that moved with no dirty declared input behind
-	// them. Skipped unless named explicitly; Code says why they are suspect.
-	Unexplained []string `json:"unexplained,omitempty" yaml:"unexplained,omitempty"`
-	// Undeclared is what no project claims, and Maintained the subset magus's own core
-	// writes outside any target's globs (.gitattributes).
-	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
-	Maintained []string `json:"maintained,omitempty" yaml:"maintained,omitempty"`
-	// Staged is what actually reached the index, empty on a dry run. It is the plan's
-	// product, so it is what -o jsonl streams.
-	Staged []string `json:"staged" yaml:"staged" jsonl:"primary"`
-	// Reason is the prose --untracked was given, and is empty on every other run.
-	// The flag switches off the undeclared-file report, so the plan is where that
-	// decision stays answerable: it reaches the terminal, `-o json`, and the hook
-	// reading the verdict, which is every audience the staging has.
-	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
-	// Code, Message and URL classify Unexplained via ClassifyDrift, and are empty when
-	// nothing is unexplained.
+// LsFiles is what `magus vcs ls-files` listed, and every group of dirty paths it left out.
+// It lists and never stages: the person stages what it lists.
+type LsFiles struct {
+	// Files are the paths listed, workspace-relative and sorted; never nil, so -o json
+	// prints an empty list rather than null.
+	Files []string `json:"files" yaml:"files" jsonl:"primary"`
+	// Excluded are the groups left out, in a fixed order, each with the flag that lists it.
+	// A path in several groups is named under the first.
+	Excluded []LsFilesExcluded `json:"excluded,omitempty" yaml:"excluded,omitempty"`
+}
+
+// LsFilesExcluded is one group of dirty paths `magus vcs ls-files` left out.
+type LsFilesExcluded struct {
+	// Group is one of held, staged, untracked, unclaimed, unexplained, generated.
+	Group string   `json:"group" yaml:"group"`
+	Flag  string   `json:"flag" yaml:"flag"`
+	Paths []string `json:"paths" yaml:"paths"`
+	// Holders maps each held path to the live job that writes it; only the held group
+	// carries it.
+	Holders map[string]string `json:"holders,omitempty" yaml:"holders,omitempty"`
+	// Code, Message and URL classify the unexplained group via ClassifyDrift, and are
+	// empty on every other group.
 	Code    string `json:"code,omitempty" yaml:"code,omitempty"`
 	Message string `json:"message,omitempty" yaml:"message,omitempty"`
 	URL     string `json:"url,omitempty" yaml:"url,omitempty"`

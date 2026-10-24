@@ -364,8 +364,8 @@ func briefOffCheckDeny(row types.Job, off briefRun, v runVerdict) string {
 	line, target := off.line, off.run.target
 	switch {
 	case v.unchecked != nil:
-		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, which could not be judged against its write paths: the workspace did not load [%s].\nThe line: %q",
-			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
+		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, which could not be judged against its write paths: %s [%s].\nThe line: %q",
+			row.ID, target, uncheckedCause(v.unchecked), denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
 	case v.op:
 		return fmt.Sprintf("this brief tells job %s's worker to run `%s`, a spell op under the rw charm whose writes nothing declares [%s]; fix the brief.\nThe line: %q",
 			row.ID, target, denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
@@ -420,7 +420,7 @@ func briefOffCheck(runs []briefRun, judge rowJudge) (off briefRun, v runVerdict,
 		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") || strings.Contains(r.run.target, "...") {
 			continue
 		}
-		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted || v.op || len(v.outside) > 0 {
+		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted && !readsOwnProjects(v.run, judge.row.WritePaths) || v.op || len(v.outside) > 0 {
 			return r, v, true
 		}
 	}

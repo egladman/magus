@@ -313,8 +313,9 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 fun goVulncheck(target: Target) > Command {
     return Command{bin = "govulncheck", defaultArgs = ["./..."], capture = true, external = External.reads};
 }
-// magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands
-// in the tree; scip-go writes there via --output. The runner resolves the bare
+// magus injects MAGUS_SYMBOL_INDEX with the cache destination and records the index there
+// as the op's output, so a checkout at the same inputs replays it rather than running
+// scip-go; scip-go writes there via --output. The runner resolves the bare
 // $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
 // scip-go loads packages through `go`, so the toolchain's version keys the index too.
 // One run per GOOS a file suffix names, merged by magus: a single run indexes only what

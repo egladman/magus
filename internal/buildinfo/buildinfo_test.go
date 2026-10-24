@@ -94,3 +94,18 @@ func TestReadBuildIDTellsAbsentFromUnreadable(t *testing.T) {
 	_, err = readBuildID(filepath.Join(t.TempDir(), "missing"))
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
+
+func TestCommitPrefersTheLinkerStamp(t *testing.T) {
+	oldCommit, oldDate := commit, commitDate
+	t.Cleanup(func() { commit, commitDate = oldCommit, oldDate })
+
+	commit, commitDate = "8a9d", "2026-10-22T18:40:11Z"
+	id, date := Commit()
+	assert.Equal(t, "8a9d", id)
+	assert.Equal(t, "2026-10-22T18:40:11Z", date)
+
+	commit, commitDate = Unknown, Unknown
+	id, date = Commit()
+	assert.NotEmpty(t, id, "an unstamped build falls back to the VCS stamp, or Unknown")
+	assert.NotEmpty(t, date)
+}

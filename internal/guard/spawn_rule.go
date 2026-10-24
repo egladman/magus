@@ -68,6 +68,9 @@ func spawnedAgentID(response any) string {
 	return cmp.Or(envelopeString(m, "agentId"), envelopeString(m, "agent_id"), envelopeString(m, "task_name"))
 }
 
+// startSessionTool is the desktop host's tool that starts a new top-level session.
+const startSessionTool = "mcp__ccd_session__start_session"
+
 // judgeAgentEvent answers a spawn or a continuation of a subagent.
 //
 // Nothing here judges the prompt: it is prose, and a prompt that merely mentions a denied
@@ -86,6 +89,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
 		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	}
+	// The main session starting a session of its own is never hindered: it carries no job
+	// row, so no spawn rule has anything to bind it to. A leased caller is judged as usual.
+	if env.IsSpawn && env.Tool == startSessionTool {
+		if lease, _ := resolveActingLease(who, at, req.Lease); lease == "" {
+			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		}
 	}
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
@@ -228,10 +238,11 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 		return refused(denySpawnUnbriefed, denial{Say: reason}), ""
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	if row, ok := spawnDuplicate(ctx, at, facts, env.Spawn.Description); ok {
+	if row, ok := spawnDuplicate(ctx, at, facts, hint.NewGate(at.cacheDir, who.callerKey()), env.Spawn.Description); ok {
 		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
 	}
-	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+	row, titled := spawnTitleJob(ctx, at, env.Spawn.Description)
+	if titled {
 		if row.Validated == 0 {
 			return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
 		}
@@ -257,8 +268,10 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 		}
 	}
 	// The orchestrator waits for the build budget so its workers never do; a subagent
-	// spawning is a worker, which reports a full budget rather than waiting on it.
-	if who.Agent == "" {
+	// spawning is a worker, which reports a full budget rather than waiting on it. A read-only
+	// row without a check runs no target, so its worker never queues for a seat.
+	seatless := titled && holdsNoBuildSeat(row)
+	if who.Agent == "" && !seatless {
 		if note := adviseBudgetFull(ctx, time.Now()); note.Say != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(denyRuleSleepPoll), note.Say, map[string]string{note.Say: note.Why}, false)
 			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(denyRuleSleepPoll)}, ref
@@ -349,8 +362,36 @@ func agentIdle(facts hint.Gate, agentID string, now time.Time) *int64 {
 // starts when its call finishes, since only then does the child have an id to key it on.
 func markAgentSeen(facts hint.Gate, env hookRequest) {
 	if env.IsContinue {
-		facts.Touch(agentSeenKind(resolveAgentID(facts, env.Target)))
+		agentID := resolveAgentID(facts, env.Target)
+		facts.Touch(agentSeenKind(agentID))
+		facts.Touch(agentContinuedKind(agentID))
 	}
+}
+
+// stoppedAgentKind names the marker judgeStop touches when a subagent's stop stands.
+func stoppedAgentKind(agentID string) hint.MarkerKind {
+	return agentMarkerKind("agent-stopped-", agentID)
+}
+
+// agentContinuedKind names the marker a continue touches, which revives a stopped agent.
+// agentSeenKind cannot serve: a foreground spawn's call finishes after its child stopped.
+func agentContinuedKind(agentID string) hint.MarkerKind {
+	return agentMarkerKind("agent-continued-", agentID)
+}
+
+// stoppedAgent reports whether the host said agentID stopped, on stops, and nothing has
+// continued it since, on facts. Stops are filed under the caller key the stop hook judges
+// with, facts under the session's facts key.
+func stoppedAgent(facts, stops hint.Gate, agentID string) bool {
+	if agentID == "" {
+		return false
+	}
+	stopped, ok := stops.LastSeen(stoppedAgentKind(agentID))
+	if !ok {
+		return false
+	}
+	continued, ok := facts.LastSeen(agentContinuedKind(agentID))
+	return !ok || stopped.After(continued)
 }
 
 // agentAliasKind names the marker mapping a subagent's addressable name to its id, since a
@@ -411,6 +452,11 @@ type spawnedAgent struct {
 // with an empty parent and no job, the answer a host with no subagent identity gets.
 func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who hookAttribution, env hookRequest, spawner string) {
 	facts.Touch(agentSeenKind(env.SpawnedAgent))
+	if env.Spawn.AgentType != "" {
+		if body, err := json.Marshal(agentTypeRecord{Type: env.Spawn.AgentType}); err == nil {
+			writeAgentMarker(facts, agentTypeKind(env.SpawnedAgent), body)
+		}
+	}
 	if env.Spawn.Name != "" {
 		writeAgentMarker(facts, agentAliasKind(env.Spawn.Name), []byte(env.SpawnedAgent))
 	}
@@ -499,9 +545,19 @@ func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
 // spawnedJob reports whether one of the spawn records in facts attributed a worker to job:
 // its title names that row of rows, and its spawner could hand the job out.
 func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
+	return spawnedJobWhere(facts, rows, job, func(spawnedAgent) bool { return true })
+}
+
+// liveSpawnedJob is spawnedJob over the agents the host has not said stopped: a stopped
+// worker holds its job no longer, so a replacement may be spawned on it.
+func liveSpawnedJob(facts, stops hint.Gate, rows []types.Job, job string) bool {
+	return spawnedJobWhere(facts, rows, job, func(rec spawnedAgent) bool { return !stoppedAgent(facts, stops, rec.ID) })
+}
+
+func spawnedJobWhere(facts hint.Gate, rows []types.Job, job string, keep func(spawnedAgent) bool) bool {
 	for _, kind := range facts.Kinds(spawnedAgentPrefix) {
 		rec, ok := readMarker[spawnedAgent](facts, kind)
-		if !ok || rec.UntrustedJob != "" {
+		if !ok || rec.UntrustedJob != "" || !keep(rec) {
 			continue
 		}
 		if row, ok := spawnTitleRow(rows, rec.Description); ok && row.ID == job {

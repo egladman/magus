@@ -11,7 +11,7 @@ import (
 // satisfies it. Every site builds its message from the same four, so a caller who has
 // met one refusal has met them all.
 type Override struct {
-	// Name is the switch as its caller writes it: "magus vcs add --untracked",
+	// Name is the switch as its caller writes it: "magus vcs ls-files --include-untracked",
 	// "cache.remote.insecure".
 	Name string
 	// Silences completes "<Name> ...", saying what stops being checked.

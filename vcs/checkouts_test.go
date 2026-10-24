@@ -38,7 +38,7 @@ func TestCheckoutLifecycleOnEveryBackend(t *testing.T) {
 		require.NoError(t, err)
 		dir := filepath.Join(t.TempDir(), "job")
 
-		err = b.drv.CreateCheckout(ctx, root, dir, base.ID)
+		err = b.drv.CreateCheckout(ctx, root, dir, base.ID, "")
 		if b.name == "sl" {
 			var declined *types.VCSUnsupportedError
 			require.ErrorAs(t, err, &declined, "Sapling has no secondary checkout, so it must decline in its own name")
@@ -69,8 +69,47 @@ func TestCheckoutLifecycleOnEveryBackend(t *testing.T) {
 	})
 }
 
+func TestCheckoutOnABranchOnEveryBackend(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		if b.name == "sl" {
+			t.Skip("Sapling has no secondary checkout")
+		}
+		ctx := t.Context()
+		root := t.TempDir()
+		b.init(t, root, map[string]string{"a.txt": "one\n"})
+		base, err := b.drv.FindCommit(ctx, root, headRev[b.name])
+		require.NoError(t, err)
+		dir := filepath.Join(t.TempDir(), "job")
+		require.NoError(t, b.drv.CreateCheckout(ctx, root, dir, base.ID, "job-a"))
+		require.Error(t, b.drv.CreateCheckout(ctx, root, filepath.Join(t.TempDir(), "again"), base.ID, "job-a"), "a name already taken is refused")
+
+		if b.name == "jj" {
+			assert.Contains(t, vcsTestOutput(t, root, "jj", "workspace", "list", "-T", `name ++ "\n"`), "job-a\n")
+			require.NoError(t, b.drv.RemoveCheckout(ctx, root, dir))
+			return
+		}
+		commitIn(t, b, dir)
+		stranded, err := b.drv.StrandedRevisions(ctx, dir, base.ID)
+		require.NoError(t, err)
+		assert.Empty(t, stranded, "the branch reaches the commit made on it")
+
+		var head, kept string
+		if b.name == "git" {
+			assert.Equal(t, "job-a\n", vcsTestOutput(t, dir, "git", "symbolic-ref", "--short", "HEAD"))
+			head = vcsTestOutput(t, dir, "git", "rev-parse", "HEAD")
+			require.NoError(t, b.drv.RemoveCheckout(ctx, root, dir))
+			kept = vcsTestOutput(t, root, "git", "rev-parse", "job-a")
+		} else {
+			head = vcsTestOutput(t, dir, "hg", "log", "-r", ".", "-T", "{node}")
+			require.NoError(t, b.drv.RemoveCheckout(ctx, root, dir))
+			kept = vcsTestOutput(t, root, "hg", "log", "-r", "job-a", "-T", "{node}")
+		}
+		assert.Equal(t, head, kept, "the branch outlives its checkout")
+	})
+}
+
 func TestSaplingCreateCheckoutSaysWhyItDeclines(t *testing.T) {
-	err := saplingVCS{}.CreateCheckout(t.Context(), t.TempDir(), filepath.Join(t.TempDir(), "co"), "x")
+	err := saplingVCS{}.CreateCheckout(t.Context(), t.TempDir(), filepath.Join(t.TempDir(), "co"), "x", "")
 	var declined *types.VCSUnsupportedError
 	require.ErrorAs(t, err, &declined)
 	assert.Equal(t, &types.VCSUnsupportedError{VCS: "sl", Capability: types.CapCheckoutProvisioner}, declined)

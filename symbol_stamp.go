@@ -42,12 +42,11 @@ const symbolStampFormat = "symbol-stamp/3"
 // symbolStampPath is the stamp file beside one project's SCIP index.
 func symbolStampPath(indexPath string) string { return indexPath + ".fresh" }
 
-// symbolIndexStamp is what the stamp file must hold for the index op writes for p to read
-// fresh without a probe. It combines op's step key before run keying (sources by content
-// through the mtime fast path, config, spell definitions and this binary, no tool versions
-// and so no subprocess) with the identity of each completion stamp the step declares, the
-// index among them. "" when the key cannot be computed, which matches no stamp file.
-func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.Project, op string, memo *cache.SourceMemo) string {
+// symbolIndexStamp is what the stamp file must hold for index, the one op writes for p, to
+// read fresh without a probe: op's step key before run keying (no tool versions, so no
+// subprocess) and the identity of the index and of each stamp the step declares. "" when
+// the key cannot be computed, which matches no stamp file.
+func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.Project, op, index string, memo *cache.SourceMemo) string {
 	step := m.buildStep(p, op)
 	key, _, err := c.StepKeyMemo(ctx, &step, memo)
 	if err != nil {
@@ -61,11 +60,20 @@ func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.P
 	for _, name := range slices.Sorted(maps.Keys(observed)) {
 		fmt.Fprintf(&b, "observed %s=%s\n", name, observed[name])
 	}
+	writeFileIdentity(&b, index)
 	for _, s := range step.Stamps {
 		writeFileIdentity(&b, cache.StampPath(step.WorkspaceRoot, s))
 	}
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:])
+}
+
+// indexReplayed reports whether step, an index op's, would replay AND the index on disk is
+// the one that entry recorded. A hit alone would vouch for an index another key's run left
+// behind, such as the edit's after the sources were reverted.
+func indexReplayed(ctx context.Context, c *cache.Cache, step cache.Step) (bool, error) {
+	step.VerifyOutputs = true
+	return c.IsCached(ctx, step)
 }
 
 func symbolStampMatches(indexPath, want string) bool {
@@ -188,7 +196,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 	indexes := make([]string, len(capable))
 	for i, idx := range capable {
 		out[i] = types.SymbolIndexStatus{Project: idx.projectRef(), Op: idx.op, Language: idx.language, Freshness: types.SymbolIndexNotBuilt}
-		index := symbols.IndexPath(cacheDir, idx.project.Dir, idx.op)
+		index := symbols.IndexPath(cacheDir, idx.project.Path, idx.op)
 		indexes[i] = index
 		if _, err := os.Stat(index); err != nil {
 			// The install hint is the fix for an index that was never built because its
@@ -202,7 +210,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 		if c == nil {
 			continue
 		}
-		stamp := m.symbolIndexStamp(ctx, c, idx.project, idx.op, memo)
+		stamp := m.symbolIndexStamp(ctx, c, idx.project, idx.op, index, memo)
 		if symbolStampMatches(index, stamp) {
 			out[i].Freshness = types.SymbolIndexFresh
 			continue
@@ -227,8 +235,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 				out[w.at].Detail = err.Error()
 				continue
 			}
-			// A cache hit means the indexer op would not re-run, so the index is current.
-			fresh, err := c.IsCached(ctx, m.symbolIndexStep(w.idx.project, w.idx.op, toolVersions[path], observations[path]))
+			fresh, err := indexReplayed(ctx, c, m.symbolIndexStep(w.idx.project, w.idx.op, toolVersions[path], observations[path]))
 			if err == nil && fresh {
 				out[w.at].Freshness = types.SymbolIndexFresh
 				writeSymbolStamp(w.index, w.stamp)

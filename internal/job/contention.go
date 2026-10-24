@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// unusedWritePaths returns the write paths of holder its footprint has not touched, the
+// unusedWritePaths returns the hard write paths of holder its footprint has not touched, the
 // ones it could release to a job refused for wanting them. The footprint is holder's diff
 // since its checkpoint in the checkout that took it, read through the store's version
 // control. A path entry is used when a changed file falls under it ([types.PathWithin]); a
@@ -32,7 +32,7 @@ func unusedWritePaths(ctx context.Context, store *Store, rows []types.Job, holde
 		return nil
 	}
 	unused := []string{}
-	for _, entry := range holder.WritePaths {
+	for _, entry := range holder.HardPaths() {
 		if !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(entry, r.Location()) }) {
 			unused = append(unused, entry)
 		}

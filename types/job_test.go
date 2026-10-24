@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -22,9 +23,19 @@ func TestValidJobID(t *testing.T) {
 		id   string
 		want bool
 	}{
-		"plain":               {"MGS1021", true},
-		"every separator":     {"a.b:c_d-1/2", true},
+		"plain":               {"mgs1021", true},
+		"every separator":     {"a.b-1/2", true},
 		"branch shaped":       {"feat/spawn-capture", true},
+		"uppercase":           {"MGS1021", false},
+		"colon":               {"a:b", false},
+		"underscore":          {"a_b", false},
+		"double dot":          {"a..b", false},
+		"leading slash":       {"/a", false},
+		"trailing slash":      {"a/", false},
+		"doubled slash":       {"a//b", false},
+		"segment dot start":   {"a/.b", false},
+		"segment dash start":  {"a/-b", false},
+		"leading dash":        {"-a", false},
 		"at the length cap":   {strings.Repeat("u", MaxJobIDLen), true},
 		"past the length cap": {strings.Repeat("u", MaxJobIDLen+1), false},
 		"empty":               {"", false},
@@ -428,6 +439,28 @@ func TestDeclarationCarriesMaxAttempts(t *testing.T) {
 	assert.Zero(t, row.MaxAttempts)
 }
 
+// A weight outside (0,1] is refused, never clamped, and an explicit 0 is out of range rather
+// than read as omitted.
+func TestDeclarationRefusesAWeightOutOfRange(t *testing.T) {
+	t.Parallel()
+
+	for _, w := range []float64{0, -0.5, 1.5, math.NaN()} {
+		assert.ErrorContains(t, Declaration{ID: "worker", Weight: &w}.Validate(), "outside (0,1]", "weight %v", w)
+	}
+	for _, w := range []float64{0.1, 0.5, 1} {
+		require.NoError(t, Declaration{ID: "worker", Weight: &w}.Validate(), "weight %v", w)
+	}
+
+	var row Job
+	w := 0.9
+	Declaration{ID: "worker", Weight: &w}.Apply(&row)
+	assert.InDelta(t, 0.9, row.Weight, 0)
+	row.Paused = 42
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Zero(t, row.Weight, "an omitted weight clears the row's, which reads as DefaultJobWeight")
+	assert.Equal(t, int64(42), row.Paused, "apply keeps a pause")
+}
+
 // The generation and the attempt record are the store's, so a declaration never writes
 // them: Apply leaves them where they were.
 func TestDeclarationApplyLeavesStoreComputedAttemptsAlone(t *testing.T) {
@@ -603,6 +636,33 @@ func TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne(t *testing.T) {
 
 	Declaration{ID: "worker"}.ApplySpec(&row)
 	assert.Empty(t, row.Breaks)
+}
+
+func TestDeclarationIntegratesNamesMergeableBranchesOnce(t *testing.T) {
+	t.Parallel()
+
+	ok := Declaration{ID: "integrate", Integrates: []string{"done-a", "feature/done-b"}}
+	require.NoError(t, ok.Validate())
+	var row Job
+	ok.Apply(&row)
+	assert.True(t, row.Integrating())
+	assert.Equal(t, []string{"done-a", "feature/done-b"}, row.Clone().Integrates)
+
+	for branches, want := range map[string]string{
+		"--force":       `integrates[0] "--force" is not a branch name a merge can take`,
+		"a..b":          `integrates[0] "a..b" is not a branch name a merge can take`,
+		"done done":     `integrates[0] "done done" is not a branch name a merge can take`,
+		"done-a,done-a": `integrates[1] "done-a" is named twice`,
+		"main.lock":     `integrates[0] "main.lock" is not a branch name a merge can take`,
+	} {
+		err := Declaration{ID: "integrate", Integrates: strings.Split(branches, ",")}.Validate()
+		require.Error(t, err, branches)
+		assert.Contains(t, err.Error(), want, branches)
+	}
+	err := Declaration{ID: "integrate", Integrates: []string{"done-a"}, ReadOnly: true}.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "an integration job merges branches, so it writes")
+	assert.False(t, Job{ID: "worker"}.Integrating())
 }
 
 func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
@@ -1055,4 +1115,58 @@ func TestPathWithin(t *testing.T) {
 	} {
 		assert.Equalf(t, tc.want, PathWithin(tc.inner, tc.outer), "PathWithin(%q, %q)", tc.inner, tc.outer)
 	}
+}
+
+func TestParseClaimEvidence(t *testing.T) {
+	t.Parallel()
+
+	for because, want := range map[string]ClaimEvidence{
+		"refs:hint.VCSAdd":         {Kind: ClaimRefs, Subject: "hint.VCSAdd"},
+		"test:cmd/magus/vcs.go":    {Kind: ClaimTest, Subject: "cmd/magus/vcs.go"},
+		"output:.:config-generate": {Kind: ClaimOutput, Subject: ".:config-generate"},
+		"released":                 {Kind: ClaimReleased},
+	} {
+		got, err := ParseClaimEvidence(because)
+		require.NoError(t, err, because)
+		assert.Equal(t, want, got)
+		assert.Equal(t, because, got.String(), "the evidence spells back as its because")
+	}
+	for because, refused := range map[string]string{
+		"hunch:x":         "names no proof",
+		"refs:":           "names no refs subject",
+		"released:a.go":   "released names nothing after it",
+		"output:generate": "names no target",
+	} {
+		_, err := ParseClaimEvidence(because)
+		require.Error(t, err, because)
+		assert.Contains(t, err.Error(), refused)
+	}
+}
+
+func TestAClaimRecordDeclaresNothingElse(t *testing.T) {
+	t.Parallel()
+
+	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "cli-ls-files", Claim: []JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
+	assert.Empty(t, rec.Problems())
+
+	rec.Criteria = "more"
+	rec.Claim = append(rec.Claim, JobClaimRequest{Path: "../x.go", Because: "released"}, JobClaimRequest{Path: "internal/**", Because: "maybe"})
+	var fields []string
+	for _, p := range rec.Problems() {
+		fields = append(fields, p.Field)
+	}
+	assert.Equal(t, []string{"claim", "claim[1].path", "claim[2].path", "claim[2].because"}, fields)
+}
+
+func TestDeclarationCarriesMaxClaims(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Declaration{ID: "worker", MaxClaims: 4}.Validate())
+	assert.ErrorContains(t, Declaration{ID: "worker", MaxClaims: -1}.Validate(), "max_claims is -1")
+
+	var row Job
+	Declaration{ID: "worker", MaxClaims: 4}.Apply(&row)
+	assert.Equal(t, 4, row.MaxClaims)
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Zero(t, row.MaxClaims)
 }

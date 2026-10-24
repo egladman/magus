@@ -37,6 +37,10 @@ func awaitBudget(ctx context.Context, rootOverride string) error {
 	}
 	reader, argv, _ := pipe.ReaderArgv(ctx, os.Stdout)
 	claims := pipedRunClaims(ctx, rootOverride, argv)
+	weight := jobWeightAt(ctx, rootOverride)
+	for i := range claims {
+		claims[i].Weight = weight
+	}
 	var err error
 	if reader == 0 {
 		err = cache.AwaitMachine(ctx, queryCapacity, claims, waiting)
@@ -73,6 +77,20 @@ func reserveSeat(ctx context.Context, reader int, argv []string, claims []types.
 		return fmt.Errorf("%w: the running broker predates seat reservations, so `%s` stops it and the next run starts a current one", err, hint.BinaryName()+" broker stop")
 	}
 	return err
+}
+
+// jobWeightAt is the weight of the job this caller acts under in the workspace at
+// rootOverride, 0 when it acts under none.
+func jobWeightAt(ctx context.Context, rootOverride string) float64 {
+	root, err := workspace.FindRoot(rootOverride)
+	if err != nil {
+		return 0
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return 0
+	}
+	return cache.LeaseWeight(ctx, cacheDir)
 }
 
 func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {

@@ -793,6 +793,17 @@ agent's prose into `$EDITOR` always passed it. What git records is who stood beh
 review conversation under way, your remarks and your colleagues', as one note anchored to the
 hunks it discussed, so the comment that mattered is findable after the pull request merges.
 
+`magus notes capture --gap` records a harness gap: a place the guard or the tooling let work
+go wrong. Positional arguments are the refs it was seen in, and `--anchor` names what it is
+about: `symbol:<key>`, `file:<path>#<decl>` (stored as the symbol that file declares), or
+`diagnostic:<code>`. Every anchor is resolved before anything is written, and one that
+resolves to nothing refuses the capture, naming it. The note is tagged `gap` and `gap/open`
+and carries a `find:` list of the commands that look its anchors up again (`magus refs`,
+`magus explain`, `magus query`). `magus notes ls --tag gap/open` lists the open gaps with a
+`find it:` block under each, and `magus notes get` prints the same block. An anchor whose code
+moved prints a `stale` line beneath it instead of a find command that silently points
+nowhere. A person closes a gap by retagging it `gap/ruled`, `gap/refused` or `gap/upstream`.
+
 ```yaml
 knowledge:
   notes:
@@ -854,7 +865,8 @@ Three consequences worth knowing:
 - **Nested folders are walked**, dot-directories (`.obsidian`, `.trash`) are skipped, and a
   scan stops at 5,000 markdown files and says so rather than silently loading half a vault.
 
-`symbol`, `file`, `project`, `target`, and `note` are the whole set. There is deliberately
+`symbol`, `file`, `project`, `target`, `note`, and `diagnostic` (a code such as `MGS3009`) are
+the whole set. There is deliberately
 no line-anchored kind: a node ID is checkable, so its breakage is reportable, while a line
 number changes on the next edit above it with nothing to detect. Anchor as narrowly as the
 knowledge allows: a coarse anchor is more durable, and multiple anchors are how a note

@@ -469,7 +469,7 @@ jobs:
         uses: ./.github/actions/magus
         env:
           TMPDIR: ${{ runner.temp }}
-          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
         with:
           command: queue gate --sandbox=required --cache .magus --env MAGUS_CACHE_REMOTE_TRUSTED_KEYS,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus config cache import --remote
 
@@ -497,7 +497,7 @@ jobs:
         uses: ./.github/actions/magus
         env:
           TMPDIR: ${{ runner.temp }}
-          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
           MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
         with:
           # ci:gha, not bare ci. The gha charm swaps a tool's reporter to GitHub's
@@ -527,7 +527,7 @@ jobs:
         uses: ./.github/actions/magus
         env:
           TMPDIR: ${{ runner.temp }}
-          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
           MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
         with:
           command: queue gate --sandbox=required --cache .magus --env MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus config cache export --remote

@@ -151,6 +151,45 @@ func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
 	assert.Equal(t, []string{"check-2", "lint-a-b", "lint-a-b-2"}, ids)
 }
 
+// workerGrade is the guard's answer for a worker: the build of magus is never its to run, and
+// a test only without default charms.
+func workerGrade(c types.LeaseCheck) CheckVerdict {
+	switch {
+	case c.Target == "build":
+		return CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
+	case c.Target == "go-test" && !c.NoDefaultCharms:
+		return CheckVerdict{Denied: true, Rule: "lease-gate", Reason: "test needs --no-default-charms"}
+	}
+	return CheckVerdict{}
+}
+
+func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "j", WritePaths: []string{"internal/job/gates.go"}, Check: &types.LeaseCheck{Target: "compile", Project: "."}}
+
+	got := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, workerGrade)
+
+	byTarget := map[string]UnrunGate{}
+	for _, g := range got {
+		byTarget[g.Target] = g
+	}
+	assert.False(t, byTarget["lint"].IntegratorGates)
+	assert.True(t, byTarget["go-test"].Goal.Check.NoDefaultCharms, "a test the worker may run only without default charms is offered that way")
+	build := byTarget["build"]
+	assert.True(t, build.IntegratorGates, "no form of the build may run")
+	assert.Zero(t, build.Goal, "a goal no worker may run is not offered")
+
+	lines := unrunLines(got)
+	assert.Contains(t, lines, "build . (reads **/*.go): the integrator gates it; no worker may run it")
+	assert.NotContains(t, lines[len(lines)-1], `"id":"build"`)
+
+	ungraded := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, nil)
+	for _, g := range ungraded {
+		assert.False(t, g.IntegratorGates, "with no grader every goal is offered as it is")
+	}
+}
+
 func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
 	t.Parallel()
 

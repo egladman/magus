@@ -1112,16 +1112,16 @@ func (_c *MockVCSDriver_Conflicts_Call) RunAndReturn(run func(ctx context.Contex
 }
 
 // CreateCheckout provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) CreateCheckout(ctx context.Context, root string, dir string, rev string) error {
-	ret := _mock.Called(ctx, root, dir, rev)
+func (_mock *MockVCSDriver) CreateCheckout(ctx context.Context, root string, dir string, rev string, branch string) error {
+	ret := _mock.Called(ctx, root, dir, rev, branch)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateCheckout")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
-		r0 = returnFunc(ctx, root, dir, rev)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) error); ok {
+		r0 = returnFunc(ctx, root, dir, rev, branch)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1138,11 +1138,12 @@ type MockVCSDriver_CreateCheckout_Call struct {
 //   - root string
 //   - dir string
 //   - rev string
-func (_e *MockVCSDriver_Expecter) CreateCheckout(ctx interface{}, root interface{}, dir interface{}, rev interface{}) *MockVCSDriver_CreateCheckout_Call {
-	return &MockVCSDriver_CreateCheckout_Call{Call: _e.mock.On("CreateCheckout", ctx, root, dir, rev)}
+//   - branch string
+func (_e *MockVCSDriver_Expecter) CreateCheckout(ctx interface{}, root interface{}, dir interface{}, rev interface{}, branch interface{}) *MockVCSDriver_CreateCheckout_Call {
+	return &MockVCSDriver_CreateCheckout_Call{Call: _e.mock.On("CreateCheckout", ctx, root, dir, rev, branch)}
 }
 
-func (_c *MockVCSDriver_CreateCheckout_Call) Run(run func(ctx context.Context, root string, dir string, rev string)) *MockVCSDriver_CreateCheckout_Call {
+func (_c *MockVCSDriver_CreateCheckout_Call) Run(run func(ctx context.Context, root string, dir string, rev string, branch string)) *MockVCSDriver_CreateCheckout_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1160,11 +1161,16 @@ func (_c *MockVCSDriver_CreateCheckout_Call) Run(run func(ctx context.Context, r
 		if args[3] != nil {
 			arg3 = args[3].(string)
 		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -1175,7 +1181,7 @@ func (_c *MockVCSDriver_CreateCheckout_Call) Return(err error) *MockVCSDriver_Cr
 	return _c
 }
 
-func (_c *MockVCSDriver_CreateCheckout_Call) RunAndReturn(run func(ctx context.Context, root string, dir string, rev string) error) *MockVCSDriver_CreateCheckout_Call {
+func (_c *MockVCSDriver_CreateCheckout_Call) RunAndReturn(run func(ctx context.Context, root string, dir string, rev string, branch string) error) *MockVCSDriver_CreateCheckout_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2625,80 +2631,6 @@ func (_c *MockVCSDriver_InstallRefreshHook_Call) Return(strings []string, err er
 }
 
 func (_c *MockVCSDriver_InstallRefreshHook_Call) RunAndReturn(run func(ctx context.Context, root string, command string) ([]string, error)) *MockVCSDriver_InstallRefreshHook_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// InstallRegenHook provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) InstallRegenHook(ctx context.Context, root string, command string) ([]string, error) {
-	ret := _mock.Called(ctx, root, command)
-
-	if len(ret) == 0 {
-		panic("no return value specified for InstallRegenHook")
-	}
-
-	var r0 []string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]string, error)); ok {
-		return returnFunc(ctx, root, command)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []string); ok {
-		r0 = returnFunc(ctx, root, command)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]string)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, root, command)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockVCSDriver_InstallRegenHook_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InstallRegenHook'
-type MockVCSDriver_InstallRegenHook_Call struct {
-	*mock.Call
-}
-
-// InstallRegenHook is a helper method to define mock.On call
-//   - ctx context.Context
-//   - root string
-//   - command string
-func (_e *MockVCSDriver_Expecter) InstallRegenHook(ctx interface{}, root interface{}, command interface{}) *MockVCSDriver_InstallRegenHook_Call {
-	return &MockVCSDriver_InstallRegenHook_Call{Call: _e.mock.On("InstallRegenHook", ctx, root, command)}
-}
-
-func (_c *MockVCSDriver_InstallRegenHook_Call) Run(run func(ctx context.Context, root string, command string)) *MockVCSDriver_InstallRegenHook_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockVCSDriver_InstallRegenHook_Call) Return(strings []string, err error) *MockVCSDriver_InstallRegenHook_Call {
-	_c.Call.Return(strings, err)
-	return _c
-}
-
-func (_c *MockVCSDriver_InstallRegenHook_Call) RunAndReturn(run func(ctx context.Context, root string, command string) ([]string, error)) *MockVCSDriver_InstallRegenHook_Call {
 	_c.Call.Return(run)
 	return _c
 }

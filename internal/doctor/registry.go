@@ -253,25 +253,11 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkMergeDriverLoads() },
 	},
 	{
-		Name:           "settle-hooks",
-		Doc:            "whether the registered git merge driver has the hooks that regenerate what a merge changed, or leaves that output stale",
-		Evidence:       types.EvidenceMeasured,
-		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSettleHooks() },
-	},
-	{
 		Name:           "owed-regeneration",
 		Doc:            "whether a merge kept one side of a generated file whose regeneration has not run",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkOwedRegeneration() },
-	},
-	{
-		Name:           "deferred-settle",
-		Doc:            "whether git operations ran under magus.settle=defer whose regeneration `magus vcs resolve` has not yet run",
-		Evidence:       types.EvidenceMeasured,
-		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkDeferredSettle() },
 	},
 	{
 		Name:           "guard-binary",
@@ -564,6 +550,12 @@ var allChecks = []checkDef{
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            (*runner).checkToolchainLifecycle,
+	},
+	{
+		Name:     "go-cache-budget",
+		Doc:      "the Go build and lint caches against go.cache_budget_mb, with the command that frees each one that is over",
+		Evidence: types.EvidenceMeasured,
+		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkGoCacheBudget() },
 	},
 	{
 		Name:           "stale-spell-shadow-acknowledgments",

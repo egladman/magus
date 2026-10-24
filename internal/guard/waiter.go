@@ -57,20 +57,20 @@ var (
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 
 	denySlotWait = "a worker waits for the build budget only in the call that spends the seat: `" + hint.Status.With("--wait") + " | " + hint.Run.String() +
-		" <your check>`. A wait on its own, a watch, or a sleep before a run reserves nothing."
+		" <your check>`. A wait that gates no magus call, a watch, a sleep before a run, or a wait on another run's pid waits for nothing."
 	denySlotWaitWhy = "`status --wait` piped straight into a magus run reserves the seat it sized for that run until the run claims it, so no other worker can take it in between. " +
-		"A wait that feeds no run holds nothing, so the run after it can still be refused with MGS3009, and a worker looping on reads and refusals spends turns no one who can free a seat sees."
+		"A wait that feeds no run, or ends with another run's process, holds nothing, so the run after it can still be refused with MGS3009, and a worker looping on reads and refusals spends turns no one who can free a seat sees."
 
 	budgetFullWhy = "Every worker's check needs a seat in the build budget, and a worker that finds none waits in its check's call until one frees, so spawning into a full budget spends a worker's time waiting. " +
 		"The budget is the machine's, shared by every worktree, so it frees only as the runs holding it end."
 )
 
-// slotWaitLine reports a line that waits for room in the build budget without reserving
-// it: `magus status --wait` that pipes into no magus run, `--watch`, a status read beside
-// a sleep or inside a watcher, or a magus run after a sleep of at least sleepPollFloor,
-// which retries a run the budget refused. `status --wait | magus run ...` alone is not
-// one: the wait holds the seat for the run it feeds.
-func slotWaitLine(command string, d Dialect, watcher bool) bool {
+// slotWaitLine reports a line that waits for room in the build budget for no call: `magus
+// status --wait` gating no magus call (see seatWaits), `--watch`, a status read beside a
+// sleep or inside a watcher, or a magus run after a sleep of at least sleepPollFloor, which
+// retries a run the budget refused. A process wait on a run holding a seat (see
+// budgetHolderWait) is one too.
+func slotWaitLine(ctx context.Context, command string, d Dialect, watcher bool) bool {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return false
@@ -84,6 +84,9 @@ func slotWaitLine(command string, d Dialect, watcher bool) bool {
 	})
 	paired := seatWaits(f, d)
 	waits := false
+	if budgetHolderWait(ctx, command, d) {
+		return true
+	}
 	eachCall(f, d, func(call *syntax.CallExpr, c hint.Invocation) {
 		if !isMagusInvocation(c) {
 			return
@@ -102,6 +105,51 @@ func slotWaitLine(command string, d Dialect, watcher bool) bool {
 	return waits
 }
 
+// budgetHolderWait reports a line that waits on the process of a run holding a seat in the
+// build budget (`caffeinate -w`, `wait`, `lsof -p`, `kill -0`): the wait `magus status
+// --wait` is, spent on another run unjudged. No broker answering reads as no holder.
+func budgetHolderWait(ctx context.Context, command string, d Dialect) bool {
+	pids := waitedPIDs(command, d)
+	if len(pids) == 0 {
+		return false
+	}
+	s, err := budgetSnapshot(ctx)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(s.Holders, func(h types.MachineClaimant) bool {
+		return h.PID > 0 && slices.Contains(pids, strconv.Itoa(h.PID))
+	})
+}
+
+// waitedPIDs is each pid the processes on a line wait on: `caffeinate -w <pid>`, `wait <pid>`,
+// `lsof -p <pid>` and `kill -0 <pid>`.
+func waitedPIDs(command string, d Dialect) []string {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok {
+		return nil
+	}
+	var pids []string
+	for _, c := range cmds {
+		switch name := path.Base(c.Name); name {
+		case "caffeinate", "lsof":
+			flag := map[string]string{"caffeinate": "w", "lsof": "p"}[name]
+			for i, a := range c.Args {
+				if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.HasSuffix(a, flag) && i+1 < len(c.Args) {
+					pids = append(pids, strings.Split(c.Args[i+1], ",")...)
+				}
+			}
+		case "wait":
+			pids = append(pids, nonFlagArgs(c.Args)...)
+		case "kill":
+			if slices.Contains(c.Args, "-0") {
+				pids = append(pids, nonFlagArgs(c.Args)...)
+			}
+		}
+	}
+	return pids
+}
+
 // statusFlag reports a status argv carrying any of names, in any spelling Go's flag
 // package reads.
 func statusFlag(args []string, names ...string) bool {
@@ -111,24 +159,31 @@ func statusFlag(args []string, names ...string) bool {
 	})
 }
 
-// seatWaits is each `magus status --wait` on a parsed line whose stdout pipes straight
-// into a magus run or affected, and each run it feeds: the wait reserves that run's seat
-// until the run claims it. A watch reserves nothing, and neither does a wait whose output
-// goes anywhere else.
+// seatWaits is each `magus status --wait` gating a magus call on a parsed line, and each
+// call it gates: one it pipes into (MGS3009's hint, for a run or a `graph build`), which it
+// reserves the seat for, or one `&&` starts once the budget has room. A watch gates nothing,
+// and neither does a wait `;` follows, which starts the next call even if the wait failed.
 func seatWaits(f *syntax.File, d Dialect) map[*syntax.CallExpr]bool {
 	paired := map[*syntax.CallExpr]bool{}
 	syntax.Walk(f, func(n syntax.Node) bool {
-		pipe, ok := n.(*syntax.BinaryCmd)
-		if !ok || (pipe.Op != syntax.Pipe && pipe.Op != syntax.PipeAll) {
+		bin, ok := n.(*syntax.BinaryCmd)
+		if !ok {
 			return true
 		}
-		wait, run := pipeEnd(pipe.X, true), pipeEnd(pipe.Y, false)
-		if wait == nil || run == nil {
+		var wait *syntax.CallExpr
+		switch bin.Op {
+		case syntax.Pipe, syntax.PipeAll:
+			wait = pipeEnd(bin.X, true)
+		case syntax.AndStmt:
+			wait, _ = bin.X.Cmd.(*syntax.CallExpr)
+		}
+		gated := pipeEnd(bin.Y, false)
+		if wait == nil || gated == nil {
 			return true
 		}
 		if magusCallIs(wait, d, func(sub string, args []string) bool { return sub == "status" && statusFlag(args, "wait") }) &&
-			magusCallIs(run, d, func(sub string, _ []string) bool { return sub == "run" || sub == "affected" }) {
-			paired[wait], paired[run] = true, true
+			magusCallIs(gated, d, func(sub string, _ []string) bool { return sub != "status" }) {
+			paired[wait], paired[gated] = true, true
 		}
 		return true
 	})
@@ -199,11 +254,12 @@ type refusedRun struct {
 // denyRefusedRetry refuses a magus run that repeats, argv for argv, one this checkout's run
 // log recorded refused with MGS3009 inside refusedRetryWindow, when that refusal is still
 // the newest run of the command. Nothing freed a seat on the caller's behalf in between,
-// so the rerun is the poll again with the caller's turn as its loop. A run fed by a wait
+// so the rerun is the poll again with the caller's turn as its loop. A run a wait gates
 // (`magus status --wait | magus run ...`) passes, as does any line that runs no target.
 // The run log is read only for a line that runs one, and only logs written inside the
-// window are opened. Workers and orchestrators are told the same pipe: the wait holds the
-// seat for the run it feeds.
+// window are opened. A leased caller is told the pipe, whose wait holds the seat for the run it
+// feeds; the unbound root is told to fork a job instead, since orchestrator-groundwork
+// refuses it the run.
 func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string) denial {
 	argvs := unwaitedRuns(command)
 	if len(argvs) == 0 {
@@ -215,6 +271,13 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 		return denial{}
 	}
 	run := strings.Join(append([]string{hint.BinaryName()}, quoteArgs(r.argv)...), " ")
+	if deps.lease == "" {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; the root runs no target: fork a job for it: `%s`.",
+				run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.JobFork.String()),
+			Why: denyRefusedRetryWhy,
+		}
+	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; wait for a seat in the same call: `%s | %s`.",
 			run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.Status.With("--wait"), run),
@@ -225,7 +288,7 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 var denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
 
 // unwaitedRuns is the argv of each magus run or affected on a line that no `magus status
-// --wait` pipes straight into; nil for a line that runs neither.
+// --wait` gates (see seatWaits); nil for a line that runs neither.
 func unwaitedRuns(command string) [][]string {
 	f, err := parseFile(command, DialectBash)
 	if err != nil {
@@ -392,6 +455,15 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 		"` shows the pool) before starting a worker, since a worker whose check finds no seat reports and stops."
 }
 
+// holdsNoBuildSeat reports whether the worker for row can never take a build seat: it writes
+// nothing and declares no check, so it runs no target.
+func holdsNoBuildSeat(row types.Job) bool {
+	if !row.ReadOnly || len(row.WritePaths) > 0 {
+		return false
+	}
+	return !slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool { return g.Resolve().Kind == types.GoalKindCheck })
+}
+
 // adviseBudgetFull is the advisory for an orchestrator spawning into a full build budget,
 // "" when the budget has room or no broker answers.
 func adviseBudgetFull(ctx context.Context, now time.Time) advice {
@@ -533,10 +605,10 @@ func denySpawnWaiter() denial {
 }
 
 // spawnDuplicate is the row a spawn's title names when an earlier spawn in this session was
-// already attributed to it and the row is still being worked. A running row alone is not
-// enough: a row stays running after its worker dies, and only this session's own record
-// says a worker of its own holds it.
-func spawnDuplicate(ctx context.Context, at location, facts hint.Gate, title string) (types.Job, bool) {
+// already attributed to it, the host has not said that worker stopped (on stops), and the row
+// is still being worked. A running row alone is not enough: a row stays running after its
+// worker dies, and only this session's own record says a worker of its own holds it.
+func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (types.Job, bool) {
 	row, ok := spawnTitleJob(ctx, at, title)
 	if !ok || !row.State.Editing() {
 		return types.Job{}, false
@@ -545,7 +617,7 @@ func spawnDuplicate(ctx context.Context, at location, facts hint.Gate, title str
 	if err != nil {
 		return types.Job{}, false
 	}
-	return row, spawnedJob(facts, rows, row.ID)
+	return row, liveSpawnedJob(facts, stops, rows, row.ID)
 }
 
 func denySpawnDuplicate(row types.Job) denial {

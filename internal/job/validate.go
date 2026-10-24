@@ -48,7 +48,7 @@ import (
 // ambiguity check. The guard grades the checks against rows rather than sweep the store
 // again.
 func validateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
-	rows = hardenWritten(ctx, store, rows)
+	rows = HardenWritten(ctx, store, rows)
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
 	prev, updates := mergeBase(rows, id, merge)
 	merged := prev.Clone()
@@ -100,6 +100,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
+		ps = append(ps, claimCeilingProblems(merged, limits)...)
 		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Goals, read)...)
 		ps = append(ps, directoryWritePathProblems(store, merged)...)
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
@@ -154,7 +155,7 @@ func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
 	}
 	var goals []types.Goal
 	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
-		if g.Target == lintTarget {
+		if g.Target == lintTarget && !g.IntegratorGates {
 			goal := g.Goal
 			goal.Check.NoDefaultCharms = true
 			goals = append(goals, goal)
@@ -250,13 +251,9 @@ func validateFork(ctx context.Context, store *Store, rows []types.Job, id string
 // check's project and target, the outputs a write path regenerates and the ci targets over
 // it, and its ignore filter. The view takes its own mutex, as [Store.As] does.
 func (s *Store) InWorkspace(ws Workspace) *Store {
-	return &Store{
-		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir, stateBase: s.stateBase,
-		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, retain: s.retain, outputs: s.outputs,
-		trailBase: s.trailBase, landed: s.landed, grader: s.grader, dryRun: s.dryRun, build: s.build,
-		modelTiers: s.modelTiers, modelRows: s.modelRows, modelTierMatrix: s.modelTierMatrix, owners: s.owners, priceContext: s.priceContext,
-		workspace: &ws,
-	}
+	v := s.view()
+	v.workspace = &ws
+	return v
 }
 
 // loadedWorkspace is the workspace store validates against, or why it has none.
@@ -307,7 +304,7 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 		})
 	}
 	ps = append(ps, regeneratedProblems(regenerated, merged.DenyPaths)...)
-	ps = append(ps, unrunGateProblems(UnrunGates(store.root, gated, ws.Projects, regenerated))...)
+	ps = append(ps, unrunGateProblems(unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged)))...)
 	ps = append(ps, onRow(broadClaimProblems(ctx, store.root, judged, ws, read), judged, merged)...)
 	return ps, unchecked
 }
@@ -430,12 +427,15 @@ func regeneratedEdit(output string) *types.JobEdit {
 	return &types.JobEdit{AddWritePath: output}
 }
 
-// unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. The goal a
-// lint gate's Edit adds skips default charms, as [lintGoals] adds it, so lint run by --fix
-// reports instead of rewriting the worker's tree.
+// unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. A gate no
+// worker may run is the integrator's and raises nothing. The goal a lint gate's Edit adds
+// skips default charms, as [lintGoals] adds it, so --fix lint reports and rewrites nothing.
 func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(gates))
 	for _, g := range gates {
+		if g.IntegratorGates {
+			continue
+		}
 		subject := g.Target + " " + g.Project
 		add := g.Goal
 		if g.Target == lintTarget {
@@ -460,7 +460,7 @@ func rowDeclaration(row types.Job) types.Declaration {
 		ID: row.ID, Parent: row.Parent, Criteria: row.Criteria, Checkpoint: row.Checkpoint,
 		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, ReadPaths: row.ReadPaths, DependsOn: row.DependsOn,
 		Breaks: row.Breaks, Model: row.Model, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
-		MaxAttempts: row.MaxAttempts, Waivers: row.Waivers,
+		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Waivers: row.Waivers,
 	}
 	// A stored row renders its check into Validation too, and a record carries one spelling.
 	if row.Check != nil {

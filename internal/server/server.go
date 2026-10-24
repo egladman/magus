@@ -246,14 +246,9 @@ func (s *Server) Serve(ctx context.Context) error {
 			// if the watcher cannot start, the SSE stream emits only heartbeats.
 			var inv <-chan struct{}
 			var jobFeed *console.JobFeed
-			// RelativeIgnore, not BuiltinIgnore: the predicate skips any dot segment in the
-			// path, which is right for a directory inside the tree and wrong for one the
-			// tree sits inside. A workspace opened at <repo>/.claude/worktrees/<name> has a
-			// dot segment above its root, so every file in it matched and this watcher
-			// reported nothing at all, with nothing logged and nothing failing.
 			bWatcher, werr := watch.New(ctx,
 				watch.WithRoot(opts.Magus.Root()),
-				watch.WithIgnore(watch.RelativeIgnore(opts.Magus.Root(), watch.BuiltinIgnore)),
+				watch.WithIgnore(watch.BuiltinIgnore),
 			)
 			if werr != nil {
 				bridgeLog.WarnContext(ctx, "file watcher unavailable; /api/v1/events will emit heartbeats only",

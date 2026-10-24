@@ -3,8 +3,8 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12801
-skill_short_bytes: 9843
+skill_full_bytes: 12946
+skill_short_bytes: 9964
 ---
 
 # magus-buzz-lang
@@ -29,8 +29,8 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
-| `knowledge-schema-version` | `23` |
-| `skill-content` | `6f9445108bce` |
+| `knowledge-schema-version` | `24` |
+| `skill-content` | `8ff27b00bf72` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -67,6 +67,7 @@ check, fix first error, run.
 magus buzz --check script.buzz    # parse and type-check: every error, nothing runs
 magus buzz script.buzz a b        # run it: magus calls main(args) for you
 magus buzz -t script.buzz         # run its test "..." {} blocks
+magus buzz -e 'import "std"; std\print(1);'    # inline: needs no main; files and stdin still do
 ```
 
 1. Run `--check` after every edit. Fix FIRST error, then check again;
@@ -193,7 +194,7 @@ you write: Buzz; you see
 `final c = Counter{};` then method that assigns `this.n`: `final c = mut Counter{};`; `cannot mutate immutable object` at run time
 `return null;` from `> int`: declare `> int?`; unwrap with `?? fallback`, `if (x -> v)`, or `x!`; nothing
 `x = 2;` after `final x = 1;`: `var x = 1;`; `cannot assign to final "x"`
-`if` or `for` at top of file: put it in `main`; `not allowed at the top level`
+`if` or `for` at top of file: put it in `main`, except `magus buzz -e`; `not allowed at the top level`
 call to `fs\...`, `json\parse`, ... in plain function: declare function `!> any`, or end call with `catch fallback`; `[BZZ1006] call may raise but is neither declared with !> nor caught`
 `import "json";`: `import "encoding/json";` (also yaml, toml, csv, xml, base64, hex, url, ini); `module not found`
 `total + doc["qty"]` with doc from JSON: `std\toInt(doc["qty"])`: JSON numbers `double`; `expected int, got double` at run time
@@ -323,6 +324,7 @@ check, fix the first error, run.
 magus buzz --check script.buzz    # parse and type-check: every error, nothing runs
 magus buzz script.buzz a b        # run it: magus calls main(args) for you
 magus buzz -t script.buzz         # run its test "..." {} blocks
+magus buzz -e 'import "std"; std\print(1);'    # inline: needs no main; files and stdin still do
 ```
 
 1. Run `--check` after every edit. Fix the FIRST error, then check again:
@@ -453,7 +455,7 @@ the checker accepts it and the result is wrong.
 | `final c = Counter{};` then a method that assigns `this.n` | `final c = mut Counter{};` | `cannot mutate immutable object` at run time |
 | `return null;` from `> int` | declare `> int?`; unwrap with `?? fallback`, `if (x -> v)`, or `x!` | nothing |
 | `x = 2;` after `final x = 1;` | `var x = 1;` | `cannot assign to final "x"` |
-| `if` or `for` at the top of the file | put it in `main` | `not allowed at the top level` |
+| `if` or `for` at the top of a file | put it in `main`; only `magus buzz -e` allows top-level statements | `not allowed at the top level` |
 | a call to `fs\...`, `json\parse`, ... in a plain function | declare the function `!> any`, or end the call with `catch fallback` | `[BZZ1006] call may raise but is neither declared with !> nor caught` |
 | `import "json";` | `import "encoding/json";` (also yaml, toml, csv, xml, base64, hex, url, ini) | `module not found` |
 | `total + doc["qty"]` with doc from JSON | `std\toInt(doc["qty"])`: JSON numbers are `double` | `expected int, got double` at run time |

@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -255,9 +258,41 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 		select {
 		case <-ctx.Done():
 			return "", nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
-		case <-time.After(machinePollEvery):
+		case <-time.After(weighted(machinePollEvery, c.Weight)):
 		}
 	}
+}
+
+// weighted divides a poll interval by weight/DefaultJobWeight, so a heavier job's waiter
+// asks again sooner. The broker keeps no queue and the first ask after a release still
+// wins, which is why weight is a lean and not an order. Zero reads as the default.
+func weighted(every time.Duration, weight float64) time.Duration {
+	if !types.ValidJobWeight(weight) {
+		weight = types.DefaultJobWeight
+	}
+	return time.Duration(float64(every) * types.DefaultJobWeight / weight)
+}
+
+// LeaseWeight is the weight of the job a run on ctx acts under, resolved as the run's lease
+// is (see job.RunLease), or 0 when it acts under none or the job store cannot be read.
+func LeaseWeight(ctx context.Context, cacheDir string) float64 {
+	stateBase, err := xdg.StateDir()
+	if err != nil {
+		return 0
+	}
+	loc := job.Location{CacheDir: cacheDir, StateBase: stateBase, DryRun: true}
+	lease, _ := job.RunLease(ctx, loc)
+	if lease == "" {
+		return 0
+	}
+	rows, err := job.NewStore(loc).List()
+	if err != nil {
+		return 0
+	}
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease }); i >= 0 {
+		return rows[i].Weight
+	}
+	return 0
 }
 
 // blindToOwnAncestry reports a run that is inside a magus process tree and cannot say
@@ -604,7 +639,7 @@ func awaitTurn(ctx context.Context, blocked types.MachineClaim, v types.MachineV
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(blocked.Project), blocked.Target, ctx.Err())
-	case <-time.After(machineAwaitEvery):
+	case <-time.After(weighted(machineAwaitEvery, blocked.Weight)):
 		return nil
 	}
 }

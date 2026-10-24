@@ -8,7 +8,6 @@
 namespace agentpolicy\comments;
 
 import "std";
-import "fs";
 import "proc";
 import "magus";
 import "encoding/json";
@@ -50,8 +49,8 @@ final houseStyle = "Go comments here follow the repository owner's house style, 
     + "graded by its size, an extended one by what the write added.";
 
 final preambleRule = "The owner's Go house style keeps nothing above the package clause but what Go "
-    + "tooling reads: //go:build, a //go: directive, a generated-code header. A package comment lives in "
-    + "doc.go alone.";
+    + "tooling reads: //go:build, a //go: directive, a generated-code header. A package keeps no "
+    + "package comment, in doc.go or anywhere else.";
 
 fun fileExtension(path: str) > str {
     final slash = path.split("/");
@@ -259,10 +258,9 @@ export fun goComments(text: str, before: str) > [GoComment] {
     return blocks;
 }
 
-// lineBudget is the lines a block of this kind earns. A doc.go preamble is the package
-// comment, budgeted like an exported declaration's.
+// lineBudget is the lines a block of this kind earns.
 fun lineBudget(kind: str) > int {
-    if (kind == "exported" or kind == "preamble") {
+    if (kind == "exported") {
         return exportedBudget;
     }
     if (kind == "unexported") {
@@ -278,24 +276,20 @@ fun describe(kind: str) > str {
     if (kind == "unexported") {
         return "doc comment on an unexported declaration";
     }
-    if (kind == "preamble") {
-        return "package comment";
-    }
     return "comment inside a body";
 }
 
 // decideGo grades the comment blocks a write to a Go file adds or extends: a preamble
-// outside doc.go denies, a block over twice its budget denies, one over its budget
-// advises. The verdict names every block that is over, path:line first.
+// denies, a block over twice its budget denies, one over its budget advises. The verdict
+// names every block that is over, path:line first.
 export fun decideGo(path: str, before: str, after: str) > GuardVerdict {
-    final isDoc = fs\basename(path) == "doc.go";
     final denied = mut [<str>];
     final advised = mut [<str>];
     foreach (b in goComments(after, before: before)) {
         if (b.added == 0) {
             continue;
         }
-        if (b.kind == "preamble" and !isDoc) {
+        if (b.kind == "preamble") {
             denied.append("{path}:{b.line}: {b.added} comment lines above the package clause. " + preambleRule + " Delete them.");
             continue;
         }
@@ -591,7 +585,7 @@ test "a comment above the package clause is refused, the lines Go tooling reads 
     std\assert(v.decision == "deny", message: v.decision);
     verdict\assertVerdict(v.reason, label: "a preamble");
     std\assert(v.reason.indexOf("a.go:1: 1 comment lines above the package clause.") != null, message: v.reason);
-    std\assert(v.reason.indexOf("doc.go alone") != null, message: "says where a package comment goes");
+    std\assert(v.reason.indexOf("keeps no package comment") != null, message: "says a package keeps none");
     std\assert(decideComments("a.go", before: "", after: "// a note\n//go:build linux\n\npackage p\n", once: spent()).decision == "deny", message: "prose beside a directive");
     foreach (name, text in {
         "build tag": "//go:build linux && !noffi\n\npackage p\n",
@@ -602,8 +596,7 @@ test "a comment above the package clause is refused, the lines Go tooling reads 
     }) {
         std\assert(decideComments("a.go", before: "", after: text, once: spent()).decision == "allow", message: name);
     }
-    std\assert(decideComments("p/doc.go", before: "", after: "// Package p is the thing.\n// One more line.\npackage p\n", once: spent()).decision == "allow", message: "doc.go holds the package comment");
-    std\assert(decideComments("p/doc.go", before: "", after: commentLines(17, indent: "") + "\npackage p\n", once: spent()).decision == "deny", message: "doc.go has the exported budget");
+    std\assert(decideComments("p/doc.go", before: "", after: "// Package p is the thing.\npackage p\n", once: spent()).decision == "deny", message: "doc.go is no exception");
 }
 
 test "an edit that leaves an old long comment alone passes; growing one is graded by the growth" {

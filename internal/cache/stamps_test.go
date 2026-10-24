@@ -129,3 +129,35 @@ func TestAnAbsentStampNeverReplays(t *testing.T) {
 	}
 	assert.Equal(t, 2, calls)
 }
+
+// An entry filed before its step declared outputs records none, so it runs again and files
+// an entry whose hit restores them.
+func TestAnEntryWithoutTheDeclaredOutputsNeverReplays(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := filepath.Join(root, "test", "pkg", "index.scip")
+	step := makeStep(root)
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		return os.WriteFile(out, []byte("index"), 0o644)
+	}
+	run := func() Result {
+		t.Helper()
+		r, err := c.Run(context.Background(), step, fn)
+		require.NoError(t, err)
+		return r
+	}
+
+	assert.False(t, run().Hit)
+	require.NoError(t, os.Remove(out))
+	step.Outputs = types.MustParseGlobs("test/pkg/index.scip")
+	step.OutputsDeclared = true
+	assert.False(t, run().Hit, "the entry recorded no outputs, so it cannot restore the index")
+	assert.Equal(t, 2, calls)
+
+	require.NoError(t, os.Remove(out))
+	assert.True(t, run().Hit, "the new entry records the index")
+	assert.FileExists(t, out, "and its hit restores it")
+	assert.Equal(t, 2, calls)
+}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,6 +58,86 @@ func fastForward(c hint.Invocation) bool {
 	return flag == "--ff-only" && commitID(commit)
 }
 
+// integrationMerge reports `git merge --no-ff [--no-edit] <branch>` for a branch row, an
+// integration job, names in integrates: the one merge its holder exists to run. Any other
+// branch, option or verb is judged as for every worker, so the allowance widens nothing else.
+func integrationMerge(c hint.Invocation, row types.Job) bool {
+	if c.Name != "git" || !row.Integrating() || len(c.Args) < 3 || len(c.Args) > 4 || c.Args[0] != "merge" {
+		return false
+	}
+	var noFF bool
+	branch := ""
+	for _, a := range c.Args[1:] {
+		switch {
+		case a == "--no-ff":
+			noFF = true
+		case a == "--no-edit":
+		case strings.HasPrefix(a, "-") || branch != "":
+			return false
+		default:
+			branch = a
+		}
+	}
+	return noFF && slices.Contains(row.Integrates, branch)
+}
+
+// workerMergeFlags are the git merge options a worker's merge of its base may carry: none
+// picks a strategy, so neither side of the merge can be dropped.
+var workerMergeFlags = []string{"--no-edit", "--edit", "-e", "--ff", "--no-ff", "--ff-only", "--commit", "--no-commit",
+	"--squash", "--log", "--no-log", "--stat", "-n", "--no-stat", "-q", "--quiet", "-v", "--verbose"}
+
+// workerMerge reads `git merge` as a worker may run it: `--continue` or `--abort`, which
+// finish or drop the merge under way (operand ""), or one revision merged with only
+// workerMergeFlags and a message. ok is false for any other merge: an octopus, a strategy,
+// or an option this list does not name.
+func workerMerge(inv hint.Invocation) (operand string, ok bool) {
+	sub, rest := vcsSubcommand(inv)
+	if inv.Name != "git" || sub != "merge" {
+		return "", false
+	}
+	if len(rest) == 1 && (rest[0] == "--continue" || rest[0] == "--abort") {
+		return "", true
+	}
+	var operands []string
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		switch {
+		case a == "-m" || a == "--message":
+			i++
+		case strings.HasPrefix(a, "--message="), slices.Contains(workerMergeFlags, a):
+		case strings.HasPrefix(a, "-"):
+			return "", false
+		default:
+			operands = append(operands, a)
+		}
+	}
+	if len(operands) != 1 {
+		return "", false
+	}
+	return operands[0], true
+}
+
+// mergesBase reports operand naming the base a worker may merge into its own branch: base
+// itself, its origin/ form, the revision the job was handed or reported, by id, or the
+// branch of a job its row depends on. A job id is its branch name, so a stacked job reaches
+// the work it builds on without a second base.
+func mergesBase(operand, base string, row types.Job) bool {
+	if slices.ContainsFunc(row.DependsOn, func(dep string) bool {
+		return dep != "" && (operand == dep || operand == "origin/"+dep)
+	}) {
+		return true
+	}
+	if commitID(operand) {
+		for _, token := range []string{row.Checkpoint, row.ReportedBase} {
+			if rev, _ := types.ParseCheckpointToken(token); rev != "" && strings.HasPrefix(rev, operand) {
+				return true
+			}
+		}
+		return row.Worktree != nil && row.Worktree.Base != "" && strings.HasPrefix(row.Worktree.Base, operand)
+	}
+	return base != "" && (operand == base || operand == "origin/"+path.Base(base))
+}
+
 // commitID reports a full or abbreviated hexadecimal object name, as `magus version` prints a
 // build's commit.
 func commitID(s string) bool {
@@ -104,6 +185,86 @@ func removesOwnCheckout(command, cwd string, row types.Job) bool {
 		}
 	}
 	return true
+}
+
+// addsScratchCheckout reports whether each checkout add on command makes its checkout
+// under $XDG_CACHE_HOME/magus/tmp, a temp copy outside every workspace that moves nothing
+// the orchestrator reads. A target the line does not spell as a literal path fails, and so
+// does a relative one after a global option, which may move where it resolves from.
+func addsScratchCheckout(command, cwd string) bool {
+	cache, err := xdg.CacheDir()
+	if err != nil {
+		return false
+	}
+	scratch := filepath.Join(cache, "magus", "tmp")
+	calls, ok := locateCalls(command, DialectBash, cwd, addsCheckout, false)
+	if !ok || len(calls) == 0 {
+		return false
+	}
+	for _, c := range calls {
+		if c.unfollowed || c.args == nil {
+			return false
+		}
+		sub, rest := vcsSubcommand(c.inv)
+		target := checkoutAddTarget(c.inv.Name, rest)
+		if target == "" || strings.ContainsAny(target, "$`~") {
+			return false
+		}
+		if !filepath.IsAbs(target) {
+			if !c.at.known || c.at.dir == "" || len(c.inv.Args) == 0 || c.inv.Args[0] != sub {
+				return false
+			}
+			target = filepath.Join(c.at.dir, target)
+		}
+		target = filepath.Clean(target)
+		if samePath(target, scratch) || !within(target, scratch) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkoutAddTarget is the directory a checkout add names, "" when its words do not name
+// exactly one. rest is the words after the subcommand.
+func checkoutAddTarget(tool string, rest []string) string {
+	var valued []string
+	switch tool {
+	case "git":
+		if !firstWordIs(rest, "add") {
+			return ""
+		}
+		rest, valued = rest[1:], []string{"-b", "-B", "--reason"}
+	case "jj":
+		if !firstWordIs(rest, "add") {
+			return ""
+		}
+		rest, valued = rest[1:], []string{"--name", "-r", "--revision", "--sparse-patterns", "-m", "--message"}
+	case "hg":
+	default:
+		return ""
+	}
+	var positional []string
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		switch {
+		case a == "--":
+			positional = append(positional, rest[i+1:]...)
+			i = len(rest)
+		case slices.Contains(valued, a):
+			i++
+		case strings.HasPrefix(a, "-"):
+		default:
+			positional = append(positional, a)
+		}
+	}
+	switch {
+	case tool == "hg" && len(positional) == 2:
+		// hg share SOURCE DEST; DEST defaults to SOURCE's name here, so it must be spelled.
+		return positional[1]
+	case tool != "hg" && len(positional) >= 1:
+		return positional[0]
+	}
+	return ""
 }
 
 // checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the

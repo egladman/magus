@@ -33,6 +33,14 @@ stdout '"claim_notes": \['
 stdout '"util\.go#helper\\" names no declaration of util\.go yet'
 stdout 'wave/b and wave/a both write run\.go'
 
+# A peer sharing three files is one line, not one per file.
+stdin wide1.json
+exec magus job fork --stdin
+stdin wide2.json
+exec magus job fork --stdin
+stdout -count=1 '^note:'
+stdout '^note: wave/w2 and wave/w1 both write 3 files \(p\.go, q\.go, r\.go\)\. Claim a declaration of each on both rows, add `--depends-on wave/w1` to wave/w2, or fold wave/w2 into wave/w1$'
+
 -- .gitignore --
 .magus/
 home/
@@ -79,6 +87,22 @@ func Open(ctx int) {
 -- c.json --
 {"schema_version": 11, "id": "wave/b", "criteria": "change C", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
  "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
+-- wide1.json --
+{"schema_version": 11, "id": "wave/w1", "criteria": "change P", "write_paths": ["p.go", "q.go", "r.go"], "check": {"target": "lint", "project": "."}}
+-- wide2.json --
+{"schema_version": 11, "id": "wave/w2", "criteria": "change Q", "write_paths": ["p.go", "q.go", "r.go"], "check": {"target": "lint", "project": "."}}
+-- p.go --
+package run
+
+func P() {}
+-- q.go --
+package run
+
+func Q() {}
+-- r.go --
+package run
+
+func R() {}
 -- both.jsonl --
 {"schema_version": 11, "id": "wave/new", "criteria": "add helper", "write_paths": ["util.go#helper"], "check": {"target": "lint", "project": "."}}
 {"schema_version": 11, "id": "wave/b", "criteria": "change C", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."}, "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}

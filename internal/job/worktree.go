@@ -1,11 +1,14 @@
 package job
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -37,13 +40,14 @@ func MirroredBinary(exe, root string) string {
 	return exe
 }
 
-// ForkWorktree makes the checkout a fork of job id names at dir, from the revision
+// ForkWorktree makes the checkout a fork of job id names at dir, on a new branch named id, from the revision
 // checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
 // not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
-// is placed only in a checkout at the commit it was built at: anywhere else its guard cannot
-// load the tree, so the checkout is made with no binary and wt.Binary stays "" for
-// [CheckoutBootstrap] to fill. made is false when the job already owns the checkout at dir,
-// which is returned as it stands. A job owning another standing checkout, a checkpoint
+// is placed only in a checkout where no build input of ./cmd/magus differs from the commit it
+// was built at (see [changedBuildInputs]): anywhere else it would judge another tree, so the
+// checkout is made with no binary and wt.Binary stays "" for [CheckoutBootstrap] to fill.
+// made is false when the job already owns the checkout at dir, which is returned as it stands,
+// and when dir is a linked checkout that already stands, which the job adopts as it is. A job owning another standing checkout, a checkpoint
 // carrying uncommitted changes the new checkout would not hold, a binary whose commit is
 // unrecorded, unknown to the repository or carries uncommitted changes, and a version
 // control that cannot make one are refused.
@@ -64,6 +68,10 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		}
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
 			id, owned.Root, owned.Root)
+	}
+	if _, err := os.Stat(dir); err == nil {
+		wt, err := s.adoptCheckout(ctx, id, dir)
+		return wt, false, err
 	}
 	revision, digest := types.ParseCheckpointToken(checkpoint)
 	if digest != "" {
@@ -105,13 +113,16 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		if err != nil {
 			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, built at %s, which %s cannot find: %w", id, binary, build.Commit, drv.Name(), err)
 		}
-		// Built elsewhere, its guard could not load the checkout; CheckoutBootstrap builds
-		// one there instead.
+		// A binary whose build inputs differ from the base judges another tree, and one whose
+		// inputs cannot be compared is not shown to match; CheckoutBootstrap builds one there.
 		if built.ID != base.ID {
-			binary = ""
+			inputs, err := changedBuildInputs(ctx, drv, source, built.ID, base.ID)
+			if err != nil || len(inputs) > 0 {
+				binary = ""
+			}
 		}
 	}
-	if err := drv.CreateCheckout(ctx, source, dir, base.ID); err != nil {
+	if err := drv.CreateCheckout(ctx, source, dir, base.ID, id); err != nil {
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
 	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix()}
@@ -123,6 +134,174 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		wt.Binary = placed
 	}
 	return wt, true, nil
+}
+
+// adoptCheckout records dir, a standing linked checkout of this repository, as job id's:
+// nothing is made or placed, and its base is what it has checked out. Its source is the
+// primary checkout, so removing it once the job ends never runs from inside it.
+func (s *Store) adoptCheckout(ctx context.Context, id, dir string) (types.JobWorktree, error) {
+	source, err := filepath.Abs(s.root)
+	if err != nil {
+		return types.JobWorktree{}, err
+	}
+	drv, why := resolveDriver(ctx, source)
+	if drv == nil {
+		return types.JobWorktree{}, fmt.Errorf("job: %s names the checkout %s, and %s", id, dir, why)
+	}
+	registered, err := drv.RegisteredCheckouts(ctx, source)
+	if err != nil {
+		return types.JobWorktree{}, fmt.Errorf("job: %s names the checkout %s, and the checkouts %s registers cannot be read: %w", id, dir, drv.Name(), err)
+	}
+	i := slices.IndexFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, dir) })
+	p := slices.IndexFunc(registered, func(c types.RegisteredCheckout) bool { return c.Primary })
+	if i < 0 || p < 0 {
+		return types.JobWorktree{}, fmt.Errorf("job: %s names %s as its checkout, which exists and is not a linked checkout of this repository: name a directory that does not exist yet, which the fork makes, or a linked checkout to adopt",
+			id, dir)
+	}
+	wt := types.JobWorktree{Root: dir, Source: registered[p].Root, Base: registered[i].Head, Created: time.Now().Unix()}
+	if info, err := os.Stat(filepath.Join(dir, binaryName)); err == nil && info.Mode().IsRegular() {
+		wt.Binary = filepath.Join(dir, binaryName)
+	}
+	return wt, nil
+}
+
+// OwnedCheckout is the root of the standing checkout a row records that dir lies in, "" when
+// no row records one there.
+func (s *Store) OwnedCheckout(dir string) (string, error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", err
+	}
+	for _, r := range rows {
+		if r.Worktree.Standing() && within(dir, r.Worktree.Root) {
+			return r.Worktree.Root, nil
+		}
+	}
+	return "", nil
+}
+
+// LinkedCheckout reports whether dir is the top of a linked checkout of this store's
+// repository, one that is not its primary.
+func (s *Store) LinkedCheckout(ctx context.Context, dir string) (bool, error) {
+	source, err := filepath.Abs(s.root)
+	if err != nil {
+		return false, err
+	}
+	drv, why := resolveDriver(ctx, source)
+	if drv == nil {
+		return false, errors.New(why)
+	}
+	registered, err := drv.RegisteredCheckouts(ctx, source)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, dir) }), nil
+}
+
+// moduleFiles decide the module graph a Go build resolves, at the root.
+var moduleFiles = []string{"go.mod", "go.sum", "go.work", "go.work.sum"}
+
+// rootScope marks the root package among the scopes. It is not a prefix: "" or "./" as one
+// would take in every file at the root.
+const rootScope = "./"
+
+// changedBuildInputs are the paths differing between commits from and to, in the checkout
+// at root, that can change the binary ./cmd/magus compiles to: a non-test Go file in a
+// package `go list -deps` names, a root module file, or another file in such a package's
+// directory, where go:embed reads. Each side's changes since the two diverged count. It fails
+// when either commit or the package list cannot be read, so unknown inputs never match;
+// equal commits run no process. hack/dev/bootstrap-worktree.buzz holds the same rule.
+func changedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to string) ([]string, error) {
+	if from == to {
+		return nil, nil
+	}
+	var changed []string
+	for _, side := range [][2]string{{from, to}, {to, from}} {
+		files, err := drv.RangeFiles(ctx, root, side[0], side[1], nil)
+		if err != nil {
+			return nil, fmt.Errorf("job: the paths %s changed since %s: %w", side[1], side[0], err)
+		}
+		changed = append(changed, files...)
+	}
+	slices.Sort(changed)
+	changed = slices.Compact(changed)
+	scopes, err := binaryScopes(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	return buildInputs(changed, scopes), nil
+}
+
+// binaryScopes asks the Go toolchain which packages under root ./cmd/magus links, as
+// [packageScopes] reads them. go list loads packages without compiling any; magus refuses
+// to load without jsonv2.
+func binaryScopes(ctx context.Context, root string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-f",
+		`{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GOEXPERIMENT=jsonv2")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("job: `go list -deps ./cmd/magus` in %s says %q: %w", root, strings.TrimSpace(stderr.String()), err)
+	}
+	return packageScopes(string(out), root), nil
+}
+
+// packageScopes are where a file can reach the binary, root-relative: "dir/" for a package
+// below root, rootScope for the root package, a bare path for a file the root package embeds.
+// listed is one package per line, its absolute directory then each go:embed file after "|";
+// a directory outside root (stdlib, module cache) drops out.
+func packageScopes(listed, root string) []string {
+	base := filepath.Clean(root)
+	var scopes []string
+	for line := range strings.Lines(listed) {
+		fields := strings.Split(strings.TrimSpace(line), "|")
+		if fields[0] == "" {
+			continue
+		}
+		dir := filepath.Clean(fields[0])
+		if dir == base {
+			scopes = append(scopes, rootScope)
+			scopes = append(scopes, fields[1:]...)
+			continue
+		}
+		if rel, ok := strings.CutPrefix(dir, base+string(filepath.Separator)); ok {
+			scopes = append(scopes, filepath.ToSlash(rel)+"/")
+		}
+	}
+	return scopes
+}
+
+// buildInputs are the paths in changed that scopes reach. A linked package deleted since
+// the listing is not missed: whatever imported it changed too.
+func buildInputs(changed, scopes []string) []string {
+	var inputs []string
+	for _, p := range changed {
+		if isBuildInput(p, scopes) {
+			inputs = append(inputs, p)
+		}
+	}
+	return inputs
+}
+
+func isBuildInput(p string, scopes []string) bool {
+	dir, name := path.Split(p)
+	if dir == "" {
+		dir = rootScope
+	}
+	switch {
+	case dir == rootScope && slices.Contains(moduleFiles, name):
+		return true
+	case strings.HasSuffix(name, "_test.go"):
+		return false
+	case strings.HasSuffix(name, ".go"):
+		return slices.Contains(scopes, dir)
+	}
+	return slices.ContainsFunc(scopes, func(s string) bool {
+		return s == p || (s != rootScope && strings.HasSuffix(s, "/") && strings.HasPrefix(p, s))
+	})
 }
 
 // CheckoutBootstrapScript builds ./magus in a checkout at the checkout's own revision.

@@ -23,13 +23,13 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
       "description": "ID is the lease's identity within the plan, the key a second register replaces on, and the only required field besides the version."
     },
     "parent": {
       "type": "string",
-      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
       "description": "Parent is the lease this one was spawned under, empty for a lease the root declared."
     },
@@ -77,10 +77,17 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^[./0-9:A-Z_a-z-]+$",
+        "pattern": "^[./0-9a-z-]+$",
         "maxLength": 128
       },
       "description": "DependsOn names the lease ids that must land before this one."
+    },
+    "integrates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Integrates names the branches this job merges; see [Job.Integrates]."
     },
     "breaks": {
       "type": "array",
@@ -93,6 +100,10 @@
       "type": "string",
       "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
     },
+    "weight": {
+      "type": "number",
+      "description": "Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an explicit 0 is out of range. See [Job.Weight]."
+    },
     "brief_format": {
       "type": "string",
       "enum": ["", "markdown", "buzz"],
@@ -100,7 +111,7 @@
     },
     "follows": {
       "type": "string",
-      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
       "description": "Follows and FreshReason name the job this one continues and why its worker is not resumed for it. See [Job.Follows]."
     },
@@ -214,7 +225,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^[./0-9:A-Z_a-z-]+$",
+            "pattern": "^[./0-9a-z-]+$",
             "maxLength": 128
           },
           "description": {
@@ -224,7 +235,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[./0-9:A-Z_a-z-]+$",
+              "pattern": "^[./0-9a-z-]+$",
               "maxLength": 128
             }
           },
@@ -324,6 +335,10 @@
       "type": "integer",
       "description": "MaxAttempts caps how many times the job may be forked, its first fork included; zero is no cap. See [Job.MaxAttempts]."
     },
+    "max_claims": {
+      "type": "integer",
+      "description": "MaxClaims caps how many proved claims one attempt takes; zero takes the default. See [Job.MaxClaims]."
+    },
     "waivers": {
       "type": "array",
       "items": {
@@ -349,6 +364,25 @@
     "enter": {
       "type": "string",
       "description": "Enter turns the record into an entry rather than a declaration: it acknowledges one write into this path, inside the write paths of the live job ID names, by somebody other than its holder. A record carrying it declares nothing else."
+    },
+    "claim": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "because"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
+          },
+          "because": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "description": "Claim turns the record into a proved claim of the job ID names: each entry adds one write path with the proof the store re-proves before it writes. A record carrying it declares nothing else."
     }
   }
 }

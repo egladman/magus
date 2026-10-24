@@ -40,6 +40,7 @@ type Config struct {
 	Diff       Diff       `json:"diff" yaml:"diff"`
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 	Queue      Queue      `json:"queue" yaml:"queue"`
+	Go         GoConfig   `json:"go" yaml:"go"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -142,6 +143,16 @@ type Config struct {
 	Agents Agents `json:"agents" yaml:"agents" cli:"-"`
 }
 
+// GoConfig configures what magus reports about the Go toolchain.
+type GoConfig struct {
+	// CacheBudgetMB is the size in MB (binary) past which `magus doctor` advises cleaning the Go
+	// build cache or the golangci-lint cache. Default 20480; 0 turns the check off.
+	//
+	// A budget rather than a cap: neither cache is magus's, so doctor measures and names the
+	// command that frees it and deletes nothing.
+	CacheBudgetMB int `json:"cache_budget_mb" yaml:"cache_budget_mb" validate:"gte=0"`
+}
+
 // Queue configures the merge queue, `magus queue`.
 type Queue struct {
 	// CarryApprovals lists the tiers of change since an approval that leave it standing:
@@ -203,8 +214,8 @@ type Diff struct {
 // Jobs bounds the job tree `magus job fork` declares. Every limit is unset by default, and
 // unset means no limit: a bound belongs to the workspace that chose it, never to magus.
 // StaleAfter and Retain are the exceptions, because they decide when magus ends a row
-// nobody took and when it drops one that is over. So are MaxClaimFiles and MaxClaimProjects,
-// which are never zero: a claim has to be bounded by something.
+// nobody took and when it drops one that is over. So are MaxClaimFiles, MaxClaimProjects and
+// MaxClaims, which are never zero: a claim has to be bounded by something.
 type Jobs struct {
 	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
 	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
@@ -235,6 +246,16 @@ type Jobs struct {
 	// record refuses it as too broad (MGS3043). Default 1; zero or negative is an error.
 	// Workspace only, like StaleAfter.
 	MaxClaimProjects int `json:"max_claim_projects" yaml:"max_claim_projects" validate:"gt=0" merge:"written"`
+	// IntegrateAdviseAt is how many finished branches may wait off the base before a fork of
+	// anything but an integration job advises forking one. Default 5; workspace only.
+	IntegrateAdviseAt int `json:"integrate_advise_at" yaml:"integrate_advise_at" validate:"gt=0" merge:"written"`
+	// IntegrateRefuseAt is the count past which such a fork is refused until an integration
+	// job names the branches; it must exceed IntegrateAdviseAt. Default 10; workspace only.
+	IntegrateRefuseAt int `json:"integrate_refuse_at" yaml:"integrate_refuse_at" validate:"gtfield=IntegrateAdviseAt" merge:"written"`
+	// MaxClaims is the most proved claims any job may be given through its
+	// max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an
+	// error. Workspace only, like StaleAfter.
+	MaxClaims int `json:"max_claims" yaml:"max_claims" validate:"gt=0" merge:"written"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.
@@ -1072,6 +1093,9 @@ var envOnly = []cmdline.Env{
 	{Name: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Key: "", Default: "", Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
 }
 
+// DefaultGoCacheBudgetMB is go.cache_budget_mb when nothing sets it: 20 GiB.
+const DefaultGoCacheBudgetMB = 20480
+
 // DefaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for most test
 // and build steps to finish; a supervisor that will not wait this long sends its own
 // second signal or SIGKILL, and runs outlive the broker anyway, re-asserting their claims
@@ -1094,7 +1118,8 @@ func Defaults() Config {
 			},
 		},
 		ShutdownGrace: DefaultShutdownGrace,
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1},
+		Go:            GoConfig{CacheBudgetMB: DefaultGoCacheBudgetMB},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, IntegrateAdviseAt: 5, IntegrateRefuseAt: 10, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).

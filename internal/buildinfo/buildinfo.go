@@ -12,9 +12,60 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"sync"
 )
+
+// commit and commitDate are the linker's stamp, set by go-build:
+//
+//	go build -ldflags "-X github.com/egladman/magus/internal/buildinfo.commit=abc123 ..."
+var (
+	commit     = Unknown
+	commitDate = Unknown
+)
+
+// Unknown is a stamp field no build set.
+const Unknown = "unknown"
+
+// Commit is the revision this binary was built from and that commit's date, RFC 3339,
+// each [Unknown] when nothing stamped it. A bare `go build` passes no -X flags, so they
+// come from the VCS stamp the toolchain embeds instead. go-build's -X values win when
+// present: its sandboxed link embeds a VCS stamp from another revision.
+func Commit() (id, date string) {
+	if commit != Unknown {
+		return commit, commitDate
+	}
+	id, date = Unknown, Unknown
+	for _, s := range buildSettings() {
+		switch s.Key {
+		case "vcs.revision":
+			id = s.Value
+		case "vcs.time":
+			date = s.Value
+		}
+	}
+	return id, date
+}
+
+// Modified reports whether the VCS stamp says the tree held uncommitted changes. Only a
+// bare `go build` carries one; go-build marks a dirty tree in its version instead.
+func Modified() bool {
+	for _, s := range buildSettings() {
+		if s.Key == "vcs.modified" {
+			return s.Value == "true"
+		}
+	}
+	return false
+}
+
+func buildSettings() []debug.BuildSetting {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return nil
+	}
+	return info.Settings
+}
 
 // unverifiable is a per-PROCESS-unique identity, minted once at startup, for a build that
 // cannot PROVE what code it is running. Every process gets a different token, so two such

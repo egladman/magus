@@ -31,7 +31,7 @@ It reads as a wordmark, and the reason is that a solid silhouette at text weight
 Local enforcement gets called out by name, and the reason is that a hook that blocks is a hook people disable.
 Never the value, which is not resolved at declaration and must not be resolved in order to log it.
 A trial merge computes those three versions in order to find the conflict at all, so reporting them is free.
-You don't need `vcs add` to exist in order to keep an agent from clobbering another agent's work.
+You don't need a staging wrapper to exist in order to keep an agent from clobbering another agent's work.
 **On `runTarget` vs `runBody`:** keep `body`, and the reason is that the function runs two different kinds of thing.
 -- hit/change-description --
 When checked, this removes the need for contractors to sign the agreement in order to submit invoices.

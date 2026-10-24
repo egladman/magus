@@ -664,6 +664,7 @@ func figuresWorkspace(t *testing.T) Dependencies {
 		"flow-generate":     {{Glob: "figures/flow.md"}},
 	}}
 	ws.EXPECT().Get("docs").Return(docs).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 }
 
@@ -702,6 +703,11 @@ func composingWorkspace(t *testing.T) Dependencies {
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	ws.EXPECT().Get(".").Return(&types.Project{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}}).Maybe()
 	ws.EXPECT().Get("libs/conventions").Return(&types.Project{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{
+		{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}},
+		{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}},
+	}).Maybe()
 	return Dependencies{
 		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
 		Spells:  spellCatalog,
@@ -1052,6 +1058,7 @@ func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
 	}
 	ws.EXPECT().Get(".").Return(root).Maybe()
 	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
 	return ws
 }
@@ -1068,6 +1075,7 @@ func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
 		MagusfileTargets: []string{"dprint"},
 		TargetUpdates:    map[string][]types.UpdateRef{"dprint": {{Glob: "**/*.md"}}},
 	}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
 	row := types.Job{
 		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
@@ -1112,7 +1120,7 @@ func TestWorkerCheckOnlyRefusesAnUncheckedRewrite(t *testing.T) {
 
 	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate:rw docs")
 	require.True(t, reason.refused(), "a rewrite the guard cannot check is refused")
-	assert.Contains(t, reason.Say, "the workspace did not load; run `")
+	assert.Contains(t, reason.Say, "the workspace did not load: magusfile: line 3: unexpected token; run `", "the Say line names the cause")
 	assert.Contains(t, reason.Say, " run figures-generate docs`.")
 	assert.Contains(t, reason.Why, "unexpected token")
 	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate docs"), "without the charm nothing is written")
@@ -1131,7 +1139,22 @@ func TestWorkerCheckOnlyRefusesAnUncheckedRewrite(t *testing.T) {
 	assert.Contains(t, briefOffCheckWhy(row, v, nil), "unexpected token")
 }
 
-// TestWorkerCheckOnlyJudgesTheCwdProject: `magus run` with no project runs the project
+// TestWorkerCheckOnlyNamesASlowOpen: a workspace open that outlasts its budget is refused
+// as slow, not as a magusfile that did not load (gap 213).
+func TestWorkerCheckOnlyNamesASlowOpen(t *testing.T) {
+	row := figuresLease()
+	ctx, _ := fleetFixture(t, row)
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, fmt.Errorf("inspect docs: %w", context.DeadlineExceeded)
+	}}
+
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run diagrams-generate:rw docs")
+	require.True(t, reason.refused())
+	assert.Contains(t, reason.Say, "opening the workspace took longer than the guard's 3.5s budget for it; run `")
+	assert.NotContains(t, reason.Say, "did not load")
+}
+
+// TestWorkerCheckOnlyJudgesTheCwdProject:`magus run` with no project runs the project
 // holding the caller's directory, so the rule judges that project, not the root.
 func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 	row := types.Job{
@@ -1151,6 +1174,7 @@ func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 	docs := &types.Project{Path: "docs", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.md"}}}}
 	ws.EXPECT().Where(at.dir).Return(docs, true).Maybe()
 	ws.EXPECT().Get("docs").Return(docs).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 
 	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format"), "the check, run from its project")
@@ -1241,7 +1265,7 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	}
 	t.Run("a workspace that cannot load falls back to the producer spelling", func(t *testing.T) {
 		row := figuresLease()
-		assert.Contains(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs").Say, "the workspace did not load",
+		assert.Contains(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs").Say, "the guard was handed no way to open the workspace",
 			"a rewrite is never let through unchecked")
 		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate docs"))
 		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run figures-generate docs"))
@@ -1359,17 +1383,36 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 }
 
 // A worker making a checkout by hand, in any backend's own verb, is pointed at the fork
-// that makes one.
+// that makes one, unless the checkout is a temp copy under $XDG_CACHE_HOME/magus/tmp.
 func TestDenyLeaseScopedVCSPointsACheckoutAddAtTheFork(t *testing.T) {
 	worker := narrowLease()
 	worker.Parent = "harness"
 	ctx, _ := fleetFixture(t, worker)
-	for _, command := range []string{"git worktree add ../x", "git -C . worktree add -b y ../y", "hg share . ../x", "jj workspace add ../x"} {
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	scratch := filepath.Join(cache, "magus", "tmp")
+	for _, command := range []string{
+		"git worktree add ../x", "git -C . worktree add -b y ../y", "hg share . ../x", "jj workspace add ../x",
+		"git worktree add " + scratch,
+		"git worktree add " + filepath.Join(scratch, "..", "x"),
+		"git worktree add $XDG_CACHE_HOME/magus/tmp/x",
+		"hg share " + filepath.Join(scratch, "x"),
+		"git worktree add " + filepath.Join(scratch, "x") + " && git worktree add ../y",
+	} {
 		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
 		assert.Contains(t, reason, "--checkout <dir>", "%q", command)
 		assert.Contains(t, reason, "harness", "%q", command)
 	}
 	assert.NotContains(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove ../x"), "--checkout")
+
+	for _, command := range []string{
+		"git worktree add " + filepath.Join(scratch, "x"),
+		"git -C . worktree add -b y " + filepath.Join(scratch, "y") + " HEAD",
+		"hg share . " + filepath.Join(scratch, "x"),
+		"jj workspace add --name x " + filepath.Join(scratch, "x"),
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
+	}
 }
 
 // The holder of a job removes the checkout its fork made, and only that one; the
@@ -1477,7 +1520,7 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 	} {
 		reason := denyLeaseScopedVCS(ctx, deps, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt, "%q", command)
+		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in "+wt, "%q", command)
 		assert.Contains(t, reason, "a worker under orchestrator", "%q", command)
 	}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git commit -m done"),
@@ -1502,6 +1545,46 @@ func TestDenyLeaseScopedVCSGradesACherryPickAsTheCommitItRecords(t *testing.T) {
 	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git cherry-pick abc123"), "the base branch")
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git cherry-pick abc123 && git push"), "`git push` stays with the orchestrator")
+}
+
+// A worker merges its base, origin/<base> or the revision its job was handed, into its own
+// branch in its own checkout, and finishes or drops that merge there. Any other merge, and
+// any merge elsewhere, stays the orchestrator's.
+func TestDenyLeaseScopedVCSLetsAWorkerMergeItsBase(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("lease-job")
+	worker := narrowLease()
+	worker.Parent = "orchestrator"
+	worker.CheckoutRoot = wt
+	worker.Checkpoint = "f1980cc5c3224cc9fca99c41a9f03415fd77db4b"
+	ctx, _ := fleetFixture(t, worker)
+	from := func(dir string) Dependencies {
+		return Dependencies{callDir: dir, VCS: types.VCSOptions{BaseRef: "origin/main"}}
+	}
+	for _, command := range []string{
+		"git merge origin/main",
+		"git merge --no-edit origin/main",
+		"git merge -m 'bring main in' origin/main",
+		"git merge f1980cc5c",
+		"git merge --continue",
+		"git merge --abort",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "own branch: %q", command)
+		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
+		assert.Contains(t, reason, "It commits in "+r.main+", and the lease was taken in "+wt+".", "another checkout: %q", command)
+	}
+	assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git -C "+wt+" merge origin/main"), "pointed at its own checkout")
+	for command, want := range map[string]string{
+		"git merge other-job":               "It merges other-job, and a worker merges only its base into its branch: origin/main",
+		"git merge a1b2c3d":                 "It merges a1b2c3d",
+		"git merge -s ours origin/main":     "`git merge` stays with the orchestrator",
+		"git merge origin/main other":       "`git merge` stays with the orchestrator",
+		"git merge origin/main && git push": "`git push` stays with the orchestrator",
+	} {
+		assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), want, command)
+	}
+	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git merge --continue"), "the base branch")
 }
 
 // TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout pins every spelling of an init
@@ -1700,7 +1783,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil)
 		require.Error(t, err, "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
-		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt)
+		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in "+wt)
 	}
 }
 
@@ -2792,6 +2875,23 @@ func TestDenyWriteOutsideLeaseLeavesScratchOutsideTheCheckout(t *testing.T) {
 	assert.NotEmpty(t, denyWriteOutsideLease(ctx, from(root), "lease-b", "rm notes.txt"), "the same word inside it")
 }
 
+// A file no lease declares is still outside the acting lease's write paths, so a shell write
+// to it is refused in the words the editor-tool write gets.
+func TestDenyWriteOutsideLeaseGradesAnUndeclaredFile(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "notes.md"), []byte("a\n"), 0o644))
+	onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "docs", "notes.md"))
+	require.Equal(t, decisionDeny, onPath.Decision)
+
+	for _, command := range []string{"sed -i 's/a/b/' docs/notes.md", "echo x > docs/notes.md"} {
+		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command)), "%q", command)
+	}
+	for _, command := range []string{"echo hi", "echo x > " + filepath.Join(t.TempDir(), "notes.md"), "sed 's/a/b/' docs/notes.md"} {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q", command)
+	}
+}
+
 // A worker leased in its own worktree, whose hook resolves the session's checkout, had its
 // own write read relative to the session's checkout, so scope-drift advised it.
 func TestLeaseCoversWriteReadsTheLeasesOwnCheckout(t *testing.T) {
@@ -2826,4 +2926,97 @@ func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 		"a cd the line does not determine places nothing")
 	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", `cp x "${OUT}store.go"`),
 		"an expansion places the word nowhere rather than dropping the parameter")
+}
+
+func regeneratingLease(id string) types.Job {
+	return types.Job{
+		ID: id, Criteria: "add a flag", WritePaths: []string{"cli/registry.go"},
+		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+}
+
+// regeneratingWorkspace is a root whose api-generate writes testdata/api.lock from every Go
+// file, and whose docs-generate writes gen/flags.go from them and also rewrites README.md.
+func regeneratingWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().Get(".").Return(&types.Project{
+		Path: ".", Sources: types.MustParseGlobs("**/*.go"),
+		MagusfileTargets: []string{"test", "lint", "api-generate", "docs-generate"},
+		TargetOutputs: map[string][]types.OutputRef{
+			"api-generate":  {{Glob: "testdata/api.lock"}},
+			"docs-generate": {{Glob: "gen/flags.go"}},
+		},
+		TargetUpdates: map[string][]types.UpdateRef{"docs-generate": {{Glob: "README.md"}}},
+	}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
+// TestWorkerRegeneratesItsOwnOutputs pins gap 177: a worker whose change leaves an output
+// outside its write paths stale (MGS3044) may run that output's generator and commit what
+// it writes, so its lint goal is not failed by an MGS4006 it may not fix. Only such
+// outputs: a generator that also writes elsewhere is refused, and a hand edit stays refused.
+func TestWorkerRegeneratesItsOwnOutputs(t *testing.T) {
+	row := regeneratingLease("z/flag")
+	ctx, root := fleetFixture(t, row)
+	deps := regeneratingWorkspace(t)
+
+	for _, tt := range []struct {
+		name, command, deny string
+	}{
+		{"the generator of its own output", "./magus run api-generate .", ""},
+		{"that generator under rw", "./magus run api-generate:rw .", ""},
+		{"a generator that also rewrites a file outside", "./magus run docs-generate:rw .", "rewrites files outside lease z/flag's write paths"},
+		{"a target writing nothing it regenerates", "./magus run lint .", "is not lease z/flag's check"},
+		{"its generator on another project", "./magus run api-generate docs", "is not lease z/flag's check"},
+	} {
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if tt.deny == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, tt.deny, tt.name)
+	}
+	assert.Contains(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run docs-generate:rw .").Why, "`README.md`",
+		"the refusal names the write that is not its own output")
+
+	edit := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "testdata/api.lock"))
+	assert.Equal(t, decisionDeny, edit.Decision, "a hand edit of the output stays refused: %s", edit.Reason)
+}
+
+// TestWorkerRegenerateWaitsForTheFirstHolder: an output two live leases regenerate is
+// regenerated by the one declared first, and one whose write paths hold it is that lease's
+// alone. The other waits rather than overwrite it.
+func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
+	deps := regeneratingWorkspace(t)
+	owner := types.Job{
+		ID: "a/lock", Criteria: "own the lock", WritePaths: []string{"testdata/api.lock"},
+		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+	ended := owner
+	ended.State = types.StatePass
+	for _, tt := range []struct {
+		name   string
+		other  types.Job
+		holder string
+	}{
+		{"a lease whose write paths hold the output", owner, "a/lock"},
+		{"a lease declared first regenerating it too", regeneratingLease("a/first"), "a/first"},
+		{"a lease declared after it", regeneratingLease("zz/later"), ""},
+		{"an ended lease", ended, ""},
+	} {
+		row := regeneratingLease("z/flag")
+		ctx, _ := fleetFixture(t, tt.other, row)
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run api-generate:rw .")
+		if tt.holder == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, "held by live lease "+tt.holder+"; run `"+hint.JobWait.With(tt.holder)+"`.", tt.name)
+	}
 }

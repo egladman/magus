@@ -481,3 +481,19 @@ func TestSaveWritesAWorldReadableNote(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm())
 }
+
+func TestHasTagsFiltersByEveryTag(t *testing.T) {
+	open := Note{Name: "a", Tags: []string{TagGap, TagGapOpen}}
+	ruled := Note{Name: "b", Tags: []string{TagGap, "gap/ruled"}}
+	plain := Note{Name: "c"}
+
+	var listed []string
+	for _, n := range []Note{open, ruled, plain} {
+		if n.HasTags([]string{TagGapOpen}) {
+			listed = append(listed, n.Name)
+		}
+	}
+	assert.Equal(t, []string{"a"}, listed)
+	assert.True(t, plain.HasTags(nil), "no tags lists every note")
+	assert.False(t, open.HasTags([]string{TagGap, "gap/ruled"}), "every tag must match")
+}

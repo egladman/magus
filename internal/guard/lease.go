@@ -423,9 +423,10 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 
 // denyWorkerCheckOnly refuses a bound worker every `magus run` and `magus affected` but its
-// row's check, a slice of the work that check composes, a dependency install, and the
-// targets declaring an output in its write paths, or refuses nothing. Two worktrees share
-// no cache key, so a second run of some other target only doubles the load.
+// row's check, a slice of the work that check composes, a dependency install, the targets
+// declaring an output in its write paths, and the generators of an output its write paths
+// regenerate outside them that no other live lease holds, or refuses nothing. Two
+// worktrees share no cache key, so a second run of some other target only doubles the load.
 //
 // A slice passes because it is the iteration the check exists to end in: `go-test . --
 // -run X` under a `test .` check runs a part of the check's own work, and refusing it sent
@@ -471,6 +472,8 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		switch {
 		case v.unchecked != nil:
 			return uncheckedDenial(v, me, checks, deps.DefaultCharms)
+		case v.held != "":
+			return heldDenial(v, me)
 		case v.op:
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
@@ -491,10 +494,13 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 					strings.Join(placementArgv(me.ID), " ") + "`. Until then the unit is held to " + commands[0] + ", and a need for the new binary goes in your result's unresolved risks.",
 			}
 		}
+		if readsOwnProjects(r, me.WritePaths) {
+			continue
+		}
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is not lease %s's check; run %s.", r.target, me.ID, commands[0]),
 			Why: fmt.Sprintf("Lease %s's checks: %s. The checkout's integrator, "+integratorIs+", runs every other target serially, in its own tree, after it integrates the units.\n"+
-				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
+				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Any target passes read-only over the projects holding those paths: name it with --no-default-charms and no rw charm. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
 				me.ID, strings.Join(commands, ", "), elideCommand(command), r.target, me.ID),
 		}
 	}
@@ -511,8 +517,20 @@ func vetsWritePaths(r targetRun, writePaths []string, deps Dependencies) bool {
 	if r.rewrites(deps.DefaultCharms) && opHonorsRewrite(deps.spells(), r.target) {
 		return false
 	}
-	// "/" is every project, most of which hold none of the write paths.
-	return !slices.ContainsFunc(r.selection(), func(p string) bool {
+	return holdsWritePaths(r.selection(), writePaths)
+}
+
+// readsOwnProjects reports a `magus run` of any target that writes nothing back,
+// --no-default-charms and no rw charm named, over projects holding the write paths, so a
+// worker whose check is lint still runs the tests it wrote.
+func readsOwnProjects(r targetRun, writePaths []string) bool {
+	return r.verb == "run" && r.noDefaultCharms && !r.rewrites(nil) && holdsWritePaths(r.selection(), writePaths)
+}
+
+// holdsWritePaths reports projects that each hold one of writePaths. "/" is every project,
+// most of which hold none.
+func holdsWritePaths(projects, writePaths []string) bool {
+	return !slices.ContainsFunc(projects, func(p string) bool {
 		p = path.Clean(p)
 		return p != "." && !slices.ContainsFunc(writePaths, func(w string) bool { return strings.HasPrefix(w, p+"/") })
 	})
@@ -543,6 +561,8 @@ type rowJudge struct {
 	graph     func() (types.TargetGraphOutput, error)
 	produces  lazyProducers
 	composes  lazyProducers
+	// others are the live rows besides row, for who else holds an output a run regenerates.
+	others func() []types.Job
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -550,6 +570,15 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 	graph := lazyTargetGraph(ctx, workspace)
 	return rowJudge{
 		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace, graph: graph,
+		others: sync.OnceValue(func() []types.Job {
+			var live []types.Job
+			for _, r := range actingLeaseStanding(ctx, deps, row.ID).rows {
+				if r.ID != row.ID && r.State.Live() {
+					live = append(live, r)
+				}
+			}
+			return live
+		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, workspace, row.WritePaths)
 		}),
@@ -586,6 +615,11 @@ type runVerdict struct {
 	// the projects the run selects.
 	op        bool
 	composers []string
+	// held is an output the run regenerates that another live lease holds, and holder that
+	// lease: its write paths cover the output, or it regenerates the output too and was
+	// declared first.
+	held   string
+	holder types.Job
 	// unchecked is why the run could not be judged: the workspace it is read against did
 	// not load.
 	unchecked error
@@ -595,31 +629,99 @@ type runVerdict struct {
 // default_charms, is held to the write paths; a target whose chain declares no write
 // passes, since nothing says what it touches. A spell op run on its own under an rw charm
 // it honors is refused: an op declares no writes, so it would always pass.
+//
+// A generator of an output the row's own write paths regenerate outside them (MGS3044) is
+// permitted too, and that output counts as inside the write paths: the worker regenerates
+// it and commits it with the change rather than leave its lint stale. It is refused when
+// another live lease holds the output, so two leases never overwrite each other's copy.
 func (j rowJudge) verdict(r targetRun) runVerdict {
 	r, err := r.fromDir(j.root, j.dir, j.workspace)
 	v := runVerdict{run: r}
-	switch {
-	case err != nil:
+	if err != nil {
 		v.unchecked = err
-	case r.allowed(j.checks, j.produces) || r.composedByCheck(j.composes):
+		return v
+	}
+	v.permitted = r.allowed(j.checks, j.produces) || r.composedByCheck(j.composes)
+	if !v.permitted && r.installs(j.deps) {
 		v.permitted = true
-		if r.verb != "run" || !r.rewrites(j.deps.DefaultCharms) {
-			break
-		}
-		ws, err := j.workspace()
-		if err != nil {
+		return v
+	}
+	if r.verb != "run" {
+		return v
+	}
+	ws, err := j.workspace()
+	if err != nil {
+		if v.permitted && r.rewrites(j.deps.DefaultCharms) {
 			v.unchecked = fmt.Errorf("reading what %s writes: %w", r.target, err)
-			break
 		}
-		if r.runsOp(ws) && opHonorsRewrite(j.deps.spells(), r.target) {
-			v.op, v.composers = true, r.composers(j.graph)
-			break
+		return v
+	}
+	projects := r.selected(ws)
+	own := r.ownOutputs(job.RegeneratedOutside(j.root, j.row, projects, nil))
+	if !v.permitted {
+		if !r.regeneratesOwn(own) {
+			return v
 		}
-		v.outside = r.writesOutside(ws, j.row.WritePaths)
-	case r.installs(j.deps):
 		v.permitted = true
 	}
+	if v.held, v.holder = j.heldBy(own, projects); v.held != "" {
+		return v
+	}
+	if !r.rewrites(j.deps.DefaultCharms) {
+		return v
+	}
+	if r.runsOp(ws) && opHonorsRewrite(j.deps.spells(), r.target) {
+		v.op, v.composers = true, r.composers(j.graph)
+		return v
+	}
+	v.outside = r.writesOutside(projects, j.row.WritePaths, own)
 	return v
+}
+
+// heldBy is the first output of own another live lease holds, and that lease: one whose
+// write paths cover the output, or one that regenerates it too from its own write paths
+// and was declared before the row. The first holder regenerates it and the other waits, so
+// neither silently overwrites the other's copy.
+func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project) (string, types.Job) {
+	if len(own) == 0 {
+		return "", types.Job{}
+	}
+	for _, other := range j.others() {
+		var theirs []job.RegeneratedOutput
+		if !other.ReadOnly && (other.Created < j.row.Created || other.Created == j.row.Created && other.ID < j.row.ID) {
+			theirs = job.RegeneratedOutside(j.root, other, projects, nil)
+		}
+		for _, o := range own {
+			pattern := strings.Fields(o.Output)[0]
+			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {
+				return o.Output, other
+			}
+		}
+	}
+	return "", types.Job{}
+}
+
+// writePathsTouch reports whether any of writePaths can name a file pattern names.
+func writePathsTouch(writePaths []string, pattern string) bool {
+	return slices.ContainsFunc(writePaths, func(raw string) bool {
+		file, _ := types.SplitClaim(raw)
+		return types.PathsIntersect(file, pattern)
+	})
+}
+
+// heldDenial words the refusal of a regenerate whose output another live lease holds.
+func heldDenial(v runVerdict, me types.Job) denial {
+	wait := hint.JobWait.With(v.holder.ID)
+	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.WritePaths, ", "))
+	if !writePathsTouch(v.holder.WritePaths, strings.Fields(v.held)[0]) {
+		why = fmt.Sprintf("lease %s regenerates it from its own write paths too, and was declared before lease %s", v.holder.ID, me.ID)
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` regenerates `%s` held by live lease %s; run `%s`.", v.run.target, v.held, v.holder.ID, wait),
+		Why: fmt.Sprintf("A lease regenerates and commits an output its own write paths regenerate, unless another live lease holds that output: %s.\n"+
+			"The first holder regenerates it and the other waits, so neither silently overwrites the other's copy. Once lease %s ends, run `%s` again; if it never needs the output, the checkout's integrator, "+integratorIs+", regenerates it after integration.",
+			why, v.holder.ID, v.run.target),
+	}
 }
 
 // rewriteDenial words the refusal of a run the rw charm would have write past the row's
@@ -681,10 +783,28 @@ func uncheckedDenial(v runVerdict, me types.Job, checks []types.LeaseCheck, defa
 		next = v.run.readOnly(defaults)
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` could not be judged against lease %s's write paths: the workspace did not load; run `%s`.", v.run.target, me.ID, next),
+		Say: fmt.Sprintf("magus workspace: `%s` could not be judged against lease %s's write paths: %s; run `%s`.", v.run.target, me.ID, uncheckedCause(v.unchecked), next),
 		Why: fmt.Sprintf("%v.\nWithout the workspace's declarations nothing says which project `%s` selects or what it writes, so it is refused rather than run unchecked. Once the workspace loads, the run is judged as usual.",
 			v.unchecked, v.run.target),
 	}
+}
+
+// uncheckedCause names why the workspace a run is judged against was not read: an open
+// that outlasted its share of the hook's budget is a slow machine, not a broken magusfile,
+// and the two send the worker different ways.
+func uncheckedCause(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return fmt.Sprintf("opening the workspace took longer than the guard's %s budget for it", inspectBudget)
+	case errors.Is(err, errNoDependency):
+		return "the guard was handed no way to open the workspace"
+	}
+	// The wraps say what the guard was reading; the innermost error says what failed.
+	for inner := errors.Unwrap(err); inner != nil; inner = errors.Unwrap(err) {
+		err = inner
+	}
+	first, _, _ := strings.Cut(err.Error(), "\n")
+	return "the workspace did not load: " + first
 }
 
 // denyWorkerRawTool refuses a bound worker a raw tool a spell op covers, naming the check
@@ -976,21 +1096,12 @@ func (r targetRun) readOnly(defaults []string) string {
 // declarations, in every project the run selects: its target's ctx.writesFiles and
 // ctx.modifiesExistingFiles globs, and the ctx.modifiesExistingFiles globs of each step
 // its ctx.needs chain reaches in that project. It returns the rooted globs no write path
-// covers.
+// covers and own does not name: own are the outputs the row's write paths regenerate,
+// which count as inside them.
 //
 // A needed step's outputs and another project's steps are left out: they build what the
 // run consumes, and another project's ci settles its own formatting.
-func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) (outside []string) {
-	var projects []*types.Project
-	if slices.Contains(r.selection(), "/") {
-		projects = ws.All()
-	} else {
-		for _, p := range r.selection() {
-			if found := ws.Get(path.Clean(p)); found != nil {
-				projects = append(projects, found)
-			}
-		}
-	}
+func (r targetRun) writesOutside(projects []*types.Project, writePaths []string, own []job.RegeneratedOutput) (outside []string) {
 	name := targetName(r.target)
 	for _, p := range projects {
 		var globs []types.Glob
@@ -1002,12 +1113,51 @@ func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) 
 		}
 		// A nil lookup keeps the chain in p.
 		for _, g := range append(globs, types.ChainUpdates(p, name, nil)...) {
-			if !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
+			regenerated := slices.ContainsFunc(own, func(o job.RegeneratedOutput) bool { return o.Project() == p.Path && o.Output == g.String() })
+			if !regenerated && !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
 				outside = append(outside, g.Pattern)
 			}
 		}
 	}
 	return outside
+}
+
+// selected is the projects the run selects, read from ws: every project for `/`.
+func (r targetRun) selected(ws types.WorkspaceReader) []*types.Project {
+	if slices.Contains(r.selection(), "/") {
+		return ws.All()
+	}
+	var projects []*types.Project
+	for _, p := range r.selection() {
+		if found := ws.Get(path.Clean(p)); found != nil {
+			projects = append(projects, found)
+		}
+	}
+	return projects
+}
+
+// ownOutputs are the outputs among regenerated that the run's target produces.
+func (r targetRun) ownOutputs(regenerated []job.RegeneratedOutput) []job.RegeneratedOutput {
+	name := targetName(r.target)
+	return slices.DeleteFunc(regenerated, func(o job.RegeneratedOutput) bool {
+		_, target, _ := strings.Cut(o.Target, ":")
+		return targetName(target) != name
+	})
+}
+
+// regeneratesOwn reports a run of a generator whose outputs the row's write paths
+// regenerate, own, in every project it names. A run over every project needs one.
+func (r targetRun) regeneratesOwn(own []job.RegeneratedOutput) bool {
+	if len(own) == 0 {
+		return false
+	}
+	selected := r.selection()
+	if slices.Contains(selected, "/") {
+		return true
+	}
+	return !slices.ContainsFunc(selected, func(p string) bool {
+		return !slices.ContainsFunc(own, func(o job.RegeneratedOutput) bool { return o.Project() == path.Clean(p) })
+	})
 }
 
 // leaseCoversGlob reports whether writePaths cover every path glob can match.
@@ -2308,11 +2458,15 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	creates := slices.ContainsFunc(cmds, isInit)
 	if !creates {
 		for _, c := range cmds {
-			if op := workerVCSOp(c); op != "" && !workerLands(c) {
-				if cwd, _ := deps.workingDir(); isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
+			if op := workerVCSOp(c); op != "" && !workerLands(c) && !integrationMerge(c, me) {
+				cwd, _ := deps.workingDir()
+				if isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
 					continue
 				}
 				if addsCheckout(c) {
+					if addsScratchCheckout(command, cwd) {
+						continue
+					}
 					return checkoutAddDenial("`"+command+"`", me, role)
 				}
 				return workerVCSDenial("`"+command+"`", vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
@@ -2547,7 +2701,7 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 	return landDenial(what, r.op, row, role,
 		"magus workspace: `"+r.op+"` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`.",
 		"The orchestrator lands the work from there. "+
-			"A worker reads the repository, stages, switches or creates a branch and fetches; every other version-control verb stays with the orchestrator.")
+			"A worker reads the repository, stages, switches or creates a branch, fetches, and merges its base into its own branch; every other version-control verb stays with the orchestrator.")
 }
 
 // landDenial is workerVCSDenial for every call but an init: lead, then why, then what a
@@ -2555,7 +2709,7 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 func landDenial(what, op string, row types.Job, role, lead, why string) string {
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
 	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
-		"A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
+		"A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
 		leaseActorClause("land it"),
 		lead, what, op, row.ID, role, why, checkout)
 }
@@ -2604,7 +2758,7 @@ type vcsSite struct {
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
 	op := workerVCSOp(inv)
 	switch {
-	case op == "":
+	case op == "" || integrationMerge(inv, row):
 		return vcsRefusal{}
 	case isInit(inv):
 		return initRefusal(row, inv, site, unlocated)
@@ -2613,16 +2767,28 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	case unlocated != "":
 		return vcsRefusal{op: op, kind: vcsOpLands, why: unlocated}
 	}
-	return vcsRefusal{op: op, kind: vcsOpLands, why: commitRefusal(ctx, opts, row, inv.Name, site)}
+	why, base := commitRefusal(ctx, opts, row, inv.Name, site)
+	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
+		why = fmt.Sprintf("It merges %s, and a worker merges only its base into its branch: ", operand)
+		if base == "" {
+			why += "this checkout resolves no base branch, so only the revision its job was handed."
+		} else {
+			why += fmt.Sprintf("origin/%s, or the revision its job was handed.", path.Base(base))
+		}
+	}
+	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
 }
 
 // workerLands reports a call that lands work on the branch its checkout is on: a commit, a
-// git cherry-pick, or a git apply. All three are graded where the commit is, its own
-// branch in its own checkout, because a cherry-pick and `git diff | git apply -3 && git
-// commit -C` land the same change, and a rule that answered them differently taught
-// whichever spelling it let through.
+// git cherry-pick, a git apply, or a merge workerMerge reads. All are graded where the
+// commit is, its own branch in its own checkout, because a cherry-pick and `git diff | git
+// apply -3 && git commit -C` land the same change, and a rule that answered them
+// differently taught whichever spelling it let through.
 func workerLands(inv hint.Invocation) bool {
 	if recordsCommit(inv) {
+		return true
+	}
+	if _, ok := workerMerge(inv); ok {
 		return true
 	}
 	sub, _ := vcsSubcommand(inv)
@@ -2848,34 +3014,35 @@ func inFreshRepo(inv hint.Invocation, site vcsSite, unlocated string, fresh []st
 }
 
 // commitRefusal says why a worker's commit at site is refused, "" when it is in the
-// lease's own checkout, a secondary one, on a named branch other than the base.
-func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, backend string, site vcsSite) string {
+// lease's own checkout, a secondary one, on a named branch other than the base. base is
+// the base branch that checkout resolves, read only when why is "".
+func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, backend string, site vcsSite) (why, base string) {
 	if row.CheckoutRoot == "" {
-		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one."
+		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one.", ""
 	}
 	root, ok := siteCheckout(ctx, opts, backend, site)
 	if !ok {
-		return "Which checkout it commits in cannot be read."
+		return "Which checkout it commits in cannot be read.", ""
 	}
 	if !samePath(root, row.CheckoutRoot) {
-		return fmt.Sprintf("It commits in %s, and the lease was taken in %s.", root, row.CheckoutRoot)
+		return fmt.Sprintf("It commits in %s, and the lease was taken in %s.", root, row.CheckoutRoot), ""
 	}
 	opts.Name = backend
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil || res.VCS == nil {
-		return "Version control is disabled or unresolvable for " + root + ", so its branch cannot be read."
+		return "Version control is disabled or unresolvable for " + root + ", so its branch cannot be read.", ""
 	}
 	if !res.VCS.IsSecondaryCheckout(root) {
-		return root + " is the repository's primary checkout, the one the orchestrator integrates in."
+		return root + " is the repository's primary checkout, the one the orchestrator integrates in.", ""
 	}
 	ref, err := res.VCS.Ref(ctx, root)
 	switch {
 	case err != nil || ref == "":
-		return root + " has no branch checked out; " + switchToJobBranch(backend, row.ID)
+		return root + " has no branch checked out; " + switchToJobBranch(backend, row.ID), ""
 	case isBaseBranch(ref, res.Base):
-		return fmt.Sprintf("%s is on %s, the base branch.", root, ref)
+		return fmt.Sprintf("%s is on %s, the base branch.", root, ref), ""
 	}
-	return ""
+	return "", res.Base
 }
 
 // isBaseBranch reports whether ref names the branch base tracks: base itself, or its last
@@ -3218,10 +3385,11 @@ func vcsMutation(c hint.Invocation) string {
 // cannot drift about who owns a path or how the refusal reads, and the extraction that
 // finds the written words is the cache-dir rule's, shared for the same reason.
 //
-// Only a candidate the acting lease or an editing one DECLARED is graded. The extraction
-// offers every word a non-reader command was pointed at, which is the safe direction for a
-// boundary as specific as the cache dir but not for one as ordinary as a path: grading every word
-// would refuse `echo hi` for writing outside the boundary.
+// A candidate the acting lease or an editing one DECLARED is graded, and so is an
+// undeclared one inside the checkout that reads as a file. The extraction offers every word
+// a non-reader command was pointed at, which is the safe direction for a boundary as
+// specific as the cache dir but not for one as ordinary as a path: grading every word would
+// refuse `echo hi` for writing outside the boundary.
 func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
 		return ""
@@ -3249,6 +3417,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	// command run from a subdirectory is not the checkout's root, and the line's cds move it.
 	checkout := leaseCheckout(ctx, location, actingLease)
 	start, home := cmp.Or(deps.callDir, checkout), userHome()
+	removed := removedOrMovedOperands(command, 0, dialect, start, home)
 	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
@@ -3270,13 +3439,24 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			}
 			continue
 		}
+		redirected := slices.Contains(redirects, candidate.word)
 		declared, byCatchAll := declaredPath(declaring, rel)
-		if !declared {
-			continue
-		}
-		// A catch-all covers every word, `print(1)` included, so under one only a
-		// redirect target or a word shaped like a file stands in for a path.
-		if byCatchAll && !slices.Contains(redirects, candidate.word) && !pathShaped(checkout, rel) {
+		switch {
+		case !declared:
+			// No lease declares it, so the acting lease's own write paths decide, as for the
+			// editor tool. Only a redirect target or an existing file counts: sed's `s/a/b`
+			// is spelled like a path. A remove or move is graded below, holder-made files kept.
+			if !enrolled || len(me.WritePaths) == 0 || slices.ContainsFunc(removed, func(o placedWord) bool {
+				t, ok := o.place(home)
+				return ok && t == target
+			}) {
+				continue
+			}
+			if info, err := os.Lstat(target); !redirected && (err != nil || !info.Mode().IsRegular()) {
+				continue
+			}
+		case byCatchAll && !redirected && !pathShaped(checkout, rel):
+			// A catch-all covers every word, `print(1)` included.
 			continue
 		}
 		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
@@ -3286,7 +3466,31 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if !enrolled || len(me.WritePaths) == 0 {
 		return ""
 	}
-	for _, operand := range removedOrMovedOperands(command, 0, dialect, start, home) {
+	// A file the holder made since its checkpoint stays its own to remove after a narrowing
+	// drops it from the write paths. Ignored files are excluded: a fresh checkout never made one.
+	madeByHolder := func(rel string) bool {
+		info, err := os.Lstat(filepath.Join(checkout, filepath.FromSlash(rel)))
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+		if _, denied, err := declarationCovering(me.DenyPaths, rel); err != nil || denied {
+			return false
+		}
+		revision, _ := types.ParseCheckpointToken(cmp.Or(me.Checkpoint, me.ReportedBase))
+		res, err := vcs.Resolve(ctx, checkout, "", deps.VCS)
+		if revision == "" || err != nil || res.VCS == nil {
+			return false
+		}
+		if ignored, err := res.VCS.IgnoredFiles(ctx, checkout, []string{rel}); err != nil || len(ignored) > 0 {
+			return false
+		}
+		if _, err := res.VCS.FindCommit(ctx, checkout, revision); err != nil {
+			return false
+		}
+		_, err = res.VCS.ReadFileAt(ctx, checkout, revision, rel)
+		return err != nil
+	}
+	for _, operand := range removed {
 		target, placed := operand.place(home)
 		if !placed {
 			continue
@@ -3295,7 +3499,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if !inside {
 			continue
 		}
-		if outside := reachOutside(checkout, me, rel); outside != "" {
+		if outside := reachOutside(checkout, me, rel); outside != "" && (outside != rel || !madeByHolder(rel)) {
 			what := outside + " is"
 			if outside != rel {
 				what = rel + " holds " + outside + ", which is"

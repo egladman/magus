@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|apply|exec|exit|wait|watch|run|rm|prune\> [flags]
+**magus** job \<fork|apply|exec|exit|wait|watch|run|rm|prune|pause|resume\> [flags]
 
 ## Description
 
@@ -77,6 +77,11 @@ orchestrator widens; a holder may apply only the release of its own paths.
 
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
+
+pause holds jobs' holders off the machine budget: their next magus run is refused
+until resume. A run already holding the budget finishes. A job's weight, in (0,1]
+on its record, leans its runs' retries ahead of other waiters; it is a lean, never
+a place in a queue.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.
@@ -208,6 +213,12 @@ them and magus describe job prints one job's terms.
 **prune**
 : End every job nobody is working
 
+**pause**
+: Hold jobs' holders off the machine budget until resumed
+
+**resume**
+: Lift the pause on jobs
+
 ## Examples
 
 *Declare a job*
@@ -280,6 +291,12 @@ magus job wait session-load/core --integration --stdin < evidence.json
 
 ```sh
 magus job prune --dry-run
+```
+
+*Hold a job's runs off the budget, then let them back*
+
+```sh
+magus job pause session-load/core && magus job resume session-load/core
 ```
 
 ## See Also

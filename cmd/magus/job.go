@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -23,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
@@ -35,6 +37,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -78,13 +81,23 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobApply(ctx, root, args[1:])
 	case "prune":
 		return jobPrune(ctx, root, args[1:])
+	case "pause":
+		return jobPause(ctx, root, "pause", args[1:])
+	case "resume":
+		return jobPause(ctx, root, "resume", args[1:])
 	default:
-		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm or prune; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, rm, prune, pause or resume; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
+// jobCommandSpec is `magus job` as the command registry declares it.
+func jobCommandSpec() cmdline.Command {
+	i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "job" })
+	return commands.Root.Children[i]
+}
+
 func jobUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|apply|exec|exit|wait|run|rm|prune> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: "+jobCommandSpec().Usage)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
@@ -93,15 +106,9 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "Kept per repository, so every worktree and clone reads one set of jobs.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  fork  declare a job, from flags or a JSON record on stdin")
-	fmt.Fprintln(os.Stderr, "  apply upsert jobs' specs from -f <file|->, keeping each job's state")
-	fmt.Fprintln(os.Stderr, "  exec  take the lease on a job here, and record the base this checkout landed on")
-	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
-	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
-	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
-	fmt.Fprintln(os.Stderr, "  run   submit one of the server's own jobs and return")
-	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
-	fmt.Fprintln(os.Stderr, "  prune end every job nobody is working, each with the reason; --all adds idle taken ones")
+	for _, c := range jobCommandSpec().Children {
+		fmt.Fprintf(os.Stderr, "  %-6s %s\n", c.Name, c.Short)
+	}
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "`"+hint.LsJobs.String()+"` lists every job in flight, and `"+hint.DescribeJob.With("<job>")+"` prints one job's terms.")
 	fmt.Fprintln(os.Stderr, "")
@@ -885,6 +892,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	leases = job.HardenWritten(ctx, store, leases)
 	i := slices.IndexFunc(leases, func(lease types.Job) bool { return lease.ID == pos[0] })
 	if i < 0 {
 		return fmt.Errorf("magus describe job: there is no job %q (run `%s` to see them)", pos[0], hint.LsJobs)
@@ -1156,7 +1164,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--checkout <dir> makes a new checkout of this repository at dir (a git worktree,")
 			fmt.Fprintln(os.Stderr, "an hg share, a jj workspace) at the job's checkpoint, or at this checkout's")
-			fmt.Fprintln(os.Stderr, "revision when it names none. A ./magus this checkout runs is copied into it. The")
+			fmt.Fprintln(os.Stderr, "revision when it names none. A ./magus this checkout runs is copied into it when it was built at that revision or no Go build input differs; otherwise the output names the bootstrap that builds one. The")
 			fmt.Fprintln(os.Stderr, "job is taken there and nowhere else, and once it ends magus removes the checkout")
 			fmt.Fprintln(os.Stderr, "if it is clean and every commit in it is on a branch, bookmark, remote or its")
 			fmt.Fprintln(os.Stderr, "base; otherwise it keeps it and records why. It is the one job flag --stdin")
@@ -1237,6 +1245,43 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS)
+	switch {
+	case len(row.Integrates) > 0:
+		if len(row.WritePaths) > 0 {
+			return exit.Usagef("magus job fork: an integration job's write paths are the files its branches changed, computed here, so the record names none: drop write_paths")
+		}
+		paths, base, err := job.IntegrationWritePaths(ctx, root, row.Checkpoint, row.Integrates)
+		if err != nil {
+			return exit.Usagef("magus job fork: integrates: %s", err)
+		}
+		if len(paths) == 0 {
+			if paths, err = unfinishedIntegration(ctx, root, store, row); err != nil {
+				return err
+			}
+			if len(paths) == 0 {
+				return exit.Usagef("magus job fork: integrates: %s change nothing since %s, so there is nothing to merge", strings.Join(row.Integrates, ", "), base)
+			}
+			slog.InfoContext(ctx, fmt.Sprintf("%s changes nothing left to merge, and %s's goals are unmet, so it is forked again on the paths it held", strings.Join(row.Integrates, ", "), row.ID), attr.Notice("note"))
+		}
+		if row.Checkpoint == "" {
+			slog.InfoContext(ctx, fmt.Sprintf("the record names no checkpoint, so the branches were compared with this checkout's revision %s, and the job starts there", base), attr.Notice("note"))
+			row.Checkpoint = base
+		}
+		row.WritePaths = paths
+	case row.Parent == "":
+		advice, refuse, err := store.IntegrationAdvice(ctx, globalCfg.Jobs)
+		switch {
+		case err != nil:
+			slog.InfoContext(ctx, "finished branches waiting off the base could not be counted", attr.Error(err), attr.Notice("note"))
+		case refuse:
+			return exit.Usagef("magus job fork: %s", advice)
+		case advice != "":
+			slog.InfoContext(ctx, advice, attr.Notice("advice"))
+		}
+	}
+	if row, err = forkCheckout(ctx, store, root, row); err != nil {
+		return err
+	}
 	// The reader loads the graph only when a gate names a symbol, or when the deletion
 	// candidates ask for it, and the two share one load.
 	graph := newJobGraph(root, true)
@@ -1345,7 +1390,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
 		printJobWorktree(os.Stdout, stored, bootstrap)
-		printClaimNotes(os.Stdout, job.ForkNotes(ctx, store, plan, stored))
+		printClaimNotes(os.Stdout, append(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored)...))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
 			for _, claim := range derived {
@@ -1373,11 +1418,68 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,
-				ClaimNotes:           job.ForkNotes(ctx, store, plan, stored),
+				ClaimNotes:           append(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored)...),
 			},
 			derived,
 		})
 	}
+}
+
+// forkCheckout settles the checkout row is taken in when it names none. A fork run inside a
+// checkout a job's fork made adopts that checkout, so the new row's holder is bound there and
+// not refused as a sibling. An integration row forked from any other linked checkout is
+// refused: its holder merges in a checkout of its own, and the forker's tree is not one.
+func forkCheckout(ctx context.Context, store *job.Store, root string, row types.Declaration) (types.Declaration, error) {
+	if row.Checkout != "" || root == "" {
+		return row, nil
+	}
+	here, err := filepath.Abs(root)
+	if err != nil {
+		return row, err
+	}
+	owned, err := store.OwnedCheckout(here)
+	if err != nil {
+		return row, err
+	}
+	if owned != "" {
+		slog.InfoContext(ctx, fmt.Sprintf("the fork runs inside %s, a checkout a job's fork made, so %s is taken there too", owned, row.ID), attr.Notice("note"))
+		row.Checkout = owned
+		return row, nil
+	}
+	if len(row.Integrates) == 0 {
+		return row, nil
+	}
+	linked, err := store.LinkedCheckout(ctx, here)
+	if err != nil {
+		return row, exit.Usagef("magus job fork: whether %s is a linked checkout cannot be read (%s), so the checkout %s merges in is unknown: pass --checkout <dir>", here, err, row.ID)
+	}
+	if linked {
+		return row, exit.Usagef("magus job fork: %s is an integration job forked from %s, the forker's own linked checkout, where its holder would be bound: pass --checkout <dir>, a new directory the fork makes or the linked checkout the integrator runs in", row.ID, here)
+	}
+	return row, nil
+}
+
+// unfinishedIntegration is the write paths a re-fork of integration row id holds when its
+// branches have nothing left to merge: the stored row's, while some goal of it is unmet, so
+// a follow-up fixing what the merge left red keeps the row. nil when there is no such row or
+// every goal is met.
+func unfinishedIntegration(ctx context.Context, root string, store *job.Store, row types.Declaration) ([]string, error) {
+	rows, err := store.List()
+	if err != nil {
+		return nil, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
+	if i < 0 || len(rows[i].Integrates) == 0 || len(rows[i].WritePaths) == 0 {
+		return nil, nil
+	}
+	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graphsByTree(root, newJobGraph(root, false), false)))
+	if err != nil {
+		return nil, exit.Usagef("magus job fork: %s's goals cannot be graded, so whether it is finished is unknown: %s", row.ID, err)
+	}
+	if !slices.ContainsFunc(status.Gates, func(g types.GateStatus) bool { return !g.Verified }) {
+		return nil, nil
+	}
+	return slices.Clone(rows[i].WritePaths), nil
 }
 
 // printClaimNotes prints each of a fork's claim notes on a line of its own.
@@ -1527,6 +1629,9 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := refusePaused(store, pos[0]); err != nil {
+		return err
+	}
 	stored, err := store.Exec(ctx, pos[0])
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
@@ -1577,6 +1682,11 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 	if root != "" {
 		if loc, err := jobPlace(root); err == nil {
 			lease, _ = job.ActingLease(loc, spawn.Lease)
+			if lease != "" {
+				if err := refusePaused(job.NewStore(loc), lease); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -1960,6 +2070,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	store = store.InWorkspace(jobWorkspace(ctx, root))
 	rows, err := store.List()
 	if err != nil {
 		return err
@@ -2164,9 +2275,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 // A watcher that will not start is REPORTED and then done without: the other two sources
 // still answer, and a silently missing third is how a feed comes to show a quiet tree.
 func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() []types.Job) <-chan job.FeedEvent {
-	// RelativeIgnore, not BuiltinIgnore: an agent worktree lives under a dot-directory, and
-	// the absolute form would skip every file in the very tree this verb exists to watch.
-	w, err := watch.New(ctx, watch.WithRoot(root), watch.WithIgnore(watch.RelativeIgnore(root, watch.BuiltinIgnore)))
+	w, err := watch.New(ctx, watch.WithRoot(root), watch.WithIgnore(watch.BuiltinIgnore))
 	if err != nil {
 		fmt.Fprintf(out, "note: no file watcher here (%s), so this shows tool calls and runs only\n", err)
 		return nil
@@ -2318,6 +2427,68 @@ func printJobFootprint(out io.Writer, s job.Status) {
 	}
 }
 
+// refusePaused refuses work under job id while a person has it paused.
+func refusePaused(store *job.Store, id string) error {
+	rows, err := store.List()
+	if err != nil {
+		return fmt.Errorf("magus job exec: read whether %s is paused: %w", id, err)
+	}
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 && rows[i].Paused != 0 {
+		return types.ExitError{Code: cache.ExitCodeMachineBusy, Err: errors.New("magus job exec: " + job.PausedLine(id))}
+	}
+	return nil
+}
+
+// jobPause is `magus job pause` and `magus job resume`, which verb says.
+func jobPause(ctx context.Context, root, verb string, args []string) error {
+	spec := jobCommandSpec()
+	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == verb })]
+	ids, err := cmdParse("job "+verb, args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: "+child.Usage)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, cmp.Or(child.Description, child.Short))
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return exit.Usagef("magus job %s: requires at least one job (`%s` lists them)", verb, hint.LsJobs)
+	}
+	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
+	if err != nil {
+		return err
+	}
+	change := store.Pause
+	if verb == "resume" {
+		change = store.Resume
+	}
+	rows, err := change(ctx, ids...)
+	if err != nil {
+		return fmt.Errorf("magus job %s: %w", verb, err)
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames(os.Stdout, ids)
+	case outputText:
+		for _, row := range rows {
+			if row.Paused != 0 {
+				fmt.Printf("paused %s; its holder's next magus run is refused until `%s`\n", row.ID, hint.BinaryName()+" job resume "+row.ID)
+			} else {
+				fmt.Printf("resumed %s\n", row.ID)
+			}
+		}
+		return nil
+	default:
+		return emitFormatted(opts, rows)
+	}
+}
+
 // jobDelete is `magus job rm <job>`: take one row out of the plan.
 //
 // Named rm rather than delete because that is the verb a person types for this everywhere
@@ -2419,6 +2590,12 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "that removes some of its own write paths, which releases them. Ending a job is")
 			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The one claim a holder applies is proved: a record carrying only id and")
+			fmt.Fprintln(os.Stderr, "claim, [{\"path\": ..., \"because\": ...}], where because is refs:<symbol>,")
+			fmt.Fprintln(os.Stderr, "test:<file>, output:<project>:<target> or released. magus proves each path")
+			fmt.Fprintln(os.Stderr, "against the job's diff and records the proof on the job; the guard serves the")
+			fmt.Fprintln(os.Stderr, "record when it refuses a write it can prove. It applies alone.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			printOwnDefaults(fs)
 		}
@@ -2448,6 +2625,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
 	}
 	root = resolveRootOrEmpty(root)
+	if slices.ContainsFunc(records, func(r types.Declaration) bool { return len(r.Claim) > 0 }) {
+		return applyClaim(ctx, root, records)
+	}
 	// A dry run assigns no tier, so it runs no matrix.
 	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun, ModelTiers: !globalCfg.DryRun})
 	if err != nil {
@@ -2515,6 +2695,59 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID]})
 	}
 	return emitFormatted(opts, report)
+}
+
+// applyClaim applies the one claim record records holds: each path proved against
+// the job's diff before the store's lock and again under it, and the proofs printed.
+func applyClaim(ctx context.Context, root string, records []types.Declaration) error {
+	if len(records) != 1 {
+		return exit.Usagef("magus job apply: a claim record applies alone, and this input holds %d records", len(records))
+	}
+	rec := records[0]
+	if err := rec.Validate(); err != nil {
+		return exit.Usagef("magus job apply: %s", err)
+	}
+	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun})
+	if err != nil {
+		return err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
+	if i < 0 {
+		return exit.Usagef("magus job apply: nothing declares job %s, so nothing claims", rec.ID)
+	}
+	asked := make([]string, len(rec.Claim))
+	for k, w := range rec.Claim {
+		asked[k] = w.Path
+	}
+	ws := jobWorkspace(ctx, root)
+	facts := job.ObserveClaim(ctx, root, rows[i], asked, ws.Projects)
+	stored, err := store.Claim(ctx, rec.ID, rec.Claim, facts, globalCfg.Jobs, globalCfg.DryRun)
+	if err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames(os.Stdout, []string{stored.ID})
+	case outputText:
+		verb := "claims"
+		if globalCfg.DryRun {
+			verb = "would claim"
+		}
+		for _, w := range stored.Claims[len(stored.Claims)-len(rec.Claim):] {
+			fmt.Printf("%s %s: + %s (%s): %s\n", verb, stored.ID, w.Path, w.Evidence, w.Proof)
+		}
+		return nil
+	default:
+		return emitFormatted(opts, stored)
+	}
 }
 
 // applyClaimNotes is job.ForkNotes for each applied row, keyed by job id, against the plan

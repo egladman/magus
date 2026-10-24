@@ -107,10 +107,10 @@ func TestPriceAttemptIsTheContextFloorOrUnknown(t *testing.T) {
 	t.Parallel()
 
 	table := model.InEffect([]types.ModelPricing{{ID: "m", CacheRead: 1}}, nil)
-	s := &Store{priceContext: func(calls []types.AgentFacts) (int64, float64, bool) {
+	s := &Store{storeConfig: storeConfig{priceContext: func(calls []types.AgentFacts) (int64, float64, bool) {
 		floor, why := table.PriceContext(calls)
 		return floor.Tokens, floor.USD, why == ""
-	}}
+	}}}
 	metered := func(tokens int64, id string) types.AgentFacts {
 		return types.AgentFacts{ContextTokens: tokens, ContextModel: id, Billing: types.AgentBillingMetered}
 	}

@@ -2006,7 +2006,6 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapMergeDriverInstaller:  {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRefreshHookInstaller:  {"git": true, "hg": true, "sl": true},
 	types.CapDriftHookInstaller:    {"git": true, "hg": true, "sl": true},
-	types.CapRegenHookInstaller:    {"git": true},
 	types.CapRemoteReporter:        {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRemoteConfigReporter:  {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapDefaultRefReporter:    {"git": true, "hg": true, "sl": true, "jj": true},
@@ -2065,7 +2064,6 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapMergeDriverInstaller, "MergeDriverCommand", func(d types.VCSDriver, dir string) error { return errOf(d.MergeDriverCommand(ctx, dir)) }},
 		{types.CapRefreshHookInstaller, "InstallRefreshHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRefreshHook(ctx, dir, "true")) }},
 		{types.CapDriftHookInstaller, "InstallDriftHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallDriftHook(ctx, dir, "true")) }},
-		{types.CapRegenHookInstaller, "InstallRegenHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRegenHook(ctx, dir, "true")) }},
 		{types.CapRemoteReporter, "RemoteURL", func(d types.VCSDriver, dir string) error { return errOf(d.RemoteURL(ctx, dir, "-x")) }},
 		{types.CapRemoteConfigReporter, "ConfiguredRemote", func(d types.VCSDriver, dir string) error { return errOf(d.ConfiguredRemote(dir)) }},
 		{types.CapDefaultRefReporter, "DefaultRef", func(d types.VCSDriver, dir string) error { return errOf(d.DefaultRef(ctx, dir)) }},
@@ -2115,7 +2113,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapGeneratedPathReporter, "GeneratedPaths", func(d types.VCSDriver, dir string) error {
 			return errOf(d.GeneratedPaths(ctx, dir, "-x", []string{"a"}))
 		}},
-		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
+		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x", "") }},
 		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
 		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
 		{types.CapCheckoutProvisioner, "StrandedRevisions", func(d types.VCSDriver, dir string) error { return errOf(d.StrandedRevisions(ctx, dir, "-x")) }},

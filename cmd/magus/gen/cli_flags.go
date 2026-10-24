@@ -345,6 +345,10 @@ const (
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
 	FlagManInstallDryRun = "dry-run"
+	// notes capture: --anchor
+	FlagNotesCaptureAnchor = "anchor"
+	// notes capture: --gap
+	FlagNotesCaptureGap = "gap"
 	// notes capture: --name
 	FlagNotesCaptureName = "name"
 	// notes capture: --private
@@ -355,6 +359,14 @@ const (
 	FlagNotesCaptureTag = "tag"
 	// notes capture: --title
 	FlagNotesCaptureTitle = "title"
+	// notes ls: --private
+	FlagNotesLsPrivate = "private"
+	// notes ls: --reproducible
+	FlagNotesLsReproducible = "reproducible"
+	// notes ls: --shared
+	FlagNotesLsShared = "shared"
+	// notes ls: --tag
+	FlagNotesLsTag = "tag"
 	// path: --global
 	FlagPathGlobal = "global"
 	// path: --refresh
@@ -667,16 +679,26 @@ const (
 	FlagStatusWatch = "watch"
 	// status: --workspace
 	FlagStatusWorkspace = "workspace"
-	// vcs add: --reason
-	FlagVCSAddReason = "reason"
-	// vcs add: --untracked
-	FlagVCSAddUntracked = "untracked"
 	// vcs checkpoint: --preserve
 	FlagVCSCheckpointPreserve = "preserve"
+	// vcs ls-files: --exclude
+	FlagVCSLsFilesExclude = "exclude"
+	// vcs ls-files: --include-generated
+	FlagVCSLsFilesIncludeGenerated = "include-generated"
+	// vcs ls-files: --include-held
+	FlagVCSLsFilesIncludeHeld = "include-held"
+	// vcs ls-files: --include-staged
+	FlagVCSLsFilesIncludeStaged = "include-staged"
+	// vcs ls-files: --include-unclaimed
+	FlagVCSLsFilesIncludeUnclaimed = "include-unclaimed"
+	// vcs ls-files: --include-unexplained
+	FlagVCSLsFilesIncludeUnexplained = "include-unexplained"
+	// vcs ls-files: --include-untracked
+	FlagVCSLsFilesIncludeUntracked = "include-untracked"
+	// vcs ls-files: --project
+	FlagVCSLsFilesProject = "project"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
-	// vcs resolve: --hook
-	FlagVCSResolveHook = "hook"
 	// version: --client
 	FlagVersionClient = "client"
 	// watch: --backend
@@ -1247,31 +1269,40 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	return &f
 }
 
-// VCSAddFlags are the flags declared for `magus vcs add`.
-type VCSAddFlags struct {
-	Untracked bool   // --untracked
-	Reason    string // --reason
+// VCSLsFilesFlags are the flags declared for `magus vcs ls-files`.
+//
+// It does NOT carry --exclude, --project: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type VCSLsFilesFlags struct {
+	IncludeUntracked   bool // --include-untracked
+	IncludeGenerated   bool // --include-generated
+	IncludeUnexplained bool // --include-unexplained
+	IncludeUnclaimed   bool // --include-unclaimed
+	IncludeHeld        bool // --include-held
+	IncludeStaged      bool // --include-staged
 }
 
-// BindVCSAdd registers `magus vcs add`'s flags on fs and returns the destination.
-func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
-	var f VCSAddFlags
-	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files; requires --reason")
-	fs.StringVar(&f.Reason, FlagVCSAddReason, "", "Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict")
+// BindVCSLsFiles registers `magus vcs ls-files`'s flags on fs and returns the destination.
+func BindVCSLsFiles(fs *flag.FlagSet) *VCSLsFilesFlags {
+	var f VCSLsFilesFlags
+	fs.BoolVar(&f.IncludeUntracked, FlagVCSLsFilesIncludeUntracked, false, "Also list untracked files; refused on jj, which has none")
+	fs.BoolVar(&f.IncludeGenerated, FlagVCSLsFilesIncludeGenerated, false, "Also list declared outputs a dirty source in this change explains")
+	fs.BoolVar(&f.IncludeUnexplained, FlagVCSLsFilesIncludeUnexplained, false, "Also list declared outputs no source change here explains")
+	fs.BoolVar(&f.IncludeUnclaimed, FlagVCSLsFilesIncludeUnclaimed, false, "Also list paths no target declares, and the ones magus maintains itself")
+	fs.BoolVar(&f.IncludeHeld, FlagVCSLsFilesIncludeHeld, false, "Also list paths another live job in this checkout writes")
+	fs.BoolVar(&f.IncludeStaged, FlagVCSLsFilesIncludeStaged, false, "Also list paths whose whole change is already staged; git only")
 	return &f
 }
 
 // VCSResolveFlags are the flags declared for `magus vcs resolve`.
 type VCSResolveFlags struct {
 	Against string // --against
-	Hook    string // --hook
 }
 
 // BindVCSResolve registers `magus vcs resolve`'s flags on fs and returns the destination.
 func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	var f VCSResolveFlags
 	fs.StringVar(&f.Against, FlagVCSResolveAgainst, "", "Merge this `ref` first, then settle what it conflicts with")
-	fs.StringVar(&f.Hook, FlagVCSResolveHook, "", "Run as the git `hook` named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand")
 	return &f
 }
 
@@ -1483,13 +1514,33 @@ func BindJobPrune(fs *flag.FlagSet) *JobPruneFlags {
 	return &f
 }
 
-// NotesCaptureFlags are the flags declared for `magus notes capture`.
+// NotesLsFlags are the flags declared for `magus notes ls`.
 //
 // It does NOT carry --tag: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type NotesLsFlags struct {
+	Shared       bool // --shared
+	Private      bool // --private
+	Reproducible bool // --reproducible
+}
+
+// BindNotesLs registers `magus notes ls`'s flags on fs and returns the destination.
+func BindNotesLs(fs *flag.FlagSet) *NotesLsFlags {
+	var f NotesLsFlags
+	fs.BoolVar(&f.Shared, FlagNotesLsShared, false, "Only notes committed to this repository (your team has these)")
+	fs.BoolVar(&f.Private, FlagNotesLsPrivate, false, "Only your own notes")
+	fs.BoolVar(&f.Reproducible, FlagNotesLsReproducible, false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
+	return &f
+}
+
+// NotesCaptureFlags are the flags declared for `magus notes capture`.
+//
+// It does NOT carry --tag, --anchor: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type NotesCaptureFlags struct {
 	Title   string // --title
 	Name    string // --name
+	Gap     bool   // --gap
 	Shared  bool   // --shared
 	Private bool   // --private
 }
@@ -1499,6 +1550,7 @@ func BindNotesCapture(fs *flag.FlagSet) *NotesCaptureFlags {
 	var f NotesCaptureFlags
 	fs.StringVar(&f.Title, FlagNotesCaptureTitle, "", "Title for the note (defaults to naming the reviewed base)")
 	fs.StringVar(&f.Name, FlagNotesCaptureName, "", "Note name (defaults to review-<patch digest>)")
+	fs.BoolVar(&f.Gap, FlagNotesCaptureGap, false, "Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve")
 	fs.BoolVar(&f.Shared, FlagNotesCaptureShared, false, "Only notes committed to this repository (your team has these)")
 	fs.BoolVar(&f.Private, FlagNotesCapturePrivate, false, "Only your own notes (default for capture)")
 	return &f

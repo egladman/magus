@@ -113,6 +113,8 @@ func AnchorNodeID(kind, target, scope string) string {
 		return target // already a fully-formed target id
 	case types.KindNote:
 		return noteID(scope, target)
+	case types.KindDiagnostic:
+		return diagnosticID(target)
 	default:
 		return ""
 	}

@@ -95,7 +95,7 @@ jobs:
         shell: bash
         env:
           TMPDIR: ${{ runner.temp }}
-          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
           ARGV: ${{ inputs.argv }}
           SANDBOX: ${{ inputs.sandbox }}
         run: |

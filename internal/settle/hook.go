@@ -35,7 +35,7 @@ func Hook(ctx context.Context, m *magus.Magus, op vcs.HookOperation, defines fun
 	if err != nil {
 		return Outcome{}, err
 	}
-	o := Outcome{op: op, kind: op.Kind}
+	var o Outcome
 	o.Ran = Invocations(generatorProjects(files), owed, defines)
 	if len(o.Ran) == 0 {
 		return o, nil
@@ -52,11 +52,6 @@ func Hook(ctx context.Context, m *magus.Magus, op vcs.HookOperation, defines fun
 	}
 	if err := vcs.DropOwedRegenerations(ctx, m.Root(), owed); err != nil {
 		return o, err
-	}
-	if op.CommitPending {
-		if err := vcs.HookRecordSettledTree(ctx, m.Root(), op); err != nil {
-			return o, err
-		}
 	}
 	return o, nil
 }
@@ -134,10 +129,8 @@ func stageRegenerated(ctx context.Context, m *magus.Magus, op vcs.HookOperation,
 	return paths, vcs.HookStage(ctx, m.Root(), op, paths)
 }
 
-// Outcome is what one hook run did, for the line it prints.
+// Outcome is what one Hook run did.
 type Outcome struct {
-	op   vcs.HookOperation
-	kind string
 	// Ran are the invocations Hook ran, or was running when it failed.
 	Ran [][]string
 	// Staged are the regenerated files Hook staged.
@@ -161,26 +154,6 @@ func (o Outcome) recordOwed(ctx context.Context, m *magus.Magus, files []types.F
 	}
 }
 
-// Notice is the one line a settled hook prints: what changed, what ran, and what the
-// output's fate is. fold is FoldCommand's answer.
-func (o Outcome) Notice(hook, fold string) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "magus: this %s changed generator inputs; ran %s", o.kind, o.Command())
-	switch {
-	case len(o.Staged) == 0:
-		b.WriteString("; the generated output was already current")
-	case hook == vcs.HookPreMergeCommit:
-		fmt.Fprintf(&b, "; staged %d regenerated file(s) into the merge, so the commit is left to you: `git commit` concludes it", len(o.Staged))
-	case o.op.CommitPending:
-		fmt.Fprintf(&b, "; staged %d regenerated file(s) into this commit", len(o.Staged))
-	case fold != "":
-		fmt.Fprintf(&b, "; staged %d regenerated file(s); fold them into HEAD with `%s`", len(o.Staged), fold)
-	default:
-		fmt.Fprintf(&b, "; staged %d regenerated file(s); HEAD may already be pushed, so commit them as a new commit", len(o.Staged))
-	}
-	return b.String()
-}
-
 // Command is the shell command that repeats Ran.
 func (o Outcome) Command() string {
 	runs := make([]string, len(o.Ran))
@@ -188,26 +161,4 @@ func (o Outcome) Command() string {
 		runs[i] = hint.Run.With(inv...)
 	}
 	return strings.Join(runs, " && ")
-}
-
-// FoldCommand is how to fold staged output into HEAD: an amend when HEAD is an unpushed
-// git commit, "" when it may already be published, no VCS resolves, or the backend
-// cannot say.
-func FoldCommand(ctx context.Context, m *magus.Magus) string {
-	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
-	if err != nil {
-		return ""
-	}
-	driver := res.VCS
-	if driver == nil || driver.Name() != "git" {
-		return ""
-	}
-	head, err := driver.Metadata(ctx, m.Root())
-	if err != nil {
-		return ""
-	}
-	if pushed, known, err := driver.CommitPushed(ctx, m.Root(), head.ID); err != nil || !known || pushed {
-		return ""
-	}
-	return "git commit --amend --no-edit"
 }

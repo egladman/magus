@@ -351,8 +351,9 @@ func TestVerifyAcceptsTheHoldersRunAndAnUnleasedOne(t *testing.T) {
 	}
 }
 
-// The args a run forwarded after `--` are part of what it ran: a run narrowed to another
-// test does not stand in for the check. A record with no args is not compared.
+// The args a run forwarded after `--` are part of what it ran: a run with another flag does
+// not stand in for the check. Another -run pattern selects tests inside the same packages,
+// so it does. A record with no args is not compared.
 func TestVerifyComparesTheRunsRecordedArgs(t *testing.T) {
 	t.Parallel()
 
@@ -363,7 +364,7 @@ func TestVerifyComparesTheRunsRecordedArgs(t *testing.T) {
 	}{
 		{name: "the check's own args", args: []string{"-run", "Ledger"}, ok: true},
 		{name: "a record with none", args: nil, ok: true},
-		{name: "a run narrowed elsewhere", args: []string{"-run", "Other"}, ok: false},
+		{name: "a run scoped elsewhere", args: []string{"-run", "Other"}, ok: true},
 		{name: "a run with more args", args: []string{"-run", "Ledger", "-short"}, ok: false},
 	} {
 		att := passingRun
@@ -375,6 +376,77 @@ func TestVerifyComparesTheRunsRecordedArgs(t *testing.T) {
 			assert.Contains(t, v.Violations[0], "-- "+strings.Join(tc.args, " "), "the message shows the args the run forwarded")
 		}
 	}
+}
+
+// A go test run scoped with -run or -skip is a run of the check's target and project over
+// the same packages, so it is evidence, and the grade notes the scope. A scoped run of
+// another target or project, or one with another flag, is still another run.
+func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	row.Check = &types.LeaseCheck{Target: "go::go-test", Project: "."}
+	scoped := passingRun
+	scoped.ExtraArgs = []string{"-run", "Spawn|Waiter"}
+
+	v := verifyClaim(row, passingResult(), scoped, nil)
+	assert.True(t, v.Verified, "%q", v.Violations)
+	require.Len(t, v.Notes, 1)
+	assert.Equal(t, "goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped with `-- -run Spawn|Waiter`:"+
+		" -run and -skip select tests inside the packages `magus run go::go-test .` runs, so it ran every package the check does", v.Notes[0])
+	var out strings.Builder
+	RenderGates(&out, v)
+	assert.Contains(t, out.String(), "  [met] check\nnote: goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped")
+
+	for name, att := range map[string]types.JobAttempt{
+		"another target":  {Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "Spawn"}},
+		"another project": {Found: true, Project: "docs", Target: "go-test", Spell: "go", ExtraArgs: []string{"-run", "Spawn"}},
+		"another flag":    {Found: true, Project: ".", Target: "go-test", Spell: "go", ExtraArgs: []string{"-run", "Spawn", "-short"}},
+	} {
+		v := verifyClaim(row, passingResult(), att, nil)
+		assert.False(t, v.Verified, name)
+		assert.Contains(t, strings.Join(v.Violations, "\n"), "different run", name)
+		assert.Empty(t, v.Notes, name)
+	}
+
+	lint := types.LeaseCheck{Target: "go::lint", Project: "."}
+	assert.False(t, ranCheck(lint, types.JobAttempt{Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "X"}}, nil),
+		"-run scopes go test only")
+}
+
+func TestWithoutTestSelectionDropsEverySpelling(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []string{"-short", "-count=1"},
+		withoutTestSelection([]string{"-run", "A", "-short", "--skip=B", "-test.run", "C", "-count=1", "--test.skip", "D"}))
+	assert.Equal(t, []string{}, withoutTestSelection(nil))
+	assert.Equal(t, []string{"run", "---run", "x"}, withoutTestSelection([]string{"run", "---run", "x"}), "not a flag go test reads")
+}
+
+// The check is the goal named check: a result may file its evidence under gate_evidence
+// by that id instead of validation, and its snapshot grades it the same.
+func TestVerifyTakesTheChecksEvidenceUnderItsGoalID(t *testing.T) {
+	t.Parallel()
+
+	rep := passingResult()
+	ref := rep.Validation.OutputRef
+	rep.GateEvidence = []types.GateEvidence{{GateID: types.PrimaryGoalID, OutputRef: ref}}
+	snapshots := []types.JobGateAttempt{{GateID: types.PrimaryGoalID, Attempt: passingRun}}
+
+	v := VerifyGates(acceptRow(), rep, passingRun, snapshots, nil, claimed(rep))
+	assert.True(t, v.Verified, "%q", v.Violations)
+	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: ref, Verified: true}}, v.Gates)
+
+	only := rep
+	only.Validation.OutputRef = ""
+	v = VerifyGates(acceptRow(), only, types.JobAttempt{}, snapshots, nil, claimed(only))
+	assert.True(t, v.Verified, "evidence filed only under gate_evidence: %q", v.Violations)
+
+	two := rep
+	two.Validation.OutputRef = "other-ref"
+	v = VerifyGates(acceptRow(), two, passingRun, snapshots, nil, claimed(two))
+	assert.False(t, v.Verified)
+	assert.Contains(t, v.Violations, `the result names output ref "other-ref" for goal "check" in validation and "a1b2c3d4" in gate_evidence; name one run`)
 }
 
 // A row with no check has nothing to bind evidence to, and accepting it anyway is how a
@@ -985,4 +1057,38 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 	require.NoError(t, err)
 	assert.False(t, blind.Verified, "a graph nobody read never passes a symbol goal")
 	assert.Contains(t, strings.Join(blind.Gates[1].Violations, "\n"), "could not read the symbol graph")
+}
+
+func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, WritePaths: []string{"a.go", "b.go"}, State: types.StateRunning}
+	rep := types.JobResult{
+		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
+		Job:          "integrate",
+		ChangedPaths: []string{"a.go", "MAGUS.md"},
+		GateEvidence: []types.GateEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
+	}
+	attempts := []types.JobGateAttempt{
+		{GateID: "go-test", Attempt: types.JobAttempt{Found: true, Ref: "test-ref", Project: ".", Target: "go-test"}},
+		{GateID: "lint", Attempt: types.JobAttempt{Found: true, Ref: "lint-ref", Project: ".", Target: "lint"}},
+	}
+	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil, Observed{Changed: []string{"a.go", "b.go", "c.go"}, ChangedKnown: true})
+	assert.True(t, status.Verified, "the merge range is the change, and the integrator's runs are declared evidence: %v", status.Violations)
+	require.Len(t, status.Gates, 2)
+
+	rep.GateEvidence = rep.GateEvidence[:1]
+	status = VerifyGates(row, rep, types.JobAttempt{}, attempts[:1], nil, Observed{})
+	assert.False(t, status.Verified, "the integrator's lint run is required, not optional")
+	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "lint"`)
+}
+
+func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	goals := integratorGoals(row)
+	require.Len(t, goals, 1)
+	assert.Equal(t, "lint", goals[0].ID)
+	assert.Empty(t, integratorGoals(acceptRow()), "a job that integrates nothing holds only what it declares")
 }

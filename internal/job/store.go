@@ -76,7 +76,13 @@ var ErrMaxAttempts = errors.New("job: max_attempts reached")
 // a writer in another process would buy nothing and would let a wedged writer stall the
 // console.
 type Store struct {
-	mu   sync.Mutex
+	mu sync.Mutex
+	storeConfig
+}
+
+// storeConfig is everything a Store carries but its mutex, so a view ([Store.As],
+// [Store.InWorkspace], [Store.dry]) copies it whole and sets only what differs.
+type storeConfig struct {
 	path string
 	// err is the failure to work out where this ledger lives, kept so NewStore can stay
 	// a constructor while every operation still reports it. A Store that cannot name its
@@ -109,6 +115,8 @@ type Store struct {
 	dryRun bool
 	// build is Location.Build.
 	build string
+	// writer is Location.Writer.
+	writer types.MagusBuild
 	// modelTiers and modelTierMatrix are Location's.
 	modelTiers      *types.ModelTierSet
 	modelRows       func() []types.ModelPricing
@@ -171,6 +179,9 @@ type Location struct {
 	// binary under a long-lived daemon never reads the old code's results as its own.
 	// Empty is the running build ([buildinfo.Build]); a test names another.
 	Build string
+	// Writer is the build every write stamps as the file's writer (see [newestWriter]).
+	// Zero is the running build ([buildinfo.Commit]); a test names another.
+	Writer types.MagusBuild
 	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
 	// row or changes its Model assigns the row's tier (see [resolveModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
@@ -205,10 +216,35 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}
+	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), writer: loc.Writer,
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}}
 	s.path, s.err = jobsPath(loc)
 	return s
+}
+
+// view is a Store over s's file with every seam s has and a mutex of its own; the file
+// lock still serializes it against s and every other writer.
+func (s *Store) view() *Store {
+	return &Store{storeConfig: s.storeConfig}
+}
+
+// writerBuild is the build s's writes stamp: Location.Writer, or the running build's commit
+// when that is zero.
+func (s *Store) writerBuild() types.MagusBuild {
+	if s.writer != (types.MagusBuild{}) {
+		return s.writer
+	}
+	return runningBuild()
+}
+
+// runningBuild is this binary's commit and commit time, zero for a build from a modified
+// tree. A var so a test binary, which carries no stamp, can stand in for a stamped one.
+var runningBuild = func() types.MagusBuild {
+	var b types.MagusBuild
+	if !buildinfo.Modified() {
+		b.Commit, b.Date = buildinfo.Commit()
+	}
+	return b
 }
 
 // Actor is who this Store writes as RIGHT NOW, for a door that has to refuse before it
@@ -284,8 +320,64 @@ func (s *Store) Path() (string, error) { return s.path, s.err }
 type jobsFile struct {
 	types.Schema
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
-	Retained int64       `json:"retained,omitempty"`
-	Jobs     []types.Job `json:"-"`
+	Retained int64 `json:"retained,omitempty"`
+	// Writer is the newest build that wrote the file; see [newestWriter].
+	Writer *writerStamp `json:"writer,omitempty"`
+	Jobs   []types.Job  `json:"-"`
+}
+
+// writerStamp names a build by its commit and that commit's time. It rides in the
+// header, never in a row, so the rows keep the shape types.Job declares.
+type writerStamp struct {
+	Commit string    `json:"commit"`
+	Time   time.Time `json:"time"`
+}
+
+// buildStamp is b's stamp, or nil when b names no commit or commit time, as for a test
+// binary, `go run`, or a build from a modified tree.
+func buildStamp(b types.MagusBuild) *writerStamp {
+	if b.Commit == "" || b.Commit == buildinfo.Unknown || strings.HasSuffix(b.Version, "-dirty") {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, b.Date)
+	if err != nil {
+		return nil
+	}
+	return &writerStamp{Commit: b.Commit, Time: t.UTC()}
+}
+
+// newestWriter is the header's stamp once build writes the file at path, or a refusal:
+// a build older than newest, or unstamped once a stamped one wrote, would write rows by
+// rules the newer build no longer applies. A build no older takes the stamp over, so the
+// header changes, and the file is rewritten, only when the build does.
+func newestWriter(path string, newest *writerStamp, b types.MagusBuild) (*writerStamp, error) {
+	self := buildStamp(b)
+	switch {
+	case newest == nil:
+		return self, nil
+	case self == nil:
+		return nil, types.DiagnosticErrorf(types.JobStoreWriterOlder,
+			"this magus has no commit stamp, and %s (committed %s) last wrote %s: run that ./magus, or rebuild ./magus from a clean tree at the current base",
+			newest.Commit, newest.Time.Format(time.RFC3339), path)
+	case !self.Time.Before(newest.Time):
+		return self, nil
+	case self.Commit != newest.Commit:
+		return nil, types.DiagnosticErrorf(types.JobStoreWriterOlder,
+			"this magus, %s (committed %s), is older than %s (committed %s), which last wrote %s: run the newer ./magus, or rebuild ./magus at the current base",
+			self.Commit, self.Time.Format(time.RFC3339), newest.Commit, newest.Time.Format(time.RFC3339), path)
+	}
+	return newest, nil
+}
+
+// noteLeftLive reports a sweep newestWriter refused. The read goes on: failing it would
+// lock a fresh checkout's unstamped bootstrap out of every list, so the rows stay live
+// until a build that may write ends them, and every read says so.
+func noteLeftLive(out io.Writer, dead []ending, err error) {
+	ids := make([]string, len(dead))
+	for i, e := range dead {
+		ids[i] = e.id
+	}
+	fmt.Fprintf(out, "job: left %s live: %v\n", strings.Join(ids, ", "), err)
 }
 
 // jobsLog is the file a write read, so the write appends only the lines that changed.
@@ -575,6 +667,26 @@ func widensInPlace(prev, next types.Job) bool {
 	return moved
 }
 
+// keepDerived carries what the fork derived for prev onto a whole-row record that omits it,
+// so a projection never hardens a path no person decided: prev's soft paths row still
+// writes, unless row names soft_paths for a path prev held, and the [IntegratorWaivers].
+func keepDerived(row *types.Job, prev types.Job) {
+	if !slices.ContainsFunc(row.SoftPaths, func(p string) bool { return slices.Contains(prev.WritePaths, p) }) {
+		for _, p := range prev.SoftPaths {
+			if slices.Contains(row.WritePaths, p) && !slices.Contains(row.SoftPaths, p) {
+				row.SoftPaths = append(row.SoftPaths, p)
+			}
+		}
+	}
+	for _, w := range prev.Waivers {
+		if w.Reason == integratorRegenerates && !slices.ContainsFunc(row.Waivers, func(have types.JobWaiver) bool {
+			return have.Code == w.Code && have.Subject == w.Subject
+		}) {
+			row.Waivers = append(row.Waivers, w)
+		}
+	}
+}
+
 // mutate is the locked read-modify-write [Store.Update], [Store.Exec] and [Wait] share, and
 // the only place a row is written row-wise. kind says what the write is; see
 // [grading].
@@ -673,6 +785,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		if i < 0 {
 			row.Entries = nil
 		}
+		if kind == asDeclaration && i >= 0 {
+			keepDerived(&row, prev)
+		}
 		// Hardening is one-way: a re-declaration cannot soften a path the holder already
 		// wrote, and a soft path that is no write path claims nothing.
 		row.SoftPaths = slices.DeleteFunc(row.SoftPaths, func(p string) bool {
@@ -727,6 +842,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// The counters are the store's: a whole-row write cannot set them, and only a
 		// write that adds write paths to a row its holder already took counts a widening.
 		row.Widenings = prev.Widenings
+		if kind != asClaim {
+			row.Claims = prev.Claims
+		}
 		if kind != asObservation {
 			row.ReworkRounds = prev.ReworkRounds
 		}
@@ -748,7 +866,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.Attempts++
 			row.Result, row.Attempt, row.GateAttempts, row.Rejection = nil, nil, nil, nil
 			row.Integration, row.WaiterEvidence = nil, nil
-			row.ReworkRounds, row.Widenings = 0, 0
+			row.ReworkRounds, row.Widenings, row.Claims = 0, 0, nil
 		}
 		row.Requires = requiredFeatures(row)
 		if kind != asNarrowing {
@@ -1095,7 +1213,8 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 // write records f against log, the file it was read from: the lines of the rows that
 // changed are appended, and the file is rewritten to one line per row instead when a row
 // was dropped, the header changed, the file ended in a line no writer finished, or the
-// appended lines would make it [file.CompactDue].
+// appended lines would make it [file.CompactDue]. A write that changes nothing skips
+// [newestWriter], so an older build still reads and sweeps.
 func (s *Store) write(f jobsFile, log jobsLog) error {
 	f.Version = max(f.Version, types.JobSchemaVersion)
 	lines, err := encodeJobs(f)
@@ -1115,10 +1234,21 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 		}
 	}
 	dropped := kept < len(log.rows)
-	sameHeader := bytes.Equal(header, log.header)
-	if len(changed) == 0 && !dropped && sameHeader && !log.partial {
+	if len(changed) == 0 && !dropped && bytes.Equal(header, log.header) && !log.partial {
 		return nil
 	}
+	writer, err := newestWriter(s.path, f.Writer, s.writerBuild())
+	if err != nil {
+		return err
+	}
+	if writer != f.Writer {
+		f.Writer = writer
+		if header, err = json.Marshal(f); err != nil {
+			return err
+		}
+		lines[0] = header
+	}
+	sameHeader := bytes.Equal(header, log.header)
 	if !dropped && sameHeader && !log.partial && !file.CompactDue(log.lines+len(changed), len(f.Jobs)) {
 		return file.AppendLines(s.path, changed, 0o644)
 	}
@@ -1214,7 +1344,7 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 			if err := json.Unmarshal(line.Text, &header); err != nil {
 				return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s:%d: %w", s.path, line.N, err)
 			}
-			f.Schema, f.Retained, log.header = header.Schema, header.Retained, line.Text
+			f.Schema, f.Retained, f.Writer, log.header = header.Schema, header.Retained, header.Writer, line.Text
 			continue
 		}
 		log.rows[row.ID] = line.Text
@@ -1263,6 +1393,9 @@ func encodeJobs(f jobsFile) ([][]byte, error) {
 // destroys the only account of it, and the caller who wants that says so with force. A
 // live row is the opposite case: nothing has happened yet, so there is nothing to lose.
 //
+// A checkout the row owns is ended first, as `job exit` ends it: removed when it is clean
+// and every commit in it is on a branch, else the row stays with it and the error says why.
+//
 // The dropped row is archived first, as Clear archives, so a delete is recoverable from
 // the sibling file rather than only from whatever the caller remembers. Archives last
 // jobs.retain; see [Store.dropExpiredFiles].
@@ -1288,6 +1421,16 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 			return fmt.Errorf("job: %s is %s, and that row is the record of what happened:"+
 				" delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
+		}
+		if dropped.Worktree.Standing() {
+			here, _ := filepath.Abs(s.root)
+			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row types.Job) bool { return row.ID == id })
+			if kept := endCheckout(ctx, others, here, dropped, *dropped.Worktree, nil); kept != "" {
+				return fmt.Errorf("job: %s owns the checkout %s, which stays, so the row stays with it: %s",
+					id, dropped.Worktree.Root, kept)
+			}
+			dropped = dropped.Clone()
+			dropped.Worktree.Removed = time.Now().Unix()
 		}
 		if err := s.archive(jobsFile{Schema: f.Schema, Jobs: []types.Job{dropped}}); err != nil {
 			return err

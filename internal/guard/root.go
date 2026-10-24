@@ -210,17 +210,32 @@ var mergeJobBranchesScript = referenceScript{
 	argv: []string{"hack/dev/merge-job-branches.buzz"},
 }
 
-// integrationScriptNote names the merge script after a merge or cherry-pick, in the
-// finding's first line so the once-per-session advice keeps it.
+var mergeBaseScript = referenceScript{
+	lead: "Bringing the base into a branch?",
+	argv: []string{"hack/dev/merge-base-into-branches.buzz", "--", "--branches", "<branch>"},
+}
+
+// integrationScriptNote names the merge scripts after a merge or cherry-pick, in the
+// finding's first line so the once-per-session advice keeps them. A merge is served both:
+// the line alone cannot say whether it brings the base in or lands a job branch.
 func integrationScriptNote(c mainCall) string {
-	if c.work != delegableIntegrate || (!strings.Contains(c.line, "git merge") && !strings.Contains(c.line, "git cherry-pick")) {
+	if c.work != delegableIntegrate {
 		return ""
 	}
-	note := mergeJobBranchesScript.note(c.root)
-	if note == "" {
-		return ""
+	var scripts []referenceScript
+	switch {
+	case strings.Contains(c.line, "git merge"):
+		scripts = []referenceScript{mergeBaseScript, mergeJobBranchesScript}
+	case strings.Contains(c.line, "git cherry-pick"):
+		scripts = []referenceScript{mergeJobBranchesScript}
 	}
-	return " " + strings.TrimPrefix(note, "\n")
+	var out string
+	for _, s := range scripts {
+		if note := s.note(c.root); note != "" {
+			out += " " + strings.TrimPrefix(note, "\n")
+		}
+	}
+	return out
 }
 
 // spawnBroken is why a spawn by host would be refused whatever its brief: at a deny

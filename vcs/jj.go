@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -50,16 +51,21 @@ func (v jjVCS) Root(ctx context.Context, dir string) (string, error) {
 }
 
 // CreateCheckout implements types.CheckoutProvisioner with `jj workspace add`, whose
-// working-copy commit starts empty on rev. The source's .jj records the workspace's
-// directory beside the name it was registered under, which `jj workspace list` omits.
-func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
+// working-copy commit starts empty on rev. jj has no current branch to put it on, so the
+// workspace takes branch as its name and `<branch>@` names its working copy. The source's
+// .jj records the workspace's directory beside the name it was registered under, which
+// `jj workspace list` omits.
+func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string) error {
 	if err := checkRequiredRevsetRef(rev); err != nil {
 		return err
 	}
 	if err := checkNewCheckout(root, dir); err != nil {
 		return err
 	}
-	name := "magus-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	name := branch
+	if name == "" {
+		name = "magus-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
 	if err := runVCS(ctx, "jj", root, []string{"workspace", "add", "--name", name, "--revision", rev, "--", dir}); err != nil {
 		return err
 	}
@@ -915,15 +921,15 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 	if err != nil {
 		return err
 	}
-	staging, err := os.MkdirTemp("", "magus-jj-export-")
+	staging, err := xdg.ScratchCheckoutDir("jj-export")
 	if err != nil {
 		return fmt.Errorf("jj workspace add: %w", err)
 	}
 	// jj refuses to create a workspace in a directory that already exists, so name the
-	// target inside the temp dir rather than as it.
+	// target inside the scratch dir rather than as it.
 	target := filepath.Join(staging, "tree")
-	// MkdirTemp's suffix makes the workspace name unique, so concurrent exports of the same
-	// repository cannot collide on it.
+	// The scratch dir's random name makes the workspace name unique, so concurrent exports
+	// of the same repository cannot collide on it.
 	name := "magus-export-" + filepath.Base(staging)
 	defer func() {
 		_ = os.RemoveAll(staging)

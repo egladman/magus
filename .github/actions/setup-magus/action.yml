@@ -398,7 +398,7 @@ runs:
         BUILD_DATE="$(git log -1 --format=%cI 2>/dev/null || echo unknown)"
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
         CGO_ENABLED=0 go build \
-          -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildDate=${BUILD_DATE}" \
+          -ldflags "-X main.version=${VERSION} -X github.com/egladman/magus/internal/buildinfo.commit=${COMMIT} -X github.com/egladman/magus/internal/buildinfo.commitDate=${BUILD_DATE}" \
           -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
         echo "magus: built ${SOURCE_DESC} from source as ${VERSION} (${COMMIT}), CGO_ENABLED=0 bootstrap" >&2
         # In this step, before any later one can touch the file: a consumer trusts this

@@ -287,23 +287,32 @@ func TestOrchestratorGroundworkByRole(t *testing.T) {
 }
 
 // TestGroundworkNamesTheMergeScript: a merge or cherry-pick of job branches names the merge
-// script in the finding's first line, only where the workspace carries it.
+// script in the finding's first line, only where the workspace carries it, and a merge also
+// names the script that brings the base into a branch.
 func TestGroundworkNamesTheMergeScript(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "dev", "merge-job-branches.buzz"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "dev", "merge-base-into-branches.buzz"), nil, 0o644))
 	deny := builtin.Setting{Decision: builtin.Deny}
 	call := func(line, workspace string) mainCall {
 		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: delegableIntegrate, line: line, root: workspace}
 	}
 	named := "Merging job branches? `" + hint.Buzz.With("hack/dev/merge-job-branches.buzz") + "`"
-	for _, line := range []string{"git cherry-pick abc123", "git merge job-branch"} {
+	base := "Bringing the base into a branch? `" + hint.Buzz.With("hack/dev/merge-base-into-branches.buzz", "--", "--branches", "<branch>") + "`"
+	for line, wantBase := range map[string]bool{"git cherry-pick abc123": false, "git merge job-branch": true, "git merge origin/main": true} {
 		f, ok := groundworkFinding(deny, call(line, root))
 		require.True(t, ok)
+		assert.True(t, f.deny, line)
 		assert.Equal(t, 1, strings.Count(f.say, named), line)
 		first, _, _ := strings.Cut(f.say, "\n")
 		assert.Contains(t, first, named, "advice keeps only the first line")
+		if wantBase {
+			assert.Contains(t, first, base, line)
+		} else {
+			assert.NotContains(t, f.say, "merge-base-into-branches", line)
+		}
 
 		f, _ = groundworkFinding(deny, call(line, t.TempDir()))
 		assert.NotContains(t, f.say, "hack/", "%q in a workspace without the script", line)
@@ -500,6 +509,24 @@ func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
 	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "the row records no model tier")
 	assert.NotEqual(t, string(denyRuleSpawnAboveModelTier), v.Rule)
 	assert.Zero(t, asked, "a row with no tier never opens the declaration")
+}
+
+// The main session starting a desktop session passes every spawn rule, built-in and
+// workspace alike; a leased caller starting one is still judged.
+func TestRootStartSessionPassesTheSpawnRules(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}}
+	deps := strict(Dependencies{SpawnRule: probe.rule()})
+	judge := func(lease string) types.GuardJudgment {
+		return Judge(ctx, deps, Request{Host: "claude-code", Lease: lease, ObservesSkillLoads: true, Input: hookJSON(t, map[string]any{
+			"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": startSessionTool,
+			"tool_input": map[string]any{"title": "orchestrator/scout scout", "name": "scout", "prompt": "Read internal/job and report."},
+		})})
+	}
+
+	assert.Equal(t, decisionPass, judge("").Decision)
+	assert.Empty(t, probe.asked)
+	assert.Equal(t, decisionDeny, judge("scout").Decision)
 }
 
 // At strict a spawn runs at the model tier its row was forked at, compared by rank through

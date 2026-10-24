@@ -242,3 +242,9 @@ func TestAnchorStatusIsTheNotesGrade(t *testing.T) {
 		assert.Equal(t, listed.GetStatus(), got.Msg.GetAnchors()[0].GetStatus(), "%s: GetNote grades as ListNotes does", n.GetName())
 	}
 }
+
+func TestADiagnosticAnchorIsRefusedNotRenderedAsAnotherKind(t *testing.T) {
+	_, err := anchorToProto(store.Anchor{Kind: store.AnchorDiagnostic, Target: "MGS3009"}, "", nil)
+	require.ErrorIs(t, err, errAnchorKindOffAPI)
+	assert.Contains(t, err.Error(), "anchor kind diagnostic: not on the notes API yet")
+}

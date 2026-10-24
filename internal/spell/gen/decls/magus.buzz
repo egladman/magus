@@ -93,6 +93,14 @@ export enum<str> ModelTierSource {
     default = "default",
 }
 
+export enum<str> ClaimKind {
+    none = "",
+    refs = "refs",
+    test = "test",
+    output = "output",
+    released = "released",
+}
+
 export enum<str> BriefFormat {
     none = "",
     markdown = "markdown",
@@ -656,6 +664,8 @@ export object ConformanceItem {
     id: str = "",
     source: str = "",
     measure: int = 0,
+    home: str = "",
+    unshared: bool = false,
 }
 
 export object ConformanceRow {
@@ -980,6 +990,42 @@ export object JobModelTier {
     model: str = "",
 }
 
+export object ClaimEvidence {
+    kind: ClaimKind = ClaimKind.none,
+    subject: str = "",
+}
+
+export object Grant {
+    tokens: int = 0,
+    mcp: int = 0,
+    console: int = 0,
+}
+
+export object Credential {
+    class: str = "",
+    id: str = "",
+    name: str = "",
+    grant: Grant = Grant{},
+}
+
+export object Origin {
+    user: str = "",
+    uid: str = "",
+    entryPoint: str = "",
+    host: str = "",
+    session: str = "",
+    agent: str = "",
+    credential: Credential = Credential{},
+}
+
+export object JobClaim {
+    path: str = "",
+    evidence: ClaimEvidence = ClaimEvidence{},
+    proof: str = "",
+    at: int = 0,
+    by: Origin = Origin{},
+}
+
 export object GateStatus {
     id: str = "",
     verified: bool = false,
@@ -1060,29 +1106,6 @@ export object JobUnattributedWrite {
     path: str = "",
     digest: str = "",
     at: int = 0,
-}
-
-export object Grant {
-    tokens: int = 0,
-    mcp: int = 0,
-    console: int = 0,
-}
-
-export object Credential {
-    class: str = "",
-    id: str = "",
-    name: str = "",
-    grant: Grant = Grant{},
-}
-
-export object Origin {
-    user: str = "",
-    uid: str = "",
-    entryPoint: str = "",
-    host: str = "",
-    session: str = "",
-    agent: str = "",
-    credential: Credential = Credential{},
 }
 
 export object JobEntry {
@@ -1182,6 +1205,7 @@ export object Job {
     softPaths: [str] = [],
     readPaths: [str] = [],
     dependsOn: [str] = [],
+    integrates: [str] = [],
     breaks: [str] = [],
     model: str = "",
     modelTier: JobModelTier? = null,
@@ -1190,8 +1214,12 @@ export object Job {
     freshReason: str = "",
     reworkRounds: int = 0,
     widenings: int = 0,
+    claims: [JobClaim] = [],
     generation: int = 0,
     maxAttempts: int = 0,
+    maxClaims: int = 0,
+    weight: double = 0.0,
+    paused: int = 0,
     attempts: int = 0,
     prior: [PriorAttempt] = [],
     rejection: JobRejection? = null,

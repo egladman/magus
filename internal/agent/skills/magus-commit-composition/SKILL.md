@@ -100,10 +100,10 @@ remove mean the restructure dropped work: return to the recorded revision and st
 again, never reconcile by hand.{{else}}Everything reported must be intended change.
 Missing nodes you did not remove -> work dropped -> return to recorded revision, restart; never reconcile by hand.{{end}}
 
-{{if .Full}}Finish by staging through the workspace's declarations and re-running the gate:{{else}}Finish: stage through workspace declarations, re-run gate:{{end}}
+{{if .Full}}Finish by listing what the commit wants, staging that list, and re-running the gate:{{else}}Finish: list what the commit wants, stage it, re-run gate:{{end}}
 
 ```sh
-magus vcs add
+magus vcs ls-files -o name | git add --pathspec-from-file=-
 magus affected ci
 ```
 

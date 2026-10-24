@@ -56,6 +56,8 @@ const (
 	AnchorProject AnchorKind = "project"
 	AnchorTarget  AnchorKind = "target"
 	AnchorNote    AnchorKind = "note"
+	// AnchorDiagnostic names a diagnostic code such as MGS3009, the graph's diagnostic:<code> node.
+	AnchorDiagnostic AnchorKind = "diagnostic"
 )
 
 // Anchor is one typed attachment from a note to a graph entity.
@@ -114,7 +116,11 @@ type Note struct {
 	// written note, which is the overwhelming majority and the reason it is a pointer: an
 	// empty block in every hand-written note's frontmatter would be litter in someone's vault.
 	Source *Source `json:"source,omitempty" yaml:"source,omitempty"`
-	Body   string  `json:"body,omitempty" yaml:"-"`
+	// Find holds the commands that look the anchored code up again, derived from the anchors when
+	// magus wrote the note (see FindLines). Stored rather than re-derived on read so a reader with
+	// no graph loaded still has them; staleness is the anchors' to report, never this field's.
+	Find []string `json:"find,omitempty" yaml:"-"`
+	Body string   `json:"body,omitempty" yaml:"-"`
 	// Modified is the file's modification time, filled in on read. It is observed, not
 	// stored, so it cannot disagree with the file it describes.
 	Modified time.Time `json:"modified" yaml:"-"`
@@ -409,9 +415,9 @@ func validateBody(n Note) error {
 	}
 	for _, a := range n.Anchors {
 		switch a.Kind {
-		case AnchorSymbol, AnchorFile, AnchorProject, AnchorTarget, AnchorNote:
+		case AnchorSymbol, AnchorFile, AnchorProject, AnchorTarget, AnchorNote, AnchorDiagnostic:
 		default:
-			return fmt.Errorf("notes: anchor kind must be one of symbol, file, project, target, note (got %q)", a.Kind)
+			return fmt.Errorf("notes: anchor kind must be one of symbol, file, project, target, note, diagnostic (got %q)", a.Kind)
 		}
 		target := strings.TrimSpace(a.Target)
 		if target == "" {
@@ -427,6 +433,16 @@ func validateBody(n Note) error {
 	return nil
 }
 
+// HasTags reports whether the note carries every tag in tags. No tags matches every note.
+func (n Note) HasTags(tags []string) bool {
+	for _, t := range tags {
+		if !slices.Contains(n.Tags, t) {
+			return false
+		}
+	}
+	return true
+}
+
 // ParseAnchor parses one "kind:target" anchor, the form a flag or a config file carries.
 //
 // Split on the FIRST colon only: a SCIP symbol key is full of them
@@ -435,7 +451,7 @@ func validateBody(n Note) error {
 func ParseAnchor(s string) (Anchor, error) {
 	i := strings.IndexByte(s, ':')
 	if i < 0 {
-		return Anchor{}, fmt.Errorf("notes: anchor %q must be written as kind:target (kinds: symbol, file, project, target, note)", s)
+		return Anchor{}, fmt.Errorf("notes: anchor %q must be written as kind:target (kinds: symbol, file, project, target, note, diagnostic)", s)
 	}
 	a := Anchor{Kind: AnchorKind(strings.TrimSpace(s[:i])), Target: strings.TrimSpace(s[i+1:])}
 	if err := Validate(Note{Name: "x", Title: "x", Anchors: []Anchor{a}}); err != nil {
@@ -657,6 +673,7 @@ func Scaffold(name string) Note {
 		"     project: a project path",
 		"     target:  a target id",
 		"     note:    another note's name",
+		"     diagnostic: a diagnostic code   (MGS3009)",
 		"     Anchor as narrowly as the knowledge allows; a coarse anchor is more",
 		"     durable, and a symbol anchor survives the code moving file and line. -->",
 		"",
@@ -734,6 +751,7 @@ type notePayload struct {
 	Tags    []string `yaml:"tags,omitempty"`
 	Anchors []Anchor `yaml:"anchors"`
 	Source  *Source  `yaml:"source,omitempty"`
+	Find    []string `yaml:"find,omitempty"`
 }
 
 // magusNode returns the value node under FrontmatterKey, or nil when the document does not
@@ -836,6 +854,7 @@ func readNoteFile(path, name string) (Note, bool, error) {
 		Tags:     payload.Tags,
 		Anchors:  payload.Anchors,
 		Source:   payload.Source,
+		Find:     payload.Find,
 		Body:     strings.TrimSpace(string(m[2])),
 		Modified: modified,
 		Path:     path,
@@ -868,7 +887,7 @@ func marshalNote(path string, n Note) ([]byte, error) {
 		}
 	}
 	if err := setMagusNode(doc, notePayload{
-		ID: n.ID, Title: n.Title, Tags: n.Tags, Anchors: n.Anchors, Source: n.Source,
+		ID: n.ID, Title: n.Title, Tags: n.Tags, Anchors: n.Anchors, Source: n.Source, Find: n.Find,
 	}); err != nil {
 		return nil, fmt.Errorf("render %s: %w", filepath.Base(path), err)
 	}

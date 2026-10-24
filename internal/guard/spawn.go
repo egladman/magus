@@ -75,7 +75,7 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 	declared := map[string]bool{}
 	for _, row := range held {
 		ids = append(ids, row.ID)
-		for _, p := range row.WritePaths {
+		for _, p := range row.HardPaths() {
 			declared[p] = true
 		}
 	}
@@ -235,13 +235,8 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 		recordSpawnedAgent(ctx, at, facts, who, hookRequest{
 			SpawnedAgent:  child,
 			DeclaredModel: e.spawn.Record.Model,
-			Spawn:         spawnFields{Description: e.spawn.Record.Description, Name: e.spawn.Record.Name},
+			Spawn:         spawnFields{Description: e.spawn.Record.Description, Name: e.spawn.Record.Name, AgentType: e.spawn.AgentType},
 		}, e.spawn.Spawner)
-		if e.spawn.AgentType != "" {
-			if body, err := json.Marshal(agentTypeRecord{Type: e.spawn.AgentType}); err == nil {
-				writeAgentMarker(facts, agentTypeKind(child), body)
-			}
-		}
 	}
 	if !firstCall {
 		if len(pending) > 0 {

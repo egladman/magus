@@ -23,7 +23,7 @@ const (
 // wideningRules are the guard rules that deny a holder a path outside its job's boundary:
 // another attempt inside the same boundary meets the same denial. internal/guard cannot be
 // imported here, so a test holds each name to a rule the guard catalogs.
-var wideningRules = []string{"claimed-declaration", "focus-read", "lease-write"}
+var wideningRules = []string{"claimed-declaration", "focus-read", "lease-claim", "lease-write"}
 
 // outsideWritePaths is the phrase [VerifyGates] words a changed path outside the job's write
 // paths with.

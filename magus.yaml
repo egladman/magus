@@ -118,9 +118,10 @@ knowledge:
     ratchet: hack/policy/conformance.jsonl
     exclude: ["libs/gopherbuzz/**"]
     checks:
+      # pairs with file-split: change both together
       file-lines:
-        source: { percentile: 95, anchor: 2200 }
-        main: { percentile: 95, anchor: 3000 }
+        source: { percentile: 95, anchor: 1500 }
+        main: { percentile: 95, anchor: 1500 }
         test: { percentile: 99, anchor: 1900 }
       func-lines:
         source: { percentile: 99, anchor: 92 }
@@ -155,6 +156,14 @@ knowledge:
         source: { percentile: 95, anchor: 100, min_subject: 5 }
       name-clash:
         source: { percentile: 99, anchor: 62, min_subject: 5 }
+      main-logic:
+        main: { percentile: 0, anchor: 119 }
+      store-path-export:
+        source: { percentile: 0, anchor: 0 }
+      # pairs with file-lines: change both together
+      file-split:
+        source: { percentile: 0, anchor: 1500 }
+        main: { percentile: 0, anchor: 1500 }
   # This repository loads its own Claude Code sessions with the adapter it ships, the
   # same way it wires the guard template it ships rather than keeping a private copy. If
   # the recipe breaks for a reader, it broke here first.

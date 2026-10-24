@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -24,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
@@ -34,24 +34,21 @@ import (
 // vcsCmd implements `magus vcs <subcommand>`.
 //
 // Three of the verbs rest on one fact git does not have: which files are generated, and
-// which target rebuilds them. `add` classifies paths before staging, `resolve` settles a
+// which target rebuilds them. `ls-files` classifies dirty paths for staging, `resolve` settles a
 // conflicted merge, `merge-driver` is the per-file callback git invokes. `checkpoint` is
 // the odd one out and rests on nothing: it reads the working state's identity back.
 //
-// `add` replaces the `git add -A` the agent guard denies: the guard infers intent from a
-// command STRING, while a magus verb gets the paths as arguments and classifies them
-// against the declared globs before touching the index.
-//
-// Not a general git proxy.
+// `ls-files` lists and never stages: the person stages what it lists. Not a general git
+// proxy.
 func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
-		return exit.Usagef("magus vcs: a subcommand is required (try: add, resolve, checkpoint)")
+		return exit.Usagef("magus vcs: a subcommand is required (try: ls-files, resolve, checkpoint)")
 	}
 	verb, rest := splitVCSVerb(args)
 	switch verb {
-	case "add":
-		return vcsAddCmd(ctx, root, rest)
+	case "ls-files":
+		return vcsLsFilesCmd(ctx, root, rest)
 	case "resolve":
 		return vcsResolveCmd(ctx, root, rc, rest)
 	case "checkpoint":
@@ -62,7 +59,7 @@ func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error
 		vcsUsage(os.Stderr)
 		return nil
 	default:
-		return exit.Usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
+		return exit.Usagef("magus vcs: unknown subcommand %q (want ls-files, resolve, checkpoint, or merge-driver)", verb)
 	}
 }
 
@@ -84,7 +81,7 @@ func vcsUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus vcs <subcommand> [args]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  add            stage a change the way this workspace's declarations say it should be staged")
+	fmt.Fprintln(w, "  ls-files       list the dirty paths a commit of this change wants; stages nothing")
 	fmt.Fprintln(w, "  resolve        settle an in-progress merge/rebase's conflicted generated files, then regenerate once")
 	fmt.Fprintln(w, "  checkpoint     print the identity of the working state right now; writes nothing")
 	fmt.Fprintln(w, "  merge-driver   the per-file merge driver git and hg invoke; you do not run this by hand")
@@ -142,8 +139,8 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "is merged when every region both sides changed is low risk, and otherwise")
 	fmt.Fprintln(os.Stderr, "left with conflict markers. A declared output keeps the current version")
 	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes,")
-	fmt.Fprintln(os.Stderr, "and the settle hooks `"+hint.Init.With("--vcs", "git")+"` writes beside it (`"+hint.VCSResolve.With("--hook")+"`)")
-	fmt.Fprintln(os.Stderr, "run it once the merge, rebase, cherry-pick or revert has the whole tree.")
+	fmt.Fprintln(os.Stderr, "and `"+hint.VCSResolve.String()+"` runs it once the merge, rebase, cherry-pick or")
+	fmt.Fprintln(os.Stderr, "revert has the whole tree.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `"+hint.Init.String()+"`.")
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
@@ -195,18 +192,10 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "a job claims gets a line saying it settled or which condition failed. Needs a")
 	fmt.Fprintln(w, "VCS that reports a merge base: git does; Mercurial, Sapling and jj do not.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "With nothing conflicted, it runs what the git settle hooks left: the")
-	fmt.Fprintln(w, "regenerations a merge left owed, and every settle deferred by setting the git")
-	fmt.Fprintln(w, "config key magus.settle to defer. A deferred settle starts no magus; the hook")
-	fmt.Fprintln(w, "records where the first deferred operation started, and this regenerates")
-	fmt.Fprintln(w, "everything changed since then in one run and stages it. To cherry-pick in")
-	fmt.Fprintln(w, "several batches and regenerate once:")
+	fmt.Fprintln(w, "With nothing conflicted, it runs the regenerations a merge left owed. Git")
+	fmt.Fprintln(w, "hooks only submit jobs and never regenerate, so run it after a merge,")
+	fmt.Fprintln(w, "cherry-pick or rebase that touched generator inputs.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick A B C")
-	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick D E")
-	fmt.Fprintln(w, "  magus vcs resolve && git commit --amend --no-edit")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "`git config magus.settle defer` defers until `git config --unset magus.settle`.")
 	fmt.Fprintln(w, "A settle another magus's project lock keeps from running waits up to 2m, then")
 	fmt.Fprintln(w, "stages nothing, leaves the regeneration owed and prints this command.")
 	fmt.Fprintln(w, "")
@@ -214,10 +203,6 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --against <ref>  merge <ref> first, then settle what it conflicts with.")
 	fmt.Fprintln(w, "                   Needs a clean tree. Leaves the merge in progress to")
 	fmt.Fprintln(w, "                   commit; with --dry-run it is backed out again.")
-	fmt.Fprintln(w, "  --hook <name>    run as the git hook <name>: once the merge, rebase,")
-	fmt.Fprintln(w, "                   cherry-pick, revert or am has the whole tree, regenerate")
-	fmt.Fprintln(w, "                   only what it changed and stage the result. The merge")
-	fmt.Fprintln(w, "                   driver's registration wires these; you do not run them.")
 	fmt.Fprintln(w, "  --dry-run        classify and report; touch nothing (global flag)")
 }
 
@@ -234,14 +219,8 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	}
 	// resolve mutates every conflicted path in the workspace. Widening
 	// `magus vcs resolve one/file.go` from one path to all of them would cost a tree.
-	if len(pos) > 0 && rf.Hook == "" {
+	if len(pos) > 0 {
 		return exit.Usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
-	}
-	if rf.Hook != "" {
-		if rf.Against != "" {
-			return exit.Usagef("vcs resolve: --hook is git's call, and --against is not one it makes")
-		}
-		return vcsResolveHook(ctx, root, rc, rf.Hook, pos)
 	}
 
 	m, err := loadMagus(ctx, root)
@@ -754,84 +733,7 @@ func unresolvedError(plan settle.Plan) error {
 	if len(plan.Manual) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d conflict(s) still need you, resolve them, then `"+hint.VCSAdd.String()+"` and continue", len(plan.Manual))
-}
-
-// vcsResolveHook is `magus vcs resolve --hook <name>`, the settle hooks' half of the
-// merge driver: once git has the whole tree it regenerates what the operation changed
-// (settle.Hook) and stages the result. Which hooks fire when, and what each sees, is
-// vcs.SettleHooks.
-//
-// What happens to the staged output follows the hook. A commit git has not made yet
-// carries it. For a clean merge, whose commit git makes on its own, the hook stops that
-// commit instead: git leaves the merge in progress, prints "use 'git commit' to complete
-// the merge", and the commit the person then makes is the merge commit, regenerated,
-// with no amend and no stale commit ever written. After a rebase, cherry-pick, revert or
-// am the commits already exist, so the output is staged and the line says how to fold
-// it in; magus never amends.
-//
-// Failure is loud and never leaves stale output behind quietly: the exact command to
-// run is printed, a commit not yet made is stopped, and the regeneration stays owed in
-// the git dir, where `magus doctor` reports it. A run another magus keeps from starting
-// is waited on for settleLockWait, then lets the commit through with nothing staged: it
-// never ran, and stopping the last pick of a cherry-pick over someone else's lock leaves
-// the whole sequence stopped.
-func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string, args []string) error {
-	// A hook runs in the repository's top level, where the workspace root is too; the
-	// merge driver relies on the same. Read git's state before loading anything, since
-	// most commits are not merge-shaped and load nothing.
-	wsRoot, err := workspace.FindRoot(root)
-	if err != nil {
-		return settleFailed(ctx, hook, vcs.HookOperation{}, settle.Outcome{}, err)
-	}
-	op, ok, err := vcs.GitHookOperation(ctx, wsRoot, vcs.HookEvent{Hook: hook, Args: args, IndexFile: hookIndexFile()})
-	if err != nil {
-		return settleFailed(ctx, hook, op, settle.Outcome{}, err)
-	}
-	if !ok || len(op.Changed) == 0 {
-		return nil
-	}
-	if op.CommitPending {
-		// The pre-merge-commit stop below leads to a `git commit` whose pre-commit hook
-		// lands here again with the very tree that was just settled.
-		if settled, err := vcs.HookTreeSettled(ctx, wsRoot, op); err != nil {
-			return settleFailed(ctx, hook, op, settle.Outcome{}, err)
-		} else if settled {
-			return nil
-		}
-	}
-
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return settleFailed(ctx, hook, op, settle.Outcome{}, settleLoadFailure(err))
-	}
-	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
-	if settle.Busy(err) {
-		settleOwed(ctx, m, op, err)
-		return nil
-	}
-	if err != nil {
-		return settleFailed(ctx, hook, op, out, err)
-	}
-	if len(out.Ran) == 0 {
-		return nil
-	}
-	slog.InfoContext(ctx, out.Notice(hook, settle.FoldCommand(ctx, m)), attr.Notice(""))
-	if hook == vcs.HookPreMergeCommit && len(out.Staged) > 0 {
-		return exit.Reported(exit.Failure)
-	}
-	return nil
-}
-
-// settleLoadFailure words a settle hook's failed workspace load. A ./magus older than the
-// merged tree cannot rebuild itself, and the hook never rebuilds it, so the message names
-// the one command that does.
-func settleLoadFailure(err error) error {
-	if ward.IsStaleBinary(err) {
-		return fmt.Errorf("the workspace did not load because this magus is older than the merged tree, so nothing regenerated: "+
-			"build a current ./magus with `%s`, alone on its line, then regenerate: %w", ward.BootstrapCommand, err)
-	}
-	return fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err)
+	return fmt.Errorf("%d conflict(s) still need you, resolve them, stage them, and continue", len(plan.Manual))
 }
 
 // settleLockWait bounds how long a settle waits for another magus to release a
@@ -849,79 +751,20 @@ func settleRun(root string, rc runConfig) settle.RunFunc {
 	})
 }
 
-// settleOwed says that a settle another magus kept from running left nothing staged and
-// its regeneration owed, and the command that finishes it. Hook already recorded the
-// record that command reads.
-func settleOwed(ctx context.Context, m *magus.Magus, op vcs.HookOperation, err error) {
-	finish := hint.VCSResolve.String()
-	if op.CommitPending || settle.FoldCommand(ctx, m) != "" {
-		finish += " && git commit --amend --no-edit"
-	}
-	slog.ErrorContext(ctx, fmt.Sprintf("this %s was not regenerated and nothing was staged; the regeneration stays owed, finish it with `%s`",
-		cmp.Or(op.Kind, "operation"), finish), attr.Notice(""), attr.Component("magus"), attr.Error(err))
-}
-
-// settleOwedByHand is `magus vcs resolve` with nothing conflicted. It settles, in one
-// run per target, what the settle hooks left: everything changed since the first
-// operation they deferred under magus.settle=defer, and what the merge driver left owed,
-// which a settle hook that failed, was kept from running or was bypassed with
-// --no-verify leaves behind and `magus doctor` reports. It stages the result and clears
-// both records. With nothing left it says so.
+// settleOwedByHand is `magus vcs resolve` with nothing conflicted. It runs, one run per
+// target, the regenerations the merge driver left owed, which `magus doctor` reports,
+// stages the result and clears the record. With nothing owed it says so.
 func settleOwedByHand(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver) error {
-	op, deferred, err := vcs.DeferredSettle(ctx, m.Root())
+	out, err := settle.Hook(ctx, m, vcs.HookOperation{}, buildDefinesTarget(ctx, m), settleRun(root, rc))
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	if deferred {
-		if err := vcs.ClearDeferredSettle(ctx, m.Root()); err != nil {
-			return fmt.Errorf("vcs resolve: %w", err)
-		}
 	}
 	if len(out.Ran) == 0 {
-		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths, no settle deferred and no regeneration owed")
+		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths and no regeneration owed")
 		return nil
 	}
 	fmt.Printf("vcs resolve: ran %s; staged %d regenerated file(s): %s\n", out.Command(), len(out.Staged), driver.ReviewCommand())
 	return nil
-}
-
-// hookIndexFile is the index git exported to this hook, absolute; "" when it exported
-// none. git spells the default one relative to the hook's working directory.
-func hookIndexFile() string {
-	index := os.Getenv("GIT_INDEX_FILE")
-	if index == "" || filepath.IsAbs(index) {
-		return index
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return index
-	}
-	return filepath.Join(wd, index)
-}
-
-// settleFailed prints what did not happen and the command that does it, then fails
-// the hook. A commit git has not made yet is stopped by that failure; one it has made
-// carries stale output, and the line says so.
-func settleFailed(ctx context.Context, hook string, op vcs.HookOperation, out settle.Outcome, err error) error {
-	regenerate := hint.VCSResolve.With("--hook", hook)
-	if len(out.Ran) > 0 {
-		regenerate = out.Command()
-	}
-	slog.ErrorContext(ctx, "could not regenerate after this "+cmp.Or(op.Kind, "operation"),
-		attr.Notice(""), attr.Component("magus"), attr.Error(err))
-	switch {
-	case op.CommitPending:
-		slog.ErrorContext(ctx, fmt.Sprintf("the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)", regenerate),
-			attr.Notice(""), attr.Component("magus"))
-	case op.Kind != "":
-		slog.ErrorContext(ctx, fmt.Sprintf("HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`", regenerate),
-			attr.Notice(""), attr.Component("magus"))
-	}
-	return exit.Reported(exit.Failure)
 }
 
 // resolveVCS returns the active VCS resolution for the workspace.
@@ -986,7 +829,7 @@ func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// The RESOLVED workspace root, not the --root override, for the reason vcsAddCmd
+	// The RESOLVED workspace root, not the --root override, for the reason vcsLsFilesCmd
 	// spells out: the override is empty unless you passed --root, and an empty dir sends
 	// every VCS call to the process cwd, which is a different repository the moment you
 	// run this from anywhere but the root.
@@ -1056,168 +899,327 @@ func checkpointLine(cp types.VCSCheckpoint) string {
 	return line
 }
 
-// -------------------------------------------------------------------- vcs add
+// --------------------------------------------------------------- vcs ls-files
 
-func vcsAddUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus vcs add [<path>...] [flags]")
+func vcsLsFilesUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: magus vcs ls-files [<pattern>...] [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Stage a change the way this workspace's declarations say it should be")
-	fmt.Fprintln(w, "staged: sources and the generated outputs a source change produced go")
-	fmt.Fprintln(w, "together, and anything undeclared is reported rather than swept in.")
+	fmt.Fprintln(w, "List the dirty paths a commit of this change wants, and stage nothing.")
+	fmt.Fprintln(w, "By default: tracked, modified or deleted declared sources that no other")
+	fmt.Fprintln(w, "live job holds and that are not already staged. stderr names each group")
+	fmt.Fprintln(w, "left out and the flag that lists it.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "With no paths, the whole dirty tree is classified. This is the safe")
-	fmt.Fprintln(w, "replacement for `git add -A`, which stages undeclared files silently.")
+	fmt.Fprintln(w, "Patterns are write-path patterns read from the current directory; they only narrow.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --dry-run    classify and report; touch nothing (global flag)")
-	fmt.Fprintln(w, "  --untracked  also stage undeclared files (the ones add -A would sweep in)")
-	fmt.Fprintln(w, "  --reason     why they belong in this change; required with --untracked")
+	fmt.Fprintln(w, "  --include-untracked    untracked files (refused on jj)")
+	fmt.Fprintln(w, "  --include-generated    declared outputs a dirty source explains")
+	fmt.Fprintln(w, "  --include-unexplained  declared outputs nothing here explains")
+	fmt.Fprintln(w, "  --include-unclaimed    paths no target declares, and the ones magus maintains")
+	fmt.Fprintln(w, "  --include-held         paths another live job in this checkout writes")
+	fmt.Fprintln(w, "  --include-staged       paths whose whole change is staged (git only)")
+	fmt.Fprintln(w, "  --exclude <pattern>    leave out what the pattern covers; repeatable")
+	fmt.Fprintln(w, "  --project <project>    only the files the project owns; repeatable")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Stage the listing: magus vcs ls-files -o name | git add --pathspec-from-file=-")
 }
 
-// untrackedOverride phrases the refusal a bare --untracked earns.
-//
-// The flag clears the one report that separates this command from `git add -A`, and
-// what it sweeps in lands in a commit everybody pulls. Naming a path stays free of the
-// requirement: that says yes to one file the caller looked at.
-var untrackedOverride = ward.Override{
-	Name:     "magus vcs add --untracked",
-	Silences: "stages every undeclared file at once, dropping the report that is the difference between this and git add -A",
-	Spelling: `magus vcs add --untracked --reason "<why>"`,
-	Records:  "is kept with the staging verdict, in the report and in -o json",
+// The groups a dirty path can be left out by, in the order lsFilesGroups reports a path
+// that falls in several.
+const (
+	lsGroupHeld        = "held"
+	lsGroupStaged      = "staged"
+	lsGroupUntracked   = "untracked"
+	lsGroupUnclaimed   = "unclaimed"
+	lsGroupUnexplained = "unexplained"
+	lsGroupGenerated   = "generated"
+)
+
+type lsFilesGroup struct {
+	name string
+	has  func(lsFilesPath) bool
 }
 
-// vcsAddCmd classifies the paths, stages what is declared, and reports the rest.
-func vcsAddCmd(ctx context.Context, root string, args []string) error {
-	// --dry-run is the GLOBAL config flag, not a local one: it already means
-	// "show me what would happen" on every other command, and redefining it here
-	// panics the FlagSet anyway.
-	var af *flaggen.VCSAddFlags
-	pos, err := cmdParse("vcs add", args, func(fs *flag.FlagSet) {
-		af = flaggen.BindVCSAdd(fs)
-		fs.Usage = func() { vcsAddUsage(os.Stderr) }
+var lsFilesGroups = []lsFilesGroup{
+	{lsGroupHeld, func(p lsFilesPath) bool { return p.Held != "" }},
+	{lsGroupStaged, func(p lsFilesPath) bool { return p.Staged }},
+	{lsGroupUntracked, func(p lsFilesPath) bool { return p.Untracked }},
+	{lsGroupUnclaimed, func(p lsFilesPath) bool { return p.Role != "source" && p.Role != "output" }},
+	{lsGroupUnexplained, func(p lsFilesPath) bool { return p.Role == "output" && p.Unexplained }},
+	{lsGroupGenerated, func(p lsFilesPath) bool { return p.Role == "output" && !p.Unexplained }},
+}
+
+// lsFilesPath is one dirty path with every fact the selection reads.
+type lsFilesPath struct {
+	Path                           string
+	Role                           string // types.FileEntry.Role
+	Project                        string
+	Held                           string // the other live job that writes it
+	Untracked, Staged, Unexplained bool
+}
+
+// lsFilesFilter is what the caller asked for. Patterns and Exclude are write-path
+// patterns already made workspace-relative; Include is keyed by group.
+type lsFilesFilter struct {
+	Patterns, Exclude, Projects []string
+	Include                     map[string]bool
+}
+
+// selectLsFiles narrows paths by the filter, then leaves out every group the filter does
+// not include. unmatched names each pattern and project that covered no dirty path.
+func selectLsFiles(paths []lsFilesPath, f lsFilesFilter) (list types.LsFiles, unmatched []string) {
+	hit := map[string]bool{}
+	var narrowed []lsFilesPath
+	for _, p := range paths {
+		if lsFilesKeeps(p, f, hit) {
+			narrowed = append(narrowed, p)
+		}
+	}
+	for _, want := range slices.Concat(f.Patterns, f.Projects) {
+		if !hit[want] {
+			unmatched = append(unmatched, want)
+		}
+	}
+
+	list.Files = []string{}
+	byGroup := map[string]*types.LsFilesExcluded{}
+	for _, p := range narrowed {
+		i := slices.IndexFunc(lsFilesGroups, func(g lsFilesGroup) bool { return g.has(p) && !f.Include[g.name] })
+		if i < 0 {
+			list.Files = append(list.Files, p.Path)
+			continue
+		}
+		name := lsFilesGroups[i].name
+		e := byGroup[name]
+		if e == nil {
+			e = &types.LsFilesExcluded{Group: name, Flag: "--include-" + name}
+			byGroup[name] = e
+		}
+		e.Paths = append(e.Paths, p.Path)
+		if name == lsGroupHeld {
+			if e.Holders == nil {
+				e.Holders = map[string]string{}
+			}
+			e.Holders[p.Path] = p.Held
+		}
+	}
+	slices.Sort(list.Files)
+	for _, g := range lsFilesGroups {
+		e := byGroup[g.name]
+		if e == nil {
+			continue
+		}
+		slices.Sort(e.Paths)
+		if g.name == lsGroupUnexplained {
+			// No declared input moved, so this is ClassifyDrift's second fork: skew against a
+			// differently-versioned magus, or a non-deterministic generator.
+			code, msg := types.ClassifyDrift(false, version)
+			e.Code, e.Message, e.URL = string(code), msg, types.CodeURL(code)
+		}
+		list.Excluded = append(list.Excluded, *e)
+	}
+	return list, unmatched
+}
+
+// lsFilesKeeps reports whether p passes the filter's patterns, exclusions and projects,
+// marking in hit each pattern and project that covered it.
+func lsFilesKeeps(p lsFilesPath, f lsFilesFilter, hit map[string]bool) bool {
+	covered := len(f.Patterns) == 0
+	for _, pat := range f.Patterns {
+		if job.Covers(pat, p.Path) {
+			hit[pat], covered = true, true
+		}
+	}
+	if !covered || slices.ContainsFunc(f.Exclude, func(pat string) bool { return job.Covers(pat, p.Path) }) {
+		return false
+	}
+	if len(f.Projects) == 0 {
+		return true
+	}
+	owned := false
+	for _, proj := range f.Projects {
+		if path.Clean(proj) == path.Clean(cmp.Or(p.Project, ".")) {
+			hit[proj], owned = true, true
+		}
+	}
+	return owned
+}
+
+// lsFilesRefusal refuses an --include flag for a state the backend does not keep, rather
+// than answering it with nothing.
+func lsFilesRefusal(driver types.VCSDriver, include map[string]bool) error {
+	if _, ok := driver.(types.StagedFileReporter); include[lsGroupStaged] && !ok {
+		return fmt.Errorf("vcs ls-files: --include-staged: %s keeps no staging index, so no path is ever left out as staged", driver.Name())
+	}
+	if include[lsGroupUntracked] && !keepsUntracked(driver) {
+		return fmt.Errorf("vcs ls-files: --include-untracked: %s tracks every file in the working copy, so no path is ever left out as untracked", driver.Name())
+	}
+	return nil
+}
+
+// keepsUntracked reports whether the backend has files present and not tracked. jj
+// snapshots every file into the working-copy commit, and its TrackedFiles answers for
+// the parent commit, which would call each new file untracked.
+func keepsUntracked(driver types.VCSDriver) bool { return driver.Name() != "jj" }
+
+// vcsLsFilesCmd lists the dirty paths a commit of this change wants.
+func vcsLsFilesCmd(ctx context.Context, root string, args []string) error {
+	var lf *flaggen.VCSLsFilesFlags
+	var exclude, projects listFlag
+	pos, err := cmdParse("vcs ls-files", args, func(fs *flag.FlagSet) {
+		lf = flaggen.BindVCSLsFiles(fs)
+		fs.Var(&exclude, flaggen.FlagVCSLsFilesExclude, "Leave out paths this write-path `pattern` covers; repeatable or comma-separated")
+		fs.Var(&projects, flaggen.FlagVCSLsFilesProject, "List only the files this `project` owns; repeatable or comma-separated")
+		fs.Usage = func() { vcsLsFilesUsage(os.Stderr) }
 	})
 	if err != nil {
 		return err
 	}
-	// Before the workspace loads: a refusal about the flags must not need a resolvable
-	// tree, and must not land after anything is staged.
-	if err := ward.RequireReason(untrackedOverride, af.Untracked, af.Reason); err != nil {
-		return exit.Usagef("%s", err)
+	include := map[string]bool{
+		lsGroupUntracked:   lf.IncludeUntracked,
+		lsGroupGenerated:   lf.IncludeGenerated,
+		lsGroupUnexplained: lf.IncludeUnexplained,
+		lsGroupUnclaimed:   lf.IncludeUnclaimed,
+		lsGroupHeld:        lf.IncludeHeld,
+		lsGroupStaged:      lf.IncludeStaged,
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return err
 	}
-	// The resolved workspace root, not the --root OVERRIDE this was handed. The override
-	// is empty unless the user passed --root, and everything below is workspace-relative:
-	// with "" the path math produced `vcs add: "x" is outside the workspace at ` (naming
-	// no workspace at all), so naming a path explicitly, which this command's own
-	// undeclared-file message tells you to do, could never work. The whole-tree form only
-	// appeared to work because an empty dir sends every VCS call to the process cwd.
-	// vcsResolveCmd already goes through m.Root() for the same reason.
 	root = ws.Root()
 	res, err := vcs.Resolve(ctx, root, "", ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return fmt.Errorf("vcs add: no VCS resolved for this workspace")
+		return fmt.Errorf("vcs ls-files: no VCS resolved for this workspace")
 	}
-
-	paths, err := workspaceRelPaths(root, pos)
+	if err := lsFilesRefusal(res.VCS, include); err != nil {
+		return exit.Usagef("%s", err)
+	}
+	patterns, err := workspaceRelPatterns(root, pos)
 	if err != nil {
 		return err
 	}
-	if len(pos) == 0 {
-		paths, err = res.VCS.DirtyFiles(ctx, root, nil)
-		if err != nil {
-			return fmt.Errorf("vcs add: list dirty files: %w", err)
-		}
-	}
-	if len(paths) == 0 {
-		fmt.Println("vcs add: nothing to stage; the tree is clean")
-		return nil
-	}
-
-	// One classification call for every path: the same declared-glob answer
-	// `magus describe file` gives, so the two can never disagree.
-	files, err := ws.ClassifyFiles(ctx, paths)
+	excluded, err := workspaceRelPatterns(root, exclude)
 	if err != nil {
 		return err
 	}
-	sources, outputs, undeclared := classifyForStaging(files)
 
-	// Only when classifying the whole dirty tree. Naming a path is an explicit statement
-	// of intent about that path, and this check is an inference about paths nobody named.
-	var unexplained []string
-	if len(pos) == 0 {
-		outputs, unexplained = types.SplitExplainedOutputs(files, types.SourcesChangedSinceBase(ctx, ws, res, root))
+	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
+	if err != nil {
+		return fmt.Errorf("vcs ls-files: list dirty files: %w", err)
 	}
-	// Naming a path is an explicit statement of intent about that path, so an undeclared
-	// one the caller ASKED for is staged rather than reported as skipped. Without this,
-	// `magus vcs add .gitattributes` refused the very file its own message had just told
-	// you to name ("name them explicitly or pass --untracked"), and the only way to stage
-	// it was the flag, or plain git, which is what the command exists to replace.
-	//
-	// --untracked stays the whole-tree form of the same permission: it says yes to every
-	// undeclared path at once, which is the one that needs a flag because nobody named
-	// them one by one.
-	explicit := len(pos) > 0
-	if !explicit {
-		held, err := heldForOtherLeases(ctx, root, slices.Concat(sources, outputs, undeclared))
+	facts, err := lsFilesFacts(ctx, ws, res, root, dirty)
+	if err != nil {
+		return err
+	}
+	list, unmatched := selectLsFiles(facts, lsFilesFilter{Patterns: patterns, Exclude: excluded, Projects: projects, Include: include})
+	for _, u := range unmatched {
+		slog.WarnContext(ctx, u+" matches no dirty path", attr.Notice(""), attr.Component("magus"))
+	}
+	reportExcluded(ctx, list.Excluded)
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, list)
+	}
+	return emitNames(os.Stdout, list.Files)
+}
+
+// lsFilesFacts gathers what the selection reads about each dirty path.
+func lsFilesFacts(ctx context.Context, ws types.WorkspaceRepository, res types.VCSResolution, root string, dirty []string) ([]lsFilesPath, error) {
+	if len(dirty) == 0 {
+		return nil, nil
+	}
+	files, err := ws.ClassifyFiles(ctx, dirty)
+	if err != nil {
+		return nil, err
+	}
+	_, unexplained := types.SplitExplainedOutputs(files, types.SourcesChangedSinceBase(ctx, ws, res, root))
+	untracked := map[string]bool{}
+	if keepsUntracked(res.VCS) {
+		tracked, err := res.VCS.TrackedFiles(ctx, root, dirty)
 		if err != nil {
-			return err
+			return nil, fmt.Errorf("vcs ls-files: %w", err)
 		}
-		isHeld := func(p string) bool { _, ok := held[p]; return ok }
-		sources = slices.DeleteFunc(sources, isHeld)
-		outputs = slices.DeleteFunc(outputs, isHeld)
-		undeclared = slices.DeleteFunc(undeclared, isHeld)
-		reportHeld(ctx, held)
-	}
-	maintained, unclaimed := splitMaintained(undeclared)
-	if explicit {
-		// They were asked for by name, so they are not "skipped" and must not be
-		// reported as if they were.
-		maintained, unclaimed = nil, nil
-	}
-
-	verdict := types.StagingPlan{
-		Sources:     sources,
-		Outputs:     outputs,
-		Unexplained: unexplained,
-		Undeclared:  unclaimed,
-		Maintained:  maintained,
-		Staged:      []string{},
-		Reason:      strings.TrimSpace(af.Reason),
-	}
-	if len(unexplained) > 0 {
-		// inputDirty is false by construction: an output is only unexplained BECAUSE no
-		// declared input of its project moved. So this is ClassifyDrift's second fork:
-		// skew against a differently-versioned magus, or a non-deterministic generator.
-		code, msg := types.ClassifyDrift(false, version)
-		verdict.Code, verdict.Message, verdict.URL = string(code), msg, types.CodeURL(code)
-	}
-
-	stage := slices.Concat(sources, outputs)
-	if af.Untracked || explicit {
-		stage = append(stage, undeclared...)
-	}
-	slices.Sort(stage)
-
-	var dropped []string
-	if !globalCfg.DryRun && len(stage) > 0 {
-		staged, gone, err := stagePaths(ctx, root, res.VCS, stage)
-		if err != nil {
-			return err
+		for _, p := range dirty {
+			untracked[p] = !slices.Contains(tracked, p)
 		}
-		verdict.Staged, dropped = staged, gone
 	}
-	return emitStaging(verdict, dropped, af.Untracked, globalCfg.DryRun, res.VCS.ReviewCommand())
+	var staged []string
+	if sr, ok := res.VCS.(types.StagedFileReporter); ok {
+		if staged, err = sr.StagedFiles(ctx, root); err != nil {
+			return nil, fmt.Errorf("vcs ls-files: %w", err)
+		}
+	}
+	held, err := heldForOtherLeases(ctx, root, dirty)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]lsFilesPath, 0, len(files))
+	for _, f := range files {
+		out = append(out, lsFilesPath{
+			Path:        f.Path,
+			Role:        f.Role,
+			Project:     f.Project,
+			Held:        held[f.Path],
+			Untracked:   untracked[f.Path],
+			Staged:      slices.Contains(staged, f.Path),
+			Unexplained: slices.Contains(unexplained, f.Path),
+		})
+	}
+	return out, nil
+}
+
+// reportExcluded names on stderr, in every output format, each group left out and the
+// flag that lists it.
+func reportExcluded(ctx context.Context, groups []types.LsFilesExcluded) {
+	for _, g := range groups {
+		paths := slices.Clone(g.Paths)
+		for i, p := range paths {
+			if lease := g.Holders[p]; lease != "" {
+				paths[i] = p + " (live job " + lease + " writes it)"
+			}
+		}
+		msg := fmt.Sprintf("left out %d %s path(s); %s lists them: %s", len(paths), g.Group, g.Flag, strings.Join(paths, ", "))
+		if g.Code != "" {
+			msg += fmt.Sprintf("; %s: %s %s", g.Code, g.Message, g.URL)
+		}
+		slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus"))
+	}
+}
+
+// workspaceRelPatterns is workspaceRelPaths for write-path patterns: the path half of
+// each (types.SplitClaim) is made workspace-relative, and a literal `#` in it is escaped
+// again so job.Covers reads it as part of the path.
+func workspaceRelPatterns(root string, patterns []string) ([]string, error) {
+	paths := make([]string, len(patterns))
+	decls := make([]string, len(patterns))
+	for i, p := range patterns {
+		paths[i], decls[i] = types.SplitClaim(p)
+	}
+	rel, err := workspaceRelPaths(root, paths)
+	if err != nil {
+		return nil, err
+	}
+	for i, p := range patterns {
+		rel[i] = strings.ReplaceAll(rel[i], "#", `\#`)
+		if types.HasClaim(p) {
+			rel[i] += "#" + decls[i]
+		}
+	}
+	return rel, nil
 }
 
 // workspaceRelPaths turns the paths you typed into workspace-relative ones.
 //
 // ClassifyFiles, the declared-output globs, and the index write are all
 // workspace-relative, but you run this from wherever you are. Passing the typed path
-// through made `magus vcs add foo.go` from a subdirectory miss, or address a different
+// through made `magus vcs ls-files foo.go` from a subdirectory miss, or address a different
 // file, with no error: an unmatched path just reports as undeclared.
 func workspaceRelPaths(root string, paths []string) ([]string, error) {
 	if len(paths) == 0 {
@@ -1227,11 +1229,11 @@ func workspaceRelPaths(root string, paths []string) ([]string, error) {
 	// reports every path as "outside the workspace at " with nothing after "at", which
 	// blames the argument for a mistake it did not make.
 	if root == "" {
-		return nil, fmt.Errorf("vcs add: no workspace root resolved, cannot place %q", paths[0])
+		return nil, fmt.Errorf("no workspace root resolved, cannot place %q", paths[0])
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("vcs add: resolve working directory: %w", err)
+		return nil, fmt.Errorf("resolve working directory: %w", err)
 	}
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
@@ -1241,122 +1243,11 @@ func workspaceRelPaths(root string, paths []string) ([]string, error) {
 		}
 		rel, err := filepath.Rel(root, abs)
 		if err != nil || strings.HasPrefix(rel, "..") {
-			return nil, fmt.Errorf("vcs add: %q is outside the workspace at %s", p, root)
+			return nil, fmt.Errorf("%q is outside the workspace at %s", p, root)
 		}
 		out = append(out, filepath.ToSlash(rel))
 	}
 	return out, nil
-}
-
-// classifyForStaging splits classified files into the three groups staging cares
-// about.
-//
-// Sources and outputs are BOTH staged deliberately: regenerated outputs belong in the
-// same commit as the source that moved them, and committing the source alone is what
-// makes CI fail on drift.
-//
-// Undeclared paths are the hazard `git add -A` poses. Usually build residue, but also
-// where a genuinely new source file and anything magus's core writes directly (see
-// types.IsMagusMaintained) show up, so they are reported rather than dropped.
-func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []string) {
-	for _, f := range out {
-		switch f.Role {
-		case "source":
-			sources = append(sources, f.Path)
-		case "output":
-			outputs = append(outputs, f.Path)
-		default:
-			undeclared = append(undeclared, f.Path)
-		}
-	}
-	return sources, outputs, undeclared
-}
-
-// reportStaging renders the verdict as prose. It reads the value and prints; it decides
-// nothing, so the terminal and `-o json` cannot disagree about what happened.
-//
-// review is the backend's own read-back command (VCSDriver.ReviewCommand), passed in
-// rather than composed: this line used to say `git diff --cached --stat` to everyone, and
-// three of the four backends have no index to read.
-func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, review string) {
-	verb := "staged"
-	if dryRun {
-		verb = "would stage"
-	}
-	for _, p := range dropped {
-		fmt.Printf("skipping %s: declared but missing from disk and not tracked\n", p)
-	}
-	if len(v.Sources) > 0 {
-		fmt.Printf("%s %d source file(s):\n", verb, len(v.Sources))
-		printPaths(v.Sources)
-	}
-	if len(v.Outputs) > 0 {
-		fmt.Printf("%s %d generated output(s), which belong with the source change that produced them:\n", verb, len(v.Outputs))
-		printPaths(v.Outputs)
-	}
-	if len(v.Unexplained) > 0 {
-		fmt.Printf("skipped %d generated output(s) no source change here accounts for:\n", len(v.Unexplained))
-		printPaths(v.Unexplained)
-		// The classification, not a second hand-written telling of it: the same code and
-		// sentence the generate gate reports for this condition (types.ClassifyDrift).
-		fmt.Printf("  %s: %s\n", v.Code, v.Message)
-		fmt.Printf("  %s\n", v.URL)
-		fmt.Println("  name a path explicitly to stage it anyway")
-	}
-	if untracked {
-		all := slices.Concat(v.Undeclared, v.Maintained)
-		if len(all) > 0 {
-			slices.Sort(all)
-			fmt.Printf("%s %d undeclared file(s) (--untracked):\n", verb, len(all))
-			printPaths(all)
-			fmt.Printf("  reason: %s\n", v.Reason)
-		}
-	} else {
-		if len(v.Undeclared) > 0 {
-			fmt.Printf("skipped %d undeclared file(s); no target claims them:\n", len(v.Undeclared))
-			printPaths(v.Undeclared)
-			fmt.Println("  if one is a new source file, name it explicitly or pass --untracked --reason \"<why>\";")
-			fmt.Println("  if it is build residue, add it to your VCS ignore rules")
-		}
-		if len(v.Maintained) > 0 {
-			fmt.Printf("skipped %d file(s) magus itself maintains outside any target's declared outputs:\n", len(v.Maintained))
-			printPaths(v.Maintained)
-			fmt.Println("  these are not residue; name them explicitly or pass --untracked --reason \"<why>\" to stage them")
-		}
-	}
-	if len(v.Staged) > 0 {
-		fmt.Println("\nreview before committing: " + review)
-	}
-}
-
-// splitMaintained separates paths magus's own core maintains from everything
-// else undeclared, so reportStaging can describe each group accurately instead
-// of asserting every undeclared path "affects nothing".
-//
-// A maintained path is one magus writes directly, rather than a target through a
-// declared output glob, so ClassifyFiles has nothing to match it against and it
-// lands in "undeclared" alongside genuine residue. Calling it undeclared is
-// accurate; claiming it "affects nothing" is not, so it gets its own report line
-// instead of being folded into the blanket message.
-//
-// .gitattributes is written by gitVCS.InstallMergeDriver (vcs/git.go) to register
-// magus's own merge driver for generated-output conflicts. It is also why `vcs
-// resolve` can settle a conflict in it: its content is derived from the workspace's
-// declared outputs, so it is re-deriveable rather than mergeable.
-//
-// The set itself is types.IsMagusMaintained rather than a local one, because
-// `describe file` classifies the same paths and the two answers must not diverge,
-// which they did, describe calling .gitattributes unclaimed and suggesting the
-// ignore rules while staging reported it as maintained.
-func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
-	for _, p := range undeclared {
-		if types.IsMagusMaintained(p) {
-			maintained = append(maintained, p)
-		} else {
-			unclaimed = append(unclaimed, p)
-		}
-	}
-	return maintained, unclaimed
 }
 
 // stagePaths shells out to git for the index write itself.
@@ -1379,28 +1270,28 @@ func stagePaths(ctx context.Context, root string, driver types.VCSDriver, paths 
 	if len(stageable) == 0 {
 		return []string{}, dropped, nil
 	}
-	// MarkResolved batches the pathspecs, which matters here: `vcs add` over a whole
+	// MarkResolved batches the pathspecs, which matters here: `vcs resolve` over a whole
 	// dirty tree is the largest path list these commands hand to the VCS.
 	if err := driver.MarkResolved(ctx, root, stageable); err != nil {
-		return nil, nil, fmt.Errorf("vcs add: %w", err)
+		return nil, nil, fmt.Errorf("stage: %w", err)
 	}
 	return stageable, dropped, nil
 }
 
-// heldForOtherLeases is the subset of paths a whole-tree `vcs add` leaves unstaged, each
+// heldForOtherLeases is the subset of paths a whole-tree listing leaves out, each
 // with the live lease it belongs to: the ones another lease's write paths cover in this
 // checkout. Two holders sharing a checkout share its dirty tree, and staging the other's
 // uncommitted sources would land them under this caller's commit.
 func heldForOtherLeases(ctx context.Context, root string, paths []string) (map[string]string, error) {
 	loc, err := jobPlace(root)
 	if err != nil {
-		return nil, fmt.Errorf("vcs add: place the job store to read which leases share this checkout: %w", err)
+		return nil, fmt.Errorf("place the job store to read which leases share this checkout: %w", err)
 	}
 	rows, err := job.NewStore(loc).List()
 	if err != nil {
-		return nil, fmt.Errorf("vcs add: read the job store to keep other leases' work out of this stage: %w", err)
+		return nil, fmt.Errorf("read the job store for the paths other leases in this checkout write: %w", err)
 	}
-	lease, _ := job.ActingLease(loc, types.JobLeaseFromContext(ctx))
+	lease, _ := job.RunLease(ctx, loc)
 	return otherLeasesPaths(rows, root, lease, paths), nil
 }
 
@@ -1422,41 +1313,6 @@ func otherLeasesPaths(rows []types.Job, root, lease string, paths []string) map[
 		}
 	}
 	return held
-}
-
-// reportHeld says, on stderr in every output format, which paths a whole-tree stage left
-// for the leases that write them.
-func reportHeld(ctx context.Context, held map[string]string) {
-	byLease := map[string][]string{}
-	for p, lease := range held {
-		byLease[lease] = append(byLease[lease], p)
-	}
-	for _, lease := range slices.Sorted(maps.Keys(byLease)) {
-		paths := byLease[lease]
-		slices.Sort(paths)
-		slog.WarnContext(ctx, fmt.Sprintf("held back %d path(s) live lease %s writes in this checkout: %s; name a path to stage it anyway",
-			len(paths), lease, strings.Join(paths, ", ")), attr.Notice(""), attr.Component("magus"))
-	}
-}
-
-// emitStaging renders the verdict: the structured formats get the value itself, and the
-// terminal gets the prose. One decision, several audiences, which is the whole reason
-// the verdict is a value. `-o json` used to be accepted here and answer in text.
-func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, review string) error {
-	opts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
-	switch opts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, v)
-	case outputName:
-		// The paths that were staged, which is what the plan is a plan OF. Dropped paths
-		// are deliberately absent: this is the list a caller feeds forward.
-		return emitNames(os.Stdout, v.Staged)
-	}
-	reportStaging(v, dropped, untracked, dryRun, review)
-	return nil
 }
 
 // filterStageable separates paths git add can actually act on from ones that
@@ -1484,7 +1340,7 @@ func filterStageable(ctx context.Context, root string, driver types.VCSDriver, p
 	// tracked-but-deleted path is kept and its deletion gets recorded.
 	known, err := driver.TrackedFiles(ctx, root, maybeGone)
 	if err != nil {
-		return nil, nil, fmt.Errorf("vcs add: %w", err)
+		return nil, nil, fmt.Errorf("stage: %w", err)
 	}
 	tracked := make(map[string]bool, len(known))
 	for _, p := range known {

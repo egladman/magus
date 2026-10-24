@@ -40,6 +40,22 @@ minimalism the tool cannot carry, and the house dialect with no rule you can
 hold in your head, the one that makes users look things up forever and then
 teaches their agents the same confusion.
 
+The discipline reaches the code too:
+
+- **A main package only wires.** A command parses its flags, builds its
+  dependencies, calls a package and prints the result. Logic that computes
+  belongs in the package that owns its data, where a test and a second caller
+  can reach it. The `main-logic` conformance metric fails a main-package
+  function that computes without calling another workspace package; the
+  ratchet (`hack/policy/conformance.jsonl`) lists the ones that predate it.
+- **One file until it is long.** A concept stays in one file until that file
+  passes 1500 lines; only then does `R_<topic>.go` earn a place beside `R.go`.
+  A platform build, generated output and a test are their own files at any
+  size. The `file-split` conformance metric fails a concept sibling that would
+  fit in its root at 1500 lines or fewer, and says to rename one that shares
+  no symbol with its root. It moves with the `file-lines` ceiling, and the
+  ratchet lists the families that predate it.
+
 ### Capability is not a reason
 
 Building the wrong thing got cheap. Coherent, well-structured, completely
@@ -162,6 +178,12 @@ The conventions:
   names it and says how to move it aside.
 - **Readable with cat, grep and diff.** Text is UTF-8. The one binary
   exception is a blob holding the bytes a tool produced, stored verbatim.
+- **One owner.** Only the package that owns a store knows where it lives.
+  Another package calls the owner's reader or writer and never builds, stats or
+  opens the path itself. The `store-path-export` conformance metric fails an
+  exported path of a state-writing package that code outside it references;
+  the shared root resolvers (`config.CacheDir`, `config.StoreDir`,
+  `vcs.StateDir`) are listed in the ratchet with the reason.
 
 The failure this prevents is state nobody can inspect when it matters. A
 stuck run, a lease that will not release, or a line that reads wrong is
@@ -171,12 +193,13 @@ between you and the evidence of what broke it, and one document holding every
 entry turns one corrupt write into a lost store; a corrupt line costs the
 line.
 
-The mechanism is three helpers and no gate. `file.JSONL` gives a keyed store
+The mechanism is three helpers and one gate. `file.JSONL` gives a keyed store
 its append, its last-line read, its compaction and its lock;
 `file.WriteFileAtomic` gives every rewrite its rename; and `internal/json`
 gives every line its strict decoder. Nothing refuses a new JSON document, so
-the rule holds in review alone. The stores that do not follow it yet, as
-found on 2026-10-14, are debt or exceptions:
+the format holds in review alone; who may know a store's path is gated by
+`store-path-export`. The stores that do not follow the format yet, as found on
+2026-10-14, are debt or exceptions:
 
 - **Runtime records** are a capped log kept as one rewritten JSON array in the
   knowledge graph store. The state cannot be rebuilt, so this is debt owed a
@@ -964,6 +987,7 @@ removed, with what decided each and where to check it.
 | a daemon sweep for idle workers                                                                                               | not built until measured: the host's stop hooks already reach `magus session notify` and the job store's stale-after covers the long tail. Add the sweep only if shadow data shows idle stalls the hooks miss                                                                                                                                                                                                                                                                                                                   | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
 | a workspace trust store: content-hashed, or a path list set by `magus init`                                                   | not built: running magus in a repository is the consent to run its code, and magus never runs that code passively. A content-hashed store would stall every agent on the 76 of 423 commits (2026-09-22 to 10-22) that changed `magusfile.buzz` or `magus.yaml`                                                                                                                                                                                                                                                                  | [ADR 0014](decisions/0014-running-magus-is-the-consent.md)                                                           |
 | a CLI root implied by the lease, or a `MAGUS_ROOT` variable                                                                   | not built: the root a run uses would depend on state the line does not show, a silent default. The guard places each magus call by its line instead, and `lease-checkout` denies one outside the holder's checkout                                                                                                                                                                                                                                                                                                              | [ADR 0015](decisions/0015-a-call-runs-where-its-line-says.md)                                                        |
+| a staging wrapper: a command that classifies the tree and stages it                                                           | not built: it made four choices at one call, untracked, generated, held and staged, and ran a mutating VCS operation. `magus vcs ls-files` lists the paths and names each choice as a flag; the person stages                                                                                                                                                                                                                                                                                                                   | [ADR 0016](decisions/0016-vcs-lists-the-person-stages.md), 2026-10-22                                                |
 
 The rows that record a measurement killing an idea somebody wanted are the only
 reason the rest of the list is worth anything. A ledger of

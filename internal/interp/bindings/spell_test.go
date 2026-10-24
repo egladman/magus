@@ -840,6 +840,7 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 	ctx = cache.NewContext(ctx, c)
 
 	projDir := t.TempDir()
+	ctx = types.WithWorkspace(ctx, rootOnlyWS{root: projDir})
 	argvFile := filepath.Join(projDir, "argv.txt")
 	// Writes the destination it was handed BOTH to argvFile (what this test reads) and
 	// to the destination itself, since dispatch now refuses an indexer that wrote no index.
@@ -853,7 +854,7 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 
 	got, err := os.ReadFile(argvFile)
 	require.NoError(t, err)
-	want := symbols.IndexPath(c.Dir(), projDir, spells.DefaultSymbolIndexOp)
+	want := symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp)
 	assert.Equal(t, want, string(got), "the resolved arg must be the real index path")
 	assert.NotContains(t, string(got), "$MAGUS_SYMBOL_INDEX", "the literal reference token must never reach the child's argv")
 }
@@ -889,6 +890,7 @@ func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
 	require.NoError(t, err)
 	ctx = cache.NewContext(ctx, c)
 	projDir := t.TempDir()
+	ctx = types.WithWorkspace(ctx, rootOnlyWS{root: projDir})
 
 	cmd := spells.Command{Bin: "sh", Args: []string{"-c", `printf x > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX"}}
 	spec := spells.Descriptor{
@@ -899,8 +901,8 @@ func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
 	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: "scip-buzz", Dir: projDir})
 	require.NoError(t, err)
 
-	assert.FileExists(t, symbols.IndexPath(c.Dir(), projDir, "scip-buzz"))
-	assert.NoFileExists(t, symbols.IndexPath(c.Dir(), projDir, spells.DefaultSymbolIndexOp), "the default op's index is not this one")
+	assert.FileExists(t, symbols.IndexPath(c.Dir(), ".", "scip-buzz"))
+	assert.NoFileExists(t, symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp), "the default op's index is not this one")
 }
 
 // An indexer that declares envs runs once under each overlay, and the index consumers
@@ -912,6 +914,7 @@ func TestDispatchOpMergesTheSymbolIndexOfEachEnv(t *testing.T) {
 	require.NoError(t, err)
 	ctx = cache.NewContext(ctx, c)
 	projDir := t.TempDir()
+	ctx = types.WithWorkspace(ctx, rootOnlyWS{root: projDir})
 
 	fixtures := t.TempDir()
 	for goos, only := range map[string]string{"linux": "proc_linux.go", "windows": "proc_windows.go"} {
@@ -929,7 +932,7 @@ func TestDispatchOpMergesTheSymbolIndexOfEachEnv(t *testing.T) {
 	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
 	require.NoError(t, err)
 
-	indexPath := symbols.IndexPath(c.Dir(), projDir, spells.DefaultSymbolIndexOp)
+	indexPath := symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp)
 	data, err := os.ReadFile(indexPath)
 	require.NoError(t, err)
 	merged, err := symbols.DecodeIndex(data)
@@ -968,9 +971,11 @@ func TestDispatchOpRejectsAnIndexerThatWroteNothing(t *testing.T) {
 	c, err := cache.Open(ctx, t.TempDir(), cache.WithLocalWrite(true))
 	require.NoError(t, err)
 	ctx = cache.NewContext(ctx, c)
+	projDir := t.TempDir()
+	ctx = types.WithWorkspace(ctx, rootOnlyWS{root: projDir})
 
 	spec := symbolIndexerSpec(spells.Command{Bin: "true"})
-	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: t.TempDir()})
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "wrote no index")
 	assert.Contains(t, err.Error(), "scip", "the error must name the format the spell declared")

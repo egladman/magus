@@ -92,7 +92,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Read the working tree's changes in the order they deserve attention. See [**magus-diff**(1)](magus-diff.md).
 
 **vcs**
-: Staging and conflict resolution that knows what is generated. See [**magus-vcs**(1)](magus-vcs.md).
+: Listing and conflict resolution that knows what is generated. See [**magus-vcs**(1)](magus-vcs.md).
 
 **session**
 : What magus invocations did and what agents are blocked on: humans read and dispose, hosts write. See [**magus-session**(1)](magus-session.md).
@@ -377,6 +377,18 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_JOBS_MAX_CLAIM_PROJECTS**
 : How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter (default: 1). Config file key: **jobs.max_claim_projects**.
+
+**MAGUS_JOBS_INTEGRATE_ADVISE_AT**
+: How many finished branches may wait off the base before a fork of anything but an integration job advises forking one. Default 5; workspace only (default: 5). Config file key: **jobs.integrate_advise_at**.
+
+**MAGUS_JOBS_INTEGRATE_REFUSE_AT**
+: The count past which such a fork is refused until an integration job names the branches; it must exceed IntegrateAdviseAt. Default 10; workspace only (default: 10). Config file key: **jobs.integrate_refuse_at**.
+
+**MAGUS_JOBS_MAX_CLAIMS**
+: The most proved claims any job may be given through its max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an error. Workspace only, like StaleAfter (default: 10). Config file key: **jobs.max_claims**.
+
+**MAGUS_GO_CACHE_BUDGET_MB**
+: The size in MB (binary) past which \`magus doctor\` advises cleaning the Go build cache or the golangci-lint cache. Default 20480; 0 turns the check off (default: 20480). Config file key: **go.cache_budget_mb**.
 
 **MAGUS_CONCURRENCY**
 : Caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set. Config file key: **concurrency**.

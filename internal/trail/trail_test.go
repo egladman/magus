@@ -439,22 +439,22 @@ func TestLeaseFromContext(t *testing.T) {
 		context string
 		want    string
 	}{
-		"first line":           {"lease: MGS1021\nthen the work", "MGS1021"},
+		"first line":           {"lease: mgs1021\nthen the work", "mgs1021"},
 		"indented":             {"  \tlease: feat/spawn-capture  \nrest", "feat/spawn-capture"},
-		"after leading blanks": {"\n  \n\nlease: a.b:c_d-1\n", "a.b:c_d-1"},
+		"after leading blanks": {"\n  \n\nlease: a.b-1/c\n", "a.b-1/c"},
 		"the first line wins":  {"lease: one\nlease: two", "one"},
 		"absent":               {"just a prompt with no marker", ""},
 		"empty id":             {"lease:\nrest", ""},
 		"only whitespace id":   {"lease:   \nrest", ""},
-		"prose after the id":   {"lease: MGS1021 the notes one", ""},
-		"not at line start":    {"see lease: MGS1021 in the ledger", ""},
-		"wrong key":            {"leases: MGS1021", ""},
-		"illegal characters":   {"lease: MGS1021!", ""},
+		"prose after the id":   {"lease: mgs1021 the notes one", ""},
+		"not at line start":    {"see lease: mgs1021 in the ledger", ""},
+		"wrong key":            {"leases: mgs1021", ""},
+		"illegal characters":   {"lease: mgs1021!", ""},
 		// The reason the marker has to LEAD: both of these carry a well-formed marker that
 		// this spawn did not write: one quoted below the prompt's own opening line, one
 		// pushed out of the head by a pathological first line. A wrong join is worse than none.
-		"below the first line": {"do this\nlease: a.b:c_d-1\n", ""},
-		"past the head cap":    {strings.Repeat(" ", leaseScanBytes) + "lease: MGS1021", ""},
+		"below the first line": {"do this\nlease: a.b-1/c\n", ""},
+		"past the head cap":    {strings.Repeat(" ", leaseScanBytes) + "lease: mgs1021", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			require.Equal(t, tc.want, leaseFromContext(tc.context))

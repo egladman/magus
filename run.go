@@ -602,11 +602,6 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 				step.Sources = append(step.Sources, magusfileGlobs(".")...)
 			}
 		}
-		// The index lands in the cache dir, outside every output glob, so a replay cannot
-		// restore it: an entry for reverted sources would replay over an index built from
-		// the edit. As a stamp, an entry replays only while the index is the one its run
-		// wrote.
-		step.Stamps = append(step.Stamps, symbols.IndexPath(m.CacheDir(), p.Dir, target))
 	}
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
 	// Every project's outputs, not just this one's. The reason is the reason OwnedOutputs
@@ -641,6 +636,19 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// Only a magusfile target is carved: a spell op run on its own (buf::buf-generate)
 		// inherits the globs its spell says it provides, and may be the one writing them.
 		step.ForeignOutputs = m.foreignOutputs(p, target, step.Outputs)
+	}
+	// The index is the op's one output, at one path under the root in every checkout, so the
+	// shared store replays it into a fresh one. Outside the workspace it cannot be an output,
+	// so it is a stamp: an entry replays only while the index is the one its run wrote.
+	if indexesSymbols(p, target) {
+		index := symbols.IndexPath(m.CacheDir(), p.Path, target)
+		step.Outputs, step.RequiredOutputs, step.ForeignOutputs = nil, nil, nil
+		if rel, err := filepath.Rel(step.WorkspaceRoot, index); err == nil && filepath.IsLocal(rel) {
+			step.Outputs = []types.Glob{{Pattern: filepath.ToSlash(rel)}}
+			step.OutputsDeclared = true
+		} else {
+			step.Stamps = append(step.Stamps, index)
+		}
 	}
 	sources := slices.Clone(step.Sources)
 	for _, s := range p.ResolvedSpells {

@@ -179,7 +179,7 @@ func rankConflictRewrite(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" {
 		return v
 	}
-	if v.Deny != "" && !slices.Contains([]denyRuleName{denyRuleInterpreterRewrite, denyRuleScriptedRewrite}, v.Rule.Name) {
+	if v.Deny != "" && !slices.Contains([]denyRuleName{denyRuleInterpreterRewrite, denyRuleInterpreterScript}, v.Rule.Name) {
 		return v
 	}
 	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleConflictRewrite}}

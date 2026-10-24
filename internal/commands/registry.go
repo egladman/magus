@@ -1645,20 +1645,30 @@ leaves the entries that would replay them.`,
 
 var vcsCommand = cmdline.Command{
 	Name:        "vcs",
-	Short:       "Staging and conflict resolution that knows what is generated",
-	Description: "Stage a change the way the workspace's declarations say it should be staged, and settle an in-progress merge's conflicted generated files by regenerating them once.",
-	Tags:        []string{"cli", "magus vcs", "git", "merge", "conflicts", "generated files", "staging"},
+	Short:       "Listing and conflict resolution that knows what is generated",
+	Description: "List the dirty paths a commit of this change wants, read against the workspace's declarations, and settle an in-progress merge's conflicted generated files by regenerating them once.",
+	Tags:        []string{"cli", "magus vcs", "git", "merge", "conflicts", "generated files", "staging", "ls-files"},
 	Long: `Version-control operations that read the workspace's output declarations,
 so generated files and hand-written sources are treated differently.
 
-add stages what the workspace declares: sources, and the generated outputs a
-source change in the same commit accounts for. Anything undeclared is reported
-rather than swept in, which is the difference between it and git add -A.
+ls-files lists dirty paths and stages nothing; you stage what it lists. By
+default it lists tracked, modified or deleted declared sources that no other
+live job holds and that are not already staged. Every other dirty path is left
+out by a group, and stderr names each group with the flag that lists it:
+--include-untracked, --include-generated (outputs a dirty source explains),
+--include-unexplained (outputs nothing here explains, with the drift code),
+--include-unclaimed (paths no target declares, and the ones magus maintains),
+--include-held (paths another live job writes) and --include-staged. A backend
+that keeps no such state refuses the flag: only git stages, and jj has no
+untracked files.
 
---untracked says yes to every undeclared path at once, so it needs --reason: it
-drops the one report that separates this command from git add -A, and the files
-it sweeps in land in a commit everybody pulls. The reason is kept with the
-staging verdict. Naming a path stages one file without the flag.
+Positional patterns and --exclude take write-path patterns (a literal path,
+a directory, or a glob with * and **), read from the current directory and
+matched the same way on every backend. --project scopes to the files a project
+owns. Patterns only narrow; a pattern that matches no dirty path is said on
+stderr. Stage the listing with:
+
+    magus vcs ls-files -o name | git add --pathspec-from-file=-
 
 resolve settles an in-progress merge, rebase, or cherry-pick. It classifies
 every conflicted path at once, regenerates once instead of once per file,
@@ -1716,19 +1726,23 @@ working copy')". Jujutsu mints nothing, so nothing accumulates.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.`,
-	// No parent Flags: neither flag belongs to `magus vcs`, which takes none of
-	// its own. They were declared here with the owning subcommand named in the doc
-	// text ("(vcs resolve)", "(vcs add)") because a child could not carry flags,
-	// which put them in one merged Options section on the man page and made a
-	// generated binder for either child bind both.
-	Usage: "magus vcs <add|resolve|checkpoint|merge-driver> [flags]",
+	// No parent Flags: `magus vcs` takes none of its own, and a flag declared on the
+	// parent lands in one merged Options section on the man page and in every child's
+	// generated binder.
+	Usage: "magus vcs <ls-files|resolve|checkpoint|merge-driver> [flags]",
 	Children: []cmdline.Command{
 		{
-			Name:  "add",
-			Short: "Stage a change the way this workspace's declarations say it should be staged",
+			Name:  "ls-files",
+			Short: "List the dirty paths a commit of this change wants; stages nothing",
 			Flags: []cmdline.Flag{
-				{Name: "untracked", Kind: cmdline.Bool, Doc: "Also stage undeclared files; requires --reason"},
-				{Name: "reason", Kind: cmdline.String, Doc: "Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict"},
+				{Name: "include-untracked", Kind: cmdline.Bool, Doc: "Also list untracked files; refused on jj, which has none"},
+				{Name: "include-generated", Kind: cmdline.Bool, Doc: "Also list declared outputs a dirty source in this change explains"},
+				{Name: "include-unexplained", Kind: cmdline.Bool, Doc: "Also list declared outputs no source change here explains"},
+				{Name: "include-unclaimed", Kind: cmdline.Bool, Doc: "Also list paths no target declares, and the ones magus maintains itself"},
+				{Name: "include-held", Kind: cmdline.Bool, Doc: "Also list paths another live job in this checkout writes"},
+				{Name: "include-staged", Kind: cmdline.Bool, Doc: "Also list paths whose whole change is already staged; git only"},
+				{Name: "exclude", Kind: cmdline.Custom, Doc: "Leave out paths this write-path `pattern` covers; repeatable or comma-separated"},
+				{Name: "project", Kind: cmdline.Custom, Doc: "List only the files this `project` owns; repeatable or comma-separated"},
 			},
 		},
 		{
@@ -1736,7 +1750,6 @@ base in yourself on the others, then run resolve.`,
 			Short: "Settle an in-progress merge's conflicted generated files, then regenerate once",
 			Flags: []cmdline.Flag{
 				{Name: "against", Kind: cmdline.String, Doc: "Merge this `ref` first, then settle what it conflicts with"},
-				{Name: "hook", Kind: cmdline.String, Doc: "Run as the git `hook` named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand"},
 			},
 		},
 		{
@@ -1749,9 +1762,9 @@ base in yourself on the others, then run resolve.`,
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
 	Examples: []cmdline.Example{
-		{Comment: "Stage a change without sweeping in build residue", Command: "magus vcs add"},
-		{Comment: "Classify the dirty tree, stage nothing", Command: "magus vcs add --dry-run"},
-		{Comment: "Sweep in the undeclared files, on the record", Command: "magus vcs add --untracked --reason \"new fixtures the go spell does not claim\""},
+		{Comment: "Stage the dirty sources and nothing else", Command: "magus vcs ls-files -o name | git add --pathspec-from-file=-"},
+		{Comment: "List one subtree's changes, with the outputs they regenerated", Command: "magus vcs ls-files --include-generated 'internal/guard/**'"},
+		{Comment: "List a new file too", Command: "magus vcs ls-files --include-untracked --project libs/xdg"},
 		{Comment: "Settle a conflicted merge", Command: "magus vcs resolve"},
 		{Comment: "Merge the base in and settle it in one step", Command: "magus vcs resolve --against origin/main"},
 		{Comment: "Record what a lease was handed", Command: "magus vcs checkpoint"},
@@ -2279,9 +2292,14 @@ orchestrator widens; a holder may apply only the release of its own paths.
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
 
+pause holds jobs' holders off the machine budget: their next magus run is refused
+until resume. A run already holding the budget finishes. A job's weight, in (0,1]
+on its record, leans its runs' retries ahead of other waiters; it is a lean, never
+a place in a queue.
+
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|rm|prune> [flags]",
+	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|rm|prune|pause|resume> [flags]",
 	Children: []cmdline.Command{
 		{
 			Name:  "fork",
@@ -2409,6 +2427,20 @@ shows what it is doing.`,
 			},
 			Usage: "magus job prune [--all] [flags]",
 		},
+		{
+			Name:  "pause",
+			Short: "Hold jobs' holders off the machine budget until resumed",
+			Description: "Mark each job paused, so `magus job exec` and the guard refuse its holder's next magus run with one " +
+				"line naming the pause and `magus job resume <job>`. Nothing is preempted: a run already holding the budget " +
+				"finishes. A holder may not pause or resume a job; that is a person's or the orchestrator's. Pausing is how a " +
+				"person gets one job out of a bind without stopping every other.",
+			Usage: "magus job pause <job>... [flags]",
+		},
+		{
+			Name:  "resume",
+			Short: "Lift the pause on jobs",
+			Usage: "magus job resume <job>... [flags]",
+		},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Declare a job", Command: "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
@@ -2423,6 +2455,7 @@ shows what it is doing.`,
 		{Comment: "Preview that change", Command: "magus job apply -f job.json --dry-run"},
 		{Comment: "Grade a job's checks in a merged tree", Command: "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{Comment: "See which jobs a prune would end", Command: "magus job prune --dry-run"},
+		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core && magus job resume session-load/core"},
 	},
 }
 
@@ -2607,7 +2640,16 @@ and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
 to declare where they live; with nothing declared the feature is inert.`,
 	Usage: "magus notes <ls|get|edit|verify|capture> [flags]",
 	Children: []cmdline.Command{
-		{Name: "ls", Short: "Show notes and any repair warnings"},
+		{
+			Name:  "ls",
+			Short: "Show notes and any repair warnings",
+			Flags: []cmdline.Flag{
+				{Name: "shared", Kind: cmdline.Bool, Doc: "Only notes committed to this repository (your team has these)"},
+				{Name: "private", Kind: cmdline.Bool, Doc: "Only your own notes"},
+				{Name: "reproducible", Kind: cmdline.Bool, Doc: "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed"},
+				{Name: "tag", Kind: cmdline.Custom, Doc: "Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)"},
+			},
+		},
 		{Name: "get", Short: "Show one note"},
 		{Name: "edit", Short: "Open one note in $VISUAL or $EDITOR"},
 		{Name: "verify", Short: "Check malformed notes and anchors that no longer resolve"},
@@ -2618,6 +2660,8 @@ to declare where they live; with nothing declared the feature is inert.`,
 				{Name: "title", Kind: cmdline.String, Doc: "Title for the note (defaults to naming the reviewed base)"},
 				{Name: "name", Kind: cmdline.String, Doc: "Note name (defaults to review-<patch digest>)"},
 				{Name: "tag", Kind: cmdline.Custom, Doc: "Tag to set on the note; repeatable"},
+				{Name: "gap", Kind: cmdline.Bool, Doc: "Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve"},
+				{Name: "anchor", Kind: cmdline.Custom, Doc: "With --gap, what the gap is about (repeatable): symbol:<key>, file:<path>#<decl>, diagnostic:<code>, or any note anchor"},
 				{Name: "shared", Kind: cmdline.Bool, Doc: "Only notes committed to this repository (your team has these)"},
 				{Name: "private", Kind: cmdline.Bool, Doc: "Only your own notes (default for capture)"},
 			},
@@ -2629,6 +2673,8 @@ to declare where they live; with nothing declared the feature is inert.`,
 		{Comment: "Write or revise one", Command: "magus notes edit cache-invalidation-pairing"},
 		{Comment: "Check every anchor still resolves", Command: "magus notes verify"},
 		{Comment: "Capture the review under way", Command: "magus notes capture"},
+		{Comment: "Record a harness gap that magus can find again", Command: "magus notes capture --gap --shared --title \"wait poll denied as sleep\" --anchor diagnostic:MGS3009 grd6392b52c2ea13c5a"},
+		{Comment: "List open gaps with their find lines", Command: "magus notes ls --tag gap/open"},
 	},
 }
 

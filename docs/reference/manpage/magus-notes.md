@@ -36,7 +36,27 @@ committed under their own name, which is what makes git attribution meaningful
 and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
 to declare where they live; with nothing declared the feature is inert.
 
+### notes ls options
+
+**--private**
+: Only your own notes
+
+**--reproducible**
+: Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed
+
+**--shared**
+: Only notes committed to this repository (your team has these)
+
+**--tag** *string*
+: Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)
+
 ### notes capture options
+
+**--anchor** *string*
+: With --gap, what the gap is about (repeatable): symbol:\<key\>, file:\<path\>#\<decl\>, diagnostic:\<code\>, or any note anchor
+
+**--gap**
+: Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve
 
 **--name** *string*
 : Note name (defaults to review-\<patch digest\>)
@@ -100,6 +120,18 @@ magus notes verify
 
 ```sh
 magus notes capture
+```
+
+*Record a harness gap that magus can find again*
+
+```sh
+magus notes capture --gap --shared --title "wait poll denied as sleep" --anchor diagnostic:MGS3009 grd6392b52c2ea13c5a
+```
+
+*List open gaps with their find lines*
+
+```sh
+magus notes ls --tag gap/open
 ```
 
 ## See Also

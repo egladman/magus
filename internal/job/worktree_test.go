@@ -42,6 +42,7 @@ func TestForkWorktreeMakesTheJobsCheckoutAtTheForkersRevision(t *testing.T) {
 	wt := *row.Worktree
 	assert.Equal(t, repo.Head(), wt.Base)
 	assert.FileExists(t, filepath.Join(wt.Root, "a.txt"), "the checkout holds the revision it was made at")
+	assert.Equal(t, "w1", repo.Git("-C", wt.Root, "symbolic-ref", "--short", "HEAD"), "the job commits on a branch named after it")
 	assert.Empty(t, wt.Binary)
 	assert.NoFileExists(t, filepath.Join(wt.Root, "magus"), "a forker running magus from PATH places none")
 
@@ -62,6 +63,43 @@ func TestForkWorktreeRefusesACheckpointWithUncommittedChanges(t *testing.T) {
 	_, _, err := s.ForkWorktree(t.Context(), "w1", dir, repo.Head()+"+00112233445566778899aabbccddeeff", "")
 	require.ErrorContains(t, err, "uncommitted changes")
 	assert.NoDirExists(t, dir)
+}
+
+// A row forked from inside an integrator's existing checkout got no worktree record, and the
+// guard then refused magus there as a sibling; --checkout naming it adopts it instead.
+func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, _, repo := worktreeStore(t)
+	dir := filepath.Join(t.TempDir(), "integrator")
+	repo.Git("worktree", "add", "-q", "-b", "integrator", dir)
+
+	wt, made, err := s.ForkWorktree(ctx, "finish", dir, "", "")
+	require.NoError(t, err)
+	assert.False(t, made, "an adopted checkout is not the fork's to discard")
+	source := wt.Source
+	assert.True(t, samePath(repo.Root(), source), "removal runs from the primary checkout, not from inside the adopted one")
+	assert.Equal(t, types.JobWorktree{Root: dir, Source: source, Base: repo.Head(), Created: wt.Created}, wt)
+
+	linked, err := s.LinkedCheckout(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, linked)
+	primary, err := s.LinkedCheckout(ctx, repo.Root())
+	require.NoError(t, err)
+	assert.False(t, primary)
+
+	seed(t, s, types.Job{ID: "finish", State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	_, err = s.RecordWorktree(ctx, "finish", wt)
+	require.NoError(t, err)
+	owned, err := s.OwnedCheckout(dir)
+	require.NoError(t, err)
+	assert.Equal(t, dir, owned)
+	none, err := s.OwnedCheckout(repo.Root())
+	require.NoError(t, err)
+	assert.Empty(t, none)
+
+	_, _, err = s.ForkWorktree(ctx, "other", t.TempDir(), "", "")
+	require.ErrorContains(t, err, "is not a linked checkout of this repository")
 }
 
 func TestMirroredBinaryIsOnlyTheForkingCheckoutsOwnMagus(t *testing.T) {
@@ -103,27 +141,28 @@ func TestForkWorktreePlacesTheForkersBinary(t *testing.T) {
 	assert.NotZero(t, info.Mode()&0o111, "the placed binary runs")
 }
 
-// A worker whose ./magus was built at another commit than its checkout cannot load the tree,
-// so the fork makes the checkout at any checkpoint and places the binary only at the commit
-// it was built at; elsewhere CheckoutBootstrap builds one.
-func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
+// This repository holds no ./cmd/magus, so whether a build input differs between commits
+// cannot be told: the fork makes the checkout at any checkpoint and places the binary only at
+// the commit it was built at; elsewhere CheckoutBootstrap builds one.
+func TestForkWorktreePlacesABinaryWhoseInputsCannotBeListedOnlyAtItsCommit(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
 	built := repo.Head()
-	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	later := repo.Commit("later", map[string]string{"b.go": "package b\n"})
 
 	for name, tc := range map[string]struct {
+		id         string
 		build      types.MagusBuild
 		checkpoint string
 		base       string
 	}{
-		"the forker's revision is past the build": {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, base: later},
-		"a checkpoint past the build":             {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later, base: later},
-		"a checkpoint before the build":           {build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built, base: built},
+		"the forker's revision is past the build": {id: "past-build", build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, base: later},
+		"a checkpoint past the build":             {id: "checkpoint-past", build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later, base: later},
+		"a checkpoint before the build":           {id: "checkpoint-before", build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built, base: built},
 	} {
 		t.Run(name, func(t *testing.T) {
 			bin, ctx := forkersBinary(t, tc.build)
-			wt, made, err := s.ForkWorktree(ctx, name, filepath.Join(t.TempDir(), "w"), tc.checkpoint, bin)
+			wt, made, err := s.ForkWorktree(ctx, tc.id, filepath.Join(t.TempDir(), "w"), tc.checkpoint, bin)
 			require.NoError(t, err)
 			require.True(t, made)
 			assert.Equal(t, tc.base, wt.Base)
@@ -243,6 +282,7 @@ func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	dirty := forkInto(t, s, "dirty", "")
 	require.NoError(t, os.WriteFile(filepath.Join(dirty.Worktree.Root, "b.txt"), []byte("b\n"), 0o644))
 	stranded := forkInto(t, s, "stranded", "")
+	repo.Git("-C", stranded.Worktree.Root, "switch", "-q", "--detach")
 	repo.Git("-C", stranded.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "local")
 	for _, id := range []string{"dirty", "stranded"} {
 		_, err := Exit(ctx, s, id, nil, nil)
@@ -266,4 +306,130 @@ func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	changed, err = s.EndWorktrees(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, changed, "a reason that has not changed is not recorded again")
+}
+
+func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, _, _ := worktreeStore(t)
+	clean := forkInto(t, s, "clean", "")
+	dirty := forkInto(t, s, "dirty", "")
+	require.NoError(t, os.WriteFile(filepath.Join(dirty.Worktree.Root, "b.txt"), []byte("b\n"), 0o644))
+
+	_, err := s.Delete(ctx, "dirty", false)
+	require.ErrorContains(t, err, "b.txt", "a checkout holding work stays, and so does its row")
+	assert.DirExists(t, dirty.Worktree.Root)
+
+	dropped, err := s.Delete(ctx, "clean", false)
+	require.NoError(t, err)
+	assert.NoDirExists(t, clean.Worktree.Root, "a clean checkout goes with its row")
+	assert.NotZero(t, dropped.Worktree.Removed)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "dirty", rows[0].ID)
+}
+
+func TestBuildInputsAreTheChangedPathsALinkedPackageReaches(t *testing.T) {
+	t.Parallel()
+	root := filepath.FromSlash("/w/a")
+	listed := root + "|VERSION|banner.txt\n" +
+		filepath.Join(root, "cmd", "magus") + "\n" +
+		filepath.Join(root, "internal", "job") + "\n" +
+		"\n" +
+		filepath.FromSlash("/usr/local/go/src/fmt") + "\n" +
+		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y") + "\n"
+	scopes := packageScopes(listed, root)
+	assert.Equal(t, []string{"./", "VERSION", "banner.txt", "cmd/magus/", "internal/job/"}, scopes)
+
+	for _, tc := range []struct {
+		path  string
+		input bool
+	}{
+		{"internal/job/worktree.go", true},
+		{"cmd/magus/main.go", true},
+		{"main.go", true},
+		{"go.mod", true},
+		{"go.sum", true},
+		{"go.work", true},
+		{"VERSION", true},
+		{"internal/job/gen/job.schema.json", true},
+		{"internal/job/worktree_test.go", false},
+		{"internal/other/x.go", false},
+		{"libs/embed/train/go.mod", false},
+		{"docs/index.md", false},
+		{"MAGUS.md", false},
+		{"console/src/app.ts", false},
+		{"changes/unreleased/x.md", false},
+	} {
+		assert.Equal(t, tc.input, len(buildInputs([]string{tc.path}, scopes)) == 1, tc.path)
+	}
+}
+
+// goModuleRepo is a git checkout holding a Go module whose ./cmd/magus links lib, beside a
+// package nothing links and a docs file.
+func goModuleRepo(t *testing.T) *testkit.Repo {
+	t.Helper()
+	return testkit.NewRepo(t, map[string]string{
+		"go.mod":            "module example.com/m\n\ngo 1.26\n",
+		"cmd/magus/main.go": "package main\n\nimport \"example.com/m/lib\"\n\nfunc main() { lib.Run() }\n",
+		"lib/lib.go":        "package lib\n\nfunc Run() {}\n",
+		"lib/lib_test.go":   "package lib\n",
+		"unlinked/u.go":     "package unlinked\n",
+		"docs/a.md":         "a\n",
+	})
+}
+
+func TestForkWorktreePlacesABinaryWhoseBuildInputsMatchTheBase(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		files  map[string]string
+		placed bool
+	}{
+		"a docs edit":                   {files: map[string]string{"docs/a.md": "b\n"}, placed: true},
+		"a test file":                   {files: map[string]string{"lib/lib_test.go": "package lib\n\n"}, placed: true},
+		"a package nothing links":       {files: map[string]string{"unlinked/u.go": "package unlinked\n\n"}, placed: true},
+		"a linked package's source":     {files: map[string]string{"lib/lib.go": "package lib\n\nfunc Run() { _ = 1 }\n"}},
+		"a file a linked package holds": {files: map[string]string{"lib/data.txt": "x\n"}},
+		"the module file":               {files: map[string]string{"go.mod": "module example.com/m\n\ngo 1.26.0\n"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo := goModuleRepo(t)
+			s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
+			built := repo.Head()
+			later := repo.Commit(name, tc.files)
+			bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built})
+			wt, made, err := s.ForkWorktree(ctx, "past", filepath.Join(t.TempDir(), "w"), later, bin)
+			require.NoError(t, err)
+			require.True(t, made)
+			assert.Equal(t, later, wt.Base)
+			assert.Equal(t, tc.placed, wt.Binary != "", "placed")
+
+			// A binary built past the base is compared the same way.
+			bin, ctx = forkersBinary(t, types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later})
+			wt, _, err = s.ForkWorktree(ctx, "before", filepath.Join(t.TempDir(), "w"), built, bin)
+			require.NoError(t, err)
+			assert.Equal(t, built, wt.Base)
+			assert.Equal(t, tc.placed, wt.Binary != "", "placed at the older base")
+		})
+	}
+}
+
+func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
+	t.Parallel()
+	repo := execRepo(t)
+	built := repo.Head()
+	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
+	drv, why := resolveDriver(t.Context(), repo.Root())
+	require.NotNil(t, drv, why)
+
+	_, err := changedBuildInputs(t.Context(), drv, s.root, built, later)
+	require.ErrorContains(t, err, "go list -deps ./cmd/magus")
+
+	inputs, err := changedBuildInputs(t.Context(), drv, s.root, later, later)
+	require.NoError(t, err, "equal commits list nothing")
+	assert.Empty(t, inputs)
 }

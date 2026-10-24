@@ -2035,7 +2035,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	primaryCache, err := magus.ResolveCacheDir(primary)
 	require.NoError(t, err)
 	_, err = trail.ReadBlob(primaryCache, ref)
-	assert.ErrorIs(t, err, os.ErrNotExist, "the hook process's checkout is not where the call ran")
+	assert.NoError(t, err, "the primary checkout holds a copy, which every checkout's query output searches")
 }
 
 // A guard-rule load that runs past the hook's deadline still stores every chunk it

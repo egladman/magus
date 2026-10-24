@@ -427,37 +427,57 @@ func (s JobState) Editing() bool {
 	return s == StateDeclared || s == StateRunning
 }
 
+// DefaultJobWeight is the weight of a job that names none, and of a run bound to no job.
+const DefaultJobWeight = 0.5
+
+// ValidJobWeight reports whether w is in (0,1]. Out of range is refused, never clamped.
+func ValidJobWeight(w float64) bool { return w > 0 && w <= 1 }
+
 // MaxJobIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
 // enough that the id stays a correlation key rather than a payload riding every event
 // line.
 const MaxJobIDLen = 128
 
-// ValidJobID reports whether id may be stamped as a lease: letters, digits
-// and the separators -_./: a ledger row or a branch-shaped lease name uses, never empty,
-// at most [MaxJobIDLen] characters.
+// ValidJobID reports whether id may be stamped as a lease and checked out as a branch:
+// see [JobIDRule].
 //
-// The narrowness is a security property, not a naming preference. A lease id is EXEMPT
-// from the redaction internal/trail applies to every other event field, so every channel
-// that can stamp one (a lease marker, the BAGGAGE environment channel, a
-// producer's own field) has to pass its candidate through here first, or the exemption
-// becomes a way to carry a credential onto an event line.
-//
-// It lives beside [Job] rather than in the package that redacts, because the
-// ledger and the trail are two readers of one id: a validator owned by either would
-// leave the other free to accept an id the first would refuse.
-func ValidJobID(id string) bool {
-	if id == "" || len(id) > MaxJobIDLen {
-		return false
+// The narrowness is a security property: a lease id is EXEMPT from the redaction
+// internal/trail applies to every other event field, so every channel that stamps one
+// passes its candidate through here first. It lives beside [Job] because the ledger and
+// the trail both read the id.
+func ValidJobID(id string) bool { return JobIDRule(id) == "" }
+
+// JobIDRule names the rule id breaks, or returns "" for a valid id. The id is also the
+// branch ForkWorktree creates, so it is held to what every driver accepts as one:
+// lowercase letters, digits, '-' and '.', with '/' only between segments, no segment
+// empty or starting with '.' or '-', never ':' or '..', at most [MaxJobIDLen] characters.
+func JobIDRule(id string) string {
+	switch {
+	case id == "":
+		return "an id is not empty"
+	case len(id) > MaxJobIDLen:
+		return fmt.Sprintf("an id is at most %d characters", MaxJobIDLen)
+	case strings.Contains(id, ".."):
+		return "an id never contains .."
 	}
 	for _, c := range id {
 		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		case c == '-', c == '_', c == '.', c == '/', c == ':':
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '-', c == '.', c == '/':
+		case c == ':':
+			return "an id never contains ':'"
 		default:
-			return false
+			return "an id is lowercase letters, digits, '-', '.' and '/' between segments"
 		}
 	}
-	return true
+	for seg := range strings.SplitSeq(id, "/") {
+		switch {
+		case seg == "":
+			return "'/' goes between segments: an id neither starts nor ends with it, nor doubles it"
+		case seg[0] == '.' || seg[0] == '-':
+			return "no segment of an id starts with '.' or '-'"
+		}
+	}
+	return ""
 }
 
 // JobSchemaVersion is the version of the row shape this magus writes: stamped on every row
@@ -737,6 +757,11 @@ type Job struct {
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	// Integrates names the finished branches an integration job merges into its checkout,
+	// with `git merge --no-ff`. A row naming any is an integration job: its write paths are
+	// the files those branches changed since its checkpoint, computed at fork, and a live
+	// lease on one of them is a note rather than a refusal, since the merge settles it.
+	Integrates []string `json:"integrates,omitempty" yaml:"integrates,omitempty"`
 	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
 	// this job breaking. Empty means the job breaks nothing on its own authority: a break
 	// outside the list is a finding for the root, not a decision for the worker.
@@ -763,7 +788,11 @@ type Job struct {
 	// the row. Both are store-computed like ModelTier: a caller's value is replaced by the
 	// stored one.
 	ReworkRounds int `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
-	Widenings    int `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
+	Widenings    int `json:"widenings,omitempty"  yaml:"widenings,omitempty"`
+	// Claims are the write paths this attempt's holder added with a proof the store
+	// re-proved, oldest first. Store-computed like ModelTier; a fork of the next attempt
+	// starts it over.
+	Claims []JobClaim `json:"claims,omitempty" yaml:"claims,omitempty"`
 	// Generation counts changes to the declared spec, as Kubernetes' metadata.generation
 	// does: 1 when the row is declared, one more on each fork or apply that changes a
 	// declared field. Store-computed, and a store-written field never moves it. Each result,
@@ -773,6 +802,16 @@ type Job struct {
 	// MaxAttempts caps Attempts, as a Kubernetes Job's backoffLimit does; zero is no cap. It
 	// is checked only when the row is forked again: magus never retries a job on its own.
 	MaxAttempts int `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	// MaxClaims caps how many proved claims one attempt takes, chosen by whoever declares the
+	// job; zero takes the default. A fork raising it past jobs.max_claims is refused.
+	MaxClaims int `json:"max_claims,omitempty" yaml:"max_claims,omitempty"`
+	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
+	// MachineClaim and polls the budget weight/DefaultJobWeight times as often. In (0,1];
+	// zero reads as DefaultJobWeight.
+	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
+	// Paused is the unix second a person paused the job, zero while it is not. A claim the
+	// holder already has finishes; exec and the guard refuse its next magus run.
+	Paused int64 `json:"paused,omitzero" yaml:"paused,omitempty"`
 	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
 	// Prior holds the attempts before it, newest last, at most three, as structured
 	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
@@ -991,7 +1030,7 @@ type PriorAttempt struct {
 	ReportedBase       string       `json:"reported_base,omitempty"       yaml:"reported_base,omitempty"`
 	Ended              int64        `json:"ended,omitempty"               yaml:"ended,omitempty"`
 	ReworkRounds       int          `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
-	Widenings          int          `json:"widenings,omitempty"           yaml:"widenings,omitempty"`
+	Widenings          int          `json:"widenings,omitempty"        yaml:"widenings,omitempty"`
 	Unmet              []GateStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	UnresolvedRisks    []string     `json:"unresolved_risks,omitempty"    yaml:"unresolved_risks,omitempty"`
@@ -1044,12 +1083,17 @@ type Declaration struct {
 	ReadPaths []string `json:"read_paths,omitempty" schema:"writepath"`
 	// DependsOn names the lease ids that must land before this one.
 	DependsOn []string `json:"depends_on,omitempty" schema:"leaseid"`
+	// Integrates names the branches this job merges; see [Job.Integrates].
+	Integrates []string `json:"integrates,omitempty"`
 	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
 	// this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks].
 	Breaks []string `json:"breaks,omitempty"`
 	// Model is the model or effort tier the work was matched to, a free string because
 	// hosts name their models differently.
 	Model string `json:"model,omitempty"`
+	// Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an
+	// explicit 0 is out of range. See [Job.Weight].
+	Weight *float64 `json:"weight,omitempty"`
 	// BriefFormat is the format a brief to this job's worker takes; empty defers to
 	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
 	BriefFormat BriefFormat `json:"brief_format,omitempty"`
@@ -1102,12 +1146,83 @@ type Declaration struct {
 	// MaxAttempts caps how many times the job may be forked, its first fork included; zero
 	// is no cap. See [Job.MaxAttempts].
 	MaxAttempts int `json:"max_attempts,omitempty"`
+	// MaxClaims caps how many proved claims one attempt takes; zero takes the default. See
+	// [Job.MaxClaims].
+	MaxClaims int `json:"max_claims,omitempty"`
 	// Waivers accept waivable problems (see [Waivable]) on the record's own authority.
 	Waivers []JobWaiver `json:"waivers,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
 	// write into this path, inside the write paths of the live job ID names, by somebody
 	// other than its holder. A record carrying it declares nothing else.
 	Enter string `json:"enter,omitempty"`
+	// Claim turns the record into a proved claim of the job ID names: each entry adds
+	// one write path with the proof the store re-proves before it writes. A record carrying
+	// it declares nothing else.
+	Claim []JobClaimRequest `json:"claim,omitempty"`
+}
+
+// JobClaimRequest is one write path a claim record asks for, and Because the proof:
+// `refs:<symbol>`, `test:<file>`, `output:<project>:<target>` or `released`. See
+// [ParseClaimEvidence].
+type JobClaimRequest struct {
+	Path    string `json:"path" schema:"writepath"`
+	Because string `json:"because" schema:"nonblank"`
+}
+
+// ClaimKind is what a proved claim rests on.
+type ClaimKind string
+
+const (
+	// ClaimRefs is a path that references a declaration the job's diff changed inside
+	// its write paths.
+	ClaimRefs ClaimKind = "refs"
+	// ClaimTest is a test beside a file the job changed that references what it defines.
+	ClaimTest ClaimKind = "test"
+	// ClaimOutput is a declared output of a target whose sources the job changed.
+	ClaimOutput ClaimKind = "output"
+	// ClaimReleased is a path the job's own holder released in this attempt.
+	ClaimReleased ClaimKind = "released"
+)
+
+// ClaimEvidence is a parsed `because`: the kind and what it names, empty for released.
+type ClaimEvidence struct {
+	Kind    ClaimKind `json:"kind"              yaml:"kind"`
+	Subject string    `json:"subject,omitempty" yaml:"subject,omitempty"`
+}
+
+// String is the evidence as a `because` spells it.
+func (e ClaimEvidence) String() string {
+	if e.Subject == "" {
+		return string(e.Kind)
+	}
+	return string(e.Kind) + ":" + e.Subject
+}
+
+// ParseClaimEvidence reads a `because`. An output subject is `<project>:<target>`.
+func ParseClaimEvidence(because string) (ClaimEvidence, error) {
+	kind, subject, _ := strings.Cut(strings.TrimSpace(because), ":")
+	e := ClaimEvidence{Kind: ClaimKind(kind), Subject: strings.TrimSpace(subject)}
+	switch {
+	case !e.Kind.Valid():
+		return e, fmt.Errorf("%q names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target> or released", because)
+	case e.Kind == ClaimReleased && e.Subject != "":
+		return e, fmt.Errorf("%q: released names nothing after it", because)
+	case e.Kind != ClaimReleased && e.Subject == "":
+		return e, fmt.Errorf("%q names no %s subject", because, e.Kind)
+	case e.Kind == ClaimOutput && !strings.Contains(e.Subject, ":"):
+		return e, fmt.Errorf("%q names no target, so spell it output:<project>:<target>", because)
+	}
+	return e, nil
+}
+
+// JobClaim is one write path a holder added with a proof. Proof is the sentence the
+// store found it true by, At unix seconds and By who wrote it.
+type JobClaim struct {
+	Path     string        `json:"path"     yaml:"path"`
+	Evidence ClaimEvidence `json:"evidence" yaml:"evidence"`
+	Proof    string        `json:"proof"    yaml:"proof"`
+	At       int64         `json:"at"       yaml:"at"`
+	By       Origin        `json:"by"       yaml:"by"`
 }
 
 // FoldLegacyNames moves a field declared under its old name onto the one that carries it,
@@ -1171,9 +1286,8 @@ func (r Declaration) Problems() JobProblems {
 	invalid := func(field, message, fix string) {
 		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
 	}
-	if !ValidJobID(strings.TrimSpace(r.ID)) {
-		invalid("id", fmt.Sprintf("%q is not a lease id", r.ID),
-			fmt.Sprintf("use letters, digits and -_./: only, at most %d characters", MaxJobIDLen))
+	if rule := JobIDRule(strings.TrimSpace(r.ID)); rule != "" {
+		invalid("id", fmt.Sprintf("%q is not a lease id: %s", r.ID, rule), "name a branch-shaped id such as fix-parser or area/fix-parser")
 	}
 	if r.Enter != "" {
 		rest := r
@@ -1184,6 +1298,9 @@ func (r Declaration) Problems() JobProblems {
 		}
 		return ps
 	}
+	if len(r.Claim) > 0 {
+		return append(ps, r.claimProblems()...)
+	}
 	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
 		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
 	}
@@ -1192,6 +1309,19 @@ func (r Declaration) Problems() JobProblems {
 			invalid(fmt.Sprintf("depends_on[%d]", i), fmt.Sprintf("depends_on[%d] %q is not a lease id", i, dep),
 				"name the id of a job that must land first")
 		}
+	}
+	for i, branch := range r.Integrates {
+		at := fmt.Sprintf("integrates[%d]", i)
+		switch b := strings.TrimSpace(branch); {
+		case !ValidIntegratedBranch(b):
+			invalid(at, fmt.Sprintf("%s %q is not a branch name a merge can take", at, branch),
+				"name a local branch, such as the one a finished job committed on")
+		case slices.Contains(r.Integrates[:i], branch):
+			invalid(at, fmt.Sprintf("%s %q is named twice", at, branch), "drop the repeat")
+		}
+	}
+	if len(r.Integrates) > 0 && r.ReadOnly {
+		invalid("read_only", "an integration job merges branches, so it writes", "drop read_only, or drop integrates")
 	}
 	if r.State != "" && !ValidJobState(r.State) {
 		invalid("state", fmt.Sprintf("state %q is not a job state", r.State), "use one of "+JobStateVocabulary())
@@ -1203,8 +1333,15 @@ func (r Declaration) Problems() JobProblems {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
 			"use one of "+strings.Join(r.BriefFormat.Values(), ", ")+", or leave it out for magus.yaml's agents.brief_format")
 	}
+	if r.Weight != nil && !ValidJobWeight(*r.Weight) {
+		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
+			fmt.Sprintf("use a weight above 0 and at most 1, or leave it out for %v", DefaultJobWeight))
+	}
 	if r.MaxAttempts < 0 {
 		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
+	}
+	if r.MaxClaims < 0 {
+		invalid("max_claims", fmt.Sprintf("max_claims is %d, and it is a count of claims", r.MaxClaims), "use a positive count, or 0 for the default")
 	}
 	if r.Checkout != "" && !filepath.IsAbs(r.Checkout) {
 		invalid("checkout", fmt.Sprintf("checkout %q is relative, and a fork names the checkout it makes by an absolute path", r.Checkout),
@@ -1251,6 +1388,36 @@ func (r Declaration) Problems() JobProblems {
 		}
 	}
 	return append(ps, goalsProblems(r.Goals, declared)...)
+}
+
+// claimProblems is every problem of a claim record: it carries only schema_version, id
+// and claim, and each entry names one literal workspace path and a proof that parses.
+func (r Declaration) claimProblems() JobProblems {
+	var ps JobProblems
+	invalid := func(field, message, fix string) {
+		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+	}
+	rest := r
+	rest.Schema, rest.ID, rest.Claim = Schema{}, "", nil
+	if !reflect.ValueOf(rest).IsZero() {
+		invalid("claim", "a record carrying claim claims a job and declares nothing, so it carries only schema_version, id and claim",
+			"drop every other field, or drop claim")
+	}
+	for i, w := range r.Claim {
+		at := fmt.Sprintf("claim[%d]", i)
+		switch p := strings.TrimSpace(w.Path); {
+		case p == "":
+			invalid(at+".path", at+" names no path", "name the file to add, relative to the workspace root")
+		case pathOutsideWorkspace(p) != "":
+			invalid(at+".path", fmt.Sprintf("%s %q %s", at, w.Path, pathOutsideWorkspace(p)), "name it relative to the workspace root")
+		case IsGlobMeta(p) || strings.Contains(p, "#"):
+			invalid(at+".path", fmt.Sprintf("%s %q is a pattern or a claim, and a proof covers one file", at, w.Path), "name one file")
+		}
+		if _, err := ParseClaimEvidence(w.Because); err != nil {
+			invalid(at+".because", at+": "+err.Error(), "name the proof the path rests on")
+		}
+	}
+	return ps
 }
 
 // goalsProblems is every problem of a record's goals: each goal's own shape, then what
@@ -1358,8 +1525,8 @@ func (g Goal) problems(field string) JobProblems {
 		}
 		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: at, Message: message, Fix: fix})
 	}
-	if !ValidJobID(strings.TrimSpace(g.ID)) {
-		bad("id", fmt.Sprintf("id %q is not a goal id", g.ID), "use letters, digits and -_./: only")
+	if rule := JobIDRule(strings.TrimSpace(g.ID)); rule != "" {
+		bad("id", fmt.Sprintf("id %q is not a goal id: %s", g.ID, rule), "use a lowercase, branch-shaped id")
 	}
 	// Validates what the row WILL BE, not what arrived: a declaration off the wire has not
 	// been through Resolve yet, and refusing it for naming no kind would refuse the
@@ -1567,8 +1734,13 @@ func (r Declaration) Apply(u *Job) {
 	u.SoftPaths = trimmedNonEmpty(r.SoftPaths)
 	u.ReadPaths = trimmedNonEmpty(r.ReadPaths)
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
+	u.Integrates = trimmedNonEmpty(r.Integrates)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
 	u.Model = strings.TrimSpace(r.Model)
+	u.Weight = 0
+	if r.Weight != nil {
+		u.Weight = *r.Weight
+	}
 	u.BriefFormat = r.BriefFormat
 	u.Follows = strings.TrimSpace(r.Follows)
 	u.FreshReason = strings.TrimSpace(r.FreshReason)
@@ -1583,6 +1755,7 @@ func (r Declaration) Apply(u *Job) {
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
 	u.MaxAttempts = r.MaxAttempts
+	u.MaxClaims = r.MaxClaims
 	u.Waivers = slices.Clone(r.Waivers)
 }
 
@@ -2306,8 +2479,20 @@ func starStarShape(glob string) (prefix, last string, ok bool) {
 	return "", "", false
 }
 
-// HardPaths is WritePaths without the soft entries: the paths the row claims against other
-// rows. Every overlap check reads this, never WritePaths.
+// Integrating reports whether the row is an integration job: one that names branches to merge.
+func (u Job) Integrating() bool { return len(u.Integrates) > 0 }
+
+// ValidIntegratedBranch reports whether b can name a branch an integration job merges: no
+// leading dash, which git would read as an option, and nothing git refuses in a ref name.
+func ValidIntegratedBranch(b string) bool {
+	return b != "" && !strings.HasPrefix(b, "-") && !strings.HasSuffix(b, ".lock") && !strings.HasSuffix(b, "/") &&
+		!strings.Contains(b, "..") && !strings.Contains(b, "@{") &&
+		!strings.ContainsFunc(b, func(r rune) bool { return r <= ' ' || r == 0x7f || strings.ContainsRune(`~^:?*[\`, r) })
+}
+
+// HardPaths is WritePaths without the soft entries: the paths the row owns against other
+// rows. A reader asking who owns a path (an overlap, a boundary, a denial naming an owner)
+// reads this; a reader asking what this row may write reads WritePaths.
 func (u Job) HardPaths() []string {
 	if len(u.SoftPaths) == 0 {
 		return u.WritePaths
@@ -2326,9 +2511,11 @@ func (u Job) Clone() Job {
 	c.SoftPaths = slices.Clone(u.SoftPaths)
 	c.ReadPaths = slices.Clone(u.ReadPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
+	c.Integrates = slices.Clone(u.Integrates)
 	c.Breaks = slices.Clone(u.Breaks)
 	c.Goals = cloneGoals(u.Goals)
 	c.Releases = slices.Clone(u.Releases)
+	c.Claims = slices.Clone(u.Claims)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
 	c.Waivers = slices.Clone(u.Waivers)

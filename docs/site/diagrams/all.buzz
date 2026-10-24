@@ -31,6 +31,7 @@ import "site/diagrams/workspace-load" as _;
 import "site/diagrams/inputs-outputs" as _;
 import "site/diagrams/bootstrap" as _;
 import "site/diagrams/target-order" as _;
+import "site/diagrams/agent-orchestration" as _;
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -65,6 +66,7 @@ export fun allFigures() > [figure\Figure] !> any {
         inputsOutputsFigure(),
         bootstrapFigure(),
         targetOrderFigure(),
+        agentOrchestrationFigure(),
     ];
 }
 

@@ -45,6 +45,7 @@ type ruleDocEntry struct {
 
 var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocBackgroundLeft},
+	{doc: ruleDocBackgroundSilent},
 	{doc: ruleDocBackgroundUnbounded},
 	{doc: ruleDocBacktickSubstitution},
 	{doc: ruleDocBusyWait},
@@ -55,6 +56,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocFilterWithoutInput},
 	{doc: ruleDocGrepReader},
 	{doc: ruleDocInterpreterRewrite},
+	{doc: ruleDocInterpreterScript},
 	{doc: ruleDocConflictRewrite},
 	{doc: ruleDocSpawnUnbriefed},
 	{doc: ruleDocBuzzUnbriefed},
@@ -73,7 +75,6 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocPolicyUnloaded},
 	{doc: ruleDocRawTool},
 	{doc: ruleDocAgentSignOff},
-	{doc: ruleDocScriptedRewrite},
 	{doc: ruleDocSedInPlace},
 	{doc: ruleDocSharedStash},
 	{doc: ruleDocSiblingCheckout},
@@ -91,10 +92,12 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseCheckout},
 	{doc: ruleDocLeaseGate},
 	{doc: ruleDocLeaseHarness},
+	{doc: ruleDocLeasePaused},
 	{doc: ruleDocLeaseRebind},
 	{doc: ruleDocLeaseUndeclared},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
+	{doc: ruleDocLeaseClaim},
 	{doc: ruleDocWholeTree},
 	{doc: ruleDocWorkerCheckOnly},
 	{doc: ruleDocWorkerBackgroundRun},
@@ -169,9 +172,21 @@ var ruleDocBackgroundLeft = types.RuleDoc{
 	Name:    string(denyRuleBackgroundLeft),
 	Catches: "an agent finishing while shell commands it ran in the background are still running",
 	Why: "A host does not stop a finished subagent's background tasks, and once the subagent has reported nobody is told when one ends or that it is still running: a transcript search left behind by a scout ran for four hours. " +
-		"At a subagent's stop magus reads the subagent's own transcript for the shell commands it ran in the background (run_in_background, a foreground call the host moved to the background, a watcher's command) that no completion notice, stop call or watcher expiry has ended, and refuses the stop naming each by id, start time, age and command. " +
+		"At a subagent's stop magus reads the subagent's own transcript for the shell commands it ran in the background (run_in_background, a foreground call the host moved to the background, a watcher's command) that no completion notice, stop call or watcher expiry has ended, and refuses the stop naming each by id, start time, age and command. A run under `magus job exec --timeout`, which check-timeout sends a worker to background and which stops at its deadline, and a commit the host moved to the background while its hooks run, end on their own: their completion notice is how the agent hears the result, so neither holds a stop. " +
 		"At a root session's stop it advises instead, and only of tasks older than 30 minutes: a root wakes on a task's completion notice, so a young task is one it is waiting on, and the person is there to decide. " +
 		"Reads the host's transcript by shape, so a host whose transcript records no background task in that shape is never refused. Set to advise, a subagent's stop is advised too.",
+}
+
+var ruleDocBackgroundSilent = types.RuleDoc{
+	Name:    string(denyRuleBackgroundSilent),
+	Catches: "a background task of the session that has written nothing for advise_minutes (30 unset)",
+	Why: "A background task's output file and event notices are the only sign it is working, and one that writes nothing for half an hour is more likely waiting on a stdin nobody feeds, a lock or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat for eight hours that way. " +
+		"On each shell call of a root session magus reads the session's transcript for the background tasks still running, as background-left does, and measures each one's silence from the latest of its start, its output file's last write and its newest event notice. " +
+		"It reads only the bytes written since its last call, resuming from a checkpoint in the workspace cache, so a transcript of hundreds of megabytes costs a hook call no more than a small one. " +
+		"Past 30 minutes of silence the call is advised, once per task per session; past 60 minutes every shell call that is not a read is refused, naming each task's id, age, silence, command, output file and the TaskStop call that ends it. " +
+		"magus never stops a task itself. The text says what a stop loses: only the process; the output file stays on disk, reads still pass, and a magus run keeps its output ref and history. It names how to pick the work back up, bounded at background-unbounded's ceiling. " +
+		"advise_minutes and deny_minutes set the two thresholds (30 and 60 unset); deny_minutes must be more than advise_minutes. " +
+		"A watcher with an expiry is not judged, since the host ends it. A subagent's tasks are background-left's at its stop. The host's hook input carries no list of background tasks, so the transcript is the record read.",
 }
 
 var ruleDocBackgroundUnbounded = types.RuleDoc{
@@ -179,6 +194,7 @@ var ruleDocBackgroundUnbounded = types.RuleDoc{
 	Catches: "a shell command run in the background with nothing to end it",
 	Why: "A backgrounded command outlives the agent that started it, and the host stops it only when asked. " +
 		"It fires when the wiring reports that the host runs the call in the background and some command in the line is not bounded: `timeout N` or `gtimeout N` in front of it (stock macOS ships neither; Homebrew's coreutils installs `gtimeout`), a magus target run (bounded by its target's timeout), or a builtin that returns at once. A pipeline is bounded by its first command; a while or until loop never is. " +
+		"The refusal names a ceiling, `timeout 30m` unless ceiling_minutes sets another, the span after which background-silent starts speaking of a quiet task. " +
 		"timeout signals its own process group, so a child that starts its own session escapes it; `--kill-after` ends a command that ignores TERM. A watcher's command is bounded by its own expiry and is not judged here.",
 }
 
@@ -240,10 +256,11 @@ var ruleDocExitStatusEcho = types.RuleDoc{
 
 var ruleDocFilterWithoutInput = types.RuleDoc{
 	Name:    string(denyRuleFilterWithoutInput),
-	Catches: "a filter with no file, pipe or redirect, which reads a stdin nothing feeds",
+	Catches: "a filter or interpreter with no file, script, pipe or redirect, which reads a stdin nothing feeds",
 	Why: "A filter given no input reads stdin, and under an agent harness stdin is the harness's own: where the harness holds it open, nothing writes to it and nothing closes it, so the call waits past the tool timeout and goes on waiting in the background. " +
 		"Name the input: a file operand, a pipe into the command, or a `<`, `<<` or `<<<` redirect on it or on a loop or block around it. " +
 		"It reads each tool's own flag grammar, so `grep -e pat file`, `jq --arg k v . f` and `head -n 5 file` are fed, and `tr`, `tee` and `xargs` fire whenever nothing feeds them, because their operands are never input. " +
+		"python, node, perl, ruby and the shells fire given `-` or no script and no inline program, and a shell given `-s`: a `python3 -` whose heredoc sat on a later `cat` waited eight hours. `read` fires without `-t` or `-u`. " +
 		"A recursive grep with no path passes: GNU grep, macOS's BSD grep and the ugrep a host may put behind `grep` all search the working directory then. " +
 		"What the guard cannot classify passes, because it refuses only what it can prove: an unknown flag, an unquoted expansion that may split into several words, `jq -n`, an awk program with a BEGIN block, a command inside a function body. " +
 		"ripgrep with no path passes for the same reason: it searches the working directory unless stdin is a pipe or a file, which a hook cannot see.",
@@ -266,6 +283,18 @@ var ruleDocInterpreterRewrite = types.RuleDoc{
 		"The editor tool reads the file first and reports what it changed, which is the same edit with a record of itself. " +
 		"It fires on the WRITE, not the interpreter: a one-liner that computes something, prints it, or creates a file the tree does not carry is untouched, and so is anything under a scratch path. " +
 		"Only a write's destination counts: the path an `open(..., 'w')`, a pathlib or `writeFile` writer, an in-place flag or an awk redirect names, a variable read through its assignment. A tracked path the program carries as data, in a list it prints to stdout or a report it writes to scratch, is not one. A destination spelled from no literal at all, such as argv, is read as the interpreter's operands.",
+}
+
+var ruleDocInterpreterScript = types.RuleDoc{
+	Name:    string(denyRuleInterpreterScript),
+	Catches: "an ad-hoc script in python, node, perl or ruby, where Buzz is the workspace's scripting language",
+	Why: "Buzz is the one scripting language here: `magus buzz -e '<buzz>'` runs a program with fs, json and proc built in, the magus-buzz-lang skill carries its syntax, and the guard reads what the program does. " +
+		"A python or perl one-liner arrives as one string the guard cannot follow, and its commonest shape, a substitute-and-write, cannot tell your identifier from a dependency's of the same name. " +
+		"It denies python, python3 and python3.x given -c, a `-` operand, no program at all (a heredoc or piped stdin), or a .py file, and a .py file run directly; node given -e, -p, --eval, --print, `-` or no program; perl with any flag cluster carrying e, E or i, or reading its program from stdin; ruby given -e or -i, or reading stdin. " +
+		"Untouched: --version, -V and --help, `python -m`, `node file.js`, `perl file.pl`, bash and sh, `magus run` and `magus buzz`. " +
+		"A script file is judged by its program too: a node, perl or ruby file that substitutes and writes back a path in the workspace, and a write that leaves one, get this verdict; a program whose every named path lies outside the workspace is untouched. " +
+		"A Buzz program is held to the line it would be typed as: every proc\\exec and proc\\shell a `magus buzz -e` body, stdin heredoc or `magus buzz <script>` file starts, spelled from literals, is judged as that command, so `proc\\exec(\"go\", args: [\"test\", \"./...\"])` meets raw-tool the way `go test ./...` does. " +
+		"That is the guard reading a hooked agent call, not a limit on Buzz: the proc module and the interpreter run anything, and a script run outside the harness is never judged.",
 }
 
 var ruleDocConflictRewrite = types.RuleDoc{
@@ -439,18 +468,6 @@ var ruleDocAgentSignOff = types.RuleDoc{
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `magus session dispose <id>` is a person's to run.",
 }
 
-var ruleDocScriptedRewrite = types.RuleDoc{
-	Name:    string(denyRuleScriptedRewrite),
-	Catches: "a scripted substitute-and-write, which cannot tell your symbol from a dependency's",
-	Why: "A regex cannot tell YOUR symbol from a dependency's symbol of the same name. " +
-		"A `\\.Sum\\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. " +
-		"The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. " +
-		"Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for \"no matches\" is how a rename misses half its sites. " +
-		"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool. " +
-		"A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched. " +
-		"An APPEND passes, since it adds to the end and cannot mangle a line already there: a heredoc appended with `cat >> f <<EOF` or `tee -a`, whatever program its text documents, and a program whose every file write opens in append mode (`open(p, 'a')`, perl's `'>>'`) or goes to its own stdout.",
-}
-
 var ruleDocSedInPlace = types.RuleDoc{
 	Name:    string(denyRuleSedInPlace),
 	Catches: "`sed -i`, whose two spellings destroy each other's work across platforms",
@@ -490,7 +507,7 @@ var ruleDocStageAll = types.RuleDoc{
 	Why: "A magus target writes its declared outputs as it runs, so the tree here is routinely dirty with files you did not edit. " +
 		"`-A` sweeps those and any build residue into a commit about something else, with no signal that it happened, and `-u` reaches the same outputs: it stages every TRACKED change across the whole tree, which is the same sweep minus files that are merely untracked, and a target's declared outputs are ordinarily tracked already. " +
 		"One such call has put a whole regenerated docs site and untouched source files into a commit about something else. " +
-		"`magus vcs add` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and reports anything undeclared instead of staging it.",
+		"`magus vcs ls-files -o name | git add --pathspec-from-file=-` stages the list magus classified against the declared output globs: dirty source paths no other job holds, with each class it left out named on stderr beside the flag that adds it.",
 }
 
 var ruleDocSymbolSearch = types.RuleDoc{
@@ -591,6 +608,11 @@ var ruleDocLeaseHarness = types.RuleDoc{
 	Catches: "a leased worker rewriting the harness skill trees that steer it",
 }
 
+var ruleDocLeasePaused = types.RuleDoc{
+	Name:    string(denyRuleLeasePaused),
+	Catches: "a leased worker starting a magus run while a person has its job paused",
+}
+
 var ruleDocLeaseRebind = types.RuleDoc{
 	Name:    string(denyRuleLeaseRebind),
 	Catches: "a leased worker rewriting who it is or what its own job row says",
@@ -628,6 +650,19 @@ var ruleDocLeaseWrite = types.RuleDoc{
 		"A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to.",
 }
 
+var ruleDocLeaseClaim = types.RuleDoc{
+	Name:    string(denyRuleLeaseClaim),
+	Catches: "a leased write outside its write paths that magus proves belongs to the job",
+	Why: "A write outside the write paths is still refused: the boundary is the declaration, and the guard never changes it inside a hook. " +
+		"When magus can prove the path belongs to the job, the refusal names the proof and serves the one `magus job apply` line that claims the path for the job, instead of sending the worker to its orchestrator. " +
+		"A proof is one of four: refs:<symbol>, a Go file referencing a declaration the job's diff changed or removed inside its write paths; " +
+		"test:<file>, a test beside a file the job changed (a _test file in its directory, or a file under its testdata) that names what the file defines; " +
+		"output:<project>:<target>, a declared output of a target whose sources the job changed; and released, a path this attempt's holder released. " +
+		"The store proves the record again under its lock when it applies, and refuses a path another live job holds (MGS3032), a deny path, " +
+		"a path outside the checkout, and any claim past the job's max_claims (3 when unset), which jobs.max_claims in magus.yaml (default 10) caps. A write no proof covers stays lease-write. " +
+		"Every message is rendered by magus from the row and the tree; no model is asked.",
+}
+
 var ruleDocWholeTree = types.RuleDoc{
 	Name:    string(denyRuleWholeTree),
 	Catches: "a whole-tree VCS reset, checkout, restore or clean, which cannot be undone",
@@ -657,7 +692,7 @@ var ruleDocWorkerBackgroundRun = types.RuleDoc{
 	Why: "A worker that backgrounds its check ends its turn with the run pending and parks there: nothing reports the result to the session that spawned it, and the background tasks pile up. " +
 		"It fires when the wiring reports that the host runs the call in the background, for a `magus run` or `magus affected` by a worker under a live lease that does not integrate the checkout. A run that only reports (--plan, --dry-run, --graph, --help) passes. " +
 		"A wiring that does not report how the host runs a call leaves it silent, and so does a pre-authorized next, since the host's choice is the call's and not the line's. " +
-		"The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum is one to hand back for a narrower check.",
+		"The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum runs under `magus job exec --timeout`, which this rule passes in the background: its completion notice is the wait, and background-left does not refuse the stop while it runs.",
 }
 
 var ruleDocWorktreeRemove = types.RuleDoc{
@@ -696,10 +731,10 @@ var ruleDocSleepPoll = types.RuleDoc{
 		"A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. " +
 		"Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. " +
 		"A watch (`--watch`) is not a status read, and a loop is busy-wait's. " +
-		"A worker (a session whose lease is a child row or a subagent's) never waits for the build budget, in a shell call or a watcher: `magus status --wait` or `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more. " +
-		"It commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. " +
+		"A worker (a session whose lease is a child row or a subagent's) waits for the build budget only in the call the wait gates: `magus status --wait` piped into a magus call, which reserves the seat for it (a run, an affected or a `graph build`), or followed by `&&` and the call. A `magus status --wait` that gates no magus call, `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more is refused. " +
+		"A worker that cannot wait commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. " +
 		"A `magus run` or `magus affected` whose argv matches one this checkout's run log recorded refused with MGS3009 in the last 60 seconds is the same poll with no sleep at all: it is refused with `magus status --wait | <the command>` as the next line, which waits for a seat and then runs, or for a worker with the report-and-stop above. " +
-		"A line that pipes `status --wait` into the run passes, and only run logs written inside the minute are opened. " +
+		"A line whose `status --wait` gates the run passes, and only run logs written inside the minute are opened. " +
 		"It compares argv exactly, so the same run with a flag added, removed or reordered is a different command. " +
 		"It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.",
 }
@@ -804,9 +839,9 @@ var ruleDocCheckTimeout = types.RuleDoc{
 	Catches: "a bound worker's magus run whose timeout is shorter than the target's last real run allows for",
 	Why: "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
 		"The duration is the newest run of that target and project that really ran, from the newest invocations in the repository's session store; a replay or a run refused before it started does not count. " +
-		"It names a timeout of half again that duration, rounded up to a minute and capped at the host's foreground maximum. When the last run alone took longer than the maximum it says the check cannot finish in the foreground and to ask the orchestrator for a narrower one. " +
+		"It names a timeout of half again that duration, rounded up to a minute and capped at the host's foreground maximum. When the run needs longer than the maximum it names the same run under `magus job exec --timeout`, to run in the background and wait on by its completion notice. " +
 		"It reads the host's foreground default and maximum from the wiring, which declares them, and the call's own timeout, and is silent when either limit is undeclared, when the target has no recorded run, and for anyone but a worker under a live lease that does not integrate the checkout. " +
-		"Held to one firing per target per session.",
+		"Held to one firing per target per session, refusing included: after it a rerun of the same target, narrowed or not, goes through.",
 }
 
 var ruleDocDependencyInstall = types.RuleDoc{
@@ -1069,7 +1104,7 @@ var ruleDocOrchestratorGroundwork = types.RuleDoc{
 	Why: "A session that hands out work keeps to planning and coordinating. Reading and searching source, editing it and running checks belong to the workers it spawns, at any context size: a worker starts small and returns its findings, while every result the orchestrator reads itself stays in the context each later call re-sends. " +
 		"magus judges the role from the live lease, never from the session's history, the context's size or the guard level. A session orchestrates while a row it handed out is declared, running or exited: a row a spawn's title bound, or one `magus job fork` (or magus\\job.put) wrote and the job store then showed live. A row the session takes itself with `magus job exec` is no longer handed out, so its `magus job exit` returns the session to orchestrating only what others hold, and once every row has passed or failed the session is judged as any other. That is proven on a main thread its host reported, and inferred on one it did not. " +
 		"Proven, its groundwork is refused; inferred, it is advised once per kind of work. A session with no live row, a leased worker, a subagent and a person are never judged, and the off level leaves the rule on. When no spawn could pass (spawn-names-model at deny, and a harness the model-tier declaration maps no model for), the refusal names `magus job exec <row>` instead of a spawn. " +
-		"Groundwork is a recursive search, a read of a file inside a checkout of the repository (Markdown included, except AGENTS.md, MAGUS.md, SKILL.md and a host's own instruction file such as ./CLAUDE.md), a full diff, a target run with or without `-s`, a `magus buzz` script that reaches beyond magus\\job, a fetch, a write inside a checkout, and integration, one class: merge, rebase, pull, am, reset, stash, restore, checkout, `switch -c`, cherry-pick, `git add` or `magus vcs add`, a commit, the build of ./magus and the generate targets. Integration belongs to the checkout's integrator, the subagent spawned `<parent>/integrate <job>` for a row taken in that checkout; the one exception is `./magus run go-build .` or the bootstrap alone on its line while ./magus is older than its sources or absent, which the root runs itself. " +
+		"Groundwork is a recursive search, a read of a file or of `magus vcs ls-files` inside a checkout of the repository (Markdown included, except AGENTS.md, MAGUS.md, SKILL.md and a host's own instruction file such as ./CLAUDE.md), a full diff, a target run with or without `-s`, a `magus buzz` script that reaches beyond magus\\job, a fetch, a write inside a checkout, and integration, one class: merge, rebase, pull, am, reset, stash, restore, checkout, `switch -c`, cherry-pick, `git add`, a commit, the build of ./magus and the generate targets. Integration belongs to the checkout's integrator, the subagent spawned `<parent>/integrate <job>` for a row taken in that checkout; the one exception is `./magus run go-build .` or the bootstrap alone on its line while ./magus is older than its sources or absent, which the root runs itself. " +
 		"Orchestration work passes: the job verbs, graph reads (`magus query`, `explain`, `refs`, `path`, `describe`, `affected --plan`), branch work (a plain `git switch`, `branch` and `worktree`), the final gate, the check of a live row the session forked, `git push`, `gh pr`, `magus query output` of a guard verdict or of a row's recorded check output, short status, and reads, searches and writes of paths outside every checkout, such as a plan or a memory, with a `~/` path placed under the home directory. " +
 		"A write while its checkout is midway through a merge or a cherry-pick is advised and never refused, since resolving a conflict is integration. Set to advise, proof is advised too.",
 }

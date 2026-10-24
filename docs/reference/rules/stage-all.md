@@ -14,7 +14,7 @@ A whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated
 
 ## Why
 
-A magus target writes its declared outputs as it runs, so the tree here is routinely dirty with files you did not edit. `-A` sweeps those and any build residue into a commit about something else, with no signal that it happened, and `-u` reaches the same outputs: it stages every TRACKED change across the whole tree, which is the same sweep minus files that are merely untracked, and a target's declared outputs are ordinarily tracked already. One such call has put a whole regenerated docs site and untouched source files into a commit about something else. `magus vcs add` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and reports anything undeclared instead of staging it.
+A magus target writes its declared outputs as it runs, so the tree here is routinely dirty with files you did not edit. `-A` sweeps those and any build residue into a commit about something else, with no signal that it happened, and `-u` reaches the same outputs: it stages every TRACKED change across the whole tree, which is the same sweep minus files that are merely untracked, and a target's declared outputs are ordinarily tracked already. One such call has put a whole regenerated docs site and untouched source files into a commit about something else. `magus vcs ls-files -o name | git add --pathspec-from-file=-` stages the list magus classified against the declared output globs: dirty source paths no other job holds, with each class it left out named on stderr beside the flag that adds it.
 
 ## Default and override
 

@@ -11,6 +11,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
@@ -57,6 +58,10 @@ func (c shellCall) foregroundLimit() (time.Duration, bool) {
 type workerRun struct {
 	lease types.Job
 	runs  []targetRun
+	// refusals holds check-timeout to one refusal per target per session when the workspace
+	// raised it to deny: the deny gate holds nothing, and a refused run narrowed to one test
+	// was refused again. Zero when check-timeout only advises, which its own gate holds.
+	refusals hint.Gate
 }
 
 // workerRuns is the target runs command makes when a bound worker makes them: the acting
@@ -83,7 +88,11 @@ func workerRuns(ctx context.Context, deps Dependencies, actingLease, command str
 	if !ok || actingIntegrator(ctx, deps, me, command) || workerRole(me, deps.caller) == "" {
 		return workerRun{}, false
 	}
-	return workerRun{lease: me, runs: runs}, true
+	run := workerRun{lease: me, runs: runs}
+	if s, ok := deps.setting(string(advisoryCheckTimeout)); ok && s.Decision == builtin.Deny {
+		run.refusals = deps.facts
+	}
+	return run, true
 }
 
 // denyWorkerBackgroundRun refuses a bound worker's magus run the host was asked to run in
@@ -143,24 +152,28 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		}
 		why := "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
 			"The duration is the newest real run of this target in the repository's session store; the advised timeout leaves half again as much for a cold cache or a loaded machine. " +
-			"It speaks once per target per session."
+			"It speaks once per target per session, a refusal included, so a narrowed rerun after it goes through."
+		key := checkTimeoutKey(r)
+		if run.refusals.MarkFired(denyMarker(string(key))) {
+			continue
+		}
 		bound := (need + time.Minute - time.Nanosecond).Truncate(time.Minute)
 		timeout := min(bound, call.foregroundMax)
 		if last > call.foregroundMax || timeout <= limit {
 			return advice{
-				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; run it bounded: `%s`.",
+				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; run it bounded in the background: `%s`.",
 					r.target, last.Round(time.Second), need.Round(time.Second), call.foregroundMax, execBounded(r, bound)),
 				Why: why + "\n" +
-					"`magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from. " +
+					"Run it in the background and end your turn: its completion notice is the wait. `magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from: the host's completion notice wakes you with the result, and your stop is not refused while it runs. " +
 					"A run narrowed after `--` is priced as the whole target: no per-test durations are recorded.",
-				Key: checkTimeoutKey(r),
+				Key: key,
 			}
 		}
 		return advice{
 			Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and this call waits %s; give it a timeout of %s (%d ms) and wait for it in the foreground.",
 				r.target, last.Round(time.Second), limit, timeout, timeout.Milliseconds()),
 			Why: why,
-			Key: checkTimeoutKey(r),
+			Key: key,
 		}
 	}
 	return advice{}
@@ -183,10 +196,15 @@ func execBounded(r targetRun, timeout time.Duration) string {
 }
 
 // checkTimeoutKey holds check-timeout to one firing per session per target and project
-// set, hashed so the marker's file name holds no path.
+// set, hashed so the marker's file name holds no path. No project is the root, as the
+// lookup in adviseCheckTimeout reads it.
 func checkTimeoutKey(r targetRun) hint.MarkerKind {
 	subject := targetName(r.target)
-	for _, p := range r.projects {
+	projects := r.projects
+	if len(projects) == 0 {
+		projects = []string{"."}
+	}
+	for _, p := range projects {
 		subject += "\x00" + path.Clean(p)
 	}
 	sum := sha256.Sum256([]byte(subject))

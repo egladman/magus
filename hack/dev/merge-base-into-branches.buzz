@@ -1,24 +1,28 @@
 // Cost: one merge and one regeneration per branch, and a push each.
 //
-// Brings a list of stacked branches up to date, in order. Each branch is switched to, made
-// gate-ready (bootstrap-checkout.buzz) so ./magus is built at its head, and merged with the
-// previous branch (the first with --base), `magus vcs resolve --against` settling the
-// generated files the merge conflicts in, then committed and pushed before the next. It stops
-// at the first branch holding a conflict in a source file and lists the files. The tree must be
-// clean. --dry-run prints the steps and runs none.
+// Brings a list of branches up to date, in order. Each branch is made gate-ready
+// (bootstrap-checkout.buzz) so ./magus is built at its head, and merged with --base,
+// `magus vcs resolve --against` settling the generated files the merge conflicts in, then
+// committed and pushed before the next. The branches are independent by default; --stack makes
+// each merge the branch before it instead. A branch another worktree has checked out is merged
+// in that worktree; any other is switched to here. It stops at the first branch holding a
+// conflict in a source file and lists the files. Every tree it touches must be clean. --dry-run
+// prints the steps and runs none.
 //
-//	magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c> [--base <ref>] [--dry-run]
+//	magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c> [--base <ref>] [--stack] [--dry-run]
 namespace mergebaseintobranches;
 
 import "flags";
+import "fs";
 import "magus";
+import "proc";
 import "std";
 import "vcs";
 import "hack/dev/bootstrap-checkout" as bootstrap;
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c> [--base <ref>] [--dry-run]";
+final USAGE = "usage: magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c> [--base <ref>] [--stack] [--dry-run]";
 final HELP = "cost: one merge and regeneration per branch, and a push each\n{USAGE}";
 
 export object Step {
@@ -26,18 +30,36 @@ export object Step {
     against: str,
 }
 
-// steps pairs each branch with what it merges: base for the first, the previous branch after.
-export fun steps(branches: [str], base: str) > [Step] {
+// Ran is one command's result, what a stubbed Shell answers.
+export object Ran {
+    stdout: str = "",
+    stderr: str = "",
+    code: int = 0,
+}
+
+// Shell is every git, magus and gate-ready call the script makes, so a test answers them. git
+// and run never raise on a failed command; the caller reads code. dir "" is this checkout.
+export object Shell {
+    git: fun (dir: str, args: [str]) > Ran !> any,
+    run: fun (dir: str, sub: str, args: [str]) > Ran !> any,
+    ready: fun (dir: str) > [str] !> any,
+}
+
+// steps pairs each branch with what it merges: base for every branch, or with stacked the
+// previous branch after the first.
+export fun steps(branches: [str], base: str, stacked: bool) > [Step] {
     final found = mut [<Step>];
     var previous = base;
     foreach (branch in branches) {
         found.append(Step{ branch = branch, against = previous });
-        previous = branch;
+        if (stacked) {
+            previous = branch;
+        }
     }
     return found;
 }
 
-// branchesProblem is why the list names no stack, "" when it does; the caller prefixes its own name.
+// branchesProblem is why the list names no branches, "" when it does; the caller prefixes its own name.
 export fun branchesProblem(branches: [str]) > str {
     if (branches.len() == 0) {
         return "--branches is required";
@@ -59,10 +81,29 @@ export fun resolveArgv(against: str) > [str] {
     return ["vcs", "resolve", "--against", against];
 }
 
-// plan is the commands of a step, as the lines --dry-run prints.
-export fun plan(s: Step) > [str] {
+// worktreeOf is the path of the other worktree that has branch checked out, from
+// `git worktree list --porcelain`; "" when none does or only here does.
+export fun worktreeOf(porcelain: str, branch: str, here: str) > str {
+    var path = "";
+    foreach (line in porcelain.split("\n")) {
+        if (line.startsWith("worktree ")) {
+            path = line.sub(9).trim();
+        } else if (line.trim() == "branch refs/heads/{branch}" and path != here) {
+            return path;
+        }
+    }
+    return "";
+}
+
+// plan is the commands of a step, as the lines --dry-run prints; dir is the worktree that has
+// the branch checked out, "" when this one switches to it.
+export fun plan(s: Step, dir: str) > [str] {
+    var where = "git switch {s.branch}";
+    if (dir != "") {
+        where = "run in {dir}, where {s.branch} is checked out";
+    }
     return [
-        "git switch {s.branch}",
+        where,
         "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
         "magus {resolveArgv(s.against).join(" ")}",
         "git commit --no-edit (when the merge is in progress)",
@@ -76,41 +117,129 @@ export fun conflictRefusal(s: Step, unmerged: [str]) > str {
         return "";
     }
     return "merge-base-into-branches: merging {s.against} into {s.branch} left {unmerged.len()} source conflict(s): {unmerged.join(", ")}; "
-        + "settle each with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>`, commit the merge, then run this again from {s.branch}";
+        + "settle each with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>` and stage it, then run this again from {s.branch}: it commits the settled merge (git commit --no-edit), pushes and carries on";
 }
 
-fun git(args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"quiet": true}).stdout;
-}
-
-fun update(s: Step) > void !> any {
-    git(["switch", s.branch]);
-    foreach (line in bootstrap\gateReady(bootstrap\liveHost(), dir: vcs\root())) {
-        std\print("gate-ready: {line}");
-    }
-    final resolved = magus\cmd("vcs", args: resolveArgv(s.against).sub(1), opts: {"quiet": true, "allow_failure": true});
-    final unmerged = mut [<str>];
-    foreach (path in git(["diff", "--name-only", "--diff-filter=U"]).split("\n")) {
-        if (path.trim() != "") {
-            unmerged.append(path.trim());
+fun lines(text: str) > [str] {
+    final acc = mut [<str>];
+    foreach (line in text.split("\n")) {
+        if (line.trim() != "") {
+            acc.append(line.trim());
         }
     }
+    return acc;
+}
+
+fun must(r: Ran, what: str) > str !> any {
+    if (r.code != 0) {
+        throw "merge-base-into-branches: {what}: exit {r.code}: {r.stderr}{r.stdout}";
+    }
+    return r.stdout;
+}
+
+// locate is the worktree that has the branch checked out other than here, "" when none.
+export fun locate(sh: Shell, branch: str, here: str) > str !> any {
+    return worktreeOf(must(sh.git("", args: ["worktree", "list", "--porcelain"]), what: "git worktree list"), branch: branch, here: here);
+}
+
+export fun update(sh: Shell, s: Step, dir: str) > void !> any {
+    if (dir == "") {
+        must(sh.git("", args: ["switch", s.branch]), what: "git switch {s.branch}");
+    } else {
+        std\print("{s.branch} is checked out in {dir}; merging there");
+    }
+    foreach (line in sh.ready(dir)) {
+        std\print("gate-ready: {line}");
+    }
+    final resolved = sh.run(dir, sub: "vcs", args: resolveArgv(s.against).sub(1));
+    final unmerged = lines(must(sh.git(dir, args: ["diff", "--name-only", "--diff-filter=U"]), what: "git diff --diff-filter=U"));
     final refused = conflictRefusal(s, unmerged: unmerged);
     if (refused != "") {
         throw refused;
     }
-    if (!resolved.ok) {
+    if (resolved.code != 0) {
         throw "merge-base-into-branches: `magus {resolveArgv(s.against).join(" ")}` failed on {s.branch}:\n{resolved.stdout}{resolved.stderr}";
     }
-    if (vcs\cmd(["rev-parse", "-q", "--verify", "MERGE_HEAD"], opts: {"quiet": true, "allow_failure": true}).ok) {
-        git(["commit", "--no-edit"]);
+    finish(sh, s: s, dir: dir);
+}
+
+fun finish(sh: Shell, s: Step, dir: str) > void !> any {
+    if (sh.git(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).code == 0) {
+        must(sh.git(dir, args: ["commit", "--no-edit"]), what: "git commit --no-edit");
     }
-    git(["push", "origin", s.branch]);
+    must(sh.git(dir, args: ["push", "origin", s.branch]), what: "git push origin {s.branch}");
     std\print("updated {s.branch} against {s.against}");
 }
 
+// mergeResolved is whether dir holds the branch's own merge with every conflict settled, left
+// uncommitted by an earlier run that stopped on a source conflict.
+export fun mergeResolved(sh: Shell, branch: str, dir: str) > bool !> any {
+    if (sh.git(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).code != 0) {
+        return false;
+    }
+    if (must(sh.git(dir, args: ["rev-parse", "--abbrev-ref", "HEAD"]), what: "git rev-parse --abbrev-ref HEAD").trim() != branch) {
+        return false;
+    }
+    return lines(must(sh.git(dir, args: ["diff", "--name-only", "--diff-filter=U"]), what: "git diff --diff-filter=U")).len() == 0;
+}
+
+// execute refuses before any merge when a tree it will touch holds uncommitted changes, then
+// updates each branch in its own tree. A branch holding a settled merge is committed and pushed
+// instead of refused.
+export fun execute(sh: Shell, stack: [Step], here: str) > void !> any {
+    final dirs = mut [<str>];
+    final settled = mut [<bool>];
+    foreach (s in stack) {
+        final dir = locate(sh, branch: s.branch, here: here);
+        dirs.append(dir);
+        final isSettled = mergeResolved(sh, branch: s.branch, dir: dir);
+        settled.append(isSettled);
+        if (!isSettled and lines(must(sh.git(dir, args: ["status", "--porcelain"]), what: "git status")).len() > 0) {
+            var tree = here;
+            if (dir != "") {
+                tree = dir;
+            }
+            throw "merge-base-into-branches: the tree at {tree} holds uncommitted changes; commit or drop them first";
+        }
+    }
+    foreach (i, s in stack) {
+        if (settled[i]) {
+            std\print("{s.branch} holds a settled merge of {s.against}; committing it");
+            finish(sh, s: s, dir: dirs[i]);
+        } else {
+            update(sh, s: s, dir: dirs[i]);
+        }
+    }
+}
+
+fun liveShell() > Shell {
+    return Shell{
+        git = fun (dir: str, args: [str]) > Ran !> any {
+            final opts = mut {<str: any>};
+            opts["quiet"] = true;
+            opts["allow_failure"] = true;
+            if (dir != "") {
+                opts["dir"] = dir;
+            }
+            final r = vcs\cmd(args, opts: opts);
+            return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+        },
+        run = fun (dir: str, sub: str, args: [str]) > Ran !> any {
+            if (dir != "") {
+                final ran = proc\exec(fs\join(dir, name: "magus"), args: [sub] + args, dir: dir, opts: {"allow_failure": true});
+                return Ran{ stdout = ran.stdout, stderr = ran.stderr, code = ran.code };
+            }
+            final r = magus\cmd(sub, args: args, opts: {"quiet": true, "allow_failure": true});
+            return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+        },
+        ready = fun (dir: str) > [str] !> any {
+            return bootstrap\gateReady(bootstrap\liveHost(), dir: if (dir == "") vcs\root() else dir);
+        },
+    };
+}
+
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--help", "--dry-run"], valued: ["--branches", "--base"]);
+    final parsed = flags\parse(args, switches: ["--help", "--dry-run", "--stack"], valued: ["--branches", "--base"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -124,27 +253,56 @@ export fun main(args: [str]) > void !> any {
     if (problem != "") {
         throw "merge-base-into-branches: {problem}\n{USAGE}";
     }
-    final stack = steps(branches, base: parsed.values["--base"] ?? "origin/main");
+    final stack = steps(branches, base: parsed.values["--base"] ?? "origin/main", stacked: parsed.values["--stack"] != null);
+    final sh = liveShell();
+    final here = vcs\root();
     if (parsed.values["--dry-run"] != null) {
         std\print("dry run: nothing changes");
         foreach (s in stack) {
-            foreach (line in plan(s)) {
+            foreach (line in plan(s, dir: locate(sh, branch: s.branch, here: here))) {
                 std\print(line);
             }
         }
         return;
     }
-    if (vcs\isDirty()) {
-        throw "merge-base-into-branches: the tree holds uncommitted changes; commit or drop them first";
-    }
-    foreach (s in stack) {
-        update(s);
-    }
+    execute(sh, stack: stack, here: here);
 }
 
-test "each branch merges the one before it, the first merges the base" {
-    final got = steps(["a", "b", "c"], base: "origin/main");
-    assert\equal(got.map(fun (index: int, s: Step) > str => "{s.branch}<-{s.against}"), want: ["a<-origin/main", "b<-a", "c<-b"], message: "order");
+// fake answers git and magus from a table keyed by the command line and records each call in
+// calls; a command the table lacks exits 0 with no output.
+fun at(dir: str) > str {
+    if (dir == "") {
+        return "";
+    }
+    return "@{dir}";
+}
+
+fun fake(answers: {str: Ran}, calls: mut [str]) > Shell {
+    return Shell{
+        git = fun (dir: str, args: [str]) > Ran !> any {
+            final line = "git{at(dir)} {args.join(" ")}";
+            calls.append(line);
+            return answers[line] ?? Ran{};
+        },
+        run = fun (dir: str, sub: str, args: [str]) > Ran !> any {
+            final line = "magus{at(dir)} {sub} {args.join(" ")}";
+            calls.append(line);
+            return answers[line] ?? Ran{};
+        },
+        ready = fun (dir: str) > [str] !> any {
+            calls.append("ready {dir}");
+            return ["built"];
+        },
+    };
+}
+
+final WORKTREES = "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /other\nHEAD def\nbranch refs/heads/b\n";
+
+test "independent branches each merge the base; a stack merges the branch before" {
+    final alone = steps(["a", "b", "c"], base: "origin/main", stacked: false);
+    assert\equal(alone.map(fun (index: int, s: Step) > str => "{s.branch}<-{s.against}"), want: ["a<-origin/main", "b<-origin/main", "c<-origin/main"], message: "independent");
+    final chained = steps(["a", "b", "c"], base: "origin/main", stacked: true);
+    assert\equal(chained.map(fun (index: int, s: Step) > str => "{s.branch}<-{s.against}"), want: ["a<-origin/main", "b<-a", "c<-b"], message: "stack");
 }
 
 test "an empty, blank or repeated branch list is refused" {
@@ -154,21 +312,107 @@ test "an empty, blank or repeated branch list is refused" {
     assert\equal(branchesProblem(["a", "a"]), want: "a appears twice in --branches", message: "twice");
 }
 
+test "a branch another worktree holds is found there, this worktree's own is not" {
+    assert\equal(worktreeOf(WORKTREES, branch: "b", here: "/repo"), want: "/other", message: "other");
+    assert\equal(worktreeOf(WORKTREES, branch: "main", here: "/repo"), want: "", message: "here");
+    assert\equal(worktreeOf(WORKTREES, branch: "local-only", here: "/repo"), want: "", message: "nowhere");
+}
+
 test "a step's argv and plan name the branch and what it merges" {
     assert\equal(resolveArgv("origin/main"), want: ["vcs", "resolve", "--against", "origin/main"], message: "argv");
-    assert\equal(plan(Step{ branch = "b", against = "a" }), want: [
+    assert\equal(plan(Step{ branch = "b", against = "a" }, dir: ""), want: [
         "git switch b",
         "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
         "magus vcs resolve --against a",
         "git commit --no-edit (when the merge is in progress)",
         "git push origin b",
     ], message: "plan");
+    assert\equal(plan(Step{ branch = "b", against = "a" }, dir: "/other")[0], want: "run in /other, where b is checked out", message: "worktree");
 }
 
-test "source conflicts stop the stack, listing each file and the way forward" {
+test "source conflicts stop the run, listing each file and the way forward" {
     final s = Step{ branch = "b", against = "a" };
     assert\equal(conflictRefusal(s, unmerged: []), want: "", message: "clean");
     final why = conflictRefusal(s, unmerged: ["x.go", "y.go"]);
     assert\equal(why.indexOf("left 2 source conflict(s): x.go, y.go") != null, want: true, message: why);
     assert\equal(why.indexOf("resolve-conflicts.buzz") != null, want: true, message: why);
+    assert\equal(why.indexOf("it commits the settled merge") != null, want: true, message: why);
+}
+
+test "a local branch is switched to here, merged and pushed" {
+    final calls = mut [<str>];
+    final sh = fake({ "git worktree list --porcelain": Ran{ stdout = WORKTREES }, "git rev-parse -q --verify MERGE_HEAD": Ran{} }, calls: calls);
+    execute(sh, stack: [Step{ branch = "local-only", against = "origin/main" }], here: "/repo");
+    assert\equal(calls, want: [
+        "git worktree list --porcelain",
+        "git rev-parse -q --verify MERGE_HEAD",
+        "git rev-parse --abbrev-ref HEAD",
+        "git status --porcelain",
+        "git switch local-only",
+        "ready ",
+        "magus vcs resolve --against origin/main",
+        "git diff --name-only --diff-filter=U",
+        "git rev-parse -q --verify MERGE_HEAD",
+        "git commit --no-edit",
+        "git push origin local-only",
+    ], message: "calls");
+}
+
+test "a branch checked out in another worktree is merged there, never switched to" {
+    final calls = mut [<str>];
+    final sh = fake({ "git worktree list --porcelain": Ran{ stdout = WORKTREES } }, calls: calls);
+    execute(sh, stack: [Step{ branch = "b", against = "origin/main" }], here: "/repo");
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git switch")).len(), want: 0, message: "no switch");
+    assert\equal(calls.indexOf("magus@/other vcs resolve --against origin/main") != null, want: true, message: "ran there");
+    assert\equal(calls.indexOf("git@/other push origin b") != null, want: true, message: "pushed from there");
+}
+
+test "a rerun commits and pushes a settled merge instead of refusing the dirty tree" {
+    final calls = mut [<str>];
+    final sh = fake({
+        "git rev-parse --abbrev-ref HEAD": Ran{ stdout = "a\n" },
+        "git status --porcelain": Ran{ stdout = "M  x.go\n" },
+    }, calls: calls);
+    execute(sh, stack: [Step{ branch = "a", against = "origin/main" }], here: "/repo");
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git commit") or c.startsWith("git push")), want: ["git commit --no-edit", "git push origin a"], message: "commit then push");
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git switch") or c.startsWith("magus")).len(), want: 0, message: "no switch or resolve");
+}
+
+test "a merge still holding conflicts, or on another branch, is a dirty tree" {
+    final sh = fake({
+        "git rev-parse --abbrev-ref HEAD": Ran{ stdout = "a\n" },
+        "git diff --name-only --diff-filter=U": Ran{ stdout = "x.go\n" },
+        "git status --porcelain": Ran{ stdout = "UU x.go\n" },
+    }, calls: mut [<str>]);
+    var why = "";
+    try {
+        execute(sh, stack: [Step{ branch = "a", against = "origin/main" }], here: "/repo");
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why.indexOf("holds uncommitted changes") != null, want: true, message: why);
+}
+
+test "a failed git call raises with its stderr" {
+    final sh = fake({ "git switch b": Ran{ code = 128, stderr = "fatal: 'b' is already used by worktree" } }, calls: mut [<str>]);
+    var why = "";
+    try {
+        update(sh, s: Step{ branch = "b", against = "origin/main" }, dir: "");
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why.indexOf("exit 128: fatal: 'b' is already used by worktree") != null, want: true, message: why);
+}
+
+test "a dirty tree refuses before any merge" {
+    final calls = mut [<str>];
+    final sh = fake({ "git status --porcelain": Ran{ stdout = " M x.go\n" } }, calls: calls);
+    var why = "";
+    try {
+        execute(sh, stack: [Step{ branch = "a", against = "origin/main" }], here: "/repo");
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why.indexOf("holds uncommitted changes") != null, want: true, message: why);
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("magus")).len(), want: 0, message: "no merge");
 }

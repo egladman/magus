@@ -14,7 +14,7 @@ A shell command run in the background with nothing to end it.
 
 ## Why
 
-A backgrounded command outlives the agent that started it, and the host stops it only when asked. It fires when the wiring reports that the host runs the call in the background and some command in the line is not bounded: `timeout N` or `gtimeout N` in front of it (stock macOS ships neither; Homebrew's coreutils installs `gtimeout`), a magus target run (bounded by its target's timeout), or a builtin that returns at once. A pipeline is bounded by its first command; a while or until loop never is. timeout signals its own process group, so a child that starts its own session escapes it; `--kill-after` ends a command that ignores TERM. A watcher's command is bounded by its own expiry and is not judged here.
+A backgrounded command outlives the agent that started it, and the host stops it only when asked. It fires when the wiring reports that the host runs the call in the background and some command in the line is not bounded: `timeout N` or `gtimeout N` in front of it (stock macOS ships neither; Homebrew's coreutils installs `gtimeout`), a magus target run (bounded by its target's timeout), or a builtin that returns at once. A pipeline is bounded by its first command; a while or until loop never is. The refusal names a ceiling, `timeout 30m` unless ceiling_minutes sets another, the span after which background-silent starts speaking of a quiet task. timeout signals its own process group, so a child that starts its own session escapes it; `--kill-after` ends a command that ignores TERM. A watcher's command is bounded by its own expiry and is not judged here.
 
 ## Default and override
 

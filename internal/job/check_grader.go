@@ -54,6 +54,11 @@ func (s *Store) checkGrader() CheckGrader {
 	if s.grader != nil {
 		return s.grader
 	}
+	return installedCheckGrader()
+}
+
+// installedCheckGrader is the grader [SetCheckGrader] installed, nil when none is.
+func installedCheckGrader() CheckGrader {
 	installedGraderMu.RLock()
 	defer installedGraderMu.RUnlock()
 	return installedGrader

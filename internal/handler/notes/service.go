@@ -117,7 +117,11 @@ func (s *Service) ListNotes(ctx context.Context, _ *connect.Request[notesv1.List
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		for _, n := range found {
-			out.Notes = append(out.Notes, s.toProto(n, sd, res, graded, stale, false))
+			pn, err := s.toProto(n, sd, res, graded, stale, false)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeUnimplemented, err)
+			}
+			out.Notes = append(out.Notes, pn)
 		}
 		status.NoteCount = int32(len(found))
 		out.Stores = append(out.Stores, status)
@@ -167,7 +171,11 @@ func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetN
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		return connect.NewResponse(s.toProto(n, sd, res, graded, stale, true)), nil
+		pn, err := s.toProto(n, sd, res, graded, stale, true)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeUnimplemented, err)
+		}
+		return connect.NewResponse(pn), nil
 	}
 	return nil, connect.NewError(connect.CodeNotFound,
 		fmt.Errorf("notes: this workspace declares no %s notes store", scopeName(want)))
@@ -196,7 +204,7 @@ func (s *Service) resolver(ctx context.Context) (*knowledge.NoteResolver, map[st
 
 // toProto renders one note. withBody is false for a listing: the prose is the largest field
 // and a list of it is not what a reader is scanning for.
-func (s *Service) toProto(n store.Note, sd scopedDir, res *knowledge.NoteResolver, graded map[anchorKey]store.IssueCode, noteNodes map[string]types.KnowledgeNode, withBody bool) *notesv1.Note {
+func (s *Service) toProto(n store.Note, sd scopedDir, res *knowledge.NoteResolver, graded map[anchorKey]store.IssueCode, noteNodes map[string]types.KnowledgeNode, withBody bool) (*notesv1.Note, error) {
 	out := &notesv1.Note{
 		Name:  n.Name,
 		Scope: sd.pbScope,
@@ -236,10 +244,14 @@ func (s *Service) toProto(n store.Note, sd scopedDir, res *knowledge.NoteResolve
 		if !ok {
 			status = store.StatusUngraded
 		}
-		out.Anchors = append(out.Anchors, anchorToProto(a, status, scoped))
+		pa, err := anchorToProto(a, status, scoped)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", n.Name, err)
+		}
+		out.Anchors = append(out.Anchors, pa)
 	}
 	out.Staleness, out.OutrunDays = staleness(noteNodes, knowledge.AnchorNodeID("note", n.Name, string(sd.scope)))
-	return out
+	return out, nil
 }
 
 // notePath renders where the note lives. Workspace-relative for a shared note, absolute for a
@@ -289,8 +301,12 @@ func grade(ctx context.Context, sd scopedDir, res *knowledge.NoteResolver) (map[
 //
 // Ungraded is not the same as RESOLVES and must never be rendered as one: the honest report is
 // that nothing was checked.
-func anchorToProto(a store.Anchor, status store.IssueCode, res *knowledge.NoteResolver) *notesv1.Anchor {
-	out := &notesv1.Anchor{Kind: anchorKind(a.Kind), Target: a.Target}
+func anchorToProto(a store.Anchor, status store.IssueCode, res *knowledge.NoteResolver) (*notesv1.Anchor, error) {
+	kind, err := anchorKind(a.Kind)
+	if err != nil {
+		return nil, err
+	}
+	out := &notesv1.Anchor{Kind: kind, Target: a.Target}
 	if res != nil {
 		out.NodeId = res.NodeID(a)
 	}
@@ -314,7 +330,7 @@ func anchorToProto(a store.Anchor, status store.IssueCode, res *knowledge.NoteRe
 		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED
 		out.Detail = fmt.Sprintf("notes graded this anchor %q, which this service does not render.", status)
 	}
-	return out
+	return out, nil
 }
 
 // staleness reads the divergence the graph folded onto the note's node. An absent node or an
@@ -356,20 +372,26 @@ func outrunDays(attr string) int32 {
 	return int32(days)
 }
 
-func anchorKind(k store.AnchorKind) notesv1.AnchorKind {
+// errAnchorKindOffAPI marks an anchor kind the notes proto cannot carry yet, so a note holding
+// one fails loudly instead of rendering as some other kind.
+var errAnchorKindOffAPI = errors.New("not on the notes API yet")
+
+func anchorKind(k store.AnchorKind) (notesv1.AnchorKind, error) {
 	switch k {
 	case store.AnchorSymbol:
-		return notesv1.AnchorKind_ANCHOR_KIND_SYMBOL
+		return notesv1.AnchorKind_ANCHOR_KIND_SYMBOL, nil
 	case store.AnchorFile:
-		return notesv1.AnchorKind_ANCHOR_KIND_FILE
+		return notesv1.AnchorKind_ANCHOR_KIND_FILE, nil
 	case store.AnchorProject:
-		return notesv1.AnchorKind_ANCHOR_KIND_PROJECT
+		return notesv1.AnchorKind_ANCHOR_KIND_PROJECT, nil
 	case store.AnchorTarget:
-		return notesv1.AnchorKind_ANCHOR_KIND_TARGET
+		return notesv1.AnchorKind_ANCHOR_KIND_TARGET, nil
 	case store.AnchorNote:
-		return notesv1.AnchorKind_ANCHOR_KIND_NOTE
+		return notesv1.AnchorKind_ANCHOR_KIND_NOTE, nil
+	case store.AnchorDiagnostic:
+		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, fmt.Errorf("notes: anchor kind %s: %w", k, errAnchorKindOffAPI)
 	default:
-		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED
+		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, nil
 	}
 }
 

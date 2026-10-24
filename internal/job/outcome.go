@@ -304,7 +304,7 @@ func (s *Store) assignModelTierWithHistory(ctx context.Context, row types.Job, p
 		return s.assignModelTier(ctx, row, plan)
 	}
 	matrix := s.modelTierMatrix
-	withHistory := &Store{modelTiers: s.modelTiers, owners: s.owners}
+	withHistory := &Store{storeConfig: storeConfig{modelTiers: s.modelTiers, owners: s.owners}}
 	withHistory.modelTierMatrix = func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
 		records, err := s.tierHistory(ctx)
 		if err != nil {

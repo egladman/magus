@@ -116,10 +116,10 @@ const maxListedClaims = 12
 // A file whose lines this checkout cannot place, or that declares nothing yet, is left
 // alone, since nothing smaller than it could be claimed. When another live job holds such a
 // file, one attention request asks it to release what it does not edit (see
-// requestRelease); a dry-run store files none. A nil store, or one with no workspace root,
-// finds nothing.
+// requestRelease); a dry-run store files none. A nil store, one with no workspace root, or an
+// integration row finds nothing: a merge writes the merged file whole (see IntegrationOverlaps).
 func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
-	if store == nil || store.root == "" {
+	if store == nil || store.root == "" || row.Integrating() {
 		return nil
 	}
 	var (
@@ -238,9 +238,10 @@ func driverPattern(p string) string {
 // sharedCheckoutProblems and the overlap report already watch; a holder that exited, whose
 // editing is over (see [Editing]); a holder blocked on
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
-// no diff driver, for which depends_on is the only move.
+// no diff driver, for which depends_on is the only move. An integration row is
+// never refused here: the merge settles a shared file, and IntegrationOverlaps notes the holder.
 func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
-	if store == nil || store.root == "" || len(row.WritePaths) == 0 {
+	if store == nil || store.root == "" || len(row.WritePaths) == 0 || row.Integrating() {
 		return nil
 	}
 	here, _ := filepath.Abs(store.root)
@@ -575,6 +576,9 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		return nil
 	}
 	var notes, configs []string
+	if note := claimLimitAdvice(row); note != "" {
+		notes = append(notes, note)
+	}
 	for _, entry := range row.WritePaths {
 		file, ok := literalClaimableFile(store.root, entry)
 		if !ok {
@@ -605,35 +609,58 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		}
 	}
 	here, _ := filepath.Abs(store.root)
-	type pair struct{ peer, file string }
-	shared := map[pair]bool{}
 	for _, peer := range rows {
 		if peer.ID == row.ID || !Editing(peer) || len(peer.HardPaths()) == 0 || peer.CheckoutRoot != "" && peer.CheckoutRoot != here {
 			continue
 		}
+		var files []string
 		for _, mine := range row.HardPaths() {
 			file, ok := literalClaimableFile(store.root, mine)
-			if !ok || shared[pair{peer.ID, file}] {
+			if !ok || slices.Contains(files, file) {
 				continue
 			}
 			if _, driven := types.MatchDiffDriver(file); !driven {
 				continue
 			}
 			for _, theirs := range peer.HardPaths() {
-				if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file || !types.PathsIntersect(mine, theirs) {
-					continue
+				if other, ok := literalClaimableFile(store.root, theirs); ok && other == file && types.PathsIntersect(mine, theirs) {
+					files = append(files, file)
+					break
 				}
-				shared[pair{peer.ID, file}] = true
-				var touched []string
-				if peer.CheckoutRoot != "" {
-					touched, _ = touchedDeclarations(ctx, store, rows, peer.ID, file)
-				}
-				notes = append(notes, fmt.Sprintf("%s and %s both write %s. %s", row.ID, peer.ID, file, splitAdvice(ctx, store, row, peer, file, touched)))
-				break
 			}
+		}
+		if note := sharedFilesNote(ctx, store, rows, row, peer, files); note != "" {
+			notes = append(notes, note)
 		}
 	}
 	return notes
+}
+
+// sharedFilesNote is the one line a fork owes about peer and the files both rows write. A
+// peer waiting on a dependency owns none yet, so its line names no file. One file gets the
+// claim pair that splits it; several get a count and the advice once, as a wide row shares
+// dozens.
+func sharedFilesNote(ctx context.Context, store *Store, rows []types.Job, row, peer types.Job, files []string) string {
+	const listed = 3
+	if len(files) == 0 {
+		return ""
+	}
+	if block, waiting := types.JobBlockedOn(rows, peer); waiting && peer.CheckoutRoot == "" {
+		return fmt.Sprintf("%s and %s share %d file(s), but %s is not taken and is %s, so it writes none yet; the fork that unblocks it checks again", row.ID, peer.ID, len(files), peer.ID, block)
+	}
+	if len(files) == 1 {
+		var touched []string
+		if peer.CheckoutRoot != "" {
+			touched, _ = touchedDeclarations(ctx, store, rows, peer.ID, files[0])
+		}
+		return fmt.Sprintf("%s and %s both write %s. %s", row.ID, peer.ID, files[0], splitAdvice(ctx, store, row, peer, files[0], touched))
+	}
+	names := strings.Join(files[:min(listed, len(files))], ", ")
+	if len(files) > listed {
+		names += fmt.Sprintf(", and %d more", len(files)-listed)
+	}
+	return fmt.Sprintf("%s and %s both write %d files (%s). Claim a declaration of each on both rows, add `--depends-on %s` to %s, or fold %s into %s",
+		row.ID, peer.ID, len(files), names, peer.ID, row.ID, row.ID, peer.ID)
 }
 
 // unclaimedTouches names every declaration of file, a project's configuration row claims

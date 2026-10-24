@@ -38,6 +38,7 @@
 {"group":"file:changes/unreleased/approval-carry-over.md","path":"changes/unreleased/approval-carry-over.md"}
 {"group":"file:changes/unreleased/audit-rewalk.md","path":"changes/unreleased/audit-rewalk.md"}
 {"group":"file:changes/unreleased/bootstrap-takes-lease-first.md","path":"changes/unreleased/bootstrap-takes-lease-first.md"}
+{"group":"file:changes/unreleased/branch-scripts-local-branches.md","path":"changes/unreleased/branch-scripts-local-branches.md"}
 {"group":"file:changes/unreleased/breaking-cache-drops-ed25519-envelopes.md","path":"changes/unreleased/breaking-cache-drops-ed25519-envelopes.md"}
 {"group":"file:changes/unreleased/breaking-os-retry-options.md","path":"changes/unreleased/breaking-os-retry-options.md"}
 {"group":"file:changes/unreleased/breaking-queue-hooks-run-in-base-sandbox.md","path":"changes/unreleased/breaking-queue-hooks-run-in-base-sandbox.md"}
@@ -207,6 +208,7 @@
 {"group":"file:changes/unreleased/sandbox-policy-grants.md","path":"changes/unreleased/sandbox-policy-grants.md"}
 {"group":"file:changes/unreleased/sandboxed-git-no-global-config.md","path":"changes/unreleased/sandboxed-git-no-global-config.md"}
 {"group":"file:changes/unreleased/scip-claims-its-width.md","path":"changes/unreleased/scip-claims-its-width.md"}
+{"group":"file:changes/unreleased/scratch-checkouts-in-cache-home.md","path":"changes/unreleased/scratch-checkouts-in-cache-home.md"}
 {"group":"file:changes/unreleased/sdk-doctrine-refusals.md","path":"changes/unreleased/sdk-doctrine-refusals.md"}
 {"group":"file:changes/unreleased/sdk-engine-link-open-fails.md","path":"changes/unreleased/sdk-engine-link-open-fails.md"}
 {"group":"file:changes/unreleased/sdk-judge-deny.md","path":"changes/unreleased/sdk-judge-deny.md"}
@@ -425,6 +427,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/status.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status_wait.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/status_wait_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stream.go"}
@@ -785,9 +788,11 @@
 {"group":"dir:hack/dev","path":"hack/dev/ls-uncommitted.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/ls-worktrees.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/mark-feedback.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/merge-base-into-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/merge-job-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/prune-changelog-fragments.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/prune-worktrees.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/rebase-branches-onto-base.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/rename-symbol.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/resolve-conflicts.buzz"}
@@ -800,7 +805,6 @@
 {"group":"dir:hack/dev","path":"hack/dev/split-into-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-root-cost.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-transcript.buzz"}
-{"group":"dir:hack/dev","path":"hack/dev/update-stack.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/banned-words.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-glue-is-wired-as-plain-argv.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-sources-pass-the-static-check.buzz"}
