@@ -94,6 +94,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseHarness},
 	{doc: ruleDocLeasePaused},
 	{doc: ruleDocLeaseRebind},
+	{doc: ruleDocLeaseRowUnknown},
 	{doc: ruleDocLeaseUndeclared},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
@@ -616,6 +617,15 @@ var ruleDocLeasePaused = types.RuleDoc{
 var ruleDocLeaseRebind = types.RuleDoc{
 	Name:    string(denyRuleLeaseRebind),
 	Catches: "a leased worker rewriting who it is or what its own job row says",
+}
+
+var ruleDocLeaseRowUnknown = types.RuleDoc{
+	Name:    string(denyRuleLeaseRowUnknown),
+	Catches: "a leased call judged by a magus older than the job row it reads",
+	Why: "A row member this build does not declare may widen or narrow what the row permits, and the build cannot tell which, so judging as if the member were absent is a silent default. " +
+		"The refusal names each such member, the binary judging the call and its version, and the remedy: rebuild the ./magus the host hook runs and restart the daemon. " +
+		"Only the root can take that remedy, which ADR 0013 would make a notice; this rule denies anyway because a call the guard cannot judge has no safe default, and passing it would let an old binary approve what a newer row forbids. " +
+		"The hook does not switch to the job checkout's ./magus instead: the worker builds that binary, and the judge is never authored by the judged.",
 }
 
 var ruleDocLeaseUndeclared = types.RuleDoc{

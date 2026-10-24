@@ -180,6 +180,8 @@ const (
 	denyRuleLeaseRebind     denyRuleName = "lease-rebind"
 	denyRuleLeaseHarness    denyRuleName = "lease-harness"
 	denyRuleFocusRead       denyRuleName = "focus-read"
+	// A row carrying members this build does not declare; see internal/guard/row_unknown.go.
+	denyRuleLeaseRowUnknown denyRuleName = "lease-row-unknown"
 	// The refusing arm of hook-wiring; see internal/guard/wiring.go.
 	denyRuleHookWiringWrite denyRuleName = "hook-wiring-write"
 )

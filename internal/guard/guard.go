@@ -922,7 +922,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Decision != decisionDeny {
 			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case decisionDeny:
-				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Next: g.Next})
+				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Why: g.Why, Next: g.Next})
 			case decisionAdvise:
 				// Held by its own key when it has one; lease-state only names the rest.
 				adviceKind = cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState))
@@ -1561,6 +1561,7 @@ type roleScopedRule struct {
 // and is here because a gate magus itself served is not a repeat the caller chose.
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
+		{denyRuleLeaseRowUnknown, denyUnknownRowMembers},
 		{denyRuleLeaseCheckout, denyLeaseCheckout},
 		{denyRuleLeasePaused, denyPausedLease},
 		{denyRuleLeaseGate, denyLeaseScopedGate},
