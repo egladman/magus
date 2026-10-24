@@ -1063,6 +1063,22 @@ func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
 	return ws
 }
 
+// TestRowJudgeHoldersSkipAnExitedRow: an exited row filed its result and holds nothing, so
+// it never blocks a run regenerating an output in its paths; a running row still does.
+func TestRowJudgeHoldersSkipAnExitedRow(t *testing.T) {
+	me := types.Job{ID: "me", Criteria: "c", WritePaths: []string{"docs/a.md"}, State: types.StateRunning, Registered: 1, Created: 2}
+	exited := types.Job{ID: "exited", Criteria: "c", WritePaths: []string{"coverage/**"}, State: types.StateExited, Registered: 1, Created: 1}
+	running := types.Job{ID: "running", Criteria: "c", WritePaths: []string{"gen/**"}, State: types.StateRunning, Registered: 1, Created: 1}
+	ctx, root := fleetFixture(t, me, exited, running)
+	deps := Dependencies{}
+	judge := newRowJudge(ctx, deps, me, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
+	var ids []string
+	for _, r := range judge.others() {
+		ids = append(ids, r.ID)
+	}
+	assert.Equal(t, []string{"running"}, ids)
+}
+
 // TestWorkerCheckOnlyJudgesTheDefaultCharms: default_charms [rw] make a plain `magus run`
 // write as surely as `:rw` on the target, so the run is held to the write paths unless it
 // passes --no-default-charms.

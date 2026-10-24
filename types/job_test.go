@@ -240,6 +240,26 @@ func TestJobOverlapsSkipsTerminalJobs(t *testing.T) {
 	}
 }
 
+// TestPathHoldersKeepsEditingRows: a path is held by a declared or running row only. An
+// exited row filed its result, so its outputs are anyone's to regenerate.
+func TestPathHoldersKeepsEditingRows(t *testing.T) {
+	t.Parallel()
+
+	rows := []Job{
+		owner("declared", StateDeclared, "a"),
+		owner("running", StateRunning, "b"),
+		owner("exited", StateExited, "c"),
+		owner("passed", StatePass, "d"),
+		owner("unset", "", "e"),
+	}
+	var ids []string
+	for _, r := range PathHolders(rows) {
+		ids = append(ids, r.ID)
+	}
+	assert.Equal(t, []string{"declared", "running"}, ids)
+	assert.Len(t, rows, 5, "the rows passed in are left whole")
+}
+
 // An exited holder returned, so its write paths collide with nobody's while it waits to be
 // graded.
 func TestJobOverlapsSkipsAnExitedJob(t *testing.T) {

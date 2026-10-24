@@ -561,7 +561,7 @@ type rowJudge struct {
 	graph     func() (types.TargetGraphOutput, error)
 	produces  lazyProducers
 	composes  lazyProducers
-	// others are the live rows besides row, for who else holds an output a run regenerates.
+	// others are the path holders besides row, for who else holds an output a run regenerates.
 	others func() []types.Job
 }
 
@@ -571,13 +571,8 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 	return rowJudge{
 		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace, graph: graph,
 		others: sync.OnceValue(func() []types.Job {
-			var live []types.Job
-			for _, r := range actingLeaseStanding(ctx, deps, row.ID).rows {
-				if r.ID != row.ID && r.State.Live() {
-					live = append(live, r)
-				}
-			}
-			return live
+			holders := types.PathHolders(actingLeaseStanding(ctx, deps, row.ID).rows)
+			return slices.DeleteFunc(holders, func(r types.Job) bool { return r.ID == row.ID })
 		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, workspace, row.WritePaths)
@@ -3455,7 +3450,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	me, enrolled := leaseRow(ctx, location, actingLease)
 	enrolled = enrolled && me.State.Live()
-	declaring := editingLeases(rows)
+	declaring := types.PathHolders(rows)
 	if enrolled && !me.State.Editing() {
 		declaring = append(declaring, me)
 	}

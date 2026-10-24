@@ -434,6 +434,14 @@ func (s JobState) Editing() bool {
 	return s == StateDeclared || s == StateRunning
 }
 
+// PathHolders are the rows that hold their write paths against everyone else now: the
+// [JobState.Editing] ones. An exited row filed its result and holds nothing, so an output
+// in its paths is anyone's to regenerate. The write judge and the run-output judge both
+// read ownership here. rows is not modified.
+func PathHolders(rows []Job) []Job {
+	return slices.DeleteFunc(slices.Clone(rows), func(r Job) bool { return !r.State.Editing() })
+}
+
 // DefaultJobWeight is the weight of a job that names none, and of a run bound to no job.
 const DefaultJobWeight = 0.5
 

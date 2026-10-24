@@ -297,7 +297,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	}
 	me, enrolled := leaseRow(ctx, location, graded)
 	enrolled = enrolled && me.State.Live()
-	live := editingLeases(leases)
+	live := types.PathHolders(leases)
 	// A soft path its holder already wrote is owned, and only that holder's diff says so;
 	// the read costs a footprint, so it runs only for a write landing in someone's soft path.
 	if slices.ContainsFunc(live, func(u types.Job) bool {
@@ -307,7 +307,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		loc := location.jobs()
 		loc.Root, loc.DryRun = checkout, isDryRun(ctx)
 		leases = job.HardenWritten(ctx, job.NewStore(loc), leases)
-		live = editingLeases(leases)
+		live = types.PathHolders(leases)
 	}
 	if len(live) == 0 && !enrolled {
 		return adviseUnleasedWorker(actingLease)
@@ -722,13 +722,6 @@ func enteredBefore(me types.Job, rel string) (types.JobEntry, bool) {
 func enteredPathKey(lease string, e types.JobEntry) hint.MarkerKind {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%s\x00%d", lease, e.Path, e.At))
 	return hint.MarkerKind("entered-path-" + hex.EncodeToString(sum[:6]))
-}
-
-// editingLeases are the rows a write can still collide with, the ones whose holder may be
-// writing their paths (see types.JobState.Editing). An exited row is live for its own
-// holder, see leaseRow, and claims nothing against anyone else.
-func editingLeases(leases []types.Job) []types.Job {
-	return slices.DeleteFunc(slices.Clone(leases), func(u types.Job) bool { return !u.State.Editing() })
 }
 
 // owningLeases narrows live to the rows that claim their write paths against other
