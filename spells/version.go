@@ -58,7 +58,7 @@ func ExtractVersion(output string) (string, bool) {
 	if patch == "" {
 		patch = "0"
 	}
-	v := "v" + m[1] + "." + m[2] + "." + patch
+	v := fmt.Sprintf("v%s.%s.%s", m[1], m[2], patch)
 	if m[4] != "" {
 		v += "-" + m[4]
 	}
@@ -212,7 +212,7 @@ func (b VersionBounds) IsZero() bool { return b.Min == "" && b.Below == "" }
 func (b VersionBounds) Window() string {
 	switch {
 	case b.Min != "" && b.Below != "":
-		return ">= " + b.Min + ", < " + b.Below
+		return fmt.Sprintf(">= %s, < %s", b.Min, b.Below)
 	case b.Min != "":
 		return ">= " + b.Min
 	case b.Below != "":
