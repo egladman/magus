@@ -23,7 +23,7 @@ Query: `magus query project=docs`
 | `diagrams-generate`             | diagrams-generate lays every figure out from the knowledge graph and fails when the committed files move.                                                                |
 | `build-hljs`                    | build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.                                                                            |
 | `build-playground-editor`       | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.                                                                |
-| `render`                        | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                      |
+| `render`                        | render is the fast docs/blog iteration path; it skips generated content and drift checks.                                                                                |
 | `install`                       | install installs node_modules through the typescript spell's pnpm-install op.                                                                                            |
 | `index-generate`                | index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile.                                                                                   |
 | `glossary-index-generate`       | glossary-index-generate rewrites the term list in glossary.md from each term page's front matter.                                                                        |
