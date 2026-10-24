@@ -1477,7 +1477,7 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 	} {
 		reason := denyLeaseScopedVCS(ctx, deps, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt, "%q", command)
+		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in "+wt, "%q", command)
 		assert.Contains(t, reason, "a worker under orchestrator", "%q", command)
 	}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git commit -m done"),
@@ -1502,6 +1502,46 @@ func TestDenyLeaseScopedVCSGradesACherryPickAsTheCommitItRecords(t *testing.T) {
 	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git cherry-pick abc123"), "the base branch")
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git cherry-pick abc123 && git push"), "`git push` stays with the orchestrator")
+}
+
+// A worker merges its base, origin/<base> or the revision its job was handed, into its own
+// branch in its own checkout, and finishes or drops that merge there. Any other merge, and
+// any merge elsewhere, stays the orchestrator's.
+func TestDenyLeaseScopedVCSLetsAWorkerMergeItsBase(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("lease-job")
+	worker := narrowLease()
+	worker.Parent = "orchestrator"
+	worker.CheckoutRoot = wt
+	worker.Checkpoint = "f1980cc5c3224cc9fca99c41a9f03415fd77db4b"
+	ctx, _ := fleetFixture(t, worker)
+	from := func(dir string) Dependencies {
+		return Dependencies{callDir: dir, VCS: types.VCSOptions{BaseRef: "origin/main"}}
+	}
+	for _, command := range []string{
+		"git merge origin/main",
+		"git merge --no-edit origin/main",
+		"git merge -m 'bring main in' origin/main",
+		"git merge f1980cc5c",
+		"git merge --continue",
+		"git merge --abort",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "own branch: %q", command)
+		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
+		assert.Contains(t, reason, "It commits in "+r.main+", and the lease was taken in "+wt+".", "another checkout: %q", command)
+	}
+	assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git -C "+wt+" merge origin/main"), "pointed at its own checkout")
+	for command, want := range map[string]string{
+		"git merge other-job":               "It merges other-job, and a worker merges only its base into its branch: origin/main",
+		"git merge a1b2c3d":                 "It merges a1b2c3d",
+		"git merge -s ours origin/main":     "`git merge` stays with the orchestrator",
+		"git merge origin/main other":       "`git merge` stays with the orchestrator",
+		"git merge origin/main && git push": "`git push` stays with the orchestrator",
+	} {
+		assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), want, command)
+	}
+	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git merge --continue"), "the base branch")
 }
 
 // TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout pins every spelling of an init
@@ -1700,7 +1740,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil)
 		require.Error(t, err, "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
-		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt)
+		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in "+wt)
 	}
 }
 
