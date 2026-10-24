@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -105,7 +106,7 @@ func GateFingerprint(steps []GateStep) string {
 	}
 	lines := make([]string, len(steps))
 	for i, s := range steps {
-		lines[i] = s.Project + "\x00" + s.Target + "\x00" + s.Key
+		lines[i] = fmt.Sprintf("%s\x00%s\x00%s", s.Project, s.Target, s.Key)
 	}
 	slices.Sort(lines)
 	h := sha256.New()
@@ -217,8 +218,7 @@ func (p InheritProbe) Evaluate(ctx context.Context) (InheritFinding, bool) {
 // annotation alone lets a reader reconstruct and dispute the decision.
 func (f InheritFinding) AnnotationText() string {
 	var b strings.Builder
-	b.WriteString("verdict inherited from run " + f.Run + " (commit " + shortRev(f.Commit) +
-		"): the change since that green run tiers trivial")
+	fmt.Fprintf(&b, "verdict inherited from run %s (commit %s): the change since that green run tiers trivial", f.Run, shortRev(f.Commit))
 	if len(f.Report.Evidence) == 0 {
 		b.WriteString("\nno paths changed since that run")
 		return b.String()
@@ -237,14 +237,14 @@ func (f InheritFinding) SummaryMarkdown() string {
 	b.WriteString("### Inherited verdict\n\n")
 	b.WriteString("The shard fan-out was short-circuited: the change since this " +
 		"branch's last green CI run tiers trivial, so that run's verdict stands.\n\n")
-	b.WriteString("Inherited run: " + f.Run + " at commit `" + shortRev(f.Commit) + "`.\n\n")
+	fmt.Fprintf(&b, "Inherited run: %s at commit `%s`.\n\n", f.Run, shortRev(f.Commit))
 	if len(f.Report.Evidence) == 0 {
 		b.WriteString("No paths changed since that run.\n")
 		return b.String()
 	}
 	b.WriteString("| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n")
 	for _, e := range f.Report.Evidence {
-		b.WriteString("| `" + e.Path + "` | " + string(e.Tier) + " | " + e.Class + " | " + e.Why + " |\n")
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", e.Path, string(e.Tier), e.Class, e.Why)
 	}
 	b.WriteString("\nTo dispute a row, its last column names the declaration or mechanism " +
 		"that decided it; to turn inheritance off, declare `gate_inherit = false` in magus.project.\n")

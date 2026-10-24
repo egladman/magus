@@ -1663,9 +1663,9 @@ func TestOutcomeWithoutCurveIsUnprofiled(t *testing.T) {
 
 	full := NewShape(nil, nil)
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	lines := `{"workspace":{"version":8}}` + "\n" +
-		`{"stats":{"project":".","target":"magusfile/test","recent_outcomes":[` +
-		`{"result":"pass","affected":false,"duration_ms":5000,"at":"2026-10-20T00:00:00Z","max_rss_bytes":1073741824,"args_hash":"` + full.ArgsHash + `"}]}}` + "\n"
+	lines := fmt.Sprintf(`{"workspace":{"version":8}}`+"\n"+
+		`{"stats":{"project":".","target":"magusfile/test","recent_outcomes":[`+
+		`{"result":"pass","affected":false,"duration_ms":5000,"at":"2026-10-20T00:00:00Z","max_rss_bytes":1073741824,"args_hash":"%s"}]}}`+"\n", full.ArgsHash)
 	require.NoError(t, os.WriteFile(path, []byte(lines), 0o644))
 
 	var h History
