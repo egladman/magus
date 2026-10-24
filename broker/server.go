@@ -200,6 +200,8 @@ type server struct {
 	seats map[string]map[string]int
 	// ended is the work this broker stopped, newest last, at most endedKeep of it.
 	ended []Ended
+	// ledger is who waits for a seat and what the budget refused lately.
+	ledger budgetLedger
 	// watches holds the crash report pipe of every process watched for a crash. A watch
 	// outlives its connection: the report arrives only once the process is gone.
 	watches    map[*os.File]struct{}
@@ -420,6 +422,7 @@ func (s *server) forget(conn net.Conn, sess *session) {
 		services, holds = sess.services, sess.holds
 		sess.claims, sess.services, sess.holds = map[string]int{}, map[string]int{}, map[string]*heldWork{}
 		s.unseatLocked(sess)
+		s.ledger.forget(sess)
 	}
 	s.mu.Unlock()
 	for _, h := range holds {
@@ -494,8 +497,10 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			// A run kept out by its tree's validation cap waits, as one kept out by its own
 			// run's steps does, and the reply says whose run holds the seat.
 			if wait := s.seatLocked(sess, c, false); wait != nil {
+				v = types.MachineVerdict{Fits: true, OwnRun: true}
+				s.ledger.claimed(s.conns, sess, c, v, wait, time.Now())
 				s.mu.Unlock()
-				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Fits: true, OwnRun: true}, Seat: wait})
+				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v, Seat: wait})
 				return
 			}
 			v = s.budget.Request(c)
@@ -503,6 +508,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		if v.Granted {
 			sess.claims[v.ID] = max(c.Slots, 1)
 		}
+		s.ledger.claimed(s.conns, sess, c, v, nil, time.Now())
 		s.mu.Unlock()
 		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
 
@@ -516,7 +522,9 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		draining := s.draining
 		var v types.MachineVerdict
 		if !draining {
-			v = s.budget.Reserve(s.attribute(sess, req.Claim), req.Reader)
+			c := s.attribute(sess, req.Claim)
+			v = s.budget.Reserve(c, req.Reader)
+			s.ledger.reserved(s.conns, sess, c, req.Reader, v, time.Now())
 		}
 		s.mu.Unlock()
 		if draining {
@@ -677,6 +685,10 @@ func (s *server) attribute(sess *session, c types.MachineClaim) types.MachineCla
 }
 
 func (s *server) status() types.StatusBroker {
+	snap := s.budget.Snapshot()
+	s.mu.Lock()
+	capacity := s.ledger.capacity(s.conns, snap, time.Now())
+	s.mu.Unlock()
 	st := types.StatusBroker{
 		PID:             os.Getpid(),
 		Version:         s.opts.version,
@@ -684,7 +696,7 @@ func (s *server) status() types.StatusBroker {
 		Socket:          s.socket,
 		Executable:      s.executable,
 		StartTime:       s.started,
-		Capacity:        s.budget.Snapshot(),
+		Capacity:        capacity,
 		IdleExitSeconds: int(s.opts.idleExit / time.Second),
 		Draining:        s.isDraining(),
 	}
