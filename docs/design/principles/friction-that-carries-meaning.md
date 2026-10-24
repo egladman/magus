@@ -49,7 +49,7 @@ This principle never slows
 a cache hit stays instant, and the pause belongs to the act that leaves the
 machine.
 
-### The Go SDK
+## The Go SDK
 
 The [Go SDK](../../reference/go-sdk.md) has been read against this page, and
 holds these rules:
