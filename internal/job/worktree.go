@@ -310,7 +310,52 @@ const CheckoutBootstrapScript = "hack/dev/bootstrap-checkout.buzz"
 // CheckoutBootstrap is the command that builds ./magus in dir, a checkout ForkWorktree made
 // at a commit no placed binary was built at.
 func CheckoutBootstrap(dir string) string {
-	return "./magus buzz " + CheckoutBootstrapScript + " -- --checkout " + dir
+	return fmt.Sprintf("./magus buzz %s -- --checkout %s", CheckoutBootstrapScript, dir)
+}
+
+// LandingBootstrap is [CheckoutBootstrap] for the store's own checkout, where a fork with no
+// checkout of its own lands, when exe is that checkout's ./magus and was built before the Go
+// build inputs of checkpoint ([ChangedBuildInputs]); "" when exe is any other magus, such as
+// one on PATH, or no build input differs. checkpoint "" is the checkout's own revision. A
+// build that records no commit, and commits or packages that cannot be read, are errors:
+// whether the binary judges the job's tree cannot then be told.
+func (s *Store) LandingBootstrap(ctx context.Context, exe, checkpoint string) (string, error) {
+	if MirroredBinary(exe, s.root) == "" {
+		return "", nil
+	}
+	build := types.MagusBuildFromContext(ctx)
+	if build.Commit == "" || build.Commit == "unknown" {
+		return "", fmt.Errorf("job: %s records no commit it was built from, so whether it judges the job's checkpoint cannot be told", exe)
+	}
+	revision, _ := types.ParseCheckpointToken(checkpoint)
+	if revision == "" {
+		token, err := s.CheckoutToken(ctx)
+		if err != nil {
+			return "", err
+		}
+		revision, _ = types.ParseCheckpointToken(token)
+	}
+	root, err := filepath.Abs(s.root)
+	if err != nil {
+		return "", err
+	}
+	drv, why := resolveDriver(ctx, root)
+	if drv == nil {
+		return "", fmt.Errorf("job: %s", why)
+	}
+	built, err := drv.FindCommit(ctx, root, build.Commit)
+	if err != nil {
+		return "", fmt.Errorf("job: %s was built at %s, which %s cannot find: %w", exe, build.Commit, drv.Name(), err)
+	}
+	base, err := drv.FindCommit(ctx, root, revision)
+	if err != nil {
+		return "", fmt.Errorf("job: the checkpoint %s is a commit %s cannot find: %w", revision, drv.Name(), err)
+	}
+	inputs, err := ChangedBuildInputs(ctx, drv, root, built.ID, base.ID)
+	if err != nil || len(inputs) == 0 {
+		return "", err
+	}
+	return CheckoutBootstrap(root), nil
 }
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then

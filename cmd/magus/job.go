@@ -1392,6 +1392,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
 		printJobWorktree(os.Stdout, stored, bootstrap)
+		if stored.Worktree == nil {
+			printLandingBootstrap(ctx, os.Stdout, store, stored)
+		}
 		printClaimNotes(os.Stdout, append(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored)...))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
@@ -1982,6 +1985,21 @@ func printJobWorktree(out io.Writer, row types.Job, bootstrap string) {
 		default:
 			fmt.Fprintln(out, "  placed no magus: the forking checkout runs magus from PATH, and so does the job")
 		}
+	}
+}
+
+// printLandingBootstrap names the build a fork with no checkout of its own needs when the
+// ./magus it lands beside was built before its checkpoint's Go build inputs, and says so
+// when that cannot be told.
+func printLandingBootstrap(ctx context.Context, out io.Writer, store *job.Store, row types.Job) {
+	exe, _ := os.Executable()
+	bootstrap, err := store.LandingBootstrap(ctx, exe, row.Checkpoint)
+	switch {
+	case err != nil:
+		fmt.Fprintf(out, "landing magus: whether ./magus judges %s's checkpoint could not be told: %s\n", row.ID, err)
+	case bootstrap != "":
+		fmt.Fprintf(out, "landing magus: ./magus was built before the Go build inputs of %s's checkpoint, so its guard judges another tree\n  next: `%s` rebuilds it\n",
+			row.ID, bootstrap)
 	}
 }
 

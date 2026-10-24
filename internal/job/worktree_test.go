@@ -417,6 +417,42 @@ func TestForkWorktreePlacesABinaryWhoseBuildInputsMatchTheBase(t *testing.T) {
 	}
 }
 
+// A fork with no checkout of its own lands in the forking checkout, whose ./magus judges
+// the job: built before the checkpoint's Go build inputs, it names the bootstrap.
+func TestLandingBootstrapNamesTheBuildAStaleMagusNeeds(t *testing.T) {
+	t.Parallel()
+	repo := goModuleRepo(t)
+	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
+	built := repo.Head()
+	docs := repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
+	linked := repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nfunc Run() { _ = 1 }\n"})
+	local := filepath.Join(repo.Root(), "magus")
+	require.NoError(t, os.WriteFile(local, []byte("build 1\n"), 0o755))
+	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built})
+
+	for name, tc := range map[string]struct {
+		exe, checkpoint, want string
+	}{
+		"a checkpoint past a linked package": {exe: local, checkpoint: linked, want: CheckoutBootstrap(repo.Root())},
+		"a checkpoint past a docs edit":      {exe: local, checkpoint: docs},
+		"the commit it was built at":         {exe: local, checkpoint: built},
+		"a magus on PATH":                    {exe: filepath.Join(t.TempDir(), "magus"), checkpoint: linked},
+	} {
+		got, err := s.LandingBootstrap(ctx, tc.exe, tc.checkpoint)
+		require.NoError(t, err, name)
+		assert.Equal(t, tc.want, got, name)
+	}
+
+	unknown := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "dev", Commit: "unknown"})
+	_, err := s.LandingBootstrap(unknown, local, linked)
+	require.ErrorContains(t, err, "records no commit it was built from")
+}
+
+func TestCheckoutBootstrapNamesTheScript(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w", CheckoutBootstrap("/w"))
+}
+
 func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
 	t.Parallel()
 	repo := execRepo(t)
