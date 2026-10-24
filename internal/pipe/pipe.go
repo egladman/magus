@@ -578,7 +578,7 @@ func (r exitRecord) exitCode() int {
 
 func (r exitRecord) ending() string {
 	if r.Signal != "" {
-		return "was stopped by a signal (" + r.Signal + ")"
+		return fmt.Sprintf("was stopped by a signal (%s)", r.Signal)
 	}
 	return fmt.Sprintf("exited %d", r.Status)
 }

@@ -117,7 +117,7 @@ func pipeStage(t *testing.T, cacheDir string, env map[string]string, args ...str
 	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestHelperPipeStage$"}, args...)...)
 	cmd.Env = append(os.Environ(), "PIPETEST_HELPER=1", "PIPETEST_CACHE_DIR="+cacheDir, spawn.AncestorsEnvVar+"=")
 	for k, v := range env {
-		cmd.Env = append(cmd.Env, "PIPETEST_"+k+"="+v)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("PIPETEST_%s=%s", k, v))
 	}
 	cmd.Stderr = os.Stderr
 	return cmd
