@@ -944,7 +944,7 @@ type FileClaim struct {
 // .gitattributes is the whole list, and it is here rather than in the merge-driver
 // code that writes it because two features have to agree about it: staging
 // (StagingPlan.Maintained) and classification (FileEntry.Role). They disagreed:
-// `magus vcs add` reported the file as one magus maintains while `magus describe
+// `magus vcs ls-files` reported the file as one magus maintains while `magus describe
 // file` called it unclaimed and suggested checking the ignore rules, for a file
 // magus had just written and needs tracked.
 //

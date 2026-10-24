@@ -1325,7 +1325,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // cross-project ctx.readsFiles reports the READING project in source_of, not just the
 // project whose directory contains it.
 //
-// The regression it guards is not cosmetic. `magus vcs add` decides whether a drifted
+// The regression it guards is not cosmetic. `magus vcs ls-files` decides whether a drifted
 // output is explained by asking, per PROJECT, whether that project has a dirty declared
 // source (types.SplitExplainedOutputs). describeFile built source_of from the project-wide
 // baseline only, while the output side already folded in per-target ctx.writesFiles via
@@ -1361,7 +1361,7 @@ export fun render(ctx: magus\Context, args: [str]) > void {
 
 	assert.Contains(t, entries[0].SourceOf, "site",
 		"site declares skills/note.md via a cross-project ctx.readsFiles, so it must appear in source_of; "+
-			"without it magus vcs add calls site's regenerated output MGS4005 and tells the author not to commit it")
+			"without it magus vcs ls-files calls site's regenerated output MGS4005 and tells the author not to commit it")
 }
 
 // TestClassifyFiles_Claims pins the per-declaration facts, which are what a caller

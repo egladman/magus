@@ -19,7 +19,7 @@ function __magus_subcommands
         path       'Connect two knowledge-graph nodes: the shortest chain of edges between them' \
         graph      'The workspace\'s graphs as objects: deps, export, stats' \
         diff       'Read the working tree\'s changes in the order they deserve attention' \
-        vcs        'Staging and conflict resolution that knows what is generated' \
+        vcs        'Listing and conflict resolution that knows what is generated' \
         session    'What magus invocations did and what agents are blocked on: humans read and dispose, hosts write' \
         job        'Fork a job, take it, return it with its result, and verify that result' \
         notes      'Human-authored notes committed to the repository' \

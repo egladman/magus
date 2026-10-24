@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 11156
-skill_short_bytes: 6282
+skill_full_bytes: 11455
+skill_short_bytes: 6409
 ---
 
 # magus-vcs-hygiene
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `f609c2a37b4a` |
+| `skill-content` | `a4186ff710ca` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -91,17 +91,17 @@ Each path -> owning project, role:
 
 ## Preparing commit
 
-`magus vcs add`: steps 1-2 below plus staging, one call; sanctioned replacement for `git add -A`:
+`magus vcs ls-files`: steps 1-2 below; lists paths, stages nothing. You stage the list:
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add <path>...   # narrow it
+magus vcs ls-files                                   # tracked dirty sources, nothing staged
+magus vcs ls-files 'internal/**' --exclude '*.md'    # patterns narrow, never add
+magus vcs ls-files --include-generated -o name | git add --pathspec-from-file=-
 ```
 
-Stages sources with generated outputs: one commit.
-Reports every undeclared path, never sweeps it in.
-Pass `--untracked` when undeclared path is new source file.
+Default: tracked, modified or deleted declared sources, not held by another job, not staged.
+stderr names each group left out and the `--include-*` flag that adds it.
+Add a flag only for a group you decided belongs in the commit.
 Hand-staging specific paths fine.
 Steps below: what it automates, fallback:
 1. List dirty tree with VCS (`git status --porcelain`).
@@ -248,20 +248,22 @@ CORRECT: note that `docs/gen/**` is a declared output of
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 below plus the staging in one call. It is the
-sanctioned replacement for `git add -A`:
+`magus vcs ls-files` does steps 1-2 below: it lists the paths a commit of the change
+wants and stages nothing. You stage the list, which `git add -A` cannot do for you:
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add <path>...   # narrow it
+magus vcs ls-files                                   # tracked dirty sources, nothing staged
+magus vcs ls-files 'internal/**' --exclude '*.md'    # patterns narrow, never add
+magus vcs ls-files --include-generated -o name | git add --pathspec-from-file=-
 ```
 
-It stages sources and their generated outputs together (one commit). It REPORTS
-every undeclared path instead of sweeping it in, which is the one thing
-`git add -A` cannot do. Pass `--untracked` when an undeclared path is a new
-source file. Staging specific paths by hand stays fine. The steps below are what it
-automates, and the fallback:
+By default it lists tracked, modified or deleted declared sources that no other live
+job holds and that are not already staged. stderr names each group it left out and the
+flag that adds it: `--include-untracked`, `--include-generated` (outputs a dirty source
+explains), `--include-unexplained`, `--include-unclaimed`, `--include-held`,
+`--include-staged`. Add a flag only for a group you decided belongs in the commit.
+Staging specific paths by hand stays fine. The steps below are what it automates, and
+the fallback:
 
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files that are

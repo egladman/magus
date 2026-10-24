@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -31,9 +31,9 @@ func TestSplitVCSVerb(t *testing.T) {
 		wantRest []string
 	}{
 		{"plain", []string{"resolve"}, "resolve", nil},
-		{"verb then args", []string{"add", "a.go"}, "add", []string{"a.go"}},
+		{"verb then args", []string{"ls-files", "a.go"}, "ls-files", []string{"a.go"}},
 		{"flag before verb", []string{"-q", "merge-driver", "%O"}, "merge-driver", []string{"-q", "%O"}},
-		{"long flag before verb", []string{"--silent", "add"}, "add", []string{"--silent"}},
+		{"long flag before verb", []string{"--silent", "ls-files"}, "ls-files", []string{"--silent"}},
 		{"help flag is its own verb", []string{"-h"}, "-h", nil},
 		{"help flag after a flag", []string{"-q", "--help"}, "--help", []string{"-q"}},
 		{"no verb at all", []string{"-q"}, "", []string{"-q"}},
@@ -75,10 +75,9 @@ func TestWorkspaceRelPaths(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-// TestClassifyForStaging pins the grouping, and the doctrine behind it: a generated
-// output belongs in the SAME commit as the source that moved it, so both are staged;
-// an undeclared path is the `git add -A` hazard, so it is reported instead.
-func TestClassifyForStaging(t *testing.T) {
+// TestClassifyByRole pins the three-way split a session brief shows: anything not
+// declared source or output is undeclared, including an empty role.
+func TestClassifyByRole(t *testing.T) {
 	out := []types.FileEntry{
 		{Path: "cmd/magus/agent.go", Role: "source"},
 		{Path: "MAGUS.md", Role: "output"},
@@ -87,21 +86,140 @@ func TestClassifyForStaging(t *testing.T) {
 		{Path: "notes.md", Role: ""},
 	}
 
-	sources, outputs, undeclared := classifyForStaging(out)
+	sources, outputs, undeclared := classifyByRole(out)
 	assert.Equal(t, []string{"cmd/magus/agent.go"}, sources)
 	assert.Equal(t, []string{"MAGUS.md", "docs/gen/index.html"}, outputs)
-	assert.Equal(t, []string{"scratch.txt", "notes.md"}, undeclared,
-		"anything not declared source or output is undeclared, including an empty role")
+	assert.Equal(t, []string{"scratch.txt", "notes.md"}, undeclared)
 }
 
-func TestSplitMaintained(t *testing.T) {
-	maintained, unclaimed := splitMaintained([]string{".gitattributes", "scratch.txt"})
-	assert.Equal(t, []string{".gitattributes"}, maintained,
-		"a file magus's own core writes is not residue, and must not be reported as such")
-	assert.Equal(t, []string{"scratch.txt"}, unclaimed)
+// TestSelectLsFiles pins the default (tracked dirty sources nobody else holds, not yet
+// staged) and that each --include flag adds exactly its own group back.
+func TestSelectLsFiles(t *testing.T) {
+	paths := []lsFilesPath{
+		{Path: "src/a.go", Role: "source", Project: "."},
+		{Path: "src/deleted.go", Role: "source", Project: "."},
+		{Path: "libs/x/b.go", Role: "source", Project: "libs/x"},
+		{Path: "src/new.go", Role: "source", Project: ".", Untracked: true},
+		{Path: "gen/out.go", Role: "output", Project: "."},
+		{Path: "docs/gen/page.html", Role: "output", Project: "docs", Unexplained: true},
+		{Path: "scratch.txt", Role: "unclaimed", Project: "."},
+		{Path: ".gitattributes", Role: "maintained", Project: "."},
+		{Path: "web/c.ts", Role: "source", Project: ".", Held: "sibling"},
+		{Path: "src/staged.go", Role: "source", Project: ".", Staged: true},
+	}
+	base := []string{"libs/x/b.go", "src/a.go", "src/deleted.go"}
+	tests := []struct {
+		name      string
+		filter    lsFilesFilter
+		want      []string
+		excluded  []string
+		unmatched []string
+	}{
+		{name: "default", want: base,
+			excluded: []string{"held", "staged", "untracked", "unclaimed", "unexplained", "generated"}},
+		{name: "include untracked", filter: lsFilesFilter{Include: map[string]bool{lsGroupUntracked: true}},
+			want: []string{"libs/x/b.go", "src/a.go", "src/deleted.go", "src/new.go"}},
+		{name: "include generated", filter: lsFilesFilter{Include: map[string]bool{lsGroupGenerated: true}},
+			want: []string{"gen/out.go", "libs/x/b.go", "src/a.go", "src/deleted.go"}},
+		{name: "include unexplained", filter: lsFilesFilter{Include: map[string]bool{lsGroupUnexplained: true}},
+			want: []string{"docs/gen/page.html", "libs/x/b.go", "src/a.go", "src/deleted.go"}},
+		{name: "include unclaimed covers maintained", filter: lsFilesFilter{Include: map[string]bool{lsGroupUnclaimed: true}},
+			want: []string{".gitattributes", "libs/x/b.go", "scratch.txt", "src/a.go", "src/deleted.go"}},
+		{name: "include held", filter: lsFilesFilter{Include: map[string]bool{lsGroupHeld: true}},
+			want: []string{"libs/x/b.go", "src/a.go", "src/deleted.go", "web/c.ts"}},
+		{name: "include staged", filter: lsFilesFilter{Include: map[string]bool{lsGroupStaged: true}},
+			want: []string{"libs/x/b.go", "src/a.go", "src/deleted.go", "src/staged.go"}},
+		{name: "a pattern narrows", filter: lsFilesFilter{Patterns: []string{"src/**"}},
+			want: []string{"src/a.go", "src/deleted.go"}},
+		{name: "a pattern never forces a path in", filter: lsFilesFilter{Patterns: []string{"scratch.txt"}},
+			want: []string{}, excluded: []string{"unclaimed"}},
+		{name: "a literal directory covers what is under it", filter: lsFilesFilter{Patterns: []string{"libs"}},
+			want: []string{"libs/x/b.go"}},
+		{name: "exclude removes matches", filter: lsFilesFilter{Exclude: []string{"src/deleted.go", "libs/**"}},
+			want: []string{"src/a.go"}},
+		{name: "project scopes to the owning project", filter: lsFilesFilter{Projects: []string{"libs/x"}},
+			want: []string{"libs/x/b.go"}},
+		{name: "a pattern matching no dirty path is named", filter: lsFilesFilter{Patterns: []string{"src/a.go", "nothing/**"}},
+			want: []string{"src/a.go"}, unmatched: []string{"nothing/**"}},
+		{name: "a project with no dirty path is named", filter: lsFilesFilter{Projects: []string{"api"}},
+			want: []string{}, unmatched: []string{"api"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, unmatched := selectLsFiles(paths, tt.filter)
+			assert.Equal(t, tt.want, got.Files)
+			assert.Equal(t, tt.unmatched, unmatched)
+			if tt.excluded == nil {
+				return
+			}
+			groups := make([]string, 0, len(got.Excluded))
+			for _, e := range got.Excluded {
+				groups = append(groups, e.Group)
+				assert.Equal(t, "--include-"+e.Group, e.Flag)
+			}
+			assert.Equal(t, tt.excluded, groups)
+		})
+	}
 }
 
-// TestFilterStageable pins the fix for a data-loss bug. `vcs add` hands a project's
+// TestSelectLsFilesNamesWhatItLeftOut pins the record a caller acts on: the held paths
+// carry their holder, and the unexplained ones the drift code.
+func TestSelectLsFilesNamesWhatItLeftOut(t *testing.T) {
+	got, _ := selectLsFiles([]lsFilesPath{
+		{Path: "web/c.ts", Role: "source", Held: "sibling"},
+		{Path: "docs/gen/page.html", Role: "output", Unexplained: true},
+	}, lsFilesFilter{})
+
+	require.Len(t, got.Excluded, 2)
+	assert.Equal(t, map[string]string{"web/c.ts": "sibling"}, got.Excluded[0].Holders)
+	assert.Equal(t, []string{"docs/gen/page.html"}, got.Excluded[1].Paths)
+	assert.NotEmpty(t, got.Excluded[1].Code)
+	assert.NotEmpty(t, got.Excluded[1].URL)
+}
+
+// TestLsFilesRefusesStateTheBackendLacks: an --include flag for a state the backend does
+// not keep is refused rather than answered with nothing.
+func TestLsFilesRefusesStateTheBackendLacks(t *testing.T) {
+	repo := testkit.NewRepo(t, nil)
+	git := resolveGitDriver(t, repo.Root())
+	require.NoError(t, lsFilesRefusal(git, map[string]bool{lsGroupStaged: true, lsGroupUntracked: true}))
+
+	for _, name := range []string{"hg", "jj"} {
+		res, err := vcs.Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{Name: name})
+		require.NoError(t, err)
+		err = lsFilesRefusal(res.VCS, map[string]bool{lsGroupStaged: true})
+		require.Error(t, err, "%s keeps no staging index", name)
+		assert.Contains(t, err.Error(), "--include-staged")
+	}
+
+	res, err := vcs.Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{Name: "jj"})
+	require.NoError(t, err)
+	err = lsFilesRefusal(res.VCS, map[string]bool{lsGroupUntracked: true})
+	require.Error(t, err, "jj tracks every file in the working copy")
+	assert.Contains(t, err.Error(), "--include-untracked")
+
+	res, err = vcs.Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{Name: "hg"})
+	require.NoError(t, err)
+	require.NoError(t, lsFilesRefusal(res.VCS, map[string]bool{lsGroupUntracked: true}))
+}
+
+// TestWorkspaceRelPatterns pins that a pattern is read from where you stand, and that a
+// path holding a literal `#` keeps the write-path grammar's escape through the move.
+func TestWorkspaceRelPatterns(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "internal")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	t.Chdir(sub)
+
+	got, err := workspaceRelPatterns(root, []string{"guard/**", "*.go", "./a#b.md", `c\#d.md`, "."})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/guard/**", "internal/*.go", `internal/a\#b.md`, `internal/c\#d.md`, "internal"}, got)
+
+	_, err = workspaceRelPatterns(root, []string{"../../elsewhere/**"})
+	require.Error(t, err)
+}
+
+// TestFilterStageable pins the fix for a data-loss bug. Staging hands a project's
 // declared outputs to one `git add`; if one path no longer exists on disk (a renamed
 // directory with a stale declaration), git fails that pathspec with "did not match any
 // files" and aborts the WHOLE invocation, staging nothing. You think you staged and did
@@ -148,14 +266,10 @@ func TestFilterStageableNonGit(t *testing.T) {
 // TestStagePathsSurvivesStalePath proves the end-to-end fix: one nonexistent, untracked
 // path in the batch must not abort the rest. The field failure:
 //
-//	staged 3 undeclared file(s) (--untracked):
-//	  .gitattributes
-//	  libs/diag/go.mod
-//	  libs/diagnostics/
 //	fatal: pathspec 'libs/diag/MAGUS.md' did not match any files
-//	[error] vcs add: git add: exit status 128
+//	[error] vcs resolve: stage: exit status 128
 //
-// where every one of the first three paths was silently left unstaged.
+// where every other path in the batch was silently left unstaged.
 func TestStagePathsSurvivesStalePath(t *testing.T) {
 	repo := testkit.NewRepo(t, nil)
 	dir := repo.Root()
@@ -171,8 +285,8 @@ func TestStagePathsSurvivesStalePath(t *testing.T) {
 }
 
 // TestWorkspaceRelPathsRejectsEmptyRoot pins the guard on a caller bug that read as a user
-// error: vcsAddCmd passed the --root OVERRIDE (empty unless given) instead of the resolved
-// workspace root, so `magus vcs add <path>` answered `is outside the workspace at ` with
+// error: a caller passed the --root OVERRIDE (empty unless given) instead of the resolved
+// workspace root, so a named path answered `is outside the workspace at ` with
 // nothing after "at", blaming the path.
 func TestWorkspaceRelPathsRejectsEmptyRoot(t *testing.T) {
 	_, err := workspaceRelPaths("", []string{"docs/foo.md"})
@@ -183,7 +297,7 @@ func TestWorkspaceRelPathsRejectsEmptyRoot(t *testing.T) {
 		"an unresolved root must not be reported as a bad path")
 }
 
-// TestSplitExplainedOutputs proves vcs add can tell a regenerated output apart from one
+// TestSplitExplainedOutputs proves vcs ls-files can tell a regenerated output apart from one
 // nothing in this change accounts for. Classifying by glob alone made those identical.
 //
 // nil for the second argument is the working-tree-only case; the committed half is
@@ -278,42 +392,9 @@ func TestSplitExplainedOutputsCountsCommittedSources(t *testing.T) {
 	assert.Empty(t, unexplained)
 }
 
-// TestVCSAddUntrackedNeedsAReason pins the rule at the CLI site: --untracked clears the
-// undeclared-file report, so a bare one is refused, and the refusal carries the whole
-// accepted spelling because a script is what it breaks.
-//
-// The temp dir is no magus workspace, which is the second assertion: the refusal is
-// about the flags, so it lands before the workspace loads and before anything stages.
-// The accepted form is covered end to end by testdata/script/vcs_add_paths.txtar, which
-// reaches a real tree without tripping this process's one-shot workspace memo.
-func TestVCSAddUntrackedNeedsAReason(t *testing.T) {
-	err := vcsAddCmd(context.Background(), t.TempDir(), []string{"--untracked"})
-
-	require.Error(t, err, "a bare --untracked swept in every undeclared file with nothing recorded")
-	assert.Contains(t, err.Error(), `magus vcs add --untracked --reason "<why>"`)
-	assert.Equal(t, exit.Usage, exit.Code(err), "a missing required flag is misuse, which the CLI exits 2 for")
-}
-
-// TestVCSAddReportsTheReason covers the keeping half: the reason reaches the terminal
-// beside the files it admitted. -o json carries the same StagingPlan.Reason.
-func TestVCSAddReportsTheReason(t *testing.T) {
-	plan := types.StagingPlan{
-		Undeclared: []string{"testdata/fixture.golden"},
-		Staged:     []string{"testdata/fixture.golden"},
-		Reason:     "golden files the go spell does not claim",
-	}
-
-	out := captureStdout(t, func() { reportStaging(plan, nil, true, false, "hg diff --stat") })
-
-	assert.Contains(t, out, "reason: golden files the go spell does not claim")
-	// A non-git backend, because the review line used to be the string "git diff --cached
-	// --stat" no matter which of the four you were in.
-	assert.Contains(t, out, "review before committing: hg diff --stat")
-}
-
-// TestVCSAddHoldsAnotherLeasesPaths: a whole-tree `vcs add` swept a sibling lease's
-// uncommitted sources out of a shared checkout into the caller's commit (2026-10-14).
-func TestVCSAddHoldsAnotherLeasesPaths(t *testing.T) {
+// TestOtherLeasesPaths: a whole-tree stage swept a sibling lease's uncommitted sources out
+// of a shared checkout into the caller's commit (2026-10-14).
+func TestOtherLeasesPaths(t *testing.T) {
 	root := t.TempDir()
 	rows := []types.Job{
 		{ID: "mine", State: types.StateRunning, CheckoutRoot: root, WritePaths: []string{"api/**"}},
@@ -327,6 +408,22 @@ func TestVCSAddHoldsAnotherLeasesPaths(t *testing.T) {
 		"only a live lease writing in this checkout holds a path back from its sibling")
 	assert.Equal(t, map[string]string{"api/a.go": "mine", "web/b.ts": "sibling"}, otherLeasesPaths(rows, root, "", paths),
 		"a caller with no lease stages no lease's work")
+}
+
+// The CLI leaves the context unstamped, so the caller's lease is the one its BAGGAGE claims.
+func TestHeldForOtherLeasesReadsTheCallersEnvironmentLease(t *testing.T) {
+	repo, _ := execRepoFixture(t)
+	root := repo.Root()
+	mine := leaseRow("mine", "")
+	mine.CheckoutRoot, mine.WritePaths = root, []string{"api/**"}
+	sibling := leaseRow("sibling", "")
+	sibling.CheckoutRoot, sibling.WritePaths = root, []string{"web/**"}
+	seedJobStore(t, root, mine, sibling)
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=mine")
+
+	held, err := heldForOtherLeases(context.Background(), root, []string{"api/a.go", "web/b.ts"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"web/b.ts": "sibling"}, held)
 }
 
 // TestCheckpointLineCarriesThePreservedHandle covers the promise --preserve makes in its

@@ -3282,6 +3282,17 @@ github.com/egladman/magus/types.LogWarn const LogLevel = "warn"
 github.com/egladman/magus/types.LooksLikeBuildInput func(p string) bool
 github.com/egladman/magus/types.LookupJobLease func(ctx context.Context) (string, bool)
 github.com/egladman/magus/types.LoopbackPeerRequired const DiagnosticCode = "MGS9008"
+github.com/egladman/magus/types.LsFiles type struct
+github.com/egladman/magus/types.LsFiles.Excluded field []LsFilesExcluded "json:\"excluded,omitempty\" yaml:\"excluded,omitempty\""
+github.com/egladman/magus/types.LsFiles.Files field []string "json:\"files\" yaml:\"files\" jsonl:\"primary\""
+github.com/egladman/magus/types.LsFilesExcluded type struct
+github.com/egladman/magus/types.LsFilesExcluded.Code field string "json:\"code,omitempty\" yaml:\"code,omitempty\""
+github.com/egladman/magus/types.LsFilesExcluded.Flag field string "json:\"flag\" yaml:\"flag\""
+github.com/egladman/magus/types.LsFilesExcluded.Group field string "json:\"group\" yaml:\"group\""
+github.com/egladman/magus/types.LsFilesExcluded.Holders field map[string]string "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
+github.com/egladman/magus/types.LsFilesExcluded.Message field string "json:\"message,omitempty\" yaml:\"message,omitempty\""
+github.com/egladman/magus/types.LsFilesExcluded.Paths field []string "json:\"paths\" yaml:\"paths\""
+github.com/egladman/magus/types.LsFilesExcluded.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
 github.com/egladman/magus/types.MCPBuzzFailed const DiagnosticCode = "MGS3033"
 github.com/egladman/magus/types.MCPClientFailed const DiagnosticCode = "MGS3034"
 github.com/egladman/magus/types.MCPEndpointStatus type struct
@@ -4429,17 +4440,8 @@ github.com/egladman/magus/types.SplitClaim func(entry string) (path string, decl
 github.com/egladman/magus/types.SplitExplainedOutputs func(files []FileEntry, alsoChangedIn map[string]bool) (explained []string, unexplained []string)
 github.com/egladman/magus/types.SplitLines func(b []byte) []string
 github.com/egladman/magus/types.SplitSourceLines func(b []byte) [][]byte
-github.com/egladman/magus/types.StagingPlan type struct
-github.com/egladman/magus/types.StagingPlan.Code field string "json:\"code,omitempty\" yaml:\"code,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Maintained field []string "json:\"maintained,omitempty\" yaml:\"maintained,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Message field string "json:\"message,omitempty\" yaml:\"message,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Outputs field []string "json:\"outputs,omitempty\" yaml:\"outputs,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Reason field string "json:\"reason,omitempty\" yaml:\"reason,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Sources field []string "json:\"sources,omitempty\" yaml:\"sources,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Staged field []string "json:\"staged\" yaml:\"staged\" jsonl:\"primary\""
-github.com/egladman/magus/types.StagingPlan.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Undeclared field []string "json:\"undeclared,omitempty\" yaml:\"undeclared,omitempty\""
-github.com/egladman/magus/types.StagingPlan.Unexplained field []string "json:\"unexplained,omitempty\" yaml:\"unexplained,omitempty\""
+github.com/egladman/magus/types.StagedFileReporter type interface
+github.com/egladman/magus/types.StagedFileReporter.StagedFiles imethod func(ctx context.Context, dir string) ([]string, error)
 github.com/egladman/magus/types.StaleGeneratedOutput const DiagnosticCode = "MGS4006"
 github.com/egladman/magus/types.StaleIndexProjects func(stale []KnowledgeStaleIndex) []string
 github.com/egladman/magus/types.StaleSourceProjects func(files []FileEntry) []string

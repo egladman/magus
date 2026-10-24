@@ -563,7 +563,7 @@ var groundworkLines = []struct {
 	{"./magus run generate:rw .", delegableIntegrate},
 	{"./magus run generate / -s", delegableIntegrate},
 	{"./magus run content-generate docs", delegableIntegrate},
-	{"./magus vcs add internal/guard/root.go", delegableIntegrate},
+	{"./magus vcs ls-files internal/guard/root.go", types.DelegableRead},
 	{"git cherry-pick abc123", delegableIntegrate},
 	{"git cherry-pick --continue", delegableIntegrate},
 	{"git add internal/guard/root.go", delegableIntegrate},

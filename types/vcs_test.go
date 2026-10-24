@@ -80,7 +80,7 @@ func TestVCSResolution_ZeroValue(t *testing.T) {
 	assert.Empty(t, r.Name)
 }
 
-// TestClassifyDrift pins the fork that `magus vcs add` and the generate gate now share.
+// TestClassifyDrift pins the fork that `magus vcs ls-files` and the generate gate now share.
 // They used to answer the same question in two places, so the same condition could be
 // reported two different ways depending on which client you met it on.
 func TestClassifyDrift(t *testing.T) {

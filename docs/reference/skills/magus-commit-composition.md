@@ -3,8 +3,8 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4402
-skill_short_bytes: 2839
+skill_full_bytes: 4453
+skill_short_bytes: 2885
 ---
 
 # magus-commit-composition
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `81b49d27c316` |
+| `skill-content` | `bf2e77ea25ea` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -125,10 +125,10 @@ magus graph diff --rev <checkpoint-revision>
 Everything reported must be intended change.
 Missing nodes you did not remove -> work dropped -> return to recorded revision, restart; never reconcile by hand.
 
-Finish: stage through workspace declarations, re-run gate:
+Finish: list what the commit wants, stage it, re-run gate:
 
 ```sh
-magus vcs add
+magus vcs ls-files -o name | git add --pathspec-from-file=-
 magus affected ci
 ```
 
@@ -255,10 +255,10 @@ Everything it reports must be a change you intended. Missing nodes you did not
 remove mean the restructure dropped work: return to the recorded revision and start
 again, never reconcile by hand.
 
-Finish by staging through the workspace's declarations and re-running the gate:
+Finish by listing what the commit wants, staging that list, and re-running the gate:
 
 ```sh
-magus vcs add
+magus vcs ls-files -o name | git add --pathspec-from-file=-
 magus affected ci
 ```
 

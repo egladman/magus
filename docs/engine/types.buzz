@@ -831,8 +831,8 @@ export object Site {
         // family was unlinkable. Registered against the guide that documents them, the
         // way the knowledge verbs above are.
         ents.append(Entity{ token = "magus vcs resolve", kind = "command", url = "guides/integrations/git/", summary = "Settle conflicted generated files by regenerating them." });
-        ents.append(Entity{ token = "magus vcs add", kind = "command", url = "guides/integrations/git/", summary = "Stage a change the way the workspace declares it should be staged." });
-        ents.append(Entity{ token = "magus vcs", kind = "command", url = "guides/integrations/git/", summary = "Staging and conflict resolution that knows what is generated." });
+        ents.append(Entity{ token = "magus vcs ls-files", kind = "command", url = "guides/integrations/git/", summary = "List the dirty paths a commit of the change wants; stage nothing." });
+        ents.append(Entity{ token = "magus vcs", kind = "command", url = "guides/integrations/git/", summary = "Path listing and conflict resolution that knows what is generated." });
         ents.append(Entity{ token = "query", kind = "command", url = "concepts/knowledge/", summary = "magus query: search the knowledge graph." });
         ents.append(Entity{ token = "explain", kind = "command", url = "concepts/knowledge/", summary = "magus explain: explain one knowledge-graph node." });
         ents.append(Entity{ token = "path", kind = "command", url = "concepts/knowledge/", summary = "magus path: show the shortest path between knowledge-graph nodes." });

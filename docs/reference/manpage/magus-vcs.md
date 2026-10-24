@@ -1,31 +1,41 @@
 ---
 title: magus vcs
 generated_from: internal/commands/registry.go
-description: "Stage a change the way the workspace's declarations say it should be staged, and settle an in-progress merge's conflicted generated files by regenerating them once."
-tags: [cli, magus vcs, git, merge, conflicts, generated files, staging]
+description: "List the dirty paths a commit of this change wants, read against the workspace's declarations, and settle an in-progress merge's conflicted generated files by regenerating them once."
+tags: [cli, magus vcs, git, merge, conflicts, generated files, staging, ls-files]
 ---
 
 # magus-vcs
 
-Staging and conflict resolution that knows what is generated
+Listing and conflict resolution that knows what is generated
 
 ## Synopsis
 
-**magus** vcs \<add|resolve|checkpoint|merge-driver\> [flags]
+**magus** vcs \<ls-files|resolve|checkpoint|merge-driver\> [flags]
 
 ## Description
 
 Version-control operations that read the workspace's output declarations,
 so generated files and hand-written sources are treated differently.
 
-add stages what the workspace declares: sources, and the generated outputs a
-source change in the same commit accounts for. Anything undeclared is reported
-rather than swept in, which is the difference between it and git add -A.
+ls-files lists dirty paths and stages nothing; you stage what it lists. By
+default it lists tracked, modified or deleted declared sources that no other
+live job holds and that are not already staged. Every other dirty path is left
+out by a group, and stderr names each group with the flag that lists it:
+--include-untracked, --include-generated (outputs a dirty source explains),
+--include-unexplained (outputs nothing here explains, with the drift code),
+--include-unclaimed (paths no target declares, and the ones magus maintains),
+--include-held (paths another live job writes) and --include-staged. A backend
+that keeps no such state refuses the flag: only git stages, and jj has no
+untracked files.
 
---untracked says yes to every undeclared path at once, so it needs --reason: it
-drops the one report that separates this command from git add -A, and the files
-it sweeps in land in a commit everybody pulls. The reason is kept with the
-staging verdict. Naming a path stages one file without the flag.
+Positional patterns and --exclude take write-path patterns (a literal path,
+a directory, or a glob with \* and \*\*), read from the current directory and
+matched the same way on every backend. --project scopes to the files a project
+owns. Patterns only narrow; a pattern that matches no dirty path is said on
+stderr. Stage the listing with:
+
+magus vcs ls-files -o name | git add --pathspec-from-file=-
 
 resolve settles an in-progress merge, rebase, or cherry-pick. It classifies
 every conflicted path at once, regenerates once instead of once per file,
@@ -84,13 +94,31 @@ working copy')". Jujutsu mints nothing, so nothing accumulates.
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
 
-### vcs add options
+### vcs ls-files options
 
-**--reason** *string*
-: Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict
+**--exclude** *pattern*
+: Leave out paths this write-path pattern covers; repeatable or comma-separated
 
-**--untracked**
-: Also stage undeclared files; requires --reason
+**--include-generated**
+: Also list declared outputs a dirty source in this change explains
+
+**--include-held**
+: Also list paths another live job in this checkout writes
+
+**--include-staged**
+: Also list paths whose whole change is already staged; git only
+
+**--include-unclaimed**
+: Also list paths no target declares, and the ones magus maintains itself
+
+**--include-unexplained**
+: Also list declared outputs no source change here explains
+
+**--include-untracked**
+: Also list untracked files; refused on jj, which has none
+
+**--project** *project*
+: List only the files this project owns; repeatable or comma-separated
 
 ### vcs resolve options
 
@@ -107,8 +135,8 @@ base in yourself on the others, then run resolve.
 
 ## Subcommands
 
-**add**
-: Stage a change the way this workspace's declarations say it should be staged
+**ls-files**
+: List the dirty paths a commit of this change wants; stages nothing
 
 **resolve**
 : Settle an in-progress merge's conflicted generated files, then regenerate once
@@ -121,22 +149,22 @@ base in yourself on the others, then run resolve.
 
 ## Examples
 
-*Stage a change without sweeping in build residue*
+*Stage the dirty sources and nothing else*
 
 ```sh
-magus vcs add
+magus vcs ls-files -o name | git add --pathspec-from-file=-
 ```
 
-*Classify the dirty tree, stage nothing*
+*List one subtree's changes, with the outputs they regenerated*
 
 ```sh
-magus vcs add --dry-run
+magus vcs ls-files --include-generated 'internal/guard/**'
 ```
 
-*Sweep in the undeclared files, on the record*
+*List a new file too*
 
 ```sh
-magus vcs add --untracked --reason "new fixtures the go spell does not claim"
+magus vcs ls-files --include-untracked --project libs/xdg
 ```
 
 *Settle a conflicted merge*

@@ -1471,15 +1471,15 @@ func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
 }
 
 // TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is
-// denied in favour of. This assertion was inverted while the message argued there was
-// deliberately no `magus vcs` wrapper; by then `vcs add` had shipped as exactly that
-// wrapper, so the deny was talking an agent out of the command built to replace it.
+// denied in favour of: magus lists the paths and git stages them, so the person, not a
+// wrapper, does the staging.
 // `git add -- <paths>` stays named: a hand-picked subset is still fine.
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `"+hint.VCSAdd.String()+"`.")
-	assert.Contains(t, verdict.Why, hint.VCSAdd.With("--dry-run"))
+	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `"+hint.VCSLsFiles.With("-o", "name")+" | git add --pathspec-from-file=-`.")
+	assert.Contains(t, verdict.Why, "--include-generated")
+	assert.NotContains(t, verdict.Why, "vcs add")
 	assert.Contains(t, verdict.Why, "git add -- <paths>")
 	assert.NotContains(t, verdict.Deny, "no `magus vcs` wrapper")
 }
@@ -2205,13 +2205,13 @@ func TestOutputRedirectRemedyPassesOutputRedirect(t *testing.T) {
 	}
 }
 
-// TestStageAllServesTheSamePathsThroughVcsAdd pins the paths carried over and the one
-// spelling left to the prose: `git add .` stages a subtree no vcs add form equals.
-func TestStageAllServesTheSamePathsThroughVcsAdd(t *testing.T) {
+// TestStageAllServesTheSamePathsThroughLsFiles pins the paths and include flags carried over
+// and the one spelling left to the prose: `git add .` stages a subtree no ls-files form equals.
+func TestStageAllServesTheSamePathsThroughLsFiles(t *testing.T) {
 	for cmd, want := range map[string]string{
-		"git add -A":                    "magus vcs add",
-		"git add --all -- a.go b/c.go":  "magus vcs add a.go b/c.go",
-		"git add -u && git commit -m x": "magus vcs add",
+		"git add -A":                    "magus vcs ls-files --include-untracked --include-generated -o name | git add --pathspec-from-file=-",
+		"git add --all -- a.go b/c.go":  "magus vcs ls-files --include-untracked --include-generated a.go b/c.go -o name | git add --pathspec-from-file=-",
+		"git add -u && git commit -m x": "magus vcs ls-files --include-generated -o name | git add --pathspec-from-file=-",
 		"git add .":                     "",
 		"git add -A -f vendor/":         "",
 		"git -C ../other add -A":        "",

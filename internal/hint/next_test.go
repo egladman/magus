@@ -285,14 +285,11 @@ func TestNextForDenyRemedyPipelineGradesEveryStage(t *testing.T) {
 	assert.Equal(t, []types.NextStep{n}, FilterServable(RoleUnbound, nil, []types.NextStep{n}))
 }
 
-// TestFilterServableGradesVcsAddByItsPaths extends the worker's write-path rule to the one
-// write whose operands are paths: staging inside the write paths is the worker's own.
-func TestFilterServableGradesVcsAddByItsPaths(t *testing.T) {
-	inside := NextForDenyRemedy("stage-all", VCSAdd.Argv("internal/hint/next.go"), "why")
-	whole := NextForDenyRemedy("stage-all", VCSAdd.Argv(), "why")
-	assert.Equal(t, []types.NextStep{inside}, FilterServable(RoleWorker, []string{"internal/hint/**"}, []types.NextStep{inside, whole}))
-	assert.Nil(t, FilterServable(RoleWorker, []string{"docs/**"}, []types.NextStep{inside}))
-	assert.Nil(t, FilterServable(RoleReviewer, []string{"internal/hint/**"}, []types.NextStep{inside}))
+// vcs ls-files lists and stages nothing, so a reviewer is served it as a read.
+func TestFilterServableServesLsFilesAsARead(t *testing.T) {
+	ls := NextForDenyRemedy("stage-all", VCSLsFiles.Argv("internal/hint/**"), "why")
+	assert.Equal(t, []types.NextStep{ls}, FilterServable(RoleReviewer, nil, []types.NextStep{ls}))
+	assert.Equal(t, []types.NextStep{ls}, FilterServable(RoleWorker, []string{"docs/**"}, []types.NextStep{ls}))
 }
 
 // A bare `magus run` writes wherever the workspace declares default charms, so the

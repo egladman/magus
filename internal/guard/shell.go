@@ -1984,8 +1984,8 @@ var (
 	// fix a target just wrote into a commit about something else. Measured: one such call
 	// put 69 files (a whole regenerated docs site plus five untouched source files) into a
 	// commit about four collection methods.
-	denyStageAll    = "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `" + hint.VCSAdd.String() + "`."
-	denyStageAllWhy = "`" + hint.VCSAdd.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSAdd.With("--dry-run") + "` stages nothing.\n" +
+	denyStageAll    = "a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `" + hint.VCSLsFiles.With("-o", "name") + " | git add --pathspec-from-file=-`."
+	denyStageAllWhy = "`" + hint.VCSLsFiles.String() + "` lists the dirty source paths no other job holds and says which classes it left out and the flag that adds each (`--include-generated`, `--include-untracked`); it stages nothing, so you read the list before git does.\n" +
 		"A hand-picked `git add -- <paths>` is still fine. Targets write declared outputs as they run, so the tree is routinely dirty with files you did not edit."
 
 	// The advisory a chain keeps when a pipe of its stages would change what it does; see
@@ -2217,8 +2217,9 @@ func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (strin
 		"the op runs the same command in the project you are in.")}
 }
 
-// stageAllRemedy stages the same paths through the workspace. `git add .` is left to the
-// prose: it stages the working directory's subtree, which no vcs add spelling equals.
+// stageAllRemedy serves the list-then-stage pipeline for the same operands. `git add .` is
+// left to the prose: it stages the working directory's subtree, which no ls-files
+// spelling equals.
 func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok {
@@ -2228,21 +2229,27 @@ func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 		if c.Name != "git" || len(c.Args) == 0 || c.Args[0] != "add" || !slices.ContainsFunc(c.Args[1:], isStageAllOperand) {
 			continue
 		}
-		var paths []string
+		argv := make([]string, 0, len(c.Args)+4)
+		if slices.Contains(c.Args[1:], "-A") || slices.Contains(c.Args[1:], "--all") {
+			argv = append(argv, "--include-untracked")
+		}
+		argv = append(argv, "--include-generated")
 		for _, a := range c.Args[1:] {
 			switch {
 			case a == ".":
 				return "", nil
-			case a == "--" || isStageAllOperand(a):
+			case a == "-A" || a == "--all" || a == "--" || isStageAllOperand(a):
 			case strings.HasPrefix(a, "-"):
 				return "", nil
 			default:
-				paths = append(paths, a)
+				argv = append(argv, a)
 			}
 		}
-		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.",
-			[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
-				"vcs add stages a source change with the outputs it produced and reports anything undeclared.")}
+		argv = append(argv, "-o", "name")
+		step := hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSLsFiles.Argv(argv...),
+			"ls-files lists the source changes with the outputs they produced and names what it left out; git stages exactly that list.")
+		step.Run += " | git add --pathspec-from-file=-"
+		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.", []types.NextStep{step}
 	}
 	return "", nil
 }

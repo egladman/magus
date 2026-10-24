@@ -892,6 +892,22 @@ func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]s
 	return gitStatusPaths(splitStatusLines(out)), nil
 }
 
+// StagedFiles implements types.StagedFileReporter from the porcelain's two status
+// columns: a change in the index column and a blank working-tree column.
+func (v gitVCS) StagedFiles(ctx context.Context, dir string) ([]string, error) {
+	out, err := gitOutput(ctx, dir, gitOpts{KeepLeadingSpace: true}, "status", "--porcelain", "--untracked-files=no")
+	if err != nil {
+		return nil, fmt.Errorf("git status: %w", err)
+	}
+	var staged []string
+	for _, line := range splitStatusLines(out) {
+		if len(line) > 3 && line[0] != ' ' && line[1] == ' ' {
+			staged = append(staged, line)
+		}
+	}
+	return gitStatusPaths(staged), nil
+}
+
 // gitStatusPaths turns porcelain lines into paths: three columns of prefix, then the
 // rename arrow, then git's C-quoting.
 //
@@ -962,7 +978,7 @@ const gitTrackedBatch = 256
 // prints "these outputs moved" followed by no diff at all. That is precisely the situation
 // the gate exists for, since it fires in CI where nobody can look at the tree.
 //
-// It is also not a hypothetical ordering: `magus vcs add` stages, and a generate run that
+// It is also not a hypothetical ordering: a person stages, and a generate run that
 // follows a staging step lands exactly here.
 //
 // -U1 keeps a multi-file diff readable in a CI log, where this is mostly read.

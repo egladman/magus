@@ -555,12 +555,12 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		{
 			name:  "vcs",
 			print: func() { vcsUsage(os.Stderr) },
-			want:  []string{"Usage: magus vcs", "add", "resolve", "checkpoint", "merge-driver"},
+			want:  []string{"Usage: magus vcs", "ls-files", "resolve", "checkpoint", "merge-driver"},
 		},
 		{
-			name:  "vcs add",
-			print: func() { vcsAddUsage(os.Stderr) },
-			want:  []string{"Usage: magus vcs add", "--dry-run", "--untracked", "git add -A"},
+			name:  "vcs ls-files",
+			print: func() { vcsLsFilesUsage(os.Stderr) },
+			want:  []string{"Usage: magus vcs ls-files", "--include-untracked", "--exclude", "--project", "git add --pathspec-from-file=-"},
 		},
 		{
 			name:  "vcs resolve",

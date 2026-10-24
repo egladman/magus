@@ -344,10 +344,24 @@ func (b *sessionBrief) readVCS(ctx context.Context, res types.VCSResolution, ws 
 	if err != nil {
 		return
 	}
-	// The same three-way split staging reports, so a brief and `magus vcs add`
-	// cannot disagree about what a path is.
-	b.Tree.Sources, b.Tree.Outputs, b.Tree.Unclaimed = classifyForStaging(files)
+	b.Tree.Sources, b.Tree.Outputs, b.Tree.Unclaimed = classifyByRole(files)
 	b.Tree.Classified = true
+}
+
+// classifyByRole splits classified files by role: declared sources, declared outputs, and
+// everything else, an empty role included.
+func classifyByRole(files []types.FileEntry) (sources, outputs, undeclared []string) {
+	for _, f := range files {
+		switch f.Role {
+		case "source":
+			sources = append(sources, f.Path)
+		case "output":
+			outputs = append(outputs, f.Path)
+		default:
+			undeclared = append(undeclared, f.Path)
+		}
+	}
+	return sources, outputs, undeclared
 }
 
 // unpushedCommits counts how many commits lead back to the base ref, or nil when the

@@ -4198,3 +4198,23 @@ func TestReadGitDriftHook(t *testing.T) {
 	_, _, err = ReadGitDriftHook(t.Context(), t.TempDir())
 	assert.ErrorIs(t, err, types.ErrVCSUnsupported)
 }
+
+// A path staged and then edited again still has something to stage, so it is not staged.
+func TestGitStagedFiles(t *testing.T) {
+	repo := testkit.NewRepo(t, nil)
+	repo.Write("whole.txt", "a")
+	repo.Write("partial.txt", "a")
+	repo.Write("unstaged.txt", "a")
+	repo.Commit("seed", nil)
+
+	repo.Write("whole.txt", "b")
+	repo.Write("partial.txt", "b")
+	repo.Write("unstaged.txt", "b")
+	repo.Write("new.txt", "b")
+	repo.Git("add", "whole.txt", "partial.txt")
+	repo.Write("partial.txt", "c")
+
+	got, err := gitVCS{}.StagedFiles(context.Background(), repo.Root())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"whole.txt"}, got)
+}

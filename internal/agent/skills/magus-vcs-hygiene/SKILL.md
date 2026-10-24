@@ -73,23 +73,25 @@ CORRECT: note that `docs/gen/**` is a declared output of
 
 {{if .Full}}## Preparing a commit{{else}}## Preparing commit{{end}}
 
-{{if .Full}}`{{cmd "vcs add"}}` does steps 1-2 below plus the staging in one call. It is the
-sanctioned replacement for `git add -A`:{{else}}`{{cmd "vcs add"}}`: steps 1-2 below plus staging, one call; sanctioned replacement for `git add -A`:{{end}}
+{{if .Full}}`{{cmd "vcs ls-files"}}` does steps 1-2 below: it lists the paths a commit of the change
+wants and stages nothing. You stage the list, which `git add -A` cannot do for you:{{else}}`{{cmd "vcs ls-files"}}`: steps 1-2 below; lists paths, stages nothing. You stage the list:{{end}}
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add <path>...   # narrow it
+magus vcs ls-files                                   # tracked dirty sources, nothing staged
+magus vcs ls-files 'internal/**' --exclude '*.md'    # patterns narrow, never add
+magus vcs ls-files --include-generated -o name | git add --pathspec-from-file=-
 ```
 
-{{if .Full}}It stages sources and their generated outputs together (one commit). It REPORTS
-every undeclared path instead of sweeping it in, which is the one thing
-`git add -A` cannot do. Pass `--untracked` when an undeclared path is a new
-source file. Staging specific paths by hand stays fine. The steps below are what it
-automates, and the fallback:
-{{else}}Stages sources with generated outputs: one commit.
-Reports every undeclared path, never sweeps it in.
-Pass `--untracked` when undeclared path is new source file.
+{{if .Full}}By default it lists tracked, modified or deleted declared sources that no other live
+job holds and that are not already staged. stderr names each group it left out and the
+flag that adds it: `--include-untracked`, `--include-generated` (outputs a dirty source
+explains), `--include-unexplained`, `--include-unclaimed`, `--include-held`,
+`--include-staged`. Add a flag only for a group you decided belongs in the commit.
+Staging specific paths by hand stays fine. The steps below are what it automates, and
+the fallback:
+{{else}}Default: tracked, modified or deleted declared sources, not held by another job, not staged.
+stderr names each group left out and the `--include-*` flag that adds it.
+Add a flag only for a group you decided belongs in the commit.
 Hand-staging specific paths fine.
 Steps below: what it automates, fallback:{{end}}
 {{if .Full}}1. List the dirty tree with your VCS (`git status --porcelain`).{{else}}1. List dirty tree with VCS (`git status --porcelain`).{{end}}

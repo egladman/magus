@@ -58,14 +58,14 @@ stdout 'deny \[[a-z-]+\]: restoring a path from MERGE_HEAD discards the other si
 stdin add-all.txt
 ! exec magus shell
 stdout 'deny \[stage-all\]: `git add` of everything sweeps outputs'
-stdout 'magus vcs add'
+stdout 'magus vcs ls-files'
 
-# `git add .` stages the working directory's subtree, which no vcs add spelling equals, so
+# `git add .` stages the working directory's subtree, which no ls-files spelling equals, so
 # it gets the prose and both deliberate forms instead.
 stdin add-dot.txt
 ! exec magus shell
 stdout 'deny \[stage-all\]: a whole-tree `git add` sweeps in regenerated output'
-stdout 'magus vcs add --dry-run'
+stdout 'magus vcs ls-files'
 stdout 'git add -- <paths>'
 
 # A worktree removal is judged rather than refused outright, so its verdict names the

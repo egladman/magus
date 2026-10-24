@@ -994,6 +994,9 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 			return types.DelegableRun
 		}
 	case "vcs":
+		if hint.VCSLsFiles.MatchedBy(words) {
+			return types.DelegableRead
+		}
 		if len(words) > 1 && integratesVCS(words[1], words[2:]) {
 			return delegableIntegrate
 		}
