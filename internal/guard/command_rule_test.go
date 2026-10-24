@@ -492,21 +492,23 @@ func TestColdApprovedCompileLapsesOnlyOnce(t *testing.T) {
 		"magusfile.buzz": "import \"magus\";\n\nmagus\\guard.command(fun (req: CommandRequest) > GuardVerdict {\n    return magus\\guard.deny(\"committed\");\n});\n",
 	})
 	repo.Magusfile("import \"magus\";\n")
-	rules, err := LoadWorkspaceRules(t.Context(), repo.Root(), types.VCSOptions{})
-	require.NoError(t, err)
-	require.Nil(t, rules.CommandRule(), "the working tree drops the rule, so the approved one is pending")
 
 	const share = time.Second
-	resolve := func(ctx context.Context) (ruleCall, error) {
-		rule, err := rules.ApprovedCommandRule(ctx)
-		if rule == nil {
-			return nil, err
-		}
-		return func(ctx context.Context) (types.GuardVerdict, error) {
-			return rule(ctx, types.CommandRequest{Command: "touch notes.txt"}, hint.NewGate(t.TempDir(), "s"))
-		}, err
-	}
+	// Each hook is its own process with its own load, as WorkspaceRules keeps the approved
+	// resolve for one judgment.
 	hook := func(provider *slowCompiles) rulesAnswer {
+		rules, err := LoadWorkspaceRules(t.Context(), repo.Root(), types.VCSOptions{})
+		require.NoError(t, err)
+		require.Nil(t, rules.CommandRule(), "the working tree drops the rule, so the approved one is pending")
+		resolve := func(ctx context.Context) (ruleCall, error) {
+			rule, err := rules.ApprovedCommandRule(ctx)
+			if rule == nil {
+				return nil, err
+			}
+			return func(ctx context.Context) (types.GuardVerdict, error) {
+				return rule(ctx, types.CommandRequest{Command: "touch notes.txt"}, hint.NewGate(t.TempDir(), "s"))
+			}, err
+		}
 		// The resolve holds two shares of the deadline to the approved rule's one.
 		ctx, cancel := context.WithTimeout(observability.WithProvider(t.Context(), provider), judgeReserve+share*3/2)
 		defer cancel()
@@ -587,4 +589,89 @@ func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
 	require.Positive(t, moved, "the unedited magusfile's working-tree chunk has the approved chunk's name")
 
 	assert.Equal(t, []types.GuardDecision{types.GuardAdvise, types.GuardDeny}, judge(`advise("edited again")`))
+}
+
+// committedRules is a root magusfile that registers every function rule, each denying, for a
+// working tree that drops or breaks them to leave the approved side pending.
+const committedRules = `import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    return magus\guard.deny("committed");
+});
+
+magus\guard.write(fun (req: WriteRequest) > GuardVerdict {
+    return magus\guard.deny("committed");
+});
+
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
+    return magus\guard.deny("committed");
+});
+`
+
+// A hook judges one call, and the compiled rules' settings and every function rule read the
+// approved sources: each read past the first answers from the first, so a slow status or
+// load costs the judgment once and not once per rule. Whether the working tree loads or
+// not, the three resolves after NewDependencies compile nothing.
+func TestOneJudgmentResolvesTheApprovedSourcesOnce(t *testing.T) {
+	for name, worktree := range map[string]string{
+		"loaded":   "import \"magus\";\n",
+		"unloaded": "import \"magus\";\n\nmagus\\guard.shell(\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			testkit.Isolate(t)
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": committedRules})
+			repo.Magusfile(worktree)
+
+			judge := func() []int32 {
+				compiles := &slowCompiles{}
+				ctx := observability.WithProvider(t.Context(), compiles)
+				deps, _ := NewDependencies(ctx, Wiring{Root: repo.Root()})
+				var extra []int32
+				mark := compiles.phases.Load()
+				command, err := deps.ApprovedCommandRule(ctx)
+				require.NoError(t, err)
+				require.NotNil(t, command)
+				got, err := command(ctx, types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
+				require.NoError(t, err)
+				require.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, got)
+				extra = append(extra, compiles.phases.Load()-mark)
+				mark = compiles.phases.Load()
+				write, err := deps.ApprovedWriteRule(ctx)
+				require.NoError(t, err)
+				require.NotNil(t, write)
+				extra = append(extra, compiles.phases.Load()-mark)
+				mark = compiles.phases.Load()
+				spawn, err := deps.ApprovedSpawnRule(ctx)
+				require.NoError(t, err)
+				require.NotNil(t, spawn)
+				return append(extra, compiles.phases.Load()-mark)
+			}
+			judge()
+			assert.Equal(t, []int32{0, 0, 0}, judge())
+		})
+	}
+}
+
+// A resolve that ran out of time is not the answer: the next read in the same judgment
+// resolves again rather than reading "no rule" off a cancelled status.
+func TestApprovedResolveUnderAnExpiredDeadlineIsNotKept(t *testing.T) {
+	testkit.Isolate(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": committedRules})
+	repo.Magusfile("import \"magus\";\n")
+	rules, err := LoadWorkspaceRules(t.Context(), repo.Root(), types.VCSOptions{})
+	require.NoError(t, err)
+
+	expired, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, _ = rules.ApprovedCommandRule(expired)
+	rule, err := rules.ApprovedCommandRule(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, rule)
+	got, err := rule(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, got)
 }

@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -466,4 +467,34 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 			}
 		}
 	})
+}
+
+// BenchmarkPlainWriteWithAPendingPolicy is one hook judging a file write while the working
+// tree edits the root magusfile, so the approved sources load beside it: the compiled rules'
+// settings and the write rule both read them.
+func BenchmarkPlainWriteWithAPendingPolicy(b *testing.B) {
+	testkit.Isolate(b)
+	b.Setenv("XDG_CACHE_HOME", b.TempDir())
+	b.Setenv("XDG_STATE_HOME", b.TempDir())
+	const policy = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
+	repo := testkit.NewRepo(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": policy})
+	root := repo.Root()
+	repo.Magusfile(policy + "\nfun unused() > void {}\n")
+	cacheDir := b.TempDir()
+	ctx := WithLocation(b.Context(), cacheDir, root, root)
+	req := Request{
+		Input: fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"bench","cwd":%q,"tool_name":"Write","tool_input":{"file_path":%q,"content":"x\n"}}`,
+			root, filepath.Join(root, "notes.txt")),
+		Host: "claude-code", Session: "bench",
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		deps, rules := NewDependencies(ctx, Wiring{Root: root, CacheDir: func(string) (string, error) { return cacheDir, nil }})
+		if rules == nil || deps.LoadFailure != nil {
+			b.Fatalf("the rules did not load: %v", deps.LoadFailure)
+		}
+		if v := Judge(ctx, deps, req); v.Decision == decisionDeny {
+			b.Fatalf("a plain write was denied: %+v", v)
+		}
+	}
 }
