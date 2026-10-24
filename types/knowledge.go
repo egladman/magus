@@ -1111,10 +1111,20 @@ type KnowledgeIndexCause struct {
 //
 // It answers the question `absent` cannot, and it is reported beside the verdict rather
 // than replacing it, because "no symbol by that name" stays true either way.
+//
+// Sites are the first [TextPresenceSiteCap] matches as "path:line", so a reader whose
+// index is stale can open the file instead of searching again; More counts the matches
+// past the cap.
 type KnowledgeTextPresence struct {
-	Hits  int `json:"hits"  yaml:"hits"`
-	Files int `json:"files" yaml:"files"`
+	Hits  int      `json:"hits"            yaml:"hits"`
+	Files int      `json:"files"           yaml:"files"`
+	Sites []string `json:"sites,omitempty" yaml:"sites,omitempty"`
+	More  int      `json:"more,omitempty"  yaml:"more,omitempty"`
 }
+
+// TextPresenceSiteCap bounds KnowledgeTextPresence.Sites, so a name present thousands of
+// times prints a screenful, not the tree.
+const TextPresenceSiteCap = 10
 
 // ClassifyAnswer classifies a lookup's result against what magus was actually able to search.
 //

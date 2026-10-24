@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
@@ -132,10 +133,11 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
 				classify = ws.ClassifyFiles
 			}
-			hits, files, n, s, g, cls, textErr := textPresence(ctx, searchRoot, pos[0], noGenerated, classify)
+			matches, n, s, g, cls, textErr := textScan(ctx, searchRoot, pos[0], nil, noGenerated, classify)
 			searched, skipped, generated, classifiedFiles = n, s, g, cls
-			if textErr == nil && hits > 0 {
-				ans.Text = &types.KnowledgeTextPresence{Hits: hits, Files: files}
+			if textErr == nil && len(matches) > 0 {
+				presence := presenceOf(searchRoot, matches)
+				ans.Text = &presence
 			}
 		}
 		miss := refsMiss{name: pos[0], answer: withIndexCause(ctx, root, ans), searched: searched}
@@ -224,6 +226,29 @@ func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
 	return reportIndexStaleness(w, out.Answer)
 }
 
+// presenceOf reduces matches to the counts and the capped site list a symbol miss reports,
+// with each site as a slash path relative to root.
+func presenceOf(root string, matches []textindex.Match) types.KnowledgeTextPresence {
+	files := map[string]bool{}
+	var sites []string
+	for _, m := range matches {
+		files[m.Path] = true
+		if len(sites) < types.TextPresenceSiteCap {
+			rel, err := filepath.Rel(root, m.Path)
+			if err != nil {
+				rel = m.Path
+			}
+			sites = append(sites, fmt.Sprintf("%s:%d", filepath.ToSlash(rel), m.Line))
+		}
+	}
+	return types.KnowledgeTextPresence{
+		Hits:  len(matches),
+		Files: len(files),
+		Sites: sites,
+		More:  len(matches) - len(sites),
+	}
+}
+
 // refsMiss is what refs learned about a name no symbol node matches.
 type refsMiss struct {
 	name     string
@@ -259,6 +284,12 @@ func reportRefsMiss(stderr io.Writer, opts output.Options, m refsMiss) error {
 			fmt.Fprintf(stderr, " (%s)", strings.Join(m.notes, "; "))
 		}
 		fmt.Fprintln(stderr)
+		for _, site := range t.Sites {
+			fmt.Fprintf(stderr, "    %s\n", site)
+		}
+		if t.More > 0 {
+			fmt.Fprintf(stderr, "    ... and %d more\n", t.More)
+		}
 		fmt.Fprintln(stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
 	}
 	printIndexCause(stderr, m.answer)
