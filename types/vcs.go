@@ -153,7 +153,6 @@ type VCSDriver interface {
 	MergeDriverInstaller
 	RefreshHookInstaller
 	DriftHookInstaller
-	RegenHookInstaller
 	RemoteReporter
 	RemoteConfigReporter
 	DefaultRefReporter
@@ -412,7 +411,6 @@ const (
 	CapMergeDriverInstaller  VCSCapability = "MergeDriverInstaller"
 	CapRefreshHookInstaller  VCSCapability = "RefreshHookInstaller"
 	CapDriftHookInstaller    VCSCapability = "DriftHookInstaller"
-	CapRegenHookInstaller    VCSCapability = "RegenHookInstaller"
 	CapRemoteReporter        VCSCapability = "RemoteReporter"
 	CapRemoteConfigReporter  VCSCapability = "RemoteConfigReporter"
 	CapDefaultRefReporter    VCSCapability = "DefaultRefReporter"
@@ -525,18 +523,6 @@ type RefreshHookInstaller interface {
 // It returns the labels of the hooks it installed, for a notice.
 type DriftHookInstaller interface {
 	InstallDriftHook(ctx context.Context, root, command string) ([]string, error)
-}
-
-// RegenHookInstaller is the capability (sibling of DriftHookInstaller) to install the
-// hooks that settle a merge-shaped operation once it has the whole tree: each runs
-// command with the hook's own name appended, and command regenerates what the operation
-// changed and stages it. The merge driver cannot do it, since it runs while the merge is
-// still writing the tree. Same managed-section contract as the other hook installers,
-// but NOT fail-open: in a hook git runs before it commits, command's failure stops the
-// commit. Callers skip the install on *VCSUnsupportedError. It returns the labels of the
-// hooks it changed, for a notice.
-type RegenHookInstaller interface {
-	InstallRegenHook(ctx context.Context, root, command string) ([]string, error)
 }
 
 // RemoteReporter is the capability to report a remote's URL. It lets callers derive a

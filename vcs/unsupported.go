@@ -36,9 +36,7 @@ func (jjName) name() string      { return "jj" }
 //   - jj, BranchChangeReporter: its working-copy commit is usually anonymous, so every
 //     bookmark, the reader's own included, would report as another line of work.
 //   - jj, Bisector: jj has no bisect command.
-//   - hg and sl, RegenHookInstaller and BranchChangeReporter: not built yet, though their
-//     hooks and revsets could answer. Until then the merge driver logs the regeneration
-//     to run before committing, and `magus vcs resolve` runs it.
+//   - hg and sl, BranchChangeReporter: not built yet, though their revsets could answer.
 //   - hg, sl and jj, CheckoutReporter: not built yet, though hg's shares and jj's
 //     workspaces are registered checkouts too.
 //   - sl, CheckoutProvisioner: Sapling has no secondary checkout (see
@@ -63,10 +61,6 @@ func (declines[N]) InstallRefreshHook(context.Context, string, string) ([]string
 
 func (declines[N]) InstallDriftHook(context.Context, string, string) ([]string, error) {
 	return nil, decline[N](types.CapDriftHookInstaller)
-}
-
-func (declines[N]) InstallRegenHook(context.Context, string, string) ([]string, error) {
-	return nil, decline[N](types.CapRegenHookInstaller)
 }
 
 func (declines[N]) RemoteURL(context.Context, string, string) (string, error) {

@@ -139,8 +139,8 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "is merged when every region both sides changed is low risk, and otherwise")
 	fmt.Fprintln(os.Stderr, "left with conflict markers. A declared output keeps the current version")
 	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes,")
-	fmt.Fprintln(os.Stderr, "and the settle hooks `"+hint.Init.With("--vcs", "git")+"` writes beside it (`"+hint.VCSResolve.With("--hook")+"`)")
-	fmt.Fprintln(os.Stderr, "run it once the merge, rebase, cherry-pick or revert has the whole tree.")
+	fmt.Fprintln(os.Stderr, "and `"+hint.VCSResolve.String()+"` runs it once the merge, rebase, cherry-pick or")
+	fmt.Fprintln(os.Stderr, "revert has the whole tree.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `"+hint.Init.String()+"`.")
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
@@ -219,10 +219,6 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	}
 	// resolve mutates every conflicted path in the workspace. Widening
 	// `magus vcs resolve one/file.go` from one path to all of them would cost a tree.
-	if rf.Hook != "" {
-		// Exit 2 is what a hook written by an earlier magus lets a commit through on.
-		return exit.Usagef("vcs resolve: --hook was removed: git hooks only submit jobs now; run `%s` after a merge", hint.VCSResolve.String())
-	}
 	if len(pos) > 0 {
 		return exit.Usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
 	}
@@ -755,28 +751,16 @@ func settleRun(root string, rc runConfig) settle.RunFunc {
 	})
 }
 
-// settleOwedByHand is `magus vcs resolve` with nothing conflicted. It settles, in one
-// run per target, what the settle hooks left: everything changed since the first
-// operation they deferred under magus.settle=defer, and what the merge driver left owed,
-// which a settle hook that failed, was kept from running or was bypassed with
-// --no-verify leaves behind and `magus doctor` reports. It stages the result and clears
-// both records. With nothing left it says so.
+// settleOwedByHand is `magus vcs resolve` with nothing conflicted. It runs, one run per
+// target, the regenerations the merge driver left owed, which `magus doctor` reports,
+// stages the result and clears the record. With nothing owed it says so.
 func settleOwedByHand(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver) error {
-	op, deferred, err := vcs.DeferredSettle(ctx, m.Root())
+	out, err := settle.Hook(ctx, m, vcs.HookOperation{}, buildDefinesTarget(ctx, m), settleRun(root, rc))
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	if deferred {
-		if err := vcs.ClearDeferredSettle(ctx, m.Root()); err != nil {
-			return fmt.Errorf("vcs resolve: %w", err)
-		}
 	}
 	if len(out.Ran) == 0 {
-		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths, no settle deferred and no regeneration owed")
+		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths and no regeneration owed")
 		return nil
 	}
 	fmt.Printf("vcs resolve: ran %s; staged %d regenerated file(s): %s\n", out.Command(), len(out.Staged), driver.ReviewCommand())

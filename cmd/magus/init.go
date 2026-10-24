@@ -368,8 +368,8 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 }
 
 // installInitHooks writes the git-style hooks `magus init` owns: the refresh and drift
-// hooks, and strips the blocking settle sections an earlier magus wrote. Server start only
-// refreshes sections that already exist, so this is where a repository first gets them.
+// hooks. Server start only refreshes sections that already exist, so this is where a
+// repository first gets them.
 func installInitHooks(ctx context.Context, installer any, name, root string) error {
 	log := slog.With(attr.Component("init"))
 	type install struct {
@@ -377,11 +377,6 @@ func installInitHooks(ctx context.Context, installer any, name, root string) err
 		run        func() ([]string, error)
 	}
 	var steps []install
-	if h, ok := installer.(types.RegenHookInstaller); ok {
-		steps = append(steps, install{"settle", "no hook blocks a commit on a regeneration now", func() ([]string, error) {
-			return h.InstallRegenHook(ctx, root, "")
-		}})
-	}
 	if h, ok := installer.(types.RefreshHookInstaller); ok {
 		steps = append(steps, install{"refresh", "history changes now reconcile the graph", func() ([]string, error) {
 			return h.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))

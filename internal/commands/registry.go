@@ -1750,7 +1750,6 @@ base in yourself on the others, then run resolve.`,
 			Short: "Settle an in-progress merge's conflicted generated files, then regenerate once",
 			Flags: []cmdline.Flag{
 				{Name: "against", Kind: cmdline.String, Doc: "Merge this `ref` first, then settle what it conflicts with"},
-				{Name: "hook", Kind: cmdline.String, Doc: "Run as the git `hook` named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand"},
 			},
 		},
 		{

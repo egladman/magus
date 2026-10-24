@@ -2365,40 +2365,6 @@ func readSectionCommand(path, text string, m managedMarkers, parse func(line str
 	return "", false, nil
 }
 
-// InstallRegenHook implements types.RegenHookInstaller. Git hooks only submit background
-// jobs, because a hook that blocks for more than about a second is not a hook, so it
-// installs nothing: it strips the magus-regenerate section an earlier magus wrote into
-// SettleHooks and post-merge, leaving any other content of those hooks as it is, and
-// returns the hooks it changed, none when all were clean. command is unused; the
-// interface keeps the parameter. Same error and locking contract as InstallRefreshHook.
-func (v gitVCS) InstallRegenHook(ctx context.Context, root, _ string) ([]string, error) {
-	return removeGitHookSections(ctx, root, append([]string{"post-merge"}, SettleHooks...), regenMarkers)
-}
-
-// removeGitHookSections deletes the m section from each named hook of root's repository
-// and returns the hooks it changed. A hook without one is left as it is.
-func removeGitHookSections(ctx context.Context, root string, names []string, m managedMarkers) ([]string, error) {
-	paths, ok, err := resolveGitRepoPaths(ctx, root)
-	if err != nil || !ok {
-		return nil, err
-	}
-	var removed []string
-	j := WriteJudge(ctx, root)
-	err = withRepoLock(ctx, paths.commonDir, func() error {
-		for _, name := range names {
-			changed, err := removeManagedSection(filepath.Join(paths.hooksDir, name), m, j)
-			if err != nil {
-				return err
-			}
-			if changed {
-				removed = append(removed, name)
-			}
-		}
-		return nil
-	})
-	return removed, err
-}
-
 // gitArgChunkSize bounds pathspecs per git invocation. Resolving in bulk exists to avoid
 // per-path process cost, but an unbounded argv hits E2BIG on the tightest platforms.
 const gitArgChunkSize = 256

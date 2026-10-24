@@ -53,11 +53,6 @@ func Hook(ctx context.Context, m *magus.Magus, op vcs.HookOperation, defines fun
 	if err := vcs.DropOwedRegenerations(ctx, m.Root(), owed); err != nil {
 		return o, err
 	}
-	if op.CommitPending {
-		if err := vcs.HookRecordSettledTree(ctx, m.Root(), op); err != nil {
-			return o, err
-		}
-	}
 	return o, nil
 }
 

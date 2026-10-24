@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -76,73 +75,6 @@ func TestOwedRegenerationOutsideARepository(t *testing.T) {
 	got, err := OwedRegenerations(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Empty(t, got)
-}
-
-// TestInstallRegenHookStripsTheBlockingSections pins that no settle hook is installed, that
-// the regenerate section an earlier magus wrote is taken out of every hook that carried
-// it, and that the drift section post-commit shares and a hand-written body stay.
-func TestInstallRegenHookStripsTheBlockingSections(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
-	ctx := t.Context()
-	hooks := filepath.Join(dir, ".git", "hooks")
-
-	_, err := gitVCS{}.InstallDriftHook(ctx, dir, "magus job run check-drift")
-	require.NoError(t, err)
-	for _, name := range append([]string{"post-merge"}, SettleHooks...) {
-		_, err := writeManagedSection(hooks, filepath.Join(hooks, name), regenMarkers, "magus vcs resolve --hook "+name+"\n", hookFile, stamp.Judge{})
-		require.NoError(t, err)
-	}
-	foreign := "#!/bin/sh\necho mine\n"
-	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-applypatch"), []byte(foreign), 0o755))
-	stale, err := SettleHooksStale(ctx, dir)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"post-merge", "pre-merge-commit", "pre-commit", "post-commit", "post-rewrite"}, stale)
-
-	removed, err := gitVCS{}.InstallRegenHook(ctx, dir, "")
-	require.NoError(t, err)
-	assert.Equal(t, []string{"post-merge", "pre-merge-commit", "pre-commit", "post-commit", "post-rewrite"}, removed)
-
-	drift := driftMarkers.section("magus job run check-drift post-commit >/dev/null 2>&1 || true\n")
-	assertFile(t, filepath.Join(hooks, "post-commit"), "#!/bin/sh\n\n"+drift, 0o755)
-	assertFile(t, filepath.Join(hooks, "post-applypatch"), foreign, 0o755)
-	for _, name := range []string{"pre-merge-commit", "pre-commit"} {
-		data, err := os.ReadFile(filepath.Join(hooks, name))
-		require.NoError(t, err)
-		assert.NotContains(t, string(data), "vcs resolve", name)
-	}
-	stale, err = SettleHooksStale(ctx, dir)
-	require.NoError(t, err)
-	assert.Empty(t, stale)
-
-	again, err := gitVCS{}.InstallRegenHook(ctx, dir, "")
-	require.NoError(t, err)
-	assert.Empty(t, again)
-}
-
-// TestInstallRegenHookInstallsNothing: a repository no earlier magus wrote a settle hook
-// into gains none.
-func TestInstallRegenHookInstallsNothing(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
-	hooks := filepath.Join(dir, ".git", "hooks")
-	before := snapshotHooks(t, hooks)
-	installed, err := gitVCS{}.InstallRegenHook(t.Context(), dir, "")
-	require.NoError(t, err)
-	assert.Empty(t, installed)
-	assert.Equal(t, before, snapshotHooks(t, hooks))
-}
-
-func snapshotHooks(t *testing.T, hooks string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(hooks)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	require.NoError(t, err)
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	return names
 }
 
 func absoluteGitDir(t *testing.T, dir string) string {

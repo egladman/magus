@@ -1,9 +1,7 @@
 package doctor
 
 import (
-	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -97,38 +95,6 @@ func TestInstallRemedyNamesNoGuessedBackend(t *testing.T) {
 	got := r.installRemedy()
 	assert.Contains(t, got, "no VCS resolved")
 	assert.NotContains(t, got, "--vcs")
-}
-
-// A git hook that still carries the blocking magus-regenerate section fails naming each
-// one and the command that strips them; once stripped, the same repository passes.
-func TestCheckSettleHooksReportsTheStaleOnes(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
-	root := repo.Root()
-	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: root}}}
-	ok := types.Check{Name: "settle-hooks", Status: types.CheckOK,
-		Message: "no git hook carries a blocking magus-regenerate section"}
-	assert.Equal(t, ok, r.checkSettleHooks())
-
-	hook := filepath.Join(root, ".git", "hooks", "pre-commit")
-	require.NoError(t, os.MkdirAll(filepath.Dir(hook), 0o755))
-	require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\n# BEGIN magus-regenerate\nmagus vcs resolve --hook pre-commit\n# END magus-regenerate\n"), 0o755))
-	assert.Equal(t, types.Check{
-		Name:    "settle-hooks",
-		Status:  types.CheckFail,
-		Message: "1 git hook(s) still run a regeneration that blocks the commit; hooks only submit jobs now",
-		Details: []string{
-			"stale: pre-commit",
-			"strip them with `" + hint.Init.With("--vcs", "git") + "`",
-		},
-	}, r.checkSettleHooks())
-
-	installer, found := vcs.Installer("git")
-	require.True(t, found)
-	hooks, found := installer.(types.RegenHookInstaller)
-	require.True(t, found)
-	_, err := hooks.InstallRegenHook(t.Context(), root, "")
-	require.NoError(t, err)
-	assert.Equal(t, ok, r.checkSettleHooks())
 }
 
 // The registration is a command line, not a path, and vcs/git.go quotes the executable
