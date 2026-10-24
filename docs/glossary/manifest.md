@@ -32,16 +32,16 @@ magus describe project libs/xdg
 
 In the docs:
 
+- [Anti-pattern: a shared manifest as an input](../concepts/cache.md#anti-pattern-a-shared-manifest-as-an-input)
 - [podman-manifest](../concepts/spells/podman.md#podman-manifest)
 - [MGS1049: a target runs a manifest-defined script](../reference/codes/magusfile/MGS1049.md#mgs1049-a-target-runs-a-manifest-defined-script)
-- [Anti-pattern: a shared manifest as an input](../concepts/cache.md#anti-pattern-a-shared-manifest-as-an-input)
 
 In the code (`magus refs <name>` lists every site):
 
 - `cache.Manifest` (Go)
+- `knowledge.manifest` (Go)
 - `selfupdate.Manifest` (Go)
 - `spells.Manifest` (Go)
-- `knowledge.manifest` (Go)
 - `v1.Manifest` (Go)
 
 <!-- END GLOSSARY USAGE -->

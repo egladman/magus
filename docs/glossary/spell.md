@@ -24,12 +24,12 @@ magus describe spell
 
 In the docs:
 
-- [Spell contract](../reference/spell-contract.md#spell-contract)
-- [spell lock options](../reference/manpage/magus-spell.md#spell-lock-options)
-- [Writing a spell](../guides/authoring-spells.md#writing-a-spell)
-- [File spell](../concepts/spells.md#file-spell)
-- [The spell contract](../concepts/engines.md#the-spell-contract)
-- [MGS1002: spell import shadowed](../reference/codes/magusfile/MGS1002.md#mgs1002-spell-import-shadowed)
+- [Spell caches: warming the tools' own caches](../concepts/cache/remote.md#spell-caches-warming-the-tools-own-caches)
+- [How a charm reaches a spell](../concepts/charms.md#how-a-charm-reaches-a-spell)
+- [The provider spell](../concepts/ci.md#the-provider-spell)
+- [Spell-backed providers](../concepts/secrets/providers.md#spell-backed-providers)
+- [D. A flag relayed through a provider spell that returns a runtime CLI command (considered)](../decisions/0003-running-an-invocation-on-another-operating-system.md#d-a-flag-relayed-through-a-provider-spell-that-returns-a-runtime-cli-command-considered)
+- [A spell exports fun op(target: Target, req: Req) > Resp](../decisions/0011-typed-provider-calls.md#a-spell-exports-fun-optarget-target-req-req--resp)
 
 In the code (`magus refs <name>` lists every site):
 

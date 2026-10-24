@@ -30,8 +30,8 @@ magus run --no-volatility-retry test .
 In the docs:
 
 - [Volatility](../concepts/volatility.md#volatility)
-- [volatility](../reference/config.md#volatility)
 - [VolatilityReport](../reference/api/insight/v1alpha1/insight.md#volatilityreport)
+- [volatility](../reference/config.md#volatility)
 
 In the code (`magus refs <name>` lists every site):
 

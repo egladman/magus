@@ -29,10 +29,12 @@ magus job exec my-job
 
 In the docs:
 
+- [A lease narrows it further](../concepts/sandbox.md#a-lease-narrows-it-further)
+- [lease-checkout](../decisions/0015-a-call-runs-where-its-line-says.md#lease-checkout)
+- [Correlating a spawn to a lease](../guides/integrations/agents/any-host.md#correlating-a-spawn-to-a-lease)
+- [Lease capture](../guides/integrations/agents/claude-code.md#lease-capture)
+- [lease-checkout](../reference/rules/lease-checkout.md#lease-checkout)
 - [lease-claim](../reference/rules/lease-claim.md#lease-claim)
-- [lease-gate](../reference/rules/lease-gate.md#lease-gate)
-- [Take the lease](../guides/integrations/agents/leases.md#take-the-lease)
-- [Lease capture](../guides/integrations/agents/any-host.md#lease-capture)
 
 In the code (`magus refs <name>` lists every site):
 

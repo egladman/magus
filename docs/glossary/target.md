@@ -28,17 +28,17 @@ magus run test libs/xdg
 
 In the docs:
 
-- [The target name](../concepts/targets.md#the-target-name)
-- [Disambiguating "op" and "target"](../concepts/operations.md#disambiguating-op-and-target)
-- [Target output references](../concepts/cache/output-refs.md#target-output-references)
-- [MGS1006: unknown target](../reference/codes/magusfile/MGS1006.md#mgs1006-unknown-target)
-- [MGS1007: target dependency cycle](../reference/codes/magusfile/MGS1007.md#mgs1007-target-dependency-cycle)
-- [Target graph in live mode](../reference/console.md#target-graph-in-live-mode)
+- [Files a target edits rather than produces](../concepts/cache.md#files-a-target-edits-rather-than-produces)
+- [Re-running a target whose inputs have not moved](../concepts/cache/output-refs.md#re-running-a-target-whose-inputs-have-not-moved)
+- [Charm vs target: the command boundary](../concepts/charms.md#charm-vs-target-the-command-boundary)
+- [B. A repository-local target (the prototype)](../decisions/0003-running-an-invocation-on-another-operating-system.md#b-a-repository-local-target-the-prototype)
+- [A spell exports fun op(target: Target, req: Req) > Resp](../decisions/0011-typed-provider-calls.md#a-spell-exports-fun-optarget-target-req-req--resp)
+- [5. Compose a ci target and run only what changed](../guides/getting-started.md#5-compose-a-ci-target-and-run-only-what-changed)
 
 In the code (`magus refs <name>` lists every site):
 
-- `interp.Target` (Go)
 - `dry.Target` (Go)
+- `interp.Target` (Go)
 - `types.Target` (Go)
 
 <!-- END GLOSSARY USAGE -->

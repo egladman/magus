@@ -30,17 +30,17 @@ magus ls targets libs/xdg
 
 In the docs:
 
-- [Project](../reference/api/tool/v1alpha1/tool.md#project)
-- [project](../reference/buzz/magus.md#project)
-- [MGS1015: cross-project dependency names an unresolvable project](../reference/codes/magusfile/MGS1015.md#mgs1015-cross-project-dependency-names-an-unresolvable-project)
-- [What a project is](../concepts/workspace.md#what-a-project-is)
-- [Binding a spell to a project](../concepts/spells.md#binding-a-spell-to-a-project)
 - [S2: Project discovery](../benchmarks/build-tools.md#s2-project-discovery)
+- [Granularity: project-wide vs per-target](../concepts/cache.md#granularity-project-wide-vs-per-target)
+- [needs and glob: functions and patterns, same-project globs](../concepts/dependencies.md#needs-and-glob-functions-and-patterns-same-project-globs)
+- [The workflow hardcodes the project list](../concepts/targets/ci.md#the-workflow-hardcodes-the-project-list)
+- [Running targets in a provided project](../concepts/workspace/providers.md#running-targets-in-a-provided-project)
+- [Project references](../guides/integrations/agents.md#project-references)
 
 In the code (`magus refs <name>` lists every site):
 
-- `types.Project` (Go)
 - `dry.Project` (Go)
+- `types.Project` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

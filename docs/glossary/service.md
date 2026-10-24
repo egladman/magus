@@ -30,20 +30,20 @@ magus broker status
 
 In the docs:
 
-- [Service](../reference/api/status/v1alpha1/status.md#service)
-- [MGS5002: service op detaches](../reference/codes/services/MGS5002.md#mgs5002-service-op-detaches)
-- [ActivityService](../reference/api/activity/v1alpha1/activity.md#activityservice)
-- [JobService](../reference/api/job/v1alpha1/job.md#jobservice)
+- [A service reached via needs is supervised, not foregrounded](../concepts/dependencies.md#a-service-reached-via-needs-is-supervised-not-foregrounded)
 - [An operation is a command or a service](../concepts/spells.md#an-operation-is-a-command-or-a-service)
-- [TokenService](../reference/api/token/v1alpha1/token.md#tokenservice)
+- [ActivityService](../reference/api/activity/v1alpha1/activity.md#activityservice)
+- [GraphService](../reference/api/graph/v1alpha1/graph.md#graphservice)
+- [InsightService](../reference/api/insight/v1alpha1/insight.md#insightservice)
+- [JobService](../reference/api/job/v1alpha1/job.md#jobservice)
 
 In the code (`magus refs <name>` lists every site):
 
-- `insight.Service` (Go)
+- `magus-protodocs.service` (Go)
+- `activity.Service` (Go)
 - `graph.Service` (Go)
-- `notes.Service` (Go)
-- `token.Service` (Go)
-- `console.Service` (Go)
+- `insight.Service` (Go)
+- `job.Service` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

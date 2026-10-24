@@ -29,17 +29,17 @@ magus session ls
 
 In the docs:
 
-- [Invocation](../reference/api/viewer/v1alpha1/viewer.md#invocation)
-- [ADR 0003: running an invocation on another operating system](../decisions/0003-running-an-invocation-on-another-operating-system.md#adr-0003-running-an-invocation-on-another-operating-system)
 - [ADR 0001: bounded concurrency with recursive invocation](../decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation)
+- [ADR 0003: running an invocation on another operating system](../decisions/0003-running-an-invocation-on-another-operating-system.md#adr-0003-running-an-invocation-on-another-operating-system)
 - [Recursive invocation](../guides/tips.md#recursive-invocation)
+- [GetInvocation](../reference/api/viewer/v1alpha1/viewer.md#getinvocation)
 - [MGS3012: invocation stalled](../reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled)
 
 In the code (`magus refs <name>` lists every site):
 
 - `hint.Invocation` (Go)
-- `magus.Invocation` (Go)
 - `journal.Invocation` (Go)
+- `magus.Invocation` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

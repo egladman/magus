@@ -23,12 +23,12 @@ magus server start
 
 In the docs:
 
-- [The daemon](../guides/integrations/server.md#the-daemon)
-- [Daemon API](../reference/api/index.md#daemon-api)
 - [Client and daemon](../concepts/compatibility.md#client-and-daemon)
-- [Decision: the daemon is an accelerant, never a capability gate](../guides/integrations/editor/design.md#decision-the-daemon-is-an-accelerant-never-a-capability-gate)
-- [MCP over the daemon socket](../guides/integrations/mcp.md#mcp-over-the-daemon-socket)
 - [Relationship to the broker and the daemon](../concepts/concurrency.md#relationship-to-the-broker-and-the-daemon)
+- [Amended 2026-09-02: machine-wide admission is daemon-owned](../guides/integrations/editor/design.md#amended-2026-09-02-machine-wide-admission-is-daemon-owned)
+- [MCP over the daemon socket](../guides/integrations/mcp.md#mcp-over-the-daemon-socket)
+- [Choosing between the daemon and ad hoc runs](../guides/integrations/server.md#choosing-between-the-daemon-and-ad-hoc-runs)
+- [One-shot daemon health probe](../guides/tips.md#one-shot-daemon-health-probe)
 
 <!-- END GLOSSARY USAGE -->
 

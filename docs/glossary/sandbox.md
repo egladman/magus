@@ -30,12 +30,12 @@ magus describe target build docs
 
 In the docs:
 
-- [sandbox](../reference/config.md#sandbox)
-- [Sandbox](../reference/api/metrics/v1alpha1/metrics.md#sandbox)
 - [Sandbox model](../concepts/sandbox.md#sandbox-model)
-- [Sandbox diagnostics](../reference/codes/sandbox/README.md#sandbox-diagnostics)
-- [MGS2004: sandbox config unresolved](../reference/codes/sandbox/MGS2004.md#mgs2004-sandbox-config-unresolved)
+- [Secrets and the sandbox](../concepts/secrets.md#secrets-and-the-sandbox)
+- [What the sandbox enforces under a lease](../guides/integrations/agents/leases.md#what-the-sandbox-enforces-under-a-lease)
 - [Sandbox env passthrough](../guides/integrations/nx.md#sandbox-env-passthrough)
+- [Sandbox](../reference/api/metrics/v1alpha1/metrics.md#sandbox)
+- [MGS2004: sandbox config unresolved](../reference/codes/sandbox/MGS2004.md#mgs2004-sandbox-config-unresolved)
 
 In the code (`magus refs <name>` lists every site):
 

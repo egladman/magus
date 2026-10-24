@@ -35,16 +35,16 @@ fun main(args: [str]) > void !> any {
 
 In the docs:
 
-- [Magusfile Module Reference](../reference/buzz/index.md#magusfile-module-reference)
-- [The suite module](../guides/testing.md#the-suite-module)
 - [Release one module](../guides/releasing.md#release-one-module)
+- [The assert module](../guides/testing.md#the-assert-module)
+- [Magusfile Module Reference](../reference/buzz/index.md#magusfile-module-reference)
 
 In the code (`magus refs <name>` lists every site):
 
+- `langservice.Module` (Go)
+- `std.Module` (Go)
 - `gopherbuzz.Module` (Go)
 - `scipbuzz.module` (Go)
-- `std.Module` (Go)
-- `langservice.Module` (Go)
 - `debug.Module` (Go)
 
 <!-- END GLOSSARY USAGE -->

@@ -28,15 +28,15 @@ magus status -o json
 
 In the docs:
 
-- [Snapshot](../reference/api/metrics/v1alpha1/metrics.md#snapshot)
 - [Live pool snapshot in a multiplexer sidebar](../guides/tips.md#live-pool-snapshot-in-a-multiplexer-sidebar)
+- [Snapshot](../reference/api/metrics/v1alpha1/metrics.md#snapshot)
 
 In the code (`magus refs <name>` lists every site):
 
-- `job.Snapshot` (Go)
-- `race.snapshot` (Go)
 - `audit.snapshot` (Go)
+- `job.Snapshot` (Go)
 - `queue.Snapshot` (Go)
+- `race.snapshot` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

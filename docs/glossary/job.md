@@ -37,12 +37,12 @@ magus ls jobs
 
 In the docs:
 
-- [Job](../reference/api/job/v1alpha1/job.md#job)
-- [magus-job](../reference/manpage/magus-job.md#magus-job)
-- [Job control](../reference/console.md#job-control)
-- [Job attribution](../reference/guard-spawn.md#job-attribution)
+- [2026-10-23: a job pauses, and leans by weight](../decisions/0001-bounded-concurrency-with-recursive-invocation.md#2026-10-23-a-job-pauses-and-leans-by-weight)
 - [Asking where a job stands](../guides/integrations/agents/leases.md#asking-where-a-job-stands)
+- [The job store is one jobs.jsonl per repository](../guides/integrations/agents/orchestration.md#the-job-store-is-one-jobsjsonl-per-repository)
 - [Which tier a job gets](../guides/jobs/model-tiers.md#which-tier-a-job-gets)
+- [Job](../reference/api/job/v1alpha1/job.md#job)
+- [MGS3018: a directory as a job write path](../reference/codes/sandbox/MGS3018.md#mgs3018-a-directory-as-a-job-write-path)
 
 In the code (`magus refs <name>` lists every site):
 

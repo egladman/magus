@@ -22,11 +22,11 @@ magus run test . --concurrency 2
 
 In the docs:
 
-- [Concurrency](../concepts/concurrency.md#concurrency)
-- [Concurrency](../guides/integrations/server.md#concurrency)
-- [ADR 0001: bounded concurrency with recursive invocation](../decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation)
-- [Concurrency pool](../concepts/telemetry.md#concurrency-pool)
 - [One exception: concurrency](../concepts/ci/providers.md#one-exception-concurrency)
+- [Concurrency](../concepts/concurrency.md#concurrency)
+- [Concurrency pool](../concepts/telemetry.md#concurrency-pool)
+- [ADR 0001: bounded concurrency with recursive invocation](../decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation)
+- [Concurrency](../guides/integrations/server.md#concurrency)
 
 <!-- END GLOSSARY USAGE -->
 

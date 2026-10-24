@@ -28,9 +28,9 @@ magus status --probe=readiness
 
 In the docs:
 
-- [Health](../reference/api/status/v1alpha1/status.md#health)
 - [Health: what magus status reports](../guides/integrations/server.md#health-what-magus-status-reports)
 - [One-shot daemon health probe](../guides/tips.md#one-shot-daemon-health-probe)
+- [Health](../reference/api/status/v1alpha1/status.md#health)
 
 <!-- END GLOSSARY USAGE -->
 

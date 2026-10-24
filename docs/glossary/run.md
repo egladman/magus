@@ -29,19 +29,19 @@ magus run test web
 
 In the docs:
 
-- [Run](../reference/api/status/v1alpha1/status.md#run)
-- [run](../reference/buzz/magus.md#run)
-- [split-run](../reference/rules/split-run.md#split-run)
-- [chained-run](../reference/rules/chained-run.md#chained-run)
-- [magus-run](../reference/manpage/magus-run.md#magus-run)
-- [magus-run](../reference/skills/magus-run.md#magus-run)
+- [S3: Affected dry-run (1 file changed)](../benchmarks/build-tools.md#s3-affected-dry-run-1-file-changed)
+- [Tools that run their own jobs: the jobserver](../concepts/concurrency.md#tools-that-run-their-own-jobs-the-jobserver)
+- [Both-arms rule: the static graph and a dry run can disagree](../concepts/dependencies.md#both-arms-rule-the-static-graph-and-a-dry-run-can-disagree)
+- [One provider per run, and why there is no fallback chain](../concepts/secrets/providers.md#one-provider-per-run-and-why-there-is-no-fallback-chain)
+- [docker-run](../concepts/spells/docker.md#docker-run)
+- [go-run](../concepts/spells/go.md#go-run)
 
 In the code (`magus refs <name>` lists every site):
 
-- `magus.run` (Go)
+- `forecast.Run` (Go)
 - `screen.run` (Go)
 - `queue.run` (Go)
-- `forecast.Run` (Go)
+- `magus.run` (Go)
 - `rankeval.Run` (Go)
 
 <!-- END GLOSSARY USAGE -->

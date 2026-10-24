@@ -30,17 +30,17 @@ magus server start
 
 In the docs:
 
-- [console](../reference/config.md#console)
-- [Console API](../reference/console.md#console-api)
 - [Console links](../concepts/tokens.md#console-links)
 - [The console view](../guides/diagrams.md#the-console-view)
+- [Watch it: the console jobs view](../guides/integrations/agents/leases.md#watch-it-the-console-jobs-view)
+- [Sharing the console to a phone](../guides/integrations/server.md#sharing-the-console-to-a-phone)
 - [MGS9010: console file withheld](../reference/codes/auth/MGS9010.md#mgs9010-console-file-withheld)
 - [MGS9013: console not built](../reference/codes/auth/MGS9013.md#mgs9013-console-not-built)
 
 In the code (`magus refs <name>` lists every site):
 
-- `playground.Console` (Go)
 - `config.Console` (Go)
+- `playground.Console` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

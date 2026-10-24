@@ -28,12 +28,12 @@ magus broker status
 
 In the docs:
 
-- [Broker](../reference/api/status/v1alpha1/status.md#broker)
-- [magus-broker](../reference/manpage/magus-broker.md#magus-broker)
-- [The broker](../guides/integrations/server.md#the-broker)
-- [The broker holds one budget per machine](../guides/integrations/agents/orchestration.md#the-broker-holds-one-budget-per-machine)
-- [MGS3022: no broker answered](../reference/codes/sandbox/MGS3022.md#mgs3022-no-broker-answered)
 - [Relationship to the broker and the daemon](../concepts/concurrency.md#relationship-to-the-broker-and-the-daemon)
+- [Slots stop being derived from memory under the broker](../decisions/0012-memory-claims-follow-a-measured-curve.md#slots-stop-being-derived-from-memory-under-the-broker)
+- [The broker holds one budget per machine](../guides/integrations/agents/orchestration.md#the-broker-holds-one-budget-per-machine)
+- [Supervising the broker](../guides/integrations/server.md#supervising-the-broker)
+- [Broker](../reference/api/status/v1alpha1/status.md#broker)
+- [MGS3022: no broker answered](../reference/codes/sandbox/MGS3022.md#mgs3022-no-broker-answered)
 
 <!-- END GLOSSARY USAGE -->
 

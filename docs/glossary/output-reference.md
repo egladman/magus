@@ -25,12 +25,7 @@ magus query output out1a2b3c
 
 In the docs:
 
-- [output-pipe](../reference/rules/output-pipe.md#output-pipe)
 - [Target output references](../concepts/cache/output-refs.md#target-output-references)
-- [Output-reference diagnostics](../reference/codes/outputref/README.md#output-reference-diagnostics)
-- [output-redirect](../reference/rules/output-redirect.md#output-redirect)
-- [MGS8001: output ref not found](../reference/codes/outputref/MGS8001.md#mgs8001-output-ref-not-found)
-- [3. If the producer's "output" isn't an output](../reference/codes/race/MGS4004.md#3-if-the-producers-output-isnt-an-output)
 
 <!-- END GLOSSARY USAGE -->
 

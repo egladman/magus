@@ -29,11 +29,11 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 In the docs:
 
 - [The magusfile](../concepts/workspace.md#the-magusfile)
-- [Magusfile Module Reference](../reference/buzz/index.md#magusfile-module-reference)
-- [MGS1022: member only callable from a magusfile](../reference/codes/magusfile/MGS1022.md#mgs1022-member-only-callable-from-a-magusfile)
-- [MGS1025: magusfile calls an API that was removed](../reference/codes/magusfile/MGS1025.md#mgs1025-magusfile-calls-an-api-that-was-removed)
 - [magus\pry(): breakpoint in a magusfile](../guides/debugging.md#maguspry-breakpoint-in-a-magusfile)
 - [3. Read your first magusfile](../guides/getting-started.md#3-read-your-first-magusfile)
+- [Magusfile API: a locked namespace](../guides/migrating/breaking-changes.md#magusfile-api-a-locked-namespace)
+- [Magusfile Module Reference](../reference/buzz/index.md#magusfile-module-reference)
+- [MGS1017: magusfile is not a spell](../reference/codes/magusfile/MGS1017.md#mgs1017-magusfile-is-not-a-spell)
 
 <!-- END GLOSSARY USAGE -->
 

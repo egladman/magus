@@ -41,17 +41,17 @@ magus describe mcp-tool
 
 In the docs:
 
-- [Tool](../reference/api/tool/v1alpha1/tool.md#tool)
-- [tool-length](../reference/proofread/tool-length.md#tool-length)
-- [tool-lead](../reference/proofread/tool-lead.md#tool-lead)
-- [raw-tool](../reference/rules/raw-tool.md#raw-tool)
-- [unjudged-tool](../reference/rules/unjudged-tool.md#unjudged-tool)
+- [The build-tool comparison](../benchmarks.md#the-build-tool-comparison)
+- [tool calls](../benchmarks/2026-09-10/anthropic/claude-opus-5.md#tool-calls)
+- [tool calls](../benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#tool-calls)
+- [Tool versions (observed)](../benchmarks/build-tools.md#tool-versions-observed)
+- [A known leak: a multi-line tool probe lands whole in the key](../concepts/cache/output-refs.md#a-known-leak-a-multi-line-tool-probe-lands-whole-in-the-key)
 - [Tool identity](../concepts/cache/tool-identity.md#tool-identity)
 
 In the code (`magus refs <name>` lists every site):
 
-- `mcp.Tool` (Go)
 - `spells.Tool` (Go)
+- `mcp.Tool` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

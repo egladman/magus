@@ -26,12 +26,12 @@ magus buzz -e 'import "std"; fun main(args: [str]) > void { std\print("hello"); 
 
 In the docs:
 
-- [buzz](../concepts/spells/buzz.md#buzz)
-- [Buzz](../reference/api/metrics/v1alpha1/metrics.md#buzz)
 - [How gopherbuzz runs Buzz](../concepts/buzz.md#how-gopherbuzz-runs-buzz)
-- [magus-buzz](../reference/manpage/magus-buzz.md#magus-buzz)
-- [buzz-unbriefed](../reference/rules/buzz-unbriefed.md#buzz-unbriefed)
-- [Provider I/O is Buzz](../design/judgment/provider-io-is-buzz.md#provider-io-is-buzz)
+- [Host modules are a superset of Buzz's stdlib](../concepts/engines.md#host-modules-are-a-superset-of-buzzs-stdlib)
+- [buzz](../concepts/spells/buzz.md#buzz)
+- [Reading Buzz: the backslash](../conventions.md#reading-buzz-the-backslash)
+- [The Buzz resolver, as it behaves today](../decisions/0002-remote-spells-are-imported-by-registry-path.md#the-buzz-resolver-as-it-behaves-today)
+- [2026-09-29: the script becomes the hack/remote/on-actions.buzz prefix](../decisions/0004-running-a-branch-on-a-hosted-runner.md#2026-09-29-the-script-becomes-the-hackremoteon-actionsbuzz-prefix)
 
 <!-- END GLOSSARY USAGE -->
 

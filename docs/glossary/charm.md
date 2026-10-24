@@ -25,12 +25,12 @@ magus run lint:rw docs
 
 In the docs:
 
+- [1. Built-in command spells (import "magus/charm")](../concepts/charms.md#1-built-in-command-spells-import-maguscharm)
+- [C. A :linux charm](../decisions/0003-running-an-invocation-on-another-operating-system.md#c-a-linux-charm)
+- [A charm is an adverb](../recommendations.md#a-charm-is-an-adverb)
 - [charm](../reference/buzz/charm.md#charm)
-- [Declaring what a charm does](../concepts/charms.md#declaring-what-a-charm-does)
-- [Charm diagnostics](../reference/codes/charms/README.md#charm-diagnostics)
-- [A rubric for a new charm name](../recommendations.md#a-rubric-for-a-new-charm-name)
-- [MGS6001: charm patch does not apply to the command](../reference/codes/charms/MGS6001.md#mgs6001-charm-patch-does-not-apply-to-the-command)
 - [hasCharm](../reference/buzz/magus.md#hascharm)
+- [MGS6001: charm patch does not apply to the command](../reference/codes/charms/MGS6001.md#mgs6001-charm-patch-does-not-apply-to-the-command)
 
 In the code (`magus refs <name>` lists every site):
 

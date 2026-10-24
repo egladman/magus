@@ -33,11 +33,11 @@ magus agent install --force
 
 In the docs:
 
-- [installed-skill](../reference/rules/installed-skill.md#installed-skill)
-- [skill-source](../reference/rules/skill-source.md#skill-source)
+- [Choose a skill form deliberately](../guides/integrations/agents/skills.md#choose-a-skill-form-deliberately)
 - [skill-description-budget](../reference/proofread/skill-description-budget.md#skill-description-budget)
 - [skill-set-description-budget](../reference/proofread/skill-set-description-budget.md#skill-set-description-budget)
-- [Choose a skill form deliberately](../guides/integrations/agents/skills.md#choose-a-skill-form-deliberately)
+- [installed-skill](../reference/rules/installed-skill.md#installed-skill)
+- [skill-source](../reference/rules/skill-source.md#skill-source)
 
 In the code (`magus refs <name>` lists every site):
 

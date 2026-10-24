@@ -22,8 +22,8 @@ magus\log.info(magus\insightMarkdown());
 
 In the docs:
 
-- [Insight](../reference/api/insight/v1alpha1/insight.md#insight)
 - [Insight](../concepts/knowledge/insight.md#insight)
+- [GetInsight](../reference/api/insight/v1alpha1/insight.md#getinsight)
 - [insight](../reference/buzz/magus.md#insight)
 
 <!-- END GLOSSARY USAGE -->

@@ -24,13 +24,13 @@ magus status
 
 In the docs:
 
-- [Configuring the window](../reference/codes/sandbox/MGS3012.md#configuring-the-window)
 - [tools: the version window this project requires](../concepts/workspace.md#tools-the-version-window-this-project-requires)
+- [Configuring the window](../reference/codes/sandbox/MGS3012.md#configuring-the-window)
 
 In the code (`magus refs <name>` lists every site):
 
-- `Window` (TypeScript, magus-console)
 - `race.window` (Go)
+- `Window` (TypeScript, magus-console)
 
 <!-- END GLOSSARY USAGE -->
 

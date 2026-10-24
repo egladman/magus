@@ -24,10 +24,10 @@ magus status
 
 In the docs:
 
-- [Pool](../reference/api/status/v1alpha1/status.md#pool)
-- [Concurrency pool](../concepts/telemetry.md#concurrency-pool)
 - [How wide the pool is by default](../concepts/concurrency.md#how-wide-the-pool-is-by-default)
+- [Concurrency pool](../concepts/telemetry.md#concurrency-pool)
 - [Live pool snapshot in a multiplexer sidebar](../guides/tips.md#live-pool-snapshot-in-a-multiplexer-sidebar)
+- [Pool](../reference/api/status/v1alpha1/status.md#pool)
 
 In the code (`magus refs <name>` lists every site):
 

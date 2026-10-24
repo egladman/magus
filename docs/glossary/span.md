@@ -25,10 +25,10 @@ magus query output out1a2b3c
 
 In the code (`magus refs <name>` lists every site):
 
-- `Span` (TypeScript, magus-console)
-- `playground.Span` (Go)
-- `proofread.span` (Go)
 - `changeset.Span` (Go)
+- `edit.span` (Go)
+- `tty.Span` (Go)
+- `playground.Span` (Go)
 - `impact.Span` (Go)
 
 <!-- END GLOSSARY USAGE -->

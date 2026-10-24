@@ -31,12 +31,8 @@ magus config cache
 
 In the docs:
 
-- [Remote cache](../concepts/telemetry.md#remote-cache)
-- [Remote caching](../concepts/cache/remote.md#remote-caching)
 - [Connecting to the remote cache](../concepts/cache.md#connecting-to-the-remote-cache)
-- [Remote spells](../reference/remote-spells.md#remote-spells)
-- [ADR 0002: remote spells are imported by registry path](../decisions/0002-remote-spells-are-imported-by-registry-path.md#adr-0002-remote-spells-are-imported-by-registry-path)
-- [Remote caching](../guides/integrations/github-actions.md#remote-caching)
+- [Remote cache](../concepts/telemetry.md#remote-cache)
 
 <!-- END GLOSSARY USAGE -->
 

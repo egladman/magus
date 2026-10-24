@@ -31,20 +31,20 @@ magus ls
 
 In the docs:
 
-- [Workspace](../reference/api/status/v1alpha1/status.md#workspace)
-- [Workspace and projects](../concepts/workspace.md#workspace-and-projects)
-- [workspace-command-failed](../reference/rules/workspace-command-failed.md#workspace-command-failed)
-- [workspace-write-failed](../reference/rules/workspace-write-failed.md#workspace-write-failed)
-- [magus-workspace-rules](../reference/skills/magus-workspace-rules.md#magus-workspace-rules)
+- [2. Workspace spells & magusfiles (import "charm")](../concepts/charms.md#2-workspace-spells--magusfiles-import-charm)
+- [Across separate runs: the workspace lock](../concepts/concurrency.md#across-separate-runs-the-workspace-lock)
 - [Workspace providers](../concepts/workspace/providers.md#workspace-providers)
+- [Review, workspace and the merge queue](../decisions/0011-typed-provider-calls.md#review-workspace-and-the-merge-queue)
+- [2. Bootstrap a workspace with magus init](../guides/getting-started.md#2-bootstrap-a-workspace-with-magus-init)
+- [Maintaining the workspace harness](../guides/integrations/agents/claude-code.md#maintaining-the-workspace-harness)
 
 In the code (`magus refs <name>` lists every site):
 
-- `Workspace` (TypeScript, magus-console)
-- `proc.Workspace` (Go)
+- `activity.Workspace` (Go)
+- `diagram.workspace` (Go)
+- `job.workspace` (Go)
+- `notes.workspace` (Go)
 - `tool.workspace` (Go)
-- `types.Workspace` (Go)
-- `job.Workspace` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

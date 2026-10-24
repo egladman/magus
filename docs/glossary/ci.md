@@ -35,12 +35,12 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 In the docs:
 
-- [CI](../concepts/targets/ci.md#ci)
-- [CI](../concepts/workspace/affected.md#ci)
-- [ci](../reference/config.md#ci)
-- [CI checkout](../guides/integrations/ci.md#ci-checkout)
+- [Set the signing secret in CI](../concepts/cache/remote.md#set-the-signing-secret-in-ci)
 - [Running under CI](../concepts/ci.md#running-under-ci)
 - [CI providers](../concepts/ci/providers.md#ci-providers)
+- [npm-ci](../concepts/spells/typescript.md#npm-ci)
+- [CI](../concepts/targets/ci.md#ci)
+- [CI](../concepts/workspace/affected.md#ci)
 
 In the code (`magus refs <name>` lists every site):
 

@@ -28,12 +28,12 @@ magus affected ci
 
 In the docs:
 
-- [Affected](../concepts/workspace/affected.md#affected)
-- [affected](../reference/buzz/magus.md#affected)
-- [Affected](../reference/api/graph/v1alpha1/graph.md#affected)
-- [magus-affected](../reference/manpage/magus-affected.md#magus-affected)
-- [Affected view](../reference/console.md#affected-view)
 - [S3: Affected dry-run (1 file changed)](../benchmarks/build-tools.md#s3-affected-dry-run-1-file-changed)
+- [How this connects to affected and the cache](../concepts/workspace.md#how-this-connects-to-affected-and-the-cache)
+- [Affected](../concepts/workspace/affected.md#affected)
+- [Sharding by affected project](../guides/integrations/github-actions.md#sharding-by-affected-project)
+- [Re-run only affected projects on each save](../guides/tips.md#re-run-only-affected-projects-on-each-save)
+- [Affected](../reference/api/graph/v1alpha1/graph.md#affected)
 
 <!-- END GLOSSARY USAGE -->
 

@@ -145,14 +145,21 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
 // termUsage asks the graph where title is used: up to six docs sections, one per page and two
 // per directory, so a family of generated rule pages does not crowd out the concept page; and
 // up to five code types named for it.
+// termUsage takes every section whose heading names the term and sorts by path before
+// capping, so the list depends on the tree alone and never on how a search ranked it.
 fun termUsage(title: str) > str !> any {
+    final candidates = mut [<dictionary\UsageDoc>];
+    foreach (m in magus\query("kind=docsection id=~^docsection:docs/ {title}", opts: {"limit": 5000}).matches) {
+        if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
+        if (m.label.lower().indexOf(title.lower()) == null) { continue; }
+        candidates.append(dictionary\docFromID(m.id, label: m.label));
+    }
+    candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
     final docs = mut [<dictionary\UsageDoc>];
     final pages = mut {<str: bool>};
     final dirs = mut {<str: int>};
-    foreach (m in magus\query("kind=docsection id=~^docsection:docs/ {title}", opts: {"limit": 60}).matches) {
+    foreach (d in candidates) {
         if (docs.len() >= 6) { break; }
-        if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
-        final d = dictionary\docFromID(m.id, label: m.label);
         final dir = fs\dirname(d.file);
         if (pages[d.file] != null or (dirs[dir] ?? 0) >= 2) { continue; }
         pages[d.file] = true;
@@ -161,13 +168,16 @@ fun termUsage(title: str) > str !> any {
     }
     final symbols = mut [<dictionary\UsageSymbol>];
     final names = mut {<str: bool>};
-    final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: {"limit": 40});
+    final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: {"limit": 5000});
     if (found.answer.verdict == "unknown") {
         throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
     }
-    foreach (m in found.matches) {
+    final ids = mut [<str>];
+    foreach (m in found.matches) { ids.append(m.id); }
+    ids.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (id in ids) {
         if (symbols.len() >= 5) { break; }
-        final s = dictionary\symbolFromID(m.id, term: title);
+        final s = dictionary\symbolFromID(id, term: title);
         if (s.name == "" or names[s.name] != null) { continue; }
         names[s.name] = true;
         symbols.append(s);

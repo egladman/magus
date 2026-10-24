@@ -30,12 +30,12 @@ magus run build libs/xdg
 
 In the docs:
 
-- [cache](../reference/config.md#cache)
-- [Cache](../reference/api/status/v1alpha1/status.md#cache)
+- [S5: Warm cache replay](../benchmarks/build-tools.md#s5-warm-cache-replay)
 - [Cache model](../concepts/cache.md#cache-model)
-- [cache-dir-write](../reference/rules/cache-dir-write.md#cache-dir-write)
-- [A cache is an accelerator, never a dependency](../design/principles/a-cache-is-an-accelerator.md#a-cache-is-an-accelerator-never-a-dependency)
-- [Cache (local)](../concepts/telemetry.md#cache-local)
+- [GitHub Actions cache](../concepts/cache/remote.md#github-actions-cache)
+- [Readiness never keys the cache](../concepts/cache/tool-identity.md#readiness-never-keys-the-cache)
+- [The shared cache](../concepts/ci.md#the-shared-cache)
+- [Shared cache trust](../concepts/targets/ci.md#shared-cache-trust)
 
 In the code (`magus refs <name>` lists every site):
 

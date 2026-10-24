@@ -46,12 +46,12 @@ magus describe harness
 
 In the docs:
 
-- [lease-harness](../reference/rules/lease-harness.md#lease-harness)
+- [The agent harness benchmark](../benchmarks.md#the-agent-harness-benchmark)
+- [Harness-effectiveness benchmark](../benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark)
+- [Harness-effectiveness benchmark](../benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark)
+- [6. Harness and host configuration](../decisions/0005-deterministic-answers.md#6-harness-and-host-configuration)
 - [The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md#the-outer-harness-stays-outside)
 - [A harness is not an agent thing](../design/principles/a-harness-is-not-an-agent-thing.md#a-harness-is-not-an-agent-thing)
-- [Harness-effectiveness benchmark](../benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark)
-- [Maintaining the workspace harness](../guides/integrations/agents/codex.md#maintaining-the-workspace-harness)
-- [The agent harness benchmark](../benchmarks.md#the-agent-harness-benchmark)
 
 <!-- END GLOSSARY USAGE -->
 

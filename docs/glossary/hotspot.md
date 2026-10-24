@@ -23,7 +23,7 @@ magus\log.info(magus\insightMarkdown());
 
 In the docs:
 
-- [HotspotOutput](../reference/api/insight/v1alpha1/insight.md#hotspotoutput)
+- [FileHotspot](../reference/api/insight/v1alpha1/insight.md#filehotspot)
 
 <!-- END GLOSSARY USAGE -->
 

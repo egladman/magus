@@ -35,12 +35,12 @@ magus agent install
 
 In the docs:
 
-- [magus-agent](../reference/manpage/magus-agent.md#magus-agent)
-- [agent-sign-off](../reference/rules/agent-sign-off.md#agent-sign-off)
-- [magus-multi-agent](../reference/skills/magus-multi-agent.md#magus-multi-agent)
+- [The agent harness benchmark](../benchmarks.md#the-agent-harness-benchmark)
+- [Agent contact (@session)](../concepts/knowledge.md#agent-contact-session)
+- [An outline from an agent](../concepts/review.md#an-outline-from-an-agent)
+- [Practices for agent-run work](../decisions/0005-deterministic-answers.md#practices-for-agent-run-work)
 - [ADR 0009: cost profiles for agent sessions](../decisions/0009-cost-profiles-for-agent-sessions.md#adr-0009-cost-profiles-for-agent-sessions)
 - [A harness is not an agent thing](../design/principles/a-harness-is-not-an-agent-thing.md#a-harness-is-not-an-agent-thing)
-- [Agent instructions](../reference/proofread/index.md#agent-instructions)
 
 In the code (`magus refs <name>` lists every site):
 

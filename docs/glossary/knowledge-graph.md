@@ -29,11 +29,6 @@ magus query "kind=spell"
 In the docs:
 
 - [Knowledge graph](../concepts/knowledge.md#knowledge-graph)
-- [Knowledge-graph diagnostics](../reference/codes/knowledge/README.md#knowledge-graph-diagnostics)
-- [Messages](../reference/api/graph/v1alpha1/graph.md#messages)
-- [magus-graph](../reference/manpage/magus-graph.md#magus-graph)
-- [knowledge](../reference/config.md#knowledge)
-- [MGS7005: directory not in the graph](../reference/codes/knowledge/MGS7005.md#mgs7005-directory-not-in-the-graph)
 
 <!-- END GLOSSARY USAGE -->
 
