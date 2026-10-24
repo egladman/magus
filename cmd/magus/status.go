@@ -1076,11 +1076,10 @@ func runningDuration(c types.StatusRunningTarget, now time.Time) time.Duration {
 
 func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now time.Time) string {
 	project, target := parseRunning(c.Args)
-	if project == "" && target == "" {
-		project = "?"
-		target = "?"
-	}
 	label := fmt.Sprintf("%s:%s", project, target)
+	if label == ":" {
+		label = "?:?"
+	}
 	if showWS {
 		label = fmt.Sprintf("%s/%s", workspaceLabel(c.Workspace), label)
 	}

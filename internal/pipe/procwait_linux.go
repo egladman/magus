@@ -32,15 +32,14 @@ func awaitExit(ctx context.Context, pids []int) error {
 	}()
 	for _, pid := range pids {
 		fd, err := unix.PidfdOpen(pid, 0)
-		switch {
-		case errors.Is(err, unix.ESRCH):
+		if err != nil {
 			_ = unix.Close(wake[1])
-			return nil
-		case errors.Is(err, unix.ENOSYS):
-			_ = unix.Close(wake[1])
-			return awaitTick(ctx)
-		case err != nil:
-			_ = unix.Close(wake[1])
+			switch {
+			case errors.Is(err, unix.ESRCH):
+				return nil
+			case errors.Is(err, unix.ENOSYS):
+				return awaitTick(ctx)
+			}
 			return fmt.Errorf("pipe: pidfd_open %d: %w", pid, err)
 		}
 		fds = append(fds, unix.PollFd{Fd: int32(fd), Events: unix.POLLIN})
@@ -60,13 +59,12 @@ func awaitExit(ctx context.Context, pids []int) error {
 	}()
 	for {
 		_, err := unix.Poll(fds, -1)
-		if errors.Is(err, unix.EINTR) {
+		switch {
+		case errors.Is(err, unix.EINTR):
 			continue
-		}
-		if err != nil {
+		case err != nil:
 			return fmt.Errorf("pipe: poll: %w", err)
-		}
-		if fds[0].Revents != 0 {
+		case fds[0].Revents != 0:
 			return ctx.Err()
 		}
 		return nil

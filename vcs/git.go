@@ -3760,20 +3760,9 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch strin
 	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
-	on := []string{"--detach"}
-	target := rev
-	if branch != "" {
-		on = []string{"-b", branch}
-		reused, err := branchAtRev(ctx, root, branch, rev)
-		if err != nil {
-			return err
-		}
-		if reused {
-			// An ended job leaves its branch behind; re-forking the id reuses it while
-			// it holds nothing past the revision.
-			on = nil
-			target = branch
-		}
+	on, target, err := worktreeOn(ctx, root, rev, branch)
+	if err != nil {
+		return err
 	}
 	args := append([]string{"worktree", "add", "--quiet"}, on...)
 	args = append(args, "--lock", "--reason", CheckoutLockReason, "--", dir, target)
@@ -3793,6 +3782,20 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch strin
 	gitCheckoutsMade.byDir[co.dir] = co
 	gitCheckoutsMade.byDir[realPath(co.dir)] = co
 	return nil
+}
+
+// worktreeOn is the `git worktree add` flags and target for a checkout of rev on branch:
+// detached for no branch, a new branch at rev, or branch itself when an ended job left it
+// holding nothing past rev, so re-forking the id reuses it.
+func worktreeOn(ctx context.Context, root, rev, branch string) ([]string, string, error) {
+	if branch == "" {
+		return []string{"--detach"}, rev, nil
+	}
+	reused, err := branchAtRev(ctx, root, branch, rev)
+	if err != nil || reused {
+		return nil, branch, err
+	}
+	return []string{"-b", branch}, rev, nil
 }
 
 // RemoveCheckout implements types.CheckoutProvisioner. A checkout made in this process

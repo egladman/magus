@@ -3443,6 +3443,7 @@ github.com/egladman/magus/types.MachineSnapshot.BudgetMB field int "json:\"budge
 github.com/egladman/magus/types.MachineSnapshot.BudgetSlots field int "json:\"budget_slots,omitzero\" yaml:\"budget_slots,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.HeldMB field int "json:\"held_mb,omitzero\" yaml:\"held_mb,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.HeldSlots field int "json:\"held_slots,omitzero\" yaml:\"held_slots,omitempty\""
+github.com/egladman/magus/types.MachineSnapshot.HolderList method func(now time.Time) string
 github.com/egladman/magus/types.MachineSnapshot.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.Refused field []MachineRefusal "json:\"refused,omitempty\" yaml:\"refused,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.Waiting field []MachineWaiter "json:\"waiting,omitempty\" yaml:\"waiting,omitempty\""
@@ -3863,6 +3864,7 @@ github.com/egladman/magus/types.ParseJobTimeout func(s string) (time.Duration, e
 github.com/egladman/magus/types.ParseLeaseCheck func(s string) (LeaseCheck, error)
 github.com/egladman/magus/types.ParseLeaseRunLine func(s string) (LeaseCheck, error)
 github.com/egladman/magus/types.ParseLevel func(s string) (Level, error)
+github.com/egladman/magus/types.ParsePauseUntil func(raw string, now time.Time) (int64, error)
 github.com/egladman/magus/types.ParseStreamEventType func(s string) (StreamEventType, error)
 github.com/egladman/magus/types.ParseTarget func(s string) (Target, error)
 github.com/egladman/magus/types.ParseTimeout func(s string) (time.Duration, error)
@@ -4934,6 +4936,10 @@ github.com/egladman/magus/types.TermStyle.String method func() string
 github.com/egladman/magus/types.TermStyle.Valid method func() bool
 github.com/egladman/magus/types.TermStyle.Values method func() []string
 github.com/egladman/magus/types.TermYellow const TermStyle = "33"
+github.com/egladman/magus/types.TextHit type struct
+github.com/egladman/magus/types.TextHit.Line field int
+github.com/egladman/magus/types.TextHit.Path field string
+github.com/egladman/magus/types.TextPresenceOf func(root string, hits []TextHit) KnowledgeTextPresence
 github.com/egladman/magus/types.TextPresenceSiteCap const untyped int = 10
 github.com/egladman/magus/types.ThreadInferred const ThreadSource = "inferred"
 github.com/egladman/magus/types.ThreadReported const ThreadSource = "reported"

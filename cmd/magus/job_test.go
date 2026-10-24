@@ -2024,12 +2024,12 @@ func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {
 		"2027-01-15T09:00:00Z": 1_800_003_600,
 	}
 	for raw, want := range cases {
-		got, err := parsePauseUntil(raw, now)
+		got, err := types.ParsePauseUntil(raw, now)
 		require.NoError(t, err, raw)
 		assert.Equal(t, want, got, raw)
 	}
 	for _, raw := range []string{"-2h", "tomorrow"} {
-		_, err := parsePauseUntil(raw, now)
+		_, err := types.ParsePauseUntil(raw, now)
 		assert.Error(t, err, raw)
 	}
 }

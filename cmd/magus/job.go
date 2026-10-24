@@ -2504,25 +2504,6 @@ func refusePaused(store *job.Store, id string) error {
 	return nil
 }
 
-// parsePauseUntil reads --until as the unix second the pause lapses: a duration from now
-// or an RFC3339 instant. Empty is zero, a pause with no bound.
-func parsePauseUntil(raw string, now time.Time) (int64, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return 0, nil
-	}
-	if d, err := time.ParseDuration(raw); err == nil {
-		if d <= 0 {
-			return 0, exit.Usagef("magus job pause: --until %q is not ahead of now; write a positive duration (2h) or a later instant", raw)
-		}
-		return now.Add(d).Unix(), nil
-	}
-	if at, err := time.Parse(time.RFC3339, raw); err == nil {
-		return at.Unix(), nil
-	}
-	return 0, exit.Usagef("magus job pause: --until %q is neither a duration nor an RFC3339 instant; write 2h or 2006-01-02T15:04:05Z", raw)
-}
-
 // jobPause is `magus job pause` and `magus job resume`, which verb says.
 func jobPause(ctx context.Context, root, verb string, args []string) error {
 	spec := jobCommandSpec()
@@ -2545,9 +2526,9 @@ func jobPause(ctx context.Context, root, verb string, args []string) error {
 	if len(ids) == 0 {
 		return exit.Usagef("magus job %s: requires at least one job (`%s` lists them)", verb, hint.LsJobs)
 	}
-	lapse, err := parsePauseUntil(until, time.Now())
+	lapse, err := types.ParsePauseUntil(until, time.Now())
 	if err != nil {
-		return err
+		return exit.Usagef("magus job pause: %v", err)
 	}
 	if verb == "pause" && strings.TrimSpace(reason) == "" {
 		return exit.Usagef("magus job pause: requires --reason, which the holder's refusal and the row show")

@@ -226,27 +226,13 @@ func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
 	return reportIndexStaleness(w, out.Answer)
 }
 
-// presenceOf reduces matches to the counts and the capped site list a symbol miss reports,
-// with each site as a slash path relative to root.
+// presenceOf reduces matches to the counts and the capped site list a symbol miss reports.
 func presenceOf(root string, matches []textindex.Match) types.KnowledgeTextPresence {
-	files := map[string]bool{}
-	var sites []string
-	for _, m := range matches {
-		files[m.Path] = true
-		if len(sites) < types.TextPresenceSiteCap {
-			rel, err := filepath.Rel(root, m.Path)
-			if err != nil {
-				rel = m.Path
-			}
-			sites = append(sites, fmt.Sprintf("%s:%d", filepath.ToSlash(rel), m.Line))
-		}
+	hits := make([]types.TextHit, len(matches))
+	for i, m := range matches {
+		hits[i] = types.TextHit{Path: m.Path, Line: m.Line}
 	}
-	return types.KnowledgeTextPresence{
-		Hits:  len(matches),
-		Files: len(files),
-		Sites: sites,
-		More:  len(matches) - len(sites),
-	}
+	return types.TextPresenceOf(root, hits)
 }
 
 // refsMiss is what refs learned about a name no symbol node matches.

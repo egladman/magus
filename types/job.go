@@ -2654,3 +2654,22 @@ func cloneIntegration(g *JobIntegration) *JobIntegration {
 	c.Gates = cloneGateStatuses(g.Gates)
 	return &c
 }
+
+// ParsePauseUntil reads a pause's --until as the unix second it lapses: a duration from now
+// or an RFC3339 instant. Empty is zero, a pause with no bound.
+func ParsePauseUntil(raw string, now time.Time) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d <= 0 {
+			return 0, fmt.Errorf("--until %q is not ahead of now; write a positive duration (2h) or a later instant", raw)
+		}
+		return now.Add(d).Unix(), nil
+	}
+	if at, err := time.Parse(time.RFC3339, raw); err == nil {
+		return at.Unix(), nil
+	}
+	return 0, fmt.Errorf("--until %q is neither a duration nor an RFC3339 instant; write 2h or 2006-01-02T15:04:05Z", raw)
+}

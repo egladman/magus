@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/scanner"
 	"go/token"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -1126,6 +1127,30 @@ type KnowledgeTextPresence struct {
 // TextPresenceSiteCap bounds KnowledgeTextPresence.Sites, so a name present thousands of
 // times prints a screenful, not the tree.
 const TextPresenceSiteCap = 10
+
+// TextHit is one text match: a file and the line in it.
+type TextHit struct {
+	Path string
+	Line int
+}
+
+// TextPresenceOf counts hits and the files they fall in, keeping the first
+// [TextPresenceSiteCap] as "path:line" relative to root.
+func TextPresenceOf(root string, hits []TextHit) KnowledgeTextPresence {
+	files := map[string]bool{}
+	var sites []string
+	for _, h := range hits {
+		files[h.Path] = true
+		if len(sites) < TextPresenceSiteCap {
+			rel, err := filepath.Rel(root, h.Path)
+			if err != nil {
+				rel = h.Path
+			}
+			sites = append(sites, fmt.Sprintf("%s:%d", filepath.ToSlash(rel), h.Line))
+		}
+	}
+	return KnowledgeTextPresence{Hits: len(hits), Files: len(files), Sites: sites, More: len(hits) - len(sites)}
+}
 
 // ClassifyAnswer classifies a lookup's result against what magus was actually able to search.
 //

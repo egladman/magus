@@ -1,6 +1,10 @@
 package types
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // MachineClaim is one step's request on the machine-wide admission budget.
 //
@@ -146,4 +150,18 @@ type MachineSnapshot struct {
 	Waiting []MachineWaiter `json:"waiting,omitempty" yaml:"waiting,omitempty"`
 	// Refused is the last MGS3009 refusals the broker answered, newest first.
 	Refused []MachineRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
+}
+
+// HolderList names each holder as its pid, its command (or its target and project when it
+// carries none) and how long it has held its seat at now, comma-joined.
+func (s MachineSnapshot) HolderList(now time.Time) string {
+	holders := make([]string, len(s.Holders))
+	for i, h := range s.Holders {
+		what := fmt.Sprintf("%s %s", h.Target, h.Project)
+		if h.Command != "" {
+			what = fmt.Sprintf("`%s`", h.Command)
+		}
+		holders[i] = fmt.Sprintf("pid %d (%s) for %s", h.PID, what, now.Sub(h.Since).Round(time.Second))
+	}
+	return strings.Join(holders, ", ")
 }

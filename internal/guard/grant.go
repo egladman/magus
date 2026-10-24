@@ -70,6 +70,13 @@ func grantNote(g types.JobGrant) string {
 // agent's, the root's included, and a grant is a person's approval, so an agent's grant is
 // never one.
 func denyAgentGrant(command string, d Dialect) denial {
+	return denyPersonsVerb(command, d, "job", "grant",
+		"A grant lowers a guard rule for one job on a person's say-so. The guard judges only agents' calls, so a grant reaching it was not a person's, and the job store refuses one from a process carrying a lease as well.")
+}
+
+// denyPersonsVerb refuses `magus <noun> <verb>` in any spelling with why: a verb only a
+// person runs.
+func denyPersonsVerb(command string, d Dialect, noun, verb, why string) denial {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok {
 		return denial{}
@@ -78,10 +85,10 @@ func denyAgentGrant(command string, d Dialect) denial {
 		if path.Base(c.Name) != "magus" {
 			continue
 		}
-		if words := magusSubcommandWords(c.Args); len(words) >= 2 && words[0] == "job" && words[1] == "grant" {
+		if words := magusSubcommandWords(c.Args); len(words) >= 2 && words[0] == noun && words[1] == verb {
 			return denial{
-				Say: fmt.Sprintf("magus workspace: only a person runs `%s job grant`; ask the person to type it.", hint.BinaryName()),
-				Why: "A grant lowers a guard rule for one job on a person's say-so. The guard judges only agents' calls, so a grant reaching it was not a person's, and the job store refuses one from a process carrying a lease as well.",
+				Say: fmt.Sprintf("magus workspace: only a person runs `%s %s %s`; ask the person to type it.", hint.BinaryName(), noun, verb),
+				Why: why,
 			}
 		}
 	}
@@ -164,20 +171,6 @@ func waiverNote(commit string, w types.GateWaiver) string {
 // refuses a grant: a waiver is a person's approval, and every call the hook judges is an
 // agent's.
 func denyAgentWaive(command string, d Dialect) denial {
-	cmds, ok := ParseCommandsDialect(command, d)
-	if !ok {
-		return denial{}
-	}
-	for _, c := range cmds {
-		if path.Base(c.Name) != "magus" {
-			continue
-		}
-		if words := magusSubcommandWords(c.Args); len(words) >= 2 && words[0] == "gate" && words[1] == "waive" {
-			return denial{
-				Say: fmt.Sprintf("magus workspace: only a person runs `%s gate waive`; ask the person to type it.", hint.BinaryName()),
-				Why: "A waiver lets one commit out past push-ungated on a person's say-so. The guard judges only agents' calls, so a waiver reaching it was not a person's, and the waivers store refuses one from a process carrying a lease as well.",
-			}
-		}
-	}
-	return denial{}
+	return denyPersonsVerb(command, d, "gate", "waive",
+		"A waiver lets one commit out past push-ungated on a person's say-so. The guard judges only agents' calls, so a waiver reaching it was not a person's, and the waivers store refuses one from a process carrying a lease as well.")
 }

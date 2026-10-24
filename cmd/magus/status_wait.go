@@ -69,15 +69,7 @@ func withinDeadline(ctx context.Context, deadline time.Duration, snapshot func(c
 	if serr != nil {
 		return fmt.Errorf("the build budget had no seat within %s; who holds it could not be read: %w", deadline, serr)
 	}
-	holders := make([]string, len(s.Holders))
-	for i, h := range s.Holders {
-		what := fmt.Sprintf("%s %s", h.Target, h.Project)
-		if h.Command != "" {
-			what = fmt.Sprintf("`%s`", h.Command)
-		}
-		holders[i] = fmt.Sprintf("pid %d (%s) for %s", h.PID, what, time.Since(h.Since).Round(time.Second))
-	}
-	return fmt.Errorf("the build budget had no seat within %s; it is held by %s", deadline, strings.Join(holders, ", "))
+	return fmt.Errorf("the build budget had no seat within %s; it is held by %s", deadline, s.HolderList(time.Now()))
 }
 
 // awaitSeat is one request the broker holds until the budget can seat claims: for a magus
