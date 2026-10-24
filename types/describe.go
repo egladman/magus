@@ -361,6 +361,15 @@ type ChainStep struct {
 	// one by the body itself; that is the only within-step sequencing there is, and the
 	// order derivation reads it from here. Zero for the first call, the common case.
 	CallIndex int `json:"callIndex,omitzero" yaml:"callIndex,omitempty"`
+	// WhenArgs: true runs the step only with args after `--`, false only without, read from
+	// an `if (args.len() == 0)`, `> 0` or `!= 0` arm. Nil runs it either way; a static read
+	// evaluates no other condition.
+	WhenArgs *bool `json:"whenArgs,omitempty" yaml:"whenArgs,omitempty"`
+}
+
+// Runs reports whether the step runs for an invocation given args.
+func (s ChainStep) Runs(args []string) bool {
+	return s.WhenArgs == nil || *s.WhenArgs == (len(args) > 0)
 }
 
 // Ref spells the step the way the CLI takes a target ref: "target" for a same-project

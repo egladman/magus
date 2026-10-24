@@ -584,6 +584,12 @@ type ChainWalkFunc func(v ChainVisit) error
 // fn's error stops the walk and is returned, except ErrSkipChain, which only keeps the walk
 // out of the chain under the target fn was given.
 func WalkChain(p *Project, target string, lookup func(path string) *Project, fn ChainWalkFunc) error {
+	return walkChain(p, target, lookup, nil, fn)
+}
+
+// walkChain is WalkChain over the steps runs keeps, given the depth of the target that
+// names the step; a nil runs keeps every step.
+func walkChain(p *Project, target string, lookup func(path string) *Project, runs func(depth int, s ChainStep) bool, fn ChainWalkFunc) error {
 	seen := map[string]bool{}
 	var walk func(v ChainVisit) error
 	walk = func(v ChainVisit) error {
@@ -598,6 +604,9 @@ func WalkChain(p *Project, target string, lookup func(path string) *Project, fn 
 			return err
 		}
 		for _, step := range v.Project.TargetChains[v.Target] {
+			if runs != nil && !runs(v.Depth, step) {
+				continue
+			}
 			next := v.Project
 			if step.Project != "" && step.Project != v.Project.Path {
 				if lookup == nil {
@@ -612,6 +621,17 @@ func WalkChain(p *Project, target string, lookup func(path string) *Project, fn 
 		return nil
 	}
 	return walk(ChainVisit{Project: p, Target: target})
+}
+
+// invokedWith keeps the steps that run when target is invoked with args. ctx.needs hands
+// a member no args, so every step below the first hop runs as it would without them.
+func invokedWith(args []string) func(depth int, s ChainStep) bool {
+	return func(depth int, s ChainStep) bool {
+		if depth == 0 {
+			return s.Runs(args)
+		}
+		return s.Runs(nil)
+	}
 }
 
 // ChainSkipCacheOutputs is the declared output of every skip_cache target a target
@@ -676,10 +696,10 @@ func ChainUpdates(p *Project, target string, lookup func(path string) *Project) 
 }
 
 // chainReaches is every target reachable from name through ctx.needs, keyed the way
-// WalkChain keys a visit.
+// WalkChain keys a visit. name runs as a member, so with no args.
 func chainReaches(p *Project, name string, lookup func(path string) *Project) map[string]bool {
 	out := map[string]bool{}
-	_ = WalkChain(p, name, lookup, func(v ChainVisit) error {
+	_ = walkChain(p, name, lookup, invokedWith(nil), func(v ChainVisit) error {
 		if v.Depth > 0 {
 			out[v.Key()] = true
 		}
@@ -704,13 +724,16 @@ func chainKey(projectPath, target string) string { return projectPath + "\x00" +
 // Running one of these runs everything it composes, so a member reachable from another
 // is left out: `generate` composing `index-generate`, or root `ci` reaching `generate`
 // through both `lint` and `security`.
-func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
-	return chainSkipCacheSteps(p, target, lookup)
+//
+// The chain is the one target runs when invoked with args, nil for none: a step a static
+// `args.len()` arm leaves out does not run first (ChainStep.Runs).
+func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project, args ...string) []ChainStep {
+	return chainSkipCacheSteps(p, target, lookup, args)
 }
 
 // BeforeKey is ChainSkipCacheSteps as the target refs a caller runs, in order.
-func BeforeKey(p *Project, target string, lookup func(path string) *Project) []TargetRef {
-	steps := chainSkipCacheSteps(p, target, lookup)
+func BeforeKey(p *Project, target string, lookup func(path string) *Project, args ...string) []TargetRef {
+	steps := chainSkipCacheSteps(p, target, lookup, args)
 	if len(steps) == 0 {
 		return nil
 	}
@@ -721,7 +744,7 @@ func BeforeKey(p *Project, target string, lookup func(path string) *Project) []T
 	return out
 }
 
-func chainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
+func chainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project, args []string) []ChainStep {
 	keyed := ChainSkipCacheOutputs(p, target, lookup)
 	inKey := func(artifacts []Glob) bool {
 		return slices.ContainsFunc(artifacts, func(a Glob) bool {
@@ -729,7 +752,7 @@ func chainSkipCacheSteps(p *Project, target string, lookup func(path string) *Pr
 		})
 	}
 	var out []ChainStep
-	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
+	_ = walkChain(p, target, lookup, invokedWith(args), func(v ChainVisit) error {
 		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
 			return nil
 		}

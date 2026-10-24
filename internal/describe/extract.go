@@ -114,8 +114,16 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 		// The count survives a hop into a helper because the helper's ctx.needs calls run
 		// in this body's sequence too.
 		callIndex := 0
-		var walk func(body *ast.BlockStmt)
-		walk = func(body *ast.BlockStmt) {
+		arms := argsArms(fn)
+		// A helper has no args of its own to test, so its calls take the arm it was called from.
+		when := func(e *ast.CallExpr, inherited *bool) *bool {
+			if w, ok := arms[ast.NodePos(e)]; ok {
+				return w
+			}
+			return inherited
+		}
+		var walk func(body *ast.BlockStmt, inherited *bool)
+		walk = func(body *ast.BlockStmt, inherited *bool) {
 			if body == nil {
 				return
 			}
@@ -141,7 +149,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// Exact edge: a target function passed by reference.
 								if key := norm(arg.Name); slices.Contains(names, key) {
 									node.Dependencies = appendUniq(node.Dependencies, key)
-									node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: key, CallIndex: callIndex})
+									node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: key, CallIndex: callIndex, WhenArgs: when(e, inherited)})
 								}
 							case *ast.MemberExpr:
 								// Cross-project step (<alias>.<target>). The MemberExpr walk
@@ -150,7 +158,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// it is recognized again here rather than read back from there.
 								if id, ok := arg.Object.(*ast.IdentExpr); ok && arg.Name != types.CrossFileMember {
 									if proj, ok := projectAliases[id.Name]; ok {
-										node.Chain = appendChainStep(node.Chain, types.ChainStep{Project: proj, Target: norm(arg.Name), CallIndex: callIndex})
+										node.Chain = appendChainStep(node.Chain, types.ChainStep{Project: proj, Target: norm(arg.Name), CallIndex: callIndex, WhenArgs: when(e, inherited)})
 									}
 								}
 							case *ast.CallExpr:
@@ -174,7 +182,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									for _, m := range matched {
 										if m != node.Name {
 											node.Dependencies = appendUniq(node.Dependencies, m)
-											node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: m, CallIndex: callIndex})
+											node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: m, CallIndex: callIndex, WhenArgs: when(e, inherited)})
 										}
 									}
 								}
@@ -326,7 +334,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					if id, ok := e.Callee.(*ast.IdentExpr); ok {
 						if h := funcs[id.Name]; h != nil && !visited[id.Name] {
 							visited[id.Name] = true
-							walk(h.Body)
+							walk(h.Body, when(e, inherited))
 						}
 					}
 				case *ast.IndexExpr:
@@ -354,7 +362,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 				return true
 			})
 		}
-		walk(fn.Body)
+		walk(fn.Body, nil)
 		slices.Sort(node.Charms)
 		node.Spells = groupSpellOps(spellHits)
 		node.DispatchOnly = dispatchOnly(fn, spellHandles)
@@ -1030,13 +1038,106 @@ func lastPathSegment(p string) string {
 // appendChainStep keeps the first mention of a target: a body that names the same
 // target in two ctx.needs calls runs it once, at the earlier call, because the memo
 // serves the second call.
+// A target named in both arms of an args test runs either way, so it loses the condition.
 func appendChainStep(chain []types.ChainStep, step types.ChainStep) []types.ChainStep {
-	for _, have := range chain {
+	for i, have := range chain {
 		if have.Project == step.Project && have.Target == step.Target {
+			if !sameArm(have.WhenArgs, step.WhenArgs) {
+				chain[i].WhenArgs = nil
+			}
 			return chain
 		}
 	}
 	return append(chain, step)
+}
+
+func sameArm(a, b *bool) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+// argsArms maps each call inside an arm of an args test in fn's own body to whether that
+// arm runs with args. An args test compares `<args>.len()`, args being fn's second
+// parameter, with 0; any other condition is not read, so its calls stay in both arms.
+// An outer test wins over one nested in it.
+func argsArms(fn *ast.FunDecl) map[ast.Pos]*bool {
+	arms := map[ast.Pos]*bool{}
+	if len(fn.Params) < 2 || fn.Body == nil {
+		return arms
+	}
+	mark := func(n ast.Node, withArgs bool) {
+		ast.Inspect(n, func(n ast.Node) bool {
+			if c, ok := n.(*ast.CallExpr); ok {
+				if _, seen := arms[ast.NodePos(c)]; !seen {
+					arms[ast.NodePos(c)] = &withArgs
+				}
+			}
+			return true
+		})
+	}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if s, ok := n.(*ast.IfStmt); ok && s.BindName == "" {
+			if withArgs, ok := argsTest(s.Cond, fn.Params[1]); ok {
+				mark(s.Then, withArgs)
+				if s.Else != nil {
+					mark(s.Else, !withArgs)
+				}
+			}
+		}
+		return true
+	})
+	return arms
+}
+
+// argsTest reads cond as `args.len() == 0`, `!= 0` or `> 0`, the mirrored `0 == args.len()`,
+// `0 != args.len()` or `0 < args.len()`, or one of those under `!`, and reports whether it
+// holds with args.
+func argsTest(cond ast.Node, args string) (withArgs, ok bool) {
+	if u, isNot := cond.(*ast.UnaryExpr); isNot && u.Op == "!" {
+		withArgs, ok = argsTest(u.Operand, args)
+		return !withArgs, ok
+	}
+	b, isBinary := cond.(*ast.BinaryExpr)
+	if !isBinary {
+		return false, false
+	}
+	switch {
+	case argsLen(b.Left, args) && isZero(b.Right):
+		switch b.Op {
+		case "==":
+			return false, true
+		case "!=", ">":
+			return true, true
+		}
+	case isZero(b.Left) && argsLen(b.Right, args):
+		switch b.Op {
+		case "==":
+			return false, true
+		case "!=", "<":
+			return true, true
+		}
+	}
+	return false, false
+}
+
+func argsLen(n ast.Node, args string) bool {
+	c, ok := n.(*ast.CallExpr)
+	if !ok || len(c.Args) != 0 {
+		return false
+	}
+	m, ok := c.Callee.(*ast.MemberExpr)
+	if !ok || m.Name != "len" || m.Namespaced {
+		return false
+	}
+	id, ok := m.Object.(*ast.IdentExpr)
+	return ok && id.Name == args
+}
+
+func isZero(n ast.Node) bool {
+	lit, ok := n.(*ast.IntLit)
+	return ok && lit.Val == 0
 }
 
 // appendUniq appends v to s unless it is already present, keeping declaration order.
