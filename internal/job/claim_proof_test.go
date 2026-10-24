@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -475,4 +476,77 @@ func TestForkAdvisesASmallClaimCap(t *testing.T) {
 	assert.Empty(t, claimLimitAdvice(types.Job{ID: "a", MaxClaims: advisedMaxClaims}))
 	assert.Empty(t, claimLimitAdvice(types.Job{ID: "a"}))
 	assert.Contains(t, claimLimitAdvice(types.Job{ID: "a", MaxClaims: 8}), "a asks for 8 claims")
+}
+
+// deadHolderStore is claimStore with a live job "gone" holding internal/free/free.go, and
+// facts holding its holder dead as the store wrote the row.
+func deadHolderStore(t *testing.T) (Location, types.Job, types.Job, claimFacts) {
+	t.Helper()
+	loc, row, facts := claimStore(t, types.Job{ID: "gone", State: types.StateRunning, Registered: 50, WritePaths: []string{"internal/free/free.go"}})
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	gone := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })]
+	return loc, row, gone, facts.WithDeadHolders([]DeadHolder{{Row: gone, Since: 1_800_000_000, Why: "its holder's session ended"}})
+}
+
+func TestProposeClaimTakesADeadHoldersPath(t *testing.T) {
+	t.Parallel()
+
+	_, row, gone, facts := deadHolderStore(t)
+	req, proof, ok := ProposeClaim(row, "internal/free/free.go", facts, nil)
+	require.True(t, ok)
+	assert.Equal(t, types.JobClaimRequest{Path: "internal/free/free.go", Because: "dead:gone"}, req)
+	assert.Equal(t, "job gone held internal/free/free.go, and its holder is dead: its holder's session ended, at 2027-01-15T08:00:00Z", proof)
+
+	d := DecideAutoClaim(row, "internal/free/free.go", facts, []types.Job{row, gone}, []*types.Project{}, leafFanIn)
+	assert.Equal(t, AutoClaim{Request: req, Proof: proof, Proved: true, Appliable: true}, d, "a dead holder's path is claimed without asking")
+
+	alive := facts.WithDeadHolders(nil)
+	d = DecideAutoClaim(row, "internal/free/free.go", alive, []types.Job{row, gone}, []*types.Project{}, leafFanIn)
+	assert.False(t, d.Proved, "a live holder's path is no claim's: %s", d.Stop)
+}
+
+func TestClaimFromADeadHolderIsRecordedOnBothRows(t *testing.T) {
+	t.Parallel()
+
+	loc, row, gone, facts := deadHolderStore(t)
+	reqs := []types.JobClaimRequest{{Path: "internal/free/free.go", Because: "dead:gone"}}
+	stored, err := boundStore(loc, row.ID).Claim(t.Context(), row.ID, reqs, facts, config.Defaults().Jobs, false)
+	require.NoError(t, err)
+
+	want := row.Clone()
+	want.WritePaths = append(want.WritePaths, "internal/free/free.go")
+	want.Widenings = 1
+	want.Claims = []types.JobClaim{{
+		Path: "internal/free/free.go", Evidence: types.ClaimEvidence{Kind: types.ClaimDeadHolder, Subject: "gone"},
+		Proof: "job gone held internal/free/free.go, and its holder is dead: its holder's session ended, at 2027-01-15T08:00:00Z",
+	}}
+	assert.Equal(t, want, claimedView(stored))
+
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	after := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })]
+	assert.Empty(t, after.WritePaths, "the dead holder no longer holds the path")
+	assert.Equal(t, gone.Updated, after.Updated, "the dead holder's heartbeat is its own writes'")
+	require.Len(t, after.Releases, 1)
+	release := after.Releases[0]
+	assert.NotEmpty(t, release.Digest)
+	assert.NotZero(t, release.ReleasedAt)
+	release.Digest, release.ReleasedAt = "", 0
+	assert.Equal(t, types.JobRelease{Path: "internal/free/free.go", Revoked: true, TakenBy: row.ID, DeadBecause: "its holder's session ended"}, release)
+}
+
+func TestClaimFromADeadHolderRefusesARowWrittenSince(t *testing.T) {
+	t.Parallel()
+
+	loc, row, gone, facts := deadHolderStore(t)
+	gone.Updated--
+	facts = facts.WithDeadHolders([]DeadHolder{{Row: gone, Since: 1_800_000_000, Why: "its holder's session ended"}})
+	_, err := boundStore(loc, row.ID).Claim(t.Context(), row.ID, []types.JobClaimRequest{{Path: "internal/free/free.go", Because: "dead:gone"}}, facts, config.Defaults().Jobs, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "job gone was written after magus judged its holder dead, so its holder may be back")
+
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/free/free.go"}, rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })].WritePaths, "nothing was written")
 }

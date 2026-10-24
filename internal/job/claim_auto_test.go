@@ -262,3 +262,28 @@ func TestCallerClaimsExpandToOneRequestPerDeclaration(t *testing.T) {
 	})
 	assert.ErrorContains(t, err, "no declaration holds the occurrence at lib/lib.go:8")
 }
+
+// A session's end tombstones its binding record, which is how a dead-holder claim tells a
+// holder whose session ended from one still working; a session that binds the job again
+// takes that back.
+func TestSessionEndedReadsTheHoldersTombstones(t *testing.T) {
+	s := tempStore(t, t.TempDir())
+	seed(t, s, types.Job{ID: "w", State: types.StateDeclared})
+	_, ended := s.SessionEnded("w")
+	assert.False(t, ended, "no record names the job")
+
+	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, s.Bind(worker, "w"))
+	_, ended = s.SessionEnded("w")
+	assert.False(t, ended, "a live binding names a working session")
+
+	_, _, err := s.EndSession(t.Context(), worker)
+	require.NoError(t, err)
+	since, ended := s.SessionEnded("w")
+	assert.True(t, ended)
+	assert.NotZero(t, since)
+
+	require.NoError(t, s.Bind(Caller{Host: "claude-code", Session: "s2"}, "w"))
+	_, ended = s.SessionEnded("w")
+	assert.False(t, ended, "a session that bound the job again is working it")
+}

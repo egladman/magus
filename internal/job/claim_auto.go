@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -44,10 +46,11 @@ type AutoClaim struct {
 // DecideAutoClaim decides whether magus claims rel for row without asking. It claims a
 // path one graph edge from what the job changed: a reference to a declaration its diff
 // changed, a call to a function whose signature it changed, the declaration of a name a
-// changed file uses, or a test beside a file the job holds. It never claims a generated
-// output, magusfile, hub or path another live job holds, nor past the row's max_claims,
-// which the fork held under jobs.max_claims. projects say which files targets generate;
-// nil stops every claim. rows are every job.
+// changed file uses, or a test beside a file the job holds. It also claims the write path
+// covering rel of a live job whose holder the facts hold dead, whole. It never claims a
+// generated output, magusfile, hub or path another live job holds, nor past the row's
+// max_claims, which the fork held under jobs.max_claims. projects say which files targets
+// generate; nil stops every claim. rows are every job.
 func DecideAutoClaim(row types.Job, rel string, facts claimFacts, rows []types.Job, projects []*types.Project, fanIn fanInFunc) AutoClaim {
 	rel = path.Clean(rel)
 	req, proof, ok := ProposeClaim(row, rel, facts, nil)
@@ -59,8 +62,12 @@ func DecideAutoClaim(row types.Job, rel string, facts claimFacts, rows []types.J
 	}
 	d := AutoClaim{Request: req, Proof: proof, Proved: true, Appliable: true}
 	limit, err := claimCap(row, config.Jobs{})
+	e, _ := types.ParseClaimEvidence(req.Because)
 	held := checkClaimPath(row, rel, rows)
-	switch e, _ := types.ParseClaimEvidence(req.Because); {
+	if e.Kind == types.ClaimDeadHolder {
+		held = checkClaimPathPast(row, rel, rows, e.Subject)
+	}
+	switch {
 	case err != nil:
 		d.Stop, d.Appliable = err.Error(), false
 	case held != nil:
@@ -77,10 +84,55 @@ func DecideAutoClaim(row types.Job, rel string, facts claimFacts, rows []types.J
 		d.Stop = rel + " is a generated output, which its target regenerates"
 	case configName(rel):
 		d.Stop = rel + " is a magusfile or workspace config, which every job's plan reads"
+	case e.Kind == types.ClaimDeadHolder:
+		// A dead holder's path was already handed out as work, so its fan-in decides nothing.
 	default:
 		d.Stop = hubStop(rel, facts.files[rel], fanIn)
 	}
 	return d
+}
+
+// DeadHolder is a live job whose holder the guard judged dead, as it read the row then.
+type DeadHolder struct {
+	Row types.Job
+	// Since is the unix second the holder died: its session's end, or its last judged call.
+	Since int64
+	// Why says how magus knows: the session ended, or how long it went silent.
+	Why string
+}
+
+// WithDeadHolders is f with each of dead's write paths open to a dead proof.
+func (f claimFacts) WithDeadHolders(dead []DeadHolder) claimFacts {
+	f.dead = make(map[string]DeadHolder, len(dead))
+	for _, d := range dead {
+		f.dead[d.Row.ID] = d
+	}
+	return f
+}
+
+// SessionEnded reports when the session holding job id ended: every binding record naming
+// id is a tombstone, and there is one. It answers with the newest tombstone's time. A
+// session that bound id again, or a record never written, says no session ended.
+func (s *Store) SessionEnded(id string) (int64, bool) {
+	if s.err != nil || s.path == "" {
+		return 0, false
+	}
+	entries, err := os.ReadDir(filepath.Join(filepath.Dir(s.path), agentRecordDir))
+	if err != nil {
+		return 0, false
+	}
+	var since int64
+	for _, e := range entries {
+		b := readBinding(filepath.Join(filepath.Dir(s.path), agentRecordDir, e.Name()))
+		switch {
+		case b.Job != id:
+		case !b.Gone:
+			return 0, false
+		default:
+			since = max(since, b.swept)
+		}
+	}
+	return since, since != 0
 }
 
 func hubStop(rel string, src sourceFacts, fanIn fanInFunc) string {

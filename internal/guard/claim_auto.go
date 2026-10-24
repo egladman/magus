@@ -14,13 +14,14 @@ import (
 // gradeClaimOutside grades a write to rel outside lease me's write paths: when
 // [job.DecideAutoClaim] allows, it records the claim as `magus job apply` does and passes
 // the write with a line naming it; otherwise the lease-claim refusal when that line would
-// apply, or no opinion. stop names what kept magus from claiming rel. rows are every job.
-func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, checkout string, me types.Job, rows []types.Job, rel string) (g writeGrade, stop string) {
+// apply, or no opinion. stop names what kept magus from claiming rel. rows are every job,
+// and dead the live ones holding rel whose holder [deadHolder] judged dead.
+func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, checkout string, me types.Job, rows []types.Job, dead []job.DeadHolder, rel string) (g writeGrade, stop string) {
 	var projects []*types.Project
 	if repo, err := deps.inspect(ctx, checkout); err == nil && repo != nil {
 		projects = repo.All()
 	}
-	facts := job.ObserveClaim(ctx, checkout, me, []string{rel}, projects)
+	facts := job.ObserveClaim(ctx, checkout, me, []string{rel}, projects).WithDeadHolders(dead)
 	d := job.DecideAutoClaim(me, rel, facts, rows, projects, deps.fileFanIn)
 	switch {
 	case d.Stop == "":

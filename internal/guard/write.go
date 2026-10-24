@@ -318,11 +318,16 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 			return writeGrade{Decision: decisionDeny, Reason: reason}
 		}
 		owners := owningLeases(leases, live)
+		// A dead holder owns nothing against me: its path is the auto-claim's to grant.
+		dead := deadOwners(location, owners, rel, me.ID, time.Now())
+		owners = slices.DeleteFunc(owners, func(u types.Job) bool {
+			return slices.ContainsFunc(dead, func(d job.DeadHolder) bool { return d.Row.ID == u.ID })
+		})
 		enter := func(owner types.Job) (writeGrade, bool) {
 			return gradeEntry(ctx, deps, location, owner, rel)
 		}
 		claim := func(rel string) (writeGrade, string) {
-			return gradeClaimOutside(ctx, deps, location, checkout, me, leases, rel)
+			return gradeClaimOutside(ctx, deps, location, checkout, me, leases, dead, rel)
 		}
 		knock := func(owner types.Job, rel string) string {
 			return knockHolder(ctx, deps, me, owner, rel)
