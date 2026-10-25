@@ -58,8 +58,8 @@ type Contract struct {
 }
 
 // harnessContract is the mgs_ functions a harness spell exports, one field per function
-// typed as what it returns. ",required" marks the one a harness must export; a function
-// it leaves out is a capability its host lacks. magus-utils contract parses it into
+// typed as what it returns. ",required" marks a function a harness must export. A function
+// it may leave out is a capability its host lacks. magus-utils contract parses it into
 // decode.HarnessFuncs, and nothing constructs it.
 type harnessContract struct {
 	// The workspace-local host JSON document the harness maintains, such as
@@ -88,8 +88,8 @@ type harnessContract struct {
 	Settings []types.Setting `mgs:"mgs_listSettings"`
 	// The subagents magus ships, rendered in the host's format as whole files.
 	RenderAgents func(agents []types.ShippedAgent) []types.AgentFile `mgs:"mgs_renderAgents"`
-	// The host-native approval prompts that carry a guard verdict of ask to the person on
-	// a host whose hooks cannot prompt. humanOnly maps each target the workspace declares
-	// human_only to its reason.
-	RenderPrompts func(humanOnly map[string]string) []types.Prompt `mgs:"mgs_renderPrompts"`
+	// Every harness exports the native approval files that carry an ask. An empty list
+	// is a host whose hook reply is the prompt. humanOnly maps each human_only target
+	// to its reason.
+	RenderPrompts func(humanOnly map[string]string) []types.Prompt `mgs:"mgs_renderPrompts,required"`
 }

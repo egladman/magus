@@ -309,10 +309,6 @@ rows.
 `mgs_getLimits` is Claude Code's and Cursor's. Zero means the host does not
 declare that limit, so Codex and OpenCode omit the function.
 
-`mgs_renderPrompts` is Codex's and OpenCode's, the hosts whose ask is a
-permission file. Claude Code and Cursor ask through hooks, which the table
-above names.
-
 Tool rows name each host's own tools. Parity is the same rules, not the same
 tool names. `claude-code-mod` is the plugin's settings spell. It is not a
 fifth copy of the host contract.

@@ -336,6 +336,13 @@ export fun mgs_renderAgents(agents: [ShippedAgent]) > [AgentFile] {
     return agents.map(fun (index: int, agent: ShippedAgent) > AgentFile => claude_agent(agent));
 }
 
+// Claude Code's PreToolUse reply is the approval prompt (permissionDecision "ask"),
+// so there is no rules file to write. humanOnly is the same map every harness receives;
+// the hook quotes each reason.
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
+    return [<Prompt>];
+}
+
 fun claude_scout_fixture(readOnly: bool, model: str) > ShippedAgent {
     return ShippedAgent{
         name = "magus-scout",
@@ -363,6 +370,10 @@ fun claude_commands() > [str] {
         }
     }
     return commands;
+}
+
+test "mgs_renderPrompts writes no file because the hook prompts" {
+    assert\equal(mgs_renderPrompts({"agent-bench-run": "launches paid sessions"}).len(), 0, "permissionDecision ask is the prompt");
 }
 
 test "mgs_renderAgents renders a read-only agent with limited tools and the model it carries" {

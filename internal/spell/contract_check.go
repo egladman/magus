@@ -38,10 +38,16 @@ func checkContract(src string) error {
 	}
 
 	var problems []string
+	exported := map[string]bool{}
+	harnessConfigLine := 0
 	for _, stmt := range prog.Stmts {
 		fd, ok := stmt.(*ast.FunDecl)
 		if !ok || !fd.IsExported {
 			continue
+		}
+		exported[fd.Name] = true
+		if fd.Name == "mgs_getHarnessConfig" {
+			harnessConfigLine = fd.Line
 		}
 		if op, ok := ops[fd.Name]; ok {
 			problems = append(problems, checkSignature(fd, op)...)
@@ -56,6 +62,16 @@ func checkContract(src string) error {
 			continue
 		}
 		problems = append(problems, checkSignature(fd, fn)...)
+	}
+	// A spell that exports the config is a harness, so it owes every required harness
+	// function. An omitted mgs_renderPrompts used to decode as an empty list, the same
+	// bytes a host returns when its hook is the prompt.
+	if harnessConfigLine > 0 {
+		for _, fn := range decode.HarnessFuncs {
+			if fn.Required && !exported[fn.Name] {
+				problems = append(problems, fmt.Sprintf("line %d: %s is required on a harness spell", harnessConfigLine, fn.Name))
+			}
+		}
 	}
 	if len(problems) == 0 {
 		return nil

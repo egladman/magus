@@ -26,6 +26,8 @@ export fun mgs_getHarnessConfig() > HarnessConfig {
 export fun mgs_getSkills() > HarnessSkills {
     return HarnessSkills{form = SkillForm.short};
 }
+
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }
 `
 
 func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {

@@ -26,11 +26,21 @@ export fun mgs_getSkills() > HarnessSkills {
     return HarnessSkills{paths = [<str>], form = SkillForm.both};
 }
 
+// This spell wires no guard, so it writes no approval file. The function is the same
+// one every harness exports; an empty list is the answer, not an omission.
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
+    return [<Prompt>];
+}
+
 export fun mgs_listSettings() > [Setting] {
     return [
         Setting{path = SETTINGS_PATH, key = ["extraKnownMarketplaces", "magus"], value = {"source": {"source": "github", "repo": "egladman/magus"}}},
         Setting{path = SETTINGS_PATH, key = ["enabledPlugins", "magus@magus"], value = true},
     ];
+}
+
+test "mgs_renderPrompts writes no approval file" {
+    assert\equal(mgs_renderPrompts({"bench": "spends tokens"}).len(), 0, "no guard, no prompt file");
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
