@@ -142,8 +142,8 @@ func registerProfile(ctx context.Context, obs buzz.DirectObserver, guardMap vm.V
 
 // parseBuiltins decodes the declared map: the settings that decode, and every malformed
 // value as one error, so the caller can report those beside what builtin.Resolve finds
-// wrong with the rest. Names and decisions are left to Resolve, which owns what a valid
-// one is.
+// wrong with the rest. A decision name is checked here by builtin.Decision's
+// UnmarshalText; rule names and whether a rule takes its decision are left to Resolve.
 func parseBuiltins(m vm.Value) (map[string]builtin.Setting, error) {
 	out := make(map[string]builtin.Setting, len(m.MapKeys()))
 	var errs []error
@@ -162,7 +162,9 @@ func parseBuiltins(m vm.Value) (map[string]builtin.Setting, error) {
 
 func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 	if v.IsStr() {
-		return builtin.Setting{Decision: builtin.Decision(v.AsString())}, nil
+		var s builtin.Setting
+		err := s.Decision.UnmarshalText([]byte(v.AsString()))
+		return s, err
 	}
 	if !v.IsMap() {
 		return builtin.Setting{}, errors.New(`want "off", "advise", "deny" or {"decision": ..., "lines": ...}`)
@@ -175,7 +177,9 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 			if !field.IsStr() {
 				return s, errors.New(`"decision" must be "off", "advise" or "deny"`)
 			}
-			s.Decision = builtin.Decision(field.AsString())
+			if err := s.Decision.UnmarshalText([]byte(field.AsString())); err != nil {
+				return s, err
+			}
 		case "markers":
 			// An empty list would reach Resolve as unset and take the rule's own markers,
 			// which is not what a workspace declaring none meant.
@@ -203,7 +207,7 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 			}
 		}
 	}
-	if s.Decision == "" {
+	if s.Decision == 0 {
 		return s, errors.New(`"decision" is required`)
 	}
 	return s, nil

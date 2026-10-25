@@ -8,6 +8,7 @@ package builtin
 import (
 	"cmp"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -18,14 +19,57 @@ import (
 )
 
 // Decision is what a built-in rule does when it matches: say nothing, explain, or refuse.
-type Decision string
+// The zero value is unset, which Resolve refuses.
+type Decision int
 
 // The decisions, least to most refusing.
 const (
-	Off    Decision = "off"
-	Advise Decision = "advise"
-	Deny   Decision = "deny"
+	Off Decision = iota + 1
+	Advise
+	Deny
 )
+
+var decisionNames = [...]string{Off: "off", Advise: "advise", Deny: "deny"}
+
+// String is d's wire name, or "unset" for the zero value.
+func (d Decision) String() string {
+	switch {
+	case d == 0:
+		return "unset"
+	case d.valid():
+		return decisionNames[d]
+	}
+	return fmt.Sprintf("Decision(%d)", int(d))
+}
+
+// MarshalText writes d's wire name, or empty text when unset. A value outside the
+// constants is an error.
+func (d Decision) MarshalText() ([]byte, error) {
+	switch {
+	case d == 0:
+		return []byte{}, nil
+	case d.valid():
+		return []byte(decisionNames[d]), nil
+	}
+	return nil, fmt.Errorf("guard decision %d is not off, advise or deny", int(d))
+}
+
+// UnmarshalText sets d from its wire name. Empty text is unset; any other name than
+// off, advise or deny is an error.
+func (d *Decision) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*d = 0
+		return nil
+	}
+	i := slices.Index(decisionNames[:], string(text))
+	if i <= 0 {
+		return fmt.Errorf("unknown decision %q; give off, advise or deny", text)
+	}
+	*d = Decision(i)
+	return nil
+}
+
+func (d Decision) valid() bool { return d >= Off && d <= Deny }
 
 // Setting is one rule's resolved configuration. Each parameter is a threshold the rule
 // fires at, taken only by the rules params lists for it; 0 means unset, and the binary
@@ -421,7 +465,7 @@ func Verdicts(name string) []types.GuardDecision {
 		return []types.GuardDecision{types.GuardAdvise}
 	}
 	if Fixed(name) {
-		return []types.GuardDecision{types.GuardDecision(defaults[name])}
+		return []types.GuardDecision{types.GuardDecision(defaults[name].String())}
 	}
 	return []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
 }
@@ -483,9 +527,13 @@ func validate(name string, s Setting) error {
 			"built-in rule %q cannot be set; remove it from the declaration", name).
 			WithWhy(why)
 	}
-	if rank(s.Decision) < 0 {
+	if s.Decision == 0 {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q: decision %q is not off, advise or deny", name, s.Decision)
+			"built-in rule %q names no decision; give off, advise or deny", name)
+	}
+	if !s.Decision.valid() {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q: decision %s is not off, advise or deny", name, s.Decision)
 	}
 	if why, ok := notices[name]; ok && s.Decision == Deny {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
@@ -599,9 +647,12 @@ func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[stri
 	return out, nil
 }
 
-// rank orders decisions by how much they refuse; an unknown one ranks below off.
+// rank orders decisions by how much they refuse; unset or unknown ranks below off.
 func rank(d Decision) int {
-	return slices.Index([]Decision{Off, Advise, Deny}, d)
+	if !d.valid() {
+		return -1
+	}
+	return int(d - Off)
 }
 
 // nearest is the rule name within a typo's reach of typed, or "". The tolerance matches
