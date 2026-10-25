@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
@@ -413,6 +414,22 @@ func TestMachineBusyRefusalNamesTheWaitPipe(t *testing.T) {
 	assert.Contains(t, err.Error(), "run <same args>")
 }
 
+func TestMachineBusyRefusalToALeasedWorkerNamesTheOwedFiling(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	b, _ := testBudget(t, 10_000, 8)
+	g, _ := testGate(t, b)
+	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err)
+
+	ctx := types.WithJobLease(t.Context(), "wave/api")
+	_, err = g.acquire(ctx, types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	assert.Contains(t, err.Error(), fmt.Sprintf(
+		"Job wave/api never waits for a seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
+		hint.JobExit.With("wave/api"), types.OwedNoSeat))
+	assert.NotContains(t, err.Error(), "status --wait | ", "a worker may not run the pipe")
+}
+
 func TestVerdictSaysItPackedByCurve(t *testing.T) {
 	b, now := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000)).Granted)
@@ -420,17 +437,17 @@ func TestVerdictSaysItPackedByCurve(t *testing.T) {
 	v := b.Request(c)
 	require.False(t, v.Granted)
 
-	assert.Contains(t, machineBusyError(c, v, *now).Error(),
+	assert.Contains(t, machineBusyError(c, v, *now, "").Error(),
 		"The broker packed by curve: the claims pass the 9.8 GiB budget together at 12:00:25, 25s from now.")
 
 	old := v
 	old.Packed = false
-	assert.Contains(t, machineBusyError(c, old, *now).Error(),
+	assert.Contains(t, machineBusyError(c, old, *now, "").Error(),
 		"The broker packed by peak, predating memory curves: this claimed the 6.8 GiB peak, which passes the budget now.",
 		"a broker that predates curves answers Packed false")
 
 	flat := types.MachineClaim{Project: ".", Target: "lint", MemoryMB: 7000, PID: 200}
-	assert.Contains(t, machineBusyError(flat, types.MachineVerdict{BudgetMB: 10_000, HeldMB: 7000}, *now).Error(),
+	assert.Contains(t, machineBusyError(flat, types.MachineVerdict{BudgetMB: 10_000, HeldMB: 7000}, *now, "").Error(),
 		"The broker packed by peak: this claimed the 6.8 GiB peak, which passes the budget now.")
 }
 

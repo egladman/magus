@@ -251,7 +251,7 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 		// parent's claim, so the refusal names the fix rather than the holders.
 		return "", nil, machineBlindError(c, v)
 	default:
-		return "", nil, machineBusyError(c, v, time.Now())
+		return "", nil, machineBusyError(c, v, time.Now(), claimLease(ctx))
 	}
 }
 
@@ -525,13 +525,28 @@ func workingDir() string {
 
 // machineBusyError is the fail-fast answer: another magus invocation fills the machine
 // right now, and the same command will succeed later. The wait belongs to the caller, so
-// the error names the pipe that does it rather than a retry loop.
-func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Time) error {
+// the error names the pipe that does it rather than a retry loop. A caller acting under a
+// job lease never waits for a seat, and may not run the pipe, so it is told to file the
+// check as owed instead: a refusal leaves no output ref for a result to cite.
+func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Time, lease string) error {
+	next := fmt.Sprintf("To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
+		hint.Status.With("--wait"), hint.Run)
+	if lease != "" {
+		next = fmt.Sprintf("Job %s never waits for a seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
+			lease, hint.JobExit.With(lease), types.OwedNoSeat)
+	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. The broker %s. To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
+		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. The broker %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		describeMachineRemaining(v), describeMachineHolders(v.Holders), describeMachinePacking(c, v, now),
-		hint.Status.With("--wait"), hint.Run)}
+		describeMachineRemaining(v), describeMachineHolders(v.Holders), describeMachinePacking(c, v, now), next)}
+}
+
+// claimLease is the job lease the refused run acts under, "" when it acts under none or
+// the user state dir cannot be read (no checkout record then, so the claim alone answers).
+func claimLease(ctx context.Context) string {
+	stateBase, _ := xdg.StateDir()
+	lease, _ := job.RunLease(ctx, job.Location{StateBase: stateBase, DryRun: true})
+	return lease
 }
 
 // describeMachinePacking says whether the verdict packed by curve or by peak, and the
