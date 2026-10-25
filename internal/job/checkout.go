@@ -803,7 +803,7 @@ type Unintegrated struct {
 // tree's checkout is the source its topmost job's worktree records, else the nearest
 // descendant's that records one. A tree none of whose jobs made a checkout cannot be told
 // from anyone's, so it counts for every checkout rather than hiding a backlog.
-func ownTree(rows []types.Job, row types.Job, root string) bool {
+func ownTree(rows []types.Job, root string, row types.Job) bool {
 	chain := append([]types.Job{row}, types.JobAncestors(rows, row.ID)...)
 	for i := len(chain) - 1; i >= 0; i-- {
 		if wt := chain[i].Worktree; wt != nil && wt.Source != "" {
@@ -841,7 +841,7 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 		switch {
 		case row.Integrating() && row.State == types.StatePass:
 		case row.State == types.StatePass || row.State == types.StateExited:
-			if ownTree(rows, row, s.root) {
+			if ownTree(rows, s.root, row) {
 				finished = append(finished, row)
 			}
 		}
