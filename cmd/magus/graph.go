@@ -187,7 +187,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 // skipIndex says what was not written and why, and answers nil: an index a hook reads is
 // never a reason to fail the build.
 func skipIndex(ctx context.Context, what string, err error) error {
-	interactive.Hint(ctx, what+" not written: "+err.Error())
+	interactive.Hint(ctx, fmt.Sprintf("%s not written: %v", what, err))
 	return nil
 }
 
