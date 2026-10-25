@@ -17,9 +17,11 @@ import (
 )
 
 // validateMerge holds a merge into job id, against the plan rows, to every rule a stored
-// job meets, in one pass that never stops at the first problem. The result carries the row
-// as the merge would leave it, every problem left once the row's deviations apply, the
-// problems they permitted, each check that could not run and why, and the write proof the row
+// job meets, in one pass that never stops at the first problem, except that a new row a live
+// job contends with is refused before the expensive checks run (see contendedFork). The
+// result carries the row as the merge would leave it, every problem left once the row's
+// deviations apply, the problems they permitted, each check that could not run and why, and
+// the write proof the row
 // records.
 //
 // A merge that creates the row, or brings an ended one back, meets every rule. The record
@@ -48,9 +50,18 @@ import (
 // ambiguity check. The guard grades the checks against rows rather than sweep the store
 // again.
 func validateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
+	// A new row is not one HardenWritten changes, so its base reads the same before it runs.
+	prev, updates := mergeBase(rows, id, merge)
+	if !updates {
+		merged := prev.Clone()
+		merge(&merged)
+		if v, refused := contendedFork(ctx, store, rows, id, merged, limits); refused {
+			return v
+		}
+	}
 	rows = HardenWritten(ctx, store, rows)
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
-	prev, updates := mergeBase(rows, id, merge)
+	prev, updates = mergeBase(rows, id, merge)
 	merged := prev.Clone()
 	merge(&merged)
 	v := types.JobValidation{Job: merged}
@@ -116,6 +127,34 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	v.Unchecked = unchecked
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
 	return v
+}
+
+// cheapRefusalSkip is the Unchecked entry of a new row contendedFork refuses.
+const cheapRefusalSkip = "the symbol, claim, test, check and workspace checks and the write proof: not run," +
+	" since this fork already contends with a live job; fork again once it does not"
+
+// contendedFork is the refusal of a new row the jobs limits or a live job's hold already
+// refuse, with every other check that reads only the record, before the footprint reads and
+// workspace checks that make a fork under load take minutes. Rows are not hardened yet: that
+// only adds hard paths, so a refusal here stands, and a pass is judged again in full.
+func contendedFork(ctx context.Context, store *Store, rows []types.Job, id string, merged types.Job, limits config.Jobs) (types.JobValidation, bool) {
+	var contended types.JobProblems
+	contended = append(contended, forkLimitProblems(rows, id, merged.Parent, limits)...)
+	contended = append(contended, sharedCheckoutProblems(store, rows, merged)...)
+	contended = append(contended, unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged))...)
+	if kept, _ := permitBut(contended, merged.Deviations); len(kept) == 0 {
+		return types.JobValidation{}, false
+	}
+	var ps types.JobProblems
+	ps = append(ps, rowDeclaration(merged).Problems()...)
+	ps = append(ps, unscopedProblems(merged)...)
+	ps = append(ps, ungradedProblems(merged)...)
+	ps = append(ps, claimCeilingProblems(merged, limits)...)
+	ps = append(ps, directoryWritePathProblems(store, merged)...)
+	ps = append(ps, contended...)
+	v := types.JobValidation{Job: merged, Unchecked: []string{cheapRefusalSkip}}
+	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
+	return v, true
 }
 
 // lintTarget is the ci target whose findings a worker must meet itself: the root meets them

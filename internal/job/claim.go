@@ -240,6 +240,7 @@ func driverPattern(p string) string {
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
 // no diff driver, for which depends_on is the only move. An integration row is
 // never refused here: the merge settles a shared file, and IntegrationOverlaps notes the holder.
+// An integration holder holds only the declarations its merge changed (see mergeLeftAlone).
 func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" || len(row.WritePaths) == 0 || row.Integrating() {
 		return nil
@@ -286,7 +287,7 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 			if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
 				continue
 			}
-			if !types.PathsIntersect(mine, theirs) {
+			if !types.PathsIntersect(mine, theirs) || mergeLeftAlone(ctx, store, rows, holder, mine) {
 				continue
 			}
 			touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
@@ -309,6 +310,18 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 		}
 	}
 	return types.JobProblem{}, false
+}
+
+// mergeLeftAlone reports whether holder is an integration row that has changed nothing the
+// claim mine names. A merge writes a file whole, so the row holds it whole, but only what the
+// merge changed is its own. A whole-file entry, or a footprint nobody can read, is never left alone.
+func mergeLeftAlone(ctx context.Context, store *Store, rows []types.Job, holder types.Job, mine string) bool {
+	if _, decl := types.SplitClaim(mine); decl == "" || !holder.Integrating() {
+		return false
+	}
+	driver, _ := resolveDriver(ctx, store.root)
+	fp := readFootprint(withFootprintCache(ctx, store.footprintCache()), driver, rows, holder.ID)
+	return fp.known && !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(mine, r.Location()) })
 }
 
 // literalClaimableFile is the file entry names, whole or by declaration, cleaned and
