@@ -24,7 +24,7 @@ func graded(findings []Finding, rule Rule) []string {
 
 	for _, f := range findings {
 		if f.Rule == rule {
-			out = append(out, strconv.Itoa(f.Line)+":"+f.Match+":"+string(f.Decision))
+			out = append(out, strconv.Itoa(f.Line)+":"+f.Match+":"+f.Decision.String())
 		}
 	}
 

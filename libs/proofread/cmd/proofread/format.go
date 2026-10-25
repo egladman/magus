@@ -93,7 +93,7 @@ func textSummary(out []finding) string {
 	deny := 0
 
 	for _, f := range out {
-		if f.Decision == string(proofread.DecisionDeny) {
+		if f.Decision == proofread.DecisionDeny.String() {
 			deny++
 		}
 	}
@@ -176,7 +176,7 @@ func position(f finding) (line, column, endLine, endColumn int) {
 // sarifLevel is the SARIF level of a decision: deny fails a gate and advise
 // only warns.
 func sarifLevel(decision string) string {
-	if decision == string(proofread.DecisionDeny) {
+	if decision == proofread.DecisionDeny.String() {
 		return "error"
 	}
 
@@ -351,7 +351,7 @@ func toRDJSON(out []finding) rdResult {
 			Code:     rdCode{Value: f.Code, URL: f.URL},
 		}
 
-		if f.Decision == string(proofread.DecisionDeny) {
+		if f.Decision == proofread.DecisionDeny.String() {
 			d.Severity = "ERROR"
 		}
 
