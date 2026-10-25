@@ -1235,7 +1235,7 @@ func Rules() []types.RuleDoc {
 		out = append(out, e.doc)
 	}
 	for i := range out {
-		out[i].Decision = string(defaults[out[i].Name])
+		out[i].Decision = defaults[out[i].Name].String()
 		out[i].Fixed = builtin.Fixed(out[i].Name)
 		out[i].Verdicts = builtin.Verdicts(out[i].Name)
 	}
@@ -1243,7 +1243,7 @@ func Rules() []types.RuleDoc {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a
 		// reader opening this list is asking what stops them first.
 		if a.Decision != b.Decision {
-			if a.Decision == string(builtin.Deny) {
+			if a.Decision == builtin.Deny.String() {
 				return -1
 			}
 			return 1

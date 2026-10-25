@@ -1016,7 +1016,7 @@ func (r *WorkspaceRules) DeclaredBuiltinSettings() map[string]string {
 	declared := r.Builtins()
 	out := make(map[string]string, len(declared))
 	for name, s := range declared {
-		out[name] = string(s.Decision)
+		out[name] = s.Decision.String()
 		if s.Lines != 0 {
 			out[name] = fmt.Sprintf("%s, lines %d", s.Decision, s.Lines)
 		}
