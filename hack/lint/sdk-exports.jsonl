@@ -155,6 +155,7 @@
 {"name":"Magus.WorkingDiff","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.Workspace","reason":"workspace accessor the CLI or std calls on the loaded handle"}
 {"name":"Magus.WriteGuardIndex","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
+{"name":"Magus.WriteScriptsIndex","reason":"symbol index query or refresh for refs and the conformance lens"}
 {"name":"MaybeLaunchSandbox","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"MergeMarkers","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"MetricsCollector","reason":"value type a Run or query result returns to the caller"}
