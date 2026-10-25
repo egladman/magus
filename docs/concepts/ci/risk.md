@@ -136,7 +136,7 @@ deadline is refused past it with the runs holding the budget named.
 A gate graded on a scoped run says so beside its mark:
 
 ```text
-  [met] check, a run scoped with `-- -run Wait`
+[met] check, a run scoped with `-- -run Wait`
 ```
 
 A merge settles a conflicted file by its class alone, not its tier; see

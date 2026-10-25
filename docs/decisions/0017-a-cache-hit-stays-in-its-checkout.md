@@ -53,10 +53,10 @@ of a replayed log finds the checkout it was written in.
 When a replayed log names `n` paths, magus counts how many lie under the producing
 checkout and how many lie outside this checkout:
 
-| Case | Output | Run |
-| --- | --- | --- |
-| Paths under the producing checkout | notice: `<project>:<target> replayed a log recorded in another checkout, <producer>; it names <n> path(s) under that checkout` | succeeds |
-| Paths outside this checkout | error: `<project>:<target> replayed a log recorded in another checkout, <producer>; it names <n> path(s) outside this checkout, <here>` | succeeds; the error reports |
+| Case                               | Output                                                                                                                                  | Run                         |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Paths under the producing checkout | notice: `<project>:<target> replayed a log recorded in another checkout, <producer>; it names <n> path(s) under that checkout`          | succeeds                    |
+| Paths outside this checkout        | error: `<project>:<target> replayed a log recorded in another checkout, <producer>; it names <n> path(s) outside this checkout, <here>` | succeeds; the error reports |
 
 The error reports but does not fail the run. Eli decided this on 2026-10-24: a replay
 that names foreign paths is a fact the person must see, and failing the run would hide
@@ -87,17 +87,17 @@ unscoped one, using the same condition as the MGS2014 guard deny.
 
 ### State
 
-| Item | State |
-| --- | --- |
-| A hit writes a new attempt marked cached (`OutputDescriptor.Cached`) | done |
-| `StepRef` and `AdoptImported` deleted | done |
-| `Manifest.Checkout` records the producer root | done |
-| MGS8005 notice and error text, reports without failing the run | done |
-| `readRef` logs the cross-checkout read at notice level, pinned in `checkouts_test.go` | done |
-| MGS2014 guard deny for a direct `custom-gcl` run with an unscoped cache | done |
-| MGS2014 `magus doctor` finding | done |
-| Per-checkout sandbox env scoping for tool result caches | decided; not checked in this record's tree |
-| `install-linter` clears the lint cache on rebuild | decided; not checked in this record's tree |
+| Item                                                                                  | State                                      |
+| ------------------------------------------------------------------------------------- | ------------------------------------------ |
+| A hit writes a new attempt marked cached (`OutputDescriptor.Cached`)                  | done                                       |
+| `StepRef` and `AdoptImported` deleted                                                 | done                                       |
+| `Manifest.Checkout` records the producer root                                         | done                                       |
+| MGS8005 notice and error text, reports without failing the run                        | done                                       |
+| `readRef` logs the cross-checkout read at notice level, pinned in `checkouts_test.go` | done                                       |
+| MGS2014 guard deny for a direct `custom-gcl` run with an unscoped cache               | done                                       |
+| MGS2014 `magus doctor` finding                                                        | done                                       |
+| Per-checkout sandbox env scoping for tool result caches                               | decided; not checked in this record's tree |
+| `install-linter` clears the lint cache on rebuild                                     | decided; not checked in this record's tree |
 
 ### Doctrine checked
 
