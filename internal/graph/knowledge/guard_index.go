@@ -112,7 +112,8 @@ type GuardIndex struct {
 	root         string
 	refsPath     string
 	symbolsFresh bool
-	built        GuardCheckout
+	symbolCount  int
+	built       GuardCheckout
 	ids          map[string][]string // sorted
 	symbolIDs    map[string][]string // symbol name to the ids that carry it
 	files        []guardFileStamp
@@ -232,7 +233,7 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool, at Guar
 		return err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\nroot %s\nsymbols-fresh %t\n", guardIndexHeader, absRoot, symbolsFresh)
+	fmt.Fprintf(&b, "%s\nroot %s\nsymbols-fresh %t\nsymbol-count %d\n", guardIndexHeader, absRoot, symbolsFresh, len(symbolIDs))
 	if at.Revision != "" {
 		fmt.Fprintf(&b, "revision %s\n", at.Revision)
 	}
@@ -391,6 +392,20 @@ func ReadGuardIndexCheckout(cacheDir, root string) (GuardCheckout, error) {
 	return x.built, nil
 }
 
+// GuardIndexHasSymbols reports whether the index for the workspace at root was built from a
+// graph that held a symbol, with ReadGuardIndexCheckout's errors. An index without one
+// cannot answer `magus refs`, whatever else it holds.
+func GuardIndexHasSymbols(cacheDir, root string) (bool, error) {
+	x, err := readGuardIndex(cacheDir, root, true)
+	if err != nil {
+		return false, err
+	}
+	return x.HasSymbols(), nil
+}
+
+// HasSymbols reports whether the graph the index was built from held a symbol.
+func (x *GuardIndex) HasSymbols() bool { return x.symbolCount > 0 }
+
 func readGuardIndex(cacheDir, root string, headerOnly bool) (*GuardIndex, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -418,6 +433,8 @@ func readGuardIndex(cacheDir, root string, headerOnly bool) (*GuardIndex, error)
 			x.root = rest
 		case "symbols-fresh":
 			x.symbolsFresh = rest == "true"
+		case "symbol-count":
+			x.symbolCount, _ = strconv.Atoi(rest)
 		case "revision":
 			x.built.Revision = rest
 		case "operation":
