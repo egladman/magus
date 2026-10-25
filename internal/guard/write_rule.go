@@ -52,9 +52,6 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 	if verdict.Decision == decisionDeny {
 		return verdict, workspaceRuleRecord{}
 	}
-	if isProse(path) {
-		fields = writeFields{}
-	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	spawned := spawnedAs(facts, who.Agent)
 	role, row := actingRole(ctx, at, lease, spawned)
@@ -120,15 +117,6 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 		note = fmt.Sprintf("%s\n\n%s", lapseSparedNote(*asked.lapse), note)
 	}
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
-}
-
-// proseExtensions are the files whose text the write rule is not handed. Their `#` and `//`
-// lines are content, so the policy's comment check allows them, but only after it has read the
-// whole file from disk and diffed it, which ran a long blog post past the hook budget.
-var proseExtensions = []string{".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc", ".json", ".csv", ".tsv", ".log", ".lock", ".svg", ".diff", ".patch"}
-
-func isProse(path string) bool {
-	return slices.Contains(proseExtensions, strings.ToLower(filepath.Ext(path)))
 }
 
 // pendingCheckBound bounds the one status policyPending runs. A lapsed load has spent the

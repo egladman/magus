@@ -56,16 +56,16 @@ func committedPolicyFixture(t *testing.T) (*testkit.Repo, context.Context) {
 // workspace the path lands in.
 func TestWriteRuleSeesTheWrittenText(t *testing.T) {
 	ctx, root, _ := writeFixture(t)
-	path := filepath.Join(root, "main.go")
+	path := filepath.Join(root, "CHANGELOG.md")
 	cases := []struct {
 		name  string
 		input map[string]any
 		want  types.WriteRequest
 	}{
-		{"an edit", map[string]any{"file_path": path, "old_string": "package a\n", "new_string": "package b\n"},
-			types.WriteRequest{OldText: "package a\n", NewText: "package b\n"}},
-		{"a whole-file write", map[string]any{"file_path": path, "content": "package a\n"},
-			types.WriteRequest{Content: "package a\n"}},
+		{"an edit", map[string]any{"file_path": path, "old_string": "## [Unreleased]\n", "new_string": "## [Unreleased]\n\n- a line\n"},
+			types.WriteRequest{OldText: "## [Unreleased]\n", NewText: "## [Unreleased]\n\n- a line\n"}},
+		{"a whole-file write", map[string]any{"file_path": path, "content": "# Changelog\n"},
+			types.WriteRequest{Content: "# Changelog\n"}},
 		{"a shape magus does not read", map[string]any{"file_path": path, "edits": []any{}},
 			types.WriteRequest{}},
 	}
@@ -130,7 +130,7 @@ func TestWriteRuleStrengthensOnly(t *testing.T) {
 // working-tree rule fails open with the advisory.
 func TestWriteRulesKeepTheStricterSide(t *testing.T) {
 	ctx, root, _ := writeFixture(t)
-	path := filepath.Join(root, "main.go")
+	path := filepath.Join(root, "CHANGELOG.md")
 	approved := (&writeRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}}).rule()
 	v := Judge(ctx, Dependencies{
 		WriteRule:         (&writeRuleProbe{}).rule(),
@@ -247,20 +247,4 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 		assert.Equal(t, "deny", v.Decision)
 		assert.Contains(t, v.Reason, "magus ran out of time judging this file write")
 	})
-}
-
-// A prose file's text never reaches the rule: an edit of a long post is graded by its path
-// alone, so the rule does not read and diff the file for a markdown heading it takes for a
-// comment.
-func TestWriteRuleIsNotHandedProseText(t *testing.T) {
-	ctx, root, _ := writeFixture(t)
-	path := filepath.Join(root, "blog", "post.md")
-	probe := &writeRuleProbe{}
-	Judge(ctx, Dependencies{WriteRule: probe.rule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
-		"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Edit",
-		"tool_input": map[string]any{"file_path": path, "old_string": "one\n", "new_string": "# two\n"},
-	})})
-	require.Len(t, probe.asked, 1)
-	got := probe.asked[0]
-	assert.Equal(t, types.WriteRequest{Path: path}, types.WriteRequest{Path: got.Path, OldText: got.OldText, NewText: got.NewText, Content: got.Content})
 }
