@@ -92,7 +92,7 @@ func TestDecisionTextRoundTrips(t *testing.T) {
 
 func TestDecisionTextRefusesUnknown(t *testing.T) {
 	var v Verdict
-	require.ErrorContains(t, json.Unmarshal([]byte(`{"decision":"ship"}`), &v), `unknown decision "ship"; want merge, kick, wait or merged`)
+	require.ErrorContains(t, json.Unmarshal([]byte(`{"decision":"ship"}`), &v), `unknown decision "ship", want merge, kick, wait or merged`)
 	_, err := Decision(9).MarshalText()
 	require.EqualError(t, err, "queue decision 9 is not merge, kick, wait or merged")
 }

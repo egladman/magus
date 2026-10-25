@@ -215,8 +215,11 @@ func TestAWorkerMergedIntoALiveIntegrationCheckoutEnds(t *testing.T) {
 			Integrates: []string{"job-a", "job-b"}, Updated: 1})
 
 	got := states(t, s)
-	assert.Equal(t, types.StateNoReturn, got["job-a"].State)
-	assert.Equal(t, fmt.Sprintf("its work landed in integration job integration at %s: the 1 changed path(s) at %s in %s read the same there",
-		integration.Head()[:7], wa.Head()[:7], wa.Root()), got["job-a"].EndReason)
+	ended := exited("job-a", wa, "a.go")
+	ended.Schema = got["job-a"].Schema // the envelope is the store's, stamped on read
+	ended.State, ended.Updated = types.StateNoReturn, got["job-a"].Updated
+	ended.EndReason = fmt.Sprintf("its work landed in integration job integration at %s: the 1 changed path(s) at %s in %s read the same there",
+		integration.Head()[:7], wa.Head()[:7], wa.Root())
+	assert.Equal(t, ended, got["job-a"])
 	assert.Equal(t, types.StateExited, got["job-b"].State, "named by the integration row, but its checkout lacks the work")
 }

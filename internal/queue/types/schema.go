@@ -136,7 +136,7 @@ func (d *Decision) UnmarshalText(text []byte) error {
 	}
 	i := slices.Index(decisionNames[:], string(text))
 	if i <= 0 {
-		return fmt.Errorf("unknown decision %q; want merge, kick, wait or merged", text)
+		return fmt.Errorf("unknown decision %q, want merge, kick, wait or merged", text)
 	}
 	*d = Decision(i)
 	return nil
