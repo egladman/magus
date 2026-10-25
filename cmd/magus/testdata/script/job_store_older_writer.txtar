@@ -18,7 +18,7 @@ exec magus job fork scout/first --read-only --criteria 'read the tests'
 exec sh -c 'f=$(find "$XDG_STATE_HOME" -name jobs.jsonl) && sed "1s/}\$/,\"writer\":{\"commit\":\"8a9d\",\"time\":\"2099-01-01T00:00:00Z\"}}/" "$f" > "$f.new" && mv "$f.new" "$f"'
 
 exec magus job fork scout/second --read-only --criteria 'read the tests'
-exec magus ls jobs
+exec magus ls jobs --all
 stdout 'scout/first'
 stdout 'scout/second'
 
