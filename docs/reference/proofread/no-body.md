@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Detail belongs in the pull request description, so a commit is one subject line. A trailer block ("Key: value" lines, including "BREAKING CHANGE") is not a body, and neither is a blank line of padding; body-separator leaves the same trailer block alone when a repository allows a body. House style: off unless a decisions table names it.
+Detail belongs in the pull request description, so a commit is one subject line. A trailer block ("Key: value" lines, including "BREAKING CHANGE") is not a body, and neither is a blank line of padding; body-separator leaves the same trailer block alone when a repository allows a body. A line a squash merge writes, opening "* ", is the forge's list of the commits it folded, not prose. Measured 2026-10-25 over the 1765 commits in this repository, 354 messages had a body and 318 of those opened with that list. House style: off unless a decisions table names it.
 
 ## Default decision
 

@@ -18,3 +18,9 @@ Co-Authored-By: A Person <a@example.com>
 -- pass/commit-message whole --
 Merge branch 'main'
 The merge brought the key.
+-- pass/commit-message whole --
+fix(harness): close the gaps (#615)
+
+* close the gaps
+
+* leave the lock

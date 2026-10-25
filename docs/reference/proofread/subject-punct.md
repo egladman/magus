@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Clauses in a subject join with a semicolon. A comma, a parenthesis, an exclamation mark, a question mark or a spaced hyphen is punctuation this repository's subjects do not use. A conventional prefix, "type(scope)!: ", is not part of what the subject says, so a parenthesis or bang there is left alone. A colon is not this rule's: the caller knows whether the branch requires that prefix. House style: off unless a decisions table names it.
+Clauses in a subject join with a semicolon. A comma, a parenthesis, an exclamation mark, a question mark or a spaced hyphen is punctuation this repository's subjects do not use. A conventional prefix, "type(scope)!: ", is not part of what the subject says, so a parenthesis or bang there is left alone, and a " (#123)" a forge appends is not counted, the same as subject-length. A colon is not this rule's: the caller knows whether the branch requires that prefix. Measured 2026-10-25 over the 1765 commits in this repository, 705 subjects had a parenthesis and 502 of those end in that trailer. House style: off unless a decisions table names it.
 
 ## Default decision
 

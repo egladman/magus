@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-This repository's subjects are lowercase. A capital letter followed by a lowercase letter is title case; an acronym ("URL-parse") and a single capital ("A hook") are left alone, which is the check hack/policy/commits.buzz used to apply off the base branch. A conventional prefix is itself lowercase, so a capital in the description after "feat: " is that branch's grammar, not this rule. House style: off unless a decisions table names it.
+This repository's subjects are lowercase. A capital letter followed by a lowercase letter is title case; an acronym ("URL-parse") and a single capital ("A hook") are left alone, which is the check hack/policy/commits.buzz used to apply off the base branch. A conventional prefix is itself lowercase, so a capital in the description after "feat: " is that branch's grammar, not this rule. Measured 2026-10-25 over the 1765 commits in this repository, 74 open in title case and none of the newest 200 do. House style: off unless a decisions table names it.
 
 ## Default decision
 

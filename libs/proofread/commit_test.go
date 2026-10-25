@@ -276,6 +276,15 @@ func TestSubjectPunctReportsTheMarksAndSkipsAConventionalPrefix(t *testing.T) {
 		{name: "a breaking prefix", text: "feat!: drop the flag"},
 		{name: "a scoped breaking prefix", text: "feat(cache)!: drop the flag"},
 		{name: "a semicolon", text: "keep the key; leave the lock"},
+		{name: "a forge trailer", text: "fix(harness): close the gaps (#615)"},
+		{
+			name: "parentheses before a forge trailer",
+			text: "keep the key (stable) (#615)",
+			want: []Finding{{
+				Rule: RuleSubjectPunct, Message: "Drop the parentheses. Join clauses with a semicolon.",
+				Match: "(", Line: 1,
+			}},
+		},
 		{
 			name: "a bang after the prefix",
 			text: "feat: drop the flag!",
@@ -318,6 +327,10 @@ func TestNoBodyReportsProseAndLeavesATrailer(t *testing.T) {
 		{"a trailer after a blank line", "keep the key\n\nCo-Authored-By: A Person <a@example.com>", nil},
 		{"a breaking footer", "fix!: add the key\nBREAKING CHANGE: the old key is gone", nil},
 		{"a merge", "Merge branch 'main'\nThe merge brought the key.", nil},
+		{"a squash list", "fix(harness): close the gaps (#615)\n\n* close the gaps\n\n* leave the lock", nil},
+		{"prose after a squash list", "keep the key\n\n* close the gaps\n\nThe detail belongs in the description.", []Finding{{
+			Rule: RuleNoBody, Message: message, Match: "The detail belongs in the description.", Line: 5,
+		}}},
 	}
 
 	for _, tc := range cases {
