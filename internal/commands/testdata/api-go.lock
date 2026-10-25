@@ -186,6 +186,7 @@ github.com/egladman/magus.Magus.Where method(ptr) func(dir string) (*github.com/
 github.com/egladman/magus.Magus.WorkingDiff method(ptr) func(ctx context.Context, paths []string) (string, error)
 github.com/egladman/magus.Magus.Workspace method(ptr) func(ctx context.Context, cfg github.com/egladman/magus/types.WorkspaceConfig) (github.com/egladman/magus/types.WorkspaceEntry, error)
 github.com/egladman/magus.Magus.WriteGuardIndex method(ptr) func(ctx context.Context) error
+github.com/egladman/magus.Magus.WriteScriptsIndex method(ptr) func(ctx context.Context) error
 github.com/egladman/magus.MaybeLaunchSandbox func()
 github.com/egladman/magus.MergeMarkers func(base []byte, ours []byte, theirs []byte, markerSize int) ([]byte, bool)
 github.com/egladman/magus.MetricsCollector type struct
@@ -3342,6 +3343,7 @@ github.com/egladman/magus/types.Limits type struct
 github.com/egladman/magus/types.Limits.ForegroundDefaultMs field int64 "json:\"foreground_default_ms,omitempty\""
 github.com/egladman/magus/types.Limits.ForegroundMaxMs field int64 "json:\"foreground_max_ms,omitempty\""
 github.com/egladman/magus/types.Limits.HookTimeoutMs field int64 "json:\"hook_timeout_ms,omitempty\""
+github.com/egladman/magus/types.Limits.ObservesSkillLoads field bool "json:\"observes_skill_loads,omitempty\""
 github.com/egladman/magus/types.Limits.ResumesOnBackgroundFrom field string "json:\"resumes_on_background_from,omitempty\""
 github.com/egladman/magus/types.ListenerHTTP const ListenerKind = "http"
 github.com/egladman/magus/types.ListenerKind type string
@@ -4977,7 +4979,9 @@ github.com/egladman/magus/types.ToolCapability.String method func() string
 github.com/egladman/magus/types.ToolCapability.Valid method func() bool
 github.com/egladman/magus/types.ToolCapability.Values method func() []string
 github.com/egladman/magus/types.ToolDefinition const untyped string = "A tool is a binary a spell drives. magus probes its version on every run, because that version keys the cache. A project may also hold it to a window - an inclusive min and an exclusive below - intersected with what the declaring spell requires."
+github.com/egladman/magus/types.ToolHostFile const untyped string = "host"
 github.com/egladman/magus/types.ToolInert const ToolCapability = "inert"
+github.com/egladman/magus/types.ToolLimitsFile const untyped string = "limits"
 github.com/egladman/magus/types.ToolModelRowsFile const untyped string = "models"
 github.com/egladman/magus/types.ToolNetwork const ToolCapability = "network"
 github.com/egladman/magus/types.ToolNotOnPath const DiagnosticCode = "MGS3003"

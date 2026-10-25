@@ -36,7 +36,6 @@ import (
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // `magus graph` is the graph meta-home: the workspace's graphs as objects.

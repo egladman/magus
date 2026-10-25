@@ -633,28 +633,18 @@ const (
 	FlagShellCallTimeoutMs = "call-timeout-ms"
 	// shell: --event
 	FlagShellEvent = "event"
-	// shell: --foreground-default-ms
-	FlagShellForegroundDefaultMs = "foreground-default-ms"
-	// shell: --foreground-max-ms
-	FlagShellForegroundMaxMs = "foreground-max-ms"
 	// shell: --lease
 	FlagShellLease = "lease"
 	// shell: --message
 	FlagShellMessage = "message"
 	// shell: --observe
 	FlagShellObserve = "observe"
-	// shell: --observes-skill-loads
-	FlagShellObservesSkillLoads = "observes-skill-loads"
 	// shell: --path
 	FlagShellPath = "path"
 	// shell: --renders-ask
 	FlagShellRendersAsk = "renders-ask"
-	// shell: --resumes-on-background-from
-	FlagShellResumesOnBackgroundFrom = "resumes-on-background-from"
 	// shell: --session
 	FlagShellSession = "session"
-	// shell: --tool-rows
-	FlagShellToolRows = "tool-rows"
 	// shell: --transcript
 	FlagShellTranscript = "transcript"
 	// shell: --transport
@@ -966,24 +956,19 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // ShellFlags are the flags declared for `magus shell`.
 type ShellFlags struct {
-	Path                    bool   // --path
-	Observe                 bool   // --observe
-	Message                 bool   // --message
-	Lease                   string // --lease
-	AgentName               string // --agent-name
-	Transport               string // --transport
-	Session                 string // --session
-	Agent                   string // --agent
-	Transcript              string // --transcript
-	Event                   string // --event
-	ObservesSkillLoads      bool   // --observes-skill-loads
-	ToolRows                string // --tool-rows
-	RendersAsk              bool   // --renders-ask
-	CallBackground          bool   // --call-background
-	CallTimeoutMs           int    // --call-timeout-ms
-	ForegroundDefaultMs     int    // --foreground-default-ms
-	ForegroundMaxMs         int    // --foreground-max-ms
-	ResumesOnBackgroundFrom string // --resumes-on-background-from
+	Path           bool   // --path
+	Observe        bool   // --observe
+	Message        bool   // --message
+	Lease          string // --lease
+	AgentName      string // --agent-name
+	Transport      string // --transport
+	Session        string // --session
+	Agent          string // --agent
+	Transcript     string // --transcript
+	Event          string // --event
+	RendersAsk     bool   // --renders-ask
+	CallBackground bool   // --call-background
+	CallTimeoutMs  int    // --call-timeout-ms
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -993,20 +978,15 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
 	fs.BoolVar(&f.Message, FlagShellMessage, false, "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass")
 	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
-	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only); required with --transport")
+	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from, required with --transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name")
 	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
-	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This hook wiring observes the host loading a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
-	fs.StringVar(&f.ToolRows, FlagShellToolRows, "", "The directory, relative to the workspace root, holding the host's tool rows that `magus agent harness install` writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
 	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
-	fs.IntVar(&f.ForegroundDefaultMs, FlagShellForegroundDefaultMs, 0, "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down")
-	fs.IntVar(&f.ForegroundMaxMs, FlagShellForegroundMaxMs, 0, "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down")
-	fs.StringVar(&f.ResumesOnBackgroundFrom, FlagShellResumesOnBackgroundFrom, "", "The first host version that resumes a stopped subagent when a background task it left running completes, declared by the wiring; without it a subagent's stop with a background task running is refused")
 	return &f
 }
 
