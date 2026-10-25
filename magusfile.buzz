@@ -648,6 +648,8 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
     // govulncheck parses generated .go files, so it must follow generate or race mockery.
     ctx.needs(generate);
     advisories\govulncheck(ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), go: go, inheritedFatal: inheritedFatal);
+    // Cantrip: the filesystem license scan. Image scans call docker["trivy-image"].
+    // docs/glossary/cantrip.md
     proc\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
         "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
@@ -2491,6 +2493,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         "changes/**/*.md", "changes/testdata/*"]);
     proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
+    // Cantrip: this target's own actionlint command. docs/glossary/cantrip.md
     proc\exec("actionlint", []);
 
     // Every unreleased fragment: pr-changelog lints only those a pull request adds.
@@ -2562,6 +2565,7 @@ fun scopedTools(ctx: magus\Context, files: [str], goPackages: [str]) > [[str]] {
     }
     final workflows = files.filter(fun (i: int, f: str) > bool => f.startsWith(".github/workflows/") and f.endsWith(".yaml"));
     if (workflows.len() > 0) {
+        // Cantrip, the same command lint runs. docs/glossary/cantrip.md
         tools.append(["actionlint"] + workflows);
     }
     return tools;

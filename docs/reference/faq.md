@@ -12,10 +12,13 @@ Short answers with a link to the full story.
 
 A **target** is a named operation on a project (`build`, `test`, `lint`). A
 **spell** teaches magus how a tool performs that operation (the `go` spell knows
-`go build`, `go test`). A **charm** modifies _how_ a target runs without changing
-which target (`rw` to write in place, `gha` for GitHub Actions output). Target =
-what, spell = how, charm = in what manner. See [targets.md](../concepts/targets.md),
-[spells.md](../concepts/spells.md), [charms.md](../concepts/charms.md).
+`go build`, `go test`). A **cantrip** is one command the target runs itself
+with `proc\exec` (`actionlint` in `lint`). A **charm** modifies _how_ a target
+runs without changing which target (`rw` to write in place, `gha` for GitHub
+Actions output). Target = what, spell = how, cantrip = one command the target
+owns, charm = in what manner. See [targets.md](../concepts/targets.md),
+[spells.md](../concepts/spells.md), [cantrip](../glossary/cantrip.md),
+[charms.md](../concepts/charms.md).
 
 ## Why did `magus run goBuild` work when my target is `go_build`?
 
@@ -57,10 +60,13 @@ capacity and services across every magus, and it exits once it holds nothing. Se
 
 ## How do I add support for a tool magus does not know?
 
-Write a spell. For a one-off, a magusfile function target calling `proc\exec` is
-enough; for shared vocabulary, author a spell whose handler returns a `Command` (or
-a `Service` for a long-running process). `magus init spell` scaffolds one. See
-[spells.md](../concepts/spells.md) and the [authoring editor setup](../guides/integrations/editor.md).
+Write a spell when the tool is shared vocabulary. For one command a target
+owns, a magusfile function calling `proc\exec` is the cantrip, and a spell
+file around it does not earn the contract. A spell's handler returns a
+`Command` (or a `Service` for a long-running process). `magus init spell`
+scaffolds one. See [spells.md](../concepts/spells.md),
+[cantrip](../glossary/cantrip.md), and the
+[authoring editor setup](../guides/integrations/editor.md).
 
 ## Why did two charms give me a warning about one being "overridden"?
 
