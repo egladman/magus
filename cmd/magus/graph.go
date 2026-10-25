@@ -201,37 +201,8 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 	if err := m.WriteGuardIndex(ctx); err != nil {
 		interactive.Hint(ctx, "guard index not written: "+err.Error())
 	}
-	return writeScriptsIndex(ctx, root, m.CacheDir())
-}
-
-// writeScriptsIndex indexes the declarations of every tracked .buzz file under root, so
-// the guard names a script by the situation it serves. A script whose declaration does
-// not parse is left out of the index and fails the build, naming it.
-func writeScriptsIndex(ctx context.Context, root, cacheDir string) error {
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil {
-		return fmt.Errorf("magus graph build: scripts index: %w", err)
-	}
-	if res.VCS == nil {
-		return errors.New("magus graph build: scripts index: no version control says which scripts are tracked")
-	}
-	tracked, err := res.VCS.TrackedFiles(ctx, root, []string{"."})
-	if err != nil {
-		return fmt.Errorf("magus graph build: scripts index: %w", err)
-	}
-	scripts := slices.DeleteFunc(tracked, func(p string) bool { return !strings.HasSuffix(p, ".buzz") })
-	var dirty []string
-	if len(scripts) > 0 {
-		if dirty, err = res.VCS.DirtyFiles(ctx, root, scripts); err != nil {
-			return fmt.Errorf("magus graph build: scripts index: %w", err)
-		}
-	}
-	x, declErr := hint.BuildScriptsIndex(root, scripts, func(p string) bool { return !slices.Contains(dirty, p) })
-	if err := hint.WriteScriptsIndex(cacheDir, x); err != nil {
-		return fmt.Errorf("magus graph build: scripts index: %w", err)
-	}
-	if declErr != nil {
-		return fmt.Errorf("magus graph build: a script's SERVES declaration does not parse: %w", declErr)
+	if err := m.WriteScriptsIndex(ctx); err != nil {
+		return fmt.Errorf("magus graph build: %w", err)
 	}
 	return nil
 }

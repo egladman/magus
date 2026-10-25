@@ -101,25 +101,25 @@ func (r *runner) checkGuardBinaryEverywhere(projects []*types.Project) types.Che
 	if skew, ok := projectBinarySkew(r.runCtx(), root, projects, r.ownVersion()); ok {
 		return skew
 	}
-	if gone, ok := servedScriptsGone(r.cacheDir()); ok {
-		return gone
-	}
 	return got
 }
 
-// servedScriptsGone fails the check when the scripts index names a script whose file is
-// gone: the guard serves nothing for its situations then, and says so only here.
-func servedScriptsGone(cacheDir string) (types.Check, bool) {
-	missing, _ := hint.MissingScripts(cacheDir)
+// servedScriptsCheck is the doctor check for scripts the guard serves by situation.
+const servedScriptsCheck = "served-scripts"
+
+// checkServedScripts fails when the scripts index names a script whose file is gone: the
+// guard serves nothing for its situations then, and says so only here.
+func (r *runner) checkServedScripts() types.Check {
+	missing, _ := hint.MissingScripts(r.cacheDir())
 	if len(missing) == 0 {
-		return types.Check{}, false
+		return types.Check{Name: servedScriptsCheck, Status: types.CheckOK, Message: "every script the guard's scripts index names exists"}
 	}
 	return types.Check{
-		Name:    guardBinaryCheck,
+		Name:    servedScriptsCheck,
 		Status:  types.CheckFail,
 		Message: fmt.Sprintf("the guard's scripts index names %d script(s) that are gone, so their situations serve nothing", len(missing)),
 		Details: append(missing, fmt.Sprintf("restore each, or rebuild the index without it: %s", hint.GraphBuild.With())),
-	}, true
+	}
 }
 
 // worktreeWithoutBinary fails a linked worktree that holds no ./magus. Its hooks then judge

@@ -392,6 +392,9 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
 					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
 				}
+				if serr := m.WriteScriptsIndex(ctx); serr != nil {
+					slog.With(attr.Component("magus")).DebugContext(ctx, "scripts index not written", attr.Error(serr))
+				}
 			}
 			if err == nil || ctx.Err() != nil {
 				return err // a clean run, or a yield-cancel that carries no useful hint

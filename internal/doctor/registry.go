@@ -267,6 +267,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, projects []*types.Project) types.Check { return r.checkGuardBinaryEverywhere(projects) },
 	},
 	{
+		Name:           servedScriptsCheck,
+		Doc:            "whether every script the guard serves by situation still exists",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkServedScripts() },
+	},
+	{
 		Name:           "agent-observer",
 		Doc:            "whether the wired observer hook is recording anything",
 		Evidence:       types.EvidenceMeasured,

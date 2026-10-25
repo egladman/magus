@@ -190,7 +190,7 @@ func indexScript(t *testing.T, root, rel, summary string) hint.ScriptServe {
 
 // A script the guard's index serves whose file is gone fails the check loudly, naming it,
 // where the guard itself only stops serving it.
-func TestCheckGuardBinaryFailsWhenAServedScriptIsGone(t *testing.T) {
+func TestCheckServedScriptsFailsWhenAServedScriptIsGone(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	versionedMagus(w, "v0.5.0")
@@ -203,10 +203,8 @@ func TestCheckGuardBinaryFailsWhenAServedScriptIsGone(t *testing.T) {
 		"event:disk-low":  {{Path: "hack/dev/prune-worktrees.buzz", Summary: "prune"}},
 		"rule:sed-inline": {{Path: "hack/dev/rename-symbol.buzz", Summary: "rename"}},
 	}}))
-	projects := []*types.Project{{Path: ".", Dir: root}}
-
 	assert.Equal(t, types.Check{
-		Name:    guardBinaryCheck,
+		Name:    servedScriptsCheck,
 		Status:  types.CheckFail,
 		Message: "the guard's scripts index names 2 script(s) that are gone, so their situations serve nothing",
 		Details: []string{
@@ -214,10 +212,10 @@ func TestCheckGuardBinaryFailsWhenAServedScriptIsGone(t *testing.T) {
 			"hack/dev/rename-symbol.buzz",
 			"restore each, or rebuild the index without it: " + hint.GraphBuild.With(),
 		},
-	}, r.checkGuardBinaryEverywhere(projects))
+	}, r.checkServedScripts())
 
 	require.NoError(t, hint.WriteScriptsIndex(r.cacheDir(), hint.ScriptsIndex{Root: root, Serves: map[string][]hint.ScriptServe{"rule:stage-all": {kept}}}))
-	assert.Equal(t, types.CheckOK, r.checkGuardBinaryEverywhere(projects).Status, "every served script is there")
+	assert.Equal(t, types.CheckOK, r.checkServedScripts().Status, "every served script is there")
 }
 
 // The check resolves the hook from every project directory: one whose hook would run a
