@@ -254,7 +254,6 @@ export fun mgs_getLimits() > Limits {
         foregroundMaxMs = FOREGROUND_MAX_MS,
         hookTimeoutMs = HOOK_TIMEOUT_S * 1000,
         resumesOnBackgroundFrom = RESUMES_ON_BACKGROUND_FROM,
-        observesSkillLoads = true,
     };
 }
 
@@ -487,7 +486,6 @@ test "mgs_getLimits carries what the wiring no longer renders" {
     assert\equal(limits.foregroundMaxMs, 600000, "the longest timeout the Bash tool takes");
     assert\equal(limits.hookTimeoutMs, 10000, "the hook timeout every judging entry carries, in ms");
     assert\equal(limits.resumesOnBackgroundFrom, "2.1.299", "the first release that resumes a subagent");
-    assert\isTrue(limits.observesSkillLoads, "the catch-all matcher meets the Skill tool");
 }
 
 test "every glue entry takes the host's name and nothing else" {
