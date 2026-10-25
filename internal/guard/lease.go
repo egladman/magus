@@ -3372,8 +3372,14 @@ func isPush(c hint.Invocation) bool {
 
 // isPRCreate reports whether c is `gh pr create`, past gh's own flags.
 func isPRCreate(c hint.Invocation) bool {
+	return ghPullRequestVerb(c) == "create"
+}
+
+// ghPullRequestVerb is the word after `pr` in a gh call, past gh's own flags, and "" for a
+// call that is not `gh pr <verb>`.
+func ghPullRequestVerb(c hint.Invocation) string {
 	if filepath.Base(c.Name) != "gh" {
-		return false
+		return ""
 	}
 	var words []string
 	for _, a := range c.Args {
@@ -3381,8 +3387,10 @@ func isPRCreate(c hint.Invocation) bool {
 			words = append(words, a)
 		}
 	}
-	i := slices.Index(words, "pr")
-	return i >= 0 && i+1 < len(words) && words[i+1] == "create"
+	if i := slices.Index(words, "pr"); i >= 0 && i+1 < len(words) {
+		return words[i+1]
+	}
+	return ""
 }
 
 // vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.

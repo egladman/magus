@@ -215,20 +215,8 @@ func placePullRequestCall(req *types.CommandRequest, in commandRuleInput, at loc
 // isPullRequestText reports `gh pr create` and `gh pr edit`, the calls whose text the
 // workspace rule judges against the diff of the branch they describe.
 func isPullRequestText(c hint.Invocation) bool {
-	if isPRCreate(c) {
-		return true
-	}
-	if filepath.Base(c.Name) != "gh" {
-		return false
-	}
-	var words []string
-	for _, a := range c.Args {
-		if !strings.HasPrefix(a, "-") {
-			words = append(words, a)
-		}
-	}
-	i := slices.Index(words, "pr")
-	return i >= 0 && i+1 < len(words) && words[i+1] == "edit"
+	verb := ghPullRequestVerb(c)
+	return verb == "create" || verb == "edit"
 }
 
 // actingRole is where a caller acting under lease, spawned as spawned, stands, and the
