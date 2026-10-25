@@ -186,7 +186,7 @@ func TestInertToolsCarryNothingToJudge(t *testing.T) {
 func TestMissingToolRowsKnowNoToolAndSaySo(t *testing.T) {
 	t.Parallel()
 	for name, rows := range map[string]agent.ToolRows{
-		"never installed":    agent.FindToolRows(t.TempDir(), testToolHost),
+		"never installed":     agent.FindToolRows(t.TempDir(), testToolHost),
 		"another host's only": agent.FindToolRows(t.TempDir(), "claude-code"),
 	} {
 		require.Error(t, rows.Err, name)

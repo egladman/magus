@@ -171,9 +171,8 @@ func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.Gua
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionDeny,
 		Rule:          string(denyRuleBackgroundLeft),
-		Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each before you finish:\n%s\nNot let through: %s.\n"+
-			"To wait on a run, background it as `magus job exec --timeout <d> -- <command>` instead: a stop that leaves only such runs stands, and each one's end resumes you.",
-			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), stoppableTasks(tasks, now), why),
+		Reason: fmt.Sprintf("magus workspace: stop each background task before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
+			stoppableTasks(tasks, now), why),
 	}
 }
 

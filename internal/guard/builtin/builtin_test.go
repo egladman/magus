@@ -289,7 +289,7 @@ func TestDecisionTextRoundTrips(t *testing.T) {
 func TestDecisionTextRefusesUnknown(t *testing.T) {
 	var s Setting
 	err := json.Unmarshal([]byte(`{"decision":"block"}`), &s)
-	require.ErrorContains(t, err, `unknown decision "block"; give off, advise or deny`)
+	require.ErrorContains(t, err, `unknown decision "block", give off, advise or deny`)
 	_, err = decision(9).MarshalText()
 	require.EqualError(t, err, "guard decision 9 is not off, advise or deny")
 }

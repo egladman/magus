@@ -177,8 +177,7 @@ func TestValidateMergeRefusesAContendedForkBeforeTheWorkspaceChecks(t *testing.T
 	}
 	v := validateMerge(t.Context(), s, rows, "contender", declare("magusfile.buzz"), config.Jobs{}, nil)
 	assert.Equal(t, []types.DiagnosticCode{types.WritePathFileShared}, codes(v.Problems))
-	assert.Equal(t, []string{cheapRefusalSkip}, v.Unchecked)
-	assert.Equal(t, types.JobWriteProof(""), v.WriteProof)
+	assert.Equal(t, types.JobValidation{Job: v.Job, Problems: v.Problems, Unchecked: []string{cheapRefusalSkip}}, v)
 
 	passed := validateMerge(t.Context(), s, rows, "bystander", declare("other.buzz"), config.Jobs{}, nil)
 	assert.Empty(t, passed.Problems)

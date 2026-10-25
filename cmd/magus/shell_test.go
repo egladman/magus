@@ -2142,12 +2142,12 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 // directory, with the given rows and limits.
 func installHostRows(t *testing.T, host string, limits types.Limits, rows ...types.HarnessTool) {
 	t.Helper()
-	dir := "." + host + "/magus/tools"
+	dir := filepath.Join("."+host, "magus", "tools")
 	raw, err := json.Marshal(limits)
 	require.NoError(t, err)
 	files := append(agent.ToolFiles(types.HarnessTools{Dir: dir, Rows: rows}, nil),
-		types.AgentFile{Path: dir + "/" + types.ToolHostFile, Content: host + "\n"},
-		types.AgentFile{Path: dir + "/" + types.ToolLimitsFile, Content: string(raw) + "\n"})
+		types.AgentFile{Path: filepath.Join(dir, types.ToolHostFile), Content: host + "\n"},
+		types.AgentFile{Path: filepath.Join(dir, types.ToolLimitsFile), Content: string(raw) + "\n"})
 	for _, f := range files {
 		require.NoError(t, os.MkdirAll(filepath.Dir(f.Path), 0o755))
 		require.NoError(t, os.WriteFile(f.Path, []byte(f.Content), 0o644))

@@ -64,7 +64,7 @@ func (d *decision) UnmarshalText(text []byte) error {
 	}
 	i := slices.Index(decisionNames[:], string(text))
 	if i <= 0 {
-		return fmt.Errorf("unknown decision %q; give off, advise or deny", text)
+		return fmt.Errorf("unknown decision %q, give off, advise or deny", text)
 	}
 	*d = decision(i)
 	return nil

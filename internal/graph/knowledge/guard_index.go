@@ -113,7 +113,7 @@ type GuardIndex struct {
 	refsPath     string
 	symbolsFresh bool
 	symbolCount  int
-	built       GuardCheckout
+	built        GuardCheckout
 	ids          map[string][]string // sorted
 	symbolIDs    map[string][]string // symbol name to the ids that carry it
 	files        []guardFileStamp

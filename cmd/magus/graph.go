@@ -184,14 +184,20 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	return scriptsErr
 }
 
+// skipIndex says what was not written and why, and answers nil: an index a hook reads is
+// never a reason to fail the build.
+func skipIndex(ctx context.Context, what string, err error) error {
+	interactive.Hint(ctx, what+" not written: "+err.Error())
+	return nil
+}
+
 // writeGuardIndexes writes the indexes a guard hook reads, and returns only the scripts
 // index's error. A guard index not written is a hint: the guard's graph-backed rules then
 // stay silent, which is the state they were in before the build.
 func writeGuardIndexes(ctx context.Context, root string) error {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
-		interactive.Hint(ctx, "guard indexes not written: "+err.Error())
-		return nil
+		return skipIndex(ctx, "guard indexes", err)
 	}
 	m, ok := ws.(*magus.Magus)
 	if !ok {

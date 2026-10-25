@@ -859,8 +859,7 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 		rec := spec("a.go", "a_test.go")
 		rec.SoftPaths = []string{"a_test.go", "b_test.go"}
 		got := apply(t, derived(t), rec)
-		assert.Equal(t, []string{"a_test.go"}, got.SoftPaths)
-		assert.Equal(t, []string{"a.go", "a_test.go"}, got.WritePaths)
+		assert.Equal(t, [][]string{{"a_test.go"}, {"a.go", "a_test.go"}}, [][]string{got.SoftPaths, got.WritePaths})
 	})
 	t.Run("explicit soft paths win", func(t *testing.T) {
 		t.Parallel()

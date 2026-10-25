@@ -138,20 +138,13 @@ const cheapRefusalSkip = "the symbol, claim, test, check and workspace checks an
 // workspace checks that make a fork under load take minutes. Rows are not hardened yet: that
 // only adds hard paths, so a refusal here stands, and a pass is judged again in full.
 func contendedFork(ctx context.Context, store *Store, rows []types.Job, id string, merged types.Job, limits config.Jobs) (types.JobValidation, bool) {
-	var contended types.JobProblems
-	contended = append(contended, forkLimitProblems(rows, id, merged.Parent, limits)...)
-	contended = append(contended, sharedCheckoutProblems(store, rows, merged)...)
-	contended = append(contended, unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged))...)
+	contended := slices.Concat(forkLimitProblems(rows, id, merged.Parent, limits), sharedCheckoutProblems(store, rows, merged),
+		unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged)))
 	if kept, _ := permitBut(contended, merged.Deviations); len(kept) == 0 {
 		return types.JobValidation{}, false
 	}
-	var ps types.JobProblems
-	ps = append(ps, rowDeclaration(merged).Problems()...)
-	ps = append(ps, unscopedProblems(merged)...)
-	ps = append(ps, ungradedProblems(merged)...)
-	ps = append(ps, claimCeilingProblems(merged, limits)...)
-	ps = append(ps, directoryWritePathProblems(store, merged)...)
-	ps = append(ps, contended...)
+	ps := slices.Concat(rowDeclaration(merged).Problems(), unscopedProblems(merged), ungradedProblems(merged),
+		claimCeilingProblems(merged, limits), directoryWritePathProblems(store, merged), contended)
 	v := types.JobValidation{Job: merged, Unchecked: []string{cheapRefusalSkip}}
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
 	return v, true

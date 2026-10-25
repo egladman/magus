@@ -212,7 +212,7 @@ func TestFindToolRowsByHost(t *testing.T) {
 	root := t.TempDir()
 	limits := types.Limits{ForegroundDefaultMs: 120000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true}
 	for _, host := range []string{"claude-code", "codex"} {
-		tools := types.HarnessTools{Dir: "." + host + "/magus/tools", Rows: shellRow()}
+		tools := types.HarnessTools{Dir: filepath.Join("."+host, "magus", "tools"), Rows: shellRow()}
 		writeToolFiles(t, root, append(ToolFiles(tools, nil), hostFiles(tools.Dir, host, limits)...))
 	}
 

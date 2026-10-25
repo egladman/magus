@@ -686,8 +686,8 @@ func TestCommandRuleSeesThePullRequestCallsCheckout(t *testing.T) {
 	line := fmt.Sprintf("cd %s && gh pr create --head topic --title t --body b", target)
 	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: line, Host: "claude-code"})
 	require.Len(t, probe.asked, 1)
-	assert.Equal(t, target, probe.asked[0].Dir)
-	assert.Equal(t, target, probe.asked[0].Workspace)
+	asked := probe.asked[0]
+	assert.Equal(t, []string{target, target}, []string{asked.Dir, asked.Workspace})
 
 	probe = &commandRuleProbe{}
 	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh pr create --head topic --title t --body b", Host: "claude-code"})
