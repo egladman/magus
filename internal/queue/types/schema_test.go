@@ -1,9 +1,11 @@
 package types
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,7 +75,26 @@ func TestVerdictCheckRefusesAMergeThatNamesNoCandidate(t *testing.T) {
 	v = green("1")
 	v.Method = ""
 	require.ErrorContains(t, v.Check(), `merge method ""`)
-	require.ErrorContains(t, Verdict{Change: change("1"), Decision: "ship"}.Check(), `unknown decision "ship"`)
+	require.ErrorContains(t, Verdict{Change: change("1"), Decision: 9}.Check(), "unknown decision Decision(9)")
+	require.ErrorContains(t, Verdict{Change: change("1")}.Check(), "names no decision")
+}
+
+func TestDecisionTextRoundTrips(t *testing.T) {
+	for d, name := range map[Decision]string{0: "", DecisionMerge: "merge", DecisionKick: "kick", DecisionWait: "wait", DecisionMerged: "merged"} {
+		got, err := json.Marshal(Verdict{Decision: d})
+		require.NoError(t, err)
+		require.Contains(t, string(got), fmt.Sprintf(`"decision":%q`, name))
+		var back Verdict
+		require.NoError(t, json.Unmarshal(got, &back))
+		require.Equal(t, d, back.Decision)
+	}
+}
+
+func TestDecisionTextRefusesUnknown(t *testing.T) {
+	var v Verdict
+	require.ErrorContains(t, json.Unmarshal([]byte(`{"decision":"ship"}`), &v), `unknown decision "ship"; want merge, kick, wait or merged`)
+	_, err := Decision(9).MarshalText()
+	require.EqualError(t, err, "queue decision 9 is not merge, kick, wait or merged")
 }
 
 func TestHookLinesBelongToValidationsVerdicts(t *testing.T) {

@@ -3,6 +3,7 @@ package types
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -86,19 +87,62 @@ func (c Changes) Check() error {
 	return nil
 }
 
-// Decision is what the queue decided for one change.
-type Decision string
+// Decision is what the queue decided for one change. The zero value is unset, which
+// [Verdict.Check] refuses.
+type Decision int
 
 const (
 	// DecisionMerge: validated green; merge once every change beneath it has.
-	DecisionMerge Decision = "merge"
+	DecisionMerge Decision = iota + 1
 	// DecisionKick: a real conflict, a red gate, or a refusal; kick back with the report.
-	DecisionKick Decision = "kick"
+	DecisionKick
 	// DecisionWait: not approved, or held behind a conflicting change; retried next run.
-	DecisionWait Decision = "wait"
+	DecisionWait
 	// DecisionMerged: its head is already on the base, so nothing is left to do.
-	DecisionMerged Decision = "merged"
+	DecisionMerged
 )
+
+var decisionNames = [...]string{DecisionMerge: "merge", DecisionKick: "kick", DecisionWait: "wait", DecisionMerged: "merged"}
+
+// String is d's wire name, or "unset" for the zero value.
+func (d Decision) String() string {
+	switch {
+	case d == 0:
+		return "unset"
+	case d.valid():
+		return decisionNames[d]
+	}
+	return fmt.Sprintf("Decision(%d)", int(d))
+}
+
+// MarshalText writes d's wire name, or empty text when unset. A value outside the
+// constants is an error.
+func (d Decision) MarshalText() ([]byte, error) {
+	switch {
+	case d == 0:
+		return []byte{}, nil
+	case d.valid():
+		return []byte(decisionNames[d]), nil
+	}
+	return nil, fmt.Errorf("queue decision %d is not merge, kick, wait or merged", int(d))
+}
+
+// UnmarshalText sets d from its wire name. Empty text is unset; any other name than
+// merge, kick, wait or merged is an error.
+func (d *Decision) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*d = 0
+		return nil
+	}
+	i := slices.Index(decisionNames[:], string(text))
+	if i <= 0 {
+		return fmt.Errorf("unknown decision %q; want merge, kick, wait or merged", text)
+	}
+	*d = Decision(i)
+	return nil
+}
+
+func (d Decision) valid() bool { return d >= DecisionMerge && d <= DecisionMerged }
 
 // Code says why a change waits or was kicked back, from a closed set a provider and a
 // workflow can act on. A CodeWait constant goes with [DecisionWait] and a CodeKick
@@ -133,7 +177,7 @@ const (
 	CodeKickRegeneration Code = "KICK_REGENERATION"
 )
 
-// decision is the decision c goes with, or "" for a code outside the set.
+// decision is the decision c goes with, or unset for a code outside the set.
 func (c Code) decision() Decision {
 	switch c {
 	case CodeWaitNotApproved, CodeWaitHeadMoved, CodeWaitBehind, CodeWaitConflictAhead, CodeWaitRevalidate,
@@ -144,7 +188,7 @@ func (c Code) decision() Decision {
 	case CodeKickConflict, CodeKickRed, CodeKickRefused, CodeKickRegeneration:
 		return DecisionKick
 	}
-	return ""
+	return 0
 }
 
 // Plan is what validation builds candidates for and an applier merges against.
@@ -324,7 +368,10 @@ func (v Verdict) Check() error {
 		}
 		return nil
 	}
-	return fmt.Errorf("unknown decision %q", v.Decision)
+	if v.Decision == 0 {
+		return fmt.Errorf("verdict on %s names no decision", v.Change.Label())
+	}
+	return fmt.Errorf("verdict on %s: unknown decision %s", v.Change.Label(), v.Decision)
 }
 
 // ReviewReport is what `magus queue reviews` prints: whether each approval standing on a

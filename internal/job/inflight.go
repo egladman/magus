@@ -69,7 +69,7 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 			ch.Partition, ch.Position, ch.Below = p.partition, p.position, p.below
 		}
 		if v, ok := verdicts[key]; ok {
-			ch.Decision, ch.Code, ch.Reason = string(v.Decision), string(v.Code), v.Reason
+			ch.Decision, ch.Code, ch.Reason = v.Decision.String(), string(v.Code), v.Reason
 		}
 		ch.Mine = (in.Me.Login != "" && ch.Author == in.Me.Login) ||
 			slices.ContainsFunc(ch.Jobs, func(id string) bool { return tree[id] })
@@ -112,7 +112,7 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 func changeAttention(ch types.InflightChange) types.InflightAttention {
 	switch {
 	case ch.Mark == string(qtypes.MarkKickedBack), ch.Mark == string(qtypes.MarkNeedsRegeneration),
-		ch.Decision == string(qtypes.DecisionKick):
+		ch.Decision == qtypes.DecisionKick.String():
 		return types.AttentionAuthor
 	case ch.Code == string(qtypes.CodeWaitNotApproved):
 		return types.AttentionReview
