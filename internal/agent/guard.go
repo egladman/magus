@@ -237,7 +237,14 @@ var guardInputs = []string{"command", "path", "mcp"}
 // 33: magus-command.buzz forwards --resumes-on-background-from on a stop, which a harness's
 // stop entries pass; a 32 copy reports it as unsupported and refuses every subagent stop
 // that leaves a background task running.
-const GuardTemplateVersion = 33
+//
+// 34: every glue takes one argument, --agent-name. magus shell finds the host's tool rows
+// by the host file install writes beside them, and reads its foreground limits, resume
+// release and skill-load capability from the limits file next to it, so the wiring drops
+// --observes-skill-loads, --foreground-default-ms, --foreground-max-ms, --tool-rows and
+// --resumes-on-background-from. A 34 copy under a 33 config reports each as unsupported
+// and judges without it; a 33 copy forwards them to a magus shell that no longer takes them.
+const GuardTemplateVersion = 34
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

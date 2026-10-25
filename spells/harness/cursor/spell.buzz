@@ -43,10 +43,9 @@ final WRITE_MATCHER = "Write|StrReplace|Edit";
 
 // The Buzz port reads the host from `--agent-name` and nowhere else, and refuses a call
 // without it (MGS3024). Cursor splits the command and runs magus itself, so there is no
-// shell. --observes-skill-loads: Cursor loads a skill by reading its SKILL.md, and the
-// preToolUse matcher covers Read, so every load reaches the guard.
+// shell. magus reads the rest from this spell: mgs_getLimits and mgs_listTools.
 fun cursor_guard_flags() > [str] {
-    return ["--agent-name", mgs_getName(), "--observes-skill-loads", "--tool-rows", TOOLS_DIR];
+    return ["--agent-name", mgs_getName()];
 }
 
 fun cursor_guard_command() > str {
@@ -80,9 +79,7 @@ fun cursor_matcher(event: str) > str {
 
 fun cursor_buzz_check_hook() > HookCommand {
     final check = buzzCheckHook(mgs_getName());
-    final flags = check.flags.cloneMutable();
-    flags.append("--observes-skill-loads");
-    return HookCommand{event = "postToolUse", matcher = WRITE_MATCHER, script = check.script, flags = flags, timeoutS = check.timeoutS};
+    return HookCommand{event = "postToolUse", matcher = WRITE_MATCHER, script = check.script, flags = check.flags, timeoutS = check.timeoutS};
 }
 
 fun cursor_hooks() > [HookCommand] {
@@ -141,6 +138,12 @@ export fun mgs_getHarnessConfig() > HarnessConfig {
 // serves both.
 export fun mgs_getSkills() > HarnessSkills {
     return HarnessSkills{paths = [".agents/skills"], form = SkillForm.both};
+}
+
+// Cursor loads a skill by reading its SKILL.md, and the preToolUse matcher covers Read, so
+// every load reaches the guard.
+export fun mgs_getLimits() > Limits {
+    return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true};
 }
 
 // Every Cursor tool the guard should know whose input's shape does not say what it does; a
@@ -232,7 +235,8 @@ test "guard command is the shipped Cursor Buzz port, not a shell script" {
     final cmd = cursor_guard_command();
     assert\isTrue(cmd.startsWith("magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz"), "host runs the Buzz port, with no shell");
     assert\isTrue(cmd.indexOf(" -- --agent-name {mgs_getName()}") != null, "names this host on the script argv");
-    assert\isTrue(cmd.indexOf(" --observes-skill-loads") != null, "a SKILL.md Read reaches preToolUse, so skill loads are reported");
+    assert\isTrue(cmd.endsWith(" -- --agent-name {mgs_getName()}"), "the host name is the one argument");
+    assert\isTrue(mgs_getLimits().observesSkillLoads, "a SKILL.md Read reaches preToolUse, so skill loads are reported");
 }
 
 test "the entries cover every Cursor event magus uses, one guard entry each" {
