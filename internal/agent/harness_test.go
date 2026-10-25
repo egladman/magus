@@ -1609,8 +1609,8 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 		requireWired(t, config, "postToolUseFailure", "Shell", "cursor-hook.buzz")
 		for _, event := range []string{"preToolUse", "postToolUse", "postToolUseFailure"} {
 			for _, h := range wiredOn(t, config, event) {
-				assert.Contains(t, h.Command, "--observes-skill-loads",
-					"Cursor installs the skills, so each tool event reports which one loaded")
+				assert.True(t, strings.HasSuffix(h.Command, " -- --agent-name cursor"),
+					"the host name is the one argument; the spell says skill loads are seen: %s", h.Command)
 			}
 		}
 		assert.Empty(t, wiredOn(t, config, "subagentStop"),

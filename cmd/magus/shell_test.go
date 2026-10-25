@@ -790,13 +790,16 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 		`"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`
 
 	global = globalFlags{}
-	tools := t.TempDir()
-	for _, f := range agent.ToolFiles(types.HarnessTools{Dir: ".", Rows: []types.HarnessTool{{Name: "TodoWrite", Capability: types.ToolInert}}}, nil) {
-		require.NoError(t, os.WriteFile(filepath.Join(tools, f.Path), []byte(f.Content), 0o644))
+	root := t.TempDir()
+	t.Chdir(root)
+	rows := types.HarnessTools{Dir: ".claude/magus/tools", Rows: []types.HarnessTool{{Name: "TodoWrite", Capability: types.ToolInert}}}
+	for _, f := range append(agent.ToolFiles(rows, nil), agent.HostFiles(rows.Dir, "claude-code", types.Limits{})...) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(f.Path), 0o755))
+		require.NoError(t, os.WriteFile(f.Path, []byte(f.Content), 0o644))
 	}
 	var out bytes.Buffer
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
-	require.NoError(t, shellStdin(ctx, strings.NewReader(payload), &out, []string{"-o", "name", "--tool-rows", tools}))
+	require.NoError(t, shellStdin(ctx, strings.NewReader(payload), &out, []string{"-o", "name", "--agent-name", "claude-code"}))
 	assert.Equal(t, "pass\n", out.String())
 }
 
@@ -1581,19 +1584,22 @@ func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"briefless","tool_name":"Task",` +
 		`"tool_input":{"subagent_type":"Explore","prompt":"read the cache package"}}`
 
-	// Without --observes-skill-loads the rule stands down, which is what keeps it from
-	// denying forever on a harness that reports no skill loads. Asserted first, because it
-	// is the behaviour three of the four shipped harnesses get.
+	t.Chdir(t.TempDir())
+	installHostRows(t, "blind", types.Limits{})
+	installHostRows(t, "claude-code", types.Limits{ObservesSkillLoads: true})
+	// A host whose limits say no skill load is seen stands the rule down, which is what keeps
+	// it from denying forever on a harness that reports no skill loads. Asserted first, because
+	// it is the behaviour three of the four shipped harnesses get.
 	var unobserved bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &unobserved,
-		[]string{"--agent-name", "claude-code", "-o", "name"}))
+		[]string{"--agent-name", "blind", "-o", "name"}))
 	assert.Equal(t, "pass\n", unobserved.String(),
 		"a wiring that cannot report a skill load must not be held to having reported one")
 
 	var refused bytes.Buffer
 	var silent reportedExit
 	require.ErrorAs(t, shellStdin(ctx, strings.NewReader(envelope), &refused,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}), &silent)
+		[]string{"--agent-name", "claude-code", "-o", "name"}), &silent)
 	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 	assert.Equal(t, "deny\n", refused.String())
 
@@ -1601,12 +1607,12 @@ func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
 
 	var allowed bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &allowed,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
+		[]string{"--agent-name", "claude-code", "-o", "name"}))
 	assert.Equal(t, "pass\n", allowed.String(), "the brief is read once per session, not per spawn")
 }
 
 // The host-call flags reach the guard: a worker's backgrounded magus run is refused, the
-// same run in the foreground passes, and the foreground limits parse as milliseconds.
+// same run in the foreground passes, and the call's timeout parses as milliseconds.
 func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
@@ -1626,7 +1632,7 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	}
 	refused := run("--call-background")
 	assert.Equal(t, []string{"deny", "worker-background-run"}, []string{refused.Decision, refused.Rule})
-	assert.Equal(t, "pass", run("--call-timeout-ms", "600000", "--foreground-default-ms", "120000", "--foreground-max-ms", "600000").Decision)
+	assert.Equal(t, "pass", run("--call-timeout-ms", "600000").Decision)
 }
 
 // denyRules is a magusfile whose spawn rule denies every spawn and whose command rule
@@ -2134,4 +2140,15 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.GuardDeny, got.Decision, "the committed rule answers")
 	assert.Equal(t, worktree, chunks(), "compiling the committed sources stores nothing")
+}
+
+// installHostRows writes the tool rows directory install writes for host under the working
+// directory, with no rows and the given limits.
+func installHostRows(t *testing.T, host string, limits types.Limits) {
+	t.Helper()
+	dir := "." + host + "/magus/tools"
+	for _, f := range append(agent.ToolFiles(types.HarnessTools{Dir: dir}, nil), agent.HostFiles(dir, host, limits)...) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(f.Path), 0o755))
+		require.NoError(t, os.WriteFile(f.Path, []byte(f.Content), 0o644))
+	}
 }

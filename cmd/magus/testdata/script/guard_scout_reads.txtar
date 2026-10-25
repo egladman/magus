@@ -14,26 +14,26 @@ exec magus shell --message --agent-name claude-code --session arch-1
 
 # The root has not loaded the skill, so its probe is refused.
 stdin $WORK/root-probe.json
-! exec magus shell --agent-name claude-code --observes-skill-loads
+! exec magus shell --agent-name claude-code
 stdout 'magus-architecture-review'
 
 # The finished spawn names the child and its type.
 stdin $WORK/spawn-finished.json
-exec magus shell --agent-name claude-code --observes-skill-loads
+exec magus shell --agent-name claude-code
 
 stdin $WORK/scout-probe.json
-exec magus shell --agent-name claude-code --observes-skill-loads
+exec magus shell --agent-name claude-code
 ! stdout 'deny'
 
 # A scout whose spawn the guard never saw names its own type on each call, and writes its
 # report without a Write tool.
 stdin $WORK/unseen-scout-probe.json
-exec magus shell --agent-name claude-code --observes-skill-loads
+exec magus shell --agent-name claude-code
 ! stdout 'deny'
 
 # A report written outside the workspace asks for no skill, even from the root.
 stdin $WORK/root-report.json
-exec magus shell --agent-name claude-code --observes-skill-loads
+exec magus shell --agent-name claude-code
 ! stdout 'deny'
 
 -- magusfile.buzz --
@@ -56,3 +56,9 @@ does this respect our current architecture patterns?
 {"session_id": "arch-1", "hook_event_name": "PreToolUse", "agent_id": "scout02", "agent_type": "magus-scout", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
 -- root-report.json --
 {"session_id": "arch-1", "hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/tmp/magus-scout-scratchpad/report.md", "content": "findings\n"}}
+-- .claude/magus/tools/version --
+1
+-- .claude/magus/tools/host --
+claude-code
+-- .claude/magus/tools/limits --
+{"observes_skill_loads":true}
