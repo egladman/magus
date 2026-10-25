@@ -57,13 +57,7 @@ func ownBuildEscape(exe string, info *debug.BuildInfo, root string) string {
 	}
 	name := filepath.Base(exe)
 	pkg := strings.TrimPrefix(info.Path, info.Main.Path+"/")
-	return "This binary was built from this checkout's own sources and predates them, so it cannot " +
-		"rebuild itself: every command it runs loads the same tree. Link a new one from source, one " +
-		"command at a time: `go build -o " + name + " ./" + pkg +
-		"`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in " +
-		"generated code, the checkout's committed generated files are behind its sources (a merge kept " +
-		"one side), and restoring either side's copy brings back the mismatch: " + regenerate(info.Main.Path) +
-		", then link again."
+	return fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot rebuild itself: every command it runs loads the same tree. Link a new one from source, one command at a time: `go build -o %s ./%s`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in generated code, the checkout's committed generated files are behind its sources (a merge kept one side), and restoring either side's copy brings back the mismatch: %s, then link again.", name, pkg, regenerate(info.Main.Path))
 }
 
 // ownModule is the module this package was compiled from, read off a type so a renamed fork
@@ -87,6 +81,5 @@ func regenerate(module string) string {
 	if module != ownModule {
 		return "regenerate them with the `go generate` commands its generate targets run"
 	}
-	return "regenerate them, one command at a time, with what the *_generate targets run: `" +
-		strings.Join(ownGenerators, "`, then `") + "`"
+	return fmt.Sprintf("regenerate them, one command at a time, with what the *_generate targets run: `%s`", strings.Join(ownGenerators, "`, then `"))
 }

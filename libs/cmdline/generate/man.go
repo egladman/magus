@@ -24,7 +24,7 @@ func Roff(root cmdline.Command, date, version string) []Page {
 	pages = append(pages, Page{Name: root.Name + ".1", Content: renderMainRoff(root, date, version)})
 	for _, command := range root.Children {
 		pages = append(pages, Page{
-			Name:    root.Name + "-" + command.Name + ".1",
+			Name:    fmt.Sprintf("%s-%s.1", root.Name, command.Name),
 			Content: renderCommandRoff(root, command, date, version),
 		})
 	}
@@ -48,7 +48,7 @@ func renderMainRoff(root cmdline.Command, date, version string) []byte {
 	w.Indent()
 	for _, command := range root.Children {
 		ref := fmt.Sprintf(`\fB%s\-%s\fR(1)`, escapeHyphen(root.Name), escapeHyphen(command.Name))
-		w.TP(w.B(command.Name), escape(command.Short)+`. See `+ref+`.`)
+		w.TP(w.B(command.Name), fmt.Sprintf(`%s. See %s.`, escape(command.Short), ref))
 	}
 	w.Dedent()
 	writeEnvSectionRoff(w, root.Env)
@@ -60,7 +60,7 @@ func renderMainRoff(root cmdline.Command, date, version string) []byte {
 func renderCommandRoff(root, command cmdline.Command, date, version string) []byte {
 	var buf bytes.Buffer
 	w := newWriter(&buf)
-	pageName := root.Name + "-" + command.Name
+	pageName := fmt.Sprintf("%s-%s", root.Name, command.Name)
 	w.TH(pageName, "1", date, thSource(root.Name, version), root.Name+" Manual")
 	w.SH("Name")
 	fmt.Fprintf(&buf, "%s \\- %s\n", escapeHyphen(pageName), escape(command.Short))
@@ -115,7 +115,7 @@ func writeSynopsisRoff(buf *bytes.Buffer, usage string) {
 		fmt.Fprintln(buf, `.B `+escapeHyphen(usage))
 	} else {
 		fmt.Fprintln(buf, `.B `+escapeHyphen(usage[:split]))
-		fmt.Fprintln(buf, `.RI "`+escape(strings.TrimSpace(usage[split:]))+`"`)
+		fmt.Fprintln(buf, fmt.Sprintf(`.RI "%s"`, escape(strings.TrimSpace(usage[split:]))))
 	}
 }
 
@@ -123,7 +123,7 @@ func writeSynopsisRoff(buf *bytes.Buffer, usage string) {
 // declares flags, naming each by its full path.
 func writeChildFlagsRoff(w *writer, path string, children []cmdline.Command) {
 	for _, child := range children {
-		sub := path + " " + child.Name
+		sub := fmt.Sprintf("%s %s", path, child.Name)
 		if len(child.Flags) > 0 {
 			w.SS(escapeHyphen(sub + " options"))
 			writeFlagListRoff(w, child)
@@ -169,12 +169,12 @@ func writeEnvSectionRoff(w *writer, env []cmdline.Env) {
 	for _, e := range env {
 		body := escape(e.Doc)
 		if e.Default != "" {
-			body += ` (default: ` + escape(e.Default) + `)`
+			body += fmt.Sprintf(` (default: %s)`, escape(e.Default))
 		}
 		if e.Key != "" {
-			body += `. Config file key: ` + w.B(e.Key) + `.`
+			body += fmt.Sprintf(`. Config file key: %s.`, w.B(e.Key))
 		}
-		w.TP(`\fB`+e.Name+`\fR`, body)
+		w.TP(fmt.Sprintf(`\fB%s\fR`, e.Name), body)
 	}
 	w.Dedent()
 }
@@ -193,7 +193,7 @@ func writeSeeAlsoRoff(w *writer, buf *bytes.Buffer, root cmdline.Command, curren
 	w.SH("See Also")
 	refs := make([]string, 0, 1+len(root.Children))
 	if current != "" {
-		refs = append(refs, `\fB`+escapeHyphen(root.Name)+`\fR(1)`)
+		refs = append(refs, fmt.Sprintf(`\fB%s\fR(1)`, escapeHyphen(root.Name)))
 	}
 	for _, command := range root.Children {
 		if command.Name != current {
@@ -208,16 +208,16 @@ func thSource(name, version string) string {
 	if version == "" {
 		return name
 	}
-	return name + " " + version
+	return fmt.Sprintf("%s %s", name, version)
 }
 
 func roffFlagLabel(name, typeName, defaultValue string) string {
-	label := `\fB` + escapeHyphen(dashes(name)+name) + `\fR`
+	label := fmt.Sprintf(`\fB%s\fR`, escapeHyphen(dashes(name)+name))
 	if typeName != "" && typeName != "bool" {
-		label += ` \fI` + typeName + `\fR`
+		label += fmt.Sprintf(` \fI%s\fR`, typeName)
 	}
 	if defaultValue != "" && defaultValue != "false" && defaultValue != "0" && defaultValue != "0s" {
-		label += ` (default: ` + escape(defaultValue) + `)`
+		label += fmt.Sprintf(` (default: %s)`, escape(defaultValue))
 	}
 	return label
 }

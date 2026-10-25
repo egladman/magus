@@ -163,7 +163,7 @@ func (o Observed) missing(kind types.GoalKind, expect types.GoalExpect) string {
 	case kind == types.GoalKindSymbol && expect == types.ExpectChanged && !o.ChangedKnown:
 		return "magus could not read what this job changed, so it cannot say whether the declared symbols moved"
 	case kind == types.GoalKindSymbol && !o.SymbolsKnown:
-		return "magus could not read the symbol graph, so it cannot say what the declared symbols are. `" + hint.GraphBuild.String() + "` builds it"
+		return fmt.Sprintf("magus could not read the symbol graph, so it cannot say what the declared symbols are. `%s` builds it", hint.GraphBuild.String())
 	}
 	return ""
 }
@@ -295,6 +295,76 @@ func integratorGoals(row types.Job) []types.Goal {
 	return goals
 }
 
+// owedGoals are the checks the jobs row merges filed as owed (see [types.OwedNoSeat]), one
+// goal per check no goal in held or before it covers. A merged job is one whose id names a
+// branch row integrates.
+func owedGoals(row types.Job, declared []types.Job, held []types.Goal) []types.Goal {
+	if !row.Integrating() {
+		return nil
+	}
+	taken := make(map[string]bool, len(held))
+	for _, g := range held {
+		taken[g.ID] = true
+	}
+	var goals []types.Goal
+	covered := func(c types.LeaseCheck) bool {
+		runs := func(g types.Goal) bool { return g.Kind == types.GoalKindCheck && checkCovers(g.Check, c) }
+		return slices.ContainsFunc(held, runs) || slices.ContainsFunc(goals, runs)
+	}
+	for _, d := range declared {
+		if d.Result == nil || !slices.Contains(row.Integrates, d.ID) {
+			continue
+		}
+		for _, c := range owedChecks(d) {
+			if covered(c) {
+				continue
+			}
+			goal := unrunGoal(cmp.Or(c.Project, "."), c.Target, taken)
+			goal.Check = c
+			goals = append(goals, goal)
+		}
+	}
+	return goals
+}
+
+// owedChecks are the checks d's result files as owed rather than citing a run.
+func owedChecks(d types.Job) []types.LeaseCheck {
+	owed := map[string]bool{}
+	if d.Result.Validation.Owed != "" {
+		owed[types.PrimaryGoalID] = true
+	}
+	for _, e := range d.Result.GateEvidence {
+		if e.Owed != "" {
+			owed[e.GateID] = true
+		}
+	}
+	var out []types.LeaseCheck
+	for _, g := range d.EffectiveGoals() {
+		if g.Kind == types.GoalKindCheck && owed[g.ID] {
+			out = append(out, g.Check)
+		}
+	}
+	return out
+}
+
+// checkCovers reports whether a run of full is also a run of c: the same script, or the
+// same target in the same project with c's args or none, since a run with no args covers
+// every package and test a narrower one selects.
+func checkCovers(full, c types.LeaseCheck) bool {
+	if full.Script != "" || c.Script != "" {
+		return types.SameLeaseCheck(&full, &c)
+	}
+	name := func(target string) string {
+		_, tail, ok := strings.Cut(target, "::")
+		if !ok {
+			return target
+		}
+		return tail
+	}
+	return name(full.Target) == name(c.Target) && path.Clean(cmp.Or(full.Project, ".")) == path.Clean(cmp.Or(c.Project, ".")) &&
+		(len(full.Args) == 0 || slices.Equal(full.Args, c.Args))
+}
+
 // covering reports whether any observed path is covered by the declared glob.
 func (o Observed) covering(declared string, paths []string) bool {
 	return slices.ContainsFunc(paths, func(p string) bool { return covers(declared, p) })
@@ -389,6 +459,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	// which is how `describe job` came to show an empty goal list on a job with a check.
 	// The check is a goal here too, so gate_evidence may name it by its id.
 	gates := append(row.EffectiveGoals(), integratorGoals(row)...)
+	gates = append(gates, owedGoals(row, declared, gates)...)
 	declaredGates := make(map[string]types.Goal, len(gates))
 	for _, gate := range gates {
 		declaredGates[gate.ID] = gate
@@ -430,8 +501,25 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		attemptByGate[types.PrimaryGoalID] = att
 	}
 
+	owedByGate := map[string]string{}
+	if rep.Validation.Owed != "" {
+		owedByGate[types.PrimaryGoalID] = rep.Validation.Owed
+	}
+	for _, evidence := range rep.GateEvidence {
+		if evidence.Owed != "" {
+			owedByGate[evidence.GateID] = evidence.Owed
+		}
+	}
+
 	statusByGate := map[string]types.GateStatus{}
 	for _, gate := range gates {
+		if reason, owed := owedByGate[gate.ID]; owed && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
+			statusByGate[gate.ID] = owedGate(row, gate, reason)
+			if len(statusByGate[gate.ID].Violations) == 0 {
+				v.Notes = append(v.Notes, fmt.Sprintf("goal %q is owed (%s): the integration that merges %s runs it", gate.ID, reason, row.ID))
+			}
+			continue
+		}
 		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
 		if gate.Kind == types.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
 			scopedRun(gate.Check, attemptByGate[gate.ID]) {
@@ -449,7 +537,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 			status := statusByGate[gate.ID]
 			for _, dependency := range gate.DependsOn {
 				dependencyStatus, ok := statusByGate[dependency]
-				if ok && dependencyStatus.Verified {
+				if ok && (dependencyStatus.Verified || dependencyStatus.Owed != "" && len(dependencyStatus.Violations) == 0) {
 					continue
 				}
 				violation := fmt.Sprintf("depends_on goal %q has not verified", dependency)
@@ -566,6 +654,23 @@ func prefixedGateViolations(status types.GateStatus) []string {
 	return out
 }
 
+// owedGate is the status of a goal whose result files its run as owed for reason. It holds
+// no violation for a worker's check owed for want of a seat, the one owed run the integration
+// that merges the job takes on; it is never verified either way.
+func owedGate(row types.Job, gate types.Goal, reason string) types.GateStatus {
+	status := types.GateStatus{ID: gate.ID, Owed: reason}
+	switch {
+	case gate.Kind != types.GoalKindCheck:
+		status.Violations = append(status.Violations, fmt.Sprintf("files a %s goal as owed, and only a check has a run to owe", gate.Kind))
+	case row.Integrating():
+		status.Violations = append(status.Violations, fmt.Sprintf("an integration runs the checks it owns: it waits for a seat with `%s | <the check>`",
+			hint.Status.With("--wait")))
+	case reason != types.OwedNoSeat:
+		status.Violations = append(status.Violations, fmt.Sprintf("files its run as owed because %q, and the one reason a run is owed is %q", reason, types.OwedNoSeat))
+	}
+	return status
+}
+
 func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAttempt, seen Observed) types.GateStatus {
 	if kind := gate.Kind; kind != types.GoalKindCheck {
 		return verifySubjectGate(gate, seen)
@@ -583,6 +688,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("no run is recorded for output ref %q", status.OutputRef))
 		return status
 	}
+	status.Scope = runScope(gate.Check, attempt)
 	if row.Created > 0 {
 		// Compared in whole seconds, the resolution the declaration is stamped in: a run in
 		// the declaring second cannot be ordered against it either way, and a check run
@@ -638,9 +744,13 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 		return false
 	}
 	if c.Script != "" {
-		// `magus buzz --record` stores its run under `buzz <script>` in the workspace
-		// project, with no charms.
-		script, ran := strings.CutPrefix(a.Target, "buzz ")
+		// `magus buzz --record` stores its run under `buzz <script>` and `magus buzz -t`
+		// under `buzz -t <script>`, in the workspace project, with no charms.
+		prefix := "buzz "
+		if c.Test {
+			prefix = "buzz -t "
+		}
+		script, ran := strings.CutPrefix(a.Target, prefix)
 		return ran && path.Clean(script) == path.Clean(c.Script) && path.Clean(a.Project) == "."
 	}
 	spell, target, _ := strings.Cut(resolveCheck(c, defaults).Target, "::")
@@ -660,6 +770,19 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 func scopedRun(c types.LeaseCheck, a types.JobAttempt) bool {
 	return a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && runsGoTest(c) &&
 		slices.Equal(withoutTestSelection(a.ExtraArgs), withoutTestSelection(c.Args))
+}
+
+// runScope is the `--` args a's go test of c narrowed with, as `-- <args>`: a -run, a -skip
+// or a package argument. It is "" for any other run, which ran every package and test c
+// names.
+func runScope(c types.LeaseCheck, a types.JobAttempt) string {
+	if !runsGoTest(c) || len(a.ExtraArgs) == 0 {
+		return ""
+	}
+	if len(withoutTestSelection(a.ExtraArgs)) == len(a.ExtraArgs) && len(goTestPackages(a.ExtraArgs)) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("-- %s", strings.Join(a.ExtraArgs, " "))
 }
 
 // withoutTestSelection is args with every -run and -skip flag and its value dropped, read
@@ -712,7 +835,7 @@ func resolveCheck(c types.LeaseCheck, defaults []string) types.LeaseCheck {
 		name += ":" + strings.Join(charms, ",")
 	}
 	if filtered {
-		name = spell + "::" + name
+		name = fmt.Sprintf("%s::%s", spell, name)
 	}
 	c.Target = name
 	return c
@@ -821,7 +944,7 @@ func denyViolations(row types.Job, rep types.JobResult, seen Observed) []string 
 		}
 		entries := make([]string, len(denied))
 		for i, d := range denied {
-			entries[i] = path.Clean(p) + "#" + d
+			entries[i] = fmt.Sprintf("%s#%s", path.Clean(p), d)
 		}
 		if !seen.RegionsKnown {
 			reason := cmp.Or(seen.RegionsReason, "nothing observed the tree")

@@ -100,6 +100,10 @@ type LeaseCheck struct {
 	// the workspace's default_charms satisfies it: the charmless `generate` that compares
 	// against HEAD, in a workspace whose default is rw.
 	NoDefaultCharms bool `json:"no_default_charms,omitzero" yaml:"no_default_charms,omitempty"`
+	// Test runs Script's tests with `magus buzz -t` instead of its main: passing tests and
+	// a passing main are different facts, so each is satisfied only by its own run. A
+	// script check alone carries it.
+	Test bool `json:"test,omitzero" yaml:"test,omitempty"`
 }
 
 // PrimaryGoalID names the job's singular check when it is projected into its goals. It
@@ -277,6 +281,9 @@ func (u Job) EffectiveGoals() []Goal {
 func (c LeaseCheck) String() string {
 	if c.Script != "" {
 		line := "magus buzz --record " + c.Script
+		if c.Test {
+			line = "magus buzz -t " + c.Script
+		}
 		if len(c.Args) > 0 {
 			line += " -- " + strings.Join(c.Args, " ")
 		}
@@ -286,7 +293,7 @@ func (c LeaseCheck) String() string {
 	if project == "" {
 		project = "."
 	}
-	line := "magus run " + c.Target + " " + project
+	line := fmt.Sprintf("magus run %s %s", c.Target, project)
 	if c.NoDefaultCharms {
 		line += " --no-default-charms"
 	}
@@ -304,7 +311,7 @@ func SameLeaseCheck(a, b *LeaseCheck) bool {
 		return a == b
 	}
 	return a.Target == b.Target && a.Script == b.Script && a.Project == b.Project &&
-		a.NoDefaultCharms == b.NoDefaultCharms && slices.Equal(a.Args, b.Args)
+		a.NoDefaultCharms == b.NoDefaultCharms && a.Test == b.Test && slices.Equal(a.Args, b.Args)
 }
 
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
@@ -425,6 +432,14 @@ func (s JobState) Live() bool {
 // running. Only an editing job claims its write paths against another job's.
 func (s JobState) Editing() bool {
 	return s == StateDeclared || s == StateRunning
+}
+
+// PathHolders are the rows that hold their write paths against everyone else now: the
+// [JobState.Editing] ones. An exited row filed its result and holds nothing, so an output
+// in its paths is anyone's to regenerate. The write judge and the run-output judge both
+// read ownership here. rows is not modified.
+func PathHolders(rows []Job) []Job {
+	return slices.DeleteFunc(slices.Clone(rows), func(r Job) bool { return !r.State.Editing() })
 }
 
 // DefaultJobWeight is the weight of a job that names none, and of a run bound to no job.
@@ -567,17 +582,25 @@ type JobResult struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// GateEvidence links a goal to captured Magus output.
+// GateEvidence links a goal to captured Magus output, or says why its run is owed instead:
+// Owed names the reason, and the integration that merges the job's branch runs the goal.
 type GateEvidence struct {
 	GateID    string `json:"gate_id" yaml:"gate_id"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
+	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
 }
 
-// JobResultValidation cites the output for a job's primary check.
+// JobResultValidation cites the output for a job's primary check, or names in Owed why its
+// run is owed to the integration, as [GateEvidence] does.
 type JobResultValidation struct {
 	Command   string `json:"command" yaml:"command"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
+	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
 }
+
+// OwedNoSeat is the one reason a worker files a check as owed: the machine's build budget
+// had no seat for it, and a worker never waits for one.
+const OwedNoSeat = "no seat"
 
 // JobStatus reports the result of verifying a job.
 type JobStatus struct {
@@ -633,9 +656,15 @@ func (s JobStatus) Clean() bool { return len(s.UnresolvedRisks) == 0 }
 
 // GateStatus reports verification of one goal.
 type GateStatus struct {
-	ID         string   `json:"id" yaml:"id"`
-	Verified   bool     `json:"verified" yaml:"verified"`
-	OutputRef  string   `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
+	ID        string `json:"id" yaml:"id"`
+	Verified  bool   `json:"verified" yaml:"verified"`
+	OutputRef string `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
+	// Scope is the `--` args the run behind OutputRef narrowed its go test with, "" when it
+	// ran every package and test its check names.
+	Scope string `json:"scope,omitempty" yaml:"scope,omitempty"`
+	// Owed is why the goal's run is owed to the integration rather than cited (see
+	// [OwedNoSeat]), "" for a goal graded on a run.
+	Owed       string   `json:"owed,omitempty" yaml:"owed,omitempty"`
 	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
 }
 
@@ -678,7 +707,7 @@ type JobGateAttempt struct {
 func (a JobAttempt) String() string {
 	target := a.Target
 	if a.Spell != "" {
-		target = a.Spell + "::" + target
+		target = fmt.Sprintf("%s::%s", a.Spell, target)
 	}
 	return LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs}.String()
 }
@@ -812,6 +841,11 @@ type Job struct {
 	// Paused is the unix second a person paused the job, zero while it is not. A claim the
 	// holder already has finishes; exec and the guard refuse its next magus run.
 	Paused int64 `json:"paused,omitzero" yaml:"paused,omitempty"`
+	// PausedBy is who paused the job, PauseReason why, and PausedUntil the unix second the
+	// pause lapses, zero for none (see [Job.PausedAt]). Set with Paused and cleared with it.
+	PausedBy    Origin `json:"paused_by,omitzero"    yaml:"paused_by,omitempty"`
+	PauseReason string `json:"pause_reason,omitempty" yaml:"pause_reason,omitempty"`
+	PausedUntil int64  `json:"paused_until,omitzero" yaml:"paused_until,omitempty"`
 	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
 	// Prior holds the attempts before it, newest last, at most three, as structured
 	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
@@ -866,8 +900,8 @@ type Job struct {
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
 	// that could assert it could assert the proof it stands for. See [JobWriteProof].
 	WriteProof JobWriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
-	// Waivers are the waivable problems the declaration accepted, copied from it.
-	Waivers []JobWaiver `json:"waivers,omitempty" yaml:"waivers,omitempty"`
+	// Deviations are the permissible problems the declaration accepted, copied from it.
+	Deviations []Deviation `json:"deviations,omitempty" yaml:"deviations,omitempty"`
 	// Validated is when the store last validated the whole record, in unix seconds; zero
 	// on a row never validated. Store-stamped like Created: a declaration cannot set it.
 	Validated int64 `json:"validated,omitempty" yaml:"validated,omitempty"`
@@ -1149,8 +1183,8 @@ type Declaration struct {
 	// MaxClaims caps how many proved claims one attempt takes; zero takes the default. See
 	// [Job.MaxClaims].
 	MaxClaims int `json:"max_claims,omitempty"`
-	// Waivers accept waivable problems (see [Waivable]) on the record's own authority.
-	Waivers []JobWaiver `json:"waivers,omitempty"`
+	// Deviations accept permissible problems (see [Permissible]) on the record's own authority.
+	Deviations []Deviation `json:"deviations,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
 	// write into this path, inside the write paths of the live job ID names, by somebody
 	// other than its holder. A record carrying it declares nothing else.
@@ -1164,9 +1198,15 @@ type Declaration struct {
 // JobClaimRequest is one write path a claim record asks for, and Because the proof:
 // `refs:<symbol>`, `test:<file>`, `output:<project>:<target>` or `released`. See
 // [ParseClaimEvidence].
+//
+// Callers, given instead of Path and Because, names a symbol: `magus job apply` expands
+// the request into one per declaration holding an occurrence of it, path
+// `<file>#<declaration>` because `refs:<symbol>`, and the store proves each of those as
+// it would one written by hand.
 type JobClaimRequest struct {
-	Path    string `json:"path" schema:"writepath"`
-	Because string `json:"because" schema:"nonblank"`
+	Path    string `json:"path,omitempty" schema:"writepath"`
+	Because string `json:"because,omitempty" schema:"nonblank"`
+	Callers string `json:"callers,omitempty" schema:"nonblank"`
 }
 
 // ClaimKind is what a proved claim rests on.
@@ -1182,6 +1222,10 @@ const (
 	ClaimOutput ClaimKind = "output"
 	// ClaimReleased is a path the job's own holder released in this attempt.
 	ClaimReleased ClaimKind = "released"
+	// ClaimDeadHolder is a write path of the live job it names whose holder is dead: its
+	// session ended, or it made no judged call past the silence bound with no background
+	// command running.
+	ClaimDeadHolder ClaimKind = "dead"
 )
 
 // ClaimEvidence is a parsed `because`: the kind and what it names, empty for released.
@@ -1195,7 +1239,7 @@ func (e ClaimEvidence) String() string {
 	if e.Subject == "" {
 		return string(e.Kind)
 	}
-	return string(e.Kind) + ":" + e.Subject
+	return fmt.Sprintf("%s:%s", string(e.Kind), e.Subject)
 }
 
 // ParseClaimEvidence reads a `because`. An output subject is `<project>:<target>`.
@@ -1204,7 +1248,7 @@ func ParseClaimEvidence(because string) (ClaimEvidence, error) {
 	e := ClaimEvidence{Kind: ClaimKind(kind), Subject: strings.TrimSpace(subject)}
 	switch {
 	case !e.Kind.Valid():
-		return e, fmt.Errorf("%q names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target> or released", because)
+		return e, fmt.Errorf("%q names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target>, dead:<job> or released", because)
 	case e.Kind == ClaimReleased && e.Subject != "":
 		return e, fmt.Errorf("%q: released names nothing after it", because)
 	case e.Kind != ClaimReleased && e.Subject == "":
@@ -1280,7 +1324,7 @@ func pathOutsideWorkspace(p string) string {
 func (r Declaration) Validate() error { return r.Problems().Err() }
 
 // Problems is every problem the record shows on its own, without a workspace: each field's
-// shape, the check, the waivers and the goals. It never stops at the first.
+// shape, the check, the deviations and the goals. It never stops at the first.
 func (r Declaration) Problems() JobProblems {
 	var ps JobProblems
 	invalid := func(field, message, fix string) {
@@ -1331,7 +1375,7 @@ func (r Declaration) Problems() JobProblems {
 	}
 	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
-			"use one of "+strings.Join(r.BriefFormat.Values(), ", ")+", or leave it out for magus.yaml's agents.brief_format")
+			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(r.BriefFormat.Values(), ", ")))
 	}
 	if r.Weight != nil && !ValidJobWeight(*r.Weight) {
 		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
@@ -1374,11 +1418,11 @@ func (r Declaration) Problems() JobProblems {
 			invalid(at, at+" is blank", "name the flag, key, symbol or format the job may break, or drop the entry")
 		}
 	}
-	for i, w := range r.Waivers {
-		at := fmt.Sprintf("waivers[%d]", i)
-		if !Waivable(w.Code) {
-			invalid(at+".code", fmt.Sprintf("%s waives %q, which is not a waivable code", at, w.Code),
-				fmt.Sprintf("waive only %s, %s or %s, and fix the record for anything else", WritePathTooBroad, OutputOutsideWritePaths, GateNotRun))
+	for i, w := range r.Deviations {
+		at := fmt.Sprintf("deviations[%d]", i)
+		if !Permissible(w.Code) {
+			invalid(at+".code", fmt.Sprintf("%s permits %q, which is not a permissible code", at, w.Code),
+				fmt.Sprintf("permit only %s, %s or %s, and fix the record for anything else", WritePathTooBroad, OutputOutsideWritePaths, GateNotRun))
 		}
 		if strings.TrimSpace(w.Subject) == "" {
 			invalid(at+".subject", at+" names no subject", "name the write path, `target project` or output path the problem names")
@@ -1405,6 +1449,13 @@ func (r Declaration) claimProblems() JobProblems {
 	}
 	for i, w := range r.Claim {
 		at := fmt.Sprintf("claim[%d]", i)
+		if strings.TrimSpace(w.Callers) != "" {
+			if w.Path != "" || w.Because != "" {
+				invalid(at+".callers", fmt.Sprintf("%s names callers of %s and also a path or a proof, and callers expands into both", at, w.Callers),
+					"drop path and because, or drop callers")
+			}
+			continue
+		}
 		switch p := strings.TrimSpace(w.Path); {
 		case p == "":
 			invalid(at+".path", at+" names no path", "name the file to add, relative to the workspace root")
@@ -1414,7 +1465,7 @@ func (r Declaration) claimProblems() JobProblems {
 			invalid(at+".path", fmt.Sprintf("%s %q is a pattern or a claim, and a proof covers one file", at, w.Path), "name one file")
 		}
 		if _, err := ParseClaimEvidence(w.Because); err != nil {
-			invalid(at+".because", at+": "+err.Error(), "name the proof the path rests on")
+			invalid(at+".because", fmt.Sprintf("%s: %s", at, err), "name the proof the path rests on")
 		}
 	}
 	return ps
@@ -1521,7 +1572,7 @@ func (g Goal) problems(field string) JobProblems {
 	bad := func(sub, message, fix string) {
 		at := sub
 		if field != "" {
-			at = field + "." + sub
+			at = fmt.Sprintf("%s.%s", field, sub)
 		}
 		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: at, Message: message, Fix: fix})
 	}
@@ -1572,17 +1623,19 @@ func (g Goal) problems(field string) JobProblems {
 	if err := g.Check.validScript(); err != nil {
 		bad("check.script", err.Error(), "name a target or a script, and give a script no project or charms")
 	} else if g.Check.Script == "" {
-		if _, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project); err != nil {
+		if _, err := ParseLeaseCheck(fmt.Sprintf("%s %s", g.Check.Target, g.Check.Project)); err != nil {
 			bad("check.target", err.Error(), "name one target and the project it runs in")
 		}
 	}
 	return ps
 }
 
-// validScript refuses a check naming both a script and a target, or a script with a
-// project: a recorded script run belongs to the workspace, not to one project.
+// validScript refuses a check naming both a script and a target, a script with a
+// project, since a recorded script run belongs to the workspace, and test on a target.
 func (c LeaseCheck) validScript() error {
 	switch {
+	case c.Script == "" && c.Test:
+		return fmt.Errorf("check target %q sets test, which runs a script's tests and so belongs to a script check", c.Target)
 	case c.Script == "":
 		return nil
 	case c.Target != "":
@@ -1636,9 +1689,10 @@ func (u Job) StaleAt(observed int) bool {
 
 // JobIdleSince is when row's jobs.stale_after clock started, in unix seconds, reading its
 // dependencies from rows. A declared row nobody took is QUEUED while a job it depends on is
-// live, so waiting is true and it has no clock; once the last one ends, the clock starts at
-// the later of that end and the row's own last update. Every other row's clock is its last
-// update. A dependency no row declares never ends, so it holds nothing back.
+// still editing (declared or running), so waiting is true and it has no clock; once the last
+// one ends or exits, the clock starts at the later of that and the row's own last update, so
+// an exited dependency nobody collects cannot hold its dependent forever. Every other row's
+// clock is its last update. A dependency no row declares holds nothing back.
 func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 	since = row.Updated
 	if row.State != StateDeclared || row.Registered != 0 {
@@ -1648,7 +1702,7 @@ func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == dep })
 		switch {
 		case i < 0:
-		case rows[i].State.Live():
+		case rows[i].State.Editing():
 			return 0, true
 		default:
 			since = max(since, rows[i].Updated)
@@ -1692,9 +1746,12 @@ func (r Declaration) check() (LeaseCheck, bool, JobProblems) {
 		if err := r.Check.validScript(); err != nil {
 			return LeaseCheck{}, false, invalid("check.script", err, "name a target or a script, and give a script no project or charms")
 		}
-		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args}, true, nil
+		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args, Test: r.Check.Test}, true, nil
 	case r.Check != nil:
-		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
+		if err := r.Check.validScript(); err != nil {
+			return LeaseCheck{}, false, invalid("check.test", err, "drop test, or name a script")
+		}
+		parsed, err := ParseLeaseCheck(fmt.Sprintf("%s %s", r.Check.Target, r.Check.Project))
 		if err != nil {
 			return LeaseCheck{}, false, invalid("check.target", err, "name one target and the project it runs in")
 		}
@@ -1756,7 +1813,7 @@ func (r Declaration) Apply(u *Job) {
 	u.ReadOnly = r.ReadOnly
 	u.MaxAttempts = r.MaxAttempts
 	u.MaxClaims = r.MaxClaims
-	u.Waivers = slices.Clone(r.Waivers)
+	u.Deviations = slices.Clone(r.Deviations)
 }
 
 // ApplySpec writes this declaration's spec onto a row, for `magus job apply`: as Apply, but
@@ -1856,6 +1913,17 @@ type JobRelease struct {
 	// Revoked is a path taken from a job a holder had taken, by a writer other than that
 	// holder: the orchestrator revoking it rather than the worker giving it up.
 	Revoked bool `json:"revoked,omitempty" yaml:"revoked,omitempty"`
+	// TakenBy is the job magus granted the path to because this row's holder was dead, and
+	// DeadBecause why magus judged it dead. Both are empty on any other release.
+	TakenBy     string `json:"taken_by,omitempty"     yaml:"taken_by,omitempty"`
+	DeadBecause string `json:"dead_because,omitempty" yaml:"dead_because,omitempty"`
+}
+
+// PausedAt reports whether a person's pause holds the job at now, unix seconds. Past
+// PausedUntil it has lapsed: the holder runs again, and the sweep and `magus job prune`
+// may end the row.
+func (u Job) PausedAt(now int64) bool {
+	return u.Paused != 0 && (u.PausedUntil == 0 || now < u.PausedUntil)
 }
 
 // JobUnattributedWrite is one path a lease owns that somebody outside it wrote, and
@@ -2518,7 +2586,7 @@ func (u Job) Clone() Job {
 	c.Claims = slices.Clone(u.Claims)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
-	c.Waivers = slices.Clone(u.Waivers)
+	c.Deviations = slices.Clone(u.Deviations)
 	if u.ModelTier != nil {
 		tier := *u.ModelTier
 		c.ModelTier = &tier
@@ -2585,4 +2653,23 @@ func cloneIntegration(g *JobIntegration) *JobIntegration {
 	c := *g
 	c.Gates = cloneGateStatuses(g.Gates)
 	return &c
+}
+
+// ParsePauseUntil reads a pause's --until as the unix second it lapses: a duration from now
+// or an RFC3339 instant. Empty is zero, a pause with no bound.
+func ParsePauseUntil(raw string, now time.Time) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d <= 0 {
+			return 0, fmt.Errorf("--until %q is not ahead of now, as a positive duration (2h) or a later instant is", raw)
+		}
+		return now.Add(d).Unix(), nil
+	}
+	if at, err := time.Parse(time.RFC3339, raw); err == nil {
+		return at.Unix(), nil
+	}
+	return 0, fmt.Errorf("--until %q is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z", raw)
 }

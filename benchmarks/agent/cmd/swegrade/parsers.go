@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -131,7 +132,7 @@ func parsePytestOptions(log string) statusMap {
 				parts := strings.Split(option, "/")
 				option = "/" + parts[len(parts)-1]
 			}
-			name = main + "[" + option + "]"
+			name = fmt.Sprintf("%s[%s]", main, option)
 		}
 		m[name] = f[0]
 	}
@@ -245,7 +246,7 @@ func parseDjango(log string) statusMap {
 func parseSympy(log string) statusMap {
 	m := statusMap{}
 	for _, g := range sympyFailureHeader.FindAllStringSubmatch(log, -1) {
-		m[g[2]+".py:"+g[3]] = statusFailed
+		m[fmt.Sprintf("%s.py:%s", g[2], g[3])] = statusFailed
 	}
 	for _, line := range strings.Split(log, "\n") {
 		line = strings.TrimSpace(line)

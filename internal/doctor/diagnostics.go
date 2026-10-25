@@ -92,10 +92,10 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 			continue
 		}
 		pages++
-		if want, ok := helpTitles[code]; ok && !strings.Contains(string(md), fmt.Sprintf("title: %q\n", string(code)+": "+want)) {
+		if want, ok := helpTitles[code]; ok && !strings.Contains(string(md), fmt.Sprintf("title: %q\n", fmt.Sprintf("%s: %s", string(code), want))) {
 			mistitled = append(mistitled, fmt.Sprintf(
 				"%s: %s is not titled %q, the description its Help link carries; make the two agree",
-				code, relToRoot(root, page), string(code)+": "+want))
+				code, relToRoot(root, page), fmt.Sprintf("%s: %s", string(code), want)))
 		}
 		if !hasRemediation(string(md)) {
 			silent = append(silent, fmt.Sprintf(

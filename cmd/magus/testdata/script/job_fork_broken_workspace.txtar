@@ -1,6 +1,7 @@
 # A magusfile that will not load does not stop the job verbs that only touch the store:
-# the fork or apply that declares the fix still writes its row, but a check needs the
-# guard to grade it and is refused (MGS3039) with the load error quoted. What needs the workspace
+# the fork or apply that declares the fix still writes its row. A check needs the guard
+# to grade it, and a guard that cannot load defers the grade: the row is kept and stderr
+# says the check was not graded, with the load error quoted. What needs the workspace
 # (the model tier, the notes over the write paths) is skipped, and each skip is named on
 # stderr with the load error, never left to read as a clean result.
 env HOME=$WORK/home
@@ -12,9 +13,10 @@ cp $WORK/broken.buzz magusfile.buzz
 ! exec magus ls
 stderr 'no member "noSuchCall"'
 
-! exec magus job fork wave/fix --write-paths a.go --check 'test .'
-stderr '\[MGS3039\] check: wave/fix.s check `magus run test \.` could not be graded against the guard'
-stderr 'no member "noSuchCall"'
+exec magus job fork wave/fix --write-paths a.go --check 'test .'
+stderr 'unchecked: check `magus run test \.` was not graded, so nothing says its worker may run it'
+stderr 'the workspace.s rules did not load: .*no member "noSuchCall"'
+exec magus job exit wave/fix
 
 # A goal needs no guard to grade, so the fork that declares one still writes its row.
 stdin $WORK/fix.json

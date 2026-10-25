@@ -2,6 +2,7 @@ package edit
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -116,7 +117,7 @@ func TestEditGradeRefusesTheFile(t *testing.T) {
 
 	p := Resolve(root, []Site{site("a.go", 1, 1, "x", "y"), site("b.go", 1, 1, "x", "y")},
 		WithGrade(func(path string, before, after []byte) (string, string) {
-			graded = append(graded, path+": "+string(before)+" -> "+string(after))
+			graded = append(graded, fmt.Sprintf("%s: %s -> %s", path, string(before), string(after)))
 			if path == "b.go" {
 				return "claimed-declaration", "lease other claims it"
 			}
@@ -145,7 +146,7 @@ func TestEditRenameFailureRestoresEarlierFiles(t *testing.T) {
 		}
 		body, err := os.ReadFile(oldpath)
 		require.NoError(t, err)
-		landed = append(landed, filepath.Base(newpath)+"="+string(body))
+		landed = append(landed, fmt.Sprintf("%s=%s", filepath.Base(newpath), string(body)))
 		return os.Rename(oldpath, newpath)
 	}
 

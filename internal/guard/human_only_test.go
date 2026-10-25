@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -159,7 +160,8 @@ func TestHumanOnlyVerdicts(t *testing.T) {
 				for _, s := range tt.contains {
 					assert.Contains(t, full, s)
 				}
-				return v.Decision + "\n" + full
+				return fmt.Sprintf(`%s
+%s`, v.Decision, full)
 			})
 		})
 	}
@@ -192,7 +194,8 @@ func TestHumanOnlyJudgesAClientScript(t *testing.T) {
 					assert.Contains(t, full, "cannot read")
 				}
 				assert.Contains(t, full, tt.contains)
-				return v.Decision + "\n" + full
+				return fmt.Sprintf(`%s
+%s`, v.Decision, full)
 			})
 		})
 	}
@@ -346,7 +349,7 @@ func TestBriefCommandRefusesAHumanOnlyRun(t *testing.T) {
 		deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
 		deps.scope = workspaceScope{root: root}
 
-		brief := "JOB ID: " + row.ID + "\nRun the benchmark:\n\n```sh\nmagus run agent-bench-run .\n```\n"
+		brief := fmt.Sprintf("JOB ID: %s\nRun the benchmark:\n\n```sh\nmagus run agent-bench-run .\n```\n", row.ID)
 		v := judgeBriefOffCheck(deps, briefInput{text: brief})
 		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)}, v.Rule, src.name)
 		assert.Contains(t, v.Deny, "job bench/run's worker to run `.:agent-bench-run`, which a person runs", src.name)
@@ -354,7 +357,7 @@ func TestBriefCommandRefusesAHumanOnlyRun(t *testing.T) {
 		assert.Empty(t, judgeBriefCommand(deps, briefInput{text: brief, bound: true}).Deny,
 			"%s: a message to a bound worker is not graded against its row", src.name)
 
-		forbidding := "JOB ID: " + row.ID + "\nNever run `magus run agent-bench-run .` yourself.\n"
+		forbidding := fmt.Sprintf("JOB ID: %s\nNever run `magus run agent-bench-run .` yourself.\n", row.ID)
 		assert.NotEqual(t, string(denyRuleHumanOnly), judgeBriefOffCheck(deps, briefInput{text: forbidding}).Rule.Arg,
 			"%s: a line that forbids the run teaches the opposite", src.name)
 	}

@@ -52,6 +52,18 @@ func claimLease(id string, paths ...string) types.Job {
 	}
 }
 
+// A write outside an integration row's paths is refused with no claim observed: reading the
+// row's diff since its checkpoint took the whole judgment past its deadline.
+func TestAnIntegrationRowObservesNoClaimFacts(t *testing.T) {
+	row := claimLease("integration", "run.go")
+	row.Integrates = []string{"job-a", "job-b"}
+
+	g, stop := gradeClaimOutside(t.Context(), Dependencies{}, location{}, t.TempDir(), row, []types.Job{row}, nil, "other.go")
+
+	assert.Equal(t, writeGrade{}, g)
+	assert.Equal(t, "integration integrates 2 branches, so a diff since its checkpoint proves no claim", stop)
+}
+
 func TestGradeClaimedDeclarations(t *testing.T) {
 	ctx, root := claimFixture(t, claimLease("own-file", "other.go", "run.go"))
 	run := filepath.Join(root, "run.go")
@@ -170,6 +182,50 @@ func TestConfigHoldNarrowsOnFirstWrite(t *testing.T) {
 	assert.Equal(t, "deny", gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, timeout).Decision, "the holder's new claim is graded")
 	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, name).Decision)
 	assert.Len(t, row("cfg").WritePaths, 2, "a denied write narrows nothing")
+}
+
+const siblingKeysMagusfile = `import "magus";
+
+magus\project({
+    "name": "demo",
+    "targets": {
+        "release": {"timeout": "1m"},
+        "release-build": {"timeout": "2m"},
+    },
+});
+`
+
+// A claim on a target key names that key, not a sibling that shares its prefix: the lease
+// holding `release` may not write `release-build`, which another lease claims.
+func TestKeyClaimNamesItsOwnKey(t *testing.T) {
+	ctx, root := fleetFixture(t,
+		claimLease("rel", "magusfile.buzz#project.targets.release"),
+		claimLease("build", "magusfile.buzz#project.targets.release-build"),
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.buzz diff=buzz\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(siblingKeysMagusfile), 0o644))
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	magusfile := filepath.Join(root, "magusfile.buzz")
+	release := writeFields{OldText: `"1m"`, NewText: `"3m"`}
+	build := writeFields{OldText: `"2m"`, NewText: `"4m"`}
+
+	for _, tc := range []struct {
+		name   string
+		lease  string
+		fields writeFields
+		want   string
+	}{
+		{"release writes its own key", "rel", release, ""},
+		{"release-build writes its own key", "build", build, ""},
+		{"release writes the sibling's key", "rel", build, "deny"},
+		{"release-build writes the sibling's key", "build", release, "deny"},
+	} {
+		assert.Equal(t, tc.want, gradeLeasedEdit(ctx, Dependencies{}, tc.lease, magusfile, tc.fields).Decision, tc.name)
+	}
 }
 
 func TestApplyEdits(t *testing.T) {

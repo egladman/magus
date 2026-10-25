@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,7 +10,7 @@ import (
 )
 
 func cmdFunc(name, params string) types.KnowledgeSymbol {
-	return goSym("cmd/magus", name+"().", name, "Function", "func "+name+"("+params+") error", "cmd/magus/"+name+".go")
+	return goSym("cmd/magus", fmt.Sprintf("%s().", name), name, "Function", fmt.Sprintf("func %s(%s) error", name, params), fmt.Sprintf("cmd/magus/%s.go", name))
 }
 
 // This tree's own case: five commands beside jobWatchFiles take the workspace root before the
@@ -37,7 +38,7 @@ func TestConformanceFindsParameterOrderDrift(t *testing.T) {
 
 func TestConformanceFindsParameterOrderDriftInTypeScript(t *testing.T) {
 	sym := func(name, params string) types.KnowledgeSymbol {
-		return tsSym("rows.ts", name, "function "+name+"("+params+"): void")
+		return tsSym("rows.ts", name, fmt.Sprintf("function %s(%s): void", name, params))
 	}
 	var syms []types.KnowledgeSymbol
 	for _, name := range []string{"drawRow", "drawGutter", "drawHunk", "drawMarker", "drawFold"} {

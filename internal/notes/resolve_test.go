@@ -25,13 +25,13 @@ type givenAnchorsResolver struct {
 }
 
 func (f givenAnchorsResolver) Resolves(_ context.Context, a Anchor) bool {
-	return f.live[string(a.Kind)+":"+a.Target]
+	return f.live[fmt.Sprintf("%s:%s", string(a.Kind), a.Target)]
 }
 func (f givenAnchorsResolver) Digest(_ context.Context, a Anchor) (string, error) {
-	return f.digests[string(a.Kind)+":"+a.Target], nil
+	return f.digests[fmt.Sprintf("%s:%s", string(a.Kind), a.Target)], nil
 }
 func (f givenAnchorsResolver) Signature(_ context.Context, a Anchor) (string, error) {
-	sig, ok := f.sigs[string(a.Kind)+":"+a.Target]
+	sig, ok := f.sigs[fmt.Sprintf("%s:%s", string(a.Kind), a.Target)]
 	if !ok {
 		return "", errors.New("the test indexer rendered no signature")
 	}
@@ -328,7 +328,7 @@ func longStructSignature(last string) string {
 	for i := range 300 {
 		fmt.Fprintf(&b, " Field%03d string;", i)
 	}
-	b.WriteString(" " + last + " }")
+	fmt.Fprintf(&b, " %s }", last)
 	return b.String()
 }
 

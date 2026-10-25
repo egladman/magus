@@ -1200,7 +1200,7 @@ func readsStamper(env *map[string]string) func(context.Context, readlog.Reads, b
 			b.WriteString("reads:unknown")
 		}
 		for _, name := range reads.Env {
-			b.WriteString(name + "=" + (*env)[name] + ";")
+			fmt.Fprintf(&b, "%s=%s;", name, (*env)[name])
 		}
 		return Stamps{ClassDomain: "domain:" + b.String(), ClassRuntime: "runtime"}
 	}

@@ -348,8 +348,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		return spells.InvokeResponse{Data: out}, nil
 
 	default:
-		return spells.InvokeResponse{}, errors.New(
-			"mcp: unknown op " + op + " (one of: state, thread, comment, suggest, resolve, outline)")
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown op %s (one of: state, thread, comment, suggest, resolve, outline)", op)
 	}
 }
 
@@ -494,7 +493,7 @@ func (t *diffTool) validateAnchor(ctx context.Context, path string, hunk int) er
 	counts := changeset.HunkCounts(patch)
 	n, ok := counts[path]
 	if !ok {
-		return errors.New("mcp: " + path + " has no changes in this diff, read op=state for the paths that do")
+		return fmt.Errorf("mcp: %s has no changes in this diff, read op=state for the paths that do", path)
 	}
 	if hunk >= n {
 		return fmt.Errorf("mcp: %s has %d hunk(s), so hunk %d does not exist (0-based, omit hunk to address the file)", path, n, hunk)

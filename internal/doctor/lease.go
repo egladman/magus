@@ -51,7 +51,7 @@ func checkJobTree(loc job.Location, limits config.Jobs, now int64) types.Check {
 	for _, b := range flagged.Blocked {
 		if b.State == "" || b.State.Terminal() {
 			stuck = append(stuck, b.Job)
-			parts = append(parts, b.Job+" is "+b.String())
+			parts = append(parts, fmt.Sprintf("%s is %s", b.Job, b.String()))
 		}
 	}
 	if len(parts) == 0 {
@@ -101,9 +101,8 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) typ
 			Status:  types.CheckFail,
 			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", id, claimed),
 			Details: []string{
-				"the guard wrote the marker when a caller whose host names no session ran `" + hint.JobExec.String() + "` here, so magus grades every write under " +
-					id + " and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
-				"unset " + trail.EnvBaggage + ", or take the lease you mean here with `" + hint.JobExec.With(claimed) + "`",
+				fmt.Sprintf("the guard wrote the marker when a caller whose host names no session ran `%s` here, so magus grades every write under %s and ignores the claim: a record of where the work is beats an assertion a shell can rewrite", hint.JobExec.String(), id),
+				fmt.Sprintf("unset %s, or take the lease you mean here with `%s`", trail.EnvBaggage, hint.JobExec.With(claimed)),
 			},
 		}
 	}
@@ -155,7 +154,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) typ
 			Name:    name,
 			Status:  types.CheckFail,
 			Message: fmt.Sprintf("lease %q is bound here and live, but has no registered base, so the guard denies every write until one is recorded", id),
-			Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
+			Details: []string{fmt.Sprintf("record one: %s, then exec it on this lease", hint.VCSCheckpoint.With("-o", "name"))},
 		}
 	}
 

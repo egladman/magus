@@ -2,6 +2,7 @@ package hint
 
 import (
 	"bufio"
+	"fmt"
 	"maps"
 	"os"
 	"slices"
@@ -50,7 +51,7 @@ func identPair(pat, scope string, refsConf Confidence, paths ...string) []Sugges
 	}
 	return []Suggestion{
 		{Run: "magus refs " + pat, Why: whyRefs, Confidence: refsConf, Hedge: hedgeRefs},
-		{Run: "magus query " + pat + scope, Why: whyEntity, Confidence: ConfidenceLow, Hedge: hedgeQuery},
+		{Run: fmt.Sprintf("magus query %s%s", pat, scope), Why: whyEntity, Confidence: ConfidenceLow, Hedge: hedgeQuery},
 		{Run: text, Why: whyLiteral, Confidence: ConfidenceHigh, Hedge: hedgeLiteral},
 	}
 }

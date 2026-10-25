@@ -148,17 +148,17 @@ func (w PromptCacheWindowStatus) Describe(now time.Time) string {
 	at, by := time.UnixMilli(w.ClosesAtMs), time.UnixMilli(w.ClosesByMs)
 	if at.Equal(by) {
 		if w.Closed {
-			return "closed " + renderSpan(now.Sub(by)) + " ago"
+			return fmt.Sprintf("closed %s ago", renderSpan(now.Sub(by)))
 		}
 		return "closes in " + renderSpan(by.Sub(now))
 	}
 	switch {
 	case w.Closed:
-		return "closed " + renderSpan(now.Sub(at)) + " to " + renderSpan(now.Sub(by)) + " ago"
+		return fmt.Sprintf("closed %s to %s ago", renderSpan(now.Sub(at)), renderSpan(now.Sub(by)))
 	case now.Before(at):
-		return "closes in " + renderSpan(at.Sub(now)) + " to " + renderSpan(by.Sub(now))
+		return fmt.Sprintf("closes in %s to %s", renderSpan(at.Sub(now)), renderSpan(by.Sub(now)))
 	default:
-		return "closed " + renderSpan(now.Sub(at)) + " ago at the earliest, closes in " + renderSpan(by.Sub(now)) + " at the latest"
+		return fmt.Sprintf("closed %s ago at the earliest, closes in %s at the latest", renderSpan(now.Sub(at)), renderSpan(by.Sub(now)))
 	}
 }
 

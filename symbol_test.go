@@ -72,18 +72,18 @@ func TestMatchProject(t *testing.T) {
 	root := sep + "ws"
 	projects := []projectIndex{
 		{project: &types.Project{Path: ".", Dir: root}},
-		{project: &types.Project{Path: "gopherbuzz", Dir: root + sep + "gopherbuzz"}},
-		{project: &types.Project{Path: "foo", Dir: root + sep + "foo"}},
+		{project: &types.Project{Path: "gopherbuzz", Dir: filepath.Join(root, "gopherbuzz")}},
+		{project: &types.Project{Path: "foo", Dir: filepath.Join(root, "foo")}},
 	}
 	cases := []struct {
 		file string
 		want string
 		ok   bool
 	}{
-		{root + sep + "gopherbuzz" + sep + "compiler.go", "gopherbuzz", true}, // nested wins over root
-		{root + sep + "main.go", ".", true},                                   // root project
-		{root + sep + "foobar" + sep + "x.go", ".", true},                     // "foo" must not claim "foobar"
-		{sep + "elsewhere" + sep + "x.go", "", false},                         // outside every project
+		{filepath.Join(root, "gopherbuzz", "compiler.go"), "gopherbuzz", true}, // nested wins over root
+		{filepath.Join(root, "main.go"), ".", true},                            // root project
+		{filepath.Join(root, "foobar", "x.go"), ".", true},                     // "foo" must not claim "foobar"
+		{filepath.Join(sep, "elsewhere", "x.go"), "", false},                   // outside every project
 	}
 	for _, c := range cases {
 		got, ok := matchProject(c.file, projects)
@@ -117,7 +117,7 @@ func newTestIndexer(t *testing.T) (*symbolIndexer, *[]string, *time.Time) {
 }
 
 // indexName spells ref as project:op, for asserting which indexes ran.
-func indexName(ref indexRef) string { return ref.project + ":" + ref.op }
+func indexName(ref indexRef) string { return fmt.Sprintf("%s:%s", ref.project, ref.op) }
 
 // goIndexA and buzzIndexA are the two indexes of one project bound to go and buzz.
 var (
@@ -348,7 +348,7 @@ func indexerOnPath(t *testing.T) {
 	t.Helper()
 	bin := testkit.NewWorkspace(t)
 	bin.WriteExecutable(indexerBin, "#!/bin/sh\n")
-	t.Setenv("PATH", bin.Root()+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", fmt.Sprintf(`%s%s%s`, bin.Root(), string(os.PathListSeparator), os.Getenv("PATH")))
 }
 
 // A reader that freshens the index it reads (magus\precedents, Diff) is called from a
@@ -811,7 +811,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 	root := w.Root()
 	for dir, file := range map[string]string{"svc": "main.go", "web": "index.ts"} {
 		w.Write(dir+"/magusfile.buzz", "")
-		w.Write(dir+"/"+file, "x\n")
+		w.Write(filepath.Join(dir, file), "x\n")
 	}
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("svc", WithSpell(goSpell))
@@ -1016,8 +1016,7 @@ func TestFreshenIndexesNamesACodedCauseInline(t *testing.T) {
 	err := freshenIndexes(idxs, w.probe, w.build, true, noSkew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
-	assert.Equal(t, "[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); "+
-		"fix it, then `magus graph build`\n  see: "+types.CodeURL(types.SymbolIndexNotCurrent), err.Error())
+	assert.Equal(t, fmt.Sprintf("[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); fix it, then `magus graph build`\n  see: %s", types.CodeURL(types.SymbolIndexNotCurrent)), err.Error())
 	assert.Equal(t, conformanceSkippedWhy, types.DiagnosticRationale(err), "with cache writes on, the why is the skipped checks alone")
 }
 
@@ -1054,31 +1053,62 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 
 func noSkew() string { return "" }
 
-// A ./magus built at another commit than the checkout writes an index the probe never reads
-// back: the error names the skew and the remedy that clears it, not another graph build alone.
+func inputsChanged(paths ...string) func() ([]string, error) {
+	return func() ([]string, error) { return paths, nil }
+}
+
+// A ./magus built from other build inputs than the checkout writes an index the probe never
+// reads back: the error names the skew and the remedy that clears it, not another graph build
+// alone.
 func TestFreshenIndexesNamesTheBinaryTreeSkew(t *testing.T) {
 	idxs := freshenProjects()
 	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: false}
-	skew := func() string { return binaryTreeSkew(ownGoMod, "6bd59e30c1a53eeb", "794bb6820376a9fa") }
+	skew := func() string {
+		return binaryTreeSkew(ownGoMod, "6bd59e30c1a53eeb", "794bb6820376a9fa", inputsChanged("symbol.go"))
+	}
 
 	err := freshenIndexes(idxs, w.probe, w.build, true, skew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "the cache recorded no run for the index it wrote: "+
-		"this magus was built at 6bd59e30c1a5 and the checkout is at 794bb6820376")
+		"this magus was built at 6bd59e30c1a5 and the checkout is at 794bb6820376, and symbol.go changed between them")
 	assert.Contains(t, err.Error(), "build ./magus at the checkout's HEAD, stop the pool parents of other builds "+
 		"with `magus server stop --pools`, then `magus graph build`")
-	assert.Contains(t, types.DiagnosticRationale(err), "built at another commit")
+	assert.Contains(t, types.DiagnosticRationale(err), "built from other build inputs")
 }
 
-var ownGoMod = []byte("module " + ownModule + "\n")
+// A binary one commit behind HEAD whose build inputs are all unchanged is the binary HEAD
+// builds, so the error never sends its reader to rebuild it.
+func TestFreshenIndexesNamesNoRebuildWhenNoBuildInputChanged(t *testing.T) {
+	idxs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: false}
+	skew := func() string {
+		return binaryTreeSkew(ownGoMod, "6bd59e30c1a53eeb", "794bb6820376a9fa", inputsChanged())
+	}
+
+	err := freshenIndexes(idxs, w.probe, w.build, true, skew)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.NotContains(t, err.Error(), "build ./magus")
+	assert.NotContains(t, err.Error(), "this magus was built at")
+	assert.NotContains(t, types.DiagnosticRationale(err), "build inputs")
+}
+
+var ownGoMod = []byte(fmt.Sprintf("module %s\n", ownModule))
 
 func TestBinaryTreeSkew(t *testing.T) {
-	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30c1a5", "6bd59e30c1a53eeb2cfb"), "an abbreviated match is no skew")
-	assert.Empty(t, binaryTreeSkew(ownGoMod, "unknown", "6bd59e30"), "an unstamped build says nothing")
-	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30", ""), "no HEAD says nothing")
-	assert.Empty(t, binaryTreeSkew([]byte("module example.com/other\n"), "abc", "def"), "another workspace's HEAD is not a magus commit")
-	assert.Equal(t, "this magus was built at abc and the checkout is at def", binaryTreeSkew(ownGoMod, "abc", "def"))
+	unread := func() ([]string, error) { return nil, errors.New("go list failed") }
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30c1a5", "6bd59e30c1a53eeb2cfb", unread), "an abbreviated match is no skew")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "unknown", "6bd59e30", unread), "an unstamped build says nothing")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30", "", unread), "no HEAD says nothing")
+	assert.Empty(t, binaryTreeSkew([]byte("module example.com/other\n"), "abc", "def", unread), "another workspace's HEAD is not a magus commit")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "abc", "def", inputsChanged()), "no changed build input is no skew")
+	assert.Equal(t, "this magus was built at abc and the checkout is at def, and go.mod changed between them",
+		binaryTreeSkew(ownGoMod, "abc", "def", inputsChanged("go.mod")))
+	assert.Equal(t, "this magus was built at abc and the checkout is at def, and go.mod and 2 more build inputs changed between them",
+		binaryTreeSkew(ownGoMod, "abc", "def", inputsChanged("go.mod", "run.go", "symbol.go")))
+	assert.Equal(t, "this magus was built at abc and the checkout is at def, whose build inputs could not be compared: go list failed",
+		binaryTreeSkew(ownGoMod, "abc", "def", unread), "inputs that cannot be listed are never read as unchanged")
 }
 
 // A missing scip-buzz must not cost the root project its review: while the Go index's
@@ -1126,7 +1156,7 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	assert.Equal(t, conformanceSkippedWhy, reasoned.Why, "-o json carries the reason beside the verdict")
 	encoded, err := json.Marshal(reasoned)
 	require.NoError(t, err)
-	assert.Contains(t, string(encoded), `"why":"`+conformanceSkippedWhy+`"`)
+	assert.Contains(t, string(encoded), fmt.Sprintf(`"why":"%s"`, conformanceSkippedWhy))
 	encoded, err = json.Marshal(d)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")

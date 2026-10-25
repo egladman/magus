@@ -155,7 +155,7 @@ func brokerServe(ctx context.Context, args []string) error {
 	slots := cache.MachineCeiling()
 	exits := "never exits for idleness"
 	if f.IdleExit > 0 {
-		exits = "exits after " + idleText(f.IdleExit) + " holding nothing"
+		exits = fmt.Sprintf("exits after %s holding nothing", idleText(f.IdleExit))
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) %s %s: %d slots, %s; %s",
 		os.Getpid(), from, addr, slots, cache.FormatMB(memMB), exits), attr.Notice(""), attr.Component("magus"))

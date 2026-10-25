@@ -67,9 +67,9 @@ func readLine(file string, input map[string]any) string {
 	first := max(envelopeInt(input, "offset"), 1)
 	switch {
 	case limit > 0 && limit <= wholeReadLines:
-		return "sed -n " + strconv.Itoa(first) + "," + strconv.Itoa(first+limit-1) + "p " + word
+		return fmt.Sprintf("sed -n %d,%dp %s", first, first+limit-1, word)
 	case first > 1:
-		return "sed -n " + strconv.Itoa(first) + ",$p " + word
+		return fmt.Sprintf("sed -n %d,$p %s", first, word)
 	}
 	return "cat " + word
 }

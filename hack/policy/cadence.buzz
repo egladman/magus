@@ -3,6 +3,7 @@ namespace agentpolicy\cadence;
 
 import "std";
 import "magus";
+import "fs";
 import "path";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
@@ -273,7 +274,7 @@ test "the orchestrator, a person, an integrate worker and the plan form may gate
     final worker = Caller{ role = "worker", title = "orchestrator/feat guard-command" };
     final plan = helpers\request([["magus", "affected", "ci", "--plan", "--no-default-charms"]]);
     std\assert(judged(plan, caller: worker, checkout: null).decision == "allow", message: "the plan runs nothing");
-    final narrow = helpers\request([["magus", "run", "go::go-test", ".", "--", "-run", "Guard"]]);
+    final narrow = helpers\request([["magus", "run", "go-test", ".", "--", "-run", "Guard"]]);
     std\assert(judged(narrow, caller: worker, checkout: null).decision == "allow", message: "narrow validation");
 }
 
@@ -334,4 +335,13 @@ test "a push the remote can place stays silent" {
     }
     final onBranch = Checkout{ detached = false, remoteBranches = [<str>] };
     std\assert(judged(helpers\request([["git", "push", "origin", "HEAD:new-branch"]]), caller: person(), checkout: onBranch).decision == "allow", message: "HEAD names a branch");
+}
+
+test "no policy example runs the go spell's op in place of the go-test target" {
+    // The target builds what its tests read first; the bare op skips that step.
+    final op = "go::" + "go-test";
+    foreach (file in fs\glob("hack/policy/*.buzz") catch [<Path>]) {
+        final body = fs\readFile(file.value) catch "";
+        std\assert(body.indexOf(op) == null, message: "{file.value} runs {op}; name the go-test target");
+    }
 }

@@ -82,8 +82,7 @@ type HarnessDescriptor struct {
 	Prompts  []types.Prompt      `json:"prompts,omitempty"`
 	Agents   []types.AgentFile   `json:"agents,omitempty"`
 	Settings []types.Setting     `json:"settings,omitempty"`
-	// Limits.ForegroundDefaultMs is not read here: the wiring passes the same number to
-	// magus shell as --foreground-default-ms.
+	// Limits reaches the hook through the limits file install writes beside the tool rows.
 	Limits types.Limits `json:"limits,omitzero"`
 	// Tools is the host's tool table, nil for a harness that declares none.
 	Tools *types.HarnessTools `json:"tools,omitempty"`
@@ -575,11 +574,11 @@ func harnessMergeCommand(id string, files map[string]types.HarnessFile) string {
 	if len(files) == 0 {
 		return ""
 	}
-	return "magus describe harness " + id + " -o json | magus buzz -e " + posixQuote(harnessMergeScript)
+	return fmt.Sprintf("magus describe harness %s -o json | magus buzz -e %s", id, posixQuote(harnessMergeScript))
 }
 
 func posixQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
 }
 
 // VerifyHarness validates both the descriptor and the concrete harness config.
@@ -600,17 +599,17 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	}
 	result, err := verifyHarnessConfig(ctx, root, d, source)
 	if err == nil {
-		merge := "; merge what `magus describe harness " + d.ID + "` prints"
+		merge := fmt.Sprintf("; merge what `magus describe harness %s` prints", d.ID)
 		result.Prompt = verifyEach(root, d.Prompts, planHarnessPrompt, func(p types.Prompt) string {
-			return "missing " + promptLocation(p) + ", so the host never asks the person before the call" + merge
+			return fmt.Sprintf("missing %s, so the host never asks the person before the call%s", promptLocation(p), merge)
 		})
 		result.Agent = verifyEach(root, d.Agents, func(root string, a types.AgentFile) (types.HarnessFile, error) {
 			return planWholeFile(root, a.Path, a.Content)
 		}, func(a types.AgentFile) string {
-			return a.Path + " is missing or differs from what the spell renders" + merge
+			return fmt.Sprintf("%s is missing or differs from what the spell renders%s", a.Path, merge)
 		})
 		result.Setting = verifyEach(root, d.Settings, planHarnessSetting, func(s types.Setting) string {
-			return "missing " + settingLocation(s) + merge
+			return fmt.Sprintf("missing %s%s", settingLocation(s), merge)
 		})
 		result.Tool = verifyEach(root, d.toolFiles(), func(root string, f types.AgentFile) (types.HarnessFile, error) {
 			return planWholeFile(root, f.Path, f.Content)
@@ -677,7 +676,7 @@ func verifyHarnessHooks(d HarnessDescriptor) HarnessCheck {
 		return HarnessCheck{}
 	}
 	if d.Config.Path == "" {
-		return HarnessCheck{Status: harnessSkipped, Reason: "skipped: " + d.ID + " declares no config path"}
+		return HarnessCheck{Status: harnessSkipped, Reason: fmt.Sprintf("skipped: %s declares no config path", d.ID)}
 	}
 	for _, h := range d.Hooks {
 		if !entriesRunHook(d.ManagedEntries, h) {
@@ -693,7 +692,7 @@ func verifyHarnessHooks(d HarnessDescriptor) HarnessCheck {
 }
 
 func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
-	invocation := "/" + h.Script + ".buzz"
+	invocation := fmt.Sprintf("/%s.buzz", h.Script)
 	if len(h.Flags) > 0 {
 		invocation += " -- " + strings.Join(h.Flags, " ")
 	}
@@ -738,7 +737,7 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere); run once in the host: /plugin install %s --marketplace %s",
 		id, enabled.Path, filepath.Join(claudeConfigDir(), "plugins", "installed_plugins.json"), name, source)
 	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
-		reason += " (marketplace " + marketplace + " is not registered either)"
+		reason += fmt.Sprintf(" (marketplace %s is not registered either)", marketplace)
 	}
 	return reason
 }

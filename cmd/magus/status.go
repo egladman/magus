@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -19,9 +20,12 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
@@ -81,7 +85,12 @@ func status(ctx context.Context, args []string) error {
 
 	if f.Watch == 0 {
 		snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
-		if err := printStatus(snapshot, opts, 0, f.Compact); err != nil {
+		silent, silentErr := loadSilentLeases(time.Now())
+		if errors.Is(silentErr, types.NoWorkspaceRoot) {
+			// Status runs anywhere; outside a workspace no row is leased.
+			silentErr = nil
+		}
+		if err := printStatusWithSilent(os.Stdout, snapshot, silent, silentErr, opts, f.Compact); err != nil {
 			return err
 		}
 		if snapshot.Broker != nil && opts.Format == outputText && !f.Compact {
@@ -138,6 +147,74 @@ func status(ctx context.Context, args []string) error {
 		case <-queryTick.C:
 			snapshot = buildStatusSnapshot(ctx, f.Socket, f.Symbols)
 		}
+	}
+}
+
+// statusReport is the snapshot with the leases whose session has gone silent. They sit
+// beside the snapshot, not in it, while the report is a shadow measurement.
+type statusReport struct {
+	types.StatusSnapshot `yaml:",inline"`
+	SilentLeases         []guard.SilentLease `json:"silent_leases,omitempty" yaml:"silent_leases,omitempty"`
+	SilentLeasesError    string              `json:"silent_leases_error,omitempty" yaml:"silent_leases_error,omitempty"`
+}
+
+// loadSilentLeases reads the workspace's silent leased rows. Outside a workspace it returns
+// the NoWorkspaceRoot error, which the caller reads as no rows.
+func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
+	root, err := workspace.FindRoot("")
+	if err != nil {
+		return nil, err
+	}
+	loc, err := jobPlace(root)
+	if err != nil {
+		return nil, err
+	}
+	loc.DryRun = true
+	rows, err := job.NewStore(loc).List()
+	if err != nil {
+		return nil, err
+	}
+	return guard.SilentLeases(root, loc.CacheDir, rows, now, guard.SilentLeaseAfter)
+}
+
+// printStatusWithSilent renders the snapshot, then the silent leases: appended to the text
+// form, a field of the structured ones.
+func printStatusWithSilent(w io.Writer, snapshot types.StatusSnapshot, silent []guard.SilentLease, silentErr error, opts output.Options, compact bool) error {
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		report := statusReport{StatusSnapshot: snapshot, SilentLeases: silent}
+		if silentErr != nil {
+			report.SilentLeasesError = silentErr.Error()
+		}
+		return emitFormatted(opts, report)
+	}
+	if err := writeStatus(w, snapshot, opts, 0, compact); err != nil {
+		return err
+	}
+	if compact {
+		return nil
+	}
+	printSilentLeases(w, silent, silentErr)
+	return nil
+}
+
+// printSilentLeases lists leased rows whose session is silent, each with how long and
+// where it was last seen. It prints nothing when there are none and no error.
+func printSilentLeases(w io.Writer, silent []guard.SilentLease, err error) {
+	if err != nil {
+		fmt.Fprintf(w, "\nsilent leases: not read: %v\n", err)
+		return
+	}
+	if len(silent) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nsilent leases (no judged call for over %s, no background command running; nothing was ended):\n", guard.SilentLeaseAfter)
+	for _, s := range silent {
+		line := fmt.Sprintf("  %s  session %s  silent %s", s.Lease, s.Session, formatDur(time.Duration(s.SilentSeconds)*time.Second))
+		if s.BackgroundNote != "" {
+			line = fmt.Sprintf("%s  (%s)", line, s.BackgroundNote)
+		}
+		fmt.Fprintln(w, line)
 	}
 }
 
@@ -496,7 +573,8 @@ func printPipeWaitStatus(w io.Writer, waits []types.StatusPipeWait) {
 
 // printBrokerRows renders the broker one fact per row, record type first and pid second,
 // so awk and xargs work on it without a parser: the broker itself, its capacity and the
-// policy in force, every claim holding it, every service it hosts, and when it exits.
+// policy in force, every claim holding it, every request it holds until the budget can
+// answer it, every service it hosts, and when it exits.
 // Printed whenever a broker answered, held or idle, because "nothing holds it" is the
 // answer to the question people ask it.
 func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPolicy, now time.Time) {
@@ -511,8 +589,25 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 		fmt.Fprintf(tw, "held\t%d\t%s\n", h.PID, strings.Join(nonEmpty(
 			fmt.Sprintf("slots %d", max(h.Slots, 1)),
 			holderMemText(h),
-			holderProject(h.Project)+" "+h.Target,
-			h.Dir, h.Command, sinceText(h.Since)), "  "))
+			fmt.Sprintf("%s %s", holderProject(h.Project), h.Target),
+			h.Owner, h.Dir, h.Command, sinceText(h.Since)), "  "))
+	}
+	for _, q := range c.Waiting {
+		why := q.Kind
+		if q.Tree != "" {
+			why = fmt.Sprintf("seat in %s", q.Tree)
+		}
+		fmt.Fprintf(tw, "waiting\t%d\t%s\n", q.PID, strings.Join(nonEmpty(
+			fmt.Sprintf("slots %d", max(q.Slots, 1)), mbText("mem ", q.MemoryMB),
+			fmt.Sprintf("%s %s", holderProject(q.Project), q.Target),
+			why, q.Owner, q.Dir, q.Command, sinceText(q.Since)), "  "))
+	}
+	for _, r := range c.Refused {
+		fmt.Fprintf(tw, "refused\t%d\t%s\n", r.PID, strings.Join(nonEmpty(
+			fmt.Sprintf("%s ago", cmp.Or(formatDur(now.Sub(r.At).Round(time.Second)), "0s")),
+			fmt.Sprintf("slots %d", max(r.Slots, 1)), mbText("mem ", r.MemoryMB),
+			fmt.Sprintf("%s %s", holderProject(r.Project), r.Target),
+			r.Owner, r.Dir, r.Command, refusedHoldersText(r.Holders)), "  "))
 	}
 	for _, s := range st.Services {
 		label := s.Label
@@ -646,6 +741,18 @@ func holderMemText(h types.MachineClaimant) string {
 		text += " " + h.Sizing.String()
 	}
 	return text
+}
+
+// refusedHoldersText names the holders that kept a refused claim out, by pid and owner.
+func refusedHoldersText(holders []types.MachineClaimant) string {
+	if len(holders) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(holders))
+	for _, h := range holders {
+		names = append(names, fmt.Sprintf("pid %d %s", h.PID, cmp.Or(h.Owner, "owner unknown")))
+	}
+	return fmt.Sprintf("held by %s", strings.Join(names, ", "))
 }
 
 // holderProject names the workspace root the way a refusal does.
@@ -974,16 +1081,15 @@ func runningDuration(c types.StatusRunningTarget, now time.Time) time.Duration {
 
 func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now time.Time) string {
 	project, target := parseRunning(c.Args)
-	if project == "" && target == "" {
-		project = "?"
-		target = "?"
+	label := fmt.Sprintf("%s:%s", project, target)
+	if label == ":" {
+		label = "?:?"
 	}
-	label := project + ":" + target
 	if showWS {
-		label = workspaceLabel(c.Workspace) + "/" + label
+		label = fmt.Sprintf("%s/%s", workspaceLabel(c.Workspace), label)
 	}
 	if d := formatDur(runningDuration(c, now)); d != "" {
-		label += "(" + d + ")"
+		label += fmt.Sprintf("(%s)", d)
 	}
 	return truncate(label, compactRunningBudget)
 }
@@ -1200,7 +1306,7 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 			vPrefix, actIndent := branchPrefix(vIndent, vLast)
 			line := truncate(lf.target, runningLineWidth)
 			if d := formatDur(lf.duration); d != "" {
-				line += " " + tty.Colorize("("+d+")", sgrPoolIdle)
+				line += " " + tty.Colorize(fmt.Sprintf("(%s)", d), sgrPoolIdle)
 			}
 			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
 			if lf.step != "" {

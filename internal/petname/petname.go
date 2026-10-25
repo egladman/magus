@@ -26,7 +26,7 @@ const suffixAlphabet = "abcdefghijklmnopqrstuvwxyz"
 func Generate(seed string) string {
 	adj := adjectives[hash(adjTag+seed)%uint64(len(adjectives))]
 	noun := nouns[hash(nounTag+seed)%uint64(len(nouns))]
-	return adj + "-" + noun
+	return fmt.Sprintf("%s-%s", adj, noun)
 }
 
 // OfWithSuffix returns Of(seed) with a two-letter suffix appended, for

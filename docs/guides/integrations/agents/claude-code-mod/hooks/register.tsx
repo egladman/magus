@@ -12,6 +12,7 @@ import {
   parseRuns,
   socketFromStatus,
 } from './api'
+import { budgetStatus, capacityText, holderText, parseBudget, recentRefusal, refusalText, runsMagus, waiterText } from './budget'
 import {
   budgetNotice,
   cacheNotice,
@@ -48,6 +49,9 @@ const JOBS_POLL_MS = 15_000
 const RUNS_POLL_MS = 5_000
 const WATCH_POLL_MS = 3_000
 const TICK_MS = 30_000
+const BUDGET_POLL_MS = 15_000
+// A magus run claims its budget after it starts, so a read this long in shows its claim.
+const BUDGET_AFTER_START_MS = 3_000
 const MAX_LINES = 300
 
 const REPORT = { plugin: 'magus', key: 'report' } as const
@@ -67,6 +71,8 @@ const HELD_FOR = { plugin: 'magus', key: 'heldFor' } as const
 const SPEND = { plugin: 'magus', key: 'spend' } as const
 const RATES_ERROR = { plugin: 'magus', key: 'ratesError' } as const
 const TICK = { plugin: 'magus', key: 'tick' } as const
+const BUDGET = { plugin: 'magus', key: 'budget' } as const
+const BUDGET_ERROR = { plugin: 'magus', key: 'budgetError' } as const
 
 // Module state, rebuilt by register on every load.
 let settings: Settings = readSettings({})
@@ -75,6 +81,7 @@ let rates: RateTable = DEFAULT_RATES
 let engineTtl: Ttl | null = null
 let healthInFlight: Promise<void> | null = null
 let healthAt = 0
+let budgetInFlight: Promise<void> | null = null
 // The server's socket, found once and found again after a call through it fails.
 let socket: string | null = null
 
@@ -182,16 +189,46 @@ async function checkHealthOnce($: EngineInterface): Promise<void> {
   await refreshStatus($)
 }
 
+// ---------- build budget ----------
+
+function scheduleBudget($: EngineInterface, afterMs = 0): void {
+  $.clock.after(afterMs, () => void readBudget($))
+}
+
+async function readBudget($: EngineInterface): Promise<void> {
+  budgetInFlight ??= readBudgetOnce($).finally(() => {
+    budgetInFlight = null
+  })
+  return budgetInFlight
+}
+
+async function readBudgetOnce($: EngineInterface): Promise<void> {
+  const root = await $.session.root()
+  if (!(await $.fs.exists(`${root}/magusfile.buzz`))) return
+  const r = await run($, [await magusBin($, root), '-s', 'status', '-o', 'json'], root)
+  const parsed = r === null ? { ok: false as const, error: 'magus status -o json did not run' } : parseBudget(r.stdout)
+  if (parsed.ok) {
+    await $.state.set(BUDGET, { budget: parsed.budget, readAt: await $.clock.now() })
+    await $.state.set(BUDGET_ERROR, null)
+  } else {
+    await $.state.set(BUDGET_ERROR, r !== null && r.exitCode !== 0 ? `${parsed.error} (exit ${r.exitCode})` : parsed.error)
+  }
+  await refreshStatus($)
+}
+
 // ---------- status line ----------
 
 // One entry for the whole mod, which the engine labels with the mod's name: the health
-// issues, the cache countdown and the session's spend, or nothing when there is none.
+// issues, the build budget, the cache countdown and the session's spend, or nothing when
+// there is none.
 async function refreshStatus($: EngineInterface): Promise<void> {
   const { value: report = null } = await $.state.get(REPORT)
   const { value: cache = null } = await $.state.get(CACHE)
   const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+  const { value: budget = null } = await $.state.get(BUDGET)
   const parts = [
     report ? statusText(report.issues) : undefined,
+    budgetStatus(budget),
     cacheStatus(cache, await $.clock.now()),
     spendStatus(spend, settings.sessionBudgetUsd),
   ]
@@ -408,6 +445,7 @@ async function showTab($: EngineInterface, tab: Tab): Promise<void> {
   await $.state.set(TAB, tab)
   if (tab === 'jobs') await loadJobs($)
   if (tab === 'runs') await loadRuns($)
+  if (tab === 'budget') await readBudget($)
 }
 
 async function recordSpawn($: EngineInterface, row: AgentRow): Promise<void> {
@@ -439,7 +477,7 @@ export const register: Register = (on, options) => {
   settings = readSettings(options)
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'magus', description: "Show magus's jobs, runs and this session's agents" })
+    await $.command.register({ name: 'magus', description: "Show magus's jobs, runs, this session's agents and the build budget" })
     await loadRates($)
     scheduleHealth($)
     $.clock.every(HEALTH_POLL_MS, () => void checkHealth($))
@@ -447,7 +485,17 @@ export const register: Register = (on, options) => {
     $.clock.every(RUNS_POLL_MS, () => void pollRuns($))
     $.clock.every(WATCH_POLL_MS, () => void pollWatch($))
     $.clock.every(TICK_MS, () => void tick($))
+    scheduleBudget($)
+    $.clock.every(BUDGET_POLL_MS, () => void readBudget($))
     return next(e)
+  })
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (!runsMagus(e.command)) return next(e)
+    scheduleBudget($, BUDGET_AFTER_START_MS)
+    const ran = await next(e)
+    scheduleBudget($)
+    return ran
   })
 
   on('command.run', { command: 'magus' }, async $ => {
@@ -481,8 +529,9 @@ export const register: Register = (on, options) => {
     if (e.prompt_cache_likely_expired && e.context_tokens) {
       const usd = e.estimated_cache_write_usd
       $.ui.toast(
-        `Resumed with an expired prompt cache: the first prompt re-caches ${formatTokens(e.context_tokens)} tokens` +
-          (usd === undefined ? '.' : ` (≈${formatUsd(usd)}, Claude Code's estimate).`),
+        `Resumed with an expired prompt cache: the first prompt re-caches ${formatTokens(e.context_tokens)} tokens${
+          usd === undefined ? '.' : ` (≈${formatUsd(usd)}, Claude Code's estimate).`
+        }`,
       )
     }
     return next(e)
@@ -560,20 +609,35 @@ export const register: Register = (on, options) => {
     const { value: hidden = null } = await $.state.get(DISMISSED)
     const { value: cache = null } = await $.state.get(CACHE)
     const { value: ratesError = null } = await $.state.get(RATES_ERROR)
+    // Read so each budget poll redraws the band, which is what ends a refusal's window.
+    const { value: budget = null } = await $.state.get(BUDGET)
     const now = await $.clock.now()
 
     const issues = report && report.issues.length && hidden !== signature(report.issues) ? report.issues : []
     const notice = cacheNotice(cache, now, settings.cacheWarnMs, settings.gateMinTokens, rates)
     const ageDays = rateAgeDays(rates, now)
     const staleRates = notice !== null && ageDays !== null && ageDays > settings.ratesStaleDays
-    if (issues.length === 0 && notice === null && ratesError === null) return next(e)
+    const board = budget?.budget ?? null
+    const refused = recentRefusal(board, now)
+    if (issues.length === 0 && notice === null && ratesError === null && refused === null) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
     const room = Math.max(1, e.props.maxRows - 1)
     const shown = issues.slice(0, room)
+    const holders = refused !== null ? refused.holders.slice(0, 3) : []
 
     return (
       <Box flexDirection="column">
+        {refused !== null ? (
+          <Text key="refused" color="red" wrap="truncate-end">
+            ✖ {refusalText(refused, board, now)}
+          </Text>
+        ) : null}
+        {holders.map(holder => (
+          <Text key={`holder-${holder.pid}-${holder.target}-${holder.since}`} dimColor wrap="truncate-end">
+            {'  '}held by {holderText(holder, now)}
+          </Text>
+        ))}
         {notice !== null ? (
           <Text key="cache" color={notice.isExpired ? 'red' : 'yellow'} wrap="truncate-end">
             ⏳ {notice.text}
@@ -636,6 +700,7 @@ export const register: Register = (on, options) => {
           {tabButton('jobs', 'Jobs', '1')}
           {tabButton('runs', 'Runs', '2')}
           {tabButton('agents', 'Agents', '3')}
+          {tabButton('budget', 'Budget', '4')}
         </Box>
         {sessionUsd(spend) > 0 || spend.isPartial ? (
           <Text key="spend" dimColor wrap="truncate-end">
@@ -684,6 +749,51 @@ export const register: Register = (on, options) => {
               </Box>
             )
           })}
+        </Box>
+      )
+    }
+
+    if (tab === 'budget') {
+      const { value: read = null } = await $.state.get(BUDGET)
+      const { value: budgetError = null } = await $.state.get(BUDGET_ERROR)
+      const b = read?.budget ?? null
+
+      return (
+        <Box flexDirection="column">
+          {header}
+          {budgetError !== null ? <Text color="red" wrap="wrap">{budgetError}</Text> : null}
+          {read === null && budgetError === null ? <Text dimColor>reading…</Text> : null}
+          {read !== null && b === null ? <Text dimColor>No broker running: nothing holds the build budget.</Text> : null}
+          {b !== null ? (
+            <Text key="capacity" bold={b.heldSlots >= b.budgetSlots} wrap="truncate-end">
+              {capacityText(b)} held · {age((now - (read?.readAt ?? now)) / 1000)} ago
+            </Text>
+          ) : null}
+          {b !== null && b.holders.length === 0 ? <Text dimColor>No holders.</Text> : null}
+          {(b?.holders ?? []).map(holder => (
+            <Box key={`holder-${holder.pid}-${holder.target}-${holder.since}`} flexDirection="column">
+              <Text color="cyan" wrap="truncate-end">
+                ● {holderText(holder, now)}
+              </Text>
+              <Text dimColor wrap="truncate-end">
+                {'  '}
+                {[holder.command, holder.dir].filter(Boolean).join(' · ')}
+              </Text>
+            </Box>
+          ))}
+          {b?.waiting.length ? <Text bold>Waiting for a seat</Text> : null}
+          {(b?.waiting ?? []).map(w => (
+            <Text key={`waiting-${w.pid}-${w.target}-${w.reservation}`} color="yellow" wrap="truncate-end">
+              … {waiterText(w, now)}
+            </Text>
+          ))}
+          {b?.refused.length ? <Text bold>Refused on this machine</Text> : null}
+          {(b?.refused ?? []).map(r => (
+            <Text key={`refused-${r.at}-${r.pid}-${r.target}`} color="red" wrap="truncate-end">
+              ✖ {refusalText(r, null, now)}
+              {r.holders.length ? ` · held by ${r.holders.map(h => [h.owner, `pid ${h.pid}`].filter(Boolean).join(' ')).join(', ')}` : ''}
+            </Text>
+          ))}
         </Box>
       )
     }

@@ -67,7 +67,7 @@ func reportedContext(facts hint.Gate, agentID string) int64 {
 // workspace, which a worker's every write must not pay for. A declaration that could not be
 // read is not kept, so the next write asks again.
 func tierContextCap(deps Dependencies, facts hint.Gate, row types.Job) int64 {
-	kind := agentMarkerKind("model-tier-cap-", row.ID+"\x00"+row.ModelTier.Name+"\x00"+strconv.Itoa(row.ModelTier.Rank))
+	kind := agentMarkerKind("model-tier-cap-", fmt.Sprintf("%s\x00%s\x00%s", row.ID, row.ModelTier.Name, strconv.Itoa(row.ModelTier.Rank)))
 	path := ""
 	if facts.CacheDir() != "" {
 		path = hint.MarkerPath(facts.CacheDir(), facts.Session(), kind)

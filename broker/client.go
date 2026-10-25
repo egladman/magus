@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
@@ -157,7 +158,9 @@ type HandshakeError struct {
 	Err  error
 }
 
-func (e *HandshakeError) Error() string { return "handshake via " + e.Path + ": " + e.Err.Error() }
+func (e *HandshakeError) Error() string {
+	return fmt.Sprintf("handshake via %s: %s", e.Path, e.Err.Error())
+}
 
 func (e *HandshakeError) Unwrap() error { return e.Err }
 
@@ -182,6 +185,18 @@ func (c *Client) Addr() string { return c.addr }
 // If ctx ends after the broker granted but before the answer arrived, the grant is
 // handed straight back.
 func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
+	return c.claim(ctx, claim, false)
+}
+
+// Claim is Request, except that a claim kept out only by its own process's or run's
+// claims, or by its job tree's validation seat, is held by the broker until a release
+// makes room, and answered then. It blocks on the connection meanwhile, and ctx ending
+// cancels the wait and returns ctx's error. Any other refusal answers at once.
+func (c *Client) Claim(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
+	return c.claim(ctx, claim, true)
+}
+
+func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool) (types.MachineVerdict, error) {
 	cn, err := c.open(ctx)
 	if err != nil {
 		return types.MachineVerdict{}, err
@@ -193,7 +208,14 @@ func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.M
 			_, _ = cn.call(context.Background(), c.next(), typeRelease, releaseRequest{ClaimID: r.Verdict.ID})
 		}
 	}
-	if err := cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late); err != nil {
+	if park {
+		request := claimRequest{Claim: claim, Park: true}
+		parked := func(p parkedReply) { c.noteSeat(ctx, p.Seat) }
+		err = c.parkedCall(ctx, cn, typeClaim, request, typeClaimReply, &reply, parked, late)
+	} else {
+		err = cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late)
+	}
+	if err != nil {
 		return types.MachineVerdict{}, err
 	}
 	c.noteSeat(ctx, reply.Seat)
@@ -256,22 +278,79 @@ func (c *Client) sendOverrun(ctx context.Context, cn *conn, remote string) {
 	}
 }
 
-// Reserve asks the broker to hold a seat the size of claim for process reader, once, and
-// answers at once. A grant does not ride this connection: the seat lasts until the
-// reader's first claim takes it, the reader exits, or the reader claims nothing within
-// the broker's bound, so it holds even after this client closes. A verdict that is not
-// Granted reserved nothing. It never starts a broker.
-func (c *Client) Reserve(ctx context.Context, claim types.MachineClaim, reader int) (types.MachineVerdict, error) {
+// Reserve asks the broker to hold a seat the size of claim for process reader, blocking
+// until the budget can seat it beside what it holds; parked, when set, is called with the
+// budget as it stood if the broker had to hold the request. A grant does not ride this
+// connection: the seat lasts until the reader's first claim takes it, the reader exits,
+// or the reader claims nothing within the broker's bound, so it holds even after this
+// client closes. A verdict that is not Granted is a seat larger than the whole budget,
+// and reserved nothing. ctx ending cancels the wait. It never starts a broker.
+func (c *Client) Reserve(ctx context.Context, claim types.MachineClaim, reader int, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
 	cn, err := c.connect(ctx)
 	if err != nil {
 		return types.MachineVerdict{}, err
 	}
 	var reply reserveReply
-	if err := cn.roundTrip(ctx, c.next(), typeReserve, reserveRequest{Claim: claim, Reader: reader}, typeReserveReply, &reply, nil); err != nil {
+	request := reserveRequest{Claim: claim, Reader: reader}
+	onParked := func(p parkedReply) {
+		if parked != nil {
+			parked(p.Verdict)
+		}
+	}
+	if err := c.parkedCall(ctx, cn, typeReserve, request, typeReserveReply, &reply, onParked, nil); err != nil {
 		return types.MachineVerdict{}, err
 	}
 	return reply.Verdict, nil
 }
+
+// Await blocks until the budget would seat each of claims beside what it holds, taking
+// nothing, so a run started once it returns can still lose the room to another that asks
+// first. parked, when set, is called with the claim it waits on and the budget as it stood
+// if the broker had to hold the request. A verdict that is not Granted names in blocked a
+// claim larger than the whole budget. ctx ending cancels the wait. It never starts a
+// broker.
+func (c *Client) Await(ctx context.Context, claims []types.MachineClaim, parked func(blocked types.MachineClaim, v types.MachineVerdict)) (blocked types.MachineClaim, v types.MachineVerdict, err error) {
+	cn, err := c.connect(ctx)
+	if err != nil {
+		return types.MachineClaim{}, types.MachineVerdict{}, err
+	}
+	var reply awaitReply
+	request := awaitRequest{Claims: claims}
+	onParked := func(p parkedReply) {
+		if parked != nil {
+			parked(p.Blocked, p.Verdict)
+		}
+	}
+	if err := c.parkedCall(ctx, cn, typeAwait, request, typeAwaitReply, &reply, onParked, nil); err != nil {
+		return types.MachineClaim{}, types.MachineVerdict{}, err
+	}
+	return reply.Blocked, reply.Verdict, nil
+}
+
+// parkedCall is roundTrip for a request the broker may park: parked runs with the
+// broker's parked frame if it does. ctx ending cancels the request at the broker, which
+// answers it then, and late, when set, receives that answer or the one already sent.
+func (c *Client) parkedCall(ctx context.Context, cn *conn, typ string, body any, replyType string, out any, parked func(parkedReply), late func(frame)) error {
+	id := c.next()
+	onParked := func(f frame) {
+		var p parkedReply
+		if parked != nil && decodeBody(f, &p) == nil {
+			parked(p)
+		}
+	}
+	err := cn.roundTripParked(ctx, id, typ, body, replyType, out, onParked, late)
+	if err != nil && ctx.Err() != nil {
+		go func() {
+			cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cancelTimeout)
+			defer cancel()
+			_, _ = cn.call(cctx, c.next(), typeCancel, cancelRequest{ID: id})
+		}()
+	}
+	return err
+}
+
+// cancelTimeout bounds telling the broker a parked request is no longer wanted.
+const cancelTimeout = 5 * time.Second
 
 // AcquireService starts, or reuses, the shared service spec under key and returns once
 // it is ready, reporting whether the broker started it and so stops it at idle (false:
@@ -531,11 +610,14 @@ func (c *Client) reassertRiders(ctx, dctx context.Context, cn *conn) (map[string
 	c.mu.Lock()
 	riders := maps.Clone(c.riders)
 	c.mu.Unlock()
+	warned := false
 	for id, r := range riders {
 		c.mu.Lock()
 		hold := r.hold
+		var claim types.MachineClaim
 		if h, ok := c.held[r.claim]; ok {
 			hold.Claim = h.remote
+			claim = h.claim
 		}
 		c.mu.Unlock()
 		if hold.Claim == "" {
@@ -546,8 +628,10 @@ func (c *Client) reassertRiders(ctx, dctx context.Context, cn *conn) (map[string
 		var refused *Error
 		switch {
 		case errors.As(err, &refused):
-			slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", hold.PGID, hold.Command),
-				attr.Error(err))
+			if !warned {
+				warned = true
+				slog.WarnContext(ctx, cache.UnheldGroupWarning(claim.Project, claim.Target, hold.PGID, hold.Command, err))
+			}
 			c.mu.Lock()
 			if c.riders[id] == r {
 				delete(c.riders, id)

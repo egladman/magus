@@ -44,7 +44,7 @@ func MirroredBinary(exe, root string) string {
 // checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
 // not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
 // is placed only in a checkout where no build input of ./cmd/magus differs from the commit it
-// was built at (see [changedBuildInputs]): anywhere else it would judge another tree, so the
+// was built at (see [ChangedBuildInputs]): anywhere else it would judge another tree, so the
 // checkout is made with no binary and wt.Binary stays "" for [CheckoutBootstrap] to fill.
 // made is false when the job already owns the checkout at dir, which is returned as it stands,
 // and when dir is a linked checkout that already stands, which the job adopts as it is. A job owning another standing checkout, a checkpoint
@@ -116,7 +116,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		// A binary whose build inputs differ from the base judges another tree, and one whose
 		// inputs cannot be compared is not shown to match; CheckoutBootstrap builds one there.
 		if built.ID != base.ID {
-			inputs, err := changedBuildInputs(ctx, drv, source, built.ID, base.ID)
+			inputs, err := ChangedBuildInputs(ctx, drv, source, built.ID, base.ID)
 			if err != nil || len(inputs) > 0 {
 				binary = ""
 			}
@@ -205,13 +205,13 @@ var moduleFiles = []string{"go.mod", "go.sum", "go.work", "go.work.sum"}
 // would take in every file at the root.
 const rootScope = "./"
 
-// changedBuildInputs are the paths differing between commits from and to, in the checkout
+// ChangedBuildInputs are the paths differing between commits from and to, in the checkout
 // at root, that can change the binary ./cmd/magus compiles to: a non-test Go file in a
 // package `go list -deps` names, a root module file, or another file in such a package's
 // directory, where go:embed reads. Each side's changes since the two diverged count. It fails
 // when either commit or the package list cannot be read, so unknown inputs never match;
 // equal commits run no process. hack/dev/bootstrap-worktree.buzz holds the same rule.
-func changedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to string) ([]string, error) {
+func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to string) ([]string, error) {
 	if from == to {
 		return nil, nil
 	}
@@ -310,7 +310,52 @@ const CheckoutBootstrapScript = "hack/dev/bootstrap-checkout.buzz"
 // CheckoutBootstrap is the command that builds ./magus in dir, a checkout ForkWorktree made
 // at a commit no placed binary was built at.
 func CheckoutBootstrap(dir string) string {
-	return "./magus buzz " + CheckoutBootstrapScript + " -- --checkout " + dir
+	return fmt.Sprintf("./magus buzz %s -- --checkout %s", CheckoutBootstrapScript, dir)
+}
+
+// LandingBootstrap is [CheckoutBootstrap] for the store's own checkout, where a fork with no
+// checkout of its own lands, when exe is that checkout's ./magus and was built before the Go
+// build inputs of checkpoint ([ChangedBuildInputs]); "" when exe is any other magus, such as
+// one on PATH, or no build input differs. checkpoint "" is the checkout's own revision. A
+// build that records no commit, and commits or packages that cannot be read, are errors:
+// whether the binary judges the job's tree cannot then be told.
+func (s *Store) LandingBootstrap(ctx context.Context, exe, checkpoint string) (string, error) {
+	if MirroredBinary(exe, s.root) == "" {
+		return "", nil
+	}
+	build := types.MagusBuildFromContext(ctx)
+	if build.Commit == "" || build.Commit == "unknown" {
+		return "", fmt.Errorf("job: %s records no commit it was built from, so whether it judges the job's checkpoint cannot be told", exe)
+	}
+	revision, _ := types.ParseCheckpointToken(checkpoint)
+	if revision == "" {
+		token, err := s.CheckoutToken(ctx)
+		if err != nil {
+			return "", err
+		}
+		revision, _ = types.ParseCheckpointToken(token)
+	}
+	root, err := filepath.Abs(s.root)
+	if err != nil {
+		return "", err
+	}
+	drv, why := resolveDriver(ctx, root)
+	if drv == nil {
+		return "", fmt.Errorf("job: %s", why)
+	}
+	built, err := drv.FindCommit(ctx, root, build.Commit)
+	if err != nil {
+		return "", fmt.Errorf("job: %s was built at %s, which %s cannot find: %w", exe, build.Commit, drv.Name(), err)
+	}
+	base, err := drv.FindCommit(ctx, root, revision)
+	if err != nil {
+		return "", fmt.Errorf("job: the checkpoint %s is a commit %s cannot find: %w", revision, drv.Name(), err)
+	}
+	inputs, err := ChangedBuildInputs(ctx, drv, root, built.ID, base.ID)
+	if err != nil || len(inputs) == 0 {
+		return "", err
+	}
+	return CheckoutBootstrap(root), nil
 }
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then

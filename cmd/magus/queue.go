@@ -818,10 +818,10 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	case src.dir != "":
 		return fmt.Errorf("%s holds no %s", e.path(src.dir), queue.PlanFile)
 	case f.Once:
-		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: "run " + src.run + " has uploaded no plan yet; nothing to apply"})
+		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: fmt.Sprintf("run %s has uploaded no plan yet; nothing to apply", src.run)})
 		return nil
 	default:
-		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: "run " + src.run + " completed without a plan; nothing to apply"})
+		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: fmt.Sprintf("run %s completed without a plan; nothing to apply", src.run)})
 		return nil
 	}
 	scratch, cleanup, err := queueScratch("merge-queue-apply")

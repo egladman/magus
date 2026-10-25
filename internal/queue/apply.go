@@ -154,7 +154,7 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 	}
 	defer func() {
 		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), a.vcs, a.clone.Root, a.scratch); err != nil {
-			a.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + a.scratch + ": " + err.Error()})
+			a.Events.Emit(Event{Kind: EventNotice, Reason: fmt.Sprintf("remove checkouts under %s: %s", a.scratch, err.Error())})
 		}
 	}()
 	for _, v := range plan.Verdicts {
@@ -257,7 +257,7 @@ type applyRun struct {
 func (r *applyRun) accept(v types.Verdict) {
 	gi, pos, ok := find(r.plan, v.Change.ID)
 	if !ok {
-		r.Events.Emit(Event{Kind: EventNotice, Change: v.Change.ID, Reason: "dropped a verdict on #" + v.Change.ID + ", which the plan did not admit"})
+		r.Events.Emit(Event{Kind: EventNotice, Change: v.Change.ID, Reason: fmt.Sprintf("dropped a verdict on #%s, which the plan did not admit", v.Change.ID)})
 		return
 	}
 	g := r.plan.Partitions[gi]
@@ -268,15 +268,15 @@ func (r *applyRun) accept(v types.Verdict) {
 	beneath := func(id string) int { return slices.IndexFunc(g[:pos], func(c types.Change) bool { return c.ID == id }) }
 	switch {
 	case v.BaseCommit != r.plan.BaseCommit:
-		v = wait("validated on " + short(v.BaseCommit) + ", not this plan's base " + short(r.plan.BaseCommit))
+		v = wait(fmt.Sprintf("validated on %s, not this plan's base %s", short(v.BaseCommit), short(r.plan.BaseCommit)))
 	case v.Change.Head != planned.Head:
-		v = wait("validated at " + short(v.Change.Head) + ", not the planned head " + short(planned.Head))
+		v = wait(fmt.Sprintf("validated at %s, not the planned head %s", short(v.Change.Head), short(planned.Head)))
 	case v.Decision == types.DecisionMerge && v.After != "" && beneath(v.After) < 0:
-		v = wait("validated on top of #" + v.After + ", which is not beneath it in its partition")
+		v = wait(fmt.Sprintf("validated on top of #%s, which is not beneath it in its partition", v.After))
 	case v.Decision == types.DecisionMerge && v.After == "" && v.Onto != r.plan.BaseCommit:
-		v = wait("validated at the bottom of its partition, but onto " + short(v.Onto) + ", not the plan's base")
+		v = wait(fmt.Sprintf("validated at the bottom of its partition, but onto %s, not the plan's base", short(v.Onto)))
 	case v.Decision == types.DecisionMerge && planned.Below != "" && (v.After == "" || beneath(planned.Below) > beneath(v.After)):
-		v = wait("validated without #" + planned.Below + ", which it is stacked on")
+		v = wait(fmt.Sprintf("validated without #%s, which it is stacked on", planned.Below))
 	default:
 		v.Change = planned
 	}
@@ -287,7 +287,7 @@ func (r *applyRun) accept(v types.Verdict) {
 func (r *applyRun) reject(rej types.RejectedVerdict) {
 	gi, pos, ok := find(r.plan, rej.Change)
 	if !ok {
-		r.Events.Emit(Event{Kind: EventNotice, Change: rej.Change, Reason: "dropped an unreadable verdict on #" + rej.Change + ": " + rej.Reason})
+		r.Events.Emit(Event{Kind: EventNotice, Change: rej.Change, Reason: fmt.Sprintf("dropped an unreadable verdict on #%s: %s", rej.Change, rej.Reason)})
 		return
 	}
 	planned := r.plan.Partitions[gi][pos]
@@ -406,13 +406,13 @@ func (r *applyRun) blocked(v types.Verdict) (types.Code, string, bool) {
 		if v.After == c.Below {
 			code = types.CodeWaitBelow
 		}
-		return code, "validated on top of #" + v.After + ", which did not merge", true
+		return code, fmt.Sprintf("validated on top of #%s, which did not merge", v.After), true
 	case c.Below != "" && !r.merged[c.Below]:
-		return types.CodeWaitBelow, "stacked on #" + c.Below + ", which did not merge", true
+		return types.CodeWaitBelow, fmt.Sprintf("stacked on #%s, which did not merge", c.Below), true
 	case c.Below != "" && !r.chainHas(v, c.Below):
-		return types.CodeWaitRevalidate, "validated without #" + c.Below + ", which it is stacked on", true
+		return types.CodeWaitRevalidate, fmt.Sprintf("validated without #%s, which it is stacked on", c.Below), true
 	case v.After != "" && r.got[v.After].CandidateCommit != v.Onto:
-		return types.CodeWaitRevalidate, "validated onto " + short(v.Onto) + ", not the candidate #" + v.After + " merged from", true
+		return types.CodeWaitRevalidate, fmt.Sprintf("validated onto %s, not the candidate #%s merged from", short(v.Onto), v.After), true
 	}
 	return "", "", false
 }
@@ -487,7 +487,7 @@ func unverified(c types.Change, why string) error {
 func (r *applyRun) verifyStack(ctx context.Context, c types.Change) error {
 	if c.StackBase == "" {
 		if c.Below != "" {
-			return unverified(c, "it is stacked on #"+c.Below+" with no stack base")
+			return unverified(c, fmt.Sprintf("it is stacked on #%s with no stack base", c.Below))
 		}
 		return nil
 	}
@@ -497,14 +497,14 @@ func (r *applyRun) verifyStack(ctx context.Context, c types.Change) error {
 		return err
 	}
 	if !carried || c.StackBase == c.Head {
-		return unverified(c, "stack base "+short(c.StackBase)+" is not beneath its head "+short(c.Head))
+		return unverified(c, fmt.Sprintf("stack base %s is not beneath its head %s", short(c.StackBase), short(c.Head)))
 	}
 	onBase, err := r.vcs.IsAncestor(ctx, root, c.StackBase, r.plan.BaseCommit)
 	if err != nil {
 		return err
 	}
 	if onBase {
-		return unverified(c, "stack base "+short(c.StackBase)+" is already on "+r.plan.Base)
+		return unverified(c, fmt.Sprintf("stack base %s is already on %s", short(c.StackBase), r.plan.Base))
 	}
 	listed, err := r.listed(ctx)
 	if err != nil {
@@ -519,20 +519,20 @@ func (r *applyRun) verifyStack(ctx context.Context, c types.Change) error {
 		gi, pos, _ := find(r.plan, c.Below)
 		below := r.plan.Partitions[gi][pos]
 		if r.confirmed[below.ID] != below.Head {
-			return unverified(c, "#"+below.ID+" beneath it was not confirmed at "+short(below.Head)+" this run")
+			return unverified(c, fmt.Sprintf("#%s beneath it was not confirmed at %s this run", below.ID, short(below.Head)))
 		}
 		top, err := ownTop(ctx, r.vcs, root, r.plan.BaseCommit, below.Head)
 		if err != nil {
 			return err
 		}
 		if top != c.StackBase {
-			return unverified(c, "stack base "+short(c.StackBase)+" is not "+short(top)+", the head #"+below.ID+" was reviewed at")
+			return unverified(c, fmt.Sprintf("stack base %s is not %s, the head #%s was reviewed at", short(c.StackBase), short(top), below.ID))
 		}
 	} else if beneath, err = r.mergedBeneath(ctx, listed.Merged, c); err != nil {
 		return err
 	}
 	if p := listed.Changes[i].Parent; p != "" && p != beneath {
-		return &waitError{code: types.CodeWaitRestack, reason: "the provider now says it is stacked on #" + p + ", not #" + beneath}
+		return &waitError{code: types.CodeWaitRestack, reason: fmt.Sprintf("the provider now says it is stacked on #%s, not #%s", p, beneath)}
 	}
 	return nil
 }
@@ -560,7 +560,7 @@ func (r *applyRun) mergedBeneath(ctx context.Context, merged []types.MergedChang
 				return "", err
 			}
 			if in {
-				return "", unverified(c, "stack base "+short(c.StackBase)+" is not the newest commit of #"+m.ID+" it carries, "+short(newer.ID))
+				return "", unverified(c, fmt.Sprintf("stack base %s is not the newest commit of #%s it carries, %s", short(c.StackBase), m.ID, short(newer.ID)))
 			}
 		}
 		if err := r.vcs.FetchCommit(ctx, root, r.clone.Remote, m.Commit); err != nil {
@@ -571,11 +571,11 @@ func (r *applyRun) mergedBeneath(ctx context.Context, merged []types.MergedChang
 			return "", err
 		}
 		if !on {
-			return "", unverified(c, "#"+m.ID+" beneath it merged as "+short(m.Commit)+", which "+r.plan.Base+" does not carry")
+			return "", unverified(c, fmt.Sprintf("#%s beneath it merged as %s, which %s does not carry", m.ID, short(m.Commit), r.plan.Base))
 		}
 		return m.ID, nil
 	}
-	return "", unverified(c, "stack base "+short(c.StackBase)+" is neither the head of a change beneath it nor a commit of one the provider lists as merged")
+	return "", unverified(c, fmt.Sprintf("stack base %s is neither the head of a change beneath it nor a commit of one the provider lists as merged", short(c.StackBase)))
 }
 
 // listed is the provider's own listing of the base, read once per run.
@@ -598,7 +598,7 @@ func (r *applyRun) mergeOne(ctx context.Context, v types.Verdict) (bool, error) 
 	}
 	onto, ok := r.onto(v)
 	if !ok {
-		return false, r.wait(ctx, c, c.Head, types.CodeWaitRevalidate, "validated on top of #"+v.After+", whose candidate this run did not rebuild")
+		return false, r.wait(ctx, c, c.Head, types.CodeWaitRevalidate, fmt.Sprintf("validated on top of #%s, whose candidate this run did not rebuild", v.After))
 	}
 	tip, err := r.tip(ctx)
 	if err != nil {
@@ -645,11 +645,11 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 	case a.Head != c.Head:
 		moved := c
 		moved.Head = a.Head
-		return nil, r.wait(ctx, moved, a.Head, types.CodeWaitHeadMoved, "head moved to "+short(a.Head)+" after validation; retried next run")
+		return nil, r.wait(ctx, moved, a.Head, types.CodeWaitHeadMoved, fmt.Sprintf("head moved to %s after validation; retried next run", short(a.Head)))
 	case !a.Queued:
 		return nil, r.wait(ctx, c, c.Head, types.CodeWaitWithdrawn, "its merge intent was withdrawn after validation")
 	case !a.Approved:
-		return nil, r.wait(ctx, c, c.Head, types.CodeWaitNotApproved, "approval at "+short(a.reviewed)+" was withdrawn"+reasonSuffix(a.Reason))
+		return nil, r.wait(ctx, c, c.Head, types.CodeWaitNotApproved, fmt.Sprintf("approval at %s was withdrawn%s", short(a.reviewed), reasonSuffix(a.Reason)))
 	}
 	if a.Base != r.plan.Base {
 		retargeted, err := r.retarget(ctx, c, a, tip, stackBase)
@@ -660,9 +660,9 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 	}
 	switch {
 	case a.Method != v.Method:
-		return nil, r.wait(ctx, c, c.Head, types.CodeWaitMethodChanged, "validated as "+string(v.Method)+", now "+string(a.Method)+"; validated again next run")
+		return nil, r.wait(ctx, c, c.Head, types.CodeWaitMethodChanged, fmt.Sprintf("validated as %s, now %s; validated again next run", string(v.Method), string(a.Method)))
 	case !r.caps.Allows(a.Method):
-		return nil, r.kick(ctx, c, refusal(&types.RefusedError{Reason: "the repository does not allow the " + string(a.Method) + " merge method",
+		return nil, r.kick(ctx, c, refusal(&types.RefusedError{Reason: fmt.Sprintf("the repository does not allow the %s merge method", string(a.Method)),
 			Remedy: "Pick a merge method it allows."}))
 	}
 	stale, settled, err := r.requiredChecks(ctx, c, tip)
@@ -727,7 +727,7 @@ func (r *applyRun) requiredChecks(ctx context.Context, c types.Change, tip strin
 		}
 		return failing, false, nil
 	case len(running) > 0:
-		return nil, true, r.wait(ctx, c, c.Head, types.CodeWaitChecks, "its required checks "+joinPaths(running)+" are running")
+		return nil, true, r.wait(ctx, c, c.Head, types.CodeWaitChecks, fmt.Sprintf("its required checks %s are running", joinPaths(running)))
 	}
 	return nil, false, nil
 }
@@ -735,9 +735,7 @@ func (r *applyRun) requiredChecks(ctx context.Context, c types.Change, tip strin
 // redChecksReport says which required checks failed on a head that carries the base's
 // tip, so the failure is the change's own.
 func redChecksReport(base, head, tip string, failing []string) string {
-	return "The merge queue cannot merge this change at `" + short(head) + "`: its required checks " + joinPaths(failing) +
-		" failed there, and it already carries `" + base + "` at `" + short(tip) + "`, so they failed on what it would merge onto.\n\n" +
-		"Fix them and push.\n"
+	return fmt.Sprintf("The merge queue cannot merge this change at `%s`: its required checks %s failed there, and it already carries `%s` at `%s`, so they failed on what it would merge onto.\n\nFix them and push.\n", short(head), joinPaths(failing), base, short(tip))
 }
 
 // rebuild builds v's candidate again onto onto and returns it once it is the commit
@@ -755,7 +753,7 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch, date: r.plan.CommitDate}
 	b, err := buildMerge(ctx, r.vcs, s)
 	if conf, ok := asConflict(err); ok {
-		return "", &waitError{code: types.CodeWaitRevalidate, reason: "rebuilding its candidate conflicted in " + joinPaths(conf.paths) + ", which validation did not; validated again next run"}
+		return "", &waitError{code: types.CodeWaitRevalidate, reason: fmt.Sprintf("rebuilding its candidate conflicted in %s, which validation did not; validated again next run", joinPaths(conf.paths))}
 	}
 	if err != nil {
 		return "", err
@@ -772,7 +770,7 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 		return "", err
 	}
 	if len(regen) == 0 {
-		return "", &waitError{code: types.CodeWaitRevalidate, reason: "rebuilding its candidate gave " + short(b.Commit) + ", not the validated " + short(v.CandidateCommit) + "; validated again next run"}
+		return "", &waitError{code: types.CodeWaitRevalidate, reason: fmt.Sprintf("rebuilding its candidate gave %s, not the validated %s; validated again next run", short(b.Commit), short(v.CandidateCommit))}
 	}
 	g, err := r.generation(ctx, c, regen, onto, b.touched)
 	var unproven *types.RefusedError
@@ -784,8 +782,7 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 		// settled is then the commit its gate ran on, which this job just built itself.
 		if b.Commit == v.CandidateCommit {
 			r.taken[c.ID] = true
-			r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Commit: b.Commit, Reason: "took its own merge, the commit validation gated, which settles " +
-				joinPaths(b.settled) + " as the change has them"})
+			r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Commit: b.Commit, Reason: fmt.Sprintf("took its own merge, the commit validation gated, which settles %s as the change has them", joinPaths(b.settled))})
 			return b.Commit, nil
 		}
 	}
@@ -798,8 +795,7 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 	}
 	if commit != v.CandidateCommit {
 		written, _ := r.vcs.DiffTrees(ctx, r.clone.Root, commit, v.CandidateCommit)
-		return "", &types.RefusedError{Paths: written, Reason: "the base's regeneration of " + joinPaths(regen) + " differs from what validation produced in " +
-			joinPaths(written), Remedy: r.mergeBaseIn()}
+		return "", &types.RefusedError{Paths: written, Reason: fmt.Sprintf("the base's regeneration of %s differs from what validation produced in %s", joinPaths(regen), joinPaths(written)), Remedy: r.mergeBaseIn()}
 	}
 	return commit, nil
 }
@@ -826,10 +822,10 @@ func (r *applyRun) takeValidated(ctx context.Context, v types.Verdict, b built, 
 	}
 	cm, err := r.vcs.FindCommit(ctx, root, want)
 	if err != nil {
-		return refuse(nil, "does not hold "+short(want)+", the commit its gate ran on")
+		return refuse(nil, fmt.Sprintf("does not hold %s, the commit its gate ran on", short(want)))
 	}
 	if len(cm.Parents) != 1 || cm.Parents[0] != merged {
-		return refuse(nil, "is not a commit on "+short(merged)+", this job's own merge of it onto what it was built onto")
+		return refuse(nil, fmt.Sprintf("is not a commit on %s, this job's own merge of it onto what it was built onto", short(merged)))
 	}
 	changed, err := r.vcs.DiffTrees(ctx, root, merged, want)
 	if err != nil {
@@ -839,7 +835,7 @@ func (r *applyRun) takeValidated(ctx context.Context, v types.Verdict, b built, 
 		if err != nil {
 			return "", err
 		}
-		return refuse(src, "changes "+joinPaths(src)+", which the base does not declare as any target's output")
+		return refuse(src, fmt.Sprintf("changes %s, which the base does not declare as any target's output", joinPaths(src)))
 	}
 	// No capability reports a tree entry's mode, so a checkout of the candidate shows
 	// them, beside b's checkout of the merge.
@@ -853,10 +849,10 @@ func (r *applyRun) takeValidated(ctx context.Context, v types.Verdict, b built, 
 		return "", err
 	}
 	if path != "" {
-		return refuse([]string{path}, "holds "+types.CodeSpan(path)+" as "+why+", which regenerating a declared output does not write")
+		return refuse([]string{path}, fmt.Sprintf("holds %s as %s, which regenerating a declared output does not write", types.CodeSpan(path), why))
 	}
 	r.taken[v.Change.ID] = true
-	r.Events.Emit(Event{Kind: EventNotice, Change: v.Change.ID, Commit: want, Reason: "took validation's regeneration of " + joinPaths(changed) + " after checking it"})
+	r.Events.Emit(Event{Kind: EventNotice, Change: v.Change.ID, Commit: want, Reason: fmt.Sprintf("took validation's regeneration of %s after checking it", joinPaths(changed))})
 	return want, nil
 }
 
@@ -869,8 +865,7 @@ func (r *applyRun) takeValidated(ctx context.Context, v types.Verdict, b built, 
 // for a run whose base holds it.
 func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []string, at string, added []string) (types.Generation, error) {
 	if r.Regenerate == nil {
-		return types.Generation{}, &types.RefusedError{Paths: outputs, Reason: "merging it needs " + joinPaths(outputs) +
-			" regenerated, and this queue regenerates nothing", Remedy: r.mergeBaseIn()}
+		return types.Generation{}, &types.RefusedError{Paths: outputs, Reason: fmt.Sprintf("merging it needs %s regenerated, and this queue regenerates nothing", joinPaths(outputs)), Remedy: r.mergeBaseIn()}
 	}
 	own, err := r.vcs.RangeFiles(ctx, r.clone.Root, r.plan.BaseCommit, c.Head, nil)
 	if err != nil {
@@ -896,12 +891,10 @@ func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []str
 	}
 	itsOwn := func(p string) bool { return slices.Contains(own, p) || slices.Contains(added, p) }
 	if len(g.Code) > 0 && !slices.ContainsFunc(g.Code, itsOwn) {
-		return types.Generation{}, &waitError{code: types.CodeWaitRevalidate, reason: "regenerating " + joinPaths(outputs) + " on " + short(at) +
-			" would run " + joinPaths(g.Code) + ", which it does not change but what it builds on does; validated again next run"}
+		return types.Generation{}, &waitError{code: types.CodeWaitRevalidate, reason: fmt.Sprintf("regenerating %s on %s would run %s, which it does not change but what it builds on does; validated again next run", joinPaths(outputs), short(at), joinPaths(g.Code))}
 	}
 	why, paths := unprovenWhy(g, outputs)
-	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: "merging it needs " + joinPaths(outputs) + " regenerated, and " + why + " (" + joinPaths(paths) +
-		"), and validation left no regenerated candidate this queue can check, so only its author can regenerate them",
+	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: fmt.Sprintf("merging it needs %s regenerated, and %s (%s), and validation left no regenerated candidate this queue can check, so only its author can regenerate them", joinPaths(outputs), why, joinPaths(paths)),
 		Remedy: r.mergeBaseIn() + " Then queue it again: the merge leaves them as they are.", Code: types.CodeKickRegeneration}
 }
 
@@ -911,7 +904,7 @@ func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []str
 func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regenerationProof) error {
 	for _, ob := range owed {
 		unreviewed := func(why string) error {
-			return &waitError{code: types.CodeWaitNotApproved, reason: "not approved at " + short(ob.Commit) + ": " + why}
+			return &waitError{code: types.CodeWaitNotApproved, reason: fmt.Sprintf("not approved at %s: %s", short(ob.Commit), why)}
 		}
 		plain, err := r.vcs.MergeTrees(ctx, r.clone.Root, magustypes.TreeMerge{Ours: ob.Onto, Theirs: ob.First})
 		if err != nil {
@@ -986,7 +979,7 @@ func (r *applyRun) regenerateAt(ctx context.Context, c types.Change, commit, ont
 // base. Any other base means c was retargeted after planning, and it is skipped.
 func (r *applyRun) retarget(ctx context.Context, c types.Change, a approvalResult, tip, stackBase string) (*approvalResult, error) {
 	skip := func() (*approvalResult, error) {
-		return nil, r.wait(ctx, c, c.Head, types.CodeWaitRetarget, "targets "+a.Base+", not "+r.plan.Base+"; skipped")
+		return nil, r.wait(ctx, c, c.Head, types.CodeWaitRetarget, fmt.Sprintf("targets %s, not %s; skipped", a.Base, r.plan.Base))
 	}
 	gi, pos, ok := find(r.plan, c.Below)
 	if !ok || !retargetable(c, r.plan.Partitions[gi][pos], r.merged[c.Below], a.Base) {
@@ -1000,7 +993,7 @@ func (r *applyRun) retarget(ctx context.Context, c types.Change, a approvalResul
 		return nil, err
 	}
 	if again.Base != r.plan.Base || again.Head != c.Head || !again.Approved || !again.Queued {
-		return nil, r.wait(ctx, c, c.Head, types.CodeWaitRetarget, "targets "+again.Base+", not "+r.plan.Base+"; asked the provider to retarget it")
+		return nil, r.wait(ctx, c, c.Head, types.CodeWaitRetarget, fmt.Sprintf("targets %s, not %s; asked the provider to retarget it", again.Base, r.plan.Base))
 	}
 	return &again, nil
 }
@@ -1024,8 +1017,7 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 	case err != nil:
 		return false, fmt.Errorf("push the update commit of %s: %w", c.Label(), err)
 	case len(rd.stale) > 0:
-		return false, r.wait(ctx, c, commit, types.CodeWaitChecks, "its required checks "+joinPaths(rd.stale)+" failed on an older "+r.plan.Base+
-			"; pushed "+short(commit)+", which carries "+short(tip)+", to run them again")
+		return false, r.wait(ctx, c, commit, types.CodeWaitChecks, fmt.Sprintf("its required checks %s failed on an older %s; pushed %s, which carries %s, to run them again", joinPaths(rd.stale), r.plan.Base, short(commit), short(tip)))
 	}
 	if ok, err := r.stillQueued(ctx, c, commit); !ok || err != nil {
 		return false, err
@@ -1043,7 +1035,7 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 	}
 	// Green before the merge: a provider that merges on its own once the status passes
 	// (GitHub's auto-merge) merges now, and one that does not takes the queue's call.
-	if err := r.post(ctx, c, commit, types.StateSuccess, "validated as "+short(rd.cand)+"; merging"); err != nil {
+	if err := r.post(ctx, c, commit, types.StateSuccess, fmt.Sprintf("validated as %s; merging", short(rd.cand))); err != nil {
 		r.revokeOne(ctx, c, commit, err)
 		return false, err
 	}
@@ -1091,11 +1083,11 @@ func (r *applyRun) stillQueued(ctx context.Context, c types.Change, commit strin
 	case a.Head != commit:
 		moved := c
 		moved.Head = a.Head
-		return false, r.wait(ctx, moved, a.Head, types.CodeWaitHeadMoved, "head moved to "+short(a.Head)+" before its merge; retried next run")
+		return false, r.wait(ctx, moved, a.Head, types.CodeWaitHeadMoved, fmt.Sprintf("head moved to %s before its merge; retried next run", short(a.Head)))
 	case !a.Queued:
 		return false, r.wait(ctx, c, commit, types.CodeWaitWithdrawn, "its merge intent was withdrawn before its merge")
 	case a.Base != r.plan.Base:
-		return false, r.wait(ctx, c, commit, types.CodeWaitRetarget, "targets "+a.Base+", not "+r.plan.Base+"; skipped")
+		return false, r.wait(ctx, c, commit, types.CodeWaitRetarget, fmt.Sprintf("targets %s, not %s; skipped", a.Base, r.plan.Base))
 	}
 	return true, nil
 }
@@ -1200,8 +1192,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 		}
 	}
 	if len(src) > 0 {
-		return "", &types.RefusedError{Paths: src, Reason: "validated at `" + short(c.Head) + "`, but merging it the way the provider would differs from what was validated in " +
-			joinPaths(src), Remedy: "Rebase it onto `" + r.plan.Base + "`."}
+		return "", &types.RefusedError{Paths: src, Reason: fmt.Sprintf("validated at `%s`, but merging it the way the provider would differs from what was validated in %s", short(c.Head), joinPaths(src)), Remedy: fmt.Sprintf("Rebase it onto `%s`.", r.plan.Base)}
 	}
 	outputs, err := r.vcs.DiffTrees(ctx, root, reviewed, rd.tree)
 	if err != nil {
@@ -1211,8 +1202,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 		return slices.ContainsFunc(resolved, func(s settledSource) bool { return s.path == p })
 	})
 	if len(resolved) > 0 && c.Method == types.MethodRebase {
-		return "", &types.RefusedError{Paths: resolvedPaths(resolved), Reason: "its merge onto `" + r.plan.Base + "` " + resolvedNote(resolved) +
-			", and a rebase replays its commits onto `" + r.plan.Base + "`, where they still conflict", Remedy: "Pick another merge method, or rebase it onto `" + r.plan.Base + "`."}
+		return "", &types.RefusedError{Paths: resolvedPaths(resolved), Reason: fmt.Sprintf("its merge onto `%s` %s, and a rebase replays its commits onto `%s`, where they still conflict", r.plan.Base, resolvedNote(resolved), r.plan.Base), Remedy: fmt.Sprintf("Pick another merge method, or rebase it onto `%s`.", r.plan.Base)}
 	}
 	// A taken candidate differs from this job's merge in declared outputs alone, if at
 	// all, and its gate's drift check held those to their generators.
@@ -1221,33 +1211,34 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 			return "", err
 		}
 	}
-	needs, remedy := "its merge onto `"+r.plan.Base+"` needs an update commit", r.mergeBaseIn()
+	needs, remedy := fmt.Sprintf("its merge onto `%s` needs an update commit", r.plan.Base), r.mergeBaseIn()
 	if onlyStale {
-		needs = "its required checks " + joinPaths(rd.stale) + " failed on an older `" + r.plan.Base + "`, and running them again needs an update commit carrying it"
-		remedy = "Merge `" + r.plan.Base + "` in and push, which runs them again."
+		needs = fmt.Sprintf("its required checks %s failed on an older `%s`, and running them again needs an update commit carrying it", joinPaths(rd.stale), r.plan.Base)
+		remedy = fmt.Sprintf("Merge `%s` in and push, which runs them again.", r.plan.Base)
 	}
 	switch {
 	case c.Branch == "":
 		return "", &types.RefusedError{Reason: needs + ", and the queue cannot push to its branch", Remedy: remedy}
 	case len(rd.approval.BranchSharedWith) > 0:
-		return "", &types.RefusedError{Reason: needs + ", and its branch is also the head of " +
-			joinIDs(rd.approval.BranchSharedWith) + ", which would gain it too", Remedy: remedy}
+		return "", &types.RefusedError{Reason: fmt.Sprintf("%s, and its branch is also the head of %s, which would gain it too", needs, joinIDs(rd.approval.BranchSharedWith)), Remedy: remedy}
 	}
 	if r.committer == (magustypes.Person{}) {
 		return "", types.ErrNoCommitter
 	}
-	parents, msg := []string{c.Head, rd.tip}, "merge "+r.plan.Base+" into #"+c.ID+" and regenerate generated files"
+	parents, msg := []string{c.Head, rd.tip}, fmt.Sprintf("merge %s into #%s and regenerate generated files", r.plan.Base, c.ID)
 	if onlyStale {
-		msg = "merge " + r.plan.Base + " into #" + c.ID + " to run its required checks again"
+		msg = fmt.Sprintf("merge %s into #%s to run its required checks again", r.plan.Base, c.ID)
 	}
 	if len(resolved) > 0 {
-		msg += "\n\nThe merge queue " + resolvedNote(resolved) + "."
+		msg += fmt.Sprintf(`
+
+The merge queue %s.`, resolvedNote(resolved))
 	}
 	switch {
 	case c.Method == types.MethodRebase && onlyStale:
 		// A commit on the head holding the base would be replayed as the change's own.
 		return "", &types.RefusedError{Reason: needs + ", and a change merged by rebase takes the base only by rebasing its commits, which the queue leaves to its author",
-			Remedy: "Rebase it onto `" + r.plan.Base + "` and push, which runs them again."}
+			Remedy: fmt.Sprintf("Rebase it onto `%s` and push, which runs them again.", r.plan.Base)}
 	case c.Method == types.MethodRebase:
 		// The provider replays the head's commits and then this one, whose tree is the
 		// validated one.
@@ -1262,12 +1253,12 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs its branch restacked onto it, which would replace the commits #" + above +
-				" is stacked on", Remedy: "Restack the stack onto `" + r.plan.Base + "`."}
+			return "", &types.RefusedError{Reason: fmt.Sprintf("its merge onto `%s` needs its branch restacked onto it, which would replace the commits #%s is stacked on", r.plan.Base, above), Remedy: fmt.Sprintf("Restack the stack onto `%s`.", r.plan.Base)}
 		}
 		parents = []string{rd.tip}
-		msg = "restack #" + c.ID + " onto " + r.plan.Base + "\n\nReplaces " + c.Head + " and the commits beneath it that " +
-			r.plan.Base + " lacks with one commit holding their delta onto " + short(rd.tip) + "."
+		msg = fmt.Sprintf(`restack #%s onto %s
+
+Replaces %s and the commits beneath it that %s lacks with one commit holding their delta onto %s.`, c.ID, r.plan.Base, c.Head, r.plan.Base, short(rd.tip))
 	}
 	update, err := r.vcs.CommitTree(ctx, root, magustypes.TreeCommit{
 		// The queue's own identity authors it too: its content is the base and the base's
@@ -1285,7 +1276,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	case errors.Is(err, magustypes.ErrStaleLease):
 		return "", &waitError{code: types.CodeWaitBranchMoved, reason: "its branch moved or was deleted since validation"}
 	case errors.As(err, &rejected):
-		return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs an update commit, and its branch refused it: " + types.CodeSpan(rejected.Reason),
+		return "", &types.RefusedError{Reason: fmt.Sprintf("its merge onto `%s` needs an update commit, and its branch refused it: %s", r.plan.Base, types.CodeSpan(rejected.Reason)),
 			Remedy: r.mergeBaseIn()}
 	}
 	return update, err
@@ -1323,7 +1314,7 @@ func joinIDs(ids []string) string {
 // next run's cleanup removes it.
 func (r *applyRun) discard(ctx context.Context, cand types.Candidate) {
 	if err := discard(ctx, r.vcs, r.clone.Root, cand); err != nil {
-		r.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkout " + cand.Dir + ": " + err.Error()})
+		r.Events.Emit(Event{Kind: EventNotice, Reason: fmt.Sprintf("remove checkout %s: %s", cand.Dir, err.Error())})
 	}
 }
 
@@ -1413,7 +1404,7 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 		if rd == nil {
 			// It waits or was kicked back; what is stacked on it cannot merge without it.
 			for _, above := range run[i+1:] {
-				if err := r.wait(ctx, above, above.Head, types.CodeWaitBelow, "stacked on #"+c.ID+", which did not merge"); err != nil {
+				if err := r.wait(ctx, above, above.Head, types.CodeWaitBelow, fmt.Sprintf("stacked on #%s, which did not merge", c.ID)); err != nil {
 					return 0, err
 				}
 			}
@@ -1429,7 +1420,7 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 		}
 		if !ok {
 			for _, above := range steps[i+1:] {
-				if err := r.wait(ctx, above.v.Change, above.v.Change.Head, types.CodeWaitBelow, "stacked on #"+st.v.Change.ID+", which did not merge"); err != nil {
+				if err := r.wait(ctx, above.v.Change, above.v.Change.Head, types.CodeWaitBelow, fmt.Sprintf("stacked on #%s, which did not merge", st.v.Change.ID)); err != nil {
 					return 0, err
 				}
 			}
@@ -1475,7 +1466,7 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 		return 0, fmt.Errorf("squash message of %s: %w", top.v.Change.Label(), err)
 	}
 	for i, st := range steps {
-		if err := r.post(ctx, st.v.Change, st.v.Change.Head, types.StateSuccess, "validated as "+short(st.cand)+"; merging in a stack"); err != nil {
+		if err := r.post(ctx, st.v.Change, st.v.Change.Head, types.StateSuccess, fmt.Sprintf("validated as %s; merging in a stack", short(st.cand))); err != nil {
 			r.revoke(ctx, steps[:i+1], err)
 			return 0, err
 		}
@@ -1530,7 +1521,7 @@ func (r *applyRun) revokeOne(ctx context.Context, c types.Change, commit string,
 // baseMoved is why a change waits when base is no longer at the tip its merge was
 // predicted onto, right before it would go green.
 func baseMoved(base, now string) string {
-	return base + " moved to " + short(now) + " before its merge; validated again next run"
+	return fmt.Sprintf("%s moved to %s before its merge; validated again next run", base, short(now))
 }
 
 // ownDeltas reports whether what a provider merging a stack atomically produces is each
@@ -1597,9 +1588,9 @@ func (r *applyRun) stackMerged(ctx context.Context, tip, after string, steps []*
 }
 
 func refusal(r *types.RefusedError) types.Kick {
-	report := "The merge queue validated this change but cannot merge it: " + r.Reason + ".\n"
+	report := fmt.Sprintf("The merge queue validated this change but cannot merge it: %s.\n", r.Reason)
 	if r.Remedy != "" {
-		report += "\n" + r.Remedy + "\n"
+		report += fmt.Sprintf("\n%s\n", r.Remedy)
 	}
 	code := r.Code
 	if code == "" {
@@ -1610,7 +1601,7 @@ func refusal(r *types.RefusedError) types.Kick {
 
 // mergeBaseIn is the remedy for what only the author can regenerate.
 func (r *applyRun) mergeBaseIn() string {
-	return "Merge `" + r.plan.Base + "` in, regenerate, and push."
+	return fmt.Sprintf("Merge `%s` in, regenerate, and push.", r.plan.Base)
 }
 
 // kick kicks c back for its head. A head pushed since the kick was decided gets a
@@ -1624,7 +1615,7 @@ func (r *applyRun) kick(ctx context.Context, c types.Change, k types.Kick) error
 		if a.Head != c.Head {
 			moved := c
 			moved.Head = a.Head
-			return r.wait(ctx, moved, a.Head, types.CodeWaitHeadMoved, "head moved to "+short(a.Head)+" since it was decided; decided again next run")
+			return r.wait(ctx, moved, a.Head, types.CodeWaitHeadMoved, fmt.Sprintf("head moved to %s since it was decided; decided again next run", short(a.Head)))
 		}
 	}
 	k.Source = r.Source
@@ -1704,11 +1695,11 @@ func (r *applyRun) mark(ctx context.Context, c types.Change, m types.Mark) {
 		return
 	}
 	if err := r.provider.Mark(ctx, c, m); err != nil {
-		what := "mark #" + c.ID + " " + string(m)
+		what := fmt.Sprintf("mark #%s %s", c.ID, string(m))
 		if m == types.MarkNone {
 			what = "clear the mark on #" + c.ID
 		}
-		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: "could not " + what + ": " + err.Error()})
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: fmt.Sprintf("could not %s: %s", what, err.Error())})
 	}
 }
 

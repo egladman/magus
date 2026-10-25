@@ -248,7 +248,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 			target, charms := splitTargetRef(ref)
 			display := target
 			if len(charms) > 0 {
-				display = target + ":" + strings.Join(charms, ",")
+				display = fmt.Sprintf("%s:%s", target, strings.Join(charms, ","))
 			}
 			tr.addOp("run", display, "")
 		}
@@ -526,7 +526,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}
 	m.MapSet("dir", fn("magus.dir", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		p := firstStr(args)
-		return bindgen.ObjectDir(types.Dir{Path: p, ID: types.KindDir + ":" + p}), nil
+		return bindgen.ObjectDir(types.Dir{Path: p, ID: fmt.Sprintf("%s:%s", types.KindDir, p)}), nil
 	}))
 	m.MapSet("dirs", fn("magus.dirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
@@ -709,7 +709,6 @@ func buildCtx(tr *Tracer) vm.Value {
 	c.MapSet("narrowed", fn("ctx.narrowed", func(context.Context, []vm.Value) (vm.Value, error) { return vm.BoolValue(false), nil }))
 	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
-	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))
 	c.MapSet("observes", fn("ctx.observes", retNull))
 	// Inert, like the file declarations above: a dry run holds nothing, and driving
 	// the resource fiber would run its acquire and release halves for real, which is
@@ -890,7 +889,7 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 						return fmt.Errorf(
 							"magus.project: targets[%q].slots must be >= 1, got %d", rawName, n)
 					}
-					p.Slots = append(p.Slots, name+"="+strconv.FormatInt(n, 10))
+					p.Slots = append(p.Slots, fmt.Sprintf("%s=%d", name, n))
 				}
 			}
 		}

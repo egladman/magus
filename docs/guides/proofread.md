@@ -147,9 +147,11 @@ Read the counts with `stats`:
 proofread stats -o text
 ```
 
-Each rule's `not_useful_rate` is (suppressed + reported) / (suppressed + reported +
-fixed). A rule at or over 10% is flagged `probation`, and one at or over 25% is flagged
-`ship-off`: turn it off in the decisions table, or fix the rule.
+Each rule's `not_useful_rate` is one minus precision over its recorded findings:
+(suppressed + reported) / (suppressed + reported + fixed), printed beside those three
+counts. A rule at or over 10% (precision 90% or less) is flagged `probation`, and one at
+or over 25% (precision 75% or less) is flagged `ship-off`: turn it off in the decisions
+table, or fix the rule.
 
 Nothing leaves the machine. The counts live in `$XDG_STATE_HOME/proofread/outcomes.json`
 (`~/.local/state/proofread/outcomes.json` when the variable is unset), hold fingerprints

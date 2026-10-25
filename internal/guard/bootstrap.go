@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -294,7 +295,8 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
 	case o.lease != "" && (o.recovery || o.bootstrap || o.link || !o.hasBinary):
 		// Replaces every pass-through and every "get one with" below: each names a build.
-		v.Why = onePerBase + "\n" + denial{Say: v.Deny, Why: v.Why}.full()
+		v.Why = fmt.Sprintf(`%s
+%s`, onePerBase, denial{Say: v.Deny, Why: v.Why}.full())
 		v.Deny = workerBuildVerdict
 		v.Next, v.Lead = nil, ""
 		return v.withRemedy(v.Deny, placementNext(denyRuleRawTool, o.lease))
@@ -304,21 +306,22 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return o.staleBootstrapAdvisory
 	case o.hasBinary && (o.bootstrap || o.link):
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = "magus workspace: not a bootstrap: " + o.root + " already has a magus binary; rebuild with " + ownRebuild + "."
+		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with %s.", o.root, ownRebuild)
 		v.Next, v.Lead = nil, ""
 		return v
 	case o.hasBinary:
 		return v
 	case o.bootstrap && o.multipleCmds:
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = "magus workspace: the bootstrap runs only alone on its line; drop " + dropList(o.others) + "."
+		v.Deny = fmt.Sprintf("magus workspace: the bootstrap runs only alone on its line; drop %s.", dropList(o.others))
 		v.Next, v.Lead = nil, ""
 		return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
 	case o.bootstrap && o.prefixed:
 		return o.advisory
 	}
-	v.Why = bootstrapWhy + "\n" + denial{Say: v.Deny, Why: v.Why}.full()
-	v.Deny = "magus workspace: " + o.root + " has no magus binary yet; one command builds it."
+	v.Why = fmt.Sprintf(`%s
+%s`, bootstrapWhy, denial{Say: v.Deny, Why: v.Why}.full())
+	v.Deny = fmt.Sprintf("magus workspace: %s has no magus binary yet; one command builds it.", o.root)
 	v.Next, v.Lead = nil, ""
 	return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
 }
@@ -327,7 +330,7 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 func dropList(parts []string) string {
 	quoted := make([]string, len(parts))
 	for i, p := range parts {
-		quoted[i] = "`" + p + "`"
+		quoted[i] = fmt.Sprintf("`%s`", p)
 	}
 	switch len(quoted) {
 	case 0:
@@ -335,7 +338,7 @@ func dropList(parts []string) string {
 	case 1:
 		return quoted[0]
 	}
-	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
+	return fmt.Sprintf("%s and %s", strings.Join(quoted[:len(quoted)-1], ", "), quoted[len(quoted)-1])
 }
 
 // besideGoCall renders every command on a line but its first go call, each with the
@@ -377,9 +380,9 @@ func besideGoCall(command string, d Dialect) []string {
 		switch {
 		case i == goAt:
 		case i < goAt:
-			out = append(out, p.text+" "+parts[i+1].op)
+			out = append(out, fmt.Sprintf("%s %s", p.text, parts[i+1].op))
 		default:
-			out = append(out, strings.TrimSpace(p.op+" "+p.text))
+			out = append(out, strings.TrimSpace(fmt.Sprintf("%s %s", p.op, p.text)))
 		}
 	}
 	return out
@@ -415,19 +418,19 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		multipleCmds:  multipleCmds,
 		others:        besideGoCall(command, d),
 		advisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: bootstrap allowed because " + where + " has no magus binary yet: use ./magus from then on.",
+			Context: fmt.Sprintf("magus workspace: bootstrap allowed because %s has no magus binary yet: use ./magus from then on.", where),
 			Why:     "A bootstrap is the one go command allowed here: " + bootstrapWhy,
 			Rule:    rule,
 		}, workspaceShell),
 		recovery: recovery,
 		recoveryAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: recovery allowed because " + where + " cannot load its own sources (MGS1021): relink and regenerate only, then rebuild with " + ownRebuild + ".",
+			Context: fmt.Sprintf("magus workspace: recovery allowed because %s cannot load its own sources (MGS1021): relink and regenerate only, then rebuild with %s.", where, ownRebuild),
 			Why:     "No magus target can run until the checkout loads its own sources again, so only the go commands that repair it are let through.",
 			Rule:    rule,
 		}, workspaceShell),
 		staleBootstrap: staleBootstrap,
 		staleBootstrapAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: bootstrap allowed because ./magus in " + where + " is older than its sources or cannot load it: the bootstrap replaces it.",
+			Context: fmt.Sprintf("magus workspace: bootstrap allowed because ./magus in %s is older than its sources or cannot load it: the bootstrap replaces it.", where),
 			Why:     "A binary older than its sources may not load the tree or rebuild itself, so the bootstrap is the one go command allowed here: " + bootstrapWhy,
 			Rule:    rule,
 		}, workspaceShell),
@@ -532,7 +535,7 @@ func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, dir 
 		return denial{}
 	}
 	return denial{
-		Say: "magus workspace: `magus buzz " + job.CheckoutBootstrapScript + " -- --checkout " + dir + "` builds ./magus in a checkout lease " + deps.lease + " does not own; the root places it.",
+		Say: fmt.Sprintf("magus workspace: `magus buzz %s -- --checkout %s` builds ./magus in a checkout lease %s does not own; the root places it.", job.CheckoutBootstrapScript, dir, deps.lease),
 		Why: workerBuildVerdict + ". Only the root and the holder of the job whose checkout it names run it.\n" + onePerBase,
 	}
 }

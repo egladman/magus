@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,8 +32,8 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 
 	stale := verdict(true, false)
 	assert.Equal(t, denyRuleSymbolSearch, stale.Rule.Name, "a stale index still knows the name, so the search is refused")
-	assert.Contains(t, stale.Deny, "the symbol index is older than the sources it covers; rebuild it: `"+hint.GraphBuild.With("--silent")+"`.")
-	assert.Contains(t, stale.Why, "Then `"+hint.Refs.With("HandleRequest", "--occurrences")+"` answers this exactly.")
+	assert.Contains(t, stale.Deny, fmt.Sprintf("the symbol index is older than the sources it covers; rebuild it: `%s`.", hint.GraphBuild.With("--silent")))
+	assert.Contains(t, stale.Why, fmt.Sprintf("Then `%s` answers this exactly.", hint.Refs.With("HandleRequest", "--occurrences")))
 	require.Len(t, stale.Next, 2, "the rebuild, then refs")
 	assert.Equal(t, hint.GraphBuild.With("--silent"), stale.Next[0].Run)
 	assert.Contains(t, stale.Lead, "Classified:", "the lead replaces the deny, so it carries the classification")

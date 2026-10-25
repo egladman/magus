@@ -224,18 +224,18 @@ func provider(t *testing.T, pp ...spells.ProvidedProject) string {
 		for i, s := range ss {
 			quoted[i] = strconv.Quote(s)
 		}
-		return "[" + strings.Join(quoted, ", ") + "]"
+		return fmt.Sprintf("[%s]", strings.Join(quoted, ", "))
 	}
 	var appends strings.Builder
 	for _, p := range pp {
 		fmt.Fprintf(&appends, "    projects.append(Project{ path = %q, name = %q, spells = %s, depends_on = %s, sources = %s, outputs = %s });\n",
 			p.Path, p.Name, list(p.Spells), list(p.DependsOn), list(p.Sources), list(p.Outputs))
 	}
-	return register.Spell(t, "provider", spells.WithFuncSource(`import "magus/spell";
+	return register.Spell(t, "provider", spells.WithFuncSource(fmt.Sprintf(`import "magus/spell";
 export fun list_projects(target: Target, req: ProjectQuery) > [Project] {
     final projects = mut [<Project>];
-`+appends.String()+`    return projects;
-}`))
+%s    return projects;
+}`, appends.String())))
 }
 
 // TestProvidedProjectIsAFullProject is the end-to-end claim the whole mechanism

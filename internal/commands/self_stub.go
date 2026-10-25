@@ -20,7 +20,7 @@ downloads and replaces the binary, is not available. Rebuild without
 
 To bootstrap a workspace, use: magus init`,
 	Usage:    "magus self <subcommand> [flags]",
-	Children: []cmdline.Command{selfInstallShorthandCommand},
+	Children: []cmdline.Command{selfInstallShorthandCommand, selfPlaceCommand},
 	Examples: []cmdline.Example{
 		{Comment: "Install the mgs shorthand", Command: "magus self install-shorthand"},
 	},

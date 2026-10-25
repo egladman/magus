@@ -234,7 +234,7 @@ func TestAStepGroupEndsWhenItsRunIsKilled(t *testing.T) {
 	root := t.TempDir()
 
 	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), groupHolderEnv+"="+addr, groupRootEnv+"="+root)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", groupHolderEnv, addr), fmt.Sprintf("%s=%s", groupRootEnv, root))
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)
 	out, err := cmd.StdoutPipe()

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -140,7 +141,7 @@ func diagnosticGraph(_ context.Context, kind string) ([]string, bool) {
 	}
 	var ids []string
 	for _, code := range types.AllDiagnosticCodes() {
-		ids = append(ids, types.KindDiagnostic+":"+string(code))
+		ids = append(ids, fmt.Sprintf("%s:%s", types.KindDiagnostic, string(code)))
 	}
 	return ids, true
 }

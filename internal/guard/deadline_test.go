@@ -3,8 +3,10 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -351,6 +353,41 @@ func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
 	assert.Equal(t, unjudgedNote(), v.Context)
 }
 
+// A lapse passes a heredoc appended to a file outside every checkout and the workspace, such
+// as a plan in the host's own directory, with a note saying so. The same append into the
+// workspace, or beside a verb that changes state, is still denied.
+func TestUnjudgedPassesAnAppendOutsideEveryCheckout(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	workspace := hookLocation(ctx, Dependencies{}).workspace
+	require.NotEmpty(t, workspace)
+	outside := filepath.Join(t.TempDir(), "plans", "README.md")
+	nothing := func(context.Context) {}
+	appendTo := func(target string) string {
+		return fmt.Sprintf("cat >> %s <<'EOF'\n\n## Decision\n\n- ship it\nEOF", target)
+	}
+
+	for i, line := range []string{
+		appendTo(outside),
+		fmt.Sprintf("cd %s && %s", filepath.Dir(outside), appendTo("README.md")),
+		fmt.Sprintf("tee -a %s <<'EOF' >/dev/null\nline\nEOF", outside),
+		fmt.Sprintf("echo done > %s", outside),
+	} {
+		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "s1"}, nothing)
+		assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
+		assert.Equal(t, unjudgedOutsideNote(), v.Context, line)
+	}
+
+	for i, line := range []string{
+		appendTo(filepath.Join(workspace, "notes.md")),
+		fmt.Sprintf("%s && touch %s.bak", appendTo(outside), outside),
+		appendTo("relative.md"),
+		"cat >> $TARGET <<'EOF'\nline\nEOF",
+	} {
+		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "deny-" + strconv.Itoa(i)}, nothing)
+		assert.Equal(t, verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
+	}
+}
+
 // A workspace open that never answers does not hold a write's judgment past its deadline:
 // every rule that opens the workspace goes silent, the first by its own bound and the rest
 // at once, and the verdict is on time.
@@ -391,7 +428,7 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	testkit.Isolate(b)
 	repo := testkit.NewRepo(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": inertBenchRules})
 	root := repo.Root()
-	for _, f := range agent.ToolFiles(types.HarnessTools{Dir: "tools", Rows: testToolRows}, nil) {
+	for _, f := range testToolFiles() {
 		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f.Path)), 0o755); err != nil {
 			b.Fatal(err)
 		}
@@ -402,9 +439,8 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	cacheDir := b.TempDir()
 	ctx := WithLocation(b.Context(), cacheDir, root, root)
 	req := Request{
-		Input: `{"hook_event_name":"PreToolUse","session_id":"bench","cwd":"` + root + `","tool_name":"TodoWrite",` +
-			`"tool_input":{"todos":[{"content":"read the guard","status":"pending"}]}}`,
-		Host: "claude-code", Form: "buzz", Session: "bench",
+		Input: fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"bench\",\"cwd\":\"%s\",\"tool_name\":\"TodoWrite\",\"tool_input\":{\"todos\":[{\"content\":\"read the guard\",\"status\":\"pending\"}]}}", root),
+		Host:  "claude-code", Form: "buzz", Session: "bench",
 	}
 	load := func(ctx context.Context) Dependencies {
 		deps, rules := NewDependencies(ctx, Wiring{Root: root, CacheDir: func(string) (string, error) { return cacheDir, nil }})
@@ -416,7 +452,7 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	b.Run("fast", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			req.Tools = agent.ReadToolRows(root, "tools")
+			req.Tools = agent.FindToolRows(root, testToolHost)
 			judge := func(ctx context.Context) types.GuardJudgment { return Judge(ctx, load(ctx), req) }
 			if v := JudgeWithin(ctx, Dependencies{}, req, judge); v.Decision != decisionPass {
 				b.Fatalf("a todo list was not passed: %+v", v)
@@ -426,10 +462,40 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	b.Run("judged", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			req.Tools = agent.ReadToolRows(root, "tools")
+			req.Tools = agent.FindToolRows(root, testToolHost)
 			if v := Judge(ctx, load(ctx), req); v.Decision != decisionPass {
 				b.Fatalf("a todo list was not passed: %+v", v)
 			}
 		}
 	})
+}
+
+// BenchmarkPlainWriteWithAPendingPolicy is one hook judging a file write while the working
+// tree edits the root magusfile, so the approved sources load beside it: the compiled rules'
+// settings and the write rule both read them.
+func BenchmarkPlainWriteWithAPendingPolicy(b *testing.B) {
+	testkit.Isolate(b)
+	b.Setenv("XDG_CACHE_HOME", b.TempDir())
+	b.Setenv("XDG_STATE_HOME", b.TempDir())
+	const policy = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
+	repo := testkit.NewRepo(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": policy})
+	root := repo.Root()
+	repo.Magusfile(policy + "\nfun unused() > void {}\n")
+	cacheDir := b.TempDir()
+	ctx := WithLocation(b.Context(), cacheDir, root, root)
+	req := Request{
+		Input: fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"bench","cwd":%q,"tool_name":"Write","tool_input":{"file_path":%q,"content":"x\n"}}`,
+			root, filepath.Join(root, "notes.txt")),
+		Host: "claude-code", Session: "bench",
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		deps, rules := NewDependencies(ctx, Wiring{Root: root, CacheDir: func(string) (string, error) { return cacheDir, nil }})
+		if rules == nil || deps.LoadFailure != nil {
+			b.Fatalf("the rules did not load: %v", deps.LoadFailure)
+		}
+		if v := Judge(ctx, deps, req); v.Decision == decisionDeny {
+			b.Fatalf("a plain write was denied: %+v", v)
+		}
+	}
 }

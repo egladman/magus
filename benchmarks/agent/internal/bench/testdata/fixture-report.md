@@ -22,16 +22,16 @@ Expected dollars per correct solution (mean dollars / pass rate).
 | full    | 6 | 6      | 100%      | [0.610, 1.000] | $0.0890 | $0.0890  | $0.0890      |
 | rampant | 6 | 5      | 83%       | [0.436, 0.970] | $0.2161 | $0.2161  | $0.2594      |
 
-## Correctness against median tokens
+## Pass rate beside spend
 
-The cost-accuracy frontier in text: pass rate beside the token spend it cost.
+Each cell's pass@1, with its passes of its graded runs, beside the median tokens and dollars it spent.
 
-| arm     | task   | n | pass@1 | median tokens | median tokens (passes only) | median $ |
-| ------- | ------ | - | ------ | ------------- | --------------------------- | -------- |
-| full    | task-a | 3 | 100%   | 42000         | 42000                       | $0.0880  |
-| full    | task-b | 3 | 100%   | 42000         | 42000                       | $0.0900  |
-| rampant | task-a | 3 | 100%   | 107800        | 107800                      | $0.2161  |
-| rampant | task-b | 3 | 67%    | 107800        | 107800                      | $0.2161  |
+| arm     | task   | n | pass@1        | median tokens | median tokens (passes only) | median $ |
+| ------- | ------ | - | ------------- | ------------- | --------------------------- | -------- |
+| full    | task-a | 3 | 100% (3 of 3) | 42000         | 42000                       | $0.0880  |
+| full    | task-b | 3 | 100% (3 of 3) | 42000         | 42000                       | $0.0900  |
+| rampant | task-a | 3 | 100% (3 of 3) | 107800        | 107800                      | $0.2161  |
+| rampant | task-b | 3 | 67% (2 of 3)  | 107800        | 107800                      | $0.2161  |
 
 ## Paired deltas, full minus rampant
 
@@ -97,12 +97,12 @@ Rep i of one arm is paired with rep i of the other. CI is a seeded 10000-sample 
 
 pass@1 is capability; pass^k (all k reps succeed) is reliability.
 
-| arm     | task   | k | pass@1 | Wilson 95%     | pass^k |
-| ------- | ------ | - | ------ | -------------- | ------ |
-| full    | task-a | 3 | 100%   | [0.439, 1.000] | 1      |
-| full    | task-b | 3 | 100%   | [0.439, 1.000] | 1      |
-| rampant | task-a | 3 | 100%   | [0.439, 1.000] | 1      |
-| rampant | task-b | 3 | 67%    | [0.208, 0.939] | 0      |
+| arm     | task   | k | pass@1        | Wilson 95%     | pass^k |
+| ------- | ------ | - | ------------- | -------------- | ------ |
+| full    | task-a | 3 | 100% (3 of 3) | [0.439, 1.000] | 1      |
+| full    | task-b | 3 | 100% (3 of 3) | [0.439, 1.000] | 1      |
+| rampant | task-a | 3 | 100% (3 of 3) | [0.439, 1.000] | 1      |
+| rampant | task-b | 3 | 67% (2 of 3)  | [0.208, 0.939] | 0      |
 
 ## Caveats
 

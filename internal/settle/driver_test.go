@@ -41,7 +41,7 @@ import "fs";
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
     fs\writeFile("gen/regenerated.txt", "the merge driver regenerated");
 }
 `)
@@ -152,7 +152,7 @@ func TestMergeDriverTreatsAnExcludedFileAsSource(t *testing.T) {
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", "!gen/hand.txt");
+    ctx.writesFiles(["gen/**", "!gen/hand.txt"]);
 }
 `)
 	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
@@ -202,7 +202,7 @@ func autoResolveWorkspace(t *testing.T) *magus.Magus {
 magus\project({"merge_low_risk": ["fixtures/**"]})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
 }
 `)
 	m, err := magus.Open(context.Background(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
@@ -298,7 +298,7 @@ func gitArgvRecorder(t *testing.T) (logPath string) {
 	shim := testkit.NewWorkspace(t)
 	logPath = shim.Path("argv.log")
 	shim.WriteExecutable("git", fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %q\nexec %q \"$@\"\n", logPath, real))
-	t.Setenv("PATH", shim.Root()+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", fmt.Sprintf("%s%c%s", shim.Root(), os.PathListSeparator, os.Getenv("PATH")))
 	return logPath
 }
 

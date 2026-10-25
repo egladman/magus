@@ -238,9 +238,9 @@ func buildEntry(t *testing.T, project, hash, outPath, manifestBlob string, casBl
 		_, err := tw.Write(data)
 		require.NoError(t, err, "tar write %s", name)
 	}
-	add("manifests/"+flattenProject(project)+"/"+hash+".json", mb)
+	add(fmt.Sprintf("manifests/%s/%s.json", flattenProject(project), hash), mb)
 	for name, data := range casBlobs {
-		add("cas/"+name[:2]+"/"+name, data)
+		add(fmt.Sprintf("cas/%s/%s", name[:2], name), data)
 	}
 	require.NoError(t, tw.Close(), "tar close")
 	require.NoError(t, gz.Close(), "gzip close")
@@ -483,10 +483,10 @@ func TestRemoteRejectsDuplicateManifest(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 	})
 	require.NoError(t, err, "marshal manifest")
-	mPath := "manifests/" + flattenProject(project) + "/" + hash + ".json"
+	mPath := fmt.Sprintf("manifests/%s/%s.json", flattenProject(project), hash)
 	entry := buildRawEntry(t, []tarMember{
 		{mPath, mb},
-		{"cas/" + good[:2] + "/" + good, []byte("built")},
+		{fmt.Sprintf("cas/%s/%s", good[:2], good), []byte("built")},
 		{mPath, mb}, // duplicate manifest — must be rejected
 	})
 
@@ -513,11 +513,11 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 	})
 	require.NoError(t, err, "marshal manifest")
-	mPath := "manifests/" + flattenProject(project) + "/" + hash + ".json"
+	mPath := fmt.Sprintf("manifests/%s/%s.json", flattenProject(project), hash)
 	entry := buildRawEntry(t, []tarMember{
 		{mPath, mb},
-		{"cas/" + hashA[:2] + "/" + hashA, blobA},
-		{"cas/" + hashB[:2] + "/" + hashB, blobB},
+		{fmt.Sprintf("cas/%s/%s", hashA[:2], hashA), blobA},
+		{fmt.Sprintf("cas/%s/%s", hashB[:2], hashB), blobB},
 	})
 
 	root := t.TempDir()
@@ -696,7 +696,7 @@ func logRecord(t *testing.T, buf *bytes.Buffer, msg string) map[string]any {
 	t.Helper()
 	var rec map[string]any
 	for line := range strings.SplitSeq(buf.String(), "\n") {
-		if strings.Contains(line, `"msg":"`+msg+`"`) {
+		if strings.Contains(line, fmt.Sprintf("\"msg\":\"%s\"", msg)) {
 			rec = nil
 			require.NoError(t, json.Unmarshal([]byte(line), &rec))
 		}

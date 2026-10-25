@@ -435,7 +435,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	// looked at what a run PRODUCED is one step from wanting to run it. Only worth
 	// saying when the descriptor records a target to reproduce.
 	if desc.Target != "" {
-		interactive.Hint(ctx, "reproduce this invocation here with `"+hint.X.With(ref)+"`")
+		interactive.Hint(ctx, fmt.Sprintf("reproduce this invocation here with `%s`", hint.X.With(ref)))
 	}
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
 	if err == nil && desc.Failed && desc.ErrMsg != "" {
@@ -648,7 +648,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 			first, _, _ := strings.Cut(e.Text, "\n")
 			detail = strings.Join(slices.DeleteFunc([]string{e.Status, e.Project, e.Target, e.Ref, first}, func(s string) bool { return s == "" }), " ")
 		} else if e.Status != "" {
-			detail = strings.TrimSpace(e.Status + " " + detail)
+			detail = strings.TrimSpace(fmt.Sprintf("%s %s", e.Status, detail))
 		}
 		fmt.Printf("  %s  %-9s %s\n", time.UnixMilli(e.Timestamp).Format("15:04:05"), e.Kind, detail)
 	}
@@ -809,8 +809,7 @@ func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string)
 	case 0:
 		// Informative, not a failure to try: nothing here keys to the ref because the
 		// run that printed it had different inputs, not because this lookup is broken.
-		slog.InfoContext(ctx, "No target in this workspace keys to that ref at the current tree, which means the run that printed it had different inputs (a different commit, uncommitted change, or environment).\n"+
-			"Once you know which target it should be: "+hint.DescribeTargets.With("<target>", "--cache", "--against", ref), attr.Notice(""))
+		slog.InfoContext(ctx, fmt.Sprintf("No target in this workspace keys to that ref at the current tree, which means the run that printed it had different inputs (a different commit, uncommitted change, or environment).\nOnce you know which target it should be: %s", hint.DescribeTargets.With("<target>", "--cache", "--against", ref)), attr.Notice(""))
 	case 1:
 		slog.InfoContext(ctx, "Nothing has produced it here, but this workspace would print it for:\n  "+m.RefMatchCommand(matches[0]), attr.Notice(""))
 	default:

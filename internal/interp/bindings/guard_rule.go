@@ -183,7 +183,7 @@ func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gat
 		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: expected one non-empty key string`, member)
 	}
 	sum := sha256.Sum256([]byte(args[0].AsString()))
-	return facts, hint.MarkerKind("rule-" + member + "-" + hex.EncodeToString(sum[:8])), nil
+	return facts, hint.MarkerKind(fmt.Sprintf("rule-%s-%s", member, hex.EncodeToString(sum[:8]))), nil
 }
 
 // callFunctionRule runs a registered rule on req and reads its answer.

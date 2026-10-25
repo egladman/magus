@@ -46,36 +46,36 @@ func TestJobProblemsErrJoinsEveryProblemInRecordOrder(t *testing.T) {
 	assert.Contains(t, got[1].Error(), "second")
 }
 
-func TestWaivableIsOnlyTheThreeBreadthCodes(t *testing.T) {
+func TestPermissibleIsOnlyTheThreeBreadthCodes(t *testing.T) {
 	for _, c := range AllDiagnosticCodes() {
 		want := c == WritePathTooBroad || c == OutputOutsideWritePaths || c == GateNotRun
-		assert.Equalf(t, want, Waivable(c), "Waivable(%s)", c)
+		assert.Equalf(t, want, Permissible(c), "Permissible(%s)", c)
 	}
 }
 
-func TestWaiveMatchesOnCodeAndSubject(t *testing.T) {
+func TestPermitMatchesOnCodeAndSubject(t *testing.T) {
 	broad := JobProblem{Code: WritePathTooBroad, Subject: "**/*.go"}
 	output := JobProblem{Code: OutputOutsideWritePaths, Subject: "manpage/magus.1"}
 	gate := JobProblem{Code: GateNotRun, Subject: "lint ."}
 	ps := JobProblems{broad, output, gate}
 
-	kept, waived := ps.Waive([]JobWaiver{
+	kept, permitted := ps.Permit([]Deviation{
 		{Code: OutputOutsideWritePaths, Subject: "manpage/magus.1", Reason: "the root regenerates it"},
 		{Code: GateNotRun, Subject: "test .", Reason: "a different gate"},
 		{Code: WritePathTooBroad, Subject: "manpage/magus.1", Reason: "a different code's subject"},
 	})
 
 	assert.Equal(t, JobProblems{broad, gate}, kept)
-	assert.Equal(t, JobProblems{output}, waived)
+	assert.Equal(t, JobProblems{output}, permitted)
 }
 
-func TestWaiveNeverWaivesAnUnwaivableCode(t *testing.T) {
+func TestPermitNeverPermitsAnUnpermissibleCode(t *testing.T) {
 	ps := JobProblems{{Code: JobRecordInvalid, Field: "id", Subject: "x"}}
 
-	kept, waived := ps.Waive([]JobWaiver{{Code: JobRecordInvalid, Subject: "x", Reason: "no"}})
+	kept, permitted := ps.Permit([]Deviation{{Code: JobRecordInvalid, Subject: "x", Reason: "no"}})
 
 	assert.Equal(t, ps, kept)
-	assert.Empty(t, waived)
+	assert.Empty(t, permitted)
 }
 
 func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
@@ -92,21 +92,21 @@ func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
 
 func TestJobEditApplyChangesTheRecordOnce(t *testing.T) {
 	goal := Goal{ID: "lint", Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint", Project: "."}}
-	waiver := JobWaiver{Code: OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: "the integrator regenerates it"}
-	edits := []JobEdit{{AddWritePath: "docs/x.md"}, {AddGoal: &goal}, {AddWaiver: &waiver}, {RefreshCheckpoint: "abc"}}
+	deviation := Deviation{Code: OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: "the integrator regenerates it"}
+	edits := []JobEdit{{AddWritePath: "docs/x.md"}, {AddGoal: &goal}, {AddDeviation: &deviation}}
 	var d Declaration
 
 	for _, e := range edits {
 		assert.True(t, e.Apply(&d), "%s changes the record", e)
 		assert.False(t, e.Apply(&d), "%s a second time changes nothing", e)
 	}
-	assert.Equal(t, Declaration{WritePaths: []string{"docs/x.md"}, Goals: []Goal{goal}, Waivers: []JobWaiver{waiver}, Checkpoint: "abc"}, d)
+	assert.Equal(t, Declaration{WritePaths: []string{"docs/x.md"}, Goals: []Goal{goal}, Deviations: []Deviation{deviation}}, d)
 	assert.False(t, JobEdit{AddGoal: &Goal{ID: "lint"}}.Apply(&d), "a goal id the record uses is left alone")
 	assert.False(t, JobEdit{}.Apply(&d))
 }
 
-func TestDoubleStarWaivesEveryRegeneratedOutputSubject(t *testing.T) {
-	w := JobWaiver{Code: OutputOutsideWritePaths, Subject: "**", Reason: "r"}
+func TestDoubleStarPermitsEveryRegeneratedOutputSubject(t *testing.T) {
+	w := Deviation{Code: OutputOutsideWritePaths, Subject: "**", Reason: "r"}
 	for _, subject := range []string{
 		"**/gen/*test/*.go",
 		"internal/interp/bindings/gen/*.go !internal/interp/bindings/gen/*_test.go !internal/interp/bindings/gen/boundary_*.go",
@@ -115,7 +115,7 @@ func TestDoubleStarWaivesEveryRegeneratedOutputSubject(t *testing.T) {
 		"MAGUS.md",
 		"manpage/*.1",
 	} {
-		assert.Truef(t, w.Waives(JobProblem{Code: OutputOutsideWritePaths, Subject: subject}), "%q", subject)
+		assert.Truef(t, w.Permits(JobProblem{Code: OutputOutsideWritePaths, Subject: subject}), "%q", subject)
 	}
 }
 

@@ -83,16 +83,16 @@ func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
 		}
 		first, _, _ := strings.Cut(v.Deny, "\n")
 		return ShellVerdict{
-			Deny: "this brief teaches `" + elideCommand(cmd) + "`, a command the guard denies [" + v.RuleName() + "]; fix the brief.",
-			Why: "The guard's verdict on it: " + first + "\n" +
-				"A worker runs a brief's commands as written, so every worker it reaches is refused, or learns a way around the refusal. A line that names it to forbid it (\"never ...\") is not graded.",
+			Deny: fmt.Sprintf("this brief teaches `%s`, a command the guard denies [%s]; fix the brief.", elideCommand(cmd), v.RuleName()),
+			Why: fmt.Sprintf(`The guard's verdict on it: %s
+A worker runs a brief's commands as written, so every worker it reaches is refused, or learns a way around the refusal. A line that names it to forbid it ("never ...") is not graded.`, first),
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: v.RuleName()},
 		}
 	}
 	if v := judgeBriefPlainCommands(brief); v.Deny != "" {
 		return v
 	}
-	named := string(brief.format) + ", " + brief.formatFrom
+	named := fmt.Sprintf("%s, %s", string(brief.format), brief.formatFrom)
 	if brief.format == types.BriefFormatBuzz {
 		if v := judgeBriefBuzz(context.Background(), brief.text, magusDecls(), named); v.Deny != "" {
 			return v
@@ -103,7 +103,7 @@ func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
 		v = judgeBriefOffCheck(deps, brief)
 	}
 	if brief.formatFrom != "" && brief.formatFrom != job.BriefFormatUnset && v.Deny == "" {
-		v.Context = strings.TrimSpace("brief format: " + named + ". " + v.Context)
+		v.Context = strings.TrimSpace(fmt.Sprintf("brief format: %s. %s", named, v.Context))
 		if v.Rule.Name == "" {
 			v.Rule = denyRule{Name: denyRuleBriefCommand, Arg: "brief-format"}
 		}
@@ -128,7 +128,7 @@ func judgeBriefPlainCommands(brief briefInput) ShellVerdict {
 	for _, cmd := range briefCommands(brief.text) {
 		if compoundCommand(cmd) {
 			return ShellVerdict{
-				Deny: "this brief teaches `" + elideCommand(cmd) + "`, which a worker in its own worktree is refused as too complex: split it into plain commands.",
+				Deny: fmt.Sprintf("this brief teaches `%s`, which a worker in its own worktree is refused as too complex: split it into plain commands.", elideCommand(cmd)),
 				Why:  why,
 				Rule: denyRule{Name: denyRuleBriefPlainCommands},
 			}
@@ -266,7 +266,8 @@ func briefHumanOnly(ctx context.Context, deps Dependencies, root string, workspa
 		return ShellVerdict{
 			Deny: fmt.Sprintf("this brief tells job %s's worker to run `%s`, which a person runs [%s]: fix the brief.\nThe line: %q",
 				row.ID, pairs[0].ref(), denyRuleHumanOnly, elideCommand(strings.TrimSpace(r.line))),
-			Why:  "The workspace declares it human_only: " + pairs[0].reason + "\nA leased worker is refused it whoever asks.",
+			Why: fmt.Sprintf(`The workspace declares it human_only: %s
+A leased worker is refused it whoever asks.`, pairs[0].reason),
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)},
 		}
 	}
@@ -288,11 +289,11 @@ func whyNoBriefRow(ids []string, rows []types.Job) string {
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
 		switch {
 		case i < 0:
-			why = append(why, "job "+id+" is not in the store")
+			why = append(why, fmt.Sprintf("job %s is not in the store", id))
 		case !rows[i].State.Live():
-			why = append(why, "job "+id+" is not live")
+			why = append(why, fmt.Sprintf("job %s is not live", id))
 		default:
-			why = append(why, "job "+id+" declares no check")
+			why = append(why, fmt.Sprintf("job %s declares no check", id))
 		}
 	}
 	return strings.Join(why, "; ")
@@ -303,7 +304,7 @@ func briefUngraded(why string, runs []briefRun) ShellVerdict {
 	var notes []string
 	for _, r := range runs {
 		if !r.negated {
-			notes = append(notes, briefRunLabel(r)+" is not graded: no row was held to a check; "+why)
+			notes = append(notes, fmt.Sprintf("%s is not graded: no row was held to a check; %s", briefRunLabel(r), why))
 		}
 	}
 	return briefPassVerdict(notes)
@@ -337,7 +338,7 @@ func briefPassNotes(runs []briefRun, judge rowJudge) []string {
 			continue
 		}
 		if run.allowed(judge.checks, judge.produces) {
-			notes = append(notes, line+" is allowed: it regenerates job "+judge.row.ID+"'s write paths")
+			notes = append(notes, fmt.Sprintf("%s is allowed: it regenerates job %s's write paths", line, judge.row.ID))
 		}
 	}
 	return notes
@@ -354,7 +355,7 @@ func briefPassVerdict(notes []string) ShellVerdict {
 		notes = append(notes[:5:5], fmt.Sprintf("and %d more", len(notes)-5))
 	}
 	return ShellVerdict{
-		Context: "worker-check-only passed this brief: " + strings.Join(notes, "; ") + ".",
+		Context: fmt.Sprintf("worker-check-only passed this brief: %s.", strings.Join(notes, "; ")),
 		Rule:    denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
 	}
 }
@@ -376,7 +377,7 @@ func briefOffCheckDeny(row types.Job, off briefRun, v runVerdict) string {
 	checks := rowChecks(row)
 	names := make([]string, len(checks))
 	for i, c := range checks {
-		names[i] = "`" + c.String() + "`"
+		names[i] = fmt.Sprintf("`%s`", c.String())
 	}
 	return fmt.Sprintf("this brief tells job %s's worker to run `%s`, not its check %s [%s]; fix the brief.\nThe line: %q\n"+
 		"A worker runs only its row's check and the targets that regenerate its write paths; the checkout's integrator, a subagent spawned `<parent>/integrate <job>`, runs the rest serially, in its own tree, after it integrates the units. A line that names it to forbid it (\"never run ...\") is not graded.",

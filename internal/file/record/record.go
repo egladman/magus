@@ -83,7 +83,7 @@ func Write(path string, v any) error {
 	}
 
 	parent, name := filepath.Dir(path), filepath.Base(path)
-	tmp, err := os.CreateTemp(parent, partialPrefix+name+"-")
+	tmp, err := os.CreateTemp(parent, fmt.Sprintf("%s%s-", partialPrefix, name))
 	if err != nil {
 		return err
 	}

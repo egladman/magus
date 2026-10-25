@@ -8,8 +8,8 @@ package playground
 
 import (
 	"context"
+	"fmt"
 	"html"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/dry"
@@ -79,10 +79,10 @@ func (s *Console) SetSource(ctx context.Context, src string) (ok bool, status st
 		if s.parsed.Spell {
 			unit = "op" // a spell buffer's runnable units are its ops, not targets
 		}
-		return true, "pass " + strconv.Itoa(n) + " " + unit + plural(n)
+		return true, fmt.Sprintf("pass %d %s%s", n, unit, plural(n))
 	}
 	if d := s.parsed.Diag; d != nil && d.Line > 0 {
-		return false, "fail line " + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col)
+		return false, fmt.Sprintf("fail line %d:%d", d.Line, d.Col)
 	}
 	return false, "fail parse error"
 }
@@ -103,7 +103,7 @@ func (s *Console) Exec(ctx context.Context, line string) ExecResult {
 
 	// Echo as a magus invocation (a dim "magus" prefix with the subcommand
 	// highlighted) to signal that these are magus CLI subcommands.
-	out := []Line{{HTML: `<span class="muted">magus</span> <span class="cmd">` + esc(line) + `</span>`}}
+	out := []Line{{HTML: fmt.Sprintf(`<span class="muted">magus</span> <span class="cmd">%s</span>`, esc(line))}}
 	if trimmed == "" {
 		return ExecResult{Lines: out}
 	}
@@ -168,10 +168,10 @@ func (s *Console) Complete(line string) (replacement string, listing []Line) {
 		return line, nil
 	}
 	if len(candidates) == 1 {
-		return prefix + candidates[0] + " ", nil
+		return fmt.Sprintf("%s%s ", prefix, candidates[0]), nil
 	}
 	cp := commonPrefix(candidates)
-	listing = []Line{{HTML: `<span class="muted">` + esc(strings.Join(candidates, "   ")) + `</span>`}}
+	listing = []Line{{HTML: fmt.Sprintf(`<span class="muted">%s</span>`, esc(strings.Join(candidates, "   ")))}}
 	if len(cp) > len(base) {
 		return prefix + cp, listing
 	}
@@ -224,7 +224,7 @@ func (s *Console) help() []Line {
 // command reprints this line; `version` prints the full build detail.
 func (s *Console) Banner() []Line {
 	dot := `<span class="muted"> · </span>`
-	head := `<span class="ok">●</span> <b>gopherbuzz</b>` + dot + `Buzz ` + buzzLangVersion
+	head := fmt.Sprintf(`<span class="ok">●</span> <b>gopherbuzz</b>%sBuzz %s`, dot, buzzLangVersion)
 	if s.info.Compiler != "" {
 		head += dot + esc(s.info.Compiler)
 	}
@@ -243,7 +243,7 @@ func (s *Console) version() []Line {
 		if val == "" {
 			val = "n/a"
 		}
-		return Line{HTML: `  <span class="muted">` + key + `</span>  ` + esc(val)}
+		return Line{HTML: fmt.Sprintf(`  <span class="muted">%s</span>  %s`, key, esc(val))}
 	}
 	return []Line{
 		{HTML: `<b>gopherbuzz</b>: a Buzz ` + buzzLangVersion + ` interpreter, written in Go`},
@@ -267,9 +267,9 @@ func (s *Console) ls() []Line {
 	for _, t := range s.parsed.Targets {
 		tail := ""
 		if deps := s.directDeps(t.Key); len(deps) > 0 {
-			tail = `  <span class="muted">→ ` + esc(strings.Join(deps, ", ")) + `</span>`
+			tail = fmt.Sprintf(`  <span class="muted">→ %s</span>`, esc(strings.Join(deps, ", ")))
 		}
-		out = append(out, Line{HTML: "  <b>" + esc(t.Key) + "</b>" + tail})
+		out = append(out, Line{HTML: fmt.Sprintf("  <b>%s</b>%s", esc(t.Key), tail)})
 	}
 	return out
 }
@@ -280,7 +280,7 @@ func (s *Console) graph() []Line {
 	}
 	var out []Line
 	for _, p := range s.parsed.Projects {
-		line := "project <b>" + esc(orDot(p.Path)) + "</b>"
+		line := fmt.Sprintf("project <b>%s</b>", esc(orDot(p.Path)))
 		line += muted("spells", p.Spells)
 		line += muted("depends_on", p.DependsOn)
 		line += muted("outputs", p.Outputs)
@@ -294,13 +294,13 @@ func (s *Console) graph() []Line {
 		// (e.g. regen_pgo becomes regen-pgo) so the mapping is visible.
 		name := ""
 		if t.Name != t.Key {
-			name = ` <span class="muted">(` + esc(t.Name) + `)</span>`
+			name = fmt.Sprintf(` <span class="muted">(%s)</span>`, esc(t.Name))
 		}
 		tail := ""
 		if deps := s.directDeps(t.Key); len(deps) > 0 {
-			tail = `  <span class="muted">→ ` + esc(strings.Join(deps, ", ")) + `</span>`
+			tail = fmt.Sprintf(`  <span class="muted">→ %s</span>`, esc(strings.Join(deps, ", ")))
 		}
-		out = append(out, Line{HTML: "  " + esc(t.Key) + name + tail})
+		out = append(out, Line{HTML: fmt.Sprintf("  %s%s%s", esc(t.Key), name, tail)})
 	}
 	return out
 }
@@ -318,31 +318,30 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 	if r.Output != "" {
 		out = append(out, Line{HTML: esc(r.Output)})
 	}
-	out = append(out, Line{HTML: `order: <span class="muted">` + esc(strings.Join(r.Order, "  →  ")) + `</span>`})
+	out = append(out, Line{HTML: fmt.Sprintf(`order: <span class="muted">%s</span>`, esc(strings.Join(r.Order, "  →  ")))})
 	if len(r.Trace) == 0 {
 		out = append(out, Line{HTML: "  (no host operations)", Class: "muted"})
 	} else {
 		for _, op := range r.Trace {
-			tag := `<span class="muted">[` + esc(op.Target) + `]</span> `
+			tag := fmt.Sprintf(`<span class="muted">[%s]</span> `, esc(op.Target))
 			if op.Kind == "log" {
 				// A magus.info/warn/error line, not a tool call.
 				cls := "muted"
 				if op.Name == "warn" || op.Name == "error" {
 					cls = "err"
 				}
-				out = append(out, Line{HTML: "  " + tag + `<span class="` + cls + `">` + esc(op.Detail) + `</span>`})
+				out = append(out, Line{HTML: fmt.Sprintf("  %s<span class=%q>%s</span>", tag, cls, esc(op.Detail))})
 				continue
 			}
 			if op.Kind == "run" {
 				// A magus.run(...) recursive target invocation, not a tool call.
-				out = append(out, Line{HTML: "  " + tag + `<span class="muted">magus run</span> <b>` +
-					esc(op.Name) + `</b>  <span class="muted">recursive invocation · would run</span>`})
+				out = append(out, Line{HTML: fmt.Sprintf(`  %s<span class="muted">magus run</span> <b>%s</b>  <span class="muted">recursive invocation · would run</span>`, tag, esc(op.Name))})
 				continue
 			}
 			if op.Kind == "ward" {
 				// A kind-coherence diagnostic (MGSxxxx) raised for a resolved spell op:
 				// an error line showing its code and message.
-				out = append(out, Line{HTML: "  " + tag + esc(op.Detail), Class: "err"})
+				out = append(out, Line{HTML: fmt.Sprintf("  %s%s", tag, esc(op.Detail)), Class: "err"})
 				continue
 			}
 			detail := ""
@@ -355,8 +354,7 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 				// config fingerprint, distinct from a run-to-completion command.
 				hint = "service · supervised, shared"
 			}
-			out = append(out, Line{HTML: "  " + tag + `<b>` + esc(op.Name) + `</b>` + detail +
-				`  <span class="muted">` + esc(hint) + `</span>`})
+			out = append(out, Line{HTML: fmt.Sprintf(`  %s<b>%s</b>%s  <span class="muted">%s</span>`, tag, esc(op.Name), detail, esc(hint))})
 		}
 	}
 	wards := 0
@@ -369,13 +367,11 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 		// A ward is a rejection at resolution, not a passing plan: magus refuses the
 		// op before running anything. Say so rather than a green pass, so the wards
 		// lesson reads correctly.
-		out = append(out, Line{HTML: "[fail] " + esc(target) + " rejected at resolution: " +
-			strconv.Itoa(wards) + " ward" + plural(wards) + " raised, <b>nothing would run</b>", Class: "err"})
+		out = append(out, Line{HTML: fmt.Sprintf("[fail] %s rejected at resolution: %d ward%s raised, <b>nothing would run</b>", esc(target), wards, plural(wards)), Class: "err"})
 		return out
 	}
 	n := len(r.Trace)
-	out = append(out, Line{HTML: "[dry] " + esc(target) + ": " + strconv.Itoa(n) +
-		" step" + plural(n) + " planned, <b>nothing executed</b>", Class: "ok"})
+	out = append(out, Line{HTML: fmt.Sprintf("[dry] %s: %d step%s planned, <b>nothing executed</b>", esc(target), n, plural(n)), Class: "ok"})
 	return out
 }
 
@@ -396,7 +392,7 @@ func (s *Console) eval(ctx context.Context, src string) []Line {
 	}
 	where := ""
 	if d := r.Diag; d != nil && d.Line > 0 {
-		where = ` <span class="muted">(line ` + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col) + `)</span>`
+		where = fmt.Sprintf(` <span class="muted">(line %d:%d)</span>`, d.Line, d.Col)
 	}
 	out = append(out, Line{HTML: esc(diagnosticMessage(r.Diag, "error")) + where, Class: "err"})
 	return out
@@ -439,7 +435,7 @@ func muted(label string, vals []string) string {
 	if len(vals) == 0 {
 		return ""
 	}
-	return `  <span class="muted">` + label + ": " + esc(strings.Join(vals, ", ")) + `</span>`
+	return fmt.Sprintf(`  <span class="muted">%s: %s</span>`, label, esc(strings.Join(vals, ", ")))
 }
 
 // splitCharms splits a "target:charm,charm" run reference into the target key

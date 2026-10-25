@@ -28,7 +28,7 @@ func goNS(dir string) string {
 	if dir == "" {
 		return goModule + "`example.com/m`/"
 	}
-	return goModule + "`example.com/m/" + dir + "`/"
+	return fmt.Sprintf("%s`example.com/m/%s`/", goModule, dir)
 }
 
 // goSym is one Go declaration as the SCIP reader distills it. file is workspace-relative.
@@ -49,7 +49,7 @@ func goFunc(dir, name, sig string) types.KnowledgeSymbol {
 
 // ctxReader is a function that reads a value from a context, the family EntryPointFrom missed.
 func ctxReader(dir, name string) types.KnowledgeSymbol {
-	return goFunc(dir, name, "func "+name+"(ctx context.Context) *"+name+"Value")
+	return goFunc(dir, name, fmt.Sprintf("func %s(ctx context.Context) *%sValue", name, name))
 }
 
 // namingGraph assembles symbols the way a workspace build does, plus the non-symbol nodes the
@@ -129,7 +129,7 @@ func contextSetters(prefix string, n int, dir string) []types.KnowledgeSymbol {
 	var out []types.KnowledgeSymbol
 	for i := range n {
 		name := prefix + greek[i]
-		out = append(out, goFunc(dir, name, "func "+name+"(ctx context.Context, v string) context.Context"))
+		out = append(out, goFunc(dir, name, fmt.Sprintf("func %s(ctx context.Context, v string) context.Context", name)))
 	}
 	return out
 }
@@ -204,7 +204,7 @@ func TestConformanceExcludesTheChangesOwnNames(t *testing.T) {
 
 	var fresh []types.KnowledgeSymbol
 	for i := range 6 {
-		fresh = append(fresh, ctxReader(fmt.Sprintf("internal/new%d", i), "Fresh"+greek[i]+"FromContext"))
+		fresh = append(fresh, ctxReader(fmt.Sprintf("internal/new%d", i), fmt.Sprintf("Fresh%sFromContext", greek[i])))
 	}
 	lone := entryPointFrom()
 	g = namingGraph(t, append(fresh, lone))
@@ -231,10 +231,10 @@ func TestConformanceNamesAnEntityOfTheSameName(t *testing.T) {
 
 func TestConformanceNamesAnEntityOfTheSameNameInTypeScript(t *testing.T) {
 	sym := func(file, name string) types.KnowledgeSymbol {
-		ns := "npm web `" + file + "`/"
+		ns := fmt.Sprintf("npm web `%s`/", file)
 		return types.KnowledgeSymbol{
-			Key: ns + name + "().", Label: name, Language: "typescript", Namespace: ns,
-			Signature: "function " + name + "(): void", Source: "web/" + file + ":1", Defs: []string{"web/" + file},
+			Key: fmt.Sprintf("%s%s().", ns, name), Label: name, Language: "typescript", Namespace: ns,
+			Signature: fmt.Sprintf("function %s(): void", name), Source: fmt.Sprintf("web/%s:1", file), Defs: []string{fmt.Sprintf("web/%s", file)},
 		}
 	}
 	top := sym("lint.ts", "lint")
@@ -285,11 +285,11 @@ func TestConformanceSilentOnAWordCarryingOtherSenses(t *testing.T) {
 
 // capability builds a types interface with n method specifications.
 func capability(name string, n int) []types.KnowledgeSymbol {
-	out := []types.KnowledgeSymbol{goSym("types", name+"#", name, "Interface", "type "+name+" interface { ... }", "types/vcs.go")}
+	out := []types.KnowledgeSymbol{goSym("types", fmt.Sprintf("%s#", name), name, "Interface", fmt.Sprintf("type %s interface { ... }", name), "types/vcs.go")}
 	for i := range n {
 		m := fmt.Sprintf("Op%d", i)
-		out = append(out, goSym("types", name+"#"+m+".", m, "MethodSpecification",
-			"func ("+name+")."+m+"(ctx context.Context) error", "types/vcs.go"))
+		out = append(out, goSym("types", fmt.Sprintf("%s#%s.", name, m), m, "MethodSpecification",
+			fmt.Sprintf("func (%s).%s(ctx context.Context) error", name, m), "types/vcs.go"))
 	}
 	return out
 }
@@ -299,7 +299,7 @@ func capability(name string, n int) []types.KnowledgeSymbol {
 func TestConformanceFindsDriftInAnIndexWithNoSignatures(t *testing.T) {
 	var syms []types.KnowledgeSymbol
 	for _, name := range []string{"chordFromEvent", "keyFromEvent", "pointFromEvent", "rangeFromEvent", "targetFromEvent", "modsFromEvent"} {
-		syms = append(syms, tsSym(name+".ts", name, "function "+name+"(e: KeyboardEvent): string"))
+		syms = append(syms, tsSym(fmt.Sprintf("%s.ts", name), name, fmt.Sprintf("function %s(e: KeyboardEvent): string", name)))
 	}
 	syms = append(syms, tsSym("parse.ts", "parseEvent", "function parseEvent(e: KeyboardEvent): string"))
 	subj := tsSym("offset.ts", "offsetFrom", "function offsetFrom(e: KeyboardEvent): string")
@@ -316,10 +316,10 @@ func TestConformanceFindsDriftInAnIndexWithNoSignatures(t *testing.T) {
 }
 
 func tsSym(file, name, sig string) types.KnowledgeSymbol {
-	ns := "npm web src/`" + file + "`/"
+	ns := fmt.Sprintf("npm web src/`%s`/", file)
 	return types.KnowledgeSymbol{
-		Key: ns + name + "().", Label: name, Language: "typescript", Namespace: ns,
-		Signature: sig, Source: "web/src/" + file + ":1", Defs: []string{"web/src/" + file},
+		Key: fmt.Sprintf("%s%s().", ns, name), Label: name, Language: "typescript", Namespace: ns,
+		Signature: sig, Source: fmt.Sprintf("web/src/%s:1", file), Defs: []string{fmt.Sprintf("web/src/%s", file)},
 	}
 }
 
@@ -327,8 +327,8 @@ func TestConformanceCapsFindingsPerChange(t *testing.T) {
 	syms := fromContextFamily()
 	var subjects []types.KnowledgeSymbol
 	for i := range 7 {
-		name := "Thing" + greek[i] + "From"
-		s := goFunc(fmt.Sprintf("internal/s%d", i), name, "func "+name+"(ctx context.Context) T")
+		name := fmt.Sprintf("Thing%sFrom", greek[i])
+		s := goFunc(fmt.Sprintf("internal/s%d", i), name, fmt.Sprintf("func %s(ctx context.Context) T", name))
 		syms = append(syms, s)
 		subjects = append(subjects, s)
 	}
@@ -613,7 +613,9 @@ func TestBuzzShapes(t *testing.T) {
 func buzzSignatureIndex(t *testing.T, values ...string) *Graph {
 	t.Helper()
 	rel := "hack/lib/doc.buzz"
-	sym := func(name string, suffix string) string { return "scip-buzz buzz . . `" + rel + "`/" + name + suffix }
+	sym := func(name string, suffix string) string {
+		return fmt.Sprintf("scip-buzz buzz . . `%s`/%s%s", rel, name, suffix)
+	}
 	doc := &scip.Document{RelativePath: rel, Language: "buzz", Symbols: []*scip.SymbolInformation{
 		{Symbol: sym("ParseError", "#"), DisplayName: "ParseError", Kind: scip.SymbolInformation_Object,
 			SignatureDocumentation: &scip.Signature{Language: "buzz", Text: "object ParseError"}},
@@ -627,7 +629,7 @@ func buzzSignatureIndex(t *testing.T, values ...string) *Graph {
 	for i, name := range values {
 		line := int32(10 + i)
 		doc.Symbols = append(doc.Symbols, &scip.SymbolInformation{Symbol: sym(name, "."), DisplayName: name,
-			Kind: scip.SymbolInformation_Constant, SignatureDocumentation: &scip.Signature{Language: "buzz", Text: "final " + name + ": ParseError"}})
+			Kind: scip.SymbolInformation_Constant, SignatureDocumentation: &scip.Signature{Language: "buzz", Text: fmt.Sprintf("final %s: ParseError", name)}})
 		doc.Occurrences = append(doc.Occurrences, def(sym(name, "."), line),
 			&scip.Occurrence{Symbol: sym("ParseError", "#"), Range: []int32{line, 20, 30}})
 	}
@@ -683,16 +685,16 @@ func conformanceFixture() (*Graph, []types.KnowledgeSymbol) {
 	verbs := []string{"Read", "Write", "Load", "Parse", "Render", "Open", "Close", "Build", "Resolve", "Check"}
 	nouns := []string{"Config", "Graph", "Target", "Spell", "Lease", "Plan", "Output", "Digest", "Store", "Session"}
 	name := func(p, f int) string {
-		return verbs[f%10] + nouns[(f/10+p)%10] + []string{"", "FromContext", "At", "For", "With"}[f/10]
+		return fmt.Sprintf("%s%s%s", verbs[f%10], nouns[(f/10+p)%10], []string{"", "FromContext", "At", "For", "With"}[f/10])
 	}
 	var syms []types.KnowledgeSymbol
 	for p := range 400 {
 		dir := fmt.Sprintf("internal/p%03d", p)
 		for f := range 50 {
-			s := goFunc(dir, name(p, f), "func "+name(p, f)+"(ctx context.Context, root string, out io.Writer) error")
-			s.Source, s.DefEndLine = dir+"/x.go:"+fmt.Sprint(10*f+1), 10*f+8
+			s := goFunc(dir, name(p, f), fmt.Sprintf("func %s(ctx context.Context, root string, out io.Writer) error", name(p, f)))
+			s.Source, s.DefEndLine = fmt.Sprintf("%s/x.go:%s", dir, fmt.Sprint(10*f+1)), 10*f+8
 			if f > 0 {
-				s.Calls = []types.KnowledgeSymbolCall{{Key: goNS(dir) + name(p, f-1) + "().", Count: 1}}
+				s.Calls = []types.KnowledgeSymbolCall{{Key: fmt.Sprintf("%s%s().", goNS(dir), name(p, f-1)), Count: 1}}
 			}
 			syms = append(syms, s)
 		}
@@ -703,7 +705,7 @@ func conformanceFixture() (*Graph, []types.KnowledgeSymbol) {
 	var added []types.KnowledgeSymbol
 	for i := range 20 {
 		n := fmt.Sprintf("%s%sFrom", verbs[i%10], nouns[i/2])
-		added = append(added, goFunc("internal/new", n, "func "+n+"(out io.Writer, root string) error"))
+		added = append(added, goFunc("internal/new", n, fmt.Sprintf("func %s(out io.Writer, root string) error", n)))
 	}
 	g := mergeAll([]Shard{assembleSymbols(".", append(syms, added...), []types.TargetGraphProject{{Path: "."}})})
 	g.AddNode(types.KnowledgeNode{ID: "project:.", Kind: types.KindProject, Label: "m", Source: "."})
@@ -798,8 +800,7 @@ func TestConformanceMeasureRenames(t *testing.T) {
 	commits := strings.Fields(git(root, "rev-list", "--no-merges", span))
 	declared := func(rev, name string, anyCase bool) bool {
 		// POSIX ERE, which is what `git grep -E` speaks: no \s and no \b.
-		pattern := `(func|type|const|var|function|class|interface|let)[[:space:]]+(\([^)]*\)[[:space:]]*)?` +
-			name + `([^A-Za-z0-9_$]|$)`
+		pattern := fmt.Sprintf("(func|type|const|var|function|class|interface|let)[[:space:]]+(\\([^)]*\\)[[:space:]]*)?%s([^A-Za-z0-9_$]|$)", name)
 		flags := "-lE"
 		if anyCase {
 			flags = "-liE"
@@ -843,7 +844,7 @@ func TestConformanceMeasureRenames(t *testing.T) {
 						var sites []string
 						for _, file := range strings.Fields(git(root, "grep", "-lw", id, sha, "--", "*.go", "*.ts", ":!*/gen/*")) {
 							file = strings.TrimPrefix(file, sha+":")
-							for _, line := range leftoverLines(git(root, "show", sha+":"+file), oldWords, newWords) {
+							for _, line := range leftoverLines(git(root, "show", fmt.Sprintf("%s:%s", sha, file)), oldWords, newWords) {
 								sites = append(sites, fmt.Sprintf("%s:%d", file, line))
 							}
 						}

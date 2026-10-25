@@ -159,7 +159,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 		}
 
 		thisYAML := append(append([]string{}, yamlPath...), yamlTag)
-		goSel := goBase + "." + name
+		goSel := fmt.Sprintf("%s.%s", goBase, name)
 
 		typeName := exprTypeIdent(field.Type)
 		kind := scalarKind(typeName)
@@ -185,7 +185,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 		// it has one. A field with no doc shows just the env var, not "ENV: ENV".
 		help := envVar
 		if usage := sanitizeUsage(firstDocLine(fieldDoc(field))); usage != "" {
-			help = envVar + ": " + usage
+			help = fmt.Sprintf("%s: %s", envVar, usage)
 		}
 
 		*out = append(*out, FlagDef{
@@ -254,7 +254,7 @@ func exprTypeIdent(expr ast.Expr) string {
 		return ""
 	case *ast.SelectorExpr:
 		if pkg, ok := t.X.(*ast.Ident); ok {
-			return pkg.Name + "." + t.Sel.Name
+			return fmt.Sprintf("%s.%s", pkg.Name, t.Sel.Name)
 		}
 		return ""
 	case *ast.ArrayType:

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -35,6 +37,36 @@ func waitClaimWorkspace(t *testing.T) {
 	repo.Commit("change both", map[string]string{"a/x.txt": "2\n", "b/x.txt": "2\n"})
 	resetWorkspaceMemo(t)
 	t.Chdir(repo.Root())
+}
+
+// An integrator waits for a seat only as long as it said: past its deadline the wait is
+// refused, naming each run that held the budget. A zero deadline waits without bound.
+func TestWithinDeadlineRefusesPastItNamingTheHolders(t *testing.T) {
+	t.Parallel()
+
+	since := time.Now().Add(-4 * time.Minute)
+	full := func(context.Context) (types.MachineSnapshot, error) {
+		return types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 2, Holders: []types.MachineClaimant{
+			{PID: 21589, Project: ".", Target: "go-test", Slots: 1, Command: "./magus run go-test .", Since: since},
+			{PID: 7, Project: "docs", Target: "lint", Slots: 1, Since: since},
+		}}, nil
+	}
+	await := func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	err := withinDeadline(t.Context(), 20*time.Millisecond, full, await)
+	require.Error(t, err)
+	assert.Equal(t, "the build budget had no seat within 20ms, held by pid 21589 (`./magus run go-test .`) for 4m0s, pid 7 (lint docs) for 4m0s", err.Error())
+
+	ran := false
+	require.NoError(t, withinDeadline(t.Context(), 0, full, func(ctx context.Context) error {
+		_, bounded := ctx.Deadline()
+		ran = !bounded
+		return nil
+	}))
+	assert.True(t, ran, "a zero deadline sets none")
 }
 
 // The wait holds for what the downstream run claims: a piped `affected ci` claims one

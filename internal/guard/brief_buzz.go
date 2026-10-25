@@ -22,8 +22,7 @@ const briefBuzzPrefix = `import "magus"; final brief = `
 func judgeBriefBuzz(ctx context.Context, text, decls, format string) ShellVerdict {
 	deny := func(problems []string) ShellVerdict {
 		return ShellVerdict{
-			Deny: "this brief is " + format + ", and it is not one `magus\\Brief{...}` literal that type-checks:\n  " +
-				strings.Join(problems, "\n  "),
+			Deny: fmt.Sprintf("this brief is %s, and it is not one `magus\\Brief{...}` literal that type-checks:\n  %s", format, strings.Join(problems, "\n  ")),
 			Why: "A buzz-format brief is checked before its worker sees it, so a misnamed field, a wrong type or a missing " +
 				"required field is a refusal at spawn rather than a worker acting on half a brief. Write the brief as one " +
 				"`magus\\Brief{ job = \"<id>\", goal = \"...\" }` literal, bare or in a single buzz fence.",
@@ -37,7 +36,8 @@ func judgeBriefBuzz(ctx context.Context, text, decls, format string) ShellVerdic
 	sess := buzz.NewSession(ctx, buzz.WithoutFileImports(), buzz.WithoutFFI())
 	defer func() { _ = sess.Close() }()
 	sess.SetModuleDecls("magus", decls)
-	src := briefBuzzPrefix + literal + ";\n"
+	src := fmt.Sprintf(`%s%s;
+`, briefBuzzPrefix, literal)
 	var problems []string
 	for _, d := range sess.Diagnostics(src) {
 		if d.Severity != buzz.SeverityError {
@@ -45,7 +45,7 @@ func judgeBriefBuzz(ctx context.Context, text, decls, format string) ShellVerdic
 		}
 		code := ""
 		if d.Code != "" {
-			code = "[" + string(d.Code) + "] "
+			code = fmt.Sprintf("[%s] ", string(d.Code))
 		}
 		problems = append(problems, fmt.Sprintf("line %d: %s%s", max(d.Line, 1), code, d.Msg))
 	}
@@ -77,7 +77,8 @@ func briefBuzzLiteral(text string) string {
 // leaves out. TODO: delete once gopherbuzz refuses a literal that omits a field with no
 // default and the mirror generator emits required fields.
 func briefMissingFields(literal string) []string {
-	prog, err := buzz.Parse(briefBuzzPrefix + literal + ";\n")
+	prog, err := buzz.Parse(fmt.Sprintf(`%s%s;
+`, briefBuzzPrefix, literal))
 	if err != nil {
 		return nil
 	}

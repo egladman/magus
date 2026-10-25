@@ -168,7 +168,8 @@ func readClientScript(root, path string) ([]byte, bool) {
 }
 
 func unreadClientCall() string {
-	return unreadRun + "\n" + hint.ToolClient.String() + " op=" + jobOpUnread
+	return fmt.Sprintf(`%s
+%s op=%s`, unreadRun, hint.ToolClient.String(), jobOpUnread)
 }
 
 // unreadRun renders a run the guard cannot read: the gate, which the lease rules refuse,
@@ -307,7 +308,7 @@ func (r *clientReader) call(member []string, c *ast.CallExpr) {
 	case `job\register`:
 		r.jobLine(jobOpRegister, c, nil)
 	case `job\clear`:
-		r.lines = append(r.lines, hint.ToolClient.String()+" op="+jobOpClear)
+		r.lines = append(r.lines, fmt.Sprintf("%s op=%s", hint.ToolClient.String(), jobOpClear))
 	case `job\wait`:
 		id, _ := literalString(clientArg(c, 0, "id"))
 		r.lines = append(r.lines, hint.JobWait.WithAs("magus", quoteValue(orUnread(id))))
@@ -354,14 +355,14 @@ func (r *clientReader) jobLine(op string, c *ast.CallExpr, opts ast.Node) {
 					continue
 				}
 				if mcpElidedParams[key] {
-					fields = append(fields, key+"="+mcpElidedValue)
+					fields = append(fields, fmt.Sprintf("%s=%s", key, mcpElidedValue))
 					continue
 				}
 				value, ok := literalValue(m.Values[i])
 				if !ok {
 					value = unreadValue
 				}
-				fields = append(fields, key+"="+quoteValue(value))
+				fields = append(fields, fmt.Sprintf("%s=%s", key, quoteValue(value)))
 			}
 			slices.Sort(fields)
 			out = append(out, fields...)

@@ -325,7 +325,7 @@ func TestNearCyclesCancellable(t *testing.T) {
 
 func iota3(i int) string {
 	// trivial 3-digit string
-	return string(rune('a'+i/100)) + string(rune('a'+(i/10)%10)) + string(rune('a'+i%10))
+	return fmt.Sprintf("%s%s%s", string(rune('a'+i/100)), string(rune('a'+(i/10)%10)), string(rune('a'+i%10)))
 }
 
 // linear builds a chain: 0→1→2→…→n-1 where each node depends on the next.

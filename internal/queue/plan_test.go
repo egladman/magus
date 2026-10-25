@@ -3,6 +3,7 @@ package queue
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -95,7 +96,7 @@ func TestPlanRefusesAMergedChangeTheBaseDoesNotCarry(t *testing.T) {
 	in := changes(change("1", "a"))
 	in.Merged = []types.MergedChange{m}
 	_, err := planner(t, d).Run(t.Context(), in)
-	require.EqualError(t, err, "provider lists #9 as merged at "+head("m9")[:12]+", which main does not carry")
+	require.EqualError(t, err, fmt.Sprintf("provider lists #9 as merged at %s, which main does not carry", head("m9")[:12]))
 }
 
 func TestPlanOfNoChangesSaysSo(t *testing.T) {
@@ -243,7 +244,7 @@ func TestPlanAdmission(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if tc.want == "" {
+			if tc.want == 0 {
 				require.Empty(t, plan.Verdicts)
 				require.Len(t, plan.Partitions, 1)
 				assert.Equal(t, tc.wantSet, plan.Partitions[0][0].Affected)
@@ -257,9 +258,8 @@ func TestPlanAdmission(t *testing.T) {
 				want.Paths = []string{"a/x.go"}
 				want.With = []string{head("x")[:12] + " change a/x.go"}
 				// The files travel in paths and with, not in the prose.
-				want.Report = "The merge queue could not merge this change at `" + short(v.Change.Head) + "`: it conflicts with `main` outside the generated files.\n\n" +
-					"Merge `main` into this branch and resolve the conflict by hand.\n"
-				want.Reason = "The merge queue could not merge this change at `" + short(v.Change.Head) + "`: it conflicts with `main` outside the generated files."
+				want.Report = fmt.Sprintf("The merge queue could not merge this change at `%s`: it conflicts with `main` outside the generated files.\n\nMerge `main` into this branch and resolve the conflict by hand.\n", short(v.Change.Head))
+				want.Reason = fmt.Sprintf("The merge queue could not merge this change at `%s`: it conflicts with `main` outside the generated files.", short(v.Change.Head))
 			}
 			// Planning runs no hook, so no Gate is set.
 			assert.Equal(t, want, v)

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -143,6 +144,28 @@ func TestGuardIndexFreshness(t *testing.T) {
 	})
 }
 
+// An index built from a graph with no symbol cannot answer `magus refs`, and says so from
+// its header alone.
+func TestGuardIndexSaysWhetherItHoldsSymbols(t *testing.T) {
+	root, cacheDir, g := guardFixture(t)
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
+	has, err := GuardIndexHasSymbols(cacheDir, root)
+	require.NoError(t, err)
+	assert.True(t, has)
+
+	bareDir := t.TempDir()
+	require.NoError(t, WriteGuardIndex(bareDir, root, NewGraph(), true, GuardCheckout{}))
+	has, err = GuardIndexHasSymbols(bareDir, root)
+	require.NoError(t, err)
+	assert.False(t, has)
+	x, err := ReadGuardIndex(bareDir, root)
+	require.NoError(t, err)
+	assert.False(t, x.HasSymbols())
+
+	_, err = GuardIndexHasSymbols(t.TempDir(), root)
+	assert.Error(t, err, "no index yet")
+}
+
 func TestGuardIndexRefusesAnotherRoot(t *testing.T) {
 	root, cacheDir, g := guardFixture(t)
 	_, err := ReadGuardIndex(cacheDir, root)
@@ -191,7 +214,7 @@ func TestGuardIndexStaleAtAnotherRevision(t *testing.T) {
 	git("commit", "-q", "--amend", "-m", "one, reworded")
 	x, err = ReadGuardIndex(cacheDir, root)
 	require.NoError(t, err)
-	assert.Equal(t, "the index was built at "+at.Revision[:12]+" and the checkout is at "+git("rev-parse", "HEAD")[:12], x.Stale())
+	assert.Equal(t, fmt.Sprintf("the index was built at %s and the checkout is at %s", at.Revision[:12], git("rev-parse", "HEAD")[:12]), x.Stale())
 	for _, kind := range guardKinds {
 		assert.False(t, x.Fresh(kind), kind)
 	}

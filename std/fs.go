@@ -951,7 +951,7 @@ func FsSymlink(ctx context.Context, target, link string) error {
 	// link's directory before it climbs out of it.
 	reached := target
 	if !filepath.IsAbs(reached) {
-		reached = filepath.Dir(link) + string(filepath.Separator) + reached
+		reached = fmt.Sprintf(`%s%s%s`, filepath.Dir(link), string(filepath.Separator), reached)
 	}
 	if err := checkRead(ctx, reached); err != nil {
 		return err

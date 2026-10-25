@@ -770,7 +770,7 @@ var Magus = Module{
 						"here. A put is validated whole before anything is stored, and raises every " +
 						"problem at once (codes MGS3037 through MGS3046), each with the field it is " +
 						"on and the fix. The record's schema is what `magus job fork --schema` prints. " +
-						"waivers, a list of {code, subject, reason}, keeps a write path broader than " +
+						"deviations, a list of {code, subject, reason}, keeps a write path broader than " +
 						"the workspace allows (MGS3043), an output a target regenerates outside the " +
 						"write paths (MGS3044) or a ci target the job does not run (MGS3045). " +
 						"A put that CREATES a row raises when its write_paths cover a file the " +
@@ -1542,7 +1542,7 @@ func buzzCause(v any) (string, error) {
 			u, _ := t["url"].(string)
 			e := diagnostics.New(func(diagnostics.Code) string { return u }).
 				Errorf(diagnostics.Code(code), "%s", msg)
-			return "[" + code + "] " + msg, e
+			return fmt.Sprintf("[%s] %s", code, msg), e
 		case msg != "":
 			return msg, errors.New(msg)
 		}
@@ -2280,11 +2280,11 @@ func nestedResult(label string, full []string, res spawn.ExecResult, err error, 
 func recursiveMagusEnv(ctx context.Context) []string {
 	var env []string
 	if lease := types.JobLeaseFromContext(ctx); lease != "" {
-		env = append(env, trail.EnvBaggage+"="+trail.BaggageLease+"="+lease)
+		env = append(env, fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease))
 	}
 	for _, k := range spawn.ProcForwardVars {
 		if v := os.Getenv(k); v != "" {
-			env = append(env, k+"="+v)
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
 			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
 				"magus socket injected into recursive magus invocation"), "var", k)
 		}

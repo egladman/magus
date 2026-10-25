@@ -61,14 +61,14 @@ remains. Fix every listed problem, then fork the same record.
 
 A glob write path past `jobs.max_claim_files` (default 50 files) or `jobs.max_claim_projects`
 (default 1 project) is refused as {{mgslink "MGS3043"}}. Name the files the job edits. A sweep
-that really needs the whole glob waives it in the record:
+that really needs the whole glob permits it in the record:
 
 ```json
-"waivers": [{"code": "MGS3043", "subject": "**/*.go", "reason": "renames the type everywhere"}]
+"deviations": [{"code": "MGS3043", "subject": "**/*.go", "reason": "renames the type everywhere"}]
 ```
 
-Only {{mgslink "MGS3043"}}, {{mgslink "MGS3044"}} and {{mgslink "MGS3045"}} can be waived. The
-subject is the write path, the output path, or `target project` for MGS3045. A waiver on any other
+Only {{mgslink "MGS3043"}}, {{mgslink "MGS3044"}} and {{mgslink "MGS3045"}} can be permitted. The
+subject is the write path, the output path, or `target project` for MGS3045. A deviation on any other
 code is refused. Magus checks that the reason is not blank; a reviewer reads it.
 
 ## The exit record
@@ -80,10 +80,20 @@ magus job exit <job> --stdin <<'EOF'
 {"schema_version": 2, "job": "<job>",
  "changed_paths": ["api/store.go", "api/store_test.go"],
  "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
+ "gate_evidence": [{"gate_id": "go-test", "output_ref": "<ref>"}, {"gate_id": "lint", "output_ref": "<ref>"}],
  "descendants": [],
  "unresolved_risks": ["what is left, or what the worker could not verify"]}
 EOF
 ```
+
+`validation` carries one command. `gate_evidence` carries one `{gate_id, output_ref}` per gate
+the brief names, so each gate keeps its own ref.
+
+A check its worker found no seat for is owed, not run: `"validation": {"command":
+"<the check>", "output_ref": "", "owed": "no seat"}`, or the same `owed` on a goal's
+`gate_evidence` entry. `{{cmd "job wait"}}` passes the result with the goal marked
+`[owed]`, and the integration that merges the branch runs it. "no seat" is the only
+reason, and an integration may not owe its own checks.
 
 ## The root's role
 

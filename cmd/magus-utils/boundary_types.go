@@ -370,7 +370,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "RetryVerdict", Type: reflect.TypeFor[types.RetryVerdict](), RuntimeObject: true},
 	{Name: "PriorAttempt", Type: reflect.TypeFor[types.PriorAttempt](), RuntimeObject: true},
 	{Name: "JobRejection", Type: reflect.TypeFor[types.JobRejection](), RuntimeObject: true},
-	{Name: "JobWaiver", Type: reflect.TypeFor[types.JobWaiver](), RuntimeObject: true},
+	{Name: "Deviation", Type: reflect.TypeFor[types.Deviation](), RuntimeObject: true},
 	{Name: "ClaimEvidence", Type: reflect.TypeFor[types.ClaimEvidence](), RuntimeObject: true},
 	{Name: "JobClaim", Type: reflect.TypeFor[types.JobClaim](), RuntimeObject: true},
 	{Name: "JobClaimRequest", Type: reflect.TypeFor[types.JobClaimRequest]()},
@@ -628,7 +628,7 @@ var boundaryEnums = []boundaryEnum{
 		Name: "ClaimKind",
 		Type: reflect.TypeFor[types.ClaimKind](),
 		Cases: []enumCase{{"none", ""}, {"refs", "refs"}, {"test", "test"}, {"output", "output"},
-			{"released", "released"}},
+			{"released", "released"}, {"dead", "dead"}},
 	},
 	{
 		Name:  "GroupingVerdict",

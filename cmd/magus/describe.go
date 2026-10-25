@@ -429,7 +429,7 @@ func spellSyntaxSummary(t types.Spell) string {
 	if c := t.Syntax.Comments; c != nil {
 		openers := slices.Clone(c.LineComments)
 		for _, b := range c.BlockComments {
-			openers = append(openers, b.Open+" "+b.Close)
+			openers = append(openers, fmt.Sprintf("%s %s", b.Open, b.Close))
 		}
 		parts = append(parts, "comments "+strings.Join(openers, ", "))
 	}
@@ -468,7 +468,7 @@ func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVers
 		if t.Probe.Bin == "" {
 			out = append(out, types.SpellVersion{
 				Tool: tool, Version: t.Key.Const,
-				CacheKey: "spell:" + tool + ":version=" + t.Key.Const,
+				CacheKey: fmt.Sprintf("spell:%s:version=%s", tool, t.Key.Const),
 			})
 			continue
 		}
@@ -482,7 +482,7 @@ func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVers
 			token, _ := spells.VersionToken(v, t.Key)
 			out = append(out, types.SpellVersion{
 				Tool: tool, Version: v,
-				CacheKey: "spell:" + tool + ":version=" + token,
+				CacheKey: fmt.Sprintf("spell:%s:version=%s", tool, token),
 			})
 		}
 	}
@@ -583,7 +583,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		}
 		line := "  " + c.Name
 		if len(tags) > 0 {
-			line += "  [" + strings.Join(tags, ", ") + "]"
+			line += fmt.Sprintf("  [%s]", strings.Join(tags, ", "))
 		}
 		fmt.Println(line)
 		if c.Doc != "" {
@@ -628,10 +628,11 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
 	var tf *flaggen.DescribeTargetFlags
+	args, targetArgs := splitOnDashDash(args)
 	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
 		tf = flaggen.BindDescribeTarget(fs)
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target> [project]] [flags] [-- <args>]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.TargetDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -649,6 +650,9 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "naming the exact source/env/tool line that disagrees (the")
 			fmt.Fprintln(os.Stderr, "works-on-my-machine explainer).")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Args after -- are the target's, as with `magus run`: the plan and the key")
+			fmt.Fprintln(os.Stderr, "are the ones a run with those args takes.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			printOwnDefaults(fs)
 		}
@@ -656,6 +660,17 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	switch {
+	case len(pos) > 2:
+		slog.ErrorContext(ctx, fmt.Sprintf("describe target takes <path:target> [project], got %q; args for the target go after --", pos),
+			attr.Notice(""), attr.Component("magus describe target"))
+		return exit.Reported(exit.Usage)
+	case len(pos) == 0 && len(targetArgs) > 0:
+		slog.ErrorContext(ctx, "args after -- belong to a target: name one, as in `magus describe target lint . -- a.go`",
+			attr.Notice(""), attr.Component("magus describe target"))
+		return exit.Reported(exit.Usage)
+	}
+	ctx = project.WithExtraArgs(ctx, targetArgs)
 	if tf.Against != "" {
 		tf.Cache = true
 	}
@@ -1291,7 +1306,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 	case outputName:
 		names := make([]string, 0, len(out))
 		for _, e := range out {
-			names = append(names, e.Project+":"+e.Target)
+			names = append(names, fmt.Sprintf("%s:%s", e.Project, e.Target))
 		}
 		return emitNames(os.Stdout, names)
 	}
@@ -1716,5 +1731,5 @@ func claimLabel(c types.FileClaim) string {
 	if c.Target == "" {
 		return c.Project
 	}
-	return c.Project + ":" + c.Target
+	return fmt.Sprintf("%s:%s", c.Project, c.Target)
 }

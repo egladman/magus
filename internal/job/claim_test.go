@@ -158,6 +158,33 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 	}
 }
 
+// A fork that shares a file with a live job is refused before the workspace checks and the
+// write proof run, so a refusal under load costs one sweep of the rows; a fork the cheap
+// checks pass is judged in full.
+func TestValidateMergeRefusesAContendedForkBeforeTheWorkspaceChecks(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"magusfile.buzz": "target a {}\n"}
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
+	s := NewStore(tempLocation(t, bRoot))
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRepo.Head(), CheckoutRoot: aRepo.Root()})
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	declare := func(paths ...string) func(*types.Job) {
+		return func(u *types.Job) { u.WritePaths, u.Check = paths, forkCheck() }
+	}
+	v := validateMerge(t.Context(), s, rows, "contender", declare("magusfile.buzz"), config.Jobs{}, nil)
+	assert.Equal(t, []types.DiagnosticCode{types.WritePathFileShared}, codes(v.Problems))
+	assert.Equal(t, types.JobValidation{Job: v.Job, Problems: v.Problems, Unchecked: []string{cheapRefusalSkip}}, v)
+
+	passed := validateMerge(t.Context(), s, rows, "bystander", declare("other.buzz"), config.Jobs{}, nil)
+	assert.Empty(t, passed.Problems)
+	assert.Len(t, passed.Unchecked, 4, "an uncontended fork runs every workspace check, here without a workspace")
+	assert.Equal(t, types.WriteProofAlone, passed.WriteProof)
+}
+
 // A holder that exited is done editing, so the file its row still lists is no longer one
 // a fork in another checkout shares with it (MGS3032); a running holder still refuses.
 func TestExitedHolderClaimsNoFileShare(t *testing.T) {
@@ -307,6 +334,55 @@ func C() {
 `
 
 var claimFiles = map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo}
+
+// An integration row holds every file its merges touch whole, so its hold on a file reaches
+// only the declarations its merge changed there: a claim on another one passes, a claim on
+// one it changed, a whole-file write path, or a merge nobody can read is refused (MGS3032).
+func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
+	t.Parallel()
+
+	bRoot := testkit.NewRepo(t, claimFiles).Root()
+	aRepo := testkit.NewRepo(t, claimFiles)
+	aRev := aRepo.Head()
+	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
+
+	for _, tc := range []struct {
+		name       string
+		checkpoint string
+		write      string
+		refused    bool
+	}{
+		{name: "a declaration the merge left alone", checkpoint: aRev, write: "run.go#C"},
+		{name: "a declaration the merge changed", checkpoint: aRev, write: "run.go#A", refused: true},
+		{name: "the whole file", checkpoint: aRev, write: "run.go", refused: true},
+		{name: "an unreadable merge", checkpoint: "not-a-revision", write: "run.go#C", refused: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := NewStore(tempLocation(t, bRoot))
+			seed(t, s, types.Job{ID: "A", State: types.StateRunning, Integrates: []string{"b1"}, WritePaths: []string{"run.go"}, Checkpoint: tc.checkpoint, CheckoutRoot: aRepo.Root()})
+			rows, err := s.List()
+			require.NoError(t, err)
+
+			err = unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{tc.write}}).Err()
+			if !tc.refused {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, types.WritePathFileShared)
+		})
+	}
+
+	t.Run("a worker's whole-file hold still refuses a claim on a declaration it left alone", func(t *testing.T) {
+		t.Parallel()
+		s := NewStore(tempLocation(t, bRoot))
+		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
+		rows, err := s.List()
+		require.NoError(t, err)
+		err = unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go#C"}}).Err()
+		require.ErrorIs(t, err, types.WritePathFileShared)
+	})
+}
 
 // A claim word that several declarations of its file share guards all of them, not the one
 // its author meant, so the fork is refused with words that name one each. A word that

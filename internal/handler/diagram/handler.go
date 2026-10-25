@@ -3,6 +3,7 @@ package diagram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -97,7 +98,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	out := []Entry{{ID: KindProjects, Kind: KindProjects, Title: "Workspace projects"}}
 	for _, p := range tg.Projects {
 		out = append(out, Entry{
-			ID:      KindTargets + ":" + p.Path,
+			ID:      fmt.Sprintf("%s:%s", KindTargets, p.Path),
 			Kind:    KindTargets,
 			Title:   "Targets in " + p.Label(),
 			Project: p.Path,
@@ -246,5 +247,5 @@ func githubBlobTemplate(remote, rev string) string {
 	if !strings.EqualFold(host, "github.com") || !ok || owner == "" || name == "" || strings.Contains(name, "/") {
 		return ""
 	}
-	return "https://github.com/" + owner + "/" + name + "/blob/" + rev + "/{path}#L{line}"
+	return fmt.Sprintf("https://github.com/%s/%s/blob/%s/{path}#L{line}", owner, name, rev)
 }

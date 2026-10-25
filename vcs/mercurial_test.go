@@ -2,6 +2,7 @@ package vcs
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,21 +37,23 @@ func TestWriteHgSections(t *testing.T) {
 		assert.True(t, changed, "the first write of each section changes the file")
 	}
 
-	want := "[ui]\nusername = me\n\n" +
-		generatedMarkers.section("[merge-patterns]\n"+
-			"glob:gen/** = magus\n"+
-			"glob:dist/** = magus\n"+
-			"\n[merge-tools]\n"+
-			"magus.executable = magus\n"+
-			"magus.args = vcs merge-driver $base $local $other 0 $local\n"+
-			"magus.premerge = False\n"+
-			"magus.gui = False\n"+
-			"magus.disabled = True\n") + "\n" +
-		refreshMarkers.section("[hooks]\n"+
-			"update.magus-refresh = magus job run sync-graph >/dev/null 2>&1 || true\n") + "\n" +
-		driftMarkers.section("[hooks]\n"+
-			"commit.magus-drift-notice = magus job run check-drift >/dev/null 2>&1 || true\n"+
-			"outgoing.magus-drift-notice = magus job run check-drift >/dev/null 2>&1 || true\n")
+	want := fmt.Sprintf(`[ui]
+username = me
+
+%s
+%s
+%s`, generatedMarkers.section("[merge-patterns]\n"+
+		"glob:gen/** = magus\n"+
+		"glob:dist/** = magus\n"+
+		"\n[merge-tools]\n"+
+		"magus.executable = magus\n"+
+		"magus.args = vcs merge-driver $base $local $other 0 $local\n"+
+		"magus.premerge = False\n"+
+		"magus.gui = False\n"+
+		"magus.disabled = True\n"), refreshMarkers.section("[hooks]\n"+
+		"update.magus-refresh = magus job run sync-graph >/dev/null 2>&1 || true\n"), driftMarkers.section("[hooks]\n"+
+		"commit.magus-drift-notice = magus job run check-drift >/dev/null 2>&1 || true\n"+
+		"outgoing.magus-drift-notice = magus job run check-drift >/dev/null 2>&1 || true\n"))
 	assertFile(t, path, want, 0o644)
 
 	changed, err := writeHgRefreshSection(filepath.Dir(path), path, "hg", "magus job run sync-graph", stamp.Judge{})

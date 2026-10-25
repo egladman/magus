@@ -535,7 +535,12 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		{
 			name:  "self",
 			print: selfCmdUsage,
-			want:  []string{"Usage: magus self", "update", "install-shorthand", "magus init"},
+			want:  []string{"Usage: magus self", "update", "install-shorthand", "place", "magus init"},
+		},
+		{
+			name:  "place",
+			print: selfPlaceUsage,
+			want:  []string{"Usage: magus self place <binary>", "newer", "renamed"},
 		},
 		{
 			name:  "install-shorthand",
@@ -680,9 +685,9 @@ func TestEveryCommandBindsDisplayFlags(t *testing.T) {
 			if slicesContainsSubstr(lines[max(i-8, 0):i], "nodisplayflags:") {
 				continue
 			}
-			want := "bindDisplayFlags(" + m[1] + ")"
+			want := fmt.Sprintf("bindDisplayFlags(%s)", m[1])
 			if !slicesContainsSubstr(lines[i+1:endOfFunc(lines, i)], want) {
-				missing = append(missing, file+":"+itoa(i+1)+" ("+m[1]+")")
+				missing = append(missing, fmt.Sprintf("%s:%s (%s)", file, itoa(i+1), m[1]))
 			}
 		}
 	}

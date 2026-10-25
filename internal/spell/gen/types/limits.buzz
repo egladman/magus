@@ -9,4 +9,6 @@ export object Limits {
     foregroundDefaultMs: int = 0,
     foregroundMaxMs: int = 0,
     hookTimeoutMs: int = 0,
+    resumesOnBackgroundFrom: str = "",
+    observesSkillLoads: bool = false,
 }

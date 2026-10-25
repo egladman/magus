@@ -61,7 +61,7 @@ func (ls *LiveServer) Token() string { return ls.ts.Token() }
 // server, so the connection details are handed to the page locally and nothing leaves the
 // machine; the page reads the token and strips it from the URL.
 func (ls *LiveServer) ViewerURL(logsBase string) string {
-	return strings.TrimRight(logsBase, "/") + "/#live=" + url.QueryEscape(ls.Addr()) + "&token=" + url.QueryEscape(ls.Token())
+	return fmt.Sprintf("%s/#live=%s&token=%s", strings.TrimRight(logsBase, "/"), url.QueryEscape(ls.Addr()), url.QueryEscape(ls.Token()))
 }
 
 // Stop shuts the server down, allowing a brief grace window first so a late or reloading

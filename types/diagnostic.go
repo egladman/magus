@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -67,23 +68,23 @@ var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	// it resolves every code's URL back to a file on disk, so a mis-routed code has no page and
 	// fails rather than shipping a dead link.
 	case strings.HasPrefix(string(c), "MGS11"):
-		return diagnosticCapabilityBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticCapabilityBase, string(c))
 	case strings.HasPrefix(string(c), "MGS9"):
-		return diagnosticAuthBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticAuthBase, string(c))
 	case strings.HasPrefix(string(c), "MGS8"):
-		return diagnosticOutputRefBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticOutputRefBase, string(c))
 	case strings.HasPrefix(string(c), "MGS7"):
-		return diagnosticKnowledgeBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticKnowledgeBase, string(c))
 	case strings.HasPrefix(string(c), "MGS6"):
-		return diagnosticCharmsBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticCharmsBase, string(c))
 	case strings.HasPrefix(string(c), "MGS5"):
-		return diagnosticServicesBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticServicesBase, string(c))
 	case strings.HasPrefix(string(c), "MGS4"):
-		return diagnosticRaceBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticRaceBase, string(c))
 	case strings.HasPrefix(string(c), "MGS1"):
-		return diagnosticMagusfileBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticMagusfileBase, string(c))
 	default:
-		return diagnosticSandboxBase + string(c) + "/"
+		return fmt.Sprintf("%s%s/", diagnosticSandboxBase, string(c))
 	}
 })
 
@@ -323,6 +324,12 @@ const SpellContractViolated DiagnosticCode = "MGS1051"
 // reads as tiered when its jobs get the default.
 const ModelTierDeclarationUnusable DiagnosticCode = "MGS1052"
 
+// FootprintDeclaredBothWays is one target declaring a path, or two overlapping globs,
+// both as produced and with editsExistingSource: true. The two modes contradict: a
+// produced file is snapshotted, replayed and cleaned, an edited source is hashed and
+// never replayed or cleaned. The load stops rather than pick one.
+const FootprintDeclaredBothWays DiagnosticCode = "MGS1053"
+
 // SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 // ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 // keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -374,6 +381,11 @@ const SandboxRequired DiagnosticCode = "MGS2012"
 // not granted; this names the variable and the target, never the value, for whoever
 // reads the run.
 const EnvReadWithheld DiagnosticCode = "MGS2013"
+
+// ToolCacheUnscoped marks a tool cache that resolves outside the checkout, where another
+// checkout's results answer for this one's. The guard names it on a direct lint run and
+// doctor on the effective cache.
+const ToolCacheUnscoped DiagnosticCode = "MGS2014"
 const DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 const VCSUnavailable DiagnosticCode = "MGS3002"
 const ToolNotOnPath DiagnosticCode = "MGS3003"
@@ -598,7 +610,7 @@ const WritePathConfigWholeFile DiagnosticCode = "MGS3036"
 // depends_on that is not a lease id, an unknown state, a timeout that is not a positive
 // duration, a negative max_attempts, a relative checkout, or a path outside the workspace.
 // So is a blank breaks entry, a field spelled both ways, enter mixed with a declaration, an
-// unknown member, or a waiver on a code that cannot be waived or with no reason.
+// unknown member, or a deviation on a code that cannot be permitted or with no reason.
 const JobRecordInvalid DiagnosticCode = "MGS3037"
 
 // JobGoalInvalid is a goal no evidence could ever grade: a malformed shape, a duplicate
@@ -623,16 +635,16 @@ const JobCheckpointUnplaceable DiagnosticCode = "MGS3041"
 const JobForkLimitExceeded DiagnosticCode = "MGS3042"
 
 // WritePathTooBroad is a write path that claims more than the workspace's breadth
-// thresholds allow: more projects, more files, or a leading `**`. Waivable, because a
+// thresholds allow: more projects, more files, or a leading `**`. Permissible, because a
 // sweep is sometimes the job.
 const WritePathTooBroad DiagnosticCode = "MGS3043"
 
 // OutputOutsideWritePaths is a regenerated output, built from sources inside the write
-// paths, that the write paths do not cover. Waivable when the root regenerates it.
+// paths, that the write paths do not cover. Permissible when the root regenerates it.
 const OutputOutsideWritePaths DiagnosticCode = "MGS3044"
 
 // GateNotRun is a ci target over the write paths that neither the check nor a goal runs.
-// Waivable when the root runs it.
+// Permissible when the root runs it.
 const GateNotRun DiagnosticCode = "MGS3045"
 
 // CheckoutConfigHeld is a job whose write paths cover a file the workspace loads (a
@@ -640,9 +652,8 @@ const GateNotRun DiagnosticCode = "MGS3045"
 // working in: a half-saved load file stops `magus run` for every job there.
 const CheckoutConfigHeld DiagnosticCode = "MGS3046"
 
-// JobStoreWriterOlder is a write to the job store by a magus built from an older commit than
-// the newest build that wrote it, or by one that carries no commit once a stamped build has:
-// the older build judges with rules the newer code no longer applies.
+// JobStoreWriterOlder is a job store whose header requires a schema feature this magus
+// lacks: nothing is read or written until a magus that implements it runs.
 const JobStoreWriterOlder DiagnosticCode = "MGS3051"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
@@ -659,7 +670,7 @@ const StaleGeneratedOutput DiagnosticCode = "MGS4006"
 // Deliberately charm-agnostic. Keying on the charm was considered and rejected: a
 // charm patches args, so it cannot say whether the tool writes, and a rule keyed on
 // whether the caller TYPED the charm exempts a mutating custom charm merely because
-// someone spelled it out. ctx.modifiesExistingFiles is the declaration that answers
+// someone spelled it out. ctx.writesFiles(..., editsExistingSource: true) is the declaration that answers
 // this, which is why a formatter names its edits rather than earning an exemption.
 const UndeclaredSourceModified DiagnosticCode = "MGS4007"
 
@@ -724,6 +735,10 @@ const OutputRefMissing DiagnosticCode = "MGS8001"
 const OutputRefAmbiguous DiagnosticCode = "MGS8002"
 const OutputRefMalformed DiagnosticCode = "MGS8003"
 const OutputRefForeignMachine DiagnosticCode = "MGS8004"
+
+// OutputReplayedFromAnotherCheckout is a cache hit that replayed a log another checkout
+// recorded: a notice, or an error when the log names paths outside this checkout.
+const OutputReplayedFromAnotherCheckout DiagnosticCode = "MGS8005"
 const BearerRejected DiagnosticCode = "MGS9001"
 const InsecureTokenPermissions DiagnosticCode = "MGS9002"
 const TokenStoreTooNew DiagnosticCode = "MGS9003"
@@ -923,6 +938,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CarryApprovalsInvalid,
 	SpellContractViolated,
 	ModelTierDeclarationUnusable,
+	FootprintDeclaredBothWays,
 	PathReadDenied,
 	PathWriteDenied,
 	EnvStripped,
@@ -935,6 +951,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SecretTooShortToMask,
 	SandboxRequired,
 	EnvReadWithheld,
+	ToolCacheUnscoped,
 	DescendantBoundaryCrossed,
 	VCSUnavailable,
 	ToolNotOnPath,
@@ -1004,6 +1021,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputRefAmbiguous,
 	OutputRefMalformed,
 	OutputRefForeignMachine,
+	OutputReplayedFromAnotherCheckout,
 	BearerRejected,
 	InsecureTokenPermissions,
 	TokenStoreTooNew,

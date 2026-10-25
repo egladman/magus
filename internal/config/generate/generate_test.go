@@ -1,6 +1,7 @@
 package generate
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -301,7 +302,7 @@ func TestCliOptions(t *testing.T) {
 		if tag == "" {
 			return &ast.Field{}
 		}
-		return &ast.Field{Tag: &ast.BasicLit{Value: "`" + tag + "`"}}
+		return &ast.Field{Tag: &ast.BasicLit{Value: fmt.Sprintf("`%s`", tag)}}
 	}
 
 	assert.Equal(t, cliOpts{}, cliOptions(field("")))

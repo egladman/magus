@@ -190,7 +190,7 @@ type Step struct {
 	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
 	// Updates are never snapshotted, so a run records an entry only when every update
 	// file ended it with the bytes the key saw.
-	Updates []types.Glob // ctx.modifiesExistingFiles globs
+	Updates []types.Glob // ctx.writesFiles(..., editsExistingSource: true) globs
 	// OwnedOutputs spans EVERY target in EVERY project, not the running one, because
 	// ctx.needs puts a chained target's writes inside this step's window and a workspace
 	// target does the same across projects.
@@ -586,7 +586,7 @@ func (c *Cache) RunningTargets() []string {
 	running := c.inflight.Running()
 	out := make([]string, 0, len(running))
 	for _, t := range running {
-		out = append(out, t.Project+":"+t.Target)
+		out = append(out, fmt.Sprintf("%s:%s", t.Project, t.Target))
 	}
 	return out
 }
@@ -823,39 +823,10 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	if c.logLevel < slog.LevelError && !c.recordsOnly && len(logData) > 0 {
 		_, _ = os.Stderr.Write(logData)
 	}
-	// A hit regenerated nothing, so reuse the existing ref for this cache key rather
-	// than minting a duplicate; persist fresh only if the store has no record yet (e.g.
-	// cache imported without its output store), storing the raw cached log verbatim.
-	ref := ""
-	if c.outputs != nil {
-		ref = c.outputs.StepRef(hash)
-		if ref == "" {
-			// A remote import ships the producer's descriptor without its output blob;
-			// completing it with the replayed log bytes makes this machine resolve the
-			// SAME ref the producer printed.
-			if adopted, ok := c.outputs.AdoptImported(hash, logData); ok {
-				ref = adopted
-			}
-		}
-	}
-	if ref == "" {
-		ref = c.recordOutput(ctx, s, hash, logData, result, nil, true)
-	} else {
-		// recordOutput is skipped, so nothing reaches the journal otherwise; a cache hit
-		// is still a target OUTCOME, and a fully-cached run would show no results.
-		journal.Emit(ctx, journal.Event{
-			Ts:         time.Now().UnixMilli(),
-			Inv:        journal.InvocationIDFromContext(ctx),
-			Project:    s.ProjectPath,
-			Target:     reproTarget(s),
-			Kind:       journal.KindResult,
-			Level:      "info",
-			Status:     journal.StatusCached,
-			Ref:        ref,
-			DurationMs: result.Duration.Milliseconds(),
-			Sizing:     journal.SizingNone,
-		})
-	}
+	c.reportReplayedCheckout(ctx, s, e.manifest.Checkout, logData)
+	// A new attempt, never an earlier one: an earlier attempt carries another run's
+	// timestamp and lease, so a job's evidence would point at a run that is not its own.
+	ref := c.recordOutput(ctx, s, hash, logData, result, nil, true)
 	attrs := append(netAttrs(netRec),
 		slog.String("project", s.ProjectPath),
 		slog.String("label", s.Label),
@@ -871,6 +842,40 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	result.Ref = ref
 	rc.fireResults(rc.step, &result, nil)
 	return result, true
+}
+
+// reportReplayedCheckout reports MGS8005 when a hit replayed a log another checkout
+// recorded: a notice naming that checkout, or an error when the log names paths
+// outside this one. The log itself replays unchanged.
+func (c *Cache) reportReplayedCheckout(ctx context.Context, s Step, producer string, log []byte) {
+	if producer == "" || s.WorkspaceRoot == "" || producer == s.WorkspaceRoot {
+		return
+	}
+	under, outside := replayedPaths(log, producer, s.WorkspaceRoot)
+	level := slog.LevelInfo
+	msg := fmt.Sprintf("%s:%s replayed a log recorded in another checkout, %s; it names %d path(s) under that checkout (see %s)",
+		s.ProjectPath, s.Target, producer, under, types.CodeURL(types.OutputReplayedFromAnotherCheckout))
+	if outside > 0 {
+		level = slog.LevelError
+		msg = fmt.Sprintf("%s:%s replayed a log recorded in another checkout, %s; it names %d path(s) outside this checkout, %s, so those lines describe that checkout's files, not these; `magus run --no-cache` records this checkout's own (see %s)",
+			s.ProjectPath, s.Target, producer, outside, s.WorkspaceRoot, types.CodeURL(types.OutputReplayedFromAnotherCheckout))
+	}
+	c.log.LogAttrs(ctx, level, msg, attr.Notice(string(types.OutputReplayedFromAnotherCheckout)))
+}
+
+// replayedPaths counts the paths under producer that log names, and how many of those
+// lie outside here. A checkout nested in the producer (a linked worktree under the
+// primary) has its own paths under the producer's root too, so those are subtracted.
+func replayedPaths(log []byte, producer, here string) (under, outside int) {
+	sep := string(filepath.Separator)
+	under = bytes.Count(log, []byte(producer+sep))
+	switch {
+	case strings.HasPrefix(producer+sep, here+sep):
+		return under, 0
+	case strings.HasPrefix(here+sep, producer+sep):
+		return under, under - bytes.Count(log, []byte(here+sep))
+	}
+	return under, under
 }
 
 // backfill hands an entry hit in tier i to every later tier that may be written, so a
@@ -981,6 +986,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			// vanishes mid-run instead of failing loudly.
 			return fail(fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err))
 		}
+		m.Checkout = s.WorkspaceRoot
 		snap, result.Outputs = m, outs
 	}
 
@@ -1067,7 +1073,7 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 	}
 	read := hint.QueryOutput.With(d.Attempt)
 	if d.FailedNeedRef != "" {
-		read = hint.QueryOutput.With(d.FailedNeedRef) + " (" + d.FailedNeedTarget + ", the ctx.needs member that failed)"
+		read = fmt.Sprintf("%s (%s, the ctx.needs member that failed)", hint.QueryOutput.With(d.FailedNeedRef), d.FailedNeedTarget)
 	}
 	interactive.Hint(ctx, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
 		d.Attempt, msg, read))
@@ -1115,6 +1121,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		VCSName:     s.VCSName,
 		Platform:    c.platform,
 		Lease:       c.actingLease(ctx),
+		Cached:      cacheHit,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
@@ -1186,7 +1193,7 @@ func reproTarget(s Step) string {
 	if len(s.Charms) == 0 {
 		return s.Target
 	}
-	return s.Target + ":" + strings.Join(s.Charms, ",")
+	return fmt.Sprintf("%s:%s", s.Target, strings.Join(s.Charms, ","))
 }
 
 // stepSlots is the limiter weight one step takes: Step.Slots clamped to [1, budget], so
@@ -1362,7 +1369,7 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 
 // stepLabel names a step for a human reading a wait: the project as `magus status` spells
 // it, then the target.
-func stepLabel(s Step) string { return displayProject(s.ProjectPath) + " " + s.Target }
+func stepLabel(s Step) string { return fmt.Sprintf("%s %s", displayProject(s.ProjectPath), s.Target) }
 
 type sharedStepBaseKey struct{}
 
@@ -2171,7 +2178,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		for _, msg := range extractNotices(logPath) {
 			// Past the level gate, which -s raises to error: a notice is the one line a
 			// silent passing run prints, so it reaches the handler whatever the level.
-			r := slog.NewRecord(time.Now(), slog.LevelInfo, projectPath+": "+msg, 0)
+			r := slog.NewRecord(time.Now(), slog.LevelInfo, fmt.Sprintf("%s: %s", projectPath, msg), 0)
 			r.AddAttrs(attr.Notice("notice"))
 			if c.recordsOnly {
 				// The -o jsonl wire shape: readers match its "notice" attribute.

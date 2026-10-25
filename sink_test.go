@@ -3,6 +3,7 @@ package magus
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"maps"
@@ -71,7 +72,7 @@ func TestEveryFormatRendersEverySinkEvent(t *testing.T) {
 	interactive.SetHintsEnabled(true)
 	for _, format := range slices.Sorted(maps.Keys(encoders)) {
 		for _, e := range sinkEvents {
-			t.Run(string(format)+"/"+reflect.TypeOf(e).Name(), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", string(format), reflect.TypeOf(e).Name()), func(t *testing.T) {
 				if n, ok := e.(report.Notice); ok {
 					// Hints print once per process; each case needs its own.
 					n.Message += " " + string(format)

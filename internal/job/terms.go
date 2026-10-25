@@ -205,7 +205,7 @@ func (b Terms) String() string {
 
 	switch {
 	case b.GraphCold:
-		writeList(&s, "graph evidence", []string{"none: the knowledge graph is cold (" + hint.GraphBuild.String() + ")"})
+		writeList(&s, "graph evidence", []string{fmt.Sprintf("none: the knowledge graph is cold (%s)", hint.GraphBuild.String())})
 	case len(b.Evidence) > 0:
 		lines := make([]string, len(b.Evidence))
 		for i, e := range b.Evidence {
@@ -228,7 +228,7 @@ func interfaceLines(goals []types.Goal) []string {
 		if g.Kind != types.GoalKindSymbol {
 			continue
 		}
-		line := strings.Join(g.Symbols, ", ") + " (" + string(g.Expect) + ")"
+		line := fmt.Sprintf("%s (%s)", strings.Join(g.Symbols, ", "), string(g.Expect))
 		if g.Signature != "" {
 			line += ": " + g.Signature
 		}
@@ -261,7 +261,7 @@ func writeAttempts(s *strings.Builder, row types.Job) {
 	newest := row.Prior[len(row.Prior)-1]
 	lines := append([]string{priorSummary(newest)}, priorDetail(newest)...)
 	for _, p := range slices.Backward(row.Prior[:len(row.Prior)-1]) {
-		lines = append(lines, priorSummary(p)+", "+retryLine(p.Retry))
+		lines = append(lines, fmt.Sprintf("%s, %s", priorSummary(p), retryLine(p.Retry)))
 	}
 	writeList(s, "previous attempts", lines)
 }
@@ -271,7 +271,7 @@ func writeAttempts(s *strings.Builder, row types.Job) {
 func priorSummary(p types.PriorAttempt) string {
 	line := fmt.Sprintf("attempt %d: %s", p.N, p.State)
 	if p.EndReason != "" {
-		line += " (" + p.EndReason + ")"
+		line += fmt.Sprintf(" (%s)", p.EndReason)
 	}
 	if p.ModelTier != "" {
 		line += ", tier " + p.ModelTier
@@ -311,7 +311,7 @@ func priorDetail(p types.PriorAttempt) []string {
 		lines = append(lines, "  (denials unknown: the trail was rotated)")
 	}
 	for _, ref := range p.FailingRefs {
-		lines = append(lines, "  failed run: reopen with `"+hint.QueryOutput.With(ref)+"`")
+		lines = append(lines, fmt.Sprintf("  failed run: reopen with `%s`", hint.QueryOutput.With(ref)))
 	}
 	return append(lines, "  "+retryLine(p.Retry))
 }

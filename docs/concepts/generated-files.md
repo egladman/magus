@@ -154,7 +154,7 @@ A target declares what it writes:
 import "magus";
 
 export fun index_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("MAGUS.md");
+    ctx.writesFiles(["MAGUS.md"]);
     ...
 }
 ```

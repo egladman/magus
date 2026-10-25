@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,24 +97,29 @@ const advisoryBackgroundLeft hint.MarkerKind = "background-left"
 // The transcript is the host's record, read by shape; a host whose transcript records no
 // background task in that shape gets no answer, never a refusal.
 //
+// A subagent whose host resumes it when a background task completes, at or past
+// resumesFrom (see hostResumes), is let through with advice: the notice reaches the
+// subagent itself.
+//
 // A subagent's stop that stands is recorded on said, so a later spawn on the job it held is
-// not refused as a second worker (see stoppedAgent).
-func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (types.GuardJudgment, bool) {
+// not refused as a second worker (see stoppedAgent). A resumed subagent still holds its
+// job, so its stop is not recorded.
+func judgeStop(deps Dependencies, said hint.Gate, raw, resumesFrom string, now time.Time) (types.GuardJudgment, bool) {
 	env, ok := decodeStop(raw)
 	if !ok {
 		return types.GuardJudgment{}, false
 	}
-	v, judged := judgeStopTasks(deps, said, env, now)
-	if env.AgentID != "" && v.Decision != decisionDeny {
+	v, judged, resumes := judgeStopTasks(deps, said, env, resumesFrom, now)
+	if env.AgentID != "" && v.Decision != decisionDeny && !resumes {
 		said.Touch(stoppedAgentKind(env.AgentID))
 	}
 	return v, judged
 }
 
-func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, now time.Time) (types.GuardJudgment, bool) {
+func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumesFrom string, now time.Time) (v types.GuardJudgment, judged, resumes bool) {
 	setting, ok := deps.setting(string(denyRuleBackgroundLeft))
 	if !ok || setting.Decision == builtin.Off {
-		return types.GuardJudgment{}, false
+		return types.GuardJudgment{}, false, false
 	}
 	subagent := env.AgentID != ""
 	transcript := env.TranscriptPath
@@ -121,13 +127,21 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, now tim
 		transcript = env.AgentTranscriptPath
 	}
 	if transcript == "" {
-		return types.GuardJudgment{}, false
+		return types.GuardJudgment{}, false, false
 	}
-	tasks, err := liveBackgroundTasks(transcript, said.CacheDir(), now)
+	read, err := readBackgroundTranscript(transcript, said.CacheDir(), now)
 	if err != nil {
-		return types.GuardJudgment{}, false
+		return types.GuardJudgment{}, false, false
 	}
-	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
+	resumes, why := hostResumes(resumesFrom, read.hostVersion)
+	if subagent && resumes && len(read.tasks) > 0 {
+		return adviseResumedStop(read.tasks, why, now), true, true
+	}
+	tasks := slices.DeleteFunc(slices.Clone(read.tasks), func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
+	if subagent && len(tasks) == 0 && len(read.tasks) > 0 {
+		// Stopping is how a subagent waits for these: each notice starts its next turn.
+		return types.GuardJudgment{}, false, true
+	}
 	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
 		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
@@ -135,26 +149,101 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, now tim
 		})
 	}
 	if len(tasks) == 0 {
-		return types.GuardJudgment{}, false
+		return types.GuardJudgment{}, false, false
 	}
-	listing := stoppableTasks(tasks, now)
 	// A subagent's notice arrives only after a stop this refuses, so stopping is its remedy.
 	if subagent && setting.Decision == builtin.Deny {
-		return types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
-			Decision:      decisionDeny,
-			Rule:          string(denyRuleBackgroundLeft),
-			Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each before you finish:\n%s",
-				plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
-		}, true
+		return refuseLeftStop(tasks, why, now), true, false
 	}
 	return types.GuardJudgment{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionAdvise,
 		Rule:          string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
-			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
-	}, true
+			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
+	}, true, false
+}
+
+// refuseLeftStop refuses a subagent's stop over tasks still running, naming each with the
+// call that stops it and the one wait a subagent has for its own run.
+func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
+	return types.GuardJudgment{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      decisionDeny,
+		Rule:          string(denyRuleBackgroundLeft),
+		Reason: fmt.Sprintf("magus workspace: stop each background task before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
+			stoppableTasks(tasks, now), why),
+	}
+}
+
+// adviseResumedStop lets a subagent's stop stand while tasks run, since why says its host
+// resumes it when they complete.
+func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
+	return types.GuardJudgment{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      decisionAdvise,
+		Rule:          string(denyRuleBackgroundLeft),
+		Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: %s.\n%s you ran in the background %s still running:\n%s",
+			why, plural(len(tasks), "A shell command", "Shell commands"), plural(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
+	}
+}
+
+// hostResumes reports whether a host at version resumes a stopped subagent when a background
+// task it left running completes, and says why in a clause. from is the first version that
+// does, as the wiring declares it (types.Limits.ResumesOnBackgroundFrom), "" when none
+// does. The hook input names no host version, so version is the one the transcript records.
+func hostResumes(from, version string) (bool, string) {
+	if from == "" {
+		return false, "the wiring declares no host version that resumes a subagent when its background task completes"
+	}
+	floor, ok := parseVersion(from)
+	if !ok {
+		return false, fmt.Sprintf("the wiring's resume version %q is not a dotted version", from)
+	}
+	if version == "" {
+		return false, fmt.Sprintf("the transcript names no host version to compare with %s, the first that resumes a subagent when its background task completes", from)
+	}
+	got, ok := parseVersion(version)
+	if !ok {
+		return false, fmt.Sprintf("the transcript's host version %q is not a dotted version to compare with %s", version, from)
+	}
+	if compareVersions(got, floor) < 0 {
+		return false, fmt.Sprintf("host version %s is below %s, the first that resumes a subagent when its background task completes", version, from)
+	}
+	return true, fmt.Sprintf("host version %s resumes this subagent when each task completes", version)
+}
+
+// parseVersion reads a dotted version such as 2.1.299; a suffix after "-" or "+" is
+// dropped, so 2.1.299-beta compares as 2.1.299.
+func parseVersion(s string) ([]int, bool) {
+	core, _, _ := strings.Cut(s, "-")
+	core, _, _ = strings.Cut(core, "+")
+	var out []int
+	for part := range strings.SplitSeq(core, ".") {
+		n, err := strconv.Atoi(part)
+		if err != nil || n < 0 {
+			return nil, false
+		}
+		out = append(out, n)
+	}
+	return out, true
+}
+
+// compareVersions orders a and b with a missing part read as 0, so 2.1 equals 2.1.0.
+func compareVersions(a, b []int) int {
+	for i := range max(len(a), len(b)) {
+		if c := cmp.Compare(partAt(a, i), partAt(b, i)); c != 0 {
+			return c
+		}
+	}
+	return 0
+}
+
+func partAt(v []int, i int) int {
+	if i < len(v) {
+		return v[i]
+	}
+	return 0
 }
 
 // endsOnItsOwn reports a backgrounded line of runs under `magus job exec --timeout`, which
@@ -217,13 +306,35 @@ func sessionEnded(raw string) bool {
 }
 
 // endStoppedSession ends the job caller c's session held when raw ends that session and
-// the guard did not refuse the stop: a refused stop leaves the agent running.
-func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw string, v types.GuardJudgment) (bool, error) {
-	if v.Decision == decisionDeny || !sessionEnded(raw) {
+// the guard did not refuse the stop: a refused stop leaves the agent running, and so does a
+// subagent stop the host resumes (see resumedStop).
+func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v types.GuardJudgment) (bool, error) {
+	if v.Decision == decisionDeny || !sessionEnded(raw) || resumedStop(raw, resumesFrom, time.Now()) {
 		return false, nil
 	}
 	_, ended, err := store.EndSession(ctx, c)
 	return ended, err
+}
+
+// resumedStop reports a subagent stop that leaves a background task running on a host that
+// resumes the subagent when the task completes, whatever background-left is set to. A task
+// that ends on its own resumes it on any host version: stopping is how a subagent waits for
+// its bounded run, and ending its job there tombstones the binding the next turn needs. A
+// subagent's transcript is short, so it is read whole, without judgeStop's checkpoint.
+func resumedStop(raw, resumesFrom string, now time.Time) bool {
+	env, ok := decodeStop(raw)
+	if !ok || env.AgentID == "" || env.AgentTranscriptPath == "" {
+		return false
+	}
+	read, err := readBackgroundTranscript(env.AgentTranscriptPath, "", now)
+	if err != nil || len(read.tasks) == 0 {
+		return false
+	}
+	if slices.ContainsFunc(read.tasks, func(t backgroundTask) bool { return endsOnItsOwn(t.Command) }) {
+		return true
+	}
+	resumes, _ := hostResumes(resumesFrom, read.hostVersion)
+	return resumes
 }
 
 func plural(n int, one, many string) string {
@@ -268,10 +379,10 @@ func stoppableTasks(tasks []backgroundTask, now time.Time) string {
 func backgroundTaskKey(kind hint.MarkerKind, t backgroundTask) hint.MarkerKind {
 	subject := t.ID
 	if subject == "" {
-		subject = t.Started.UTC().Format(time.RFC3339Nano) + "\x00" + t.Command
+		subject = fmt.Sprintf("%s\x00%s", t.Started.UTC().Format(time.RFC3339Nano), t.Command)
 	}
 	sum := sha256.Sum256([]byte(subject))
-	return kind + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+	return hint.MarkerKind(fmt.Sprintf("%s-%s", kind, hex.EncodeToString(sum[:6])))
 }
 
 // judgeBackgroundSilent is a root session's per-call word on its background tasks that
@@ -290,10 +401,7 @@ func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint
 	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
 		return !t.Expires.IsZero() || silentFor(t) < limits.advise
 	})
-	why := fmt.Sprintf("A background task's output file and event notices are the only sign it is working. One that writes nothing for %s is more likely waiting on a stdin nobody feeds, a lock, or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat that way for eight hours. ", limits.advise) +
-		fmt.Sprintf("Past %s of silence each call is advised, once per task; past %s each call but a read is refused until the task is stopped. ", limits.advise, limits.deny) +
-		"Silence is measured from the task's start, its output file's last write, and its newest event notice, whichever is latest. A watcher with an expiry is not judged: the host ends it. " +
-		"magus never stops a task itself. The figures are background-silent's advise_minutes and deny_minutes in the workspace's magus\\guard.builtins."
+	why := fmt.Sprintf("A background task's output file and event notices are the only sign it is working. One that writes nothing for %s is more likely waiting on a stdin nobody feeds, a lock, or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat that way for eight hours. Past %s of silence each call is advised, once per task; past %s each call but a read is refused until the task is stopped. Silence is measured from the task's start, its output file's last write, and its newest event notice, whichever is latest. A watcher with an expiry is not judged: the host ends it. magus never stops a task itself. The figures are background-silent's advise_minutes and deny_minutes in the workspace's magus\\guard.builtins.", limits.advise, limits.advise, limits.deny)
 	if stuck := slices.DeleteFunc(slices.Clone(tasks), func(t backgroundTask) bool { return silentFor(t) < limits.deny }); len(stuck) > 0 {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop %s before anything else:\n%s\n%s",
@@ -318,9 +426,7 @@ func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint
 // back up, so a stop is never a guess about lost output.
 func resumeAfterStop(ceiling time.Duration) string {
 	bound := fmt.Sprintf("%dm", int(ceiling.Minutes()))
-	return "Stopping ends only the process: its output file stays on disk, and reads still pass, so read it first if you need it. " +
-		"A magus run keeps its output ref and run history (`magus query output <ref>`). " +
-		fmt.Sprintf("To pick the work back up, rerun the command bounded: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", bound, bound)
+	return fmt.Sprintf("Stopping ends only the process: its output file stays on disk, and reads still pass, so read it first if you need it. A magus run keeps its output ref and run history (`magus query output <ref>`). To pick the work back up, rerun the command bounded: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", bound, bound)
 }
 
 // silentTasks lists tasks as stoppableTasks does, each with how long it has been silent
@@ -401,6 +507,8 @@ var errNotATranscript = errors.New("transcript path is not absolute")
 type transcriptRecord struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp"`
+	// Version is the host's own version, which the host writes on every line.
+	Version string `json:"version"`
 	// Content is a queued notice's text, on a queue line.
 	Content    any `json:"content"`
 	Attachment struct {
@@ -436,18 +544,32 @@ type transcriptBlock struct {
 // megabytes, and a hook has 7 seconds. A checkpoint that cannot be saved costs the next
 // call a full read, never a wrong answer.
 func liveBackgroundTasks(transcript, cacheDir string, now time.Time) ([]backgroundTask, error) {
+	read, err := readBackgroundTranscript(transcript, cacheDir, now)
+	return read.tasks, err
+}
+
+// transcriptTasks is what one read of a transcript found: the tasks still running, and
+// the host version its newest decoded line names, "" when none named one.
+type transcriptTasks struct {
+	tasks       []backgroundTask
+	hostVersion string
+}
+
+// readBackgroundTranscript is liveBackgroundTasks with the host version the transcript
+// records.
+func readBackgroundTranscript(transcript, cacheDir string, now time.Time) (transcriptTasks, error) {
 	if !filepath.IsAbs(transcript) {
-		return nil, errNotATranscript
+		return transcriptTasks{}, errNotATranscript
 	}
 	f, err := os.Open(transcript)
 	if err != nil {
-		return nil, err
+		return transcriptTasks{}, err
 	}
 	defer f.Close()
 	store := taskCheckpointPath(cacheDir, transcript)
 	r, start, saved := resumeTaskReader(store, transcript, f)
 	if _, err := f.Seek(start, io.SeekStart); err != nil {
-		return nil, err
+		return transcriptTasks{}, err
 	}
 	reader := bufio.NewReaderSize(f, 1<<20)
 	offset := start
@@ -461,7 +583,7 @@ func liveBackgroundTasks(transcript, cacheDir string, now time.Time) ([]backgrou
 			break
 		}
 		if err != nil {
-			return nil, err
+			return transcriptTasks{}, err
 		}
 		offset += int64(len(line))
 		r.fold(line)
@@ -473,7 +595,7 @@ func liveBackgroundTasks(transcript, cacheDir string, now time.Time) ([]backgrou
 		}
 	}
 	r.fold(tail)
-	return r.result(now), nil
+	return transcriptTasks{tasks: r.result(now), hostVersion: r.version}, nil
 }
 
 // pendingCallWindow is how long a shell call stays in a checkpoint waiting for a result
@@ -494,6 +616,9 @@ type taskCheckpoint struct {
 	Pending    map[string]backgroundTask `json:"pending,omitzero"`
 	Live       []checkpointTask          `json:"live,omitzero"`
 	Heard      map[string]time.Time      `json:"heard,omitzero"`
+	// HostVersion is the newest host version read, so a resumed read still knows it when
+	// no line written since names one.
+	HostVersion string `json:"host_version,omitzero"`
 }
 
 // checkpointTask is one backgrounded call, keyed by the call id a notice may end it by.
@@ -556,6 +681,7 @@ func resumeTaskReader(store, transcript string, f *os.File) (*taskReader, int64,
 			r.start(t.CallID, t.Task)
 		}
 		maps.Copy(r.heard, cp.Heard)
+		r.version = cp.HostVersion
 		return r, cp.Offset, saved
 	}
 	return r, 0, saved
@@ -568,6 +694,7 @@ func resumeTaskReader(store, transcript string, f *os.File) (*taskReader, int64,
 func (r *taskReader) save(store string, saved file.Lines, cp taskCheckpoint) {
 	cp.Pending = r.commands
 	cp.Heard = r.heard
+	cp.HostVersion = r.version
 	for _, callID := range r.order {
 		cp.Live = append(cp.Live, checkpointTask{CallID: callID, Task: *r.live[callID]})
 	}
@@ -648,6 +775,8 @@ type taskReader struct {
 	heard map[string]time.Time
 	// latest is the newest timestamp read.
 	latest time.Time
+	// version is the host version the newest decoded line names.
+	version string
 }
 
 // fold reads line when it holds one of backgroundMarkers; most lines hold none and are
@@ -667,6 +796,7 @@ func (r *taskReader) read(line []byte) {
 	if at.After(r.latest) {
 		r.latest = at
 	}
+	r.version = cmp.Or(rec.Version, r.version)
 	r.notices(rec.Attachment.Prompt, at)
 	if s, ok := rec.Content.(string); ok {
 		r.notices(s, at)

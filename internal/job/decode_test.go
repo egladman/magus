@@ -178,8 +178,11 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	require.NoError(t, err)
 	two := fmt.Sprintf(`{"schema_version":%d,"id":"b"}`, types.JobSchemaVersion)
 	for name, raw := range map[string]string{
-		"an array":     "[" + string(one) + "," + two + "]",
-		"one per line": string(one) + "\n\n" + two + "\n",
+		"an array": fmt.Sprintf("[%s,%s]", string(one), two),
+		"one per line": fmt.Sprintf(`%s
+
+%s
+`, string(one), two),
 	} {
 		rows, err := DecodeDeclarations(strings.NewReader(raw))
 		require.NoError(t, err, name)
@@ -190,10 +193,10 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	assert.Len(t, rows, 1)
 
 	bad := fmt.Sprintf(`{"schema_version":%d,"id":"c","confidence":"high"}`, types.JobSchemaVersion)
-	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + two + "\n" + bad))
+	_, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s\n%s", string(one), two, bad)))
 	require.ErrorContains(t, err, "record 3:")
 	assert.Contains(t, err.Error(), "confidence")
-	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + string(one)))
+	_, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s", string(one), string(one))))
 	require.ErrorContains(t, err, "a is record 1 too")
 }
 
@@ -207,7 +210,7 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 		"base_verdict", "registered_by", "registered", "checkout_root", "worktree", "end_reason", "created",
 		"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
 		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation", "attempts",
-		"prior", "rejection", "paused",
+		"prior", "rejection", "paused", "paused_by", "pause_reason", "paused_until",
 	}, storeStamped)
 }
 
@@ -233,6 +236,27 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 
 	_, err = decodeDeclaration(strings.NewReader(stored))
 	require.ErrorContains(t, err, "unknown", "fork's decoder stays strict")
+}
+
+// `describe job -o json` nests the row under `job` beside what magus derived for it, and
+// apply reads that record back as the row alone.
+func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
+	t.Parallel()
+
+	plain, err := DecodeDeclarations(strings.NewReader(fmt.Sprintf(
+		`{"schema_version":%d,"id":"a","write_paths":["internal/job"]}`, types.JobSchemaVersion)))
+	require.NoError(t, err)
+
+	described := `{"job":{"id":"a","write_paths":["internal/job"],"state":"declared","created":1},` +
+		`"projects":["."],"graph_cold":true,"goals":{"id":"a"}}`
+	rows, err := DecodeDeclarations(strings.NewReader(described))
+	require.NoError(t, err)
+	assert.Equal(t, plain, rows)
+
+	typo := strings.Replace(described, `"projects"`, `"projectz"`, 1)
+	_, err = DecodeDeclarations(strings.NewReader(typo))
+	require.EqualError(t, err, fmt.Sprintf("record 1: %v", recordInvalid("projectz",
+		errors.New("\"projectz\" beside `job` is not a member `describe job -o json` prints")).Err()))
 }
 
 // A stored row prints its check twice, as the record and as the rendered line, and a
@@ -417,7 +441,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 				"id":    "unit",
 				"check": map[string]any{"target": "test", "project": "internal/job"},
 			}}
-		case "waivers":
+		case "deviations":
 			value = []any{map[string]any{
 				"code": string(types.WritePathTooBroad), "subject": "internal/**", "reason": "the root regenerates it",
 			}}

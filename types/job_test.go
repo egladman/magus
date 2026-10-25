@@ -240,6 +240,26 @@ func TestJobOverlapsSkipsTerminalJobs(t *testing.T) {
 	}
 }
 
+// TestPathHoldersKeepsEditingRows: a path is held by a declared or running row only. An
+// exited row filed its result, so its outputs are anyone's to regenerate.
+func TestPathHoldersKeepsEditingRows(t *testing.T) {
+	t.Parallel()
+
+	rows := []Job{
+		owner("declared", StateDeclared, "a"),
+		owner("running", StateRunning, "b"),
+		owner("exited", StateExited, "c"),
+		owner("passed", StatePass, "d"),
+		owner("unset", "", "e"),
+	}
+	var ids []string
+	for _, r := range PathHolders(rows) {
+		ids = append(ids, r.ID)
+	}
+	assert.Equal(t, []string{"declared", "running"}, ids)
+	assert.Len(t, rows, 5, "the rows passed in are left whole")
+}
+
 // An exited holder returned, so its write paths collide with nobody's while it waits to be
 // graded.
 func TestJobOverlapsSkipsAnExitedJob(t *testing.T) {
@@ -795,6 +815,48 @@ func TestScriptCheckRendersAsARecordedRunAndNamesOneSubject(t *testing.T) {
 	scoped := gate
 	scoped.Check.Project = "cmd/magus"
 	require.ErrorContains(t, scoped.Validate(), "belongs to the workspace")
+
+	tested := gate
+	tested.Check.Test = true
+	require.NoError(t, tested.Validate())
+	assert.Equal(t, "magus buzz -t probes/key.buzz", tested.Check.String())
+}
+
+func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
+	t.Parallel()
+
+	target := Goal{ID: "unit", Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: ".", Test: true}}.Resolve()
+	require.ErrorContains(t, target.Validate(), `check target "test" sets test`)
+
+	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "fix-parser", Check: &LeaseCheck{Target: "test", Test: true}}
+	_, _, ps := rec.check()
+	require.Len(t, ps, 1)
+	assert.Equal(t, "check.test", ps[0].Field)
+
+	rec.Check = &LeaseCheck{Script: "probes/key.buzz", Test: true}
+	c, ok, ps := rec.check()
+	require.Empty(t, ps)
+	assert.True(t, ok)
+	assert.True(t, c.Test, "the record's test reaches the row's check")
+}
+
+// An exited dependency is done editing, so nobody collecting it leaves its dependent
+// queued forever: the clock starts at the exit, and only a declared or running one holds it.
+func TestJobIdleSinceStartsAtAnExitedDependency(t *testing.T) {
+	t.Parallel()
+
+	row := Job{ID: "next", State: StateDeclared, Updated: 100, DependsOn: []string{"first"}}
+	exited := Job{ID: "first", State: StateExited, Updated: 300}
+	since, waiting := JobIdleSince([]Job{exited, row}, row)
+	assert.False(t, waiting)
+	assert.Equal(t, int64(300), since)
+	assert.True(t, JobStaleAt([]Job{exited, row}, row, 300+3600, time.Hour))
+
+	for _, state := range []JobState{StateRunning, StateDeclared} {
+		dep := Job{ID: "first", State: state, Updated: 300}
+		_, waiting = JobIdleSince([]Job{dep, row}, row)
+		assert.True(t, waiting, "a %s dependency still holds the clock", state)
+	}
 }
 
 func dependent(id string, state JobState, dependsOn string, paths ...string) Job {
@@ -972,7 +1034,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		Breaks:      []string{" "},
 		Check:       &LeaseCheck{Target: "test", Project: "."},
 		Validation:  "magus run test .",
-		Waivers: []JobWaiver{
+		Deviations: []Deviation{
 			{Code: JobRecordInvalid, Subject: "x", Reason: "r"},
 			{Code: GateNotRun},
 		},
@@ -986,7 +1048,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 
 	fields := make([]string, len(ps))
 	for i, p := range ps {
-		fields[i] = string(p.Code) + " " + p.Field
+		fields[i] = fmt.Sprintf("%s %s", string(p.Code), p.Field)
 		assert.NotEmptyf(t, p.Message, "%s has a message", fields[i])
 		assert.NotEmptyf(t, p.Fix, "%s has a fix", fields[i])
 	}
@@ -1001,9 +1063,9 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		"MGS3037 write_paths[1]",
 		"MGS3037 validation",
 		"MGS3037 breaks[0]",
-		"MGS3037 waivers[0].code",
-		"MGS3037 waivers[1].subject",
-		"MGS3037 waivers[1].reason",
+		"MGS3037 deviations[0].code",
+		"MGS3037 deviations[1].subject",
+		"MGS3037 deviations[1].reason",
 		"MGS3038 goals[0].paths",
 		"MGS3038 goals[1].id",
 		"MGS3038 goals[1].depends_on[0]",
@@ -1019,7 +1081,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 		ID:         "wave/a",
 		WritePaths: []string{"types/job.go"},
 		Check:      &LeaseCheck{Target: "go-test", Project: "."},
-		Waivers:    []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
+		Deviations: []Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
 		Goals:      []Goal{{ID: "names", Kind: GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{PrimaryGoalID}}},
 	}
 
@@ -1044,15 +1106,15 @@ func TestDeclarationProblemsReportsEachGoalCycleOnce(t *testing.T) {
 	assert.Contains(t, ps[0].Message, "cannot depend on itself")
 }
 
-func TestDeclarationApplyCopiesWaivers(t *testing.T) {
+func TestDeclarationApplyCopiesDeviations(t *testing.T) {
 	t.Parallel()
-	waivers := []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}}
+	deviations := []Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}}
 	var row Job
 
-	Declaration{ID: "a", Waivers: waivers}.Apply(&row)
-	waivers[0].Reason = "changed"
+	Declaration{ID: "a", Deviations: deviations}.Apply(&row)
+	deviations[0].Reason = "changed"
 
-	assert.Equal(t, "the root runs it", row.Waivers[0].Reason)
+	assert.Equal(t, "the root runs it", row.Deviations[0].Reason)
 }
 
 func TestGoalProblemsNameTheFieldUnderTheGoal(t *testing.T) {
@@ -1169,4 +1231,35 @@ func TestDeclarationCarriesMaxClaims(t *testing.T) {
 	assert.Equal(t, 4, row.MaxClaims)
 	Declaration{ID: "worker"}.ApplySpec(&row)
 	assert.Zero(t, row.MaxClaims)
+}
+
+// A pause holds until its bound and not a second past it; a pause naming no bound holds
+// until it is lifted.
+func TestJobPausedAtLapsesAtItsBound(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		row  Job
+		want bool
+	}{
+		"not paused":       {row: Job{PausedUntil: 200}, want: false},
+		"paused, no bound": {row: Job{Paused: 10, PauseReason: "busy"}, want: true},
+		"inside its bound": {row: Job{Paused: 10, PauseReason: "busy", PausedUntil: 101}, want: true},
+		"at its bound":     {row: Job{Paused: 10, PauseReason: "busy", PausedUntil: 100}, want: false},
+	}
+	for name, c := range cases {
+		assert.Equal(t, c.want, c.row.PausedAt(100), name)
+	}
+}
+
+func TestParseClaimEvidenceReadsADeadHolder(t *testing.T) {
+	t.Parallel()
+
+	e, err := ParseClaimEvidence("dead:api/migrate")
+	require.NoError(t, err)
+	assert.Equal(t, ClaimEvidence{Kind: ClaimDeadHolder, Subject: "api/migrate"}, e)
+	assert.Equal(t, "dead:api/migrate", e.String())
+
+	_, err = ParseClaimEvidence("dead")
+	assert.EqualError(t, err, `"dead" names no dead subject`)
 }

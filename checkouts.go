@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
@@ -27,7 +28,7 @@ func (m *Magus) readRef(ctx context.Context, ref string, read func(cacheDir stri
 	}
 	from, err := m.searchOtherCheckouts(ctx, ref, read)
 	if err == nil {
-		slog.InfoContext(ctx, fmt.Sprintf("read %s from the output store of %s, another checkout of this repository", ref, from),
+		slog.WarnContext(ctx, fmt.Sprintf("read %s from the output store of %s, another checkout of this repository", ref, from),
 			attr.Notice(""), attr.Component("magus"))
 	}
 	return err
@@ -37,8 +38,9 @@ func (m *Magus) readRef(ctx context.Context, ref string, read func(cacheDir stri
 // repository that may hold ref, until one does not miss, and returns that checkout. The
 // candidates are the checkouts the repo-wide session store records as having run ref,
 // newest first, then the primary checkout when this is a linked worktree, for a run no
-// fact recorded. A checkout sharing this one's cache dir is skipped: that store already
-// missed. Nothing is written to another checkout.
+// fact recorded, then, for a ref no fact records, each sibling linked worktree whose store
+// changed in the last day. A checkout sharing this one's cache dir is skipped: that store
+// already missed. Nothing is written to another checkout.
 //
 // A miss is a *refMiss, which unwraps to the *cache.RefNotFoundError `magus query`
 // renders under MGS8001. Any other error from read, or ctx ending, ends the search.
@@ -47,10 +49,7 @@ func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(
 	var unreadGone bool
 	var consulted []string
 	recorded := m.recordedCheckouts(ctx, ref)
-	candidates := recorded
-	if primary, ok := primaryCheckoutRoot(m.ws.Root); ok && !slices.Contains(recorded, primary) {
-		candidates = append(slices.Clone(recorded), primary)
-	}
+	candidates := append(slices.Clone(recorded), unrecordedCheckouts(m.ws.Root, ref, recorded)...)
 	self := m.CacheDir()
 	for _, root := range candidates {
 		if err := ctx.Err(); err != nil {
@@ -93,6 +92,57 @@ func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(
 	}
 	miss.foldInto(miss.err)
 	return "", miss
+}
+
+// unrecordedCheckouts are the checkouts worth trying for ref beyond the recorded ones: the
+// primary checkout when root is a linked worktree, then, for a ref no fact records, root's
+// counterparts in the other linked worktrees whose store changed in the last day, newest store
+// first. Reading every one of this repository's 455 took 1.3s on a miss; the last day's 0.35s.
+func unrecordedCheckouts(root, ref string, recorded []string) []string {
+	primary, ok := primaryCheckoutRoot(root)
+	if !ok {
+		return nil
+	}
+	var roots []string
+	if !slices.Contains(recorded, primary) {
+		roots = append(roots, primary)
+	}
+	// No fact records a guard verdict: the hook stores it in whichever checkout it judged in.
+	if cache.LooksLikeRef(ref) {
+		return roots
+	}
+	const recent = 24 * time.Hour
+	checkout, others, err := vcs.Checkouts(root)
+	if err != nil {
+		return roots
+	}
+	rel, err := filepath.Rel(checkout, root)
+	if err != nil {
+		return roots
+	}
+	type store struct {
+		root     string
+		modified time.Time
+	}
+	var stores []store
+	for _, other := range others {
+		sibling := filepath.Join(other, rel)
+		if sibling == primary {
+			continue
+		}
+		dir, err := ResolveCacheDir(sibling)
+		if err != nil {
+			continue
+		}
+		if info, err := os.Stat(dir); err == nil && time.Since(info.ModTime()) < recent {
+			stores = append(stores, store{root: sibling, modified: info.ModTime()})
+		}
+	}
+	slices.SortFunc(stores, func(a, b store) int { return b.modified.Compare(a.modified) })
+	for _, s := range stores {
+		roots = append(roots, s.root)
+	}
+	return roots
 }
 
 // refMiss is a ref that neither this checkout's output store nor any other checkout's

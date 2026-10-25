@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"cmp"
+	"fmt"
 	"maps"
 	"path"
 	"slices"
@@ -76,7 +77,7 @@ func splitSymbolShard(project string, sh Shard) []Shard {
 	part := func(dir string) *Shard {
 		p := parts[dir]
 		if p == nil {
-			p = &Shard{Name: sh.Name + ":" + dir, canonical: true}
+			p = &Shard{Name: fmt.Sprintf("%s:%s", sh.Name, dir), canonical: true}
 			parts[dir] = p
 		}
 		return p
@@ -431,7 +432,7 @@ func refProvenance(ref types.KnowledgeSymbolRef) string {
 // per (caller, callee) pair would be pure shard weight. What distinguishes a call from a
 // reference is the RELATION and the endpoint kinds, never the provenance.
 func callProvenance(c types.KnowledgeSymbolCall) string {
-	return refProvenancePrefix + "count=" + strconv.Itoa(c.Count)
+	return fmt.Sprintf("%scount=%s", refProvenancePrefix, strconv.Itoa(c.Count))
 }
 
 // parseRefProvenance decodes a refProvenance string back into its count and lines.

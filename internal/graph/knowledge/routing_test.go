@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -254,7 +255,7 @@ func TestRoutingIgnoresCatalogShape(t *testing.T) {
 		g := NewGraph()
 		g.Merge(reg.Nodes, reg.Edges)
 		for _, m := range modules {
-			page := "docs/reference/buzz/" + m.Name + ".md"
+			page := fmt.Sprintf("docs/reference/buzz/%s.md", m.Name)
 			g.AddNode(types.KnowledgeNode{ID: docID(page), Kind: types.KindDoc, Label: page})
 			g.AddEdge(extractedEdge(docID(page), moduleID(m.Name), types.RelationDocuments, page))
 		}

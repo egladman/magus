@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os/exec"
 	"testing"
 
@@ -86,7 +87,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 			Status:   types.CheckOK,
 			Evidence: types.EvidenceMeasured,
 			Message:  "1 gated tool(s), all ready",
-			Details:  []string{"compose: docker ready (`" + bin + "`)"},
+			Details:  []string{fmt.Sprintf("compose: docker ready (`%s`)", bin)},
 		}, got)
 	})
 }

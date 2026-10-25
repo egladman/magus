@@ -738,5 +738,5 @@ func cycleKey(root, cwd string, args []string) string {
 	if scope == "" {
 		scope = cwd
 	}
-	return scope + "\x00" + cwd + "\x00" + strings.Join(args, "\x00")
+	return fmt.Sprintf("%s\x00%s\x00%s", scope, cwd, strings.Join(args, "\x00"))
 }

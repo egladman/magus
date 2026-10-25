@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -117,13 +118,13 @@ func TestSpawnRuleFailuresAreErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rule, err := loadSpawnRule(t, `
+			rule, err := loadSpawnRule(t, fmt.Sprintf(`
 import "magus";
 
 magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
-    `+tc.body+`
+    %s
 });
-`)
+`, tc.body))
 			require.NoError(t, err)
 			_, err = rule(t.Context(), types.SpawnRequest{}, hint.NewGate(t.TempDir(), "s"))
 			require.ErrorContains(t, err, tc.want)

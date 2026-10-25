@@ -234,7 +234,7 @@ func (c *replCompleter) complete(line string, pos int, key rune) (string, int, b
 			return "", 0, false
 		}
 	}
-	return line[:start] + insert + line[pos:], start + len(insert), true
+	return fmt.Sprintf("%s%s%s", line[:start], insert, line[pos:]), start + len(insert), true
 }
 
 // matches resolves the candidate pool for the word starting at start, reading

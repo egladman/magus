@@ -284,7 +284,7 @@ func (w walker) handsStderr(call *ast.CallExpr) string {
 	path := fn.Pkg().Path()
 	under := func(p string) bool { return path == p || strings.HasPrefix(path, p+"/") }
 	if !slices.ContainsFunc(w.opts.CalleePackages, under) || slices.ContainsFunc(w.opts.Display, func(d string) bool {
-		return under(d) || d == path+"."+fn.Name()
+		return under(d) || d == fmt.Sprintf("%s.%s", path, fn.Name())
 	}) {
 		return ""
 	}

@@ -62,7 +62,9 @@ func loadGoldens(t *testing.T, name string) map[int]schemaGolden {
 // ledgerViolations is every way l's type breaks the contract against goldens.
 func ledgerViolations(l SchemaLedger, goldens map[int]schemaGolden) []string {
 	var out []string
-	add := func(format string, args ...any) { out = append(out, fmt.Sprintf(l.Name+": "+format, args...)) }
+	add := func(format string, args ...any) {
+		out = append(out, fmt.Sprintf("%s: %s", l.Name, fmt.Sprintf(format, args...)))
+	}
 
 	current, hasBag := schemaFields(l.Type)
 	if !hasBag {

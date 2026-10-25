@@ -38,7 +38,7 @@ func workerVCSOp(c hint.Invocation) string {
 	if sub == "" || may {
 		return ""
 	}
-	return c.Name + " " + sub
+	return fmt.Sprintf("%s %s", c.Name, sub)
 }
 
 // fastForward reports `git merge --ff-only <commit>`, the recovery of a worker whose placed
@@ -118,10 +118,15 @@ func workerMerge(inv hint.Invocation) (operand string, ok bool) {
 }
 
 // mergesBase reports operand naming the base a worker may merge into its own branch: base
-// itself, its origin/ form, the revision the job was handed or reported, by id, or the
-// branch of a job its row depends on. A job id is its branch name, so a stacked job reaches
-// the work it builds on without a second base.
+// itself, its origin/ form, or the revision the job was handed or reported, by id.
+// The branch of a job its row depends on, or a branch its integration row names in
+// integrates, counts too, so the holder merges them with a message or from a path
+// integrationMerge does not read. A job id is its branch name, so a stacked job reaches the work it builds on without a
+// second base.
 func mergesBase(operand, base string, row types.Job) bool {
+	if row.Integrating() && slices.Contains(row.Integrates, operand) {
+		return true
+	}
 	if slices.ContainsFunc(row.DependsOn, func(dep string) bool {
 		return dep != "" && (operand == dep || operand == "origin/"+dep)
 	}) {
@@ -283,6 +288,39 @@ var workerGitVerbs = []string{
 	"merge-base", "mv", "name-rev", "range-diff", "restore", "rev-list", "rev-parse", "rm",
 	"shortlog", "show", "show-branch", "show-ref", "stash", "status", "var", "verify-commit",
 	"verify-tag", "version", "whatchanged",
+}
+
+// workerVCSMovesRefs reports a call that moves HEAD, a branch, a bookmark or the index: a
+// worker's own state only in its own checkout, and another checkout's state anywhere else.
+// A listing or a read moves nothing.
+func workerVCSMovesRefs(c hint.Invocation) bool {
+	sub, rest := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		switch sub {
+		case "switch", "checkout", "restore", "stash", "add", "rm", "mv":
+			return true
+		case "branch":
+			return positionals(rest) > 0 && !anyFlag(rest, "alrv", "--list", "--all", "--remotes",
+				"--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--show-current")
+		}
+	case "hg", "sl":
+		switch sub {
+		case "update", "up", "checkout", "co", "goto", "add", "addremove", "remove", "rm", "forget",
+			"rename", "mv", "move", "copy", "cp", "shelve", "unshelve":
+			return true
+		case "bookmark", "book", "branch":
+			return positionals(rest) > 0 && !anyFlag(rest, "l", "--list")
+		}
+	case "jj":
+		switch sub {
+		case "new", "edit", "next", "prev":
+			return true
+		case "bookmark", "b":
+			return firstWordIs(rest, "create", "c", "set", "s", "move", "m", "rename", "r", "delete", "d", "forget", "f", "track", "t", "untrack")
+		}
+	}
+	return false
 }
 
 func workerMayRunGit(sub string, rest []string) bool {

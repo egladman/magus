@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"maps"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/audit"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/annotate"
@@ -681,7 +683,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// A replay of this step would skip every composed skip_cache target, so key on
 	// their artifacts instead; see types.ChainSkipCacheOutputs.
 	sources = append(sources, types.ChainSkipCacheOutputs(p, target, m.Get)...)
-	// Per-target ctx.modifiesExistingFiles refs fold into Sources exactly as inputs do, and into
+	// Per-target ctx.writesFiles(..., editsExistingSource: true) refs fold into Sources exactly as inputs do, and into
 	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
 	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
 	// landing in the source set means editing the authored prose around a generated
@@ -890,9 +892,9 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 // it for the project at projectPath, without executing anything. The step is keyed
 // exactly as a run with these charms would key it (spell claims, tool versions and
 // the env allowlist all included), so the returned key equals the one a real run
-// mints, and PortableRef of it equals the ref that run would print. Only args after
-// `--` are absent (this is not a run, so there are none). It is the live half of the
-// works-on-my-machine diff: `describe target --cache` compares these lines against
+// mints, and PortableRef of it equals the ref that run would print. Args after `--` key
+// it when ctx carries them (project.WithExtraArgs), as they key a run. It is the live
+// half of the works-on-my-machine diff: `describe target --cache` compares these lines against
 // the set stored behind a ref. Returns types.ErrNoCache on an Inspect workspace.
 func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string, charms []string) (key string, lines []string, err error) {
 	return m.computeTargetKey(ctx, projectPath, target, charms, nil)
@@ -945,6 +947,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	observations := m.probeObservations(ctx, []*types.Project{p},
 		map[string]map[string]bool{p.Path: targetDrivenBins(p, target)})
 	step := m.buildStep(p, target)
+	m.applyArgs(&step, p, target, project.ExtraArgs(ctx))
 	var keyTools []string
 	if keysTools(p, target) {
 		keyTools = toolVersions[p.Path]
@@ -1259,7 +1262,7 @@ func checkToolWindows(projects []*types.Project, versions map[string]string) err
 				if window.IsZero() {
 					continue
 				}
-				version, seen := versions[p.Path+"\x00"+s.Name()+"\x00"+tool]
+				version, seen := versions[fmt.Sprintf("%s\x00%s\x00%s", p.Path, s.Name(), tool)]
 				if !seen {
 					continue
 				}
@@ -1393,12 +1396,12 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 				if !wanted(s, tool) {
 					continue
 				}
-				r := memo[s.Name()+"\x00"+dir+"\x00"+tool]
+				r := memo[fmt.Sprintf("%s\x00%s\x00%s", s.Name(), dir, tool)]
 				// A project sharing a dir with another still needs its own gate entry.
 				if extracted != nil && r.full != "" {
-					extracted[p.Path+"\x00"+s.Name()+"\x00"+tool] = r.full
+					extracted[fmt.Sprintf("%s\x00%s\x00%s", p.Path, s.Name(), tool)] = r.full
 				}
-				vers = append(vers, s.Name()+":"+tool+":"+r.token)
+				vers = append(vers, fmt.Sprintf("%s:%s:%s", s.Name(), tool, r.token))
 			}
 		}
 		if len(vers) > 0 {
@@ -1444,7 +1447,7 @@ func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*t
 				if !wanted(s, tool) {
 					continue
 				}
-				key := s.Name() + "\x00" + dir + "\x00" + tool
+				key := fmt.Sprintf("%s\x00%s\x00%s", s.Name(), dir, tool)
 				probe := tp.memo[key]
 				if probe == nil {
 					probe = &toolProbe{}
@@ -1593,7 +1596,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 			for _, tool := range s.ToolNames() {
 				t, _ := s.Tool(tool)
 				probe, fork := t.Observe, func() (string, error) { return s.ProbeObservation(ctx, tool, p.Dir) }
-				drivenAs := s.Name() + ":" + tool
+				drivenAs := fmt.Sprintf("%s:%s", s.Name(), tool)
 				if !t.HasObservationProbe() {
 					// A tool the symbol indexer uses is observed through its version argv,
 					// for the scip op alone: only a caller scoped to that op names it.
@@ -1610,7 +1613,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				if driven != nil && !drivenHere[drivenAs] {
 					continue
 				}
-				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
+				tk := fmt.Sprintf("%s\x00%s\x00%s", s.Name(), p.Dir, tool)
 				value, hit := memo[tk]
 				if !hit {
 					probed, err := m.probeCached(ctx, probe, p.Dir, fork)
@@ -1632,7 +1635,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				if out[p.Path] == nil {
 					out[p.Path] = map[string]string{}
 				}
-				out[p.Path][s.Name()+":"+tool] = value
+				out[p.Path][fmt.Sprintf("%s:%s", s.Name(), tool)] = value
 			}
 		}
 	}
@@ -1654,13 +1657,13 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 		}
 		for _, opName := range use.Ops {
 			if op, ok := p.ResolvedSpells[i].Op(opName); ok && op.Bin != "" {
-				driven[use.Spell+":"+op.Bin] = true
+				driven[fmt.Sprintf("%s:%s", use.Spell, op.Bin)] = true
 			}
 		}
 	}
 	for _, s := range p.ResolvedSpells {
 		if op, ok := s.Op(target); ok && op.Bin != "" {
-			driven[s.Name()+":"+op.Bin] = true
+			driven[fmt.Sprintf("%s:%s", s.Name(), op.Bin)] = true
 		}
 		for _, tool := range indexerUses(s, target) {
 			driven[indexerUseKey(s, tool)] = true
@@ -1728,12 +1731,12 @@ func observationsForTarget(p *types.Project, target string, probed map[string]st
 	}
 	var out []string
 	add := func(spell, tool string) {
-		key := spell + ":" + tool
+		key := fmt.Sprintf("%s:%s", spell, tool)
 		value, ok := probed[key]
 		if !ok {
 			return
 		}
-		if line := key + ":" + value; !slices.Contains(out, line) {
+		if line := fmt.Sprintf("%s:%s", key, value); !slices.Contains(out, line) {
 			out = append(out, line)
 		}
 	}
@@ -2094,7 +2097,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
-			step.ExtraArgs = opts.ExtraArgs
+			m.applyArgs(&step, p, st.target, opts.ExtraArgs)
 			// The spell::op filter selects which definition runs (an explicit op
 			// bypasses a shadowing magusfile export), so it keys the cache the
 			// same way; without it a compile-only go::go-build recorded a pass
@@ -2625,7 +2628,7 @@ func checkOutputOverlap(ctx context.Context, steps []cache.Step, out *Sink) {
 			}
 			target := tA
 			if tA != tB {
-				target = tA + "," + tB
+				target = fmt.Sprintf("%s,%s", tA, tB)
 			}
 			out.emit(ctx, report.OutputOverlapDetected{
 				ProjectA:    pA,
@@ -2714,6 +2717,9 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 		scope[i] = s.Name()
 	}
 	ctx = sandbox.WithStep(ctx, scope, p.TargetPolicies[name].Sandbox)
+	if err := m.checkEditedSourcesExist(p, name); err != nil {
+		return err
+	}
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
 	// A magusfile target whose body is provably only these calls runs them directly:
 	// evaluating the file and its imports to make them costs more than a warm install
@@ -2741,6 +2747,45 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 	return errors.Join(err, a.Finish(ctx, name))
 }
 
+// checkEditedSourcesExist refuses a target whose editsExistingSource path or glob matches
+// no file. Checked as the target is about to run rather than at load, so a target earlier
+// in the same run can still create the file.
+func (m *Magus) checkEditedSourcesExist(p *types.Project, target string) error {
+	for _, ref := range p.TargetUpdates[target] {
+		dir := p.Dir
+		if ref.Project != p.Path {
+			owner := m.Get(ref.Project)
+			if owner == nil {
+				continue
+			}
+			dir = owner.Dir
+		}
+		if globMatchesAFile(dir, types.Glob{Pattern: ref.Glob, Except: ref.Except}) {
+			continue
+		}
+		return fmt.Errorf("ctx.writesFiles in target %s lists %q with editsExistingSource: true, but no file matches it in project %s: an edited source must already exist: create it, or drop editsExistingSource so the target produces it",
+			target, ref.Glob, ref.Project)
+	}
+	return nil
+}
+
+// globMatchesAFile reports whether g, relative to dir, matches at least one file on
+// disk; it stops at the first.
+func globMatchesAFile(dir string, g types.Glob) bool {
+	if !types.IsGlobMeta(g.Pattern) {
+		_, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(g.Pattern)))
+		return err == nil
+	}
+	found := errors.New("found")
+	err := doublestar.GlobWalk(os.DirFS(dir), g.Pattern, func(path string, d fs.DirEntry) error {
+		if d.IsDir() || g.Excludes(path) {
+			return nil
+		}
+		return found
+	})
+	return errors.Is(err, found)
+}
+
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.
 // Each attempt is one evaluation with its own types.EvalMemo, so the body reads one
 // knowledge graph snapshot however many graph members it calls, and a retry rebuilds it.
@@ -2755,7 +2800,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		return err
 	}
 
-	volatileTarget := s.Name() + "/" + name
+	volatileTarget := fmt.Sprintf("%s/%s", s.Name(), name)
 	// This pair's own opt-in. Read here because here is the only place that holds
 	// both halves of the (project, target) the decision is about; the Runtime holds
 	// one answer for the whole run, which is not the same question.
@@ -3199,7 +3244,7 @@ func charmedTarget(target string, charms []string) string {
 	if len(charms) == 0 {
 		return target
 	}
-	return target + ":" + strings.Join(charms, ",")
+	return fmt.Sprintf("%s:%s", target, strings.Join(charms, ","))
 }
 
 // attributeRun gives a run an invocation identity when nothing upstream gave it one, so

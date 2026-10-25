@@ -74,7 +74,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 magus\project({});
 
 // Vet the Go sources.
-export fun vet(ctx: magus\Context, args: [str]) > void { ctx.readsFiles("*.go"); }
+export fun vet(ctx: magus\Context, args: [str]) > void { ctx.readsFiles(["*.go"]); }
 `,
 }}
 
@@ -190,7 +190,7 @@ func renderExamples() (map[string]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("example %s (%s): %w", ex.slug, ex.command(), err)
 		}
-		out[ex.slug] = "```console\n$ " + ex.command() + "\n" + text + "```\n"
+		out[ex.slug] = fmt.Sprintf("```console\n$ %s\n%s```\n", ex.command(), text)
 	}
 	return out, nil
 }
@@ -257,7 +257,7 @@ func inject(path string, rendered map[string]string) error {
 	}
 	content := string(raw)
 	for slug, snippet := range rendered {
-		start := "<!-- example:" + slug + " -->"
+		start := fmt.Sprintf("<!-- example:%s -->", slug)
 		end := "<!-- /example -->"
 		si := strings.Index(content, start)
 		if si < 0 {
@@ -273,7 +273,10 @@ func inject(path string, rendered map[string]string) error {
 		// wants one between an HTML comment and an adjacent fenced block, and without them the
 		// generator and the formatter each undo the other on every run, the oscillation that
 		// makes a page a hybrid nobody can gate.
-		content = content[:after] + "\n\n" + snippet + "\n" + content[ei:]
+		content = fmt.Sprintf(`%s
+
+%s
+%s`, content[:after], snippet, content[ei:])
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
@@ -282,6 +285,6 @@ func inject(path string, rendered map[string]string) error {
 }
 
 func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "magus-examples: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "magus-examples: %s\n", fmt.Sprintf(format, args...))
 	os.Exit(1)
 }

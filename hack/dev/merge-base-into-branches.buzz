@@ -22,6 +22,9 @@ import "hack/dev/bootstrap-checkout" as bootstrap;
 
 import "assert";
 
+final SUMMARY = "bring the base into each branch";
+final SERVES = ["replaces:git merge"];
+
 final USAGE = "usage: magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c> [--base <ref>] [--stack] [--dry-run]";
 final HELP = "cost: one merge and regeneration per branch, and a push each\n{USAGE}";
 

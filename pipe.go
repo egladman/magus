@@ -24,32 +24,50 @@ import (
 )
 
 // MachineClaims is what a run of targets, under charms and with extraArgs forwarded,
-// would ask the machine budget for: one claim per selected target, sized as the run sizes
-// it. A gating stage waits on these for the run it feeds (see `magus status --wait`).
+// would ask the machine budget for: one claim per step the run admits, sized as the run
+// sizes it. A gating stage waits on these for the run it feeds (see `magus status --wait`).
 //
-// They are the selected targets' own claims. A step the run reaches through a project
-// dependency claims for itself when it starts, and is not weighed here.
+// The steps are the selected targets and, through each skip_cache composer, the
+// same-project ctx.needs members it lends claims of their own (types.MembersClaimTheirOwn),
+// transitively. Every other member runs under its composer's seat and is already folded
+// into that claim.
 func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charms, extraArgs []string) []types.MachineClaim {
 	size := newClaimSizer(m.measuredRuns(m.loadHistory(ctx)), forecast.NewShape(charms, extraArgs), m.chainReadsCharm)
 	capacity := m.limiter().Capacity()
 	out := make([]types.MachineClaim, 0, len(targets))
-	for _, t := range targets {
-		p := m.Get(t.Path)
-		if p == nil {
-			continue
+	seen := map[types.TargetRef]bool{}
+	var claim func(p *types.Project, target string)
+	claim = func(p *types.Project, target string) {
+		ref := types.TargetRef{Project: p.Path, Target: target}
+		if seen[ref] {
+			return
 		}
-		step := m.buildStep(p, t.Name)
+		seen[ref] = true
+		step := m.buildStep(p, target)
 		if size != nil {
-			m.sizeClaim(&step, p, t.Name, size)
+			m.sizeClaim(&step, p, target, size)
 		}
 		slots := max(step.Slots, 1)
 		if capacity > 0 {
 			slots = min(slots, capacity)
 		}
 		out = append(out, types.MachineClaim{
-			Project: p.Path, Target: t.Name, DeclaredBy: step.MemoryDeclaredBy,
+			Project: p.Path, Target: target, DeclaredBy: step.MemoryDeclaredBy,
 			MemoryMB: step.MemoryMB, Profile: step.MemoryProfile, Sizing: step.MemorySizing, Slots: slots,
 		})
+		if !types.MembersClaimTheirOwn(p, target) {
+			return
+		}
+		for _, member := range p.TargetChains[target] {
+			if member.Project == "" {
+				claim(p, member.Target)
+			}
+		}
+	}
+	for _, t := range targets {
+		if p := m.Get(t.Path); p != nil {
+			claim(p, t.Name)
+		}
 	}
 	return out
 }
@@ -139,7 +157,7 @@ func (l *projectLocker) publishHolds(ctx context.Context, paths []string) func()
 // false when it has published none that is live: it has not finished taking its locks,
 // has released them, or never takes any. A dead publisher's record is swept.
 func (l *projectLocker) settledProjects(procID int) ([]string, bool) {
-	matches, _ := filepath.Glob(filepath.Join(l.pipeDir(), strconv.Itoa(procID)+"-*"+holdsSuffix))
+	matches, _ := filepath.Glob(filepath.Join(l.pipeDir(), fmt.Sprintf("%s-*%s", strconv.Itoa(procID), holdsSuffix)))
 	var out []string
 	settled := false
 	for _, path := range matches {

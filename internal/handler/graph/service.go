@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -117,7 +118,7 @@ func (s *Service) ExplainNode(
 	}
 	out, ok := g.Explain(name)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+", try `magus query "+name+"` for a wider search"))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("graph: no node matches %s, try `magus query %s` for a wider search", name, name))
 	}
 	resp := &graphv1.NodeContext{
 		Node:        nodeToProto(out.Node),
@@ -135,7 +136,7 @@ func (s *Service) FindPath(
 	if from == "" || to == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: from and to are both required"))
 	}
-	g, _, err := s.graph(ctx, from+" "+to)
+	g, _, err := s.graph(ctx, fmt.Sprintf("%s %s", from, to))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -144,7 +145,7 @@ func (s *Service) FindPath(
 	// collapsing the two would report "no path" for a typo.
 	out, ok := g.Path(from, to)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("no node matches "+from+" or "+to))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no node matches %s or %s", from, to))
 	}
 	resp := &graphv1.Path{
 		From:  out.From,
@@ -177,7 +178,7 @@ func (s *Service) FindDependents(
 	// unknown id returns nil, which would report "nothing rebuilds" for a typo.
 	matches := g.Resolve(name, 1)
 	if len(matches) == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+", try `magus query "+name+"` for a wider search"))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("graph: no node matches %s, try `magus query %s` for a wider search", name, name))
 	}
 	id := matches[0].ID
 	return connect.NewResponse(&graphv1.Dependents{Node: id, Ids: g.Dependents(id)}), nil
@@ -199,7 +200,7 @@ func (s *Service) FindAffected(
 	}
 	ids := make([]string, 0, len(r.Affected))
 	for _, p := range r.Affected {
-		ids = append(ids, types.KindProject+":"+p)
+		ids = append(ids, fmt.Sprintf("%s:%s", types.KindProject, p))
 	}
 	return connect.NewResponse(&graphv1.Affected{
 		Base:         r.Base,

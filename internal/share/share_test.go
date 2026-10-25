@@ -2,6 +2,7 @@ package share
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -232,7 +233,7 @@ func TestClosingALinkEndsItsOpenStreams(t *testing.T) {
 	}))
 	link, err := m.Start(types.GrantConsole, consoleDirFixture(t), routes, 0)
 	require.NoError(t, err)
-	base := "http://" + hostOfURL(t, link.URL) + "/api/v1/status"
+	base := fmt.Sprintf("http://%s/api/v1/status", hostOfURL(t, link.URL))
 	token := tokenFromURL(t, link.URL)
 	stream := func(wg *sync.WaitGroup, url string) {
 		wg.Add(1)
@@ -382,7 +383,7 @@ func TestManagerSupersedeRevokesOldToken(t *testing.T) {
 	newBase := "http://" + hostOfURL(t, second.URL)
 
 	// Give the superseded listener a beat to shut down.
-	waitClosed(t, "http://"+hostOfURL(t, first.URL)+"/console/")
+	waitClosed(t, fmt.Sprintf("http://%s/console/", hostOfURL(t, first.URL)))
 
 	// The OLD token is rejected on the NEW listener (bound 1:1 to the new token).
 	if code := get(t, newBase+"/api/v1/status", oldToken); code != http.StatusUnauthorized {

@@ -1,6 +1,7 @@
 package hint
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,7 +23,7 @@ func scriptFixture(t *testing.T, root, rel, effect string, args ...string) Scrip
 	info, err := os.Stat(abs)
 	require.NoError(t, err)
 	return ScriptServe{
-		Path: rel, Args: args, Effect: effect, Blob: "0123abcd",
+		Path: rel, Args: args, Effect: effect,
 		Summary: rel + " answers it.", MtimeNs: info.ModTime().UnixNano(), Size: info.Size(),
 	}
 }
@@ -30,8 +31,137 @@ func scriptFixture(t *testing.T, root, rel, effect string, args ...string) Scrip
 func writeScriptsIndex(t *testing.T, root string, serves map[string][]ScriptServe) string {
 	t.Helper()
 	cacheDir := t.TempDir()
-	require.NoError(t, WriteScriptsIndex(cacheDir, ScriptsIndex{Root: root, Revision: "abc123", Serves: serves}))
+	require.NoError(t, WriteScriptsIndex(cacheDir, ScriptsIndex{Root: root, Serves: serves}))
 	return cacheDir
+}
+
+func TestParseScriptDeclarationReadsSummaryServesAndEffect(t *testing.T) {
+	src := []byte(`import "std";
+
+final SUMMARY = "free disk by removing finished worktrees, largest first";
+export final SERVES = [
+    "rule:worktree-remove -- --go-cache",
+    "replaces:git  worktree remove",
+];
+final EFFECT = "read";
+
+fun main(args: [str]) > void {}
+`)
+	d, ok, err := parseScriptDeclaration(src)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, scriptDeclaration{
+		Summary: "free disk by removing finished worktrees, largest first",
+		Effect:  ScriptEffectRead,
+		Serves: []scriptSituation{
+			{Situation: "rule:worktree-remove", Args: []string{"--go-cache"}},
+			{Situation: "replaces:git worktree remove"},
+		},
+	}, d)
+
+	d, ok, err = parseScriptDeclaration([]byte("final USAGE = \"x\";\nfun main(args: [str]) > void {}\n"))
+	require.NoError(t, err)
+	assert.False(t, ok, "a script that declares nothing")
+	assert.Equal(t, scriptDeclaration{}, d)
+
+	d, ok, err = parseScriptDeclaration([]byte("final SUMMARY = \"settle a file\";\nfinal SERVES = [\"rule:x\"];\n"))
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, ScriptEffectWrite, d.Effect, "no EFFECT is a write")
+}
+
+func TestParseScriptDeclarationRefusesWhatItCannotServe(t *testing.T) {
+	for name, src := range map[string]string{
+		"serves without summary": `final SERVES = ["rule:stage-all"];`,
+		"summary without serves": `final SUMMARY = "x";`,
+		"empty serves":           "final SUMMARY = \"x\";\nfinal SERVES = [];",
+		"unknown family":         "final SUMMARY = \"x\";\nfinal SERVES = [\"stage-all\"];",
+		"unknown event":          "final SUMMARY = \"x\";\nfinal SERVES = [\"event:disk-full\"];",
+		"unknown effect":         "final SUMMARY = \"x\";\nfinal SERVES = [\"rule:x\"];\nfinal EFFECT = \"reads\";",
+		"unknown placeholder":    "final SUMMARY = \"x\";\nfinal SERVES = [\"rule:x -- --session {session}\"];",
+	} {
+		_, ok, err := parseScriptDeclaration([]byte(src))
+		assert.True(t, ok, name)
+		assert.Error(t, err, name)
+	}
+}
+
+func TestBuildScriptsIndexIndexesDeclaredScripts(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, body string) os.FileInfo {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+		info, err := os.Stat(abs)
+		require.NoError(t, err)
+		return info
+	}
+	show := write("hack/dev/show-x.buzz", "final SUMMARY = \"show x\";\nfinal SERVES = [\"rule:a\", \"mgs:MGS1\"];\nfinal EFFECT = \"read\";\n")
+	edited := write("hack/dev/ls-y.buzz", "final SUMMARY = \"list y\";\nfinal SERVES = [\"rule:a\"];\nfinal EFFECT = \"read\";\n")
+	write("hack/dev/plain.buzz", "fun main(args: [str]) > void {}\n")
+	write("hack/dev/broken.buzz", "final SERVES = [\"rule:a\"];\n")
+	write("README.md", "final SUMMARY = \"not a script\";\n")
+
+	x, err := BuildScriptsIndex(root,
+		[]string{"hack/dev/show-x.buzz", "hack/dev/ls-y.buzz", "hack/dev/plain.buzz", "hack/dev/broken.buzz", "README.md", "hack/dev/gone.buzz"},
+		func(p string) bool { return p != "hack/dev/ls-y.buzz" })
+	require.ErrorContains(t, err, "hack/dev/broken.buzz: declares SERVES without a SUMMARY line")
+	stamp := func(info os.FileInfo) (int64, int64) { return info.ModTime().UnixNano(), info.Size() }
+	showMtime, showSize := stamp(show)
+	editedMtime, editedSize := stamp(edited)
+	assert.Equal(t, ScriptsIndex{Root: root, Serves: map[string][]ScriptServe{
+		"rule:a": {
+			{Path: "hack/dev/ls-y.buzz", Effect: ScriptEffectWrite, Summary: "list y", MtimeNs: editedMtime, Size: editedSize},
+			{Path: "hack/dev/show-x.buzz", Effect: ScriptEffectRead, Summary: "show x", MtimeNs: showMtime, Size: showSize},
+		},
+		"mgs:MGS1": {{Path: "hack/dev/show-x.buzz", Effect: ScriptEffectRead, Summary: "show x", MtimeNs: showMtime, Size: showSize}},
+	}}, x, "an uncommitted read is indexed as a write")
+}
+
+func TestMatchReplacedServesTheScriptsReplacingALine(t *testing.T) {
+	root := t.TempDir()
+	prune := scriptFixture(t, root, "hack/dev/prune-worktrees.buzz", ScriptEffectWrite)
+	merge := scriptFixture(t, root, "hack/dev/merge-job-branches.buzz", ScriptEffectWrite)
+	base := scriptFixture(t, root, "hack/dev/merge-base-into-branches.buzz", ScriptEffectWrite, "--branches", "{ref}")
+	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{
+		"replaces:git worktree remove": {prune},
+		"replaces:git merge":           {base, merge},
+		"replaces:git cherry-pick":     {merge},
+		"rule:stage-all":               {prune},
+	})
+
+	run := func(next []types.NextStep) []string {
+		var out []string
+		for _, n := range next {
+			out = append(out, n.Run)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"magus buzz hack/dev/prune-worktrees.buzz"},
+		run(MatchReplaced(cacheDir, []Invocation{{Name: "/usr/bin/git", Args: []string{"worktree", "remove", "--force", "x"}}}, nil)))
+	assert.Equal(t, []string{"magus buzz hack/dev/merge-job-branches.buzz"},
+		run(MatchReplaced(cacheDir, []Invocation{{Name: "git", Args: []string{"merge", "main"}}, {Name: "git", Args: []string{"cherry-pick", "abc"}}}, nil)),
+		"merge-base-into-branches needs a {ref} the facts do not bind, and merge-job-branches is named once")
+	assert.Equal(t, []string{"magus buzz hack/dev/merge-base-into-branches.buzz -- --branches feat", "magus buzz hack/dev/merge-job-branches.buzz"},
+		run(MatchReplaced(cacheDir, []Invocation{{Name: "git", Args: []string{"merge", "main"}}}, map[string]string{"ref": "feat"})))
+	assert.Nil(t, MatchReplaced(cacheDir, []Invocation{{Name: "git", Args: []string{"worktree", "list"}}}, nil))
+	assert.Nil(t, MatchReplaced("", []Invocation{{Name: "git", Args: []string{"merge"}}}, nil), "no cache dir")
+}
+
+func TestMissingScriptsNamesWhatTheIndexServesAndIsGone(t *testing.T) {
+	root := t.TempDir()
+	kept := scriptFixture(t, root, "hack/dev/show-x.buzz", ScriptEffectRead)
+	gone := scriptFixture(t, root, "hack/dev/prune-worktrees.buzz", ScriptEffectWrite)
+	require.NoError(t, os.Remove(filepath.Join(root, gone.Path)))
+	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{"rule:a": {kept, gone}, "event:disk-low": {gone}})
+
+	missing, ok := MissingScripts(cacheDir)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"hack/dev/prune-worktrees.buzz"}, missing)
+
+	missing, ok = MissingScripts(t.TempDir())
+	assert.False(t, ok, "no index")
+	assert.Nil(t, missing)
 }
 
 func TestScriptsForServesTheIndexedScripts(t *testing.T) {
@@ -156,7 +286,7 @@ func foreignScriptsIndex(t *testing.T, root string) string {
 	cacheDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Dir(ScriptsIndexPath(cacheDir)), 0o755))
 	require.NoError(t, os.WriteFile(ScriptsIndexPath(cacheDir),
-		[]byte(`{"format":999,"root":"`+root+`","serves":{}}`), 0o600))
+		[]byte(fmt.Sprintf(`{"format":999,"root":"%s","serves":{}}`, root)), 0o600))
 	return cacheDir
 }
 

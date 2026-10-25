@@ -2,6 +2,7 @@ package types
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -19,7 +20,7 @@ func (l Location) String() string {
 	if l.Declaration == "" {
 		return l.Path
 	}
-	return l.Path + "#" + l.Declaration
+	return fmt.Sprintf("%s#%s", l.Path, l.Declaration)
 }
 
 // SplitClaim is the one parser of a write path's claim grammar: `<path>#<declaration>`
@@ -97,6 +98,55 @@ func NamesDeclaration(claimed, declaration string) bool {
 		}
 		from = start + 1
 	}
+}
+
+// NamesClaimedDeclaration is [NamesDeclaration] for a claim read against a declaration, except
+// that a key path (`project.targets.release`, no whitespace) is named only along its dots:
+// the claim must be the whole path or a run of its segments, so `project.targets.release`
+// names itself and not `project.targets.release-build`, and `project.targets` names every
+// key under it.
+func NamesClaimedDeclaration(claimed, declaration string) bool {
+	claimed, declaration = strings.TrimSpace(claimed), strings.TrimSpace(declaration)
+	if !isKeyPath(claimed) || !isKeyPath(declaration) {
+		return NamesDeclaration(claimed, declaration)
+	}
+	if claimed == declaration {
+		return true
+	}
+	return strings.HasPrefix(declaration, claimed+".") ||
+		strings.HasSuffix(declaration, "."+claimed) ||
+		strings.Contains(declaration, fmt.Sprintf(".%s.", claimed))
+}
+
+// NamedDeclarations are the entries of all that claim names under [NamesClaimedDeclaration].
+func NamedDeclarations(claimed string, all []string) []string {
+	var named []string
+	for _, d := range all {
+		if NamesClaimedDeclaration(claimed, d) {
+			named = append(named, d)
+		}
+	}
+	return named
+}
+
+// ClaimsMap reports whether claim is a key path that is, or is the parent of, every one of
+// named: `project.targets` claims the targets map and its entries, which is the whole of
+// what it holds and no ambiguity.
+func ClaimsMap(claimed string, named []string) bool {
+	claimed = strings.TrimSpace(claimed)
+	if !isKeyPath(claimed) || len(named) == 0 {
+		return false
+	}
+	for _, d := range named {
+		if d = strings.TrimSpace(d); d != claimed && !strings.HasPrefix(d, claimed+".") {
+			return false
+		}
+	}
+	return true
+}
+
+func isKeyPath(s string) bool {
+	return s != "" && s != Preamble && !strings.ContainsAny(s, " \t#")
 }
 
 func identifierByte(b byte) bool {

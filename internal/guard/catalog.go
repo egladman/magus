@@ -63,6 +63,8 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocArchitectureUnbriefed},
 	{doc: ruleDocPushUngated},
 	{doc: ruleDocHumanOnly},
+	{doc: ruleDocGrantIsAPersons},
+	{doc: ruleDocWaiverIsAPersons},
 	{doc: ruleDocInlineAlias},
 	{doc: ruleDocMagusTimeout},
 	{doc: ruleDocMergeSideCheckout},
@@ -94,6 +96,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseHarness},
 	{doc: ruleDocLeasePaused},
 	{doc: ruleDocLeaseRebind},
+	{doc: ruleDocLeaseRowUnknown},
 	{doc: ruleDocLeaseUndeclared},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
@@ -172,7 +175,8 @@ var ruleDocBackgroundLeft = types.RuleDoc{
 	Name:    string(denyRuleBackgroundLeft),
 	Catches: "an agent finishing while shell commands it ran in the background are still running",
 	Why: "A host does not stop a finished subagent's background tasks, and once the subagent has reported nobody is told when one ends or that it is still running: a transcript search left behind by a scout ran for four hours. " +
-		"At a subagent's stop magus reads the subagent's own transcript for the shell commands it ran in the background (run_in_background, a foreground call the host moved to the background, a watcher's command) that no completion notice, stop call or watcher expiry has ended, and refuses the stop naming each by id, start time, age and command. A run under `magus job exec --timeout`, which check-timeout sends a worker to background and which stops at its deadline, and a commit the host moved to the background while its hooks run, end on their own: their completion notice is how the agent hears the result, so neither holds a stop. " +
+		"At a subagent's stop magus reads the subagent's own transcript for the shell commands it ran in the background (run_in_background, a foreground call the host moved to the background, a watcher's command) that no completion notice, stop call or watcher expiry has ended, and refuses the stop naming each by id, start time, age and command. A run under `magus job exec --timeout`, which check-timeout sends a worker to background and which stops at its deadline, and a commit the host moved to the background while its hooks run, end on their own: their completion notice is how the agent hears the result, so neither holds a stop. A subagent whose only live tasks are these keeps its job and its binding at its stop on any host version, since the notice starts its next turn: stopping is how it waits. Every refusal ends naming that wait. " +
+		"A host that resumes a stopped subagent when its background task completes declares the first version that does, and magus reads the version from the transcript, since the hook input carries none. At or past it the stop stands with advice naming each task, and the subagent keeps its job instead of ending it no_return. Below it, with no version recorded, or with none declared, the stop is refused and the refusal says why. " +
 		"At a root session's stop it advises instead, and only of tasks older than 30 minutes: a root wakes on a task's completion notice, so a young task is one it is waiting on, and the person is there to decide. " +
 		"Reads the host's transcript by shape, so a host whose transcript records no background task in that shape is never refused. Set to advise, a subagent's stop is advised too.",
 }
@@ -211,7 +215,8 @@ var ruleDocBusyWait = types.RuleDoc{
 	Name:    string(denyRuleBusyWait),
 	Catches: "a while or until loop that sleeps, or a for loop that sleeps until it breaks out",
 	Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
-		"Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting: wait for the task's completion notice, or `magus job wait <job>` for a job; `magus status --watch` is for a person watching. " +
+		"Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting. " +
+		"The one wait for work the caller started is that work's completion notice: a run backgrounded as `magus job exec --timeout <d> -- <command>` is announced when it ends, and a subagent may stop while it runs, since the notice resumes it with its job still bound (background-left). A job is waited on with `magus job wait <job>`. " +
 		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, `magus status --watch` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
@@ -340,7 +345,8 @@ var ruleDocPushUngated = types.RuleDoc{
 		"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
 		"A session no job lease binds is the orchestrator. It used to be asked, and two pull requests went out with no local gate because the rule only asked, so it is now refused with the gate named: `magus status --wait`, then `magus affected ci`. Opening a pull request with `gh pr create` meets the same gate at the head commit. " +
 		"A session bound to a lease is a worker, and workers do not publish: its refusal also sends the commit to the orchestrator. " +
-		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD.",
+		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD. " +
+		"A person who skips the gate on purpose types `magus gate waive <commit> --reason \"...\"`: a push or `gh pr create` of that commit, and of no other, then passes, and the verdict names who waived it, when and why. A revoked waiver covers nothing.",
 }
 
 var ruleDocHumanOnly = types.RuleDoc{
@@ -618,6 +624,30 @@ var ruleDocLeaseRebind = types.RuleDoc{
 	Catches: "a leased worker rewriting who it is or what its own job row says",
 }
 
+var ruleDocGrantIsAPersons = types.RuleDoc{
+	Name:    string(denyRuleGrantIsAPersons),
+	Catches: "an agent running `magus job grant`, in any spelling and any role",
+	Why: "A grant is a person's one-time approval: `magus job grant <job> <rule> [--for <duration>]` lowers one rule to advice for one job's calls until the duration passes or the job ends, and `--revoke` ends it early. " +
+		"Every call the hook judges is an agent's, so a grant reaching it is not a person's, and it is refused whoever runs it, the root included. The job store also refuses a grant from a process carrying a lease, and no MCP tool exposes one. " +
+		"Only hooks-off is grantable; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when.",
+}
+
+var ruleDocWaiverIsAPersons = types.RuleDoc{
+	Name:    string(denyRuleWaiverIsAPersons),
+	Catches: "an agent running `magus gate waive`, in any spelling and any role",
+	Why: "A waiver is a person's say-so that one commit may go out with no passing local gate: `magus gate waive <commit> --reason \"...\"` records who typed it, when, the commit and the reason, and push-ungated then lets a push or `gh pr create` of that commit through, naming the waiver. `--revoke` ends it. " +
+		"Every call the hook judges is an agent's, so a waiver reaching it is not a person's, and it is refused whoever runs it, the root included. The waivers store also refuses a waiver from a process carrying a lease.",
+}
+
+var ruleDocLeaseRowUnknown = types.RuleDoc{
+	Name:    string(denyRuleLeaseRowUnknown),
+	Catches: "a leased call judged by a magus older than the job row it reads",
+	Why: "A row member this build does not declare may widen or narrow what the row permits, and the build cannot tell which, so judging as if the member were absent is a silent default. " +
+		"The refusal names each such member, the binary judging the call and its version, and the remedy: rebuild the ./magus the host hook runs and restart the daemon. " +
+		"Only the root can take that remedy, which ADR 0013 would make a notice; this rule denies anyway because a call the guard cannot judge has no safe default, and passing it would let an old binary approve what a newer row forbids. " +
+		"The hook does not switch to the job checkout's ./magus instead: the worker builds that binary, and the judge is never authored by the judged.",
+}
+
 var ruleDocLeaseUndeclared = types.RuleDoc{
 	Name:    string(denyRuleLeaseUndeclared),
 	Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned",
@@ -647,7 +677,9 @@ var ruleDocLeaseWrite = types.RuleDoc{
 	Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
 	Why: "The boundary is the orchestrator's declaration in the job store; the guard reads it back for a file write and for a shell line, in the same words. " +
 		"A shell line's relative paths resolve from the directory it runs in. A remove or move (rm, rmdir, mv, git rm and mv, hg and sl remove and rename) is graded by every path it reaches: each operand, and everything a directory operand holds, must be inside the write paths and outside the deny paths. " +
-		"A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to.",
+		"A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to. " +
+		"Only a declared or running lease owns its paths: one that filed its result holds nothing against another. " +
+		"A writer outside the owner's job tree can neither verify nor end the owner, so its refusal names the root of the owner's tree and files one attention row for that root, the same row however often the write is retried.",
 }
 
 var ruleDocLeaseClaim = types.RuleDoc{
@@ -679,8 +711,9 @@ var ruleDocWorkerCheckOnly = types.RuleDoc{
 		"The integrator is a role, never a check: the subagent spawned `<parent>/integrate <job>` whose row was taken in the checkout the call runs in builds ./magus, regenerates and gates there, whatever its row's check names. A row whose check is the gate is refused it like any worker, since a job's check is never the gate. The root holds no spawn title, so it never integrates, and one build at a time per checkout is the project lock's: a second run of a project the checkout is already running is refused, naming the run holding it. " +
 		"Two workers running the same target at once from two worktrees double the load and prove nothing the integrator's one run does not: the cache replays a run that has landed and never two in flight, and two trees share no key. " +
 		"Allowed under a live lease: the row's check, with or without a charm and forwarded args; a `magus run` of a target that declares an output among the row's write paths, read from the workspace's own declarations (a `-generate` name or a charm stands in when the workspace cannot load); and every other verb, and every run that only reports (--plan, --dry-run, --graph). " +
-		"A `magus run` whose target names the rw charm, the check included, is held to the write paths as well: it passes only when every glob that target declares writing (ctx.writesFiles, ctx.modifiesExistingFiles), and every file each target its ctx.needs chain reaches in the same project declares modifying, lies inside them. A needed step's outputs and another project's steps build what the run consumes, and are not counted. A target whose chain declares no write passes, since nothing says what it touches, so a formatter declares the files it rewrites. The refusal names the globs and the same run with neither the charm nor the default charms. A run the workspace's default_charms give rw is judged the same way, unless it passes --no-default-charms. " +
+		"A `magus run` whose target names the rw charm, the check included, is held to the write paths as well: it passes only when every glob that target declares writing (ctx.writesFiles, with or without editsExistingSource), and every file each target its ctx.needs chain reaches in the same project declares modifying, lies inside them. A needed step's outputs and another project's steps build what the run consumes, and are not counted. A target whose chain declares no write passes, since nothing says what it touches, so a formatter declares the files it rewrites. The refusal names the globs and the same run with neither the charm nor the default charms. A run the workspace's default_charms give rw is judged the same way, unless it passes --no-default-charms. " +
 		"A spell op run on its own under the rw charm (`markdown::dprint:rw`, or a target no magusfile it selects exports) is refused even when the check composes it: an op declares no writes, so it would always pass and what it rewrites shows only after the write, as MGS3001. The refusal names the magusfile target that calls the op, whose declarations are judged, or the run without the charm when none does. An op whose spell declares no rw charm runs unpatched under default_charms [rw] and passes. " +
+		"A run regenerating an output another declared or running lease holds is refused, so the two never overwrite each other's copy; a lease that filed its result holds no output. The refusal names `magus job wait` for a holder below the caller, and otherwise the root of the holder's job tree, for which it files one attention row. " +
 		"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`) is not on the list either: there is one binary per base, the integrator builds it and a copy is placed in the worker's checkout. An unbound caller, the checkout's integrator and a row declaring no check are untouched. " +
 		"The same rule grades a spawn brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists. " +
 		"A continuation to a worker already bound to a live row is not graded against the row: that worker's own runs are.",
@@ -731,6 +764,7 @@ var ruleDocSleepPoll = types.RuleDoc{
 		"A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. " +
 		"Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. " +
 		"A watch (`--watch`) is not a status read, and a loop is busy-wait's. " +
+		"A worker waiting on its own check has one wait, the one busy-wait names: the check backgrounded as `magus job exec --timeout <d> -- <command>`, whose completion notice resumes it after it stops. " +
 		"A worker (a session whose lease is a child row or a subagent's) waits for the build budget only in the call the wait gates: `magus status --wait` piped into a magus call, which reserves the seat for it (a run, an affected or a `graph build`), or followed by `&&` and the call. A `magus status --wait` that gates no magus call, `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more is refused. " +
 		"A worker that cannot wait commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. " +
 		"A `magus run` or `magus affected` whose argv matches one this checkout's run log recorded refused with MGS3009 in the last 60 seconds is the same poll with no sleep at all: it is refused with `magus status --wait | <the command>` as the next line, which waits for a seat and then runs, or for a worker with the report-and-stop above. " +
@@ -1201,7 +1235,7 @@ func Rules() []types.RuleDoc {
 		out = append(out, e.doc)
 	}
 	for i := range out {
-		out[i].Decision = string(defaults[out[i].Name])
+		out[i].Decision = defaults[out[i].Name].String()
 		out[i].Fixed = builtin.Fixed(out[i].Name)
 		out[i].Verdicts = builtin.Verdicts(out[i].Name)
 	}
@@ -1209,7 +1243,7 @@ func Rules() []types.RuleDoc {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a
 		// reader opening this list is asking what stops them first.
 		if a.Decision != b.Decision {
-			if a.Decision == string(builtin.Deny) {
+			if a.Decision == builtin.Deny.String() {
 				return -1
 			}
 			return 1

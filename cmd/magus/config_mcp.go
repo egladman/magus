@@ -36,8 +36,8 @@ func configMCPCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "Connector tokens are named, hashed-at-rest, and expiring; mint one per external")
 		fmt.Fprintln(os.Stderr, "MCP client (a hosted connector, an IDE). They reach /mcp and nothing else.")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "The operator token is `"+hint.ConfigToken.String()+"`; console tokens are")
-		fmt.Fprintln(os.Stderr, "`"+hint.ConfigConsoleToken.String()+"`.")
+		fmt.Fprintf(os.Stderr, "The operator token is `%s`; console tokens are\n", hint.ConfigToken.String())
+		fmt.Fprintf(os.Stderr, "`%s`.\n", hint.ConfigConsoleToken.String())
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp <subcommand> -h` for flags.")
 	}
@@ -143,7 +143,7 @@ func configMCPConnectorCreate(args []string) error {
 	slog.Info("The token was printed above (stdout). Send it as a header:\n  Authorization: Bearer <token>", attr.Notice(""))
 	// The two scopes reach disjoint endpoints, so naming the wrong one here would send
 	// the reader to an endpoint that will reject the token they just minted.
-	slog.Info("This token reaches /mcp only. It is REJECTED by the console; mint a console\ncredential with `"+hint.ConfigConsoleTokenCreate.String()+"`.", attr.Notice(""))
+	slog.Info(fmt.Sprintf("This token reaches /mcp only. It is REJECTED by the console; mint a console\ncredential with `%s`.", hint.ConfigConsoleTokenCreate.String()), attr.Notice(""))
 	return nil
 }
 
@@ -170,7 +170,7 @@ func tokenList(cmd string, args []string) error {
 		return err
 	}
 	if len(toks) == 0 {
-		slog.Info("no stored tokens; mint one with `"+hint.ConfigConsoleTokenCreate.String()+"` or `"+hint.ConfigMCPConnectorCreate.String()+"`", attr.Notice(""))
+		slog.Info(fmt.Sprintf("no stored tokens; mint one with `%s` or `%s`", hint.ConfigConsoleTokenCreate.String(), hint.ConfigMCPConnectorCreate.String()), attr.Notice(""))
 		return nil
 	}
 	return tokenTable(toks)

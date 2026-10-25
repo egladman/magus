@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -148,7 +149,7 @@ func TestNarrowToLeaseNeverGrantsOutsideTheCheckout(t *testing.T) {
 	outside := filesystem.ResolveRulePath(t.TempDir())
 	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
-		WritePaths: []string{"../" + filepath.Base(outside) + "/x.txt", "link/x.txt", "nowhere/deeper/new.go", "."},
+		WritePaths: []string{fmt.Sprintf("../%s/x.txt", filepath.Base(outside)), "link/x.txt", "nowhere/deeper/new.go", "."},
 	})
 	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
 	p := narrowed(t, root, cacheDir, "fleet/w1")

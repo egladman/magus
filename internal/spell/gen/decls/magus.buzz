@@ -99,6 +99,7 @@ export enum<str> ClaimKind {
     test = "test",
     output = "output",
     released = "released",
+    dead = "dead",
 }
 
 export enum<str> BriefFormat {
@@ -596,6 +597,8 @@ export object KnowledgeSymbolGap {
 export object KnowledgeTextPresence {
     hits: int = 0,
     files: int = 0,
+    sites: [str] = [],
+    more: int = 0,
 }
 
 export object KnowledgeIndexCause {
@@ -666,6 +669,7 @@ export object ConformanceItem {
     measure: int = 0,
     home: str = "",
     unshared: bool = false,
+    rename: str = "",
 }
 
 export object ConformanceRow {
@@ -1030,6 +1034,8 @@ export object GateStatus {
     id: str = "",
     verified: bool = false,
     outputRef: str = "",
+    scope: str = "",
+    owed: str = "",
     violations: [str] = [],
 }
 
@@ -1081,6 +1087,7 @@ export object LeaseCheck {
     project: str = "",
     args: [str] = [],
     noDefaultCharms: bool = false,
+    test: bool = false,
 }
 
 export object Goal {
@@ -1100,6 +1107,8 @@ export object JobRelease {
     digest: str = "",
     releasedAt: int = 0,
     revoked: bool = false,
+    takenBy: str = "",
+    deadBecause: str = "",
 }
 
 export object JobUnattributedWrite {
@@ -1115,7 +1124,7 @@ export object JobEntry {
     consumed: int = 0,
 }
 
-export object JobWaiver {
+export object Deviation {
     code: str = "",
     subject: str = "",
     reason: str = "",
@@ -1134,11 +1143,13 @@ export object JobWorktree {
 export object JobResultValidation {
     command: str = "",
     outputRef: str = "",
+    owed: str = "",
 }
 
 export object GateEvidence {
     gateID: str = "",
     outputRef: str = "",
+    owed: str = "",
 }
 
 export object JobResult {
@@ -1220,6 +1231,9 @@ export object Job {
     maxClaims: int = 0,
     weight: double = 0.0,
     paused: int = 0,
+    pausedBy: Origin = Origin{},
+    pauseReason: str = "",
+    pausedUntil: int = 0,
     attempts: int = 0,
     prior: [PriorAttempt] = [],
     rejection: JobRejection? = null,
@@ -1233,7 +1247,7 @@ export object Job {
     unattributed: [JobUnattributedWrite] = [],
     entries: [JobEntry] = [],
     writeProof: str = "",
-    waivers: [JobWaiver] = [],
+    deviations: [Deviation] = [],
     validated: int = 0,
     reportedBase: str = "",
     baseVerdict: str = "",
@@ -1596,6 +1610,7 @@ export object ChainStep {
     project: str = "",
     target: str = "",
     callIndex: int = 0,
+    whenArgs: bool? = null,
 }
 
 export object TargetRef {

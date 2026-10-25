@@ -57,7 +57,7 @@
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 32
+// magus-guard-template: 34
 
 import "io";
 import "fs";

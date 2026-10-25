@@ -19,13 +19,55 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
+
+func TestPrintSilentLeases(t *testing.T) {
+	silent := []guard.SilentLease{
+		{Lease: "job-a", Session: "s1", SilentSeconds: 2700},
+		{Lease: "job-b", Session: "s2", SilentSeconds: 4000, BackgroundNote: "the host named no transcript, so background commands were not counted"},
+	}
+	var buf bytes.Buffer
+	printSilentLeases(&buf, silent, nil)
+	out := buf.String()
+	assert.Contains(t, out, "job-a  session s1")
+	assert.Contains(t, out, "job-b  session s2")
+	assert.Contains(t, out, "no transcript")
+	assert.Contains(t, out, "nothing was ended")
+
+	buf.Reset()
+	printSilentLeases(&buf, nil, nil)
+	assert.Empty(t, buf.String(), "no silent lease prints nothing")
+
+	buf.Reset()
+	printSilentLeases(&buf, nil, errors.New("store unreadable"))
+	assert.Contains(t, buf.String(), "not read: store unreadable", "a failed read is said, not dropped")
+}
+
+func TestStatusReportInlinesTheSnapshot(t *testing.T) {
+	report := statusReport{
+		StatusSnapshot: types.StatusSnapshot{PoolError: "no pool"},
+		SilentLeases:   []guard.SilentLease{{Lease: "job-a", Session: "s1", SilentSeconds: 2700}},
+	}
+	raw, err := json.Marshal(report)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Contains(t, got, "silent_leases")
+	assert.NotContains(t, got, "StatusSnapshot", "the snapshot's fields sit at the top level")
+	assert.Contains(t, string(raw), "no pool")
+
+	raw, err = json.Marshal(statusReport{})
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "silent_leases", "no silent lease and no error adds no key")
+}
 
 func TestPrintStatusCompact(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
@@ -373,6 +415,53 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	assert.True(t, strings.HasPrefix(lines[3], "held      41999"), lines[3])
 	assert.Contains(t, lines[3], "docs ci  /tree/hardening")
 	assert.Contains(t, lines[4], "service   -      postgres-15  running  deps 2  ports 5432")
+}
+
+// Each holder names its owner, and the callers waiting on a seat and the refusals the
+// broker answered get rows of their own, so a person sees whose run keeps theirs out.
+func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
+	now := time.Now()
+	var buf bytes.Buffer
+	printBrokerRows(&buf, types.StatusBroker{
+		PID: 48213,
+		Capacity: types.MachineSnapshot{
+			BudgetSlots: 8, HeldSlots: 8,
+			Holders: []types.MachineClaimant{{Project: ".", Target: "test", PID: 41221, Slots: 8, Dir: "/tree/polish", Owner: "fix-cache"}},
+			Waiting: []types.MachineWaiter{
+				{Kind: "claim", PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
+				{Kind: "claim", PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
+				{Kind: "reserve", PID: 41302, Target: "ci", Owner: "job-c", Since: now},
+			},
+			Refused: []types.MachineRefusal{{
+				At: now.Add(-2 * time.Minute), PID: 41400, Project: ".", Target: "ci", Slots: 4, Dir: "/tree/b",
+				Owner: "spawned by root", Fits: true,
+				Holders: []types.MachineClaimant{{PID: 41221, Owner: "fix-cache"}, {PID: 41222}},
+			}},
+		},
+	}, types.BrokerRequired, now)
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 7)
+	assert.Contains(t, lines[2], "(root) test  fix-cache  /tree/polish")
+	assert.True(t, strings.HasPrefix(lines[3], "waiting   41300"), lines[3])
+	assert.Contains(t, lines[3], "slots 2  (root) lint  claim  unleased  /tree/a")
+	assert.Contains(t, lines[4], "docs ci  seat in root-job  job-b")
+	assert.Contains(t, lines[5], "(root) ci  reserve  job-c")
+	assert.True(t, strings.HasPrefix(lines[6], "refused   41400"), lines[6])
+	assert.Contains(t, lines[6], "2m0s ago  slots 4  (root) ci  spawned by root  /tree/b  held by pid 41221 fix-cache, pid 41222 owner unknown")
+}
+
+// A request the broker holds parked shows as its own row, after the claims keeping it out.
+func TestBrokerRowsNameEveryParkedRequest(t *testing.T) {
+	var buf bytes.Buffer
+	printBrokerRows(&buf, types.StatusBroker{
+		PID: 48213,
+		Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8, Waiting: []types.MachineWaiter{
+			{Kind: "claim", Project: "docs", Target: "lint", PID: 41300, MemoryMB: 2 << 10, Slots: 2, Dir: "/tree/polish", Command: "magus run lint docs"},
+		}},
+	}, types.BrokerRequired, time.Now())
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 3)
+	assert.Equal(t, "waiting   41300  slots 2  mem 2.0 GiB  docs lint  claim  /tree/polish  magus run lint docs", lines[2])
 }
 
 // A claim says where its figure came from, since a measured one sits below what the

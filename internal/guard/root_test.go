@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -286,21 +287,20 @@ func TestOrchestratorGroundworkByRole(t *testing.T) {
 	assert.NotEqual(t, inferred.key, search.key, "advised once per kind of work")
 }
 
-// TestGroundworkNamesTheMergeScript: a merge or cherry-pick of job branches names the merge
-// script in the finding's first line, only where the workspace carries it, and a merge also
-// names the script that brings the base into a branch.
+// TestGroundworkNamesTheMergeScript: a merge or cherry-pick of job branches names, in the
+// finding's first line, each script the workspace declares replaces it, and none where no
+// script declares so.
 func TestGroundworkNamesTheMergeScript(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "dev", "merge-job-branches.buzz"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "dev", "merge-base-into-branches.buzz"), nil, 0o644))
+	servesScript(t, root, "hack/dev/merge-job-branches.buzz", "merge job branches", "replaces:git merge", "replaces:git cherry-pick")
+	servesScript(t, root, "hack/dev/merge-base-into-branches.buzz", "bring the base into each branch", "replaces:git merge")
 	deny := builtin.Setting{Decision: builtin.Deny}
 	call := func(line, workspace string) mainCall {
 		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: delegableIntegrate, line: line, root: workspace}
 	}
-	named := "Merging job branches? `" + hint.Buzz.With("hack/dev/merge-job-branches.buzz") + "`"
-	base := "Bringing the base into a branch? `" + hint.Buzz.With("hack/dev/merge-base-into-branches.buzz", "--", "--branches", "<branch>") + "`"
+	named := "This workspace's script for it, to merge job branches: `magus buzz hack/dev/merge-job-branches.buzz`"
+	base := "This workspace's script for it, to bring the base into each branch: `magus buzz hack/dev/merge-base-into-branches.buzz`"
 	for line, wantBase := range map[string]bool{"git cherry-pick abc123": false, "git merge job-branch": true, "git merge origin/main": true} {
 		f, ok := groundworkFinding(deny, call(line, root))
 		require.True(t, ok)
@@ -319,6 +319,30 @@ func TestGroundworkNamesTheMergeScript(t *testing.T) {
 	}
 	f, _ := groundworkFinding(deny, call("git commit -m x", root))
 	assert.NotContains(t, f.say, "hack/", "a commit is not a branch merge")
+}
+
+// A root folding a worker's commits with a reset or a rebase is refused, and the first line
+// names the integrator's path: an integration job or an integrate spawn in the job's
+// checkout, and the fold it runs there.
+func TestGroundworkNamesTheIntegratorForAReset(t *testing.T) {
+	t.Parallel()
+	deny := builtin.Setting{Decision: builtin.Deny}
+	call := func(line string) mainCall {
+		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: delegableIntegrate, line: line, root: t.TempDir()}
+	}
+	for _, line := range []string{"git reset --soft abc123", "git -C ../w reset HEAD~3", "git rebase -i origin/main"} {
+		f, ok := groundworkFinding(deny, call(line))
+		require.True(t, ok, line)
+		assert.True(t, f.deny, line)
+		first, _, _ := strings.Cut(f.say, "\n")
+		assert.Contains(t, first, `"integrates": ["<branch>"]`, line)
+		assert.Contains(t, first, "`<root>/integrate <job>`", line)
+		assert.Contains(t, first, "`git reset --soft <checkpoint>`, then one commit", line)
+	}
+	for _, line := range []string{"git commit -m x", "git merge job-branch"} {
+		f, _ := groundworkFinding(deny, call(line))
+		assert.NotContains(t, f.say, "<root>/integrate", line)
+	}
 }
 
 // Proof is the session's from its first bound spawn: its groundwork is refused from the
@@ -591,7 +615,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 	require.NoError(t, err)
 	root := t.TempDir()
 	file := filepath.Join(root, "magusfile.buzz")
-	require.NoError(t, os.WriteFile(file, []byte(`import "`+filepath.ToSlash(repo)+`/spells/harness/claude-code" as claude;`), 0o644))
+	require.NoError(t, os.WriteFile(file, []byte(fmt.Sprintf(`import "%s/spells/harness/claude-code" as claude;`, filepath.ToSlash(repo))), 0o644))
 	_, err = interp.Parse(t.Context(), &interp.Source{Dir: root, Files: []string{file}, Engine: "buzz"})
 	require.NoError(t, err)
 	descriptor, _, err := agent.LoadHarness(t.Context(), root, "claude-code")
@@ -610,7 +634,8 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))
 	}
-	facts, err := agent.ReadToolRows(root, tools.Dir).Models()
+	require.NoError(t, os.WriteFile(filepath.Join(root, tools.Dir, types.ToolHostFile), []byte(descriptor.ID+"\n"), 0o644))
+	facts, err := agent.FindToolRows(root, descriptor.ID).Models()
 	require.NoError(t, err)
 	assert.Equal(t, descriptor.Models, facts.Rows, "the hook reads the same model facts the harness publishes")
 	for _, tc := range []struct {

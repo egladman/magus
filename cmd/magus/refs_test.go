@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
@@ -41,9 +42,10 @@ func TestRefsSymbolRefusesANameSeveralDefinitionsCarry(t *testing.T) {
 	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, exit.Usage, silent.ExitCode())
-	assert.Equal(t, `magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
-  `+hint.Refs.With("'"+hintID+"'")+`
-  `+hint.Refs.With("'"+queueID+"'")+"\n", stderr.String())
+	assert.Equal(t, fmt.Sprintf(`magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
+  %s
+  %s
+`, hint.Refs.With("'"+hintID+"'"), hint.Refs.With("'"+queueID+"'")), stderr.String())
 
 	got, err := refsSymbol(&stderr, g, queueID)
 	require.NoError(t, err)
@@ -217,9 +219,13 @@ func TestWriteRefsText(t *testing.T) {
 	}
 	var b bytes.Buffer
 	require.NoError(t, writeRefsText(&b, out))
-	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\n"+
-		"referenced in 2 file(s), 3 occurrence(s):\n"+
-		"  b.go  (2)"+linesSuffix([]int{4, 9})+"\n  c.go  (1)\n", b.String())
+	assert.Equal(t, fmt.Sprintf(`symbol: symbol:a F().  (F)
+defined in:
+  a.go
+referenced in 2 file(s), 3 occurrence(s):
+  b.go  (2)%s
+  c.go  (1)
+`, linesSuffix([]int{4, 9})), b.String())
 
 	// A resolved symbol nothing references is a verified answer, unless the verdict is not.
 	out.Refs, out.FileCount, out.RefCount = nil, 0, 0
@@ -462,8 +468,8 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 		},
 	}, record)
 	assert.Contains(t, stdout, `"index_cause"`)
-	assert.Contains(t, stderr.String(), "why: "+ans.IndexCause.Why+"\n")
-	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")
+	assert.Contains(t, stderr.String(), fmt.Sprintf("why: %s\n", ans.IndexCause.Why))
+	assert.Contains(t, stderr.String(), fmt.Sprintf("fix: %s\n", ans.IndexCause.Fix))
 
 	stderr.Reset()
 	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputText}, miss) })
@@ -471,7 +477,46 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	assert.Empty(t, stdout, "text output keeps stdout for answers")
 	assert.Contains(t, stderr.String(), `magus refs: no node matches "Foo"`)
 	assert.Contains(t, stderr.String(), "outside coverage: libs/api (not-indexed)")
-	assert.Contains(t, stderr.String(), "  why: "+ans.IndexCause.Why+"\n  fix: "+ans.IndexCause.Fix+"\n")
+	assert.Contains(t, stderr.String(), fmt.Sprintf(`  why: %s
+  fix: %s
+`, ans.IndexCause.Why, ans.IndexCause.Fix))
+}
+
+func TestPresenceOfCapsSitesAndCountsTheRest(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "ws")
+	var matches []textindex.Match
+	for i := 1; i <= types.TextPresenceSiteCap+3; i++ {
+		matches = append(matches, textindex.Match{Path: filepath.Join(root, "pkg", "a.go"), Line: i})
+	}
+	matches = append(matches, textindex.Match{Path: filepath.Join(root, "b.go"), Line: 7})
+
+	sites := make([]string, types.TextPresenceSiteCap)
+	for i := range sites {
+		sites[i] = fmt.Sprintf("pkg/a.go:%d", i+1)
+	}
+	assert.Equal(t, types.KnowledgeTextPresence{Hits: types.TextPresenceSiteCap + 4, Files: 2, Sites: sites, More: 4},
+		missPresence(root, matches))
+}
+
+// A symbol miss with text hits names the sites in the text block and in the -o json record.
+func TestReportRefsMissPrintsTextSites(t *testing.T) {
+	ans := types.ClassifyAnswer(false, "", nil)
+	ans.Text = &types.KnowledgeTextPresence{Hits: 3, Files: 2, Sites: []string{"a/b.go:4", "c.go:9"}, More: 1}
+	miss := refsMiss{name: "Foo", answer: ans, searched: 10}
+
+	var stderr bytes.Buffer
+	var err error
+	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputText}, miss) })
+	require.NoError(t, err)
+	assert.Empty(t, stdout)
+	assert.Contains(t, stderr.String(), "    a/b.go:4\n    c.go:9\n    ... and 1 more\n")
+
+	stderr.Reset()
+	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputJSON}, miss) })
+	require.NoError(t, err)
+	var record types.KnowledgeRefsOutput
+	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
+	assert.Equal(t, ans.Text, record.Answer.Text)
 }
 
 // withIndexCause diagnoses only an answer drawn from a missing or stale index; a clean

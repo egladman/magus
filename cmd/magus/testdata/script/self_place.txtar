@@ -1,0 +1,20 @@
+# `magus self place` refuses a replacement that carries no clean commit stamp, before
+# it touches anything.
+chmod 755 dirty.sh
+chmod 755 unstamped.sh
+
+! exec magus self place $WORK/dirty.sh
+stderr 'built from a modified tree'
+
+! exec magus self place $WORK/unstamped.sh
+stderr 'reports no commit or build date'
+
+! exec magus self place
+stderr 'want one binary to place'
+
+-- dirty.sh --
+#!/bin/sh
+echo '{"commit":"abc","dirty":true,"build_date":"2099-01-01T00:00:00Z"}'
+-- unstamped.sh --
+#!/bin/sh
+echo '{"commit":"","dirty":false,"build_date":""}'

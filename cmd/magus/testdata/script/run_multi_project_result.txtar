@@ -52,7 +52,7 @@ import "spells/acme";
 import "project/api";
 magus\project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > str !> any {
-    ctx.writesFiles("dist/*.txt");
+    ctx.writesFiles(["dist/*.txt"]);
     proc\exec("sh", ["-c", "mkdir -p dist && echo root > dist/root.txt"]);
     return "root-v1";
 }
@@ -62,7 +62,7 @@ import "proc";
 import "spells/acme";
 magus\project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > str !> any {
-    ctx.writesFiles("dist/*.txt");
+    ctx.writesFiles(["dist/*.txt"]);
     proc\exec("sh", ["-c", "mkdir -p dist && echo api > dist/api.txt"]);
     return "api-v1";
 }

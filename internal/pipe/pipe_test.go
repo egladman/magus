@@ -117,7 +117,7 @@ func pipeStage(t *testing.T, cacheDir string, env map[string]string, args ...str
 	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestHelperPipeStage$"}, args...)...)
 	cmd.Env = append(os.Environ(), "PIPETEST_HELPER=1", "PIPETEST_CACHE_DIR="+cacheDir, spawn.AncestorsEnvVar+"=")
 	for k, v := range env {
-		cmd.Env = append(cmd.Env, "PIPETEST_"+k+"="+v)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("PIPETEST_%s=%s", k, v))
 	}
 	cmd.Stderr = os.Stderr
 	return cmd
@@ -576,5 +576,57 @@ func TestExitSweepSkipsWhenTheRecordCannotBeWritten(t *testing.T) {
 	writeExitRecord(dir, exitRecord{PID: 1, Ended: time.Now()})
 	if _, err := os.Stat(stale); err != nil {
 		t.Fatalf("an unrecordable sweep was walked and removed a record: %v", err)
+	}
+}
+
+// startSleeper runs a process to wait on, killed and reaped when the test ends.
+func startSleeper(t *testing.T) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command("sleep", "60")
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	return cmd
+}
+
+func awaitExitAsync(ctx context.Context, pids ...int) <-chan error {
+	done := make(chan error, 1)
+	go func() { done <- awaitExit(ctx, pids) }()
+	return done
+}
+
+// TestAwaitExitWakesOnTheExitOfAnyStage: the wait blocks in the kernel on the stages, not
+// on a timer, and the first exit among them ends it.
+func TestAwaitExitWakesOnTheExitOfAnyStage(t *testing.T) {
+	still, ending := startSleeper(t), startSleeper(t)
+	done := awaitExitAsync(t.Context(), still.Process.Pid, ending.Process.Pid)
+	select {
+	case err := <-done:
+		t.Fatalf("awaitExit returned (%v) while both stages ran", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	require.NoError(t, ending.Process.Kill())
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("awaitExit never woke on the exit of one of its stages")
+	}
+}
+
+func TestAwaitExitCountsAGonePidAsExited(t *testing.T) {
+	gone := exec.Command("true")
+	require.NoError(t, gone.Run())
+	require.NoError(t, awaitExit(t.Context(), []int{gone.Process.Pid}))
+}
+
+func TestAwaitExitStopsWithItsContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	done := awaitExitAsync(ctx, startSleeper(t).Process.Pid)
+	cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("awaitExit outlived its context")
 	}
 }

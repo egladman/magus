@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -73,6 +74,21 @@ func TestCheckGoCacheBudgetZeroTurnsItOff(t *testing.T) {
 	got := r.checkGoCacheBudget()
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "go.cache_budget_mb is 0")
+}
+
+func TestLintCacheUnscoped(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GOLANGCI_LINT_CACHE", filepath.Join(root, ".magus", "golangci-lint"))
+	assert.Equal(t, "", lintCacheUnscoped(root))
+
+	t.Setenv("GOLANGCI_LINT_CACHE", "/shared/lint")
+	want := fmt.Sprintf("[MGS2014] the golangci-lint cache is outside the checkout %s (GOLANGCI_LINT_CACHE=/shared/lint), "+
+		"so results from other checkouts can answer for this one's; `magus run golangci-lint <project>` keeps it in %s",
+		root, filepath.Join(root, ".magus", "golangci-lint"))
+	assert.Equal(t, want, lintCacheUnscoped(root))
+
+	got := (&runner{ctx: context.Background(), root: root}).checkGoCacheBudget()
+	assert.Equal(t, types.Check{Name: "go-cache-budget", Status: types.CheckAdvice, Message: want, Details: []string{want}}, got)
 }
 
 func TestLintCacheDirHonorsItsEnv(t *testing.T) {

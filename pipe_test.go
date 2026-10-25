@@ -34,8 +34,9 @@ import (
 // TestHelperPipeStage is not a test: it is one stage of a shell pipe, re-executed from
 // this binary so it runs the same executable a real magus stage would. PIPETEST_*
 // configures it: raise the pipe gate when GATE is set, sleep PRE_MS, take PROJECTS
-// through takeRunLocks, touch READY, wait for the budget until AWAIT_FILE exists, write
-// WRITE_HOLDING and WRITE_BYTES while holding, hold HOLD_MS, release, write WRITE_AFTER.
+// through takeRunLocks, touch READY, wait for the budget until the FIFO AWAIT_FILE is
+// written, write WRITE_HOLDING and WRITE_BYTES while holding, hold HOLD_MS, release, write
+// WRITE_AFTER.
 // RESULT, when set, receives "acquired" or the acquisition's error. EXIT, when set, is
 // the status it records and exits with.
 func TestHelperPipeStage(t *testing.T) {
@@ -72,13 +73,12 @@ func TestHelperPipeStage(t *testing.T) {
 		_ = os.WriteFile(r, []byte("1"), 0o644)
 	}
 	if f := env("AWAIT_FILE"); f != "" {
-		budget := func(context.Context) (types.MachineSnapshot, error) {
-			if _, err := os.Stat(f); err == nil {
-				return types.MachineSnapshot{BudgetSlots: 1}, nil
-			}
-			return types.MachineSnapshot{BudgetSlots: 1, HeldSlots: 1}, nil
+		// Opening a FIFO to read blocks until the test opens it to write: the release.
+		budget := func(context.Context, func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+			_, err := os.ReadFile(f)
+			return types.MachineClaim{}, types.MachineVerdict{Granted: true, Fits: true}, err
 		}
-		if err := cache.AwaitMachine(context.Background(), budget, []types.MachineClaim{{Slots: 1}}, nil); err != nil {
+		if err := cache.AwaitMachine(context.Background(), budget, nil); err != nil {
 			os.Exit(4)
 		}
 	}
@@ -123,7 +123,7 @@ func pipeStage(t *testing.T, cacheDir string, env map[string]string, args ...str
 	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestHelperPipeStage$"}, args...)...)
 	cmd.Env = append(os.Environ(), "PIPETEST_HELPER=1", "PIPETEST_CACHE_DIR="+cacheDir, spawn.AncestorsEnvVar+"=")
 	for k, v := range env {
-		cmd.Env = append(cmd.Env, "PIPETEST_"+k+"="+v)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("PIPETEST_%s=%s", k, v))
 	}
 	cmd.Stderr = os.Stderr
 	return cmd
@@ -619,6 +619,9 @@ func TestStatusWaitPipeRunsTheDownstreamAfterRelease(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	freed := filepath.Join(t.TempDir(), "freed")
+	if err := syscall.Mkfifo(freed, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "AWAIT_FILE": freed, "EXIT": "0"}, "readonly")
 	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)

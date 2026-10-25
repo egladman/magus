@@ -1,6 +1,7 @@
 package script
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -95,7 +96,7 @@ func TestWithCommandsAddsACommand(t *testing.T) {
 	Run(t, scripts(t, map[string]string{"cmd": "hello world\nstdout '^hello world$'\n"}),
 		WithCommands(map[string]Command{
 			"hello": func(s *State, _ bool, args []string) {
-				_, err := s.Stdout().Write([]byte("hello " + strings.Join(args, " ") + "\n"))
+				_, err := fmt.Fprintf(s.Stdout(), "hello %s\n", strings.Join(args, " "))
 				s.Check(err)
 			},
 		}))

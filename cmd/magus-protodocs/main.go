@@ -482,7 +482,7 @@ func describeRules(m protoreflect.Message) []string {
 				out = append(out, name)
 			}
 		default:
-			out = append(out, name+": "+formatScalar(fd, v))
+			out = append(out, fmt.Sprintf("%s: %s", name, formatScalar(fd, v)))
 		}
 	})
 	return out
@@ -516,7 +516,7 @@ func rangeInFieldOrder(m protoreflect.Message, fn func(protoreflect.FieldDescrip
 func describeSubRules(prefix string, m protoreflect.Message) []string {
 	var out []string
 	rangeInFieldOrder(m, func(fd protoreflect.FieldDescriptor, v protoreflect.Value) {
-		name := prefix + "." + string(fd.Name())
+		name := fmt.Sprintf("%s.%s", prefix, string(fd.Name()))
 		switch {
 		case fd.IsList():
 			out = append(out, describeListRule(name, fd, v)...)
@@ -529,7 +529,7 @@ func describeSubRules(prefix string, m protoreflect.Message) []string {
 				out = append(out, name)
 			}
 		default:
-			out = append(out, name+": "+formatScalar(fd, v))
+			out = append(out, fmt.Sprintf("%s: %s", name, formatScalar(fd, v)))
 		}
 	})
 	return out
@@ -546,7 +546,7 @@ func describeListRule(name string, fd protoreflect.FieldDescriptor, v protorefle
 	case "cel_expression":
 		var exprs []string
 		for i := 0; i < list.Len(); i++ {
-			exprs = append(exprs, "`"+list.Get(i).String()+"`")
+			exprs = append(exprs, fmt.Sprintf("`%s`", list.Get(i).String()))
 		}
 		return []string{"custom rule: " + strings.Join(exprs, ", ")}
 	}
@@ -554,7 +554,7 @@ func describeListRule(name string, fd protoreflect.FieldDescriptor, v protorefle
 	for i := 0; i < list.Len(); i++ {
 		vals = append(vals, formatScalar(fd, list.Get(i)))
 	}
-	return []string{name + ": " + strings.Join(vals, ", ")}
+	return []string{fmt.Sprintf("%s: %s", name, strings.Join(vals, ", "))}
 }
 
 func formatScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) string {
@@ -562,7 +562,7 @@ func formatScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) string 
 	case protoreflect.StringKind, protoreflect.BytesKind:
 		// A table cell ends at the first unescaped pipe, and a code span does not protect
 		// it, so an alternation pattern like `^(shared|private)/.+$` truncates the row.
-		return "`" + strings.ReplaceAll(v.String(), "|", `\|`) + "`"
+		return fmt.Sprintf("`%s`", strings.ReplaceAll(v.String(), "|", `\|`))
 	case protoreflect.EnumKind:
 		if ev := fd.Enum().Values().ByNumber(v.Enum()); ev != nil {
 			return string(ev.Name())
@@ -610,14 +610,14 @@ func reservedNote(nums []string, names protoreflect.Names) string {
 	if names.Len() > 0 {
 		var ns []string
 		for i := 0; i < names.Len(); i++ {
-			ns = append(ns, "`"+string(names.Get(i))+"`")
+			ns = append(ns, fmt.Sprintf("`%s`", string(names.Get(i))))
 		}
 		parts = append(parts, strings.Join(ns, ", "))
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return "Reserved: " + strings.Join(parts, "; ") + "."
+	return fmt.Sprintf("Reserved: %s.", strings.Join(parts, "; "))
 }
 
 // fileDoc reads the package-level comment. There is no protoreflect.Descriptor for a
@@ -713,7 +713,7 @@ func escapeAndLinkify(s string) string {
 		for end < len(s) && !isURLBoundary(s[end]) {
 			end++
 		}
-		b.WriteString("<" + s[start:end] + ">")
+		fmt.Fprintf(&b, "<%s>", s[start:end])
 		s = s[end:]
 	}
 	return b.String()
@@ -841,7 +841,7 @@ func (a api) typeLink(disp, full, fromPkg, fromPath string) string {
 	if path, ok := a.page(pkg); ok {
 		return fmt.Sprintf("[%s](%s.md#%s)", disp, relLink(fromPath, path), anchor(full))
 	}
-	return "`" + disp + "`"
+	return fmt.Sprintf("`%s`", disp)
 }
 
 func (a api) typePackage(full string) string {
@@ -1036,7 +1036,7 @@ func renderIndex(a api) string {
 		}
 		b.WriteString(". Streaming methods:\n\n")
 		for _, n := range names {
-			b.WriteString("- " + n + "\n")
+			fmt.Fprintf(&b, "- %s\n", n)
 		}
 		b.WriteString("\n")
 	}
@@ -1078,13 +1078,13 @@ func (a api) exampleJSON(inputFull string) string {
 	if len(lines) == 0 {
 		return "{}"
 	}
-	return "{" + strings.Join(lines, ",") + "}"
+	return fmt.Sprintf("{%s}", strings.Join(lines, ","))
 }
 
 func (f field) placeholder() string {
 	if f.RefIsEnum {
 		if f.EnumFallback != "" {
-			return `"` + f.EnumFallback + `"`
+			return fmt.Sprintf("%q", f.EnumFallback)
 		}
 		return `""`
 	}
@@ -1290,7 +1290,7 @@ func writeMessage(b *strings.Builder, a api, m message, used []usage, fromPath s
 				notes = append(notes, "_optional_")
 			}
 			if f.Constraints != "" {
-				notes = append(notes, "_"+f.Constraints+"_")
+				notes = append(notes, fmt.Sprintf("_%s_", f.Constraints))
 			}
 			desc := strings.TrimSpace(strings.Join(append(notes, f.Doc), " "))
 			typeCell := f.Type

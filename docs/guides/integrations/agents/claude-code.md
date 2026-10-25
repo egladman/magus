@@ -107,7 +107,7 @@ claude-code` prints it, in the place it lands in `.claude/settings.json`:
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --observes-skill-loads --foreground-default-ms 120000 --foreground-max-ms 600000 --tool-rows .claude/magus/tools"
+          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
         }]
       }
     ]
@@ -119,8 +119,8 @@ The glue forwards the whole event, and magus judges the call by its tool and the
 of its input: a command line, a file read or write, a search, a spawn, a skill load,
 an MCP call. The spell's tool rows say what each Claude Code tool does where the shape
 cannot; `magus agent harness install` writes them to `.claude/magus/tools`, one file per
-capability with one tool name per line, and the catch-all entry names that directory with
-`--tool-rows`. A tool the rows list as touching nothing (a todo list, a plan, a web lookup)
+capability with one tool name per line, beside a host file naming claude-code, where magus
+finds them by the entry's `--agent-name`. A tool the rows list as touching nothing (a todo list, a plan, a web lookup)
 passes before any rule loads; a tool whose input has none of those shapes and that no row
 lists is named by the unjudged-tool rule rather than run unseen. See
 [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard).
@@ -402,7 +402,7 @@ rather than guessed. The same record keeps the model the spawn
 named, and, when the spawn's `description` reads `<parent>/<role> <job>` for a
 live job, the job its later calls are graded under, in its own worktree too.
 
-The `SubagentStop` entry judges nothing either. Its payload names the finished
+The `SubagentStop` entry also measures the subagent. Its payload names the finished
 subagent's `agent_id` and `agent_transcript_path`; magus reads the last usage
 record in that transcript's final 512 KiB and files input plus cache-read plus
 cache-write tokens as the agent's context size, which a later `SendMessage` to it
@@ -410,17 +410,14 @@ hands a [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule as
 `target.contextTokens`.
 
 A spawn's payload is a prompt, a `subagent_type`, and an optional `model`, not one
-string, and the event goes whole as every call's does. The one capability written on
-every entry that judges is the flag after `--`, which `magus buzz` forwards to the
-script as its own argv: `--observes-skill-loads` says that THIS config matches the host's
-`Skill` tool too, which the catch-all does, so a rule that requires a skill before a
-spawn, a write or a command has loads to read. A load counts for the
-agent that made it: a subagent loads a skill itself, and its parent's load does not
-count for it. A config without that matcher omits the flag and those rules stand
-down rather than denying forever. The catch-all entry also declares the Bash tool's
-foreground limits, which the script forwards only for a shell command line. The script
-parses that tail against the flags it
-supports; an argument it does not know is named on stderr, which Claude Code shows
+string, and the event goes whole as every call's does. Whether a config sees skill loads
+is the spell's to say: `mgs_getLimits` returns `observesSkillLoads`, install writes it
+beside the tool rows, and the catch-all matcher meets the `Skill` tool, so a rule that
+requires a skill before a spawn, a write or a command has loads to read. A load counts for
+the agent that made it: a subagent loads a skill itself, and its parent's load does not
+count for it. A host whose wiring sees no skill load says so in its limits, and those
+rules stand down rather than denying forever. The script takes only `--agent-name`; any
+other argument is named on stderr, which Claude Code shows
 as a hook error, and the call is judged without it rather than blocked.
 `magus session hook` reads
 `tool_input.prompt` for the context, `tool_input.subagent_type` (then
@@ -617,6 +614,12 @@ It adds these to a session:
   `confirm` holds the prompt once.
 - The session's spend, main conversation and subagents together, in the status line
   and at the top of the pane.
+- The machine build budget, read from `magus status -o json` every 15 seconds and
+  around each Bash call that runs magus: `budget 8/10 slots, 8.7/23.5 GiB` in the
+  status line, and each holder's pid, target, slots, memory, age and checkout on the
+  pane's Budget tab. When a magus run in the session fails with
+  [MGS3009](../../../reference/codes/sandbox/MGS3009.md), a band above the prompt names
+  it and who holds the budget for five minutes, and the Budget tab keeps the refusal.
 
 Every threshold is a setting in `/config`: `cacheGate`, `cacheWarnMinutes`,
 `gateMinTokens`, `cacheTtl`, `priceStepGate`, `priceStepMarginTokens`, `spawnGate`,
@@ -659,11 +662,14 @@ channel cannot carry a verdict.
 
 This harness wires six events: `PreToolUse`, `PostToolUse` (a finished spawn's child
 id), `SessionStart`, `Stop` (the checkpoint), `SubagentStop` (a
-subagent's context size) and `UserPromptSubmit`. The Bash entry alone carries
-`--foreground-default-ms` and `--foreground-max-ms`, Claude Code's Bash timeout limits
-(`BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS`): the glue reads the call's
-`timeout` and `run_in_background`, which only Claude Code's Bash tool has, so no other
-host's shell entry declares them.
+subagent's context size) and `UserPromptSubmit`. Every entry takes only `--agent-name`;
+the spell's `mgs_getLimits` carries Claude Code's Bash timeout limits
+(`BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS`), which magus applies to a call's
+`timeout` and `run_in_background`, and
+`resumesOnBackgroundFrom = 2.1.299`, the first Claude Code release that resumes a
+stopped subagent when a background task it left running completes. From that version a
+subagent's stop with a task still running stands, and the subagent keeps its job. Below
+it, or when the transcript records no version, the stop is refused.
 
 That is not the same as using everything this host offers. `PostToolUseFailure`,
 `PermissionRequest` and `PreCompact` are available and unused, on the test every

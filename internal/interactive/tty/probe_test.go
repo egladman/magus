@@ -3,6 +3,7 @@ package tty
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -89,7 +90,7 @@ func TestWantsColorHonoursNoColor(t *testing.T) {
 	})
 
 	for _, v := range []string{"1", "0", "false", "anything"} {
-		t.Run("set to "+v+" disables colour", func(t *testing.T) {
+		t.Run(fmt.Sprintf("set to %s disables colour", v), func(t *testing.T) {
 			t.Setenv("NO_COLOR", v)
 			assert.False(t, WantsColor(&ttyBuf{}, terminal),
 				"any non-empty NO_COLOR disables colour")

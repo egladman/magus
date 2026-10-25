@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	goast "go/ast"
 	"go/parser"
 	"go/token"
@@ -179,7 +180,7 @@ func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), rootWorkspace{root: root})
 	oldJoin := strings.ReplaceAll(magusSearchPaths(ctx, root)[0], "?", "../x")
-	require.Equal(t, root+string(filepath.Separator)+".."+string(filepath.Separator)+"x.buzz", oldJoin)
+	require.Equal(t, fmt.Sprintf("%s%c..%cx.buzz", root, filepath.Separator, filepath.Separator), oldJoin)
 	require.Equal(t, above, filepath.Clean(oldJoin), "the old search resolves the planted module")
 
 	load := func(t *testing.T, magusfile string) ([]string, error) {
@@ -585,7 +586,7 @@ func BenchmarkMagusfileFacts(b *testing.B) {
 		i := 0
 		for b.Loop() {
 			i++
-			loadMagusfileFacts(nil, code+"\n// "+strconv.Itoa(i)+"\n")
+			loadMagusfileFacts(nil, fmt.Sprintf("%s\n// %d\n", code, i))
 		}
 	})
 	b.Run("stored", func(b *testing.B) {

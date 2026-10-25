@@ -230,16 +230,12 @@ flag shell/agent-name
 flag shell/call-background
 flag shell/call-timeout-ms
 flag shell/event
-flag shell/foreground-default-ms
-flag shell/foreground-max-ms
 flag shell/lease
 flag shell/message
 flag shell/observe
-flag shell/observes-skill-loads
 flag shell/path
 flag shell/renders-ask
 flag shell/session
-flag shell/tool-rows
 flag shell/transcript
 flag shell/transport
 flag status/W
@@ -291,6 +287,7 @@ subcommand diff
 subcommand doctor
 subcommand events
 subcommand explain
+subcommand gate
 subcommand graph
 subcommand init
 subcommand job

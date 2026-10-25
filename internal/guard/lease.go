@@ -330,7 +330,7 @@ func isGateCommand(args []string) bool {
 //
 // What magus can contribute is the size of the blast radius, which is what --plan prints.
 // The caller weighs that against the wall clock above.
-var gateCadence = "`" + hint.Affected.With(string(types.TargetCI), "--plan") + "` sizes the risk"
+var gateCadence = fmt.Sprintf("`%s` sizes the risk", hint.Affected.With(string(types.TargetCI), "--plan"))
 
 // gateCadenceWhy is the trade --plan informs, kept behind the advisory's ref.
 var gateCadenceWhy = "One project is usually answered by that project's own `" + string(types.TargetCI) +
@@ -405,7 +405,7 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s declares no check; run the narrowest target covering your paths.",
 				elideCommand(command), me.ID),
-			Why: gated + " Report what that target said, and that this row names no check: " + leaseActorClause("record a check on this row") + "\n" + leaseActorWhy,
+			Why: fmt.Sprintf("%s Report what that target said, and that this row names no check: %s\n%s", gated, leaseActorClause("record a check on this row"), leaseActorWhy),
 		}
 	}
 	check := me.Validation
@@ -473,7 +473,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		case v.unchecked != nil:
 			return uncheckedDenial(v, me, checks, deps.DefaultCharms)
 		case v.held != "":
-			return heldDenial(v, me)
+			return heldDenial(v, me, knockHolder(ctx, deps, me, v.holder, fmt.Sprintf("`%s`", v.held)))
 		case v.op:
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
@@ -484,14 +484,13 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		r = v.run
 		commands := make([]string, len(checks))
 		for i, c := range checks {
-			commands[i] = "`" + checkCommand(c) + "`"
+			commands[i] = fmt.Sprintf("`%s`", checkCommand(c))
 		}
 		if buildsCheckoutBinary(ctx, judge.workspace, r) {
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
-				Why: onePerBase + "\n" +
-					"When this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `" +
-					strings.Join(placementArgv(me.ID), " ") + "`. Until then the unit is held to " + commands[0] + ", and a need for the new binary goes in your result's unresolved risks.",
+				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks.",
+					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0]),
 			}
 		}
 		if readsOwnProjects(r, me.WritePaths) {
@@ -561,8 +560,10 @@ type rowJudge struct {
 	graph     func() (types.TargetGraphOutput, error)
 	produces  lazyProducers
 	composes  lazyProducers
-	// others are the live rows besides row, for who else holds an output a run regenerates.
+	// others are the path holders besides row, for who else holds an output a run regenerates.
 	others func() []types.Job
+	// ignored asks the VCS at root which paths it ignores, for job.RegeneratedOutside.
+	ignored func() func([]string) []string
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -571,13 +572,11 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 	return rowJudge{
 		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace, graph: graph,
 		others: sync.OnceValue(func() []types.Job {
-			var live []types.Job
-			for _, r := range actingLeaseStanding(ctx, deps, row.ID).rows {
-				if r.ID != row.ID && r.State.Live() {
-					live = append(live, r)
-				}
-			}
-			return live
+			holders := types.PathHolders(actingLeaseStanding(ctx, deps, row.ID).rows)
+			return slices.DeleteFunc(holders, func(r types.Job) bool { return r.ID == row.ID })
+		}),
+		ignored: sync.OnceValue(func() func([]string) []string {
+			return job.VCSIgnored(ctx, at.workspace)
 		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, workspace, row.WritePaths)
@@ -682,16 +681,28 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 // write paths cover the output, or one that regenerates it too from its own write paths
 // and was declared before the row. The first holder regenerates it and the other waits, so
 // neither silently overwrites the other's copy.
+//
+// A lease taken in another checkout holds only the outputs the change commits. One the VCS
+// ignores, such as a coverage profile, is a file of each checkout, so the two leases
+// regenerate two copies and neither overwrites the other.
 func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project) (string, types.Job) {
 	if len(own) == 0 {
 		return "", types.Job{}
 	}
+	committed := sync.OnceValue(func() []job.RegeneratedOutput {
+		kept := job.RegeneratedOutside(j.root, j.row, projects, j.ignored())
+		return slices.DeleteFunc(slices.Clone(own), func(o job.RegeneratedOutput) bool { return !slices.Contains(kept, o) })
+	})
 	for _, other := range j.others() {
 		var theirs []job.RegeneratedOutput
 		if !other.ReadOnly && (other.Created < j.row.Created || other.Created == j.row.Created && other.ID < j.row.ID) {
 			theirs = job.RegeneratedOutside(j.root, other, projects, nil)
 		}
-		for _, o := range own {
+		shared := own
+		if other.CheckoutRoot != "" && j.root != "" && !samePath(other.CheckoutRoot, j.root) {
+			shared = committed()
+		}
+		for _, o := range shared {
 			pattern := strings.Fields(o.Output)[0]
 			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {
 				return o.Output, other
@@ -709,15 +720,46 @@ func writePathsTouch(writePaths []string, pattern string) bool {
 	})
 }
 
+// knockHolder files one attention row for the root of holder's job tree saying me needs
+// what, and returns that root. A holder below me returns "" and files nothing: me reaches
+// it with `magus job wait`. So does a store it cannot read, which leaves that remedy.
+func knockHolder(ctx context.Context, deps Dependencies, me, holder types.Job, what string) string {
+	at := hookLocation(ctx, deps)
+	rows, err := leaseRows(ctx, at)
+	if err != nil || slices.ContainsFunc(types.JobAncestors(rows, holder.ID), func(a types.Job) bool { return a.ID == me.ID }) {
+		return ""
+	}
+	root, err := job.NewStore(at.jobs()).TreeRoot(holder.ID)
+	if err != nil {
+		return ""
+	}
+	if !isDryRun(ctx) {
+		job.NoteHeld(ctx, at.workspace, root, fmt.Sprintf("lease %s needs %s, which lease %s holds (%s right now): release it, end lease %s, or re-partition the plan",
+			me.ID, what, holder.ID, holder.State, holder.ID))
+	}
+	return root
+}
+
+// knockClause says where knockHolder filed its row.
+func knockClause(root string, holder types.Job) string {
+	return fmt.Sprintf("magus filed an attention row for %s, the root of lease %s's job tree", root, holder.ID)
+}
+
 // heldDenial words the refusal of a regenerate whose output another live lease holds.
-func heldDenial(v runVerdict, me types.Job) denial {
+// root is knockHolder's answer: a caller who cannot wait on the holder is told who was
+// asked instead.
+func heldDenial(v runVerdict, me types.Job, root string) denial {
 	wait := hint.JobWait.With(v.holder.ID)
 	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.WritePaths, ", "))
 	if !writePathsTouch(v.holder.WritePaths, strings.Fields(v.held)[0]) {
 		why = fmt.Sprintf("lease %s regenerates it from its own write paths too, and was declared before lease %s", v.holder.ID, me.ID)
 	}
+	next := fmt.Sprintf("run `%s`", wait)
+	if root != "" {
+		next = fmt.Sprintf("%s, since lease %s waits only on a job below it; leave the output and carry on", knockClause(root, v.holder), me.ID)
+	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` regenerates `%s` held by live lease %s; run `%s`.", v.run.target, v.held, v.holder.ID, wait),
+		Say: fmt.Sprintf("magus workspace: `%s` regenerates `%s` held by live lease %s; %s.", v.run.target, v.held, v.holder.ID, next),
 		Why: fmt.Sprintf("A lease regenerates and commits an output its own write paths regenerate, unless another live lease holds that output: %s.\n"+
 			"The first holder regenerates it and the other waits, so neither silently overwrites the other's copy. Once lease %s ends, run `%s` again; if it never needs the output, the checkout's integrator, "+integratorIs+", regenerates it after integration.",
 			why, v.holder.ID, v.run.target),
@@ -745,7 +787,7 @@ func opRewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
 	if len(v.composers) > 0 {
 		why += fmt.Sprintf("`%s` calls it in the projects the run selects, and that run is judged by its declarations.", strings.Join(v.composers, "`, `"))
 	} else {
-		why += "No magusfile target calls it in the projects the run selects. `" + next + "` reports the same drift without writing it; the checkout's integrator, " + integratorIs + ", rewrites the rest after it integrates the units."
+		why += fmt.Sprintf("No magusfile target calls it in the projects the run selects. `%s` reports the same drift without writing it; the checkout's integrator, %s, rewrites the rest after it integrates the units.", next, integratorIs)
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` runs a spell op under the rw charm, and no declaration says what it writes; run `%s`.", r.target, next),
@@ -828,13 +870,13 @@ func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, comm
 		return denial{}
 	}
 	match, _ := rawToolMatch(deps, raw)
-	op := match.spell + "::" + match.operation
+	op := fmt.Sprintf("%s::%s", match.spell, match.operation)
 	why := "A bound worker runs its work through targets, where the cache, the sandbox and the rules that hold it to its row all apply."
 	project := cmp.Or(checks[0].Project, ".")
 	if checksCompose(lazyTargetGraph(ctx, lazyWorkspace(ctx, deps, hookLocation(ctx, deps).workspace)), checks)(op, project) {
-		why += " The check composes " + op + ", so a narrower run of it passes too: `" + hint.Run.With(op, project) + "`, with the tool's own flags after `--`."
+		why += fmt.Sprintf(" The check composes %s, so a narrower run of it passes too: `%s`, with the tool's own flags after `--`.", op, hint.Run.With(op, project))
 	} else {
-		why += " If the unit needs " + op + ", name it in your result's unresolved risks."
+		why += fmt.Sprintf(" If the unit needs %s, name it in your result's unresolved risks.", op)
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` runs %s outside magus; run lease %s's check: `%s`.",
@@ -1080,7 +1122,7 @@ func (r targetRun) readOnly(defaults []string) string {
 		name += ":" + strings.Join(kept, ",")
 	}
 	if spell != "" {
-		name = spell + "::" + name
+		name = fmt.Sprintf("%s::%s", spell, name)
 	}
 	args := append([]string{name}, r.projects...)
 	if r.noDefaultCharms || defaultsRewrite(defaults) {
@@ -1094,7 +1136,7 @@ func (r targetRun) readOnly(defaults []string) string {
 
 // writesOutside reads what a run under the rw charm writes from the workspace's
 // declarations, in every project the run selects: its target's ctx.writesFiles and
-// ctx.modifiesExistingFiles globs, and the ctx.modifiesExistingFiles globs of each step
+// ctx.writesFiles(..., editsExistingSource: true) globs, and the ctx.writesFiles(..., editsExistingSource: true) globs of each step
 // its ctx.needs chain reaches in that project. It returns the rooted globs no write path
 // covers and own does not name: own are the outputs the row's write paths regenerate,
 // which count as inside them.
@@ -1615,6 +1657,8 @@ var (
 		"stat": true, "wc": true, "pwd": true, "echo": true, "nl": true, "cut": true,
 		"diff": true, "cmp": true, "basename": true, "dirname": true, "realpath": true,
 		"readlink": true, "file": true, "du": true, "tree": true,
+		// `cd <checkout> && magus job exec <job>` is the bind a refusal names.
+		"cd": true,
 	}
 )
 
@@ -1725,14 +1769,14 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 	if fix == "" {
 		fix = leaseActorClause(what.ask)
 	}
-	why := "This call acts under lease " + actingLease + ". An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible."
+	why := fmt.Sprintf("This call acts under lease %s. An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible.", actingLease)
 	if what.why != "" {
-		why = what.why + "\n" + why
+		why = fmt.Sprintf("%s\n%s", what.why, why)
 	}
 	if what.fix == "" {
-		why += "\n" + leaseActorWhy
+		why += fmt.Sprintf("\n%s", leaseActorWhy)
 	}
-	return denial{Say: "magus workspace: `" + elideCommand(command) + "` " + what.problem + "; " + fix, Why: why}
+	return denial{Say: fmt.Sprintf("magus workspace: `%s` %s; %s", elideCommand(command), what.problem, fix), Why: why}
 }
 
 // lineBaggageLease is the lease the last BAGGAGE assignment in f names, exported,
@@ -1866,12 +1910,12 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 		if operand == "" {
 			return boundedExecRebind(h)
 		}
-		return rebind{problem: "would take the lease on another job while lease " + h.id + " is in flight", ask: "hand that job out"}
+		return rebind{problem: fmt.Sprintf("would take the lease on another job while lease %s is in flight", h.id), ask: "hand that job out"}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
 		if len(words) > 2 && descendsFrom(h.standing(), words[2]) {
 			return rebind{}
 		}
-		return rebind{problem: "would verify a job outside lease " + h.id + "'s tree", ask: "verify it"}
+		return rebind{problem: fmt.Sprintf("would verify a job outside lease %s's tree", h.id), ask: "verify it"}
 	case words[0] == hint.JobFork.Head() && words[1] == hint.JobFork.Leaf():
 		return childForkRebind(cliFork(c.Args, stdin), h, "declare a job", "fork it")
 	}
@@ -1887,8 +1931,8 @@ func boundedExecRebind(h holder) rebind {
 		return rebind{}
 	}
 	return rebind{
-		problem: "would run a command owned by lease " + owner + " while lease " + h.id + " is in flight",
-		fix:     "set BAGGAGE=" + trail.BaggageLease + "=" + h.id + " on the line so it runs under your own lease",
+		problem: fmt.Sprintf("would run a command owned by lease %s while lease %s is in flight", owner, h.id),
+		fix:     fmt.Sprintf("set BAGGAGE=%s=%s on the line so it runs under your own lease", trail.BaggageLease, h.id),
 	}
 }
 
@@ -1927,22 +1971,22 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 	held := h.standing()
 	switch {
 	case !held.declared || !held.state.Live():
-		return rebind{problem: "would " + verb + ", and lease " + h.id + " is not live to hand one out", ask: ask}
+		return rebind{problem: fmt.Sprintf("would %s, and lease %s is not live to hand one out", verb, h.id), ask: ask}
 	case f.id == "":
-		return rebind{problem: "would " + verb + " the guard cannot read", fix: "give the child an id and --parent " + h.id + ", or its record in a quoted heredoc."}
+		return rebind{problem: fmt.Sprintf("would %s the guard cannot read", verb), fix: fmt.Sprintf("give the child an id and --parent %s, or its record in a quoted heredoc.", h.id)}
 	case f.id == h.id:
 		return rebind{problem: "would rewrite the job it holds", ask: "change it"}
 	case f.parent != h.id:
-		return rebind{problem: "is outside lease " + h.id + "'s tree", ask: ask,
+		return rebind{problem: fmt.Sprintf("is outside lease %s's tree", h.id), ask: ask,
 			why: fmt.Sprintf("It would %s outside its own tree: a row a worker creates must name %s as its parent, and this one names %q.", verb, h.id, f.parent)}
 	case slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
-		return rebind{problem: "would " + verb + " over " + f.id + ", which already exists", ask: "change it",
+		return rebind{problem: fmt.Sprintf("would %s over %s, which already exists", verb, f.id), ask: "change it",
 			why: "A worker writes no row but its own and the children it hands out."}
 	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.WritePaths) > 0):
-		return rebind{problem: "would " + verb + " that can write anywhere", fix: "fork it --read-only or with --write-paths inside your own.",
+		return rebind{problem: fmt.Sprintf("would %s that can write anywhere", verb), fix: "fork it --read-only or with --write-paths inside your own.",
 			why: "A child that is not read-only and names no write paths is scoped by nothing."}
 	case (!f.readOnly || f.bounded) && h.storeLease() != h.id:
-		return rebind{problem: "would " + verb + " nothing would grade", fix: "fork it --read-only, declaring no paths or gates, and at most a script check.",
+		return rebind{problem: fmt.Sprintf("would %s nothing would grade", verb), fix: "fork it --read-only, declaring no paths or gates, and at most a script check.",
 			why: fmt.Sprintf("This checkout's job store writes as %q, not as %s, so it checks no child against your row.", h.storeLease(), h.id)}
 	}
 	return rebind{}
@@ -2442,12 +2486,16 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		return ""
 	}
 	cmds, ok := ParseCommands(command)
-	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" }) {
+	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" || workerVCSMovesRefs(c) }) {
 		return ""
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
 	if !ok {
 		return ""
+	}
+	placed := workerLands
+	if me.Worktree.Standing() {
+		placed = func(c hint.Invocation) bool { return workerLands(c) || workerVCSMovesRefs(c) && workerVCSOp(c) == "" }
 	}
 	role := workerRole(me, deps.caller)
 	if role == "" {
@@ -2467,22 +2515,22 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 					if addsScratchCheckout(command, cwd) {
 						continue
 					}
-					return checkoutAddDenial("`"+command+"`", me, role)
+					return checkoutAddDenial(fmt.Sprintf("`%s`", command), me, role)
 				}
-				return workerVCSDenial("`"+command+"`", vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
+				return workerVCSDenial(fmt.Sprintf("`%s`", command), vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
 			}
 		}
 	}
-	matches := workerLands
+	matches := placed
 	if creates {
-		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" }
+		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" || placed(c) }
 	}
 	d := effectiveDialect(deps.ShellDialect)
 	cwd, _ := deps.workingDir()
 	calls, ok := locateCalls(command, d, cwd, matches, false)
 	if !ok {
 		unparsed := vcsRefusal{op: "commit", kind: vcsOpLands, why: "The line does not parse, so where it commits cannot be read."}
-		return workerVCSDenial("`"+command+"`", unparsed, me, role)
+		return workerVCSDenial(fmt.Sprintf("`%s`", command), unparsed, me, role)
 	}
 	envDir, envWhy := gitDirAssigned(command, d)
 	var fresh []string
@@ -2506,7 +2554,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
 		if r.refused() {
-			return workerVCSDenial("`"+command+"`", r, me, role)
+			return workerVCSDenial(fmt.Sprintf("`%s`", command), r, me, role)
 		}
 		if r.kind == vcsOpInit {
 			fresh = append(fresh, r.dest)
@@ -2577,7 +2625,7 @@ func gitEnvSite(site vcsSite, env []string, checkout string) (_ vcsSite, unlocat
 		relocated = true
 		switch {
 		case name != "GIT_DIR":
-			return vcsSite{}, "Its environment sets " + name + ", so where it commits cannot be read.", true
+			return vcsSite{}, fmt.Sprintf("Its environment sets %s, so where it commits cannot be read.", name), true
 		case site.gitDir != "":
 		case value == "" || strings.HasPrefix(value, "~"):
 			return vcsSite{}, "The GIT_DIR its environment sets is not one literal path, so where it commits cannot be read.", true
@@ -2676,7 +2724,7 @@ func workTreeAt(ctx context.Context, dir, checkout string) bool {
 func workerRole(row types.Job, caller job.Caller) string {
 	switch {
 	case row.Parent != "":
-		return "a worker under " + row.Parent + " in this workspace's ledger"
+		return fmt.Sprintf("a worker under %s in this workspace's ledger", row.Parent)
 	case caller.Agent != "":
 		return "held by a subagent, which makes it a worker"
 	case !caller.Identified():
@@ -2691,15 +2739,13 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
 	switch r.kind {
 	case vcsOpInit:
-		return fmt.Sprintf("magus workspace: a worker creates a repository only outside its checkout, %s.\n"+
-			"%s runs `%s`, and lease %s is %s. %s "+
-			leaseActorClause("create it"),
-			checkout, what, r.op, row.ID, role, r.why)
+		return fmt.Sprintf("magus workspace: a worker creates a repository only outside its checkout, %s.\n%s runs `%s`, and lease %s is %s. %s %s",
+			checkout, what, r.op, row.ID, role, r.why, leaseActorClause("create it"))
 	case vcsOpLands:
-		return landDenial(what, r.op, row, role, "magus workspace: a worker commits only on its own branch in its own checkout, "+checkout+".", r.why)
+		return landDenial(what, r.op, row, role, fmt.Sprintf("magus workspace: a worker commits only on its own branch in its own checkout, %s.", checkout), r.why)
 	}
 	return landDenial(what, r.op, row, role,
-		"magus workspace: `"+r.op+"` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`.",
+		fmt.Sprintf("magus workspace: `%s` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`.", r.op),
 		"The orchestrator lands the work from there. "+
 			"A worker reads the repository, stages, switches or creates a branch, fetches, and merges its base into its own branch; every other version-control verb stays with the orchestrator.")
 }
@@ -2708,10 +2754,8 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 // worker may land and where.
 func landDenial(what, op string, row types.Job, role, lead, why string) string {
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
-	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
-		"A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
-		leaseActorClause("land it"),
-		lead, what, op, row.ID, role, why, checkout)
+	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. %s",
+		lead, what, op, row.ID, role, why, checkout, leaseActorClause("land it"))
 }
 
 // vcsOpKind is how lease-vcs grades and words a version-control mutation.
@@ -2757,6 +2801,9 @@ type vcsSite struct {
 // cannot be placed cannot be shown to be in the worker's own checkout.
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
 	op := workerVCSOp(inv)
+	if own := row.Worktree; op == "" && own.Standing() && workerVCSMovesRefs(inv) {
+		return refMoveRefusal(ctx, opts, own, inv, site, unlocated)
+	}
 	switch {
 	case op == "" || integrationMerge(inv, row):
 		return vcsRefusal{}
@@ -2769,14 +2816,58 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	}
 	why, base := commitRefusal(ctx, opts, row, inv.Name, site)
 	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
-		why = fmt.Sprintf("It merges %s, and a worker merges only its base into its branch: ", operand)
-		if base == "" {
-			why += "this checkout resolves no base branch, so only the revision its job was handed."
-		} else {
-			why += fmt.Sprintf("origin/%s, or the revision its job was handed.", path.Base(base))
-		}
+		why = mergeRefusal(operand, base, row)
 	}
 	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
+}
+
+// refMoveRefusal places a call that moves HEAD, a ref or the index like a commit: in another
+// checkout of the repository it moves that checkout's state, and a repository of its own
+// holds none of the job's.
+func refMoveRefusal(ctx context.Context, opts types.VCSOptions, own *types.JobWorktree, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+	sub, rest := vcsSubcommand(inv)
+	moves := fmt.Sprintf("%s %s", inv.Name, sub)
+	if unlocated != "" {
+		return vcsRefusal{op: moves, kind: vcsOpLands, why: unlocated}
+	}
+	if site.gitDir == "" && inOtherRepository(site, own.Root) {
+		return vcsRefusal{}
+	}
+	root, ok := siteCheckout(ctx, opts, inv.Name, site)
+	if ok && samePath(root, own.Root) {
+		return vcsRefusal{}
+	}
+	where := "a checkout that cannot be read"
+	if ok {
+		where = root
+	}
+	flag := map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}[inv.Name]
+	remedy := strings.Join(slices.Concat([]string{inv.Name, flag, own.Root, sub}, rest), " ")
+	return vcsRefusal{op: moves, kind: vcsOpLands, why: fmt.Sprintf(
+		"It moves a branch, HEAD or the index in %s, outside %s, the checkout the job's fork made; run `%s` instead.", where, own.Root, remedy)}
+}
+
+// mergeRefusal is why a worker may not merge operand, naming every revision mergesBase
+// accepts so the refusal serves the merge that would pass.
+func mergeRefusal(operand, base string, row types.Job) string {
+	why := fmt.Sprintf("It merges %s, and a worker merges only its base into its branch: ", operand)
+	var accepts []string
+	if base == "" {
+		why += "this checkout resolves no base branch, so only "
+	} else {
+		accepts = append(accepts, "origin/"+path.Base(base))
+	}
+	accepts = append(accepts, "the revision its job was handed")
+	if deps := slices.DeleteFunc(slices.Clone(row.DependsOn), func(d string) bool { return d == "" }); len(deps) > 0 {
+		accepts = append(accepts, "a depends_on branch: "+strings.Join(deps, ", "))
+	}
+	switch len(accepts) {
+	case 1:
+		return fmt.Sprintf("%s%s.", why, accepts[0])
+	case 2:
+		return fmt.Sprintf("%s%s, or %s.", why, accepts[0], accepts[1])
+	}
+	return fmt.Sprintf("%s%s, or %s.", why, strings.Join(accepts[:len(accepts)-1], ", "), accepts[len(accepts)-1])
 }
 
 // workerLands reports a call that lands work on the branch its checkout is on: a commit, a
@@ -2871,11 +2962,11 @@ func initOperands(backend vcsBackend, args []string) (operand string, dirs []str
 		name, value, joined := strings.Cut(a, "=")
 		opt, known := initOptions[backend][name]
 		if !known {
-			return "", nil, "Its option " + name + " is not one init is known to take, so where it creates the repository cannot be read."
+			return "", nil, fmt.Sprintf("Its option %s is not one init is known to take, so where it creates the repository cannot be read.", name)
 		}
 		if opt.valued && !joined {
 			if i++; i >= len(args) {
-				return "", nil, "Its option " + name + " has no value."
+				return "", nil, fmt.Sprintf("Its option %s has no value.", name)
 			}
 			value = args[i]
 		}
@@ -3030,7 +3121,7 @@ func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, ba
 	opts.Name = backend
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil || res.VCS == nil {
-		return "Version control is disabled or unresolvable for " + root + ", so its branch cannot be read.", ""
+		return fmt.Sprintf("Version control is disabled or unresolvable for %s, so its branch cannot be read.", root), ""
 	}
 	if !res.VCS.IsSecondaryCheckout(root) {
 		return root + " is the repository's primary checkout, the one the orchestrator integrates in.", ""
@@ -3038,7 +3129,7 @@ func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, ba
 	ref, err := res.VCS.Ref(ctx, root)
 	switch {
 	case err != nil || ref == "":
-		return root + " has no branch checked out; " + switchToJobBranch(backend, row.ID), ""
+		return fmt.Sprintf("%s has no branch checked out; %s", root, switchToJobBranch(backend, row.ID)), ""
 	case isBaseBranch(ref, res.Base):
 		return fmt.Sprintf("%s is on %s, the base branch.", root, ref), ""
 	}
@@ -3057,7 +3148,7 @@ func isBaseBranch(ref, base string) bool {
 // on no branch is one it cannot name.
 func switchToJobBranch(backend, job string) string {
 	if backend != "git" {
-		return "check out a branch named " + job + " first."
+		return fmt.Sprintf("check out a branch named %s first.", job)
 	}
 	return fmt.Sprintf("run `git switch %s`, or `git switch -c %s` when no such branch exists.", job, job)
 }
@@ -3263,7 +3354,7 @@ func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 	})
 	switch {
 	case unplaced || len(values) > 1:
-		return "", "The line names its repository through " + strings.Join(gitLocationVars, ", ") + " in a way that cannot be read as one checkout."
+		return "", fmt.Sprintf("The line names its repository through %s in a way that cannot be read as one checkout.", strings.Join(gitLocationVars, ", "))
 	case len(values) == 0:
 		return "", ""
 	case values[0] == "" || strings.HasPrefix(values[0], "~"):
@@ -3281,8 +3372,14 @@ func isPush(c hint.Invocation) bool {
 
 // isPRCreate reports whether c is `gh pr create`, past gh's own flags.
 func isPRCreate(c hint.Invocation) bool {
+	return ghPullRequestVerb(c) == "create"
+}
+
+// ghPullRequestVerb is the word after `pr` in a gh call, past gh's own flags, and "" for a
+// call that is not `gh pr <verb>`.
+func ghPullRequestVerb(c hint.Invocation) string {
 	if filepath.Base(c.Name) != "gh" {
-		return false
+		return ""
 	}
 	var words []string
 	for _, a := range c.Args {
@@ -3290,8 +3387,10 @@ func isPRCreate(c hint.Invocation) bool {
 			words = append(words, a)
 		}
 	}
-	i := slices.Index(words, "pr")
-	return i >= 0 && i+1 < len(words) && words[i+1] == "create"
+	if i := slices.Index(words, "pr"); i >= 0 && i+1 < len(words) {
+		return words[i+1]
+	}
+	return ""
 }
 
 // vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.
@@ -3321,7 +3420,7 @@ func vcsMutation(c hint.Invocation) string {
 	// The word an inline alias defines can run any verb, push included.
 	if _, other := vcsGlobals[c.Name]; other {
 		if v := parseVCS(c.Name, c.Args); v.alias != "" {
-			return c.Name + " " + aliasFlag(v.alias)
+			return fmt.Sprintf("%s %s", c.Name, aliasFlag(v.alias))
 		}
 	}
 	switch c.Name {
@@ -3368,7 +3467,7 @@ func vcsMutation(c hint.Invocation) string {
 		}
 	case "checkout", "restore":
 		if slices.Contains(rest, ".") {
-			return "git " + sub + " ."
+			return fmt.Sprintf("git %s .", sub)
 		}
 	}
 	return ""
@@ -3404,7 +3503,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	me, enrolled := leaseRow(ctx, location, actingLease)
 	enrolled = enrolled && me.State.Live()
-	declaring := editingLeases(rows)
+	declaring := types.PathHolders(rows)
 	if enrolled && !me.State.Editing() {
 		declaring = append(declaring, me)
 	}
@@ -3502,7 +3601,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if outside := reachOutside(checkout, me, rel); outside != "" && (outside != rel || !madeByHolder(rel)) {
 			what := outside + " is"
 			if outside != rel {
-				what = rel + " holds " + outside + ", which is"
+				what = fmt.Sprintf("%s holds %s, which is", rel, outside)
 			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: %s outside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths"),

@@ -87,7 +87,7 @@ func pprofDescendantSpec(spec string) string {
 		if !ok || path == "" || strings.Contains(path, pprofPid) {
 			continue
 		}
-		parts[i] = kind + ":" + path + "." + pprofPid
+		parts[i] = fmt.Sprintf("%s:%s.%s", kind, path, pprofPid)
 	}
 	return strings.Join(parts, ",")
 }

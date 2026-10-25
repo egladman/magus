@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,7 @@ func TestReadHarnessContract(t *testing.T) {
 	require.NoError(t, err)
 	signatures := map[string]string{}
 	for _, fn := range funcs {
-		signatures[fn.Name] = "(" + fn.Params + ") > " + fn.Returns
+		signatures[fn.Name] = fmt.Sprintf("(%s) > %s", fn.Params, fn.Returns)
 		assert.Equal(t, fn.Name == "mgs_getHarnessConfig", fn.Required, "%s: only the config is required", fn.Name)
 	}
 	assert.Equal(t, map[string]string{
@@ -100,7 +101,14 @@ func TestReadContractRefuses(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "contract.go")
-			require.NoError(t, os.WriteFile(path, []byte("package spell\n\nimport \"time\"\n\nvar _ time.Time\n\n"+tc.src+"\n"), 0o644))
+			require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`package spell
+
+import "time"
+
+var _ time.Time
+
+%s
+`, tc.src)), 0o644))
 			_, err := readContract(path, "Contract")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.want)

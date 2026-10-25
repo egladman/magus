@@ -253,7 +253,7 @@ func (v saplingVCS) RangeDiff(ctx context.Context, dir, base, head string, paths
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
-	args := []string{"diff", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
+	args := []string{"diff", "-r", fmt.Sprintf("ancestor(%s,%s)", base, head), "-r", head}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, hgGlobs(paths)...)
@@ -563,7 +563,7 @@ func copyTree(src, dst string) error {
 // contract requires for correctness under concurrent runs.
 func (v saplingVCS) isAncestor(ctx context.Context, dir, sha string) error {
 	out, err := vcsExec(ctx, "sl", "-R", dir, "log",
-		"-r", "("+sha+") and (ancestors(.) or .)",
+		"-r", fmt.Sprintf("(%s) and (ancestors(.) or .)", sha),
 		"--template", "{node}").Output()
 	if err != nil {
 		return fmt.Errorf("sl log: %w", err)

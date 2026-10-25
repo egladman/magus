@@ -2,6 +2,7 @@ package race
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -177,7 +178,7 @@ func addDir(w *fsnotify.Watcher, dir string) error {
 		if shouldSkipDir(name) {
 			continue
 		}
-		child := dir + "/" + name
+		child := fmt.Sprintf("%s/%s", dir, name)
 		if isDir(child) {
 			if err := addDir(w, child); err != nil {
 				continue // non-fatal: some dirs may be inaccessible

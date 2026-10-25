@@ -35,13 +35,16 @@ import (
 // tests. A pattern that does not
 // compile is left to go test, which refuses it itself. The paths are relative to the
 // store's workspace root; a nil store, or one with no root, has no tree to read.
+//
+// A check naming exactly the packages of the write paths ([scopedToWritePackages]) may
+// narrow their tests too: the integration that merges the job runs the full go-test.
 func narrowedTestProblems(store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
 	var ps types.JobProblems
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck {
+		if g.Kind != types.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.WritePaths) {
 			continue
 		}
 		named := fmt.Sprintf("%s's check", row.ID)
@@ -100,7 +103,7 @@ func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths
 			missed = append(missed, name)
 		}
 		if len(missed) > 0 {
-			packages = append(packages, dir+" ("+summarizeTests(missed)+")")
+			packages = append(packages, fmt.Sprintf("%s (%s)", dir, summarizeTests(missed)))
 		}
 	}
 	if len(packages) == 0 {
@@ -163,7 +166,7 @@ func summarizeTests(names []string) string {
 // is short enough to paste, else dropping -run, since a package argument forwarded to
 // go-test does not scope the run.
 func widenRunFix(runArg string, notRun []string) string {
-	if covering := runArg + "|" + exactTestPattern(notRun); len(covering) <= maxPastedPattern {
+	if covering := fmt.Sprintf("%s|%s", runArg, exactTestPattern(notRun)); len(covering) <= maxPastedPattern {
 		return fmt.Sprintf("widen -run to `%s` or drop -run", covering)
 	}
 	return "drop -run, since the tests it leaves out are too many for one pattern and a package argument does not scope go-test"
@@ -180,7 +183,7 @@ func narrowSkipFix(skipArg string, skipped []string) string {
 // exactTestPattern is a pattern matching exactly the named tests.
 func exactTestPattern(names []string) string {
 	names = slices.Compact(slices.Sorted(slices.Values(names)))
-	return "^(" + strings.Join(names, "|") + ")$"
+	return fmt.Sprintf("^(%s)$", strings.Join(names, "|"))
 }
 
 // goTestFlag reads the last -name, --name, -test.name or --test.name among args, in either
@@ -425,4 +428,66 @@ func isTestFunc(fn *ast.FuncDecl) bool {
 	}
 	sel, ok := star.X.(*ast.SelectorExpr)
 	return ok && sel.Sel.Name == "T"
+}
+
+// scopedToWritePackages reports whether check is a go test naming exactly the packages of
+// writePaths: every package argument names one of them, `./dir` or `./dir/...`, and every
+// one of them is named.
+func scopedToWritePackages(root string, check types.LeaseCheck, writePaths []string) bool {
+	if root == "" || !runsGoTest(check) {
+		return false
+	}
+	patterns := goTestPackages(check.Args)
+	var dirs []string
+	for _, p := range writePaths {
+		dirs = append(dirs, writePathDirs(root, p)...)
+	}
+	if len(patterns) == 0 || len(dirs) == 0 {
+		return false
+	}
+	names := func(pattern, dir string) bool {
+		pattern = path.Clean(pattern)
+		if tree, ok := strings.CutSuffix(pattern, "/..."); ok {
+			return coversPath(tree, dir) || tree == "."
+		}
+		return pattern == dir
+	}
+	for _, pattern := range patterns {
+		if !slices.ContainsFunc(dirs, func(d string) bool { return names(pattern, d) }) {
+			return false
+		}
+	}
+	for _, d := range dirs {
+		if !slices.ContainsFunc(patterns, func(p string) bool { return names(p, d) }) {
+			return false
+		}
+	}
+	return true
+}
+
+// goTestBoolFlags are the go test and go build flags that take no value, so the argument
+// after one can be a package.
+var goTestBoolFlags = map[string]bool{
+	"a": true, "asan": true, "benchmem": true, "cover": true, "failfast": true, "fullpath": true, "json": true,
+	"msan": true, "n": true, "race": true, "short": true, "trimpath": true, "v": true, "work": true, "x": true,
+}
+
+// goTestPackages is the package arguments among go test args: the relative patterns, `.`
+// and those starting `./`, a workspace's check names. The value of a flag is never one.
+func goTestPackages(args []string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if flag, ok := strings.CutPrefix(arg, "-"); ok {
+			flag = strings.TrimPrefix(strings.TrimPrefix(flag, "-"), "test.")
+			if !strings.Contains(flag, "=") && !goTestBoolFlags[flag] {
+				i++
+			}
+			continue
+		}
+		if arg == "." || strings.HasPrefix(arg, "./") {
+			out = append(out, arg)
+		}
+	}
+	return out
 }

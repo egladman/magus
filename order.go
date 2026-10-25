@@ -60,8 +60,8 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 	// without a debugger, like the upstream wait's schedule.wait trace.
 	trace := func(e cache.DerivedEdge, dropped string) {
 		slog.DebugContext(ctx, "schedule.derived",
-			slog.String("writer", order.Nodes[e.Writer].Project+":"+order.Nodes[e.Writer].Target),
-			slog.String("reader", order.Nodes[e.Reader].Project+":"+order.Nodes[e.Reader].Target),
+			slog.String("writer", fmt.Sprintf("%s:%s", order.Nodes[e.Writer].Project, order.Nodes[e.Writer].Target)),
+			slog.String("reader", fmt.Sprintf("%s:%s", order.Nodes[e.Reader].Project, order.Nodes[e.Reader].Target)),
 			slog.Bool("ordered", e.Ordered), slog.String("dropped", dropped))
 	}
 	for _, e := range order.Edges {
@@ -89,7 +89,7 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 			// folds composed targets' updates and skip-cache outputs into the parent
 			// (they land inside its window), but for ordering each chain member is
 			// its own node and the fold would blame a member's writes on its
-			// composer. Measured: format's modifiesExistingFiles("**/*.go") reached
+			// composer. Measured: format's writesFiles(["**/*.go"], editsExistingSource: true) reached
 			// test's writes that way and closed a declared-footprint "cycle" between
 			// test and docs content-generate that neither target declares.
 			node := cache.DeclaredNode(p, target, stepKey, m.ws.Get)
@@ -267,7 +267,7 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 		}
 		slog.With(attr.Component("magus")).InfoContext(ctx, "derived ordering: re-running target whose declared inputs were written after it ran",
 			slog.String("project", node.Project), slog.String("target", node.Target),
-			slog.String("written_by", stale.Project+":"+stale.Target))
+			slog.String("written_by", fmt.Sprintf("%s:%s", stale.Project, stale.Target)))
 		types.ActiveDispatchFromContext(ctx).Mark(p.Path)
 		types.ActiveDispatchFromContext(ctx).Mark(p.Dir)
 		// Through RunAside, not straight at the interpreter: a re-run here holds every

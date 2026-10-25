@@ -104,8 +104,8 @@ func TestCommitPrefersTheLinkerStamp(t *testing.T) {
 	assert.Equal(t, "8a9d", id)
 	assert.Equal(t, "2026-10-22T18:40:11Z", date)
 
-	commit, commitDate = Unknown, Unknown
+	commit, commitDate = unstamped, unstamped
 	id, date = Commit()
-	assert.NotEmpty(t, id, "an unstamped build falls back to the VCS stamp, or Unknown")
+	assert.NotEmpty(t, id, "an unstamped build falls back to the VCS stamp, or unstamped")
 	assert.NotEmpty(t, date)
 }

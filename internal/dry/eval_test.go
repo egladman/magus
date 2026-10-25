@@ -2,6 +2,7 @@ package dry
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -110,14 +111,14 @@ func TestLoadMagusfile_everyTargetPolicyKeyAccepted(t *testing.T) {
 	require.NotEmpty(t, types.TargetPolicyKeys())
 	for _, key := range types.TargetPolicyKeys() {
 		t.Run(key, func(t *testing.T) {
-			g := LoadMagusfile(context.Background(), `
+			g := LoadMagusfile(context.Background(), fmt.Sprintf(`
 import "magus";
 magus\project({
     "name": "pinned",
-    "targets": {"build": {"`+key+`": "x"}},
+    "targets": {"build": {"%s": "x"}},
 });
 export fun build(ctx: magus\Context, args: [str]) > void {}
-`)
+`, key))
 			if g.Diag != nil {
 				assert.NotContains(t, g.Diag.Msg, "unknown option",
 					"the dry host rejects %q, which types.TargetPolicyKeys declares recognized", key)
@@ -133,14 +134,14 @@ func TestLoadMagusfile_everyToolBoundKeyAccepted(t *testing.T) {
 	require.NotEmpty(t, types.ToolBoundKeys)
 	for _, key := range types.ToolBoundKeys {
 		t.Run(key, func(t *testing.T) {
-			g := LoadMagusfile(context.Background(), `
+			g := LoadMagusfile(context.Background(), fmt.Sprintf(`
 import "magus";
 magus\project({
     "name": "pinned",
-    "tools": {"go": {"`+key+`": "1.21"}},
+    "tools": {"go": {"%s": "1.21"}},
 });
 export fun build(ctx: magus\Context, args: [str]) > void {}
-`)
+`, key))
 			require.True(t, g.OK, "the dry host rejects %q, which types.ToolBoundKeys declares recognized: %+v", key, g.Diag)
 		})
 	}

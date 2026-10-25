@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,7 @@ func TestHardResetOnACleanUnboundTreeIsJudgedAsASwitch(t *testing.T) {
 	assert.Equal(t, judge("git switch --detach origin/main"), judge("git reset --hard origin/main"))
 
 	assert.Equal(t, wholeTree, judge("git reset --hard").Rule, "no revision")
-	assert.Equal(t, wholeTree, judge("git -C "+r.main+" reset --hard origin/main").Rule, "relocated")
+	assert.Equal(t, wholeTree, judge(fmt.Sprintf("git -C %s reset --hard origin/main", r.main)).Rule, "relocated")
 	assert.Equal(t, wholeTree, judge("git reset --hard origin/main", types.Job{ID: "w1", State: types.StateRunning, CheckoutRoot: r.main}).Rule, "a live job")
 	assert.Empty(t, judge("git reset --hard origin/main", types.Job{ID: "w1", State: types.StatePass, CheckoutRoot: r.main}).Deny, "an ended job")
 

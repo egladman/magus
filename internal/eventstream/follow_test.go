@@ -2,6 +2,7 @@ package eventstream
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -90,7 +91,7 @@ func TestFollowerSkipsPartialLines(t *testing.T) {
 func TestFollowerReplayLimitKeepsNewest(t *testing.T) {
 	dir := t.TempDir()
 	for _, inv := range []string{"inv1", "inv2", "inv3"} {
-		writeLog(t, dir, inv, `{"ts":1,"inv":"`+inv+`","kind":"finished","status":"pass"}`+"\n")
+		writeLog(t, dir, inv, fmt.Sprintf(`{"ts":1,"inv":"%s","kind":"finished","status":"pass"}`+"\n", inv))
 		// Distinct mtimes: ordering is by modification time, and a same-tick write
 		// would make the assertion depend on filesystem timestamp resolution.
 		time.Sleep(10 * time.Millisecond)
@@ -109,7 +110,7 @@ func TestFollowerReplayLimitKeepsNewest(t *testing.T) {
 func TestFollowerReplayLimitSurvivesTheFirstFollowTick(t *testing.T) {
 	dir := t.TempDir()
 	for _, inv := range []string{"inv1", "inv2", "inv3"} {
-		writeLog(t, dir, inv, `{"ts":1,"inv":"`+inv+`","kind":"finished","status":"pass"}`+"\n")
+		writeLog(t, dir, inv, fmt.Sprintf(`{"ts":1,"inv":"%s","kind":"finished","status":"pass"}`+"\n", inv))
 		time.Sleep(10 * time.Millisecond)
 	}
 

@@ -92,7 +92,7 @@ func ungradableClaimProblems(ctx context.Context, store *Store, row types.Job) t
 				all, _ = readDeclarations(ctx, driver, store.root, c.path)
 				placed[c.path] = all
 			}
-			if matched := namedDeclarations(c.decl, all); len(matched) > 1 {
+			if matched := types.NamedDeclarations(c.decl, all); len(matched) > 1 && !types.ClaimsMap(c.decl, matched) {
 				message, fix := ambiguousClaimProblem(c.path, c.decl, matched, all)
 				refuse(c.field, c.label+message, fix)
 			}
@@ -182,10 +182,10 @@ func listClaims(file string, all []string) string {
 	var claims []string
 	for _, d := range ordered {
 		word := claimWord(d, all)
-		if len(namedDeclarations(word, all)) != 1 {
+		if len(types.NamedDeclarations(word, all)) != 1 {
 			continue
 		}
-		claims = append(claims, "`"+file+"#"+word+"`")
+		claims = append(claims, fmt.Sprintf("`%s#%s`", file, word))
 	}
 	if len(claims) == 0 {
 		return fmt.Sprintf("`%s#<declaration>`", file)
@@ -221,9 +221,9 @@ func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDr
 // driverPattern is the .gitattributes pattern a driver for p would be declared under.
 func driverPattern(p string) string {
 	if ext := path.Ext(p); ext != "" {
-		return "`*" + ext + "`"
+		return fmt.Sprintf("`*%s`", ext)
 	}
-	return "`" + path.Base(p) + "`"
+	return fmt.Sprintf("`%s`", path.Base(p))
 }
 
 // unorderedFileShareProblems is every write path of row that would hand one claimable file
@@ -240,6 +240,7 @@ func driverPattern(p string) string {
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
 // no diff driver, for which depends_on is the only move. An integration row is
 // never refused here: the merge settles a shared file, and IntegrationOverlaps notes the holder.
+// An integration holder holds only the declarations its merge changed (see mergeLeftAlone).
 func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" || len(row.WritePaths) == 0 || row.Integrating() {
 		return nil
@@ -286,7 +287,7 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 			if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
 				continue
 			}
-			if !types.PathsIntersect(mine, theirs) {
+			if !types.PathsIntersect(mine, theirs) || mergeLeftAlone(ctx, store, rows, holder, mine) {
 				continue
 			}
 			touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
@@ -309,6 +310,18 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 		}
 	}
 	return types.JobProblem{}, false
+}
+
+// mergeLeftAlone reports whether holder is an integration row that has changed nothing the
+// claim mine names. A merge writes a file whole, so the row holds it whole, but only what the
+// merge changed is its own. A whole-file entry, or a footprint nobody can read, is never left alone.
+func mergeLeftAlone(ctx context.Context, store *Store, rows []types.Job, holder types.Job, mine string) bool {
+	if _, decl := types.SplitClaim(mine); decl == "" || !holder.Integrating() {
+		return false
+	}
+	driver, _ := resolveDriver(ctx, store.root)
+	fp := readFootprint(withFootprintCache(ctx, store.footprintCache()), driver, rows, holder.ID)
+	return fp.known && !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(mine, r.Location()) })
 }
 
 // literalClaimableFile is the file entry names, whole or by declaration, cleaned and
@@ -425,7 +438,7 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 			continue
 		}
 		for _, symbol := range g.Symbols {
-			if len(namedDeclarations(symbol, all)) == 1 {
+			if len(types.NamedDeclarations(symbol, all)) == 1 {
 				mine = appendUnique(mine, symbol)
 			}
 		}
@@ -433,9 +446,9 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 	claims := func(words []string, id string) string {
 		quoted := make([]string, len(words))
 		for i, w := range words {
-			quoted[i] = "`" + file + "#" + w + "`"
+			quoted[i] = fmt.Sprintf("`%s#%s`", file, w)
 		}
-		return strings.Join(quoted, ", ") + " on " + id
+		return fmt.Sprintf("%s on %s", strings.Join(quoted, ", "), id)
 	}
 	switch {
 	case len(theirs) == 0 && len(mine) == 0:
@@ -458,7 +471,7 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 
 // sameDeclaration reports whether the claim words a and b name one declaration of all.
 func sameDeclaration(a, b string, all []string) bool {
-	return a == b || slices.ContainsFunc(all, func(d string) bool { return types.NamesDeclaration(a, d) && types.NamesDeclaration(b, d) })
+	return a == b || slices.ContainsFunc(all, func(d string) bool { return types.NamesClaimedDeclaration(a, d) && types.NamesClaimedDeclaration(b, d) })
 }
 
 func appendUnique(list []string, s string) []string {
@@ -490,16 +503,16 @@ func readDeclarations(ctx context.Context, driver types.VCSDriver, root, file st
 	return decls, true
 }
 
-// namedDeclarations are the entries of all that claim names.
+// namedDeclarations are the entries of all that claim names. PlaceDerivedClaims (plan.go) reads it too.
 func namedDeclarations(claim string, all []string) []string {
-	return slices.DeleteFunc(slices.Clone(all), func(d string) bool { return !types.NamesDeclaration(claim, d) })
+	return types.NamedDeclarations(claim, all)
 }
 
 // ambiguousClaim is the MGS3031 reason for a claim naming several declarations of file:
 // the guard and `job wait` would hold every one of them, not the one its author meant.
 func ambiguousClaim(file, claim string, matched, all []string) string {
 	message, fix := ambiguousClaimProblem(file, claim, matched, all)
-	return message + "; " + fix
+	return fmt.Sprintf("%s; %s", message, fix)
 }
 
 // ambiguousClaimProblem is ambiguousClaim as a problem's message and fix.
@@ -507,10 +520,10 @@ func ambiguousClaimProblem(file, claim string, matched, all []string) (message, 
 	shown := matched[:min(len(matched), 3)]
 	alternatives := make([]string, 0, len(shown))
 	for _, d := range shown {
-		alternatives = append(alternatives, "`"+claimWord(d, all)+"`")
+		alternatives = append(alternatives, fmt.Sprintf("`%s`", claimWord(d, all)))
 	}
 	message = fmt.Sprintf("%q names %d declarations of %s (such as `%s`), and a claim guards exactly one",
-		file+"#"+claim, len(matched), file, strings.TrimSpace(matched[0]))
+		fmt.Sprintf("%s#%s", file, claim), len(matched), file, strings.TrimSpace(matched[0]))
 	return message, "use a word only one of them has, such as " + strings.Join(alternatives, ", ")
 }
 
@@ -599,7 +612,7 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		switch {
 		case !readable:
 			notes = append(notes, fmt.Sprintf("%s does not exist yet in this checkout, so %q names a declaration once it is written", file, entry))
-		case len(namedDeclarations(decl, all)) == 0:
+		case len(types.NamedDeclarations(decl, all)) == 0:
 			notes = append(notes, fmt.Sprintf("%q names no declaration of %s yet; it holds one once written, so check the spelling", entry, file))
 		}
 	}
@@ -684,10 +697,10 @@ func unclaimedTouches(ctx context.Context, store *Store, rows []types.Job, row t
 	}
 	var claims []string
 	for _, d := range touched {
-		if d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesDeclaration(c, d) }) {
+		if d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesClaimedDeclaration(c, d) }) {
 			continue
 		}
-		claims = appendUnique(claims, "`"+file+"#"+claimWord(d, all)+"`")
+		claims = appendUnique(claims, fmt.Sprintf("`%s#%s`", file, claimWord(d, all)))
 	}
 	if len(claims) == 0 {
 		return ""

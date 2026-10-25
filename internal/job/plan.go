@@ -46,7 +46,7 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 // default_timeout when a merge that creates the row named no timeout. What it is held to is
 // [validateMerge]'s, the rules `magus job apply` shares, with the merge's checkpoint and
 // symbol goals settled in the same pass: the error joins every problem left after the row's
-// waivers, and nothing is written then. read may be nil where no graph is at hand, which
+// deviations, and nothing is written then. read may be nil where no graph is at hand, which
 // skips only the ambiguity check.
 func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.Job, error) {
 	rows, err := store.List()
@@ -267,6 +267,12 @@ func specMerge(rec types.Declaration, creates bool, checkpoint func() string) fu
 	}
 	return func(u *types.Job) {
 		rec.ApplySpec(u)
+		if soft := slices.DeleteFunc(slices.Clone(u.SoftPaths), func(p string) bool { return !slices.Contains(u.WritePaths, p) }); len(soft) != len(u.SoftPaths) {
+			u.SoftPaths = soft
+			if len(soft) == 0 {
+				u.SoftPaths = nil
+			}
+		}
 		if cp != "" {
 			u.Checkpoint = cp
 		}
@@ -287,7 +293,7 @@ func specChanges(prev, next types.Job) []string {
 // prefixed is ps with each message led by the record id it was found on.
 func prefixed(id string, ps types.JobProblems) types.JobProblems {
 	for i := range ps {
-		ps[i].Message = id + ": " + ps[i].Message
+		ps[i].Message = fmt.Sprintf("%s: %s", id, ps[i].Message)
 	}
 	return ps
 }
@@ -391,7 +397,7 @@ func derivedClaim(row types.Job, expect types.GoalExpect, read bool, fact Symbol
 			return ""
 		}
 	}
-	return file + "#" + word
+	return fmt.Sprintf("%s#%s", file, word)
 }
 
 // declarationWord is the run of a symbol's declaration line that names it alone, read off
@@ -416,11 +422,11 @@ func declarationWord(signature string) string {
 		if len(fields) == 0 || name == "" {
 			return ""
 		}
-		return strings.TrimPrefix(fields[len(fields)-1], "*") + ") " + name
+		return fmt.Sprintf("%s) %s", strings.TrimPrefix(fields[len(fields)-1], "*"), name)
 	case strings.HasPrefix(sig, "func "), strings.HasPrefix(sig, "type "), strings.HasPrefix(sig, "fun "):
 		keyword, rest, _ := strings.Cut(sig, " ")
 		if name := nameOf(rest); name != "" {
-			return keyword + " " + name
+			return fmt.Sprintf("%s %s", keyword, name)
 		}
 	}
 	return ""
@@ -557,7 +563,14 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 		if gate.Verified {
 			mark = "met"
 		}
-		fmt.Fprintf(out, "  [%s] %s\n", mark, gate.ID)
+		detail := ""
+		switch {
+		case gate.Owed != "" && len(gate.Violations) == 0:
+			mark, detail = "owed", fmt.Sprintf(" (%s)", gate.Owed)
+		case gate.Scope != "":
+			detail = fmt.Sprintf(", a run scoped with `%s`", gate.Scope)
+		}
+		fmt.Fprintf(out, "  [%s] %s%s\n", mark, gate.ID, detail)
 		for _, why := range gate.Violations {
 			fmt.Fprintf(out, "      %s\n", why)
 		}
@@ -625,7 +638,7 @@ func inheritGoals(row types.Job, rows []types.Job) types.Job {
 			if goal = goal.Resolve(); goal.Kind != types.GoalKindSymbol {
 				continue
 			}
-			goal.ID = ancestor.ID + "/" + goal.ID
+			goal.ID = fmt.Sprintf("%s/%s", ancestor.ID, goal.ID)
 			// Its dependencies name goals of the ancestor's this row does not carry.
 			goal.DependsOn = nil
 			inherited = append(inherited, goal)

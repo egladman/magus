@@ -2,6 +2,7 @@ package vcs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,15 +47,26 @@ func TestReplaceManagedSection(t *testing.T) {
 		},
 		{
 			name: "surrounding hand-written lines survive on both sides",
-			text: "*.png binary\n\n" + generatedMarkers.section("old.go merge=magus\n") + "\n*.jpg binary\n",
-			want: "*.png binary\n\n" + want + "\n*.jpg binary\n",
+			text: fmt.Sprintf(`*.png binary
+
+%s
+*.jpg binary
+`, generatedMarkers.section("old.go merge=magus\n")),
+			want: fmt.Sprintf(`*.png binary
+
+%s
+*.jpg binary
+`, want),
 		},
 		{
 			// The banner wording changed once (an em-dash went away). Matching begin as
 			// a prefix keeps the old section findable instead of stranding it above a
 			// freshly appended copy.
 			name: "section written with the older banner wording is replaced, not duplicated",
-			text: generatedMarkers.begin + " — do not edit this section manually\nold.go merge=magus\n" + generatedMarkers.end + "\n",
+			text: fmt.Sprintf(`%s — do not edit this section manually
+old.go merge=magus
+%s
+`, generatedMarkers.begin, generatedMarkers.end),
 			want: want,
 		},
 		{
@@ -62,14 +74,16 @@ func TestReplaceManagedSection(t *testing.T) {
 			// scan matched the FIRST section's end, so a begin further down failed the
 			// ordering test and appended instead of replacing, once per invocation.
 			name: "accumulated duplicate sections collapse to one",
-			text: generatedMarkers.section("first.go merge=magus\n") + "\n" +
-				generatedMarkers.section("second.go merge=magus\n") + "\n" +
-				generatedMarkers.section("third.go merge=magus\n"),
+			text: fmt.Sprintf(`%s
+%s
+%s`, generatedMarkers.section("first.go merge=magus\n"), generatedMarkers.section("second.go merge=magus\n"), generatedMarkers.section("third.go merge=magus\n")),
 			want: want,
 		},
 		{
 			name: "duplicates collapse without eating hand-written lines between them",
-			text: generatedMarkers.section("first.go merge=magus\n") + "\nkeep-me\n" + generatedMarkers.section("second.go merge=magus\n"),
+			text: fmt.Sprintf(`%s
+keep-me
+%s`, generatedMarkers.section("first.go merge=magus\n"), generatedMarkers.section("second.go merge=magus\n")),
 			want: want + "\nkeep-me\n",
 		},
 		{
@@ -80,14 +94,19 @@ func TestReplaceManagedSection(t *testing.T) {
 		{
 			// Pairing the torn begin with the complete section's end would swallow the
 			// lines between them.
-			name:    "a begin whose end follows the next begin is an error",
-			text:    tornBanner + "\ndangling\n\n" + generatedMarkers.section("old.go merge=magus\n"),
+			name: "a begin whose end follows the next begin is an error",
+			text: fmt.Sprintf(`%s
+dangling
+
+%s`, tornBanner, generatedMarkers.section("old.go merge=magus\n")),
 			wantErr: `line 1: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`,
 		},
 		{
 			name: "mid-line begin is ignored so the section is appended",
-			text: "note: see " + generatedMarkers.begin + " in docs\n",
-			want: "note: see " + generatedMarkers.begin + " in docs\n\n" + want,
+			text: fmt.Sprintf("note: see %s in docs\n", generatedMarkers.begin),
+			want: fmt.Sprintf(`note: see %s in docs
+
+%s`, generatedMarkers.begin, want),
 		},
 	}
 
@@ -134,7 +153,7 @@ func TestManagedSectionPresent(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, got)
 
-	got, err = managedSectionPresent(write("quoted", "see "+generatedMarkers.begin+"\n"), generatedMarkers)
+	got, err = managedSectionPresent(write("quoted", fmt.Sprintf("see %s\n", generatedMarkers.begin)), generatedMarkers)
 	require.NoError(t, err)
 	assert.False(t, got, "a marker quoted mid-line is not a section")
 
@@ -173,7 +192,7 @@ func TestEnsureShShebang(t *testing.T) {
 			got, err := ensureShShebang("hooks/pre-push", tt.text)
 			if tt.wantErr {
 				first, _, _ := strings.Cut(tt.text, "\n")
-				require.EqualError(t, err, `vcs: hook hooks/pre-push runs "`+first+`", not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead`)
+				require.EqualError(t, err, fmt.Sprintf(`vcs: hook hooks/pre-push runs "%s", not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead`, first))
 				return
 			}
 			require.NoError(t, err)
@@ -281,7 +300,7 @@ func TestWriteManagedSectionRefusesANonShHook(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o755))
 
 	changed, err := writeManagedSection(filepath.Dir(path), path, driftMarkers, "magus job run check-drift\n", hookFile, stamp.Judge{})
-	require.EqualError(t, err, `vcs: hook `+path+` runs "#!/usr/bin/env python3", not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead`)
+	require.EqualError(t, err, fmt.Sprintf(`vcs: hook %s runs "#!/usr/bin/env python3", not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead`, path))
 	assert.False(t, changed)
 	assertFile(t, path, script, 0o755)
 }
@@ -337,7 +356,9 @@ func TestWithRepoLockSerializesWriters(t *testing.T) {
 	require.NoError(t, err)
 	refresh, drift := refreshMarkers.section("[hooks]\n"), driftMarkers.section("[hooks]\n")
 	// Whichever kind landed first stays first; each kind appears exactly once.
-	assert.Contains(t, []string{refresh + "\n" + drift, drift + "\n" + refresh}, string(got))
+	assert.Contains(t, []string{fmt.Sprintf(`%s
+%s`, refresh, drift), fmt.Sprintf(`%s
+%s`, drift, refresh)}, string(got))
 }
 
 func TestWithRepoLockHonorsCancellationWhileHeld(t *testing.T) {
@@ -371,7 +392,11 @@ func TestWriteManagedSectionRefusesADowngrade(t *testing.T) {
 	older := stamp.Judge{Self: olderMagus}
 	_, err := writeManagedSection(filepath.Dir(path), path, regenMarkers, "magus vcs resolve --hook post-commit\n", hookFile, newer)
 	require.NoError(t, err)
-	written := "#!/bin/sh\n\n" + regenMarkers.banner(newerMagus) + "magus vcs resolve --hook post-commit\n" + regenMarkers.end + "\n"
+	written := fmt.Sprintf(`#!/bin/sh
+
+%smagus vcs resolve --hook post-commit
+%s
+`, regenMarkers.banner(newerMagus), regenMarkers.end)
 	assertFile(t, path, written, 0o755)
 
 	_, err = writeManagedSection(filepath.Dir(path), path, regenMarkers, "magus vcs resolve post-commit\n", hookFile, older)
@@ -394,14 +419,20 @@ func TestWriteManagedSectionRefusesADowngrade(t *testing.T) {
 	changed, err = writeManagedSection(filepath.Dir(path), path, regenMarkers, "magus vcs resolve --hook=v2 post-commit\n", hookFile, newer)
 	require.NoError(t, err)
 	assert.True(t, changed, "an equal writer replaces")
-	assertFile(t, path, "#!/bin/sh\n\n"+regenMarkers.banner(newerMagus)+"magus vcs resolve --hook=v2 post-commit\n"+regenMarkers.end+"\n", 0o755)
+	assertFile(t, path, fmt.Sprintf(`#!/bin/sh
+
+%smagus vcs resolve --hook=v2 post-commit
+%s
+`, regenMarkers.banner(newerMagus), regenMarkers.end), 0o755)
 }
 
 // An older section, and one written before stamps existed, are replaced and stamped with
 // the writer; a section whose content is already current keeps the writer it has.
 func TestWriteManagedSectionStampsOlderAndLegacySections(t *testing.T) {
 	for name, prior := range map[string]string{
-		"older":     generatedMarkers.banner(olderMagus) + "old.go merge=magus\n" + generatedMarkers.end + "\n",
+		"older": fmt.Sprintf(`%sold.go merge=magus
+%s
+`, generatedMarkers.banner(olderMagus), generatedMarkers.end),
 		"unstamped": generatedMarkers.section("old.go merge=magus\n"),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -410,12 +441,18 @@ func TestWriteManagedSectionStampsOlderAndLegacySections(t *testing.T) {
 			changed, err := writeManagedSection(filepath.Dir(path), path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{Self: newerMagus})
 			require.NoError(t, err)
 			assert.True(t, changed)
-			assertFile(t, path, "*.png binary\n\n"+generatedMarkers.banner(newerMagus)+"gen/** merge=magus\n"+generatedMarkers.end+"\n", 0o644)
+			assertFile(t, path, fmt.Sprintf(`*.png binary
+
+%sgen/** merge=magus
+%s
+`, generatedMarkers.banner(newerMagus), generatedMarkers.end), 0o644)
 		})
 	}
 
 	path := filepath.Join(t.TempDir(), ".gitattributes")
-	current := generatedMarkers.banner(olderMagus) + "gen/** merge=magus\n" + generatedMarkers.end + "\n"
+	current := fmt.Sprintf(`%sgen/** merge=magus
+%s
+`, generatedMarkers.banner(olderMagus), generatedMarkers.end)
 	require.NoError(t, os.WriteFile(path, []byte(current), 0o644))
 	changed, err := writeManagedSection(filepath.Dir(path), path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{Self: newerMagus})
 	require.NoError(t, err)
@@ -438,7 +475,8 @@ func TestConfinedToGeneratedSection(t *testing.T) {
 	t.Parallel()
 
 	user := "*.png binary\n"
-	old := user + "\n" + generatedMarkers.section("a.go merge=magus\n")
+	old := fmt.Sprintf(`%s
+%s`, user, generatedMarkers.section("a.go merge=magus\n"))
 
 	tests := []struct {
 		name      string
@@ -448,13 +486,17 @@ func TestConfinedToGeneratedSection(t *testing.T) {
 		wantErr   string
 	}{
 		{name: "identical", committed: old, current: old, want: false},
-		{name: "section body changed", committed: old, current: user + "\n" + generatedMarkers.section("b.go merge=magus\n"), want: true},
+		{name: "section body changed", committed: old, current: fmt.Sprintf(`%s
+%s`, user, generatedMarkers.section("b.go merge=magus\n")), want: true},
 		{name: "section first written", committed: user, current: old, want: true},
 		{name: "section dropped", committed: old, current: user, want: true},
 		{name: "hand edit beside section", committed: old, current: "*.png binary\n*.jpg binary\n\n" + generatedMarkers.section("a.go merge=magus\n"), want: false},
 		{name: "hand edit and section change", committed: old, current: "*.jpg binary\n\n" + generatedMarkers.section("b.go merge=magus\n"), want: false},
-		{name: "blank lines moved", committed: old, current: user + generatedMarkers.section("a.go merge=magus\n") + "\n\n", want: true},
-		{name: "crlf working copy", committed: old, current: strings.ReplaceAll(user+"\n"+generatedMarkers.section("b.go merge=magus\n"), "\n", "\r\n"), want: true},
+		{name: "blank lines moved", committed: old, current: fmt.Sprintf(`%s%s
+
+`, user, generatedMarkers.section("a.go merge=magus\n")), want: true},
+		{name: "crlf working copy", committed: old, current: strings.ReplaceAll(fmt.Sprintf(`%s
+%s`, user, generatedMarkers.section("b.go merge=magus\n")), "\n", "\r\n"), want: true},
 		{name: "torn committed section", committed: tornBanner + "\n", current: old, wantErr: "committed: line 1"},
 		{name: "torn working section", committed: old, current: tornBanner + "\n", wantErr: "working copy: line 1"},
 	}

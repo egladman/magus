@@ -52,9 +52,9 @@ func vcsCmdCall(args []string, dir string) string {
 	for i, a := range args {
 		quoted[i] = strconv.Quote(a)
 	}
-	call := `vcs\cmd([` + strings.Join(quoted, ", ") + `]`
+	call := fmt.Sprintf(`vcs\cmd([%s]`, strings.Join(quoted, ", "))
 	if dir != "" {
-		call += `, {"dir": ` + strconv.Quote(dir) + `}`
+		call += fmt.Sprintf(`, {"dir": %s}`, strconv.Quote(dir))
 	}
 	return call + ")"
 }

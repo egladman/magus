@@ -1,11 +1,13 @@
 package hint
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
@@ -13,16 +15,15 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// A workspace script is served as a breadcrumb when a situation it declares it serves
-// comes up: a guard rule refusing a line, a diagnostic, a doctor check, another next,
-// or one of the events below. The graph build reads each script's declaration and
-// writes scripts.idx; a serving site asks MatchScripts and never loads the graph.
+// A workspace script declares the situations it serves (BuildScriptsIndex);
+// `magus graph build` indexes every tracked script into scripts.idx, and a serving site
+// asks MatchScripts or MatchReplaced, never the graph.
 
 // ScriptIDPrefix starts the id of every script breadcrumb, so `session hints` counts
 // uptake per script beside the built-in templates.
 const ScriptIDPrefix = "script-"
 
-// The effects a script declares. Anything else reads as a write.
+// The effects a script declares. A script that declares none is a write.
 const (
 	ScriptEffectRead  = "read"
 	ScriptEffectWrite = "write"
@@ -30,7 +31,7 @@ const (
 
 // scriptsIndexFormat is bumped whenever ScriptsIndex changes shape. An index in any
 // other format serves nothing until the next graph build rewrites it.
-const scriptsIndexFormat = 1
+const scriptsIndexFormat = 2
 
 // ScriptsIndex is the content of scripts.idx: which scripts serve which situation,
 // stamped so a reader can tell when an entry no longer describes its file.
@@ -38,11 +39,6 @@ type ScriptsIndex struct {
 	Format int `json:"format"`
 	// Root is the absolute workspace root every Path is relative to.
 	Root string `json:"root"`
-	// Revision is the commit the index was built at, "" where no version control
-	// answers. MatchScripts does not compare it: a checkout that moves rewrites the
-	// files it changes, which the per-script stamp already catches without a VCS
-	// process on the serving path.
-	Revision string `json:"revision,omitempty"`
 	// Serves maps a situation (see ValidateSituation) to the scripts serving it, in
 	// the order they are offered.
 	Serves map[string][]ScriptServe `json:"serves"`
@@ -52,17 +48,14 @@ type ScriptsIndex struct {
 type ScriptServe struct {
 	// Path is the script, workspace-relative and slash-separated.
 	Path string `json:"path"`
-	// Args follow `--` on the command line. {ref}, {rule} and {project} are filled
-	// from the serving site's facts.
+	// Args follow `--` on the command line. Each placeholder in scriptPlaceholders is
+	// filled from the serving site's facts.
 	Args []string `json:"args,omitempty"`
-	// Effect is ScriptEffectRead or ScriptEffectWrite, read from the committed blob
-	// Blob names. The writer records read only when the working file matched that
-	// blob, since a served read is pre-authorized for every role.
+	// Effect is ScriptEffectRead only when the script declares read and its file was
+	// the committed one when indexed, since a served read is pre-authorized for every role.
 	Effect string `json:"effect"`
-	// Blob is the version-control id of the committed blob Effect was read from.
-	Blob string `json:"blob"`
-	// Summary is the declaration's one sentence, served as the breadcrumb's Why.
-	Summary string `json:"summary,omitempty"`
+	// Summary is the declaration's one line, served as the breadcrumb's Why.
+	Summary string `json:"summary"`
 	// MtimeNs and Size stamp the working file when the index was built. A file whose
 	// stamp no longer matches is still served, but never as a read.
 	MtimeNs int64 `json:"mtime_ns"`
@@ -90,10 +83,13 @@ func WriteScriptsIndex(cacheDir string, x ScriptsIndex) error {
 	return file.ReplaceFile(path, data, 0o600)
 }
 
-// readScriptsIndex reads scripts.idx under cacheDir, false when it is missing,
-// unreadable, or written in another magus's format.
+// readScriptsIndex reads scripts.idx under cacheDir, false when cacheDir is "" or the
+// index is missing, unreadable, or written in another magus's format.
 func readScriptsIndex(cacheDir string) (ScriptsIndex, bool) {
 	var x ScriptsIndex
+	if cacheDir == "" {
+		return x, false
+	}
 	data, err := os.ReadFile(ScriptsIndexPath(cacheDir))
 	if err != nil {
 		return x, false
@@ -111,9 +107,12 @@ const (
 	SituationMGS    = "mgs:"
 	SituationDoctor = "doctor:"
 	SituationNext   = "next:"
+	// situationReplaces is a command shape the script replaces: a program and the
+	// arguments a line must carry, in any order, as a workspace shell rule matches them.
+	situationReplaces = "replaces:"
 )
 
-var situationFamilies = []string{SituationEvent, SituationRule, SituationMGS, SituationDoctor, SituationNext}
+var situationFamilies = []string{SituationEvent, SituationRule, SituationMGS, SituationDoctor, SituationNext, situationReplaces}
 
 // The events a script may serve. They have no registry of their own elsewhere, so
 // this list is it, and it is closed: an id not here is an error, not a situation that
@@ -138,7 +137,7 @@ func ValidateSituation(situation string) error {
 	if i < 0 {
 		return fmt.Errorf("hint: situation %q names no family, want one of %s", situation, strings.Join(situationFamilies, " "))
 	}
-	if situation == situationFamilies[i] {
+	if strings.TrimSpace(strings.TrimPrefix(situation, situationFamilies[i])) == "" {
 		return fmt.Errorf("hint: situation %q names no id", situation)
 	}
 	if situationFamilies[i] == SituationEvent && !slices.Contains(AllEvents, situation) {
@@ -147,8 +146,171 @@ func ValidateSituation(situation string) error {
 	return nil
 }
 
+// scriptDeclaration is what one script declares about itself.
+type scriptDeclaration struct {
+	Summary string
+	Effect  string
+	Serves  []scriptSituation
+}
+
+// scriptSituation is one SERVES entry: a situation, then optionally ` -- ` and the
+// arguments the script is served with.
+type scriptSituation struct {
+	Situation string
+	Args      []string
+}
+
+var (
+	summaryDeclRe = regexp.MustCompile(`(?m)^(?:export\s+)?final\s+SUMMARY\s*=\s*("(?:[^"\\\n]|\\.)*")\s*;`)
+	effectDeclRe  = regexp.MustCompile(`(?m)^(?:export\s+)?final\s+EFFECT\s*=\s*("(?:[^"\\\n]|\\.)*")\s*;`)
+	servesDeclRe  = regexp.MustCompile(`(?ms)^(?:export\s+)?final\s+SERVES\s*=\s*\[(.*?)\]\s*;`)
+	quotedRe      = regexp.MustCompile(`"(?:[^"\\\n]|\\.)*"`)
+)
+
+// parseScriptDeclaration reads the declarations BuildScriptsIndex shows as text, running
+// nothing; none of them is false. SERVES without a one-line SUMMARY, an unknown EFFECT,
+// or an entry ValidateSituation or the placeholder set rejects is an error.
+func parseScriptDeclaration(src []byte) (scriptDeclaration, bool, error) {
+	var d scriptDeclaration
+	summary, hasSummary := declaredString(summaryDeclRe, src)
+	effect, hasEffect := declaredString(effectDeclRe, src)
+	serves := servesDeclRe.FindSubmatch(src)
+	if !hasSummary && !hasEffect && serves == nil {
+		return d, false, nil
+	}
+	if serves == nil {
+		return d, true, errors.New("declares SUMMARY or EFFECT but no SERVES list")
+	}
+	if strings.TrimSpace(summary) == "" {
+		return d, true, errors.New("declares SERVES without a SUMMARY line")
+	}
+	d.Summary, d.Effect = summary, ScriptEffectWrite
+	if hasEffect {
+		if effect != ScriptEffectRead && effect != ScriptEffectWrite {
+			return d, true, fmt.Errorf("EFFECT %q is neither %q nor %q", effect, ScriptEffectRead, ScriptEffectWrite)
+		}
+		d.Effect = effect
+	}
+	var errs []error
+	for _, q := range quotedRe.FindAll(serves[1], -1) {
+		entry, err := strconv.Unquote(string(q))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("SERVES entry %s: %w", q, err))
+			continue
+		}
+		s, err := parseScriptSituation(entry)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		d.Serves = append(d.Serves, s)
+	}
+	if len(d.Serves) == 0 && len(errs) == 0 {
+		errs = append(errs, errors.New("declares an empty SERVES list"))
+	}
+	return d, true, errors.Join(errs...)
+}
+
+func declaredString(re *regexp.Regexp, src []byte) (string, bool) {
+	m := re.FindSubmatch(src)
+	if m == nil {
+		return "", false
+	}
+	s, err := strconv.Unquote(string(m[1]))
+	return s, err == nil
+}
+
+func parseScriptSituation(entry string) (scriptSituation, error) {
+	situation, args, _ := strings.Cut(entry, " -- ")
+	s := scriptSituation{Situation: strings.Join(strings.Fields(situation), " ")}
+	if args = strings.TrimSpace(args); args != "" {
+		s.Args = strings.Fields(args)
+	}
+	if err := ValidateSituation(s.Situation); err != nil {
+		return s, fmt.Errorf("SERVES entry %q: %w", entry, err)
+	}
+	for _, a := range s.Args {
+		for _, m := range placeholderRe.FindAllStringSubmatch(a, -1) {
+			if !slices.Contains(scriptPlaceholders, m[1]) {
+				return s, fmt.Errorf("SERVES entry %q: placeholder {%s} is not one of %s", entry, m[1], strings.Join(scriptPlaceholders, " "))
+			}
+		}
+	}
+	return s, nil
+}
+
+// ErrScriptDeclaration is what a script whose SERVES declaration does not parse reports.
+var ErrScriptDeclaration = errors.New("a script's SERVES declaration does not parse")
+
+// BuildScriptsIndex indexes the top-level declarations of each slash-separated .buzz path
+// under root (EFFECT is optional, a write when absent):
+//
+//	final SUMMARY = "rename a code symbol at every occurrence the index verifies";
+//	final SERVES = ["rule:sed-in-place", "replaces:git worktree remove -- --apply"];
+//	final EFFECT = "read";
+//
+// committed says a path is as committed, which a read needs; a bad script is named in the error.
+func BuildScriptsIndex(root string, paths []string, committed func(path string) bool) (ScriptsIndex, error) {
+	x := ScriptsIndex{Root: root, Serves: map[string][]ScriptServe{}}
+	var errs []error
+	for _, rel := range slices.Sorted(slices.Values(paths)) {
+		if filepath.Ext(rel) != ".buzz" {
+			continue
+		}
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		info, err := os.Stat(abs)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		src, err := os.ReadFile(abs)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", rel, err))
+			continue
+		}
+		d, ok, err := parseScriptDeclaration(src)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", rel, err))
+			continue
+		}
+		if !ok {
+			continue
+		}
+		effect := d.Effect
+		if effect == ScriptEffectRead && !committed(rel) {
+			effect = ScriptEffectWrite
+		}
+		for _, s := range d.Serves {
+			x.Serves[s.Situation] = append(x.Serves[s.Situation], ScriptServe{
+				Path: rel, Args: s.Args, Effect: effect, Summary: d.Summary,
+				MtimeNs: info.ModTime().UnixNano(), Size: info.Size(),
+			})
+		}
+	}
+	return x, errors.Join(errs...)
+}
+
+// MissingScripts lists, sorted, every script the index under cacheDir serves whose file
+// is gone, false when there is no index to read.
+func MissingScripts(cacheDir string) ([]string, bool) {
+	x, ok := readScriptsIndex(cacheDir)
+	if !ok {
+		return nil, false
+	}
+	var missing []string
+	for _, entries := range x.Serves {
+		for _, s := range entries {
+			info, err := os.Stat(filepath.Join(x.Root, filepath.FromSlash(s.Path)))
+			if (err != nil || !info.Mode().IsRegular()) && !slices.Contains(missing, s.Path) {
+				missing = append(missing, s.Path)
+			}
+		}
+	}
+	slices.Sort(missing)
+	return missing, true
+}
+
 // scriptPlaceholders are the facts a script's args may name.
-var scriptPlaceholders = []string{"ref", "rule", "project"}
+var scriptPlaceholders = []string{"ref", "rule", "project", "file"}
 
 var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 
@@ -157,30 +319,66 @@ var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 // own and FilterServable caps what survives.
 //
 // It errors only on a situation ValidateSituation rejects. A missing, unreadable or
-// foreign-format index serves nothing, as does an entry whose file is gone, whose
-// args name a placeholder facts does not bind, or whose id an earlier entry already
-// took. An entry is a read only when it declares read and its file still matches the
-// stamp; Reads is never set otherwise.
+// foreign-format index serves nothing, as does an entry whose file is gone (which
+// MissingScripts reports), whose args name a placeholder facts does not bind, or whose
+// id an earlier entry already took. Reads is set only for a read whose stamp holds.
 func MatchScripts(cacheDir, situation string, facts map[string]string) ([]types.NextStep, error) {
 	if err := ValidateSituation(situation); err != nil {
 		return nil, err
-	}
-	if cacheDir == "" {
-		return nil, nil
 	}
 	x, ok := readScriptsIndex(cacheDir)
 	if !ok {
 		return nil, nil
 	}
+	return x.serve(x.Serves[situation], facts, nil), nil
+}
+
+// MatchReplaced returns the breadcrumbs for every script the index under cacheDir
+// declares replaces a command shape one of cmds carries, in situation order, then index
+// order, served as MatchScripts serves them.
+func MatchReplaced(cacheDir string, cmds []Invocation, facts map[string]string) []types.NextStep {
+	x, ok := readScriptsIndex(cacheDir)
+	if !ok {
+		return nil
+	}
+	var shapes []string
+	for s := range x.Serves {
+		if strings.HasPrefix(s, situationReplaces) {
+			shapes = append(shapes, s)
+		}
+	}
+	slices.Sort(shapes)
 	var next []types.NextStep
-	for _, s := range x.Serves[situation] {
+	for _, situation := range shapes {
+		shape := strings.TrimPrefix(situation, situationReplaces)
+		if slices.ContainsFunc(cmds, func(c Invocation) bool { return carriesShape(c, shape) }) {
+			next = x.serve(x.Serves[situation], facts, next)
+		}
+	}
+	return next
+}
+
+// carriesShape reports whether c runs shape's program with every one of its arguments,
+// in any order: the match a workspace shell rule makes.
+func carriesShape(c Invocation, shape string) bool {
+	words := strings.Fields(shape)
+	if len(words) == 0 || filepath.Base(c.Name) != words[0] {
+		return false
+	}
+	return !slices.ContainsFunc(words[1:], func(w string) bool { return !slices.Contains(c.Args, w) })
+}
+
+// serve appends to next the breadcrumb of each entry it can serve whose id next does not
+// already hold.
+func (x ScriptsIndex) serve(entries []ScriptServe, facts map[string]string, next []types.NextStep) []types.NextStep {
+	for _, s := range entries {
 		n, ok := scriptNext(x.Root, s, facts)
 		if !ok || slices.ContainsFunc(next, func(o types.NextStep) bool { return o.ID == n.ID }) {
 			continue
 		}
 		next = append(next, n)
 	}
-	return next, nil
+	return next
 }
 
 // scriptNext builds one entry's breadcrumb, and reports false when it cannot be served.

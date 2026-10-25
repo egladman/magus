@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -126,7 +127,7 @@ func TestInflightForInterruptSpansEveryTracker(t *testing.T) {
 		var out []string
 		for _, r := range InFlight() {
 			if strings.HasPrefix(r.Project, "interrupt-") {
-				out = append(out, r.Project+" "+r.Target)
+				out = append(out, fmt.Sprintf("%s %s", r.Project, r.Target))
 			}
 		}
 		return out

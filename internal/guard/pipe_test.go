@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -32,7 +33,7 @@ func TestPipeRecordsNameRealFields(t *testing.T) {
 			i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "ls" })
 			require.GreaterOrEqual(t, i, 0)
 			example := strings.Join(exampleCommands(commands.Root.Children[i]), "\n")
-			assert.Contains(t, example, "{{range ."+rec.list+"}}{{."+rec.id+"}}", verb)
+			assert.Contains(t, example, fmt.Sprintf("{{range .%s}}{{.%s}}", rec.list, rec.id), verb)
 			assert.Empty(t, rec.count, "ls has no count field the registry documents")
 			continue
 		}

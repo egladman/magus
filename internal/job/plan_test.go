@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,6 +241,19 @@ func TestGraphSymbolsResolvesAPackageQualifiedName(t *testing.T) {
 	assert.Equal(t, []string{"internal/job/plan.go", "types/declare.go"}, bare.SameNameDefinitions, "a bare name is still ambiguous")
 }
 
+// A gate graded on a scoped run says so beside its mark, so an integration grade shows what
+// the run covered.
+func TestRenderGatesShowsTheScopeOfARun(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.GateStatus{
+		{ID: "check", Verified: true, OutputRef: "out1", Scope: "-- ./internal/job -run Wait"},
+		{ID: "lint", Verified: true, OutputRef: "out2"},
+	}})
+	assert.Equal(t, "unit: 2 of 2 goal(s) met\n  [met] check, a run scoped with `-- ./internal/job -run Wait`\n  [met] lint\n", out.String())
+}
+
 func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	t.Parallel()
 
@@ -345,7 +359,7 @@ func TestResolveSymbolGoalsFreezesSignatures(t *testing.T) {
 	}{
 		{"no reader", "Api", nil, "this door reads no symbol graph"},
 		{"an unreadable graph", "Cold", read, "the symbol graph could not be read"},
-		{"a symbol the index does not define", "Stub", read, "write the stub, run `" + hint.GraphBuild.String() + "`, and fork again"},
+		{"a symbol the index does not define", "Stub", read, fmt.Sprintf("write the stub, run `%s`, and fork again", hint.GraphBuild.String())},
 		{"a symbol with no indexed signature", "Bare", read, "holds none for it to record"},
 		{"an ambiguous name", "Twice", read, "resolves to 2 definitions"},
 	} {
@@ -729,7 +743,7 @@ func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 			require.ErrorIs(t, err, types.JobUngraded)
 			assert.Contains(t, err.Error(), "s names no write paths and is not read-only")
 			assert.Contains(t, err.Error(), `{"check": {"script": "<probe>.buzz"}}`, "the refusal names the check a scout passes by")
-			assert.Contains(t, err.Error(), "`"+hint.JobExit.With("s")+"`", "and how a scout without one ends")
+			assert.Contains(t, err.Error(), fmt.Sprintf("`%s`", hint.JobExit.With("s")), "and how a scout without one ends")
 		})
 	}
 }
@@ -793,17 +807,17 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
 }
 
-// The fork derives soft paths and integrator waivers, so a record projected without them
+// The fork derives soft paths and integrator deviations, so a record projected without them
 // widens or narrows the row and keeps them; one naming soft_paths for a held path decides.
 func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	t.Parallel()
 
-	waiver := types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
+	deviation := types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
 	derived := func(t *testing.T) *Store {
 		t.Helper()
 		root := loadableRepo(t)
 		rec := spec("a.go", "a_test.go", "b_test.go")
-		rec.SoftPaths, rec.Waivers = []string{"a_test.go", "b_test.go"}, []types.JobWaiver{waiver}
+		rec.SoftPaths, rec.Deviations = []string{"a_test.go", "b_test.go"}, []types.Deviation{deviation}
 		s := NewStore(tempLocation(t, root))
 		_, err := s.Update(t.Context(), "w", Declare(rec, 0))
 		require.NoError(t, err)
@@ -833,12 +847,19 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 		want.Widenings = 1
 		want.WriteProof = types.WriteProofAlone
 		want.Validated = got.Validated
-		assert.Equal(t, want, got, "the soft paths and the waiver stay")
+		assert.Equal(t, want, got, "the soft paths and the deviation stay")
 	})
 	t.Run("narrowing", func(t *testing.T) {
 		t.Parallel()
 		got := apply(t, derived(t), spec("a.go", "a_test.go"))
 		assert.Equal(t, []string{"a_test.go"}, got.SoftPaths, "a dropped path is no soft path, and the kept one stays soft")
+	})
+	t.Run("explicit soft paths outside the write paths drop", func(t *testing.T) {
+		t.Parallel()
+		rec := spec("a.go", "a_test.go")
+		rec.SoftPaths = []string{"a_test.go", "b_test.go"}
+		got := apply(t, derived(t), rec)
+		assert.Equal(t, [][]string{{"a_test.go"}, {"a.go", "a_test.go"}}, [][]string{got.SoftPaths, got.WritePaths})
 	})
 	t.Run("explicit soft paths win", func(t *testing.T) {
 		t.Parallel()

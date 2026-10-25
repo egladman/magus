@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -136,15 +137,15 @@ func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
 	// false that an omitempty tag names.
 	raw, err := json.Marshal(inventory[idx])
 	require.NoError(t, err)
-	assert.JSONEq(t, `{
-		"name": "`+name+`", "buzz_import": "magus/spell/`+name+`", "built_in": false,
+	assert.JSONEq(t, fmt.Sprintf(`{
+		"name": "%s", "buzz_import": "magus/spell/%s", "built_in": false,
 		"opaque": false, "version_probe": false,
 		"language": "demo", "extensions": [".demo"],
 		"syntax": {
 			"comments": {"lineComments": ["//"], "nested": false},
 			"stubs": {"kinds": ["Function"], "bodyStyle": "brace", "body": "{ todo }"}
 		}
-	}`, string(raw))
+	}`, name, name), string(raw))
 }
 
 func TestSpellToolchainsDeriveFromResolvedCommands(t *testing.T) {
@@ -773,8 +774,7 @@ func TestClassifyFiles_OutsideWorkspace(t *testing.T) {
 	out, err := ws.ClassifyFiles(context.Background(), []string{elsewhere, invented})
 	require.NoError(t, err, "ClassifyFiles")
 
-	hint := "resolves outside this workspace (" + root + "): no project here can declare it, " +
-		"so none of magus's answers about this workspace apply to it"
+	hint := fmt.Sprintf("resolves outside this workspace (%s): no project here can declare it, so none of magus's answers about this workspace apply to it", root)
 	assert.Equal(t, []types.FileEntry{
 		// Exists still answered: a real file from another checkout is a different
 		// mistake from a path that is nowhere, and the caller can tell which.
@@ -838,9 +838,12 @@ func TestClassifyFiles_DeclaredGitattributesByChange(t *testing.T) {
 
 	const user = "*.png binary\n"
 	section := func(body string) string {
-		return "# BEGIN magus-generated - do not edit this section manually\n" + body + "# END magus-generated\n"
+		return fmt.Sprintf(`# BEGIN magus-generated - do not edit this section manually
+%s# END magus-generated
+`, body)
 	}
-	committed := user + "\n" + section("a.go merge=magus\n")
+	committed := fmt.Sprintf(`%s
+%s`, user, section("a.go merge=magus\n"))
 
 	tests := []struct {
 		name    string
@@ -848,8 +851,11 @@ func TestClassifyFiles_DeclaredGitattributesByChange(t *testing.T) {
 		want    string
 	}{
 		{name: "unchanged", working: committed, want: "source"},
-		{name: "section rewritten", working: user + "\n" + section("a.go merge=magus\nb.go merge=magus\n"), want: "maintained"},
-		{name: "hand edit outside the section", working: user + "*.jpg binary\n\n" + section("a.go merge=magus\n"), want: "source"},
+		{name: "section rewritten", working: fmt.Sprintf(`%s
+%s`, user, section("a.go merge=magus\nb.go merge=magus\n")), want: "maintained"},
+		{name: "hand edit outside the section", working: fmt.Sprintf(`%s*.jpg binary
+
+%s`, user, section("a.go merge=magus\n")), want: "source"},
 		{name: "hand edit and section rewritten", working: "*.jpg binary\n\n" + section("b.go merge=magus\n"), want: "source"},
 	}
 	for _, tt := range tests {
@@ -1083,7 +1089,7 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("GEN.md");
+    ctx.writesFiles(["GEN.md"]);
 }
 `
 	w.Magusfile(mf)
@@ -1108,10 +1114,10 @@ func TestClassifyFiles_ExcludedOutputIsASource(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+    ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("gen/*.go");
+    ctx.readsFiles(["gen/*.go"]);
 }
 `,
 		"gen/runtime.go": "package gen\n",
@@ -1141,7 +1147,7 @@ func TestOpen_RefusesAnExclusionThatNarrowsNothing(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("!gen/runtime.go");
+    ctx.writesFiles(["!gen/runtime.go"]);
 }
 `,
 	})
@@ -1158,8 +1164,8 @@ func TestClassifyFiles_ExclusionsStayWithTheirCall(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("a/x.go");
-    ctx.writesFiles("!a/x.go", "a/*.go");
+    ctx.writesFiles(["a/x.go"]);
+    ctx.writesFiles(["!a/x.go", "a/*.go"]);
 }
 `,
 	})
@@ -1183,7 +1189,7 @@ func TestOpen_ValidatesACrossProjectExclusionAgainstItsOwnProject(t *testing.T) 
 		"magusfile.buzz": `import "magus";
 import "project/site";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", site.file("!gen/x"));
+    ctx.writesFiles(["gen/**", site.file("!gen/x")]);
 }
 `,
 		"site/magusfile.buzz": `import "magus";
@@ -1300,7 +1306,7 @@ func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("GEN.md");
+    ctx.writesFiles(["GEN.md"]);
 }
 `
 	w.Magusfile(mf)
@@ -1346,8 +1352,8 @@ func TestDescribeFileSeesCrossProjectReads(t *testing.T) {
 		"site/magusfile.buzz": `import "magus";
 import "project/../skills";
 export fun render(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(skills.file("note.md"));
-    ctx.writesFiles("gen/*.html");
+    ctx.readsFiles([skills.file("note.md")]);
+    ctx.writesFiles(["gen/*.html"]);
 }
 `,
 	}
@@ -1385,14 +1391,14 @@ func TestClassifyFiles_Claims(t *testing.T) {
 import "project/../skills";
 import "project/../dist";
 export fun render(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(skills.file("note.md"));
-    ctx.writesFiles("gen/*.html");
+    ctx.readsFiles([skills.file("note.md")]);
+    ctx.writesFiles(["gen/*.html"]);
 }
 export fun publish(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles(dist.file("index.html"));
+    ctx.writesFiles([dist.file("index.html")]);
 }
 export fun stamp(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("README.md");
+    ctx.writesFiles(["README.md"], editsExistingSource: true);
 }
 `,
 	}

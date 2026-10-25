@@ -3,6 +3,7 @@ package sessions
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -29,7 +30,7 @@ import (
 // The result satisfies the rule [ValidID] enforces (alphanumeric with `-` and `_`),
 // because it names the invocation's file.
 func NewID() string {
-	return journal.NewInvocationID() + "-" + processSuffix()
+	return fmt.Sprintf("%s-%s", journal.NewInvocationID(), processSuffix())
 }
 
 // processSuffix is derived once per process. Re-deriving it per call would defeat the

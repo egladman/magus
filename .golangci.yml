@@ -125,6 +125,7 @@ linters:
     - fieldwise
     - globalrestore
     - testloops
+    - stringjoin
     - diagmsg
     - errmsg
     - stderrprint
@@ -301,7 +302,7 @@ linters:
           # message-commands), exempt until the terse-output rewrites land. Delete an
           # entry once its file is clean; never add one.
           allow:
-            - {file: cmd/magus/gate_redundancy.go, reason: staged}
+            - {file: cmd/magus/gate.go, reason: staged}
             - {file: cmd/magus/spell.go, reason: staged}
             - {file: cmd/magus/stale_index.go, reason: staged}
             - {file: describe.go, reason: staged}
@@ -605,6 +606,15 @@ linters:
         settings:
           markers: [Setpgid, SetupProcessGroup]
           hint: pass the loop TEST_PID=<os.Getpid()> in its environment, as testPidEnv in internal/proc/spawn/reap_unix_test.go does
+
+      # A chain of + hides the shape of the string it builds; a format string,
+      # filepath.Join or a raw string shows it.
+      stringjoin:
+        type: module
+        description: reports a string built from a chain of + with a non-constant operand
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          min-operands: 3
 
     testifylint:
       disable-all: true

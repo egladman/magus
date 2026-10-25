@@ -117,7 +117,7 @@ func (p *Plan) readFile(root, rel string, sites []Site) *fileEdit {
 		return refuseFile(err.Error())
 	case !info.Mode().IsRegular():
 		// A rename over a symlink replaces the link, not the file it names.
-		return refuseFile("not a regular file (" + info.Mode().Type().String() + ")")
+		return refuseFile(fmt.Sprintf("not a regular file (%s)", info.Mode().Type().String()))
 	}
 	if !insideRoot(root, abs) {
 		return refuseFile("resolves outside the workspace through a symlinked directory")
@@ -351,7 +351,7 @@ func (p *Plan) restore(files []*fileEdit) error {
 // stage writes content to a synced temp sibling of abs, so the rename that lands it stays
 // on one filesystem.
 func stage(abs string, content []byte, mode fs.FileMode) (string, error) {
-	tmp, err := os.CreateTemp(filepath.Dir(abs), "."+filepath.Base(abs)+".magus-edit-*")
+	tmp, err := os.CreateTemp(filepath.Dir(abs), fmt.Sprintf(".%s.magus-edit-*", filepath.Base(abs)))
 	if err != nil {
 		return "", err
 	}
@@ -384,7 +384,7 @@ func FormatRefusal(r types.EditRefusal) string {
 	}
 	b.WriteString(r.Reason)
 	if r.Rule != "" {
-		b.WriteString(" [" + r.Rule + "]")
+		fmt.Fprintf(&b, " [%s]", r.Rule)
 	}
 	return b.String()
 }

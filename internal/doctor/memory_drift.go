@@ -122,7 +122,7 @@ func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Check 
 func gradeDeclaration(project, target, declaredBy string, declaredMB int, peaks peakRange) string {
 	declares := "declares"
 	if declaredBy != "" && declaredBy != target {
-		declares = "runs " + declaredBy + ", which declares"
+		declares = fmt.Sprintf("runs %s, which declares", declaredBy)
 	}
 	switch {
 	case declaredMB <= 0:

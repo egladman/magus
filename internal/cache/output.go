@@ -134,6 +134,10 @@ type OutputDescriptor struct {
 	// to the job whose evidence it may be: another lease's passing run of the same check
 	// in a shared checkout proves nothing about this job's work.
 	Lease string `json:"lease,omitempty"`
+	// Cached marks an attempt a cache hit recorded: the target did not run, and the blob
+	// is the log the hit replayed. The attempt still belongs to this run, with its own
+	// timestamp and lease.
+	Cached bool `json:"cached,omitempty"`
 }
 
 // JobAttempt is the descriptor as a job row records the run behind ref: the one copy
@@ -225,8 +229,8 @@ func PortableRef(cacheKey string) string {
 // and resolves exactly like a ref, and so pre-portable stores, whose file stems
 // were minted the same way, resolve unchanged.
 func (s *OutputStore) mintAttempt(cacheKey string) string {
-	nonce := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + strconv.FormatUint(s.seq.Add(1), 10)
-	sum := sha256.Sum256([]byte(cacheKey + "\x00" + nonce))
+	nonce := fmt.Sprintf("%s-%s", strconv.FormatInt(time.Now().UnixNano(), 10), strconv.FormatUint(s.seq.Add(1), 10))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s", cacheKey, nonce)))
 	return RefPrefix + hex.EncodeToString(sum[:])[:attemptHexLen]
 }
 
@@ -297,24 +301,6 @@ func readDescriptor(path string) (OutputDescriptor, error) {
 		return OutputDescriptor{}, err
 	}
 	return m, nil
-}
-
-// StepRef returns the step's portable ref when at least one execution is stored for
-// cacheKey, or "" if none. A cache HIT reuses it instead of re-persisting identical
-// output under a fresh attempt, so hits point at the existing events, not bloat the
-// store. Pre-portable directories qualify too: the ref derives from the key, not from
-// what any stored descriptor says.
-func (s *OutputStore) StepRef(cacheKey string) string {
-	files, err := os.ReadDir(filepath.Join(s.outputsDir(), cacheKey))
-	if err != nil {
-		return ""
-	}
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), outExt) {
-			return PortableRef(cacheKey)
-		}
-	}
-	return ""
 }
 
 // newestAttemptBlob returns the path of the newest attempt's .out blob in a cache-key
@@ -427,7 +413,7 @@ func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 				continue
 			}
 			d.Target = bareTarget(d.Target)
-			key := d.Project + "\x00" + d.Target
+			key := fmt.Sprintf("%s\x00%s", d.Project, d.Target)
 			if cur, ok := latest[key]; ok && !newerDescriptor(d, cur) {
 				continue
 			}
@@ -862,66 +848,6 @@ func (s *OutputStore) removeForProject(project string) {
 			_ = os.Remove(dir)
 		}
 	}
-}
-
-// AdoptImported completes an execution record that arrived from a remote artifact.
-// An import ships the producer's DESCRIPTOR but not its output blob (the bytes travel
-// once, as the build log), so the attempt is a descriptor with no sibling .out and
-// stays unresolvable. Given the log bytes a cache hit just replayed, this writes that
-// missing blob and returns the step's portable ref, so a fresh machine answers under
-// the SAME ref the producer printed instead of minting a local one. Reports false
-// when the key has no orphan descriptor to complete (nothing imported, or already
-// completed), leaving the caller to persist its own attempt.
-func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, bool) {
-	if len(output) == 0 {
-		// Nothing to complete the record with (an absent or quiet log). A zero-byte
-		// blob would advertise the ref as resolvable and then answer with nothing.
-		return "", false
-	}
-	dir := filepath.Join(s.outputsDir(), cacheKey)
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return "", false
-	}
-	stems := make(map[string]bool, len(files)) // stem -> has a blob
-	for _, f := range files {
-		if stem, ok := strings.CutSuffix(f.Name(), descExt); ok {
-			if _, seen := stems[stem]; !seen {
-				stems[stem] = false // a descriptor alone; a blob may still turn up
-			}
-			continue
-		}
-		if stem, ok := strings.CutSuffix(f.Name(), outExt); ok {
-			stems[stem] = true
-		}
-	}
-	orphans := make([]string, 0, len(stems))
-	for stem, hasBlob := range stems {
-		if !hasBlob {
-			orphans = append(orphans, stem)
-		}
-	}
-	// Exactly one orphan, or none of this is safe: several descriptors without blobs
-	// means something other than a fresh import produced them (a half-finished prune,
-	// two imports), and guessing which execution these bytes belong to would file one
-	// run's output under another run's identity and timestamps.
-	if len(orphans) != 1 {
-		return "", false
-	}
-	// The descriptor must actually claim this key's ref. A producer on a different
-	// keyVersion writes a descriptor whose Ref disagrees with what this machine
-	// resolves by, and adopting it would make the ref and its record contradict.
-	ref := PortableRef(cacheKey)
-	if d, err := readDescriptor(filepath.Join(dir, orphans[0]+descExt)); err != nil || (d.Ref != "" && d.Ref != ref) {
-		return "", false
-	}
-	// Atomic, so a concurrent reader never sees a half-written blob, and uniquely named:
-	// the store is shared machine-wide, so two adopters of this stem can be mid-write at
-	// once.
-	if file.WriteFileAtomic(filepath.Join(dir, orphans[0]+outExt), output, 0o644) != nil {
-		return "", false
-	}
-	return ref, true
 }
 
 // newestDescriptor returns the newest stored execution's descriptor for cacheKey:

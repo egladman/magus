@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode"
@@ -22,9 +23,9 @@ func CodeSpan(s string) string {
 	// CommonMark strips one space from each end of a span whose content starts and ends
 	// with one, and a backtick against the fence would lengthen it.
 	if strings.HasPrefix(s, "`") || strings.HasSuffix(s, "`") || strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") {
-		s = " " + s + " "
+		s = fmt.Sprintf(" %s ", s)
 	}
-	return fence + s + fence
+	return fmt.Sprintf("%s%s%s", fence, s, fence)
 }
 
 // CodeBlock renders s as a fenced Markdown code block showing s as text, lines and
@@ -33,7 +34,7 @@ func CodeSpan(s string) string {
 func CodeBlock(s string) string {
 	s = strings.TrimSuffix(strings.ToValidUTF8(s, string(utf8.RuneError)), "\n")
 	fence := strings.Repeat("`", max(3, longestRun(s, '`')+1))
-	return fence + "text\n" + s + "\n" + fence + "\n"
+	return fmt.Sprintf("%stext\n%s\n%s\n", fence, s, fence)
 }
 
 func longestRun(s string, c byte) int {

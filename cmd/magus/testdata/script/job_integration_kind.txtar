@@ -58,7 +58,7 @@ stderr 'integrates: branch no-such-branch: '
 # allowed, and editor's hold on pricing.txt is a note, not MGS3032.
 stdin $WORK/integrate.json
 exec magus job fork --stdin
-stderr 'note: the record names no checkpoint, so the branches were compared with this checkout.s revision [0-9a-f]{40}'
+stderr 'note: the record names no checkpoint, so the branches were compared with the revision [0-9a-f]{40} of '
 stdout '^forked integrate, declared, with 2 write path\(s\)'
 stdout 'note: editor \(declared\) holds "pricing.txt", which the merge writes as "pricing.txt": the merge settles it'
 ! stderr 'MGS3032|MGS3036'
@@ -70,6 +70,31 @@ stdout '^  pricing.txt$'
 exec magus job fork writer --read-only --criteria 'read the tests'
 ! stderr 'advice:'
 
+# A regeneration a merge left owed in the checkout refuses the integration's pass until
+# `magus vcs resolve` runs it once and its result is committed.
+exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" $WORK/evidence.tmpl.json > "$WORK/evidence.json"'
+cp $WORK/owed.json .git/magus-owed-regeneration.json
+stdin $WORK/evidence.json
+! exec magus job wait integrate --integration --stdin
+stderr 'owes 1 regeneration\(s\) a merge left: test \.'
+stderr 'run `magus vcs resolve`, commit what it stages, then wait again'
+exec magus vcs resolve
+stdout 'vcs resolve: ran magus run test:rw \.'
+! exists .git/magus-owed-regeneration.json
+# The resolve ran test:rw on the same key, so its attempt is the ref's newest; the
+# evidence names a fresh run of the check.
+exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" $WORK/evidence.tmpl.json > "$WORK/evidence.json"'
+stdin $WORK/evidence.json
+exec magus job wait integrate --integration --stdin
+stdout '^integration: integrate passes in '
+
+-- owed.json --
+{"schema_version": 1, "owed": [{"project": ".", "target": "test", "paths": ["pricing.txt"]}]}
+-- evidence.tmpl.json --
+{"schema_version": 2,
+ "changed_paths": [],
+ "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
+ "unresolved_risks": []}
 -- pricing-a --
 apples 2
 -- magusfile-b --

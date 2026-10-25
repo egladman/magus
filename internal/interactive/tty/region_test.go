@@ -649,7 +649,7 @@ func TestRegionRenderStylesPerRowAndClosesIt(t *testing.T) {
 	r := newRegion(&buf, 2+borderRows, terminal(80, 24))
 	require.NoError(t, r.render([]Line{{Text: "warn", Style: SGRYellow}, {Text: "plain"}}))
 	out := buf.String()
-	assert.Contains(t, out, fmt.Sprintf(sgrFmt, SGRYellow)+"warn"+sgrReset,
+	assert.Contains(t, out, fmt.Sprintf("%swarn%s", fmt.Sprintf(sgrFmt, SGRYellow), sgrReset),
 		"the style is closed on its own row, so the next cannot inherit it")
 	// An unstyled row emits no SGR at all rather than an empty one.
 	assert.NotContains(t, out, fmt.Sprintf(sgrFmt, "")+"plain")
@@ -732,8 +732,8 @@ func TestRegionRenderStylesEachSpanIndependently(t *testing.T) {
 		{Text: "esc", Style: SGRDim, Align: AlignRight},
 	}}}))
 	out := buf.String()
-	assert.Contains(t, out, fmt.Sprintf(sgrFmt, SGRYellow)+"waiting"+sgrReset)
-	assert.Contains(t, out, fmt.Sprintf(sgrFmt, SGRDim)+"esc"+sgrReset,
+	assert.Contains(t, out, fmt.Sprintf("%swaiting%s", fmt.Sprintf(sgrFmt, SGRYellow), sgrReset))
+	assert.Contains(t, out, fmt.Sprintf("%sesc%s", fmt.Sprintf(sgrFmt, SGRDim), sgrReset),
 		"each span closes its own style, so neither bleeds into the other")
 }
 

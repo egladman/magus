@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ func TestLiveServerStreamsBacklogAndLive(t *testing.T) {
 	cancel()
 	defer ls.Stop(ctx)
 
-	req, _ := http.NewRequest(http.MethodGet, "http://"+ls.Addr()+"/events?token="+ls.Token(), nil)
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/events?token=%s", ls.Addr(), ls.Token()), nil)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -87,7 +88,7 @@ func TestLiveServerRejectsBadToken(t *testing.T) {
 	cancel()
 	defer ls.Stop(ctx)
 
-	resp, err := http.Get("http://" + ls.Addr() + "/events?token=wrong")
+	resp, err := http.Get(fmt.Sprintf("http://%s/events?token=wrong", ls.Addr()))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)

@@ -152,7 +152,7 @@ func (d *VerdictDir) RecordWithBundle(v types.Verdict, bundle string) error {
 	if err := os.MkdirAll(d.Path, 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.MkdirTemp(d.Path, "."+v.Change.ID+"-")
+	tmp, err := os.MkdirTemp(d.Path, fmt.Sprintf(".%s-", v.Change.ID))
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -50,7 +51,7 @@ func (h *ReviewHandler) reading(w http.ResponseWriter, r *http.Request, req revi
 		return
 	}
 	if at.Merged() {
-		handler.Refuse(w, r, rpcerr.Conflict("review "+at.ID+" has already merged, so there is nothing left to hold"))
+		handler.Refuse(w, r, rpcerr.Conflict(fmt.Sprintf("review %s has already merged, so there is nothing left to hold", at.ID)))
 		return
 	}
 	mark, err := h.Sessions.SetReading(ctx, at, time.Now())

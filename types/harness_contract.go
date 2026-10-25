@@ -150,19 +150,22 @@ type HarnessTool struct {
 }
 
 // HarnessTools is the table of a host's own tools: Dir is the workspace-relative directory
-// `magus agent harness install` writes the rows to, and the one the spell's hook wiring
-// names to `magus shell --tool-rows`. A tool no row names is one the guard cannot judge.
+// `magus agent harness install` writes the rows to, beside a host file magus shell finds
+// them by. A tool no row names is one the guard cannot judge.
 type HarnessTools struct {
 	Dir  string        `json:"dir"`
 	Rows []HarnessTool `json:"rows"`
 }
 
 // The files a tool rows directory holds beside one file per capability: the layout
-// version, the harness's model rows, and the workspace's model-tier declaration.
+// version, the harness's model rows, the workspace's model-tier declaration, the harness
+// id the directory belongs to, and that harness's Limits.
 const (
 	ToolRowsVersionFile = "version"
 	ToolModelRowsFile   = "models"
 	ToolTiersFile       = "tiers"
+	ToolHostFile        = "host"
+	ToolLimitsFile      = "limits"
 )
 
 // Holds reports whether rel, a slash-separated workspace-relative path, is a file install
@@ -174,7 +177,7 @@ func (t HarnessTools) Holds(rel string) bool {
 		return false
 	}
 	return name == ToolModelRowsFile || name == ToolTiersFile || name == ToolRowsVersionFile ||
-		slices.Contains(toolCapabilities, ToolCapability(name))
+		name == ToolHostFile || name == ToolLimitsFile || slices.Contains(toolCapabilities, ToolCapability(name))
 }
 
 // Capability is the capability the table gives tool, "" for a tool no row names.
@@ -220,10 +223,18 @@ type Setting struct {
 // foreground, ForegroundDefaultMs for one that names no timeout and ForegroundMaxMs at
 // most, past which it moves the command to the background; and on one hook, HookTimeoutMs,
 // past which it stops waiting for a verdict. Zero is a limit the host does not declare.
+//
+// ResumesOnBackgroundFrom is the first host version, dotted such as 2.1.299, that resumes a
+// stopped subagent when a background task it left running completes; "" when none does.
+//
+// ObservesSkillLoads is true when the host's hook wiring sees it load a skill, so a rule
+// may require one before an act; without it those rules stand down.
 type Limits struct {
-	ForegroundDefaultMs int64 `json:"foreground_default_ms,omitempty"`
-	ForegroundMaxMs     int64 `json:"foreground_max_ms,omitempty"`
-	HookTimeoutMs       int64 `json:"hook_timeout_ms,omitempty"`
+	ForegroundDefaultMs     int64  `json:"foreground_default_ms,omitempty"`
+	ForegroundMaxMs         int64  `json:"foreground_max_ms,omitempty"`
+	HookTimeoutMs           int64  `json:"hook_timeout_ms,omitempty"`
+	ResumesOnBackgroundFrom string `json:"resumes_on_background_from,omitempty"`
+	ObservesSkillLoads      bool   `json:"observes_skill_loads,omitempty"`
 }
 
 // ShippedAgent is one subagent magus ships, as mgs_renderAgents receives it. Model is the

@@ -859,7 +859,16 @@ const ctxMarker = "__magus_context"
 // MEMBERS, not decls: `uses` runs a body rather than declaring anything, and it is
 // refused here for the same reason the declarations are. An Exec carries execution
 // overrides, so a region scoped to one would hold a resource for a run it does not own.
-var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "observes", "hasCharm", "narrowed", "uses"}
+var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", "envInputs", "observes", "hasCharm", "narrowed", "uses"}
+
+// removedFootprintMembers maps each removed ctx member to the call that replaces it. They
+// stay bound so a call raises that name rather than "null is not callable".
+var removedFootprintMembers = map[string]string{
+	"inputs":                "ctx.readsFiles([...])",
+	"outputs":               "ctx.writesFiles([...])",
+	"updates":               "ctx.writesFiles([...], editsExistingSource: true)",
+	"modifiesExistingFiles": "ctx.writesFiles([...], editsExistingSource: true)",
+}
 
 // TargetContextKeys returns the member names bound on the magus\Context a target
 // receives, and ExecRefusedKeys those a magus\Exec refuses. Same role as
@@ -883,7 +892,7 @@ func ExecRefusedKeys() []string { return slices.Clone(execRefusedMembers) }
 //   - needs(...) dispatches the named dependencies (a target function, or a
 //     ctx.glob(...) list of them) deduped through the pool.
 //   - glob(pattern) resolves a pattern to matching target handles, feeding needs.
-//   - readsFiles / writesFiles / modifiesExistingFiles declare the cache footprint, and
+//   - readsFiles / writesFiles declare the cache footprint, and
 //     are no-ops at run time: it is read STATICALLY by describe.Extract (both arms of
 //     any branch), so the body is never run to learn it. A non-literal argument is
 //     caught there as DynamicIO at load, not here.
@@ -962,16 +971,9 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 	c.MapSet("readsFiles", directVal(obs, "ctx.readsFiles", footprintDecl))
 	c.MapSet("writesFiles", directVal(obs, "ctx.writesFiles", footprintDecl))
-	// modifiesExistingFiles is outputs' explicit counterpart: the target changes an
-	// existing file but does not own its whole contents, so magus neither deletes it
-	// nor restores it from a snapshot. See types.UpdateRef.
-	c.MapSet("modifiesExistingFiles", directVal(obs, "ctx.modifiesExistingFiles", footprintDecl))
-	for old, replacement := range map[string]string{
-		"inputs": "readsFiles", "outputs": "writesFiles", "updates": "modifiesExistingFiles",
-	} {
-		old, replacement := old, replacement
+	for old, replacement := range removedFootprintMembers {
 		c.MapSet(old, directVal(obs, "ctx."+old, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-			return vm.Null, fmt.Errorf("ctx.%s was removed in v0.4, use ctx.%s instead", old, replacement)
+			return vm.Null, fmt.Errorf("ctx.%s was removed, use %s instead", old, replacement)
 		}))
 	}
 	// env names variables whose PROCESS value folds into the key: the counterpart to

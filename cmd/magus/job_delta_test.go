@@ -18,7 +18,7 @@ func deltaGraph(defs map[string]string) *knowledge.Graph {
 	var nodes []types.KnowledgeNode
 	var edges []types.KnowledgeEdge
 	for name, at := range defs {
-		id := "symbol:go a `a`/" + name + "()."
+		id := fmt.Sprintf("symbol:go a `a`/%s().", name)
 		file := at[:len(at)-2]
 		nodes = append(nodes, types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: at})
 		edges = append(edges, types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationDefines,

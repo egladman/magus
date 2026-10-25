@@ -23,7 +23,9 @@ package describe
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 
@@ -114,8 +116,16 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 		// The count survives a hop into a helper because the helper's ctx.needs calls run
 		// in this body's sequence too.
 		callIndex := 0
-		var walk func(body *ast.BlockStmt)
-		walk = func(body *ast.BlockStmt) {
+		arms := argsArms(fn)
+		// A helper has no args of its own to test, so its calls take the arm it was called from.
+		when := func(e *ast.CallExpr, inherited *bool) *bool {
+			if w, ok := arms[ast.NodePos(e)]; ok {
+				return w
+			}
+			return inherited
+		}
+		var walk func(body *ast.BlockStmt, inherited *bool)
+		walk = func(body *ast.BlockStmt, inherited *bool) {
 			if body == nil {
 				return
 			}
@@ -141,7 +151,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// Exact edge: a target function passed by reference.
 								if key := norm(arg.Name); slices.Contains(names, key) {
 									node.Dependencies = appendUniq(node.Dependencies, key)
-									node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: key, CallIndex: callIndex})
+									node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: key, CallIndex: callIndex, WhenArgs: when(e, inherited)})
 								}
 							case *ast.MemberExpr:
 								// Cross-project step (<alias>.<target>). The MemberExpr walk
@@ -150,7 +160,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// it is recognized again here rather than read back from there.
 								if id, ok := arg.Object.(*ast.IdentExpr); ok && arg.Name != types.CrossFileMember {
 									if proj, ok := projectAliases[id.Name]; ok {
-										node.Chain = appendChainStep(node.Chain, types.ChainStep{Project: proj, Target: norm(arg.Name), CallIndex: callIndex})
+										node.Chain = appendChainStep(node.Chain, types.ChainStep{Project: proj, Target: norm(arg.Name), CallIndex: callIndex, WhenArgs: when(e, inherited)})
 									}
 								}
 							case *ast.CallExpr:
@@ -174,7 +184,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									for _, m := range matched {
 										if m != node.Name {
 											node.Dependencies = appendUniq(node.Dependencies, m)
-											node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: m, CallIndex: callIndex})
+											node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: m, CallIndex: callIndex, WhenArgs: when(e, inherited)})
 										}
 									}
 								}
@@ -204,6 +214,9 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						ctxDeclNames[me.Name] && !ctxRooted(me.Object) {
 						flagDynamic(&node, me.Name)
 					}
+					if ctxCall(e, "modifiesExistingFiles") && node.FootprintErr == nil {
+						node.FootprintErr = errors.New("ctx.modifiesExistingFiles was removed: write ctx.writesFiles([...], editsExistingSource: true)")
+					}
 					if kind, globs, ok := ioCall(e); ok {
 						// Record the callee (ctx.readsFiles) position so UnreachedIO knows this
 						// call was reached; keyed on the MemberExpr, matching its full-program scan.
@@ -214,11 +227,26 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						// flag it by kind so the load path can reject the footprint ones.
 						recognized := len(globs)
 						switch kind {
-						case "readsFiles", "writesFiles", "modifiesExistingFiles":
-							refs, crossed, err := footprintCall(globs, e.Args, projectAliases)
+						case "readsFiles", "writesFiles":
+							// The list's elements are judged here, so the call's own
+							// arguments all count as read.
+							recognized = len(e.Args)
+							fa, err := readFootprintArgs(kind, e)
+							if err != nil {
+								if node.FootprintErr == nil {
+									node.FootprintErr = err
+								}
+								break
+							}
+							if fa.dynamic {
+								flagDynamic(&node, kind)
+							}
+							refs, crossed, err := footprintCall(fa.globs, fa.items, projectAliases)
 							// A cross-project file counts as recognized (so it does NOT trip
 							// DynamicIO); a computed rel is not recognized and trips it.
-							recognized += crossed
+							if len(fa.globs)+crossed < len(fa.items) {
+								flagDynamic(&node, kind)
+							}
 							if err != nil && node.FootprintErr == nil {
 								node.FootprintErr = fmt.Errorf("ctx.%s: %w", kind, err)
 							}
@@ -229,13 +257,13 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// crossed. If one grows a field InputRef lacks, this fails to
 								// compile instead of silently zeroing it; do not collapse it
 								// into a field-by-field struct literal.
-								switch kind {
-								case "readsFiles":
+								switch {
+								case kind == "readsFiles":
 									node.ReadsFiles = types.AppendRef(node.ReadsFiles, ref)
-								case "writesFiles":
-									node.WritesFiles = types.AppendRef(node.WritesFiles, types.OutputRef(ref))
-								default:
+								case fa.editsExistingSource:
 									node.ModifiesExistingFiles = types.AppendRef(node.ModifiesExistingFiles, types.UpdateRef(ref))
+								default:
+									node.WritesFiles = types.AppendRef(node.WritesFiles, types.OutputRef(ref))
 								}
 							}
 						case "withCwd":
@@ -270,7 +298,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 										node.DynamicExec = true
 										continue
 									}
-									node.ExecOverrides = appendUniq(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
+									node.ExecOverrides = appendUniq(node.ExecOverrides, fmt.Sprintf("env:%s=%s", ekl.Val, evl.Val))
 								}
 							}
 						case "envInputs":
@@ -303,7 +331,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									pairs = nil
 									break
 								}
-								pairs = append(pairs, globs[i]+"="+globs[i+1])
+								pairs = append(pairs, fmt.Sprintf("%s=%s", globs[i], globs[i+1]))
 							}
 							// Committed only once the whole call is readable; an earlier
 							// ctx.observes in the same target keeps what it recorded.
@@ -326,7 +354,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					if id, ok := e.Callee.(*ast.IdentExpr); ok {
 						if h := funcs[id.Name]; h != nil && !visited[id.Name] {
 							visited[id.Name] = true
-							walk(h.Body)
+							walk(h.Body, when(e, inherited))
 						}
 					}
 				case *ast.IndexExpr:
@@ -354,7 +382,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 				return true
 			})
 		}
-		walk(fn.Body)
+		walk(fn.Body, nil)
 		slices.Sort(node.Charms)
 		node.Spells = groupSpellOps(spellHits)
 		node.DispatchOnly = dispatchOnly(fn, spellHandles)
@@ -591,7 +619,7 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 // not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
-	"readsFiles": true, "writesFiles": true, "modifiesExistingFiles": true, "envInputs": true, "observes": true, "withEnv": true, "withCwd": true,
+	"readsFiles": true, "writesFiles": true, "envInputs": true, "observes": true, "withEnv": true, "withCwd": true,
 }
 
 // CtxDeclNames returns the declaration members this static reader recognizes. Exported
@@ -714,12 +742,66 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
 
-// footprintCall reads one ctx.readsFiles/writesFiles/modifiesExistingFiles call into
-// refs, given the literal globs ioCall collected from it. Each glob carries the "!"
-// exclusions this call declares against the same project (types.ParseGlobs): a
-// cross-project exclusion narrows only that project's globs, and nothing narrows
-// another call's. Same-project refs come first, in argument order, then each crossed
-// project's. crossed counts the <alias>.file arguments recognized.
+// footprintArgs is one ctx.readsFiles/writesFiles call as the static read sees it: the
+// list's elements, the string literals among them, and the flag.
+type footprintArgs struct {
+	items               []ast.Node
+	globs               []string
+	editsExistingSource bool
+	// dynamic is set when the list or the flag is not a literal.
+	dynamic bool
+}
+
+// readFootprintArgs reads ctx.<kind>([paths...], editsExistingSource: <bool>). A shape
+// that was never valid, or was removed, is an error naming the call to write instead; a
+// computed list or flag is not an error here but sets dynamic, which the load path
+// refuses as it refuses any computed footprint.
+func readFootprintArgs(kind string, e *ast.CallExpr) (footprintArgs, error) {
+	var fa footprintArgs
+	if len(e.Args) == 0 {
+		return fa, fmt.Errorf("ctx.%s takes a list of paths: write ctx.%s([\"...\"])", kind, kind)
+	}
+	if lit, ok := e.Args[0].(*ast.StringLit); ok {
+		return fa, fmt.Errorf("ctx.%s takes a list of paths: write ctx.%s([%q, ...])", kind, kind, lit.Val)
+	}
+	for i := 1; i < len(e.Args); i++ {
+		label := ""
+		if i < len(e.ArgNames) {
+			label = e.ArgNames[i]
+		}
+		if kind == "readsFiles" {
+			return fa, fmt.Errorf("ctx.%s takes one list of paths and no editsExistingSource", kind)
+		}
+		if label != "editsExistingSource" {
+			if label == "" {
+				return fa, fmt.Errorf("ctx.%s takes one list of paths, then editsExistingSource: true or false", kind)
+			}
+			return fa, fmt.Errorf("ctx.%s: unknown argument %s: the flag is editsExistingSource", kind, label)
+		}
+		b, ok := e.Args[i].(*ast.BoolLit)
+		if !ok {
+			fa.dynamic = true
+			continue
+		}
+		fa.editsExistingSource = b.Val
+	}
+	list, ok := e.Args[0].(*ast.ListExpr)
+	if !ok {
+		fa.dynamic = true
+		return fa, nil
+	}
+	fa.items = list.Items
+	for _, item := range list.Items {
+		if lit, ok := item.(*ast.StringLit); ok {
+			fa.globs = append(fa.globs, lit.Val)
+		}
+	}
+	return fa, nil
+}
+
+// footprintCall reads one call's list into refs. A "!" exclusion narrows only the globs
+// this call declares in the same project; nothing narrows another call's. Same-project
+// refs come first, then each crossed project's; crossed counts the <alias>.file items.
 func footprintCall(globs []string, args []ast.Node, aliases map[string]string) (refs []types.InputRef, crossed int, err error) {
 	owners := []string{""}
 	declared := map[string][]string{"": globs}
@@ -1030,13 +1112,106 @@ func lastPathSegment(p string) string {
 // appendChainStep keeps the first mention of a target: a body that names the same
 // target in two ctx.needs calls runs it once, at the earlier call, because the memo
 // serves the second call.
+// A target named in both arms of an args test runs either way, so it loses the condition.
 func appendChainStep(chain []types.ChainStep, step types.ChainStep) []types.ChainStep {
-	for _, have := range chain {
+	for i, have := range chain {
 		if have.Project == step.Project && have.Target == step.Target {
+			if !sameArm(have.WhenArgs, step.WhenArgs) {
+				chain[i].WhenArgs = nil
+			}
 			return chain
 		}
 	}
 	return append(chain, step)
+}
+
+func sameArm(a, b *bool) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+// argsArms maps each call inside an arm of an args test in fn's own body to whether that
+// arm runs with args. An args test compares `<args>.len()`, args being fn's second
+// parameter, with 0; any other condition is not read, so its calls stay in both arms.
+// An outer test wins over one nested in it.
+func argsArms(fn *ast.FunDecl) map[ast.Pos]*bool {
+	arms := map[ast.Pos]*bool{}
+	if len(fn.Params) < 2 || fn.Body == nil {
+		return arms
+	}
+	mark := func(n ast.Node, withArgs bool) {
+		ast.Inspect(n, func(n ast.Node) bool {
+			if c, ok := n.(*ast.CallExpr); ok {
+				if _, seen := arms[ast.NodePos(c)]; !seen {
+					arms[ast.NodePos(c)] = &withArgs
+				}
+			}
+			return true
+		})
+	}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if s, ok := n.(*ast.IfStmt); ok && s.BindName == "" {
+			if withArgs, ok := argsTest(s.Cond, fn.Params[1]); ok {
+				mark(s.Then, withArgs)
+				if s.Else != nil {
+					mark(s.Else, !withArgs)
+				}
+			}
+		}
+		return true
+	})
+	return arms
+}
+
+// argsTest reads cond as `args.len() == 0`, `!= 0` or `> 0`, the mirrored `0 == args.len()`,
+// `0 != args.len()` or `0 < args.len()`, or one of those under `!`, and reports whether it
+// holds with args.
+func argsTest(cond ast.Node, args string) (withArgs, ok bool) {
+	if u, isNot := cond.(*ast.UnaryExpr); isNot && u.Op == "!" {
+		withArgs, ok = argsTest(u.Operand, args)
+		return !withArgs, ok
+	}
+	b, isBinary := cond.(*ast.BinaryExpr)
+	if !isBinary {
+		return false, false
+	}
+	switch {
+	case argsLen(b.Left, args) && isZero(b.Right):
+		switch b.Op {
+		case "==":
+			return false, true
+		case "!=", ">":
+			return true, true
+		}
+	case isZero(b.Left) && argsLen(b.Right, args):
+		switch b.Op {
+		case "==":
+			return false, true
+		case "!=", "<":
+			return true, true
+		}
+	}
+	return false, false
+}
+
+func argsLen(n ast.Node, args string) bool {
+	c, ok := n.(*ast.CallExpr)
+	if !ok || len(c.Args) != 0 {
+		return false
+	}
+	m, ok := c.Callee.(*ast.MemberExpr)
+	if !ok || m.Name != "len" || m.Namespaced {
+		return false
+	}
+	id, ok := m.Object.(*ast.IdentExpr)
+	return ok && id.Name == args
+}
+
+func isZero(n ast.Node) bool {
+	lit, ok := n.(*ast.IntLit)
+	return ok && lit.Val == 0
 }
 
 // appendUniq appends v to s unless it is already present, keeping declaration order.
@@ -1045,4 +1220,58 @@ func appendUniq[T comparable](s []T, v T) []T {
 		return s
 	}
 	return append(s, v)
+}
+
+// GlobsMayOverlap reports whether two declared globs, relative to one project, can name
+// one path. A literal is matched exactly, exclusions included. Two patterns overlap
+// unless an exclusion covers one or their segments provably diverge; past that it errs
+// toward true, as [types.GlobsOverlap] does.
+func GlobsMayOverlap(a, b types.Glob) bool {
+	aMeta, bMeta := types.IsGlobMeta(a.Pattern), types.IsGlobMeta(b.Pattern)
+	switch {
+	case !aMeta && !bMeta:
+		return a.Pattern == b.Pattern
+	case !aMeta:
+		return b.Match(a.Pattern)
+	case !bMeta:
+		return a.Match(b.Pattern)
+	}
+	if a.Excludes(b.Pattern) || b.Excludes(a.Pattern) || segmentsDisjoint(a.Pattern, b.Pattern) {
+		return false
+	}
+	return types.GlobsOverlap(a.Pattern, b.Pattern)
+}
+
+// segmentsDisjoint proves two patterns match no common path by walking their segments up
+// to the first "**". GlobsOverlap stops at the first metacharacter, so "gen/**" and
+// "*.mod" would otherwise read as overlapping.
+func segmentsDisjoint(a, b string) bool {
+	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	for i := 0; ; i++ {
+		if i < len(as) && as[i] == "**" || i < len(bs) && bs[i] == "**" {
+			return false
+		}
+		if i == len(as) || i == len(bs) {
+			return len(as) != len(bs)
+		}
+		if !segmentsMeet(as[i], bs[i]) {
+			return true
+		}
+	}
+}
+
+// segmentsMeet reports whether two path segments can match one name; two patterns are
+// assumed to.
+func segmentsMeet(a, b string) bool {
+	switch aMeta, bMeta := types.IsGlobMeta(a), types.IsGlobMeta(b); {
+	case !aMeta && !bMeta:
+		return a == b
+	case !aMeta:
+		ok, err := path.Match(b, a)
+		return ok || err != nil
+	case !bMeta:
+		ok, err := path.Match(a, b)
+		return ok || err != nil
+	}
+	return true
 }

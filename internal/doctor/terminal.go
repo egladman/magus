@@ -105,7 +105,7 @@ func (r *runner) checkTerminal() types.Check {
 	// cost is that this is the one setting that can make it render wrong, so it
 	// is reported instead.
 	if !utf8Locale() {
-		degraded = append(degraded, "locale is not UTF-8 ("+localeSource()+"), so the band's border may render as stray characters; set LANG to a UTF-8 value")
+		degraded = append(degraded, fmt.Sprintf("locale is not UTF-8 (%s), so the band's border may render as stray characters; set LANG to a UTF-8 value", localeSource()))
 	}
 	if height > 0 && height < minInteractiveHeight {
 		degraded = append(degraded, fmt.Sprintf("only %d rows; the pinned band needs a scrolling area above it and stands down below about %d", height, minInteractiveHeight))
@@ -181,7 +181,7 @@ func utf8Locale() bool {
 func localeSource() string {
 	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
 		if v := os.Getenv(k); v != "" {
-			return k + "=" + v
+			return fmt.Sprintf("%s=%s", k, v)
 		}
 	}
 	return "none of LC_ALL, LC_CTYPE or LANG is set"

@@ -185,7 +185,7 @@ func TestAgentInstallReportsEachRemovalOnStdout(t *testing.T) {
 		require.NoError(t, agentInstallCmd(context.Background(), []string{dest, "--dir", dir, "--skill-form", "full", "--force"}))
 	})
 
-	assert.Equal(t, "removed skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n", out)
+	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
 	assert.NoDirExists(t, retired)
 	assert.DirExists(t, handAuthored)
 }
@@ -263,7 +263,7 @@ func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 // root project that writes MAGUS.md earns it, and a directory that is no workspace root
 // never does.
 func TestDeclaresRoutingIndex(t *testing.T) {
-	const writer = "import \"magus\";\nexport fun index_generate(ctx: magus\\Context, args: [str]) > void !> any {\n    ctx.writesFiles(\"MAGUS.md\");\n}\n"
+	const writer = "import \"magus\";\nexport fun index_generate(ctx: magus\\Context, args: [str]) > void !> any {\n    ctx.writesFiles([\"MAGUS.md\"]);\n}\n"
 	const silent = "import \"magus\";\nexport fun noop(ctx: magus\\Context, args: [str]) > void !> any {\n}\n"
 
 	for name, tc := range map[string]struct {

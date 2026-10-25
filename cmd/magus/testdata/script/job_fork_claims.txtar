@@ -56,11 +56,11 @@ stdout '^wave/open$'
 stdout '^wave/new$'
 
 # A job holding every Buzz file by a pattern, in a third checkout. A leading ** is refused
-# as too broad (MGS3043) unless the record waives it.
+# as too broad (MGS3043) unless the record permits it.
 cd ../cara
 ! exec magus job fork wave/cfg --criteria 'tune buzz' --write-paths '**/*.buzz' --check 'lint .'
 stderr 'MGS3043'
-stderr 'waive'
+stderr 'deviation'
 stdin $WORK/cfg.json
 exec magus job fork --stdin
 exec magus job exec wave/cfg
@@ -75,16 +75,18 @@ stderr '`magusfile.buzz#project.name`, `magusfile.buzz#project.targets.lint`'
 exec magus session attention
 stdout -count=1 'job wave/cfg holds magusfile.buzz'
 
-# A key claim forks; a key whose entries it would also hold is a word several share.
+# A key claim names that key and not a sibling that shares its prefix, and a map key claims
+# every entry under it.
 exec magus job fork wave/slots --criteria 'lint timeout' --write-paths 'magusfile.buzz#project.targets.lint' --check 'lint .'
-! exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .'
-stderr 'MGS3031'
-stderr '"magusfile.buzz#project.targets" names 2 declarations of magusfile.buzz'
+exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .'
+exec magus ls jobs -o name
+stdout '^wave/slots$'
+stdout '^wave/targets$'
 
 -- cfg.json --
 {"schema_version": 11, "id": "wave/cfg", "criteria": "tune buzz", "write_paths": ["**/*.buzz"],
  "check": {"target": "lint", "project": "."},
- "waivers": [{"code": "MGS3043", "subject": "**/*.buzz", "reason": "the job tunes every magusfile"}]}
+ "deviations": [{"code": "MGS3043", "subject": "**/*.buzz", "reason": "the job tunes every magusfile"}]}
 -- site/.gitignore --
 .magus/
 -- site/.gitattributes --
@@ -100,13 +102,18 @@ magus\project({
     "name": "site",
     "targets": {
         "lint": {"timeout": "5m"},
+        "lint-fast": {"timeout": "1m"},
     },
 });
 
 // lint fails on an empty file.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("**/*.go");
+    ctx.readsFiles(["**/*.go"]);
     proc\exec("sh", ["-c", "for f in *.go; do test -s \"$f\" || exit 1; done"]);
+}
+
+export fun lint_fast(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["**/*.go"]);
 }
 -- site/run.go --
 package run

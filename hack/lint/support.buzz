@@ -4,6 +4,7 @@
 namespace support;
 
 import "fs";
+import "std";
 import "magus";
 import "serialize";
 import "strings";
@@ -179,6 +180,43 @@ export fun sorted(keys: [str]) > [str] {
     return copy.sort(fun (a: str, b: str) > bool => strings\compare(a, b: b) < 0);
 }
 
+// Staleness is what a rule reading a symbol index makes of one index's freshness: the
+// findings it fails, and whether the rest of the index is current enough to judge.
+export object Staleness {
+    findings: [Finding],
+    judgeable: bool,
+}
+
+// staleness judges freshness per changed file. An out-of-date index that lists every source
+// changed since it was built fails each of them, so a run scoped to other files passes and
+// the rest is judged. One that lists only some, or a missing or unvouched index, fails at
+// its project and leaves nothing to judge. judging names what the rule could not judge.
+export fun staleness(idx: any, judging: str) > Staleness {
+    final freshness: str = idx["freshness"] ?? "";
+    if (freshness == "up-to-date") {
+        return Staleness{ findings = [<Finding>], judgeable = true };
+    }
+    final project: str = idx["project"]["path"] ?? ".";
+    final lang: str = idx["language"] ?? "";
+    final detail: str = idx["detail"] ?? "";
+    final rebuild = "Rebuild it with `magus graph build`, then rerun lint.";
+    final fix = if (detail != "") detail + "\n" + rebuild else rebuild;
+    final changed: [str] = idx["changed"] ?? [<str>];
+    final count = std\toInt(idx["changed_count"] ?? 0);
+    if (freshness != "out-of-date" or changed.len() == 0 or count > changed.len()) {
+        return Staleness{ judgeable = false, findings = [Finding{ path = project,
+            message = "the {lang} symbol index of {project} is {freshness}, so its {judging} cannot be judged",
+            fix = fix }] };
+    }
+    final found = mut [<Finding>];
+    foreach (file in changed) {
+        found.append(Finding{ path = file,
+            message = "changed since the {lang} symbol index of {project} was built, so its {judging} cannot be judged",
+            fix = fix });
+    }
+    return Staleness{ findings = found, judgeable = true };
+}
+
 // missing is the finding a rule reports for a file it reads that the tree lacks.
 export fun missing(p: str) > Finding {
     return Finding{ path = p, message = "cannot read " + p,
@@ -225,6 +263,27 @@ test "scalar reads a YAML scalar as its text" {
     assert\equal(has(doc, key: "a"), want: true, message: "present");
     assert\equal(has(doc, key: "z"), want: false, message: "absent");
     assert\equal(pointer("a/b~c"), want: "a~1b~0c", message: "escaped");
+}
+
+test "a stale index fails each changed file it lists and stays judgeable" {
+    final fresh = staleness({"project": {"path": "."}, "language": "go", "freshness": "up-to-date"}, judging: "docs");
+    assert\equal(fresh.findings.len(), want: 0, message: "current");
+    assert\isTrue(fresh.judgeable, message: "current is judged");
+    final listed = staleness({"project": {"path": "."}, "language": "go", "freshness": "out-of-date",
+        "changed": ["a.go", "b/c.go"], "changed_count": 2.0}, judging: "docs");
+    assert\equal(listed.findings.len(), want: 2, message: "one per changed file");
+    assert\equal(listed.findings[1].path, want: "b/c.go", message: "at the file");
+    assert\isTrue(listed.judgeable, message: "the rest is current");
+}
+
+test "a stale index that lists only some changes, or none, fails at its project" {
+    final short = staleness({"project": {"path": "libs/x"}, "language": "go", "freshness": "out-of-date",
+        "changed": ["libs/x/a.go"], "changed_count": 9.0}, judging: "docs");
+    assert\equal(messages(short.findings), want: ["the go symbol index of libs/x is out-of-date, so its docs cannot be judged"], message: "truncated");
+    assert\isTrue(!short.judgeable, message: "an unlisted change could be anywhere");
+    final missing = staleness({"project": {"path": "libs/x"}, "language": "go", "freshness": "not-indexed"}, judging: "docs");
+    assert\equal(missing.findings[0].path, want: "libs/x", message: "at the project");
+    assert\isTrue(!missing.judgeable, message: "nothing to judge");
 }
 
 test "fixture round-trips through read" {

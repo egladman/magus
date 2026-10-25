@@ -198,7 +198,7 @@ func contractFuncSignature(ft *ast.FuncType, imports map[string]string) (ast.Exp
 			return nil, "", err
 		}
 		for _, n := range p.Names {
-			params = append(params, n.Name+": "+buzzType)
+			params = append(params, fmt.Sprintf("%s: %s", n.Name, buzzType))
 		}
 	}
 	return ft.Results.List[0].Type, strings.Join(params, ", "), nil
@@ -285,7 +285,7 @@ func contractReturn(rt reflect.Type, handler bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "{str: fun(" + buzzName(reflect.TypeFor[types.Target]()) + ") " + elem + "}", nil
+	return fmt.Sprintf("{str: fun(%s) %s}", buzzName(reflect.TypeFor[types.Target]()), elem), nil
 }
 
 func renderContractTable(funcs, harness []contractFunc) ([]byte, error) {

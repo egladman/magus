@@ -2,6 +2,7 @@ package console
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sort"
 	"sync"
@@ -182,7 +183,7 @@ func (r *RunRegistry) pruneLocked(now time.Time) {
 }
 
 // targetKey joins a project and target into a map key that cannot collide across projects.
-func targetKey(project, target string) string { return project + "\x00" + target }
+func targetKey(project, target string) string { return fmt.Sprintf("%s\x00%s", project, target) }
 
 // resultState maps a journal result status onto a target run state. An unrecognized status
 // (e.g. a future journal status this build does not know) maps to the zero/unspecified state

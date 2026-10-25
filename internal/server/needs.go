@@ -145,7 +145,7 @@ func serviceNeeds(path string) (map[string]types.Need, error) {
 		if !ok {
 			return nil, fmt.Errorf("server: procedure %s/%s has no Need", name, m)
 		}
-		needs["/"+string(name)+"/"+string(m)] = need
+		needs[fmt.Sprintf("/%s/%s", string(name), string(m))] = need
 	}
 	return needs, nil
 }

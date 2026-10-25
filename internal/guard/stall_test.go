@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,8 +35,8 @@ func TestGradeStallNamesTheExitOnTheVerdictLine(t *testing.T) {
 	blocked := types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Reason: "outside the write paths.\nthe rationale"}
 
 	v := gradeStall(on, blocked, "job-a", at)
-	assert.Equal(t, "outside the write paths. Only the root can clear this: exit with `"+hint.JobExit.With("job-a", "--stdin")+
-		"`, naming it in unresolved_risks.\nthe rationale", v.Reason)
+	assert.Equal(t, fmt.Sprintf("outside the write paths. Only the root can clear this: exit with `%s`, naming it in unresolved_risks.\nthe rationale",
+		hint.JobExit.With("job-a", "--stdin")), v.Reason)
 
 	assert.Equal(t, blocked, gradeStall(Dependencies{}, blocked, "job-a", at), "off by default")
 	assert.Equal(t, blocked, gradeStall(on, blocked, "", at), "no lease, no job to exit")

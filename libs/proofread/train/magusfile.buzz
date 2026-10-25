@@ -17,7 +17,7 @@ magus\project({
 export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    ctx.writesFiles(["**/*.go", "go.mod", "go.sum"], editsExistingSource: true);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
 }
@@ -26,8 +26,8 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx, {
 // The calibrate tests replay the cases internal/calibrate embeds and judge with the
 // libs/proofread rules, so both are inputs.
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "../*.go", "../internal/**/*.go", "../go.mod", "../go.sum",
-                   "../internal/wordclass/gen/model.gz", "../internal/wordclass/testdata/*", "../internal/calibrate/cases/*.txtar");
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "../*.go", "../internal/**/*.go", "../go.mod", "../go.sum",
+                    "../internal/wordclass/gen/model.gz", "../internal/wordclass/testdata/*", "../internal/calibrate/cases/*.txtar"]);
     go["go-test"](ctx, {"args": ["./..."] + args});
 }
 

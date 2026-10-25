@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -448,8 +449,8 @@ func TestSessionLoadDropsAnotherRepositorysEvents(t *testing.T) {
 	elsewhere := t.TempDir()
 
 	out, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"cwd":"`+root+`","kind":"file.read","ref":"r1","text":"a.go"}`,
-		`{"host":"h1","session":"s1","ts":2,"cwd":"`+elsewhere+`","kind":"file.read","ref":"r2","text":"b.go"}`)
+		fmt.Sprintf("{\"host\":\"h1\",\"session\":\"s1\",\"ts\":1,\"cwd\":\"%s\",\"kind\":\"file.read\",\"ref\":\"r1\",\"text\":\"a.go\"}", root),
+		fmt.Sprintf("{\"host\":\"h1\",\"session\":\"s1\",\"ts\":2,\"cwd\":\"%s\",\"kind\":\"file.read\",\"ref\":\"r2\",\"text\":\"b.go\"}", elsewhere))
 	require.NoError(t, err)
 	assert.Contains(t, out, "loaded 1, deduped 0, dropped 1")
 }
@@ -609,10 +610,12 @@ func TestSessionShowNamesTheLoadWhenNothingIsThere(t *testing.T) {
 // TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory is the bound: a line longer than
 // any event is rejected by number and skipped, and the lines after it still load.
 func TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory(t *testing.T) {
-	long := `{"event":"command","host":"claude-code","session":"s1","cwd":"/nowhere","command":"` +
-		strings.Repeat("x", loadMaxLineBytes+1) + `"}`
+	long := fmt.Sprintf("{\"event\":\"command\",\"host\":\"claude-code\",\"session\":\"s1\",\"cwd\":\"/nowhere\",\"command\":\"%s\"}", strings.Repeat("x", loadMaxLineBytes+1))
 
-	summary, err := readLoadStream(strings.NewReader(long+"\n\n"+long+"\n"), t.TempDir(), newRejudge(t.Context(), ""))
+	summary, err := readLoadStream(strings.NewReader(fmt.Sprintf(`%s
+
+%s
+`, long, long)), t.TempDir(), newRejudge(t.Context(), ""))
 
 	require.NoError(t, err)
 	require.Len(t, summary.Rejects, 2)

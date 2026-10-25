@@ -127,7 +127,7 @@ func emitConcurrencyNudge(ctx context.Context, sink *magus.Sink, m *magus.Magus,
 	}
 	hint.AppendServedNext(gate.CacheDir(), next)
 	rerun := strings.TrimSuffix(hint.Render(next, func(types.NextStep) string { return "" }), "\n")
-	sink.EmitNotice(ctx, slog.LevelInfo, "", line+"\n"+rerun)
+	sink.EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf("%s\n%s", line, rerun))
 }
 
 // printNext writes a result's breadcrumbs, the command on its own line and the reason

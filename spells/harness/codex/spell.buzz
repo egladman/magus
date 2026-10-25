@@ -36,11 +36,10 @@ final EVERY_TOOL = "*";
 final TOOLS_DIR = ".codex/magus/tools";
 
 // One glue serves every entry that judges: each event reaches `magus shell` whole, and magus
-// reads off it what the call is, a command, a patch, an MCP call or a spawn. No entry
-// declares --observes-skill-loads: Codex has no skill tool to match, so a rule that requires
-// a skill load has nothing to read and must stand down.
+// reads off it what the call is, a command, a patch, an MCP call or a spawn. The host name is
+// the one argument: Codex has no skill tool to match, so its limits say no skill load is seen.
 fun codex_guard_flags() > [str] {
-    return ["--agent-name", mgs_getName(), "--tool-rows", TOOLS_DIR];
+    return ["--agent-name", mgs_getName()];
 }
 
 // Codex parses a SessionStart or SubagentStart hook's stdout as a reply, so the brief has
@@ -340,7 +339,7 @@ test "every hook appears in the entries, so the drift check magus runs passes" {
 
 test "every glue command is a plain argv that names this host, and rehydrate takes none" {
     final named = " --agent-name {mgs_getName()}";
-    assert\isTrue(codex_guard_command().indexOf(named + " ") != null, "command hook");
+    assert\isTrue(codex_guard_command().endsWith(named), "command hook, with the host name its one argument");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
     assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
@@ -348,7 +347,7 @@ test "every glue command is a plain argv that names this host, and rehydrate tak
         final cmd = codex_command(hook);
         assert\isTrue(cmd.startsWith("magus buzz -C . -s "), "name the working directory without an environment prefix or POSIX shell: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
-        assert\isTrue(cmd.indexOf("--observes-skill-loads") == null, "Codex has no hook on a skill load: {cmd}");
+        assert\isTrue(cmd.indexOf("--tool-rows") == null, "magus finds the tool rows by host: {cmd}");
     }
 }
 

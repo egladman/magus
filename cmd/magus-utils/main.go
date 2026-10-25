@@ -63,7 +63,7 @@ func main() {
 // usageLine lists every registered subcommand. Derived from scribes rather than
 // written out: the hand-maintained list named 13 of the 20 that existed.
 func usageLine() string {
-	return "usage: magus-utils <" + strings.Join(slices.Sorted(maps.Keys(scribes)), "|") + "> [flags]"
+	return fmt.Sprintf("usage: magus-utils <%s> [flags]", strings.Join(slices.Sorted(maps.Keys(scribes)), "|"))
 }
 
 func usage() {

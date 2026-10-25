@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -85,14 +86,16 @@ func TestRenderSpellReportsTheDescriptor(t *testing.T) {
 			assert.Equal(t, docs.Frontmatter{
 				Title:         name + " spell",
 				Description:   meta.description,
-				GeneratedFrom: "spells/" + meta.dir + "/spell.buzz",
+				GeneratedFrom: fmt.Sprintf("spells/%s/spell.buzz", meta.dir),
 				Tags:          fm.Tags, // the two assertions below pin them
 			}, fm)
 			assert.Equal(t, fm.Tags[0], name, "the spell's own name leads its tags")
 			assert.Equal(t, len(fm.Tags), len(slices.Compact(slices.Sorted(slices.Values(fm.Tags)))), "tags are deduped: %v", fm.Tags)
 
-			assert.Contains(t, body, "# "+name+"\n\n"+meta.intro)
-			assert.Contains(t, body, "**Runtime name:** `"+name+"` (source `spells/"+meta.dir+"/`)")
+			assert.Contains(t, body, fmt.Sprintf(`# %s
+
+%s`, name, meta.intro))
+			assert.Contains(t, body, fmt.Sprintf("**Runtime name:** `%s` (source `spells/%s/`)", name, meta.dir))
 			assert.Contains(t, body, "## Passing arguments to ops")
 
 			if d.Opaque {
@@ -119,9 +122,11 @@ func TestRenderSpellReportsTheDescriptor(t *testing.T) {
 			}
 
 			for _, op := range d.OpNames() {
-				assert.Contains(t, body, "\n## "+op+"\n", "no section for op %s", op)
+				assert.Contains(t, body, fmt.Sprintf(`
+## %s
+`, op), "no section for op %s", op)
 				if cmd := resolvedArgv(d.Ops[op]); cmd != "" {
-					assert.Contains(t, body, "**Command:** `"+cmd+"`")
+					assert.Contains(t, body, fmt.Sprintf("**Command:** `%s`", cmd))
 				} else {
 					assert.Contains(t, body, "**Command:** none; this op composes the spell's other ops")
 				}
@@ -299,7 +304,16 @@ func TestPruneUnregisteredReportsAnUnreadableDirectory(t *testing.T) {
 // landing builds a stand-in for docs/spells.md: hand-written prose either side
 // of the generated region.
 func landing(begin, end string) string {
-	return "# Spells\n\nA spell is a plugin.\n\n" + begin + "\nstale table\n" + end + "\n\nMore prose.\n"
+	return fmt.Sprintf(`# Spells
+
+A spell is a plugin.
+
+%s
+stale table
+%s
+
+More prose.
+`, begin, end)
 }
 
 // TestInjectSpellListRewritesOnlyTheMarkedRegion: the at-a-glance list lives on
@@ -324,7 +338,7 @@ func TestInjectSpellListRewritesOnlyTheMarkedRegion(t *testing.T) {
 		if lang == "" {
 			lang = "-"
 		}
-		assert.Contains(t, got, "| [`"+name+"`](spells/"+name+".md) | "+lang+" | ")
+		assert.Contains(t, got, fmt.Sprintf("| [`%s`](spells/%s.md) | %s | ", name, name, lang))
 	}
 
 	// Re-running is idempotent: an unchanged region is not rewritten, so the

@@ -109,20 +109,20 @@ cd read-ws
 # case: command/deny
 # No offset and no limit: the whole file.
 stdin $WORK/read-whole.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'big.go'
 
 # case: command/deny
 # A limit past 300 lines counts as whole.
 stdin $WORK/read-huge-limit.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 
 # case: command/pass
 # An offset and a limit inside the threshold is the bounded read the deny points to.
 stdin $WORK/read-range.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout 'permissionDecision'
 cd $WORK
 
@@ -187,7 +187,7 @@ rm $WORK/home/state
 # An empty command on the shell tool. The tool is one the guard knows, so a call with
 # nothing to run passes rather than being named as a tool no rule could read.
 stdin $WORK/empty-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/pass
@@ -195,14 +195,14 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # envelope, where the decoder finds no command, no path and no prompt and says there is
 # nothing to judge.
 stdin $WORK/null-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/pass
 # No command field at all, and no other shape magus reads either. The envelope goes whole
 # and the decoder answers that it holds nothing to judge.
 stdin $WORK/no-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/pass
@@ -229,33 +229,32 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 ! stdout .
 cd $WORK
 
-# --- the per-entry flag route: the argv after `--` ---------------------------
+# --- the host's capability: read from the rows install wrote for it ------------
 #
 # A spawn carries a prompt and a subagent type rather than one string, so it takes the same
-# whole-event route the MCP cases above do. What it adds is the OTHER knob: the capability
-# an entry declares about itself. Only a wiring that also matches its host's skill tool may
-# pass --observes-skill-loads, so the rule that requires a skill before a spawn fires
-# exactly where loads are reported.
+# whole-event route the MCP cases above do. Whether its host sees a skill load is the host's
+# limits, which install writes beside its tool rows, so the rule that requires a skill before a
+# spawn fires exactly where loads are reported.
 
 # Inside a fixture workspace, because the rule stands down without a cache dir to key its
-# per-session marker on: that is the same fail-open the flag itself exists for, and a case
+# per-session marker on: that is the same fail-open a host that sees no load gets, and a case
 # run at $WORK would pass both ways and pin nothing. The workspace sets spawn-unbriefed to
 # deny, since it only advises by default.
 cd push-ws
 
-# What varies between the two cases below is only the flag.
+# What varies between the two cases below is only the host the entry names.
 
 # case: command/pass
-# Unflagged: the wiring reports no skill loads, so the rule stands down rather than denying
+# A host whose limits say no skill load is seen: the rule stands down rather than denying
 # every spawn on a host that cannot satisfy it.
 stdin $WORK/spawn-call.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name blind
 ! stdout .
 
 # case: command/deny
-# A SUPPORTED flag: the glue matches it against the set it publishes and passes it on.
+# A host whose limits say its loads are seen.
 stdin $WORK/spawn-call.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'magus-multi-agent'
 
@@ -268,7 +267,7 @@ stdin $WORK/deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --not-a-flag
 stderr 'magus-command.buzz: unsupported argument "--not-a-flag"'
 stderr 'judged WITHOUT it'
-stderr 'Supported: --observes-skill-loads'
+stderr 'takes only --agent-name <host>'
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
@@ -282,14 +281,6 @@ stderr 'magus-command.buzz: unsupported argument ""'
 stdout '"permissionDecision":"deny"'
 
 # case: command/deny
-# A supported flag given twice, which is what two hook entries merged by hand look like.
-# Forwarded twice it reached `magus shell` as a repeated flag; deduped, the verdict is the
-# one the single-flag case above already pins.
-stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --observes-skill-loads --observes-skill-loads
-! stderr 'unsupported argument'
-stdout '"permissionDecision":"deny"'
-
 cd $WORK
 
 # --- magus-command.buzz: a message the person typed ---------------------------
@@ -304,48 +295,49 @@ cd $WORK
 cd arch-ws
 
 stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
 # case: command/deny
 stdin $WORK/arch-bash.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
 stdout 'magus-architecture-review'
 
 # case: command/pass
 # Loading the skill clears it.
 stdin $WORK/arch-skill.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 stdin $WORK/arch-bash.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: command/pass
 # A message that asks no structure question records nothing, so that session's next call runs.
 stdin $WORK/prompt-ordinary.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 stdin $WORK/arch-bash-s2.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: path/deny
 # The path entry declares the capability too, and a write that creates a directory waits
 # on the same load whatever was asked.
 stdin $WORK/arch-new-dir.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
 stdout 'creating the new directory'
 
 # case: path/advise
-# Unflagged, the rule stands down and the new-directory advisory speaks instead.
+# On a host whose limits say no skill load is seen, the rule stands down and the
+# new-directory advisory speaks instead.
 stdin $WORK/arch-new-dir.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name blind
 stdout 'additionalContext'
 stdout 'NEW DIRECTORY'
 
@@ -541,14 +533,14 @@ env CURSOR_HOOK_STATE_DIR=$WORK/cursor-state
 
 # case: command/pass
 stdin cursor-pre-shell-pass.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'updated_input'
 
 # case: command/deny
 # A refused command is never rewritten: it does not run.
 stdin cursor-pre-shell-deny.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
 stdout 'whole-tree git stash'
 ! stdout 'updated_input'
@@ -579,52 +571,52 @@ env __MAGUS_BIN=$WORK/counting-magus
 env COUNTING_MAGUS_LOG=$WORK/calls.log
 
 stdin cursor-pre-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'updated_input'
-grep 'shell .*observes-skill-loads' $WORK/calls.log
+grep 'shell .*--agent-name cursor' $WORK/calls.log
 
 # beforeShellExecution sees the same line, and lets it through unjudged.
 stdin cursor-before-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 
 stdin cursor-post-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
 grep -count=1 '^shell ' $WORK/calls.log
 
 # The verdict is spent: a second after-call event for the same id judges afresh.
 stdin cursor-post-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 grep -count=2 '^shell ' $WORK/calls.log
 
 # A failed call gets its advice on postToolUseFailure, again from the filed verdict.
 stdin cursor-pre-shell-failing.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin cursor-post-shell-failing.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
 grep -count=3 '^shell ' $WORK/calls.log
 
 # Cursor reuses one tool_use_id for a Read and the Write after it, so the tool name is
 # part of the key: the Write's postToolUse does not answer from the Read's verdict.
 stdin cursor-pre-read-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin cursor-pre-write-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin cursor-post-write-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
 stdin cursor-post-read-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
 grep -count=5 '^shell ' $WORK/calls.log
 
 # A Read of a SKILL.md is how Cursor loads a skill, so it goes to magus as the Read it
 # is, which magus records as the load, rather than as the `cat` the other reads become.
 stdin cursor-pre-skill-read.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 grep '"tool_name":"Read"' $WORK/calls.log.stdin
 grep 'skills/magus-run/SKILL.md' $WORK/calls.log.stdin
@@ -634,29 +626,29 @@ grep 'skills/magus-run/SKILL.md' $WORK/calls.log.stdin
 # JSON string; postToolUse names the same call MCP:<tool>, its input an object with the
 # keys in another order and no server, and carries the advice to the model.
 stdin cursor-mcp-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 grep '"tool_name":"mcp__magus__client"' $WORK/calls.log.stdin
 grep '"tool_input":\{"' $WORK/calls.log.stdin
 stdin cursor-post-mcp-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
 grep -count=7 '^shell ' $WORK/calls.log
 
 # preCompact marks the conversation, and the next after-call reply carries the brief
 # with the call's own advice. Only the next: the mark is spent.
 stdin cursor-pre-compact.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '\{\}'
 stdin cursor-pre-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin cursor-post-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout 'COUNTED-ADVICE\\n\\nCOUNTED-BRIEF'
 stdin cursor-pre-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin cursor-post-shell-counted.json
-exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 ! stdout 'COUNTED-BRIEF'
 env __MAGUS_BIN=
 env COUNTING_MAGUS_LOG=
@@ -750,6 +742,12 @@ stdin $WORK/stop-event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz
 ! stdout .
 stderr 'MGS3024'
+
+# The host version that resumes a subagent comes from the rows install wrote, and the glue
+# takes no argument for it.
+stdin $WORK/stop-event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stderr 'unsupported argument'
 
 # It reached magus rather than being silent because it resolved nothing: the checkpoints
 # just recorded are in the session the wrapper named.
@@ -898,7 +896,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_N
 # A message is as silent: the guard's unavailable notice would reach the model as context
 # on every turn, and nothing about the message itself was ever going to be enforced.
 stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
@@ -1251,10 +1249,10 @@ stdout 'stays with the orchestrator, not a worker'
 
 # case: command/deny
 # The same worker asks its host to run a magus target in the background. The glue reads
-# run_in_background and timeout off the event, forwards them with the foreground limits
-# the entry declares, and the worker that would park is refused.
+# run_in_background and timeout off the event and forwards them; the foreground limits come
+# from the host's rows, and the worker that would park is refused.
 stdin $WORK/background-run-worker.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --foreground-default-ms 120000 --foreground-max-ms 600000
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
 stdout 'in the background; run it in the foreground with a timeout that covers it'
@@ -1474,15 +1472,15 @@ magus\project({
     "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
 });
 magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}, "unjudged-tool": "advise"});
--- tools/version --
+-- .testscript/magus/tools/version --
 1
--- tools/runs --
+-- .testscript/magus/tools/runs --
 Bash
--- tools/inert --
+-- .testscript/magus/tools/inert --
 TodoWrite
--- read-ws/tools/version --
+-- read-ws/.testscript/magus/tools/version --
 1
--- read-ws/tools/reads --
+-- read-ws/.testscript/magus/tools/reads --
 Read
 -- read-ws/big.go --
 package fixture
@@ -1726,3 +1724,53 @@ exit 0
 {"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "MCP:client", "tool_use_id": "m-1", "tool_input": {"args": {"a": 2, "b": 1}, "script": "x"}, "tool_output": "{}"}
 -- cursor-pre-compact.json --
 {"hook_event_name": "preCompact", "conversation_id": "c2", "session_id": "c2", "trigger": "auto", "context_tokens": 180000, "context_window_size": 200000}
+-- .testscript/magus/tools/host --
+testscript
+-- .testscript/magus/tools/limits --
+{"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
+-- read-ws/.testscript/magus/tools/host --
+testscript
+-- read-ws/.testscript/magus/tools/limits --
+{"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
+-- push-ws/.testscript/magus/tools/version --
+1
+-- push-ws/.testscript/magus/tools/host --
+testscript
+-- push-ws/.testscript/magus/tools/limits --
+{"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
+-- arch-ws/.testscript/magus/tools/version --
+1
+-- arch-ws/.testscript/magus/tools/host --
+testscript
+-- arch-ws/.testscript/magus/tools/limits --
+{"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
+-- arch-ws/.blind/magus/tools/version --
+1
+-- arch-ws/.blind/magus/tools/host --
+blind
+-- arch-ws/.blind/magus/tools/limits --
+{}
+-- notes-ws/.testscript/magus/tools/version --
+1
+-- notes-ws/.testscript/magus/tools/host --
+testscript
+-- notes-ws/.testscript/magus/tools/limits --
+{"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
+-- push-ws/.blind/magus/tools/version --
+1
+-- push-ws/.blind/magus/tools/host --
+blind
+-- push-ws/.blind/magus/tools/limits --
+{}
+-- .cursor/magus/tools/version --
+1
+-- .cursor/magus/tools/host --
+cursor
+-- .cursor/magus/tools/limits --
+{"observes_skill_loads":true}
+-- notes-ws/.cursor/magus/tools/version --
+1
+-- notes-ws/.cursor/magus/tools/host --
+cursor
+-- notes-ws/.cursor/magus/tools/limits --
+{"observes_skill_loads":true}

@@ -242,7 +242,7 @@ type Project struct {
 	// TargetOutputs are per-target ctx.writesFiles refs. When a target has any, they
 	// replace the broad project/spell output baseline for that target's replay set.
 	TargetOutputs map[string][]OutputRef
-	// TargetUpdates are per-target ctx.modifiesExistingFiles refs: existing files the
+	// TargetUpdates are per-target ctx.writesFiles(..., editsExistingSource: true) refs: existing files the
 	// target changes in place.
 	// Deliberately absent from AllOutputs, which is what makes magus clean skip them and
 	// the cache neither snapshot nor replay them. See types.UpdateRef.
@@ -354,13 +354,13 @@ func RootGlob(projectPath, glob string) string {
 	if projectPath == "" || projectPath == "." {
 		return path.Clean(glob)
 	}
-	return path.Clean(projectPath + "/" + glob)
+	return path.Clean(fmt.Sprintf("%s/%s", projectPath, glob))
 }
 
 // Glob is one declared doublestar pattern and the exclusions declared with it.
 //
 // A magusfile spells an exclusion in-band, as a "!pattern" argument to the same call:
-// ctx.writesFiles("gen/*.go", "!gen/runtime.go"). [ParseGlobs] reads that call once,
+// ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]). [ParseGlobs] reads that call once,
 // where it is declared, into one Glob per positive pattern, each carrying every
 // exclusion of the call. Order within the call does not matter, and an exclusion never
 // reaches a pattern declared by another call, so a list of Globs is a plain union that
@@ -453,7 +453,7 @@ func (g Glob) String() string {
 	if len(g.Except) == 0 {
 		return g.Pattern
 	}
-	return g.Pattern + " !" + strings.Join(g.Except, " !")
+	return fmt.Sprintf("%s !%s", g.Pattern, strings.Join(g.Except, " !"))
 }
 
 // GlobStrings renders each glob with [Glob.String], for a display field that lists one
@@ -574,7 +574,7 @@ func InvalidGlobs(globs []Glob) []string {
 
 // DeclaredGlobs is every glob this project declares, rooted at the WORKSPACE rather
 // than at the project: the project-wide Sources and AllOutputs, plus the per-target
-// ctx.readsFiles, ctx.writesFiles, and ctx.modifiesExistingFiles refs, each anchored
+// ctx.readsFiles and ctx.writesFiles refs, each anchored
 // on the project its glob is relative to. Sorted and deduplicated.
 //
 // It answers "does this project declare that path", which is the question affected

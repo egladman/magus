@@ -676,7 +676,7 @@ func TestDeclaredNodesRootsGlobsAtTheWorkspace(t *testing.T) {
 		}
 	}
 	// Every ref carries its owner from resolution, an update is read AND written, and
-	// ctx.modifiesExistingFiles is a declared write.
+	// editsExistingSource is a declared write.
 	assert.Equal(t, TargetNode{
 		Project:        "docs",
 		Target:         "pages",

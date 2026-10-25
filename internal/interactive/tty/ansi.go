@@ -94,7 +94,7 @@ func Colorize(s string, sgr SGR) string {
 	if sgr == "" {
 		return s
 	}
-	return fmt.Sprintf(sgrFmt, string(sgr)) + s + sgrReset
+	return fmt.Sprintf("%s%s%s", fmt.Sprintf(sgrFmt, string(sgr)), s, sgrReset)
 }
 
 // OSC 8 hyperlink framing: ESC ] 8 ; params ; URI ST ... ESC ] 8 ; ; ST.
@@ -121,7 +121,7 @@ func Hyperlink(text, uri string) string {
 	if uri == "" {
 		return text
 	}
-	return fmt.Sprintf(osc8Fmt, uri) + text + osc8End
+	return fmt.Sprintf("%s%s%s", fmt.Sprintf(osc8Fmt, uri), text, osc8End)
 }
 
 // ClipCols shortens s to cols DISPLAY COLUMNS, counting only what the

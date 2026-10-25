@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28715
-skill_short_bytes: 21668
+skill_full_bytes: 29107
+skill_short_bytes: 22216
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `50bd5df9df94` |
+| `skill-content` | `ee25be4f0a30` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -166,8 +166,9 @@ Before spawning, state the topology: the model per job, and whether isolated wor
   - `default_timeout` bounds a fork that names no `--timeout`.
   - Honor a cap the user states the same way.
 - Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers, which share the machine's build budget. The root waits for that budget,
-  never a worker; a spawn or `magus job fork` into a full one says how full it is.
+  triggers, which share the machine's build budget. An integrator waits for that budget,
+  explicitly (`magus status --wait` piped into its run) and for as long as it decided, never a worker; a spawn
+  or `magus job fork` into a full one says how full it is.
   Serialize validations that share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
@@ -175,9 +176,10 @@ Assign the check from the pipeline the workspace composed, not from convention.
 
 - A job gets the narrowest check that covers its edits: the target from that
   decomposition. Scope it to the job's own tests with the runner's filter after `--`
-  where one exists. Never the full suite.
-- The integrator re-runs the described order, and `magus affected ci` re-proves the
-  whole composition.
+  where one exists. A go test check naming exactly the packages of the write paths
+  (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
+- The integration job owns the full `go-test` and `lint`, and runs every check a merged
+  worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the whole composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands.
@@ -357,12 +359,12 @@ binds its child to nothing.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
    - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
-Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless permitted. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
 covers claiming one declaration in a shared file and forking from a leased worker.
 
 A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
-Add the output to the write paths, or waive it when the root regenerates it after integration.
+Add the output to the write paths, or permit it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -385,13 +387,13 @@ any cap the user set for the tree. Require the worker to:
   set;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget. When a full budget refuses its check, it commits, reports that the check found no seat, and stops; you rerun it once one frees;
+- never wait for the build budget, `magus status --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
 - never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never
 moves. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
+`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
 `unresolved_risks`; `magus job exit --schema` prints the shape.
 Keep unresolved risks mandatory.
 
@@ -623,8 +625,9 @@ Before spawning, state the topology: the model per job, and whether isolated wor
   - `default_timeout` bounds a fork that names no `--timeout`.
   - Honor a cap the user states the same way.
 - Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers, which share the machine's build budget. The root waits for that budget,
-  never a worker; a spawn or `magus job fork` into a full one says how full it is.
+  triggers, which share the machine's build budget. An integrator waits for that budget,
+  explicitly (`magus status --wait` piped into its run) and for as long as it decided, never a worker; a spawn
+  or `magus job fork` into a full one says how full it is.
   Serialize validations that share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
@@ -632,11 +635,10 @@ Assign the check from the pipeline the workspace composed, not from convention.
 
 - A job gets the narrowest check that covers its edits: the target from that
   decomposition. Scope it to the job's own tests with the runner's filter after `--`
-  where one exists. Never the full suite.
-- The integrator re-runs the described order, and `magus affected ci` re-proves the
-  whole composition. A worker hand-sequencing lint, format, and test is re-deriving an
-  order the magusfile already owns, and the step it forgets fails silently by
-  omission.
+  where one exists. A go test check naming exactly the packages of the write paths
+  (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
+- The integration job owns the full `go-test` and `lint`, and runs every check a merged
+  worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the whole composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands, which is what stops seven fanned-out workers from
@@ -845,12 +847,12 @@ an editor magus cannot attribute.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
    - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
-Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless permitted. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
 covers claiming one declaration in a shared file and forking from a leased worker.
 
 A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
-Add the output to the write paths, or waive it when the root regenerates it after integration.
+Add the output to the write paths, or permit it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -887,7 +889,7 @@ any cap the user set for the tree. Require the worker to:
   verdict is ever keyed on them;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget. When a full budget refuses its check, it commits, reports that the check found no seat, and stops; you rerun it once one frees;
+- never wait for the build budget, `magus status --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
 - never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
 
 End every brief with the step that files the result, as the worker's LAST act before
@@ -895,7 +897,7 @@ it reports back. A brief that leaves it out gets a prose report and a row that n
 moves: the store keeps the write paths held, `magus job wait`
 has nothing to verify, and nobody notices until a sibling is refused over a path
 the finished worker no longer needs. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
+`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
 `unresolved_risks`; `magus job exit --schema` prints the shape, and
 [reference.md](reference.md) shows a record.
 A typed result makes verification mechanical. Keep unresolved risks mandatory, so a

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -406,14 +407,14 @@ func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 	assert.ElementsMatch(t, []string{"here", "bound"}, ids)
 	assert.Equal(t, 3, brief.OtherLeases)
 	text := brief.Text()
-	assert.Contains(t, text, "\n3 other leases: `"+hint.LsJobs.String()+"`\n")
+	assert.Contains(t, text, fmt.Sprintf("\n3 other leases: `%s`\n", hint.LsJobs.String()))
 	assert.NotContains(t, text, "elsewhere")
 	assertBriefIsContextSafe(t, text)
 
 	// With nothing bound here, the leases section is that one line.
 	var only strings.Builder
 	sessionBrief{OtherLeases: 3}.writeLeases(&only)
-	assert.Equal(t, "3 other leases: `"+hint.LsJobs.String()+"`\n", only.String())
+	assert.Equal(t, fmt.Sprintf("3 other leases: `%s`\n", hint.LsJobs.String()), only.String())
 }
 
 // A checkout every job was once exec'd in holds many exited rows that are still "live"
@@ -442,7 +443,7 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 	assert.Equal(t, "running", brief.Leases[0].ID, "editing jobs are named before exited holders")
 	assert.Equal(t, 6, brief.OtherLeases)
 	text := brief.Text()
-	assert.Contains(t, text, "6 other leases: `"+hint.LsJobs.String()+"`")
+	assert.Contains(t, text, fmt.Sprintf("6 other leases: `%s`", hint.LsJobs.String()))
 	assertBriefIsContextSafe(t, text)
 }
 
@@ -464,7 +465,7 @@ func TestSessionBriefCountsFinishedBranchesOffTheBase(t *testing.T) {
 
 	var at strings.Builder
 	sessionBrief{Unintegrated: &briefUnintegrated{Count: 1, Branches: []string{"done-a"}, AdviseAt: 1, RefuseAt: 2}}.writeUnintegrated(&at)
-	assert.Contains(t, at.String(), "integrate them: `"+hint.JobFork.With("--stdin", "--checkout", "<dir>")+"`")
+	assert.Contains(t, at.String(), fmt.Sprintf("integrate them: `%s`", hint.JobFork.With("--stdin", "--checkout", "<dir>")))
 
 	var unknown strings.Builder
 	sessionBrief{Unintegrated: &briefUnintegrated{Unknown: "version control is disabled here"}}.writeUnintegrated(&unknown)
@@ -532,7 +533,9 @@ func TestSessionBriefListsTheJobTreeForkedFromThisCheckout(t *testing.T) {
 		"      next: collect it: " + hint.JobWait.With("plan/exited"),
 		"      depends on: plan/exited (exited, unsatisfied)",
 		"      next: read why: " + hint.DescribeJob.With("plan/failed"),
-		"exited and never collected, so each ends as no_return unless waited on:\n  " + hint.JobWait.With("plan/exited") + "\n",
+		fmt.Sprintf(`exited and never collected, so each ends as no_return unless waited on:
+  %s
+`, hint.JobWait.With("plan/exited")),
 	} {
 		assert.Contains(t, text, want)
 	}
@@ -574,11 +577,11 @@ func TestSessionBriefJobTreeCapsAndNamesWhatItCouldNotRead(t *testing.T) {
 	t.Parallel()
 
 	unread := sessionBrief{Jobs: &briefJobTree{Unread: "permission denied"}}.Text()
-	assert.Contains(t, unread, "jobs: the store could not be read (permission denied); `"+hint.LsJobs.String()+"`")
+	assert.Contains(t, unread, fmt.Sprintf("jobs: the store could not be read (permission denied); `%s`", hint.LsJobs.String()))
 	assert.NotContains(t, sessionBrief{}.Text(), "jobs", "a session that owns no jobs prints no tree")
 
 	unpushed := &briefUnpushed{Base: "origin/main", Count: 2}
-	assert.Equal(t, "gate it in its checkout ("+hint.Affected.With("ci")+"), then push",
+	assert.Equal(t, fmt.Sprintf("gate it in its checkout (%s), then push", hint.Affected.With("ci")),
 		briefNextStep(nil, types.Job{ID: "done", State: types.StatePass}, unpushed))
 	assert.Empty(t, briefNextStep(nil, types.Job{ID: "done", State: types.StatePass}, &briefUnpushed{Base: "origin/main"}))
 	assert.Equal(t, "waits on gone, which no job declares",
@@ -590,7 +593,7 @@ func TestSessionBriefJobTreeCapsAndNamesWhatItCouldNotRead(t *testing.T) {
 	}}
 	text := b.Text()
 	assert.Contains(t, text, "  done (pass) on done at abc1234 in this checkout, 2 commit(s) not on origin/main\n")
-	assert.Contains(t, text, "  and 3 more: `"+hint.LsJobs.String()+"`\n")
+	assert.Contains(t, text, fmt.Sprintf("  and 3 more: `%s`\n", hint.LsJobs.String()))
 	assertBriefIsContextSafe(t, text)
 }
 
@@ -614,6 +617,8 @@ func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
 
 	text := sessionBrief{Jobs: tree}.Text()
 	assert.Contains(t, text, "exited and never collected, so each ends as no_return unless waited on:\n")
-	assert.Contains(t, text, "\n  "+hint.JobWait.With("root/13")+"\n", "a job past the cap is still named")
+	assert.Contains(t, text, fmt.Sprintf(`
+  %s
+`, hint.JobWait.With("root/13")), "a job past the cap is still named")
 	assertBriefIsContextSafe(t, text)
 }

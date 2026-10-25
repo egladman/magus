@@ -3,6 +3,7 @@ package magus
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -23,7 +24,9 @@ func openSandboxed(t *testing.T, mode types.SandboxMode) *Magus {
 	t.Helper()
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": "",
-		"magus.yaml":     "sandbox:\n  mode: " + string(mode) + "\n",
+		"magus.yaml": fmt.Sprintf(`sandbox:
+  mode: %s
+`, string(mode)),
 	})
 	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)

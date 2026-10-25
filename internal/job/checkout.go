@@ -186,7 +186,7 @@ func (s *Store) record(c Caller) string {
 	if s.err != nil || s.path == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(c.Host + "\x00" + c.Session + "\x00" + c.Agent))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s", c.Host, c.Session, c.Agent)))
 	return filepath.Join(filepath.Dir(s.path), agentRecordDir, hex.EncodeToString(sum[:12]))
 }
 
@@ -346,7 +346,7 @@ func (s *Store) writeRecordsSwept(now int64, rows []types.Job) {
 // record found to hold anything else is linked back, unless a newer bind already took its
 // place.
 func dropRecord(path string, b Binding) {
-	aside := path + "." + rand.Text() + ".sweep"
+	aside := fmt.Sprintf("%s.%s.sweep", path, rand.Text())
 	if os.Rename(path, aside) != nil {
 		return
 	}
@@ -462,7 +462,7 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 // as WritePathIsDirectory, project roots and the workspace root included. A write path names
 // files: a directory claims every file beneath it, so the job overlaps every job that edits
 // anything there, and the overlap report fills with pairs that share no file. Every fork door
-// runs it, and there is no waiver.
+// runs it, and there is no deviation.
 //
 // Declarable: a file, and a path that does not exist yet, which the job creates. A glob
 // whose last segments are only wildcards (`docs/**`, `docs/*`, `docs/**/*`) names everything
@@ -503,11 +503,10 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 				named += fmt.Sprintf(", inside project %q", enclosingProject(store.root, dir))
 			}
 			ps = append(ps, types.JobProblem{
-				Code:  types.WritePathIsDirectory,
-				Field: fmt.Sprintf("write_paths[%d]", i),
-				Message: named + " is a directory, and a write path names files: a directory claims every file under it," +
-					" so the job would overlap every job editing anything there" + why,
-				Fix: "list the files the job will edit in its place, and name each file it creates by its path",
+				Code:    types.WritePathIsDirectory,
+				Field:   fmt.Sprintf("write_paths[%d]", i),
+				Message: fmt.Sprintf("%s is a directory, and a write path names files: a directory claims every file under it, so the job would overlap every job editing anything there%s", named, why),
+				Fix:     "list the files the job will edit in its place, and name each file it creates by its path",
 			})
 		}
 	}
@@ -671,14 +670,18 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 		if !fp.known {
 			continue
 		}
-		written := slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
-			return !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(entry, r.Location()) })
-		})
+		used := indexRegions(fp.regions)
+		written := map[string]bool{}
+		for _, entry := range row.SoftPaths {
+			if used.uses(entry) {
+				written[entry] = true
+			}
+		}
 		if len(written) == 0 {
 			continue
 		}
 		harden := func(soft []string) []string {
-			return slices.DeleteFunc(slices.Clone(soft), func(p string) bool { return slices.Contains(written, p) })
+			return slices.DeleteFunc(slices.Clone(soft), func(p string) bool { return written[p] })
 		}
 		out[i].SoftPaths = harden(row.SoftPaths)
 		if store.dryRun {
@@ -796,8 +799,24 @@ type Unintegrated struct {
 	Commits int
 }
 
+// ownTree reports whether row belongs to a job tree forked from the checkout at root. A
+// tree's checkout is the source its topmost job's worktree records, else the nearest
+// descendant's that records one. A tree none of whose jobs made a checkout cannot be told
+// from anyone's, so it counts for every checkout rather than hiding a backlog.
+func ownTree(rows []types.Job, root string, row types.Job) bool {
+	chain := append([]types.Job{row}, types.JobAncestors(rows, row.ID)...)
+	for i := len(chain) - 1; i >= 0; i-- {
+		if wt := chain[i].Worktree; wt != nil && wt.Source != "" {
+			return samePath(wt.Source, root)
+		}
+	}
+	return true
+}
+
 // UnintegratedBranches is every job at pass or exited whose branch holds commits the
-// revision checked out at the store's root does not, in store order. A job's branch is the
+// revision checked out at the store's root does not, in store order. Only jobs of a tree
+// forked from the store's root count (see [ownTree]): another checkout's backlog is its
+// own to integrate and never blocks this one. A job's branch is the
 // one its standing checkout has checked out, else a branch named for the job. Skipped as
 // integrated:
 //
@@ -822,7 +841,9 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 		switch {
 		case row.Integrating() && row.State == types.StatePass:
 		case row.State == types.StatePass || row.State == types.StateExited:
-			finished = append(finished, row)
+			if ownTree(rows, s.root, row) {
+				finished = append(finished, row)
+			}
 		}
 	}
 	if len(finished) == 0 {
@@ -899,7 +920,7 @@ func (s *Store) IntegrationAdvice(ctx context.Context, limits config.Jobs) (advi
 	}
 	record, _ := json.Marshal(map[string]any{
 		"schema_version": types.JobSchemaVersion,
-		"id":             "integrate-" + strconv.Itoa(len(waiting)) + "-branches",
+		"id":             fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
 		"criteria":       "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
 		"integrates":     branches,
 		"check":          map[string]string{"target": "<target>", "project": "<project>"},

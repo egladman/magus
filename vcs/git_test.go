@@ -255,11 +255,13 @@ func TestPrePushDriftHookHandsOverItsArgumentsAndStdin(t *testing.T) {
 	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	got := filepath.Join(t.TempDir(), "got")
 	record := filepath.Join(t.TempDir(), "record")
-	require.NoError(t, os.WriteFile(record, []byte("#!/bin/sh\n{ echo \"$@\"; cat; } >"+got+"\n"), 0o755))
+	require.NoError(t, os.WriteFile(record, []byte(fmt.Sprintf(`#!/bin/sh
+{ echo "$@"; cat; } >%s
+`, got)), 0o755))
 	_, err := gitVCS{}.InstallDriftHook(t.Context(), dir, record)
 	require.NoError(t, err)
 
-	refs := "refs/heads/main " + strings.Repeat("a", 40) + " refs/heads/main " + strings.Repeat("0", 40) + "\n"
+	refs := fmt.Sprintf("refs/heads/main %s refs/heads/main %s\n", strings.Repeat("a", 40), strings.Repeat("0", 40))
 	cmd := exec.Command("sh", filepath.Join(dir, ".git", "hooks", "pre-push"), "origin", "git@example.com:o/r.git")
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(refs)
@@ -291,7 +293,10 @@ func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
 	require.NoError(t, err)
 	_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)
-	assertFile(t, postCommit, "#!/bin/sh\n\n"+drift+"\n"+refresh, 0o755)
+	assertFile(t, postCommit, fmt.Sprintf(`#!/bin/sh
+
+%s
+%s`, drift, refresh), 0o755)
 }
 
 // Outside any repository there is nothing to hook, which the installer contract calls a
@@ -307,7 +312,7 @@ func TestInstallGitHooksOutsideARepositoryInstallNothing(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(dir, ".git"))
 
 	err = gitVCS{}.InstallMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
-	require.EqualError(t, err, "vcs: install merge driver: "+dir+" is not in a git repository")
+	require.EqualError(t, err, fmt.Sprintf("vcs: install merge driver: %s is not in a git repository", dir))
 	assert.NoFileExists(t, filepath.Join(dir, ".gitattributes"))
 }
 
@@ -1027,7 +1032,7 @@ func TestBranchChangesHonorsTheLimit(t *testing.T) {
 	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n"}).Root()
 	for _, name := range []string{"one", "two", "three"} {
 		gitRun(t, repo, "checkout", "-q", "-b", name, "main")
-		require.NoError(t, os.WriteFile(filepath.Join(repo, name+".go"), []byte("package "+name+"\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(repo, name+".go"), []byte(fmt.Sprintf("package %s\n", name)), 0o644))
 		gitRun(t, repo, "add", "-A")
 		gitRun(t, repo, "commit", "-qm", name)
 		gitRun(t, repo, "update-ref", "refs/remotes/origin/"+name, name)
@@ -1213,7 +1218,7 @@ fi
 exit $status
 `, real, marker, marker, real, dir, ref, sha)
 	require.NoError(t, os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0o755))
-	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", fmt.Sprintf(`%s%s%s`, shimDir, string(os.PathListSeparator), os.Getenv("PATH")))
 }
 
 // The name, the date and the subject all describe the commit a ref pointed at when
@@ -1617,7 +1622,7 @@ Run it.
 		{"d.md", "Run it.", "## Usage"},
 		{"e.yaml", "  stale_after: 2h", "jobs"},
 	} {
-		t.Run(tc.file+" "+strings.TrimSpace(tc.line), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s %s", tc.file, strings.TrimSpace(tc.line)), func(t *testing.T) {
 			original := files[tc.file]
 			require.Equal(t, 1, strings.Count(original, tc.line+"\n"), "the case names one line")
 			writeRepoFile(t, repo, tc.file, strings.Replace(original, tc.line+"\n", tc.line+" // changed\n", 1))
@@ -1796,7 +1801,7 @@ func TestPathUnder(t *testing.T) {
 		{"the root itself", root, true},
 		{"an unclean path that still lands inside", filepath.Join(root, "hack", "..", "magus"), true},
 		{"a sibling worktree", filepath.Join(string(filepath.Separator), "w", "other", "magus"), false},
-		{"a prefix-sharing sibling", root + "-2" + string(filepath.Separator) + "magus", false},
+		{"a prefix-sharing sibling", fmt.Sprintf("%s-2%smagus", root, string(filepath.Separator)), false},
 		{"an installed release", filepath.Join(string(filepath.Separator), "usr", "local", "bin", "magus"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2121,7 +2126,7 @@ func TestDriverExeExists(t *testing.T) {
 	exe, err := exec.LookPath("git")
 	require.NoError(t, err)
 	assert.True(t, driverExeExists(exe+" vcs merge-driver %O"))
-	assert.True(t, driverExeExists(`"`+exe+`" vcs merge-driver %O`), "a quoted path is unwrapped")
+	assert.True(t, driverExeExists(fmt.Sprintf(`"%s" vcs merge-driver %%O`, exe)), "a quoted path is unwrapped")
 }
 
 // TestDriverUsablePreservesAWrapperAndRejectsAStaleVerb pins the pair the review found
@@ -2141,7 +2146,7 @@ func TestDriverUsablePreservesAWrapperAndRejectsAStaleVerb(t *testing.T) {
 	assert.True(t, driverUsable(t.Context(), fake+" vcs merge-driver %O %A %B %L %P"),
 		"the spelling this binary writes short-circuits without a probe")
 
-	assert.True(t, driverUsable(t.Context(), env+" FOO=1 "+fake+" vcs merge-driver %O %A %B %L %P"),
+	assert.True(t, driverUsable(t.Context(), fmt.Sprintf("%s FOO=1 %s vcs merge-driver %%O %%A %%B %%L %%P", env, fake)),
 		"a wrapper that still dispatches must be left alone, not rewritten")
 
 	assert.False(t, driverUsable(t.Context(), fake+" merge-driver %O %A %B %L %P"),
@@ -2169,7 +2174,7 @@ func TestDriverProbeSilenceIsNotAnAnswer(t *testing.T) {
 	assert.False(t, dispatches)
 	assert.False(t, answered, "a probe that was killed reported no exit status")
 
-	assert.True(t, driverUsable(silent, env+" FOO=1 "+fake+" vcs merge-driver %O %A %B %L %P"),
+	assert.True(t, driverUsable(silent, fmt.Sprintf("%s FOO=1 %s vcs merge-driver %%O %%A %%B %%L %%P", env, fake)),
 		"an unproven registration is kept; rewriting would drop the wrapper for good")
 	assert.False(t, driverExeAnswers(silent, fake),
 		"an unproven binary is never registered; os.Executable dispatches by construction")
@@ -2219,7 +2224,7 @@ func TestDriverIsReachableHere(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	assert.True(t, driverIsReachableHere(t.Context(), root, self+" vcs merge-driver %O"))
-	assert.True(t, driverIsReachableHere(t.Context(), root, `"`+self+`" vcs merge-driver %O`),
+	assert.True(t, driverIsReachableHere(t.Context(), root, fmt.Sprintf(`"%s" vcs merge-driver %%O`, self)),
 		"a quoted path is unwrapped before comparison")
 }
 
@@ -2382,7 +2387,7 @@ func TestBisectRunCarriesNoMagusPins(t *testing.T) {
 	}
 	dump := filepath.Join(t.TempDir(), "env")
 
-	_, err := gitVCS{}.Bisect(t.Context(), dir, types.BisectOptions{Good: good, TestCmd: "env >> " + dump + "; exit 1"})
+	_, err := gitVCS{}.Bisect(t.Context(), dir, types.BisectOptions{Good: good, TestCmd: fmt.Sprintf("env >> %s; exit 1", dump)})
 	require.NoError(t, err)
 	env, err := os.ReadFile(dump)
 	require.NoError(t, err)
@@ -2882,7 +2887,7 @@ func TestPushLeaseAndRejection(t *testing.T) {
 // rejection.
 func TestPushRefusalReadsARemoteLeaseLossAsStale(t *testing.T) {
 	line := func(reason string) string {
-		return "To /remote\n!\t" + strings.Repeat("a", 40) + ":refs/heads/main\t" + reason + "\nDone\n"
+		return fmt.Sprintf("To /remote\n!\t%s:refs/heads/main\t%s\nDone\n", strings.Repeat("a", 40), reason)
 	}
 	for _, reason := range []string{
 		"[rejected] (stale info)",
@@ -3059,7 +3064,7 @@ func TestCommitTreeIsDeterministicAndCreatesNoRef(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first, second, "the same inputs yield the same commit id")
 	assert.Equal(t, before, listRefs(t, dir))
-	assert.Equal(t, revs["ours"]+" "+revs["clean"], gitTestOutput(t, dir, "log", "-1", "--format=%P", first))
+	assert.Equal(t, fmt.Sprintf("%s %s", revs["ours"], revs["clean"]), gitTestOutput(t, dir, "log", "-1", "--format=%P", first))
 	assert.Equal(t, "author queue", gitTestOutput(t, dir, "log", "-1", "--format=%an %cn", first))
 
 	c.Committer = types.Person{}
@@ -3288,8 +3293,7 @@ func TestGitRegisteredCheckouts(t *testing.T) {
 // An unborn branch has no revision, and a lock with no reason is still a lock.
 func TestParseWorktreeList(t *testing.T) {
 	t.Parallel()
-	out := "worktree /r\x00HEAD " + strings.Repeat("0", 40) + "\x00branch refs/heads/main\x00\x00" +
-		"worktree /w\x00HEAD " + strings.Repeat("a", 40) + "\x00detached\x00locked\x00prunable gitdir file points to non-existent location\x00\x00"
+	out := fmt.Sprintf("worktree /r\x00HEAD %s\x00branch refs/heads/main\x00\x00worktree /w\x00HEAD %s\x00detached\x00locked\x00prunable gitdir file points to non-existent location\x00\x00", strings.Repeat("0", 40), strings.Repeat("a", 40))
 	assert.Equal(t, []types.RegisteredCheckout{
 		{Root: "/r", Primary: true},
 		{Root: "/w", Head: strings.Repeat("a", 40), Locked: true},
@@ -3412,7 +3416,7 @@ func TestGitInACheckoutReadsTheRepositoryItWasMadeIn(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(co, "a.txt"), []byte("changed\n"), 0o644))
 
 	cmd := gitExec(t.Context(), co, gitOpts{}, "status", "--porcelain")
-	require.NoError(t, os.WriteFile(filepath.Join(co, ".git"), []byte("gitdir: "+evil+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(co, ".git"), []byte(fmt.Sprintf("gitdir: %s\n", evil)), 0o644))
 	require.True(t, statusRuns(t, co, marker), "the fixture runs its monitor under a discovering git")
 
 	out, err := cmd.Output()
@@ -3430,7 +3434,7 @@ func TestGitInACheckoutWhoseRepositoryFilesChangedIsRefused(t *testing.T) {
 	for name, tamper := range map[string]func(co, gitDir string) string{
 		"the gitfile names another repository": func(co, _ string) string {
 			dotgit := filepath.Join(co, ".git")
-			require.NoError(t, os.WriteFile(dotgit, []byte("gitdir: "+hostileGitDir(t, root, script)+"\n"), 0o644))
+			require.NoError(t, os.WriteFile(dotgit, []byte(fmt.Sprintf("gitdir: %s\n", hostileGitDir(t, root, script))), 0o644))
 			return dotgit
 		},
 		"the gitfile is a repository of its own": func(co, _ string) string {
@@ -3476,7 +3480,7 @@ func TestGitInACheckoutWhoseRepositoryFilesChangedIsRefused(t *testing.T) {
 func TestStatusInACheckoutRunsNothingASubmoduleConfigures(t *testing.T) {
 	sub := testkit.NewRepo(t, map[string]string{"s.txt": "s\n"}).Root()
 	root := testkit.NewRepo(t, map[string]string{".gitmodules": "[submodule \"sub\"]\n\tpath = sub\n\turl = ./sub\n\tignore = none\n"}).Root()
-	gitRun(t, root, "update-index", "--add", "--cacheinfo", "160000,"+gitTestOutput(t, sub, "rev-parse", "HEAD")+",sub")
+	gitRun(t, root, "update-index", "--add", "--cacheinfo", fmt.Sprintf("160000,%s,sub", gitTestOutput(t, sub, "rev-parse", "HEAD")))
 	gitRun(t, root, "commit", "-q", "-m", "sub")
 	co := filepath.Join(t.TempDir(), "co")
 	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD", ""))
@@ -3510,7 +3514,7 @@ func TestRemoveCheckoutIgnoresARewrittenRegistration(t *testing.T) {
 	victim := t.TempDir()
 	writeRepoFile(t, victim, "keep.txt", "keep\n")
 	require.NoError(t, os.WriteFile(filepath.Join(made.gitDir, "gitdir"), []byte(filepath.Join(victim, ".git")+"\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(co, ".git"), []byte("gitdir: "+victim+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(co, ".git"), []byte(fmt.Sprintf("gitdir: %s\n", victim)), 0o644))
 
 	require.NoError(t, gitVCS{}.RemoveCheckout(t.Context(), root, co))
 	assert.NoDirExists(t, co)
@@ -4093,7 +4097,9 @@ func sentinelMagus(t *testing.T, dir string) string {
 	t.Helper()
 	sentinel := filepath.Join(t.TempDir(), "ran")
 	exe := filepath.Join(dir, "magus")
-	require.NoError(t, os.WriteFile(exe, []byte("#!/bin/sh\ntouch '"+sentinel+"'\n"), 0o755))
+	require.NoError(t, os.WriteFile(exe, []byte(fmt.Sprintf(`#!/bin/sh
+touch '%s'
+`, sentinel)), 0o755))
 	require.NoError(t, os.Chmod(exe, 0o755), "WriteFile keeps an existing file's mode")
 	return sentinel
 }
@@ -4167,7 +4173,7 @@ func TestHookInstallRefusesASharedHooksPath(t *testing.T) {
 	shared := t.TempDir()
 	gitRun(t, dir, "config", "core.hooksPath", shared)
 	_, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
-	require.ErrorContains(t, err, "vcs: core.hooksPath is "+shared+", which other repositories share")
+	require.ErrorContains(t, err, fmt.Sprintf("vcs: core.hooksPath is %s, which other repositories share", shared))
 	assert.ErrorContains(t, err, "rerun magus init --vcs git")
 	assert.NoFileExists(t, filepath.Join(shared, "post-checkout"))
 
@@ -4215,4 +4221,30 @@ func TestGitStagedFiles(t *testing.T) {
 	got, err := gitVCS{}.StagedFiles(context.Background(), repo.Root())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"whole.txt"}, got)
+}
+
+func TestCreateCheckoutReusesABranchAtTheRevision(t *testing.T) {
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	g := gitVCS{}
+	ctx := t.Context()
+	first := filepath.Join(t.TempDir(), "first")
+	require.NoError(t, g.CreateCheckout(ctx, dir, first, "HEAD", "job-branch"))
+	require.NoError(t, g.RemoveCheckout(ctx, dir, first))
+
+	second := filepath.Join(t.TempDir(), "second")
+	require.NoError(t, g.CreateCheckout(ctx, dir, second, "HEAD", "job-branch"), "a branch still at the revision is reused")
+	branch, err := gitOutput(ctx, second, gitOpts{}, "rev-parse", "--abbrev-ref", "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, "job-branch", branch)
+	require.NoError(t, g.RemoveCheckout(ctx, dir, second))
+
+	third := filepath.Join(t.TempDir(), "third")
+	require.NoError(t, g.CreateCheckout(ctx, dir, third, "HEAD", "job-branch"))
+	_, err = gitOutput(ctx, third, gitOpts{}, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--allow-empty", "-m", "work")
+	require.NoError(t, err)
+	require.NoError(t, g.RemoveCheckout(ctx, dir, third))
+
+	fourth := filepath.Join(t.TempDir(), "fourth")
+	err = g.CreateCheckout(ctx, dir, fourth, "HEAD", "job-branch")
+	require.ErrorContains(t, err, "already exists", "a branch holding commits past the revision is never reused")
 }

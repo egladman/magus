@@ -151,9 +151,9 @@ func captureBody(c Capture, src Source) string {
 		if s := strings.TrimSpace(e.Subject); !started || s != subject {
 			subject, started = s, true
 			head := captureHeading(e)
-			b.WriteString("\n" + head + "\n" + strings.Repeat("-", len(head)) + "\n")
+			fmt.Fprintf(&b, "\n%s\n%s\n", head, strings.Repeat("-", len(head)))
 		}
-		b.WriteString("\n" + captureAttribution(e) + ":\n\n")
+		fmt.Fprintf(&b, "\n%s:\n\n", captureAttribution(e))
 		b.WriteString(strings.TrimSpace(e.Body) + "\n")
 	}
 	return b.String()
@@ -176,7 +176,7 @@ func captureHeading(e CaptureEntry) string {
 		s = "Not about a particular file"
 	}
 	if loc := strings.TrimSpace(e.Locator); loc != "" {
-		return s + " " + loc
+		return fmt.Sprintf("%s %s", s, loc)
 	}
 	return s
 }

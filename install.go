@@ -175,7 +175,7 @@ func (m *Magus) installStep(p *types.Project, spellName, target string, choice s
 	}
 	for _, v := range toolVersions {
 		for _, t := range choice.Install.Tools {
-			if strings.HasPrefix(v, spellName+":"+t+":") {
+			if strings.HasPrefix(v, fmt.Sprintf("%s:%s:", spellName, t)) {
 				step.ToolVersions = append(step.ToolVersions, v)
 			}
 		}
@@ -287,7 +287,7 @@ func (m *Magus) installCommand(dir, op string) string {
 	case slices.Contains(projectTargets(p), "install"):
 		return "magus run install " + p.Path
 	default:
-		return "magus run " + op + " " + p.Path
+		return fmt.Sprintf("magus run %s %s", op, p.Path)
 	}
 }
 

@@ -157,7 +157,7 @@ func yamlScalar(s string) string {
 	}
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
-	return `"` + s + `"`
+	return fmt.Sprintf("%c%s%c", '"', s, '"')
 }
 
 func yamlNeedsQuote(s string) bool {

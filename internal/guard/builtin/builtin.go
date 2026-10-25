@@ -8,6 +8,7 @@ package builtin
 import (
 	"cmp"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -17,21 +18,65 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Decision is what a built-in rule does when it matches: say nothing, explain, or refuse.
-type Decision string
+// decision is what a built-in rule does when it matches: say nothing, explain, or refuse.
+// The zero value is unset, which Resolve refuses. Callers name it through Off, Advise and
+// Deny and a [Setting].
+type decision int
 
 // The decisions, least to most refusing.
 const (
-	Off    Decision = "off"
-	Advise Decision = "advise"
-	Deny   Decision = "deny"
+	Off decision = iota + 1
+	Advise
+	Deny
 )
+
+var decisionNames = [...]string{Off: "off", Advise: "advise", Deny: "deny"}
+
+// String is d's wire name, or "unset" for the zero value.
+func (d decision) String() string {
+	switch {
+	case d == 0:
+		return "unset"
+	case d.valid():
+		return decisionNames[d]
+	}
+	return fmt.Sprintf("Decision(%d)", int(d))
+}
+
+// MarshalText writes d's wire name, or empty text when unset. A value outside the
+// constants is an error.
+func (d decision) MarshalText() ([]byte, error) {
+	switch {
+	case d == 0:
+		return []byte{}, nil
+	case d.valid():
+		return []byte(decisionNames[d]), nil
+	}
+	return nil, fmt.Errorf("guard decision %d is not off, advise or deny", int(d))
+}
+
+// UnmarshalText sets d from its wire name. Empty text is unset; any other name than
+// off, advise or deny is an error.
+func (d *decision) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*d = 0
+		return nil
+	}
+	i := slices.Index(decisionNames[:], string(text))
+	if i <= 0 {
+		return fmt.Errorf("unknown decision %q, give off, advise or deny", text)
+	}
+	*d = decision(i)
+	return nil
+}
+
+func (d decision) valid() bool { return d >= Off && d <= Deny }
 
 // Setting is one rule's resolved configuration. Each parameter is a threshold the rule
 // fires at, taken only by the rules params lists for it; 0 means unset, and the binary
 // ships no number for it except the background rules' minutes (see Ceiling).
 type Setting struct {
-	Decision Decision `json:"decision"`
+	Decision decision `json:"decision"`
 	// Lines is the size of a whole read worth flagging.
 	Lines int `json:"lines"`
 	// Tokens is a context size in tokens.
@@ -222,7 +267,7 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 // remedy the caller can take now denies, recoverable or not (ADR 0013): an agent routes
 // around advice that only prints. A notice states a fact with no remedy and never
 // refuses. A workspace that wants a rule softer sets it to advise or off by name.
-var defaults = map[string]Decision{
+var defaults = map[string]decision{
 	// Recoverable: the served command answers what the refused one asked.
 	"architecture-unbriefed": Deny,
 	"brief-command":          Deny,
@@ -279,6 +324,8 @@ var defaults = map[string]Decision{
 	"lease-vcs":             Deny,
 	"lease-write":           Deny,
 	"lease-claim":           Deny,
+	"lease-row-unknown":     Deny,
+	"grant-is-a-persons":    Deny,
 	"conflict-rewrite":      Deny,
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,
@@ -294,6 +341,7 @@ var defaults = map[string]Decision{
 	"stale-binary":          Deny,
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,
+	"waiver-is-a-persons":   Deny,
 	"whole-tree":            Deny,
 	"worker-background-run": Deny,
 	"worker-check-only":     Deny,
@@ -369,14 +417,16 @@ var defaultMarkers = map[string][]string{
 	compatMarker: {"compat(until:", "Deprecated:"},
 }
 
-// fixed maps each rule a workspace may not set, with any value, to why. Its entries are
-// notices that report on the workspace's own rules, so a setting would let a workspace
-// silence the report or promote it to a refusal. Every name is also in defaults.
+// fixed maps each rule a workspace may not set, with any value, to why. Most are notices
+// that report on the workspace's own rules, so a setting would let a workspace silence the
+// report or promote it to a refusal. Every name is also in defaults.
 var fixed = map[string]string{
-	"guard-unfinished":         "a guard check",
-	"workspace-command-failed": "a command rule",
-	"workspace-spawn-failed":   "a spawn rule",
-	"workspace-write-failed":   "a write rule",
+	"guard-unfinished":         "it is how a workspace learns that a guard check of its own judged nothing, so it can be neither silenced nor promoted",
+	"workspace-command-failed": "it is how a workspace learns that a command rule of its own judged nothing, so it can be neither silenced nor promoted",
+	"workspace-spawn-failed":   "it is how a workspace learns that a spawn rule of its own judged nothing, so it can be neither silenced nor promoted",
+	"workspace-write-failed":   "it is how a workspace learns that a write rule of its own judged nothing, so it can be neither silenced nor promoted",
+	"grant-is-a-persons":       "a grant is a person's approval, so no workspace setting may let an agent issue one",
+	"waiver-is-a-persons":      "a gate waiver is a person's approval, so no workspace setting may let an agent issue one",
 }
 
 // removal is why a rule the guard no longer has under its name is gone, and the name it
@@ -409,18 +459,21 @@ func Fixed(name string) bool {
 }
 
 // Verdicts returns the verdicts rule name can give under any setting a workspace may
-// declare, least refusing first: advise alone for a notice or a rule a workspace may not
-// set, advise and deny for any other.
+// declare, least refusing first: advise alone for a notice, the default alone for a rule a
+// workspace may not set, advise and deny for any other.
 func Verdicts(name string) []types.GuardDecision {
-	if _, notice := notices[name]; notice || Fixed(name) {
+	if _, notice := notices[name]; notice {
 		return []types.GuardDecision{types.GuardAdvise}
+	}
+	if Fixed(name) {
+		return []types.GuardDecision{types.GuardDecision(defaults[name].String())}
 	}
 	return []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
 }
 
 // Defaults returns every compiled rule's name mapped to the decision it takes when the
 // workspace declares nothing for it. The map is the caller's to modify.
-func Defaults() map[string]Decision {
+func Defaults() map[string]decision {
 	return maps.Clone(defaults)
 }
 
@@ -470,14 +523,18 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"unknown built-in rule %q; `magus describe rules` lists every name", name)
 	}
-	if what, ok := fixed[name]; ok {
+	if why, ok := fixed[name]; ok {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q cannot be set; remove it from the declaration", name).
-			WithWhy("it is how a workspace learns that " + what + " of its own judged nothing, so it can be neither silenced nor promoted")
+			WithWhy(why)
 	}
-	if rank(s.Decision) < 0 {
+	if s.Decision == 0 {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q: decision %q is not off, advise or deny", name, s.Decision)
+			"built-in rule %q names no decision; give off, advise or deny", name)
+	}
+	if !s.Decision.valid() {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q: decision %s is not off, advise or deny", name, s.Decision)
 	}
 	if why, ok := notices[name]; ok && s.Decision == Deny {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
@@ -591,9 +648,12 @@ func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[stri
 	return out, nil
 }
 
-// rank orders decisions by how much they refuse; an unknown one ranks below off.
-func rank(d Decision) int {
-	return slices.Index([]Decision{Off, Advise, Deny}, d)
+// rank orders decisions by how much they refuse; unset or unknown ranks below off.
+func rank(d decision) int {
+	if !d.valid() {
+		return -1
+	}
+	return int(d - Off)
 }
 
 // nearest is the rule name within a typo's reach of typed, or "". The tolerance matches

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 		h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/v1/token/exchange", strings.NewReader(body)))
 		return rr
 	}
-	rr := post(`{"code":"` + code + `"}`)
+	rr := post(fmt.Sprintf(`{"code":"%s"}`, code))
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	assert.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
 	var got exchangeResponse
@@ -51,9 +52,9 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	assert.WithinDuration(t, time.Now().Add(12*time.Hour), expires, time.Minute)
 
 	for name, body := range map[string]string{
-		"used":      `{"code":"` + code + `"}`,
+		"used":      fmt.Sprintf(`{"code":"%s"}`, code),
 		"unknown":   `{"code":"mgx_nope"}`,
-		"a token":   `{"code":"` + got.Token + `"}`,
+		"a token":   fmt.Sprintf(`{"code":"%s"}`, got.Token),
 		"malformed": `code=` + code,
 		"empty":     `{}`,
 	} {
@@ -61,7 +62,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 		assert.Contains(t, []int{http.StatusUnauthorized, http.StatusBadRequest}, rr.Code, name)
 		assert.NotContains(t, rr.Body.String(), "mgs_", name)
 	}
-	assert.Equal(t, http.StatusUnauthorized, post(`{"code":"`+code+`"}`).Code, "a spent code is a wrong bearer")
+	assert.Equal(t, http.StatusUnauthorized, post(fmt.Sprintf(`{"code":"%s"}`, code)).Code, "a spent code is a wrong bearer")
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/token/exchange?code="+code, nil))
 	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)

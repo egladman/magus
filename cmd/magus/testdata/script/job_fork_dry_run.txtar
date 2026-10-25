@@ -1,7 +1,7 @@
 # The global --dry-run validates a whole job record without forking it: every problem at
 # once, each with its code and fix, then the record as it would be stored. It exits 1 while
 # any problem remains and writes no row. A real fork with the same problems prints the
-# same list and writes nothing either. A waiver accepts a broad write path, and the dry run
+# same list and writes nothing either. A deviation accepts a broad write path, and the dry run
 # names it.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
@@ -46,8 +46,8 @@ exec magus ls jobs -o name
 stdin $WORK/broad.json
 exec magus job fork --stdin --dry-run
 stdout '^no problems$'
-stdout '^waived 1:$'
-stdout 'waived: the job tunes every Go file'
+stdout '^permitted 1:$'
+stdout 'permitted: the job tunes every Go file'
 exec magus ls jobs -o name
 ! stdout .
 
@@ -56,4 +56,4 @@ package pkg
 -- broad.json --
 {"schema_version": 11, "id": "wave/broad", "write_paths": ["**/*.go"],
  "check": {"target": "test", "project": "."},
- "waivers": [{"code": "MGS3043", "subject": "**/*.go", "reason": "the job tunes every Go file"}]}
+ "deviations": [{"code": "MGS3043", "subject": "**/*.go", "reason": "the job tunes every Go file"}]}

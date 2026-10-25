@@ -202,7 +202,7 @@ func stampLine(w stamp.Writer) string {
 	if !w.Known() {
 		return ""
 	}
-	return stampPrefix + w.String() + "\n"
+	return fmt.Sprintf("%s%s\n", stampPrefix, w.String())
 }
 
 // checkWriter refuses to replace data, the config at path, when its stamp names a magus

@@ -54,7 +54,7 @@ func TestBroadClaimRefusesAGlobAcrossProjects(t *testing.T) {
 		Message: `write path "**/*.go" matches 4 files in 2 projects: more than 1 project, ` +
 			"a leading `**`, which reaches every directory of the workspace",
 		Fix: `replace "**/*.go" with the files the goals and criteria name: "write_paths": ["pkg/b.go"]; ` +
-			`or keep it with the waiver {"code":"MGS3043","subject":"**/*.go","reason":"<why this job needs all of it>"}`,
+			`or keep it with the deviation {"code":"MGS3043","subject":"**/*.go","reason":"<why this job needs all of it>"}`,
 	}}, got)
 }
 
@@ -133,16 +133,16 @@ func TestBroadClaimDropsIgnoredFilesAndReadsTheLoadedProjects(t *testing.T) {
 	assert.Empty(t, broadClaimProblems(context.Background(), root, row, ws, nil))
 }
 
-func TestBroadClaimWaivedPathPassesThroughWaive(t *testing.T) {
+func TestBroadClaimPermittedPathPassesThroughPermit(t *testing.T) {
 	root := breadthWorkspace(t)
 	row := types.Job{ID: "sweep", WritePaths: []string{"**/*.go"}}
 
-	kept, waived := broadClaimProblems(context.Background(), root, row, Workspace{}, nil).
-		Waive([]types.JobWaiver{{Code: types.WritePathTooBroad, Subject: "**/*.go", Reason: "a rename touches every package"}})
+	kept, permitted := broadClaimProblems(context.Background(), root, row, Workspace{}, nil).
+		Permit([]types.Deviation{{Code: types.WritePathTooBroad, Subject: "**/*.go", Reason: "a rename touches every package"}})
 
 	assert.Empty(t, kept)
-	require.Len(t, waived, 1)
-	assert.Equal(t, "**/*.go", waived[0].Subject)
+	require.Len(t, permitted, 1)
+	assert.Equal(t, "**/*.go", permitted[0].Subject)
 }
 
 func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {

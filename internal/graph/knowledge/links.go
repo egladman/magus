@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"go/scanner"
 	gotoken "go/token"
 	"net"
@@ -152,7 +153,7 @@ func citableHost(host string) bool {
 
 // linkID keys a link node by its normalized URL, so two comments citing the same page
 // reach the same node whatever they wrote around it.
-func linkID(u string) string { return types.KindLink + ":" + u }
+func linkID(u string) string { return fmt.Sprintf("%s:%s", types.KindLink, u) }
 
 // docIndex resolves a URL back onto the workspace's own prose. It is built from the doc
 // shard's FINISHED nodes, so a page is citable exactly when the graph holds it, and a
@@ -232,7 +233,7 @@ func (idx docIndex) resolveDocsURL(c citation) (string, bool) {
 			continue
 		}
 		rel := rels[0]
-		if c.Fragment != "" && idx.sections[rel+"#"+c.Fragment] {
+		if c.Fragment != "" && idx.sections[fmt.Sprintf("%s#%s", rel, c.Fragment)] {
 			return docSectionID(rel, c.Fragment), true
 		}
 		return docID(rel), true
@@ -392,7 +393,7 @@ func assembleLinksIn(w *TreeWalk, projects []types.TargetGraphProject, idx docIn
 			if target == fID {
 				continue // a file citing its own path says nothing
 			}
-			s.Edges = append(s.Edges, extractedEdge(fID, target, types.RelationReferences, rel+":"+strconv.Itoa(sc.Line)))
+			s.Edges = append(s.Edges, extractedEdge(fID, target, types.RelationReferences, fmt.Sprintf("%s:%s", rel, strconv.Itoa(sc.Line))))
 		}
 	}
 

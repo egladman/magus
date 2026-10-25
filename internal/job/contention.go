@@ -31,9 +31,10 @@ func unusedWritePaths(ctx context.Context, store *Store, rows []types.Job, holde
 	if !fp.known {
 		return nil
 	}
+	used := indexRegions(fp.regions)
 	unused := []string{}
 	for _, entry := range holder.HardPaths() {
-		if !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(entry, r.Location()) }) {
+		if !used.uses(entry) {
 			unused = append(unused, entry)
 		}
 	}
@@ -51,6 +52,74 @@ func usesEntry(entry string, loc types.Location) bool {
 		return false
 	}
 	return loc.Declaration == "" || types.NamesDeclaration(decl, loc.Declaration)
+}
+
+// regionIndex is a footprint's changed regions sorted by path, so asking whether a
+// write path entry was used looks up the files under it rather than walking every
+// region: an integration row holds hundreds of entries against a diff of thousands.
+type regionIndex struct {
+	paths []string            // cleaned literal paths, sorted, once each
+	decls map[string][]string // declarations changed in each path; "" when unplaced
+	odd   []types.Location    // regions with no path or a glob character in it
+}
+
+func indexRegions(regions []types.RegionChange) regionIndex {
+	x := regionIndex{decls: map[string][]string{}}
+	for _, r := range regions {
+		loc := r.Location()
+		p := path.Clean(loc.Path)
+		if loc.Path == "" || types.IsGlobMeta(p) {
+			x.odd = append(x.odd, loc)
+			continue
+		}
+		if _, seen := x.decls[p]; !seen {
+			x.paths = append(x.paths, p)
+		}
+		x.decls[p] = append(x.decls[p], loc.Declaration)
+	}
+	slices.Sort(x.paths)
+	return x
+}
+
+// uses reports what usesEntry would for any one region of the index. Only a path at or
+// under the entry's literal prefix can fall under the entry, so only those are asked.
+func (x regionIndex) uses(entry string) bool {
+	if slices.ContainsFunc(x.odd, func(loc types.Location) bool { return usesEntry(entry, loc) }) {
+		return true
+	}
+	file, decl := types.SplitClaim(entry)
+	if file == "" {
+		return false
+	}
+	file = path.Clean(file)
+	if decl != "" {
+		return slices.ContainsFunc(x.decls[file], func(d string) bool {
+			return usesEntry(entry, types.Location{Path: file, Declaration: d})
+		})
+	}
+	return slices.ContainsFunc(x.under(types.LiteralPrefix(file)), func(p string) bool {
+		return usesEntry(entry, types.Location{Path: p})
+	})
+}
+
+// under is the indexed paths equal to prefix or beneath it; every path is under "".
+// Paths beneath prefix are contiguous from prefix+"/", not from prefix, since a sibling
+// such as prefix+"-x" sorts between the two.
+func (x regionIndex) under(prefix string) []string {
+	if prefix == "" {
+		return x.paths
+	}
+	var out []string
+	if _, ok := x.decls[prefix]; ok {
+		out = append(out, prefix)
+	}
+	dir := prefix + "/"
+	start, _ := slices.BinarySearch(x.paths, dir)
+	end := start
+	for end < len(x.paths) && strings.HasPrefix(x.paths[end], dir) {
+		end++
+	}
+	return append(out, x.paths[start:end]...)
 }
 
 // describeUnused is unusedWritePaths as a refusal names it.

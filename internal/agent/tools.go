@@ -81,12 +81,23 @@ func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolRowsVersionFile), Content: strconv.Itoa(ToolRowsVersion) + "\n"})
 }
 
+// hostFiles are the files that tell a hook which host a tool rows directory in dir belongs
+// to and what that host's limits are, so the hook glue names only the host.
+func hostFiles(dir, host string, limits types.Limits) []types.AgentFile {
+	var b strings.Builder
+	writeJSONLine(&b, limits)
+	return []types.AgentFile{
+		{Path: path.Join(dir, types.ToolHostFile), Content: host + "\n"},
+		{Path: path.Join(dir, types.ToolLimitsFile), Content: b.String()},
+	}
+}
+
 // toolFiles is d's tool rows directory as files, nil when d declares no tools.
 func (d HarnessDescriptor) toolFiles() []types.AgentFile {
 	if d.Tools == nil {
 		return nil
 	}
-	return ToolFiles(*d.Tools, nil)
+	return append(ToolFiles(*d.Tools, nil), hostFiles(d.Tools.Dir, d.ID, d.Limits)...)
 }
 
 // InstallHarnessTools writes the tool rows directory harness id declares under root, with
@@ -108,7 +119,8 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 		return nil, fmt.Errorf("agent: harness %s: no workspace is loaded, so its model tiers are unknown", id)
 	}
 	var changed []string
-	for _, f := range ToolFiles(*d.Tools, &ModelFacts{Rows: d.Models, Tiers: ws.ModelTiers(ctx)}) {
+	files := append(ToolFiles(*d.Tools, &ModelFacts{Rows: d.Models, Tiers: ws.ModelTiers(ctx)}), hostFiles(d.Tools.Dir, d.ID, d.Limits)...)
+	for _, f := range files {
 		planned, err := planWholeFile(root, f.Path, f.Content)
 		if err != nil {
 			return changed, err
@@ -141,14 +153,14 @@ type ToolRows struct {
 	Err          error
 }
 
-// ReadToolRows reads the tool rows directory dir, relative to root unless absolute. A
+// readToolRows reads the tool rows directory dir, relative to root unless absolute. A
 // capability file that is absent has no rows. A dir of "", a missing version file, an
 // unreadable file and a version other than ToolRowsVersion are each an Err naming the
 // command that writes the directory.
-func ReadToolRows(root, dir string) ToolRows {
+func readToolRows(root, dir string) ToolRows {
 	rows := ToolRows{Dir: dir}
 	if dir == "" {
-		rows.Err = errors.New("the hook wiring names no --tool-rows directory, so it predates the tool rows, so reinstall it with `magus agent harness install`")
+		rows.Err = errors.New("no tool rows directory was named, so write one with `magus agent harness install`")
 		return rows
 	}
 	abs := dir
@@ -221,6 +233,46 @@ func (r ToolRows) Models() (ModelFacts, error) {
 		}
 	}
 	return ModelFacts{Rows: rows, Tiers: tiers}, nil
+}
+
+// toolRowsGlob matches the host file of every tool rows directory a harness installs, each
+// `.<host config dir>/magus/tools` under the workspace root.
+const toolRowsGlob = ".*/magus/tools/" + types.ToolHostFile
+
+// FindToolRows reads the tool rows directory installed for host under root: the one whose
+// host file names it. None is an Err naming the install that writes it, so the rules that
+// read the rows report the gap rather than judge without them unsaid.
+func FindToolRows(root, host string) ToolRows {
+	matches, _ := filepath.Glob(filepath.Join(root, filepath.FromSlash(toolRowsGlob)))
+	for _, m := range matches {
+		body, err := os.ReadFile(m)
+		if err != nil || strings.TrimSpace(string(body)) != host {
+			continue
+		}
+		dir, err := filepath.Rel(root, filepath.Dir(m))
+		if err != nil {
+			continue
+		}
+		return readToolRows(root, filepath.ToSlash(dir))
+	}
+	return ToolRows{Err: fmt.Errorf("no tool rows are installed for %s, so write them with `magus agent harness install`", host)}
+}
+
+// Limits reads the host's limits installed beside the rows; the error says why there are
+// none, naming the install that rewrites them.
+func (r ToolRows) Limits() (types.Limits, error) {
+	if r.Err != nil {
+		return types.Limits{}, r.Err
+	}
+	body, err := os.ReadFile(filepath.Join(r.abs, types.ToolLimitsFile))
+	if err != nil {
+		return types.Limits{}, fmt.Errorf("no host limits at %s, rewrite them with `magus agent harness install`: %w", r.Dir, err)
+	}
+	var limits types.Limits
+	if err := json.Unmarshal(bytes.TrimSpace(body), &limits); err != nil {
+		return types.Limits{}, fmt.Errorf("the host limits at %s do not read, rewrite them with `magus agent harness install`: %w", r.Dir, err)
+	}
+	return limits, nil
 }
 
 type toolRowsKey struct{}

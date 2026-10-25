@@ -80,7 +80,7 @@ func (s *sessionEnums) Case(enum, value string) vm.Value {
 // qualify spells enum as a call site does: Buzz binds a slash-path import under its
 // last segment.
 func (s *sessionEnums) qualify(enum string) string {
-	return s.module[strings.LastIndex(s.module, "/")+1:] + `\` + enum
+	return fmt.Sprintf(`%s\%s`, s.module[strings.LastIndex(s.module, "/")+1:], enum)
 }
 
 // read evaluates the enum's cases in the session, since only the VM that holds a
@@ -96,9 +96,9 @@ func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
 	}
 	refs := make([]string, len(names))
 	for i, name := range names {
-		refs[i] = s.qualify(enum) + "." + name
+		refs[i] = fmt.Sprintf("%s.%s", s.qualify(enum), name)
 	}
-	list, err := s.value("cases", enum, "["+strings.Join(refs, ", ")+"]")
+	list, err := s.value("cases", enum, fmt.Sprintf("[%s]", strings.Join(refs, ", ")))
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
 // rejects a top-level return. Redeclaring the function for a second reader of the same
 // session replaces the first, which is what the same expression asks for.
 func (s *sessionEnums) value(part, enum, expr string) (vm.Value, error) {
-	name := "__enum_" + part + "_" + enum
+	name := fmt.Sprintf("__enum_%s_%s", part, enum)
 	decl := fmt.Sprintf("import %q; fun %s() > any { return %s; }", s.module, name, expr)
 	if _, err := s.sess.Eval(s.ctx, decl); err != nil {
 		return vm.Null, err
@@ -128,5 +128,5 @@ func (s *sessionEnums) value(part, enum, expr string) (vm.Value, error) {
 
 func describeCase(v vm.Value) string {
 	enum, name, _ := v.EnumCase()
-	return enum + "." + name
+	return fmt.Sprintf("%s.%s", enum, name)
 }

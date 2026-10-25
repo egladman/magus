@@ -1510,19 +1510,15 @@ not block every tool call.`,
 		{Name: "observe", Kind: cmdline.Bool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
 		{Name: "message", Kind: cmdline.Bool, Doc: "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass"},
 		{Name: "lease", Kind: cmdline.String, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE"},
-		{Name: "agent-name", Kind: cmdline.String, Doc: "Name of the agent host this invocation came from (attribution only); required with --transport"},
+		{Name: "agent-name", Kind: cmdline.String, Doc: "Name of the agent host this invocation came from, required with --transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name"},
 		{Name: "transport", Kind: cmdline.String, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)"},
 		{Name: "session", Kind: cmdline.String, Doc: "The host's own session id for this invocation"},
 		{Name: "agent", Kind: cmdline.String, Doc: "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job"},
 		{Name: "transcript", Kind: cmdline.String, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: cmdline.String, Doc: "The host's hook event name (e.g. PreToolUse)"},
-		{Name: "observes-skill-loads", Kind: cmdline.Bool, Doc: "This hook wiring observes the host loading a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down"},
-		{Name: "tool-rows", Kind: cmdline.String, Doc: "The directory, relative to the workspace root, holding the host's tool rows that `magus agent harness install` writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged"},
 		{Name: "renders-ask", Kind: cmdline.Bool, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
 		{Name: "call-background", Kind: cmdline.Bool, Doc: "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused"},
 		{Name: "call-timeout-ms", Kind: cmdline.Int, Doc: "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default"},
-		{Name: "foreground-default-ms", Kind: cmdline.Int, Doc: "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down"},
-		{Name: "foreground-max-ms", Kind: cmdline.Int, Doc: "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Check one command", Command: "magus shell 'go test ./...'"},
@@ -1624,7 +1620,7 @@ arguments the cwd project (or the whole workspace, from the root) is selected.
 These are the same files the cache snapshots and replays on a hit. Whether
 each one is regenerable is the declaration's claim, not something clean
 verifies - so a file magus only modifies rather than produces belongs in
-ctx.modifiesExistingFiles, which clean never removes. Nor does it remove an
+ctx.writesFiles(..., editsExistingSource: true), which clean never removes. Nor does it remove an
 output the VCS tracks: that file is committed, and deleting it would dirty
 the tree. Preview with the global --dry-run flag before trusting a
 declaration you have not read.
@@ -2312,7 +2308,7 @@ them and magus describe job prints one job's terms.`,
 				"the jobs already here, in write_proof, which `magus ls jobs` prints. The whole record is validated at once: " +
 				"a fork with problems lists every one with its code and fix and stores nothing, and the global --dry-run " +
 				"does the same without forking, printing the record as it would be stored and exiting 1 while a problem " +
-				"remains. A waiver in the record keeps a broad write path, an output a target regenerates outside the " +
+				"remains. A deviation in the record keeps a broad write path, an output a target regenerates outside the " +
 				"write paths, or a ci target the job does not run.",
 			Flags: []cmdline.Flag{
 				{Name: "schema", Kind: cmdline.Bool, Doc: "Print the JSON schema a job must satisfy, and exit"},
@@ -2330,7 +2326,7 @@ them and magus describe job prints one job's terms.`,
 				{Name: "brief-format", Kind: cmdline.String, Doc: "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides"},
 				{Name: "read-only", Kind: cmdline.Bool, Doc: "A job that gathers evidence and writes nothing"},
 				{Name: "checkout", Kind: cmdline.String, Doc: "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work"},
-				{Name: "fix", Kind: cmdline.Bool, Doc: "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's waiver), validating again until none is left, and list only the problems that remain"},
+				{Name: "fix", Kind: cmdline.Bool, Doc: "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain"},
 			},
 		},
 		{
@@ -2431,15 +2427,35 @@ shows what it is doing.`,
 			Name:  "pause",
 			Short: "Hold jobs' holders off the machine budget until resumed",
 			Description: "Mark each job paused, so `magus job exec` and the guard refuse its holder's next magus run with one " +
-				"line naming the pause and `magus job resume <job>`. Nothing is preempted: a run already holding the budget " +
-				"finishes. A holder may not pause or resume a job; that is a person's or the orchestrator's. Pausing is how a " +
-				"person gets one job out of a bind without stopping every other.",
-			Usage: "magus job pause <job>... [flags]",
+				"line naming who paused it, why, and `magus job resume <job>`. The pause records its owner (the caller's " +
+				"session, or the person at the terminal) and --reason. While it holds, the read sweep and `magus job prune " +
+				"--all` leave the row alone; past --until the pause lapses and both may end it again. Nothing is preempted: " +
+				"a run already holding the budget finishes. A holder may not pause or resume a job; that is a person's or " +
+				"the orchestrator's. Pausing is how a person gets one job out of a bind without stopping every other.",
+			Flags: []cmdline.Flag{
+				{Name: "reason", Kind: cmdline.String, Doc: "Why the job is paused, which the holder's refusal and the row show (required)"},
+				{Name: "until", Kind: cmdline.String, Doc: "Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds until resumed"},
+			},
+			Usage: "magus job pause <job>... --reason <text> [--until <duration|time>] [flags]",
 		},
 		{
 			Name:  "resume",
 			Short: "Lift the pause on jobs",
 			Usage: "magus job resume <job>... [flags]",
+		},
+		{
+			Name:  "grant",
+			Short: "Lower one guard rule to advice for one job, typed by a person",
+			Description: "Record a person's one-time approval: the guard advises instead of refusing the named rule for the " +
+				"job's calls alone, until --for passes or the job ends, and the advice names who granted it and until when. " +
+				"--revoke ends a grant early. Only a grantable rule is accepted (hooks-off); any other is refused, naming " +
+				"the grantable ones. The guard refuses this verb to every agent and the job store refuses it from a process " +
+				"carrying a lease, so it is typed at a person's own terminal.",
+			Flags: []cmdline.Flag{
+				{Name: "for", Kind: cmdline.Duration, Doc: "End the grant after this long (e.g. 2h); unset, it lasts until the job ends"},
+				{Name: "revoke", Kind: cmdline.Bool, Doc: "End the job's grant of the rule"},
+			},
+			Usage: "magus job grant [--for <duration>] [--revoke] <job> <rule> [flags]",
 		},
 	},
 	Examples: []cmdline.Example{
@@ -2455,7 +2471,34 @@ shows what it is doing.`,
 		{Comment: "Preview that change", Command: "magus job apply -f job.json --dry-run"},
 		{Comment: "Grade a job's checks in a merged tree", Command: "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{Comment: "See which jobs a prune would end", Command: "magus job prune --dry-run"},
-		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core && magus job resume session-load/core"},
+		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core"},
+	},
+}
+
+var gateCommand = cmdline.Command{
+	Name:        "gate",
+	Short:       "A person's decisions about the local gate",
+	Description: "Record a person's waiver of the push gate for one commit, or revoke it.",
+	Tags:        []string{"cli", "magus gate", "gate", "push", "waiver"},
+	Usage:       "magus gate <waive> [flags]",
+	Children: []cmdline.Command{
+		{
+			Name:  "waive",
+			Short: "Let one commit be pushed with no passing gate, typed by a person",
+			Description: "Record a person's waiver for exactly one commit: push-ungated lets a push or `gh pr create` " +
+				"of that commit through and names who waived it, when and why; any other commit is still refused. " +
+				"--revoke removes the waiver. The guard refuses this verb to every agent and the store refuses it " +
+				"from a process carrying a lease, so it is typed at a person's own terminal.",
+			Flags: []cmdline.Flag{
+				{Name: "reason", Kind: cmdline.String, Doc: "Why the gate was skipped, recorded with the waiver; required unless --revoke"},
+				{Name: "revoke", Kind: cmdline.Bool, Doc: "Remove the commit's waiver"},
+			},
+			Usage: "magus gate waive <commit> (--reason <text> | --revoke) [flags]",
+		},
+	},
+	Examples: []cmdline.Example{
+		{Comment: "Push HEAD without the local gate, saying why", Command: `magus gate waive HEAD --reason "CI gates this release branch"`},
+		{Comment: "Take the waiver back", Command: "magus gate waive --revoke HEAD"},
 	},
 }
 

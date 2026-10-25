@@ -53,6 +53,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow)) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential)) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
+	{Name: "Deviation", Zero: types.Deviation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDeviation(v.(types.Deviation)) }},
 	{Name: "Diagnostic", Zero: types.Diagnostic{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiagnostic(v.(types.Diagnostic)) }},
 	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(types.Diff), enums) }},
 	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
@@ -162,7 +163,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobUnattributedWrite", Zero: types.JobUnattributedWrite{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobUnattributedWrite(v.(types.JobUnattributedWrite))
 	}},
-	{Name: "JobWaiver", Zero: types.JobWaiver{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWaiver(v.(types.JobWaiver)) }},
 	{Name: "JobWorktree", Zero: types.JobWorktree{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWorktree(v.(types.JobWorktree)) }},
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer), enums)

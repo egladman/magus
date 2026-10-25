@@ -566,12 +566,12 @@ func openLib(name string) (uintptr, error) {
 		}
 		if runtime.GOOS == "darwin" {
 			candidates = append(candidates,
-				"/System/Library/Frameworks/"+name+".framework/"+name)
+				fmt.Sprintf("/System/Library/Frameworks/%s.framework/%s", name, name))
 		}
 		// Legacy/robustness: the bare name (dyld may resolve a leaf), versioned
 		// Linux sonames, and the opposite lib-prefix form.
 		candidates = append(candidates, name,
-			"lib"+name+".so.6", "lib"+name+".so.1", "lib"+name+".so.0",
+			fmt.Sprintf("lib%s.so.6", name), fmt.Sprintf("lib%s.so.1", name), fmt.Sprintf("lib%s.so.0", name),
 			name+".so.6", name+".so.1", name+".so.0")
 	}
 	var lastErr error

@@ -1,6 +1,6 @@
 # A release checklist where each item is a job whose goal says what done means, and
 # `ls jobs` is the board. One item verifies; the other comes back unfinished, and wait
-# says which goal is unmet and repeats the risk its holder reported.
+# says which goal is unmet, repeats the risk its holder reported, and sends it back to rework.
 # docs/guides/jobs/other-work.md shows these commands and every golden below verbatim
 # (TestJobGuideMatchesItsScripts holds it to that).
 env HOME=$WORK/home
@@ -88,17 +88,18 @@ goal changelog: verified
 footprint: where its diff since the checkpoint landed
   CHANGELOG.md:3-6
 -- wait-notes.out --
-rejected release-1.3/notes, and its state is unchanged
+rejected release-1.3/notes
   job release-1.3/notes is not read-only and the result claims no changed paths at all
   nothing in the diff since 5f6b136f2721af3fb8a117fbf824b24a3a78b059 is inside its write paths (notes/1.3.md)
   goal "notes": nothing matching "notes/1.3.md" is in the tree, so this goal is unmet
+release-1.3/notes is running again and holds its write paths again for its rework
 goal notes: rejected
 footprint: no line changed since the checkpoint
 unresolved risks its holder reported
   the notes need the final benchmark numbers
 -- ls-board.out --
-JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  pass    standard  1      alone     -
-release-1.3/notes      notes      exited  standard  1      disjoint  -
+JOB                    HOLDER     STATE    MODEL     PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass     standard  1      alone     -
+release-1.3/notes      notes      running  standard  1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

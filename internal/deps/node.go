@@ -3,6 +3,7 @@ package deps
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -240,7 +241,7 @@ func yarnBerryLock(lockfile string) func(name, spec string) string {
 		}
 	}
 	return func(name, spec string) string {
-		for _, desc := range []string{name + "@npm:" + spec, name + "@" + spec} {
+		for _, desc := range []string{fmt.Sprintf("%s@npm:%s", name, spec), fmt.Sprintf("%s@%s", name, spec)} {
 			if v, ok := byDescriptor[desc]; ok {
 				return v
 			}

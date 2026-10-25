@@ -1564,17 +1564,17 @@ func TestGuardTemplateMarkerProblem(t *testing.T) {
 	marker := agent.GuardTemplateMarker
 
 	t.Run("current", func(t *testing.T) {
-		body := []byte("#!/bin/sh\n# " + marker + " " + strconv.Itoa(agent.GuardTemplateVersion) + "\n")
+		body := []byte(fmt.Sprintf("#!/bin/sh\n# %s %d\n", marker, agent.GuardTemplateVersion))
 		assert.Equal(t, "", guardTemplateMarkerProblem(body))
 	})
 
 	t.Run("ahead of this binary", func(t *testing.T) {
-		body := []byte("# " + marker + " " + strconv.Itoa(agent.GuardTemplateVersion+1) + "\n")
+		body := []byte(fmt.Sprintf("# %s %d\n", marker, agent.GuardTemplateVersion+1))
 		assert.Equal(t, "", guardTemplateMarkerProblem(body))
 	})
 
 	t.Run("behind", func(t *testing.T) {
-		body := []byte("# " + marker + " 1\n")
+		body := []byte(fmt.Sprintf("# %s 1\n", marker))
 		got := guardTemplateMarkerProblem(body)
 		assert.Contains(t, got, "template version 1 is older than current version "+strconv.Itoa(agent.GuardTemplateVersion))
 		assert.Contains(t, got, "re-download it")
@@ -1585,19 +1585,19 @@ func TestGuardTemplateMarkerProblem(t *testing.T) {
 	// plugin still calling a removed subcommand graded healthy without this.
 	t.Run("no marker at all", func(t *testing.T) {
 		got := guardTemplateMarkerProblem([]byte("#!/bin/sh\necho hi\n"))
-		assert.Contains(t, got, "carries no "+marker+" line")
+		assert.Contains(t, got, fmt.Sprintf("carries no %s line", marker))
 		assert.Contains(t, got, "predates template versioning")
 	})
 
 	// An unreadable version is treated as current rather than as a version-0 copy:
 	// the marker is there, so the file is not from before versioning.
 	t.Run("unparsable version", func(t *testing.T) {
-		assert.Equal(t, "", guardTemplateMarkerProblem([]byte("# "+marker+" seven\n")))
+		assert.Equal(t, "", guardTemplateMarkerProblem([]byte(fmt.Sprintf("# %s seven\n", marker))))
 	})
 
 	// The marker on the last line, with no newline after it.
 	t.Run("marker at end of file", func(t *testing.T) {
-		assert.Equal(t, "", guardTemplateMarkerProblem([]byte("# "+marker+" "+strconv.Itoa(agent.GuardTemplateVersion))))
+		assert.Equal(t, "", guardTemplateMarkerProblem([]byte(fmt.Sprintf("# %s %d", marker, agent.GuardTemplateVersion))))
 	})
 }
 

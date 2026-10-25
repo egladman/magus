@@ -311,7 +311,7 @@ func TestPrettyHandlerPrintsWhyUnderTheMessage(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
 	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), rec))
-	assert.Contains(t, term.String(), "       "+tty.Colorize(why, colDim)+"\n", "the why is dim on a terminal")
+	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", tty.Colorize(why, colDim)), "the why is dim on a terminal")
 
 	var text bytes.Buffer
 	require.NoError(t, slog.NewTextHandler(&text, nil).Handle(context.Background(), rec))
@@ -326,7 +326,7 @@ func failureWithReason() slog.Record {
 		slog.String("project", "web"),
 		slog.String("target", "fmt"),
 		slog.Int64("duration", int64(time.Second)),
-		slog.String("error", "[MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)"),
+		slog.String("error", "[MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.writesFiles([...], editsExistingSource: true)"),
 		attr.Why("A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."),
 		slog.String("ref", "outbadcafe"),
 	)
@@ -346,21 +346,23 @@ func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
 		return buf.String()
 	}
 	const why = "A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."
-	cause := "  cause: [MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)\n"
+	cause := "  cause: [MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.writesFiles([...], editsExistingSource: true)\n"
 
-	assert.Contains(t, render(false, false), cause+"       "+why+"\n  output: outbadcafe\n")
+	assert.Contains(t, render(false, false), fmt.Sprintf(`%s       %s
+  output: outbadcafe
+`, cause, why))
 
 	quieted := render(true, false)
 	assert.Contains(t, quieted, cause+"  output: outbadcafe\n")
 	assert.NotContains(t, quieted, why)
 
-	assert.Contains(t, render(true, true), cause+"       "+why+"\n", "-v brings the reason back")
+	assert.Contains(t, render(true, true), fmt.Sprintf("%s       %s\n", cause, why), "-v brings the reason back")
 
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
 	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), failureWithReason()))
-	assert.Contains(t, term.String(), "       "+tty.Colorize(why, colDim)+"\n", "the why is dim on a terminal")
+	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", tty.Colorize(why, colDim)), "the why is dim on a terminal")
 }
 
 // A wait note shows from the first beat by default; a quiet display shows it only past a
@@ -470,9 +472,8 @@ func TestFailureExcerptBoundsMultilineError(t *testing.T) {
 
 func TestFailureExcerptKeepsTheCapturedOutputPathWhole(t *testing.T) {
 	t.Parallel()
-	path := "/" + strings.Repeat("d", 300) + "/.magus/logs/9c4f0000-abcd-1234-5678-000000000000.log"
-	cause := `target "security" exceeded its declared timeout of 15m after 15m0s; ` +
-		`its process tree was killed; captured output: ` + path
+	path := fmt.Sprintf("/%s/.magus/logs/9c4f0000-abcd-1234-5678-000000000000.log", strings.Repeat("d", 300))
+	cause := fmt.Sprintf("target \"security\" exceeded its declared timeout of 15m after 15m0s; its process tree was killed; captured output: %s", path)
 	got := failureCauseExcerpt(cause)
 	assert.True(t, strings.HasSuffix(got, path), "path was cut: %s", got)
 }
@@ -481,13 +482,13 @@ func TestFailureExcerptKeepsTheCapturedOutputPathWhole(t *testing.T) {
 func TestFailureExcerptKeepsTheProseBesideALongPath(t *testing.T) {
 	t.Parallel()
 	prose := `[MGS3011] target "slow" exceeded its declared timeout of 2s after 2.0s; its process tree was killed; `
-	path := "/" + strings.Repeat("d", 300) + "/.magus/logs/6122356f3c90df4ef0902d643a644a09cdd5e0e4fe048990d0e773779180edda.log"
-	cause := prose + failureCauseExcerptLogMarker + path
+	path := fmt.Sprintf("/%s/.magus/logs/6122356f3c90df4ef0902d643a644a09cdd5e0e4fe048990d0e773779180edda.log", strings.Repeat("d", 300))
+	cause := fmt.Sprintf("%s%s%s", prose, failureCauseExcerptLogMarker, path)
 	assert.Equal(t, cause, failureCauseExcerpt(cause))
 
 	long := strings.Repeat("x", 300) + " "
-	assert.Equal(t, strings.Repeat("x", 237)+"..."+failureCauseExcerptLogMarker+path,
-		failureCauseExcerpt(long+failureCauseExcerptLogMarker+path))
+	assert.Equal(t, fmt.Sprintf("%s...%s%s", strings.Repeat("x", 237), failureCauseExcerptLogMarker, path),
+		failureCauseExcerpt(fmt.Sprintf("%s%s%s", long, failureCauseExcerptLogMarker, path)))
 }
 
 // TestReproTarget verifies the target token the repro line uses: the bare name, or
@@ -1034,8 +1035,7 @@ func TestRepeatedCodeFoldsIntoOneFooterLine(t *testing.T) {
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
 	mutation := func(project, target string) string {
-		return "[MGS4007] " + project + ":" + target + " modified its declared sources a.go; declare them with ctx.modifiesExistingFiles(...)\n" +
-			"  see: https://example/MGS4007/"
+		return fmt.Sprintf("[MGS4007] %s:%s modified its declared sources a.go; declare them with ctx.writesFiles([...], editsExistingSource: true)\n  see: https://example/MGS4007/", project, target)
 	}
 	steps := [][2]string{
 		{".", "format"}, {"docs", "render"}, {"web", "lint"}, {"api", "fmt"},
@@ -1143,7 +1143,7 @@ func TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage(t *testing.T) {
 // generateRoot is the root of the generate cascade below: a coded diagnostic, which
 // renders its docs URL on a second line.
 const generateRoot = "[MGS4007] .:types-generate modified its declared sources .claude/skills/magus-docs-lookup-full/SKILL.md, " +
-	".claude/skills/magus-docs-lookup/SKILL.md; declare them with ctx.modifiesExistingFiles(...)\n" +
+	".claude/skills/magus-docs-lookup/SKILL.md; declare them with ctx.writesFiles([...], editsExistingSource: true)\n" +
 	"  see: https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"
 
 // generateCascade replays a lint run in which types-generate failed and every
@@ -1152,7 +1152,7 @@ const generateRoot = "[MGS4007] .:types-generate modified its declared sources .
 // chain and every see: line.
 func generateCascade(t *testing.T, h *PrettyHandler) {
 	t.Helper()
-	via := func(names ...string) string { return strings.Join(names, ": ") + ": " + generateRoot }
+	via := func(names ...string) string { return fmt.Sprintf("%s: %s", strings.Join(names, ": "), generateRoot) }
 	failEvent(t, h, ".", "types-generate:rw", generateRoot)
 	failEvent(t, h, ".", "job-generate:rw", via("types-generate"))
 	failEvent(t, h, ".", "termcast-generate:rw", via("job-generate", "types-generate"))

@@ -5,10 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -355,7 +355,7 @@ func failureLines(failures []trail.RuleFailure) []string {
 	out := make([]string, len(failures))
 	for i, f := range failures {
 		head, _, _ := strings.Cut(f.Error, "\n\n")
-		out[i] = f.Side + ": " + head
+		out[i] = fmt.Sprintf("%s: %s", f.Side, head)
 	}
 	return out
 }
@@ -365,11 +365,11 @@ func failureLines(failures []trail.RuleFailure) []string {
 func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own, hasBinary bool) denial {
 	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
 	var why strings.Builder
-	why.WriteString("This workspace registered a " + call.seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
+	fmt.Fprintf(&why, "This workspace registered a %s rule the last time it loaded, and now neither the working tree nor its approved copy loads:", call.seam.member())
 	for _, f := range failures {
-		why.WriteString("\n  " + f.Side + ": " + f.Error)
+		fmt.Fprintf(&why, "\n  %s: %s", f.Side, f.Error)
 	}
-	why.WriteString("\nThat rule judges " + gatedCalls(call.seam) + ", so these wait until it loads; every other call still runs on the built-in rules.")
+	fmt.Fprintf(&why, "\nThat rule judges %s, so these wait until it loads; every other call still runs on the built-in rules.", gatedCalls(call.seam))
 	switch {
 	case call.lease == "" && own && hasBinary:
 		why.WriteString("\nThe likeliest cause is a ./magus older than the tree.")
@@ -379,7 +379,7 @@ func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own, hasBinar
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
 	}
-	return denial{Say: call.verb + " waits for this workspace's guard policy to load; " + fix.say + ".", Why: why.String()}
+	return denial{Say: fmt.Sprintf("%s waits for this workspace's guard policy to load; %s.", call.verb, fix.say), Why: why.String()}
 }
 
 // gatedCalls words what denyUnloaded holds back on seam.
@@ -416,7 +416,7 @@ func applyWorkspaceAnswer(verdict types.GuardJudgment, decided string, asked rul
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionAdvise:
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
 		verdict.Context += "\n\n" + answer.Reason
-		return verdict, decided + decidedByJoin + asked.by
+		return verdict, fmt.Sprintf("%s%s%s", decided, decidedByJoin, asked.by)
 	}
 	return verdict, decided
 }
@@ -440,9 +440,9 @@ func applyRuleFailureNote(verdict types.GuardJudgment, note string, kind hint.Ma
 func sideName(seam functionSeam, side string) string {
 	switch side {
 	case decidedByApproved:
-		return "approved " + seam.member() + " rule"
+		return fmt.Sprintf("approved %s rule", seam.member())
 	default:
-		return "working tree's " + seam.member() + " rule"
+		return fmt.Sprintf("working tree's %s rule", seam.member())
 	}
 }
 
@@ -483,13 +483,13 @@ func ruleFailureNote(r ruleFailureReport) string {
 	for _, by := range r.answered {
 		applied = append(applied, "the "+sideName(r.seam, by))
 	}
-	summary := "Only " + strings.Join(applied, " and ") + " applied to this " + string(r.seam) + "."
+	summary := fmt.Sprintf("Only %s applied to this %s.", strings.Join(applied, " and "), string(r.seam))
 	var full strings.Builder
 	full.WriteString(lead)
 	h := sha256.New()
 	for _, f := range r.failures {
-		full.WriteString("The " + sideName(r.seam, f.Side) + " judged nothing: " + f.Error + "\n\n")
-		_, _ = h.Write([]byte(f.Side + "\x00" + f.Error + "\x00"))
+		fmt.Fprintf(&full, "The %s judged nothing: %s\n\n", sideName(r.seam, f.Side), f.Error)
+		_, _ = fmt.Fprintf(h, "%s\x00%s\x00", f.Side, f.Error)
 	}
 	full.WriteString(summary)
 	if r.judging != nil {
@@ -500,8 +500,8 @@ func ruleFailureNote(r ruleFailureReport) string {
 	if r.toldInFull {
 		return full.String()
 	}
-	kind := hint.MarkerKind(string(ruleFailedKind(r.seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
-	return r.gate.OnceOrBrief(kind, full.String(), lead+summary+" A workspace "+string(r.seam)+" rule is still failing, as told earlier in this session.")
+	kind := hint.MarkerKind(fmt.Sprintf("%s-%s", string(ruleFailedKind(r.seam)), hex.EncodeToString(h.Sum(nil)[:8])))
+	return r.gate.OnceOrBrief(kind, full.String(), fmt.Sprintf("%s%s A workspace %s rule is still failing, as told earlier in this session.", lead, summary, string(r.seam)))
 }
 
 // judgingBinary is what is known about the magus that judged a call, told by String.
@@ -553,7 +553,7 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 func (j judgingBinary) String() string {
 	who := "Judged by " + j.path
 	if j.version != "" {
-		who += " (" + j.version + ")"
+		who += fmt.Sprintf(" (%s)", j.version)
 	}
 	if j.root == "" {
 		return who + "."
@@ -568,13 +568,13 @@ func (j judgingBinary) String() string {
 	}
 	switch {
 	case j.unload.Cause == unloadSkewedSpell:
-		return who + " It ships no spell " + strconv.Quote(j.unload.Spell) + ", which the tree carries, so it was built from another commit. Fix: " + j.fix + "."
+		return fmt.Sprintf("%s It ships no spell %q, which the tree carries, so it was built from another commit. Fix: %s.", who, j.unload.Spell, j.fix)
 	case j.unload.Cause != unloadStale:
 		return who
 	case j.hasBinary && !j.same:
-		return who + " It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise " + j.fix + "."
+		return fmt.Sprintf("%s It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise %s.", who, j.fix)
 	}
-	return who + " Fix: " + j.fix + "."
+	return fmt.Sprintf("%s Fix: %s.", who, j.fix)
 }
 
 // ruleFailedKind names the notice that a seam's workspace rule judged nothing.

@@ -35,9 +35,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("MAGUS.md");
-    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
-                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                    "../../internal/render/md/md.go", "../../internal/hint/cli_command.go"]);
     index\render("libs/textsearch");
 }
 
@@ -52,7 +52,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     // Declared so a cache hit restores the report the console merges.
-    ctx.writesFiles("coverage.lcov");
+    ctx.writesFiles(["coverage.lcov"]);
     fs\removeAll(".testcache");
 
     final bundle = mut [<str>];

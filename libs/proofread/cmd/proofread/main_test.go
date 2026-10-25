@@ -37,7 +37,7 @@ func (f finding) replacing(texts ...string) finding {
 
 func row(node, source, kind string, rule proofread.Rule, decision proofread.Decision, message, match string) finding {
 	f := finding{
-		Node: node, Source: source, Kind: kind, Rule: string(rule), Decision: string(decision),
+		Node: node, Source: source, Kind: kind, Rule: string(rule), Decision: decision.String(),
 		Message: message, Match: match,
 	}
 

@@ -129,7 +129,7 @@ func NarrowConfigHold(ctx context.Context, store *Store, id, file string, touche
 			}
 			word := claimWord(d, all)
 			held = append(held, word)
-			cur.WritePaths = append(cur.WritePaths, file+"#"+word)
+			cur.WritePaths = append(cur.WritePaths, fmt.Sprintf("%s#%s", file, word))
 		}
 		// Store.releases records what a write gave up; here that is file itself, which the
 		// pattern held whole until now.

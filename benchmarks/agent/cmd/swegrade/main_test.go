@@ -1,13 +1,18 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
 )
 
 func wrapped(body string) string {
-	return "setup\n" + markerStart + "\n" + body + markerEnd + "\ncleanup\n"
+	return fmt.Sprintf(`setup
+%s
+%s%s
+cleanup
+`, markerStart, body, markerEnd)
 }
 
 func sampleRow(t *testing.T) instance {

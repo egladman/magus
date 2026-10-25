@@ -108,7 +108,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Run target "+targetName+" for the selected projects.")
+			fmt.Fprintf(os.Stderr, "Run target %s for the selected projects.\n", targetName)
 			if spellFilter != "" {
 				fmt.Fprintf(os.Stderr, "Spell filter: only the %q spell runs.\n", spellFilter)
 			}
@@ -954,7 +954,7 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "  ls       print selected projects (no execution)")
 	fmt.Fprintln(os.Stderr, "  ci       the magusfile's ci target, run read-only (affected/pipeline anchor)")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "To see what a project can run: `"+hint.LsTargets.With("[project]")+"`")
+	fmt.Fprintf(os.Stderr, "To see what a project can run: `%s`\n", hint.LsTargets.With("[project]"))
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (each is an exported magusfile function, e.g.")
 	fmt.Fprintln(os.Stderr, hint.TargetExample+"):")

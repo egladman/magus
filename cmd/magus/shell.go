@@ -90,8 +90,8 @@ func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "on purpose. Unreadable input is 2, so a host that blocks on 2 fails closed")
 	fmt.Fprintln(w, "when bytes were lost on the way in.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "A verdict names the rule that produced it, in brackets. `"+hint.DescribeRules.String()+"`")
-	fmt.Fprintln(w, "lists every rule this workspace enforces; `"+hint.DescribeRule.With("<name>")+"` details one.")
+	fmt.Fprintf(w, "A verdict names the rule that produced it, in brackets. `%s`\n", hint.DescribeRules.String())
+	fmt.Fprintf(w, "lists every rule this workspace enforces; `%s` details one.\n", hint.DescribeRule.With("<name>"))
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
 }
@@ -167,8 +167,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
-			Reason: refusal.Error() + "\n" +
-				"Nothing was judged, so this call is blocked rather than cleared. Fix the environment the agent host runs in.",
+			Reason:        fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. Fix the environment the agent host runs in.", refusal.Error()),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
@@ -192,8 +191,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 			Decision:      "deny",
 			// "from stdin" is accurate whichever way this command is called: an operand
 			// is read off argv and cannot fail, so a read error is always the piped path.
-			Reason: "magus shell could not read its input from stdin: " + readErr.Error() + "\n" +
-				"Nothing was judged, so this call is blocked rather than cleared. Retry it.",
+			Reason: fmt.Sprintf("magus shell could not read its input from stdin: %s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", readErr.Error()),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
@@ -219,20 +217,14 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Window:     window,
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
-		// Declared by the wiring, because only a host whose skill loads magus observes can
-		// honestly say so. See guard.denySpawnWithoutBrief.
-		ObservesSkillLoads: sf.ObservesSkillLoads,
-		Tools:              shellToolRows(sf.ToolRows),
-		// Declared by the wiring for the same reason: only a glue that renders the host's
-		// approval prompt can say so, and one that predates ask renders it as an allow.
+		// Declared by the wiring, because only a glue that renders the host's approval
+		// prompt can say so, and one that predates ask renders it as an allow.
 		RendersAsk: sf.RendersAsk,
-		// The call's own word on how the host runs it, and the host's foreground limits
-		// as the wiring declares them; a flag left out leaves the rules that read it silent.
-		CallBackground:        sf.CallBackground,
-		CallTimeout:           time.Duration(sf.CallTimeoutMs) * time.Millisecond,
-		HostForegroundDefault: time.Duration(sf.ForegroundDefaultMs) * time.Millisecond,
-		HostForegroundMax:     time.Duration(sf.ForegroundMaxMs) * time.Millisecond,
+		// The call's own word on how the host runs it.
+		CallBackground: sf.CallBackground,
+		CallTimeout:    time.Duration(sf.CallTimeoutMs) * time.Millisecond,
 	}
+	applyHostFacts(ctx, &req)
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
 	ctx = guard.BeginJudgment(ctx, guardCacheDir(""), req)
@@ -472,14 +464,28 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 	}
 }
 
-// shellToolRows reads the tool rows directory the wiring names, relative to the guard's
-// workspace, or to the cwd outside one, where no workspace rule applies anyway.
-func shellToolRows(dir string) agent.ToolRows {
+// applyHostFacts fills req from the tool rows installed for its host, whose limits file
+// install writes from the host's harness spell, so the glue names only the host and the
+// hook never loads the workspace for them. Without the files the gap is logged.
+func applyHostFacts(ctx context.Context, req *guard.Request) {
+	if strings.TrimSpace(req.Host) == "" {
+		return
+	}
 	root, err := guardRoot("")
 	if err != nil {
 		root = ""
 	}
-	return agent.ReadToolRows(root, dir)
+	req.Tools = agent.FindToolRows(root, req.Host)
+	limits, err := req.Tools.Limits()
+	if err != nil {
+		slog.WarnContext(ctx, "the guard judges without the host's limits and skill-load capability",
+			attr.Error(err), attr.Notice(""), attr.Component("magus shell"))
+		return
+	}
+	req.ObservesSkillLoads = limits.ObservesSkillLoads
+	req.HostForegroundDefault = time.Duration(limits.ForegroundDefaultMs) * time.Millisecond
+	req.HostForegroundMax = time.Duration(limits.ForegroundMaxMs) * time.Millisecond
+	req.HostResumesOnBackgroundFrom = limits.ResumesOnBackgroundFrom
 }
 
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,
@@ -693,11 +699,11 @@ func writeGuardVerdict(out io.Writer, opts output.Options, verdict types.GuardJu
 	case outputText:
 		switch verdict.Decision {
 		case "deny":
-			fmt.Fprintln(out, decisionLabel("deny", verdict.Rule)+" "+verdict.Reason)
+			fmt.Fprintf(out, "%s %s\n", decisionLabel("deny", verdict.Rule), verdict.Reason)
 		case "ask":
-			fmt.Fprintln(out, decisionLabel("ask", verdict.Rule)+" "+verdict.Reason)
+			fmt.Fprintf(out, "%s %s\n", decisionLabel("ask", verdict.Rule), verdict.Reason)
 		case "advise":
-			fmt.Fprintln(out, decisionLabel("advise", verdict.Rule)+" "+verdict.Context)
+			fmt.Fprintf(out, "%s %s\n", decisionLabel("advise", verdict.Rule), verdict.Context)
 		default:
 			fmt.Fprintln(out, "pass")
 		}
@@ -723,7 +729,7 @@ func decisionLabel(decision, rule string) string {
 	if rule == "" {
 		return decision + ":"
 	}
-	return decision + " [" + rule + "]:"
+	return fmt.Sprintf("%s [%s]:", decision, rule)
 }
 
 // guardInputLimit bounds the payload one hook call may carry.

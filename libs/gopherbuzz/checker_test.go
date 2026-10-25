@@ -898,10 +898,10 @@ func confRejects(t *testing.T, src, wantSubstr string) {
 func TestConformance_FiberYieldTypeNeedNotBeOptional(t *testing.T) {
 	for _, annot := range []string{"int", "int?", "void", "[str]", "Point"} {
 		t.Run(annot, func(t *testing.T) {
-			src := `object Point { x: int = 0 }
-fun g() > void *> ` + annot + ` { _ = yield ` + yieldOperand(annot) + `; }
+			src := fmt.Sprintf(`object Point { x: int = 0 }
+fun g() > void *> %s { _ = yield %s; }
 final f = &g();
-final __r = resume f;`
+final __r = resume f;`, annot, yieldOperand(annot))
 			_, err := ParseEmbedded(src)
 			require.NoErrorf(t, err, "a %q yield type must parse", annot)
 		})

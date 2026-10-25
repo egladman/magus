@@ -125,7 +125,7 @@ func (sprawlCheck) run(x *namingIndex) []finding {
 				details = append(details, fmt.Sprintf("`%s` has %d methods, past the %s of %d for type-methods source",
 					f.Owner, methods, thresholdSource(src), wide))
 			}
-			key := f.Members[0].language + "\x00" + f.Members[0].scope + "\x00" + f.Stem + "\x00" + s.folded[f.Slot]
+			key := fmt.Sprintf("%s\x00%s\x00%s\x00%s", f.Members[0].language, f.Members[0].scope, f.Stem, s.folded[f.Slot])
 			if prev, ok := reported[key]; ok && prev.subject <= s.id {
 				continue
 			}
@@ -190,7 +190,7 @@ func (x *namingIndex) siblingFamilies(ds []*namingDecl) []siblingFamily {
 		slices.SortFunc(members, func(a, b *namingDecl) int { return cmp.Compare(a.id, b.id) })
 		w := members[0].words[k.slot]
 		out = append(out, siblingFamily{
-			Owner: k.owner, Stem: members[0].label[:w.start] + "<X>" + members[0].label[w.end:],
+			Owner: k.owner, Stem: fmt.Sprintf("%s<X>%s", members[0].label[:w.start], members[0].label[w.end:]),
 			Slot: k.slot, Words: words, Members: members,
 		})
 	}
@@ -277,7 +277,7 @@ func kinOwners(kin []*namingDecl) []string {
 // familyPlace says where f lives: on its owner, or in its scope's directory.
 func familyPlace(f siblingFamily) string {
 	if f.Owner != "" {
-		return "on `" + f.Owner + "`"
+		return fmt.Sprintf("on `%s`", f.Owner)
 	}
 	return "in " + path.Dir(f.Members[0].file())
 }

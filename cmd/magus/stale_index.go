@@ -339,5 +339,5 @@ func (l guardLookups) indexCause() string {
 	if !ok {
 		return ""
 	}
-	return "Why: " + c.Why + ". Fix: " + c.Fix + "."
+	return fmt.Sprintf("Why: %s. Fix: %s.", c.Why, c.Fix)
 }

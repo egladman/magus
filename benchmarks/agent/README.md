@@ -47,9 +47,10 @@ Neither is part of the task set.
 ## Headline metric
 
 **Cost-of-pass**: expected dollars per correct solution. Efficiency is
-conditioned on success, so a cheap failure is not efficient. The companion chart
-is correctness against median completion tokens, read as a cost-accuracy
-frontier.
+conditioned on success, so a cheap failure is not efficient. The companion table
+puts each cell's pass rate, with its passes of its graded runs, beside the median
+tokens and dollars it spent. The null control is the false-pass check: a pass
+rate is evidence only where the null control fails.
 
 ## Running a pilot
 

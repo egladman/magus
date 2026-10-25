@@ -182,7 +182,7 @@ func (r goAPIRenderer) typeString(t gotypes.Type) string {
 // lockLine joins a sort key to its declaration text: the symbol path, then each
 // member beneath it.
 func lockLine(id, format string, args ...any) string {
-	return id + " " + fmt.Sprintf(format, args...)
+	return fmt.Sprintf("%s %s", id, fmt.Sprintf(format, args...))
 }
 
 // declarations lists a line for every exported constant, variable, function and
@@ -195,7 +195,7 @@ func (r goAPIRenderer) declarations() []string {
 		if !obj.Exported() {
 			continue
 		}
-		id := r.pkg.Path() + "." + name
+		id := fmt.Sprintf("%s.%s", r.pkg.Path(), name)
 		switch o := obj.(type) {
 		case *gotypes.Const:
 			lines = append(lines, lockLine(id, "const %s = %s", r.typeString(o.Type()), o.Val().ExactString()))
@@ -258,13 +258,13 @@ func (r goAPIRenderer) members(id string, named *gotypes.Named) []string {
 			if tag := u.Tag(i); tag != "" {
 				text += " " + strconv.Quote(tag)
 			}
-			lines = append(lines, lockLine(id+"."+f.Name(), "%s", text))
+			lines = append(lines, lockLine(fmt.Sprintf("%s.%s", id, f.Name()), "%s", text))
 		}
 	case *gotypes.Interface:
 		for i := range u.NumExplicitMethods() {
 			m := u.ExplicitMethod(i)
 			if m.Exported() {
-				lines = append(lines, lockLine(id+"."+m.Name(), "imethod %s", r.typeString(m.Type())))
+				lines = append(lines, lockLine(fmt.Sprintf("%s.%s", id, m.Name()), "imethod %s", r.typeString(m.Type())))
 			}
 		}
 		for i := range u.NumEmbeddeds() {
@@ -286,7 +286,7 @@ func (r goAPIRenderer) members(id string, named *gotypes.Named) []string {
 		if valSet.Lookup(fn.Pkg(), fn.Name()) == nil {
 			kind = "method(ptr)"
 		}
-		lines = append(lines, lockLine(id+"."+fn.Name(), "%s %s", kind, r.typeString(fn.Type())))
+		lines = append(lines, lockLine(fmt.Sprintf("%s.%s", id, fn.Name()), "%s %s", kind, r.typeString(fn.Type())))
 	}
 	return lines
 }
@@ -300,9 +300,9 @@ func (r goAPIRenderer) typeParams(list *gotypes.TypeParamList) string {
 	parts := make([]string, list.Len())
 	for i := range list.Len() {
 		tp := list.At(i)
-		parts[i] = tp.Obj().Name() + " " + r.typeString(tp.Constraint())
+		parts[i] = fmt.Sprintf("%s %s", tp.Obj().Name(), r.typeString(tp.Constraint()))
 	}
-	return "[" + strings.Join(parts, ", ") + "]"
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 }
 
 // internalLeaks lists, sorted, every exported declaration of pkgs whose signature,
@@ -324,7 +324,7 @@ func internalLeaks(pkgs []*gotypes.Package) []string {
 			if !obj.Exported() {
 				continue
 			}
-			id := pkg.Path() + "." + name
+			id := fmt.Sprintf("%s.%s", pkg.Path(), name)
 			tn, isType := obj.(*gotypes.TypeName)
 			if !isType {
 				out = append(out, l.check(id, obj.Type())...)
@@ -383,13 +383,13 @@ func (l leakFinder) members(id string, named *gotypes.Named) []string {
 	case *gotypes.Struct:
 		for i := range u.NumFields() {
 			if f := u.Field(i); f.Exported() {
-				out = append(out, l.check(id+"."+f.Name(), f.Type())...)
+				out = append(out, l.check(fmt.Sprintf("%s.%s", id, f.Name()), f.Type())...)
 			}
 		}
 	case *gotypes.Interface:
 		for i := range u.NumExplicitMethods() {
 			if m := u.ExplicitMethod(i); m.Exported() {
-				out = append(out, l.check(id+"."+m.Name(), m.Type())...)
+				out = append(out, l.check(fmt.Sprintf("%s.%s", id, m.Name()), m.Type())...)
 			}
 		}
 		for i := range u.NumEmbeddeds() {
@@ -400,7 +400,7 @@ func (l leakFinder) members(id string, named *gotypes.Named) []string {
 	ptrSet := gotypes.NewMethodSet(gotypes.NewPointer(named))
 	for i := range ptrSet.Len() {
 		if fn, ok := ptrSet.At(i).Obj().(*gotypes.Func); ok && fn.Exported() {
-			out = append(out, l.check(id+"."+fn.Name(), fn.Type())...)
+			out = append(out, l.check(fmt.Sprintf("%s.%s", id, fn.Name()), fn.Type())...)
 		}
 	}
 	return out
@@ -410,7 +410,7 @@ func (l leakFinder) members(id string, named *gotypes.Named) []string {
 func (l leakFinder) check(id string, t gotypes.Type) []string {
 	var out []string
 	l.walk(t, func(named *gotypes.Named) {
-		out = append(out, id+" names "+gotypes.TypeString(named, nil))
+		out = append(out, fmt.Sprintf("%s names %s", id, gotypes.TypeString(named, nil)))
 	})
 	return out
 }

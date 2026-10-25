@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -319,7 +320,7 @@ func (m fileMap) read(e mapEntry) string {
 
 // sedRangeCommand prints lines first..last of rel, the one read every file kind has.
 func sedRangeCommand(rel string, first, last int) string {
-	return "sed -n " + strconv.Itoa(first) + "," + strconv.Itoa(last) + "p " + shellWord(rel)
+	return fmt.Sprintf("sed -n %d,%dp %s", first, last, shellWord(rel))
 }
 
 // shellWord quotes s for a shell only when it needs it, so a plain path reads as typed.
@@ -327,7 +328,7 @@ func shellWord(s string) string {
 	if s != "" && !strings.ContainsAny(s, " \t\n'\"$`\\*?[]{}()&;|<>!#~") {
 		return s
 	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
 }
 
 // covering is the one entry whose span holds first..last.
@@ -389,7 +390,7 @@ func goFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 	})
 	m := fileMap{rel: rel, lines: lines, entries: entries, indexed: indexed, noun: "declaration"}
 	if indexed {
-		m.list = hint.Explain.With(types.KindFile + ":" + rel)
+		m.list = hint.Explain.With(fmt.Sprintf("%s:%s", types.KindFile, rel))
 	}
 	return m, true
 }
@@ -422,7 +423,7 @@ func goDecls(abs string) (entries []mapEntry, lines int, ok bool) {
 			if d.Recv == nil {
 				add(d.Name.Name, d.Name.Name, d.Doc, d.Pos(), d.End())
 			} else {
-				add(receiverType(d.Recv)+"."+d.Name.Name, "", d.Doc, d.Pos(), d.End())
+				add(fmt.Sprintf("%s.%s", receiverType(d.Recv), d.Name.Name), "", d.Doc, d.Pos(), d.End())
 			}
 		case *ast.GenDecl:
 			if d.Tok == token.IMPORT {
@@ -515,14 +516,14 @@ func markdownFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 			continue
 		}
 		if m := headingRe.FindStringSubmatch(text); len(m) > 2 && m[2] != "" {
-			entries = append(entries, mapEntry{name: m[1] + " " + m[2], first: lines})
+			entries = append(entries, mapEntry{name: fmt.Sprintf("%s %s", m[1], m[2]), first: lines})
 		}
 	}
 	if s.Err() != nil || len(entries) == 0 {
 		return fileMap{}, false
 	}
 	m := fileMap{rel: rel, lines: lines, entries: closeSpans(entries, lines), noun: "heading"}
-	prefix := types.KindDocSection + ":" + rel + "#"
+	prefix := fmt.Sprintf("%s:%s#", types.KindDocSection, rel)
 	if ids, definitive := deps.graphIDs(context.Background(), types.KindDocSection); definitive {
 		held := 0
 		for _, id := range ids {
@@ -531,7 +532,7 @@ func markdownFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 			}
 		}
 		if held == len(entries) {
-			m.list = hint.Query.With("kind="+types.KindDocSection, "'id=~^"+regexp.QuoteMeta(prefix)+"'", "-o", "name")
+			m.list = hint.Query.With("kind="+types.KindDocSection, fmt.Sprintf("'id=~^%s'", regexp.QuoteMeta(prefix)), "-o", "name")
 		}
 	}
 	return m, true
@@ -642,47 +643,45 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 // command that reads a single declaration; the map of what the file holds is the
 // rationale, read from the stored verdict.
 func denyReadNavigation(m fileMap) denial {
-	byLines := "`sed -n <first>,<last>p " + shellWord(m.rel) + "`"
+	byLines := fmt.Sprintf("`sed -n <first>,<last>p %s`", shellWord(m.rel))
 	read := byLines
 	if m.indexed {
-		read = "`" + hint.Refs.With("<name>", "--definition", "--source") + "`"
+		read = fmt.Sprintf("`%s`", hint.Refs.With("<name>", "--definition", "--source"))
 	}
-	say := "magus workspace: " + strconv.Itoa(m.lines) + " lines; read one " + m.noun + ": " + read + "."
+	say := fmt.Sprintf("magus workspace: %d lines; read one %s: %s.", m.lines, m.noun, read)
 	var b strings.Builder
 	if m.list != "" {
-		b.WriteString("`" + m.list + "` maps this file, and the map is below: ")
+		fmt.Fprintf(&b, "`%s` maps this file, and the map is below: ", m.list)
 	} else {
 		b.WriteString("The map below is parsed from the file itself: ")
 	}
-	b.WriteString(strconv.Itoa(m.lines) + " lines, " + countNoun(len(m.entries), m.noun) + ", each with its lines.\n")
+	fmt.Fprintf(&b, "%d lines, %s, each with its lines.\n", m.lines, countNoun(len(m.entries), m.noun))
 	switch {
 	case m.indexed && slices.ContainsFunc(m.entries, func(e mapEntry) bool { return e.symbol == "" }):
-		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; " + read +
-			" prints that one, numbered and checked against the index, and " + byLines + " prints a method by its lines.\n")
+		fmt.Fprintf(&b, "A whole read spends %d lines to reach one of them; %s prints that one, numbered and checked against the index, and %s prints a method by its lines.\n", m.lines, read, byLines)
 	case m.indexed:
-		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; " + read +
-			" prints that one, numbered and checked against the index.\n")
+		fmt.Fprintf(&b, "A whole read spends %d lines to reach one of them; %s prints that one, numbered and checked against the index.\n", m.lines, read)
 	default:
-		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; " + byLines + " prints that one by its lines.\n")
+		fmt.Fprintf(&b, "A whole read spends %d lines to reach one of them; %s prints that one by its lines.\n", m.lines, byLines)
 	}
-	b.WriteString("What the file holds (" + countNoun(len(m.entries), m.noun) + "):")
+	fmt.Fprintf(&b, "What the file holds (%s):", countNoun(len(m.entries), m.noun))
 	for i, e := range m.entries {
 		if i == mapCap {
-			b.WriteString("\n  ... " + strconv.Itoa(len(m.entries)-mapCap) + " more")
+			fmt.Fprintf(&b, "\n  ... %d more", len(m.entries)-mapCap)
 			if m.list != "" {
-				b.WriteString("; `" + m.list + "` lists them all")
+				fmt.Fprintf(&b, "; `%s` lists them all", m.list)
 			}
 			break
 		}
-		b.WriteString("\n  " + strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + ": " + e.name)
+		fmt.Fprintf(&b, "\n  %d-%d: %s", e.first, e.last, e.name)
 	}
 	return denial{Say: say, Why: b.String()}
 }
 
 func adviseReadSymbol(m fileMap, e mapEntry, first, last int) advice {
 	return advice{
-		Say: "magus workspace: lines " + strconv.Itoa(first) + "-" + strconv.Itoa(last) + " of " + m.rel + " sit inside `" + e.name + "` (" +
-			strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + "); `" + m.read(e) + "` prints that body.",
+		Say: fmt.Sprintf("magus workspace: lines %d-%d of %s sit inside `%s` (%d-%d); `%s` prints that body.",
+			first, last, m.rel, e.name, e.first, e.last, m.read(e)),
 		Why: "It prints the body with its line numbers, checked against the index, and finds it again after the file moves.",
 	}
 }

@@ -1,6 +1,7 @@
 package changeset
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -47,7 +48,7 @@ func TestSanitizeBidiCoversBothFamilies(t *testing.T) {
 		"word joiner":             0x2060,
 		"byte order mark":         0xFEFF,
 	} {
-		_, changed := SanitizeBidi("x" + string(r) + "y")
+		_, changed := SanitizeBidi(fmt.Sprintf("x%cy", r))
 		assert.True(t, changed, name)
 	}
 }

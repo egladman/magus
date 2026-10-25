@@ -35,5 +35,5 @@ func ReviewSpell(tb testkit.TB, at types.ReviewTarget, threads []types.ReviewCom
 // buzzString renders s as a Buzz string literal. A brace is escaped too, since an unescaped
 // one would open an interpolation.
 func buzzString(s string) string {
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "{", `\{`).Replace(s) + `"`
+	return strings.ReplaceAll(fmt.Sprintf("%q", s), "{", `\{`)
 }

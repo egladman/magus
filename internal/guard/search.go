@@ -85,15 +85,15 @@ func graphMoved(deps Dependencies) staleGraph {
 // verdict is graph-stale's advice in place of the deny: the search runs, and the rebuild
 // is named with when it is worth running.
 func (s staleGraph) verdict() ShellVerdict {
-	rebuild := "`" + hint.GraphBuild.String() + "` refreshes it"
+	rebuild := fmt.Sprintf("`%s` refreshes it", hint.GraphBuild.String())
 	if s.underway {
 		rebuild += " once that is finished"
 	}
 	return ShellVerdict{
-		Context: "magus workspace: the graph is stale (" + s.reason + "), and this search runs as typed; " + rebuild + ".",
+		Context: fmt.Sprintf("magus workspace: the graph is stale (%s), and this search runs as typed; %s.", s.reason, rebuild),
 		Why:     "No graph answer replaces a search while the graph is stale. Once it is rebuilt, the graph answers exactly again.",
 		Kind:    advisoryGraphStale,
-		Brief:   "magus workspace: the graph is stale, " + s.reason + ". This search runs; " + rebuild + ".",
+		Brief:   fmt.Sprintf("magus workspace: the graph is stale, %s. This search runs; %s.", s.reason, rebuild),
 	}
 }
 
@@ -567,7 +567,7 @@ func liveDeclarations(deps Dependencies, root, dir string, c hint.Invocation, id
 func printClause(routes []searchRoute) string {
 	runs := make([]string, len(routes))
 	for i, r := range routes {
-		runs[i] = "`" + r.run + "`"
+		runs[i] = fmt.Sprintf("`%s`", r.run)
 	}
 	if len(routes) == 1 {
 		return runs[0] + " prints"
@@ -580,10 +580,10 @@ const denyGrepReaderLead = "a context flag makes this search read a declaration 
 
 // denyGrepReader names the commands in its verdict, since they are the whole correction.
 func denyGrepReader(routes []searchRoute) string {
-	return denyGrepReaderLead + "; " + printClause(routes) + " it whole.\n" +
-		"The commands print the declaration numbered, where a context count only guesses at its length. " +
-		"With -A, -B or -C this search is a read, so the single-file allowance a plain search gets does not apply. " +
-		"A search for where a name is USED, without a context flag, runs as before."
+	return fmt.Sprintf("%s; %s it whole.\n"+
+		"The commands print the declaration numbered, where a context count only guesses at its length. "+
+		"With -A, -B or -C this search is a read, so the single-file allowance a plain search gets does not apply. "+
+		"A search for where a name is USED, without a context flag, runs as before.", denyGrepReaderLead, printClause(routes))
 }
 
 // fileSymbolVerdict advises refs for a search of named Go files for names the index
@@ -620,10 +620,10 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 		return stale.verdict(), true
 	}
 	return ShellVerdict{
-		Context: "magus workspace: " + routeClause(routes) + " this for every file; the search runs as typed.",
+		Context: fmt.Sprintf("magus workspace: %s this for every file; the search runs as typed.", routeClause(routes)),
 		Why:     "The answer is checked against the tree, including the generated and cross-language sites a pattern misses.",
 		Kind:    advisoryPrecedent,
-		Brief:   "magus workspace: " + routeClause(routes) + " this for every file.",
+		Brief:   fmt.Sprintf("magus workspace: %s this for every file.", routeClause(routes)),
 	}, true
 }
 
@@ -638,7 +638,7 @@ func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js sear
 	if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
 		// The answer stays inline with the verdict, since it is what the search was for;
 		// a lead would drop it.
-		v.Deny += "\n" + answerBlock("Its answer", answer) + pipeNote(piped)
+		v.Deny += fmt.Sprintf("\n%s%s", answerBlock("Its answer", answer), pipeNote(piped))
 		return v
 	}
 	v.Deny += pipeNote(piped)
@@ -646,7 +646,7 @@ func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js sear
 	if len(next) > 0 {
 		next = append(next, textNext...)
 	}
-	return v.withRemedy(denySymbolSearchLead+", which the graph answers exactly. "+classifiedLine(js)+textNote, next...)
+	return v.withRemedy(fmt.Sprintf("%s, which the graph answers exactly. %s%s", denySymbolSearchLead, classifiedLine(js), textNote), next...)
 }
 
 // routeNexts serves each route as a remedy, or none when one of them cannot be.
@@ -716,7 +716,7 @@ func treeSymbolAnswer(deps Dependencies, dir string, c hint.Invocation, routes [
 	answer := make([]string, 0, len(merged))
 	for _, s := range merged {
 		slices.Sort(s.lines)
-		answer = append(answer, s.rel+"  ("+strconv.Itoa(s.count)+")  lines "+joinInts(s.lines))
+		answer = append(answer, fmt.Sprintf("%s  (%d)  lines %s", s.rel, s.count, joinInts(s.lines)))
 	}
 	return answer, true
 }
@@ -794,13 +794,13 @@ func answerBlock(title string, items []string) string {
 		return title + ": nothing."
 	}
 	var b strings.Builder
-	b.WriteString(title + " (" + countNoun(len(items), "result") + "):\n")
+	fmt.Fprintf(&b, "%s (%s):\n", title, countNoun(len(items), "result"))
 	for i, it := range items {
 		if i == answerCap {
-			b.WriteString("  ... " + strconv.Itoa(len(items)-answerCap) + " more\n")
+			fmt.Fprintf(&b, "  ... %d more\n", len(items)-answerCap)
 			break
 		}
-		b.WriteString("  " + it + "\n")
+		fmt.Fprintf(&b, "  %s\n", it)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
 }
@@ -1099,7 +1099,7 @@ func classifyAlternative(raw string, mode regexMode, word bool) searchAlt {
 	exported := core[0] >= 'A' && core[0] <= 'Z'
 	switch {
 	case qualified && stdlibQualifiers[qualifier]:
-		a.how = "a member of the standard library (" + qualifier + "), which this workspace's index does not define"
+		a.how = fmt.Sprintf("a member of the standard library (%s), which this workspace's index does not define", qualifier)
 		return a
 	case a.strong:
 		a.explicit = call
@@ -1201,13 +1201,13 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 	}
 	text := func(a searchAlt, why string) {
 		js.texts = append(js.texts, a)
-		js.classified = append(js.classified, "`"+a.raw+"` is text ("+why+")")
+		js.classified = append(js.classified, fmt.Sprintf("`%s` is text (%s)", a.raw, why))
 	}
 	route := func(a searchAlt, r searchRoute, why string) {
 		if !slices.Contains(js.routes, r) {
 			js.routes = append(js.routes, r)
 		}
-		js.classified = append(js.classified, "`"+a.raw+"` is a name ("+why+")")
+		js.classified = append(js.classified, fmt.Sprintf("`%s` is a name (%s)", a.raw, why))
 	}
 	for _, a := range searchAlts(c) {
 		switch a.kind {
@@ -1216,7 +1216,7 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 			continue
 		case altDiagnostic:
 			if codes, ok := graphDiagnostics(deps); ok && slices.Contains(codes, a.ident) && !js.folded {
-				node := string(types.KindDiagnostic) + ":" + a.ident
+				node := fmt.Sprintf("%s:%s", string(types.KindDiagnostic), a.ident)
 				route(a, searchRoute{name: node, run: hint.Explain.With(node), indexed: true}, "a diagnostic code with a graph node")
 			} else {
 				text(a, "a code the graph holds no node for")
@@ -1237,7 +1237,7 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 		ids := deps.symbolIDs(a.ident)
 		if len(ids) > 1 {
 			// refs on a name that several symbols carry lists them and stops.
-			r.run = strings.Replace(r.run, " "+a.ident, " '"+ids[0]+"'", 1)
+			r.run = strings.Replace(r.run, " "+a.ident, fmt.Sprintf(" '%s'", ids[0]), 1)
 		}
 		switch {
 		case definitive && defined:
@@ -1260,8 +1260,9 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 	return js
 }
 
-// symbolIndexBuilt reports whether `magus graph build` has written a symbol index for this
-// workspace at all, current or not.
+// symbolIndexBuilt reports whether `magus graph build` has written an index holding symbols
+// for this workspace, current or not. An index built with none cannot answer `magus refs`,
+// so a search stays text there.
 func symbolIndexBuilt(deps Dependencies) bool {
 	if deps.scope.root == "" {
 		return false
@@ -1274,15 +1275,15 @@ func symbolIndexBuilt(deps Dependencies) bool {
 	if err != nil {
 		return false
 	}
-	_, err = knowledge.ReadGuardIndexCheckout(cacheDir, root)
-	return err == nil
+	has, err := knowledge.GuardIndexHasSymbols(cacheDir, root)
+	return err == nil && has
 }
 
 // symbolIndexCause is why the symbol index cannot vouch for every site, as a clause
 // completing "the symbol index ...". It is the one place that cause is worded.
 func symbolIndexCause(moved staleGraph) string {
 	if moved.reason != "" {
-		return "describes another tree (" + moved.reason + ")"
+		return fmt.Sprintf("describes another tree (%s)", moved.reason)
 	}
 	return "is older than the sources it covers"
 }
@@ -1301,7 +1302,7 @@ func indexCauseNote(deps Dependencies) string {
 
 // classifiedLine is the deny's account of each alternative.
 func classifiedLine(js searchJudgment) string {
-	return "Classified: " + strings.Join(js.classified, "; ") + "."
+	return fmt.Sprintf("Classified: %s.", strings.Join(js.classified, "; "))
 }
 
 // textRemedy serves each text alternative as the literal search magus runs, when it is a
@@ -1318,7 +1319,7 @@ func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep)
 	var names []string
 	var next []types.NextStep
 	for _, t := range js.texts {
-		names = append(names, "`"+t.raw+"`")
+		names = append(names, fmt.Sprintf("`%s`", t.raw))
 		lit := t.raw
 		if searchMode(c) != regexFixed {
 			lit = strings.ReplaceAll(lit, `\.`, ".")
@@ -1329,7 +1330,7 @@ func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep)
 		argv := append([]string{hint.BinaryName(), "refs", "--text", lit}, paths...)
 		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "a literal search over the same paths, for the text the graph does not hold."))
 	}
-	return "\nThe text alternatives (" + strings.Join(names, ", ") + ") are not symbols: search them on their own.", next
+	return fmt.Sprintf("\nThe text alternatives (%s) are not symbols: search them on their own.", strings.Join(names, ", ")), next
 }
 
 // staleSymbolVerdict denies a search for names a stale index vouches for, serving the
@@ -1338,25 +1339,23 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	build := hint.GraphBuild.With("--silent")
 	textNote, textNext := textRemedy(c, js)
 	wait := hint.Status.With("--wait")
-	rebuild, leadRebuild := "rebuild it: `"+build+"`", "rebuild it, then ask the graph. "
+	rebuild, leadRebuild := fmt.Sprintf("rebuild it: `%s`", build), "rebuild it, then ask the graph. "
 	full := budgetFullText()
 	// A worker never waits for a seat outside the call that spends it, so its remedy is the
 	// report its check would make.
 	worker := full != "" && deps.worker
 	switch {
 	case worker:
-		rebuild = "the rebuild has no seat (" + full + "); report that and stop, as a worker's check does"
+		rebuild = fmt.Sprintf("the rebuild has no seat (%s); report that and stop, as a worker's check does", full)
 		leadRebuild = "the rebuild has no seat; report that and stop. "
 	case full != "":
-		rebuild = "the rebuild has no seat (" + full + "); wait for one: `" + wait + "`, then rebuild it: `" + build + "`"
+		rebuild = fmt.Sprintf("the rebuild has no seat (%s); wait for one: `%s`, then rebuild it: `%s`", full, wait, build)
 		leadRebuild = "wait for a seat, then rebuild it and ask the graph. "
 	}
 	v := ShellVerdict{
-		Deny: denySymbolSearchLead + ", and the symbol index " + symbolIndexCause(moved) + "; " + rebuild + ".",
-		Why: "Then " + routeClause(js.routes) + " this exactly.\n" +
-			classifiedLine(js) + "\n" +
-			"refs checks every site against the tree, the generated and cross-language ones a pattern misses included." +
-			indexCauseNote(deps) + textNote + pipeNote(piped),
+		Deny: fmt.Sprintf("%s, and the symbol index %s; %s.", denySymbolSearchLead, symbolIndexCause(moved), rebuild),
+		Why: fmt.Sprintf("Then %s this exactly.\n%s\nrefs checks every site against the tree, the generated and cross-language ones a pattern misses included.%s%s%s",
+			routeClause(js.routes), classifiedLine(js), indexCauseNote(deps), textNote, pipeNote(piped)),
 		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(js.routes)},
 	}
 	argv := servedArgv(build)
@@ -1375,7 +1374,7 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	next = append(append(next, routes...), textNext...)
 	// The lead replaces the deny when the remedy is served, so it carries the classification:
 	// it is what makes a false positive disputable.
-	return v.withRemedy(denySymbolSearchLead+", and the symbol index "+symbolIndexCause(moved)+"; "+leadRebuild+classifiedLine(js)+textNote, next...)
+	return v.withRemedy(fmt.Sprintf("%s, and the symbol index %s; %s%s%s", denySymbolSearchLead, symbolIndexCause(moved), leadRebuild, classifiedLine(js), textNote), next...)
 }
 
 // budgetFullText words the machine build budget when it has no seat for a rebuild, "" when
@@ -1431,7 +1430,7 @@ func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 		if codes, ok := graphDiagnostics(deps); !ok || !slices.Contains(codes, alt) {
 			return searchRoute{}, false
 		}
-		node := string(types.KindDiagnostic) + ":" + alt
+		node := fmt.Sprintf("%s:%s", string(types.KindDiagnostic), alt)
 		return searchRoute{name: node, run: hint.Explain.With(node), indexed: true}, true
 	}
 	var ident string
@@ -1467,13 +1466,13 @@ func routeNames(routes []searchRoute) string {
 func routeClause(routes []searchRoute) string {
 	runs := make([]string, len(routes))
 	for i, r := range routes {
-		runs[i] = "`" + r.run + "`"
+		runs[i] = fmt.Sprintf("`%s`", r.run)
 	}
 	verb := "answers"
 	if len(routes) > 1 {
 		verb = "answer"
 	}
-	return strings.Join(runs, ", ") + " " + verb
+	return fmt.Sprintf("%s %s", strings.Join(runs, ", "), verb)
 }
 
 // denySymbolSearchLead names what the search is for; the classification after it is what
@@ -1483,7 +1482,7 @@ const denySymbolSearchLead = "this text search is for an indexed name"
 // denySymbolSearch names the commands, one per name, since that is the whole correction.
 func denySymbolSearch(routes []searchRoute, js searchJudgment) denial {
 	return denial{
-		Say: denySymbolSearchLead + "; " + routeClause(routes) + " it exactly. " + classifiedLine(js),
+		Say: fmt.Sprintf("%s; %s it exactly. %s", denySymbolSearchLead, routeClause(routes), classifiedLine(js)),
 		Why: "The graph checks every site against the tree rather than matching it. Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
 	}
 }

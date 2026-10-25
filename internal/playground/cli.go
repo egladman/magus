@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -131,10 +132,10 @@ func explainCLI(name string) []Line {
 		return nil
 	}
 	rows := []Line{
-		{HTML: `<span class="muted">magus</span> <b>` + esc(c.Name) + `</b> &mdash; ` + esc(c.Short)},
+		{HTML: fmt.Sprintf(`<span class="muted">magus</span> <b>%s</b> &mdash; %s`, esc(c.Name), esc(c.Short))},
 	}
 	if c.Usage != "" {
-		rows = append(rows, Line{HTML: `  <span class="muted">` + esc(c.Usage) + `</span>`})
+		rows = append(rows, Line{HTML: fmt.Sprintf(`  <span class="muted">%s</span>`, esc(c.Usage))})
 	}
 	if kids := cliChildren(c.Name); len(kids) > 0 {
 		rows = append(rows, Line{HTML: `  <span class="muted">subcommands:</span> ` + esc(strings.Join(kids, "  "))})

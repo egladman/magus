@@ -63,7 +63,7 @@ func refuseNarrowedIn(root string, row types.Job) error {
 		if p.Code != types.JobCheckUnrunnable {
 			return fmt.Errorf("code %s, want %s", string(p.Code), string(types.JobCheckUnrunnable))
 		}
-		errs = append(errs, errors.New(p.Message+": "+p.Fix))
+		errs = append(errs, fmt.Errorf("%s: %s", p.Message, p.Fix))
 	}
 	return errors.Join(errs...)
 }
@@ -196,7 +196,12 @@ func TestRefuseNarrowedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 		"_scratch/s_test.go":             "TestScratch",
 		"lib/l_test.go":                  "TestNestedModule",
 	} {
-		w.Write(rel, "package x\n\nimport \"testing\"\n\nfunc "+name+"(t *testing.T) {}\n")
+		w.Write(rel, fmt.Sprintf(`package x
+
+import "testing"
+
+func %s(t *testing.T) {}
+`, name))
 	}
 	w.Write("lib/go.mod", "module lib\n")
 
@@ -221,10 +226,10 @@ func TestRefuseNarrowedTestsCountsOnlyTestsGoTestBuilds(t *testing.T) {
 		other = "darwin"
 	}
 	w.WriteTree(map[string]string{
-		"pkg/tagged_test.go":           "//go:build integration\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestTagged(t *testing.T) {}\n",
-		"pkg/os_" + other + "_test.go": "package pkg\n\nimport \"testing\"\n\nfunc TestOtherPlatform(t *testing.T) {}\n",
-		"pkg/_ignored_test.go":         "package pkg\n\nimport \"testing\"\n\nfunc TestIgnored(t *testing.T) {}\n",
-		"pkg/.hidden_test.go":          "package pkg\n\nimport \"testing\"\n\nfunc TestHidden(t *testing.T) {}\n",
+		"pkg/tagged_test.go":                    "//go:build integration\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestTagged(t *testing.T) {}\n",
+		fmt.Sprintf("pkg/os_%s_test.go", other): "package pkg\n\nimport \"testing\"\n\nfunc TestOtherPlatform(t *testing.T) {}\n",
+		"pkg/_ignored_test.go":                  "package pkg\n\nimport \"testing\"\n\nfunc TestIgnored(t *testing.T) {}\n",
+		"pkg/.hidden_test.go":                   "package pkg\n\nimport \"testing\"\n\nfunc TestHidden(t *testing.T) {}\n",
 	})
 
 	require.NoError(t, refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")}))
@@ -380,4 +385,36 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 
 	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "docs/page.md") }, config.Jobs{}, nil)
 	require.NoError(t, err, "a path that names no Go package adds nothing to grade")
+}
+
+// A check scoped to the packages of the write paths leaves the rest of the suite to the
+// integration's full go-test, so it may narrow those packages' tests too. Scoped to a
+// package outside them, or leaving one of them out, it is still refused.
+func TestNarrowedTestsAcceptAWritePackageScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	root := testRoot(t).Root()
+	store := &Store{storeConfig: storeConfig{root: root}}
+	refused := func(writePaths []string, args ...string) []string {
+		var out []string
+		for _, p := range narrowedTestProblems(store, types.Job{ID: "w", WritePaths: writePaths, Check: goTestCheck(args...)}) {
+			out = append(out, fmt.Sprintf("%s %s", p.Code, p.Field))
+		}
+		return out
+	}
+
+	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg", "-run", "Alpha"), "the package plus -run")
+	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg/...", "-run", "Alpha"), "the package as a pattern")
+	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg"), "the package alone")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "./other", "-run", "Alpha"), "a package outside the write paths")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go", "nested/x/deep.go"}, "./pkg", "-run", "Alpha"),
+		"a write path's package the check leaves out")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "-run", "Alpha"), "no package at all")
+}
+
+func TestGoTestPackagesReadsRelativePatterns(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []string{"./pkg", "./a/...", "."}, goTestPackages([]string{"-run", "X", "./pkg", "-count=1", "-v", "./a/...", "."}))
+	assert.Empty(t, goTestPackages([]string{"-run", "./looks/like/one", "-tags", "x"}), "a flag's value is not a package")
 }

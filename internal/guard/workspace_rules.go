@@ -155,7 +155,7 @@ func (h headPolicy) keepPending(scope []string, preID, files string, pending []s
 	h.writePending(scope, pendingKey(id, files), pending)
 }
 
-func pendingKey(id, files string) string { return id + " " + files }
+func pendingKey(id, files string) string { return fmt.Sprintf("%s %s", id, files) }
 
 // checkoutID reads the id from the checkout dir sits in, which may be an
 // ancestor: a workspace nested in a repository has no marker of its own.
@@ -215,7 +215,7 @@ func (h headPolicy) writePending(scope []string, fp string, pending []string) {
 	if !ok {
 		return
 	}
-	body := fp + "\n" + strings.Join(pending, "\n")
+	body := fmt.Sprintf("%s\n%s", fp, strings.Join(pending, "\n"))
 	if len(pending) > 0 {
 		body += "\n"
 	}
@@ -345,7 +345,7 @@ func (h headPolicy) pendingCacheFile(scope []string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	sum := sha256.Sum256([]byte(h.workspace + "\x00" + strings.Join(scope, "\x00")))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s", h.workspace, strings.Join(scope, "\x00"))))
 	return filepath.Join(dir, "policy-pending", hex.EncodeToString(sum[:])), true
 }
 
@@ -592,6 +592,12 @@ func LoadApprovedBuiltins(ctx context.Context, root string) (map[string]builtin.
 	if err != nil {
 		return nil, err
 	}
+	return approvedBuiltins(root, reg)
+}
+
+// approvedBuiltins is LoadApprovedBuiltins over a registry already resolved, nil for no
+// approval authority.
+func approvedBuiltins(root string, reg *workspace.WorkspaceRegistry) (map[string]builtin.Setting, error) {
 	agents, err := config.LoadAgents(root)
 	if err != nil {
 		return nil, err
@@ -900,6 +906,34 @@ type WorkspaceRules struct {
 	// cacheDir is where the approval authority records what it found pending, nil for
 	// nowhere. NewDependencies sets it from its Wiring.
 	cacheDir func(root string) (string, error)
+	approved approvedOnce
+}
+
+// approvedOnce keeps the first approved registry a judgment resolved, so the compiled rules'
+// settings, the level and each function rule share one VCS status and at most one load of
+// the approved sources. A WorkspaceRules lives for one judgment, which is what bounds how
+// stale the kept answer can be.
+type approvedOnce struct {
+	mu   sync.Mutex
+	done bool
+	reg  *workspace.WorkspaceRegistry
+	err  error
+}
+
+// get answers from the kept resolve, or runs resolve and keeps its answer. An answer read
+// under an expired or cancelled ctx is returned and not kept: "no rule" from a status cut
+// short may be a read that failed.
+func (o *approvedOnce) get(ctx context.Context, resolve func(context.Context) (*workspace.WorkspaceRegistry, error)) (*workspace.WorkspaceRegistry, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.done {
+		return o.reg, o.err
+	}
+	reg, err := resolve(ctx)
+	if ctx.Err() == nil {
+		o.done, o.reg, o.err = true, reg, err
+	}
+	return reg, err
 }
 
 // LoadWorkspaceRules evaluates the root magusfile of the workspace at root on its own, and
@@ -982,7 +1016,7 @@ func (r *WorkspaceRules) DeclaredBuiltinSettings() map[string]string {
 	declared := r.Builtins()
 	out := make(map[string]string, len(declared))
 	for name, s := range declared {
-		out[name] = string(s.Decision)
+		out[name] = s.Decision.String()
 		if s.Lines != 0 {
 			out[name] = fmt.Sprintf("%s, lines %d", s.Decision, s.Lines)
 		}
@@ -1060,8 +1094,13 @@ func (r *WorkspaceRules) approvedContentIDs(ctx context.Context, paths []string)
 
 // approvedIfChanged is the approved sources' registry for these rules, nil when it cannot
 // differ from what the working tree's load registered: no approval authority, nothing
-// pending, or nothing pending that the root load read or could read.
+// pending, or nothing pending that the root load read or could read. The first answer is
+// kept for every later caller on r.
 func (r *WorkspaceRules) approvedIfChanged(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
+	return r.approved.get(ctx, r.resolveApprovedIfChanged)
+}
+
+func (r *WorkspaceRules) resolveApprovedIfChanged(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
 	approved, ok, err := approvalAuthority(ctx, r.root, r.opts, r.cacheDir)
 	if err != nil || !ok {
 		return nil, err
@@ -1150,7 +1189,8 @@ func stricterBuiltins(approved, working map[string]builtin.Setting) (map[string]
 // answer.
 //
 // It costs one VCS status when no file the root load read differs from its approved
-// content, and a second load of the root magusfile when one does.
+// content, and a second load of the root magusfile when one does, paid once per r: the
+// settings, the level and the other Approved rules answer from the same resolve.
 func (r *WorkspaceRules) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule, error) {
 	reg, err := r.approvedIfChanged(ctx)
 	if err != nil || reg == nil {
@@ -1260,7 +1300,7 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		deps.WriteRule = rules.WriteRule()
 		deps.ApprovedWriteRule = rules.ApprovedWriteRule
 		deps.Policy = rules.policyState
-		deps.Builtins = w.builtins(ctx, rules, "")
+		deps.Builtins = w.builtins(ctx, rules)
 		return deps, rules
 	}
 	if w.Root == "" {
@@ -1271,23 +1311,55 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 	// Annotated like every other load failure: a binary older than the tree says so, and
 	// the guard reads that off the error to decide what the failure costs the session.
 	deps.LoadFailure = ward.ExplainStaleBinary(loadErr, w.BinaryVersion, w.Config.RequiredVersion)
-	deps.Builtins = w.builtins(ctx, nil, w.Root)
+	// One load of the approved sources for the settings and every function rule, as
+	// WorkspaceRules keeps for a working tree that loads.
+	var approved approvedOnce
+	registry := func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
+		return approved.get(ctx, func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
+			return loadApprovedRegistry(ctx, w.Root)
+		})
+	}
+	deps.Builtins = w.approvedBuiltins(ctx, registry)
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
-		return LoadApprovedSpawnRule(ctx, w.Root)
+		reg, err := registry(ctx)
+		if err != nil || reg == nil {
+			return nil, err
+		}
+		return reg.SpawnRule(), nil
 	}
 	deps.ApprovedCommandRule = func(ctx context.Context) (workspace.CommandRule, error) {
-		return LoadApprovedCommandRule(ctx, w.Root)
+		reg, err := registry(ctx)
+		if err != nil || reg == nil {
+			return nil, err
+		}
+		return reg.CommandRule(), nil
 	}
 	deps.ApprovedWriteRule = func(ctx context.Context) (workspace.WriteRule, error) {
-		return LoadApprovedWriteRule(ctx, w.Root)
+		reg, err := registry(ctx)
+		if err != nil || reg == nil {
+			return nil, err
+		}
+		return reg.WriteRule(), nil
 	}
 	return deps, nil
 }
 
-// builtins is BuiltinSettings, traced.
-func (w Wiring) builtins(ctx context.Context, rules *WorkspaceRules, root string) map[string]builtin.Setting {
+// builtins is BuiltinSettings for a working tree that loaded, traced.
+func (w Wiring) builtins(ctx context.Context, rules *WorkspaceRules) map[string]builtin.Setting {
 	defer w.trace(ctx, "guard.builtins_resolve")()
-	return BuiltinSettings(ctx, rules, root)
+	return BuiltinSettings(ctx, rules, "")
+}
+
+// approvedBuiltins is BuiltinSettings for a working tree that did not load, traced, read off
+// the registry the function rules share.
+func (w Wiring) approvedBuiltins(ctx context.Context, registry func(context.Context) (*workspace.WorkspaceRegistry, error)) map[string]builtin.Setting {
+	defer w.trace(ctx, "guard.builtins_resolve")()
+	if reg, err := registry(ctx); err == nil {
+		if settings, err := approvedBuiltins(w.Root, reg); err == nil && settings != nil {
+			return settings
+		}
+	}
+	return lightBuiltins()
 }
 
 // revisionAt answers the revision rev names in the checkout holding dir, for the push gate,

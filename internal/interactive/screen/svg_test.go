@@ -57,7 +57,7 @@ func TestSVGDrawsReverseVideoAsASwap(t *testing.T) {
 	fmt.Fprint(s, "\x1b[7mselected\x1b[0m\n")
 	out := s.SVG(SVGOptions{})
 	assert.Contains(t, out, "<rect x=", "reverse video draws a filled background")
-	assert.Contains(t, out, `fill="`+DarkTheme.Background+`"`)
+	assert.Contains(t, out, fmt.Sprintf(`fill="%s"`, DarkTheme.Background))
 }
 
 func TestSVGCoalescesRunsRatherThanCells(t *testing.T) {

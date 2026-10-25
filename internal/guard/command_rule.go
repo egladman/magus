@@ -3,6 +3,7 @@ package guard
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"path"
 	"path/filepath"
 	"slices"
@@ -63,15 +64,13 @@ type commandRuleInput struct {
 // verdict every compiled rule reached.
 func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
 	verdict = gradeStall(deps, gradeMainCommand(ctx, deps, verdict, in, who, at), in.lease, at)
-	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
-		return verdict, workspaceRuleRecord{}
-	}
-	if verdict.Decision == decisionDeny {
+	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil || verdict.Decision == decisionDeny {
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	req.OwnedCheckouts = ownedCheckouts(ctx, deps, at)
+	placePullRequestCall(&req, in, at)
 	if deps.CheckoutState != nil {
 		if site, ok := locateCheckout(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
 			req.Checkout = deps.CheckoutState(ctx, site.dir)
@@ -128,12 +127,12 @@ func gatedVerb(command string, d Dialect) string {
 		case isPRCreate(c):
 			return "`gh pr create`"
 		case isPush(c):
-			return "`" + vcsMutation(c) + "`"
+			return fmt.Sprintf("`%s`", vcsMutation(c))
 		case filepath.Base(c.Name) == "gh" && len(c.Args) > 1 && c.Args[0] == "pr" && c.Args[1] == "merge":
 			return "`gh pr merge`"
 		case isMagusInvocation(c):
 			if verb := magusStateWrite(c.Args); verb != "" {
-				return "`magus " + verb + "`"
+				return fmt.Sprintf("`magus %s`", verb)
 			}
 		}
 	}
@@ -194,6 +193,27 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Dir:           at.dir,
 		Workspace:     at.workspace,
 	}
+}
+
+// placePullRequestCall moves req to the checkout a pull request call runs in when the line
+// cds there first, so the rule judges the fragments and the proofread build of that tree
+// and not the session's own. A call whose directory cannot be read without running the
+// line stays where the host started.
+func placePullRequestCall(req *types.CommandRequest, in commandRuleInput, at location) {
+	site, found, located := locateFirst(in.command, in.dialect, cmp.Or(at.dir, at.workspace), isPullRequestText)
+	if !found || !located || !site.relocated {
+		return
+	}
+	if root := workspaceHolding(at, site.dir); root != "" {
+		req.Dir, req.Workspace = site.dir, root
+	}
+}
+
+// isPullRequestText reports `gh pr create` and `gh pr edit`, the calls whose text the
+// workspace rule judges against the diff of the branch they describe.
+func isPullRequestText(c hint.Invocation) bool {
+	verb := ghPullRequestVerb(c)
+	return verb == "create" || verb == "edit"
 }
 
 // actingRole is where a caller acting under lease, spawned as spawned, stands, and the

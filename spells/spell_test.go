@@ -3,6 +3,7 @@ package spells
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,7 @@ func TestSpellVersionProbe(t *testing.T) {
 	probed := NewSpell("go",
 		WithTools(map[string]Tool{"go": {Probe: Command{Bin: "go", Args: []string{"version"}}}}),
 		WithVersionProber(func(_ context.Context, c Command, dir string) (string, error) {
-			return c.Bin + "@" + dir, nil
+			return fmt.Sprintf("%s@%s", c.Bin, dir), nil
 		}))
 	assert.True(t, probed.HasVersionProbe())
 	v, err = probed.ProbeVersion(context.Background(), "go", "/d")

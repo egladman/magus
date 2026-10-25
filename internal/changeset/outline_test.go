@@ -1,6 +1,7 @@
 package changeset
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestNormalizeOutlineTrimsAndKeepsOrder(t *testing.T) {
 
 // around puts r between two words, spelled by code point because the characters this test is
 // about are the ones nobody can see in the source.
-func around(r rune) string { return "left" + string(r) + "right" }
+func around(r rune) string { return fmt.Sprintf("left%cright", r) }
 
 // TestNormalizeOutlineRefusesAnythingThatIsMoreThanAPointer. Each refusal names the reply as the
 // person's, because the agent that reads it is the one that tried to write one.

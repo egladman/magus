@@ -3,6 +3,7 @@ package transform
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -51,7 +52,7 @@ func TestRunDoesNotImportHostModulesOrFiles(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Run(context.Background(), Request{
-				Script: `import "` + tc.importPath + `"; fun transform(input: any, args: [str]) > any { return input; }`,
+				Script: fmt.Sprintf(`import "%s"; fun transform(input: any, args: [str]) > any { return input; }`, tc.importPath),
 			})
 			require.Error(t, err)
 			assert.ErrorContains(t, err, tc.want)

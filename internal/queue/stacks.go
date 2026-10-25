@@ -66,7 +66,7 @@ func (in stackInput) stack(i int) *types.Verdict {
 	}
 	for k, u := range in.unqueued {
 		if mine[u.Head] || k < len(in.unqueuedTops) && mine[in.unqueuedTops[k]] {
-			return decided(*c, types.DecisionWait, types.CodeWaitUnqueuedBelow, "carries the commits of #"+u.ID+", which is open but not queued", "")
+			return decided(*c, types.DecisionWait, types.CodeWaitUnqueuedBelow, fmt.Sprintf("carries the commits of #%s, which is open but not queued", u.ID), "")
 		}
 	}
 	for j, m := range in.merged {
@@ -97,9 +97,9 @@ func (in stackInput) stack(i int) *types.Verdict {
 			return nil
 		}
 		if !slices.ContainsFunc(nodes, func(n stackNode) bool { return n.id == c.Parent }) {
-			return decided(*c, types.DecisionWait, types.CodeWaitBelow, "stacked on #"+c.Parent+", which is not queued", "")
+			return decided(*c, types.DecisionWait, types.CodeWaitBelow, fmt.Sprintf("stacked on #%s, which is not queued", c.Parent), "")
 		}
-		return decided(*c, types.DecisionWait, types.CodeWaitRestack, "not built on #"+c.Parent+"'s head; restack it onto that head", "")
+		return decided(*c, types.DecisionWait, types.CodeWaitRestack, fmt.Sprintf("not built on #%s's head; restack it onto that head", c.Parent), "")
 	}
 	if len(below) == 0 {
 		return declared()
@@ -115,7 +115,7 @@ func (in stackInput) stack(i int) *types.Verdict {
 		for _, a := range below {
 			for _, b := range below {
 				if a.id != b.id && !a.own[b.head] && !b.own[a.head] {
-					return refused(*c, "built on #"+a.id+" and #"+b.id+", which are not stacked on each other")
+					return refused(*c, fmt.Sprintf("built on #%s and #%s, which are not stacked on each other", a.id, b.id))
 				}
 			}
 		}
@@ -214,7 +214,7 @@ func cascade(changes []types.Change, verdicts []*types.Verdict) {
 			changes[i].Below = ""
 			return nil
 		default:
-			verdicts[i] = decided(changes[i], types.DecisionWait, types.CodeWaitBelow, "stacked on #"+changes[j].ID+", which is waiting: "+below.Reason, "")
+			verdicts[i] = decided(changes[i], types.DecisionWait, types.CodeWaitBelow, fmt.Sprintf("stacked on #%s, which is waiting: %s", changes[j].ID, below.Reason), "")
 		}
 		return verdicts[i]
 	}
@@ -225,7 +225,7 @@ func cascade(changes []types.Change, verdicts []*types.Verdict) {
 
 // kickedBelow is the wait of a change stacked, directly or not, on kicked.
 func kickedBelow(kicked string) string {
-	return "#" + kicked + " was kicked back; this stays queued and is validated again once it returns"
+	return fmt.Sprintf("#%s was kicked back; this stays queued and is validated again once it returns", kicked)
 }
 
 // stackOrder keeps queue order but moves each change after the one it is stacked on.

@@ -84,10 +84,10 @@ type ToolHost struct {
 // through: see gitConfigGlobal.
 func BuildPolicy(o PolicyOptions) *Policy {
 	vars := envMap(o.Environ)
-	host := hostDirs{vars: vars, home: o.Home, goos: o.GOOS}
+	host := hostDirs{vars: vars, home: o.Home, goos: o.GOOS, workspace: o.Workspace}
 	pathHome := o.Home
 	if o.Tools != nil {
-		host.tools = &hostDirs{vars: envMap(o.Tools.Environ), home: o.Tools.Home, goos: o.GOOS}
+		host.tools = &hostDirs{vars: envMap(o.Tools.Environ), home: o.Tools.Home, goos: o.GOOS, workspace: o.Workspace}
 		pathHome = o.Tools.Home
 	}
 	rules := []filesystem.Rule{
@@ -107,7 +107,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 	if o.Target != nil {
 		layers = append(layers, *o.Target)
 	}
-	declared, allow := host.mergeLayers(layers...)
+	declared, allow, exports := host.mergeLayers(layers...)
 	cores := len(rules)
 	rules = append(rules, declared...)
 	writtenAt := map[string]string{}
@@ -130,7 +130,14 @@ func BuildPolicy(o PolicyOptions) *Policy {
 	}
 
 	kept, dropped := allow.Scrub(o.Environ)
-	kept = slices.DeleteFunc(kept, func(kv string) bool { return strings.HasPrefix(kv, "TMPDIR=") })
+	kept = slices.DeleteFunc(kept, func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		_, exported := exports[name]
+		return name == "TMPDIR" || exported
+	})
+	for _, name := range slices.Sorted(maps.Keys(exports)) {
+		kept = append(kept, fmt.Sprintf("%s=%s", name, exports[name]))
+	}
 	if o.TempDir != "" {
 		kept = append(kept, "TMPDIR="+o.TempDir)
 	}
@@ -238,6 +245,7 @@ func pathRules(path, home string) []filesystem.Rule {
 type hostDirs struct {
 	vars       map[string]string
 	home, goos string
+	workspace  string // the base of workspace entries
 	// tools, when set, resolves the entries that grant no write (see PolicyOptions.Tools).
 	tools *hostDirs
 }
@@ -253,8 +261,9 @@ type hostDirs struct {
 // relative, and XDG_CACHE_HOME=$HOME would hand over the whole home tree. A literal
 // path is taken as written. A passthrough pattern that does not parse was refused
 // where it was declared, and is skipped here.
-func (h hostDirs) mergeLayers(layers ...spells.Sandbox) ([]filesystem.Rule, env.Allowlist) {
+func (h hostDirs) mergeLayers(layers ...spells.Sandbox) ([]filesystem.Rule, env.Allowlist, map[string]string) {
 	var rules []filesystem.Rule
+	exports := map[string]string{}
 	allow := env.Allowlist{Names: env.DefaultAllow()}
 	for _, layer := range layers {
 		for _, a := range layer.Allow {
@@ -273,13 +282,16 @@ func (h hostDirs) mergeLayers(layers ...spells.Sandbox) ([]filesystem.Rule, env.
 			rule.Path = path
 			rule.Create = rule.Write
 			rules = append(rules, rule)
+			if a.Env != "" && a.Base == spells.SandboxBaseWorkspace {
+				exports[a.Env] = path
+			}
 		}
 		if pass, err := env.Parse(layer.Env.Passthrough); err == nil {
 			allow.Names = append(allow.Names, pass.Names...)
 			allow.Prefixes = append(allow.Prefixes, pass.Prefixes...)
 		}
 	}
-	return mergeRulesByPath(rules), allow
+	return mergeRulesByPath(rules), allow, exports
 }
 
 // holdsHome reports whether path is home or one of its ancestors.
@@ -290,7 +302,7 @@ func (h hostDirs) holdsHome(path string) bool {
 // locate returns where a points on this host, and whether that is a literal path the
 // declaration wrote rather than one read from a variable or a base.
 func (h hostDirs) locate(a spells.SandboxAllow) (path string, literal bool) {
-	if a.Env != "" {
+	if a.Env != "" && a.Base != spells.SandboxBaseWorkspace {
 		if v := h.vars[a.Env]; v != "" {
 			return v, false
 		}
@@ -362,6 +374,8 @@ func (h hostDirs) base(a spells.SandboxAllow) string {
 		return pick("XDG_STATE_HOME", join(h.home, ".local", "state"))
 	case spells.SandboxBaseBinRoot:
 		return binRoot(h.vars["PATH"], a.Bin)
+	case spells.SandboxBaseWorkspace:
+		return h.workspace
 	}
 	if name, ok := strings.CutPrefix(a.Base, "$"); ok {
 		v, _, _ := strings.Cut(h.vars[name], string(filepath.ListSeparator))
@@ -516,6 +530,7 @@ func checkAllow(a spells.SandboxAllow) error {
 var symbolicBases = []string{
 	spells.SandboxBaseHome, spells.SandboxBaseUserCache, spells.SandboxBaseUserConfig,
 	spells.SandboxBaseXDGCache, spells.SandboxBaseXDGData, spells.SandboxBaseXDGState,
+	spells.SandboxBaseWorkspace,
 }
 
 // envName reports whether name can be an environment variable's name. A prefix pattern

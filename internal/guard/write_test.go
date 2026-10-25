@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -126,6 +128,35 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 		// checkpoint first would be a second refusal for one mistake.
 		assert.NotContains(t, got.Reason, "checkpoint")
 	})
+}
+
+// TestGradeLeasedWriteKnocksOnTheOwnersTreeRoot: a writer outside the owner's job tree
+// can neither verify nor end the owner, so the denial names the root of the owner's tree
+// and files one attention row for it, however often the write is retried.
+func TestGradeLeasedWriteKnocksOnTheOwnersTreeRoot(t *testing.T) {
+	leases := append(fixture.FleetLeases(), types.Job{ID: "orch", Criteria: "plan", ReadOnly: true, State: types.StateRunning, Registered: 1})
+	leases[0].Parent = "orch"
+	ctx, root := fleetFixture(t, leases...)
+	for range 2 {
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "magus filed an attention row for orch, the root of lease lease-a's job tree")
+		assert.NotContains(t, got.Reason, "job exit lease-a", "the writer cannot end a job outside its tree")
+	}
+	queue := heldAttention(t, root)
+	require.Len(t, queue, 1)
+	assert.Equal(t, "orch", queue[0].Lease)
+	assert.Contains(t, queue[0].Message, "internal/ledger/store.go")
+}
+
+// heldAttention is the attention queue at root, where a knock on a holder's tree root lands.
+func heldAttention(t *testing.T, root string) []sessions.AttentionRequest {
+	t.Helper()
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+	return sessions.AttentionQueue(fold)
 }
 
 // TestGradeLeasedWritePasses covers the silences. Each is a case where the guard has
@@ -333,7 +364,7 @@ func TestDeclarationCovering(t *testing.T) {
 		{".", "internal/ledger/store.go", false},
 		{"/", "internal/ledger/store.go", false},
 	} {
-		t.Run(tt.decl+" vs "+tt.rel, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s vs %s", tt.decl, tt.rel), func(t *testing.T) {
 			_, got, err := declarationCovering([]string{tt.decl}, tt.rel)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
@@ -888,7 +919,7 @@ func TestGradeLeasedWriteServesNoWidening(t *testing.T) {
 	}
 
 	outside := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
-	assert.Contains(t, outside.Reason, "`"+hint.DescribeJob.With("lease-b")+"`")
+	assert.Contains(t, outside.Reason, fmt.Sprintf("`%s`", hint.DescribeJob.With("lease-b")))
 	assert.Contains(t, outside.Reason, "ask the job's owner")
 }
 
@@ -1041,14 +1072,18 @@ func TestGradeLeasedWriteIgnoresAnOverdueOwner(t *testing.T) {
 	assert.NotContains(t, got.Reason, "is owned by lease lease-a", "an overdue lease no longer holds its write paths against others")
 }
 
+// An owner below the writer is one the writer releases itself, so nothing is filed.
 func TestGradeLeasedWriteNamesHowToReleaseAnOwner(t *testing.T) {
-	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
+	leases := fixture.FleetLeases()
+	leases[0].Parent = "lease-b"
+	ctx, root := fleetFixture(t, leases...)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 	require.Equal(t, "deny", got.Decision)
 	assert.Contains(t, got.Reason, "last updated")
 	assert.Contains(t, got.Reason, "ago")
 	assert.Contains(t, got.Reason, hint.JobExit.With("lease-a"))
+	assert.Empty(t, heldAttention(t, root))
 }
 
 // TestLeasedPathAdvisesOncePerSessionPerLease: the owned-path advisory was 52% of every
@@ -1506,4 +1541,35 @@ func TestASoftPathItsHolderWroteIsOwned(t *testing.T) {
 	got := write("s2")
 	assert.Equal(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(got))
 	assert.Contains(t, got.Context, "lease holder")
+}
+
+// A write grade hands the hardening only the soft entries covering the written path, so an
+// integration row's hundreds of soft paths cost one entry, not one per path, against its diff.
+func TestHardenCoveringHandsOnlyTheEntriesCoveringThePath(t *testing.T) {
+	var soft []string
+	for i := range 500 {
+		soft = append(soft, fmt.Sprintf("internal/p%d/p_test.go", i))
+	}
+	rows := []types.Job{
+		{ID: "integrate", SoftPaths: append(slices.Clone(soft), "internal/guard/guard_test.go")},
+		{ID: "other", SoftPaths: []string{"internal/guard/*_test.go", "docs/a.md"}},
+		{ID: "quiet", WritePaths: []string{"internal/guard/guard.go"}},
+	}
+	var handed [][]string
+	got := hardenCovering(rows, "internal/guard/guard_test.go", func(narrowed []types.Job) []types.Job {
+		out := slices.Clone(narrowed)
+		for i, row := range narrowed {
+			handed = append(handed, row.SoftPaths)
+			if row.ID == "integrate" {
+				out[i].SoftPaths = nil
+			}
+		}
+		return out
+	})
+	assert.Equal(t, [][]string{{"internal/guard/guard_test.go"}, {"internal/guard/*_test.go"}, nil}, handed)
+	assert.Equal(t, []types.Job{
+		{ID: "integrate", SoftPaths: soft},
+		{ID: "other", SoftPaths: []string{"internal/guard/*_test.go", "docs/a.md"}},
+		{ID: "quiet", WritePaths: []string{"internal/guard/guard.go"}},
+	}, got)
 }

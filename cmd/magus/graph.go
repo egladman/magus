@@ -177,17 +177,40 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 	out := g.Output()
 	slog.InfoContext(ctx, fmt.Sprintf("knowledge graph rebuilt: %d nodes, %d edges", out.NodeCount, out.EdgeCount), attr.Notice(""))
-	// Not fatal: without the index the guard's graph-backed rules stay silent, which is
-	// the state they were in before the build.
-	if ws, err := inspectWorkspace(ctx, root); err == nil {
-		if m, ok := ws.(*magus.Magus); ok {
-			if err := m.WriteGuardIndex(ctx); err != nil {
-				interactive.Hint(ctx, "guard index not written: "+err.Error())
-			}
-		}
-	}
+	scriptsErr := writeGuardIndexes(ctx, root)
 	if refused != nil {
-		return fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused)
+		return errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
+	}
+	return scriptsErr
+}
+
+// skipIndex says what was not written and why, and answers nil: an index a hook reads is
+// never a reason to fail the build.
+func skipIndex(ctx context.Context, what string, err error) error {
+	interactive.Hint(ctx, fmt.Sprintf("%s not written: %v", what, err))
+	return nil
+}
+
+// writeGuardIndexes writes the indexes a guard hook reads, and returns only the scripts
+// index's error. A guard index not written is a hint: the guard's graph-backed rules then
+// stay silent, which is the state they were in before the build.
+func writeGuardIndexes(ctx context.Context, root string) error {
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return skipIndex(ctx, "guard indexes", err)
+	}
+	m, ok := ws.(*magus.Magus)
+	if !ok {
+		return nil
+	}
+	if err := m.WriteGuardIndex(ctx); err != nil {
+		interactive.Hint(ctx, "guard index not written: "+err.Error())
+	}
+	if err := m.WriteScriptsIndex(ctx); err != nil {
+		if errors.Is(err, hint.ErrScriptDeclaration) {
+			return fmt.Errorf("magus graph build: %w", err)
+		}
+		interactive.Hint(ctx, "scripts index not written: "+err.Error())
 	}
 	return nil
 }
@@ -312,7 +335,7 @@ func ingestSessions(ctx context.Context, root string) {
 	results := sessions.RunAdapters(ctx, resolveRootOrEmpty(root), adapters)
 	for _, r := range results {
 		if r.Err != nil {
-			interactive.Hint(ctx, "session adapter "+r.Host+" did not finish", attr.Error(r.Err))
+			interactive.Hint(ctx, fmt.Sprintf("session adapter %s did not finish", r.Host), attr.Error(r.Err))
 		}
 		if r.Output != "" {
 			slog.InfoContext(ctx, r.Output, attr.Notice(""))
@@ -332,8 +355,8 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Emit the project dependency DAG. A trailing list of project paths roots")
 			fmt.Fprintln(os.Stderr, "the graph at those projects; default is the whole workspace. The same")
-			fmt.Fprintln(os.Stderr, "view scoped to a run is available as `"+hint.Run.With("<target>", "--graph")+"` and")
-			fmt.Fprintln(os.Stderr, "`"+hint.Affected.With("<target>", "--graph")+"`.")
+			fmt.Fprintf(os.Stderr, "view scoped to a run is available as `%s` and\n", hint.Run.With("<target>", "--graph"))
+			fmt.Fprintf(os.Stderr, "`%s`.\n", hint.Affected.With("<target>", "--graph"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			printOwnDefaults(fs)
@@ -383,7 +406,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
-			fmt.Fprintln(os.Stderr, "the engine behind `"+hint.Query.String()+"`. -o dot renders only with")
+			fmt.Fprintf(os.Stderr, "the engine behind `%s`. -o dot renders only with\n", hint.Query.String())
 			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -906,7 +929,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	if err != nil {
 		return err
 	}
-	openURL := strings.TrimRight(base, "/") + "/#data=" + encoded
+	openURL := fmt.Sprintf("%s/#data=%s", strings.TrimRight(base, "/"), encoded)
 
 	if len(encoded) > fragmentWarnBytes {
 		slog.WarnContext(ctx, fmt.Sprintf("this graph encodes to %d KB, near or past what Safari and older\n"+
@@ -975,7 +998,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	if err != nil {
 		return err
 	}
-	openURL := strings.TrimRight(base, "/") + "/#data=" + encoded
+	openURL := fmt.Sprintf("%s/#data=%s", strings.TrimRight(base, "/"), encoded)
 
 	if printOnly {
 		fmt.Println(openURL)
@@ -1009,7 +1032,7 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 	// SourceURL carries the per-run bearer token in a `?token=` query param; tucking the
 	// whole URL into the `#src=` fragment keeps the token out of any HTTP request the browser
 	// makes to the hosted page, and the explorer replays it when it fetches the blob.
-	openURL := strings.TrimRight(base, "/") + "/#src=" + url.QueryEscape(bs.SourceURL())
+	openURL := fmt.Sprintf("%s/#src=%s", strings.TrimRight(base, "/"), url.QueryEscape(bs.SourceURL()))
 
 	slog.InfoContext(ctx, fmt.Sprintf("handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n"+
 		"it is served once, CORS-locked to %s, and never leaves your machine; the server stops as soon as the page has it.",
@@ -1139,7 +1162,7 @@ const probeLiveBridgeTimeout = 2 * time.Second
 // on. A 401/403 response proves the guarded route exists (auth runs before
 // the handler); connection refused/timeout means the bridge is down.
 func probeLiveBridge(ctx context.Context, addr string) error {
-	target := "http://" + addr + "/api/v1/graph"
+	target := fmt.Sprintf("http://%s/api/v1/graph", addr)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return err

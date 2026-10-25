@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -53,8 +54,10 @@ func TestDiffUnifiedAgainstEmpty(t *testing.T) {
 }
 
 func TestDiffUnifiedContext(t *testing.T) {
-	a := strings.Repeat("same\n", 20) + "old\n" + strings.Repeat("same\n", 20)
-	b := strings.Repeat("same\n", 20) + "new\n" + strings.Repeat("same\n", 20)
+	a := fmt.Sprintf(`%sold
+%s`, strings.Repeat("same\n", 20), strings.Repeat("same\n", 20))
+	b := fmt.Sprintf(`%snew
+%s`, strings.Repeat("same\n", 20), strings.Repeat("same\n", 20))
 
 	tight, err := DiffUnified(context.Background(), a, b, "", "", 1)
 	require.NoError(t, err)

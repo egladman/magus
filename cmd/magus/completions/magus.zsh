@@ -60,6 +60,7 @@ _magus() {
                 'job:Fork a job, take it, return it with its result, and verify that result'
                 'notes:Human-authored notes committed to the repository'
                 'queue:Merge approved changes through a speculative, partitioned merge queue'
+                'gate:A person'\''s decisions about the local gate'
                 'watch:Emit changed file paths to stdout'
                 'events:Stream workspace events as JSONL for an integration to consume'
                 'server:Manage the magus server\: MCP, the console, APIs and background jobs'

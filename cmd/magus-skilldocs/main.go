@@ -229,7 +229,11 @@ func writeFenced(w *strings.Builder, body string) {
 		}
 	}
 	fence := strings.Repeat("`", max(3, longest+1))
-	w.WriteString(fence + "markdown\n" + body + "\n" + fence + "\n\n")
+	fmt.Fprintf(w, `%smarkdown
+%s
+%s
+
+`, fence, body, fence)
 }
 
 // renderIndex is the section landing: a table of every skill with what each

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"maps"
 	"testing"
 
@@ -148,16 +149,16 @@ func placementFixture(t *testing.T, imports map[string][]string) types.Duplicati
 	for _, pkg := range []string{"a", "b", "h", "leaf"} {
 		g.AddNode(types.KnowledgeNode{ID: ns(pkg), Kind: types.KindSymbol, Label: pkg, Source: pkg + "/x.go:1",
 			Attrs: map[string]string{attrNamespace: ns(pkg)}})
-		g.AddNode(types.KnowledgeNode{ID: "file:" + pkg + "/x.go", Kind: types.KindFile, Source: pkg + "/x.go"})
-		g.AddEdge(types.KnowledgeEdge{Source: "file:" + pkg + "/x.go", Target: ns(pkg), Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
+		g.AddNode(types.KnowledgeNode{ID: fmt.Sprintf("file:%s/x.go", pkg), Kind: types.KindFile, Source: fmt.Sprintf("%s/x.go", pkg)})
+		g.AddEdge(types.KnowledgeEdge{Source: fmt.Sprintf("file:%s/x.go", pkg), Target: ns(pkg), Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
 	}
 	for from, tos := range imports {
 		for _, to := range tos {
-			g.AddEdge(types.KnowledgeEdge{Source: "file:" + from + "/x.go", Target: ns(to), Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1})
+			g.AddEdge(types.KnowledgeEdge{Source: fmt.Sprintf("file:%s/x.go", from), Target: ns(to), Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1})
 		}
 	}
 	fn := func(id, pkg, line string, callees ...string) {
-		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: id, Source: pkg + "/x.go:" + line,
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: id, Source: fmt.Sprintf("%s/x.go:%s", pkg, line),
 			Attrs: map[string]string{attrSymbolKind: "Function", attrDefEndLine: line + "0", attrNamespace: ns(pkg)}})
 		for _, c := range callees {
 			g.AddEdge(types.KnowledgeEdge{Source: id, Target: c, Relation: types.RelationCalls, Confidence: types.ConfidenceExtracted, Score: 1})
@@ -246,8 +247,8 @@ func TestDuplicatesSaysWhatAFoldWouldCost(t *testing.T) {
 	}
 	for _, pkg := range []string{"a", "b"} {
 		g.AddNode(types.KnowledgeNode{ID: "ns:" + pkg, Kind: types.KindSymbol, Source: pkg + "/x.go:1", Attrs: map[string]string{attrNamespace: "ns:" + pkg}})
-		g.AddNode(types.KnowledgeNode{ID: "file:" + pkg + "/x.go", Kind: types.KindFile, Source: pkg + "/x.go"})
-		edge("file:"+pkg+"/x.go", "ns:"+pkg, types.RelationDefines)
+		g.AddNode(types.KnowledgeNode{ID: fmt.Sprintf("file:%s/x.go", pkg), Kind: types.KindFile, Source: fmt.Sprintf("%s/x.go", pkg)})
+		edge(fmt.Sprintf("file:%s/x.go", pkg), fmt.Sprintf("ns:%s", pkg), types.RelationDefines)
 	}
 	fn := func(id, label, source, end string, attrs map[string]string, callees ...string) {
 		a := map[string]string{attrSymbolKind: "Function", attrDefEndLine: end, attrNamespace: "ns:a"}

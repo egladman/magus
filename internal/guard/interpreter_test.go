@@ -126,7 +126,7 @@ func TestInterpreterScriptJudgesAScriptsProgram(t *testing.T) {
 // every rule included. Only literal argv is read; a computed one proves nothing.
 func TestGuardJudgesWhatABuzzProgramSpawns(t *testing.T) {
 	t.Parallel()
-	buzz := func(program string) string { return "magus buzz -e '" + program + "'" }
+	buzz := func(program string) string { return fmt.Sprintf("magus buzz -e '%s'", program) }
 	for _, tt := range []struct {
 		command string
 		rule    denyRuleName // "" for no deny

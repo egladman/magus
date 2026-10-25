@@ -95,6 +95,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [Jobs](guides/jobs.md): coordinate work by hand: one person across worktrees, teammates sharing a file, CI checking merged work, and splitting other work.
 - [Tips and tricks](guides/tips.md): non-obvious ways to combine subcommands.
 - [MCP](guides/integrations/mcp.md): drive magus from agents over the Model Context Protocol.
+- [Go SDK](guides/go-sdk.md): call magus from Go: open a workspace, run a target, ask what a change affects, judge a tool call with the guard.
 - [Merge queue](concepts/merge-queue.md): `magus queue`: queue a pull request by enabling auto-merge, validate stages speculatively, merge each as its own commit; magus supplies the version control and the affected sets.
 - [Review](concepts/review.md): read a change, draft remarks as you go, and send them to the pull request they belong to, with the review's own conversation rendered beside the code.
 - [Telemetry](concepts/telemetry.md): OpenTelemetry traces and metrics.

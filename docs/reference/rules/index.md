@@ -46,6 +46,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [focus-read](focus-read.md)                           | a read outside the paths a focus lease was given                                                     |
 | [gate-repeat](gate-repeat.md)                         | the gate run a third time over a tree its last green verdict already covers                          |
 | [generated-write](generated-write.md)                 | a hand edit to a declared output, which the next run overwrites                                      |
+| [grant-is-a-persons](grant-is-a-persons.md)           | an agent running `magus job grant`, in any spelling and any role                                     |
 | [graph-pipe](graph-pipe.md)                           | a read-only graph verb piped into a text filter, when magus projects the record itself               |
 | [grep-reader](grep-reader.md)                         | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body     |
 | [heredoc-write](heredoc-write.md)                     | a here-document written to a file, judged as the file write it is                                    |
@@ -63,6 +64,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [lease-invalid](lease-invalid.md)                     | a call naming a lease this workspace's job store does not declare                                    |
 | [lease-paused](lease-paused.md)                       | a leased worker starting a magus run while a person has its job paused                               |
 | [lease-rebind](lease-rebind.md)                       | a leased worker rewriting who it is or what its own job row says                                     |
+| [lease-row-unknown](lease-row-unknown.md)             | a leased call judged by a magus older than the job row it reads                                      |
 | [lease-undeclared](lease-undeclared.md)               | a call graded under a lease id the job store has no row for, or a binding it tombstoned              |
 | [lease-vcs](lease-vcs.md)                             | a worker lease mutating version control, or committing outside its own branch and checkout           |
 | [lease-write](lease-write.md)                         | a leased write outside its write paths, or into a path it was denied or another lease owns           |
@@ -102,6 +104,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [unknown-env](unknown-env.md)                         | a retired or misspelled MAGUS_* variable handed to a command                                         |
 | [unread-command](unread-command.md)                   | a program or VCS subcommand the shell computes before it runs, which no rule can read                |
 | [vcs-off-switch](vcs-off-switch.md)                   | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
+| [waiver-is-a-persons](waiver-is-a-persons.md)         | an agent running `magus gate waive`, in any spelling and any role                                    |
 | [whole-tree](whole-tree.md)                           | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                           |
 | [worker-background-run](worker-background-run.md)     | a bound worker running a magus target in the background                                              |
 | [worker-check-only](worker-check-only.md)             | a bound worker running other than its check or a writer of its write paths, or writing past them     |
@@ -138,13 +141,13 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                  |
 | [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                      |
 | [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                        |
-| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it           |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it             |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it        |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                          |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                    |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                     |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                   |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at            |
 | [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                          |
+| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it           |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it             |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it        |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                   |

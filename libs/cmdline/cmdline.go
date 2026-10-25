@@ -123,7 +123,7 @@ func Walk(root Command, visit func(path string, c Command)) {
 func walk(path string, c Command, visit func(string, Command)) {
 	visit(path, c)
 	for _, child := range c.Children {
-		walk(path+" "+child.Name, child, visit)
+		walk(fmt.Sprintf("%s %s", path, child.Name), child, visit)
 	}
 }
 
@@ -143,7 +143,7 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 		case Duration:
 			fs.Duration(f.Name, TypedDefault[time.Duration](f), f.Doc)
 		default:
-			panic("cmdline: flag --" + f.Name + " has unknown kind " + string(f.Kind))
+			panic(fmt.Sprintf("cmdline: flag --%s has unknown kind %s", f.Name, string(f.Kind)))
 		}
 	}
 }

@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,7 +31,10 @@ func TestBootstrapCommandIsOnePrefixAndAGoCommand(t *testing.T) {
 func checkoutFixture(t *testing.T, module string, withBinary bool) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Write("go.mod", "module "+module+"\n\ngo 1.26\n")
+	w.Write("go.mod", fmt.Sprintf(`module %s
+
+go 1.26
+`, module))
 	if withBinary {
 		w.WriteExecutable("magus", "binary")
 	}
@@ -78,7 +82,7 @@ func TestRankOwnBuild(t *testing.T) {
 		{name: "bootstrap", cwd: fresh, command: ward.BootstrapCommand, advise: true, says: "Go's build cache stays on"},
 		{name: "bare package operand", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath cmd/magus run go-build --no-cache .", advise: true},
 		{name: "trailing slash", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus/ run go-build --no-cache .", advise: true},
-		{name: "subcommand -C inside the workspace", cwd: filepath.Dir(fresh), command: "GOEXPERIMENT=jsonv2 go run -C " + filepath.Base(fresh) + " -trimpath ./cmd/magus run go-build --no-cache .", advise: true, says: fresh},
+		{name: "subcommand -C inside the workspace", cwd: filepath.Dir(fresh), command: fmt.Sprintf("GOEXPERIMENT=jsonv2 go run -C %s -trimpath ./cmd/magus run go-build --no-cache .", filepath.Base(fresh)), advise: true, says: fresh},
 
 		{name: "binary exists", cwd: built, command: ward.BootstrapCommand, deny: true, says: "already has a magus binary"},
 		{name: "a bare link with a binary", cwd: built, command: "go build -o magus ./cmd/magus", deny: true, says: "already has a magus binary"},
@@ -98,10 +102,10 @@ func TestRankOwnBuild(t *testing.T) {
 
 		// A -C outside the workspace passes the pure rule, which has no way to know what is
 		// there; a checkout of magus there is this repository's policy to judge.
-		{name: "another magus checkout by -C", cwd: elsewhere, command: "go -C " + built + " test ./..."},
-		{name: "a bootstrap into another checkout by -C", cwd: elsewhere, command: "GOEXPERIMENT=jsonv2 go -C " + fresh + " run -trimpath ./cmd/magus run go-build --no-cache ."},
-		{name: "foreign tree by -C", cwd: elsewhere, command: "go -C " + foreign + " test ./..."},
-		{name: "magus against another root", cwd: elsewhere, command: "./magus --root " + fresh + " run go-build ."},
+		{name: "another magus checkout by -C", cwd: elsewhere, command: fmt.Sprintf("go -C %s test ./...", built)},
+		{name: "a bootstrap into another checkout by -C", cwd: elsewhere, command: fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", fresh)},
+		{name: "foreign tree by -C", cwd: elsewhere, command: fmt.Sprintf("go -C %s test ./...", foreign)},
+		{name: "magus against another root", cwd: elsewhere, command: fmt.Sprintf("./magus --root %s run go-build .", fresh)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -111,7 +115,8 @@ func TestRankOwnBuild(t *testing.T) {
 				assert.Empty(t, v.Deny)
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 				assert.Contains(t, v.Context, "bootstrap allowed")
-				assert.Contains(t, v.Context+"\n"+v.Why, tt.says)
+				assert.Contains(t, fmt.Sprintf(`%s
+%s`, v.Context, v.Why), tt.says)
 			case tt.deny:
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 				assert.Contains(t, v.Deny+hint.Render(v.Next, func(types.NextStep) string { return "" }), tt.says,
@@ -162,7 +167,7 @@ func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
 	testkit.Isolate(t)
 	fresh := checkoutFixture(t, ownModule, false)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: fresh})
-	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + fresh + `","tool_input":{"command":"` + ward.BootstrapCommand + `"}}`
+	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", fresh, ward.BootstrapCommand)
 
 	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 
@@ -261,14 +266,14 @@ func TestRankOwnBuildDeniesRecoveryWhenTheWorkspaceLoads(t *testing.T) {
 		for _, command := range recoveryForms {
 			loads := 0
 			v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, command)
-			assert.Equal(t, denyRuleRawTool, v.Rule.Name, name+": "+command)
-			assert.NotEmpty(t, v.Deny, name+": "+command)
-			assert.NotContains(t, v.Context, "recovery allowed", name+": "+command)
+			assert.Equal(t, denyRuleRawTool, v.Rule.Name, fmt.Sprintf("%s: %s", name, command))
+			assert.NotEmpty(t, v.Deny, fmt.Sprintf("%s: %s", name, command))
+			assert.NotContains(t, v.Context, "recovery allowed", fmt.Sprintf("%s: %s", name, command))
 
 			v = judgeOwnBuildWith(loadingAs(loadErr, &loads), fresh, command)
-			assert.Contains(t, v.Deny, "has no magus binary yet", name+" without a binary: "+command)
-			require.Len(t, v.Next, 1, name+" without a binary: "+command)
-			assert.Equal(t, ward.BootstrapCommand, v.Next[0].Run, name+" without a binary: "+command)
+			assert.Contains(t, v.Deny, "has no magus binary yet", fmt.Sprintf("%s without a binary: %s", name, command))
+			require.Len(t, v.Next, 1, fmt.Sprintf("%s without a binary: %s", name, command))
+			assert.Equal(t, ward.BootstrapCommand, v.Next[0].Run, fmt.Sprintf("%s without a binary: %s", name, command))
 		}
 	}
 }
@@ -277,7 +282,7 @@ func TestJudgeAllowsTheRelinkWhileTheWorkspaceCannotLoad(t *testing.T) {
 	testkit.Isolate(t)
 	built := checkoutFixture(t, ownModule, true)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
-	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + built + `","tool_input":{"command":"GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus"}}`
+	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus\"}}", built)
 	loads := 0
 
 	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
@@ -340,7 +345,7 @@ func TestJudgeAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
 	testkit.Isolate(t)
 	built := checkoutFixture(t, ownModule, true)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
-	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + built + `","tool_input":{"command":"` + ward.BootstrapCommand + `"}}`
+	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", built, ward.BootstrapCommand)
 	loads := 0
 
 	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
@@ -399,7 +404,7 @@ func TestRankOwnBuildLetsOnlyTheRootAndTheHolderBootstrapACheckout(t *testing.T)
 		{name: "the holder", lease: holder.ID, cwd: checkout, command: line},
 		{name: "the holder by a relative path", lease: holder.ID, cwd: filepath.Dir(checkout), command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout=" + filepath.Base(checkout)},
 		{name: "another lease", lease: other.ID, cwd: root, command: line, deny: true},
-		{name: "another lease by the script's absolute path", lease: other.ID, cwd: root, command: "./magus buzz " + filepath.Join(root, job.CheckoutBootstrapScript) + " -- --checkout " + checkout, deny: true},
+		{name: "another lease by the script's absolute path", lease: other.ID, cwd: root, command: fmt.Sprintf("./magus buzz %s -- --checkout %s", filepath.Join(root, job.CheckoutBootstrapScript), checkout), deny: true},
 		{name: "another lease running another script", lease: other.ID, cwd: root, command: "./magus buzz hack/dev/ls-uncommitted.buzz"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

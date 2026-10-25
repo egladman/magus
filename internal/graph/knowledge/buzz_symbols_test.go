@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -23,7 +24,7 @@ type buzzOcc struct {
 
 // buzzFun is scip-buzz's moniker for the top-level fun name in the workspace file rel: the
 // file a Namespace descriptor, the fun a Method one.
-func buzzFun(rel, name string) string { return "scip-buzz buzz . . `" + rel + "`/" + name + "()." }
+func buzzFun(rel, name string) string { return fmt.Sprintf("scip-buzz buzz . . `%s`/%s().", rel, name) }
 
 // buzzIndexSymbols reads a fake scip-buzz index through the real ingestion, so the symbols
 // reach the graph keyed and labeled the way a built index's do.

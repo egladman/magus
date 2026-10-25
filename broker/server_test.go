@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -140,6 +141,57 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 	assert.Empty(t, holders(t, addr), "a release frees the claim")
 }
 
+// TestStatusNamesOwnersWaitersAndRefusals: status answers whose run holds each seat,
+// which runs wait for one, and which claims the broker refused, from any connection.
+func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(1000, 4))
+	// One test process stands in for three, so each client names its own pid.
+	holder := leasedClient(t, addr, "plan/a", "plan", 1)
+	waiter := leasedClient(t, addr, "plan/b", "plan", 1)
+	stranger := leasedClient(t, addr, "other", "other", 0)
+	holder.hello.PID, waiter.hello.PID, stranger.hello.PID = 101, 102, 103
+
+	v, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 900, Invocation: "101:a"})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+	parked := claimAsync(t, t.Context(), addr, waiter, types.MachineClaim{Project: ".", Target: "lint", Invocation: "102:b"})
+	requirePending(t, parked)
+	v, err = stranger.Request(t.Context(), types.MachineClaim{Project: "x", Target: "build", MemoryMB: 900})
+	require.NoError(t, err)
+	require.False(t, v.Granted)
+	require.False(t, v.OwnRun, "nothing of its own keeps it out, so the client refuses it with MGS3009")
+
+	st, err := QueryStatus(t.Context(), addr)
+	require.NoError(t, err)
+	c := st.Capacity
+	require.Len(t, c.Holders, 1)
+	assert.Equal(t, "plan/a", c.Holders[0].Owner)
+	require.Len(t, c.Waiting, 1)
+	w := c.Waiting[0]
+	assert.Equal(t, types.MachineWaiter{Kind: "claim", PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command,
+		Owner: "plan/b", Tree: "plan", Since: w.Since, WaitedMS: w.WaitedMS}, w)
+	require.Len(t, c.Refused, 1)
+	r := c.Refused[0]
+	assert.Equal(t, 103, r.PID)
+	assert.Equal(t, "other", r.Owner)
+	assert.Equal(t, "x", r.Project)
+	assert.True(t, r.Fits)
+	require.Len(t, r.Holders, 1)
+	assert.Equal(t, "plan/a", r.Holders[0].Owner, "a refusal keeps the holders as they were")
+
+	b, err := json.Marshal(st)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"waiting":[{"kind":"claim","project":".","target":"lint","pid":102`)
+	assert.Contains(t, string(b), `"refused":[{"at":`)
+
+	require.NoError(t, waiter.Close())
+	assert.Eventually(t, func() bool {
+		st, err := QueryStatus(t.Context(), addr)
+		return err == nil && len(st.Capacity.Waiting) == 0
+	}, 2*time.Second, 10*time.Millisecond, "a waiter that hangs up stops waiting")
+}
+
 // curvedClaim is a claim over a 100s run holding early for its first half and late for
 // its second, claiming its peak.
 func curvedClaim(target string, pid int, early, late uint32) types.MachineClaim {
@@ -219,7 +271,7 @@ func TestAReservationOutlivesItsAskerAndGoesToItsReader(t *testing.T) {
 	reader := startReader(t)
 
 	asker := dial(t, addr)
-	v, err := asker.Reserve(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, Command: "magus run go-test ."}, reader.Process.Pid)
+	v, err := asker.Reserve(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, Command: "magus run go-test ."}, reader.Process.Pid, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	require.NoError(t, asker.Close())
@@ -245,7 +297,7 @@ func TestAReservationDiesWithItsReader(t *testing.T) {
 	serve(t, addr, WithCapacity(0, 4))
 	reader := startReader(t)
 	c := dial(t, addr)
-	v, err := c.Reserve(t.Context(), types.MachineClaim{Slots: 4}, reader.Process.Pid)
+	v, err := c.Reserve(t.Context(), types.MachineClaim{Slots: 4}, reader.Process.Pid, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -260,7 +312,7 @@ func TestAReservationDiesWithItsReader(t *testing.T) {
 func TestAReservationNamesItsReader(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, 4))
-	_, err := dial(t, addr).Reserve(t.Context(), types.MachineClaim{Slots: 1}, 0)
+	_, err := dial(t, addr).Reserve(t.Context(), types.MachineClaim{Slots: 1}, 0, nil)
 	var refused *Error
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, CodeMalformed, refused.Code)
@@ -274,7 +326,7 @@ func TestSIGKILLReleasesAtOnce(t *testing.T) {
 	serve(t, addr, WithCapacity(1000, 4))
 
 	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), holderEnv+"="+addr)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", holderEnv, addr))
 	out, err := cmd.StdoutPipe()
 	require.NoError(t, err)
 	require.NoError(t, cmd.Start())

@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,8 +35,8 @@ func loadShippedHarness(t *testing.T, id string) agent.HarnessDescriptor {
 // contract functions in body, beside the config every harness exports.
 func harnessSource(t *testing.T, name, body string) string {
 	t.Helper()
-	return register.Spell(t, name, spells.WithFuncSource("import \"magus/spell\";\n"+
-		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }\n"+body))
+	return register.Spell(t, name, spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\n"+
+		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }\n%s", body)))
 }
 
 func scoutInstructions(t *testing.T) string {
@@ -58,25 +59,21 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 		want types.AgentFile
 	}{
 		{"claude-code", types.AgentFile{
-			Path: ".claude/agents/magus-scout.md",
-			Content: "---\nname: \"magus-scout\"\ndescription: " + quoted + "\n" +
-				"tools: Read, Grep, Glob, Bash\n---\n\n" + instructions,
+			Path:    ".claude/agents/magus-scout.md",
+			Content: fmt.Sprintf("---\nname: \"magus-scout\"\ndescription: %s\ntools: Read, Grep, Glob, Bash\n---\n\n%s", quoted, instructions),
 		}},
 		{"codex", types.AgentFile{
-			Path: ".codex/agents/magus-scout.toml",
-			Content: "name = \"magus-scout\"\ndescription = " + quoted + "\n" +
-				"sandbox_mode = \"read-only\"\n" +
-				"developer_instructions = '''\n" + instructions + "'''\n",
-			Hint: "magus-scout runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
+			Path:    ".codex/agents/magus-scout.toml",
+			Content: fmt.Sprintf("name = \"magus-scout\"\ndescription = %s\nsandbox_mode = \"read-only\"\ndeveloper_instructions = '''\n%s'''\n", quoted, instructions),
+			Hint:    "magus-scout runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
 		}},
 		{"cursor", types.AgentFile{
-			Path: ".cursor/agents/magus-scout.md",
-			Content: "---\nname: \"magus-scout\"\ndescription: " + quoted + "\n" +
-				"model: inherit\nreadonly: true\n---\n\n" + instructions,
+			Path:    ".cursor/agents/magus-scout.md",
+			Content: fmt.Sprintf("---\nname: \"magus-scout\"\ndescription: %s\nmodel: inherit\nreadonly: true\n---\n\n%s", quoted, instructions),
 		}},
 		{"opencode", types.AgentFile{
 			Path:    ".opencode/agents/magus-scout.md",
-			Content: "---\ndescription: " + quoted + "\nmode: subagent\npermission:\n  edit: deny\n---\n\n" + instructions,
+			Content: fmt.Sprintf("---\ndescription: %s\nmode: subagent\npermission:\n  edit: deny\n---\n\n%s", quoted, instructions),
 		}},
 	}
 	for _, tc := range cases {
@@ -273,9 +270,10 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 // command past its timeout, and whose wiring sets the hook timeout the guard reports
 // against, and that every other shipped harness declares no limits.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
-	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000},
+	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true},
 		loadShippedHarness(t, "claude-code").Limits)
-	for _, id := range []string{"codex", "cursor", "opencode"} {
+	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true}, loadShippedHarness(t, "cursor").Limits)
+	for _, id := range []string{"codex", "opencode"} {
 		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
 	}
 }

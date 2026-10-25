@@ -99,7 +99,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Run target "+target+" for every project affected by VCS changes.")
+			fmt.Fprintf(os.Stderr, "Run target %s for every project affected by VCS changes.\n", target)
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -457,7 +457,7 @@ func printFailedResults(w io.Writer, events []journal.Event) {
 }
 
 func affectedMissingTargetUsage() {
-	fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `"+hint.Affected.With("ci")+"`)")
+	fmt.Fprintf(os.Stderr, "magus affected: a target is required (e.g. `%s`)\n", hint.Affected.With("ci"))
 	fmt.Fprintln(os.Stderr, "")
 	affectedUsage()
 }
@@ -610,15 +610,16 @@ func newPlanRisk(rep types.RiskReport) *planRisk {
 
 func planRiskSummaryMarkdown(r *planRisk) string {
 	var b strings.Builder
-	b.WriteString("### Gate sized " + string(r.Tier) + "\n\n")
-	b.WriteString("No shard runs: the change against `" + shortCommit(r.Base) + "` tiers " + string(r.Tier) +
-		", so no step of the gate can observe it.\n\n")
+	fmt.Fprintf(&b, `### Gate sized %s
+
+`, string(r.Tier))
+	fmt.Fprintf(&b, "No shard runs: the change against `%s` tiers %s, so no step of the gate can observe it.\n\n", shortCommit(r.Base), string(r.Tier))
 	if len(r.Paths) == 0 {
 		b.WriteString("No paths changed.\n")
 	} else {
 		b.WriteString("| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n")
 		for _, e := range r.Paths {
-			b.WriteString("| `" + e.Path + "` | " + string(e.Tier) + " | " + e.Class + " | " + e.Why + " |\n")
+			fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", e.Path, string(e.Tier), e.Class, e.Why)
 		}
 	}
 	b.WriteString("\nTo run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n")
@@ -764,7 +765,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 
 	var pf *flaggen.AffectedPlanFlags
-	if _, err := cmdParse("affected "+target+" --plan", flagArgs, func(fs *flag.FlagSet) {
+	if _, err := cmdParse(fmt.Sprintf("affected %s --plan", target), flagArgs, func(fs *flag.FlagSet) {
 		pf = flaggen.BindAffectedPlan(fs, flaggen.AffectedPlanDefaults{
 			MaxShards:         globalCfg.CI.MaxShards,
 			MaxParallelBudget: globalCfg.CI.RunnerPoolBudget,
@@ -982,7 +983,7 @@ func noteUndeclaredSeeds(ctx context.Context, undeclaredBySeed map[string][]stri
 	if len(undeclaredBySeed) == 0 {
 		return
 	}
-	interactive.Hint(ctx, "["+string(types.UndeclaredSeedingFile)+"] "+undeclaredSeedNotice(undeclaredBySeed, false))
+	interactive.Hint(ctx, fmt.Sprintf("[%s] %s", string(types.UndeclaredSeedingFile), undeclaredSeedNotice(undeclaredBySeed, false)))
 }
 
 // noteUndeclaredSeedCost reports MGS1028 on the run that PAYS for it: `magus affected
@@ -1014,7 +1015,7 @@ func undeclaredSeedNotice(undeclaredBySeed map[string][]string, withFiles bool) 
 	named := make([]string, 0, len(seeds))
 	for _, seed := range seeds {
 		if withFiles {
-			seed += " (" + strings.Join(cappedList(undeclaredBySeed[seed]), ", ") + ")"
+			seed += fmt.Sprintf(" (%s)", strings.Join(cappedList(undeclaredBySeed[seed]), ", "))
 		}
 		named = append(named, seed)
 	}
@@ -1296,7 +1297,7 @@ func printImpactText(out *types.ImpactResult) error {
 		if len(out.SeedProjects) > 1 {
 			label = fmt.Sprintf("%s (1 of %d seeds)", seed, len(out.SeedProjects))
 		}
-		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: types.KindProject + ":" + seed})
+		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
 		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
 		fmt.Printf("%s\n", authHint(link))
 		fmt.Printf("(start the magus server if the graph does not load)\n")

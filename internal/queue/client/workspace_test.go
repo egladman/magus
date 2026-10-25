@@ -99,10 +99,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(stamp);
 }
 export fun stamp(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("README.md");
+    ctx.writesFiles(["README.md"], editsExistingSource: true);
 }
 export fun format(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("**/*.go");
+    ctx.writesFiles(["**/*.go"], editsExistingSource: true);
 }
 `,
 		"api/README.md": "# api\n", "api/main.go": "package main\n",

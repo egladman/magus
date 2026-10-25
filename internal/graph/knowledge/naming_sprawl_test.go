@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,7 @@ const sprawlDir = "internal/obs"
 
 // sprawlMethod is a method of owner in internal/obs taking params.
 func sprawlMethod(owner, name, params string) types.KnowledgeSymbol {
-	return goSym(sprawlDir, owner+"#"+name+"().", name, "Method", "func ("+owner+")."+name+"("+params+")", sprawlDir+"/x.go")
+	return goSym(sprawlDir, fmt.Sprintf("%s#%s().", owner, name), name, "Method", fmt.Sprintf("func (%s).%s(%s)", owner, name, params), fmt.Sprintf("%s/x.go", sprawlDir))
 }
 
 const cacheParams = "ctx context.Context, name string"

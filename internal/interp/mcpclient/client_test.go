@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -66,7 +67,7 @@ func TestRunRejectsFilesystemImport(t *testing.T) {
 func TestRunRejectsWithheldStdlibWithTheReason(t *testing.T) {
 	for _, name := range []string{"env", "debug", "gc", "assert", "test", "ffi"} {
 		_, err := Run(context.Background(), Request{
-			Script: `import "` + name + `"; fun main(args: [str]) > int { return 1; }`,
+			Script: fmt.Sprintf(`import "%s"; fun main(args: [str]) > int { return 1; }`, name),
 		})
 		require.Error(t, err, name)
 		assert.Contains(t, err.Error(), "outside this tool", name)
@@ -76,7 +77,7 @@ func TestRunRejectsWithheldStdlibWithTheReason(t *testing.T) {
 func TestRunRejectsCmdAndPry(t *testing.T) {
 	for _, member := range []string{`magus\cmd("status", args: [])`, `magus\pry()`} {
 		_, err := Run(context.Background(), Request{
-			Script: `import "magus"; fun main(args: [str]) > any !> any { return ` + member + `; }`,
+			Script: fmt.Sprintf(`import "magus"; fun main(args: [str]) > any !> any { return %s; }`, member),
 		})
 		require.Error(t, err, member)
 	}

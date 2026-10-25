@@ -77,7 +77,7 @@ func (d descendant) String() string {
 	if len(work) == 0 {
 		return s
 	}
-	return s + ": " + strings.Join(work, "; ")
+	return fmt.Sprintf("%s: %s", s, strings.Join(work, "; "))
 }
 
 // heldCheckout is the checkout row's holder works in: the one its fork made, else the one
@@ -110,7 +110,7 @@ func uncommitted(ctx context.Context, root string, row types.Job) ([]string, str
 	}
 	dirty, err := drv.DirtyFiles(ctx, root, nil)
 	if err != nil {
-		return nil, "the status of " + root + " cannot be read: " + err.Error()
+		return nil, fmt.Sprintf("the status of %s cannot be read: %s", root, err.Error())
 	}
 	return slices.DeleteFunc(dirty, func(p string) bool {
 		return !slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, p) })
@@ -166,17 +166,18 @@ func joinDescendants(descs []descendant) string {
 }
 
 // Abandon ends each of ids as no_return, as [Exit] does with no result, every descendant
-// before its ancestors, and returns the rows it ended and one error for each id it did not.
+// before its ancestors, and returns the rows it ended, one `<id> already ended` line for
+// each id that had already ended, and one error for each other id it did not end.
 //
 // A job whose live descendants are not all among ids is refused, naming each: ending it
 // would end them unseen. Restating them in ids ends them too, unless one of them holds
 // uncommitted work in its write paths or a running check. Then the end needs a person, who
 // disposes the attention request the refusal names (the guard denies an agent that), and
 // the same call proceeds afterwards.
-func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []error) {
-	rows, err := store.List()
+func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []error, []error) {
+	rows, err := store.unswept()
 	if err != nil {
-		return nil, []error{err}
+		return nil, nil, []error{err}
 	}
 	var unique []string
 	for _, id := range ids {
@@ -220,15 +221,20 @@ func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []er
 		return cmp.Compare(len(types.JobAncestors(rows, b)), len(types.JobAncestors(rows, a)))
 	})
 	var ended []types.Job
+	var already []error
 	for _, id := range order {
 		stored, err := Exit(ctx, store, id, nil, nil)
+		if over := (*alreadyEndedError)(nil); errors.As(err, &over) {
+			already = append(already, over)
+			continue
+		}
 		if err != nil {
 			refused = append(refused, err)
 			continue
 		}
 		ended = append(ended, stored)
 	}
-	return ended, refused
+	return ended, already, refused
 }
 
 // confirmEnd is nil once a person disposed the attention request asking to end ids, which
@@ -341,14 +347,24 @@ func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restat
 // changed are returned. A linked checkout no row records comes back on a copy of its row
 // whose Worktree says what became of it; the store is not written for it.
 func (s *Store) EndCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]types.Job, error) {
-	rows, err := s.List()
+	return s.endCheckouts(ctx, written, ended, false)
+}
+
+// EndNamedCheckouts is [Store.EndCheckouts] for the jobs in ended alone: ending some jobs
+// restores and removes their checkouts and leaves every other ended row's as it stands.
+func (s *Store) EndNamedCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]types.Job, error) {
+	return s.endCheckouts(ctx, written, ended, true)
+}
+
+func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []string, onlyNamed bool) ([]types.Job, error) {
+	rows, err := s.unswept()
 	if err != nil {
 		return nil, err
 	}
 	here, _ := filepath.Abs(s.root)
 	var changed []types.Job
 	for _, row := range rows {
-		if !row.State.Terminal() {
+		if !row.State.Terminal() || (onlyNamed && !slices.Contains(ended, row.ID)) {
 			continue
 		}
 		if !row.Worktree.Standing() {
@@ -394,7 +410,7 @@ func (s *Store) EndCheckouts(ctx context.Context, written WrittenPaths, ended ..
 // why it stays: this call runs in it, a live job is held in it, or it holds work.
 func endCheckout(ctx context.Context, rows []types.Job, here string, row types.Job, wt types.JobWorktree, written WrittenPaths) string {
 	if here != "" && within(here, wt.Root) {
-		return "this call runs in it; `" + hint.JobWait.With(row.ID) + "` from another checkout removes it"
+		return fmt.Sprintf("this call runs in it; `%s` from another checkout removes it", hint.JobWait.With(row.ID))
 	}
 	for _, other := range rows {
 		if other.State.Live() && samePath(heldCheckout(other), wt.Root) {

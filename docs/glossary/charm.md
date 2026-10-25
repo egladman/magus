@@ -27,10 +27,10 @@ In the docs:
 
 - [1. Built-in command spells (import "magus/charm")](../concepts/charms.md#1-built-in-command-spells-import-maguscharm)
 - [C. A :linux charm](../decisions/0003-running-an-invocation-on-another-operating-system.md#c-a-linux-charm)
+- [A charm scoped to one target (ci:breaking on proto only)](../decisions/0017-a-change-accepts-the-findings-it-causes.md#a-charm-scoped-to-one-target-cibreaking-on-proto-only)
 - [A charm is an adverb](../recommendations.md#a-charm-is-an-adverb)
 - [charm](../reference/buzz/charm.md#charm)
 - [hasCharm](../reference/buzz/magus.md#hascharm)
-- [MGS6001: charm patch does not apply to the command](../reference/codes/charms/MGS6001.md#mgs6001-charm-patch-does-not-apply-to-the-command)
 
 In the code (`magus refs <name>` lists every site):
 

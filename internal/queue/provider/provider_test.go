@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -53,7 +54,7 @@ var (
 
 // script is a provider whose ops echo what they were handed, so a test reads the
 // bridge's encoding from the answers.
-var script = `
+var script = fmt.Sprintf(`
 import "std";
 import "mergequeue/types";
 
@@ -65,19 +66,19 @@ export fun describe(req: QueueDescribeRequest) > any {
 export fun list_changes(req: QueueListChangesRequest) > any {
     return {
         "changes": [{
-            "id": "7", "repo": "acme/acme", "head": "` + headA + `", "ref": "refs/pull/7/head",
+            "id": "7", "repo": "acme/acme", "head": "%s", "ref": "refs/pull/7/head",
             "branch": "feat", "base": req.base, "title": req.remoteURL, "author": "priya", "fork": true,
             "method": "squash", "parent": "6",
         }],
-        "merged": [{"id": "6", "head": "` + headD + `", "commit": "` + headE + `", "method": "squash"}],
-        "unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "title": "wip", "author": "ann", "branch": "wip", "mark": "queued", "base": "main"}],
+        "merged": [{"id": "6", "head": "%s", "commit": "%s", "method": "squash"}],
+        "unqueued": [{"id": "9", "head": "%s", "repo": "acme/acme", "title": "wip", "author": "ann", "branch": "wip", "mark": "queued", "base": "main"}],
         "closed": [{"id": "12", "repo": "acme/acme"}],
     };
 }
 
 export fun approval_at(req: QueueApprovalRequest) > any {
     return {"approved": req.id == "7", "head": req.commit, "reason": req.title,
-        "base": "main", "method": req.method, "approvedCommit": "` + headD + `",
+        "base": "main", "method": req.method, "approvedCommit": "%s",
         "queued": true, "branchSharedWith": ["40"]};
 }
 
@@ -85,7 +86,7 @@ export fun list_green(req: QueueListGreenRequest) > any {
     if (req.context != "merge-queue") {
         return [<any>];
     }
-    return [{"id": req.base, "repo": req.remoteURL, "head": "` + headD + `"}];
+    return [{"id": req.base, "repo": req.remoteURL, "head": "%s"}];
 }
 
 export fun post_status(req: QueueStatusRequest) > Ack {
@@ -98,7 +99,7 @@ export fun retarget(req: QueueRetargetRequest) > Ack {
 
 export fun merge_change(req: QueueMergeRequest) > any {
     final through = req.through;
-    final pinned = through.len() == 1 and through[0].id == "5" and through[0].commit == "` + headE + `";
+    final pinned = through.len() == 1 and through[0].id == "5" and through[0].commit == "%s";
     return {"merged": req.message == "* body" and req.app == "q" and (pinned or through.len() == 0), "byProvider": through.len() == 0, "reason": "head moved"};
 }
 
@@ -123,13 +124,13 @@ export fun required_checks(req: QueueRequiredChecksRequest) > any {
 
 export fun reviews(req: QueueReviewsRequest) > any {
     if (req.title == "bad commit") {
-        return {"head": "` + headA + `", "approving": [{"id": "12", "reviewer": "ann", "commit": "d"}]};
+        return {"head": "%s", "approving": [{"id": "12", "reviewer": "ann", "commit": "d"}]};
     }
-    return {"head": "` + headA + `", "approving": [{"id": "12", "reviewer": req.title, "commit": "` + headD + `"}]};
+    return {"head": "%s", "approving": [{"id": "12", "reviewer": req.title, "commit": "%s"}]};
 }
 
 export fun dismiss_review(req: QueueDismissReviewRequest) > Ack {
-    return Ack{ ok = req.id == "7" and req.review.id == "12" and req.review.reviewer == "ann" and req.review.commit == "` + headD + `" and req.message == "a.go changed" };
+    return Ack{ ok = req.id == "7" and req.review.id == "12" and req.review.reviewer == "ann" and req.review.commit == "%s" and req.message == "a.go changed" };
 }
 
 export fun list_artifacts(req: QueueListArtifactsRequest) > any {
@@ -140,7 +141,7 @@ export fun list_artifacts(req: QueueListArtifactsRequest) > any {
     return {"run": run, "complete": req.source == "done", "headers": {"Authorization": "Bearer tok"},
         "artifacts": [{"name": "mergequeue-plan", "url": "https://example.invalid/1.zip"}]};
 }
-`
+`, headA, headD, headE, headF, headD, headD, headE, headA, headA, headD, headD)
 
 func open(t *testing.T, src string) *Script {
 	t.Helper()
@@ -298,12 +299,12 @@ func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T
 
 func TestListChangesRefusesWhatGitCouldReadAsAnOption(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
-		{`"head": "` + headA + `", `, `"head": "", `, `head "" is not a full commit id`},
+		{fmt.Sprintf("\"head\": \"%s\", ", headA), `"head": "", `, `head "" is not a full commit id`},
 		{`"id": "7"`, `"id": ".."`, `change id ".."`},
 		{`"branch": "feat"`, `"branch": "--upload-pack=x"`, `starts with '-'`},
 		{`"ref": "refs/pull/7/head"`, `"ref": "refs/pull/7/head:refs/heads/main"`, `holds ':'`},
 		{`"method": "squash", "parent"`, `"method": "", "parent"`, `merge method ""`},
-		{`"commit": "` + headE + `"`, `"commit": "e"`, `must be full commit ids`},
+		{fmt.Sprintf("\"commit\": \"%s\"", headE), `"commit": "e"`, `must be full commit ids`},
 	} {
 		_, err := open(t, strings.Replace(script, tc.from, tc.to, 1)).ListChanges(context.Background(), types.ListQuery{Base: "main"})
 		require.ErrorContains(t, err, tc.want, tc.to)
@@ -317,7 +318,7 @@ func TestAMissingRequiredFieldIsAnError(t *testing.T) {
 		{`, "fork": true`, `list_changes.changes[0]: field "fork" is missing`},
 		{`"repo": "acme/acme", `, `list_changes.changes[0]: field "repo" is missing`},
 		{`"base": req.base, `, `list_changes.changes[0]: field "base" is missing`},
-		{`"unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "title": "wip", "author": "ann", "branch": "wip", "mark": "queued", "base": "main"}],`, `list_changes: field "unqueued" is missing`},
+		{fmt.Sprintf("\"unqueued\": [{\"id\": \"9\", \"head\": \"%s\", \"repo\": \"acme/acme\", \"title\": \"wip\", \"author\": \"ann\", \"branch\": \"wip\", \"mark\": \"queued\", \"base\": \"main\"}],", headF), `list_changes: field "unqueued" is missing`},
 		{`, "method": "squash"}]`, `list_changes.merged[0]: field "method" is missing`},
 	} {
 		to := ""
@@ -353,7 +354,7 @@ func TestListGreenDecodesTheChangesCarryingTheStatus(t *testing.T) {
 	assert.Empty(t, got)
 	_, err = open(t, script).ListGreen(context.Background(), types.ListQuery{Base: ".."}, "merge-queue")
 	require.ErrorContains(t, err, `list_green[0]: change id ".."`)
-	_, err = open(t, strings.Replace(script, `"head": "`+headD+`"}];`, `"head": "d"}];`, 1)).ListGreen(context.Background(), types.ListQuery{Base: "12"}, "merge-queue")
+	_, err = open(t, strings.Replace(script, fmt.Sprintf("\"head\": \"%s\"}];", headD), `"head": "d"}];`, 1)).ListGreen(context.Background(), types.ListQuery{Base: "12"}, "merge-queue")
 	require.ErrorContains(t, err, `head "d" is not a full commit id`)
 }
 
@@ -443,7 +444,7 @@ func TestRequiredChecksDecodesEachStateAndIsOptional(t *testing.T) {
 
 	c.Title = "red"
 	_, err = open(t, script).RequiredChecks(context.Background(), c, headD)
-	require.EqualError(t, err, `provider "echo": required_checks: check "`+headD+`" has state "red", want pending, success or failure`)
+	require.EqualError(t, err, fmt.Sprintf("provider \"echo\": required_checks: check \"%s\" has state \"red\", want pending, success or failure", headD))
 
 	none, err := open(t, strings.Split(script, "export fun required_checks")[0]).RequiredChecks(context.Background(), c, headD)
 	require.NoError(t, err)
@@ -465,7 +466,7 @@ func TestReviewsDecodesTheApprovalsAndDismissReviewCarriesTheReview(t *testing.T
 	_, err = p.Reviews(ctx, c)
 	require.ErrorContains(t, err, `review 12: commit "d" is not a full commit id`)
 
-	none := open(t, strings.Split(script, "export fun reviews")[0]+"export fun list_artifacts"+strings.Split(script, "export fun list_artifacts")[1])
+	none := open(t, fmt.Sprintf("%sexport fun list_artifacts%s", strings.Split(script, "export fun reviews")[0], strings.Split(script, "export fun list_artifacts")[1]))
 	_, err = none.Reviews(ctx, c)
 	require.EqualError(t, err, `provider "echo" does not export reviews`, "reviews is optional")
 }
@@ -481,7 +482,7 @@ func TestAnUnknownProviderNamesBothPlacesItLooked(t *testing.T) {
 func cannedGitHub(t *testing.T, answers map[string]answer) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.Method + " " + r.URL.Path
+		key := fmt.Sprintf("%s %s", r.Method, r.URL.Path)
 		if r.URL.RawQuery != "" {
 			key += "?" + r.URL.RawQuery
 		}
@@ -498,7 +499,7 @@ func cannedGitHub(t *testing.T, answers map[string]answer) string {
 	t.Setenv("GITHUB_API_URL", srv.URL)
 	t.Setenv("GITHUB_TOKEN", "t")
 	t.Setenv("MERGEQUEUE_TOKEN", "")
-	return "https://" + strings.TrimPrefix(srv.URL, "http://") + "/acme/widgets"
+	return fmt.Sprintf("https://%s/acme/widgets", strings.TrimPrefix(srv.URL, "http://"))
 }
 
 // cannedWeb is the web host the GitHub provider derives from cannedGitHub's API root.
@@ -517,8 +518,8 @@ var notFound = answer{http.StatusNotFound, `{"message": "Not Found"}`}
 // owned by a user or an organization, whose main branch nothing protects.
 func repoAnswers(ownerType string) map[string]answer {
 	return map[string]answer{
-		"GET /repos/acme/widgets": {200, `{"allow_auto_merge": true, "allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": false,
-			"owner": {"type": "` + ownerType + `"}}`},
+		"GET /repos/acme/widgets": {200, fmt.Sprintf(`{"allow_auto_merge": true, "allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": false,
+			"owner": {"type": "%s"}}`, ownerType)},
 		"GET /repos/acme/widgets/rules/branches/main": {200, `[]`},
 		"GET /repos/acme/widgets/branches/main":       {200, `{"protection": {}}`},
 		"GET /users/q[bot]":                           {200, `{"login": "q[bot]", "id": 333550495}`},
@@ -605,9 +606,8 @@ func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
 	web = cannedWeb()
 	assert.Equal(t, &types.SetupRefusedError{
 		Reason: "github: the merge queue writes only as its own GitHub App, and none is named; register one",
-		URL: web + "/settings/apps/new?name=acme-magus-queue&url=" + strings.ToLower(url.QueryEscape(web+"/acme/widgets")) +
-			"&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write",
-		App: "<slug>",
+		URL:    fmt.Sprintf("%s/settings/apps/new?name=acme-magus-queue&url=%s&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write", web, strings.ToLower(url.QueryEscape(web+"/acme/widgets"))),
+		App:    "<slug>",
 	}, refused)
 }
 
@@ -624,28 +624,18 @@ func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 		Credential:    types.Integration{ID: "2034567"},
 		Settings:      []types.Setting{{Name: "allow_auto_merge", Value: "true", Want: "true"}},
 		App: &types.App{Slug: "q", ID: "2034567",
-			RegistrationURL: web + "/settings/apps/new?name=acme-magus-queue&url=" + strings.ToLower(url.QueryEscape(web+"/acme/widgets")) +
-				"&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write",
-			InstallURL:  web + "/apps/q/installations/new",
-			Environment: "magus-queue", Variable: "MAGUS_QUEUE_APP_CLIENT_ID", Secret: "MAGUS_QUEUE_APP_PRIVATE_KEY"},
+			RegistrationURL: fmt.Sprintf("%s/settings/apps/new?name=acme-magus-queue&url=%s&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write", web, strings.ToLower(url.QueryEscape(web+"/acme/widgets"))),
+			InstallURL:      web + "/apps/q/installations/new",
+			Environment:     "magus-queue", Variable: "MAGUS_QUEUE_APP_CLIENT_ID", Secret: "MAGUS_QUEUE_APP_PRIVATE_KEY"},
 		Steps: []types.SetupStep{
 			{Title: "Install q on acme/widgets only", URL: web + "/apps/q/installations/new"},
 			{Title: "Create the magus-queue environment, whose secrets only main can read, so pull request runs never see the key",
 				Command: "gh api -X PUT repos/acme/widgets/environments/magus-queue -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'\n" +
 					"gh api -X POST repos/acme/widgets/environments/magus-queue/deployment-branch-policies -f name=main -f type=branch"},
-			{Title: "Store the app's client id, under About on " + web + "/settings/apps/q; gh asks for it",
+			{Title: fmt.Sprintf("Store the app's client id, under About on %s/settings/apps/q; gh asks for it", web),
 				Command: "gh variable set MAGUS_QUEUE_APP_CLIENT_ID --repo acme/widgets"},
-			{Title: "Generate a private key on " + web + "/settings/apps/q (a .pem downloads), store it in the environment alone, and delete the download",
-				Command: "(\n" +
-					"  pem=$(find ~/Downloads -maxdepth 1 -name 'q.*.private-key.pem' -exec ls -t {} + | head -n 1)\n" +
-					"  if [ -n \"$pem\" ]; then\n" +
-					"    gh secret set MAGUS_QUEUE_APP_PRIVATE_KEY --repo acme/widgets --env magus-queue < \"$pem\"\n" +
-					"    find ~/Downloads -maxdepth 1 -name 'q.*.private-key.pem' -delete\n" +
-					"  else\n" +
-					"    echo 'no q key in ~/Downloads: generate one on " + web + "/settings/apps/q unless MAGUS_QUEUE_APP_PRIVATE_KEY is listed below' >&2\n" +
-					"  fi\n" +
-					"  gh secret ls --repo acme/widgets --env magus-queue\n" +
-					")"},
+			{Title: fmt.Sprintf("Generate a private key on %s/settings/apps/q (a .pem downloads), store it in the environment alone, and delete the download", web),
+				Command: fmt.Sprintf("(\n  pem=$(find ~/Downloads -maxdepth 1 -name 'q.*.private-key.pem' -exec ls -t {} + | head -n 1)\n  if [ -n \"$pem\" ]; then\n    gh secret set MAGUS_QUEUE_APP_PRIVATE_KEY --repo acme/widgets --env magus-queue < \"$pem\"\n    find ~/Downloads -maxdepth 1 -name 'q.*.private-key.pem' -delete\n  else\n    echo 'no q key in ~/Downloads: generate one on %s/settings/apps/q unless MAGUS_QUEUE_APP_PRIVATE_KEY is listed below' >&2\n  fi\n  gh secret ls --repo acme/widgets --env magus-queue\n)", web)},
 			{Title: "Require merge-queue from 2034567 on main, in a ruleset of its own (your other rulesets stay as they are)",
 				Command: "gh api -X POST repos/acme/widgets/rulesets --input - <<'EOF'\n" +
 					`{"name":"magus merge queue","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/main"],"exclude":[]}},` +
@@ -686,25 +676,25 @@ func countingGitHub(t *testing.T) (string, map[string]int) {
 	pr := func(n, sha, merge string) string {
 		auto := `null`
 		if merge != "" {
-			auto = `{"merge_method": "` + merge + `"}`
+			auto = fmt.Sprintf("{\"merge_method\": \"%s\"}", merge)
 		}
-		return `{"number": ` + n + `, "draft": false, "title": "t", "user": {"login": "u"}, "labels": [],
-			"head": {"sha": "` + strings.Repeat(sha, 40) + `", "ref": "b` + n + `", "repo": {"full_name": "acme/widgets"}},
-			"base": {"ref": "main"}, "auto_merge": ` + auto + `}`
+		return fmt.Sprintf(`{"number": %s, "draft": false, "title": "t", "user": {"login": "u"}, "labels": [],
+			"head": {"sha": "%s", "ref": "b%s", "repo": {"full_name": "acme/widgets"}},
+			"base": {"ref": "main"}, "auto_merge": %s}`, n, strings.Repeat(sha, 40), n, auto)
 	}
-	pulls := "[" + pr("1", "a", "squash") + "," + pr("2", "b", "squash") + "," + pr("3", "c", "") + "]"
+	pulls := fmt.Sprintf("[%s,%s,%s]", pr("1", "a", "squash"), pr("2", "b", "squash"), pr("3", "c", ""))
 	review := func(id, who, oid string) string {
-		return `{"databaseId": ` + id + `, "state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "` + who + `"}, "commit": {"oid": "` + oid + `"}}`
+		return fmt.Sprintf("{\"databaseId\": %s, \"state\": \"APPROVED\", \"authorCanPushToRepository\": true, \"author\": {\"login\": \"%s\"}, \"commit\": {\"oid\": \"%s\"}}", id, who, oid)
 	}
 	page := func(next, cursor, nodes string) string {
-		return `{"data": {"repository": {"pullRequest": {"headRefOid": "` + strings.Repeat("c", 40) + `", "reviewDecision": "APPROVED",
-			"reviews": {"pageInfo": {"hasNextPage": ` + next + `, "endCursor": "` + cursor + `"}, "nodes": [` + nodes + `]}}}}}`
+		return fmt.Sprintf(`{"data": {"repository": {"pullRequest": {"headRefOid": "%s", "reviewDecision": "APPROVED",
+			"reviews": {"pageInfo": {"hasNextPage": %s, "endCursor": "%s"}, "nodes": [%s]}}}}}`, strings.Repeat("c", 40), next, cursor, nodes)
 	}
 	var mu sync.Mutex
 	counts := map[string]int{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		key := r.Method + " " + r.URL.Path
+		key := fmt.Sprintf("%s %s", r.Method, r.URL.Path)
 		var answer string
 		switch {
 		case r.URL.Path == "/repos/acme/widgets/pulls":
@@ -734,7 +724,7 @@ func countingGitHub(t *testing.T) (string, map[string]int) {
 	t.Setenv("GITHUB_API_URL", srv.URL)
 	t.Setenv("GITHUB_TOKEN", "t")
 	t.Setenv("MERGEQUEUE_TOKEN", "")
-	return "https://" + strings.TrimPrefix(srv.URL, "http://") + "/acme/widgets", counts
+	return fmt.Sprintf("https://%s/acme/widgets", strings.TrimPrefix(srv.URL, "http://")), counts
 }
 
 // A listing scoped to the change under review reads the merged changes that one carries

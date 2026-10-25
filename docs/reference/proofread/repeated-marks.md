@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Repeated marks read as exasperation where one mark asks the same question. Measured 2026-10-10 over the AIDev review comments: 0.17 percent of 39639 written by people and 0.05 percent of 42076 written by bots. Code spans are masked, so an operator such as ?? passes. Measured 2026-10-11 over the adjudicated labeling round: 46.5% precision (20 of 43) before, 100% (20 of 20) after: every false positive was an operator or placeholder outside a code span, so a run set between spaces or brackets, or touching a word it opens ("!!hit", "!!NAME!!"), is left alone. Labeling round 3 measured 34 of 34, a lower bound of 0.90, which each graded finding weighs.
+Repeated marks read as exasperation where one mark asks the same question. Measured 2026-10-10 over the AIDev review comments, it fires on 0.17% of 39,639 replies written by people and 0.05% of 42,076 written by bots (firing rates, not precision). Code spans are masked, so an operator such as ?? passes. Measured 2026-10-11 over the adjudicated labeling round: 46.5% precision (20 of 43) before, 100% (20 of 20) after: every false positive was an operator or placeholder outside a code span, so a run set between spaces or brackets, or touching a word it opens ("!!hit", "!!NAME!!"), is left alone. Labeling round 3 measured 34 of 34, a lower bound of 0.90, which each graded finding weighs.
 
 ## Default decision
 

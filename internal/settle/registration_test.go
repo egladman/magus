@@ -20,7 +20,7 @@ import "fs";
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/**");
+    ctx.writesFiles(["gen/**"]);
     fs\writeFile("gen/catalog.md", "regenerated\n");
 }
 `

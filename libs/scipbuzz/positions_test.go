@@ -1,6 +1,7 @@
 package scipbuzz
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestInterpStartsFindExactSources(t *testing.T) {
 		{"`\\{x} {y}`", []string{"y"}},
 	}
 	for _, c := range cases {
-		text := "x = " + c.text + ";"
+		text := fmt.Sprintf("x = %s;", c.text)
 		starts := interpStarts(text, 4)
 		require.Len(t, starts, len(c.exprs), c.text)
 		for i, start := range starts {
@@ -61,7 +62,7 @@ func TestSkipTypeRecordsTypeNames(t *testing.T) {
 		for _, r := range refs {
 			n := s.toks[r.name].Val
 			if r.ns >= 0 {
-				n = s.toks[r.ns].Val + `\` + n
+				n = fmt.Sprintf(`%s\%s`, s.toks[r.ns].Val, n)
 			}
 			out = append(out, n)
 		}

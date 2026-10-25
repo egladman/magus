@@ -202,7 +202,7 @@ func (i Integration) String() string {
 	if i.Name == "" {
 		return i.ID
 	}
-	return i.ID + " (" + i.Name + ")"
+	return fmt.Sprintf("%s (%s)", i.ID, i.Name)
 }
 
 // RequiredCheck is one check the base requires.
@@ -246,7 +246,7 @@ type SetupRefusedError struct {
 	App    string
 }
 
-func (e *SetupRefusedError) Error() string { return e.Reason + ": " + e.URL }
+func (e *SetupRefusedError) Error() string { return fmt.Sprintf("%s: %s", e.Reason, e.URL) }
 
 // SetupStep is one thing a person does: run Command, or open URL.
 type SetupStep struct {

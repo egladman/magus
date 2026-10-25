@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/egladman/magus/internal/handler/mcp/origin"
@@ -52,10 +53,10 @@ func (t *clientTool) Invoke(ctx context.Context, call spells.InvokeRequest) (spe
 func clientWorkerEnv(ctx context.Context) []string {
 	env := []string{mcpclient.WorkerEnv + "=1"}
 	if o, ok := origin.FromContext(ctx); ok && o.Name != "" {
-		env = append(env, mcpclient.HostEnv+"="+o.Name)
+		env = append(env, fmt.Sprintf("%s=%s", mcpclient.HostEnv, o.Name))
 	}
 	if actor, ok := callerActor(ctx); ok {
-		env = append(env, mcpclient.LeaseEnv+"="+actor.Lease)
+		env = append(env, fmt.Sprintf("%s=%s", mcpclient.LeaseEnv, actor.Lease))
 	}
 	return env
 }

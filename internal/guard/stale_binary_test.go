@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -183,7 +184,7 @@ func TestStaleBinaryRepeatNamesTheRule(t *testing.T) {
 	repeat := Judge(ctx, deps, Request{Input: "touch b", Host: "claude-code", Session: "s1"})
 	doc, ok := Rule(string(denyRuleStaleBinary))
 	require.True(t, ok)
-	assert.True(t, strings.HasPrefix(repeat.Reason, "denied again [stale-binary]: "+doc.Catches+"\n"), repeat.Reason)
+	assert.True(t, strings.HasPrefix(repeat.Reason, fmt.Sprintf("denied again [stale-binary]: %s\n", doc.Catches)), repeat.Reason)
 }
 
 // The remedy follows who is asking: the main session or a person rebuilds, a leased worker
@@ -583,7 +584,7 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 	} {
 		v := Judge(ctx, deps, Request{Input: call, Host: "claude-code", Session: name})
 		stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleOwnSay)
-		assert.Contains(t, stored, "\nthis call to the magus "+strings.Fields(name)[0]+" tool changes state", name)
+		assert.Contains(t, stored, fmt.Sprintf("\nthis call to the magus %s tool changes state", strings.Fields(name)[0]), name)
 	}
 
 	for name, call := range map[string]string{

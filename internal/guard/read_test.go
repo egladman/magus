@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -104,13 +105,13 @@ func readFixture(t *testing.T) string {
 	t.Helper()
 	body := func(n int) string { return strings.Repeat("\t_ = 0\n", n) }
 	// 1 package, 3 comment, 4 type, 6 comment, 7-30 Open, 32-130 the Close method.
-	store := "package store\n\n// Store holds nothing.\ntype Store struct{}\n\n// Open opens.\nfunc Open() error {\n" +
-		body(22) + "}\n\nfunc (s *Store) Close() error {\n" + body(97) + "}\n"
+	store := fmt.Sprintf("package store\n\n// Store holds nothing.\ntype Store struct{}\n\n// Open opens.\nfunc Open() error {\n%s}\n\nfunc (s *Store) Close() error {\n%s}\n",
+		body(22), body(97))
 	small := "package store\n\nfunc helper() {}\n"
 	// 1 Alpha, 4 Beta, a fenced # on 6, filler, 131 Gamma.
-	page := "# Alpha\n\nintro\n## Beta\n```sh\n# not a heading\n```\n" + strings.Repeat("text\n", 123) + "## Gamma\ntext\n"
+	page := fmt.Sprintf("# Alpha\n\nintro\n## Beta\n```sh\n# not a heading\n```\n%s## Gamma\ntext\n", strings.Repeat("text\n", 123))
 	// 1-2 run, 4-133 the gate test.
-	spell := "fun run() > void {\n}\n\ntest \"gate\" {\n" + strings.Repeat("    run();\n", 128) + "}\n"
+	spell := fmt.Sprintf("fun run() > void {\n}\n\ntest \"gate\" {\n%s}\n", strings.Repeat("    run();\n", 128))
 	root := writeTree(t, map[string]string{
 		"internal/store/store.go":           store,
 		"internal/store/small.go":           small,
@@ -164,7 +165,7 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 		absent []string
 	}{
 		{`cat internal/store/store.go`, deps, []string{
-			"`" + hint.Explain.With("file:internal/store/store.go") + "` maps this file",
+			fmt.Sprintf("`%s` maps this file", hint.Explain.With("file:internal/store/store.go")),
 			"130 lines, 3 declarations",
 			hint.Refs.With("<name>", "--definition", "--source"),
 			"`sed -n <first>,<last>p internal/store/store.go` prints a method by its lines",
@@ -175,7 +176,7 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 		{`sed -n '1,$p' internal/store/store.go`, deps, nil, nil},
 		{`sed -n 1,200p internal/store/store.go`, deps, nil, nil},
 		{`cat ./internal/store/store.go`, deps, nil, nil},
-		{`cat ` + root + `/internal/store/store.go`, deps, nil, nil},
+		{fmt.Sprintf(`cat %s/internal/store/store.go`, root), deps, nil, nil},
 		{`cat docs/a.md`, deps, []string{
 			"query kind=docsection 'id=~^docsection:docs/a\\.md#' -o name` maps this file",
 			"132 lines, 3 headings",

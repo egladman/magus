@@ -15,6 +15,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -312,7 +313,7 @@ func serviceLabel(s spells.Service) string {
 	c := runs(s)
 	if id := identity.Parse(c); id.IsContainer() {
 		if id.Tag != "" {
-			return id.Image + ":" + id.Tag
+			return fmt.Sprintf("%s:%s", id.Image, id.Tag)
 		}
 		return id.Image
 	}
@@ -333,7 +334,7 @@ func commandString(c spells.Command) string {
 	if len(c.Args) == 0 {
 		return c.Bin
 	}
-	return c.Bin + " " + strings.Join(c.Args, " ")
+	return fmt.Sprintf("%s %s", c.Bin, strings.Join(c.Args, " "))
 }
 
 // Key returns the key a running service is shared under. A Command service is scoped

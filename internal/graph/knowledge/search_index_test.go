@@ -193,7 +193,7 @@ func (r *refResolver) admits(n types.KnowledgeNode, id string, q parsedQuery) bo
 		return false
 	}
 
-	hay := strings.ToLower(id + " " + n.Label + " " + n.Doc)
+	hay := strings.ToLower(fmt.Sprintf("%s %s %s", id, n.Label, n.Doc))
 	for _, t := range q.negTerms {
 		if hasWildcard(t) {
 			if refGlobMatch(t, id) || refGlobMatch(t, n.Label) {
@@ -430,7 +430,7 @@ func TestResolveProjectOwnerMatchesPrefixScan(t *testing.T) {
 		g := NewGraph()
 		projects := map[string]struct{}{}
 		for _, p := range set {
-			g.AddNode(types.KnowledgeNode{ID: types.KindProject + ":" + p, Kind: types.KindProject})
+			g.AddNode(types.KnowledgeNode{ID: fmt.Sprintf("%s:%s", types.KindProject, p), Kind: types.KindProject})
 			projects[p] = struct{}{}
 		}
 		ref := newRefResolver(g)

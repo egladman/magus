@@ -25,7 +25,7 @@ type UnrunGate struct {
 	// form the guard lets the job's worker run. Zero when IntegratorGates.
 	Goal types.Goal `json:"goal"    yaml:"goal"`
 	// IntegratorGates marks a target no form of which the guard lets a worker run, such as
-	// the build of magus itself. The integrator runs it, so no goal or waiver is asked for.
+	// the build of magus itself. The integrator runs it, so no goal or deviation is asked for.
 	IntegratorGates bool `json:"integrator_gates,omitempty" yaml:"integrator_gates,omitempty"`
 }
 
@@ -112,7 +112,7 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		if v.Depth == 0 || run[v.Key()] {
 			return nil
 		}
-		label := v.Project.Path + ":" + v.Target
+		label := fmt.Sprintf("%s:%s", v.Project.Path, v.Target)
 		if slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
 			return nil
 		}

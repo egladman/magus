@@ -282,7 +282,8 @@ func (s *Session) SetModuleDecls(importPath, src string) {
 	// declarations were silently dropped and its members read as untyped, which is
 	// how `crypto\hash` had no signature despite being declared in this very package.
 	if prev := s.moduleDecls[importPath]; prev != "" {
-		s.moduleDecls[importPath] = prev + "\n" + src
+		s.moduleDecls[importPath] = fmt.Sprintf(`%s
+%s`, prev, src)
 		return
 	}
 	s.moduleDecls[importPath] = src

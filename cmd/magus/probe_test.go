@@ -450,7 +450,7 @@ func TestResolveDeclaredWorkspacesMergesAndDedupes(t *testing.T) {
 
 	got := resolveDeclaredWorkspaces(
 		[]string{a, b}, // cfg
-		b+string(filepath.ListSeparator)+c+string(filepath.ListSeparator)+missing, // env (b is duplicate)
+		fmt.Sprintf("%s%s%s%s%s", b, string(filepath.ListSeparator), c, string(filepath.ListSeparator), missing), // env (b is duplicate)
 	)
 	require.Len(t, got, 3)
 	want := map[string]bool{a: true, b: true, c: true}

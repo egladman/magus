@@ -5,8 +5,10 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"go/scanner"
 	"go/token"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -959,12 +961,12 @@ func (g KnowledgeSymbolGap) Describe() string {
 		detail = string(g.State)
 	}
 	if g.Language != "" {
-		detail = g.Language + " index " + detail
+		detail = fmt.Sprintf("%s index %s", g.Language, detail)
 	}
 	if g.Hint != "" {
 		detail += "; " + g.Hint
 	}
-	return g.Project.Display() + " (" + detail + ")"
+	return fmt.Sprintf("%s (%s)", g.Project.Display(), detail)
 }
 
 // DescribeGaps renders a gap list as "libs/api (not-indexed), docs (not-indexed)".
@@ -1002,7 +1004,7 @@ func (s KnowledgeStaleIndex) Describe() string {
 	if s.Language == "" {
 		return s.Project
 	}
-	return s.Project + " (" + s.Language + " index)"
+	return fmt.Sprintf("%s (%s index)", s.Project, s.Language)
 }
 
 // CouldHold reports whether this index could hold a symbol of language, on the same terms
@@ -1111,9 +1113,43 @@ type KnowledgeIndexCause struct {
 //
 // It answers the question `absent` cannot, and it is reported beside the verdict rather
 // than replacing it, because "no symbol by that name" stays true either way.
+//
+// Sites are the first [TextPresenceSiteCap] matches as "path:line", so a reader whose
+// index is stale can open the file instead of searching again; More counts the matches
+// past the cap.
 type KnowledgeTextPresence struct {
-	Hits  int `json:"hits"  yaml:"hits"`
-	Files int `json:"files" yaml:"files"`
+	Hits  int      `json:"hits"            yaml:"hits"`
+	Files int      `json:"files"           yaml:"files"`
+	Sites []string `json:"sites,omitempty" yaml:"sites,omitempty"`
+	More  int      `json:"more,omitempty"  yaml:"more,omitempty"`
+}
+
+// TextPresenceSiteCap bounds KnowledgeTextPresence.Sites, so a name present thousands of
+// times prints a screenful, not the tree.
+const TextPresenceSiteCap = 10
+
+// TextHit is one text match: a file and the line in it.
+type TextHit struct {
+	Path string
+	Line int
+}
+
+// CountTextPresence counts hits and the files they fall in, keeping the first
+// [TextPresenceSiteCap] as "path:line" relative to root.
+func CountTextPresence(root string, hits []TextHit) KnowledgeTextPresence {
+	files := map[string]bool{}
+	var sites []string
+	for _, h := range hits {
+		files[h.Path] = true
+		if len(sites) < TextPresenceSiteCap {
+			rel, err := filepath.Rel(root, h.Path)
+			if err != nil {
+				rel = h.Path
+			}
+			sites = append(sites, fmt.Sprintf("%s:%d", filepath.ToSlash(rel), h.Line))
+		}
+	}
+	return KnowledgeTextPresence{Hits: len(hits), Files: len(files), Sites: sites, More: len(hits) - len(sites)}
 }
 
 // ClassifyAnswer classifies a lookup's result against what magus was actually able to search.

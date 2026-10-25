@@ -92,10 +92,10 @@ func TestFootprintDropsOpGlobsFiresOnlyOnTotalOmission(t *testing.T) {
 			"a target that narrows to the package it compiles has said what it reads")
 	})
 
-	t.Run("ctx.modifiesExistingFiles counts as naming them", func(t *testing.T) {
+	t.Run("editsExistingSource counts as naming them", func(t *testing.T) {
 		got := r.checkFootprintDropsOpGlobs([]*types.Project{project([]string{"dprint.json"}, []string{"**/*.go", "go.mod"})})
 		assert.Equal(t, types.CheckOK, got.Status,
-			"gofmt amends rather than produces, so modifiesExistingFiles is the correct declaration and it folds into Sources")
+			"gofmt amends rather than produces, so editsExistingSource is the correct declaration and it folds into Sources")
 	})
 
 	t.Run("a literal path answers for the wildcard that would match it", func(t *testing.T) {

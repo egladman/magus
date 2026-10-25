@@ -82,17 +82,17 @@ type removal struct {
 func worktreeRemoveDenial(r removal) ShellVerdict {
 	more := ""
 	if len(r.failed) > 1 {
-		more = " (" + countNoun(len(r.failed)-1, "more condition") + " in the full verdict)"
+		more = fmt.Sprintf(" (%s in the full verdict)", countNoun(len(r.failed)-1, "more condition"))
 	}
 	v := ShellVerdict{
-		Deny: r.verb + " " + r.target + " may lose work: " + r.failed[0] + more + ".",
-		Why: strings.ToUpper(r.verb[:1]) + r.verb[1:] + " " + r.target + " is refused until magus can prove it loses nothing:\n  - " +
-			strings.Join(r.failed, "\n  - ") + "\n" +
-			"A removal passes when the worktree is a linked worktree of this repository other than your own, clean, " +
-			"taken by no live job, every change its unpublished commits made reads the same in your checkout's HEAD, " +
-			"and it is unlocked or locked over a worker your session spawned for a job that finished, which git removes only with -f -f. " +
-			"A checkout a job's fork made and locked is magus's to remove: `" + hint.JobWait.String() + " <job>` once its job ended, `" + hint.JobExit.String() + " <job>` before. " +
+		Deny: fmt.Sprintf("%s %s may lose work: %s%s.", r.verb, r.target, r.failed[0], more),
+		Why: fmt.Sprintf("%s%s %s is refused until magus can prove it loses nothing:\n  - %s\n"+
+			"A removal passes when the worktree is a linked worktree of this repository other than your own, clean, "+
+			"taken by no live job, every change its unpublished commits made reads the same in your checkout's HEAD, "+
+			"and it is unlocked or locked over a worker your session spawned for a job that finished, which git removes only with -f -f. "+
+			"A checkout a job's fork made and locked is magus's to remove: `%s <job>` once its job ended, `%s <job>` before. "+
 			"An unlock is judged the same, but for the lock. --force changes nothing here but that lock.",
+			strings.ToUpper(r.verb[:1]), r.verb[1:], r.target, strings.Join(r.failed, "\n  - "), hint.JobWait.String(), hint.JobExit.String()),
 		Rule: denyRule{Name: denyRuleWorktreeRemove},
 	}
 	if r.next.Run == "" {
@@ -124,7 +124,7 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 		return fail("this session runs in no git checkout, so the repository and its job store cannot be read")
 	}
 	if _, common, ok := gitCheckout(s.gitDir); !ok || common != hereCommon {
-		return fail("git runs against another repository than this session's, whose job store magus does not read (`git -C " + s.gitDir + " rev-parse --git-common-dir`)")
+		return fail(fmt.Sprintf("git runs against another repository than this session's, whose job store magus does not read (`git -C %s rev-parse --git-common-dir`)", s.gitDir))
 	}
 
 	opts := deps.VCS
@@ -153,7 +153,7 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 	if _, err := os.Stat(co.Root); errors.Is(err, fs.ErrNotExist) {
 		r.failed = append(r.failed, "its directory is gone, so there is nothing to remove; `git worktree prune` clears the record")
 	} else if dirty, err := drv.DirtyFiles(ctx, co.Root, nil); err != nil {
-		r.failed = append(r.failed, "its status cannot be read (`git -C "+co.Root+" status`): "+err.Error())
+		r.failed = append(r.failed, fmt.Sprintf("its status cannot be read (`git -C %s status`): %s", co.Root, err.Error()))
 	} else if len(dirty) > 0 {
 		r.failed = append(r.failed, fmt.Sprintf("it has %d modified, staged or untracked path(s), first %s (`git -C %s status`)", len(dirty), dirty[0], co.Root))
 	}
@@ -163,7 +163,7 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 		if co.Locked && !s.unlock {
 			r.failed = append(r.failed, lockHeld(co))
 		}
-		r.failed = append(r.failed, "the job store cannot be read, so who works in it is unknown (`"+hint.LsJobs.String()+"`): "+err.Error())
+		r.failed = append(r.failed, fmt.Sprintf("the job store cannot be read, so who works in it is unknown (`%s`): %s", hint.LsJobs.String(), err.Error()))
 		return r
 	}
 	var finished []types.Job
@@ -204,13 +204,13 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 			break
 		}
 		forked = &rows[i]
-		r.failed = append(r.failed, "it is the checkout job "+forked.ID+"'s fork made and locked, which git removes only with -f -f; magus unlocks and removes it once the job ends")
+		r.failed = append(r.failed, fmt.Sprintf("it is the checkout job %s's fork made and locked, which git removes only with -f -f; magus unlocks and removes it once the job ends", forked.ID))
 	default:
 		switch owner := lockOwner(deps, rows, finished); {
 		case owner == "":
 			r.failed = append(r.failed, lockHeld(co))
 		case s.force < 2:
-			r.failed = append(r.failed, "it is locked over the worker your session spawned for job "+owner+", which finished, and git removes a locked worktree only with -f -f")
+			r.failed = append(r.failed, fmt.Sprintf("it is locked over the worker your session spawned for job %s, which finished, and git removes a locked worktree only with -f -f", owner))
 			ownedLock = true
 		}
 	}
@@ -220,19 +220,19 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 
 	switch {
 	case unfiled != "" && len(r.failed) > 0:
-		r.lead = "job " + unfiled + " exited without filing a result, and " + r.target + " still holds work."
+		r.lead = fmt.Sprintf("job %s exited without filing a result, and %s still holds work.", unfiled, r.target)
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(unfiled),
 			"exit files the result the job never filed")
 	case exited != "":
-		r.lead = "job " + exited + " exited and is not graded yet; wait for its grade before " + r.verb + " " + r.target + "."
+		r.lead = fmt.Sprintf("job %s exited and is not graded yet; wait for its grade before %s %s.", exited, r.verb, r.target)
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(exited),
 			"a job's worktree is removable once its grade is filed")
 	case forked != nil && len(r.failed) == 1 && forked.State.Terminal():
-		r.lead = "job " + forked.ID + " ended, and magus removes the checkout its fork made, keeping it if it holds work."
+		r.lead = fmt.Sprintf("job %s ended, and magus removes the checkout its fork made, keeping it if it holds work.", forked.ID)
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(forked.ID),
 			"wait unlocks and removes the checkout of every ended job once it holds no work")
 	case forked != nil && len(r.failed) == 1:
-		r.lead = "job " + forked.ID + " owns " + r.target + "; ending it removes the checkout its fork made, keeping it if it holds work."
+		r.lead = fmt.Sprintf("job %s owns %s; ending it removes the checkout its fork made, keeping it if it holds work.", forked.ID, r.target)
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(forked.ID),
 			"exit ends the job, then unlocks and removes its checkout once it holds no work")
 	case ownedLock && len(r.failed) == 1:
@@ -282,7 +282,7 @@ func mayWorkIn(deps Dependencies, rows []types.Job, row types.Job) bool {
 func lockHeld(co types.RegisteredCheckout) string {
 	reason := "it is locked"
 	if co.LockReason != "" {
-		reason += " (" + co.LockReason + ")"
+		reason += fmt.Sprintf(" (%s)", co.LockReason)
 	}
 	return reason + ", so whoever locked it still holds it (`git worktree list --porcelain`)"
 }
@@ -323,19 +323,19 @@ func unlanded(ctx context.Context, drv types.VCSDriver, dir, callDir, head, base
 	ids, err := drv.UnpublishedRevisions(ctx, dir, head, bases...)
 	switch {
 	case err != nil:
-		return []string{"which of its commits are published cannot be read (`" + inspect + "`): " + err.Error()}
+		return []string{fmt.Sprintf("which of its commits are published cannot be read (`%s`): %s", inspect, err.Error())}
 	case len(ids) == 0:
 		return nil
 	}
 	commits := fmt.Sprintf("%d commit(s) on it, newest %.12s, are on no remote-tracking ref or base branch", len(ids), ids[0])
 	lr, ok := drv.(types.LandingReporter)
 	if !ok {
-		return []string{commits + ", and this version control cannot tell whether your checkout holds their changes (`" + inspect + "`)"}
+		return []string{fmt.Sprintf("%s, and this version control cannot tell whether your checkout holds their changes (`%s`)", commits, inspect)}
 	}
 	paths, err := lr.UnlandedPaths(ctx, callDir, head, "HEAD")
 	switch {
 	case err != nil:
-		return []string{commits + ", and whether your checkout's HEAD holds their changes cannot be read (`" + inspect + "`): " + err.Error()}
+		return []string{fmt.Sprintf("%s, and whether your checkout's HEAD holds their changes cannot be read (`%s`): %s", commits, inspect, err.Error())}
 	case len(paths) > 0:
 		return []string{fmt.Sprintf("%s, and %d path(s) they changed read differently in your checkout's HEAD, first %s (`%s`; `git diff %.12s HEAD -- %s`)",
 			commits, len(paths), paths[0], inspect, head, paths[0])}

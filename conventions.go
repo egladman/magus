@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"path/filepath"
@@ -71,7 +72,7 @@ func newSymbolIndex() symbolIndex {
 
 // resolves reports whether this module accounts for the reference at all.
 func (ix symbolIndex) resolves(pkg, sym string) bool {
-	if ix.host[pkg+"."+sym] || ix.files[pkg+"."+sym] {
+	if ix.host[fmt.Sprintf("%s.%s", pkg, sym)] || ix.files[fmt.Sprintf("%s.%s", pkg, sym)] {
 		return true
 	}
 	syms, ours := ix.byPkg[pkg]
@@ -112,13 +113,13 @@ func (ix symbolIndex) resolves(pkg, sym string) bool {
 func (ix symbolIndex) score(pkg, sym string) (int, string) {
 	composed := isMultiwordExported(sym)
 	if owner := ix.exported[sym]; composed && owner != "" && owner != pkg {
-		return commentRefFailScore, "only package " + owner + " declares it, so the qualifier rotted"
+		return commentRefFailScore, fmt.Sprintf("only package %s declares it, so the qualifier rotted", owner)
 	}
 	if near, ok := ix.nearest(pkg, sym); ok {
 		if composed {
-			return commentRefFailScore, "the package declares " + near + ", close enough to be a rename"
+			return commentRefFailScore, fmt.Sprintf("the package declares %s, close enough to be a rename", near)
 		}
-		return 3, "the package declares " + near + ", but a one-word near-miss is usually prose"
+		return 3, fmt.Sprintf("the package declares %s, but a one-word near-miss is usually prose", near)
 	}
 	if strings.ToLower(sym) != sym {
 		return 2, "reads like an identifier, but nothing in the module matches it"
@@ -263,7 +264,7 @@ func (ix symbolIndex) addBuzzName(lit string) {
 	}
 	for _, m := range buzzNameRe().FindAllStringSubmatch(lit, -1) {
 		module, member, namespaced := m[1], m[2], m[3]
-		ix.host[module+"."+member] = true
+		ix.host[fmt.Sprintf("%s.%s", module, member)] = true
 		if namespaced != "" {
 			ix.host[member+namespaced] = true
 		}
@@ -327,10 +328,10 @@ func storeMechanicsSites(path string, f *ast.File) []string {
 					recv = idx.X
 				}
 				if id, ok := recv.(*ast.Ident); ok {
-					name = id.Name + "." + name
+					name = fmt.Sprintf("%s.%s", id.Name, name)
 				}
 			}
-			sites = append(sites, path+":"+name)
+			sites = append(sites, fmt.Sprintf("%s:%s", path, name))
 		}
 	}
 	return sites

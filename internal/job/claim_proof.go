@@ -20,6 +20,7 @@ import (
 	"unicode"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
@@ -82,6 +83,9 @@ type claimFacts struct {
 	regenerated []RegeneratedOutput
 	// outputsKnown says a workspace answered for the outputs: none read proves no output.
 	outputsKnown bool
+	// dead is each live job whose holder the guard judged dead, by id: the only proof that
+	// takes a path another job holds.
+	dead map[string]DeadHolder
 }
 
 // sourceFacts is one file as a proof reads it. pkg is empty for a file that is not Go,
@@ -129,6 +133,7 @@ func readClaimFacts(tree string, row types.Job, seen Observed, asked []string, p
 	facts := claimFacts{seen: seen, files: map[string]sourceFacts{}, packages: map[string]goPackage{}}
 	changed := changedInside(row, seen)
 	for _, rel := range append(slices.Clone(asked), changed...) {
+		rel, _ = types.SplitClaim(rel)
 		rel = path.Clean(rel)
 		if _, ok := facts.files[rel]; !ok {
 			facts.files[rel] = readSource(tree, rel)
@@ -258,7 +263,7 @@ func (s *sourceFacts) readUses(f *ast.File) {
 			}
 		case *ast.SelectorExpr:
 			if x, ok := n.X.(*ast.Ident); ok {
-				s.uses[x.Name+"."+n.Sel.Name] = true
+				s.uses[fmt.Sprintf("%s.%s", x.Name, n.Sel.Name)] = true
 			}
 		case *ast.Ident:
 			s.uses[n.Name] = true
@@ -312,21 +317,39 @@ func proveClaim(row types.Job, rel string, e types.ClaimEvidence, facts claimFac
 		return "", fmt.Errorf("magus could not read what the job changed (%s), so nothing it changed proves %s",
 			cmp.Or(facts.seen.RegionsReason, "no diff was read"), rel)
 	}
+	// A `#declaration` claim is proved by what its file reads, and facts key files by path.
+	file, _ := types.SplitClaim(rel)
+	file = path.Clean(file)
 	switch e.Kind {
 	case types.ClaimRefs:
-		return proveRefs(rel, e.Subject, facts)
+		return proveRefs(file, e.Subject, facts)
 	case types.ClaimTest:
-		return proveTest(row, rel, path.Clean(e.Subject), facts)
+		return proveTest(row, file, path.Clean(e.Subject), facts)
 	case claimCalls:
-		return proveCalls(rel, e.Subject, facts)
+		return proveCalls(file, e.Subject, facts)
 	case claimDefines:
-		return proveDefines(row, rel, e.Subject, facts)
+		return proveDefines(row, file, e.Subject, facts)
 	case types.ClaimOutput:
-		return proveOutput(rel, e.Subject, facts)
+		return proveOutput(file, e.Subject, facts)
 	case types.ClaimReleased:
 		return proveReleased(row, rel)
+	case types.ClaimDeadHolder:
+		return proveDeadHolder(rel, e.Subject, facts)
 	}
 	return "", fmt.Errorf("%q is not a proof", e.String())
+}
+
+// proveDeadHolder proves rel a write path of live job id, whose holder the guard judged
+// dead. The claim takes the whole write path, since the store tracks ownership by entry.
+func proveDeadHolder(rel, id string, facts claimFacts) (string, error) {
+	d, ok := facts.dead[id]
+	switch {
+	case !ok:
+		return "", fmt.Errorf("magus has not judged the holder of job %s dead", id)
+	case !slices.Contains(d.Row.HardPaths(), rel):
+		return "", fmt.Errorf("%s is not a write path of job %s", rel, id)
+	}
+	return fmt.Sprintf("job %s held %s, and its holder is dead: %s, at %s", id, rel, d.Why, time.Unix(d.Since, 0).UTC().Format(time.RFC3339)), nil
 }
 
 func proveRefs(rel, subject string, facts claimFacts) (string, error) {
@@ -552,6 +575,12 @@ func proveReleased(row types.Job, rel string) (string, error) {
 // checkClaimPath refuses rel to row whatever proves it: a path it holds already, one
 // its deny paths cover, and one another live job holds.
 func checkClaimPath(row types.Job, rel string, rows []types.Job) error {
+	return checkClaimPathPast(row, rel, rows, "")
+}
+
+// checkClaimPathPast is [checkClaimPath] that lets live job dead hold rel: a dead holder's
+// path is the one a dead proof takes.
+func checkClaimPathPast(row types.Job, rel string, rows []types.Job, dead string) error {
 	switch {
 	case slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, rel) }):
 		return fmt.Errorf("%s is already a write path of %s", rel, row.ID)
@@ -560,7 +589,7 @@ func checkClaimPath(row types.Job, rel string, rows []types.Job) error {
 	}
 	ancestors := types.JobAncestors(rows, row.ID)
 	for _, other := range rows {
-		if other.ID == row.ID || !Editing(other) || slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
+		if other.ID == row.ID || other.ID == dead || !Editing(other) || slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
 		if slices.ContainsFunc(other.WritePaths, func(w string) bool { return covers(w, rel) }) {
@@ -570,11 +599,15 @@ func checkClaimPath(row types.Job, rel string, rows []types.Job) error {
 	return nil
 }
 
-// ProposeClaim is the first proof of rel for row the facts hold, tried refs, test, calls,
-// defines, output, then released, each kind's subjects in sorted order, and false when rel is no
-// path a proof may add or none proves it.
+// ProposeClaim is the first proof of rel for row the facts hold, and false when rel is no
+// path a proof may add or none proves it. A write path of a job whose holder is dead
+// covering rel comes first, claimed whole; then refs, test, calls, defines, output and
+// released, each kind's subjects in sorted order.
 func ProposeClaim(row types.Job, rel string, facts claimFacts, rows []types.Job) (types.JobClaimRequest, string, bool) {
 	rel = path.Clean(rel)
+	if req, proof, ok := proposeDeadHolder(row, rel, facts); ok {
+		return req, proof, true
+	}
 	if checkClaimPath(row, rel, rows) != nil {
 		return types.JobClaimRequest{}, "", false
 	}
@@ -592,7 +625,7 @@ func ProposeClaim(row types.Job, rel string, facts claimFacts, rows []types.Job)
 		tries = append(tries, types.ClaimEvidence{Kind: claimCalls, Subject: name})
 	}
 	for _, name := range slices.Sorted(maps.Keys(asked.decls)) {
-		tries = append(tries, types.ClaimEvidence{Kind: claimDefines, Subject: asked.pkg + "." + name}, types.ClaimEvidence{Kind: claimDefines, Subject: name})
+		tries = append(tries, types.ClaimEvidence{Kind: claimDefines, Subject: fmt.Sprintf("%s.%s", asked.pkg, name)}, types.ClaimEvidence{Kind: claimDefines, Subject: name})
 	}
 	for _, o := range facts.regenerated {
 		tries = append(tries, types.ClaimEvidence{Kind: types.ClaimOutput, Subject: o.Target})
@@ -609,6 +642,22 @@ func ProposeClaim(row types.Job, rel string, facts claimFacts, rows []types.Job)
 	return types.JobClaimRequest{}, "", false
 }
 
+// proposeDeadHolder is the dead proof of the first write path covering rel of a job whose
+// holder the facts hold dead, by job id.
+func proposeDeadHolder(row types.Job, rel string, facts claimFacts) (types.JobClaimRequest, string, bool) {
+	for _, id := range slices.Sorted(maps.Keys(facts.dead)) {
+		for _, entry := range facts.dead[id].Row.HardPaths() {
+			if !covers(entry, rel) || checkClaimPath(row, entry, nil) != nil {
+				continue
+			}
+			if proof, err := proveDeadHolder(entry, id, facts); err == nil {
+				return types.JobClaimRequest{Path: entry, Because: types.ClaimEvidence{Kind: types.ClaimDeadHolder, Subject: id}.String()}, proof, true
+			}
+		}
+	}
+	return types.JobClaimRequest{}, "", false
+}
+
 // ClaimCommand is the one `magus job apply` line that claims job id by reqs, and false
 // when it would run past [maxClaimCommand].
 func ClaimCommand(id string, reqs []types.JobClaimRequest) (string, bool) {
@@ -616,7 +665,7 @@ func ClaimCommand(id string, reqs []types.JobClaimRequest) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	line := hint.JobApply.With("-f", "-") + " <<<" + shellQuote(string(record))
+	line := fmt.Sprintf("%s <<<%s", hint.JobApply.With("-f", "-"), shellQuote(string(record)))
 	return line, len(line) <= maxClaimCommand
 }
 
@@ -634,6 +683,9 @@ func (s *Store) Claim(ctx context.Context, id string, reqs []types.JobClaimReque
 		return types.Job{}, claimRefusal(actor, id, "the record claims nothing")
 	}
 	by := trail.StampOrigin(ctx, types.Origin{})
+	if slices.ContainsFunc(reqs, takesFromDeadHolder) {
+		return s.claimFromDeadHolders(ctx, actor, id, reqs, facts, limits, dryRun, by)
+	}
 	if !dryRun {
 		return s.mutate(ctx, id, asClaim, func(cur *types.Job, exists bool, now int64) error {
 			if !exists {
@@ -655,6 +707,91 @@ func (s *Store) Claim(ctx context.Context, id string, reqs []types.JobClaimReque
 		return types.Job{}, err
 	}
 	return next, authorizeRow(actor, id, asClaim, rows[i], next, true, rows)
+}
+
+func takesFromDeadHolder(req types.JobClaimRequest) bool {
+	e, err := types.ParseClaimEvidence(req.Because)
+	return err == nil && e.Kind == types.ClaimDeadHolder
+}
+
+// claimFromDeadHolders is [Store.Claim] for reqs holding a dead proof, which writes two
+// rows under one lock: id gains each path with its proof, and the dead holder drops it,
+// recording the release with who took it and why its holder was dead. A holder whose row
+// changed since the guard judged it dead is refused: its holder may be back.
+func (s *Store) claimFromDeadHolders(ctx context.Context, actor Actor, id string, reqs []types.JobClaimRequest, facts claimFacts, limits config.Jobs, dryRun bool, by types.Origin) (types.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out types.Job
+	err := s.update(ctx, func(f *jobsFile) error {
+		i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id })
+		if i < 0 {
+			return claimRefusal(actor, id, "nothing declares that job")
+		}
+		prev := f.Jobs[i]
+		if err := readOnly(prev); err != nil {
+			return err
+		}
+		if prev.State != types.StateRunning && prev.State != types.StateExited {
+			return claimRefusal(actor, id, fmt.Sprintf("%s is %s, and only a running or exited job claims", id, cmp.Or(string(prev.State), "unstated")))
+		}
+		now := s.now().Unix()
+		next := prev.Clone()
+		if err := grantClaim(actor, &next, reqs, facts, limits, now, by); err != nil {
+			return err
+		}
+		for _, req := range reqs {
+			rel := path.Clean(strings.TrimSpace(req.Path))
+			e, _ := types.ParseClaimEvidence(req.Because)
+			if e.Kind != types.ClaimDeadHolder {
+				if err := checkClaimPath(prev, rel, f.Jobs); err != nil {
+					return claimRefusal(actor, id, err.Error())
+				}
+				continue
+			}
+			if err := takeFromDeadHolder(ctx, s, f.Jobs, id, rel, facts.dead[e.Subject], now); err != nil {
+				return claimRefusal(actor, id, err.Error())
+			}
+		}
+		next.Updated = now
+		next.Widenings++
+		f.Jobs[i] = next
+		out = next.Clone()
+		if dryRun {
+			return file.ErrSkipWrite
+		}
+		return nil
+	})
+	if err != nil {
+		return types.Job{}, err
+	}
+	return out, nil
+}
+
+// takeFromDeadHolder drops rel from the dead holder d judged in rows, recording that taker
+// took it. The holder's Updated stays: it moves only on the holder's own writes.
+func takeFromDeadHolder(ctx context.Context, s *Store, rows []types.Job, taker, rel string, d DeadHolder, now int64) error {
+	j := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == d.Row.ID })
+	switch {
+	case j < 0 || !Editing(rows[j]):
+		return fmt.Errorf("job %s no longer holds %s", d.Row.ID, rel)
+	case rows[j].Updated != d.Row.Updated:
+		return fmt.Errorf("job %s was written after magus judged its holder dead, so its holder may be back", d.Row.ID)
+	case !slices.Contains(rows[j].HardPaths(), rel):
+		return fmt.Errorf("%s is not a write path of job %s", rel, d.Row.ID)
+	}
+	if err := readOnly(rows[j]); err != nil {
+		return err
+	}
+	held, _ := types.SplitClaim(rel)
+	if err := checkClaimPathPast(types.Job{ID: taker}, held, rows, d.Row.ID); err != nil {
+		return err
+	}
+	holder := &rows[j]
+	holder.WritePaths = slices.DeleteFunc(holder.WritePaths, func(p string) bool { return p == rel })
+	holder.Releases = append(holder.Releases, types.JobRelease{
+		Path: rel, Digest: s.digest(ctx, rel), ReleasedAt: now, Revoked: true, TakenBy: taker, DeadBecause: d.Why,
+	})
+	return nil
 }
 
 // grantClaim proves each of reqs against cur and appends the path and its proof, or

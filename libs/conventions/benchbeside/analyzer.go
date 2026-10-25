@@ -41,7 +41,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	}
 	if err := source.InModule("benchbeside", opts.Module, func(root string) error {
 		for _, dir := range slices.Sorted(maps.Keys(opts.Exempt)) {
-			if err := source.RequirePackage("benchbeside", "exempt", root, opts.Module, opts.Module+"/"+dir); err != nil {
+			if err := source.RequirePackage("benchbeside", "exempt", root, opts.Module, fmt.Sprintf("%s/%s", opts.Module, dir)); err != nil {
 				return err
 			}
 			has, err := hasBenchmark(filepath.Join(root, filepath.FromSlash(dir)))

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -60,7 +61,7 @@ func (r *spellRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	last := p[strings.LastIndex(p, "/")+1:]
 	switch {
 	case p == "/v2/":
-		w.Header().Set("WWW-Authenticate", `Bearer realm="https://`+req.Host+`/token",service="`+req.Host+`"`)
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer realm=\"https://%s/token\",service=\"%s\"", req.Host, req.Host))
 		w.WriteHeader(http.StatusUnauthorized)
 	case p == "/token":
 		_, _ = w.Write([]byte(`{"token":"fake"}`))
@@ -173,7 +174,7 @@ func TestSpellBuildPushLsPull(t *testing.T) {
 
 	repoRef := reg.host() + "/team/spells/x"
 	pushed := runSpell(t, repo, "push", dir, repoRef+":v1", "--tag", "latest")
-	assert.Equal(t, repoRef+"@"+built+"\n", pushed, "push writes the digest build printed")
+	assert.Equal(t, fmt.Sprintf("%s@%s\n", repoRef, built), pushed, "push writes the digest build printed")
 	reg.mu.Lock()
 	assert.Equal(t, 2, reg.uploads, "the config blob and the layer, once each for both tags")
 	reg.mu.Unlock()
@@ -182,11 +183,11 @@ func TestSpellBuildPushLsPull(t *testing.T) {
 
 	pulled := strings.Split(strings.TrimSpace(runSpell(t, repo, "pull", repoRef+":latest")), "\n")
 	require.Len(t, pulled, 2)
-	assert.Equal(t, repoRef+"@"+built, pulled[0])
+	assert.Equal(t, fmt.Sprintf("%s@%s", repoRef, built), pulled[0])
 	assert.FileExists(t, filepath.Join(pulled[1], "spell.buzz"))
 
 	dst := filepath.Join(t.TempDir(), "vendor", "x")
-	runSpell(t, repo, "pull", repoRef+"@"+built, dst)
+	runSpell(t, repo, "pull", fmt.Sprintf("%s@%s", repoRef, built), dst)
 	var got []string
 	require.NoError(t, filepath.WalkDir(dst, func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
@@ -232,7 +233,10 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 	path := reg.host() + "/team/spells/x"
 	pinned := strings.TrimSpace(runSpell(t, repo, "push", dir, path+":v1"))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "magus.yaml"),
-		[]byte("spells:\n  \""+path+"\":\n    tag: v1\n"), 0o644))
+		[]byte(fmt.Sprintf(`spells:
+  "%s":
+    tag: v1
+`, path)), 0o644))
 
 	resetStartupSingletons()
 	err := spellCmd(t.Context(), repo, []string{"lock"})
@@ -271,7 +275,7 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	require.Len(t, pulled, 2)
 	ref, err := oci.ParseReference(pulled[0])
 	require.NoError(t, err)
-	assert.Equal(t, "ghcr.io/egladman/magus/spells/go", ref.Registry+"/"+ref.Repository)
+	assert.Equal(t, "ghcr.io/egladman/magus/spells/go", fmt.Sprintf("%s/%s", ref.Registry, ref.Repository))
 	assert.Equal(t, dst, pulled[1])
 
 	driver, err := spellVCS(t.Context(), repo, dir)
@@ -338,9 +342,9 @@ func TestSpellPushShipped(t *testing.T) {
 		manifest, _, err := content.Manifest()
 		require.NoError(t, err)
 
-		dest := reg.host() + "/team/spells/" + name
+		dest := fmt.Sprintf("%s/team/spells/%s", reg.host(), name)
 		pushed := runSpell(t, repo, "push", "magus/spell/"+name, dest+":v1.2.3")
-		assert.Equal(t, dest+"@"+want.Digest.String()+"\n", pushed, name)
+		assert.Equal(t, fmt.Sprintf("%s@%s\n", dest, want.Digest.String()), pushed, name)
 		reg.mu.Lock()
 		assert.Equal(t, manifest, reg.manifests["v1.2.3"], name)
 		reg.mu.Unlock()

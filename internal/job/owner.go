@@ -15,6 +15,10 @@ import (
 // owner went away or whose deadline passed.
 const endedSource = "magus/ownership"
 
+// heldSource is the attention source of a knock: a caller outside a holder's job tree needs
+// a path or output the holder holds.
+const heldSource = "magus/held"
+
 // NoteEnded files one attention row in the repository at root saying magus ended work
 // lease owned, for whoever reads the queue: the root session, which otherwise learns of
 // it only by polling. The same message noted twice is one row (see
@@ -23,6 +27,18 @@ const endedSource = "magus/ownership"
 // Best effort: a repository with no session store, or a write that fails, files nothing,
 // since the ending itself already happened and is recorded where it happened.
 func NoteEnded(ctx context.Context, root, lease, message string) {
+	noteAttention(ctx, root, endedSource, lease, message)
+}
+
+// NoteHeld files one attention row in the repository at root for treeRoot, the root of a
+// holder's job tree, saying what a caller outside that tree needs from it: the caller
+// cannot verify or end a job outside its own tree, so only treeRoot can release it. The
+// same message noted twice is one row. Best effort, as [NoteEnded] is.
+func NoteHeld(ctx context.Context, root, treeRoot, message string) {
+	noteAttention(ctx, root, heldSource, treeRoot, message)
+}
+
+func noteAttention(ctx context.Context, root, source, lease, message string) {
 	if root == "" {
 		return
 	}
@@ -30,10 +46,10 @@ func NoteEnded(ctx context.Context, root, lease, message string) {
 	if err != nil {
 		return
 	}
-	_, _, _ = sessions.OpenRequest(dir, endedSource, sessions.AttentionOpen{
+	_, _, _ = sessions.OpenRequest(dir, source, sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeFailed),
 		Severity: string(types.SeverityWarning),
-		Source:   endedSource,
+		Source:   source,
 		Lease:    lease,
 		Message:  message,
 	}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root})
@@ -55,6 +71,10 @@ func (s *Store) noteEnded(id, reason string) {
 //
 // An identity-less caller ends nothing: its record is the checkout's, shared by every
 // such caller there, so one caller's end says nothing about the rest.
+//
+// An integration row (one naming Integrates) neither ends nor loses its binding: its merges
+// sit in a standing checkout that outlives the holder's turn, and the holder resumed later
+// carries on from them. It ends with its deadline or its exit.
 func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, error) {
 	if !c.Identified() {
 		return types.Job{}, false, nil
@@ -67,9 +87,14 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 	now := s.now().Unix()
 	var ended types.Job
 	var outcomes endings
+	integrating := false
 	err := s.update(ctx, func(f *jobsFile) error {
 		outcomes = endings{}
 		i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == b.Job })
+		if i >= 0 && len(f.Jobs[i].Integrates) > 0 {
+			integrating = true
+			return file.ErrSkipWrite
+		}
 		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].Holder.OrSession() == types.HolderServer {
 			return file.ErrSkipWrite
 		}
@@ -83,7 +108,7 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 		ended = f.Jobs[i].Clone()
 		return outcomes.hold(s, f.Jobs, ended)
 	})
-	if err != nil {
+	if err != nil || integrating {
 		return types.Job{}, false, err
 	}
 	_ = file.ReplaceFile(path, fmt.Appendf(nil, "%s %s %d\n", tombstoneTag, b.Job, now), 0o600)

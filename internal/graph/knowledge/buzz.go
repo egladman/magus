@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -93,7 +94,7 @@ func assembleBuzzIn(w *TreeWalk) Shard {
 				}
 				s.Nodes = append(s.Nodes, types.KnowledgeNode{
 					ID: fnID, Kind: types.KindFunction, Label: d.Name, Doc: d.Doc,
-					Source: rel + ":" + strconv.Itoa(d.Line), Attrs: nilIfEmpty(attrs),
+					Source: fmt.Sprintf("%s:%s", rel, strconv.Itoa(d.Line)), Attrs: nilIfEmpty(attrs),
 				})
 				s.Edges = append(s.Edges, extractedEdge(fID, fnID, types.RelationContains, rel))
 				s.Edges = append(s.Edges, callEdges(rel, d, sameFile)...)
@@ -144,8 +145,8 @@ func appendRationale(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge, r
 			if m == nil {
 				continue
 			}
-			prov := rel + ":" + strconv.Itoa(tk.Line)
-			rID := rationaleID(rel, tk.Line) + ":" + m[1]
+			prov := fmt.Sprintf("%s:%s", rel, strconv.Itoa(tk.Line))
+			rID := fmt.Sprintf("%s:%s", rationaleID(rel, tk.Line), m[1])
 			if seen[rID] {
 				continue
 			}

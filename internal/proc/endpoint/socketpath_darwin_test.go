@@ -3,6 +3,7 @@
 package endpoint
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 func TestAPathLongerThanSocketPathIsRefusedOnDarwin(t *testing.T) {
 	path := filepath.Join("/tmp", strings.Repeat("d", 100), "s.sock")
 	ep := Endpoint{Scheme: "unix", Addr: path}
-	want := "endpoint: unix socket path " + path + " is 112 bytes, and darwin holds at most 103"
+	want := fmt.Sprintf("endpoint: unix socket path %s is 112 bytes, and darwin holds at most 103", path)
 	_, err := ep.Listen()
 	assert.EqualError(t, err, want)
 	_, err = ep.Dial(t.Context())

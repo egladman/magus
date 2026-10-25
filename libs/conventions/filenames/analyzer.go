@@ -61,7 +61,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		for i, s := range opts.Suffixes {
 			quoted[i] = regexp.QuoteMeta(s)
 		}
-		suffixes = regexp.MustCompile(`_(` + strings.Join(quoted, "|") + `)$`)
+		suffixes = regexp.MustCompile(fmt.Sprintf(`_(%s)$`, strings.Join(quoted, "|")))
 	}
 	c := &checker{opts: opts, suffixes: suffixes, vocabulary: map[string]bool{}}
 	root, err := source.Root("filenames", opts.Module)

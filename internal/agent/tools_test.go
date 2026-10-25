@@ -71,7 +71,7 @@ func TestReadToolRowsReadsBackWhatFilesWrote(t *testing.T) {
 		{Name: "Browse", Capability: types.ToolNetwork},
 	}}, nil))
 
-	rows := ReadToolRows(root, "tools")
+	rows := readToolRows(root, "tools")
 	require.NoError(t, rows.Err)
 	assert.Equal(t, types.ToolRuns, rows.Capability("Shell"))
 	assert.Equal(t, types.ToolNetwork, rows.Capability("Browse"))
@@ -99,7 +99,7 @@ func TestToolRowsModelsReadBackWhatFilesWrote(t *testing.T) {
 	want := testModelFacts(t)
 	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "tools", Rows: shellRow()}, want))
 
-	got, err := ReadToolRows(root, "tools").Models()
+	got, err := readToolRows(root, "tools").Models()
 	require.NoError(t, err)
 	assert.Equal(t, want.Rows, got.Rows)
 	require.NotNil(t, got.Tiers)
@@ -114,7 +114,7 @@ func TestToolRowsModelsWithoutTiersReadAsNone(t *testing.T) {
 	root := t.TempDir()
 	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "tools"}, &ModelFacts{}))
 
-	got, err := ReadToolRows(root, "tools").Models()
+	got, err := readToolRows(root, "tools").Models()
 	require.NoError(t, err)
 	assert.Equal(t, ModelFacts{}, got)
 }
@@ -136,7 +136,7 @@ func TestToolRowsModelsSayWhyThereAreNone(t *testing.T) {
 		"written before":   {"bare", "no model rows at bare"},
 		"a malformed file": {"broken", "the model tiers at broken do not read"},
 	} {
-		_, err := ReadToolRows(root, tc.dir).Models()
+		_, err := readToolRows(root, tc.dir).Models()
 		require.Error(t, err, name)
 		assert.Contains(t, err.Error(), tc.says, name)
 		assert.Contains(t, err.Error(), "magus agent harness install", name)
@@ -158,7 +158,7 @@ func BenchmarkToolRowsModels(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
-	rows := ReadToolRows(root, "tools")
+	rows := readToolRows(root, "tools")
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := rows.Models(); err != nil {
@@ -175,11 +175,11 @@ func TestReadToolRowsSaysWhyThereAreNone(t *testing.T) {
 	writeToolFiles(t, root, stale)
 
 	for name, tc := range map[string]struct{ dir, says string }{
-		"no directory named": {"", "names no --tool-rows directory"},
+		"no directory named": {"", "no tool rows directory was named"},
 		"never installed":    {"missing", "no tool rows at missing"},
 		"another layout":     {"stale", "are version 0 and this magus reads version 1"},
 	} {
-		rows := ReadToolRows(root, tc.dir)
+		rows := readToolRows(root, tc.dir)
 		require.Error(t, rows.Err, name)
 		assert.Contains(t, rows.Err.Error(), tc.says, name)
 		assert.Contains(t, rows.Err.Error(), "magus agent harness install", name)
@@ -204,4 +204,28 @@ func TestValidateHarnessToolsRefusesWhatTheGuardCannotRead(t *testing.T) {
 		assert.EqualError(t, validateHarnessTools(tc.tools), tc.err, name)
 	}
 	assert.NoError(t, validateHarnessTools(types.HarnessTools{Dir: "d", Rows: shellRow()}))
+}
+
+// The hook names only its host: the rows are the directory whose host file names it, and
+// the limits are the ones install wrote beside them.
+func TestFindToolRowsByHost(t *testing.T) {
+	root := t.TempDir()
+	limits := types.Limits{ForegroundDefaultMs: 120000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true}
+	for _, host := range []string{"claude-code", "codex"} {
+		tools := types.HarnessTools{Dir: filepath.Join("."+host, "magus", "tools"), Rows: shellRow()}
+		writeToolFiles(t, root, append(ToolFiles(tools, nil), hostFiles(tools.Dir, host, limits)...))
+	}
+
+	rows := FindToolRows(root, "claude-code")
+	require.NoError(t, rows.Err)
+	assert.Equal(t, ".claude-code/magus/tools", rows.Dir)
+	got, err := rows.Limits()
+	require.NoError(t, err)
+	assert.Equal(t, limits, got)
+
+	missing := FindToolRows(root, "cursor")
+	require.Error(t, missing.Err)
+	assert.Contains(t, missing.Err.Error(), "no tool rows are installed for cursor")
+	_, err = missing.Limits()
+	require.Error(t, err)
 }

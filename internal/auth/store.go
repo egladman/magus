@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -493,7 +492,7 @@ func defaultName(g types.Grant, n int) string {
 	if g.MCP != types.LevelNone {
 		prefix = "connector"
 	}
-	return prefix + "-" + strconv.Itoa(n)
+	return fmt.Sprintf("%s-%d", prefix, n)
 }
 
 func grantOrNothing(g types.Grant) string {

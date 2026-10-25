@@ -1,6 +1,7 @@
 package spell
 
 import (
+	"fmt"
 	"io/fs"
 	"testing"
 
@@ -31,7 +32,7 @@ func TestModuleDeclsParse(t *testing.T) {
 
 func TestModuleDeclsRepeatTheEmbeddedFile(t *testing.T) {
 	for _, name := range []string{"magus", "fs", "no-such-module"} {
-		b, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+name+".buzz")
+		b, err := fs.ReadFile(hostDeclsFS, fmt.Sprintf("gen/decls/%s.buzz", name))
 		for range 2 {
 			src, ok := ModuleDecls(name)
 			assert.Equal(t, err == nil, ok, name)
@@ -48,7 +49,7 @@ func BenchmarkModuleDecls(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			for _, mod := range mods {
-				if data, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+mod.Name+".buzz"); err == nil {
+				if data, err := fs.ReadFile(hostDeclsFS, fmt.Sprintf("gen/decls/%s.buzz", mod.Name)); err == nil {
 					_ = string(data)
 				}
 			}
@@ -81,11 +82,11 @@ func TestModuleDeclsDeclareEveryMethod(t *testing.T) {
 				variadic = variadic || a.Variadic
 			}
 			if variadic {
-				assert.Containsf(t, src, "// "+name+" is variadic",
+				assert.Containsf(t, src, fmt.Sprintf("// %s is variadic", name),
 					"%s.%s is variadic, so the declarations must say why it stays untyped", mod.Name, name)
 				continue
 			}
-			assert.Containsf(t, src, "export extern fun "+name+"(",
+			assert.Containsf(t, src, fmt.Sprintf("export extern fun %s(", name),
 				"%s.%s has no generated declaration, so calls to it stay unchecked", mod.Name, name)
 		}
 	}

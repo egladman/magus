@@ -335,7 +335,7 @@ func (g *Graph) admits(ix *searchIndex, i int, cq *compiledQuery) bool {
 		case t.span:
 			// A phrase can straddle two fields, so it is tested against the joined text the
 			// scan always used. Rare, so the join is not worth keeping in the index.
-			if strings.Contains(e.lcID+" "+e.lcLabel+" "+e.lcDoc, t.lc) {
+			if strings.Contains(fmt.Sprintf("%s %s %s", e.lcID, e.lcLabel, e.lcDoc), t.lc) {
 				return false
 			}
 		default:
@@ -784,7 +784,7 @@ func matchesStamp(n types.KnowledgeNode, q parsedQuery) bool {
 	if n.Kind == types.KindMarker {
 		for _, k := range slices.Sorted(maps.Keys(n.Attrs)) {
 			if !slices.Contains(reservedMarkerAttrs, k) {
-				pairs = append(pairs, k+"="+n.Attrs[k])
+				pairs = append(pairs, fmt.Sprintf("%s=%s", k, n.Attrs[k]))
 			}
 		}
 	}

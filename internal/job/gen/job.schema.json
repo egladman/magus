@@ -175,6 +175,10 @@
         "no_default_charms": {
           "type": "boolean",
           "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
+        },
+        "test": {
+          "type": "boolean",
+          "description": "Test runs Script's tests with `magus buzz -t` instead of its main: passing tests and a passing main are different facts, so each is satisfied only by its own run. A script check alone carries it."
         }
       },
       "oneOf": [
@@ -276,6 +280,10 @@
               "no_default_charms": {
                 "type": "boolean",
                 "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
+              },
+              "test": {
+                "type": "boolean",
+                "description": "Test runs Script's tests with `magus buzz -t` instead of its main: passing tests and a passing main are different facts, so each is satisfied only by its own run. A script check alone carries it."
               }
             },
             "oneOf": [
@@ -339,7 +347,7 @@
       "type": "integer",
       "description": "MaxClaims caps how many proved claims one attempt takes; zero takes the default. See [Job.MaxClaims]."
     },
-    "waivers": {
+    "deviations": {
       "type": "array",
       "items": {
         "type": "object",
@@ -359,7 +367,7 @@
           }
         }
       },
-      "description": "Waivers accept waivable problems (see [Waivable]) on the record's own authority."
+      "description": "Deviations accept permissible problems (see [Permissible]) on the record's own authority."
     },
     "enter": {
       "type": "string",
@@ -370,13 +378,17 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "because"],
+        "required": [],
         "properties": {
           "path": {
             "type": "string",
             "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
           },
           "because": {
+            "type": "string",
+            "minLength": 1
+          },
+          "callers": {
             "type": "string",
             "minLength": 1
           }

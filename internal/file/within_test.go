@@ -1,6 +1,7 @@
 package file
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,7 +35,7 @@ func TestWithinFollowsSymlinksAndRefusesAnEscape(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "sub", "in.txt"), got)
 
-	for _, path := range []string{"out-link", "../" + filepath.Base(outside) + "/out.txt", filepath.Join(outside, "out.txt")} {
+	for _, path := range []string{"out-link", fmt.Sprintf("../%s/out.txt", filepath.Base(outside)), filepath.Join(outside, "out.txt")} {
 		_, err = Within(root, path)
 		require.ErrorIs(t, err, ErrOutsideRoot, path)
 	}

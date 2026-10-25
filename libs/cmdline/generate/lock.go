@@ -2,6 +2,7 @@ package generate
 
 import (
 	"flag"
+	"fmt"
 	"sort"
 
 	"github.com/egladman/magus/libs/cmdline"
@@ -17,10 +18,10 @@ func Lock(root cmdline.Command) []string {
 	for _, c := range root.Children {
 		out = append(out, "subcommand "+c.Name)
 		visitFlags(c, func(f *flag.Flag) {
-			out = append(out, "flag "+c.Name+"/"+f.Name)
+			out = append(out, fmt.Sprintf("flag %s/%s", c.Name, f.Name))
 		})
 		for _, o := range c.Operands {
-			out = append(out, "operand "+c.Name+"/"+o.Name)
+			out = append(out, fmt.Sprintf("operand %s/%s", c.Name, o.Name))
 		}
 	}
 	sort.Strings(out)

@@ -98,7 +98,7 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
 	t.Parallel()
 
-	s, rec := graderStore(t, CheckVerdict{NotGraded: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"})
+	s, rec := graderStore(t, CheckVerdict{NotGraded: "the guard denies this worker `magus run go::go-vet .` as well: the hook binary is older than the tree"})
 	row := types.Job{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: forkCheck(), Goals: []types.Goal{
 		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
 	}}
@@ -109,7 +109,7 @@ func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
 	assert.Equal(t, types.JobUngraded, ps[0].Code)
 	assert.Equal(t, "check", ps[0].Field)
 	assert.Contains(t, ps[0].Message, "w's check `magus run")
-	assert.Contains(t, ps[0].Message, "magusfile.buzz:3: expected ';'", "the reason no verdict was reached is quoted")
+	assert.Contains(t, ps[0].Message, "the hook binary is older than the tree", "the reason no verdict was reached is quoted")
 	assert.NotEmpty(t, ps[0].Fix)
 	assert.Len(t, rec.graded, 1, "grading stops at the first check nobody could grade")
 
@@ -179,4 +179,21 @@ func TestDeniedCheckProblemsGradeEveryGoalCheck(t *testing.T) {
 		{ID: "paid-too", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "docs"}},
 	}}
 	assert.Len(t, deniedCheckProblems(t.Context(), s, both), 2, "every denied check is found, not the first")
+}
+
+// A grader that could not load the workspace's rules defers the grade: the row is stored,
+// nothing is refused, and grading stops at the first check since the reason holds for all.
+func TestDeniedCheckProblemsDeferWhenTheRulesDidNotLoad(t *testing.T) {
+	t.Parallel()
+
+	s, rec := graderStore(t, CheckVerdict{Deferred: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"})
+	row := types.Job{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: forkCheck(), Goals: []types.Goal{
+		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+	}}
+
+	assert.Empty(t, deniedCheckProblems(t.Context(), s, row))
+	assert.Len(t, rec.graded, 1, "grading stops at the first deferred check")
+
+	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = row.WritePaths, row.Check }, config.Jobs{}, nil)
+	require.NoError(t, err)
 }

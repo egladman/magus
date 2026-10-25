@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,12 +55,12 @@ func hostOptions(t *testing.T) (PolicyOptions, string) {
 		Home:         home,
 		GOOS:         "linux",
 		Environ: []string{
-			"PATH=/usr/bin:" + home + "/.local/bin:" + home + ":.:/",
+			fmt.Sprintf("PATH=/usr/bin:%[1]s/.local/bin:%[1]s:.:/", home),
 			"HOME=" + home,
 			"TMPDIR=/tmp/shared",
 			"GITHUB_TOKEN=ghp_secret",
 			"GOROOT=/usr/local/go",
-			"GOCACHE=" + root + "/gocache",
+			fmt.Sprintf("GOCACHE=%s/gocache", root),
 			"MISE_DATA_DIR=/opt/mise",
 		},
 		Sandbox: miseDecl,
@@ -140,7 +141,7 @@ func TestBuildPolicyKnowsNoToolchain(t *testing.T) {
 	}
 	environ := []string{"PATH=/usr/bin", "HOME=" + home}
 	for _, n := range names {
-		environ = append(environ, n+"="+filepath.Join(tc, "tools", n))
+		environ = append(environ, fmt.Sprintf("%s=%s", n, filepath.Join(tc, "tools", n)))
 	}
 	p := BuildPolicy(PolicyOptions{Workspace: filepath.Join(tc, "ws"), Home: home, GOOS: "linux", Environ: environ})
 
@@ -158,7 +159,7 @@ func TestBuildPolicyKnowsNoToolchain(t *testing.T) {
 // the whole home tree.
 func TestBuildPolicyPathEntries(t *testing.T) {
 	o, _ := hostOptions(t)
-	rules := pathRules("/usr/bin:"+o.Home+"/.local/bin:"+o.Home+":.:/:bin:/opt/x/", o.Home)
+	rules := pathRules(fmt.Sprintf("/usr/bin:%[1]s/.local/bin:%[1]s:.:/:bin:/opt/x/", o.Home), o.Home)
 	assert.Equal(t, []filesystem.Rule{rx("/usr/bin"), rx(o.Home + "/.local/bin"), rx("/opt/x")}, rules)
 }
 
@@ -169,7 +170,7 @@ func TestBuildPolicyBaseEnv(t *testing.T) {
 	p := BuildPolicy(o)
 
 	assert.Contains(t, p.BaseEnv, "TMPDIR="+filepath.Join(root, "tmp"))
-	assert.Contains(t, p.BaseEnv, "GOCACHE="+root+"/gocache", "the go spell passes GOCACHE through")
+	assert.Contains(t, p.BaseEnv, fmt.Sprintf("GOCACHE=%s/gocache", root), "the go spell passes GOCACHE through")
 	assert.NotContains(t, p.BaseEnv, "TMPDIR=/tmp/shared")
 	for _, kv := range p.BaseEnv {
 		assert.False(t, strings.HasPrefix(kv, "GITHUB_TOKEN="), "secret leaked: %s", kv)
@@ -333,11 +334,38 @@ func TestMergeLayers(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := hostDirs{vars: tc.vars, home: "/home/u", goos: "linux"}
-			rules, allow := h.mergeLayers(tc.layers...)
+			rules, allow, exports := h.mergeLayers(tc.layers...)
+			assert.Equal(t, map[string]string{}, exports)
 			assert.Equal(t, append([]filesystem.Rule{}, tc.want...), rules)
 			assert.Equal(t, env.Allowlist{Names: append(env.DefaultAllow(), tc.wantNames...), Prefixes: tc.wantPfx}, allow)
 		})
 	}
+}
+
+// A workspace entry is the checkout's own path whatever the host variable says, and the
+// child gets that path in its variable, so the variable and the grant agree.
+func TestWorkspaceBaseScopesAnEntryToTheCheckout(t *testing.T) {
+	o, root := hostOptions(t)
+	o.Environ = append(o.Environ, "GOLANGCI_LINT_CACHE=/shared/golangci-lint")
+	o.Spells = map[string]spells.Sandbox{"lint": {
+		Allow: []spells.SandboxAllow{{Env: "GOLANGCI_LINT_CACHE", Base: spells.SandboxBaseWorkspace, Path: ".magus/golangci-lint", Mode: spells.SandboxAccessRW}},
+		Env:   spells.SandboxEnv{Passthrough: []string{"GOLANGCI_LINT_CACHE"}},
+	}}
+	cache := filepath.Join(root, "ws", ".magus", "golangci-lint")
+
+	p := BuildPolicy(o)
+	assert.Contains(t, p.BaseEnv, "GOLANGCI_LINT_CACHE="+cache)
+	assert.NotContains(t, p.BaseEnv, "GOLANGCI_LINT_CACHE=/shared/golangci-lint")
+	require.NoError(t, check(p, filesystem.Write, filepath.Join(cache, "entry")))
+	assert.Error(t, check(p, filesystem.Write, "/shared/golangci-lint/entry"))
+
+	h := hostDirs{home: "/home/u", goos: "linux", workspace: "/ws"}
+	assert.Equal(t, "/ws", h.base(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace}))
+	assert.Empty(t, hostDirs{goos: "linux"}.base(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace}), "no workspace, no base")
+	_, _, exports := h.mergeLayers(o.Spells["lint"])
+	assert.Equal(t, map[string]string{"GOLANGCI_LINT_CACHE": "/ws/.magus/golangci-lint"}, exports)
+	require.NoError(t, checkAllow(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace, Path: ".magus/x", Mode: spells.SandboxAccessRW}))
+	assert.Error(t, checkAllow(spells.SandboxAllow{Base: spells.SandboxBaseWorkspace, Mode: spells.SandboxAccessRW}), "the whole checkout is not a cache")
 }
 
 // userCache and userConfig follow the OS the way Go's os.UserCacheDir does; the xdg
@@ -368,7 +396,7 @@ func TestBinRootFindsTheInstallBehindPath(t *testing.T) {
 
 	goroot := spells.SandboxAllow{Base: "binRoot", Bin: "go", Requires: "pkg/tool", Mode: spells.SandboxAccessRX}
 	resolve := func(path string) []filesystem.Rule {
-		rules, _ := hostDirs{vars: map[string]string{"PATH": path}, goos: "linux"}.mergeLayers(spells.Sandbox{Allow: []spells.SandboxAllow{goroot}})
+		rules, _, _ := hostDirs{vars: map[string]string{"PATH": path}, goos: "linux"}.mergeLayers(spells.Sandbox{Allow: []spells.SandboxAllow{goroot}})
 		return rules
 	}
 	assert.Equal(t, []filesystem.Rule{rx(install)}, resolve(filepath.Join(dir, "links")), "through a symlink")
@@ -396,7 +424,7 @@ func TestScopedCutsTheSpellLayer(t *testing.T) {
 	assert.ErrorIs(t, check(rustOnly, filesystem.Read, gocache), filesystem.ErrDenied)
 	require.NoError(t, check(rustOnly, filesystem.Write, registry))
 	assert.False(t, rustOnly.AllowsEnv("GOFLAGS"))
-	assert.NotContains(t, rustOnly.BaseEnv, "GOCACHE="+root+"/gocache")
+	assert.NotContains(t, rustOnly.BaseEnv, fmt.Sprintf("GOCACHE=%s/gocache", root))
 
 	target := &spells.Sandbox{Allow: []spells.SandboxAllow{{Path: filepath.Join(root, "fixtures"), Mode: spells.SandboxAccessRW}}}
 	withTarget := p.Scoped([]string{"rust"}, target)

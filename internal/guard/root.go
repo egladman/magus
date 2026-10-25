@@ -205,37 +205,23 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 	}, true
 }
 
-var mergeJobBranchesScript = referenceScript{
-	lead: "Merging job branches?",
-	argv: []string{"hack/dev/merge-job-branches.buzz"},
-}
-
-var mergeBaseScript = referenceScript{
-	lead: "Bringing the base into a branch?",
-	argv: []string{"hack/dev/merge-base-into-branches.buzz", "--", "--branches", "<branch>"},
-}
-
-// integrationScriptNote names the merge scripts after a merge or cherry-pick, in the
-// finding's first line so the once-per-session advice keeps them. A merge is served both:
-// the line alone cannot say whether it brings the base in or lands a job branch.
+// integrationScriptNote names the scripts the workspace declares replace the line's merge or
+// cherry-pick, in the finding's first line so the once-per-session advice keeps them. A
+// reset or a rebase is a root folding a worker's commits, which is the integrator's to run.
 func integrationScriptNote(c mainCall) string {
 	if c.work != delegableIntegrate {
 		return ""
 	}
-	var scripts []referenceScript
-	switch {
-	case strings.Contains(c.line, "git merge"):
-		scripts = []referenceScript{mergeBaseScript, mergeJobBranchesScript}
-	case strings.Contains(c.line, "git cherry-pick"):
-		scripts = []referenceScript{mergeJobBranchesScript}
+	cmds, _ := ParseCommands(c.line)
+	if slices.ContainsFunc(cmds, func(inv hint.Invocation) bool {
+		sub, _ := vcsSubcommand(inv)
+		return inv.Name == "git" && (sub == "reset" || sub == "rebase")
+	}) {
+		return fmt.Sprintf(" Folding a worker's commits is the integrator's: fork an integration job (`%s` with `\"integrates\": [\"<branch>\"]`) "+
+			"or spawn `<root>/integrate <job>` in the job's checkout, "+
+			"which runs the fold there: `git reset --soft <checkpoint>`, then one commit.", hint.JobFork.With("--stdin"))
 	}
-	var out string
-	for _, s := range scripts {
-		if note := s.note(c.root); note != "" {
-			out += " " + strings.TrimPrefix(note, "\n")
-		}
-	}
-	return out
+	return strings.ReplaceAll(scriptLines(servedScripts(c.root, "", cmds)), "\n", " ")
 }
 
 // spawnBroken is why a spawn by host would be refused whatever its brief: at a deny

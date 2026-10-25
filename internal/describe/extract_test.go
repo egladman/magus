@@ -1,6 +1,7 @@
 package describe
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -91,7 +92,7 @@ export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestCtxFormCharms(t *testing.T) {
 	g := Extract(`import "magus";
 export fun release(ctx: magus\Context, args: [str]) > void {
-    if (ctx.hasCharm("cd")) { ctx.writesFiles("dist/pkg.tar.gz"); }
+    if (ctx.hasCharm("cd")) { ctx.writesFiles(["dist/pkg.tar.gz"]); }
 }
 `)
 	release, _ := nodeByName(g, "release")
@@ -146,12 +147,12 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {}
 func TestInputsOutputs(t *testing.T) {
 	g := Extract(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**", "tsconfig.json");
-    ctx.writesFiles("dist/**");
-    // ctx.readsFiles("ignored") in a comment must not count
+    ctx.readsFiles(["src/**", "tsconfig.json"]);
+    ctx.writesFiles(["dist/**"]);
+    // ctx.readsFiles(["ignored"]) in a comment must not count
 }
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**");
+    ctx.readsFiles(["src/**"]);
 }
 export fun plain(ctx: magus\Context, args: [str]) > void { }
 `)
@@ -174,6 +175,109 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 	assert.Empty(t, plain.WritesFiles)
 }
 
+// TestFootprintListForm pins the one call shape: a list of literal paths, then an
+// optional literal editsExistingSource. Calls accumulate per target, and the flag routes
+// a call's paths to the edited set rather than the produced one.
+func TestFootprintListForm(t *testing.T) {
+	g := Extract(`import "magus";
+import "project/site";
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(["src/**", site.file("theme.css")]);
+    ctx.writesFiles(["report.json"]);
+    ctx.writesFiles(["go.mod", "go.sum"], editsExistingSource: true);
+    ctx.writesFiles(["gen/**"], editsExistingSource: false);
+}
+`)
+	format, _ := nodeByName(g, "format")
+	assert.Equal(t, types.TargetGraphNode{
+		Name:                  "format",
+		ReadsFiles:            []types.InputRef{{Glob: "src/**"}, {Project: "site", Glob: "theme.css"}},
+		WritesFiles:           []types.OutputRef{{Glob: "report.json"}, {Glob: "gen/**"}},
+		ModifiesExistingFiles: []types.UpdateRef{{Glob: "go.mod"}, {Glob: "go.sum"}},
+	}, format)
+}
+
+// TestFootprintRefusesTheRemovedForms: the variadic string form and
+// ctx.modifiesExistingFiles are gone, and each refusal names the call that replaces it.
+func TestFootprintRefusesTheRemovedForms(t *testing.T) {
+	cases := []struct {
+		name, body, want string
+	}{
+		{
+			name: "variadic writesFiles",
+			body: `ctx.writesFiles("gen/**", "dist/**");`,
+			want: `ctx.writesFiles takes a list of paths: write ctx.writesFiles(["gen/**", ...])`,
+		},
+		{
+			name: "variadic readsFiles",
+			body: `ctx.readsFiles("src/**");`,
+			want: `ctx.readsFiles takes a list of paths: write ctx.readsFiles(["src/**", ...])`,
+		},
+		{
+			name: "modifiesExistingFiles",
+			body: `ctx.modifiesExistingFiles("go.mod");`,
+			want: `ctx.modifiesExistingFiles was removed: write ctx.writesFiles([...], editsExistingSource: true)`,
+		},
+		{
+			name: "flag on readsFiles",
+			body: `ctx.readsFiles(["src/**"], editsExistingSource: true);`,
+			want: `ctx.readsFiles takes one list of paths and no editsExistingSource`,
+		},
+		{
+			name: "unknown label",
+			body: `ctx.writesFiles(["go.mod"], edits: true);`,
+			want: `ctx.writesFiles: unknown argument edits: the flag is editsExistingSource`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := Extract(fmt.Sprintf("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    %s\n}\n", tc.body))
+			build, _ := nodeByName(g, "build")
+			require.EqualError(t, build.FootprintErr, tc.want)
+		})
+	}
+}
+
+// TestGlobsMayOverlap pins what MGS1053 compares: exact literals, a literal against a
+// pattern with its exclusions, and patterns whose segments provably diverge.
+func TestGlobsMayOverlap(t *testing.T) {
+	glob := func(pattern string, except ...string) types.Glob {
+		return types.Glob{Pattern: pattern, Except: except}
+	}
+	cases := []struct {
+		a, b types.Glob
+		want bool
+	}{
+		{glob("go.mod"), glob("go.mod"), true},
+		{glob("go.mod"), glob("go.sum"), false},
+		{glob("gen/x.go"), glob("**/*.go"), true},
+		{glob("gen/x.go"), glob("**/*.go", "gen/**"), false},
+		{glob("gen/**"), glob("gen/*.go"), true},
+		{glob("gen/**"), glob("*.mod"), false},
+		{glob("gen/*.go"), glob("docs/*.go"), false},
+		{glob("**/*.go"), glob("gen/**"), true},
+		{glob("**/*.go", "gen/**"), glob("gen/**"), false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, GlobsMayOverlap(tc.a, tc.b), "%v vs %v", tc.a, tc.b)
+		assert.Equal(t, tc.want, GlobsMayOverlap(tc.b, tc.a), "%v vs %v", tc.b, tc.a)
+	}
+}
+
+// TestFootprintComputedListOrFlagIsDynamic: a list or flag the static read cannot see
+// is refused at load like any computed footprint argument.
+func TestFootprintComputedListOrFlagIsDynamic(t *testing.T) {
+	for _, body := range []string{
+		`final paths = ["gen/**"]; ctx.writesFiles([paths]);`,
+		`final extra = "gen/**"; ctx.writesFiles(["dist/**", extra]);`,
+		`final edits = true; ctx.writesFiles(["go.mod"], editsExistingSource: edits);`,
+	} {
+		g := Extract(fmt.Sprintf("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    %s\n}\n", body))
+		build, _ := nodeByName(g, "build")
+		assert.True(t, build.DynamicIO, "%s must flag DynamicIO", body)
+	}
+}
+
 // TestFootprintExclusionsStayWithTheirCall pins the one meaning of "!": every exclusion
 // in a call narrows every glob of that call, in any order, and none of another call's.
 // Deduplicating the flat list across calls folded the second call's exclusion onto the
@@ -181,8 +285,8 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 func TestFootprintExclusionsStayWithTheirCall(t *testing.T) {
 	g := Extract(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("a/x.go");
-    ctx.writesFiles("!a/x.go", "a/*.go");
+    ctx.writesFiles(["a/x.go"]);
+    ctx.writesFiles(["!a/x.go", "a/*.go"]);
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -200,10 +304,10 @@ func TestFootprintExclusionNarrowsOnlyItsOwnProject(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/site";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", site.file("gen/*.html"), site.file("!gen/hand.html"));
+    ctx.writesFiles(["gen/**", site.file("gen/*.html"), site.file("!gen/hand.html")]);
 }
 export fun bad(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/**", site.file("!gen/hand.html"));
+    ctx.writesFiles(["gen/**", site.file("!gen/hand.html")]);
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -224,7 +328,7 @@ func TestReadsWritesDynamic(t *testing.T) {
 	g := Extract(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
-    ctx.readsFiles("src/**", extra);
+    ctx.readsFiles(["src/**", extra]);
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -328,11 +432,11 @@ export fun scan(ctx: magus\Context, args: [str]) > void {
 func TestUnreachedIO(t *testing.T) {
 	orphans := UnreachedIO(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**");
+    ctx.readsFiles(["src/**"]);
     helper();
 }
-fun helper() > void { ctx.writesFiles("dist/**"); }
-fun orphan() > void { ctx.readsFiles("gen/**"); }
+fun helper() > void { ctx.writesFiles(["dist/**"]); }
+fun orphan() > void { ctx.readsFiles(["gen/**"]); }
 export fun test(ctx: magus\Context, args: [str]) > void {
     final f = ctx.readsFiles;
     f("late/**");
@@ -649,13 +753,67 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 	}, l.Chain)
 }
 
+// TestChainReadsArgsArms: a ctx.needs in an arm of an args.len() test runs only for
+// invocations that take that arm; one outside any such test, or under a condition the
+// read does not evaluate, runs either way.
+func TestChainReadsArgsArms(t *testing.T) {
+	g := Extract(`import "magus";
+export fun gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun rules(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun vet(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun both(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun lint(ctx: magus\Context, paths: [str]) > void {
+    if (paths.len() == 0) {
+        ctx.needs(gen, both);
+    } else {
+        ctx.needs(fmt, both);
+    }
+    if (0 < paths.len()) {
+        ctx.needs(rules);
+    }
+    if (ctx.hasCharm("rw")) {
+        ctx.needs(vet);
+    }
+}
+`)
+	l, ok := nodeByName(g, "lint")
+	require.True(t, ok, "missing lint; got %v", g)
+	without, with := false, true
+	assert.Equal(t, []types.ChainStep{
+		{Target: "gen", WhenArgs: &without},
+		{Target: "both"},
+		{Target: "fmt", CallIndex: 1, WhenArgs: &with},
+		{Target: "rules", CallIndex: 2, WhenArgs: &with},
+		{Target: "vet", CallIndex: 3},
+	}, l.Chain, "both arms name both, so it runs either way")
+}
+
+// TestChainArgsArmReachesAHelper: a helper has no args to test, so the ctx.needs calls it
+// makes take the arm the target called it from.
+func TestChainArgsArmReachesAHelper(t *testing.T) {
+	g := Extract(`import "magus";
+export fun gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+fun prepare(ctx: magus\Context) > void { ctx.needs(gen); }
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    if (!(args.len() != 0)) {
+        prepare(ctx);
+    }
+}
+`)
+	l, ok := nodeByName(g, "lint")
+	require.True(t, ok, "missing lint; got %v", g)
+	without := false
+	assert.Equal(t, []types.ChainStep{{Target: "gen", WhenArgs: &without}}, l.Chain)
+}
+
 // TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so
 // `magus describe` prints no line rather than an empty one.
 func TestChainEmptyForALeafTarget(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file("go.mod"));
+    ctx.readsFiles([lib.file("go.mod")]);
     go["go-build"]();
 }
 `)
@@ -707,7 +865,7 @@ export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 	assert.Empty(t, b.CrossDependencies, "the cross-project ref is inside a string literal")
 }
 
-// TestCrossFileInputs: ctx.readsFiles(<alias>.file("lit")) and a sibling bare string
+// TestCrossFileInputs: ctx.readsFiles([<alias>.file("lit")]) and a sibling bare string
 // literal land on the SAME Inputs list in one shape: the literal a same-project input
 // (empty Project), the alias.file a cross-project input (raw dep path + rel); the
 // recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
@@ -716,7 +874,7 @@ func TestCrossFileInputs(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file("go.mod"), "src/**/*.go");
+    ctx.readsFiles([lib.file("go.mod"), "src/**/*.go"]);
     go["go-build"]();
 }
 `)
@@ -736,7 +894,7 @@ func TestCrossFileInputsDynamic(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file(args[0]));
+    ctx.readsFiles([lib.file(args[0])]);
     go["go-build"]();
 }
 `)

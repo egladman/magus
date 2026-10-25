@@ -431,9 +431,11 @@ func TestMachineSnapshotReportsHolders(t *testing.T) {
 }
 
 // budgetAdmitter is a MachineAdmitter whose answers come from a budget a test writes. It
-// records every request so the gate's calls can be observed.
+// holds a claim kept out by its own run until a release through it, as the broker does,
+// and records every request so the gate's calls can be observed.
 type budgetAdmitter struct {
 	mu       sync.Mutex
+	freed    sync.Cond
 	budget   *MachineBudget
 	requests int
 	fail     error
@@ -441,14 +443,30 @@ type budgetAdmitter struct {
 	overruns []string
 }
 
-func (f *budgetAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (f *budgetAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.requests++
 	if f.fail != nil {
 		return types.MachineVerdict{}, f.fail
 	}
-	return f.budget.Request(c), nil
+	f.freed.L = &f.mu
+	stop := context.AfterFunc(ctx, func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.freed.Broadcast()
+	})
+	defer stop()
+	for {
+		v := f.budget.Request(c)
+		if v.Granted || !v.Fits || !v.OwnRun {
+			return v, nil
+		}
+		if ctx.Err() != nil {
+			return types.MachineVerdict{}, ctx.Err()
+		}
+		f.freed.Wait()
+	}
 }
 
 func (f *budgetAdmitter) Release(_ context.Context, id string) {
@@ -456,6 +474,8 @@ func (f *budgetAdmitter) Release(_ context.Context, id string) {
 	defer f.mu.Unlock()
 	f.released = append(f.released, id)
 	f.budget.Release(id)
+	f.freed.L = &f.mu
+	f.freed.Broadcast()
 }
 
 func (f *budgetAdmitter) Overrun(_ context.Context, id string) {
@@ -1057,4 +1077,30 @@ func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	}
 	assert.NotEqual(t, ExitCodeMachineBusy, ExitCodeMachineDeclaration,
 		"a permanent refusal that shares EX_TEMPFAIL is a retry loop")
+}
+
+func TestNextChangeIsTheEarliestReservationBoundOrCurveBreakpoint(t *testing.T) {
+	b, now := testBudget(t, 10_000, 8)
+	_, ok := b.NextChange()
+	assert.False(t, ok, "an empty budget never changes on its own")
+
+	b.Assert(types.MachineClaim{Target: "flat", MemoryMB: 1000})
+	_, ok = b.NextChange()
+	assert.False(t, ok, "a claim held flat changes only when released")
+
+	liveReaders(b, 500)
+	require.True(t, b.Reserve(types.MachineClaim{Slots: 1}, 500).Granted)
+	at, ok := b.NextChange()
+	require.True(t, ok)
+	assert.Equal(t, now.Add(reservationBound), at, "a reservation lapses at its bound")
+
+	profile := types.MemoryProfile{D10Ms: 10_000, D90Ms: 10_000, Runs: 3}
+	for i := range profile.Curve {
+		profile.Curve[i] = 100
+	}
+	b.Assert(types.MachineClaim{Target: "curved", MemoryMB: 100, Profile: profile})
+	at, ok = b.NextChange()
+	require.True(t, ok)
+	step := 10 * time.Second / types.MemoryCurveBuckets
+	assert.Equal(t, now.Add(step), at, "a curve's first breakpoint comes before the reservation's bound")
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -196,7 +197,7 @@ func TestCryptoSignVerifyRoundTrip(t *testing.T) {
 
 	// Surrounding whitespace is tolerated on both hex inputs: a signature pasted
 	// from a file arrives with a trailing newline.
-	ok, err = CryptoVerify(ctx, SignEd25519, "payload", "  "+sig+"\n", "\t"+pubHex+" ")
+	ok, err = CryptoVerify(ctx, SignEd25519, "payload", fmt.Sprintf("  %s\n", sig), fmt.Sprintf("\t%s ", pubHex))
 	require.NoError(t, err)
 	assert.True(t, ok)
 }

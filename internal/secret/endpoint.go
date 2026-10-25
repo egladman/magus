@@ -415,7 +415,7 @@ func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, 
 // and the error, and must never be extended to echo a header or a request.
 func endpointErrorHandler(g types.SecretGrant) func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, _ *http.Request, err error) {
-		http.Error(w, "magus secret endpoint: upstream "+g.Host+": "+err.Error(), http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf("magus secret endpoint: upstream %s: %s", g.Host, err.Error()), http.StatusBadGateway)
 	}
 }
 

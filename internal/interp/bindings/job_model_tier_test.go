@@ -283,12 +283,12 @@ func TestModelTierMatrixAnswersAreChecked(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reg, err := loadModelTiers(t, matrixDecl+`
+			reg, err := loadModelTiers(t, fmt.Sprintf(`%s
 enum Other { a }
 magus\job.modelTier(fun (req: ModelTierRequest) > any !> any {
-    `+tc.body+`
+    %s
 });
-`, "claude-code")
+`, matrixDecl, tc.body), "claude-code")
 			require.NoError(t, err)
 			_, err = reg.ModelTierMatrix()(t.Context(), types.ModelTierRequest{})
 			require.ErrorContains(t, err, tc.want)
@@ -347,7 +347,7 @@ func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
 		for i, tier := range tiers {
 			list[i] = fmt.Sprintf("ModelRow{id = %q, tier = %q}", "m-"+tier, tier)
 		}
-		return spells.WithFuncSource("import \"magus/spell\";\nexport fun mgs_listModels() > [ModelRow] { return [" + strings.Join(list, ", ") + "]; }\n")
+		return spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\nexport fun mgs_listModels() > [ModelRow] { return [%s]; }\n", strings.Join(list, ", ")))
 	}
 	full := register.Spell(t, "tiered-test", rows("economy", "standard", "principal"))
 	reg, err := loadModelTiers(t, `import "magus";`, full)

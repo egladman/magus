@@ -2,6 +2,7 @@ package dry
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -95,9 +96,9 @@ func TestMagusAPIMatchesBindings(t *testing.T) {
 // of it is exactly the kind of half-wired that reads as done.
 func TestCtxDeclarationsMatchAcrossHosts(t *testing.T) {
 	// Not a fourth list: the members of the real ctx ARE the enumeration, and the two
-	// copies are measured against it. Dropped are the internal marker and the three
-	// v0.4 removal shims, which exist to raise a better error than either copy could.
-	notDeclarations := []string{"__magus_context", "inputs", "outputs", "updates"}
+	// copies are measured against it. Dropped are the internal marker and the removal
+	// shims, which exist to raise a better error than either copy could.
+	notDeclarations := []string{"__magus_context", "inputs", "outputs", "updates", "modifiesExistingFiles"}
 	// Known absences, each a pre-existing gap this test documents rather than fixes;
 	// listing them is what keeps the rest of the members gated instead of the whole
 	// check being deleted the first time it goes red.
@@ -161,7 +162,7 @@ func keySet(m vm.Value) map[string]bool {
 // that validates less than the language does teaches worse than none.
 func TestPlaygroundChecksHostCallTypes(t *testing.T) {
 	run := func(body string) Result {
-		src := "import \"magus\";\n" + body + "\nexport fun work(ctx: magus\\Context, args: [str]) > void {}\n"
+		src := fmt.Sprintf("import \"magus\";\n%s\nexport fun work(ctx: magus\\Context, args: [str]) > void {}\n", body)
 		return Run(context.Background(), src, "work", nil)
 	}
 
@@ -307,7 +308,7 @@ func TestTraceProject_slotsBelowOne(t *testing.T) {
 func TestTraceProject_humanOnlyNeedsReason(t *testing.T) {
 	for name, value := range map[string]string{"bare true": "true", "empty": `""`, "whitespace": `"  "`, "a number": "4"} {
 		t.Run(name, func(t *testing.T) {
-			src := `import "magus"; magus\project({"targets": {"bench": {"human_only": ` + value + `}}});`
+			src := fmt.Sprintf(`import "magus"; magus\project({"targets": {"bench": {"human_only": %s}}});`, value)
 			g := LoadMagusfile(context.Background(), src)
 			require.False(t, g.OK)
 			require.NotNil(t, g.Diag)
@@ -687,13 +688,13 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 func TestRun_insightLensesAreShaped(t *testing.T) {
 	for _, lens := range []string{"hotspots.nodes", "affinity.pairs", "ownership.projects", "trend.projects", "volatility.targets", "modelTiers.rows"} {
 		t.Run(lens, func(t *testing.T) {
-			src := `
+			src := fmt.Sprintf(`
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus\log.info("{magus\insight({}).` + lens + `.len()}");
+    magus\log.info("{magus\insight({}).%s.len()}");
     magus\log.info("reached-the-end");
 }
-`
+`, lens)
 			r := Run(context.Background(), src, "work", nil)
 			require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
 			assert.Contains(t, traceDetail(r), "reached-the-end",

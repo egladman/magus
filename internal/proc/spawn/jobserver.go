@@ -95,7 +95,7 @@ func (j *Jobserver) environ(env []string, readFD int) []string {
 // and ignores the pipe; 4.x reads the last of --jobserver-fds and --jobserver-auth, and
 // both name the same pipe.
 func (j *Jobserver) flags(readFD int) []string {
-	fds := strconv.Itoa(readFD) + "," + strconv.Itoa(readFD+1)
+	fds := fmt.Sprintf("%d,%d", readFD, readFD+1)
 	return []string{"-j", "--jobserver-fds=" + fds, "--jobserver-auth=" + fds}
 }
 

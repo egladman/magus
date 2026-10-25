@@ -1,6 +1,6 @@
 // magus guard for Cursor. One file, every event.
 //
-// Run it as `magus buzz -s cursor-hook.buzz -- --agent-name cursor --observes-skill-loads`.
+// Run it as `magus buzz -s cursor-hook.buzz -- --agent-name cursor`.
 // `-s` is load-bearing: without it a BZZ advisory on stderr reads to the host as a hook
 // error. The command is an argv. Cursor splits it and runs magus itself, so there is no
 // shell and no jq. Flags after `--` are this file's argv.
@@ -11,9 +11,9 @@
 //
 // The host name is `--agent-name` and nowhere else: never the event's shape,
 // never the environment, never a default. Without it the gating events are
-// denied (MGS3024). `--observes-skill-loads` is passed on to `magus shell`: Cursor loads a
-// skill by reading its SKILL.md, and that Read reaches preToolUse, where this file hands
-// it over as the load it is.
+// denied (MGS3024). magus reads what else it knows of Cursor from its harness spell,
+// among it that Cursor loads a skill by reading its SKILL.md: that Read reaches preToolUse,
+// where this file hands it over as the load it is.
 //
 // Cursor splits across two events what every other host delivers from one. A deny
 // needs a gating event (preToolUse, beforeShellExecution, beforeMCPExecution), because
@@ -56,7 +56,7 @@
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 32
+// magus-guard-template: 34
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
@@ -89,9 +89,6 @@ final UNREADABLE = "magus guard is NOT running for this call: the hook event on 
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
 final AGENT_NAME = "--agent-name";
-final OBSERVES_SKILL_LOADS = "--observes-skill-loads";
-// The tool rows directory the harness spell declares, forwarded to every judgment.
-final TOOL_ROWS = "--tool-rows";
 
 // How Cursor names an MCP call on preToolUse and postToolUse.
 final MCP_TOOL_PREFIX = "MCP:";
@@ -120,9 +117,6 @@ object Scope {
     agent: str,
     session: str,
     transcript: str,
-    observesSkillLoads: bool,
-    // toolRows is the tool rows directory the entry declares, "" for none.
-    toolRows: str,
 }
 
 fun firstField(node: any?, keys: [str]) > str {
@@ -157,20 +151,16 @@ fun warn(message: str) > void {
 // Entry is what the hook entry's argv declares: the host name, "" when it names none.
 object Entry {
     agent: str,
-    observesSkillLoads: bool,
-    toolRows: str,
 }
 
 fun readArgs(args: [str]) > Entry {
-    final parsed = flags\parse(args, switches: [OBSERVES_SKILL_LOADS], valued: [AGENT_NAME, TOOL_ROWS]) catch null;
-    if (parsed == null) { return Entry{ agent = "", observesSkillLoads = false, toolRows = "" }; }
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME]) catch null;
+    if (parsed == null) { return Entry{ agent = "" }; }
     foreach (word in parsed!.unknown) {
         warn("unsupported argument {word}; this call was judged WITHOUT it");
     }
     return Entry{
         agent = parsed!.values[AGENT_NAME] ?? "",
-        observesSkillLoads = parsed!.values[OBSERVES_SKILL_LOADS] != null,
-        toolRows = parsed!.values[TOOL_ROWS] ?? "",
     };
 }
 
@@ -410,11 +400,6 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
     final extra = mut [<str>];
     if (asPath) { extra.append("--path"); }
     if (ask) { extra.append("--renders-ask"); }
-    if (scope.observesSkillLoads) { extra.append(OBSERVES_SKILL_LOADS); }
-    if (scope.toolRows != "") {
-        extra.append(TOOL_ROWS);
-        extra.append(scope.toolRows);
-    }
     foreach (word in ["-o", "json", AGENT_NAME, scope.agent, "--transport", "buzz", "--session", scope.session, "--transcript", scope.transcript]) {
         extra.append(word);
     }
@@ -816,8 +801,6 @@ fun main(args: [str]) > void {
         agent = entry.agent,
         session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
-        observesSkillLoads = entry.observesSkillLoads,
-        toolRows = entry.toolRows,
     };
     io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
 }

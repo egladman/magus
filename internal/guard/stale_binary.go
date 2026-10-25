@@ -3,11 +3,11 @@ package guard
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -429,7 +429,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 		return call
 	}
 	if in.mcpTool != "" {
-		call.what = "this call to the magus " + in.mcpTool + " tool"
+		call.what = fmt.Sprintf("this call to the magus %s tool", in.mcpTool)
 	}
 	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
@@ -448,8 +448,7 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:
-		problem = "./magus was built from another commit than this tree: it ships no spell " + strconv.Quote(reason.Spell) +
-			", which the tree carries, so it cannot load its guard policy"
+		problem = fmt.Sprintf("./magus was built from another commit than this tree: it ships no spell %q, which the tree carries, so it cannot load its guard policy", reason.Spell)
 	case reason.Cause == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
 	case own && hasBinary:
@@ -468,7 +467,7 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
 	}
-	return denial{Say: problem + "; " + fix.say + ".", Why: why.String()}
+	return denial{Say: fmt.Sprintf("%s; %s.", problem, fix.say), Why: why.String()}
 }
 
 // binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,

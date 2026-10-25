@@ -5,6 +5,7 @@ package std
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,7 @@ func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	var asked []string
 	refusal := errors.New("lease-vcs: refused")
 	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, dir string, _ []string) error {
-		asked = append(asked, row.ID+" "+backend+" "+args[0]+" "+dir)
+		asked = append(asked, fmt.Sprintf("%s %s %s %s", row.ID, backend, args[0], dir))
 		return refusal
 	})
 

@@ -69,7 +69,7 @@ func promptLocation(p types.Prompt) string {
 	if len(p.Key) == 0 {
 		return p.Path
 	}
-	return p.Path + " " + strings.Join(p.Key, ".")
+	return fmt.Sprintf("%s %s", p.Path, strings.Join(p.Key, "."))
 }
 
 // planHarnessPrompt reports what p's file needs, with no Changes when it is in place. A key
@@ -173,7 +173,7 @@ func validateHarnessSetting(s types.Setting) error {
 
 // settingLocation renders a setting for a message: the file, and the key inside it.
 func settingLocation(s types.Setting) string {
-	return s.Path + " " + strings.Join(s.Key, ".")
+	return fmt.Sprintf("%s %s", s.Path, strings.Join(s.Key, "."))
 }
 
 // planHarnessSetting reports what s's file needs, with no Changes when it is in place.

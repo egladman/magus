@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -305,7 +306,7 @@ func TestRepl_LoadExecutesFile(t *testing.T) {
 
 	drv := &scriptDriver{lang: "buzz"}
 	sess := newScriptedSession(drv)
-	_, _, err := runRepl(t, sess, ReplOptions{}, ".load "+path+"\n")
+	_, _, err := runRepl(t, sess, ReplOptions{}, fmt.Sprintf(".load %s\n", path))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"print(1);"}, sess.doStrings)
 }
@@ -662,7 +663,7 @@ func TestPry_LoadExecutesFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("print(2);"), 0o644))
 
 	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
-	_, _, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".load "+path+"\n.exit\n")
+	_, _, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, fmt.Sprintf(".load %s\n.exit\n", path))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"print(2);"}, sess.doStrings)
 }

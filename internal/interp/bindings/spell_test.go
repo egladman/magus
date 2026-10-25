@@ -79,7 +79,7 @@ func TestProjectImportFileResolver(t *testing.T) {
 	w.Write("a/magusfile.buzz", `import "magus";
 import "project/../b";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(b.file("go.mod"));
+    ctx.readsFiles([b.file("go.mod")]);
 }`)
 	w.Write("b/magusfile.buzz", `import "magus";
 export fun compile(ctx: magus\Context, args: [str]) > void {}`)

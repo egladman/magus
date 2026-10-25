@@ -2,6 +2,7 @@
 package types
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 
@@ -51,7 +52,9 @@ type ListType struct {
 	Mut  bool
 }
 
-func (l *ListType) TypeName() string { return mutPrefix(l.Mut) + "[" + l.Elem.TypeName() + "]" }
+func (l *ListType) TypeName() string {
+	return fmt.Sprintf("%s[%s]", mutPrefix(l.Mut), l.Elem.TypeName())
+}
 
 // MapType is the type {K:V}. Mut carries the `mut {K: V}` spelling; see ListType.
 //
@@ -68,7 +71,7 @@ type MapType struct {
 }
 
 func (m *MapType) TypeName() string {
-	return mutPrefix(m.Mut) + "{" + m.Key.TypeName() + ":" + m.Val.TypeName() + "}"
+	return fmt.Sprintf("%s{%s:%s}", mutPrefix(m.Mut), m.Key.TypeName(), m.Val.TypeName())
 }
 
 // mutPrefix renders the `mut ` modifier, the single spelling every renderer uses
@@ -114,7 +117,7 @@ func (f *FuncType) TypeName() string {
 	if f.Ret != nil {
 		ret = f.Ret.TypeName()
 	}
-	return "fun(" + strings.Join(ps, ",") + ")" + ret
+	return fmt.Sprintf("fun(%s)%s", strings.Join(ps, ","), ret)
 }
 
 // ObjectType is a named object type.

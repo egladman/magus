@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -371,8 +372,8 @@ func definesAlias(key string) bool {
 // the expansion out loses nothing.
 func denyInlineAlias(prog, key string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "`" + key + "` defines an inline alias that hides which " + prog + " command runs; spell that command out.",
-		Why:  "`" + key + "` on this line can define what a " + prog + " word runs, so no " + prog + " rule can read which command it is: one that discards work or pushes would pass unjudged.",
+		Deny: fmt.Sprintf("`%s` defines an inline alias that hides which %s command runs; spell that command out.", key, prog),
+		Why:  fmt.Sprintf("`%s` on this line can define what a %[2]s word runs, so no %[2]s rule can read which command it is: one that discards work or pushes would pass unjudged.", key, prog),
 		Rule: denyRule{Name: denyRuleInlineAlias, Arg: key},
 	}
 }
@@ -640,17 +641,17 @@ func mergeSideRef(args []string) string {
 
 // denyMergeSideCheckout explains why restoring a path from one side of a merge is refused.
 func denyMergeSideCheckout(ref string) string {
-	return "restoring a path from " + ref + " discards the other side and the merge computed for it; for a generated file run `" + hint.VCSResolve.String() + "`.\n" +
-		"It overwrites the path with ONE side, discarding the other side's changes and any merge already computed for that file.\n" +
-		"It reads like \"undo my edit to this file\" and is not: during a merge the working-tree " +
-		"copy IS the merge, and this replaces it wholesale.\n" +
-		"Measured here: `git checkout MERGE_HEAD -- magusfile.buzz` during a conflict resolution " +
-		"silently dropped the branch's own half of a merged feature. Nothing failed, the gate " +
-		"stayed green, and the feature could not fire until someone read the code days later.\n" +
-		"What to do instead: for a generated file, `" + hint.VCSResolve.String() + "` settles every " +
-		"conflicted one by regenerating. To take one side deliberately, say which - `git checkout " +
-		"--ours` or `--theirs` -- <path>`. To keep the merged result, it is already in the file; " +
-		"copy it aside before doing anything else."
+	return fmt.Sprintf("restoring a path from %s discards the other side and the merge computed for it; for a generated file run `%[2]s`.\n"+
+		"It overwrites the path with ONE side, discarding the other side's changes and any merge already computed for that file.\n"+
+		"It reads like \"undo my edit to this file\" and is not: during a merge the working-tree "+
+		"copy IS the merge, and this replaces it wholesale.\n"+
+		"Measured here: `git checkout MERGE_HEAD -- magusfile.buzz` during a conflict resolution "+
+		"silently dropped the branch's own half of a merged feature. Nothing failed, the gate "+
+		"stayed green, and the feature could not fire until someone read the code days later.\n"+
+		"What to do instead: for a generated file, `%[2]s` settles every "+
+		"conflicted one by regenerating. To take one side deliberately, say which - `git checkout "+
+		"--ours` or `--theirs` -- <path>`. To keep the merged result, it is already in the file; "+
+		"copy it aside before doing anything else.", ref, hint.VCSResolve.String())
 }
 
 func isWholeTreePathspec(args []string) bool {
@@ -757,7 +758,7 @@ func nonGitDeny(c hint.Invocation) (ShellVerdict, bool) {
 	// Deletes UNTRACKED files outright. No backup, no undo, and untracked is exactly
 	// where a concurrent agent's unfinished work lives.
 	case "purge", "clean":
-		return denyWholeTree(c.Name + " " + sub), true
+		return denyWholeTree(fmt.Sprintf("%s %s", c.Name, sub)), true
 	case "revert":
 		if hasAnyFlag(rest, "--all", "-a") {
 			return denyWholeTree(c.Name + " revert --all"), true
@@ -766,7 +767,7 @@ func nonGitDeny(c hint.Invocation) (ShellVerdict, bool) {
 	// with no .orig backup. sl spells the verb goto; hg accepts update, up and co.
 	case "update", "up", "goto", "co":
 		if hasAnyFlag(rest, "--clean", "-C") {
-			return denyWholeTree(c.Name + " " + sub + " --clean"), true
+			return denyWholeTree(fmt.Sprintf("%s %s --clean", c.Name, sub)), true
 		}
 	}
 	return ShellVerdict{}, false

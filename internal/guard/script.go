@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -63,7 +64,7 @@ func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) Sh
 		if lang == scriptNone {
 			lang = detectScriptLang(file, body)
 		}
-		v := judgedFrom(judgeScript(deps, lang, body), run.path, "\nJudged from the content of "+run.path+", which this line runs: a script gets the verdict its lines would get typed inline.")
+		v := judgedFrom(judgeScript(deps, lang, body), run.path, fmt.Sprintf("\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed inline.", run.path))
 		switch {
 		case v.Deny != "":
 			return v
@@ -106,7 +107,7 @@ func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict
 	if v.Deny == "" && !v.demoted || judgeScript(deps, lang, before).advisoryName() == v.advisoryName() {
 		return ShellVerdict{}
 	}
-	return judgedFrom(v, file, "\nJudged from what this write leaves in "+file+": a script gets the verdict its lines would get typed inline.")
+	return judgedFrom(v, file, fmt.Sprintf("\nJudged from what this write leaves in %s: a script gets the verdict its lines would get typed inline.", file))
 }
 
 // judgeScript is the inline verdict for a script's content, kept only when it is one of
@@ -147,7 +148,7 @@ func judgedFrom(v ShellVerdict, script, note string) ShellVerdict {
 	switch {
 	case v.Deny != "":
 		d := verdictParts(v.Deny, v.Why)
-		v.Deny = "`" + script + "`: " + d.Say
+		v.Deny = fmt.Sprintf("`%s`: %s", script, d.Say)
 		v.Why = strings.TrimPrefix(note, "\n")
 		if d.Why != "" {
 			v.Why += "\n" + d.Why

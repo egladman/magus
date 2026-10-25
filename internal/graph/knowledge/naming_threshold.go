@@ -210,7 +210,7 @@ func thresholdItemID(d *namingDecl) (string, bool) {
 }
 
 func thresholdName(k types.ConformanceKey) string {
-	return string(k.Metric) + " " + string(k.Population)
+	return fmt.Sprintf("%s %s", string(k.Metric), string(k.Population))
 }
 
 func thresholdSource(s types.ConformanceSource) string {

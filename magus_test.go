@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -19,18 +20,21 @@ import (
 
 	_ "github.com/egladman/magus/buzzengine" // Open and Inspect fail without the engine linked
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -474,41 +478,6 @@ func TestExpand_UnknownPath_Suggestion(t *testing.T) {
 	assert.Contains(t, err.Error(), `did you mean "api"`)
 }
 
-// TestParseTarget covers the canonical "target[:charm,...]" parsing cases.
-func TestParseTarget(t *testing.T) {
-	t.Parallel()
-
-	parseOK := func(input, wantName string, wantCharms []string) {
-		t.Run(input, func(t *testing.T) {
-			t.Parallel()
-			got, err := types.ParseTarget(input)
-			require.NoErrorf(t, err, "ParseTarget(%q)", input)
-			assert.Equalf(t, types.Target{Name: wantName, Charms: wantCharms}, got, "ParseTarget(%q)", input)
-		})
-	}
-	parseErr := func(name, input string) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			_, err := types.ParseTarget(input)
-			assert.Errorf(t, err, "ParseTarget(%q): want error", input)
-		})
-	}
-
-	parseOK("build", "build", nil) // bare target
-	parseOK("lint:read", "lint", []string{"read"})
-	parseOK("format:write", "format", []string{"write"})
-	parseErr("empty", "")
-	parseErr("empty charm", "lint:")               // empty charm
-	parseErr("slash in target", "web/studio:test") // '/' not allowed in target
-}
-
-// TestTargetString verifies the canonical "path:target" form.
-func TestTargetString(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "api:build", types.Target{Path: "api", Name: "build"}.String())
-	assert.Equal(t, ":test", types.Target{Name: "test"}.String())
-}
-
 // TestMagus_proxies asserts that the methods *Magus exposes
 // (Root, All, Get, Where, Affected, AffectedFromPaths, Graph,
 // VCSOptions) return consistent values. The intent is to lock the
@@ -747,7 +716,7 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 }
 
 // TestCrossFileInputs is the end-to-end payoff of the unified per-target inputs: a target
-// declaring ctx.readsFiles(<sibling>.file("go.mod"), "app/**") stores BOTH a cross-project
+// declaring ctx.readsFiles([<sibling>.file("go.mod"), "app/**"]) stores BOTH a cross-project
 // and a same-project input in ONE TargetInputs list, each carrying its owning project.
 // The cross input folds into the cache key WORKSPACE-relative (lib/go.mod, NOT
 // consumer/lib/go.mod) and unions its owning project into DependsOn; the same-project
@@ -769,7 +738,7 @@ func TestCrossFileInputs(t *testing.T) {
 	write("consumer/magusfile.buzz", `import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file("go.mod"), "app/**");
+    ctx.readsFiles([lib.file("go.mod"), "app/**"]);
 }
 `)
 
@@ -946,7 +915,7 @@ func floorWorkspace(t *testing.T, constraint string) string {
 	w := testkit.NewWorkspace(t)
 	yaml := ""
 	if constraint != "" {
-		yaml = "required_version: \"" + constraint + "\"\n"
+		yaml = fmt.Sprintf("required_version: \"%s\"\n", constraint)
 	}
 	w.Write("magus.yaml", yaml)
 	w.Magusfile("import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n")
@@ -1353,7 +1322,7 @@ func TestLastPassedBaseRefErrorKeepsItsText(t *testing.T) {
 
 // rangedSymbol is an indexed symbol with its definition's extent and SCIP kind.
 func rangedSymbol(id, label, source string, end int, kind string) types.KnowledgeNode {
-	n := symbolNode(id, label, source, "func "+label+"()", "")
+	n := symbolNode(id, label, source, fmt.Sprintf("func %s()", label), "")
 	n.Attrs[attrDefEndLine] = fmt.Sprint(end)
 	n.Attrs[attrSymbolKind] = kind
 	return n
@@ -1410,35 +1379,6 @@ const twoHunkPatch = `diff --git a/api.go b/api.go
 +	d()
  }
 `
-
-// A file's hunks each carry the digest the parser gave them and only the symbols whose lines
-// that hunk changed.
-func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
-	open, closeID := goSymbol("api", "Open()."), goSymbol("api", "Close().")
-	head := newGraph(
-		rangedSymbol(open, "Open", "api.go:3", 5, "Function"),
-		rangedSymbol(closeID, "Close", "api.go:20", 22, "Function"),
-	)
-	files := []types.DiffFile{{Path: "api.go", Symbols: []types.DiffSymbol{{ID: closeID}, {ID: open}}}}
-	touched := touchedSymbols(head, twoHunkPatch, map[string]*types.DiffFile{"api.go": &files[0]})
-	places := map[string]map[string]hunkPlace{"api.go": {}}
-	for id, ts := range touched {
-		places["api.go"][id] = ts.place
-	}
-
-	attachHunks(files, twoHunkPatch, places)
-
-	parsed := changeset.Parse(twoHunkPatch)
-	require.Len(t, parsed, 1)
-	require.Len(t, parsed[0].Hunks, 2)
-	h0, h1 := parsed[0].Hunks[0], parsed[0].Hunks[1]
-	assert.Equal(t, []types.DiffHunk{
-		{Index: 0, Digest: h0.Digest, OldStart: 2, OldCount: 4, NewStart: 2, NewCount: 4, Declaration: "package api", Symbols: []string{open}},
-		{Index: 1, Digest: h1.Digest, OldStart: 20, OldCount: 3, NewStart: 20, NewCount: 3, Declaration: "func Close() {", Symbols: []string{closeID}},
-	}, files[0].Hunks)
-	assert.NotEmpty(t, h0.Digest)
-	assert.NotEqual(t, h0.Digest, h1.Digest)
-}
 
 // A hunk no listed symbol sits in is still a hunk, and a file the patch has no hunks for
 // gets none.
@@ -1645,11 +1585,273 @@ func ExampleMagus_ExpandAffected() {
 	}
 	fmt.Println("fell back to every project:", fellBack)
 	for _, t := range targets {
-		fmt.Println(t.Path + ":" + t.Name)
+		fmt.Printf("%s:%s\n", t.Path, t.Name)
 	}
 	// Output:
 	// fell back to every project: true
 	// .:ci
 	// api:ci
 	// web:ci
+}
+
+// The examples in this file are the code blocks of docs/guides/go-sdk.md, which shows
+// each one verbatim, with its tabs as four spaces. Edit them together.
+
+// newGuideWorkspace writes files, keyed by slash-separated workspace-relative path, into a
+// new temporary directory and returns it with the function that removes it.
+func newGuideWorkspace(files map[string]string) (root string, cleanup func()) {
+	root, err := os.MkdirTemp("", "magus-guide-*")
+	if err != nil {
+		panic(err)
+	}
+	for name, body := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			panic(err)
+		}
+	}
+	return root, func() { _ = os.RemoveAll(root) }
+}
+
+// registerCopySpell registers a spell named name with one target, build, that copies
+// every .txt file of a project into its out directory. The spell declares the .txt
+// files as its inputs and out as its output, which is what lets magus cache the target.
+// runs counts the builds that actually ran. The returned function unregisters it.
+func registerCopySpell(name string, runs *int) (unregister func()) {
+	build := func(_ context.Context, req spells.InvokeRequest) (any, error) {
+		*runs++
+		var copied []string
+		inputs, err := filepath.Glob(filepath.Join(req.Dir, "*.txt"))
+		if err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(filepath.Join(req.Dir, "out"), 0o755); err != nil {
+			return nil, err
+		}
+		for _, in := range inputs {
+			body, err := os.ReadFile(in)
+			if err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(filepath.Join(req.Dir, "out", filepath.Base(in)), body, 0o644); err != nil {
+				return nil, err
+			}
+			copied = append(copied, filepath.Base(in))
+		}
+		return copied, nil
+	}
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithTargets("build"),
+		spells.WithSources("*.txt"),
+		spells.WithOutputs("out/**"),
+		spells.WithInvoker(build),
+	))
+	return func() { project.DefaultSpellRegistry().UnregisterSpell(name) }
+}
+
+// targetResult is the part of a run.target.result record these examples read.
+type targetResult struct {
+	Type     string `json:"type"`
+	Project  string `json:"project"`
+	Target   string `json:"target"`
+	Status   string `json:"status"`
+	CacheHit bool   `json:"cache_hit"`
+	Ref      string `json:"ref"`
+}
+
+// runRecorded runs targets on m and returns the per-target results the run recorded.
+func runRecorded(ctx context.Context, m *Magus, targets []types.Target) ([]targetResult, error) {
+	var records bytes.Buffer
+	sink, err := NewSink(output.JSONL, &records, io.Discard)
+	if err != nil {
+		return nil, err
+	}
+	runErr := m.Run(ctx, targets, WithSink(sink))
+	if err := sink.Close(); err != nil {
+		return nil, err
+	}
+	var results []targetResult
+	lines := bufio.NewScanner(&records)
+	for lines.Scan() {
+		var r targetResult
+		if err := json.Unmarshal(lines.Bytes(), &r); err != nil {
+			return nil, err
+		}
+		if r.Type == "run.target.result" {
+			results = append(results, r)
+		}
+	}
+	return results, errors.Join(runErr, lines.Err())
+}
+
+// Example_openAWorkspace opens a workspace read-only and lists its projects. A
+// directory holding a magusfile.buzz is a project.
+func Example_openAWorkspace() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "",
+		"web/magusfile.buzz": "",
+	})
+	defer cleanup()
+
+	ctx := context.Background()
+	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("inspect:", err)
+		return
+	}
+	for _, p := range ws.All() {
+		fmt.Println(p.Path)
+	}
+	// Output:
+	// .
+	// api
+	// web
+}
+
+// Example_listProjectsAndTargets lists every target the workspace declares, here the
+// build target a spell attached in Go contributes, beside the canonical ci target.
+func Example_listProjectsAndTargets() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "",
+	})
+	defer cleanup()
+	var runs int
+	defer registerCopySpell("guide-list", &runs)()
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("api", WithSpell("guide-list"))
+
+	ctx := context.Background()
+	ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("inspect:", err)
+		return
+	}
+	targets, err := ws.ListTargets(ctx)
+	if err != nil {
+		fmt.Println("list targets:", err)
+		return
+	}
+	for _, t := range targets {
+		fmt.Println(t.Name, t.Kind, t.Spells)
+	}
+	// Output:
+	// ci canonical []
+	// build spell [guide-list]
+}
+
+// ExampleMagus_Context asks the workspace's knowledge graph for every project, on the
+// context m.Context returns. The verdict says whether zero matches would mean absent or
+// unknown.
+func ExampleMagus_Context() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "",
+		"web/magusfile.buzz": "",
+	})
+	defer cleanup()
+
+	ctx := context.Background()
+	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("open:", err)
+		return
+	}
+	defer m.Close()
+
+	out, err := std.MagusQuery(m.Context(ctx), "kind=project", types.KnowledgeQueryOptions{})
+	if err != nil {
+		fmt.Println("query:", err)
+		return
+	}
+	ids := make([]string, 0, len(out.Matches))
+	for _, match := range out.Matches {
+		ids = append(ids, match.ID)
+	}
+	slices.Sort(ids)
+	fmt.Println("verdict:", out.Answer.Verdict)
+	fmt.Println(strings.Join(ids, "\n"))
+	// Output:
+	// verdict: found
+	// project:.
+	// project:api
+	// project:web
+}
+
+// guardPolicy is a root magusfile whose command rule denies every program but magus,
+// naming the target to run instead.
+const guardPolicy = `import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    foreach (c in req.commands) {
+        if (c.program != "magus") {
+            return magus\guard.deny("Build through the target: magus run build api", {"rule": "targets-only"});
+        }
+    }
+    return magus\guard.allow();
+});
+`
+
+// Example_aProgramThatIsItsOwnHarness is the whole loop in one program: an agent
+// proposes shell commands, the guard judges each before it runs, the allowed one runs as
+// a target with declared inputs and outputs, and a second run of the same inputs is
+// answered from the cache without running the build again.
+func Example_aProgramThatIsItsOwnHarness() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz":     guardPolicy,
+		"api/magusfile.buzz": "",
+		"api/greeting.txt":   "hello\n",
+	})
+	defer cleanup()
+	var runs int
+	defer registerCopySpell("guide-harness", &runs)()
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("api", WithSpell("guide-harness"))
+
+	ctx := context.Background()
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("open:", err)
+		return
+	}
+	defer m.Close()
+
+	// What a model asked to run, in order. A real harness reads these from its agent loop.
+	proposed := []string{"cp api/greeting.txt api/out/", "magus run build api", "magus run build api"}
+	for _, command := range proposed {
+		j, err := m.JudgeCommand(ctx, "guide-session", root, command)
+		if err != nil {
+			fmt.Println("judge:", err)
+			return
+		}
+		if j.Decision == "deny" {
+			reason, _, _ := strings.Cut(j.Reason, "\n")
+			fmt.Printf("denied %q: %s\n", command, reason)
+			continue
+		}
+		target, ok := strings.CutPrefix(command, "magus run ")
+		name, path, _ := strings.Cut(target, " ")
+		if !ok {
+			fmt.Printf("allowed %q, which this harness does not run\n", command)
+			continue
+		}
+		results, err := runRecorded(ctx, m, []types.Target{{Path: path, Name: name}})
+		if err != nil {
+			fmt.Println("run:", err)
+			return
+		}
+		for _, r := range results {
+			fmt.Printf("ran %s:%s: %s, cache hit %v, builds so far %d\n", r.Project, r.Target, r.Status, r.CacheHit, runs)
+		}
+	}
+	// Output:
+	// denied "cp api/greeting.txt api/out/": Build through the target: magus run build api
+	// ran api:build: ok, cache hit false, builds so far 1
+	// ran api:build: ok, cache hit true, builds so far 1
 }

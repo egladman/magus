@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `gha`                                                                                                                                              |
 | module     | built in | `magus query kind=module`     |                                                                                                                                                                |
 | method     | built in | `magus query kind=method`     |                                                                                                                                                                |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3032`, `MGS3018`                                                                                                                                |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3032`, `MGS3044`                                                                                                                                |
 | doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
 | dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                                                                       |
 | file       |     500+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                                                                      |
@@ -73,7 +73,7 @@ magus graph export -o json  # the whole graph
 | rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                         |
 | package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                              |
 | link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                                                             |
-| marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                                                                      |
+| marker     |        4 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:skills`                                                                                                    |
 | figure     |      20+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `The only listener a second machine can reach` |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |

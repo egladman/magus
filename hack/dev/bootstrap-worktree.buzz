@@ -11,6 +11,9 @@ import "vcs";
 
 import "assert";
 
+final SUMMARY = "place ./magus and a lease in a job's worktree";
+final SERVES = ["rule:stale-binary"];
+
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> | --build-from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script compiles magus only under --build-from\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"
@@ -172,6 +175,13 @@ export fun mainWorktree(porcelain: str) > str {
         }
     }
     return "";
+}
+
+// needsDetach is whether the recorded base diverged from the checkpoint on a tree with no
+// tracked edits, where moving onto the checkpoint loses nothing.
+export fun needsDetach(row: Row, trackedClean: bool) > bool {
+    final sameTree = row.baseVerdict == "match" or (row.baseVerdict == "revision-match" and trackedClean);
+    return row.checkpoint != "" and !sameTree and trackedClean;
 }
 
 // checkFit raises with every way the taken lease is unfit for a worker in root. A row with no
@@ -375,6 +385,9 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
         job: job,
         main: main,
         trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0,
+        detach: fun (checkpoint: str) > void !> any {
+            vcs\cmd(["switch", "--detach", checkpoint], opts: {"dir": root, "quiet": true});
+        },
     );
 }
 
@@ -392,14 +405,20 @@ export fun refreshSkills(run: fun (args: [str]) > str !> any, lease: str) > str 
 // claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
 // graph: the lease records the base, so an edit made while the graph builds lands after it.
 // run executes a magus subcommand and returns its output.
-export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: str, main: str, trackedClean: fun () > bool !> any) > Row !> any {
+export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: str, main: str, trackedClean: fun () > bool !> any, detach: fun (checkpoint: str) > void !> any) > Row !> any {
     final took = run(["job", "exec", job]);
     foreach (line in took.split("\n")) {
         if (line.trim() != "") {
             std\print("  {line.trim()}");
         }
     }
-    final row = parseRow(run(["describe", "job", job, "-o", "json"]));
+    var row = parseRow(run(["describe", "job", job, "-o", "json"]));
+    if (needsDetach(row, trackedClean: trackedClean())) {
+        detach(row.checkpoint);
+        std\print("detached onto the checkpoint {row.checkpoint}; the base had diverged and the tracked files were clean");
+        run(["job", "exec", job]);
+        row = parseRow(run(["describe", "job", job, "-o", "json"]));
+    }
     try {
         checkFit(row, root: root, main: main, trackedClean: trackedClean());
     } catch (e: str) {
@@ -590,8 +609,62 @@ test "the lease is taken before the graph is built" {
         job: "agent-scripts",
         main: "/work/magus",
         trackedClean: fun () > bool !> any => true,
+        detach: fun (checkpoint: str) > void !> any {
+            ran.append("detach " + checkpoint);
+        },
     );
     assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
+}
+
+test "a diverged clean worktree is detached onto the checkpoint and the lease retaken" {
+    final diverged = fs\readFile("hack/testdata/bootstrap-diverged.json");
+    final matched = fs\readFile("hack/testdata/bootstrap-match.json");
+    final ran = mut [<str>];
+    var described = 0;
+    final row = claimThenIndex(
+        fun (args: [str]) > str !> any {
+            ran.append(args.join(" "));
+            if (args[0] == "describe") {
+                described += 1;
+                return if (described == 1) diverged else matched;
+            }
+            return "";
+        },
+        root: WT,
+        job: "agent-scripts",
+        main: MAIN,
+        trackedClean: fun () > bool !> any => true,
+        detach: fun (checkpoint: str) > void !> any {
+            ran.append("detach " + checkpoint);
+        },
+    );
+    assert\equal(row.baseVerdict, want: "match", message: "row read after the retake");
+    assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|detach 7472f16fc709ab3827cd38ff281fecc0a217ca88|job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
+}
+
+test "a diverged worktree with tracked edits is still refused and not detached" {
+    final diverged = fs\readFile("hack/testdata/bootstrap-diverged.json");
+    final ran = mut [<str>];
+    var said = "";
+    try {
+        claimThenIndex(
+            fun (args: [str]) > str !> any {
+                ran.append(args.join(" "));
+                return if (args[0] == "describe") diverged else "";
+            },
+            root: WT,
+            job: "agent-scripts",
+            main: MAIN,
+            trackedClean: fun () > bool !> any => false,
+            detach: fun (checkpoint: str) > void !> any {
+                ran.append("detach " + checkpoint);
+            },
+        );
+    } catch (e: str) {
+        said = e;
+    }
+    assert\equal(said.indexOf("verdict diverged") != null, want: true, message: said);
+    assert\equal(ran.indexOf("detach 7472f16fc709ab3827cd38ff281fecc0a217ca88"), want: null, message: "no detach");
 }
 
 test "an ended job is refused" {

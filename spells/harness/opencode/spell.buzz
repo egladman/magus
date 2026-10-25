@@ -33,7 +33,8 @@ export fun mgs_listHooks() > [HookCommand] {
 }
 
 // Every OpenCode tool the guard should know, written by `magus agent harness install` to
-// the directory the plugin names to `magus shell --tool-rows`. A tool missing here is one
+// a directory beside a host file naming opencode, where `magus shell --agent-name opencode`
+// finds them. A tool missing here is one
 // the guard cannot judge (unjudged-tool).
 export fun mgs_listTools() > HarnessTools {
     final rows = mut [HarnessTool{name = "bash", capability = ToolCapability.runs}];

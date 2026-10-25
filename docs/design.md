@@ -80,6 +80,7 @@ automates a decision and when it hands the decision to you.
 - [Every answer has an address](design/principles/every-answer-has-an-address.md): A run's output ref is derived from the hash of everything it declared, the way a Nix store path is; the same inputs name the same run on any machine.
 - [No news is good news](design/principles/no-news-is-good-news.md): A passing run says almost nothing; output is spent on what failed, what changed and what to do next, because every line costs a reader's attention and an agent's context.
 - [Enforcement, not pinky promises](design/principles/enforcement-not-pinky-promises.md): A rule written only as prose in an agent's context is a pinky promise; each rule lives at the lowest layer that can enforce it, and skills teach rather than guard.
+- [The harness belongs in the task runner](design/principles/the-harness-sits-on-the-tool-layer.md): Loosen the reins at the right layers; magus builds the harness on the task runner's record of declared inputs and outputs, and the CLI, the harness and the Go SDK all read that one record.
 
 ### Judgment
 

@@ -1,6 +1,7 @@
 package race
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -192,7 +193,7 @@ func TestDetect_MaxFindings(t *testing.T) {
 	var evs []fsEvent
 	allowed := make(map[string]bool, maxFindings+10)
 	for i := 0; i < maxFindings+10; i++ {
-		p := "/ws/file" + string(rune('a'+i%26)) + string(rune('A'+i/26))
+		p := fmt.Sprintf("/ws/file%c%c", 'a'+i%26, 'A'+i/26)
 		evs = append(evs, fsEvent{Path: p, ObservedAt: now.Add(time.Second)})
 		allowed[p] = true
 		// Set both projects as confirmed writers for each path.

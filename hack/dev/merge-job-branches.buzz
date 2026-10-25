@@ -958,11 +958,14 @@ final FIXTURE_MAGUSFILE = `import "magus";
 import "fs";
 import "sort";
 
+final SUMMARY = "merge job branches, settling generated conflicts";
+final SERVES = ["replaces:git merge", "replaces:git cherry-pick"];
+
 magus\project({});
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("src/*.txt");
-    ctx.writesFiles("gen/list.txt");
+    ctx.readsFiles(["src/*.txt"]);
+    ctx.writesFiles(["gen/list.txt"]);
     final names = mut [<str>];
     foreach (n in fs\listDir("src")) { names.append(n); }
     fs\mkdirAll("gen");

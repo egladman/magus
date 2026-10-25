@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -309,7 +310,7 @@ func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
 		{"a target off the check", "./magus run lint .", true},
 	} {
 		worker := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
-		_, _, briefRefused := briefOffCheck(briefRuns("Run `"+tt.command+"`."), judge)
+		_, _, briefRefused := briefOffCheck(briefRuns(fmt.Sprintf("Run `%s`.", tt.command)), judge)
 		assert.Equal(t, tt.refused, worker.refused(), "%s: the worker", tt.name)
 		assert.Equal(t, tt.refused, briefRefused, "%s: the brief", tt.name)
 	}

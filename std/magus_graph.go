@@ -305,7 +305,8 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 	if freshErr != nil {
 		for i := range indexes {
 			if idx := &indexes[i]; idx.Freshness != types.SymbolIndexFresh {
-				idx.Detail = strings.TrimSpace(idx.Detail + "\n" + freshErr.Error())
+				idx.Detail = strings.TrimSpace(fmt.Sprintf(`%s
+%s`, idx.Detail, freshErr.Error()))
 			}
 		}
 	}

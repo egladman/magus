@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -165,7 +166,7 @@ func TestInitWritesNoKeys(t *testing.T) {
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.Equal(t, initHeader+"# written by "+olderWriter.String()+"\n", string(data))
+	assert.Equal(t, fmt.Sprintf("%s# written by %s\n", initHeader, olderWriter.String()), string(data))
 	var keys map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &keys))
 	assert.Empty(t, keys)
@@ -179,7 +180,7 @@ func TestInitWritesNoKeys(t *testing.T) {
 // magus wrote it.
 func TestInitLeavesAnExistingConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
-	mine := "# written by " + newerWriter.String() + "\nlog:\n  format: json\n"
+	mine := fmt.Sprintf("# written by %s\nlog:\n  format: json\n", newerWriter.String())
 	require.NoError(t, os.WriteFile(path, []byte(mine), 0o644))
 
 	wrote, err := Init(stamp.Judge{Self: olderWriter}, path, false)
@@ -201,7 +202,7 @@ func TestInitLeavesAnExistingConfig(t *testing.T) {
 // an older or unstamped magus wrote.
 func TestSaveRefusesANewerWriter(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
-	newer := "# written by " + newerWriter.String() + "\nlog:\n  format: json\n"
+	newer := fmt.Sprintf("# written by %s\nlog:\n  format: json\n", newerWriter.String())
 	require.NoError(t, os.WriteFile(path, []byte(newer), 0o644))
 
 	err := Save(stamp.Judge{Self: olderWriter}, path, "log.format", "text")
@@ -212,10 +213,10 @@ func TestSaveRefusesANewerWriter(t *testing.T) {
 	assert.Contains(t, err.Error(), "v0.4.3")
 	assertFileText(t, path, newer)
 
-	for _, prior := range []string{"# written by " + olderWriter.String() + "\n", ""} {
+	for _, prior := range []string{fmt.Sprintf("# written by %s\n", olderWriter.String()), ""} {
 		require.NoError(t, os.WriteFile(path, []byte(prior+"log:\n  format: json\n"), 0o644))
 		require.NoError(t, Save(stamp.Judge{Self: newerWriter}, path, "log.format", "text"))
-		assertFileText(t, path, "# written by "+newerWriter.String()+"\nlog:\n  format: text\n")
+		assertFileText(t, path, fmt.Sprintf("# written by %s\nlog:\n  format: text\n", newerWriter.String()))
 	}
 }
 

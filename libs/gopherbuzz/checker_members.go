@@ -151,7 +151,7 @@ func qualifiedName(n ast.Node) string {
 	case *ast.IdentExpr:
 		return v.Name
 	case *ast.MemberExpr:
-		return qualifiedName(v.Object) + `\` + v.Name
+		return fmt.Sprintf(`%s\%s`, qualifiedName(v.Object), v.Name)
 	}
 	return ""
 }

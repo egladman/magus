@@ -166,3 +166,79 @@ func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
 	}
 	assert.False(t, merge("git merge --no-ff done-a", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
+
+func TestWorkerVCSMovesRefs(t *testing.T) {
+	for line, want := range map[string]bool{
+		"git switch -c topic":        true,
+		"git switch main":            true,
+		"git -C ../x checkout topic": true,
+		"git checkout -- a.go":       true,
+		"git branch topic":           true,
+		"git branch -f topic HEAD~1": true,
+		"git restore a.go":           true,
+		"git stash":                  true,
+		"git add -A":                 true,
+		"git rm a.go":                true,
+		"git mv a.go b.go":           true,
+		"hg update tip":              true,
+		"hg bookmark topic":          true,
+		"hg add a.go":                true,
+		"sl goto main":               true,
+		"jj new main":                true,
+		"jj edit abc":                true,
+		"jj bookmark create topic":   true,
+		"git branch":                 false,
+		"git branch --list 'job-*'":  false,
+		"git branch -a":              false,
+		"git branch --show-current":  false,
+		"git status":                 false,
+		"git log --oneline":          false,
+		"git diff --cached":          false,
+		"git commit -m done":         false,
+		"git merge --no-ff topic":    false,
+		"hg bookmarks":               false,
+		"hg log":                     false,
+		"jj log":                     false,
+		"jj bookmark list":           false,
+		"ls -la":                     false,
+	} {
+		cmds, ok := ParseCommands(line)
+		require.True(t, ok, line)
+		require.Len(t, cmds, 1, line)
+		assert.Equal(t, want, workerVCSMovesRefs(cmds[0]), line)
+	}
+}
+
+func TestIntegrationMergeInALoop(t *testing.T) {
+	worker := narrowLease()
+	worker.Parent = "harness"
+	worker.Integrates = []string{"done-a", "done-b"}
+	ctx, _ := fleetFixture(t, worker)
+
+	for _, command := range []string{
+		"git merge --no-ff --no-edit done-a",
+		`for b in done-a done-b; do git merge --no-ff --no-edit "$b"; done`,
+		`for b in done-b; do git merge --no-ff --no-edit $b; done`,
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
+	}
+
+	for _, command := range []string{
+		`for b in done-a other; do git merge --no-ff --no-edit "$b"; done`,
+		`for b in $(git branch --list 'done-*'); do git merge --no-ff --no-edit "$b"; done`,
+		`for b in done-*; do git merge --no-ff --no-edit "$b"; done`,
+		`git merge --no-ff --no-edit "$b"`,
+	} {
+		assert.NotEmpty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
+	}
+}
+
+func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
+	row := types.Job{ID: "integrate", Integrates: []string{"done-a"}}
+	got := map[string]bool{}
+	for _, operand := range []string{"done-a", "other"} {
+		got[operand] = mergesBase(operand, "", row)
+	}
+	assert.Equal(t, map[string]bool{"done-a": true, "other": false}, got)
+	assert.False(t, mergesBase("done-a", "", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
+}

@@ -287,7 +287,7 @@ workspace the day someone deletes its one positive pattern, and reading it as
 nothing would quietly run no target at all.
 
 `!` means the same thing wherever magus reads a pattern list: in `ctx.glob`, and in
-the file globs `ctx.readsFiles`, `ctx.writesFiles`, `ctx.modifiesExistingFiles` and a
+the file globs `ctx.readsFiles` and `ctx.writesFiles` (either mode) and a
 project's `sources` and `outputs` take (see [per-target inputs and outputs](cache.md#per-target-inputs-and-outputs)). It subtracts from the
 other patterns of the same call, in any order, and never from another call's; a
 call of nothing but negations is an error.

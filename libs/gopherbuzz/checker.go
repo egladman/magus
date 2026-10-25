@@ -475,7 +475,7 @@ func (c *checker) errorfc(p ast.Pos, code diagnostics.Code, format string, args 
 func (c *checker) unimportedNamespace(p ast.Pos, ns, what string) {
 	c.errors = append(c.errors, typeError{
 		Line: p.Line, Col: p.Col, Code: UnimportedNamespace, namespace: ns,
-		Msg: what + ": no import binds " + ns + " in this module",
+		Msg: fmt.Sprintf("%s: no import binds %s in this module", what, ns),
 	})
 }
 
@@ -2209,7 +2209,7 @@ func hasDefault(ft *types.FuncType) bool {
 
 func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	if id, ok := v.Object.(*ast.IdentExpr); ok && v.Namespaced && !c.private[id.Name] && c.unboundQualifier(id.Name) {
-		c.unimportedNamespace(id.Pos, id.Name, "undefined: "+id.Name+`\`+v.Name)
+		c.unimportedNamespace(id.Pos, id.Name, fmt.Sprintf("undefined: %s\\%s", id.Name, v.Name))
 		return types.Unknown
 	}
 	ot := c.infer(v.Object)
@@ -2560,7 +2560,7 @@ func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 
 func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 	if c.unboundQualifier(v.Namespace) {
-		c.unimportedNamespace(v.Pos, v.Namespace, `undefined type "`+v.Namespace+`\`+v.TypeName+`"`)
+		c.unimportedNamespace(v.Pos, v.Namespace, fmt.Sprintf(`undefined type "%s\%s"`, v.Namespace, v.TypeName))
 		return types.Unknown
 	}
 	resolved, ok := c.namedType(v.TypeName)
@@ -2624,9 +2624,9 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 func canonicalTypeName(t types.Type) string {
 	switch v := t.(type) {
 	case *types.ListType:
-		return mutSpelling(v.Mut) + "[" + canonicalTypeName(v.Elem) + "]"
+		return fmt.Sprintf("%s[%s]", mutSpelling(v.Mut), canonicalTypeName(v.Elem))
 	case *types.MapType:
-		return mutSpelling(v.Mut) + "{" + canonicalTypeName(v.Key) + ": " + canonicalTypeName(v.Val) + "}"
+		return fmt.Sprintf("%s{%s: %s}", mutSpelling(v.Mut), canonicalTypeName(v.Key), canonicalTypeName(v.Val))
 	case nil:
 		return "any"
 	}

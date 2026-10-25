@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"cmp"
+	"fmt"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -84,7 +86,7 @@ func denyArchitectureWithoutSkill(facts, skills hint.Gate, observesSkillLoads bo
 	const carries = "The knowledge graph answers imports, cycles, layering and coupling from the workspace's own edges; reading files does not."
 	if newDir != "" {
 		return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
-			"creating the new directory `"+newDir+"`", carries)
+			fmt.Sprintf("creating the new directory `%s`", newDir), carries)
 	}
 	if !facts.AlreadyFired(topicArchitecture) {
 		return ""
@@ -108,10 +110,10 @@ var noSkillAgents = sync.OnceValue(func() map[string]bool {
 })
 
 // loadsSkills reports whether the calling agent can load a skill. A root session and an
-// agent of a type magus does not know can; an agent spawned as a shipped read-only type
-// cannot.
+// agent of a type magus does not know can; an agent of a shipped read-only type cannot,
+// whether its own call names the type or its recorded spawn does.
 func (d Dependencies) loadsSkills() bool {
-	return !noSkillAgents()[spawnedAgentType(d.facts, d.caller.Agent)]
+	return !noSkillAgents()[cmp.Or(d.callerType, spawnedAgentType(d.facts, d.caller.Agent))]
 }
 
 // structureProbe reports whether a shell line searches, reads or lists the workspace's own

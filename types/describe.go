@@ -2,6 +2,7 @@ package types
 
 import (
 	"cmp"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -223,7 +224,7 @@ type TargetGraphNode struct {
 	Chain []ChainStep `json:"chain,omitempty" yaml:"chain,omitempty"`
 	// ReadsFiles are the per-target file inputs the body declares via ctx.readsFiles(...),
 	// captured statically in ONE representation where each entry carries its owning
-	// project (InputRef). A bare-literal glob (ctx.readsFiles("glob")) is a same-project
+	// project (InputRef). A bare-literal glob (ctx.readsFiles(["glob"])) is a same-project
 	// input whose owning project is the target's own project; a ctx.readsFiles(<alias>.
 	// file("lit")) entry is a cross-project input whose owning project is the imported
 	// one. When present, inputs define the target's file cache footprint rather than
@@ -263,7 +264,7 @@ type TargetGraphNode struct {
 	// (empty means this target's own). When present, they define the target's
 	// snapshot/replay set instead of inheriting project-wide and spell outputs.
 	WritesFiles []OutputRef `json:"writes_files,omitempty" yaml:"writes_files,omitempty"`
-	// ModifiesExistingFiles are the per-target ctx.modifiesExistingFiles(...) refs: existing files the target edits in place
+	// ModifiesExistingFiles are the per-target ctx.writesFiles([...], editsExistingSource: true) refs: existing files the target edits in place
 	// rather than produces. Deliberately NOT unioned into the snapshot/replay set; see
 	// UpdateRef for why magus must neither delete nor restore one.
 	//
@@ -294,7 +295,7 @@ type TargetGraphNode struct {
 	// changes nothing about HOW the target runs, only what its answer is a function of.
 	// magus never interprets the value: it stores it, and a change is a miss.
 	Observations []string `json:"observations,omitempty" yaml:"observations,omitempty"`
-	// DynamicIO is set when a ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes call carries a
+	// DynamicIO is set when a ctx.readsFiles/writesFiles/envInputs/observes call carries a
 	// non-literal argument. A computed glob is invisible to this static read, so the load
 	// path rejects it loudly rather than silently caching an under-declared footprint.
 	// Not serialized: it is a load-time validation signal, not part of the graph.
@@ -305,7 +306,7 @@ type TargetGraphNode struct {
 	// only records that ExecOverrides is an incomplete view of what the target will run
 	// with. Not serialized, same as DynamicIO.
 	DynamicExec bool `json:"-" yaml:"-" buzz:"-"`
-	// FootprintErr is a ctx.readsFiles/writesFiles/modifiesExistingFiles call the static
+	// FootprintErr is a ctx.readsFiles/writesFiles call the static
 	// read refused (see ParseGlobs), naming the call. The load path rejects it the way it
 	// rejects DynamicIO. Not serialized, same as DynamicIO.
 	FootprintErr error `json:"-" yaml:"-" buzz:"-"`
@@ -321,7 +322,7 @@ type TargetRef struct {
 
 // Ref spells the reference the way the CLI takes a target ref, "project:target".
 func (r TargetRef) Ref() string {
-	return r.Project + ":" + r.Target
+	return fmt.Sprintf("%s:%s", r.Project, r.Target)
 }
 
 // Compare orders refs by project, then target.
@@ -342,7 +343,7 @@ type CrossTargetRef struct {
 // it the same way. Project is never empty on this type (a cross-project ref names
 // another project by definition), so there is no bare-name form.
 func (r CrossTargetRef) Ref() string {
-	return r.Project + ":" + r.Target
+	return fmt.Sprintf("%s:%s", r.Project, r.Target)
 }
 
 // ChainStep is one target a composed target invokes, in source order. Project is empty
@@ -361,6 +362,15 @@ type ChainStep struct {
 	// one by the body itself; that is the only within-step sequencing there is, and the
 	// order derivation reads it from here. Zero for the first call, the common case.
 	CallIndex int `json:"callIndex,omitzero" yaml:"callIndex,omitempty"`
+	// WhenArgs: true runs the step only with args after `--`, false only without, read from
+	// an `if (args.len() == 0)`, `> 0` or `!= 0` arm. Nil runs it either way; a static read
+	// evaluates no other condition.
+	WhenArgs *bool `json:"whenArgs,omitempty" yaml:"whenArgs,omitempty"`
+}
+
+// Runs reports whether the step runs for an invocation given args.
+func (s ChainStep) Runs(args []string) bool {
+	return s.WhenArgs == nil || *s.WhenArgs == (len(args) > 0)
 }
 
 // Ref spells the step the way the CLI takes a target ref: "target" for a same-project
@@ -369,7 +379,7 @@ func (s ChainStep) Ref() string {
 	if s.Project == "" {
 		return s.Target
 	}
-	return s.Project + ":" + s.Target
+	return fmt.Sprintf("%s:%s", s.Project, s.Target)
 }
 
 // Chain is a target's ctx.needs chain built the way its body reads: Needs("generate",
@@ -412,7 +422,7 @@ func (c Chain) String() string {
 // that carries the owning project for both a same-project glob and a cross-project file,
 // maximally explicit: a local input's project is itself. Project is the owning
 // project's path; Glob is the doublestar glob (or exact file) relative to that root. For a
-// same-project input (ctx.readsFiles("glob")) Project is empty at extraction, meaning "this
+// same-project input (ctx.readsFiles(["glob"])) Project is empty at extraction, meaning "this
 // target's own project", and is filled to the project's path when resolved. For a
 // cross-project input (ctx.readsFiles(<alias>.file("rel"))) Project names the imported
 // project (dot-/repo-relative as written in the magusfile until resolved to
@@ -454,7 +464,7 @@ func rootRef(owner, projectPath, glob string, except []string) Glob {
 
 // OutputRef names one file output a target declares via ctx.writesFiles, in the same shape
 // as InputRef: Project is the OWNING project (the tree written into) and Glob is relative
-// to that root. For a same-project output (ctx.writesFiles("glob")) Project is empty at
+// to that root. For a same-project output (ctx.writesFiles(["glob"])) Project is empty at
 // extraction and filled to the project's own path when resolved.
 //
 // A separate type from InputRef despite the identical shape, because the dependency edge
@@ -474,7 +484,7 @@ func (r OutputRef) Rooted(projectPath string) Glob {
 }
 
 // UpdateRef names one EXISTING file a target edits in place rather than produces, declared via
-// ctx.modifiesExistingFiles. Same shape as OutputRef, and a third type for the same reason OutputRef
+// ctx.writesFiles(..., editsExistingSource: true). Same shape as OutputRef, and a third type for the same reason OutputRef
 // is not InputRef: what magus is allowed to DO with the file differs, and sharing a
 // type would let a caller pass one where the other belongs.
 //
@@ -865,7 +875,7 @@ type FileEntry struct {
 	// splitting work across agents.
 	//
 	// The set is wider than Role ranks: it also carries the in-place edits of
-	// ctx.modifiesExistingFiles ("update"), which is a write nobody replays or
+	// ctx.writesFiles(..., editsExistingSource: true) ("update"), which is a write nobody replays or
 	// cleans, so Role deliberately leaves such a file reading as its source or
 	// unclaimed self.
 	Claims []FileClaim `json:"claims,omitempty" yaml:"claims,omitempty"`
@@ -927,7 +937,7 @@ type FileClaim struct {
 	Target string `json:"target,omitempty" yaml:"target,omitempty"`
 	// Role is "output" (ctx.writesFiles or a project/spell output glob), "source"
 	// (ctx.readsFiles or a project/spell source glob), or "update"
-	// (ctx.modifiesExistingFiles). The first two are also FileEntry.Role values;
+	// (ctx.writesFiles(..., editsExistingSource: true)). The first two are also FileEntry.Role values;
 	// "update" has no FileEntry.Role counterpart; see FileEntry.Claims.
 	Role string `json:"role" yaml:"role"`
 	Glob string `json:"glob" yaml:"glob"`

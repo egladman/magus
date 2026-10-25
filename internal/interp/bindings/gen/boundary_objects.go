@@ -391,6 +391,12 @@ func ObjectKnowledgeTextPresence(v types.KnowledgeTextPresence) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("hits", vm.IntValue(int64(v.Hits)))
 	out.MapSet("files", vm.IntValue(int64(v.Files)))
+	itemsSites := make([]vm.Value, len(v.Sites))
+	for indexSites := range v.Sites {
+		itemsSites[indexSites] = vm.StrValue(v.Sites[indexSites])
+	}
+	out.MapSet("sites", vm.ListValue(itemsSites))
+	out.MapSet("more", vm.IntValue(int64(v.More)))
 	return out
 }
 
@@ -523,6 +529,7 @@ func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
 	out.MapSet("measure", vm.IntValue(int64(v.Measure)))
 	out.MapSet("home", vm.StrValue(v.Home))
 	out.MapSet("unshared", vm.BoolValue(v.Unshared))
+	out.MapSet("rename", vm.StrValue(v.Rename))
 	return out
 }
 
@@ -2821,6 +2828,11 @@ func ObjectChainStep(v types.ChainStep) vm.Value {
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("target", vm.StrValue(v.Target))
 	out.MapSet("callIndex", vm.IntValue(int64(v.CallIndex)))
+	optWhenArgs := vm.Null
+	if v.WhenArgs != nil {
+		optWhenArgs = vm.BoolValue((*v.WhenArgs))
+	}
+	out.MapSet("whenArgs", optWhenArgs)
 	return out
 }
 
@@ -3445,6 +3457,8 @@ func ObjectJobRelease(v types.JobRelease) vm.Value {
 	out.MapSet("digest", vm.StrValue(v.Digest))
 	out.MapSet("releasedAt", vm.IntValue(int64(v.ReleasedAt)))
 	out.MapSet("revoked", vm.BoolValue(v.Revoked))
+	out.MapSet("takenBy", vm.StrValue(v.TakenBy))
+	out.MapSet("deadBecause", vm.StrValue(v.DeadBecause))
 	return out
 }
 
@@ -3505,6 +3519,7 @@ func ObjectLeaseCheck(v types.LeaseCheck) vm.Value {
 	}
 	out.MapSet("args", vm.ListValue(itemsArgs))
 	out.MapSet("noDefaultCharms", vm.BoolValue(v.NoDefaultCharms))
+	out.MapSet("test", vm.BoolValue(v.Test))
 	return out
 }
 
@@ -3538,6 +3553,7 @@ func ObjectGateEvidence(v types.GateEvidence) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("gateID", vm.StrValue(v.GateID))
 	out.MapSet("outputRef", vm.StrValue(v.OutputRef))
+	out.MapSet("owed", vm.StrValue(v.Owed))
 	return out
 }
 
@@ -3545,6 +3561,7 @@ func ObjectJobResultValidation(v types.JobResultValidation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("command", vm.StrValue(v.Command))
 	out.MapSet("outputRef", vm.StrValue(v.OutputRef))
+	out.MapSet("owed", vm.StrValue(v.Owed))
 	return out
 }
 
@@ -3617,6 +3634,8 @@ func ObjectGateStatus(v types.GateStatus) vm.Value {
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("verified", vm.BoolValue(v.Verified))
 	out.MapSet("outputRef", vm.StrValue(v.OutputRef))
+	out.MapSet("scope", vm.StrValue(v.Scope))
+	out.MapSet("owed", vm.StrValue(v.Owed))
 	itemsViolations := make([]vm.Value, len(v.Violations))
 	for indexViolations := range v.Violations {
 		itemsViolations[indexViolations] = vm.StrValue(v.Violations[indexViolations])
@@ -3820,7 +3839,7 @@ func ObjectJobRejection(v types.JobRejection) vm.Value {
 	return out
 }
 
-func ObjectJobWaiver(v types.JobWaiver) vm.Value {
+func ObjectDeviation(v types.Deviation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("code", vm.StrValue(string(v.Code)))
 	out.MapSet("subject", vm.StrValue(v.Subject))
@@ -3913,6 +3932,9 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("maxClaims", vm.IntValue(int64(v.MaxClaims)))
 	out.MapSet("weight", vm.FloatValue(float64(v.Weight)))
 	out.MapSet("paused", vm.IntValue(int64(v.Paused)))
+	out.MapSet("pausedBy", ObjectOrigin(v.PausedBy))
+	out.MapSet("pauseReason", vm.StrValue(v.PauseReason))
+	out.MapSet("pausedUntil", vm.IntValue(int64(v.PausedUntil)))
 	out.MapSet("attempts", vm.IntValue(int64(v.Attempts)))
 	itemsPrior := make([]vm.Value, len(v.Prior))
 	for indexPrior := range v.Prior {
@@ -3954,11 +3976,11 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("entries", vm.ListValue(itemsEntries))
 	out.MapSet("writeProof", vm.StrValue(string(v.WriteProof)))
-	itemsWaivers := make([]vm.Value, len(v.Waivers))
-	for indexWaivers := range v.Waivers {
-		itemsWaivers[indexWaivers] = ObjectJobWaiver(v.Waivers[indexWaivers])
+	itemsDeviations := make([]vm.Value, len(v.Deviations))
+	for indexDeviations := range v.Deviations {
+		itemsDeviations[indexDeviations] = ObjectDeviation(v.Deviations[indexDeviations])
 	}
-	out.MapSet("waivers", vm.ListValue(itemsWaivers))
+	out.MapSet("deviations", vm.ListValue(itemsDeviations))
 	out.MapSet("validated", vm.IntValue(int64(v.Validated)))
 	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
@@ -5193,5 +5215,7 @@ func ObjectLimits(v types.Limits) vm.Value {
 	out.MapSet("foregroundDefaultMs", vm.IntValue(int64(v.ForegroundDefaultMs)))
 	out.MapSet("foregroundMaxMs", vm.IntValue(int64(v.ForegroundMaxMs)))
 	out.MapSet("hookTimeoutMs", vm.IntValue(int64(v.HookTimeoutMs)))
+	out.MapSet("resumesOnBackgroundFrom", vm.StrValue(v.ResumesOnBackgroundFrom))
+	out.MapSet("observesSkillLoads", vm.BoolValue(v.ObservesSkillLoads))
 	return out
 }

@@ -36,17 +36,17 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("MAGUS.md");
-    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
-                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                    "../../internal/render/md/md.go", "../../internal/hint/cli_command.go"]);
     index\render("libs/gopherbuzz");
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     // readsFiles replaces the project baseline, so the next two lines must name every
     // input. The markdown glob mirrors dprint.json `includes`; keep the two in step.
-    ctx.readsFiles("dprint.json");
-    ctx.modifiesExistingFiles("**/*.md", "**/*.go", "go.mod", "go.sum");
+    ctx.readsFiles(["dprint.json"]);
+    ctx.writesFiles(["**/*.md", "**/*.go", "go.mod", "go.sum"], editsExistingSource: true);
     ctx.needs(generate);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
@@ -63,7 +63,7 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); 
 // Runs the suite under the default tags, then again under buzz_safe.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // Declared so a cache hit leaves the profile the root's coverage badge merges.
-    ctx.writesFiles("coverage.out");
+    ctx.writesFiles(["coverage.out"]);
     go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
     proc\exec("go", ["test", "-tags", "buzz_safe", "./..."]);
 }
@@ -73,9 +73,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // compile, and without -bench no benchmark runs.
 export fun buzzbench_test(ctx: magus\Context, args: [str]) > void {
     // The module replaces gopherbuzz and diagnostics with their checkouts, so both feed the key.
-    ctx.readsFiles("**/*.go", "go.mod", "go.sum",
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum",
         "benchmarks/comparison/go.mod", "benchmarks/comparison/go.sum",
-        "../diagnostics/**/*.go", "../diagnostics/go.mod");
+        "../diagnostics/**/*.go", "../diagnostics/go.mod"]);
     go["go-test"](ctx.withCwd("benchmarks/comparison"));
 }
 
@@ -87,7 +87,7 @@ export fun fuzz(ctx: magus\Context, args: [str]) > void !> any {
         throw "fuzz: unexpected arguments {args.join(" ")}; the only flag is --fuzztime <duration>";
     }
     // A crasher lands as a new file here.
-    ctx.writesFiles("token/testdata/fuzz/**");
+    ctx.writesFiles(["token/testdata/fuzz/**"]);
     go["go-fuzz"](ctx, {"args": ["-fuzz", "FuzzTokenize", "-fuzztime", parsed.values["--fuzztime"] ?? "30s", "./token"]});
 }
 

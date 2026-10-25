@@ -14,13 +14,20 @@ import (
 // gradeClaimOutside grades a write to rel outside lease me's write paths: when
 // [job.DecideAutoClaim] allows, it records the claim as `magus job apply` does and passes
 // the write with a line naming it; otherwise the lease-claim refusal when that line would
-// apply, or no opinion. stop names what kept magus from claiming rel. rows are every job.
-func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, checkout string, me types.Job, rows []types.Job, rel string) (g writeGrade, stop string) {
+// apply, or no opinion. stop names what kept magus from claiming rel. rows are every job,
+// and dead the live ones holding rel whose holder [deadHolder] judged dead.
+func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, checkout string, me types.Job, rows []types.Job, dead []job.DeadHolder, rel string) (g writeGrade, stop string) {
+	// Observing the claim facts diffs the whole checkout against the checkpoint. An
+	// integration row's diff is every merged branch, which took the write judgment past
+	// its deadline on each write, and no edge from a merge's diff proves a claim.
+	if me.Integrating() {
+		return writeGrade{}, fmt.Sprintf("%s integrates %d branches, so a diff since its checkpoint proves no claim", me.ID, len(me.Integrates))
+	}
 	var projects []*types.Project
 	if repo, err := deps.inspect(ctx, checkout); err == nil && repo != nil {
 		projects = repo.All()
 	}
-	facts := job.ObserveClaim(ctx, checkout, me, []string{rel}, projects)
+	facts := job.ObserveClaim(ctx, checkout, me, []string{rel}, projects).WithDeadHolders(dead)
 	d := job.DecideAutoClaim(me, rel, facts, rows, projects, deps.fileFanIn)
 	switch {
 	case d.Stop == "":
@@ -49,7 +56,7 @@ func withStop(g writeGrade, stop string) writeGrade {
 		return g
 	}
 	say, why, _ := strings.Cut(g.Reason, "\n")
-	g.Reason = denial{Say: say + " magus did not claim it on its own: " + stop + ".", Why: why}.full()
+	g.Reason = denial{Say: fmt.Sprintf("%s magus did not claim it on its own: %s.", say, stop), Why: why}.full()
 	return g
 }
 

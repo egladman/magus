@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -497,7 +498,7 @@ func TestACallersRecordIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	main, worktree := t.TempDir(), t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"),
-		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "w")+"\n"), 0o644))
+		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(main, ".git", "worktrees", "w"))), 0o644))
 	spawner := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(main, ".magus"), Root: main})
 	worker := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
 	child := Caller{Host: "claude-code", Session: "s1", Agent: "a1b2c3"}
@@ -771,4 +772,41 @@ func TestUnintegratedBranchesSkipsWorkTheBaseHolds(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}}, got,
 		"a squash-merged branch, a branch an integration job names whatever its state, and a passed integration job's own branch are integrated")
+}
+
+func TestIntegrationAdviceCountsOnlyTheForkersOwnTree(t *testing.T) {
+	t.Parallel()
+	s, loc, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	peerRoot := execRepo(t).Root()
+	peer := NewStore(Location{StateBase: loc.StateBase, CacheDir: loc.CacheDir, Root: peerRoot})
+	for _, name := range []string{"mine-a", "mine-b", "peer-a"} {
+		repo.Git("switch", "-q", "-c", name, main)
+		repo.Commit(name, map[string]string{name + ".txt": name + "\n"})
+		repo.Git("switch", "-q", main)
+	}
+	seed(t, s, types.Job{ID: "mine", State: types.StateRunning})
+	_, err := s.RecordWorktree(t.Context(), "mine", types.JobWorktree{Root: t.TempDir(), Source: repo.Root()})
+	require.NoError(t, err)
+	seed(t, s, types.Job{ID: "mine-a", Parent: "mine", State: types.StatePass})
+	seed(t, s, types.Job{ID: "mine-b", Parent: "mine", State: types.StateExited})
+	seed(t, s, types.Job{ID: "peer", State: types.StateRunning})
+	_, err = s.RecordWorktree(t.Context(), "peer", types.JobWorktree{Root: t.TempDir(), Source: peerRoot})
+	require.NoError(t, err)
+	seed(t, s, types.Job{ID: "peer-a", Parent: "peer", State: types.StatePass})
+	limits := config.Jobs{IntegrateAdviseAt: 2, IntegrateRefuseAt: 2}
+
+	advice, refuse, err := s.IntegrationAdvice(t.Context(), limits)
+	require.NoError(t, err)
+	assert.True(t, refuse, "the tree with two finished branches is at the threshold")
+	assert.Contains(t, advice, "mine-a (job mine-a, 1 commit(s)), mine-b (job mine-b, 1 commit(s)). Integrate them first",
+		"the refusal names this tree's branches and no peer's")
+	waiting, err := s.UnintegratedBranches(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []Unintegrated{{Job: "mine-a", Branch: "mine-a", Commits: 1}, {Job: "mine-b", Branch: "mine-b", Commits: 1}}, waiting,
+		"the peer's branch is not this tree's")
+
+	advice, refuse, err = peer.IntegrationAdvice(t.Context(), limits)
+	require.NoError(t, err)
+	assert.Equal(t, []any{"", false}, []any{advice, refuse}, "the peer's tree holds one finished branch, below the threshold")
 }

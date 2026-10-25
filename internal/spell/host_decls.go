@@ -2,6 +2,7 @@ package spell
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"sync"
 )
@@ -44,7 +45,7 @@ func ModuleDecls(module string) (string, bool) {
 		return d.src, d.ok
 	}
 	var d moduleDecl
-	if b, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+module+".buzz"); err == nil {
+	if b, err := fs.ReadFile(hostDeclsFS, fmt.Sprintf("gen/decls/%s.buzz", module)); err == nil {
 		d = moduleDecl{src: string(b), ok: true}
 	}
 	moduleDecls.Store(module, d)

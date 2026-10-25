@@ -85,8 +85,10 @@ func Run(w io.Writer, o Options) error {
 
 	elapsed := time.Since(start)
 
-	dev := evaluate(m, splits["dev"])
-	m.Accuracy = evaluate(m, splits["test"])
+	dev, _ := evaluate(m, splits["dev"])
+
+	var test confusion
+	m.Accuracy, test = evaluate(m, splits["test"])
 
 	raw, err := m.MarshalBinary()
 	if err != nil {
@@ -119,6 +121,11 @@ func Run(w io.Writer, o Options) error {
 	}{{"dev: ", dev}, {"test:", m.Accuracy}} {
 		fmt.Fprintf(w, "%s UPOS %.4f XPOS %.4f over %d tokens\n", s.name, ratio(s.a.UPOS, s.a.Words), ratio(s.a.XPOS, s.a.Words), s.a.Words)
 	}
+	fmt.Fprintln(w, "test UPOS per class:")
+	for _, s := range test.scores() {
+		fmt.Fprintf(w, "  %s\n", s)
+	}
+
 	fmt.Fprintf(w, "model: %d bytes\n", len(model))
 
 	return nil
@@ -217,13 +224,18 @@ func (t *trainer) train(train []sentence, iterations int, seed uint64) {
 }
 
 // evaluate tags each sentence with m and counts the words, the UPOS matches
-// and the XPOS matches.
-func evaluate(m *wordclass.Model, sentences []sentence) (a wordclass.Accuracy) {
+// and the XPOS matches, and every gold UPOS against the predicted one.
+func evaluate(m *wordclass.Model, sentences []sentence) (a wordclass.Accuracy, c confusion) {
+	c = confusion{}
+
 	for _, s := range sentences {
 		for i, got := range m.Tag(s.forms()) {
 			a.Words++
 
-			if got.Class.String() == s.words[i].upos {
+			gold, predicted := s.words[i].upos, got.Class.String()
+			c[uposPair{gold: gold, predicted: predicted}]++
+
+			if predicted == gold {
 				a.UPOS++
 			}
 
@@ -233,7 +245,57 @@ func evaluate(m *wordclass.Model, sentences []sentence) (a wordclass.Accuracy) {
 		}
 	}
 
-	return a
+	return a, c
+}
+
+type uposPair struct{ gold, predicted string }
+
+// confusion counts tokens by gold UPOS and predicted UPOS. Token accuracy is
+// dominated by NOUN, PUNCT and DET, so a rare class a rule leans on can be
+// poor while the total holds.
+type confusion map[uposPair]int
+
+// classScore is one UPOS class's precision (correct of predicted) and recall
+// (correct of gold).
+type classScore struct {
+	upos                     string
+	correct, predicted, gold int
+}
+
+func (s classScore) String() string {
+	return fmt.Sprintf("%-5s precision %.4f (%d of %d) recall %.4f (%d of %d)",
+		s.upos, ratio(s.correct, s.predicted), s.correct, s.predicted, ratio(s.correct, s.gold), s.correct, s.gold)
+}
+
+// scores returns one classScore per UPOS seen as gold or predicted, sorted by
+// class name.
+func (c confusion) scores() []classScore {
+	by := map[string]*classScore{}
+	get := func(upos string) *classScore {
+		if by[upos] == nil {
+			by[upos] = &classScore{upos: upos}
+		}
+
+		return by[upos]
+	}
+
+	for p, n := range c {
+		get(p.gold).gold += n
+		get(p.predicted).predicted += n
+
+		if p.gold == p.predicted {
+			get(p.gold).correct += n
+		}
+	}
+
+	out := make([]classScore, 0, len(by))
+	for _, s := range by {
+		out = append(out, *s)
+	}
+
+	slices.SortFunc(out, func(a, b classScore) int { return cmp.Compare(a.upos, b.upos) })
+
+	return out
 }
 
 func ratio(n, d int) float64 { return float64(n) / float64(d) }

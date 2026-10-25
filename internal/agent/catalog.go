@@ -429,7 +429,7 @@ import (
 //
 // 142: magus-multi-agent checks a record with `magus job fork --stdin --dry-run` before
 // forking, and teaches the claim breadth bounds (MGS3043), the outputs a fork refuses to
-// leave unregenerated (MGS3044) and the waivers for both.
+// leave unregenerated (MGS3044) and the deviations for both.
 //
 // 143: magus-vcs-hygiene teaches the commit message: read the repository's recent
 // subjects and write in their shape, imposing no style of its own.
@@ -614,7 +614,7 @@ var skillFuncs = template.FuncMap{
 		if err != nil {
 			return "", err
 		}
-		return "[" + code + "](" + types.CodeURL(c) + ")", nil
+		return fmt.Sprintf("[%s](%s)", code, types.CodeURL(c)), nil
 	},
 	// buzz renders a call into the magus host module: "query" is magus\query, and
 	// "harness.provider" is magus\harness.provider. These are the load-bearing lines
@@ -632,7 +632,7 @@ var skillFuncs = template.FuncMap{
 			if !nested {
 				for _, decl := range m.Methods {
 					if buzzMemberName(decl) == call {
-						return magusModule + `\` + call, nil
+						return fmt.Sprintf(`%s\%s`, magusModule, call), nil
 					}
 				}
 				return "", fmt.Errorf(`no method %q on the %s module`, call, magusModule)
@@ -643,7 +643,7 @@ var skillFuncs = template.FuncMap{
 				}
 				for _, decl := range ns.Methods {
 					if buzzMemberName(decl) == method {
-						return magusModule + `\` + call, nil
+						return fmt.Sprintf(`%s\%s`, magusModule, call), nil
 					}
 				}
 				return "", fmt.Errorf(`no method %q on magus\%s`, method, space)
@@ -900,7 +900,7 @@ func (c *Catalog) Render(def AgentSkill, v types.SkillVariant) (AgentSkill, erro
 	}
 	var ref string
 	if def.Reference != "" {
-		if ref, err = applyVariant(def.Name+"/"+referenceFile, def.Reference, types.SkillVariantFull); err != nil {
+		if ref, err = applyVariant(fmt.Sprintf("%s/%s", def.Name, referenceFile), def.Reference, types.SkillVariantFull); err != nil {
 			return AgentSkill{}, err
 		}
 		ref = md.WithContents(ref)
@@ -938,8 +938,7 @@ func (c *Catalog) RenderedSkills(form types.SkillForm) ([]AgentSkill, error) {
 		// unless this entry says so, and browsing for it is exactly what nobody did:
 		// measured, 12 of 15 twins were never loaded once.
 		if form == types.SkillFormBoth {
-			primary.Description += " A fuller copy with the worked examples kept is installed as " +
-				FullTwinName(def.Name) + "; load that one if this leaves a step underspecified."
+			primary.Description += fmt.Sprintf(" A fuller copy with the worked examples kept is installed as %s; load that one if this leaves a step underspecified.", FullTwinName(def.Name))
 		}
 		skills = append(skills, primary)
 
@@ -962,8 +961,7 @@ func (c *Catalog) RenderedSkills(form types.SkillForm) ([]AgentSkill, error) {
 		// full twin when the acting lease says a delegated worker is running, and the
 		// session brief names it for the same reason. A description cannot route; a
 		// verdict that has read the lease can.
-		full.Description = "Full copy of " + def.Name + " with worked examples. " +
-			"Load it when magus names it or when " + def.Name + " left a step underspecified."
+		full.Description = fmt.Sprintf("Full copy of %s with worked examples. Load it when magus names it or when %s left a step underspecified.", def.Name, def.Name)
 		skills = append(skills, full)
 	}
 	return skills, nil
@@ -988,7 +986,7 @@ func (c *Catalog) installBytes(skill AgentSkill) []byte {
 func (c *Catalog) installFiles(skill AgentSkill) []installedFile {
 	files := []installedFile{{name: "SKILL.md", body: c.installBytes(skill)}}
 	if skill.Reference != "" {
-		body := strings.TrimRight(skill.Reference, "\n") + "\n" + c.footer(skill.Name, skill.Variant)
+		body := fmt.Sprintf("%s\n%s", strings.TrimRight(skill.Reference, "\n"), c.footer(skill.Name, skill.Variant))
 		files = append(files, installedFile{name: referenceFile, body: []byte(body)})
 	}
 	return files
@@ -1284,7 +1282,7 @@ func (c *Catalog) AgentsBlock(routingIndex bool) string {
 		line = routingIndexLine
 	}
 	section := strings.Replace(c.agentsSection, routingIndexPlaceholder, line, 1)
-	return c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(section) + "\n\n" + agentsSectionEnd + "\n"
+	return fmt.Sprintf("%s\n\n%s\n\n%s\n", c.agentsSectionBegin(), strings.TrimSpace(section), agentsSectionEnd)
 }
 
 func (c *Catalog) provenance(name string, v types.SkillVariant) string {
@@ -1316,7 +1314,7 @@ func (c *Catalog) injectProvenance(name string, body []byte, v types.SkillVarian
 		return body
 	}
 	closeAt := len("---\n") + rel + 1
-	return []byte(s[:closeAt] + c.provenance(name, v) + s[closeAt:])
+	return []byte(fmt.Sprintf("%s%s%s", s[:closeAt], c.provenance(name, v), s[closeAt:]))
 }
 
 func (c *Catalog) computeContentDigest() string {
@@ -1416,7 +1414,7 @@ func (c *Catalog) CheckStatuses(ctx context.Context, dir string, wired ...string
 					if !c.hasMagusOwnedSkill(dir, location.Path) {
 						continue
 					}
-					out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: " + ReinstallHint(location.ID)})
+					out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: fmt.Sprintf("missing %s; re-run: %s", anchorSkillRel, ReinstallHint(location.ID))})
 				}
 				continue
 			}
@@ -1563,7 +1561,7 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 			// the reinstall the other reasons name would leave this directory as it is.
 			leftover := filepath.Join(dest, name)
 			leftovers = append(leftovers, leftover)
-			reasons = append(reasons, name+": "+leftoverReason(filepath.Join(dir, leftover), leftover, err))
+			reasons = append(reasons, fmt.Sprintf("%s: %s", name, leftoverReason(filepath.Join(dir, leftover), leftover, err)))
 			continue
 		}
 		if err != nil {
@@ -1571,7 +1569,7 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 			// move on rather than silently dropping it, which is the one answer that stops
 			// a reader looking. The anchor path already reports this; the per-skill loop
 			// was the half that stayed quiet.
-			reasons = append(reasons, name+": cannot read it ("+err.Error()+"), so its provenance cannot be checked; "+reinstall)
+			reasons = append(reasons, fmt.Sprintf("%s: cannot read it (%v), so its provenance cannot be checked; %s", name, err, reinstall))
 			continue
 		}
 		// Not ours to grade: a workspace's own skill sits here by design, and grading it
@@ -1585,12 +1583,12 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 			continue
 		}
 		if !expected[name] {
-			reasons = append(reasons, name+" is not part of the descriptor's "+string(location.Form)+" form; re-run: "+reinstall)
+			reasons = append(reasons, fmt.Sprintf("%s is not part of the descriptor's %s form; re-run: %s", name, location.Form, reinstall))
 			continue
 		}
 		seen[name] = true
 		if st := c.gradeStamp(dest, reinstall, string(body), c.SkillDigest(baseSkillName(name))); st.Stale {
-			reasons = append(reasons, name+": "+st.Detail)
+			reasons = append(reasons, fmt.Sprintf("%s: %s", name, st.Detail))
 		}
 	}
 	var missing []string
@@ -1601,7 +1599,7 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 	}
 	sort.Strings(missing) // map iteration order would otherwise make Detail nondeterministic
 	for _, name := range missing {
-		reasons = append(reasons, "missing "+name+"; re-run: "+reinstall)
+		reasons = append(reasons, fmt.Sprintf("missing %s; re-run: %s", name, reinstall))
 	}
 	if len(reasons) == 0 {
 		return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
@@ -1624,7 +1622,7 @@ func leftoverReason(abs, rel string, readErr error) string {
 	if entries, err := os.ReadDir(abs); err == nil && len(entries) == 0 {
 		return "empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir " + rel
 	}
-	return "cannot read its SKILL.md (" + readErr.Error() + "), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r " + rel
+	return fmt.Sprintf("cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", readErr, rel)
 }
 
 // sortReasons orders gradeDest's collected reasons so a version/schema mismatch

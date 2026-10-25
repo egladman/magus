@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -501,4 +502,42 @@ func TestSizeSlotClaim(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// A skip_cache composer lends its same-project members claims of their own, so the run it
+// feeds needs a seat as wide as its widest member: `magus status --wait | magus affected
+// ci` reserved ci's one slot while the root test, which ci composes, took four.
+func TestMachineClaimsCoverTheMembersAComposerLends(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+magus\project({"targets": {
+    "ci": {"skip_cache": "composes the gates"},
+    "check": {"skip_cache": "composes the suite"},
+    "test": {"memory_mb": 4096, "slots": 3},
+    "lint": {"memory_mb": 512},
+    "vet": {"slots": 2},
+    "inline": {"slots": 5},
+    "folded": {"memory_mb": 1024},
+}});
+export fun test(ctx: magus\Context, args: [str]) > void {}
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+export fun vet(ctx: magus\Context, args: [str]) > void {}
+export fun inline(ctx: magus\Context, args: [str]) > void {}
+export fun folded(ctx: magus\Context, args: [str]) > void { ctx.needs(inline); }
+export fun check(ctx: magus\Context, args: [str]) > void { ctx.needs(test, vet); }
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, check, folded); }
+`)
+	m, err := Open(t.Context(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	claims := m.MachineClaims(t.Context(), []types.Target{{Path: ".", Name: "ci"}}, nil, nil)
+	got := map[string][2]int{}
+	for _, c := range claims {
+		got[c.Target] = [2]int{c.MemoryMB, c.Slots}
+	}
+	// folded caches, so inline runs under folded's seat and claims nothing apart from it.
+	assert.Equal(t, map[string][2]int{
+		"ci": {0, 1}, "lint": {512, 1}, "check": {0, 1}, "test": {4096, 3}, "vet": {0, 2}, "folded": {1024, 1},
+	}, got)
 }

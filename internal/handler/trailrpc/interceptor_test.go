@@ -3,6 +3,7 @@ package trailrpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,7 +84,7 @@ func TestKnownVerbs(t *testing.T) {
 			for j := 0; j < methods.Len(); j++ {
 				name := string(methods.Get(j).Name())
 				if _, known := classify(name); !known {
-					unknown = append(unknown, string(svcs.Get(i).FullName())+"."+name)
+					unknown = append(unknown, fmt.Sprintf("%s.%s", string(svcs.Get(i).FullName()), name))
 				}
 			}
 		}
@@ -171,7 +172,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 	subject := func(resp connect.AnyResponse) ([]byte, string) {
 		switch msg := resp.Any().(type) {
 		case *tokenv1.TokenInfo:
-			return []byte(`{"id":"` + msg.GetId() + `"}`), "token " + msg.GetId()
+			return []byte(fmt.Sprintf("{\"id\":\"%s\"}", msg.GetId())), fmt.Sprintf("token %s", msg.GetId())
 		case *tokenv1.CreateTokenResponse:
 			return []byte(`{"identifier":"minted"}`), "token minted"
 		}

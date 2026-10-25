@@ -19,9 +19,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // AttemptResolver resolves the recorded run behind a result's output ref. A result is
@@ -46,9 +44,9 @@ const returnedReason = "returned: its holder filed a result, and a read-only row
 func endedReason(prev types.Job, byHolder bool) string {
 	switch {
 	case prev.Result != nil:
-		return "ended unverified: its holder filed a result and nobody ran `" + hint.JobWait.With(prev.ID) + "` on it"
+		return fmt.Sprintf("ended unverified: its holder filed a result and nobody ran `%s` on it", hint.JobWait.With(prev.ID))
 	case prev.Registered == 0:
-		return "ended with no result filed, before any holder ran `" + hint.JobExec.With(prev.ID) + "` on it"
+		return fmt.Sprintf("ended with no result filed, before any holder ran `%s` on it", hint.JobExec.With(prev.ID))
 	case gradedByHolder(prev):
 		return "ended ungraded: a read-only row declaring no check or goal has nothing magus can grade, so what it found went only to its caller"
 	case byHolder:
@@ -68,11 +66,12 @@ func endedReason(prev types.Job, byHolder bool) string {
 //
 // An abandonment is refused while any live job is below id, since ending id ends them;
 // [Abandon] ends a tree whose every member is named. A result is refused while a job
-// below id is still working.
+// below id is still working. A row that already ended fails as `<id> already ended <state>
+// <ago>`. A dry-run store returns the row as it would end and writes nothing.
 func Exit(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver) (types.Job, error) {
 	// Update declares a row it does not find, so an exit naming a mistyped or never-forked
 	// id would mint a job only to end it. Nobody declared it, so there is nothing to end.
-	rows, err := store.List()
+	rows, err := store.unswept()
 	if err != nil {
 		return types.Job{}, err
 	}
@@ -81,19 +80,26 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", ErrUnknownJob, id)
 	}
 	// An ended row is not ended again: a second end would rewrite how the first one ended.
-	if ended := rows[i]; ended.State.Terminal() {
-		reason := ""
-		if ended.EndReason != "" {
-			reason = " (" + ended.EndReason + ")"
-		}
-		return types.Job{}, fmt.Errorf("job: %s already ended %s %s ago%s, so there is nothing to end, `%s` lists it",
-			id, ended.State, updatedAgo(ended), reason, hint.LsJobs.With("--all"))
+	if rows[i].State.Terminal() {
+		return types.Job{}, &alreadyEndedError{Row: rows[i]}
 	}
 	if err := refuseLiveDescendants(ctx, rows, id, result != nil); err != nil {
 		return types.Job{}, err
 	}
+	update := func(apply func(*types.Job)) (types.Job, error) {
+		if store.dryRun {
+			row := rows[i].Clone()
+			apply(&row)
+			if row.State == types.StateNoReturn {
+				row.EndReason = endedReason(rows[i], store.endsOwnRow(rows[i]))
+			}
+			store.endDry(row)
+			return row, nil
+		}
+		return store.Update(ctx, id, apply)
+	}
 	if result == nil {
-		return store.Update(ctx, id, func(row *types.Job) { row.State = types.StateNoReturn })
+		return update(func(row *types.Job) { row.State = types.StateNoReturn })
 	}
 	if resolve == nil {
 		return types.Job{}, errors.New("job: no output resolver files a result's validation evidence")
@@ -103,7 +109,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if err != nil {
 		return types.Job{}, err
 	}
-	return store.Update(ctx, id, func(row *types.Job) {
+	return update(func(row *types.Job) {
 		prev := row.Clone()
 		// A row awaiting `magus job wait` keeps only the entries covering a path the result
 		// names (a claim `F#d` covers F), so it stops holding files it never touched; Update
@@ -137,6 +143,21 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 			row.State = types.StatePass
 		}
 	})
+}
+
+// alreadyEndedError is [Exit]'s failure for a row that ended before: a second end would
+// rewrite how the first one ended. It asked for what is already true, so [Abandon]
+// reports it beside the rows it ended rather than as a refusal.
+type alreadyEndedError struct {
+	Row types.Job
+}
+
+func (e *alreadyEndedError) Error() string {
+	reason := ""
+	if e.Row.EndReason != "" {
+		reason = fmt.Sprintf(" (%s)", e.Row.EndReason)
+	}
+	return fmt.Sprintf("%s already ended %s %s ago%s", e.Row.ID, e.Row.State, updatedAgo(e.Row), reason)
 }
 
 // Wait verifies a returned result against the current job terms and records pass under
@@ -231,6 +252,9 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 				At:                 now,
 				ObservedGeneration: generation,
 			}
+			if note := reclaimForRework(row, jobs); note != "" {
+				status.Notes = append(status.Notes, note)
+			}
 			return nil
 		}
 		row.State = types.StatePass
@@ -244,6 +268,25 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.JobStatus{}, err
 	}
 	return status, nil
+}
+
+// reclaimForRework sends a rejected exited row back to running, re-claiming each write path
+// under the rule a claim meets ([checkClaimPath]). Filing released them, so another job may
+// have taken one meanwhile: then the row stays exited and the note names that job. A row in
+// any other state gets no note.
+func reclaimForRework(row *types.Job, rows []types.Job) string {
+	if row.State != types.StateExited {
+		return ""
+	}
+	for _, entry := range row.WritePaths {
+		file, _ := types.SplitClaim(entry)
+		if err := checkClaimPath(types.Job{ID: row.ID}, file, rows); err != nil {
+			return fmt.Sprintf("%s stays exited and holds nothing, since its rework could not re-claim its write paths: %v; it reworks once that job ends, or `magus job fork` declares it again",
+				row.ID, err)
+		}
+	}
+	row.State = types.StateRunning
+	return fmt.Sprintf("%s is running again and holds its write paths again for its rework", row.ID)
 }
 
 // Verifies reports whether this actor may verify row id: an unbound actor verifies any
@@ -788,7 +831,7 @@ func (s *Store) acrossCheckouts(rows []types.Job, id string, resolve AttemptReso
 			}
 		}
 		return attempt, nil
-	}, here + " or " + strings.Join(roots, ", ")
+	}, fmt.Sprintf("%s or %s", here, strings.Join(roots, ", "))
 }
 
 // GradeGates grades a job against its gates WITHOUT recording anything, so an orchestrator
@@ -874,8 +917,8 @@ type landing struct {
 //  2. a holder took it with `magus job exec` and that checkout's directory is gone;
 //  3. it is declared, nobody ever took it, it was not updated within jobs.stale_after,
 //     and no live child hangs under it, so a root outlives the children still working;
-//     a row queued on a live dependency is waiting, and its clock starts when the last
-//     one ends (see [types.JobIdleSince]);
+//     a row queued on a declared or running dependency is waiting, and its clock starts
+//     when the last one ends or exits (see [types.JobIdleSince]);
 //  4. its holder exited, its work landed on the base branch (see [Store.landedOnBase]),
 //     and no live child hangs under it;
 //  5. a holder took it and its deadline passed (see [types.Job.Overdue]): the declared
@@ -884,6 +927,9 @@ type landing struct {
 // A landed row ends as no_return rather than pass: landing is not grading, and pass
 // stays the verdict only `magus job wait` records from the job's own evidence. Its
 // end_reason names the base commit.
+//
+// A row a person paused (see [types.Job.PausedAt]) ends by rule 1 alone until its pause
+// lapses.
 //
 // Server rows are the server's own maintenance and never swept. An exited row skips rule
 // 2: its holder already returned, and removing the worktree is the normal end of that. A
@@ -958,6 +1004,9 @@ func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, e
 			kin = "parent"
 		}
 		return fmt.Sprintf("%s %s ended as %s, and its tree ends with it", kin, a.ID, a.State), nil
+	}
+	if row.PausedAt(w.now) {
+		return "", nil
 	}
 	liveChild := x.liveChild[row.ID]
 	if l, ok := w.landed[row.ID]; ok && row.State == types.StateExited && l.updated == row.Updated && !liveChild {
@@ -1037,7 +1086,6 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	if err != nil || len(dead) == 0 {
 		return f, false, err
 	}
-	read := f
 	var ended endings
 	err = s.update(context.Background(), func(cur *jobsFile) error {
 		ended = endings{}
@@ -1061,10 +1109,6 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	out := s.notices
 	if out == nil {
 		out = os.Stderr
-	}
-	if errors.Is(err, types.JobStoreWriterOlder) {
-		noteLeftLive(out, dead, err)
-		return read, false, nil
 	}
 	if err != nil {
 		return jobsFile{}, false, err
@@ -1115,8 +1159,9 @@ type PruneOptions struct {
 //     opts.All is set.
 //
 // A declared or running row a holder took and touched within jobs.stale_after is never
-// ended, and neither is one it took that is not overdue unless opts.All is set. Nor is
-// any ancestor of such a row, since its tree would end with it. Server rows and rows this
+// ended, and neither is one it took that is not overdue unless opts.All is set, nor one a
+// person paused until its pause lapses, opts.All or not. Nor is any ancestor of such a
+// row, since its tree would end with it. Server rows and rows this
 // magus cannot write are left alone, as the sweep leaves them.
 //
 // A row that would end only because an ancestor this prune ends does is not ended
@@ -1240,15 +1285,16 @@ func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]
 	}
 }
 
-// worked is the ids Prune keeps: every row a holder took and may still be working, and
-// every ancestor of one.
+// worked is the ids Prune keeps: every row a holder took and may still be working, every
+// row a person paused until its pause lapses, and every ancestor of one.
 func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[string]bool {
 	kept := map[string]bool{}
 	for _, row := range rows {
-		if !Editing(row) || row.Registered == 0 {
+		paused := row.State.Live() && row.PausedAt(w.now)
+		if !paused && (!Editing(row) || row.Registered == 0) {
 			continue
 		}
-		if row.Overdue(w.now) || (all && window > 0 && w.now-row.Updated >= int64(window/time.Second)) {
+		if !paused && (row.Overdue(w.now) || (all && window > 0 && w.now-row.Updated >= int64(window/time.Second))) {
 			continue
 		}
 		kept[row.ID] = true
@@ -1296,233 +1342,4 @@ func (s *Store) resolveStaleAfter() (time.Duration, error) {
 		return 0, fmt.Errorf("job: read jobs.stale_after to end untaken jobs: %w", err)
 	}
 	return cfg.Jobs.StaleAfter, nil
-}
-
-// landingInterval is how long one exited row goes unprobed after a probe. Every List
-// sweeps, the guard lists on every hook call, and a probe runs the VCS, so a probe per
-// read would put subprocesses on every tool call.
-const landingInterval = 5 * time.Minute
-
-// landingProbesFile logs when each exited row was last probed, one line per probe beside
-// jobs.jsonl, so the interval holds across processes. A row's last line is its entry.
-const landingProbesFile = "landing-probes.jsonl"
-
-// landingProbe is one row's entry in landingProbesFile: when it was probed, and the row's
-// Updated then, so a row that exits again is probed at once.
-type landingProbe struct {
-	At      int64 `json:"at"`
-	Updated int64 `json:"updated"`
-}
-
-// landingProbeLine is one line of landingProbesFile.
-type landingProbeLine struct {
-	ID      string `json:"id"`
-	At      int64  `json:"at"`
-	Updated int64  `json:"updated"`
-}
-
-// probeLog is the probe history as read, and what a write needs to append to it.
-type probeLog struct {
-	probes  map[string]landingProbe
-	lines   int
-	partial bool
-}
-
-// landingCandidate reports an exited row whose result names changed paths in a checkout,
-// the only rows a landing can be judged for.
-func landingCandidate(row types.Job) bool {
-	return row.State == types.StateExited && row.Holder.OrSession() != types.HolderServer && !row.ReadOnly &&
-		row.Result != nil && len(row.Result.ChangedPaths) > 0 && row.CheckoutRoot != "" &&
-		checkpointRevision(row.Checkpoint) != ""
-}
-
-// landings probes the exited rows not probed within landingInterval, at most
-// landingBudget of them, least recently probed first, in at most one round per
-// landingRound, and returns the ones whose work landed. The probes are recorded BEFORE
-// they run: a process killed mid-probe (a guard hook past its deadline) has still taken
-// its turn, so the next reader moves on to the rows after it rather than starting the
-// same probes again, and two readers at once split the rows rather than both probing
-// every one. A probe history that cannot be read or written only costs the interval,
-// never a verdict.
-func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
-	probe := s.landed
-	if probe == nil {
-		probe = s.landedOnBase
-	}
-	var log probeLog
-	var history map[string]landingProbe
-	read := false
-	next := map[string]landingProbe{}
-	var due []types.Job
-	for _, row := range rows {
-		if !landingCandidate(row) {
-			continue
-		}
-		if !read {
-			log, read = s.readLandingProbes(), true
-			history = log.probes
-		}
-		last, ok := history[row.ID]
-		if ok {
-			next[row.ID] = last
-		}
-		if !ok || last.Updated != row.Updated || now-last.At >= int64(landingInterval/time.Second) {
-			due = append(due, row)
-		}
-	}
-	if since := now - lastProbeRound(history); since >= 0 && since < int64(landingRound/time.Second) {
-		due = nil
-	}
-	slices.SortStableFunc(due, func(a, b types.Job) int { return cmp.Compare(history[a.ID].At, history[b.ID].At) })
-	due = due[:min(len(due), landingBudget)]
-	for _, row := range due {
-		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
-	}
-	if read && !s.dryRun && !maps.Equal(history, next) {
-		s.writeLandingProbes(log, next)
-	}
-	out := map[string]landing{}
-	for _, row := range due {
-		if reason := probe(context.Background(), row); reason != "" {
-			out[row.ID] = landing{updated: row.Updated, reason: reason}
-		}
-	}
-	return out
-}
-
-// landingBudget is how many exited rows one sweep probes. Every List sweeps, the guard
-// lists on every hook call, and a probe runs several VCS subprocesses, so a pass over
-// every exited row held a hook past its deadline. The rest wait for later sweeps.
-const landingBudget = 4
-
-// landingRound is the least time between two probe rounds, whichever processes read. A
-// store holding more unprobed rows than one budget had every read probe four of them, so
-// each fork, exit and hook call ran a few dozen VCS subprocesses.
-const landingRound = time.Minute
-
-// lastProbeRound is when the latest recorded probe ran, in unix seconds; 0 for none.
-func lastProbeRound(history map[string]landingProbe) int64 {
-	var last int64
-	for _, p := range history {
-		last = max(last, p.At)
-	}
-	return last
-}
-
-// readLandingProbes reads the probe history. A line that does not parse is skipped: the
-// history only paces the probes, and losing an entry costs one early probe.
-func (s *Store) readLandingProbes() probeLog {
-	if s.err != nil || s.path == "" {
-		return probeLog{}
-	}
-	read, err := file.ReadLines(filepath.Join(filepath.Dir(s.path), landingProbesFile))
-	if err != nil {
-		return probeLog{}
-	}
-	log := probeLog{probes: map[string]landingProbe{}, lines: len(read.Lines), partial: read.Partial}
-	for _, line := range read.Lines {
-		var p landingProbeLine
-		if json.Unmarshal(line.Text, &p) == nil && p.ID != "" {
-			log.probes[p.ID] = landingProbe{At: p.At, Updated: p.Updated}
-		}
-	}
-	return log
-}
-
-// writeLandingProbes records next against log, the history it was decided from: the
-// entries that changed are appended, and the file is rewritten to next alone when next
-// drops an entry or the log is [file.CompactDue].
-func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
-	if s.err != nil || s.path == "" {
-		return
-	}
-	dropped := false
-	for id := range log.probes {
-		if _, ok := next[id]; !ok {
-			dropped = true
-		}
-	}
-	var changed, all [][]byte
-	for _, id := range slices.Sorted(maps.Keys(next)) {
-		p := next[id]
-		line, err := json.Marshal(landingProbeLine{ID: id, At: p.At, Updated: p.Updated})
-		if err != nil {
-			return
-		}
-		all = append(all, line)
-		if prev, ok := log.probes[id]; !ok || prev != p {
-			changed = append(changed, line)
-		}
-	}
-	path := filepath.Join(filepath.Dir(s.path), landingProbesFile)
-	if !dropped && !log.partial && !file.CompactDue(log.lines+len(changed), len(next)) {
-		_ = file.AppendLines(path, changed, 0o644)
-		return
-	}
-	_ = file.RewriteLines(path, all, 0o644)
-}
-
-// landedOnBase reports why row's work is on the base branch, or "" when that is not
-// proven. Offline: it reads local refs and file content, never a remote.
-//
-// CONTENT, not ancestry, because the base usually gains the work as a squash commit
-// holding several jobs' branches, which no ancestry walk connects to any of them. The
-// work landed when every path the checkout's diff since the checkpoint shows reads the
-// same at the row's checkout HEAD as at the base, and differs at HEAD from the row's
-// checkpoint: a path equal at HEAD and checkpoint is uncommitted, so HEAD says nothing
-// about it. A path that reads at neither side (a deletion, or a checkout already removed)
-// leaves the row unproven.
-//
-// The diff is read, never the result's changed_paths: a result naming the part of the work
-// that landed would otherwise end the job while the rest has not.
-func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
-	if s.root == "" {
-		return ""
-	}
-	res, err := vcs.Resolve(ctx, s.root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil || res.Base == "" {
-		return ""
-	}
-	driver := res.VCS
-	if info, err := os.Stat(row.CheckoutRoot); err != nil || !info.IsDir() {
-		return ""
-	}
-	head, err := driver.FindCommit(ctx, row.CheckoutRoot, "")
-	if err != nil {
-		return ""
-	}
-	base, err := driver.FindCommit(ctx, s.root, res.Base)
-	if err != nil {
-		return ""
-	}
-	checkpoint := checkpointRevision(row.Checkpoint)
-	// The paths alone: changedSince also places every changed line in its declaration,
-	// a VCS read per path this verdict never looks at.
-	paths, err := driver.ChangedFiles(ctx, row.CheckoutRoot, checkpoint)
-	if err != nil || len(paths) == 0 {
-		return ""
-	}
-	for _, changed := range paths {
-		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
-		ours, err := driver.ReadFileAt(ctx, row.CheckoutRoot, head.ID, p)
-		if err != nil {
-			return ""
-		}
-		if theirs, err := driver.ReadFileAt(ctx, s.root, base.ID, p); err != nil || theirs != ours {
-			return ""
-		}
-		if before, err := driver.ReadFileAt(ctx, row.CheckoutRoot, checkpoint, p); err == nil && before == ours {
-			return ""
-		}
-	}
-	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s read the same there",
-		res.Base, shortRevision(base), len(paths), shortRevision(head), row.CheckoutRoot)
-}
-
-// shortRevision is the commit's short id, or its id cut to 12 when the backend gave none.
-func shortRevision(c types.Commit) string {
-	if c.Short != "" {
-		return c.Short
-	}
-	return c.ID[:min(len(c.ID), 12)]
 }

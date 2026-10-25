@@ -131,7 +131,7 @@ func TestContextHandler_MissingRootReturns503WithoutThePath(t *testing.T) {
 	const patch = "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"
 	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(patch)+"&start=3&end=3", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/diff/context?path=source.go&as_of=%s&start=3&end=3", changeset.PatchDigest(patch)), nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("want 503, got %d: %s", w.Code, w.Body.String())
 	}
@@ -157,7 +157,7 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 	const patch = "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"
 	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(patch)+"&start=3&end=3&radius=1", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/diff/context?path=source.go&as_of=%s&start=3&end=3&radius=1", changeset.PatchDigest(patch)), nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -173,7 +173,7 @@ func TestContextHandler_RejectsPathEscape(t *testing.T) {
 	h := NewContextHandler(t.TempDir(), answeringSource(t, "", nil), nil)
 	for _, path := range []string{"../secret", ".."} {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+path+"&start=1&end=1", nil))
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/diff/context?path=%s&start=1&end=1", path), nil))
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("path %q: want 400, got %d", path, w.Code)
 		}
@@ -193,7 +193,7 @@ func TestContextHandler_RejectsPathsOutsideTheReviewedSnapshot(t *testing.T) {
 	const patch = "diff --git a/reviewed.go b/reviewed.go\n@@ -1 +1 @@\n-old\n+new\n"
 	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=private.go&as_of="+changeset.PatchDigest(patch)+"&start=1&end=1", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/diff/context?path=private.go&as_of=%s&start=1&end=1", changeset.PatchDigest(patch)), nil))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d: %s", w.Code, w.Body.String())
 	}
@@ -239,9 +239,13 @@ func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *tes
 	} {
 		// Add each target to the patch before testing the filesystem contract; a file outside the
 		// snapshot must be rejected before it reveals whether it is a directory or a large file.
-		patch = "diff --git a/" + tc.name + " b/" + tc.name + "\n@@ -1 +1 @@\n-old\n+new\n"
+		patch = fmt.Sprintf(`diff --git a/%s b/%s
+@@ -1 +1 @@
+-old
++new
+`, tc.name, tc.name)
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+tc.name+"&as_of="+changeset.PatchDigest(patch)+"&start=1&end=1", nil))
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/diff/context?path=%s&as_of=%s&start=1&end=1", tc.name, changeset.PatchDigest(patch)), nil))
 		if w.Code != tc.want {
 			t.Fatalf("%s: want %d, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
 		}
@@ -276,7 +280,7 @@ func TestReviewHandler_GetReadsAttachedReviewWithoutMutatingIt(t *testing.T) {
 	wire, err := json.Marshal(want)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(wire), w.Body.String())
-	assert.Equal(t, "snapshot-a main", want.AsOf+" "+want.Base, "the served review is the one attached")
+	assert.Equal(t, "snapshot-a main", fmt.Sprintf("%s %s", want.AsOf, want.Base), "the served review is the one attached")
 }
 
 // post is one session mutation, for the publish cases below.
@@ -668,18 +672,18 @@ func recordReplies(t *testing.T, threadsBody string) func() []string {
 	if threadsBody == "" {
 		threadsBody = "[<ReviewComment>]"
 	}
-	selectReviewProvider(t, register.Spell(t, "reply-recorder", spells.WithFuncSource(`import "magus/spell";
+	selectReviewProvider(t, register.Spell(t, "reply-recorder", spells.WithFuncSource(fmt.Sprintf(`import "magus/spell";
 import "http";
 export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
     return ReviewTarget{ id = "482", repo = "acme/acme" };
 }
 export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
-    return `+threadsBody+`;
+    return %s;
 }
 export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any {
-    http\get("`+host.URL+`/?thread=" + req.thread);
+    http\get("%s/?thread=" + req.thread);
     return Ack{ ok = true };
-}`)))
+}`, threadsBody, host.URL))))
 	return func() []string {
 		mu.Lock()
 		defer mu.Unlock()
@@ -805,9 +809,9 @@ func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 	}
 	_ = mine
 
-	require.Equal(t, http.StatusOK, post(t, h, `{"op":"discard","id":"`+ids["mine"]+`"}`).Code)
-	require.Equal(t, http.StatusOK, post(t, h, `{"op":"discard","id":"`+ids["theirs"]+`"}`).Code)
-	require.Equal(t, http.StatusOK, post(t, h, `{"op":"discard","id":"`+ids["sent"]+`"}`).Code)
+	require.Equal(t, http.StatusOK, post(t, h, fmt.Sprintf("{\"op\":\"discard\",\"id\":\"%s\"}", ids["mine"])).Code)
+	require.Equal(t, http.StatusOK, post(t, h, fmt.Sprintf("{\"op\":\"discard\",\"id\":\"%s\"}", ids["theirs"])).Code)
+	require.Equal(t, http.StatusOK, post(t, h, fmt.Sprintf("{\"op\":\"discard\",\"id\":\"%s\"}", ids["sent"])).Code)
 
 	left := map[string]bool{}
 	for _, c := range store.Get(root).Comments {

@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"go/format"
 	"os"
 	"path/filepath"
@@ -68,23 +69,78 @@ func TestAbandonEndsATreeOnlyWhenEveryLiveDescendantIsNamed(t *testing.T) {
 	)
 	s := NewStore(loc)
 
-	ended, refused := Abandon(t.Context(), s, []string{"plan", "plan/a"})
+	ended, already, refused := Abandon(t.Context(), s, []string{"plan", "plan/a"})
+	assert.Empty(t, already)
 	require.Len(t, refused, 1)
 	assert.Contains(t, refused[0].Error(), "ending plan would end 1 live job(s) below it: plan/b")
 	require.Len(t, ended, 1, "a named job with nothing live below it still ends")
 	assert.Equal(t, "plan/a", ended[0].ID)
 	assert.Equal(t, types.StateRunning, storedRows(t, s)["plan"].State)
 
-	ended, refused = Abandon(t.Context(), s, []string{"plan", "plan/b", "plan"})
+	ended, already, refused = Abandon(t.Context(), s, []string{"plan", "plan/b", "plan"})
+	assert.Empty(t, already)
 	require.Empty(t, refused)
 	ids := make([]string, len(ended))
 	for i, r := range ended {
 		ids[i] = r.ID
 	}
 	assert.Equal(t, []string{"plan/b", "plan"}, ids, "descendants end before their ancestors")
-	for id, r := range storedRows(t, s) {
+	rows := storedRows(t, s)
+	for id, r := range rows {
 		assert.Equal(t, types.StateNoReturn, r.State, id)
 	}
+
+	ended, already, refused = Abandon(t.Context(), s, []string{"plan/a"})
+	assert.Empty(t, ended)
+	assert.Empty(t, refused, "ending a row again asks for what is already true")
+	assert.Equal(t, []error{&alreadyEndedError{Row: rows["plan/a"]}}, already)
+}
+
+// A dry run ends a tree in what it returns, descendants first as a real end does, and
+// writes no row.
+func TestAbandonUnderADryRunWritesNothing(t *testing.T) {
+	t.Parallel()
+	loc := declared(t,
+		types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true},
+		types.Job{ID: "plan/a", Parent: "plan", State: types.StateDeclared, ReadOnly: true},
+	)
+	before := storedRows(t, NewStore(loc))
+	dry := loc
+	dry.DryRun = true
+
+	ended, already, refused := Abandon(t.Context(), NewStore(dry), []string{"plan", "plan/a"})
+	assert.Empty(t, already)
+	require.Empty(t, refused)
+	ids := make([]string, len(ended))
+	for i, r := range ended {
+		ids[i] = r.ID
+		assert.Equal(t, types.StateNoReturn, r.State, r.ID)
+	}
+	assert.Equal(t, []string{"plan/a", "plan"}, ids)
+	assert.Equal(t, before, storedRows(t, NewStore(loc)))
+}
+
+// Ending one job restores and removes its checkout alone; another ended row's checkout
+// waits for the call that ends every one.
+func TestEndNamedCheckoutsLeavesOtherEndedRowsCheckouts(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, _ := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	first := endedFork(t, s, "w1")
+	second := endedFork(t, s, "w2")
+
+	changed, err := s.EndNamedCheckouts(ctx, nil, "w1")
+	require.NoError(t, err)
+	require.Len(t, changed, 1)
+	assert.Equal(t, "w1", changed[0].ID)
+	assert.NoDirExists(t, first.Worktree.Root)
+	assert.DirExists(t, second.Worktree.Root)
+
+	changed, err = s.EndCheckouts(ctx, nil)
+	require.NoError(t, err)
+	require.Len(t, changed, 1)
+	assert.Equal(t, "w2", changed[0].ID)
+	assert.NoDirExists(t, second.Worktree.Root)
 }
 
 func TestExitWithAResultRefusesADescendantStillWorking(t *testing.T) {
@@ -116,10 +172,10 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.txt"), []byte("half done\n"), 0o644))
 
 	for range 2 {
-		ended, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
+		ended, _, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
 		assert.Empty(t, ended)
 		require.Len(t, refused, 1)
-		assert.Contains(t, refused[0].Error(), "plan/w (running, session holder, held in "+repo.Root()+"): 1 uncommitted path(s) in its write paths, first a.txt")
+		assert.Contains(t, refused[0].Error(), fmt.Sprintf("plan/w (running, session holder, held in %s): 1 uncommitted path(s) in its write paths, first a.txt", repo.Root()))
 		assert.Contains(t, refused[0].Error(), "which an agent may not")
 	}
 	requests := endRequests(t, repo.Root())
@@ -135,7 +191,7 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 	}
 
 	dispose(t, repo.Root(), requests[0].ID)
-	ended, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
+	ended, _, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
 	require.Empty(t, refused)
 	require.Len(t, ended, 2)
 	assert.Empty(t, endRequests(t, repo.Root()))
@@ -149,7 +205,7 @@ func TestAbandonNeedsNoPersonForADescendantHoldingNoWork(t *testing.T) {
 	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, WritePaths: []string{"a.txt"}, CheckoutRoot: repo.Root()})
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "other.txt"), []byte("not its paths\n"), 0o644))
 
-	ended, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
+	ended, _, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
 	require.Empty(t, refused)
 	assert.Len(t, ended, 2)
 	assert.Empty(t, endRequests(t, repo.Root()))
@@ -161,7 +217,7 @@ func TestAbandonWaitsOnAPersonWhenADescendantsCheckIsRunning(t *testing.T) {
 		types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true},
 		types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, ReadOnly: true, LastRun: &types.JobRun{Invocation: "inv-1"}},
 	)
-	ended, refused := Abandon(t.Context(), NewStore(loc), []string{"plan", "plan/w"})
+	ended, _, refused := Abandon(t.Context(), NewStore(loc), []string{"plan", "plan/w"})
 	assert.Empty(t, ended)
 	require.Len(t, refused, 1)
 	assert.Contains(t, refused[0].Error(), "its check is still running as invocation inv-1")
@@ -333,4 +389,16 @@ func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	got, err := s.Prune(t.Context(), PruneOptions{}, "done/w")
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
+}
+
+func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	loc := declared(t, row)
+	stored, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateNoReturn, stored.State)
+	assert.Nil(t, stored.Result)
+	assert.Nil(t, stored.Attempt)
 }

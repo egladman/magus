@@ -164,3 +164,34 @@ func ExampleMagus_JudgeWrite() {
 	// names its rule: true
 	// gives the rule's reason: true
 }
+
+// Example_judgeAToolCall asks the guard about two shell commands before either runs.
+// A deny is an answer with a nil error.
+func Example_judgeAToolCall() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz":     guardPolicy,
+		"api/magusfile.buzz": "",
+	})
+	defer cleanup()
+
+	ctx := context.Background()
+	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("open:", err)
+		return
+	}
+	defer m.Close()
+
+	for _, command := range []string{"cp api/greeting.txt api/out/", "magus run build api"} {
+		j, err := m.JudgeCommand(ctx, "guide-session", root, command)
+		if err != nil {
+			fmt.Println("judge:", err)
+			return
+		}
+		reason, _, _ := strings.Cut(j.Reason, "\n")
+		fmt.Printf("%s: %s %s %s\n", command, j.Decision, j.Rule, reason)
+	}
+	// Output:
+	// cp api/greeting.txt api/out/: deny workspace:targets-only Build through the target: magus run build api
+	// magus run build api: pass
+}

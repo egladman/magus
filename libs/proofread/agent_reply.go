@@ -62,7 +62,7 @@ var agentReplyTexts = map[Rule]ruleText{
 		why: "A label turns each point into a field of a form, so the person reads the labels and " +
 			"rebuilds the sentences. Measured 2026-10-10 over 400 end-of-turn replies sampled from " +
 			"one machine's coding-agent sessions (101 projects, median 266 words): it fires on 121 " +
-			"(30.3%). Judged as review-reply, bold labels were the largest share of the 85 denials in " +
+			"of 400 (a 30.3% firing rate). Judged as review-reply, bold labels were the largest share of the 85 denials in " +
 			"200 replies. It reports the first label and counts the rest. It advises: a long reply may " +
 			"need a label to be scanned. Firings are counted, not labeled.",
 	},
@@ -71,7 +71,7 @@ var agentReplyTexts = map[Rule]ruleText{
 		dimension: DimensionStance,
 		catches:   "an agent reply whose last paragraph offers more work or asks leave to go on",
 		why: "A reflexive offer hands the next decision back to the person and costs them a turn. " +
-			"Measured 2026-10-10 over the same 400 replies: it fires on 62 (15.5%), \"Want me to\" in " +
+			"Measured 2026-10-10 over the same 400 replies: it fires on 62 (a 15.5% firing rate), \"Want me to\" in " +
 			"most. Of 45 closing offers read, about a third asked for a decision the agent needed (a " +
 			"push, a branch name, a choice between designs), so it advises: the rule cannot tell a " +
 			"needed question from a reflexive one.",
@@ -90,8 +90,8 @@ var agentReplyTexts = map[Rule]ruleText{
 		dimension: DimensionStructure,
 		catches:   "an agent reply that lays out labeled options or alternatives",
 		why: "Options the person did not ask for move a decision the agent could make back to them. " +
-			"Measured 2026-10-10: it fires on 6 of the 400 replies (1.5%), and a broader pattern found " +
-			"158 of all 7088 (2.2%). It advises: the rule cannot see whether the person asked for the " +
+			"Measured 2026-10-10: it fires on 6 of the 400 replies (a 1.5% firing rate), and a broader pattern found " +
+			"158 of all 7088 (a 2.2% firing rate). It advises: the rule cannot see whether the person asked for the " +
 			"choices. Measured 2026-10-11 over the adjudicated labeling round 2: 70.5% precision (31 of 44) " +
 			"before, 96.9% (31 of 32) after. A label a sentence goes on from (\"Option B completed\"), a " +
 			"count of options already named or owned by a thing (\"the three approaches you suggested\", " +
@@ -104,7 +104,7 @@ var agentReplyTexts = map[Rule]ruleText{
 		catches:   "a claim of done, fixed, verified or passing with no command, output ref, file or link beside it",
 		why: "\"Done and verified\" asks the person to trust a run they cannot open; a backticked command, " +
 			"a magus output ref or a file beside the claim lets them check it. Measured 2026-10-10 over " +
-			"the 400 replies: it fires on 55 (13.8%), \"Done\", \"Fixed\" and \"gate green\" most. A " +
+			"the 400 replies: it fires on 55 (a 13.8% firing rate), \"Done\", \"Fixed\" and \"gate green\" most. A " +
 			"negated or conditional claim (\"not verified\", \"once it passes\") is left alone. It " +
 			"advises: the person may have watched the run, and evidence may sit in another paragraph.",
 	},
@@ -114,7 +114,7 @@ var agentReplyTexts = map[Rule]ruleText{
 		catches:   "a heading in an agent reply under 300 words",
 		why: "A reply that short reads in one screen, and a heading there splits it into a page the " +
 			"person has to navigate. Measured 2026-10-10 over the 400 replies: 64 carry a heading, and " +
-			"it fires on 17 (4.3%) whose prose runs under 300 words. It advises: a heading can still " +
+			"it fires on 17 (a 4.3% firing rate) whose prose runs under 300 words. It advises: a heading can still " +
 			"mark the one decision the person owes.",
 	},
 	RuleAgreementOpener: {
@@ -122,7 +122,7 @@ var agentReplyTexts = map[Rule]ruleText{
 		dimension: DimensionStance,
 		catches:   "an agent reply that opens with praise or agreement (\"Great question\", \"You're right\")",
 		why: "Praise or agreement first answers the person's tone rather than their request, and pushes " +
-			"the result down. Measured 2026-10-10 over the 400 replies: it fires on 15 (3.8%), 10 of " +
+			"the result down. Measured 2026-10-10 over the 400 replies: it fires on 15 (a 3.8% firing rate), 10 of " +
 			"them \"You're right\" or \"You were right\". It advises: \"You're right\" can concede a " +
 			"correction the person needs to hear was taken.",
 	},

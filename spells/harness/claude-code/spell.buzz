@@ -32,16 +32,10 @@ export fun mgs_getName() > str { return "claude-code"; }
 // until one resolves.
 final HOOK_DIR = "\"$CLAUDE_PROJECT_DIR\"";
 
-// Declared on every entry that judges, because THIS config wires every tool, the Skill tool
-// among them. A rule that requires a skill before an act can only be satisfied where loads
-// are reported, so the wiring that reports them is what declares it; a harness that does
-// not see skill loads passes nothing and those rules stand down rather than denying forever.
-final OBSERVES_SKILL_LOADS = "--observes-skill-loads";
-
 // Claude Code's Bash tool waits 120000 ms on a command that names no timeout and lets one
 // name up to 600000 (code.claude.com/docs/en/settings, BASH_DEFAULT_TIMEOUT_MS and
-// BASH_MAX_TIMEOUT_MS); past its timeout the command moves to the background. Declared once
-// here, rendered onto the catch-all entry and returned by mgs_getLimits.
+// BASH_MAX_TIMEOUT_MS); past its timeout the command moves to the background. Returned by
+// mgs_getLimits, which `magus shell` reads for the host the glue names.
 final FOREGROUND_DEFAULT_MS = 120000;
 final FOREGROUND_MAX_MS = 600000;
 
@@ -49,9 +43,13 @@ final FOREGROUND_MAX_MS = 600000;
 // runs the call. Rendered onto every judging entry and returned by mgs_getLimits.
 final HOOK_TIMEOUT_S = 10;
 
+// The first Claude Code release that resumes a stopped subagent when a background task it
+// left running completes. Returned by mgs_getLimits.
+final RESUMES_ON_BACKGROUND_FROM = "2.1.299";
+
 // Every tool, so magus judges every call by its tool and the shape of its input, and a tool
 // no rule can read is named rather than run unseen (the unjudged-tool rule). Skill loads
-// ride it too, which is what lets the judging entries declare --observes-skill-loads.
+// ride it too, which is what lets mgs_getLimits say this host's loads are observed.
 final EVERY_TOOL = "*";
 
 // Both names the spawn tool has had across Claude Code releases, matched after the call:
@@ -65,22 +63,10 @@ final WRITE_MATCHER = "Write|Edit|MultiEdit";
 // environment and only rehydrates.
 final SESSION_PATH_MATCHER = "startup|resume|clear";
 
-// The entries that judge no tool call before it runs (a finished spawn, a stop, the
-// person's message) take these flags. Each event reaches `magus shell` whole, and magus
-// reads what it is off the event.
-fun claude_guard_flags() > [str] {
-    return ["--agent-name", mgs_getName(), OBSERVES_SKILL_LOADS];
-}
-
-// The catch-all entry every tool call reaches. It carries the foreground limits, which the
-// glue forwards only for a shell command line, and the tool rows.
-fun claude_call_flags() > [str] {
-    return [
-        "--agent-name", mgs_getName(), OBSERVES_SKILL_LOADS,
-        "--foreground-default-ms", "{FOREGROUND_DEFAULT_MS}",
-        "--foreground-max-ms", "{FOREGROUND_MAX_MS}",
-        "--tool-rows", claude_tools_dir(),
-    ];
+// The one argument every glue entry takes: the host it answers. magus reads the rest of
+// what it needs to know about the host from this spell.
+fun claude_named() > [str] {
+    return ["--agent-name", mgs_getName()];
 }
 
 fun claude_hook(event: str, matcher: str, script: str, flags: [str]) > HookCommand {
@@ -94,14 +80,13 @@ fun claude_buzz_check_hook() > HookCommand {
 
 // Every hook this host runs, in the order its entries render.
 fun claude_hooks() > [HookCommand] {
-    final named = ["--agent-name", mgs_getName()];
     return [
         // magus restates a read as the `cat` or `sed -n` line it stands for and a search as
         // its rg or find line, so the read and search rules hold whichever tool performs them.
-        claude_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: claude_call_flags()),
+        claude_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: claude_named()),
         // The observer records the path a read reached; it judges nothing.
-        claude_hook("PreToolUse", matcher: "Read", script: "magus-observe", flags: named),
-        claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_guard_flags()),
+        claude_hook("PreToolUse", matcher: "Read", script: "magus-observe", flags: claude_named()),
+        claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_named()),
         claude_buzz_check_hook(),
         // PATH's first entry becomes the root for the agent's own Bash tool commands, through
         // CLAUDE_ENV_FILE, the file Claude Code sources before each one; it never reaches a
@@ -109,14 +94,14 @@ fun claude_hooks() > [HookCommand] {
         claude_hook("SessionStart", matcher: SESSION_PATH_MATCHER, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]),
         claude_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: [<str>]),
         // The guard reads the session's transcript for background tasks left running.
-        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_guard_flags()),
-        claude_hook("Stop", matcher: "", script: "magus-checkpoint", flags: named),
+        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_named()),
+        claude_hook("Stop", matcher: "", script: "magus-checkpoint", flags: claude_named()),
         // A subagent's stop carries the path of its own transcript, whose last usage record
         // is the context a later continue to it would resume.
-        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_guard_flags()),
+        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_named()),
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing: it records the topics a later rule reads.
-        claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_guard_flags()),
+        claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_named()),
     ];
 }
 
@@ -129,11 +114,7 @@ fun claude_command(hook: HookCommand) > str {
 }
 
 fun claude_guard_command() > str {
-    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-command", flags: [OBSERVES_SKILL_LOADS]));
-}
-
-fun claude_call_command() > str {
-    return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-command", flags: claude_call_flags()));
+    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-command", flags: [<str>]));
 }
 
 fun claude_observe_command() > str {
@@ -272,6 +253,8 @@ export fun mgs_getLimits() > Limits {
         foregroundDefaultMs = FOREGROUND_DEFAULT_MS,
         foregroundMaxMs = FOREGROUND_MAX_MS,
         hookTimeoutMs = HOOK_TIMEOUT_S * 1000,
+        resumesOnBackgroundFrom = RESUMES_ON_BACKGROUND_FROM,
+        observesSkillLoads = true,
     };
 }
 
@@ -469,7 +452,7 @@ test "every tool call reaches the guard through one entry" {
         final command = "{(entry["hooks"] as [any])[0]["command"]}";
         if ((entry["matcher"] as? str) == EVERY_TOOL) {
             everyTool = everyTool + 1;
-            assert\equal(command, claude_call_command(), "the catch-all runs the command glue");
+            assert\equal(command, claude_guard_command(), "the catch-all runs the command glue");
         } else {
             assert\isTrue(command.indexOf("magus-command.buzz") == null, "no second entry judges a call the catch-all judges: {command}");
         }
@@ -492,42 +475,25 @@ test "the glue commands are the plain argv every machine shares" {
         }
         assert\isTrue(cmd.indexOf("proofread") == null, "the reply check is opt-in, never shipped: {cmd}");
     }
-    assert\equal(claude_guard_command(), head + "magus-command.buzz -- --agent-name claude-code --observes-skill-loads", "the guard entry");
+    assert\equal(claude_guard_command(), head + "magus-command.buzz -- --agent-name claude-code", "the guard entry");
     assert\isTrue(claude_session_command().endsWith("magus-session.buzz -- --env-file \"$CLAUDE_ENV_FILE\""), "the file the Bash tool sources");
     assert\isTrue(claude_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
     assert\isTrue(claude_checkpoint_command().endsWith(" -- --agent-name claude-code"), "Stop checkpoint");
 }
 
-test "only the catch-all entry declares the foreground limits, from the constants mgs_getLimits returns" {
+test "mgs_getLimits carries what the wiring no longer renders" {
     final limits = mgs_getLimits();
     assert\equal(limits.foregroundDefaultMs, 120000, "the Bash tool's default timeout");
     assert\equal(limits.foregroundMaxMs, 600000, "the longest timeout the Bash tool takes");
     assert\equal(limits.hookTimeoutMs, 10000, "the hook timeout every judging entry carries, in ms");
-    assert\equal(claude_call_command(),
-        claude_guard_command() + " --foreground-default-ms {FOREGROUND_DEFAULT_MS} --foreground-max-ms {FOREGROUND_MAX_MS} --tool-rows {claude_tools_dir()}",
-        "the guard command plus the two limits and the tool rows");
-    foreach (hook in mgs_listHooks()) {
-        final declares = hook.flags.indexOf("--foreground-max-ms") != null;
-        assert\equal(declares, hook.event == "PreToolUse" and hook.matcher == EVERY_TOOL,
-            "only the entry a shell command reaches declares the host's limits: {hook.event} {hook.matcher}");
-    }
+    assert\equal(limits.resumesOnBackgroundFrom, "2.1.299", "the first release that resumes a subagent");
+    assert\isTrue(limits.observesSkillLoads, "the catch-all matcher meets the Skill tool");
 }
 
-// The judging entries claim loads are REPORTED, and only a PreToolUse matcher the Skill tool
-// meets reports them. Derived from the hooks rather than pinned as a pair, so the coupling is
-// what fails when it breaks.
-test "every judging entry declares observes-skill-loads exactly while a matcher reports them" {
-    var reportsLoads = false;
+test "every glue entry takes the host's name and nothing else" {
     foreach (hook in mgs_listHooks()) {
-        if (hook.event == "PreToolUse" and (hook.matcher == EVERY_TOOL or hook.matcher == "Skill")) { reportsLoads = true; }
-    }
-    foreach (hook in mgs_listHooks()) {
-        final claims = hook.flags.indexOf(OBSERVES_SKILL_LOADS) != null;
-        if (hook.script == "magus-command") {
-            assert\equal(claims, reportsLoads, "a judging entry declares the flag exactly when a matcher reports loads");
-        } else {
-            assert\isTrue(!claims, "a glue that judges nothing takes no capability: {hook.script}");
-        }
+        if (hook.script == "magus-session" or hook.script == "magus-rehydrate") { continue; }
+        assert\equal(hook.flags.join(" "), "--agent-name claude-code", "{hook.event} {hook.script}");
     }
 }
 

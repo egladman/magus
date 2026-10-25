@@ -121,7 +121,7 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.
 	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
 		return "", nil
 	}
-	return "`" + root + "` is another checkout of this repository; run its own magus rooted there.",
+	return fmt.Sprintf("`%s` is another checkout of this repository; run its own magus rooted there.", root),
 		[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleSiblingCheckout), slices.Concat([]string{bin, "--root", root}, args),
 			"that checkout's own binary is the one its guard rules and spell bytecode were built from.")}
 }

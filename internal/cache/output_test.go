@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/xdg"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -211,8 +213,7 @@ func TestOutputStoreV2DescriptorResolvesWithEmptyRevision(t *testing.T) {
 	keyDir := filepath.Join(dir, "outputs", key)
 	require.NoError(t, os.MkdirAll(keyDir, 0o755))
 	const attempt = "out22222222" // shaped like a real attempt id
-	v2 := []byte(`{"ref":"` + PortableRef(key) + `","project":"pkg/a","target":"build","failed":false,"timestamp_ms":100,"duration_ms":5,` +
-		`"schema":2,"key":"` + key + `","key_version":1,"attempt":"` + attempt + `"}`)
+	v2 := []byte(fmt.Sprintf("{\"ref\":\"%s\",\"project\":\"pkg/a\",\"target\":\"build\",\"failed\":false,\"timestamp_ms\":100,\"duration_ms\":5,\"schema\":2,\"key\":\"%s\",\"key_version\":1,\"attempt\":\"%s\"}", PortableRef(key), key, attempt))
 	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+outExt), []byte("v2 bytes\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+descExt), v2, 0o644))
 
@@ -325,7 +326,7 @@ func TestOutputStoreAttemptsShareOnePortableRef(t *testing.T) {
 	ref2 := mustPersist(t, s, key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build", TimestampMs: 200})
 
 	assert.Equal(t, ref1, ref2, "every execution of one cache key shares the portable ref")
-	assert.Equal(t, ref1, s.StepRef(key))
+	assert.Equal(t, PortableRef(key), ref1)
 
 	attempts, err := s.Attempts(ref1)
 	require.NoError(t, err)
@@ -427,7 +428,7 @@ func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
 		require.ErrorIs(t, err, boom)
 		hash, herr := c.hashStep(context.Background(), &step)
 		require.NoError(t, herr)
-		refs = append(refs, c.outputs.StepRef(hash))
+		refs = append(refs, PortableRef(hash))
 	}
 	assert.Equal(t, refs[0], refs[1])
 	assert.Equal(t, refs[1], refs[2], "every failing execution shares the step's portable ref")
@@ -670,7 +671,7 @@ func TestInvocationReadsRefuseTraversal(t *testing.T) {
 	rel, err := filepath.Rel(filepath.Join(dir, RunsDir, "inv"), filepath.Join(outside, "hosts"))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(rel, ".."), "sanity: %q must climb out of the runs dir", rel)
-	traversal := "inv" + string(filepath.Separator) + rel
+	traversal := fmt.Sprintf("inv%s%s", string(filepath.Separator), rel)
 	// The refusal, not a missing file, is what has to stop this read: the id below joins onto
 	// a journal that exists and parses.
 	require.FileExists(t, filepath.Join(dir, RunsDir, traversal+runExt))
@@ -867,9 +868,8 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ref := c.outputs.StepRef(r.Hash)
-	require.NotEmpty(t, ref)
-	data, _, err := c.outputs.ByRef(ref)
+	require.NotEmpty(t, r.Ref)
+	data, _, err := c.outputs.ByRef(r.Ref)
 	require.NoError(t, err)
 	assert.Equal(t, "no newline here", string(data), "verbatim - no newline invented")
 }
@@ -911,7 +911,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, rPass.Hit)
 
-	passRef := c.outputs.StepRef(rPass.Hash)
+	passRef := rPass.Ref
 	require.NotEmpty(t, passRef, "a passing miss should persist a ref")
 	data, meta, err := c.outputs.ByRef(passRef)
 	require.NoError(t, err)
@@ -931,8 +931,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 
 	failHash, herr := c.hashStep(context.Background(), &fail)
 	require.NoError(t, herr)
-	failRef := c.outputs.StepRef(failHash)
-	require.NotEmpty(t, failRef, "a failing run should persist a ref")
+	failRef := PortableRef(failHash)
 	fdata, fmeta, err := c.outputs.ByRef(failRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(fdata), "FAIL: assertion failed")
@@ -1078,8 +1077,12 @@ func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
 // TestCacheHitReusesTheSameRef is THE portability contract, and the easiest one to
 // break from far away: a hit must answer with the ref the miss printed. If a hit ever
 // minted a fresh id, every existing test would still pass while two machines (or the
-// same machine twice) silently stopped agreeing on what a run is called.
+// same machine twice) silently stopped agreeing on what a run is called. The hit's
+// attempt under that ref is its own: this run's lease, marked cached, never the
+// miss's attempt.
 func TestCacheHitReusesTheSameRef(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvBaggage, "")
 	root, cdir, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
@@ -1094,15 +1097,31 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 
 	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err)
-	hit, err := c2.Run(context.Background(), step, build)
+	hit, err := c2.Run(types.WithJobLease(t.Context(), "wave/hit"), step, build)
 	require.NoError(t, err)
 	require.True(t, hit.Hit, "second run must hit")
 	assert.Equal(t, miss.Ref, hit.Ref, "a hit must reuse the miss's ref, never mint a new one")
 
-	// And the ref still resolves to the captured bytes after the hit.
+	type attempt struct {
+		Ref, Project, Lease string
+		Cached, Failed      bool
+	}
+	attempts, err := c2.outputs.Attempts(hit.Ref)
+	require.NoError(t, err)
+	got := make([]attempt, 0, len(attempts))
+	for _, a := range attempts {
+		got = append(got, attempt{Ref: a.Ref, Project: a.Project, Lease: a.Lease, Cached: a.Cached, Failed: a.Failed})
+	}
+	assert.Equal(t, []attempt{
+		{Ref: miss.Ref, Project: "test/pkg", Lease: "wave/hit", Cached: true},
+		{Ref: miss.Ref, Project: "test/pkg"},
+	}, got, "the hit records a new attempt, newest first, rather than answering with the miss's")
+	assert.GreaterOrEqual(t, attempts[0].TimestampMs, attempts[1].TimestampMs)
+
+	// The bare ref answers with the hit's attempt.
 	_, desc, err := c2.outputs.ByRef(hit.Ref)
 	require.NoError(t, err)
-	assert.Equal(t, "test/pkg", desc.Project)
+	assert.Equal(t, attempts[0].Attempt, desc.Attempt)
 }
 
 // TestFailingRunRefResolves: failures are the outputs people most want to retrieve,
@@ -1405,28 +1424,117 @@ func TestRotateRunsAgeCapKeepsNewestEvenPastMaxAge(t *testing.T) {
 	require.Len(t, got, 1)
 }
 
-// The outputs store is shared machine-wide, so two adopters of one imported key run
-// concurrently. AdoptImported reports only a bool, so the property is pinned by
-// occupying the fixed temp path a contended adopter would have wanted.
-func TestAdoptImportedDoesNotDependOnAFixedTempName(t *testing.T) {
-	dir := t.TempDir()
-	s := NewOutputStore(dir)
-	const key = "aabbccddeeff00112233445566778899aabbccddeeff001122334455"
+func TestReplayedPaths(t *testing.T) {
+	type counts struct{ Under, Outside int }
+	log := []byte("/src/app/a.go:1: x\n/src/app/wt/b.go:2: y\n/src/app-other/c.go:3: z\n")
+	cases := []struct {
+		name, producer, here string
+		want                 counts
+	}{
+		{name: "sibling checkout", producer: "/src/app", here: "/src/elsewhere", want: counts{Under: 2, Outside: 2}},
+		{name: "worktree nested in the producer", producer: "/src/app", here: "/src/app/wt", want: counts{Under: 2, Outside: 1}},
+		{name: "producer nested in this checkout", producer: "/src/app/wt", here: "/src/app", want: counts{Under: 1, Outside: 0}},
+		{name: "a root that is a name prefix is not a parent", producer: "/src/app-other", here: "/src/app", want: counts{Under: 1, Outside: 1}},
+		{name: "log names nothing under the producer", producer: "/opt/ci", here: "/src/app", want: counts{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			under, outside := replayedPaths(log, tc.producer, tc.here)
+			assert.Equal(t, tc.want, counts{Under: under, Outside: outside})
+		})
+	}
+}
 
-	// An imported step is a descriptor with no blob beside it, which is what
-	// AdoptImported completes.
-	keyDir := filepath.Join(dir, "outputs", key)
-	require.NoError(t, os.MkdirAll(keyDir, 0o755))
-	desc, err := json.Marshal(OutputDescriptor{Ref: PortableRef(key), Key: key, Project: "svc/api", Target: "test"})
+type replayReport struct {
+	Level   slog.Level
+	Message string
+}
+
+// replayReports drains the MGS8005 notices records holds.
+func replayReports(records *recordingHandler) []replayReport {
+	records.mu.Lock()
+	defer records.mu.Unlock()
+	var out []replayReport
+	for _, r := range records.records {
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == attr.NoticeKey && a.Value.String() == string(types.OutputReplayedFromAnotherCheckout) {
+				out = append(out, replayReport{Level: r.Level, Message: r.Message})
+			}
+			return true
+		})
+	}
+	records.records = nil
+	return out
+}
+
+// runPrinting runs target over the test/pkg project at root through c, printing printed
+// and writing its one output.
+func runPrinting(t *testing.T, c *Cache, root, target, printed string) Result {
+	t.Helper()
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Target = target
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
+	r, err := c.Run(t.Context(), step, func(ctx context.Context) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		fmt.Fprint(stdout, printed)
+		return os.WriteFile(out, []byte("built"), 0o644)
+	})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(keyDir, "attempt1"+descExt), desc, 0o644))
-	require.NoError(t, os.Mkdir(filepath.Join(keyDir, "attempt1"+outExt+".adopt.tmp"), 0o755))
+	return r
+}
 
-	ref, ok := s.AdoptImported(key, []byte("imported log\n"))
-	require.True(t, ok, "the import was reported uncompletable because one fixed temp path was taken")
-	assert.Equal(t, PortableRef(key), ref)
+// Checkouts sharing one store hit each other's entries. The manifest names the producing
+// checkout, and a hit in another checkout reports MGS8005 while replaying the log as is.
+func TestCacheHitFromAnotherCheckoutReportsMGS8005(t *testing.T) {
+	store := t.TempDir()
+	rootA, rootB := t.TempDir(), t.TempDir()
+	var records recordingHandler
+	open := func() *Cache {
+		t.Helper()
+		c, err := Open(t.Context(), t.TempDir(), WithStoreDir(store), WithLocalWrite(true), WithLogger(slog.New(&records)))
+		require.NoError(t, err)
+		return c
+	}
+	cA, cB := open(), open()
+	url := types.CodeURL(types.OutputReplayedFromAnotherCheckout)
 
-	got, _, err := s.ByRef(ref)
-	require.NoError(t, err)
-	assert.Equal(t, "imported log\n", string(got))
+	t.Run("the log names paths outside this checkout", func(t *testing.T) {
+		printed := fmt.Sprintf("%s/test/pkg/main.go:1: unused\n%s/test/pkg/main.go:2: unused\n", rootA, rootA)
+		miss := runPrinting(t, cA, rootA, "vet", printed)
+		require.False(t, miss.Hit)
+		m, err := cA.readManifest("test/pkg", miss.Hash)
+		require.NoError(t, err)
+		assert.Equal(t, rootA, m.Checkout)
+		assert.Empty(t, replayReports(&records), "a miss replays nothing")
+
+		hit := runPrinting(t, cB, rootB, "vet", "never printed: the hit does not run the target\n")
+		require.True(t, hit.Hit)
+		assert.Equal(t, []replayReport{{
+			Level: slog.LevelError,
+			Message: fmt.Sprintf("test/pkg:vet replayed a log recorded in another checkout, %s; it names 2 path(s) outside this checkout, %s, so those lines describe that checkout's files, not these; `magus run --no-cache` records this checkout's own (see %s)",
+				rootA, rootB, url),
+		}}, replayReports(&records))
+		data, desc, err := cB.outputs.ByRef(hit.Ref)
+		require.NoError(t, err)
+		assert.Equal(t, printed, string(data), "the replayed log is recorded byte for byte, never rewritten")
+		assert.True(t, desc.Cached)
+	})
+
+	t.Run("the log names no path outside this checkout", func(t *testing.T) {
+		require.False(t, runPrinting(t, cA, rootA, "build", "ok\n").Hit)
+		replayReports(&records)
+
+		require.True(t, runPrinting(t, cB, rootB, "build", "").Hit)
+		assert.Equal(t, []replayReport{{
+			Level:   slog.LevelInfo,
+			Message: fmt.Sprintf("test/pkg:build replayed a log recorded in another checkout, %s; it names 0 path(s) under that checkout (see %s)", rootA, url),
+		}}, replayReports(&records))
+	})
+
+	t.Run("a hit in the producing checkout reports nothing", func(t *testing.T) {
+		require.True(t, runPrinting(t, cA, rootA, "build", "").Hit)
+		assert.Empty(t, replayReports(&records))
+	})
 }

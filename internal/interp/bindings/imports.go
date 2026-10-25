@@ -70,7 +70,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 					continue
 				}
 				ref := externalTarget{Project: raw, Target: norm(fn.Name)}
-				handle := vm.DirectValue(raw+"."+fn.Name, func(callCtx context.Context, _ []vm.Value) (vm.Value, error) {
+				handle := vm.DirectValue(fmt.Sprintf("%s.%s", raw, fn.Name), func(callCtx context.Context, _ []vm.Value) (vm.Value, error) {
 					return vm.Null, dispatchBuzzExternal(callCtx, ref)
 				})
 				ext.register(handle, ref)
@@ -87,7 +87,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 	// to declare a cross-project input, or use it directly (e.g. an exec argv). It
 	// registers nothing itself.
 	// Set after the target loop so it reserves the name even if a target is called file.
-	m.MapSet(types.CrossFileMember, vm.DirectValue(raw+"."+types.CrossFileMember, func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet(types.CrossFileMember, vm.DirectValue(fmt.Sprintf("%s.%s", raw, types.CrossFileMember), func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 		var rel string
 		if len(args) > 0 && args[0].IsStr() {
 			rel = args[0].AsString()

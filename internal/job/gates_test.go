@@ -36,7 +36,7 @@ func gatesWorkspace() []*types.Project {
 func gateTargets(gates []UnrunGate) []string {
 	var out []string
 	for _, g := range gates {
-		out = append(out, g.Project+":"+g.Target)
+		out = append(out, fmt.Sprintf("%s:%s", g.Project, g.Target))
 	}
 	return out
 }

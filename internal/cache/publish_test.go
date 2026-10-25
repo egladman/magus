@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -66,10 +67,10 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	// A's ref even if the artifact shipped no metadata files at all. Assert what actually
 	// crossed the wire.
 	names := tarMemberNames(t, findBackendArtifact(t, remote, "test__pkg"))
-	assert.Contains(t, names, "outputs/"+rA.Hash+"/"+keyInputsName, "the artifact must carry the key inputs")
+	assert.Contains(t, names, fmt.Sprintf("outputs/%s/%s", rA.Hash, keyInputsName), "the artifact must carry the key inputs")
 	hasDescriptor := false
 	for _, n := range names {
-		if strings.HasPrefix(n, "outputs/"+rA.Hash+"/") && strings.HasSuffix(n, descExt) {
+		if strings.HasPrefix(n, fmt.Sprintf("outputs/%s/", rA.Hash)) && strings.HasSuffix(n, descExt) {
 			hasDescriptor = true
 		}
 	}
@@ -209,8 +210,7 @@ func TestPublishedBundleResolvesRemotely(t *testing.T) {
 
 	hash, err := cA.hashStep(context.Background(), &step)
 	require.NoError(t, err)
-	ref := cA.outputs.StepRef(hash)
-	require.NotEmpty(t, ref)
+	ref := PortableRef(hash)
 
 	// Machine B cannot resolve it yet: a failure is never shared automatically.
 	_, cB := openSigned(t, remote, nil, trusted)

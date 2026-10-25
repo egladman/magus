@@ -381,7 +381,7 @@ func TestSession_DeclaredNamespace(t *testing.T) {
 				"strict cached":   {WithParseCache(NewParseCache(1 << 20))},
 				"embedded cached": {WithEmbedded(), WithParseCache(NewParseCache(1 << 20))},
 			} {
-				t.Run(tc.name+"/"+mode, func(t *testing.T) {
+				t.Run(fmt.Sprintf("%s/%s", tc.name, mode), func(t *testing.T) {
 					s := NewSession(ctx, opts...)
 					assert.Equal(t, tc.want, s.declaredNamespace(src), "source %q", src)
 				})

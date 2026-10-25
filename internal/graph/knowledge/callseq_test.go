@@ -31,7 +31,7 @@ func (s *seqGraph) def(pkg, desc, file string, start, end int, sig string) strin
 		label = label[i+1:]
 	}
 	if sig == "" {
-		sig = "func " + label + "()"
+		sig = fmt.Sprintf("func %s()", label)
 	}
 	r := &types.KnowledgeSymbol{
 		Key: conformanceNS(pkg) + desc, Label: label, Language: "go", Namespace: conformanceNS(pkg), Signature: sig,
@@ -202,8 +202,8 @@ func TestCallSeqCheckExcludesBuildersAndVerbs(t *testing.T) {
 			s := newSeqGraph()
 			steps := s.steps(8)
 			s.def("/cmd/tool", "main().", "cmd/tool/main.go", 1, 3, "")
-			p := s.def("/cmd/tool", "build().", "cmd/tool/build.go", 1, 40, "func build("+tc.params+") error")
-			q := s.def("/cmd/tool", "lint().", "cmd/tool/lint.go", 1, 40, "func lint("+tc.params+") error")
+			p := s.def("/cmd/tool", "build().", "cmd/tool/build.go", 1, 40, fmt.Sprintf("func build(%s) error", tc.params))
+			q := s.def("/cmd/tool", "lint().", "cmd/tool/lint.go", 1, 40, fmt.Sprintf("func lint(%s) error", tc.params))
 			s.call(p, steps...)
 			s.call(q, steps...)
 

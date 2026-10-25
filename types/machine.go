@@ -1,6 +1,10 @@
 package types
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // MachineClaim is one step's request on the machine-wide admission budget.
 //
@@ -66,6 +70,49 @@ type MachineClaimant struct {
 	Dir     string        `json:"dir,omitempty" yaml:"dir,omitempty"`
 	Command string        `json:"command,omitempty" yaml:"command,omitempty"`
 	Since   time.Time     `json:"since,omitempty" yaml:"since,omitempty"`
+	// Owner is who answers for the holder: its job lease, else `spawned by <job>`, else
+	// "unleased". Empty when no connection to the broker names the holder's pid.
+	Owner string `json:"owner,omitempty" yaml:"owner,omitempty"`
+}
+
+// MachineWaiter is a request the broker holds until the budget can answer it: a claim kept
+// out by its own run or its job tree's validation seat, or a `status --wait`.
+type MachineWaiter struct {
+	// Kind is claim, reserve (a seat held for a piped reader) or await (takes nothing).
+	Kind    string `json:"kind" yaml:"kind"`
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target  string `json:"target,omitempty" yaml:"target,omitempty"`
+	// PID is the waiting process; for a reservation, the run the seat is asked for.
+	PID int `json:"pid,omitzero" yaml:"pid,omitempty"`
+	// MemoryMB and Slots are the claim it waits to seat.
+	MemoryMB int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Slots    int    `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir      string `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string `json:"command,omitempty" yaml:"command,omitempty"`
+	Owner    string `json:"owner,omitempty" yaml:"owner,omitempty"`
+	// Tree is the job tree whose validation seat it waits for, "" when it waits on the
+	// budget.
+	Tree  string    `json:"tree,omitempty" yaml:"tree,omitempty"`
+	Since time.Time `json:"since" yaml:"since"`
+	// WaitedMS is how long it had waited when the status was read.
+	WaitedMS int64 `json:"waited_ms" yaml:"waited_ms"`
+}
+
+// MachineRefusal is one MGS3009 refusal the broker answered: the claim it turned away
+// and the holders keeping it out at that moment.
+type MachineRefusal struct {
+	At       time.Time `json:"at" yaml:"at"`
+	PID      int       `json:"pid" yaml:"pid"`
+	Project  string    `json:"project" yaml:"project"`
+	Target   string    `json:"target" yaml:"target"`
+	MemoryMB int       `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Slots    int       `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
+	Owner    string    `json:"owner,omitempty" yaml:"owner,omitempty"`
+	// Fits is false when no state of the machine admits the claim, which no wait mends.
+	Fits    bool              `json:"fits" yaml:"fits"`
+	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
 }
 
 // MachineVerdict is the budget's answer to one admission request.
@@ -99,4 +146,22 @@ type MachineSnapshot struct {
 	HeldSlots   int `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
 	// Holders are the steps running against the budget, oldest first.
 	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
+	// Waiting is every caller blocked on a seat now, longest waiting first.
+	Waiting []MachineWaiter `json:"waiting,omitempty" yaml:"waiting,omitempty"`
+	// Refused is the last MGS3009 refusals the broker answered, newest first.
+	Refused []MachineRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
+}
+
+// HolderList names each holder as its pid, its command (or its target and project when it
+// carries none) and how long it has held its seat at now, comma-joined.
+func (s MachineSnapshot) HolderList(now time.Time) string {
+	holders := make([]string, len(s.Holders))
+	for i, h := range s.Holders {
+		what := fmt.Sprintf("%s %s", h.Target, h.Project)
+		if h.Command != "" {
+			what = fmt.Sprintf("`%s`", h.Command)
+		}
+		holders[i] = fmt.Sprintf("pid %d (%s) for %s", h.PID, what, now.Sub(h.Since).Round(time.Second))
+	}
+	return strings.Join(holders, ", ")
 }

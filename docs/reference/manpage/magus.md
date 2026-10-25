@@ -106,6 +106,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **queue**
 : Merge approved changes through a speculative, partitioned merge queue. See [**magus-queue**(1)](magus-queue.md).
 
+**gate**
+: A person's decisions about the local gate. See [**magus-gate**(1)](magus-gate.md).
+
 **watch**
 : Emit changed file paths to stdout. See [**magus-watch**(1)](magus-watch.md).
 
@@ -373,7 +376,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : How many \`magus run\`s one job tree's leased workers may have going at once; a run past it waits for a seat and says whose run holds it. A run with no lease (the root, a person) is never counted. Default 1; 0 = unlimited. Workspace only, like StaleAfter (default: 1). Config file key: **jobs.max_validations**.
 
 **MAGUS_JOBS_MAX_CLAIM_FILES**
-: How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more waives the path. Workspace only, like StaleAfter (default: 50). Config file key: **jobs.max_claim_files**.
+: How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more keeps the path with a deviation. Workspace only, like StaleAfter (default: 50). Config file key: **jobs.max_claim_files**.
 
 **MAGUS_JOBS_MAX_CLAIM_PROJECTS**
 : How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter (default: 1). Config file key: **jobs.max_claim_projects**.
@@ -525,5 +528,5 @@ dot-prefixed names are accepted; having both in the same directory is an error.
 
 ## See Also
 
-[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-gate**(1)](magus-gate.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

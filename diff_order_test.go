@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,7 +72,7 @@ func orderStepPaths(o types.DiffOrder) []string {
 	for _, g := range o.Groups {
 		for _, s := range g.Steps {
 			for _, h := range s.Hunks {
-				out = append(out, string(g.Kind)+" "+h.Ref.Path+" "+string(h.Why.Relation))
+				out = append(out, fmt.Sprintf("%s %s %s", string(g.Kind), h.Ref.Path, string(h.Why.Relation)))
 			}
 		}
 	}
@@ -278,7 +279,13 @@ func TestDiffOrderRefusesAPatchPathOutsideTheWorkspace(t *testing.T) {
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	rel, err := filepath.Rel(root, filepath.Join(outside, "x.go"))
 	require.NoError(t, err)
-	patch := "diff --git a/" + filepath.ToSlash(rel) + " b/" + filepath.ToSlash(rel) + "\n--- a/" + filepath.ToSlash(rel) + "\n+++ b/" + filepath.ToSlash(rel) + "\n@@ -1,1 +1,2 @@\n package p\n+var X = 1\n"
+	patch := fmt.Sprintf(`diff --git a/%s b/%s
+--- a/%s
++++ b/%s
+@@ -1,1 +1,2 @@
+ package p
++var X = 1
+`, filepath.ToSlash(rel), filepath.ToSlash(rel), filepath.ToSlash(rel), filepath.ToSlash(rel))
 
 	moved := movedFiles(root, patch)
 
@@ -309,4 +316,33 @@ func TestDiffOrderLinksKeepOnlyPairsOfChangedSymbols(t *testing.T) {
 
 	assert.Equal(t, []changeset.OrderLink{{Implementer: "impl", Interface: "iface"}}, orderLinks(g, files))
 	assert.Nil(t, orderLinks(nil, files))
+}
+
+// A file's hunks each carry the digest the parser gave them and only the symbols whose lines
+// that hunk changed.
+func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
+	open, closeID := goSymbol("api", "Open()."), goSymbol("api", "Close().")
+	head := newGraph(
+		rangedSymbol(open, "Open", "api.go:3", 5, "Function"),
+		rangedSymbol(closeID, "Close", "api.go:20", 22, "Function"),
+	)
+	files := []types.DiffFile{{Path: "api.go", Symbols: []types.DiffSymbol{{ID: closeID}, {ID: open}}}}
+	touched := touchedSymbols(head, twoHunkPatch, map[string]*types.DiffFile{"api.go": &files[0]})
+	places := map[string]map[string]hunkPlace{"api.go": {}}
+	for id, ts := range touched {
+		places["api.go"][id] = ts.place
+	}
+
+	attachHunks(files, twoHunkPatch, places)
+
+	parsed := changeset.Parse(twoHunkPatch)
+	require.Len(t, parsed, 1)
+	require.Len(t, parsed[0].Hunks, 2)
+	h0, h1 := parsed[0].Hunks[0], parsed[0].Hunks[1]
+	assert.Equal(t, []types.DiffHunk{
+		{Index: 0, Digest: h0.Digest, OldStart: 2, OldCount: 4, NewStart: 2, NewCount: 4, Declaration: "package api", Symbols: []string{open}},
+		{Index: 1, Digest: h1.Digest, OldStart: 20, OldCount: 3, NewStart: 20, NewCount: 3, Declaration: "func Close() {", Symbols: []string{closeID}},
+	}, files[0].Hunks)
+	assert.NotEmpty(t, h0.Digest)
+	assert.NotEqual(t, h0.Digest, h1.Digest)
 }

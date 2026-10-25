@@ -263,7 +263,7 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 func (s *Service) probeVersion(ctx context.Context, sp *spells.Spell, bin, dir string) probe {
 	// Keyed by spell as well as (bin, dir), because the argv comes from the spell: two
 	// spells declaring the same bin ask different questions and must not share an answer.
-	key := sp.Name() + "\x00" + bin + "\x00" + dir
+	key := fmt.Sprintf("%s\x00%s\x00%s", sp.Name(), bin, dir)
 	s.mu.Lock()
 	if c, ok := s.probes[key]; ok && time.Since(c.at) < s.ttl {
 		s.mu.Unlock()

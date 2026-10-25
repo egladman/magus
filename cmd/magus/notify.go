@@ -202,7 +202,7 @@ func notifyUsage(w io.Writer) {
 	fmt.Fprintln(w, "types.Event JSON envelope. --desktop additionally raises an OS notification.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "An event whose outcome is waiting or permission also opens a durable request")
-	fmt.Fprintln(w, "in this repository, which `"+hint.SessionAttention.String()+"` lists and only a person closes.")
+	fmt.Fprintf(w, "in this repository, which `%s` lists and only a person closes.\n", hint.SessionAttention.String())
 	fmt.Fprintln(w, "A repeat of a request the queue already holds does not raise another desktop")
 	fmt.Fprintln(w, "notification. A failure still does.")
 	fmt.Fprintln(w, "")
@@ -229,7 +229,7 @@ func renderNotification(ev types.Event) (title, body string) {
 		body = "no detail supplied"
 	}
 	if ev.Where != nil && ev.Where.Workspace.Value != "" {
-		body += " (" + ev.Where.Workspace.Value + ")"
+		body += fmt.Sprintf(" (%s)", ev.Where.Workspace.Value)
 	}
 	return title, body
 }

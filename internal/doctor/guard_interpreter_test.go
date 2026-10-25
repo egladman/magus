@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,7 +107,7 @@ func onPath(t *testing.T) {
 
 // versionedMagus writes an executable magus into w that prints version as `magus version` does.
 func versionedMagus(w *testkit.Workspace, version string) string {
-	return w.WriteExecutable("magus", "#!/bin/sh\necho 'magus "+version+" (abc1234) built 2026-01-01'\n")
+	return w.WriteExecutable("magus", fmt.Sprintf("#!/bin/sh\necho 'magus %s (abc1234) built 2026-01-01'\n", version))
 }
 
 // A call from console/ or docs/, each with a magusfile.buzz and no binary, runs the root's
@@ -152,7 +153,11 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 	require.NoError(t, os.MkdirAll(w.Path("cmd", "magus"), 0o755))
 	pathBin := versionedMagus(testkit.NewWorkspace(t), "v0.5.0")
 	t.Setenv("PATH", filepath.Dir(pathBin))
-	r := &runner{ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	r := &runner{root: root, ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	placement := indexScript(t, root, "hack/dev/bootstrap-worktree.buzz", "place ./magus and a lease in a job's worktree")
+	require.NoError(t, hint.WriteScriptsIndex(r.cacheDir(), hint.ScriptsIndex{Root: root, Serves: map[string][]hint.ScriptServe{
+		hint.SituationDoctor + guardBinaryCheck: {placement},
+	}}))
 
 	got := r.checkGuardBinaryEverywhere(nil)
 
@@ -163,8 +168,8 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 		Details: []string{
 			"its guard hooks judge with the magus on PATH, which may not load this tree",
 			"the main session builds one ./magus per base and places a copy here",
-			"place it: <main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>",
-			"on your own: build one with " + hint.Run.With("build", ".") + ", or bootstrap it with the command the guard prints",
+			"place it, from the main checkout: magus buzz hack/dev/bootstrap-worktree.buzz, to place ./magus and a lease in a job's worktree",
+			fmt.Sprintf("on your own: build one with %s, or bootstrap it with the command the guard prints", hint.Run.With("build", ".")),
 		},
 	}, got)
 
@@ -172,6 +177,45 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
 	main := r.checkGuardBinaryEverywhere(nil)
 	assert.NotContains(t, main.Message, "this worktree", "a main checkout with no ./magus is the ordinary state")
+}
+
+// indexScript places rel under root and returns the entry the graph build records for it.
+func indexScript(t *testing.T, root, rel, summary string) hint.ScriptServe {
+	t.Helper()
+	abs := filepath.Join(root, filepath.FromSlash(rel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+	require.NoError(t, os.WriteFile(abs, []byte("fun main(args: [str]) > void {}\n"), 0o644))
+	return hint.ScriptServe{Path: rel, Effect: hint.ScriptEffectWrite, Summary: summary}
+}
+
+// A script the guard's index serves whose file is gone fails the check loudly, naming it,
+// where the guard itself only stops serving it.
+func TestCheckServedScriptsFailsWhenAServedScriptIsGone(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	versionedMagus(w, "v0.5.0")
+	w.Write("magus.yaml", "{}\n")
+	withoutPathMagus(t)
+	r := &runner{root: root, ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	kept := indexScript(t, root, "hack/dev/show-x.buzz", "show x")
+	require.NoError(t, hint.WriteScriptsIndex(r.cacheDir(), hint.ScriptsIndex{Root: root, Serves: map[string][]hint.ScriptServe{
+		"rule:stage-all":  {kept, {Path: "hack/dev/prune-worktrees.buzz", Summary: "prune"}},
+		"event:disk-low":  {{Path: "hack/dev/prune-worktrees.buzz", Summary: "prune"}},
+		"rule:sed-inline": {{Path: "hack/dev/rename-symbol.buzz", Summary: "rename"}},
+	}}))
+	assert.Equal(t, types.Check{
+		Name:    servedScriptsCheck,
+		Status:  types.CheckFail,
+		Message: "the guard's scripts index names 2 script(s) that are gone, so their situations serve nothing",
+		Details: []string{
+			"hack/dev/prune-worktrees.buzz",
+			"hack/dev/rename-symbol.buzz",
+			"restore each, or rebuild the index without it: " + hint.GraphBuild.With(),
+		},
+	}, r.checkServedScripts())
+
+	require.NoError(t, hint.WriteScriptsIndex(r.cacheDir(), hint.ScriptsIndex{Root: root, Serves: map[string][]hint.ScriptServe{"rule:stage-all": {kept}}}))
+	assert.Equal(t, types.CheckOK, r.checkServedScripts().Status, "every served script is there")
 }
 
 // The check resolves the hook from every project directory: one whose hook would run a

@@ -3,6 +3,7 @@ package magus
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -90,7 +92,14 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 
 	var notices bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&notices, nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(&notices, &slog.HandlerOptions{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	ctx := t.Context()
@@ -98,11 +107,14 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 	require.NoError(t, err)
 	m := opened.(*Magus)
 
+	notices.Reset()
 	data, desc, err := m.OutputByRef(ctx, ref)
 	require.NoError(t, err)
 	assert.Equal(t, "lint log\n", string(data))
 	assert.Equal(t, "lint", desc.Target)
-	assert.Contains(t, notices.String(), orchestrator, "stderr says which checkout was read")
+	assert.Equal(t,
+		fmt.Sprintf("level=WARN msg=\"read %s from the output store of %s, another checkout of this repository\" notice=\"\" component=magus\n", ref, orchestrator),
+		notices.String(), "stderr says which checkout was read, at the level a quiet display keeps")
 
 	data, _, err = m.OutputByRefRemote(ctx, ref[:8])
 	require.NoError(t, err, "a unique prefix resolves in the other checkout as it does locally")
@@ -197,8 +209,8 @@ func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
 			var again *cache.RefNotFoundError
 			require.ErrorAs(t, err, &again)
 			assert.Same(t, missing, again, "the miss is one error, not rebuilt on every unwrap")
-			assert.Contains(t, err.Error(), "recorded by "+gone+", which is no longer on disk")
-			assert.Contains(t, err.Error(), "`cd "+gone+" && magus query output "+goneRef+"`")
+			assert.Contains(t, err.Error(), fmt.Sprintf("recorded by %s, which is no longer on disk", gone))
+			assert.Contains(t, err.Error(), fmt.Sprintf("`cd %s && magus query output %s`", gone, goneRef))
 
 			err = lookup(agedRef)
 			require.ErrorIs(t, err, fs.ErrNotExist)
@@ -268,4 +280,36 @@ func TestRecordedRefMatchesOnlyRefShapedPrefixes(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, c.want, recordedRefMatches(c.recorded, c.ref), "recorded %q, ref %q", c.recorded, c.ref)
 	}
+}
+
+// A guard hook stores its verdict in the checkout it judged in, which may be a sibling linked
+// worktree no fact records: the ref still resolves from the worker, and a miss names every
+// sibling store it read. An output ref's runs are recorded, so its miss reads no sibling.
+func TestOutputLookupsReadASiblingWorktree(t *testing.T) {
+	testkit.Isolate(t)
+	_, trees := linkedWorktrees(t, "worker", "judge", "idle")
+	worker, judge, idle := trees[0], trees[1], trees[2]
+	ref := persistedRunRef(t, idle)
+	judgeCache, err := ResolveCacheDir(judge)
+	require.NoError(t, err)
+	idleCache, err := ResolveCacheDir(idle)
+	require.NoError(t, err)
+	verdict, _ := trail.WriteBlob(t.Context(), judgeCache, "grd", []byte("the full verdict"))
+	require.NotEmpty(t, verdict)
+
+	opened, err := Inspect(t.Context(), worker, WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	m := opened.(*Magus)
+
+	got, err := m.PayloadByRef(t.Context(), verdict)
+	require.NoError(t, err)
+	assert.Equal(t, "the full verdict", string(got))
+
+	_, err = m.PayloadByRef(t.Context(), "grd"+strings.Repeat("0", 16))
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	assert.Contains(t, err.Error(), judgeCache)
+	assert.Contains(t, err.Error(), idleCache)
+
+	_, _, err = m.OutputByRef(t.Context(), ref)
+	require.ErrorIs(t, err, fs.ErrNotExist, "no fact recorded idle as running it")
 }

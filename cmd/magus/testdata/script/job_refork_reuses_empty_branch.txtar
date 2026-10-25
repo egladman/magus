@@ -1,0 +1,31 @@
+# Forking a job id again after it ended reuses the branch the first fork left behind,
+# while that branch holds nothing past the checkpoint.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+exec magus job fork scout --read-only --criteria 'read the pricing code' --checkout $WORK/scout
+exec magus job exit scout
+! exists $WORK/scout
+
+exec magus job fork scout --read-only --criteria 'read the pricing code again' --checkout $WORK/again
+stdout '^checkout .*again: made for job scout at '
+exists $WORK/again/magusfile.buzz
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+
+// test has nothing to check; the job here only reads.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}

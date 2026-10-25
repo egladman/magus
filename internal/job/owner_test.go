@@ -1,6 +1,8 @@
 package job
 
 import (
+	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,6 +19,24 @@ func attentionRows(t *testing.T, root string) []sessions.AttentionRequest {
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	return sessions.AttentionQueue(fold)
+}
+
+// A knock on a holder's tree root is one attention row on that root, however many callers
+// meet the same held path.
+func TestNoteHeldFilesOneRowForTheTreeRoot(t *testing.T) {
+	root := t.TempDir()
+	NoteHeld(t.Context(), root, "orchestrator", "worker needs coverage/buzz/x.lcov, held by job mover")
+	NoteHeld(t.Context(), root, "orchestrator", "worker needs coverage/buzz/x.lcov, held by job mover")
+
+	queue := attentionRows(t, root)
+	require.Len(t, queue, 1)
+	got := queue[0]
+	assert.Contains(t, got.Message, "held by job mover")
+	// The id, the invocation and the clock are the raise's own; the message is checked above.
+	got.ID, got.Invocation, got.OpenedMs, got.Message = "", "", 0, ""
+	assert.Equal(t, sessions.AttentionRequest{
+		Lease: "orchestrator", Source: heldSource, Outcome: string(types.OutcomeFailed), Severity: string(types.SeverityWarning),
+	}, got)
 }
 
 // A session that ends takes the job it was editing with it, tells the root once, and a
@@ -54,6 +74,50 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.StateRunning, resumed.State)
 	assert.Empty(t, resumed.EndReason)
+}
+
+// A read-only row ends with its session as a writing one does: it holds no paths, and
+// left running it would sit in the stale list until somebody pruned it.
+func TestEndSessionEndsATakenReadOnlyJob(t *testing.T) {
+	repo := execRepo(t)
+	loc := tempLocation(t, repo.Root())
+	s := NewStore(loc)
+	seed(t, s, types.Job{ID: "scout", Checkpoint: repo.Head(), State: types.StateDeclared, ReadOnly: true})
+	_, err := s.Exec(t.Context(), "scout")
+	require.NoError(t, err)
+	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, s.Bind(worker, "scout"))
+
+	ended, ok, err := s.EndSession(t.Context(), worker)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, types.StateNoReturn, ended.State)
+	assert.True(t, ended.EndedWithSession(), ended.EndReason)
+}
+
+// An integration row outlives its holder's turn: the merges it holds sit in a standing
+// checkout, so a session end leaves the row running and the binding live for the holder
+// that resumes it.
+func TestEndSessionLeavesAnIntegrationRowRunning(t *testing.T) {
+	repo := execRepo(t)
+	loc := tempLocation(t, repo.Root())
+	s := NewStore(loc)
+	seed(t, s, types.Job{ID: "integrate", Checkpoint: repo.Head(), State: types.StateDeclared, Integrates: []string{"feat-a"}})
+	_, err := s.Exec(t.Context(), "integrate")
+	require.NoError(t, err)
+	holder := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, s.Bind(holder, "integrate"))
+
+	_, ok, err := s.EndSession(t.Context(), holder)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	binding := s.Binding(holder)
+	assert.Equal(t, []any{"integrate", false}, []any{binding.Job, binding.Gone}, "the binding stays live, never a tombstone")
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Empty(t, attentionRows(t, repo.Root()))
 }
 
 func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
@@ -131,4 +195,46 @@ func TestNoteEndedFilesOneRowPerEnding(t *testing.T) {
 	queue := attentionRows(t, root)
 	require.Len(t, queue, 1, "two processes noting one ending raise it once")
 	assert.Equal(t, string(types.OutcomeFailed), queue[0].Outcome)
+}
+
+// A rejecting wait sends an exited row back to rework, holding its write paths again under
+// the rule a claim meets; a path another job took meanwhile refuses the re-claim, naming
+// that job, and the row stays exited holding nothing.
+func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
+	t.Parallel()
+
+	result := passingResult()
+	attempt := passingRun
+	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+	resolve := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	empty := result
+	empty.ChangedPaths = nil
+	exited := func(t *testing.T, others ...types.Job) Location {
+		t.Helper()
+		loc := declared(t, append([]types.Job{acceptRow()}, others...)...)
+		_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolve)
+		require.NoError(t, err)
+		return loc
+	}
+	state := func(t *testing.T, loc Location) types.JobState {
+		t.Helper()
+		rows, err := NewStore(loc).List()
+		require.NoError(t, err)
+		return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == result.Job })].State
+	}
+
+	loc := exited(t)
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+	require.False(t, status.Verified)
+	assert.Equal(t, types.StateRunning, state(t, loc))
+	assert.Contains(t, strings.Join(status.Notes, "\n"), "holds its write paths again")
+
+	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"cmd/magus/ledger.go"}, State: types.StateRunning}
+	loc = exited(t, taker)
+	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+	require.False(t, status.Verified)
+	assert.Equal(t, types.StateExited, state(t, loc))
+	assert.Contains(t, strings.Join(status.Notes, "\n"), "cmd/magus/ledger.go is held by live job taker")
 }

@@ -230,14 +230,13 @@ func ruleDecisions(in map[string]string) (map[proofread.Rule]proofread.Decision,
 	out := make(map[proofread.Rule]proofread.Decision, len(in))
 
 	for _, name := range slices.Sorted(maps.Keys(in)) {
-		r, d := proofread.Rule(name), proofread.Decision(in[name])
+		r := proofread.Rule(name)
 		if !slices.Contains(known, r) {
 			return nil, fmt.Errorf("unknown rule %q", name)
 		}
 
-		switch d {
-		case proofread.DecisionOff, proofread.DecisionAdvise, proofread.DecisionDeny:
-		default:
+		var d proofread.Decision
+		if err := d.UnmarshalText([]byte(in[name])); err != nil || d == 0 {
 			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
 		}
 
@@ -404,14 +403,14 @@ func (c *sampleConfig) newRuleCount(r proofread.Rule, kinds map[proofread.Kind]b
 
 		for _, k := range doc.Kinds {
 			rc.Kinds = append(rc.Kinds, string(k))
-			rc.ShippedDecisions[string(k)] = string(doc.Decisions[k])
+			rc.ShippedDecisions[string(k)] = doc.Decisions[k].String()
 
 			d := doc.Decisions[k]
 			if set, ok := c.decisions[r]; ok {
 				d = set
 			}
 
-			rc.Decisions[string(k)] = string(d)
+			rc.Decisions[string(k)] = d.String()
 
 			if !kinds[k] {
 				rc.KindsWithoutASource = append(rc.KindsWithoutASource, string(k))

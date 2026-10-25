@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,11 +27,11 @@ func runLog(t *testing.T, dir, name, version, status string, argv ...string) {
 		if i > 0 {
 			args += ","
 		}
-		args += `"` + a + `"`
+		args += fmt.Sprintf(`"%s"`, a)
 	}
-	body := `{"ts":1,"inv":"i","kind":"started","command":{"arguments":[` + args + `]},"magus_version":"` + version + `"}` + "\n"
+	body := fmt.Sprintf(`{"ts":1,"inv":"i","kind":"started","command":{"arguments":[%s]},"magus_version":"%s"}`+"\n", args, version)
 	if status != "" {
-		body += `{"ts":2,"inv":"i","kind":"finished","status":"` + status + `"}` + "\n"
+		body += fmt.Sprintf(`{"ts":2,"inv":"i","kind":"finished","status":"%s"}`+"\n", status)
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
 }
@@ -489,7 +490,7 @@ func judgeRelocatedPush(t *testing.T, gatedA, gatedB bool, command func(b string
 // TestRelocatedPushGradesTheCheckoutItRunsIn pins that a push another directory runs is
 // graded by THAT checkout's revision and gate record, not the hook's.
 func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
-	dashC := func(b string) string { return "git -C " + b + " push origin HEAD:refs/heads/x" }
+	dashC := func(b string) string { return fmt.Sprintf("git -C %s push origin HEAD:refs/heads/x", b) }
 
 	t.Run("an ungated checkout is refused, though the hook's own is gated", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, dashC)
@@ -504,7 +505,7 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 	})
 
 	t.Run("a leading cd relocates it the same way", func(t *testing.T) {
-		v := judgeRelocatedPush(t, true, false, func(b string) string { return "cd " + b + " && git push" })
+		v := judgeRelocatedPush(t, true, false, func(b string) string { return fmt.Sprintf("cd %s && git push", b) })
 		assert.Equal(t, decisionDeny, v.Decision)
 		assert.Contains(t, v.Reason, "def5678")
 	})
@@ -517,7 +518,7 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 
 	t.Run("global options around -C still grade the checkout it names", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, func(b string) string {
-			return "git --no-pager -c color.ui=never -C " + b + " -P push origin HEAD:refs/heads/x"
+			return fmt.Sprintf("git --no-pager -c color.ui=never -C %s -P push origin HEAD:refs/heads/x", b)
 		})
 		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
@@ -616,7 +617,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 
 func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gateCoverage {
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return commit[:12] }}
-	cover, _, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
+	cover, _, _, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
 	return cover
 }
 
@@ -638,7 +639,7 @@ func TestPushCoverageNamesTheReplayedRun(t *testing.T) {
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return replayed[:12] }}
 	at := location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}
 
-	cover, _, _, replay := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
+	cover, _, _, replay, _ := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
 	assert.Equal(t, gatePassed, cover)
 	assert.Equal(t, "inv-green", replay.Inv)
 

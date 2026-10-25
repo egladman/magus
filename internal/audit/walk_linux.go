@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"fmt"
 	"sync"
 	"unsafe"
 
@@ -80,7 +81,7 @@ func readDirEnts(dirPath string, fn func(name []byte, kind dirEntKind)) error {
 				// Some filesystems return DT_UNKNOWN for every entry; lstat to
 				// classify so the audit doesn't silently under-report files.
 				var st unix.Stat_t
-				if unix.Lstat(dirPath+"/"+string(name), &st) != nil {
+				if unix.Lstat(fmt.Sprintf("%s/%s", dirPath, string(name)), &st) != nil {
 					continue
 				}
 				switch st.Mode & unix.S_IFMT {

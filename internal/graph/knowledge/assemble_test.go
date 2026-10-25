@@ -797,7 +797,7 @@ func TestSplitEdges(t *testing.T) {
 	got := map[string]map[string]string{}
 	for _, e := range splitEdges(sh.Nodes, sh.Edges) {
 		require.Equal(t, types.RelationSplits, e.Relation)
-		got[e.Source+" -> "+e.Target] = e.Attrs
+		got[fmt.Sprintf("%s -> %s", e.Source, e.Target)] = e.Attrs
 	}
 	split := func(suffix, class string, coupled bool) map[string]string {
 		return map[string]string{attrSplitSuffix: suffix, attrSplitClass: class, attrSplitCoupled: fmt.Sprint(coupled)}

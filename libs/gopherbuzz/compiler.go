@@ -622,7 +622,7 @@ func (c *compiler) checkConstructible(v *ast.ObjectLit, key string) error {
 	}
 	name := v.TypeName
 	if v.Namespace != "" {
-		name = v.Namespace + `\` + name
+		name = fmt.Sprintf(`%s\%s`, v.Namespace, name)
 	}
 	return fmt.Errorf("buzz: line %d:%d: %s is declared for type checking only and has no definition to construct", v.Line, v.Col, name)
 }
@@ -843,7 +843,7 @@ func (c *compiler) initModuleScope(prog *ast.Program, opts CompileOptions) {
 	if len(priv) == 0 {
 		return
 	}
-	c.nsPrefix = "\x00" + ns + "\x00"
+	c.nsPrefix = fmt.Sprintf("\x00%s\x00", ns)
 	c.privTop = priv
 }
 
@@ -1785,7 +1785,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		if m.IsStatic {
 			tf = nil
 		}
-		idx, err := c.compileFunChunkThis(v.Name+"."+m.Name, m.Doc, m.Params, m.Body.Stmts, tf)
+		idx, err := c.compileFunChunkThis(fmt.Sprintf("%s.%s", v.Name, m.Name), m.Doc, m.Params, m.Body.Stmts, tf)
 		if err != nil {
 			return err
 		}
@@ -1816,7 +1816,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		if !namesSomething(f.Default) {
 			continue
 		}
-		idx, err := c.compileFunChunk(v.Name+"."+f.Name, "", nil, []ast.Node{&ast.ReturnStmt{Pos: ast.NodePos(f.Default), Value: f.Default}})
+		idx, err := c.compileFunChunk(fmt.Sprintf("%s.%s", v.Name, f.Name), "", nil, []ast.Node{&ast.ReturnStmt{Pos: ast.NodePos(f.Default), Value: f.Default}})
 		if err != nil {
 			return err
 		}

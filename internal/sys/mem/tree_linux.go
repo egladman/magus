@@ -3,6 +3,7 @@
 package mem
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -46,7 +47,7 @@ func walkTree(pid int) int64 {
 // statm rather than status or smaps_rollup: it is a single short line of numbers
 // with no keys to match, which is what makes it cheap enough to sample.
 func procRSS(pid int) int64 {
-	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/statm")
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", pid))
 	if err != nil {
 		return 0
 	}
@@ -64,14 +65,14 @@ func procRSS(pid int) int64 {
 // procChildren lists a process's direct children, gathered across its threads
 // because each thread keeps its own children file.
 func procChildren(pid int) []int {
-	base := "/proc/" + strconv.Itoa(pid) + "/task"
+	base := fmt.Sprintf("/proc/%d/task", pid)
 	tids, err := os.ReadDir(base)
 	if err != nil {
 		return nil
 	}
 	var out []int
 	for _, tid := range tids {
-		raw, rerr := os.ReadFile(base + "/" + tid.Name() + "/children")
+		raw, rerr := os.ReadFile(fmt.Sprintf("%s/%s/children", base, tid.Name()))
 		if rerr != nil {
 			continue
 		}

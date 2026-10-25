@@ -159,7 +159,7 @@ func typeMarkdown(t std.TypeTag) string {
 	if t == std.TypeFunc { // GoType() == "Callback"
 		return fmt.Sprintf("[`%s`](%s)", name, callbackURL)
 	}
-	return "`" + name + "`"
+	return fmt.Sprintf("`%s`", name)
 }
 
 // methodSourceLink renders a `" - [source](...)"` suffix linking a method to the file
@@ -209,7 +209,7 @@ func moduleHasExample(m std.Module) bool {
 func frontmatterDesc(m std.Module) string {
 	doc := strings.TrimSpace(m.Doc)
 	if doc == "" {
-		return "The " + m.Name + " magusfile stdlib module."
+		return fmt.Sprintf("The %s magusfile stdlib module.", m.Name)
 	}
 	// Prefer the first sentence.
 	if i := strings.Index(doc, ". "); i > 0 && i < 200 {
@@ -313,7 +313,7 @@ func renderModule(m std.Module) string {
 			// superscript and gathers the notes at the foot of the page.
 			sig := fmt.Sprintf("**Signature:** `%s`", std.BuzzSignature(m, meth))
 			if equiv, dup := std.BuzzStdlibEquiv(m.Name, meth.Name); dup {
-				label := "buzz-stdlib-" + m.Name + "-" + meth.Name
+				label := fmt.Sprintf("buzz-stdlib-%s-%s", m.Name, meth.Name)
 				sig += fmt.Sprintf("[^%s]", label)
 				notes = append(notes, stdlibNote{label, buzzMethodName(m, meth), equiv})
 			}
@@ -341,7 +341,7 @@ func renderModule(m std.Module) string {
 						typ += " or null"
 					}
 					if r.Name != "" {
-						rets[i] = r.Name + " " + typ
+						rets[i] = fmt.Sprintf("%s %s", r.Name, typ)
 					} else {
 						rets[i] = typ
 					}
@@ -388,7 +388,7 @@ func renderModule(m std.Module) string {
 // buzzMethodName renders the module-qualified camelCase call (e.g. "fs.delete")
 // for a footnote, matching the form used in signatures.
 func buzzMethodName(m std.Module, meth std.Method) string {
-	return m.Name + `\` + std.BuzzMethodName(meth)
+	return fmt.Sprintf("%s\\%s", m.Name, std.BuzzMethodName(meth))
 }
 
 func writeIndex(dir string, modules []std.Module) error {

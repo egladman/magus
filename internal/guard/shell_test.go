@@ -1,10 +1,13 @@
 package guard
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -737,7 +740,7 @@ func TestDenyReasonsStayShort(t *testing.T) {
 // were not already looking at.
 func TestDenyDoesNotReplayALongCommand(t *testing.T) {
 	body := strings.Repeat("x = 1\n", 200)
-	v := Evaluate(strict(testDependencies()), "go run -c \""+body+"\"")
+	v := Evaluate(strict(testDependencies()), fmt.Sprintf("go run -c \"%s\"", body))
 	require.NotEmpty(t, v.Deny)
 	assert.NotContains(t, v.Deny, body, "the command is elided, not quoted back")
 	assert.Less(t, len(v.Deny), len(body), "the refusal must be shorter than what tripped it")
@@ -1476,7 +1479,7 @@ func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `"+hint.VCSLsFiles.With("-o", "name")+" | git add --pathspec-from-file=-`.")
+	assert.Contains(t, verdict.Deny, fmt.Sprintf("a whole-tree `git add` sweeps in regenerated output; list the paths, then stage them: `%s | git add --pathspec-from-file=-`.", hint.VCSLsFiles.With("-o", "name")))
 	assert.Contains(t, verdict.Why, "--include-generated")
 	assert.NotContains(t, verdict.Why, "vcs add")
 	assert.Contains(t, verdict.Why, "git add -- <paths>")
@@ -1686,23 +1689,47 @@ func TestInPlaceSedLeavesAScratchFile(t *testing.T) {
 	}
 }
 
-// TestDenyTextsPointAtTheReferenceScripts: each rewrite refusal names the scripted rename,
-// and each output refusal the typed-result script, in one line, only where the workspace
-// carries the script.
-func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
+// servesScript places the script rel under root declaring summary and serves, then
+// indexes every script under root the way `magus graph build` does.
+func servesScript(t *testing.T, root, rel, summary string, serves ...string) {
+	t.Helper()
+	quoted := make([]string, len(serves))
+	for i, s := range serves {
+		quoted[i] = strconv.Quote(s)
+	}
+	placeFile(t, root, rel, fmt.Sprintf("final SUMMARY = %q;\nfinal SERVES = [%s];\n", summary, strings.Join(quoted, ", ")))
+	var scripts []string
+	require.NoError(t, filepath.WalkDir(root, func(p string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() && filepath.Ext(p) == ".buzz" {
+			rel, _ := filepath.Rel(root, p)
+			scripts = append(scripts, filepath.ToSlash(rel))
+		}
+		return err
+	}))
+	x, err := hint.BuildScriptsIndex(root, scripts, func(string) bool { return true })
+	require.NoError(t, err)
+	require.NoError(t, hint.WriteScriptsIndex(workspaceCacheDir(root), x))
+}
+
+// TestDenyTextsNameTheScriptsServingTheRule: a refusal names, once, each script the
+// workspace's scripts index says serves its rule, and nothing where none does.
+func TestDenyTextsNameTheScriptsServingTheRule(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal"), 0o755))
-	for _, f := range []string{"hack/dev/rename-symbol.buzz", "hack/dev/example-typed-results.buzz", "hack/dev/prune-worktrees.buzz", "hack/dev/resolve-conflicts.buzz", "internal/x.go"} {
-		require.NoError(t, os.WriteFile(filepath.Join(root, f), nil, 0o644))
-	}
+	placeFile(t, root, "internal/x.go", "")
+	servesScript(t, root, "hack/dev/rename-symbol.buzz", "rename a code symbol at every occurrence the index verifies",
+		"rule:sed-in-place", "rule:interpreter-rewrite")
+	servesScript(t, root, "hack/dev/example-typed-results.buzz", "read magus results as typed Buzz values",
+		"rule:output-pipe", "rule:output-redirect")
+	servesScript(t, root, "hack/dev/prune-worktrees.buzz", "free disk by removing finished worktrees",
+		"rule:worktree-remove -- --go-cache")
+	servesScript(t, root, "hack/dev/resolve-conflicts.buzz", "settle a conflicted file", "rule:merge-side-checkout")
 	carries := strict(Dependencies{scope: workspaceScope{root: root}})
 	bare := strict(Dependencies{scope: workspaceScope{root: t.TempDir()}})
-	rename := "\nRenaming a symbol from a script? `" + hint.Buzz.With("hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>") + "`"
-	typed := "\nReading magus output in a script? `" + hint.Buzz.With("hack/dev/example-typed-results.buzz") + "`"
-	prune := "\nFreeing disk or clearing finished worktrees? `" + hint.Buzz.With("hack/dev/prune-worktrees.buzz", "--", "--go-cache") + "`"
-	resolve := "\nSettling a conflicted file? `" + hint.Buzz.With("hack/dev/resolve-conflicts.buzz") + "`"
+	rename := "\nThis workspace's script for it, to rename a code symbol at every occurrence the index verifies: `magus buzz hack/dev/rename-symbol.buzz`"
+	typed := "\nThis workspace's script for it, to read magus results as typed Buzz values: `magus buzz hack/dev/example-typed-results.buzz`"
+	prune := "\nThis workspace's script for it, to free disk by removing finished worktrees: `magus buzz hack/dev/prune-worktrees.buzz -- --go-cache`"
+	resolve := "\nThis workspace's script for it, to settle a conflicted file: `magus buzz hack/dev/resolve-conflicts.buzz`"
 	for _, tt := range []struct {
 		command string
 		rule    denyRuleName
@@ -1723,6 +1750,24 @@ func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 	at := location{workspace: root, dir: root}
 	got := denyInterpreterRewrite(at, `python3 -c "open('internal/x.go','w').write(x)"`, DialectBash)
 	assert.True(t, strings.HasSuffix(got, rename), got)
+}
+
+// TestWorkspaceDenyNamesTheScriptReplacingTheLine: a workspace rule denying a raw command
+// a script declares it replaces is served that script, and a line it does not replace is not.
+func TestWorkspaceDenyNamesTheScriptReplacingTheLine(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	servesScript(t, root, "hack/dev/merge-job-branches.buzz", "merge job branches, settling generated conflicts",
+		"replaces:git merge", "replaces:git cherry-pick")
+	deps := strict(Dependencies{scope: workspaceScope{root: root}, ShellRules: []WorkspaceShellRule{
+		{Name: "raw-merge", Decision: decisionDeny, Program: "git", Args: []string{"merge"}, Reason: "merge through the script"},
+		{Name: "raw-pick", Decision: decisionDeny, Program: "git", Args: []string{"cherry-pick"}, Reason: "pick through the script"},
+		{Name: "raw-revert", Decision: decisionDeny, Program: "git", Args: []string{"revert"}, Reason: "no reverts"},
+	}})
+
+	assert.Equal(t, "merge through the script\nThis workspace's script for it, to merge job branches, settling generated conflicts: `magus buzz hack/dev/merge-job-branches.buzz`",
+		Evaluate(deps, "git merge --no-ff feat").Deny)
+	assert.Equal(t, "no reverts", Evaluate(deps, "git revert abc123").Deny)
 }
 
 // TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
@@ -1866,7 +1911,7 @@ func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name)
 		require.Len(t, v.Next, 1)
 		assert.Equal(t, tc.pipe, v.Next[0].Run)
-		assert.Contains(t, v.Why, "when their order does not matter: `"+tc.combined+"`")
+		assert.Contains(t, v.Why, fmt.Sprintf("when their order does not matter: `%s`", tc.combined))
 		assert.Empty(t, Evaluate(strict(testDependencies()), tc.combined).Deny)
 	}
 
@@ -1927,7 +1972,7 @@ func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
 // The bootstrap link itself is raw-tool's, alone on its line.
 func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
 	own := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(own, "go.mod"), []byte("module "+ownModule+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(own, "go.mod"), []byte(fmt.Sprintf("module %s\n", ownModule)), 0o644))
 	deps := strict(testDependencies())
 	deps.scope = workspaceScope{root: own}
 
@@ -1989,9 +2034,8 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "announces when it ends", cmd)
-		assert.Contains(t, v.Deny, "wait for the task's completion notice", cmd)
+		assert.Contains(t, v.Deny, "magus job exec --timeout <d> -- <command>` and wait for its notice", cmd)
 		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
-		assert.Contains(t, v.Deny, hint.Status.With("--watch")+"` is for a person", cmd)
 	}
 	// A loop that works each pass without sleeping, or a for loop over a list that never
 	// breaks out, is not waiting.
@@ -2022,7 +2066,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "waits on work you did not start", cmd)
 		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
-		assert.Contains(t, v.Deny, hint.Status.With("--watch=15s"), cmd)
+		assert.Contains(t, v.Deny, "background your own call as `magus job exec --timeout <d> -- <command>`", cmd)
 		assert.NotContains(t, v.Deny, "monitor", cmd)
 		assert.NotContains(t, v.Deny, "announces when it ends", cmd)
 	}
@@ -2119,7 +2163,7 @@ func TestGuardDeniesProcessPoll(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleProcessPoll, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "status --watch", cmd)
+		assert.Contains(t, v.Deny, "background your call as `magus job exec --timeout <d> -- <command>` and wait for its notice", cmd)
 	}
 }
 

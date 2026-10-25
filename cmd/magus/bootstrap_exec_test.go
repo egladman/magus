@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -224,7 +225,7 @@ func TestBootstrapExecIntoReplacesProcess(t *testing.T) {
 	require.NoError(t, err)
 
 	cmd := exec.Command(exe, "-test.run", "^TestBootstrapExecIntoHelperProcess$")
-	cmd.Env = append(os.Environ(), bootstrapExecIntoHelperTargetVar+"="+fixture)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", bootstrapExecIntoHelperTargetVar, fixture))
 	out, runErr := cmd.CombinedOutput()
 
 	var exitErr *exec.ExitError

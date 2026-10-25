@@ -125,7 +125,7 @@ import "proc";
 magus\project({});
 
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("a.go", "test.sh");
+    ctx.readsFiles(["a.go", "test.sh"]);
     proc\exec("sh", ["test.sh"]);
 }
 -- ws/test.sh --
@@ -142,7 +142,7 @@ import "proc";
 magus\project({"merge_low_risk": ["*.go"]});
 
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("a.go", "test.sh");
+    ctx.readsFiles(["a.go", "test.sh"]);
     proc\exec("sh", ["test.sh"]);
 }
 -- a.A.go --

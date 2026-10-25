@@ -58,8 +58,10 @@ func FileCut(ranked []string, fileOf func(id string) string, k int) []string {
 // Metrics summarizes the runs of one slice at file granularity, cut at 10 files.
 // Rates and means are over Queries, the runs with at least one relevant file; a run
 // with none counts in Unscorable only. Judged10 is the share of the top 10 files
-// that carry a judgment, over the runs that returned a file. CondensedNDCG10 scores
-// the list with unjudged files removed (Sakai, SIGIR 2007).
+// that carry a judgment, over the runs that returned a file. Precision10 is the share
+// of the top 10 files that are relevant, over the same runs: an unjudged file counts
+// as not relevant, and a run that returned nothing counts in ZeroResult only.
+// CondensedNDCG10 scores the list with unjudged files removed (Sakai, SIGIR 2007).
 type Metrics struct {
 	Queries         int           `json:"queries"`
 	Unscorable      int           `json:"unscorable"`
@@ -67,6 +69,7 @@ type Metrics struct {
 	NDCG10          float64       `json:"ndcg_at_10"`
 	CondensedNDCG10 float64       `json:"condensed_ndcg_at_10"`
 	Judged10        float64       `json:"judged_at_10"`
+	Precision10     float64       `json:"precision_at_10"`
 	Recall10        float64       `json:"recall_at_10"`
 	RR10            float64       `json:"rr_at_10"`
 	ZeroResult      float64       `json:"zero_result_rate"`
@@ -182,13 +185,23 @@ func condensed(files []string, judged map[string]bool) []string {
 // judgedShare is judged@k for one nonempty ranked list: the share of top that
 // carries a judgment.
 func judgedShare(top []string, judged map[string]bool) float64 {
-	hit := 0
+	return share(top, func(f string) bool { return judged[f] })
+}
+
+// relevantShare is precision@k for one nonempty ranked list: the share of top that
+// is relevant.
+func relevantShare(top []string, relevant map[string]int) float64 {
+	return share(top, func(f string) bool { return relevant[f] > 0 })
+}
+
+func share(top []string, hit func(string) bool) float64 {
+	n := 0
 	for _, f := range top {
-		if judged[f] {
-			hit++
+		if hit(f) {
+			n++
 		}
 	}
-	return float64(hit) / float64(len(top))
+	return float64(n) / float64(len(top))
 }
 
 func summarize(runs []Run) Metrics {
@@ -213,6 +226,7 @@ func summarize(runs []Run) Metrics {
 		} else {
 			returned++
 			m.Judged10 += judgedShare(top, judged)
+			m.Precision10 += relevantShare(top, relevant)
 		}
 		if r.Unknown {
 			m.Unknown++
@@ -232,6 +246,7 @@ func summarize(runs []Run) Metrics {
 	m.Unknown /= n
 	if returned > 0 {
 		m.Judged10 /= float64(returned)
+		m.Precision10 /= float64(returned)
 	}
 	m.MeanBytes = float64(bytes) / n
 	slices.Sort(latencies)
@@ -283,12 +298,13 @@ func (r Report) Text() string {
 			continue
 		}
 		fmt.Fprintf(&b, "== %s\n", heading)
+		fmt.Fprintln(&b, "P@10 and judged@10 are over the queries that returned a file; an unjudged file counts as not relevant.")
 		w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "slice\tqueries\tunscorable\tdropped gold\tnDCG@10\tcond nDCG@10\tjudged@10\tR@10\tRR@10\tzero\tunknown\tp50\tp95\tmean bytes")
+		fmt.Fprintln(w, "slice\tqueries\tunscorable\tdropped gold\tnDCG@10\tcond nDCG@10\tjudged@10\tP@10\tR@10\tRR@10\tzero\tunknown\tp50\tp95\tmean bytes")
 		row := func(name string, m Metrics) {
-			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%s\t%s\t%.0f\n",
+			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%s\t%s\t%.0f\n",
 				name, m.Queries, m.Unscorable, m.DroppedGold, m.NDCG10, m.CondensedNDCG10, m.Judged10,
-				m.Recall10, m.RR10, m.ZeroResult, m.Unknown, m.LatencyP50, m.LatencyP95, m.MeanBytes)
+				m.Precision10, m.Recall10, m.RR10, m.ZeroResult, m.Unknown, m.LatencyP50, m.LatencyP95, m.MeanBytes)
 		}
 		row("all", s.Overall)
 		for _, shape := range slices.Sorted(maps.Keys(s.Shapes)) {

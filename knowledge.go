@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -806,9 +807,9 @@ func foldEvaluationReads(h *knowledge.InputHash, reads readlog.Reads, known bool
 	// through internal/proc/environ, so it is what the evaluation saw.
 	for _, name := range reads.Env {
 		if v, ok := os.LookupEnv(name); ok {
-			h.String("env:" + name + "=" + v)
+			h.String(fmt.Sprintf("env:%s=%s", name, v))
 		} else {
-			h.String("env:" + name + ":unset")
+			h.String(fmt.Sprintf("env:%s:unset", name))
 		}
 	}
 	if reads.EnvAll {
@@ -2346,6 +2347,39 @@ func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 		return s.Freshness == types.SymbolIndexStale || s.Freshness == types.SymbolIndexUnvouched
 	})
 	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh, at)
+}
+
+// WriteScriptsIndex indexes the declarations of every tracked .buzz file in the workspace,
+// so the guard names a script by the situation it serves. A script whose declaration does
+// not parse is left out of the index, and the error names it.
+func (m *Magus) WriteScriptsIndex(ctx context.Context) error {
+	root := m.Root()
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil {
+		return fmt.Errorf("scripts index: %w", err)
+	}
+	if res.VCS == nil {
+		return errors.New("scripts index: no version control says which scripts are tracked")
+	}
+	tracked, err := res.VCS.TrackedFiles(ctx, root, []string{"."})
+	if err != nil {
+		return fmt.Errorf("scripts index: %w", err)
+	}
+	scripts := slices.DeleteFunc(tracked, func(p string) bool { return !strings.HasSuffix(p, ".buzz") })
+	var dirty []string
+	if len(scripts) > 0 {
+		if dirty, err = res.VCS.DirtyFiles(ctx, root, scripts); err != nil {
+			return fmt.Errorf("scripts index: %w", err)
+		}
+	}
+	x, declErr := hint.BuildScriptsIndex(root, scripts, func(p string) bool { return !slices.Contains(dirty, p) })
+	if err := hint.WriteScriptsIndex(resolveCacheDir(root, m.cfg), x); err != nil {
+		return fmt.Errorf("scripts index: %w", err)
+	}
+	if declErr != nil {
+		return fmt.Errorf("%w: %w", hint.ErrScriptDeclaration, declErr)
+	}
+	return nil
 }
 
 // WatchKnowledgeGraph starts a file watcher that keeps the warm knowledge graph

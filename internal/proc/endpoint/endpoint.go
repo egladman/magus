@@ -50,7 +50,7 @@ func Parse(s string) (Endpoint, error) {
 
 // String returns the canonical unix:// URL form.
 func (e Endpoint) String() string {
-	return e.Scheme + "://" + e.Addr
+	return fmt.Sprintf("%s://%s", e.Scheme, e.Addr)
 }
 
 // Network returns the network name expected by net.Listen / net.Dial.

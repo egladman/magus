@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,7 +126,7 @@ func TestReadAllSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
 
 	body := strings.Join([]string{
 		`{"v":1,"invocation":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
-		`{"v":1,"invocation":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
+		fmt.Sprintf(`{"v":1,"invocation":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
 		`{"v":1,"invocation":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
@@ -150,7 +151,7 @@ func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 	path := filepath.Join(dir, "sess1.jsonl")
 
 	body := strings.Join([]string{
-		`{"v":1,"invocation":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
+		fmt.Sprintf(`{"v":1,"invocation":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
 		`{"v":1,"invocation":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
@@ -261,7 +262,7 @@ func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
 
 	var order []string
 	for _, rec := range fold.Records {
-		order = append(order, rec.Invocation+"/"+string(rune('0'+rec.Seq)))
+		order = append(order, fmt.Sprintf("%s/%c", rec.Invocation, '0'+rec.Seq))
 	}
 	assert.Equal(t, []string{"alpha/1", "beta/1", "beta/2", "alpha/2"}, order)
 }
@@ -465,7 +466,7 @@ func TestDirIsSharedAcrossWorktreesOfOneRepo(t *testing.T) {
 
 	linked := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"),
-		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "feature")+"\n"), 0o644))
+		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(main, ".git", "worktrees", "feature"))), 0o644))
 
 	mainDir, err := Dir(main)
 	require.NoError(t, err)

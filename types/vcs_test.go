@@ -2,6 +2,7 @@ package types
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -166,7 +167,7 @@ func TestCheckpointTokenRoundTrips(t *testing.T) {
 
 	both := tracked
 	both.UntrackedDigest = "fedcba9876543210fedcba9876543210"
-	rev, digest = ParseCheckpointToken(" " + both.Token() + "\n")
+	rev, digest = ParseCheckpointToken(fmt.Sprintf(" %s\n", both.Token()))
 	assert.Equal(t, "abc", rev, "surrounding space is trimmed")
 	assert.Len(t, digest, 32, "the folded digest is as wide as a patch digest")
 	assert.NotEqual(t, tracked.PatchDigest, digest, "untracked files change the digest")

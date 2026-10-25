@@ -2,6 +2,7 @@ package types
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ func (k MergeKind) String() string {
 	case MergeImportSet:
 		return "kind 4"
 	}
-	return "MergeKind(" + strconv.Itoa(int(k)) + ")"
+	return fmt.Sprintf("MergeKind(%s)", strconv.Itoa(int(k)))
 }
 
 // MergeRegion is one region both sides changed: the locations their edits collide at,
@@ -57,7 +58,7 @@ func (r MergeRegion) String() string {
 	for i, l := range r.Locations {
 		names[i] = l.String()
 	}
-	return strings.Join(names, ", ") + ": " + r.Kind.String()
+	return fmt.Sprintf("%s: %s", strings.Join(names, ", "), r.Kind.String())
 }
 
 // MergeResolution is a three-way merge.
@@ -278,7 +279,7 @@ func settleOverlap(o, a, b []string, da, db []bool) ([]string, MergeKind, bool) 
 // has no newline gets one, so no marker lands on a content line.
 func conflictMarked(o, a, b []string, size int) []string {
 	section := func(marker, label string, lines []string) []string {
-		out := append([]string{strings.Repeat(marker, size) + label + "\n"}, lines...)
+		out := append([]string{fmt.Sprintf("%s%s\n", strings.Repeat(marker, size), label)}, lines...)
 		if last := out[len(out)-1]; !strings.HasSuffix(last, "\n") {
 			out[len(out)-1] = last + "\n"
 		}

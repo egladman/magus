@@ -177,7 +177,7 @@ func TestClientRunsAsATask(t *testing.T) {
 	id := startTask(t, send, `fun main(args: [str]) > int { return 7; }`)
 
 	var result toolResult
-	require.NoError(t, json.Unmarshal(send(`{"jsonrpc":"2.0","id":11,"method":"tasks/result","params":{"taskId":"`+id+`"}}`), &result))
+	require.NoError(t, json.Unmarshal(send(fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/result\",\"params\":{\"taskId\":\"%s\"}}", id)), &result))
 	require.Len(t, result.Content, 1)
 	require.False(t, result.IsError, result.Content[0].Text)
 	var got mcpclient.Result
@@ -190,7 +190,7 @@ func TestClientTaskIsCancellable(t *testing.T) {
 	_, m, send := taskServer(t)
 	id := startTask(t, send, loopForever)
 	time.Sleep(300 * time.Millisecond)
-	send(`{"jsonrpc":"2.0","id":12,"method":"tasks/cancel","params":{"taskId":"` + id + `"}}`)
+	send(fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"%s\"}}", id))
 
 	require.Eventually(t, func() bool {
 		events, err := trail.ReadRecent(m.CacheDir(), 10)

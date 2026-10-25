@@ -291,8 +291,8 @@ func gitExternalDiffRefusal(rest []string) error {
 	return exit.Usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
 		"magus reports on a whole changeset, so it cannot answer per file. "+
 		"Use git's pager instead, which hands over the entire diff at once: "+
-		"`git config pager.diff '"+hint.Diff.With("--patch", "-")+"'` - then plain `git diff` renders through magus, "+
-		"and `git --no-pager diff` still gets you the raw patch", rest[0])
+		"`git config pager.diff '%s'` - then plain `git diff` renders through magus, "+
+		"and `git --no-pager diff` still gets you the raw patch", rest[0], hint.Diff.With("--patch", "-"))
 }
 
 // diffTUITerm is the terminal the viewer was handed, split by descriptor, because the viewer
@@ -557,8 +557,8 @@ func hintSinceLastReview(ctx context.Context, rev types.Diff, src diffInput) {
 		return
 	}
 	interactive.Hint(ctx, fmt.Sprintf(
-		"you last reviewed %d of these %d files at %s: `"+hint.Diff.With("--rev", "%s...%s")+"` shows only what changed since",
-		covered, len(rev.Files), short(at.Revision), at.Revision, src.head))
+		"you last reviewed %d of these %d files at %s: `%s` shows only what changed since",
+		covered, len(rev.Files), short(at.Revision), hint.Diff.With("--rev", fmt.Sprintf("%s...%s", at.Revision, src.head))))
 }
 
 // warnUnreadUnknown tells the person the read marks could not be loaded, with the load error as
@@ -1180,7 +1180,7 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	b := &diffBridge{addr: mcpAddrString(), token: token}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+b.addr+"/api/v1/diff?"+q.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff?%s", b.addr, q.Encode()), nil)
 	if err != nil {
 		return nil
 	}
@@ -1203,7 +1203,7 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 		return nil
 	}
 	if sess.AsOf != asOf {
-		warn("the review is not shared with the server: it computed its changeset from a different patch", attr.Why("as-of "+sess.AsOf+", this patch is "+asOf))
+		warn("the review is not shared with the server: it computed its changeset from a different patch", attr.Why(fmt.Sprintf("as-of %s, this patch is %s", sess.AsOf, asOf)))
 		return nil
 	}
 	b.session = &sess
@@ -1394,7 +1394,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeWrite)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+b.addr+"/api/v1/diff/session", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v1/diff/session", b.addr), bytes.NewReader(body))
 	if err != nil {
 		return
 	}
@@ -1430,7 +1430,7 @@ func diffUsage(w io.Writer) {
 	tty.Prose(w, tty.SystemProbe,
 		"The order is: declared outputs last, then the widest reach first - how many files reference the most-referenced symbol the file changed.",
 		"Reach needs a symbol index; without one there is no ranking key at all, and diff says so at the top and falls back to path order rather than implying a ranking.",
-		"Build the index with `"+hint.GraphBuild.String()+"`.")
+		fmt.Sprintf("Build the index with `%s`.", hint.GraphBuild.String()))
 	fmt.Fprintln(w, "")
 	tty.Prose(w, tty.SystemProbe,
 		"Below the files the report prints the reading order of the hunks: a definition before its uses, an interface before its implementations, code before its tests,",
@@ -1483,7 +1483,7 @@ func diffUsage(w io.Writer) {
 		"The viewer opens on its hunk. Printed, it is the conversation oldest first, the hunk,",
 		"and what the change there reaches: callers, who it is public to, coverage, conformance and notes.")
 	tty.ProseItem(w, tty.SystemProbe, "  --baseline    ",
-		"a `"+hint.GraphExport.With("--symbols", "-o", "json")+"` of the base, which adds what each changed symbol did to the API",
+		fmt.Sprintf("a `%s` of the base, which adds what each changed symbol did to the API", hint.GraphExport.With("--symbols", "-o", "json")),
 		"and the smallest semver bump that proves. Signatures are compared as the indexer rendered them,",
 		"so the base must come from the same indexers this tree is indexed with.")
 	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-cohort ",
@@ -1499,10 +1499,10 @@ func diffUsage(w io.Writer) {
 func diagnosticLine(d types.Diagnostic) string {
 	line := d.Message
 	if d.Code != "" {
-		line = "[" + d.Code + "] " + line
+		line = fmt.Sprintf("[%s] %s", d.Code, line)
 	}
 	if d.URL != "" {
-		line += " (" + d.URL + ")"
+		line += fmt.Sprintf(" (%s)", d.URL)
 	}
 	return line
 }
@@ -1570,7 +1570,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 	if !rev.Ranked() && len(primary) > 1 {
 		fmt.Println("UNRANKED: no symbol index, so there is no consequence to rank by.")
 		fmt.Println("What follows is path order, not a ranking. Build the index with")
-		fmt.Println("`" + hint.GraphBuild.String() + "` to order these by what they can break.")
+		fmt.Printf("`%s` to order these by what they can break.\n", hint.GraphBuild.String())
 		fmt.Println()
 	}
 
@@ -1589,11 +1589,11 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 			for _, f := range generated {
 				printDiffFile(f, link)
 			}
-			fmt.Println("      why is one of these folded? `" + hint.DescribeFile.With("<path>") + "` names the project that declares it")
+			fmt.Printf("      why is one of these folded? `%s` names the project that declares it\n", hint.DescribeFile.With("<path>"))
 		} else {
 			fmt.Printf("%d generated files folded. They are declared target outputs: reading one is\n", len(generated))
 			fmt.Println("reading a machine's restatement of a change made elsewhere. Show them with --generated,")
-			fmt.Println("or ask why one is folded with `" + hint.DescribeFile.With("<path>") + "`.")
+			fmt.Printf("or ask why one is folded with `%s`.\n", hint.DescribeFile.With("<path>"))
 		}
 	}
 
@@ -1700,7 +1700,7 @@ func diffAPILines(api *types.DiffAPI) []string {
 		head += fmt.Sprintf(", likely %s (%d public signature(s) changed)", api.Likely, api.Signature)
 	}
 	lines := []string{
-		head + " against " + api.Base,
+		fmt.Sprintf("%s against %s", head, api.Base),
 		fmt.Sprintf("  public symbols: %d added, %d removed, %d re-signed, %d changed in body only",
 			api.Added, api.Removed, api.Signature, api.Body),
 	}
@@ -1756,7 +1756,7 @@ func diffFileFacts(f types.DiffFile) []string {
 			case types.DiffChangeAdded:
 				facts = append(facts, "ADDED "+s.Qualified)
 			case types.DiffChangeSignature:
-				facts = append(facts, "SIGNATURE "+s.Qualified+": `"+s.BaseSignature+"` -> `"+s.Signature+"`")
+				facts = append(facts, fmt.Sprintf("SIGNATURE %s: `%s` -> `%s`", s.Qualified, s.BaseSignature, s.Signature))
 			}
 		}
 	}
@@ -2148,7 +2148,7 @@ func impactCostLines(c *impactCost) []string {
 	if c == nil {
 		return []string{
 			"COST: no run history yet, so there is nothing to estimate from",
-			"      Run `" + hint.Affected.With("ci") + "` once and the next impact can price this.",
+			fmt.Sprintf("      Run `%s` once and the next impact can price this.", hint.Affected.With("ci")),
 		}
 	}
 	out := []string{fmt.Sprintf(
@@ -2199,7 +2199,7 @@ func impactAdvisorBaseLine(b *impactAdvisorBase) string {
 	if b == nil {
 		return ""
 	}
-	refresh := "`git fetch origin " + strings.TrimPrefix(b.Ref, "origin/") + "` brings it forward"
+	refresh := fmt.Sprintf("`git fetch origin %s` brings it forward", strings.TrimPrefix(b.Ref, "origin/"))
 	if b.Tip == "" {
 		return fmt.Sprintf("BASE: %s is not in this clone, so the advisors below had nothing to "+
 			"compare against; %s", b.Ref, refresh)
@@ -2707,7 +2707,7 @@ func impactEvidenceGapLines(gap trail.ConsultGap) []string {
 	default:
 		return []string{
 			"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
-			"      This record is per checkout, and wiring it is `" + hint.AgentInstall.String() + "`.",
+			fmt.Sprintf("      This record is per checkout, and wiring it is `%s`.", hint.AgentInstall.String()),
 		}
 	}
 }
@@ -3159,7 +3159,7 @@ func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
 	for _, p := range paths {
 		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
 		if !inChange[clean] {
-			return types.Diff{}, exit.Usagef("magus diff --ack: %q is not a changed file in this changeset; `"+hint.Diff.With("-o", "name")+"` lists them", p)
+			return types.Diff{}, exit.Usagef("magus diff --ack: %q is not a changed file in this changeset; `%s` lists them", p, hint.Diff.With("-o", "name"))
 		}
 		want[clean] = true
 	}
@@ -3263,7 +3263,7 @@ func ackChangeset(content reviewedContent, cacheDir string, rev types.Diff, reas
 // under them. That is additive; it is not a reason to drop the only telling of it here.
 func impactReviewLines(r *impactReview) []string {
 	if r == nil {
-		return []string{"REVIEW: read receipts unavailable; step a file through in `" + hint.Diff.String() + "` to earn one"}
+		return []string{fmt.Sprintf("REVIEW: read receipts unavailable; step a file through in `%s` to earn one", hint.Diff.String())}
 	}
 	// Silence, not a reassurance. "Everything here has been read" would be a claim the
 	// reader can produce by stamping rather than by reading, which is the sentence this

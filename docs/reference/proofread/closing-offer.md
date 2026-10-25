@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A reflexive offer hands the next decision back to the person and costs them a turn. Measured 2026-10-10 over the same 400 replies: it fires on 62 (15.5%), "Want me to" in most. Of 45 closing offers read, about a third asked for a decision the agent needed (a push, a branch name, a choice between designs), so it advises: the rule cannot tell a needed question from a reflexive one.
+A reflexive offer hands the next decision back to the person and costs them a turn. Measured 2026-10-10 over the same 400 replies: it fires on 62 (a 15.5% firing rate), "Want me to" in most. Of 45 closing offers read, about a third asked for a decision the agent needed (a push, a branch name, a choice between designs), so it advises: the rule cannot tell a needed question from a reflexive one.
 
 ## Default decision
 

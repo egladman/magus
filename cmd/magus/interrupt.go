@@ -158,7 +158,7 @@ func discardWarning(running []cache.RunningTarget, now time.Time) string {
 	oldest := now
 	for i, t := range running {
 		if i < show {
-			names = append(names, t.Project+" "+t.Target)
+			names = append(names, fmt.Sprintf("%s %s", t.Project, t.Target))
 		}
 		if t.Started.Before(oldest) {
 			oldest = t.Started

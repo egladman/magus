@@ -214,7 +214,7 @@ func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }
 func (v ModelTierSource) String() string   { return enum.String(v) }
 
-var claimKinds = enum.Set[ClaimKind]{ClaimRefs, ClaimTest, ClaimOutput, ClaimReleased}
+var claimKinds = enum.Set[ClaimKind]{ClaimRefs, ClaimTest, ClaimOutput, ClaimReleased, ClaimDeadHolder}
 
 func (v ClaimKind) Values() []string { return claimKinds.Strings() }
 func (v ClaimKind) Valid() bool      { return claimKinds.Valid(v) }

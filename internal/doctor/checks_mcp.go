@@ -40,7 +40,7 @@ func (*runner) checkTokens() types.Check {
 	case err != nil:
 		fails = append(fails, err.Error())
 	default:
-		parts = append(parts, "operator token: present (id "+auth.TokenID(tok)+")")
+		parts = append(parts, fmt.Sprintf("operator token: present (id %s)", auth.TokenID(tok)))
 	}
 
 	stored, skipped, err := readStore()

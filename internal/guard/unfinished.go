@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -45,7 +46,7 @@ func beginJudgment(cacheDir, sessionKey string, now time.Time) judgmentMark {
 	if os.MkdirAll(dir, 0o755) != nil {
 		return judgmentMark{}
 	}
-	path := filepath.Join(dir, strconv.FormatInt(now.UnixNano(), 10)+"-"+strconv.Itoa(os.Getpid()))
+	path := filepath.Join(dir, fmt.Sprintf("%d-%d", now.UnixNano(), os.Getpid()))
 	if os.WriteFile(path, nil, 0o644) != nil {
 		return judgmentMark{}
 	}

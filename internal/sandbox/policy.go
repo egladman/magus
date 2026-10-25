@@ -357,7 +357,7 @@ func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path
 		Lease:     p.Lease,
 		LeaseFrom: p.LeaseFrom,
 		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
-		Action:  access.String() + " of " + path,
+		Action:  fmt.Sprintf("%s of %s", access.String(), path),
 		Outcome: trail.OutcomeError,
 		Error:   err.Error(),
 	})

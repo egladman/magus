@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/workspace"
@@ -25,6 +24,9 @@ import (
 // awaitBudget is `status --wait`. The gate goes up before anything slow, since the run
 // reading the pipe looks for it once, on its way to its locks. A magus reading stdout
 // gets the seat reserved for it; anything else is only told the budget has room.
+//
+// TODO: pass status's --deadline to withinDeadline once internal/commands/registry.go
+// declares the flag; until then the wait has no bound.
 func awaitBudget(ctx context.Context, rootOverride string) error {
 	if root, err := workspace.FindRoot(rootOverride); err == nil {
 		pipe.Gate(root, globalCfg)
@@ -41,40 +43,63 @@ func awaitBudget(ctx context.Context, rootOverride string) error {
 	for i := range claims {
 		claims[i].Weight = weight
 	}
-	var err error
-	if reader == 0 {
-		err = cache.AwaitMachine(ctx, queryCapacity, claims, waiting)
-	} else {
-		err = reserveSeat(ctx, reader, argv, claims, waiting)
-	}
+	err := withinDeadline(ctx, 0, queryCapacity, func(ctx context.Context) error {
+		return awaitSeat(ctx, reader, argv, claims, waiting)
+	})
 	if err == nil && waited {
 		slog.InfoContext(ctx, fmt.Sprintf("the build budget can seat it now, after %s", time.Since(start).Round(time.Second)), attr.Notice(""), attr.Component("magus"))
 	}
 	return err
 }
 
-// reserveSeat waits until the broker can seat claims and has it hold the seat for the
-// magus reader, whose command argv is. With no broker, or one shutting down, nothing
-// holds a seat and the run admits itself; that is said rather than assumed.
-func reserveSeat(ctx context.Context, reader int, argv []string, claims []types.MachineClaim, waiting func(string)) error {
+// withinDeadline runs wait bounded by deadline, a zero one never. Past it, the wait is
+// refused with each run snapshot shows holding the budget, so a caller that may wait says
+// how long and learns whom it waited on.
+func withinDeadline(ctx context.Context, deadline time.Duration, snapshot func(context.Context) (types.MachineSnapshot, error), wait func(context.Context) error) error {
+	if deadline <= 0 {
+		return wait(ctx)
+	}
+	bounded, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+	err := wait(bounded)
+	if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+		return err
+	}
+	s, serr := snapshot(ctx)
+	if serr != nil {
+		return fmt.Errorf("the build budget had no seat within %s, and who holds it could not be read: %w", deadline, serr)
+	}
+	return fmt.Errorf("the build budget had no seat within %s, held by %s", deadline, s.HolderList(time.Now()))
+}
+
+// awaitSeat is one request the broker holds until the budget can seat claims: for a magus
+// reader, whose command argv is, a seat held for it; for any other reader (0), only the
+// word that the budget has room. The deadline is ctx's. With no broker, or one shutting
+// down, nothing is held and the run admits itself; that is said rather than assumed.
+func awaitSeat(ctx context.Context, reader int, argv []string, claims []types.MachineClaim, waiting func(string)) error {
 	client := broker.NewClient(broker.DefaultAddr())
 	defer func() { _ = client.Close() }()
-	command := strings.Join(argv, " ")
-	reserve := func(ctx context.Context, c types.MachineClaim, reader int) (types.MachineVerdict, error) {
-		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		defer cancel()
-		c.Command = command
-		return client.Reserve(ctx, c, reader)
+	wait := func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+		return client.Await(ctx, claims, parked)
 	}
-	err := cache.ReserveMachine(ctx, reserve, claims, reader, waiting)
+	if reader != 0 {
+		seat := cache.WidestSeat(claims)
+		seat.Command = strings.Join(argv, " ")
+		wait = func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+			v, err := client.Reserve(ctx, seat, reader, func(v types.MachineVerdict) { parked(seat, v) })
+			return seat, v, err
+		}
+	}
+	err := cache.AwaitMachine(ctx, wait, waiting)
 	var refused *broker.Error
-	switch {
-	case errors.Is(err, broker.ErrUnavailable), errors.As(err, &refused) && refused.Code == broker.CodeDraining:
-		slog.InfoContext(ctx, fmt.Sprintf("no seat is reserved for pid %d; it asks the budget itself when it starts", reader),
+	if errors.Is(err, broker.ErrUnavailable) || errors.As(err, &refused) && refused.Code == broker.CodeDraining {
+		held := "nothing holds a seat for this run"
+		if reader != 0 {
+			held = fmt.Sprintf("no seat is reserved for pid %d", reader)
+		}
+		slog.InfoContext(ctx, fmt.Sprintf("%s; it asks the budget itself when it starts", held),
 			attr.Error(err), attr.Notice(""), attr.Component("magus"))
 		return nil
-	case errors.As(err, &refused) && refused.Code == broker.CodeUnknownType:
-		return fmt.Errorf("%w: the running broker predates seat reservations, so `%s` stops it and the next run starts a current one", err, hint.BinaryName()+" broker stop")
 	}
 	return err
 }

@@ -61,7 +61,7 @@ magus\project({
 
 // lint fails on an empty file.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("**/*.go");
+    ctx.readsFiles(["**/*.go"]);
     proc\exec("sh", ["-c", "for f in *.go; do test -s \"$f\" || exit 1; done"]);
 }
 -- run.go --

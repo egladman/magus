@@ -17,6 +17,9 @@ type conn struct {
 
 	mu      sync.Mutex
 	pending map[uint64]chan frame
+	// parked is told of a parked frame for a request still pending, which the broker sends
+	// before that request's reply.
+	parked map[uint64]func(frame)
 	// handshake receives the broker's first frame, which carries ID 0.
 	handshake chan frame
 	dead      chan struct{}
@@ -29,6 +32,7 @@ func newConn(nc net.Conn, onLost func(*conn)) *conn {
 		nc:        nc,
 		w:         &frameWriter{w: nc},
 		pending:   map[uint64]chan frame{},
+		parked:    map[uint64]func(frame){},
 		handshake: make(chan frame, 1),
 		dead:      make(chan struct{}),
 	}
@@ -70,6 +74,15 @@ func (cn *conn) read(onLost func(*conn)) {
 			return
 		}
 		cn.mu.Lock()
+		if f.Type == typeParked {
+			_, waiting := cn.pending[f.ID]
+			told := cn.parked[f.ID]
+			cn.mu.Unlock()
+			if waiting && told != nil {
+				told(f)
+			}
+			continue
+		}
 		ch, ok := cn.pending[f.ID]
 		delete(cn.pending, f.ID)
 		cn.mu.Unlock()
@@ -134,6 +147,20 @@ func (cn *conn) callFiles(ctx context.Context, id uint64, typ string, body any, 
 // roundTrip is call plus decoding: an error frame becomes an *Error, a reply of another
 // type is a protocol error, and the body lands in out when out is non-nil.
 func (cn *conn) roundTrip(ctx context.Context, id uint64, typ string, body any, replyType string, out any, late func(frame)) error {
+	return cn.roundTripFiles(ctx, id, typ, body, nil, replyType, out, late)
+}
+
+// roundTripParked is roundTrip for a request the broker may park: parked runs, on the
+// connection's reader, with the parked frame the broker sends first when it does.
+func (cn *conn) roundTripParked(ctx context.Context, id uint64, typ string, body any, replyType string, out any, parked func(frame), late func(frame)) error {
+	cn.mu.Lock()
+	cn.parked[id] = parked
+	cn.mu.Unlock()
+	defer func() {
+		cn.mu.Lock()
+		delete(cn.parked, id)
+		cn.mu.Unlock()
+	}()
 	return cn.roundTripFiles(ctx, id, typ, body, nil, replyType, out, late)
 }
 

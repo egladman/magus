@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -142,7 +143,7 @@ func (h DriftHook) Argv() []string {
 		argv = append(argv, driftRemoteFlag+h.Remote)
 	}
 	for _, p := range h.Pushes {
-		argv = append(argv, driftPushFlag+p.Remote+":"+p.Local)
+		argv = append(argv, fmt.Sprintf("%s%s:%s", driftPushFlag, p.Remote, p.Local))
 	}
 	return argv
 }

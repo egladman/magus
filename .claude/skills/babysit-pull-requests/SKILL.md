@@ -70,9 +70,9 @@ fix the pure function that produced it and its test, then run it again.
         branch still carries the commits of a pull request that squash-merged below
         it (`evidence.squashed_base`). The script rebases its own commits onto the
         base in a fresh checkout job, gates, and force-pushes with a lease.
-      - a branch behind its base with nothing squash-merged below it:
-        `./magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c>`
-        merges the base into each independently. Add `--stack` when each branch
+      - a branch behind its base with nothing squash-merged below it: run
+        `./magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c>`.
+        It merges the base into each independently. Add `--stack` when each branch
         sits on the one before. Both scripts take local branches origin lacks.
       - When either stops at a source conflict, it names the files and the
         checkout; hand those to an agent of the record's model as below.

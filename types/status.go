@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // StatusBase holds the static portions of a StatusSnapshot: telemetry, cache, and
 // build-flag fields. It is populated by cmd/magus (which has access to the
@@ -23,7 +26,7 @@ type BuildInfo struct {
 
 // Fingerprint is the full human identity, matching what `magus --version` prints.
 func (b BuildInfo) Fingerprint() string {
-	return "magus " + b.Version + " (" + b.Commit + ") built " + b.Date
+	return fmt.Sprintf("magus %s (%s) built %s", b.Version, b.Commit, b.Date)
 }
 
 // StatusSnapshot is the canonical JSON/YAML shape returned by `magus status -o json`.
@@ -247,7 +250,8 @@ type StatusBroker struct {
 	// ./magus keeps running after that worktree is gone, and this is where to look.
 	Executable string    `json:"executable,omitempty" yaml:"executable,omitempty"`
 	StartTime  time.Time `json:"start_time" yaml:"start_time"`
-	// Capacity is the whole budget, what is held, and every claim holding it.
+	// Capacity is the whole budget, what is held, every claim holding it, and every
+	// request it holds until the budget can answer it.
 	Capacity MachineSnapshot `json:"capacity" yaml:"capacity"`
 	// Services are the shared services it hosts right now.
 	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`

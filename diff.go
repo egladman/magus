@@ -119,8 +119,7 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 	}
 	baseDefs := definedSymbols(baseOut.Nodes)
 	if len(baseDefs) == 0 {
-		out.Notes = append(out.Notes, "API delta skipped: the baseline "+cfg.baselineLabel+
-			" carries no symbols; export it with `magus graph export --symbols`")
+		out.Notes = append(out.Notes, fmt.Sprintf("API delta skipped: the baseline %s carries no symbols; export it with `magus graph export --symbols`", cfg.baselineLabel))
 		return nil, nil, nil
 	}
 	var removed []types.KnowledgeNode
@@ -428,7 +427,7 @@ func pairRenames(defs map[string]symbolDef, changes map[string]string, removed [
 		}
 		var match string
 		for id, def := range defs {
-			if changes[id] != types.DiffChangeAdded || id != r.ID[:i]+def.node.Label+r.ID[i+len(r.Label):] {
+			if changes[id] != types.DiffChangeAdded || id != fmt.Sprintf(`%s%s%s`, r.ID[:i], def.node.Label, r.ID[i+len(r.Label):]) {
 				continue
 			}
 			sig, baseSig := def.node.Attrs[knowledge.AttrSignature], r.Attrs[knowledge.AttrSignature]
@@ -525,7 +524,7 @@ func parsedGoSymbols(root, path string, hunks []impact.HunkLines, pf patchFacts)
 			return
 		}
 		descriptors = append([]*scip.Descriptor{{Name: importPath, Suffix: scip.Descriptor_Namespace}}, descriptors...)
-		id := "symbol:gomod " + module + " " + scip.DescriptorOnlyFormatter.FormatSymbol(&scip.Symbol{Descriptors: descriptors})
+		id := fmt.Sprintf("symbol:gomod %s %s", module, scip.DescriptorOnlyFormatter.FormatSymbol(&scip.Symbol{Descriptors: descriptors}))
 		decls = append(decls, decl{label: name.Name, id: id, start: fset.Position(name.Pos()).Line, end: fset.Position(end).Line})
 	}
 	for _, d := range file.Decls {
@@ -619,7 +618,7 @@ func goImportPath(root, path string) (module, importPath string, ok bool) {
 			if rel == "." {
 				return module, module, true
 			}
-			return module, module + "/" + filepath.ToSlash(rel), true
+			return module, fmt.Sprintf("%s/%s", module, filepath.ToSlash(rel)), true
 		}
 		if dir == "." {
 			return "", "", false

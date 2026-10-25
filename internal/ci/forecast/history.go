@@ -933,7 +933,7 @@ func (l historyLine) key() string {
 	case l.Workspace != nil:
 		return "workspace"
 	case l.Stats != nil:
-		return "stats\x00" + l.Stats.Project + "\x00" + l.Stats.Target
+		return fmt.Sprintf("stats\x00%s\x00%s", l.Stats.Project, l.Stats.Target)
 	case l.Run != nil:
 		r := l.Run
 		return strings.Join([]string{"run", r.Commit, r.Ref, r.Target, string(r.Status), r.At.UTC().Format(time.RFC3339Nano)}, "\x00")

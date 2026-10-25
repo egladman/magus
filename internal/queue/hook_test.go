@@ -264,7 +264,7 @@ func TestAHooksEnvironmentIsTheSandboxesInItsBox(t *testing.T) {
 		"MISE_TRUSTED_CONFIG_PATHS": "/work:/tmp",
 	}, box)
 	require.NotEmpty(t, seen["MAGUS"])
-	assert.Equal(t, filepath.Dir(seen["MAGUS"])+string(os.PathListSeparator)+os.Getenv("PATH"), seen["PATH"],
+	assert.Equal(t, fmt.Sprintf("%s%s%s", filepath.Dir(seen["MAGUS"]), string(os.PathListSeparator), os.Getenv("PATH")), seen["PATH"],
 		"the inherited PATH, behind the running magus's own directory, so a bare magus in a hook is this build")
 	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[spawn.SandboxEnvVar])
 	assert.Equal(t, "p", seen["PASSED"])
@@ -402,7 +402,7 @@ func TestAHookIsRefusedWhenItsPolicyWouldWriteOutsideItsBox(t *testing.T) {
 	env := HookEnv{Sandbox: config.SandboxConfig{Allow: []spells.SandboxAllow{{Path: gocache, Mode: spells.SandboxAccessRW}}}}
 	dir := t.TempDir()
 	res, err := CommandGate(script(`touch ran`), env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
-	require.ErrorContains(t, err, "the sandbox grants a hook write on `"+gocache+"`, outside its candidate's box")
+	require.ErrorContains(t, err, fmt.Sprintf("the sandbox grants a hook write on `%s`, outside its candidate's box", gocache))
 	assert.Equal(t, types.GateResult{}, res)
 	assert.NoFileExists(t, filepath.Join(dir, "ran"))
 
@@ -435,7 +435,7 @@ func TestABoxAHookChangedIsTheChangesRed(t *testing.T) {
 		}, "is mode 0000, not 0700"},
 		"a link in home leads a grant out": {func(t *testing.T, home string) {
 			require.NoError(t, os.Symlink(outside, filepath.Join(home, ".cache")))
-		}, "found a link in its box leading a grant out of it, to `" + filepath.Join(filesystem.ResolveRulePath(outside), "tool") + "`"},
+		}, fmt.Sprintf("found a link in its box leading a grant out of it, to `%s`", filepath.Join(filesystem.ResolveRulePath(outside), "tool"))},
 	} {
 		t.Run(name, func(t *testing.T) {
 			env := HookEnv{Spells: cacheGrant}
@@ -740,7 +740,7 @@ func TestAHookWithNoBoxIsTheMachinesError(t *testing.T) {
 	_, err := CommandGate(script(`touch ran`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
 	require.EqualError(t, err, "gate on `s`: the candidate has no box to run its hooks in")
 	err = CommandRegenerate(script(`touch ran`), HookEnv{}, nil)(context.Background(), types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
-	require.EqualError(t, err, "regenerate "+hookChange.Label()+": the candidate has no box to run its hooks in")
+	require.EqualError(t, err, fmt.Sprintf("regenerate %s: the candidate has no box to run its hooks in", hookChange.Label()))
 	assert.NoFileExists(t, filepath.Join(dir, "ran"))
 }
 
@@ -942,7 +942,7 @@ func TestGateCommitGatesInTheBoxAndEnvironmentValidationGivesACandidate(t *testi
 	res, err := CommandGate(probe, env, NewHookLog(&log)).Validate(t.Context(), cand, nil)
 	require.NoError(t, err)
 	require.True(t, res.Green, res.Summary)
-	queued := strings.ReplaceAll(log.String(), "["+short(commit)+" base] ", "")
+	queued := strings.ReplaceAll(log.String(), fmt.Sprintf("[%s base] ", short(commit)), "")
 
 	got := boxedRun(t, direct.String())
 	assert.Equal(t, boxedRun(t, queued), got)
@@ -1009,7 +1009,7 @@ func TestGateCommitKeepsTheCallersCacheAndReportsTheExitStatus(t *testing.T) {
 func goCachingDecl(goroot string) map[string]spells.Sandbox {
 	decl := goDecl(goroot)
 	sb := decl["go"]
-	sb.Allow = append(sb.Allow, spells.SandboxAllow{Env: "GOLANGCI_LINT_CACHE", Base: "userCache", Path: "golangci-lint", Mode: spells.SandboxAccessRW})
+	sb.Allow = append(sb.Allow, spells.SandboxAllow{Env: "GOLANGCI_LINT_CACHE", Base: "workspace", Path: ".magus/golangci-lint", Mode: spells.SandboxAccessRW})
 	sb.Caches = []spells.SandboxCache{{Env: "GOCACHE", StampsUse: true}, {Env: "GOMODCACHE"}}
 	decl["go"] = sb
 	return decl

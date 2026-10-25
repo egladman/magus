@@ -142,8 +142,9 @@ Before spawning, state the topology: the model per job, and whether isolated wor
   - `default_timeout` bounds a fork that names no `--timeout`.
   - Honor a cap the user states the same way.
 - Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers, which share the machine's build budget. The root waits for that budget,
-  never a worker; a spawn or `{{cmd "job fork"}}` into a full one says how full it is.
+  triggers, which share the machine's build budget. An integrator waits for that budget,
+  explicitly (`{{cmd "status"}} --wait` piped into its run) and for as long as it decided, never a worker; a spawn
+  or `{{cmd "job fork"}}` into a full one says how full it is.
   Serialize validations that share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
@@ -151,11 +152,10 @@ Assign the check from the pipeline the workspace composed, not from convention.
 
 - A job gets the narrowest check that covers its edits: the target from that
   decomposition. Scope it to the job's own tests with the runner's filter after `--`
-  where one exists. Never the full suite.
-- The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the
-  whole composition.{{if .Full}} A worker hand-sequencing lint, format, and test is re-deriving an
-  order the magusfile already owns, and the step it forgets fails silently by
-  omission.{{end}}
+  where one exists. A go test check naming exactly the packages of the write paths
+  (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
+- The integration job owns the full `go-test` and `lint`, and runs every check a merged
+  worker filed as owed. The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the whole composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands{{if .Full}}, which is what stops seven fanned-out workers from
@@ -364,12 +364,12 @@ an editor magus cannot attribute{{end}}.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
    - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
-Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
+Write paths name exact FILES; a glob too broad is refused as MGS3043 unless permitted. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
 covers claiming one declaration in a shared file and forking from a leased worker.
 
 A fork refuses a job whose sources regenerate an output outside its write paths (MGS3044).
-Add the output to the write paths, or waive it when the root regenerates it after integration.
+Add the output to the write paths, or permit it when the root regenerates it after integration.
 
 Render the prompt FROM the row; never type it. `{{cmd "describe job"}} <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -410,7 +410,7 @@ any cap the user set for the tree. Require the worker to:
   set{{end}};
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget. When a full budget refuses its check, it commits, reports that the check found no seat, and stops; you rerun it once one frees;
+- never wait for the build budget, `{{cmd "status"}} --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
 - never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
 
 End every brief with the step that files the result, as the worker's LAST act before
@@ -418,7 +418,7 @@ it reports back. A brief that leaves it out gets a prose report and a row that n
 moves{{if .Full}}: the store keeps the write paths held, `{{cmd "job wait"}}`
 has nothing to verify, and nobody notices until a sibling is refused over a path
 the finished worker no longer needs{{end}}. The step: `{{cmd "job exit"}} <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
+`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
 `unresolved_risks`; `{{cmd "job exit"}} --schema` prints the shape{{if .Full}}, and
 [reference.md](reference.md) shows a record{{end}}.
 {{if .Full}}A typed result makes verification mechanical. {{end}}Keep unresolved risks mandatory{{if .Full}}, so a

@@ -2,6 +2,7 @@ package spell
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -451,11 +452,11 @@ func TestResolve_SandboxRefusesAMalformedDeclaration(t *testing.T) {
 		"a variable path":   `SandboxAllow{path = "$HOME/.tool", mode = SandboxAccess.rw}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			src := `
+			src := fmt.Sprintf(`
 import "magus/spell";
 export fun mgs_getName() > str { return "bad-sandbox"; }
-export fun mgs_getSandbox() > Sandbox { return Sandbox{allow = [` + entry + `]}; }
-`
+export fun mgs_getSandbox() > Sandbox { return Sandbox{allow = [%s]}; }
+`, entry)
 			_, err := resolve(t, src)
 			require.ErrorIs(t, err, types.AllowlistUnresolved)
 			assert.Contains(t, err.Error(), `spell "bad-sandbox"`)
@@ -471,11 +472,11 @@ func TestResolve_SandboxRefusesACacheOfNoWritableGrant(t *testing.T) {
 		"read-only grant": `Sandbox{allow = [SandboxAllow{env = "TOOL_CACHE", mode = SandboxAccess.rx}], caches = [SandboxCache{env = "TOOL_CACHE"}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			src := `
+			src := fmt.Sprintf(`
 import "magus/spell";
 export fun mgs_getName() > str { return "bad-cache"; }
-export fun mgs_getSandbox() > Sandbox { return ` + decl + `; }
-`
+export fun mgs_getSandbox() > Sandbox { return %s; }
+`, decl)
 			_, err := resolve(t, src)
 			require.ErrorIs(t, err, types.AllowlistUnresolved)
 			assert.Contains(t, err.Error(), "no writable allow entry has env TOOL_CACHE")

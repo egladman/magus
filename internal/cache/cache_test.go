@@ -556,7 +556,7 @@ func casArchive(t *testing.T, name string, content []byte, mod time.Time) *bytes
 	tw := tar.NewWriter(gz)
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeReg,
-		Name:     "cas/" + name[:2] + "/" + name,
+		Name:     fmt.Sprintf("cas/%s/%s", name[:2], name),
 		Size:     int64(len(content)),
 		Mode:     0o644,
 		ModTime:  mod,
@@ -1099,7 +1099,7 @@ func TestRunEnvironmentalFailureRerunsToAPass(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, failedAttempt)
-	assert.Contains(t, out, "inputs unchanged since "+failedAttempt+",")
+	assert.Contains(t, out, fmt.Sprintf("inputs unchanged since %s,", failedAttempt))
 	assert.Contains(t, out, hint.QueryOutput.With(failedAttempt))
 
 	_, named, err := c.outputs.ByRef(failedAttempt)

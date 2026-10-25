@@ -40,6 +40,7 @@
 package fieldwise
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -69,6 +70,25 @@ var equalities = map[string]bool{
 	"Exactly": true, "Exactlyf": true,
 }
 
+const partialMessage = "%s is checked in part (%s): build the whole expected %s and compare %s with Equal, making any time, id or path in it deterministic (a fixed clock, seeded ids, t.TempDir in the expectation)"
+
+// predicates maps each partial testify assertion to the parameter naming its
+// subject; the f-form shares its base's parameters.
+var predicates = map[string]string{
+	"Contains": "s", "NotContains": "s",
+	"True": "value", "False": "value",
+	"Regexp": "str", "NotRegexp": "str",
+	"Len": "object", "Subset": "list", "NotSubset": "list",
+}
+
+// wholeComparers compare their arguments deeply, so a local handed to one is
+// compared whole.
+var wholeComparers = map[string]bool{
+	"reflect.DeepEqual":                  true,
+	"github.com/google/go-cmp/cmp.Diff":  true,
+	"github.com/google/go-cmp/cmp.Equal": true,
+}
+
 var failures = map[string]bool{
 	"Error": true, "Errorf": true, "Fatal": true, "Fatalf": true, "Fail": true, "FailNow": true,
 }
@@ -82,6 +102,11 @@ type Options struct {
 	// normalized: a different kind of edit from folding assertions that
 	// already name every field.
 	ReportPartial bool `json:"report-partial"`
+
+	// ReportPartialAssertions also reports a Contains, True, Regexp, Len or
+	// Subset on a field of a result, or an Equal on a lone one, when the test
+	// never compares that result whole.
+	ReportPartialAssertions bool `json:"report-partial-assertions"`
 }
 
 // New returns the analyzer configured by opts. Every Options is valid; the
@@ -100,6 +125,9 @@ func run(pass *analysis.Pass, opts Options) error {
 			continue
 		}
 		c := &checker{pass: pass, opts: opts, ranged: map[types.Object]bool{}}
+		if opts.ReportPartialAssertions {
+			c.whole, c.inputs = c.wholes(f), c.literals(f)
+		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			if r, ok := n.(*ast.RangeStmt); ok {
 				for _, e := range []ast.Expr{r.Key, r.Value} {
@@ -129,6 +157,10 @@ type checker struct {
 	pass   *analysis.Pass
 	opts   Options
 	ranged map[types.Object]bool
+	// whole holds the variables the file compares whole; inputs holds those
+	// only ever set from a literal.
+	whole  map[*types.Var]bool
+	inputs map[*types.Var]bool
 }
 
 // value identifies one state of one struct value: the expression spelling it,
@@ -143,6 +175,7 @@ type value struct {
 type group struct {
 	pos    token.Pos
 	typ    types.Type
+	form   string
 	fields []string
 }
 
@@ -221,9 +254,12 @@ func (c *checker) unit(body *ast.BlockStmt) {
 		return true
 	})
 
-	record := func(pos token.Pos, operand, other ast.Expr) {
+	record := func(pos token.Pos, form string, operand, other ast.Expr) {
 		sel, ok := c.field(operand)
 		if !ok {
+			if c.opts.ReportPartialAssertions && !c.constant(operand) && !c.tableCase(operand) {
+				c.partial(pos, form, operand)
+			}
 			return
 		}
 		if o, ok := c.field(other); ok && !c.counterpart(sel, o) {
@@ -240,7 +276,7 @@ func (c *checker) unit(body *ast.BlockStmt) {
 		key := value{root: root, expr: render(sel.X), gen: u.gens[root]}
 		g, ok := u.groups[key]
 		if !ok {
-			g = &group{pos: pos, typ: typ}
+			g = &group{pos: pos, typ: typ, form: form}
 			u.groups[key] = g
 			u.order = append(u.order, key)
 		}
@@ -256,14 +292,16 @@ func (c *checker) unit(body *ast.BlockStmt) {
 		case *ast.CallExpr:
 			if fn, ok := typeutil.Callee(c.pass.TypesInfo, n).(*types.Func); ok && testify(fn) {
 				if actual, expected, ok := c.equality(fn, n); ok {
-					c.orient(n.Pos(), actual, expected, record)
+					c.orient(n.Pos(), fn.Name(), actual, expected, record)
+				} else if subject, ok := c.predicate(fn, n); ok && c.opts.ReportPartialAssertions {
+					c.partial(n.Pos(), fn.Name(), subject)
 				}
 				return true
 			}
 		case *ast.IfStmt:
 			if c.fails(n.Body) {
 				for _, cmp := range c.inequalities(n.Cond) {
-					c.orient(cmp.Pos(), c.resolve(n.Init, cmp.X), c.resolve(n.Init, cmp.Y), record)
+					c.orient(cmp.Pos(), "!=", c.resolve(n.Init, cmp.X), c.resolve(n.Init, cmp.Y), record)
 				}
 			}
 		}
@@ -278,15 +316,191 @@ func (c *checker) unit(body *ast.BlockStmt) {
 
 	for _, key := range u.order {
 		g := u.groups[key]
-		if len(g.fields) < minFields || slices.ContainsFunc(u.class(key.root), func(v *types.Var) bool { return u.captured[v] }) {
+		named := c.named(g.typ)
+		captured := slices.ContainsFunc(u.class(key.root), func(v *types.Var) bool { return u.captured[v] })
+		if len(g.fields) >= minFields && !captured && (c.opts.ReportPartial || covers(g.typ, g.fields)) {
+			c.pass.Reportf(g.pos, message, key.expr, strings.Join(g.fields, ", "), named, named)
 			continue
 		}
-		if !c.opts.ReportPartial && !covers(g.typ, g.fields) {
-			continue
+		if c.opts.ReportPartialAssertions && c.result(key.root) {
+			on := fmt.Sprintf("%s on %s.%s", g.form, key.expr, strings.Join(g.fields, fmt.Sprintf(", %s.", key.expr)))
+			c.reportPartial(g.pos, key.root, on)
 		}
-		named := types.TypeString(deref(g.typ), types.RelativeTo(c.pass.Pkg))
-		c.pass.Reportf(g.pos, message, key.expr, strings.Join(g.fields, ", "), named, named)
 	}
+}
+
+func (c *checker) named(t types.Type) string {
+	return types.TypeString(deref(t), func(p *types.Package) string {
+		if p == c.pass.Pkg {
+			return ""
+		}
+		return p.Name()
+	})
+}
+
+// predicate returns the subject of a partial testify assertion: the string
+// Contains searches, the bool True reads, the object Len measures.
+func (c *checker) predicate(fn *types.Func, call *ast.CallExpr) (ast.Expr, bool) {
+	param, ok := predicates[strings.TrimSuffix(fn.Name(), "f")]
+	if !ok {
+		return nil, false
+	}
+	params := fn.Signature().Params()
+	for i := range min(params.Len(), len(call.Args)) {
+		if params.At(i).Name() == param {
+			return call.Args[i], true
+		}
+	}
+	return nil, false
+}
+
+// partial reports the first field of a result that subject reads, so
+// strings.HasPrefix(got.Path, dir) and len(got.Items) count as checks on got.
+func (c *checker) partial(pos token.Pos, form string, subject ast.Expr) {
+	found := false
+	ast.Inspect(subject, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false
+		}
+		e, ok := n.(ast.Expr)
+		if !ok {
+			return true
+		}
+		sel, ok := c.field(e)
+		if !ok {
+			return true
+		}
+		if root, ok := c.root(sel.X); ok && !c.ranged[root] && c.result(root) {
+			found = true
+			c.reportPartial(pos, root, fmt.Sprintf("%s on %s", form, render(sel)))
+		}
+		return false
+	})
+}
+
+func (c *checker) reportPartial(pos token.Pos, root *types.Var, on string) {
+	c.pass.Reportf(pos, partialMessage, root.Name(), on, c.named(root.Type()), root.Name())
+}
+
+// result reports whether root is a local struct under test the file never
+// compares whole, and not an input the test built from a literal.
+func (c *checker) result(root *types.Var) bool {
+	local := root.Pkg() != nil && root.Parent() != nil && root.Parent() != root.Pkg().Scope()
+	return local && !c.inputs[root] && !c.whole[root] && c.comparable(root.Type())
+}
+
+// wholes returns the variables f compares whole: an argument of a testify
+// equality or a deep comparison, or an operand of == or != on a struct.
+func (c *checker) wholes(f *ast.File) map[*types.Var]bool {
+	out := map[*types.Var]bool{}
+	mark := func(e ast.Expr) {
+		for {
+			x := ast.Unparen(e)
+			if s, ok := x.(*ast.StarExpr); ok {
+				e = s.X
+			} else if u, ok := x.(*ast.UnaryExpr); ok && u.Op == token.AND {
+				e = u.X
+			} else {
+				break
+			}
+		}
+		if id, ok := ast.Unparen(e).(*ast.Ident); ok {
+			if v, ok := c.pass.TypesInfo.ObjectOf(id).(*types.Var); ok {
+				out[v] = true
+			}
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.CallExpr:
+			fn, ok := typeutil.Callee(c.pass.TypesInfo, n).(*types.Func)
+			if !ok || fn.Pkg() == nil {
+				return true
+			}
+			if (testify(fn) && equalities[fn.Name()]) || wholeComparers[fmt.Sprintf("%s.%s", fn.Pkg().Path(), fn.Name())] {
+				for _, arg := range n.Args {
+					mark(arg)
+				}
+			}
+		case *ast.BinaryExpr:
+			if n.Op == token.EQL || n.Op == token.NEQ {
+				for _, e := range []ast.Expr{n.X, n.Y} {
+					if _, ok := typeOrNil(c.pass.TypesInfo.TypeOf(e)).Underlying().(*types.Struct); ok {
+						mark(e)
+					}
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// literals returns the variables f sets only from a composite literal and
+// never hands out by address: values the test built as input.
+func (c *checker) literals(f *ast.File) map[*types.Var]bool {
+	lit, other := map[*types.Var]bool{}, map[*types.Var]bool{}
+	set := func(lhs []ast.Expr, rhs []ast.Expr) {
+		for i, l := range lhs {
+			id, ok := l.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			v, ok := c.pass.TypesInfo.ObjectOf(id).(*types.Var)
+			if !ok {
+				continue
+			}
+			if len(lhs) == len(rhs) && composite(rhs[i]) {
+				lit[v] = true
+			} else {
+				other[v] = true
+			}
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			set(n.Lhs, n.Rhs)
+		case *ast.ValueSpec:
+			if len(n.Values) > 0 {
+				lhs := make([]ast.Expr, len(n.Names))
+				for i, name := range n.Names {
+					lhs[i] = name
+				}
+				set(lhs, n.Values)
+			}
+		case *ast.UnaryExpr:
+			if id, ok := ast.Unparen(n.X).(*ast.Ident); ok && n.Op == token.AND {
+				if v, ok := c.pass.TypesInfo.ObjectOf(id).(*types.Var); ok {
+					other[v] = true
+				}
+			}
+		}
+		return true
+	})
+	for v := range other {
+		delete(lit, v)
+	}
+	return lit
+}
+
+func composite(e ast.Expr) bool {
+	e = ast.Unparen(e)
+	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AND {
+		e = ast.Unparen(u.X)
+	}
+	_, ok := e.(*ast.CompositeLit)
+	return ok
+}
+
+func typeOrNil(t types.Type) types.Type {
+	if t == nil {
+		return types.Typ[types.Invalid]
+	}
+	return t
 }
 
 func testify(fn *types.Func) bool {
@@ -298,13 +512,13 @@ func testify(fn *types.Func) bool {
 }
 
 // orient records actual, or expected when actual is a constant or a field of
-// a table case and expected is a field: assert.Equal(t, got.Name, "x") and
+// a table case and expected is neither: assert.Equal(t, got.Name, "x") and
 // `if tt.name != got.Name` both put the value under test second.
-func (c *checker) orient(pos token.Pos, actual, expected ast.Expr, record func(token.Pos, ast.Expr, ast.Expr)) {
-	if _, ok := c.field(expected); ok && (c.constant(actual) || c.tableCase(actual)) {
+func (c *checker) orient(pos token.Pos, form string, actual, expected ast.Expr, record func(token.Pos, string, ast.Expr, ast.Expr)) {
+	if !c.constant(expected) && !c.tableCase(expected) && (c.constant(actual) || c.tableCase(actual)) {
 		actual, expected = expected, actual
 	}
-	record(pos, actual, expected)
+	record(pos, form, actual, expected)
 }
 
 func (c *checker) constant(e ast.Expr) bool {

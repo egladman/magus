@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strconv"
 )
@@ -77,5 +78,5 @@ func HasInvocationAncestor(ctx context.Context, pid int, id string) bool {
 // invocations, which is all this comparison spans. Under the server the pid is shared by
 // holder and waiter and the ids differ, which is the case the ids alone handle.
 func invocationRef(pid int, id string) string {
-	return strconv.Itoa(pid) + ":" + id
+	return fmt.Sprintf("%s:%s", strconv.Itoa(pid), id)
 }

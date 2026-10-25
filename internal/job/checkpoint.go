@@ -92,7 +92,7 @@ func expandedCheckpoint(full, digest string) string {
 	if digest == "" {
 		return full
 	}
-	return full + "+" + digest
+	return fmt.Sprintf("%s+%s", full, digest)
 }
 
 // fullRevision is the version control answering at the store's root and the full revision

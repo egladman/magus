@@ -227,3 +227,63 @@ func TestDecideAutoClaimStopsWhatTheStoreWouldRefuse(t *testing.T) {
 		},
 	})
 }
+
+func TestCallerClaimsExpandToOneRequestPerDeclaration(t *testing.T) {
+	occ := func(line int) types.SymbolOccurrence {
+		return types.SymbolOccurrence{Line: line, Status: types.SymbolOccurrenceVerified}
+	}
+	files := []types.SymbolOccurrenceFile{
+		{File: "lib/use_test.go", Occurrences: []types.SymbolOccurrence{occ(4)}},
+		{File: "lib/lib.go", Occurrences: []types.SymbolOccurrence{{Line: 3, Status: types.SymbolOccurrenceVerified, Definition: true}, occ(8), occ(9), occ(14)}},
+	}
+	region := func(file string, from, to int, decl string) types.RegionChange {
+		return types.RegionChange{File: types.FileChange{Path: file}, Side: types.RegionNew, Lines: [2]int{from, to}, Declaration: decl, Driver: "golang"}
+	}
+	placed := map[string][]types.RegionChange{
+		"lib/lib.go": {
+			region("lib/lib.go", 1, 2, ""),
+			region("lib/lib.go", 3, 5, "func Parse(s string) error {"),
+			region("lib/lib.go", 6, 11, "func (c *Client) Run() error {"),
+			region("lib/lib.go", 12, 16, "func (s *Server) Run() error {"),
+		},
+		"lib/use_test.go": {region("lib/use_test.go", 3, 6, "func TestParse(t *testing.T) {")},
+	}
+	got, err := CallerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) { return placed[file], nil })
+	require.NoError(t, err)
+	assert.Equal(t, []types.JobClaimRequest{
+		{Path: "lib/lib.go#Client) Run", Because: "refs:Parse"},
+		{Path: "lib/lib.go#Server) Run", Because: "refs:Parse"},
+		{Path: "lib/use_test.go#TestParse", Because: "refs:Parse"},
+	}, got, "two occurrences in one declaration claim it once, and the definition claims nothing")
+
+	files[0].Occurrences = []types.SymbolOccurrence{occ(1)}
+	_, err = CallerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) {
+		return []types.RegionChange{region(file, 1, 2, "")}, nil
+	})
+	assert.ErrorContains(t, err, "no declaration holds the occurrence at lib/lib.go:8")
+}
+
+// A session's end tombstones its binding record, which is how a dead-holder claim tells a
+// holder whose session ended from one still working; a session that binds the job again
+// takes that back.
+func TestSessionEndedReadsTheHoldersTombstones(t *testing.T) {
+	s := tempStore(t, t.TempDir())
+	seed(t, s, types.Job{ID: "w", State: types.StateDeclared})
+	_, ended := s.SessionEnded("w")
+	assert.False(t, ended, "no record names the job")
+
+	worker := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, s.Bind(worker, "w"))
+	_, ended = s.SessionEnded("w")
+	assert.False(t, ended, "a live binding names a working session")
+
+	_, _, err := s.EndSession(t.Context(), worker)
+	require.NoError(t, err)
+	since, ended := s.SessionEnded("w")
+	assert.True(t, ended)
+	assert.NotZero(t, since)
+
+	require.NoError(t, s.Bind(Caller{Host: "claude-code", Session: "s2"}, "w"))
+	_, ended = s.SessionEnded("w")
+	assert.False(t, ended, "a session that bound the job again is working it")
+}

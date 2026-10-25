@@ -97,6 +97,9 @@ Human\-authored notes committed to the repository. See \fBmagus\-notes\fR(1).
 \fBqueue\fR
 Merge approved changes through a speculative, partitioned merge queue. See \fBmagus\-queue\fR(1).
 .TP
+\fBgate\fR
+A person's decisions about the local gate. See \fBmagus\-gate\fR(1).
+.TP
 \fBwatch\fR
 Emit changed file paths to stdout. See \fBmagus\-watch\fR(1).
 .TP
@@ -365,7 +368,7 @@ How long a job that is over (graded, ended, or exited with its result never coll
 How many `magus run`s one job tree's leased workers may have going at once; a run past it waits for a seat and says whose run holds it. A run with no lease (the root, a person) is never counted. Default 1; 0 = unlimited. Workspace only, like StaleAfter (default: 1). Config file key: \fBjobs.max_validations\fR.
 .TP
 \fBMAGUS_JOBS_MAX_CLAIM_FILES\fR
-How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more waives the path. Workspace only, like StaleAfter (default: 50). Config file key: \fBjobs.max_claim_files\fR.
+How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more keeps the path with a deviation. Workspace only, like StaleAfter (default: 50). Config file key: \fBjobs.max_claim_files\fR.
 .TP
 \fBMAGUS_JOBS_MAX_CLAIM_PROJECTS\fR
 How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter (default: 1). Config file key: \fBjobs.max_claim_projects\fR.
@@ -534,6 +537,7 @@ Content\-addressed build cache in the workspace root. Override with MAGUS_CACHE_
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

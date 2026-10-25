@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,9 +31,9 @@ func TestTokenStateCommandsAreDenied(t *testing.T) {
 		"cat ~/.local/state/magus/mcp_token",
 		`cat "$XDG_STATE_HOME/magus/mcp_token"`,
 		"cat ${HOME}/Library/Application\\ Support/magus/mcp_token",
-		"cp " + filepath.Join(state, "mcp_token") + " /tmp/x",
-		"cp -r " + filepath.Join(state, "tokens.d") + " /tmp/x",
-		"cp -r " + state + " /tmp/x",
+		fmt.Sprintf("cp %s /tmp/x", filepath.Join(state, "mcp_token")),
+		fmt.Sprintf("cp -r %s /tmp/x", filepath.Join(state, "tokens.d")),
+		fmt.Sprintf("cp -r %s /tmp/x", state),
 		"cat tokens.d/laptop.json",
 		"cat ./mcp_token",
 		"echo '{}' > " + filepath.Join(state, "tokens.d", "evil.json"),
@@ -69,14 +70,14 @@ func TestTokenStateListingPasses(t *testing.T) {
 	s := state
 	for _, cmd := range []string{
 		"ls " + s,
-		"ls -la " + s + "/",
+		fmt.Sprintf("ls -la %s/", s),
 		"ls " + filepath.Join(s, "tokens.d"),
 		"ls ~/.local/state/magus/mcp_token",
 		"du -sh " + s,
 		"stat ~/.local/state/magus/mcp_token",
 		"test -e ~/.local/state/magus/mcp_token && echo present",
 		"[ -d ~/.local/state/magus/tokens.d ]",
-		"ls " + s + " 2>/dev/null | head",
+		fmt.Sprintf("ls %s 2>/dev/null | head", s),
 		"ls ~/.local/state/magus/tokens.d | grep laptop | wc -l",
 	} {
 		assert.Empty(t, denyTokenStateCommand(at, cmd, DialectBash), "a listing reads no secret: %s", cmd)
@@ -88,10 +89,10 @@ func TestTokenStateListingPasses(t *testing.T) {
 		`jq . "$(ls ~/.local/state/magus/tokens.d/*.json)"`,
 		"cat <(ls ~/.local/state/magus/tokens.d)",
 		// A listing beside a read, or written over.
-		"ls " + s + " && cat ~/.local/state/magus/mcp_token",
+		fmt.Sprintf("ls %s && cat ~/.local/state/magus/mcp_token", s),
 		"ls > ~/.local/state/magus/mcp_token",
 		// A loop's words are not a lister's arguments.
-		"for d in " + s + `; do du -sh "$d"; done`,
+		fmt.Sprintf("for d in %s; do du -sh \"$d\"; done", s),
 	} {
 		assert.NotEmpty(t, denyTokenStateCommand(at, cmd, DialectBash), "should be denied: %s", cmd)
 	}
@@ -104,7 +105,7 @@ func TestTokenStateSiblingsPassAndWalksAreDenied(t *testing.T) {
 	for _, cmd := range []string{
 		"cat " + filepath.Join(state, "server.log"),
 		"tail -n 20 " + filepath.Join(state, "daemon.pid"),
-		"cat " + state + "/*.log",
+		fmt.Sprintf("cat %s/*.log", state),
 		"ls " + state,
 	} {
 		assert.Empty(t, denyTokenStateCommand(at, cmd, DialectBash), "a sibling of the secrets is not one: %s", cmd)
@@ -112,10 +113,10 @@ func TestTokenStateSiblingsPassAndWalksAreDenied(t *testing.T) {
 	for _, cmd := range []string{
 		"grep -r token " + state,
 		"rg token " + state,
-		"find " + state + " -type f",
+		fmt.Sprintf("find %s -type f", state),
 		"tar cf /tmp/x.tar " + state,
-		"cat " + state + "/*",
-		"for f in " + state + "; do cat $f; done",
+		fmt.Sprintf("cat %s/*", state),
+		fmt.Sprintf("for f in %s; do cat $f; done", state),
 	} {
 		assert.NotEmpty(t, denyTokenStateCommand(at, cmd, DialectBash), "should be denied: %s", cmd)
 	}
@@ -144,9 +145,9 @@ func TestJudgeDeniesTheTokenStateOnEveryInput(t *testing.T) {
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: at.workspace})
 	op := filepath.Join(state, "mcp_token")
 	for _, envelope := range []string{
-		`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + at.workspace + `","tool_input":{"command":"cat ` + op + `"}}`,
-		`{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"` + at.workspace + `","tool_input":{"file_path":"` + filepath.Join(state, "tokens.d", "evil.json") + `"}}`,
-		`{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"` + at.workspace + `","tool_input":{"file_path":"` + op + `"}}`,
+		fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"cat %s\"}}", at.workspace, op),
+		fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Write\",\"cwd\":\"%s\",\"tool_input\":{\"file_path\":\"%s\"}}", at.workspace, filepath.Join(state, "tokens.d", "evil.json")),
+		fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Edit\",\"cwd\":\"%s\",\"tool_input\":{\"file_path\":\"%s\"}}", at.workspace, op),
 	} {
 		v := Judge(ctx, testDependencies(), Request{Input: envelope})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleTokenState)), unworded(v), envelope)

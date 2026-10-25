@@ -1,6 +1,9 @@
 package tty
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // The box every interactive view draws itself in.
 //
@@ -26,21 +29,21 @@ func boxRule(inner int, lc, rc, left, right string, dim func(string) string) str
 		return ""
 	}
 	if left == "" && right == "" {
-		return dim(lc + strings.Repeat(boxH, inner) + rc)
+		return dim(fmt.Sprintf("%s%s%s", lc, strings.Repeat(boxH, inner), rc))
 	}
-	lead := " " + ClipCols(left, max(inner-4, 0)) + " "
+	lead := fmt.Sprintf(" %s ", ClipCols(left, max(inner-4, 0)))
 	if left == "" {
 		lead = ""
 	}
 	tail := ""
 	if right != "" {
-		tail = " " + ClipCols(right, max(inner-cols(lead)-3, 0)) + " "
+		tail = fmt.Sprintf(" %s ", ClipCols(right, max(inner-cols(lead)-3, 0)))
 	}
 	gap := inner - cols(lead) - cols(tail) - 1
 	if gap < 0 {
 		gap = 0
 	}
-	return dim(lc + boxH + lead + strings.Repeat(boxH, gap) + tail + rc)
+	return dim(fmt.Sprintf("%s%s%s%s%s%s", lc, boxH, lead, strings.Repeat(boxH, gap), tail, rc))
 }
 
 // boxWrap puts one row of already-laid-out content between the vertical edges,
@@ -56,7 +59,7 @@ func boxWrap(content string, inner int, dim func(string) string) string {
 	if pad < 0 {
 		pad = 0
 	}
-	return dim(boxV) + content + strings.Repeat(" ", pad) + dim(boxV)
+	return dim(fmt.Sprintf("%s%s%s%s", dim(boxV), content, strings.Repeat(" ", pad), dim(boxV)))
 }
 
 // plain is the no-styling dim function, for a view drawing to something that

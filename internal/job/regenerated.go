@@ -99,7 +99,7 @@ func RegeneratedOutside(root string, row types.Job, projects []*types.Project, i
 			}
 			for _, g := range outside {
 				found = append(found, candidate{
-					out:         RegeneratedOutput{Output: g.String(), Target: p.Path + ":" + name, Source: source.String()},
+					out:         RegeneratedOutput{Output: g.String(), Target: fmt.Sprintf("%s:%s", p.Path, name), Source: source.String()},
 					glob:        g,
 					specificity: specificity,
 				})

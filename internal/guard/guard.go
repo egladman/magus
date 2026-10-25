@@ -68,20 +68,20 @@ type Dependencies struct {
 	SpawnRule workspace.SpawnRule
 	// ApprovedSpawnRule resolves the same rule as the approved sources register it: nil
 	// with no error when those sources are the working tree's or register none, and an
-	// error when they could not be evaluated. Resolved lazily because it can load the
-	// magusfile a second time, which only a spawn is worth. Nil when the workspace has no
-	// approval authority wired.
+	// error when they could not be evaluated. Resolved lazily, once per judgment, because it
+	// can load the magusfile a second time; the approved rules share that one load. Nil when
+	// the workspace has no approval authority wired.
 	ApprovedSpawnRule func(ctx context.Context) (workspace.SpawnRule, error)
 	// CommandRule is the working tree's magus\guard.command rule, nil when none is
 	// registered. It is called on every shell command the built-in rules let through and
 	// can only add to their verdict.
 	CommandRule workspace.CommandRule
-	// ApprovedCommandRule is ApprovedSpawnRule for the command rule, resolved per command.
+	// ApprovedCommandRule is ApprovedSpawnRule for the command rule, resolved per judgment.
 	ApprovedCommandRule func(ctx context.Context) (workspace.CommandRule, error)
 	// WriteRule is the working tree's magus\guard.write rule, nil when none is registered.
 	// It is called on every file write the built-in rules let through.
 	WriteRule workspace.WriteRule
-	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
+	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per judgment.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// mgs_listModels, nil when none does. It can load the workspace and its harness
@@ -189,6 +189,9 @@ type Dependencies struct {
 	// caller is who makes the judged call, which decides whether a lease acts as a worker.
 	// Judge fills it; zero is an identity-less caller.
 	caller job.Caller
+	// callerType is the caller's subagent type as its own call named it, "" when it named
+	// none. Judge fills it.
+	callerType string
 	// facts holds the caller's own session facts, its spawn records among them. Judge fills
 	// it, so a remedy graded for this caller reads no other session's; zero reads none.
 	facts hint.Gate
@@ -582,6 +585,9 @@ type Request struct {
 	// timeout".
 	HostForegroundDefault time.Duration
 	HostForegroundMax     time.Duration
+	// HostResumesOnBackgroundFrom is types.Limits.ResumesOnBackgroundFrom as the wiring
+	// declares it. Empty, a subagent's stop with a background task running is refused.
+	HostResumesOnBackgroundFrom string
 }
 
 // hostUnnamed refuses a call from installed hook glue that did not say which agent host
@@ -714,13 +720,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
 			at := hookLocation(ctx, deps)
-			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, time.Now())
+			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, req.HostResumesOnBackgroundFrom, time.Now())
 			if !ok {
 				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
 			if !req.DryRun && !req.Observe {
-				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, v); err != nil {
-					v.Context = strings.TrimPrefix(v.Context+"\n", "\n") + "magus workspace: the job store did not end the job this session held: " + err.Error()
+				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, req.HostResumesOnBackgroundFrom, v); err != nil {
+					v.Context = fmt.Sprintf("%smagus workspace: the job store did not end the job this session held: %s", strings.TrimPrefix(v.Context+"\n", "\n"), err)
 				}
 			}
 			return v
@@ -763,6 +769,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	location := hookLocation(ctx, deps)
 	deps.scope = scopeAt(location)
 	deps.caller = who.caller()
+	deps.callerType = env.CallerType
 	policyDigest := ""
 	if !req.DryRun {
 		rememberSettings(location.cacheDir, deps.Builtins)
@@ -838,6 +845,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		standing.endedBinding = binding.Job
 	}
 	deps.worker = standing.declared && standing.state.Live() && workerRole(standing.row, deps.caller) != ""
+	deps, granted := grantedRules(deps, location, standing)
 	// pending is the call's first deny the workspace demoted to advise. It is spoken only
 	// once every rule has had its turn, so a later deny still wins.
 	var pending heldAdvice
@@ -922,7 +930,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Decision != decisionDeny {
 			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case decisionDeny:
-				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Next: g.Next})
+				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Why: g.Why, Next: g.Next})
 			case decisionAdvise:
 				// Held by its own key when it has one; lease-state only names the rest.
 				adviceKind = cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState))
@@ -960,12 +968,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// Last of the denies and first thing a Buzz write meets, in that order for a
 		// reason: the two above answer whether this agent may touch the file at all, and
 		// there is nothing to learn before a write that is refused anyway.
-		if verdict.Decision != decisionDeny {
+		// Neither asks a caller that cannot load a skill, nor briefs a write outside the
+		// workspace, such as a report in a scratchpad.
+		briefable := deps.loadsSkills() && inSource(location.workspace, input)
+		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyBuzzWriteWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				refuse(denyBuzzUnbriefed, reason)
 			}
 		}
-		if verdict.Decision != decisionDeny {
+		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
 			}
@@ -1157,6 +1168,16 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		denyUndeclared(input)
+		if verdict.Decision != decisionDeny {
+			if d := denyAgentGrant(input, shellD); d.refused() {
+				refuseWith(denyRuleGrantIsAPersons, d)
+			}
+		}
+		if verdict.Decision != decisionDeny {
+			if d := denyAgentWaive(input, shellD); d.refused() {
+				refuseWith(denyRuleWaiverIsAPersons, d)
+			}
+		}
 		// The job store's half of the shell-command rules, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
@@ -1229,8 +1250,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			case decisionAsk:
 				verdict.Decision, verdict.Context, verdict.Reason = decisionAsk, "", reason
 				if !req.RendersAsk {
-					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny("running `"+elideCommand(input)+"`")
-					whys[verdict.Reason] = reason + "\n" + askUnrendered
+					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny(fmt.Sprintf("running `%s`", elideCommand(input)))
+					whys[verdict.Reason] = fmt.Sprintf("%s\n%s", reason, askUnrendered)
 				}
 				verdict.Rule = string(denyRuleHumanOnly)
 			case decisionDeny:
@@ -1247,7 +1268,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			cover, commit, moved, replay := pushCoverage(ctx, deps, location, input, shellD, callDir)
+			cover, commit, moved, replay, waiver := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
 			// publishes, so its refusal names no orchestrator. A row that cannot be read
 			// stays a worker.
@@ -1269,6 +1290,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				verdict.Rule = string(denyRulePushUngated)
 			} else if replay.Inv != "" && !moved {
 				verdict.Context = fmt.Sprintf("magus workspace: %s is covered by `%s` at %s on the identical tree (%s).", commit, types.TargetCI, replay.Commit, gateRunRef(replay))
+			} else if cover == gateWaived && !moved {
+				verdict.Context = waiverNote(commit, waiver)
 			}
 		}
 		if preauth == "" {
@@ -1441,6 +1464,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	if verdict.Decision == decisionAdvise && !req.Observe && adviceRepeated(markers, who.Agent, verdict.Rule, verdict.Context) {
 		verdict.Decision, verdict.Context, verdict.Rule = decisionPass, "", ""
 	}
+	if g, ok := granted[verdict.Rule]; ok && verdict.Decision == decisionAdvise {
+		verdict.Context += fmt.Sprintf("\n%s", grantNote(g))
+	}
 	if verdict.Decision == decisionAdvise && !req.Observe {
 		verdict.Context, verdictRef = shapeAdvice(ctx, markers, verdict.Rule, verdict.Context, whys, req.DryRun)
 	}
@@ -1561,6 +1587,7 @@ type roleScopedRule struct {
 // and is here because a gate magus itself served is not a repeat the caller chose.
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
+		{denyRuleLeaseRowUnknown, denyUnknownRowMembers},
 		{denyRuleLeaseCheckout, denyLeaseCheckout},
 		{denyRuleLeasePaused, denyPausedLease},
 		{denyRuleLeaseGate, denyLeaseScopedGate},
@@ -1652,6 +1679,8 @@ type hookEnvelope struct {
 	// AgentID is the subagent making this tool call, on a host that tells a subagent's
 	// calls from its root session's; "" for the root session and for hosts that do not.
 	AgentID string `json:"agent_id"`
+	// AgentType is that subagent's own type, on a host that names it on each of its calls.
+	AgentType string `json:"agent_type"`
 	// AgentTranscriptPath is that subagent's own log, on an event that reports on the
 	// subagent rather than a tool call. Read only for its last usage record.
 	AgentTranscriptPath string `json:"agent_transcript_path"`
@@ -1781,6 +1810,11 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		Event:      env.HookEventName,
 		Agent:      env.AgentID,
 	}}
+	// Only a subagent's: a root session run as a named agent type carries one too, and the
+	// root is the one caller every skill tool is wired for.
+	if env.AgentID != "" {
+		req.CallerType = env.AgentType
+	}
 	tool := magusToolCall(env.ToolName)
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
@@ -1995,6 +2029,9 @@ type hookRequest struct {
 	Write writeFields
 	// Cwd is where the host says the call runs; "" when the envelope carried none.
 	Cwd string
+	// CallerType is the calling subagent's type as the host named it, "" for a root session
+	// or a host that does not say.
+	CallerType string
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool
@@ -2100,7 +2137,7 @@ func (who hookAttribution) skillsKey() string {
 	if key == "" || agentID == "" {
 		return key
 	}
-	return key + "/agent/" + callerKeyEscaper.Replace(agentID)
+	return fmt.Sprintf("%s/agent/%s", key, callerKeyEscaper.Replace(agentID))
 }
 
 // FactsKey is the marker key the guard files a caller's facts under, for a reader outside
@@ -2111,7 +2148,7 @@ func FactsKey(host, callerID string) string {
 	if callerID == "" {
 		return ""
 	}
-	return callerKeyEscaper.Replace(host) + "/" + callerKeyEscaper.Replace(callerID)
+	return fmt.Sprintf("%s/%s", callerKeyEscaper.Replace(host), callerKeyEscaper.Replace(callerID))
 }
 
 // callerKey keys TEXT a caller has already rendered, a fire-once notice or a deny's full
@@ -2122,7 +2159,7 @@ func (who hookAttribution) callerKey() string {
 	if id == "" {
 		return ""
 	}
-	return callerKeyEscaper.Replace(who.Host) + "/" + callerKeyEscaper.Replace(who.Form) + "/" + callerKeyEscaper.Replace(id)
+	return fmt.Sprintf("%s/%s/%s", callerKeyEscaper.Replace(who.Host), callerKeyEscaper.Replace(who.Form), callerKeyEscaper.Replace(id))
 }
 
 type location struct {
@@ -2247,6 +2284,31 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	return job.NewStore(at.jobs()).List()
 }
 
+// hardenCovering is harden, which keeps its rows' order, over rows narrowed to the soft
+// entries covering rel, the one path a write grade asks about. Hardening every entry
+// checks each against every region of its holder's diff, which ran a test-file edit
+// against a 526-entry integration row past the hook's budget.
+func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []types.Job) []types.Job {
+	narrowed := slices.Clone(rows)
+	for i, row := range rows {
+		narrowed[i].SoftPaths = slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
+			_, covers, _ := declarationCovering([]string{entry}, rel)
+			return !covers
+		})
+	}
+	hardened := harden(narrowed)
+	out := slices.Clone(rows)
+	for i := range out {
+		made := slices.DeleteFunc(slices.Clone(narrowed[i].SoftPaths), func(entry string) bool {
+			return slices.Contains(hardened[i].SoftPaths, entry)
+		})
+		if len(made) > 0 {
+			out[i].SoftPaths = slices.DeleteFunc(slices.Clone(rows[i].SoftPaths), func(entry string) bool { return slices.Contains(made, entry) })
+		}
+	}
+	return out
+}
+
 // dryRunCopyPrefix starts the name of a dry run's session copy in the temporary directory;
 // the pid of the process that made it follows.
 const dryRunCopyPrefix = "magus-guard-dry-run-"
@@ -2266,7 +2328,7 @@ func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 		return "", release
 	}
 	removeOrphanedCopies()
-	dir, err := os.MkdirTemp("", dryRunCopyPrefix+strconv.Itoa(os.Getpid())+"-")
+	dir, err := os.MkdirTemp("", fmt.Sprintf("%s%s-", dryRunCopyPrefix, strconv.Itoa(os.Getpid())))
 	if err != nil {
 		return "", release
 	}
@@ -2387,6 +2449,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	if input == "" || location.cacheDir == "" {
 		return
 	}
+	stampHeartbeat(ctx, location.workspace, heartbeat{Session: who.Session, Lease: lease, Transcript: who.Transcript, At: time.Now()})
 	cost := observeCall(ctx, location, input, who, tool, lease, verdict)
 	command := trail.AgentCommand{
 		PolicyDigest: policyDigest,

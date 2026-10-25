@@ -161,7 +161,7 @@ api_targets() {
     cat <<'API'
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/api.md");
+    ctx.writesFiles(["gen/api.md"]);
     proc\exec("node", ["../../../tools/gen-api.mjs", "--write", "."]);
 }
 

@@ -167,9 +167,7 @@ func TestGroupingLinesStateTheSampleAndNeverAdvise(t *testing.T) {
 	outcomes = append(outcomes, worked("s", 1, 1, 1, 1, "internal/a"))
 
 	assert.Equal(t, []string{
-		"chained: 5 groups of 5 jobs, 5 with a known trail; 4000 context tokens per group; 1m0s wall per group;" +
-			" median 1000 tokens at the first write; 25% of context spent before it;" +
-			fmt.Sprintf(" 1.0 denials and 0.0 unattributed writes per job; pass rate at least %.0f%%", volatility.WilsonLower(5, 5)*100),
+		fmt.Sprintf("chained: 5 groups of 5 jobs, 5 with a known trail; 4000 context tokens per group; 1m0s wall per group; median 1000 tokens at the first write; 25%% of context spent before it;%s", fmt.Sprintf(" 1.0 denials and 0.0 unattributed writes per job; pass rate at least %.0f%%", volatility.WilsonLower(5, 5)*100)),
 		"split: unknown, 0 groups of 0 jobs, 0 with a known trail (fewer than 5 groups, or most trails unknown)",
 		"solo: unknown, 1 groups of 1 jobs, 1 with a known trail (fewer than 5 groups, or most trails unknown)",
 	}, groupingLines(GroupingRecords(outcomes, nil)))

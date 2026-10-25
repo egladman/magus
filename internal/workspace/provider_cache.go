@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -253,7 +254,7 @@ func matchedFileIdentities(ctx context.Context, root string, globs []string) []s
 			if serr != nil {
 				return nil //nolint:nilerr // a vanished file re-runs the provider, it does not fail the open
 			}
-			lines = append(lines, rel+"\x00"+strconv.FormatInt(info.Size(), 10)+"\x00"+strconv.FormatInt(info.ModTime().UnixNano(), 10))
+			lines = append(lines, fmt.Sprintf("%s\x00%d\x00%d", rel, info.Size(), info.ModTime().UnixNano()))
 			return nil
 		}
 		return nil

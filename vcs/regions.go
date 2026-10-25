@@ -403,7 +403,7 @@ func (gitVCS) Drivers(ctx context.Context, root string, paths []string) (map[str
 func gitFuncnameConfig(ctx context.Context, root string) ([]string, error) {
 	var args []string
 	for _, f := range gitFuncnames {
-		args = append(args, "-c", f.key()+"="+f.pattern)
+		args = append(args, "-c", fmt.Sprintf("%s=%s", f.key(), f.pattern))
 	}
 	out, err := gitOutput(ctx, root, gitOpts{KeepLeadingSpace: true},
 		"config", "-z", "--get-regexp", `^diff\..+\.x?funcname$`)
@@ -416,7 +416,7 @@ func gitFuncnameConfig(ctx context.Context, root string) ([]string, error) {
 	// Records are <key> LF <value> NUL.
 	for _, rec := range splitNUL(out) {
 		key, value, _ := strings.Cut(rec, "\n")
-		args = append(args, "-c", key+"="+value)
+		args = append(args, "-c", fmt.Sprintf("%s=%s", key, value))
 	}
 	return args, nil
 }
@@ -459,7 +459,7 @@ func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, 
 		marked.WriteString(regionMarker + "\n")
 	}
 	attrs, a, b := filepath.Join(tmp, "attributes"), filepath.Join(tmp, "a"), filepath.Join(tmp, "b")
-	for name, content := range map[string]string{attrs: "* diff=" + driver + "\n", a: orig.String(), b: marked.String()} {
+	for name, content := range map[string]string{attrs: fmt.Sprintf("* diff=%s\n", driver), a: orig.String(), b: marked.String()} {
 		if err := os.WriteFile(name, []byte(content), 0o600); err != nil {
 			return nil, err
 		}

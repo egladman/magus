@@ -1,6 +1,7 @@
 package filenames
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestNewChecksSkipDirs(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "push/push.go", "gen/gen.go", ".cache/x.go")
 	for _, dir := range []string{"vendor", ".cache"} {
 		_, err := New(Options{Module: "example.com/m", SkipDirs: []string{"gen", dir}})
-		if err == nil || !strings.Contains(err.Error(), `filenames: skip-dirs entry "`+dir+`"`) {
+		if err == nil || !strings.Contains(err.Error(), fmt.Sprintf(`filenames: skip-dirs entry "%s"`, dir)) {
 			t.Errorf("%s: want an error naming the dead entry, got %v", dir, err)
 		}
 	}

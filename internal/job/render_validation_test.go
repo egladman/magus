@@ -63,21 +63,21 @@ func TestRenderValidationDryRunPrintsTheRecordItWouldStore(t *testing.T) {
 	assert.Empty(t, buf.String(), "a real run with nothing to say prints nothing")
 }
 
-func TestRenderValidationNamesTheWaiverAndWhatWasNotChecked(t *testing.T) {
+func TestRenderValidationNamesTheDeviationAndWhatWasNotChecked(t *testing.T) {
 	t.Parallel()
 
 	v := types.JobValidation{
 		Job: types.Job{
-			ID:      "j",
-			Waivers: []types.JobWaiver{{Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Reason: "the root regenerates it"}},
+			ID:         "j",
+			Deviations: []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Reason: "the root regenerates it"}},
 		},
-		Waived:    types.JobProblems{{Code: types.OutputOutsideWritePaths, Field: "write_paths", Subject: "docs/x.md", Message: "x regenerates docs/x.md"}},
+		Permitted: types.JobProblems{{Code: types.OutputOutsideWritePaths, Field: "write_paths", Subject: "docs/x.md", Message: "x regenerates docs/x.md"}},
 		Unchecked: []string{"write path breadth: the workspace did not load"},
 	}
 	var buf bytes.Buffer
 	RenderValidation(&buf, v, false)
-	assert.Equal(t, "waived 1:\n"+
-		"  [MGS3044] write_paths: x regenerates docs/x.md (waived: the root regenerates it)\n"+
+	assert.Equal(t, "permitted 1:\n"+
+		"  [MGS3044] write_paths: x regenerates docs/x.md (permitted: the root regenerates it)\n"+
 		"not checked:\n"+
 		"  write path breadth: the workspace did not load\n", buf.String())
 }

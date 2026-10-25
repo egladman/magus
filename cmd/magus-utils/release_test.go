@@ -438,7 +438,7 @@ func TestRunCut_HappyPath(t *testing.T) {
 	tarName := "magus_v0.2.0_linux_amd64.tar.gz"
 	tarContent := []byte("fake tarball content for test")
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, tarName), tarContent, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "SHA256SUMS"), []byte("abc123  "+tarName+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "SHA256SUMS"), []byte(fmt.Sprintf("abc123  %s\n", tarName)), 0o644))
 
 	unreleasedDir := t.TempDir()
 	writeFragment(t, unreleasedDir, "b-fix.md", "### Fixed\n\n- **A fix.** It\n  wraps.\n")
@@ -469,7 +469,7 @@ func TestRunCut_HappyPath(t *testing.T) {
 	// Compute expected artifact digests.
 	tarH := sha256.Sum256(tarContent)
 	tarDigest := hex.EncodeToString(tarH[:])
-	ckContent := []byte("abc123  " + tarName + "\n")
+	ckContent := []byte(fmt.Sprintf("abc123  %s\n", tarName))
 	ckH := sha256.Sum256(ckContent)
 	ckDigest := hex.EncodeToString(ckH[:])
 
@@ -535,7 +535,7 @@ func TestRunCut_PrereleaseKeepsFragmentsForTheFinalCut(t *testing.T) {
 	relDir := t.TempDir()
 	cut := func(version string) {
 		t.Helper()
-		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_"+version+"_linux_amd64_static.tar.gz"), []byte(version), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, fmt.Sprintf("magus_%s_linux_amd64_static.tar.gz", version)), []byte(version), 0o644))
 		require.NoError(t, runCut([]string{
 			"-version", version, "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", relDir,
 		}))
@@ -774,7 +774,9 @@ func TestLintUnreleased(t *testing.T) {
 		{"entry before a section", "- **a.**\n", []string{"sits under a section heading"}},
 		{"no bold headline", "### Added\n- plain text.\n", []string{"opens with a **bold headline**"}},
 		{"no period", "### Added\n- **a** trailing\n", []string{"ends with a period"}},
-		{"over the cap", "### Added\n- **a.** " + long + "end.\n", []string{"the cap is"}},
+		{"over the cap", fmt.Sprintf(`### Added
+- **a.** %send.
+`, long), []string{"the cap is"}},
 		{"stray line", "### Added\n- **a.**\nstray\n", []string{"not a heading, an entry"}},
 	}
 	for _, tc := range cases {

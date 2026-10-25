@@ -113,6 +113,8 @@ $ magus job fork fr/upgrading --criteria 'upgrading section in French' --write-p
 [error] 1 problem:
   1. [MGS3032] write_paths[0]: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. fr/install has changed nothing under docs/fr/install.md
      fix: Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install; or the root narrows fr/install to what it has changed with `magus job apply -f <record>`, dropping docs/fr/install.md
+not checked:
+  the symbol, claim, test, check and workspace checks and the write proof: not run, since this fork already contends with a live job; fork again once it does not
 ```
 
 Refused, with no row written: the page is held in another checkout, so it has one
@@ -216,10 +218,11 @@ footprint: where its diff since the checkpoint landed
 
 ```console
 $ magus job wait release-1.3/notes
-rejected release-1.3/notes, and its state is unchanged
+rejected release-1.3/notes
   job release-1.3/notes is not read-only and the result claims no changed paths at all
   nothing in the diff since 5f6b136f2721af3fb8a117fbf824b24a3a78b059 is inside its write paths (notes/1.3.md)
   goal "notes": nothing matching "notes/1.3.md" is in the tree, so this goal is unmet
+release-1.3/notes is running again and holds its write paths again for its rework
 goal notes: rejected
 footprint: no line changed since the checkpoint
 unresolved risks its holder reported
@@ -227,15 +230,17 @@ unresolved risks its holder reported
 ```
 
 Exit 1, every unmet rule named, and the risk repeated where the person deciding
-reads it. The board with its ended rows is the checklist:
+reads it. The rejected item is running again, holding its write paths for the rework;
+had another job taken one of them meanwhile, it would stay exited and the wait would
+name that job. The board is the checklist:
 
 <!-- golden: job_people_release.txtar ls-board.out -->
 
 ```console
 $ magus ls jobs --all
-JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  pass    standard  1      alone     -
-release-1.3/notes      notes      exited  standard  1      disjoint  -
+JOB                    HOLDER     STATE    MODEL     PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass     standard  1      alone     -
+release-1.3/notes      notes      running  standard  1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

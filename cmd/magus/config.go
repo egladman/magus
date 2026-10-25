@@ -151,7 +151,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "  magus config set key=telemetry.headers,value={X-Tenant: acme}")
 		fmt.Fprintln(os.Stderr, "  magus config set key=sandbox.allow.homebin.path,value=~/.local/bin")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Run `"+hint.ConfigView.With("-o", "name")+"` to list all valid keys.")
+		fmt.Fprintf(os.Stderr, "Run `%s` to list all valid keys.\n", hint.ConfigView.With("-o", "name"))
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)

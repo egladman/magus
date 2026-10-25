@@ -336,7 +336,7 @@ func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
 	// singleflight rather than a lock held across the fetch: two targets reading the
 	// same reference share one provider invocation, while two targets reading DIFFERENT
 	// references still proceed in parallel.
-	got, err, _ := r.group.Do(name+"\x00"+ref, func() (any, error) {
+	got, err, _ := r.group.Do(fmt.Sprintf("%s\x00%s", name, ref), func() (any, error) {
 		// Re-checked INSIDE the flight. A caller that missed the memo just as a previous
 		// flight was completing would otherwise start a second one and invoke the
 		// provider again, the exact duplicate-unlock-prompt this exists to prevent.

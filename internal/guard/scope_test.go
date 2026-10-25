@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -104,7 +105,7 @@ func TestWorkspaceRelativeRefusesANestedCheckout(t *testing.T) {
 	root := t.TempDir()
 	wt := filepath.Join(root, ".claude", "worktrees", "wt")
 	require.NoError(t, os.MkdirAll(filepath.Join(wt, "docs"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+filepath.Join(root, ".git", "worktrees", "wt")+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(root, ".git", "worktrees", "wt"))), 0o644))
 
 	_, inside := workspaceRelative(root, filepath.Join(wt, "docs", "x.md"))
 	assert.False(t, inside, "a nested checkout's file is that checkout's")

@@ -231,7 +231,7 @@ func renderSpell(d spells.Descriptor) string {
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:         d.Name + " spell",
 		Description:   meta.description,
-		GeneratedFrom: "spells/" + meta.dir + "/spell.buzz",
+		GeneratedFrom: fmt.Sprintf("spells/%s/spell.buzz", meta.dir),
 		Tags:          dedupe(tags),
 	})
 
@@ -387,12 +387,12 @@ func injectSpellList(path string, builtins map[string]spells.Descriptor, names [
 		}
 		// Link is relative to docs/spells.md: spells/<name>.md -> /spells/<name>/.
 		rows = append(rows, []string{
-			md.Link(md.Code(name), "spells/"+name+".md"), lang, strconv.Itoa(len(d.Ops)), meta.description,
+			md.Link(md.Code(name), fmt.Sprintf("spells/%s.md", name)), lang, strconv.Itoa(len(d.Ops)), meta.description,
 		})
 	}
 	table := strings.Join(md.TableLines([]string{"Spell", "Language", "Ops", "Purpose"}, nil, rows), "\n") + "\n"
 
-	rebuilt := src[:headEnd] + table + src[ei:]
+	rebuilt := fmt.Sprintf("%s%s%s", src[:headEnd], table, src[ei:])
 	if rebuilt == src {
 		return nil // already up to date; avoid a needless write
 	}
@@ -498,21 +498,21 @@ func describeCharm(c spells.Charm, args []string) string {
 		switch p.Op {
 		case "add":
 			if strings.HasSuffix(p.Path, "/-") {
-				parts = append(parts, "appends `"+p.Value+"`")
+				parts = append(parts, fmt.Sprintf("appends `%s`", p.Value))
 			} else {
-				parts = append(parts, "inserts `"+p.Value+"`")
+				parts = append(parts, fmt.Sprintf("inserts `%s`", p.Value))
 			}
 		case "remove":
 			if orig := argAt(args, p.Path); orig != "" {
-				parts = append(parts, "drops `"+orig+"`")
+				parts = append(parts, fmt.Sprintf("drops `%s`", orig))
 			} else {
 				parts = append(parts, "drops an argument")
 			}
 		case "replace":
 			if orig := argAt(args, p.Path); orig != "" {
-				parts = append(parts, "replaces `"+orig+"` with `"+p.Value+"`")
+				parts = append(parts, fmt.Sprintf("replaces `%s` with `%s`", orig, p.Value))
 			} else {
-				parts = append(parts, "sets an argument to `"+p.Value+"`")
+				parts = append(parts, fmt.Sprintf("sets an argument to `%s`", p.Value))
 			}
 		case "move":
 			parts = append(parts, "moves an argument")
@@ -582,7 +582,7 @@ func readExample(spell, op string) string {
 func codeList(items []string) string {
 	out := make([]string, len(items))
 	for i, s := range items {
-		out[i] = "`" + s + "`"
+		out[i] = fmt.Sprintf("`%s`", s)
 	}
 	return strings.Join(out, ", ")
 }

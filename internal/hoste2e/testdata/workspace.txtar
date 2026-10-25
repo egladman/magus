@@ -47,5 +47,5 @@ magus\guard.spawn(judgeSpawn);
 magus\project({"no_language": "host e2e fixture"});
 
 export fun generate(ctx: magus\Context, _a: [str]) > void {
-    ctx.writesFiles("gen/out.txt");
+    ctx.writesFiles(["gen/out.txt"]);
 }

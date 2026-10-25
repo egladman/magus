@@ -61,7 +61,7 @@ func StartCacheReadProxy(upstream, token string, log *HookLog) (*CacheReadProxy,
 		return nil, fmt.Errorf("the cache read proxy: %w", err)
 	}
 	p := &CacheReadProxy{
-		URL:      "http://" + ln.Addr().String() + "/",
+		URL:      fmt.Sprintf("http://%s/", ln.Addr().String()),
 		Token:    hex.EncodeToString(stand),
 		upstream: strings.TrimSuffix(upstream, "/"),
 		token:    token,
@@ -98,7 +98,7 @@ func (p *CacheReadProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	allowed := slices.Index(cacheReads, method)
 	if !ok || allowed < 0 || r.URL.RawQuery != "" {
 		p.refuse(w, r, http.StatusForbidden, "permission_denied",
-			"the queue's cache proxy forwards only "+strings.Join(cacheReads, ", ")+", and validation never writes the cache")
+			fmt.Sprintf("the queue's cache proxy forwards only %s, and validation never writes the cache", strings.Join(cacheReads, ", ")))
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -111,7 +111,7 @@ func (p *CacheReadProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Built from the allowlist rather than the request, so no byte of the path reaches upstream.
-	up, err := http.NewRequestWithContext(r.Context(), http.MethodPost, p.upstream+cacheService+cacheReads[allowed], bytes.NewReader(body))
+	up, err := http.NewRequestWithContext(r.Context(), http.MethodPost, fmt.Sprintf("%s%s%s", p.upstream, cacheService, cacheReads[allowed]), bytes.NewReader(body))
 	if err != nil {
 		twirpError(w, http.StatusBadGateway, "internal", err.Error())
 		return

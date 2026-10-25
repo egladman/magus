@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -182,7 +183,7 @@ func TestForkWorktreePlacesABinaryWhoseInputsCannotBeListedOnlyAtItsCommit(t *te
 		},
 		"a build from uncommitted changes": {
 			build: types.MagusBuild{Version: "v0.5.0-1-gabc-dirty", Commit: built}, checkpoint: built,
-			want: "built from changes to " + built + " nobody committed",
+			want: fmt.Sprintf("built from changes to %s nobody committed", built),
 		},
 		"a build at a commit this repository lacks": {
 			build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: "0123456789abcdef0123456789abcdef01234567"}, checkpoint: built,
@@ -334,12 +335,12 @@ func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
 func TestBuildInputsAreTheChangedPathsALinkedPackageReaches(t *testing.T) {
 	t.Parallel()
 	root := filepath.FromSlash("/w/a")
-	listed := root + "|VERSION|banner.txt\n" +
-		filepath.Join(root, "cmd", "magus") + "\n" +
-		filepath.Join(root, "internal", "job") + "\n" +
-		"\n" +
-		filepath.FromSlash("/usr/local/go/src/fmt") + "\n" +
-		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y") + "\n"
+	listed := fmt.Sprintf("%s|VERSION|banner.txt\n%s\n%s\n\n%s\n%s\n",
+		root,
+		filepath.Join(root, "cmd", "magus"),
+		filepath.Join(root, "internal", "job"),
+		filepath.FromSlash("/usr/local/go/src/fmt"),
+		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y"))
 	scopes := packageScopes(listed, root)
 	assert.Equal(t, []string{"./", "VERSION", "banner.txt", "cmd/magus/", "internal/job/"}, scopes)
 
@@ -417,6 +418,42 @@ func TestForkWorktreePlacesABinaryWhoseBuildInputsMatchTheBase(t *testing.T) {
 	}
 }
 
+// A fork with no checkout of its own lands in the forking checkout, whose ./magus judges
+// the job: built before the checkpoint's Go build inputs, it names the bootstrap.
+func TestLandingBootstrapNamesTheBuildAStaleMagusNeeds(t *testing.T) {
+	t.Parallel()
+	repo := goModuleRepo(t)
+	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
+	built := repo.Head()
+	docs := repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
+	linked := repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nfunc Run() { _ = 1 }\n"})
+	local := filepath.Join(repo.Root(), "magus")
+	require.NoError(t, os.WriteFile(local, []byte("build 1\n"), 0o755))
+	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built})
+
+	for name, tc := range map[string]struct {
+		exe, checkpoint, want string
+	}{
+		"a checkpoint past a linked package": {exe: local, checkpoint: linked, want: CheckoutBootstrap(repo.Root())},
+		"a checkpoint past a docs edit":      {exe: local, checkpoint: docs},
+		"the commit it was built at":         {exe: local, checkpoint: built},
+		"a magus on PATH":                    {exe: filepath.Join(t.TempDir(), "magus"), checkpoint: linked},
+	} {
+		got, err := s.LandingBootstrap(ctx, tc.exe, tc.checkpoint)
+		require.NoError(t, err, name)
+		assert.Equal(t, tc.want, got, name)
+	}
+
+	unknown := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "dev", Commit: "unknown"})
+	_, err := s.LandingBootstrap(unknown, local, linked)
+	require.ErrorContains(t, err, "records no commit it was built from")
+}
+
+func TestCheckoutBootstrapNamesTheScript(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w", CheckoutBootstrap("/w"))
+}
+
 func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
 	t.Parallel()
 	repo := execRepo(t)
@@ -426,10 +463,10 @@ func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
 	drv, why := resolveDriver(t.Context(), repo.Root())
 	require.NotNil(t, drv, why)
 
-	_, err := changedBuildInputs(t.Context(), drv, s.root, built, later)
+	_, err := ChangedBuildInputs(t.Context(), drv, s.root, built, later)
 	require.ErrorContains(t, err, "go list -deps ./cmd/magus")
 
-	inputs, err := changedBuildInputs(t.Context(), drv, s.root, later, later)
+	inputs, err := ChangedBuildInputs(t.Context(), drv, s.root, later, later)
 	require.NoError(t, err, "equal commits list nothing")
 	assert.Empty(t, inputs)
 }

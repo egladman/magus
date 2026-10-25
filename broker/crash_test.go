@@ -59,7 +59,7 @@ func skipWithoutFilePassing(t *testing.T) {
 func runWatched(t *testing.T, addr, mode string) (string, time.Duration, error) {
 	t.Helper()
 	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), crasherEnv+"="+addr, crashModeEnv+"="+mode)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", crasherEnv, addr), fmt.Sprintf("%s=%s", crashModeEnv, mode))
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	start := time.Now()

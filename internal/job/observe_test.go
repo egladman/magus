@@ -313,7 +313,7 @@ func TestCheckpointObserverDiffsFromTheHoldersBase(t *testing.T) {
 	git("checkout", "-q", "-b", "worker", base)
 	head := commit("worker.txt")
 	seen := observe()
-	assert.Equal(t, []any{[]string{"worker.txt"}, base + " (the merge base of the holder's HEAD " + head + " and its checkpoint " + checkpoint + ")"},
+	assert.Equal(t, []any{[]string{"worker.txt"}, fmt.Sprintf("%s (the merge base of the holder's HEAD %s and its checkpoint %s)", base, head, checkpoint)},
 		[]any{seen.Changed, seen.ChangedFrom}, "plan.txt is the checkpoint's, not the holder's")
 
 	git("checkout", "-q", "plan")
@@ -339,8 +339,7 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 		},
 		{
 			"no merge base", "def5678", nil, &types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}, "def5678",
-			"def5678 (the base its holder reported, not its checkpoint abc1234; no merge base: " +
-				(&types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}).Error() + ")",
+			fmt.Sprintf("def5678 (the base its holder reported, not its checkpoint abc1234; no merge base: %s)", (&types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}).Error()),
 		},
 		{"no reported base", "", errors.New("no revision"), nil, "abc1234", "abc1234 (its checkpoint; no merge base: the holder's HEAD could not be read: no revision)"},
 		{"a reported base on the checkpoint", "abc1234+00ff", errors.New("no revision"), nil, "abc1234", "abc1234 (its checkpoint; no merge base: the holder's HEAD could not be read: no revision)"},

@@ -516,22 +516,24 @@ func TestCheckParentWritable(t *testing.T) {
 }
 
 func TestParseManifest_Valid(t *testing.T) {
-	raw := "version: v1.2.3\n" +
-		"aabbcc" + strings.Repeat("0", 58) + "  magus_v1.2.3_linux_amd64.tar.gz\n"
+	raw := fmt.Sprintf(`version: v1.2.3
+aabbcc%s  magus_v1.2.3_linux_amd64.tar.gz
+`, strings.Repeat("0", 58))
 	_, err := selfupdate.ParseManifest([]byte(raw))
 	require.NoError(t, err, "valid manifest failed")
 }
 
 func TestParseManifest_MissingVersion(t *testing.T) {
-	raw := "abc" + strings.Repeat("0", 61) + "  magus_v1.0.0_linux_amd64.tar.gz\n"
+	raw := fmt.Sprintf("abc%s  magus_v1.0.0_linux_amd64.tar.gz\n", strings.Repeat("0", 61))
 	_, err := selfupdate.ParseManifest([]byte(raw))
 	require.Error(t, err, "expected missing-version error")
 	assert.Contains(t, err.Error(), "version")
 }
 
 func TestParseManifest_BadVersion(t *testing.T) {
-	raw := "version: not-semver\n" +
-		"aabbcc" + strings.Repeat("0", 58) + "  magus_v1.0.0_linux_amd64.tar.gz\n"
+	raw := fmt.Sprintf(`version: not-semver
+aabbcc%s  magus_v1.0.0_linux_amd64.tar.gz
+`, strings.Repeat("0", 58))
 	_, err := selfupdate.ParseManifest([]byte(raw))
 	require.Error(t, err, "expected semver error")
 	assert.Contains(t, err.Error(), "semver")

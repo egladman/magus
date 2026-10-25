@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -48,11 +49,11 @@ var credentialVerbRe = sync.OnceValue(func() *regexp.Regexp {
 	for _, inv := range credentialInvocations {
 		alt := strings.Join(inv.words, `\s+`) + `\b`
 		if inv.flag != "" {
-			alt += `[^|;&]*\s--?` + regexp.QuoteMeta(inv.flag) + `\b`
+			alt += fmt.Sprintf("[^|;&]*\\s--?%s\\b", regexp.QuoteMeta(inv.flag))
 		}
 		alts = append(alts, alt)
 	}
-	return regexp.MustCompile(`\bmagus\b[^|;&]*?\b(?:` + strings.Join(alts, "|") + `)`)
+	return regexp.MustCompile(fmt.Sprintf("\\bmagus\\b[^|;&]*?\\b(?:%s)", strings.Join(alts, "|")))
 })
 
 // credentialVerbFires reports a line that runs a credential verb through magus, however the
@@ -221,10 +222,7 @@ func walksDirectories(c hint.Invocation) bool {
 
 // tokenStateDenial is the one text a file write and a shell line both refuse with.
 func tokenStateDenial(what string) string {
-	return "magus guard denied access to " + what + ", which holds magus's token secrets: the operator token or the token store.\n\n" +
-		"Those files are the credentials the server checks, so a session that reads one holds a grant nobody handed it, and one that writes one mints itself a token. " +
-		"Use the token you were given. A person mints another with `" + hint.ConfigMCPConnectorCreate.String() + "` or `" + hint.ConfigConsoleTokenCreate.String() + "`, and `" +
-		hint.ConfigMCPConnectorLs.String() + "` lists what exists without a secret."
+	return fmt.Sprintf("magus guard denied access to %s, which holds magus's token secrets: the operator token or the token store.\n\nThose files are the credentials the server checks, so a session that reads one holds a grant nobody handed it, and one that writes one mints itself a token. Use the token you were given. A person mints another with `%s` or `%s`, and `%s` lists what exists without a secret.", what, hint.ConfigMCPConnectorCreate.String(), hint.ConfigConsoleTokenCreate.String(), hint.ConfigMCPConnectorLs.String())
 }
 
 // denyTokenStatePath is the file-write rule: the reason a file write aimed at the token state is

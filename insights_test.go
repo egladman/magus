@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,10 +127,10 @@ func commitInsightFiles(t *testing.T, dir, author, when string, files map[string
 	cmd := exec.Command("git", "-C", dir, "commit", "-q", "-m", "insight")
 	cmd.Env = append(insightGitEnv(),
 		"GIT_AUTHOR_NAME="+author,
-		"GIT_AUTHOR_EMAIL="+strings.ToLower(author)+"@example.test",
+		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s@example.test", strings.ToLower(author)),
 		"GIT_AUTHOR_DATE="+when,
 		"GIT_COMMITTER_NAME="+author,
-		"GIT_COMMITTER_EMAIL="+strings.ToLower(author)+"@example.test",
+		fmt.Sprintf("GIT_COMMITTER_EMAIL=%s@example.test", strings.ToLower(author)),
 		"GIT_COMMITTER_DATE="+when,
 	)
 	out, err := cmd.CombinedOutput()

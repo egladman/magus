@@ -1,10 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,14 +17,113 @@ import (
 	"github.com/egladman/magus/broker"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/annotate"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
+
+// gateCmd implements `magus gate`, a person's decisions about the local gate.
+func gateCmd(ctx context.Context, root string, args []string) error {
+	if len(args) == 0 {
+		return exit.Usagef("magus gate: requires a subcommand (waive)")
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		gateUsage()
+		return nil
+	case "waive":
+		return gateWaive(ctx, root, args[1:])
+	default:
+		return exit.Usagef("magus gate: unknown subcommand %q (want waive)", args[0])
+	}
+}
+
+func gateUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s\n", gateCommandSpec().Usage)
+}
+
+// gateCommandSpec is `magus gate` as the command registry declares it.
+func gateCommandSpec() cmdline.Command {
+	i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "gate" })
+	return commands.Root.Children[i]
+}
+
+// gateWaive is `magus gate waive`, a person's waiver of the push gate for one commit.
+func gateWaive(ctx context.Context, root string, args []string) error {
+	var reason string
+	var revoke bool
+	rest, err := cmdParse("gate waive", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&reason, "reason", "", "")
+		fs.BoolVar(&revoke, "revoke", false, "")
+		fs.Usage = func() {
+			spec := gateCommandSpec()
+			child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == "waive" })]
+			fmt.Fprintln(os.Stderr, "Usage: "+child.Usage)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, cmp.Or(child.Description, child.Short))
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) != 1 {
+		return exit.Usagef("magus gate waive: requires one commit")
+	}
+	if revoke == (strings.TrimSpace(reason) != "") {
+		return exit.Usagef("magus gate waive: takes --reason to waive or --revoke to remove, and not both")
+	}
+	dir := resolveRootOrEmpty(root)
+	if dir == "" {
+		return fmt.Errorf("magus gate waive: no workspace here, so there is no repository to name %s in", rest[0])
+	}
+	commit, err := fullCommit(ctx, dir, rest[0])
+	if err != nil {
+		return fmt.Errorf("magus gate waive: %w", err)
+	}
+	store, err := openJobs(ctx, dir, jobOpen{})
+	if err != nil {
+		return err
+	}
+	if revoke {
+		if _, err := guard.RevokeGateWaiver(ctx, store, commit); err != nil {
+			return fmt.Errorf("magus gate waive: %w", err)
+		}
+		fmt.Printf("revoked the waiver of %s: a push of it meets the gate again\n", commit)
+		return nil
+	}
+	w, err := guard.WaiveGate(ctx, store, commit, reason)
+	if err != nil {
+		return fmt.Errorf("magus gate waive: %w", err)
+	}
+	fmt.Printf("waived the gate for %s at %s: a push or `gh pr create` of it passes, and of no other commit\n",
+		w.Commit, time.Unix(w.At, 0).Format(time.RFC3339))
+	return nil
+}
+
+// fullCommit is the full id of the commit rev names in the checkout at dir, through the
+// VCS layer the push gate reads revisions with.
+func fullCommit(ctx context.Context, dir, rev string) (string, error) {
+	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
+	if err != nil {
+		return "", err
+	}
+	if res.VCS == nil {
+		return "", fmt.Errorf("no version control at %s to name %s in", dir, rev)
+	}
+	c, err := res.VCS.FindCommit(ctx, dir, rev)
+	if err != nil {
+		return "", fmt.Errorf("%s names no commit: %w", rev, err)
+	}
+	return c.ID, nil
+}
 
 // gateMergeScanLimit bounds the history walk that looks for a merge commit
 // between the green gate and HEAD. A green gate older than this many commits
@@ -230,13 +332,13 @@ func renderSizing(target string, rep types.RiskReport) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
 	for _, line := range rep.Lines() {
-		b.WriteString("  " + line + "\n")
+		fmt.Fprintf(&b, "  %s\n", line)
 	}
 	gate := "none"
 	if cmds := rep.Commands(); len(cmds) > 0 {
 		gate = strings.Join(cmds, " && ")
 	}
-	b.WriteString("  gate: " + gate + "\n")
+	fmt.Fprintf(&b, "  gate: %s\n", gate)
 	for _, s := range rep.Gate {
 		if s.Op != "" {
 			fmt.Fprintf(&b, "  narrowed: %s in %s %s runs %d package(s): %s\n",
@@ -262,7 +364,7 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 			n, types.UndeclaredSeedingFile, strings.Join(f.rec.UndeclaredSeeds, ", "))
 	}
 	if f.identical {
-		b.WriteString("\n  delta since that gate: none; this run's input fingerprint " + shortFingerprint(g.fp) + " matches it exactly")
+		fmt.Fprintf(&b, "\n  delta since that gate: none; this run's input fingerprint %s matches it exactly", shortFingerprint(g.fp))
 		return b.String()
 	}
 	if len(f.delta) == 0 {
@@ -416,7 +518,7 @@ func gatePoolSaturated(ctx context.Context) (bool, string) {
 		return false, "no broker answered; treated as idle"
 	}
 	m := &st.Capacity
-	desc := strconv.Itoa(m.HeldSlots) + " of " + strconv.Itoa(m.BudgetSlots) + " slots held"
+	desc := fmt.Sprintf("%s of %s slots held", strconv.Itoa(m.HeldSlots), strconv.Itoa(m.BudgetSlots))
 	if !internalci.PoolSaturated(m) {
 		return false, "idle: " + desc
 	}

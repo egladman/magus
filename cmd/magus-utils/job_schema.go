@@ -83,9 +83,9 @@ var closedSets = map[string][]string{
 	"GoalKind":    goalKindNames(),
 	"GoalExpect":  goalExpectNames(),
 	"BriefFormat": types.BriefFormat("").Values(),
-	// The only DiagnosticCode a record declares is JobWaiver.Code, so the set is the codes a
-	// waiver may name: a waiver on any other code fails the schema as it fails the decoder.
-	"DiagnosticCode": waivableCodeNames(),
+	// The only DiagnosticCode a record declares is Deviation.Code, so the set is the codes a
+	// deviation may name: a deviation on any other code fails the schema as it fails the decoder.
+	"DiagnosticCode": permissibleCodeNames(),
 }
 
 func runJobSchema(args []string) error {
@@ -235,7 +235,7 @@ func property(f *ast.Field, structName, field, name string, omitempty bool, d *g
 	if name == versionProperty {
 		prop = append(prop, member{"minimum", 1}, member{"maximum", version})
 	}
-	if doc := d.docs[structName+"."+field]; doc != "" {
+	if doc := d.docs[fmt.Sprintf("%s.%s", structName, field)]; doc != "" {
 		prop = append(prop, member{"description", doc})
 	}
 	return prop, nil
@@ -399,7 +399,7 @@ func (d *goDecls) read(gd *ast.GenDecl, spec ast.Spec) {
 		d.docs[s.Name.Name] = firstParagraph(doc.Text())
 		for _, f := range st.Fields.List {
 			for _, name := range f.Names {
-				d.docs[s.Name.Name+"."+name.Name] = firstParagraph(f.Doc.Text())
+				d.docs[fmt.Sprintf("%s.%s", s.Name.Name, name.Name)] = firstParagraph(f.Doc.Text())
 			}
 		}
 	case *ast.ValueSpec:
@@ -422,10 +422,10 @@ func firstParagraph(doc string) string {
 	return strings.Join(strings.Fields(head), " ")
 }
 
-func waivableCodeNames() []string {
+func permissibleCodeNames() []string {
 	var names []string
 	for _, c := range types.AllDiagnosticCodes() {
-		if types.Waivable(c) {
+		if types.Permissible(c) {
 			names = append(names, string(c))
 		}
 	}
@@ -466,11 +466,11 @@ func goalExpectNames() []string {
 func leaseIDPattern() string {
 	var accepted []rune
 	for r := rune(0); r < 0x80; r++ {
-		if types.ValidJobID("a" + string(r) + "a") {
+		if types.ValidJobID(fmt.Sprintf("a%sa", string(r))) {
 			accepted = append(accepted, r)
 		}
 	}
-	return "^[" + charClass(accepted) + "]+$"
+	return fmt.Sprintf("^[%s]+$", charClass(accepted))
 }
 
 // writePathPattern is the write path shape that needs no workspace: a non-empty,
@@ -489,7 +489,7 @@ func writePathPattern() string {
 	lastSeg := `(?:[^/#.*]` + ch + `*|` + starts + `|` + dotted + `)`
 	// A path of one segment is also the first, and a lone `.` is the workspace itself.
 	onlySeg := `(?:[^/#.*~]` + ch + `*|` + starts + `|\.[^/#.]` + ch + `*|\.\.` + ch + `+)`
-	return `^(?:` + onlySeg + `|` + firstSeg + `(?:/` + anySeg + `)*/` + lastSeg + `)(?:#[^#]+)?$`
+	return fmt.Sprintf("^(?:%s|%s(?:/%s)*/%s)(?:#[^#]+)?$", onlySeg, firstSeg, anySeg, lastSeg)
 }
 
 // durationPattern is a Go duration with a positive total, or empty. The nonzero component
@@ -511,8 +511,8 @@ func targetPattern() string {
 			accepted = append(accepted, r)
 		}
 	}
-	class := "[" + charClass(accepted) + "]"
-	return "^(?:" + class + "+::" + class + "+|" + class + "*)$"
+	class := fmt.Sprintf("[%s]", charClass(accepted))
+	return fmt.Sprintf("^(?:%s+::%s+|%s*)$", class, class, class)
 }
 
 // charClass renders accepted runes as a regexp character class: alphanumeric runs
@@ -532,7 +532,7 @@ func charClass(accepted []rune) string {
 			end++
 		}
 		if end-i >= 2 {
-			b.WriteString(string(r) + "-" + string(accepted[end]))
+			fmt.Fprintf(&b, "%s-%s", string(r), string(accepted[end]))
 			i = end
 			continue
 		}

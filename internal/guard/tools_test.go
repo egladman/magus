@@ -41,14 +41,26 @@ var testToolRows = []types.HarnessTool{
 func testTools(t testing.TB) agent.ToolRows {
 	t.Helper()
 	root := t.TempDir()
-	for _, f := range agent.ToolFiles(types.HarnessTools{Dir: "tools", Rows: testToolRows}, nil) {
+	for _, f := range testToolFiles() {
 		path := filepath.Join(root, f.Path)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))
 	}
-	rows := agent.ReadToolRows(root, "tools")
+	rows := agent.FindToolRows(root, testToolHost)
 	require.NoError(t, rows.Err)
 	return rows
+}
+
+const (
+	testToolHost = "test"
+	testToolsDir = ".test/magus/tools"
+)
+
+// testToolFiles is testToolRows installed under testToolsDir with the host file that names
+// the directory, as the harness install writes them.
+func testToolFiles() []types.AgentFile {
+	return append(agent.ToolFiles(types.HarnessTools{Dir: testToolsDir, Rows: testToolRows}, nil),
+		types.AgentFile{Path: testToolsDir + "/" + types.ToolHostFile, Content: testToolHost + "\n"})
 }
 
 // decodeTestEnvelope is decodeHookEnvelope under testToolRows.
@@ -174,8 +186,8 @@ func TestInertToolsCarryNothingToJudge(t *testing.T) {
 func TestMissingToolRowsKnowNoToolAndSaySo(t *testing.T) {
 	t.Parallel()
 	for name, rows := range map[string]agent.ToolRows{
-		"no directory named": agent.ReadToolRows(t.TempDir(), ""),
-		"never installed":    agent.ReadToolRows(t.TempDir(), "tools"),
+		"never installed":     agent.FindToolRows(t.TempDir(), testToolHost),
+		"another host's only": agent.FindToolRows(t.TempDir(), "claude-code"),
 	} {
 		require.Error(t, rows.Err, name)
 		req, ok := decodeHookEnvelope(toolEnvelope(t, "s1", "/r", "TodoWrite", map[string]any{"todos": []any{}}), rows)

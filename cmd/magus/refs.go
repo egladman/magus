@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
@@ -132,10 +133,11 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
 				classify = ws.ClassifyFiles
 			}
-			hits, files, n, s, g, cls, textErr := textPresence(ctx, searchRoot, pos[0], noGenerated, classify)
+			matches, n, s, g, cls, textErr := textScan(ctx, searchRoot, pos[0], nil, noGenerated, classify)
 			searched, skipped, generated, classifiedFiles = n, s, g, cls
-			if textErr == nil && hits > 0 {
-				ans.Text = &types.KnowledgeTextPresence{Hits: hits, Files: files}
+			if textErr == nil && len(matches) > 0 {
+				presence := missPresence(searchRoot, matches)
+				ans.Text = &presence
 			}
 		}
 		miss := refsMiss{name: pos[0], answer: withIndexCause(ctx, root, ans), searched: searched}
@@ -224,6 +226,15 @@ func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
 	return reportIndexStaleness(w, out.Answer)
 }
 
+// missPresence reduces matches to the counts and the capped site list a symbol miss reports.
+func missPresence(root string, matches []textindex.Match) types.KnowledgeTextPresence {
+	hits := make([]types.TextHit, len(matches))
+	for i, m := range matches {
+		hits[i] = types.TextHit{Path: m.Path, Line: m.Line}
+	}
+	return types.CountTextPresence(root, hits)
+}
+
 // refsMiss is what refs learned about a name no symbol node matches.
 type refsMiss struct {
 	name     string
@@ -259,6 +270,12 @@ func reportRefsMiss(stderr io.Writer, opts output.Options, m refsMiss) error {
 			fmt.Fprintf(stderr, " (%s)", strings.Join(m.notes, "; "))
 		}
 		fmt.Fprintln(stderr)
+		for _, site := range t.Sites {
+			fmt.Fprintf(stderr, "    %s\n", site)
+		}
+		if t.More > 0 {
+			fmt.Fprintf(stderr, "    ... and %d more\n", t.More)
+		}
 		fmt.Fprintln(stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
 	}
 	printIndexCause(stderr, m.answer)
@@ -299,7 +316,7 @@ func refuseAmbiguous(w io.Writer, ref string, named []string) error {
 	for _, id := range named {
 		// Single-quoted: a symbol id holds spaces and backticks, which a paste must not
 		// hand to the shell.
-		fmt.Fprintf(w, "  %s\n", hint.Refs.With("'"+strings.ReplaceAll(id, "'", `'\''`)+"'"))
+		fmt.Fprintf(w, "  %s\n", hint.Refs.With(fmt.Sprintf("'%s'", strings.ReplaceAll(id, "'", `'\''`))))
 	}
 	return exit.Reported(exit.Usage)
 }
@@ -1019,8 +1036,8 @@ func declaredOutputRefusal(ctx context.Context, ws types.WorkspaceRepository, pa
 	var by []string
 	for _, c := range e.Claims {
 		if c.Role == types.DiffRoleOutput {
-			by = append(by, strings.TrimSuffix(c.Project+":"+c.Target, ":"))
+			by = append(by, strings.TrimSuffix(fmt.Sprintf("%s:%s", c.Project, c.Target), ":"))
 		}
 	}
-	return "a declared output of " + strings.Join(by, ", ") + ": change its source and regenerate it"
+	return fmt.Sprintf("a declared output of %s: change its source and regenerate it", strings.Join(by, ", "))
 }

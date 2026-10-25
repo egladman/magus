@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -94,7 +95,11 @@ func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
 	assert.Contains(t, out, "keyid  ")
 	// The seed sits BARE on its own line, not after "VAR=", which is awkward to
 	// select and invites pasting it into an export, straight into shell history.
-	assert.Contains(t, out, "\n\n"+findSeed(t, out)+"\n\n", "the seed must be alone on its line")
+	assert.Contains(t, out, fmt.Sprintf(`
+
+%s
+
+`, findSeed(t, out)), "the seed must be alone on its line")
 	assert.NotContains(t, out, signingKeyEnv+"=", "the seed must not be rendered as an assignment")
 	// Column zero, or the snippet does not paste into magus.yaml.
 	assert.Contains(t, out, "\ncache:\n  remote:\n    trusted_keys:\n")

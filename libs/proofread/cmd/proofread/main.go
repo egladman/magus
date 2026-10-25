@@ -339,7 +339,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		fmt.Fprint(stderr, textSummary(out))
 	}
 
-	if slices.ContainsFunc(out, func(f finding) bool { return f.Decision == string(proofread.DecisionDeny) }) {
+	if slices.ContainsFunc(out, func(f finding) bool { return f.Decision == proofread.DecisionDeny.String() }) {
 		return exitFindings
 	}
 
@@ -513,7 +513,7 @@ func sourceAt(name string, line int) string {
 func toFinding(node, source string, kind proofread.Kind, f proofread.Finding) finding {
 	return finding{
 		Node: node, Source: source, Kind: string(kind), Rule: string(f.Rule), Code: string(f.Code),
-		Decision: string(f.Decision), Message: f.Message, Match: f.Match, URL: f.URL, Weight: f.Weight,
+		Decision: f.Decision.String(), Message: f.Message, Match: f.Match, URL: f.URL, Weight: f.Weight,
 		Line: f.Line, Column: f.Column, EndLine: f.EndLine, EndColumn: f.EndColumn, Replacements: f.Replacements,
 	}
 }
@@ -729,14 +729,13 @@ func ruleDecisions(in map[string]string) (map[proofread.Rule]proofread.Decision,
 	out := make(map[proofread.Rule]proofread.Decision, len(in))
 
 	for _, name := range slices.Sorted(maps.Keys(in)) {
-		r, d := proofread.Rule(name), proofread.Decision(in[name])
+		r := proofread.Rule(name)
 		if !slices.Contains(known, r) {
 			return nil, fmt.Errorf("unknown rule %q", name)
 		}
 
-		switch d {
-		case proofread.DecisionOff, proofread.DecisionAdvise, proofread.DecisionDeny:
-		default:
+		var d proofread.Decision
+		if err := d.UnmarshalText([]byte(in[name])); err != nil || d == 0 {
 			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
 		}
 
