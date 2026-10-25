@@ -48,7 +48,7 @@ const sleepPollFloor = 10 * time.Second
 
 var (
 	denySleepPoll = fmt.Sprintf("a sleep before a status read is a poll spread over calls; background the work as `%s` and wait for its notice, or `gh run watch` for CI.",
-		boundedRun)
+		boundedRunWait)
 	denySleepPollWhy = "Each call spends a turn and the sleep's tool slot to look once, and the next call looks again. " +
 		"A backgrounded run is announced when it ends, and a CI watch ends with its run. Both answer when the state changes, where a sleep answers on its own schedule."
 
