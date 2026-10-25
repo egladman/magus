@@ -1431,7 +1431,11 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	}
 	out := map[string]landing{}
 	for _, row := range due {
-		if reason := probe(context.Background(), row); reason != "" {
+		reason := probe(context.Background(), row)
+		if reason == "" {
+			reason = s.landedInIntegration(context.Background(), row, rows)
+		}
+		if reason != "" {
 			out[row.ID] = landing{updated: row.Updated, reason: reason}
 		}
 	}
@@ -1543,28 +1547,72 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 	if err != nil {
 		return ""
 	}
+	paths := contentLanded(ctx, driver, row, head, s.root, base)
+	if paths == 0 {
+		return ""
+	}
+	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s read the same there",
+		res.Base, shortRevision(base), paths, shortRevision(head), row.CheckoutRoot)
+}
+
+// landedInIntegration reports why row's work is in the checkout of a live integration job
+// that names row.ID in its Integrates, or "" when no such checkout holds it. The base only
+// gains the work when the integration lands, so until then the integration's own checkout
+// is where a merged worker shows. Same content check as [Store.landedOnBase].
+func (s *Store) landedInIntegration(ctx context.Context, row types.Job, rows []types.Job) string {
+	for _, into := range rows {
+		if into.State != types.StateRunning || into.CheckoutRoot == "" || !slices.Contains(into.Integrates, row.ID) {
+			continue
+		}
+		res, err := vcs.Resolve(ctx, into.CheckoutRoot, "", types.VCSOptions{})
+		if err != nil || res.VCS == nil {
+			continue
+		}
+		driver := res.VCS
+		if info, err := os.Stat(row.CheckoutRoot); err != nil || !info.IsDir() {
+			return ""
+		}
+		head, err := driver.FindCommit(ctx, row.CheckoutRoot, "")
+		if err != nil {
+			return ""
+		}
+		tip, err := driver.FindCommit(ctx, into.CheckoutRoot, "")
+		if err != nil {
+			continue
+		}
+		if paths := contentLanded(ctx, driver, row, head, into.CheckoutRoot, tip); paths > 0 {
+			return fmt.Sprintf("its work landed in integration job %s at %s: the %d changed path(s) at %s in %s read the same there",
+				into.ID, shortRevision(tip), paths, shortRevision(head), row.CheckoutRoot)
+		}
+	}
+	return ""
+}
+
+// contentLanded is how many paths the row's checkout changed since its checkpoint, or 0
+// when any of them does not read at target's commit as it reads at head (the row's
+// checkout HEAD), or still reads at head as it did at the checkpoint.
+func contentLanded(ctx context.Context, driver types.VCSDriver, row types.Job, head types.Commit, targetRoot string, target types.Commit) int {
 	checkpoint := checkpointRevision(row.Checkpoint)
 	// The paths alone: changedSince also places every changed line in its declaration,
 	// a VCS read per path this verdict never looks at.
 	paths, err := driver.ChangedFiles(ctx, row.CheckoutRoot, checkpoint)
 	if err != nil || len(paths) == 0 {
-		return ""
+		return 0
 	}
 	for _, changed := range paths {
 		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
 		ours, err := driver.ReadFileAt(ctx, row.CheckoutRoot, head.ID, p)
 		if err != nil {
-			return ""
+			return 0
 		}
-		if theirs, err := driver.ReadFileAt(ctx, s.root, base.ID, p); err != nil || theirs != ours {
-			return ""
+		if theirs, err := driver.ReadFileAt(ctx, targetRoot, target.ID, p); err != nil || theirs != ours {
+			return 0
 		}
 		if before, err := driver.ReadFileAt(ctx, row.CheckoutRoot, checkpoint, p); err == nil && before == ours {
-			return ""
+			return 0
 		}
 	}
-	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s read the same there",
-		res.Base, shortRevision(base), len(paths), shortRevision(head), row.CheckoutRoot)
+	return len(paths)
 }
 
 // shortRevision is the commit's short id, or its id cut to 12 when the backend gave none.

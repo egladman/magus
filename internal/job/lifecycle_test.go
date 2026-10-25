@@ -918,6 +918,41 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 	assert.Equal(t, types.StateExited, states(t, s)["job"].State)
 }
 
+// A worker whose branch a live integration job merged ends as landed before the base has
+// the work: the integration row's checkout reads the worker's paths as the worker does. A
+// worker no live integration row names stays exited.
+func TestAWorkerMergedIntoALiveIntegrationCheckoutEnds(t *testing.T) {
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	seedRev := repo.Head()
+	wa := repo.AddWorktree("job-a")
+	wa.Write("a.go", "package a // merged\n")
+	wa.Git("commit", "-q", "-am", "job-a")
+	wb := repo.AddWorktree("job-b")
+	wb.Write("b.go", "package b // unmerged\n")
+	wb.Git("commit", "-q", "-am", "job-b")
+
+	integration := repo.AddWorktree("integration")
+	integration.Git("merge", "-q", "--no-ff", "-m", "merge job-a", "job-a")
+	repo.Git("update-ref", "refs/remotes/origin/main", seedRev)
+
+	s := tempStore(t, repo.Root())
+	var notices strings.Builder
+	s.notices = &notices
+	exited := func(id string, wt *testkit.Repo, file string) types.Job {
+		return types.Job{ID: id, State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
+			WritePaths: []string{file}, Result: &types.JobResult{ChangedPaths: []string{file}}, Updated: 1}
+	}
+	plant(t, s, exited("job-a", wa, "a.go"), exited("job-b", wb, "b.go"),
+		types.Job{ID: "integration", State: types.StateRunning, Checkpoint: seedRev, CheckoutRoot: integration.Root(),
+			Integrates: []string{"job-a", "job-b"}, Updated: 1})
+
+	got := states(t, s)
+	assert.Equal(t, types.StateNoReturn, got["job-a"].State)
+	assert.Equal(t, fmt.Sprintf("its work landed in integration job integration at %s: the 1 changed path(s) at %s in %s read the same there",
+		integration.Head()[:7], wa.Head()[:7], wa.Root()), got["job-a"].EndReason)
+	assert.Equal(t, types.StateExited, got["job-b"].State, "named by the integration row, but its checkout lacks the work")
+}
+
 // Exit resolves a ref the caller's checkout never recorded in the checkout the job was
 // taken in, so an orchestrator can file its worker's result; with no Outputs it refuses.
 func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
