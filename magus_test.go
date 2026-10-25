@@ -1595,7 +1595,7 @@ func ExampleMagus_ExpandAffected() {
 }
 
 // The examples in this file are the code blocks of docs/guides/go-sdk.md, which shows
-// each one verbatim. Edit them together.
+// each one verbatim, with its tabs as four spaces. Edit them together.
 
 // newGuideWorkspace writes files, keyed by slash-separated workspace-relative path, into a
 // new temporary directory and returns it with the function that removes it.

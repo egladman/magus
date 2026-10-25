@@ -1343,4 +1343,3 @@ func (s *Store) resolveStaleAfter() (time.Duration, error) {
 	}
 	return cfg.Jobs.StaleAfter, nil
 }
-
