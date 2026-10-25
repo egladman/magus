@@ -1256,7 +1256,15 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if len(row.WritePaths) > 0 {
 			return exit.Usagef("magus job fork: an integration job's write paths are the files its branches changed, computed here, so the record names none: drop write_paths")
 		}
-		paths, base, err := job.IntegrationWritePaths(ctx, root, row.Checkpoint, row.Integrates)
+		// A checkout that already stands is where the merge happens, so its revision is the
+		// one the branches are compared with, not the forker's.
+		at := root
+		if info, statErr := os.Stat(row.Checkout); row.Checkout != "" && statErr == nil && info.IsDir() {
+			if at, err = filepath.Abs(row.Checkout); err != nil {
+				return exit.Usagef("magus job fork: checkout %s: %s", row.Checkout, err)
+			}
+		}
+		paths, base, err := job.IntegrationWritePaths(ctx, at, row.Checkpoint, row.Integrates)
 		if err != nil {
 			return exit.Usagef("magus job fork: integrates: %s", err)
 		}
@@ -1270,7 +1278,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			slog.InfoContext(ctx, fmt.Sprintf("%s changes nothing left to merge, and %s's goals are unmet, so it is forked again on the paths it held", strings.Join(row.Integrates, ", "), row.ID), attr.Notice("note"))
 		}
 		if row.Checkpoint == "" {
-			slog.InfoContext(ctx, fmt.Sprintf("the record names no checkpoint, so the branches were compared with this checkout's revision %s, and the job starts there", base), attr.Notice("note"))
+			slog.InfoContext(ctx, fmt.Sprintf("the record names no checkpoint, so the branches were compared with the revision %s of %s, and the job starts there", base, at), attr.Notice("note"))
 			row.Checkpoint = base
 		}
 		row.WritePaths = paths
