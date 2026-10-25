@@ -670,14 +670,18 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 		if !fp.known {
 			continue
 		}
-		written := slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
-			return !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(entry, r.Location()) })
-		})
+		used := indexRegions(fp.regions)
+		written := map[string]bool{}
+		for _, entry := range row.SoftPaths {
+			if used.uses(entry) {
+				written[entry] = true
+			}
+		}
 		if len(written) == 0 {
 			continue
 		}
 		harden := func(soft []string) []string {
-			return slices.DeleteFunc(slices.Clone(soft), func(p string) bool { return slices.Contains(written, p) })
+			return slices.DeleteFunc(slices.Clone(soft), func(p string) bool { return written[p] })
 		}
 		out[i].SoftPaths = harden(row.SoftPaths)
 		if store.dryRun {
