@@ -408,3 +408,6 @@ reference/rules/stdin-closed/
 # started judging what an interpreter does, not the substitute-and-write shape. A rule page
 # is generated per shipped rule, so the old page retires rather than aliases.
 reference/rules/scripted-rewrite/
+# The waivers tag became deviations when JobWaiver was renamed to Deviation. A tag page is
+# generated per tag, so the old page retires rather than aliases.
+tags/waivers/
