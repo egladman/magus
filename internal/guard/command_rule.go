@@ -73,6 +73,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	req.OwnedCheckouts = ownedCheckouts(ctx, deps, at)
+	placePullRequestCall(&req, in, at)
 	if deps.CheckoutState != nil {
 		if site, ok := locateCheckout(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
 			req.Checkout = deps.CheckoutState(ctx, site.dir)
@@ -195,6 +196,39 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Dir:           at.dir,
 		Workspace:     at.workspace,
 	}
+}
+
+// placePullRequestCall moves req to the checkout a pull request call runs in when the line
+// cds there first, so the rule judges the fragments and the proofread build of that tree
+// and not the session's own. A call whose directory cannot be read without running the
+// line stays where the host started.
+func placePullRequestCall(req *types.CommandRequest, in commandRuleInput, at location) {
+	site, found, located := locateFirst(in.command, in.dialect, cmp.Or(at.dir, at.workspace), isPullRequestText)
+	if !found || !located || !site.relocated {
+		return
+	}
+	if root := workspaceHolding(at, site.dir); root != "" {
+		req.Dir, req.Workspace = site.dir, root
+	}
+}
+
+// isPullRequestText reports `gh pr create` and `gh pr edit`, the calls whose text the
+// workspace rule judges against the diff of the branch they describe.
+func isPullRequestText(c hint.Invocation) bool {
+	if isPRCreate(c) {
+		return true
+	}
+	if filepath.Base(c.Name) != "gh" {
+		return false
+	}
+	var words []string
+	for _, a := range c.Args {
+		if !strings.HasPrefix(a, "-") {
+			words = append(words, a)
+		}
+	}
+	i := slices.Index(words, "pr")
+	return i >= 0 && i+1 < len(words) && words[i+1] == "edit"
 }
 
 // actingRole is where a caller acting under lease, spawned as spawned, stands, and the
