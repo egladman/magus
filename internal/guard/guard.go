@@ -2284,6 +2284,31 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	return job.NewStore(at.jobs()).List()
 }
 
+// hardenCovering is harden, which keeps its rows' order, over rows narrowed to the soft
+// entries covering rel, the one path a write grade asks about. Hardening every entry
+// checks each against every region of its holder's diff, which ran a test-file edit
+// against a 526-entry integration row past the hook's budget.
+func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []types.Job) []types.Job {
+	narrowed := slices.Clone(rows)
+	for i, row := range rows {
+		narrowed[i].SoftPaths = slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
+			_, covers, _ := declarationCovering([]string{entry}, rel)
+			return !covers
+		})
+	}
+	hardened := harden(narrowed)
+	out := slices.Clone(rows)
+	for i := range out {
+		made := slices.DeleteFunc(slices.Clone(narrowed[i].SoftPaths), func(entry string) bool {
+			return slices.Contains(hardened[i].SoftPaths, entry)
+		})
+		if len(made) > 0 {
+			out[i].SoftPaths = slices.DeleteFunc(slices.Clone(rows[i].SoftPaths), func(entry string) bool { return slices.Contains(made, entry) })
+		}
+	}
+	return out
+}
+
 // dryRunCopyPrefix starts the name of a dry run's session copy in the temporary directory;
 // the pid of the process that made it follows.
 const dryRunCopyPrefix = "magus-guard-dry-run-"
