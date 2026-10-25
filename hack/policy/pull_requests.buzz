@@ -450,6 +450,7 @@ export object Facts {
     areas: [str] = [<str>],
     changed: [str] = [<str>],
     added: [str] = [<str>],
+    texts: {str: str} = {<str: str>},
 }
 
 export fun unknownFacts() > Facts {
@@ -707,7 +708,7 @@ export object PullRef {
 // counts the lines head carries past ref (head "" is the checkout's own branch). A base the
 // command names wins over the pull request's. A read that fails or finds nothing is
 // unknown, which textProblems denies.
-export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: fun (head: str, ref: str) > [FileStat]?) > fun (head: str, base: str, number: str) > Facts {
+export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: fun (head: str, ref: str) > [FileStat]?, fragmentText: fun (head: str, path: str) > str?) > fun (head: str, base: str, number: str) > Facts {
     return fun (head: str, base: str, number: str) > Facts {
         var rev = head;
         var name = base;
@@ -733,9 +734,16 @@ export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: 
             return unknownFacts();
         }
         final facts = statFacts(stats!);
+        final texts = mut {<str: str>};
+        foreach (added in facts.added) {
+            final text = fragmentText(rev, path: added);
+            if (text != null) {
+                texts[added] = text!;
+            }
+        }
         return Facts{ known = facts.known, fragments = facts.fragments, shipped = facts.shipped, lines = facts.lines,
             paths = facts.paths, areas = changedAreas(workspace, paths: facts.paths), changed = facts.changed,
-            added = facts.added };
+            added = facts.added, texts = texts };
     };
 }
 
@@ -768,7 +776,17 @@ export fun pullRequestDiff(workspace: str) > fun (head: str, base: str, number: 
         }
         return parseNumstat(run!.stdout);
     };
-    return diffReader(workspace, view: view, stat: stat);
+    final fragmentText = fun (head: str, path: str) > str? {
+        if (head == "") {
+            return fs\readFile("{workspace}/{path}") catch null;
+        }
+        final run = vcs\cmd(["show", "{head}:{path}"], opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+        if (run == null or run!.code != 0) {
+            return null;
+        }
+        return run!.stdout;
+    };
+    return diffReader(workspace, view: view, stat: stat, fragmentText: fragmentText);
 }
 
 // parseNumstat reads `git diff --numstat` rows: added, deleted and path, where a binary
@@ -1433,15 +1451,21 @@ fun unreadableDiff(base: str) > str {
 
 // changelogProblems are what CI's pr-changelog target reaches over the same diff: a
 // fragment that fails changelog\lint, then a title that owes a fragment the diff does not
-// add. A fragment absent from this checkout (its head is not checked out) is not linted.
+// add. Each added fragment is linted from facts.texts, which diffReader read at the head
+// the pull request carries, so the session's own checkout never stands in for it.
 fun changelogProblems(title: str, facts: Facts) > [str] {
-    final present = mut [<str>];
+    final malformed = mut [<str>];
     foreach (path in facts.added) {
-        if (fs\exists(path) catch false) {
-            present.append(path);
+        final text = facts.texts[path];
+        if (text == null) {
+            malformed.append("{path}: cannot be read at the head this pull request carries");
+            continue;
+        }
+        final these = entries\problems(text!);
+        if (these.len() > 0) {
+            malformed.append("{path}: " + these.join("; "));
         }
     }
-    final malformed = entries\lint(present);
     if (malformed.len() > 0) {
         return ["malformed changelog fragment(s); fix each to the format changes/README.md gives:\n  "
             + malformed.join("\n  ")];
@@ -2329,9 +2353,13 @@ final featTitle = "feat(cache): hash the key in sorted order";
 // shipped is the diff of a feature that changes one shipped path, with the fragments
 // paths gained lines.
 fun shippedDiff(fragments: [str]) > Facts {
+    final texts = mut {<str: str>};
+    foreach (path in fragments) {
+        texts[path] = fs\readFile(path) catch "";
+    }
     return Facts{ known = true, fragments = fragments.len(), shipped = 1, lines = 10,
         paths = ["internal/cache/key.go"] + fragments, changed = ["internal/cache/key.go"] + fragments,
-        added = fragments };
+        added = fragments, texts = texts };
 }
 
 test "a feat that ships code with no fragment is denied with the fix, and a fragment settles it" {
@@ -2372,22 +2400,52 @@ test "gh pr edit <n> reads its head and base from gh and counts the lines betwee
             FileStat{ path = "MAGUS.md", added = 1, deleted = 1, binary = false },
         ];
     };
-    final read = diffReader(".", view: view, stat: stat)("", base: "", number: "12");
-    std\assert(asked.join(",") == "12,0123abc...origin/release", message: "asked {asked}");
+    final text = fun (head: str, path: str) > str? {
+        asked.append("{head}:{path}");
+        return "### Fixed\n\n- **Key order.** Hashes the key in sorted order.\n";
+    };
+    final read = diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "", number: "12");
+    std\assert(asked.join(",") == "12,0123abc...origin/release,0123abc:changes/unreleased/key.md", message: "asked {asked}");
+    std\assert(read.texts.size() == 1 and (read.texts["changes/unreleased/key.md"] ?? "").startsWith("### Fixed"), message: "the added fragment is read at the pull request's head: {read.texts}");
     std\assert(read.known and read.shipped == 1 and read.fragments == 1 and read.lines == 16, message: "counts {read}");
     std\assert(read.paths.join(",") == "internal/cache/key.go,changes/unreleased/key.md", message: "paths {read.paths}");
     std\assert(read.changed.len() == 3 and read.added.join(",") == "changes/unreleased/key.md", message: "changed {read.changed}, added {read.added}");
 
-    diffReader(".", view: view, stat: stat)("", base: "main", number: "12");
-    std\assert(asked[asked.len() - 1] == "0123abc...origin/main", message: "a --base wins over the pull request's: {asked}");
+    diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "main", number: "12");
+    std\assert(asked[asked.len() - 2] == "0123abc...origin/main", message: "a --base wins over the pull request's: {asked}");
     final unseen = fun (number: str) > PullRef? {
         return null;
     };
-    std\assert(!diffReader(".", view: unseen, stat: stat)("", base: "", number: "12").known, message: "a pull request gh cannot view is unreadable");
+    std\assert(!diffReader(".", view: unseen, stat: stat, fragmentText: text)("", base: "", number: "12").known, message: "a pull request gh cannot view is unreadable");
     final unstat = fun (head: str, ref: str) > [FileStat]? {
         return null;
     };
-    std\assert(!diffReader(".", view: view, stat: unstat)("other", base: "main", number: "").known, message: "a diff git cannot count is unreadable");
+    std\assert(!diffReader(".", view: view, stat: unstat, fragmentText: text)("other", base: "main", number: "").known, message: "a diff git cannot count is unreadable");
+}
+
+test "a fragment added on a head is linted from that head, not from the session's checkout" {
+    final stat = fun (head: str, ref: str) > [FileStat]? {
+        return [FileStat{ path = "changes/unreleased/elsewhere-only.md", added = 3, deleted = 0, binary = false }];
+    };
+    final unseen = fun (number: str) > PullRef? {
+        return null;
+    };
+    final onHead = fun (head: str, path: str) > str? {
+        if (head == "topic") {
+            return "### Fixed\n\n- **Key order.** Hashes the key in sorted order.\n";
+        }
+        return null;
+    };
+    final read = diffReader(".", view: unseen, stat: stat, fragmentText: onHead)("topic", base: "main", number: "");
+    std\assert(changelogProblems(featTitle, facts: read).len() == 0, message: "a well-formed fragment on the head passes though this checkout lacks it");
+    final missing = diffReader(".", view: unseen, stat: stat, fragmentText: onHead)("gone", base: "main", number: "");
+    final got = changelogProblems(featTitle, facts: missing);
+    std\assert(got.len() == 1 and got[0].indexOf("changes/unreleased/elsewhere-only.md: cannot be read at the head") != null, message: got.join(","));
+    final bad = fun (head: str, path: str) > str? {
+        return "not a fragment\n";
+    };
+    final malformed = changelogProblems(featTitle, facts: diffReader(".", view: unseen, stat: stat, fragmentText: bad)("topic", base: "main", number: ""));
+    std\assert(malformed.len() == 1 and malformed[0].indexOf("malformed changelog fragment(s)") != null, message: malformed.join(","));
 }
 
 test "numstat rows become file stats, a binary file with zero counts" {

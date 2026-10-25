@@ -675,3 +675,23 @@ func TestApprovedResolveUnderAnExpiredDeadlineIsNotKept(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, got)
 }
+
+// A pull request call that follows a cd is judged at the checkout it cds into, so the rule
+// reads that tree's fragments and build rather than the session's own.
+func TestCommandRuleSeesThePullRequestCallsCheckout(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	target := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(target, "magusfile.buzz"), nil, 0o644))
+	probe := &commandRuleProbe{}
+	line := fmt.Sprintf("cd %s && gh pr create --head topic --title t --body b", target)
+	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: line, Host: "claude-code"})
+	require.Len(t, probe.asked, 1)
+	assert.Equal(t, target, probe.asked[0].Dir)
+	assert.Equal(t, target, probe.asked[0].Workspace)
+
+	probe = &commandRuleProbe{}
+	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh pr create --head topic --title t --body b", Host: "claude-code"})
+	require.Len(t, probe.asked, 1)
+	at := hookLocation(ctx, Dependencies{})
+	assert.Equal(t, at.workspace, probe.asked[0].Workspace, "a call with no cd stays at the session's checkout")
+}
