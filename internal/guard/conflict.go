@@ -34,9 +34,6 @@ var (
 // file past it is not one a merge left markers in by hand.
 const conflictScanBytes = 8 << 20
 
-// conflictScript is the script resolveCommand serves, when the workspace carries it.
-const conflictScript = "hack/dev/resolve-conflicts.buzz"
-
 // holdsConflictMarkers reports whether file opens and closes a conflict hunk.
 func holdsConflictMarkers(file string) bool {
 	f, err := os.Open(file)
@@ -63,16 +60,14 @@ func conflictedWorkspaceFile(workspace string, candidates []string) string {
 	return ""
 }
 
-// resolveCommand is the golden path for file's hunks, or "" when the workspace does not
-// carry the script.
+// resolveCommand is the first script the workspace's scripts index serves for
+// conflict-rewrite, bound to file, or "" when none serves it.
 func resolveCommand(workspace, file string) string {
-	if workspace == "" {
+	next, _ := hint.MatchScripts(workspaceCacheDir(workspace), hint.SituationRule+string(denyRuleConflictRewrite), map[string]string{"file": file})
+	if len(next) == 0 {
 		return ""
 	}
-	if _, err := os.Stat(filepath.Join(workspace, conflictScript)); err != nil {
-		return ""
-	}
-	return hint.Buzz.With(conflictScript, "--", "--file", file)
+	return next[0].Run
 }
 
 // denyConflictRewrite is the reason an inline interpreter would rewrite a file holding

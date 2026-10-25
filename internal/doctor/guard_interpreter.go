@@ -90,7 +90,7 @@ func nearestDirWith(dir, name string) string {
 func (r *runner) checkGuardBinaryEverywhere(projects []*types.Project) types.Check {
 	root := r.ws.Root()
 	if info, err := os.Stat(filepath.Join(root, "magus")); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
-		if wt, ok := worktreeWithoutBinary(root); ok {
+		if wt, ok := worktreeWithoutBinary(root, r.cacheDir()); ok {
 			return wt
 		}
 	}
@@ -101,7 +101,25 @@ func (r *runner) checkGuardBinaryEverywhere(projects []*types.Project) types.Che
 	if skew, ok := projectBinarySkew(r.runCtx(), root, projects, r.ownVersion()); ok {
 		return skew
 	}
+	if gone, ok := servedScriptsGone(r.cacheDir()); ok {
+		return gone
+	}
 	return got
+}
+
+// servedScriptsGone fails the check when the scripts index names a script whose file is
+// gone: the guard serves nothing for its situations then, and says so only here.
+func servedScriptsGone(cacheDir string) (types.Check, bool) {
+	missing, _ := hint.MissingScripts(cacheDir)
+	if len(missing) == 0 {
+		return types.Check{}, false
+	}
+	return types.Check{
+		Name:    guardBinaryCheck,
+		Status:  types.CheckFail,
+		Message: fmt.Sprintf("the guard's scripts index names %d script(s) that are gone, so their situations serve nothing", len(missing)),
+		Details: append(missing, fmt.Sprintf("restore each, or rebuild the index without it: %s", hint.GraphBuild.With())),
+	}, true
 }
 
 // worktreeWithoutBinary fails a linked worktree that holds no ./magus. Its hooks then judge
@@ -109,7 +127,7 @@ func (r *runner) checkGuardBinaryEverywhere(projects []*types.Project) types.Che
 // and fail to load it; and a checkout that cannot load its policy is one the guard can only
 // advise on. A main checkout stays an ordinary state to report elsewhere: a build machine
 // legitimately has no ./magus yet.
-func worktreeWithoutBinary(root string) (types.Check, bool) {
+func worktreeWithoutBinary(root, cacheDir string) (types.Check, bool) {
 	if info, err := os.Lstat(filepath.Join(root, ".git")); err != nil || info.IsDir() {
 		return types.Check{}, false
 	}
@@ -117,9 +135,12 @@ func worktreeWithoutBinary(root string) (types.Check, bool) {
 		"its guard hooks judge with the magus on PATH, which may not load this tree",
 		"the main session builds one ./magus per base and places a copy here",
 	}
+	served, _ := hint.MatchScripts(cacheDir, hint.SituationDoctor+guardBinaryCheck, nil)
+	for _, n := range served {
+		details = append(details, fmt.Sprintf("place it, from the main checkout: %s, to %s", n.Run, n.Why))
+	}
 	if info, err := os.Stat(filepath.Join(root, "cmd", "magus")); err == nil && info.IsDir() {
 		details = append(details,
-			"place it: <main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>",
 			fmt.Sprintf("on your own: build one with %s, or bootstrap it with the command the guard prints", hint.Run.With("build", ".")))
 	}
 	return types.Check{

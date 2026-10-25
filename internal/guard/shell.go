@@ -14,6 +14,8 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/config"
+	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -2491,9 +2493,6 @@ const precedentIdentMin = 6
 func Evaluate(deps Dependencies, command string) ShellVerdict {
 	d := effectiveDialect(deps.ShellDialect)
 	builtin := evaluateRules(deps, command, d)
-	if builtin.Deny != "" {
-		builtin.Deny += referenceScriptNote(deps.scope.root, builtin.Rule.Name)
-	}
 	// Here rather than in gitGuard, which answers for every backend and names no paths.
 	if builtin.Deny != "" && builtin.Rule.Name == denyRuleStageAll {
 		lead, next := stageAllRemedy(command, d)
@@ -2523,64 +2522,61 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 	// text was correct and complete about the redirect every time. What it never said was
 	// how much else went with it.
 	if v.Deny != "" {
-		v.Deny += nothingRanNote(command, d)
+		v.Deny += servedScriptsNote(deps.scope.root, v.Rule.Name, command, d) + nothingRanNote(command, d)
 	}
 	return v
 }
 
-// referenceScript is a Buzz script under hack/ that does, the sanctioned way, what a line a
-// rule refused was reaching for.
-type referenceScript struct {
-	lead string   // the question the reader was answering, ending in "?"
-	argv []string // the script's path, then how it is run
-}
-
-var (
-	renameScript = referenceScript{
-		lead: "Renaming a symbol from a script?",
-		argv: []string{"hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>"},
-	}
-	typedResultScript = referenceScript{
-		lead: "Reading magus output in a script?",
-		argv: []string{"hack/dev/example-typed-results.buzz"},
-	}
-	pruneWorktreesScript = referenceScript{
-		lead: "Freeing disk or clearing finished worktrees?",
-		argv: []string{"hack/dev/prune-worktrees.buzz", "--", "--go-cache"},
-	}
-	resolveConflictsScript = referenceScript{
-		lead: "Settling a conflicted file?",
-		argv: []string{"hack/dev/resolve-conflicts.buzz"},
-	}
-	referenceScripts = map[denyRuleName]referenceScript{
-		denyRuleSedInPlace:         renameScript,
-		denyRuleInterpreterRewrite: renameScript,
-		denyRuleOutputPipe:         typedResultScript,
-		denyRuleOutputRedirect:     typedResultScript,
-		denyRuleWorktreeRemove:     pruneWorktreesScript,
-		denyRuleMergeSideCheckout:  resolveConflictsScript,
-	}
-)
-
-// referenceScriptNote is the line naming rule's reference script, or "" when the workspace at
-// root does not carry it: hack/ is one repository's own, and a pointer to a file that is not
-// there is advice nobody can take.
+// referenceScriptNote names, one per line, the scripts the workspace at root declares
+// serve rule, "" when none does.
 func referenceScriptNote(root string, rule denyRuleName) string {
-	s, ok := referenceScripts[rule]
-	if !ok {
-		return ""
-	}
-	return s.note(root)
+	return scriptLines(servedScripts(root, rule, nil))
 }
 
-func (s referenceScript) note(root string) string {
+// servedScriptsNote is referenceScriptNote with the scripts declaring they replace a
+// command the line runs, each named once.
+func servedScriptsNote(root string, rule denyRuleName, command string, d Dialect) string {
+	cmds, _ := ParseCommandsDialect(command, d)
+	return scriptLines(servedScripts(root, rule, cmds))
+}
+
+// servedScripts is what the scripts index of the workspace at root serves for rule, then
+// for each command shape cmds carry; rule "" asks only for the shapes.
+func servedScripts(root string, rule denyRuleName, cmds []hint.Invocation) []types.NextStep {
+	cacheDir := workspaceCacheDir(root)
+	var next []types.NextStep
+	if rule != "" {
+		next, _ = hint.MatchScripts(cacheDir, hint.SituationRule+string(rule), nil)
+	}
+	for _, n := range hint.MatchReplaced(cacheDir, cmds, nil) {
+		if !slices.ContainsFunc(next, func(o types.NextStep) bool { return o.ID == n.ID }) {
+			next = append(next, n)
+		}
+	}
+	return next
+}
+
+// scriptLines is one line per served script, each opening with a newline.
+func scriptLines(next []types.NextStep) string {
+	var b strings.Builder
+	for _, n := range next {
+		fmt.Fprintf(&b, "\nThis workspace's script for it, to %s: `%s`", n.Why, n.Run)
+	}
+	return b.String()
+}
+
+// workspaceCacheDir is where `magus graph build` wrote the scripts index of the workspace
+// at root, "" outside one. It resolves as config.CacheDir does from the root's magus.yaml
+// and the environment: the callers hold a root, not Dependencies.CacheDir.
+func workspaceCacheDir(root string) string {
 	if root == "" {
 		return ""
 	}
-	if _, err := os.Stat(filepath.Join(root, s.argv[0])); err != nil {
+	cfg, err := config.LoadWorkspaceOnly(root)
+	if err != nil || configgen.ApplyEnv(&cfg, os.Getenv) != nil {
 		return ""
 	}
-	return fmt.Sprintf("\n%s `%s`", s.lead, hint.Buzz.With(s.argv...))
+	return config.CacheDir(root, cfg)
 }
 
 // changesDirectory reports a cd or pushd anywhere on the line, or a line that does not parse.

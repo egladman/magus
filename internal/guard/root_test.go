@@ -287,21 +287,20 @@ func TestOrchestratorGroundworkByRole(t *testing.T) {
 	assert.NotEqual(t, inferred.key, search.key, "advised once per kind of work")
 }
 
-// TestGroundworkNamesTheMergeScript: a merge or cherry-pick of job branches names the merge
-// script in the finding's first line, only where the workspace carries it, and a merge also
-// names the script that brings the base into a branch.
+// TestGroundworkNamesTheMergeScript: a merge or cherry-pick of job branches names, in the
+// finding's first line, each script the workspace declares replaces it, and none where no
+// script declares so.
 func TestGroundworkNamesTheMergeScript(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "dev", "merge-job-branches.buzz"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "dev", "merge-base-into-branches.buzz"), nil, 0o644))
+	servesScript(t, root, "hack/dev/merge-job-branches.buzz", "merge job branches", "replaces:git merge", "replaces:git cherry-pick")
+	servesScript(t, root, "hack/dev/merge-base-into-branches.buzz", "bring the base into each branch", "replaces:git merge")
 	deny := builtin.Setting{Decision: builtin.Deny}
 	call := func(line, workspace string) mainCall {
 		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: delegableIntegrate, line: line, root: workspace}
 	}
-	named := fmt.Sprintf("Merging job branches? `%s`", hint.Buzz.With("hack/dev/merge-job-branches.buzz"))
-	base := fmt.Sprintf("Bringing the base into a branch? `%s`", hint.Buzz.With("hack/dev/merge-base-into-branches.buzz", "--", "--branches", "<branch>"))
+	named := "This workspace's script for it, to merge job branches: `magus buzz hack/dev/merge-job-branches.buzz`"
+	base := "This workspace's script for it, to bring the base into each branch: `magus buzz hack/dev/merge-base-into-branches.buzz`"
 	for line, wantBase := range map[string]bool{"git cherry-pick abc123": false, "git merge job-branch": true, "git merge origin/main": true} {
 		f, ok := groundworkFinding(deny, call(line, root))
 		require.True(t, ok)

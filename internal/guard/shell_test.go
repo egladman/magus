@@ -2,10 +2,12 @@ package guard
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1687,23 +1689,47 @@ func TestInPlaceSedLeavesAScratchFile(t *testing.T) {
 	}
 }
 
-// TestDenyTextsPointAtTheReferenceScripts: each rewrite refusal names the scripted rename,
-// and each output refusal the typed-result script, in one line, only where the workspace
-// carries the script.
-func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
+// servesScript places the script rel under root declaring summary and serves, then
+// indexes every script under root the way `magus graph build` does.
+func servesScript(t *testing.T, root, rel, summary string, serves ...string) {
+	t.Helper()
+	quoted := make([]string, len(serves))
+	for i, s := range serves {
+		quoted[i] = strconv.Quote(s)
+	}
+	placeFile(t, root, rel, fmt.Sprintf("final SUMMARY = %q;\nfinal SERVES = [%s];\n", summary, strings.Join(quoted, ", ")))
+	var scripts []string
+	require.NoError(t, filepath.WalkDir(root, func(p string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() && filepath.Ext(p) == ".buzz" {
+			rel, _ := filepath.Rel(root, p)
+			scripts = append(scripts, filepath.ToSlash(rel))
+		}
+		return err
+	}))
+	x, err := hint.BuildScriptsIndex(root, scripts, func(string) bool { return true })
+	require.NoError(t, err)
+	require.NoError(t, hint.WriteScriptsIndex(workspaceCacheDir(root), x))
+}
+
+// TestDenyTextsNameTheScriptsServingTheRule: a refusal names, once, each script the
+// workspace's scripts index says serves its rule, and nothing where none does.
+func TestDenyTextsNameTheScriptsServingTheRule(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal"), 0o755))
-	for _, f := range []string{"hack/dev/rename-symbol.buzz", "hack/dev/example-typed-results.buzz", "hack/dev/prune-worktrees.buzz", "hack/dev/resolve-conflicts.buzz", "internal/x.go"} {
-		require.NoError(t, os.WriteFile(filepath.Join(root, f), nil, 0o644))
-	}
+	placeFile(t, root, "internal/x.go", "")
+	servesScript(t, root, "hack/dev/rename-symbol.buzz", "rename a code symbol at every occurrence the index verifies",
+		"rule:sed-in-place", "rule:interpreter-rewrite")
+	servesScript(t, root, "hack/dev/example-typed-results.buzz", "read magus results as typed Buzz values",
+		"rule:output-pipe", "rule:output-redirect")
+	servesScript(t, root, "hack/dev/prune-worktrees.buzz", "free disk by removing finished worktrees",
+		"rule:worktree-remove -- --go-cache")
+	servesScript(t, root, "hack/dev/resolve-conflicts.buzz", "settle a conflicted file", "rule:merge-side-checkout")
 	carries := strict(Dependencies{scope: workspaceScope{root: root}})
 	bare := strict(Dependencies{scope: workspaceScope{root: t.TempDir()}})
-	rename := fmt.Sprintf("\nRenaming a symbol from a script? `%s`", hint.Buzz.With("hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>"))
-	typed := fmt.Sprintf("\nReading magus output in a script? `%s`", hint.Buzz.With("hack/dev/example-typed-results.buzz"))
-	prune := fmt.Sprintf("\nFreeing disk or clearing finished worktrees? `%s`", hint.Buzz.With("hack/dev/prune-worktrees.buzz", "--", "--go-cache"))
-	resolve := fmt.Sprintf("\nSettling a conflicted file? `%s`", hint.Buzz.With("hack/dev/resolve-conflicts.buzz"))
+	rename := "\nThis workspace's script for it, to rename a code symbol at every occurrence the index verifies: `magus buzz hack/dev/rename-symbol.buzz`"
+	typed := "\nThis workspace's script for it, to read magus results as typed Buzz values: `magus buzz hack/dev/example-typed-results.buzz`"
+	prune := "\nThis workspace's script for it, to free disk by removing finished worktrees: `magus buzz hack/dev/prune-worktrees.buzz -- --go-cache`"
+	resolve := "\nThis workspace's script for it, to settle a conflicted file: `magus buzz hack/dev/resolve-conflicts.buzz`"
 	for _, tt := range []struct {
 		command string
 		rule    denyRuleName
@@ -1724,6 +1750,24 @@ func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 	at := location{workspace: root, dir: root}
 	got := denyInterpreterRewrite(at, `python3 -c "open('internal/x.go','w').write(x)"`, DialectBash)
 	assert.True(t, strings.HasSuffix(got, rename), got)
+}
+
+// TestWorkspaceDenyNamesTheScriptReplacingTheLine: a workspace rule denying a raw command
+// a script declares it replaces is served that script, and a line it does not replace is not.
+func TestWorkspaceDenyNamesTheScriptReplacingTheLine(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	servesScript(t, root, "hack/dev/merge-job-branches.buzz", "merge job branches, settling generated conflicts",
+		"replaces:git merge", "replaces:git cherry-pick")
+	deps := strict(Dependencies{scope: workspaceScope{root: root}, ShellRules: []WorkspaceShellRule{
+		{Name: "raw-merge", Decision: decisionDeny, Program: "git", Args: []string{"merge"}, Reason: "merge through the script"},
+		{Name: "raw-pick", Decision: decisionDeny, Program: "git", Args: []string{"cherry-pick"}, Reason: "pick through the script"},
+		{Name: "raw-revert", Decision: decisionDeny, Program: "git", Args: []string{"revert"}, Reason: "no reverts"},
+	}})
+
+	assert.Equal(t, "merge through the script\nThis workspace's script for it, to merge job branches, settling generated conflicts: `magus buzz hack/dev/merge-job-branches.buzz`",
+		Evaluate(deps, "git merge --no-ff feat").Deny)
+	assert.Equal(t, "no reverts", Evaluate(deps, "git revert abc123").Deny)
 }
 
 // TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an

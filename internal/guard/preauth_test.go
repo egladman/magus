@@ -406,8 +406,7 @@ func rootMergeServesBaseScript(t *testing.T, ctx context.Context, deps Dependenc
 		return Request{}, nil
 	}
 	workspace := hookLocation(ctx, Dependencies{}).workspace
-	require.NoError(t, os.MkdirAll(filepath.Join(workspace, "hack", "dev"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(workspace, "hack", "dev", "merge-base-into-branches.buzz"), nil, 0o644))
+	servesScript(t, workspace, "hack/dev/merge-base-into-branches.buzz", "bring the base into each branch", "replaces:git merge")
 	call := servedAs(Request{Input: "git merge origin/main"}, role)
 	call.DryRun = true
 	v := Judge(ctx, deps, call)
