@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // `magus graph` is the graph meta-home: the workspace's graphs as objects.
@@ -177,17 +178,60 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 	out := g.Output()
 	slog.InfoContext(ctx, fmt.Sprintf("knowledge graph rebuilt: %d nodes, %d edges", out.NodeCount, out.EdgeCount), attr.Notice(""))
-	// Not fatal: without the index the guard's graph-backed rules stay silent, which is
-	// the state they were in before the build.
-	if ws, err := inspectWorkspace(ctx, root); err == nil {
-		if m, ok := ws.(*magus.Magus); ok {
-			if err := m.WriteGuardIndex(ctx); err != nil {
-				interactive.Hint(ctx, "guard index not written: "+err.Error())
-			}
+	scriptsErr := writeGuardIndexes(ctx, root)
+	if refused != nil {
+		return errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
+	}
+	return scriptsErr
+}
+
+// writeGuardIndexes writes the indexes a guard hook reads, and returns only the scripts
+// index's error. A guard index not written is a hint: the guard's graph-backed rules then
+// stay silent, which is the state they were in before the build.
+func writeGuardIndexes(ctx context.Context, root string) error {
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		interactive.Hint(ctx, "guard indexes not written: "+err.Error())
+		return nil
+	}
+	m, ok := ws.(*magus.Magus)
+	if !ok {
+		return nil
+	}
+	if err := m.WriteGuardIndex(ctx); err != nil {
+		interactive.Hint(ctx, "guard index not written: "+err.Error())
+	}
+	return writeScriptsIndex(ctx, root, m.CacheDir())
+}
+
+// writeScriptsIndex indexes the declarations of every tracked .buzz file under root, so
+// the guard names a script by the situation it serves. A script whose declaration does
+// not parse is left out of the index and fails the build, naming it.
+func writeScriptsIndex(ctx context.Context, root, cacheDir string) error {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil {
+		return fmt.Errorf("magus graph build: scripts index: %w", err)
+	}
+	if res.VCS == nil {
+		return errors.New("magus graph build: scripts index: no version control says which scripts are tracked")
+	}
+	tracked, err := res.VCS.TrackedFiles(ctx, root, []string{"."})
+	if err != nil {
+		return fmt.Errorf("magus graph build: scripts index: %w", err)
+	}
+	scripts := slices.DeleteFunc(tracked, func(p string) bool { return !strings.HasSuffix(p, ".buzz") })
+	var dirty []string
+	if len(scripts) > 0 {
+		if dirty, err = res.VCS.DirtyFiles(ctx, root, scripts); err != nil {
+			return fmt.Errorf("magus graph build: scripts index: %w", err)
 		}
 	}
-	if refused != nil {
-		return fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused)
+	x, declErr := hint.BuildScriptsIndex(root, scripts, func(p string) bool { return !slices.Contains(dirty, p) })
+	if err := hint.WriteScriptsIndex(cacheDir, x); err != nil {
+		return fmt.Errorf("magus graph build: scripts index: %w", err)
+	}
+	if declErr != nil {
+		return fmt.Errorf("magus graph build: a script's SERVES declaration does not parse: %w", declErr)
 	}
 	return nil
 }
