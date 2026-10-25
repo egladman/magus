@@ -9,7 +9,7 @@ import (
 
 func options() Options {
 	return Options{
-		Suffixes:   []string{"To", "For", "Of"},
+		Suffixes:   []string{"To", "For", "Of", "From"},
 		ShortForms: []string{"Src", "Dst", "Cfg", "Msg", "Idx", "Tmp", "Ptr"},
 	}
 }

@@ -932,7 +932,7 @@ func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []jo
 	return journal.InvocationFromEvents(inv, events), events, nil
 }
 
-// InvocationEventsFrom reads one invocation's journal starting at byte offset from and returns the
+// InvocationEventsSince reads one invocation's journal starting at byte offset from and returns the
 // events on COMPLETE lines plus the offset just past the last one. It is the tailing counterpart to
 // [OutputStore.InvocationEventsByID], which reads the file whole.
 //
@@ -945,7 +945,7 @@ func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []jo
 // A file shorter than from means the id was reused after a cache clean, so the read restarts at
 // zero rather than seeking past the end and reporting nothing forever. Returns fs.ErrNotExist when
 // the log never existed, has aged out, or inv is not shaped like an invocation id.
-func (s *OutputStore) InvocationEventsFrom(inv string, from int64) ([]journal.Event, int64, error) {
+func (s *OutputStore) InvocationEventsSince(inv string, from int64) ([]journal.Event, int64, error) {
 	path, err := s.runLogPath(inv)
 	if err != nil {
 		return nil, from, err

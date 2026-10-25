@@ -15,7 +15,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `stutter`       | an exported package-level name opening with its package's name                                              |
 | `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                            |
 | `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                            |
-| `namewords`     | a function or method name ending in a listed word (`Of`, `For`) or using a listed short form (`Src`)        |
+| `namewords`     | a function or method name ending in a listed word (`Of`, `For`, `From`, `To`) or using a listed short form (`Src`) |
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
 | `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
@@ -103,7 +103,9 @@ as an attribute, and the display names a shared origin once.
 underscores, camel-case boundaries and digit runs. It skips a test, benchmark,
 fuzz or example entry point, a generated file, and a method that satisfies an
 interface of a standard library package its package reaches, such as
-`io.WriterTo`'s `WriteTo`. A one-word name is never judged against `suffixes`.
+`io.WriterTo`'s `WriteTo` and `io.ReaderFrom`'s `ReadFrom`. A one-word name is never
+judged against `suffixes`, so `readlog.From` stays. A value read off a context is
+named `XFromContext`, not `XFrom`.
 
 ## Not here
 

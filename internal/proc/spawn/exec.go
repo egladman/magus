@@ -234,7 +234,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		c.WaitDelay = opts.CancelGrace
 	}
 	c.Env = env
-	if js := jobserverFrom(ctx); js != nil {
+	if js := jobserverFromContext(ctx); js != nil {
 		c.ExtraFiles = append(c.ExtraFiles, js.files()...)
 	}
 	sandbox.RecordEnvDropped(ctx, policy, name)
@@ -435,7 +435,7 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	env = append(env, SelfVars(ctx)...)
 	env = withSelfFirstOnPath(env, magusExe())
 	// Ahead of the overrides, so a target that sets MAKEFLAGS itself keeps its own.
-	if js := jobserverFrom(ctx); js != nil {
+	if js := jobserverFromContext(ctx); js != nil {
 		// An error here is a required policy the kernel cannot confine; Exec refuses
 		// that child before it would start, so the answer is never used.
 		confined, _ := policy.KernelConfines()

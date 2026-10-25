@@ -78,10 +78,10 @@ func TestWriteFileAtomic_FailedRenameRemovesTemp(t *testing.T) {
 func TestWriteFromFailedReadKeepsTheOldFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "artifact")
-	require.NoError(t, WriteFrom(path, strings.NewReader("old"), 0o755))
+	require.NoError(t, WriteReader(path, strings.NewReader("old"), 0o755))
 
 	boom := errors.New("boom")
-	err := WriteFrom(path, io.MultiReader(strings.NewReader("half"), iotest.ErrReader(boom)), 0o644)
+	err := WriteReader(path, io.MultiReader(strings.NewReader("half"), iotest.ErrReader(boom)), 0o644)
 	require.ErrorIs(t, err, boom)
 
 	got, err := os.ReadFile(path)

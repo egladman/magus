@@ -1295,9 +1295,9 @@ func useTextLogger(t *testing.T) {
 	})
 }
 
-// noticesFrom returns what the pretty display prints for the records fn logs through
+// notices returns what the pretty display prints for the records fn logs through
 // the default logger, the way a notice reaches a person now that it is a record.
-func noticesFrom(t *testing.T, fn func()) string {
+func notices(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()

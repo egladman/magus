@@ -1302,12 +1302,12 @@ func (m *Magus) releaseStage(ctx context.Context) types.ReleaseStage {
 	if err != nil || res.VCS == nil {
 		return types.ReleaseStage{}
 	}
-	return releaseStageFrom(ctx, res.VCS, m.ws.Root)
+	return releaseStage(ctx, res.VCS, m.ws.Root)
 }
 
-// releaseStageFrom treats a driver that cannot list tags as one with none: the stage is
+// releaseStage treats a driver that cannot list tags as one with none: the stage is
 // then unknown, which a reader must not mistake for pre-1.0.
-func releaseStageFrom(ctx context.Context, driver types.VCSDriver, root string) types.ReleaseStage {
+func releaseStage(ctx context.Context, driver types.VCSDriver, root string) types.ReleaseStage {
 	tags, err := driver.Tags(ctx, root, "")
 	if err != nil {
 		return types.ReleaseStage{}

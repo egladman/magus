@@ -65,5 +65,5 @@ func (r *FSRemoteBackend) PutArtifact(_ context.Context, namespace, key string, 
 	if _, err := os.Stat(path); err == nil {
 		return types.ErrCacheExists
 	}
-	return file.WriteFrom(path, data, 0o600)
+	return file.WriteReader(path, data, 0o600)
 }

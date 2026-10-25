@@ -43,7 +43,7 @@ func buildService(obs buzz.DirectObserver) vm.Value {
 
 // serviceScope is the script's scope and the workspace that opens its session.
 func serviceScope(ctx context.Context, member string) (*service.Scope, types.WorkspaceRepository, serviceSessions, error) {
-	sc := service.ScopeFrom(ctx)
+	sc := service.ScopeFromContext(ctx)
 	if sc == nil {
 		return nil, nil, nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
 			"magus\\service.%s: only a `magus buzz` script holds a service this way; a magusfile target holds one through ctx.needs", member)

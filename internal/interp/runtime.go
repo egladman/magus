@@ -402,7 +402,7 @@ func WithSourceReader(ctx context.Context, read func(path string) ([]byte, error
 	return context.WithValue(ctx, sourceReaderCtxKey{}, read)
 }
 
-func sourceReaderFrom(ctx context.Context) func(path string) ([]byte, error) {
+func sourceReaderFromContext(ctx context.Context) func(path string) ([]byte, error) {
 	read, _ := ctx.Value(sourceReaderCtxKey{}).(func(path string) ([]byte, error))
 	return read
 }
@@ -480,7 +480,7 @@ func ContentID(data []byte) string {
 // recorded into the load's SourceLog when it has one. Nil when neither applies, which
 // leaves a Buzz session on its own os.ReadFile.
 func loadReader(ctx context.Context) func(path string) ([]byte, error) {
-	read := sourceReaderFrom(ctx)
+	read := sourceReaderFromContext(ctx)
 	log, _ := ctx.Value(sourceLogCtxKey{}).(*SourceLog)
 	reads := readlog.From(ctx)
 	if log == nil && reads == nil {
@@ -1180,7 +1180,7 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		// but the bytes its reader returns, so it gets a store only working-tree
 		// loads never write, and any other reader gets none.
 		switch {
-		case sourceReaderFrom(ctx) == nil:
+		case sourceReaderFromContext(ctx) == nil:
 			store = guardBytecodeStore(src.Dir)
 		case approvedSources(ctx):
 			store = approvedBytecodeStore(src.Dir)

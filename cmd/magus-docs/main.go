@@ -137,7 +137,7 @@ func prune(outDir string, modules []std.Module) error {
 			return err
 		}
 		frontmatter, ok := docs.ParseFrontmatter(string(body))
-		if !ok || !modulePageGeneratedFrom(frontmatter.GeneratedFrom) {
+		if !ok || !modulePageGenerated(frontmatter.GeneratedFrom) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(outDir, name)); err != nil {
@@ -147,7 +147,7 @@ func prune(outDir string, modules []std.Module) error {
 	return nil
 }
 
-func modulePageGeneratedFrom(source string) bool {
+func modulePageGenerated(source string) bool {
 	return source == "reference/buzz/" || source == "std/**/*.go, internal/hostmodules/**/*.go"
 }
 

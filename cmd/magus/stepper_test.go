@@ -19,12 +19,12 @@ import (
 // impossible; this checks they stay together.
 func TestStepGateAlwaysBringsItsRepl(t *testing.T) {
 	ctx := withStepGate(context.Background())
-	require.NotNil(t, spawn.StepReplFrom(ctx),
+	require.NotNil(t, spawn.StepReplFromContext(ctx),
 		"the gate offers [r]epl, so the ctx it installs must carry one")
 }
 
 func TestStepReplIsAbsentWithoutTheGate(t *testing.T) {
 	// And not attached to a context nobody asked to step, so an ordinary run
 	// carries nothing extra.
-	assert.Nil(t, spawn.StepReplFrom(context.Background()))
+	assert.Nil(t, spawn.StepReplFromContext(context.Background()))
 }

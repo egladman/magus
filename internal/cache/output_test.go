@@ -681,8 +681,8 @@ func TestInvocationReadsRefuseTraversal(t *testing.T) {
 		_, _, err := s.InvocationEventsByID(id)
 		assert.ErrorIs(t, err, fs.ErrNotExist, "InvocationEventsByID(%q) must refuse the id", id)
 
-		_, _, err = s.InvocationEventsFrom(id, 0)
-		assert.ErrorIs(t, err, fs.ErrNotExist, "InvocationEventsFrom(%q) must refuse the id", id)
+		_, _, err = s.InvocationEventsSince(id, 0)
+		assert.ErrorIs(t, err, fs.ErrNotExist, "InvocationEventsSince(%q) must refuse the id", id)
 	}
 }
 
@@ -702,7 +702,7 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	require.NoError(t, f.Close())
 
 	store := NewOutputStore(dir)
-	events, next, err := store.InvocationEventsFrom("invtail1", 0)
+	events, next, err := store.InvocationEventsSince("invtail1", 0)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "compiling", events[0].Text)
@@ -718,7 +718,7 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	events, next, err = store.InvocationEventsFrom("invtail1", next)
+	events, next, err = store.InvocationEventsSince("invtail1", next)
 	require.NoError(t, err)
 	require.Len(t, events, 1, "the torn line is held back, not parsed")
 	assert.Equal(t, "linking", events[0].Text)
@@ -730,12 +730,12 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	events, _, err = store.InvocationEventsFrom("invtail1", next)
+	events, _, err = store.InvocationEventsSince("invtail1", next)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, journal.KindFinished, events[0].Kind)
 
-	_, _, err = store.InvocationEventsFrom("invmissing", 0)
+	_, _, err = store.InvocationEventsSince("invmissing", 0)
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
 }
 

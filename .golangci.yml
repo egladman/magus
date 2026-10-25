@@ -498,7 +498,8 @@ linters:
         settings:
           # A function is named for what it returns or does: graphOf builds a graph,
           # so it is buildGraph, and configFor answers a question, so name the question.
-          suffixes: [To, For, Of]
+          # A value read off a context is XFromContext, not XFrom.
+          suffixes: [To, For, Of, From]
           short-forms: [Src, Dst, Cfg, Msg, Idx, Tmp, Ptr]
 
       testisolation:

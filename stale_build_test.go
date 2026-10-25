@@ -26,7 +26,7 @@ go 1.26
 	return w.Root(), w.WriteExecutable("magus", "binary")
 }
 
-func builtFrom(module, pkg string) *debug.BuildInfo {
+func moduleBuildInfo(module, pkg string) *debug.BuildInfo {
 	return &debug.BuildInfo{Path: fmt.Sprintf("%s/%s", module, pkg), Main: debug.Module{Path: module}}
 }
 
@@ -39,14 +39,14 @@ func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
 		"checkout's committed generated files are behind its sources (a merge kept one side), and "+
 		"restoring either side's copy brings back the mismatch: regenerate them with the `go generate` "+
 		"commands its generate targets run, then link again.",
-		ownBuildEscape(exe, builtFrom("example.com/tool", "cmd/tool"), root))
+		ownBuildEscape(exe, moduleBuildInfo("example.com/tool", "cmd/tool"), root))
 }
 
 // A merged checkout of magus itself is told which generators to run, in the order the
 // *_generate targets need them, rather than to restore files from either side.
 func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
 	root, exe := sourceCheckout(t, ownModule)
-	escape := ownBuildEscape(exe, builtFrom(ownModule, "cmd/magus"), root)
+	escape := ownBuildEscape(exe, moduleBuildInfo(ownModule, "cmd/magus"), root)
 
 	assert.Contains(t, escape, "command at a time: `go build -o magus ./cmd/magus`, then rebuild")
 	assert.NotContains(t, escape, "magus.old")
@@ -73,7 +73,7 @@ func TestOwnGeneratorsAreWhatTheMagusfileRuns(t *testing.T) {
 func TestOwnBuildEscapeIsSilentForAnyOtherBinary(t *testing.T) {
 	root, exe := sourceCheckout(t, "example.com/app")
 	other, otherExe := sourceCheckout(t, "example.com/tool")
-	info := builtFrom("example.com/tool", "cmd/tool")
+	info := moduleBuildInfo("example.com/tool", "cmd/tool")
 
 	assert.Empty(t, ownBuildEscape(exe, info, root), "a module other than the workspace's")
 	assert.Empty(t, ownBuildEscape(otherExe, info, root), "a binary outside the root")

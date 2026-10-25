@@ -65,8 +65,8 @@ func WithStdio(ctx context.Context, s Stdio) context.Context {
 	return context.WithValue(ctx, stdioKey{}, s)
 }
 
-// StdioFrom returns the Stdio WithStdio put on ctx, and false when there is none.
-func StdioFrom(ctx context.Context) (Stdio, bool) {
+// StdioFromContext returns the Stdio WithStdio put on ctx, and false when there is none.
+func StdioFromContext(ctx context.Context) (Stdio, bool) {
 	s, ok := ctx.Value(stdioKey{}).(Stdio)
 	return s, ok
 }

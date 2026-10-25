@@ -96,12 +96,12 @@ func fromContextFamily() []types.KnowledgeSymbol {
 	return append(out, ctxReader("internal/obs", "RecorderFrom"))
 }
 
-func entryPointFrom() types.KnowledgeSymbol {
+func entryPointSymbol() types.KnowledgeSymbol {
 	return goFunc("internal/trail", "EntryPointFrom", "func EntryPointFrom(ctx context.Context) EntryPoint")
 }
 
 func TestConformanceFlagsEntryPointFrom(t *testing.T) {
-	subj := entryPointFrom()
+	subj := entryPointSymbol()
 	g := namingGraph(t, append(fromContextFamily(), subj))
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
@@ -169,7 +169,7 @@ func TestConformanceIgnoresGeneratedAndTestCode(t *testing.T) {
 		goSym("internal/p6", "ImageFromContext().", "ImageFromContext", "Function",
 			"func ImageFromContext(ctx context.Context) *T", "internal/p6/image_gen.go"),
 	)
-	subj := entryPointFrom()
+	subj := entryPointSymbol()
 	g := namingGraph(t, append(syms, subj))
 	generated := map[string]bool{"internal/p7/out.go": true}
 
@@ -193,7 +193,7 @@ func TestConformanceSilentOnATestFileSubject(t *testing.T) {
 // neither as carriers nor as outliers.
 func TestConformanceExcludesTheChangesOwnNames(t *testing.T) {
 	family := fromContextFamily()
-	subj := entryPointFrom()
+	subj := entryPointSymbol()
 	g := namingGraph(t, append(family, subj))
 
 	assert.Empty(t, g.ConformanceChecks(ConformanceChange{
@@ -206,7 +206,7 @@ func TestConformanceExcludesTheChangesOwnNames(t *testing.T) {
 	for i := range 6 {
 		fresh = append(fresh, ctxReader(fmt.Sprintf("internal/new%d", i), fmt.Sprintf("Fresh%sFromContext", greek[i])))
 	}
-	lone := entryPointFrom()
+	lone := entryPointSymbol()
 	g = namingGraph(t, append(fresh, lone))
 	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(lone), Introduced: introduced(append(fresh, lone)...)}),
 		"six carriers, every one of them new")
@@ -433,7 +433,7 @@ func TestRenamedFrom(t *testing.T) {
 			[]string{"func (s) Land(p Plan) error {"}, ""},
 		{"func Apply(p Plan) error {", "Apply", nil, ""},
 	} {
-		assert.Equal(t, tc.want, RenamedFrom(tc.added, tc.name, tc.removed), tc.added)
+		assert.Equal(t, tc.want, PreviousName(tc.added, tc.name, tc.removed), tc.added)
 	}
 }
 
@@ -783,7 +783,7 @@ func TestConformanceMeasure(t *testing.T) {
 //	MAGUS_CONFORMANCE_HISTORY=HEAD~700..HEAD ./magus run go::go-test . --stall-timeout -1s -- \
 //	    -run TestConformanceMeasureRenames -v -count=1 -timeout 60m
 //
-// Each commit stands in for a change with no baseline. A rename is what RenamedFrom finds on an
+// Each commit stands in for a change with no baseline. A rename is what PreviousName finds on an
 // added declaration line whose new name the commit declares and whose old name it no longer
 // declares in any casing, found by `git grep` in place of an index. The files searched are every
 // code file the commit's tree names the new name in, which is what the index's references give.
@@ -829,7 +829,7 @@ func TestConformanceMeasureRenames(t *testing.T) {
 						continue
 					}
 					for _, id := range identifiers(r.Text) {
-						old := RenamedFrom(r.Text, id, removed)
+						old := PreviousName(r.Text, id, removed)
 						oldWords, newWords := foldedWords(nameWords(old)), foldedWords(nameWords(id))
 						if len(oldWords) < 2 {
 							continue

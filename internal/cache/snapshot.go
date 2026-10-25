@@ -282,12 +282,12 @@ func ownership(s Step, rel string) recordOwnership {
 
 // replay restores a manifest's outputs from the local store.
 func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string, error) {
-	return c.replayFrom(ctx, m, root, c.store)
+	return c.replayBlobs(ctx, m, root, c.store)
 }
 
-// replayFrom restores a manifest's outputs into root from the blobs under store (the
+// replayBlobs restores a manifest's outputs into root from the blobs under store (the
 // local store, or a remote hit's staging root): reflink, else byte copy.
-func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string) ([]string, error) {
+func (c *Cache) replayBlobs(ctx context.Context, m *Manifest, root, store string) ([]string, error) {
 	var paths []string
 	for _, rec := range m.Outputs {
 		if err := ctx.Err(); err != nil {

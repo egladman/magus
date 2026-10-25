@@ -152,7 +152,7 @@ func WithJobserver(ctx context.Context, j *Jobserver) context.Context {
 	return context.WithValue(ctx, jobserverKey{}, j)
 }
 
-func jobserverFrom(ctx context.Context) *Jobserver {
+func jobserverFromContext(ctx context.Context) *Jobserver {
 	j, _ := ctx.Value(jobserverKey{}).(*Jobserver)
 	return j
 }

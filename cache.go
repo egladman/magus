@@ -300,7 +300,7 @@ func (m *Magus) MetricsCollector() (*MetricsCollector, bool) {
 	if m.tel == nil {
 		return nil, false
 	}
-	c, ok := otlp.CollectorFrom(m.tel)
+	c, ok := otlp.ManualCollector(m.tel)
 	if !ok {
 		return nil, false
 	}

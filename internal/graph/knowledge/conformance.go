@@ -983,7 +983,7 @@ var storePathSuffixes = []string{"Path", "Dir", "File", "FileName", "Ext"}
 // references one keeps state. Writes made with os directly are invisible: the index holds
 // no standard library symbols.
 var stateWriters = map[string]bool{
-	"WriteFileAtomic": true, "WriteFrom": true, "ReplaceFile": true, "AppendLines": true, "RewriteLines": true, "JSONL": true,
+	"WriteFileAtomic": true, "WriteReader": true, "ReplaceFile": true, "AppendLines": true, "RewriteLines": true, "JSONL": true,
 }
 
 // storePathSamples measures each exported path of a package that keeps state by how many

@@ -128,7 +128,7 @@ var errNoRecordUpstream = errors.New("no magus stage writing records feeds this 
 	"pipe a run into it, like `magus run test . | magus buzz <script>`")
 
 func pipeIn(ctx context.Context, member string) (*report.Reader, error) {
-	p := report.StageFrom(ctx)
+	p := report.StageFromContext(ctx)
 	if p.In == nil {
 		return nil, fmt.Errorf("pipe.%s: %w", member, errNoRecordUpstream)
 	}
@@ -187,7 +187,7 @@ func PipeAll(ctx context.Context) ([]types.PipeRecord, error) {
 
 // PipeEmit implements pipe.emit.
 func PipeEmit(ctx context.Context, record map[string]any) error {
-	p := report.StageFrom(ctx)
+	p := report.StageFromContext(ctx)
 	if p.Out == nil {
 		return errors.New("pipe.emit: this script is not a pipe stage, run it with `magus buzz <script>`")
 	}
@@ -300,7 +300,7 @@ func exportArtifact(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return file.WriteFrom(dst, in, info.Mode().Perm())
+	return file.WriteReader(dst, in, info.Mode().Perm())
 }
 
 // PipeHistory implements pipe.history.
@@ -338,7 +338,7 @@ func PipeDiff(ctx context.Context, artifact map[string]any) error {
 	if err != nil {
 		return err
 	}
-	p := report.StageFrom(ctx)
+	p := report.StageFromContext(ctx)
 	prose := p.Prose
 	if prose == nil {
 		prose = os.Stdout

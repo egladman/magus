@@ -165,12 +165,12 @@ func trapBrokerSpawn(t *testing.T) *int {
 // TestNoticeBrokerSaysWhatItLeftBehind pins the one line a run prints when it starts the
 // broker: the pid, that it opens no network listener, and when it goes away.
 func TestNoticeBrokerSaysWhatItLeftBehind(t *testing.T) {
-	text := noticesFrom(t, func() { noticeBroker(t.Context(), 4242) })
+	text := notices(t, func() { noticeBroker(t.Context(), 4242) })
 	assert.True(t, strings.HasPrefix(text, "magus: started a broker (pid 4242)"), text)
 	assert.Contains(t, text, "no network listener")
 	assert.Contains(t, text, "10 minutes")
 
-	none := noticesFrom(t, func() { noticeBroker(t.Context(), 0) })
+	none := notices(t, func() { noticeBroker(t.Context(), 0) })
 	assert.Empty(t, none, "a broker this run did not start is not announced")
 }
 

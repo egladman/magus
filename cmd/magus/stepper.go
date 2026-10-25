@@ -138,7 +138,7 @@ func newStepGate() spawn.StepGate {
 			}
 
 			if wantRepl {
-				if replFn := spawn.StepReplFrom(ctx); replFn != nil {
+				if replFn := spawn.StepReplFromContext(ctx); replFn != nil {
 					if err := replFn(ctx, name, args, dir); err != nil {
 						slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("repl"), attr.Error(err))
 					}

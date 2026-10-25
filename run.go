@@ -1942,7 +1942,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	prober := m.newToolProber()
 	m.prewarmInstallProbes(ctx, prober, stages)
 	var stdio *pipe.Stdio
-	if s, ok := pipe.StdioFrom(ctx); ok {
+	if s, ok := pipe.StdioFromContext(ctx); ok {
 		stdio = &s
 	}
 	// The streams are this invocation's own: a run a target starts in this process reads

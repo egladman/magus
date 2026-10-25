@@ -25,8 +25,8 @@ func WithScope(ctx context.Context) (context.Context, *Scope) {
 	return context.WithValue(ctx, scopeKey{}, sc), sc
 }
 
-// ScopeFrom returns the Scope on ctx, or nil outside a script.
-func ScopeFrom(ctx context.Context) *Scope {
+// ScopeFromContext returns the Scope on ctx, or nil outside a script.
+func ScopeFromContext(ctx context.Context) *Scope {
 	sc, _ := ctx.Value(scopeKey{}).(*Scope)
 	return sc
 }
@@ -58,7 +58,7 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 	return context.WithValue(ctx, sessionKey{}, s)
 }
 
-func sessionFrom(ctx context.Context) *Session {
+func sessionFromContext(ctx context.Context) *Session {
 	s, _ := ctx.Value(sessionKey{}).(*Session)
 	return s
 }
@@ -82,7 +82,7 @@ func supervisionActive(ctx context.Context) bool {
 // handled=false (a no-op probe) and the caller runs the service inline (foreground,
 // blocking): the directly-run-service case.
 func TrySupervise(ctx context.Context, key string, s spells.Service) (handled bool, err error) {
-	sess := sessionFrom(ctx)
+	sess := sessionFromContext(ctx)
 	if sess == nil || !supervisionActive(ctx) {
 		return false, nil
 	}

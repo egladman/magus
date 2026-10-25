@@ -41,7 +41,7 @@ func (b *Broadcaster) Enabled(context.Context, slog.Level) bool {
 // every current subscriber. A subscriber whose buffer is full is skipped for that event
 // rather than blocking the run: capture must never slow execution.
 func (b *Broadcaster) Handle(_ context.Context, r slog.Record) error {
-	e, ok := eventFrom(r)
+	e, ok := capturedEvent(r)
 	if !ok {
 		return nil
 	}

@@ -227,7 +227,7 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 	require.NoError(t, err)
 
 	before := dirSnapshot(t, dir)
-	out := noticesFrom(t, func() {
+	out := notices(t, func() {
 		written := []string{".claude/skills/magus-query/SKILL.md"}
 		printAgentInstallNextSteps(t.Context(), dir, written, written, types.SkillFormFull, false)
 	})
@@ -248,13 +248,13 @@ func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+agentSkills.AgentsBlock(false)), 0o644))
 
-	out := noticesFrom(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
+	out := notices(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
 	assert.Empty(t, out, "a current block is not reprinted")
 
 	// A stale one is, with the replace-in-place instruction rather than the add-it one.
 	stale := strings.Replace(agentSkills.AgentsBlock(false), "skill-content: ", "skill-content: 0", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+stale), 0o644))
-	out = noticesFrom(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
+	out = notices(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
 	assert.Contains(t, out, "older copy")
 	assert.Contains(t, out, "<!-- magus:skills:begin")
 }

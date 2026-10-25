@@ -75,7 +75,7 @@ func withBootstrapLimiter(ctx context.Context, lim *cache.Limiter) context.Conte
 	return context.WithValue(ctx, bootstrapLimiterKey{}, lim)
 }
 
-func bootstrapLimiterFrom(ctx context.Context) *cache.Limiter {
+func bootstrapLimiterFromContext(ctx context.Context) *cache.Limiter {
 	lim, _ := ctx.Value(bootstrapLimiterKey{}).(*cache.Limiter)
 	return lim
 }
@@ -153,7 +153,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		stop := t.phase("magus.open")
 		defer relaxGC()()
 		opts := append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
-		if lim := bootstrapLimiterFrom(ctx); lim != nil {
+		if lim := bootstrapLimiterFromContext(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
 		if globalCfg.Broker.Resolved() != types.BrokerOff {

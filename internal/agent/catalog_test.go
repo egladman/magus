@@ -555,8 +555,8 @@ func TestApplyVariantResolvesCommandsThroughTheRegistry(t *testing.T) {
 // this process's argv0. A skill is read in another checkout, where ./magus is a path
 // to something else or to nothing.
 func TestApplyVariantRendersCommandsForTheReadersPath(t *testing.T) {
-	hint.ResolveBinaryNameFrom("./magus")
-	t.Cleanup(func() { hint.ResolveBinaryNameFrom(hint.DefaultBinaryName) })
+	hint.ResolveBinaryName("./magus")
+	t.Cleanup(func() { hint.ResolveBinaryName(hint.DefaultBinaryName) })
 	require.Equal(t, "./magus", hint.BinaryName(), "the test needs the argv0 spelling actually set")
 
 	got, err := applyVariant("s", `{{cmd "doctor"}}`, types.SkillVariantShort)

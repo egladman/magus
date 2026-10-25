@@ -135,7 +135,7 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]type
 			At: time.UnixMilli(e.Ts),
 		})
 	}
-	return touchesFrom(obs, paths)
+	return touchesRead(obs, paths)
 }
 
 // replayLoaded answers replayTrail's question from the loaded transcripts in fold: which
@@ -168,15 +168,15 @@ func replayLoaded(fold sessions.Fold, paths []string) map[string][]types.DiffTou
 		}
 		return a.At.Compare(b.At)
 	})
-	return touchesFrom(obs, paths)
+	return touchesRead(obs, paths)
 }
 
-// touchesFrom is the one reading of "what had it read before it wrote this": one pass over
+// touchesRead is the one reading of "what had it read before it wrote this": one pass over
 // obs in session order, accumulating each session's reads and programs so that a write can
 // take a snapshot of what came before it. Walking newest-first would mean knowing the writes
 // before the reads that explain them, which is the wrong direction for the only question
 // being asked. The result is keyed by written path, one entry per session.
-func touchesFrom(obs []observation, paths []string) map[string][]types.DiffTouch {
+func touchesRead(obs []observation, paths []string) map[string][]types.DiffTouch {
 	want := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		want[p] = true

@@ -232,7 +232,7 @@ func TestTierUnreachableL2DegradesTheRun(t *testing.T) {
 	_, ran = buildIn(t, ctx, t.TempDir(), c)
 	require.False(t, ran, "the second workspace hits L1")
 
-	stats := remoteStatsFrom(ctx)
+	stats := remoteStatsFromContext(ctx)
 	assert.Equal(t, int64(1), stats.fails.Load(), "one failure, then the run stops asking")
 	assert.Zero(t, stats.misses.Load(), "an error is not the store saying it has nothing")
 	assert.Equal(t, int64(1), gets.Load())
@@ -270,7 +270,7 @@ func TestTierL1EvictionLeavesL2(t *testing.T) {
 	r, ran := buildIn(t, ctx, root, c)
 	assert.True(t, r.Hit)
 	assert.False(t, ran)
-	assert.Equal(t, int64(1), remoteStatsFrom(ctx).hits.Load(), "restored from L2")
+	assert.Equal(t, int64(1), remoteStatsFromContext(ctx).hits.Load(), "restored from L2")
 }
 
 // A remote hit is ONE event, cache.hit carrying the tier, counted only once its replay
@@ -308,7 +308,7 @@ func TestTierRemoteHitIsOneEventAfterReplay(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	_, _ = other.Run(ctx, step, func(context.Context) error { return nil })
-	stats := remoteStatsFrom(ctx)
+	stats := remoteStatsFromContext(ctx)
 	assert.Zero(t, stats.hits.Load(), "a hit was counted before its replay succeeded")
 	assert.Equal(t, int64(1), stats.fails.Load(), "the failed replay is the remote tier's failure")
 }
@@ -330,7 +330,7 @@ func TestTierLocalReplayFailureTriesL2(t *testing.T) {
 	r, ran := buildIn(t, ctx, root, c)
 	assert.True(t, r.Hit)
 	assert.False(t, ran, "rebuilt instead of trying L2")
-	assert.Equal(t, int64(1), remoteStatsFrom(ctx).hits.Load())
+	assert.Equal(t, int64(1), remoteStatsFromContext(ctx).hits.Load())
 }
 
 // A promotion counts against the local size cap like any other write.
@@ -406,7 +406,7 @@ func TestTierAlreadyStoredIsNeitherUploadNorFailure(t *testing.T) {
 	c := openTiered(t, backend, true)
 	ctx := ContextWithRemoteStats(t.Context())
 	buildIn(t, ctx, t.TempDir(), c)
-	stats := remoteStatsFrom(ctx)
+	stats := remoteStatsFromContext(ctx)
 	assert.Equal(t, int64(1), backend.puts.Load())
 	assert.Zero(t, stats.stores.Load())
 	assert.Zero(t, stats.up.Load())

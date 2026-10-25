@@ -117,13 +117,13 @@ func TestPushGateStandsDownWithNothingToProve(t *testing.T) {
 func TestBuiltFromMatchesEitherAbbreviation(t *testing.T) {
 	t.Parallel()
 
-	assert.True(t, builtFrom("v0.4.3-97-gabc1234-dirty", "abc1234"))
-	assert.True(t, builtFrom("v0.4.3-97-gabc1234", "abc1234567"), "describe abbreviated shorter")
-	assert.True(t, builtFrom("v0.4.3-97-gabc1234567", "abc1234"), "caller abbreviated shorter")
-	assert.False(t, builtFrom("v0.4.3-97-gabc1234", "def5678"))
-	assert.False(t, builtFrom("", "abc1234"))
-	assert.False(t, builtFrom("v0.4.3-97-gabc1234", ""))
-	assert.False(t, builtFrom("v0.4.3", "abc1234"), "a release build names no commit")
+	assert.True(t, namesCommit("v0.4.3-97-gabc1234-dirty", "abc1234"))
+	assert.True(t, namesCommit("v0.4.3-97-gabc1234", "abc1234567"), "describe abbreviated shorter")
+	assert.True(t, namesCommit("v0.4.3-97-gabc1234567", "abc1234"), "caller abbreviated shorter")
+	assert.False(t, namesCommit("v0.4.3-97-gabc1234", "def5678"))
+	assert.False(t, namesCommit("", "abc1234"))
+	assert.False(t, namesCommit("v0.4.3-97-gabc1234", ""))
+	assert.False(t, namesCommit("v0.4.3", "abc1234"), "a release build names no commit")
 }
 
 // backendRevisions are the ids each backend's Metadata reports for one revision: the Short
@@ -195,7 +195,7 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 			runs := t.TempDir()
 			runLog(t, runs, "a.jsonl", "v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", "pass", "affected", "ci")
 			assert.Equal(t, gateUnknown, gateCoverageAt(runs, id))
-			assert.False(t, builtFrom("v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", id))
+			assert.False(t, namesCommit("v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", id))
 
 			testkit.Isolate(t)
 			root := t.TempDir()
@@ -214,11 +214,11 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 // `affected ci` run with that status at HEAD first.
 func judgePush(t *testing.T, gate, lease string, leases ...types.Job) types.GuardJudgment {
 	t.Helper()
-	return judgePushFrom(t, true, gate, lease, leases...)
+	return judgePushAs(t, true, gate, lease, leases...)
 }
 
-// judgePushFrom is judgePush for a caller that does or does not declare it renders ask.
-func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) types.GuardJudgment {
+// judgePushAs is judgePush for a caller that does or does not declare it renders ask.
+func judgePushAs(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) types.GuardJudgment {
 	t.Helper()
 	ctx, _ := fleetFixture(t, leases...)
 	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
@@ -234,13 +234,13 @@ func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...
 // about: a caller that renders ask and one that does not get the same deny.
 func TestUngatedPushDeniesWhetherOrNotTheCallerRendersAsk(t *testing.T) {
 	for _, renders := range []bool{true, false} {
-		v := judgePushFrom(t, renders, "", "")
+		v := judgePushAs(t, renders, "", "")
 		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "abc1234", "the refusal names what it refused")
 		assert.NotContains(t, v.Reason, "predates approval prompts")
 	}
 
-	gated := judgePushFrom(t, false, "pass", "")
+	gated := judgePushAs(t, false, "pass", "")
 	assert.Contains(t, []string{decisionPass, decisionAdvise}, gated.Decision, "a covered push passes")
 }
 
@@ -414,7 +414,7 @@ func TestLocateCallsUnrollsALiteralLoop(t *testing.T) {
 		var out []pushSite
 		for _, c := range calls {
 			require.False(t, c.unfollowed, command)
-			site, ok := pushFrom(c.inv.Name, c.args, c.at)
+			site, ok := parsePush(c.inv.Name, c.args, c.at)
 			require.True(t, ok, command)
 			out = append(out, site)
 		}

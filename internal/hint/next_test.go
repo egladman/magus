@@ -380,7 +380,7 @@ func TestRenderIsTheOneTwoLineLayout(t *testing.T) {
 // either spelling, and leaves spell args after "--" alone.
 func TestNextForSlotWait(t *testing.T) {
 	keepBinaryName(t)
-	ResolveBinaryNameFrom("./magus")
+	ResolveBinaryName("./magus")
 
 	got := NextForSlotWait("aggressive", []string{
 		"--concurrency-profile", "conservative", "-concurrency-profile=balanced",

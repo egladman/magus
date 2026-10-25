@@ -1165,7 +1165,7 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 			a.typeLink(leafName(m.Output), m.Output, s.Package, path))
 	}
 
-	msgNames, enumNames := a.reachableFrom(s.Package, serviceSeeds(s))
+	msgNames, enumNames := a.reachable(s.Package, serviceSeeds(s))
 
 	if len(msgNames) > 0 {
 		b.WriteString("## Messages\n\n")
@@ -1224,13 +1224,13 @@ func serviceSeeds(s service) []string {
 	return seeds
 }
 
-// reachableFrom walks the type graph transitively from a set of seed type names, staying
+// reachable walks the type graph transitively from a set of seed type names, staying
 // within pkg. A one-hop walk documents only inputs and outputs, which omits the types they
 // carry: ListEventsResponse holds `repeated Event`, and Event is the message a client most
 // needs. A type declared in a different package is a foreign reference: it is linked where
 // it is used (typeLink), not walked further or rendered again here; it has its own
 // canonical page.
-func (a api) reachableFrom(pkg string, seeds []string) (msgs []string, enums []string) {
+func (a api) reachable(pkg string, seeds []string) (msgs []string, enums []string) {
 	seen := map[string]bool{}
 	queue := slices.Clone(seeds)
 	for len(queue) > 0 {

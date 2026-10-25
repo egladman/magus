@@ -1912,7 +1912,7 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 		}
 		return rebind{problem: fmt.Sprintf("would take the lease on another job while lease %s is in flight", h.id), ask: "hand that job out"}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
-		if len(words) > 2 && descendsFrom(h.standing(), words[2]) {
+		if len(words) > 2 && isDescendant(h.standing(), words[2]) {
 			return rebind{}
 		}
 		return rebind{problem: fmt.Sprintf("would verify a job outside lease %s's tree", h.id), ask: "verify it"}
@@ -1936,8 +1936,8 @@ func boundedExecRebind(h holder) rebind {
 	}
 }
 
-// descendsFrom reports whether id sits below the held row in the parent chain.
-func descendsFrom(held leaseStanding, id string) bool {
+// isDescendant reports whether id sits below the held row in the parent chain.
+func isDescendant(held leaseStanding, id string) bool {
 	return held.declared && held.state.Live() &&
 		slices.ContainsFunc(types.JobDescendants(held.rows, held.row.ID), func(r types.Job) bool { return r.ID == id })
 }
@@ -3021,7 +3021,7 @@ func initRefusal(row types.Job, inv hint.Invocation, site vcsSite, unlocated str
 		if strings.HasPrefix(operand, "~") || strings.Contains(operand, "://") {
 			return refuse("The directory it names is not one local literal path, so where it creates the repository cannot be read.")
 		}
-		dest = resolveFrom(site.dir, operand)
+		dest = resolvePath(site.dir, operand)
 	}
 	dest, err := filepath.Abs(dest)
 	if err != nil {
@@ -3223,7 +3223,7 @@ func shellCommitSite(c locatedCall) (vcsSite, string) {
 		}
 		return argvSite(hint.Invocation{Name: c.inv.Name, Args: lits}, c.at.dir)
 	}
-	site, ok := pushFrom(c.inv.Name, c.args, c.at)
+	site, ok := parsePush(c.inv.Name, c.args, c.at)
 	if !ok {
 		return vcsSite{}, "The repository it names is not one literal path, so where it commits cannot be read."
 	}

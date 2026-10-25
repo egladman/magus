@@ -73,8 +73,8 @@ func WithStepRepl(ctx context.Context, fn StepReplFn) context.Context {
 	return context.WithValue(ctx, stepReplKey{}, fn)
 }
 
-// StepReplFrom retrieves the StepReplFn stored by WithStepRepl, or nil.
-func StepReplFrom(ctx context.Context) StepReplFn {
+// StepReplFromContext retrieves the StepReplFn stored by WithStepRepl, or nil.
+func StepReplFromContext(ctx context.Context) StepReplFn {
 	fn, _ := ctx.Value(stepReplKey{}).(StepReplFn)
 	return fn
 }

@@ -19,6 +19,6 @@ type outputSource interface {
 type runSource interface {
 	ListRunLogs(limit int) []cache.RunLog
 	InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error)
-	InvocationEventsFrom(inv string, from int64) ([]journal.Event, int64, error)
+	InvocationEventsSince(inv string, from int64) ([]journal.Event, int64, error)
 	DescriptorByRef(ref string) (cache.OutputDescriptor, error)
 }

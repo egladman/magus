@@ -171,7 +171,7 @@ func readGateOutcome(path, commit string) gateCoverage {
 		// The started event is the first line, so a log that is not this commit's gate
 		// is abandoned on line one instead of being read to the end.
 		if ev.Kind == journal.KindStarted {
-			if ev.Command == nil || !isGateCommand(ev.Command.Arguments) || !builtFrom(ev.MagusVersion, commit) {
+			if ev.Command == nil || !isGateCommand(ev.Command.Arguments) || !namesCommit(ev.MagusVersion, commit) {
 				return gateUnknown
 			}
 		}
@@ -218,13 +218,13 @@ func matchableRevision(id string) bool {
 	return true
 }
 
-// builtFrom reports whether a magus version string names this commit.
+// namesCommit reports whether a magus version string names this commit.
 //
 // `git describe` renders it as v0.4.3-97-g4a1c0cc84, optionally with -dirty, so the
 // commit appears as a g-prefixed abbreviation. Compared by PREFIX in both directions
 // because the two sides abbreviate to different lengths: the describe output picks its
 // own, and the caller passes whatever `vcs.Commit().short` gave it.
-func builtFrom(version, commit string) bool {
+func namesCommit(version, commit string) bool {
 	if version == "" || !matchableRevision(commit) {
 		return false
 	}
@@ -427,7 +427,7 @@ func locateFirst(command string, d Dialect, cwd string, match func(hint.Invocati
 		}
 		site = pushSite{dir: c.at.dir, relocated: c.at.moved}
 	default:
-		if site, ok = pushFrom(c.inv.Name, args, c.at); !ok {
+		if site, ok = parsePush(c.inv.Name, args, c.at); !ok {
 			return pushSite{}, true, false
 		}
 	}
@@ -802,9 +802,9 @@ func vcsRelocates(program string, args []string) bool {
 	return false
 }
 
-// gitPushFrom is pushFrom for git: where its -C chain leads from at, and the revision the
+// gitPushSite is parsePush for git: where its -C chain leads from at, and the revision the
 // refspec names.
-func gitPushFrom(args []*syntax.Word, at shellDir) (pushSite, bool) {
+func gitPushSite(args []*syntax.Word, at shellDir) (pushSite, bool) {
 	at, g, ok := gitCallAt(args, at)
 	if !ok {
 		return pushSite{}, false
@@ -838,11 +838,11 @@ func gitCallAt(args []*syntax.Word, at shellDir) (shellDir, gitCommand, bool) {
 	return at, g, at.known
 }
 
-// pushFrom is where a push spelled with args runs, starting from at, and the revision a
+// parsePush is where a push spelled with args runs, starting from at, and the revision a
 // git push publishes. False when a relocating operand is not one literal path.
-func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool) {
+func parsePush(program string, args []*syntax.Word, at shellDir) (pushSite, bool) {
 	if program == "git" {
-		return gitPushFrom(args, at)
+		return gitPushSite(args, at)
 	}
 	globals := vcsGlobals[program]
 	moving := relocatingFlags[program]

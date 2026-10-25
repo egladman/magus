@@ -26,9 +26,9 @@ func TestSlotHeld(t *testing.T) {
 func TestSlotMarkersPreserveTheRestOfTheHold(t *testing.T) {
 	base := admission{slots: 4, machineClaim: true}.on(context.Background())
 
-	assert.Equal(t, admission{slots: 2, machineClaim: true}, admissionFrom(WithSlotsHeld(base, 2)))
-	assert.Equal(t, admission{slots: 1, machineClaim: true}, admissionFrom(WithSlotHeld(base)))
-	assert.Equal(t, admission{slots: 0, machineClaim: true}, admissionFrom(WithoutSlotHeld(base)))
+	assert.Equal(t, admission{slots: 2, machineClaim: true}, admissionFromContext(WithSlotsHeld(base, 2)))
+	assert.Equal(t, admission{slots: 1, machineClaim: true}, admissionFromContext(WithSlotHeld(base)))
+	assert.Equal(t, admission{slots: 0, machineClaim: true}, admissionFromContext(WithoutSlotHeld(base)))
 }
 
 func TestLimiterFromContext_RoundTrip(t *testing.T) {

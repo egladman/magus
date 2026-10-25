@@ -329,7 +329,7 @@ func TestFilterByNameAndNamesOf(t *testing.T) {
 // and the caller gets the already-printed sentinel so the message is not doubled.
 func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
 	var err error
-	out := noticesFrom(t, func() {
+	out := notices(t, func() {
 		err = unknownEntity("spell", "gol", []string{"go", "typescript"})
 	})
 
@@ -337,7 +337,7 @@ func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
 	assert.Contains(t, out, `magus describe spell: unknown spell "gol"`)
 	assert.Contains(t, out, `did you mean "go"?`)
 
-	out = noticesFrom(t, func() {
+	out = notices(t, func() {
 		err = unknownEntity("spell", "zzzzzzzz", []string{"go"})
 	})
 	assert.Equal(t, exit.Reported(exit.Usage), err)
@@ -534,7 +534,7 @@ func TestHintCanonicalSpellingTeachesCharmOnce(t *testing.T) {
 	target, err := types.ParseTarget("format:UPDATE")
 	require.NoError(t, err)
 
-	got := noticesFrom(t, func() {
+	got := notices(t, func() {
 		hintCanonicalSpelling(t.Context(), target)
 		hintCanonicalSpelling(t.Context(), target)
 	})

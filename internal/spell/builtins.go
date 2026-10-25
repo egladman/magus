@@ -128,7 +128,7 @@ func loadShipped() shippedSpells {
 	// withBuiltinResolve keeps the resolve "builtin" attribute correct should a
 	// provider-carrying ctx ever drive this path.
 	ctx := withBuiltinResolve(context.Background())
-	p := providerFrom(ctx)
+	p := providerFromContext(ctx)
 	out := shippedSpells{builtins: map[string]spells.Descriptor{}, dirs: map[string]string{}}
 	for _, e := range entries {
 		dir := e.Name()

@@ -496,7 +496,7 @@ func TestMethodKind(t *testing.T) {
 // one-hop walk would leave undocumented while linking to it.
 func TestReachableFromWalksTransitivelyWithinOnePackage(t *testing.T) {
 	a := fixtureAPI(t)
-	msgs, enums := a.reachableFrom("magus.token.v1", serviceSeeds(a.services[1]))
+	msgs, enums := a.reachable("magus.token.v1", serviceSeeds(a.services[1]))
 
 	assert.Contains(t, msgs, "magus.token.v1.Token")
 	assert.Contains(t, msgs, "magus.token.v1.ListTokensRequest")

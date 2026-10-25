@@ -71,10 +71,10 @@ func (r worktreeRepo) commitFiles(dir string, files map[string]string) string {
 // judge runs the rule for command from the main checkout, against a job store holding rows.
 func (r worktreeRepo) judge(command string, rows ...types.Job) ShellVerdict {
 	r.t.Helper()
-	return r.judgeFrom(r.main, command, rows...)
+	return r.judgeIn(r.main, command, rows...)
 }
 
-func (r worktreeRepo) judgeFrom(callDir, command string, rows ...types.Job) ShellVerdict {
+func (r worktreeRepo) judgeIn(callDir, command string, rows ...types.Job) ShellVerdict {
 	r.t.Helper()
 	return r.judgeWith(Dependencies{}, callDir, command, rows...)
 }
@@ -179,7 +179,7 @@ func TestWorktreeRemoveDeniesEachUnsafeCondition(t *testing.T) {
 	assertRemovalDenied(t, r.judge("git worktree remove "+locked), "it is locked (in use)")
 
 	assertRemovalDenied(t, r.judge("git worktree remove "+r.main), "it is the main worktree")
-	assertRemovalDenied(t, r.judgeFrom(filepath.Join(held), "git worktree remove "+held), "this session runs in it")
+	assertRemovalDenied(t, r.judgeIn(filepath.Join(held), "git worktree remove "+held), "this session runs in it")
 	assertRemovalDenied(t, r.judge("git worktree remove "+r.origin.Root()), "not a worktree of this repository")
 	assertRemovalDenied(t, r.judge(fmt.Sprintf("cd %s && git worktree remove %s", r.origin.Root(), held)), "another repository")
 }
@@ -469,7 +469,7 @@ func TestWorktreeRemoveDeniesWhatItCannotRead(t *testing.T) {
 	} {
 		assertRemovalDenied(t, r.judge(command), says)
 	}
-	assertRemovalDenied(t, r.judgeFrom("", "git worktree remove "+wt), "which checkout this session runs in is unknown")
+	assertRemovalDenied(t, r.judgeIn("", "git worktree remove "+wt), "which checkout this session runs in is unknown")
 }
 
 // A for loop over literal words is judged one removal per word, as if written out; a list
