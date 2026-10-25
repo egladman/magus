@@ -232,3 +232,13 @@ func TestIntegrationMergeInALoop(t *testing.T) {
 		assert.NotEmpty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
 	}
 }
+
+func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
+	row := types.Job{ID: "integrate", Integrates: []string{"done-a"}}
+	got := map[string]bool{}
+	for _, operand := range []string{"done-a", "other"} {
+		got[operand] = mergesBase(operand, "", row)
+	}
+	assert.Equal(t, map[string]bool{"done-a": true, "other": false}, got)
+	assert.False(t, mergesBase("done-a", "", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
+}

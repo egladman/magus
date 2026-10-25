@@ -119,9 +119,14 @@ func workerMerge(inv hint.Invocation) (operand string, ok bool) {
 
 // mergesBase reports operand naming the base a worker may merge into its own branch: base
 // itself, its origin/ form, the revision the job was handed or reported, by id, or the
-// branch of a job its row depends on. A job id is its branch name, so a stacked job reaches
-// the work it builds on without a second base.
+// branch of a job its row depends on, or a branch its integration row names in integrates,
+// so the holder merges them with a message or from a path integrationMerge does not read.
+// A job id is its branch name, so a stacked job reaches the work it builds on without a
+// second base.
 func mergesBase(operand, base string, row types.Job) bool {
+	if row.Integrating() && slices.Contains(row.Integrates, operand) {
+		return true
+	}
 	if slices.ContainsFunc(row.DependsOn, func(dep string) bool {
 		return dep != "" && (operand == dep || operand == "origin/"+dep)
 	}) {
