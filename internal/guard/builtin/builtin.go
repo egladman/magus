@@ -18,13 +18,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Decision is what a built-in rule does when it matches: say nothing, explain, or refuse.
-// The zero value is unset, which Resolve refuses.
-type Decision int
+// decision is what a built-in rule does when it matches: say nothing, explain, or refuse.
+// The zero value is unset, which Resolve refuses. Callers name it through Off, Advise and
+// Deny and a [Setting].
+type decision int
 
 // The decisions, least to most refusing.
 const (
-	Off Decision = iota + 1
+	Off decision = iota + 1
 	Advise
 	Deny
 )
@@ -32,7 +33,7 @@ const (
 var decisionNames = [...]string{Off: "off", Advise: "advise", Deny: "deny"}
 
 // String is d's wire name, or "unset" for the zero value.
-func (d Decision) String() string {
+func (d decision) String() string {
 	switch {
 	case d == 0:
 		return "unset"
@@ -44,7 +45,7 @@ func (d Decision) String() string {
 
 // MarshalText writes d's wire name, or empty text when unset. A value outside the
 // constants is an error.
-func (d Decision) MarshalText() ([]byte, error) {
+func (d decision) MarshalText() ([]byte, error) {
 	switch {
 	case d == 0:
 		return []byte{}, nil
@@ -56,7 +57,7 @@ func (d Decision) MarshalText() ([]byte, error) {
 
 // UnmarshalText sets d from its wire name. Empty text is unset; any other name than
 // off, advise or deny is an error.
-func (d *Decision) UnmarshalText(text []byte) error {
+func (d *decision) UnmarshalText(text []byte) error {
 	if len(text) == 0 {
 		*d = 0
 		return nil
@@ -65,17 +66,17 @@ func (d *Decision) UnmarshalText(text []byte) error {
 	if i <= 0 {
 		return fmt.Errorf("unknown decision %q; give off, advise or deny", text)
 	}
-	*d = Decision(i)
+	*d = decision(i)
 	return nil
 }
 
-func (d Decision) valid() bool { return d >= Off && d <= Deny }
+func (d decision) valid() bool { return d >= Off && d <= Deny }
 
 // Setting is one rule's resolved configuration. Each parameter is a threshold the rule
 // fires at, taken only by the rules params lists for it; 0 means unset, and the binary
 // ships no number for it except the background rules' minutes (see Ceiling).
 type Setting struct {
-	Decision Decision `json:"decision"`
+	Decision decision `json:"decision"`
 	// Lines is the size of a whole read worth flagging.
 	Lines int `json:"lines"`
 	// Tokens is a context size in tokens.
@@ -266,7 +267,7 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 // remedy the caller can take now denies, recoverable or not (ADR 0013): an agent routes
 // around advice that only prints. A notice states a fact with no remedy and never
 // refuses. A workspace that wants a rule softer sets it to advise or off by name.
-var defaults = map[string]Decision{
+var defaults = map[string]decision{
 	// Recoverable: the served command answers what the refused one asked.
 	"architecture-unbriefed": Deny,
 	"brief-command":          Deny,
@@ -472,7 +473,7 @@ func Verdicts(name string) []types.GuardDecision {
 
 // Defaults returns every compiled rule's name mapped to the decision it takes when the
 // workspace declares nothing for it. The map is the caller's to modify.
-func Defaults() map[string]Decision {
+func Defaults() map[string]decision {
 	return maps.Clone(defaults)
 }
 
@@ -648,7 +649,7 @@ func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[stri
 }
 
 // rank orders decisions by how much they refuse; unset or unknown ranks below off.
-func rank(d Decision) int {
+func rank(d decision) int {
 	if !d.valid() {
 		return -1
 	}

@@ -16,7 +16,7 @@ func TestDefaults(t *testing.T) {
 	assert.Len(t, got, 125)
 	assert.NotContains(t, got, "stdin-closed")
 	assert.NotContains(t, got, "spawn-principal-for-economy")
-	want := map[string]Decision{
+	want := map[string]decision{
 		"compat-marker":        Advise,
 		"read-navigation":      Deny,
 		"brief-command":        Deny,
@@ -68,7 +68,7 @@ func TestDefaults(t *testing.T) {
 
 		"model-tier-context-cap": Deny,
 	}
-	have := map[string]Decision{}
+	have := map[string]decision{}
 	for name := range want {
 		have[name] = got[name]
 	}
@@ -213,7 +213,7 @@ func TestResolveRefusesAFixedRule(t *testing.T) {
 		"workspace-write-failed":   "a write rule",
 		"guard-unfinished":         "a guard check",
 	} {
-		for _, d := range []Decision{Off, Advise, Deny} {
+		for _, d := range []decision{Off, Advise, Deny} {
 			t.Run(fmt.Sprintf("%s/%s", name, d.String()), func(t *testing.T) {
 				got, err := Resolve(map[string]Setting{name: {Decision: d}})
 				assert.Nil(t, got)
@@ -246,7 +246,7 @@ func TestFixedRulesAreCompiledRules(t *testing.T) {
 }
 
 func TestResolveRefusesSettingTheGrantRule(t *testing.T) {
-	for _, d := range []Decision{Off, Advise, Deny} {
+	for _, d := range []decision{Off, Advise, Deny} {
 		_, err := Resolve(map[string]Setting{"grant-is-a-persons": {Decision: d}})
 		var de *types.DiagnosticError
 		require.ErrorAs(t, err, &de, d.String())
@@ -276,7 +276,7 @@ func TestResolveReportsEveryMisdeclaration(t *testing.T) {
 }
 
 func TestDecisionTextRoundTrips(t *testing.T) {
-	for d, name := range map[Decision]string{0: "", Off: "off", Advise: "advise", Deny: "deny"} {
+	for d, name := range map[decision]string{0: "", Off: "off", Advise: "advise", Deny: "deny"} {
 		got, err := json.Marshal(Setting{Decision: d})
 		require.NoError(t, err)
 		assert.Contains(t, string(got), fmt.Sprintf(`"decision":%q`, name))
@@ -290,7 +290,7 @@ func TestDecisionTextRefusesUnknown(t *testing.T) {
 	var s Setting
 	err := json.Unmarshal([]byte(`{"decision":"block"}`), &s)
 	require.ErrorContains(t, err, `unknown decision "block"; give off, advise or deny`)
-	_, err = Decision(9).MarshalText()
+	_, err = decision(9).MarshalText()
 	require.EqualError(t, err, "guard decision 9 is not off, advise or deny")
 }
 

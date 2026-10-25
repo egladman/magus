@@ -634,7 +634,8 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))
 	}
-	facts, err := agent.ReadToolRows(root, tools.Dir).Models()
+	require.NoError(t, os.WriteFile(filepath.Join(root, tools.Dir, types.ToolHostFile), []byte(descriptor.ID+"\n"), 0o644))
+	facts, err := agent.FindToolRows(root, descriptor.ID).Models()
 	require.NoError(t, err)
 	assert.Equal(t, descriptor.Models, facts.Rows, "the hook reads the same model facts the harness publishes")
 	for _, tc := range []struct {

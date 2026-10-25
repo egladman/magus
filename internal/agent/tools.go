@@ -81,9 +81,9 @@ func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolRowsVersionFile), Content: strconv.Itoa(ToolRowsVersion) + "\n"})
 }
 
-// HostFiles are the files that tell a hook which host a tool rows directory in dir belongs
+// hostFiles are the files that tell a hook which host a tool rows directory in dir belongs
 // to and what that host's limits are, so the hook glue names only the host.
-func HostFiles(dir, host string, limits types.Limits) []types.AgentFile {
+func hostFiles(dir, host string, limits types.Limits) []types.AgentFile {
 	var b strings.Builder
 	writeJSONLine(&b, limits)
 	return []types.AgentFile{
@@ -97,7 +97,7 @@ func (d HarnessDescriptor) toolFiles() []types.AgentFile {
 	if d.Tools == nil {
 		return nil
 	}
-	return append(ToolFiles(*d.Tools, nil), HostFiles(d.Tools.Dir, d.ID, d.Limits)...)
+	return append(ToolFiles(*d.Tools, nil), hostFiles(d.Tools.Dir, d.ID, d.Limits)...)
 }
 
 // InstallHarnessTools writes the tool rows directory harness id declares under root, with
@@ -119,7 +119,7 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 		return nil, fmt.Errorf("agent: harness %s: no workspace is loaded, so its model tiers are unknown", id)
 	}
 	var changed []string
-	files := append(ToolFiles(*d.Tools, &ModelFacts{Rows: d.Models, Tiers: ws.ModelTiers(ctx)}), HostFiles(d.Tools.Dir, d.ID, d.Limits)...)
+	files := append(ToolFiles(*d.Tools, &ModelFacts{Rows: d.Models, Tiers: ws.ModelTiers(ctx)}), hostFiles(d.Tools.Dir, d.ID, d.Limits)...)
 	for _, f := range files {
 		planned, err := planWholeFile(root, f.Path, f.Content)
 		if err != nil {
@@ -153,11 +153,11 @@ type ToolRows struct {
 	Err          error
 }
 
-// ReadToolRows reads the tool rows directory dir, relative to root unless absolute. A
+// readToolRows reads the tool rows directory dir, relative to root unless absolute. A
 // capability file that is absent has no rows. A dir of "", a missing version file, an
 // unreadable file and a version other than ToolRowsVersion are each an Err naming the
 // command that writes the directory.
-func ReadToolRows(root, dir string) ToolRows {
+func readToolRows(root, dir string) ToolRows {
 	rows := ToolRows{Dir: dir}
 	if dir == "" {
 		rows.Err = errors.New("no tool rows directory was named, so write one with `magus agent harness install`")
@@ -253,7 +253,7 @@ func FindToolRows(root, host string) ToolRows {
 		if err != nil {
 			continue
 		}
-		return ReadToolRows(root, filepath.ToSlash(dir))
+		return readToolRows(root, filepath.ToSlash(dir))
 	}
 	return ToolRows{Err: fmt.Errorf("no tool rows are installed for %s, so write them with `magus agent harness install`", host)}
 }

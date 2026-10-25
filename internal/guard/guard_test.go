@@ -19,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	// Blank-imported so its init installs the spell registry's ensure hook, exactly as
 	// cmd/magus/packs_interp.go does for the real binary: without it,
 	// project.DefaultSpellRegistry().All() in testDependencies below runs against a registry
@@ -1141,7 +1142,7 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 		{advisoryLeaseInvalid, "lease b!"},
 	} {
 		for _, tt := range []struct {
-			decision     builtin.Decision
+			decision     fmt.Stringer
 			first, again string
 		}{
 			{decision: builtin.Advise, first: decisionAdvise, again: decisionPass},
@@ -1304,16 +1305,21 @@ func TestRecoverableRulesDenyUnlessSetToAdvise(t *testing.T) {
 // sedInPlace is a recoverable deny on its own line, and nothing else.
 const sedInPlace = `sed -i 's/a/b/' f.go`
 
-func withSetting(rule string, d builtin.Decision) Dependencies {
-	return Dependencies{Builtins: map[string]builtin.Setting{rule: {Decision: d}}}
+// withSetting is dependencies whose one built-in rule takes decision d. d is read through
+// its wire name, so the test never names the decision type the rules package keeps to itself.
+func withSetting(rule string, d fmt.Stringer) Dependencies {
+	var s builtin.Setting
+	if err := json.Unmarshal(fmt.Appendf(nil, `{"decision":%q}`, d.String()), &s); err != nil {
+		panic(err)
+	}
+	return Dependencies{Builtins: map[string]builtin.Setting{rule: s}}
 }
-
 func TestGradeDeny(t *testing.T) {
 	t.Parallel()
 	deny := ShellVerdict{Deny: "use the editor", Rule: denyRule{Name: denyRuleSedInPlace}}
 
 	for _, tt := range []struct {
-		decision builtin.Decision
+		decision fmt.Stringer
 		want     ShellVerdict
 	}{
 		{builtin.Deny, deny},
@@ -1331,7 +1337,7 @@ func TestGradeAdvisory(t *testing.T) {
 	advice := ShellVerdict{Context: "read the map", Kind: advisorySourceRead, Brief: "map"}
 
 	for _, tt := range []struct {
-		decision builtin.Decision
+		decision fmt.Stringer
 		want     ShellVerdict
 	}{
 		{builtin.Advise, advice},

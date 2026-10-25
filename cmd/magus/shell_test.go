@@ -792,11 +792,7 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 	global = globalFlags{}
 	root := t.TempDir()
 	t.Chdir(root)
-	rows := types.HarnessTools{Dir: ".claude/magus/tools", Rows: []types.HarnessTool{{Name: "TodoWrite", Capability: types.ToolInert}}}
-	for _, f := range append(agent.ToolFiles(rows, nil), agent.HostFiles(rows.Dir, "claude-code", types.Limits{})...) {
-		require.NoError(t, os.MkdirAll(filepath.Dir(f.Path), 0o755))
-		require.NoError(t, os.WriteFile(f.Path, []byte(f.Content), 0o644))
-	}
+	installHostRows(t, "claude-code", types.Limits{}, types.HarnessTool{Name: "TodoWrite", Capability: types.ToolInert})
 	var out bytes.Buffer
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
 	require.NoError(t, shellStdin(ctx, strings.NewReader(payload), &out, []string{"-o", "name", "--agent-name", "claude-code"}))
@@ -2143,11 +2139,16 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 }
 
 // installHostRows writes the tool rows directory install writes for host under the working
-// directory, with no rows and the given limits.
-func installHostRows(t *testing.T, host string, limits types.Limits) {
+// directory, with the given rows and limits.
+func installHostRows(t *testing.T, host string, limits types.Limits, rows ...types.HarnessTool) {
 	t.Helper()
 	dir := "." + host + "/magus/tools"
-	for _, f := range append(agent.ToolFiles(types.HarnessTools{Dir: dir}, nil), agent.HostFiles(dir, host, limits)...) {
+	raw, err := json.Marshal(limits)
+	require.NoError(t, err)
+	files := append(agent.ToolFiles(types.HarnessTools{Dir: dir, Rows: rows}, nil),
+		types.AgentFile{Path: dir + "/" + types.ToolHostFile, Content: host + "\n"},
+		types.AgentFile{Path: dir + "/" + types.ToolLimitsFile, Content: string(raw) + "\n"})
+	for _, f := range files {
 		require.NoError(t, os.MkdirAll(filepath.Dir(f.Path), 0o755))
 		require.NoError(t, os.WriteFile(f.Path, []byte(f.Content), 0o644))
 	}

@@ -428,7 +428,7 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	testkit.Isolate(b)
 	repo := testkit.NewRepo(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": inertBenchRules})
 	root := repo.Root()
-	for _, f := range agent.ToolFiles(types.HarnessTools{Dir: "tools", Rows: testToolRows}, nil) {
+	for _, f := range testToolFiles() {
 		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f.Path)), 0o755); err != nil {
 			b.Fatal(err)
 		}
@@ -452,7 +452,7 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	b.Run("fast", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			req.Tools = agent.ReadToolRows(root, "tools")
+			req.Tools = agent.FindToolRows(root, testToolHost)
 			judge := func(ctx context.Context) types.GuardJudgment { return Judge(ctx, load(ctx), req) }
 			if v := JudgeWithin(ctx, Dependencies{}, req, judge); v.Decision != decisionPass {
 				b.Fatalf("a todo list was not passed: %+v", v)
@@ -462,7 +462,7 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	b.Run("judged", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			req.Tools = agent.ReadToolRows(root, "tools")
+			req.Tools = agent.FindToolRows(root, testToolHost)
 			if v := Judge(ctx, load(ctx), req); v.Decision != decisionPass {
 				b.Fatalf("a todo list was not passed: %+v", v)
 			}
