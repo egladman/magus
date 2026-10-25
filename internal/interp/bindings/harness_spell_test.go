@@ -270,9 +270,10 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 // command past its timeout, and whose wiring sets the hook timeout the guard reports
 // against, and that every other shipped harness declares no limits.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
-	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299"},
+	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true},
 		loadShippedHarness(t, "claude-code").Limits)
-	for _, id := range []string{"codex", "cursor", "opencode"} {
+	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true}, loadShippedHarness(t, "cursor").Limits)
+	for _, id := range []string{"codex", "opencode"} {
 		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
 	}
 }

@@ -46,7 +46,7 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 		v := Evaluate(deps, tt.line)
 		if tt.want {
 			assert.Equal(t, denyRuleSleepPoll, v.Rule.Name, tt.line)
-			assert.Contains(t, v.Deny, hint.Status.With("--watch=15s"), tt.line)
+			assert.Contains(t, v.Deny, "background the work as `magus job exec --timeout <d> -- <command>` and wait for its notice", tt.line)
 		} else {
 			assert.NotEqual(t, denyRuleSleepPoll, v.Rule.Name, tt.line)
 		}

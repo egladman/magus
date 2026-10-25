@@ -2034,9 +2034,8 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "announces when it ends", cmd)
-		assert.Contains(t, v.Deny, "wait for the task's completion notice", cmd)
+		assert.Contains(t, v.Deny, "magus job exec --timeout <d> -- <command>` and wait for its notice", cmd)
 		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
-		assert.Contains(t, v.Deny, hint.Status.With("--watch")+"` is for a person", cmd)
 	}
 	// A loop that works each pass without sleeping, or a for loop over a list that never
 	// breaks out, is not waiting.
@@ -2067,7 +2066,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "waits on work you did not start", cmd)
 		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
-		assert.Contains(t, v.Deny, hint.Status.With("--watch=15s"), cmd)
+		assert.Contains(t, v.Deny, "background your own call as `magus job exec --timeout <d> -- <command>`", cmd)
 		assert.NotContains(t, v.Deny, "monitor", cmd)
 		assert.NotContains(t, v.Deny, "announces when it ends", cmd)
 	}
@@ -2164,7 +2163,7 @@ func TestGuardDeniesProcessPoll(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleProcessPoll, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "status --watch", cmd)
+		assert.Contains(t, v.Deny, "background your call as `magus job exec --timeout <d> -- <command>` and wait for its notice", cmd)
 	}
 }
 
