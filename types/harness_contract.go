@@ -158,11 +158,14 @@ type HarnessTools struct {
 }
 
 // The files a tool rows directory holds beside one file per capability: the layout
-// version, the harness's model rows, and the workspace's model-tier declaration.
+// version, the harness's model rows, the workspace's model-tier declaration, the harness
+// id the directory belongs to, and that harness's Limits.
 const (
 	ToolRowsVersionFile = "version"
 	ToolModelRowsFile   = "models"
 	ToolTiersFile       = "tiers"
+	ToolHostFile        = "host"
+	ToolLimitsFile      = "limits"
 )
 
 // Holds reports whether rel, a slash-separated workspace-relative path, is a file install
@@ -174,7 +177,7 @@ func (t HarnessTools) Holds(rel string) bool {
 		return false
 	}
 	return name == ToolModelRowsFile || name == ToolTiersFile || name == ToolRowsVersionFile ||
-		slices.Contains(toolCapabilities, ToolCapability(name))
+		name == ToolHostFile || name == ToolLimitsFile || slices.Contains(toolCapabilities, ToolCapability(name))
 }
 
 // Capability is the capability the table gives tool, "" for a tool no row names.
