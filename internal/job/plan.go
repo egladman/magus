@@ -267,6 +267,12 @@ func specMerge(rec types.Declaration, creates bool, checkpoint func() string) fu
 	}
 	return func(u *types.Job) {
 		rec.ApplySpec(u)
+		if soft := slices.DeleteFunc(slices.Clone(u.SoftPaths), func(p string) bool { return !slices.Contains(u.WritePaths, p) }); len(soft) != len(u.SoftPaths) {
+			u.SoftPaths = soft
+			if len(soft) == 0 {
+				u.SoftPaths = nil
+			}
+		}
 		if cp != "" {
 			u.Checkpoint = cp
 		}
