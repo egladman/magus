@@ -510,7 +510,7 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 		if out.refused == nil {
 			red, err := r.baseRed(ctx, f.onto, f.change)
 			if err != nil {
-				return "", fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
+				return 0, fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
 			}
 			if red {
 				v.Decision, v.Code = types.DecisionWait, types.CodeWaitBaseRed
@@ -540,7 +540,7 @@ Building the candidate %s; the gate ran on that merge.
 	}
 	bundle, cleanup, err := r.bundle(ctx, f)
 	if err != nil {
-		return "", fmt.Errorf("bundle the candidate of %s: %w", f.change.Label(), err)
+		return 0, fmt.Errorf("bundle the candidate of %s: %w", f.change.Label(), err)
 	}
 	defer cleanup()
 	return v.Decision, r.decideWithBundle(v, bundle)

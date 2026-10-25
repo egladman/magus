@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -183,10 +184,10 @@ func TestResolveRefusesMisdeclarations(t *testing.T) {
 			coded{types.GuardRuleMisdeclared, `built-in rule "stdin-closed" was removed; delete it from the declaration`}},
 		{"renamed rule", map[string]Setting{"spawn-principal-for-economy": {Decision: Advise}},
 			coded{types.GuardRuleMisdeclared, `built-in rule "spawn-principal-for-economy" was renamed to "spawn-above-model-tier"; declare it under that name`}},
-		{"bad decision", map[string]Setting{"stage-all": {Decision: "block"}},
-			coded{types.GuardRuleMisdeclared, `built-in rule "stage-all": decision "block" is not off, advise or deny`}},
+		{"bad decision", map[string]Setting{"stage-all": {Decision: 9}},
+			coded{types.GuardRuleMisdeclared, `built-in rule "stage-all": decision Decision(9) is not off, advise or deny`}},
 		{"empty decision", map[string]Setting{"stage-all": {}},
-			coded{types.GuardRuleMisdeclared, `built-in rule "stage-all": decision "" is not off, advise or deny`}},
+			coded{types.GuardRuleMisdeclared, `built-in rule "stage-all" names no decision; give off, advise or deny`}},
 		{"lines on a rule without it", map[string]Setting{"stage-all": {Decision: Deny, Lines: 50}},
 			coded{types.GuardRuleMisdeclared, `built-in rule "stage-all" takes no lines parameter; only read-navigation does`}},
 		{"lines below 1", map[string]Setting{"read-navigation": {Decision: Deny, Lines: -3}},
@@ -213,7 +214,7 @@ func TestResolveRefusesAFixedRule(t *testing.T) {
 		"guard-unfinished":         "a guard check",
 	} {
 		for _, d := range []Decision{Off, Advise, Deny} {
-			t.Run(fmt.Sprintf("%s/%s", name, string(d)), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", name, d.String()), func(t *testing.T) {
 				got, err := Resolve(map[string]Setting{name: {Decision: d}})
 				assert.Nil(t, got)
 				var de *types.DiagnosticError
@@ -230,7 +231,7 @@ func TestFixedRulesAreCompiledRules(t *testing.T) {
 	for name := range fixed {
 		assert.Contains(t, defaults, name)
 		assert.True(t, Fixed(name))
-		assert.Equal(t, []types.GuardDecision{types.GuardDecision(defaults[name])}, Verdicts(name), name)
+		assert.Equal(t, []types.GuardDecision{types.GuardDecision(defaults[name].String())}, Verdicts(name), name)
 	}
 	assert.False(t, Fixed("stage-all"))
 	assert.Equal(t, Deny, defaults["grant-is-a-persons"])
@@ -248,7 +249,7 @@ func TestResolveRefusesSettingTheGrantRule(t *testing.T) {
 	for _, d := range []Decision{Off, Advise, Deny} {
 		_, err := Resolve(map[string]Setting{"grant-is-a-persons": {Decision: d}})
 		var de *types.DiagnosticError
-		require.ErrorAs(t, err, &de, string(d))
+		require.ErrorAs(t, err, &de, d.String())
 		assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
 		assert.Equal(t, "a grant is a person's approval, so no workspace setting may let an agent issue one", types.DiagnosticRationale(err))
 	}
@@ -256,7 +257,7 @@ func TestResolveRefusesSettingTheGrantRule(t *testing.T) {
 
 func TestResolveReportsEveryMisdeclaration(t *testing.T) {
 	_, err := Resolve(map[string]Setting{
-		"stage-all":  {Decision: "block"},
+		"stage-all":  {Decision: 9},
 		"whole-tre":  {Decision: Off},
 		"whole-tree": {Decision: Off},
 	})
@@ -269,9 +270,28 @@ func TestResolveReportsEveryMisdeclaration(t *testing.T) {
 		msgs = append(msgs, de.Msg)
 	}
 	assert.Equal(t, []string{
-		`built-in rule "stage-all": decision "block" is not off, advise or deny`,
+		`built-in rule "stage-all": decision Decision(9) is not off, advise or deny`,
 		`unknown built-in rule "whole-tre"; did you mean "whole-tree"?`,
 	}, msgs)
+}
+
+func TestDecisionTextRoundTrips(t *testing.T) {
+	for d, name := range map[Decision]string{0: "", Off: "off", Advise: "advise", Deny: "deny"} {
+		got, err := json.Marshal(Setting{Decision: d})
+		require.NoError(t, err)
+		assert.Contains(t, string(got), fmt.Sprintf(`"decision":%q`, name))
+		var back Setting
+		require.NoError(t, json.Unmarshal(got, &back))
+		assert.Equal(t, d, back.Decision)
+	}
+}
+
+func TestDecisionTextRefusesUnknown(t *testing.T) {
+	var s Setting
+	err := json.Unmarshal([]byte(`{"decision":"block"}`), &s)
+	require.ErrorContains(t, err, `unknown decision "block"; give off, advise or deny`)
+	_, err = Decision(9).MarshalText()
+	require.EqualError(t, err, "guard decision 9 is not off, advise or deny")
 }
 
 func TestStricter(t *testing.T) {

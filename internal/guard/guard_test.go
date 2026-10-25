@@ -1148,7 +1148,7 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 			{decision: builtin.Off, first: decisionPass, again: decisionPass},
 			{decision: builtin.Deny, first: decisionDeny, again: decisionDeny},
 		} {
-			t.Run(fmt.Sprintf("%s/%s", string(notice.rule), string(tt.decision)), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", string(notice.rule), tt.decision), func(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
 				deps := withSetting(string(notice.rule), tt.decision)
 				judge := func() types.GuardJudgment {

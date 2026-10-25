@@ -244,7 +244,7 @@ func TestPlanAdmission(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if tc.want == "" {
+			if tc.want == 0 {
 				require.Empty(t, plan.Verdicts)
 				require.Len(t, plan.Partitions, 1)
 				assert.Equal(t, tc.wantSet, plan.Partitions[0][0].Affected)

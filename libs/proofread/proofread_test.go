@@ -1,6 +1,8 @@
 package proofread
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"slices"
 	"testing"
@@ -62,7 +64,7 @@ func assertFindings(t *testing.T, got, want []Finding) {
 			got[i].Replacements = nil
 		}
 
-		if want[i].Decision == "" {
+		if want[i].Decision == 0 {
 			want[i].Decision = DecisionDeny
 			if isGraded(want[i].Rule) {
 				want[i].Decision = DecisionAdvise
@@ -301,5 +303,38 @@ func TestProseLinesOpenAParagraphWhereAListStartsAndEnds(t *testing.T) {
 
 	if got := proseLines(doc); !reflect.DeepEqual(got, want) {
 		t.Errorf("proseLines:\n got %#v\nwant %#v", got, want)
+	}
+}
+
+func TestDecisionTextRoundTrips(t *testing.T) {
+	for d, name := range map[Decision]string{0: "", DecisionOff: "off", DecisionAdvise: "advise", DecisionDeny: "deny"} {
+		got, err := json.Marshal(map[string]Decision{"d": d})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if want := fmt.Sprintf(`{"d":%q}`, name); string(got) != want {
+			t.Errorf("Marshal(%s) = %s, want %s", d, got, want)
+		}
+
+		var back map[string]Decision
+		if err := json.Unmarshal(got, &back); err != nil {
+			t.Fatal(err)
+		}
+
+		if back["d"] != d {
+			t.Errorf("round trip of %s gave %s", d, back["d"])
+		}
+	}
+}
+
+func TestDecisionTextRefusesUnknown(t *testing.T) {
+	var d Decision
+	if err := json.Unmarshal([]byte(`"block"`), &d); err == nil || err.Error() != `unknown decision "block": want off, advise or deny` {
+		t.Errorf("Unmarshal(block) = %v", err)
+	}
+
+	if _, err := Decision(9).MarshalText(); err == nil || err.Error() != "proofread decision 9 is not off, advise or deny" {
+		t.Errorf("MarshalText(9) = %v", err)
 	}
 }

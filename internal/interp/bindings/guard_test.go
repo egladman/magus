@@ -135,7 +135,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		{"not a map", vm.StrValue("deny"), "expected one map"},
 		{"unknown rule names the nearest", one("whole-tre", vm.StrValue("deny")), `did you mean "whole-tree"`},
 		{"unknown rule with nothing near", one("zzzzzzzzzzzz", vm.StrValue("deny")), "magus describe rules"},
-		{"unknown decision", one("whole-tree", vm.StrValue("warn")), "not off, advise or deny"},
+		{"unknown decision", one("whole-tree", vm.StrValue("warn")), `"whole-tree": unknown decision "warn"; give off, advise or deny`},
 		{"neither a decision nor a setting", one("whole-tree", vm.IntValue(1)), "want"},
 		{"off on the command-failed notice", one("workspace-command-failed", vm.StrValue("off")), "cannot be set; remove it from the declaration"},
 		{"deny on the command-failed notice", one("workspace-command-failed", vm.StrValue("deny")), "cannot be set; remove it from the declaration"},

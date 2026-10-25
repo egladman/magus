@@ -105,7 +105,7 @@ func TestCatalogMatchesBuiltinDefaults(t *testing.T) {
 		if !assert.Truef(t, ok, "builtin.Defaults names %q and the catalog has no row for it", name) {
 			continue
 		}
-		assert.Equalf(t, string(want), got, "%q: the catalog shows a decision other than its default", name)
+		assert.Equalf(t, want.String(), got, "%q: the catalog shows a decision other than its default", name)
 	}
 	for name := range rows {
 		_, ok := defaults[name]
@@ -241,7 +241,7 @@ func TestRuleLookupIsExact(t *testing.T) {
 
 	got, ok := Rule("stage-all")
 	require.True(t, ok)
-	assert.Equal(t, string(builtin.Defaults()["stage-all"]), got.Decision)
+	assert.Equal(t, builtin.Defaults()["stage-all"].String(), got.Decision)
 
 	// Surrounding whitespace is a shell artifact, not a different name.
 	_, ok = Rule("  stage-all\n")

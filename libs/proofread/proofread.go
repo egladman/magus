@@ -12,6 +12,7 @@
 package proofread
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -210,18 +211,67 @@ func ParseKind(name string) (Kind, bool) {
 
 // Decision is what a finding costs the caller that reads it, in the words a
 // magus guard rule's decision uses. Each rule ships a default per kind, and a
-// decisions table ([WithDecisions]) overrides it per rule.
-type Decision string
+// decisions table ([WithDecisions]) overrides it per rule. The zero value is
+// unset: a finding a rule left unmarked, which takes the rule's decision.
+type Decision int
 
 const (
 	// DecisionOff is a rule that does not run.
-	DecisionOff Decision = "off"
+	DecisionOff Decision = iota + 1
 	// DecisionAdvise is a graded finding: it fails nothing alone, and its
 	// Weight lowers its text's [Grade].
-	DecisionAdvise Decision = "advise"
+	DecisionAdvise
 	// DecisionDeny is a finding a gate refuses.
-	DecisionDeny Decision = "deny"
+	DecisionDeny
 )
+
+var decisionNames = [...]string{DecisionOff: "off", DecisionAdvise: "advise", DecisionDeny: "deny"}
+
+// String is d's wire name, or "unset" for the zero value.
+func (d Decision) String() string {
+	switch {
+	case d == 0:
+		return "unset"
+	case d.valid():
+		return decisionNames[d]
+	}
+
+	return fmt.Sprintf("Decision(%d)", int(d))
+}
+
+// MarshalText writes d's wire name, or empty text when unset. A value outside
+// the constants is an error.
+func (d Decision) MarshalText() ([]byte, error) {
+	switch {
+	case d == 0:
+		return []byte{}, nil
+	case d.valid():
+		return []byte(decisionNames[d]), nil
+	}
+
+	return nil, fmt.Errorf("proofread decision %d is not off, advise or deny", int(d))
+}
+
+// UnmarshalText sets d from its wire name. Empty text is unset; any other
+// name than off, advise or deny is an error.
+func (d *Decision) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*d = 0
+
+		return nil
+	}
+
+	i := slices.Index(decisionNames[:], string(text))
+	if i <= 0 {
+		return fmt.Errorf("unknown decision %q: want off, advise or deny", text)
+	}
+
+	*d = Decision(i)
+
+	return nil
+}
+
+func (d Decision) valid() bool { return d >= DecisionOff && d <= DecisionDeny }
 
 var (
 	docOnly = []Kind{KindDocComment}
@@ -581,7 +631,7 @@ func (in input) reports(c check) bool { return in.opts.decide(c, in.kind) != Dec
 // settle gives f the rule, code and decision d of c. A decision the rule
 // marked on f itself stands only while no table names the rule.
 func (o options) settle(c check, f Finding, d Decision) Finding {
-	if _, named := o.decisions[c.rule]; named || f.Decision == "" {
+	if _, named := o.decisions[c.rule]; named || f.Decision == 0 {
 		f.Decision = d
 	}
 
