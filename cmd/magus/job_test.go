@@ -714,6 +714,34 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 	assert.Contains(t, err.Error(), "--checkout <dir>")
 }
 
+// The checkpoint of an integration fork into a standing checkout is that checkout's
+// revision, not the forker's, so the integrator's merge is judged from where it starts.
+func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *testing.T) {
+	resetWorkspaceMemo(t)
+	repo, cacheDir := execRepoFixture(t)
+	root := repo.Root()
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+
+	standing := filepath.Join(t.TempDir(), "integrator")
+	repo.Git("worktree", "add", "-q", "-b", "integrator", standing)
+	checkoutHead := repo.Head()
+	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
+	repo.Git("branch", "done")
+	repo.Git("reset", "-q", "--hard", "HEAD~1")
+	repo.Commit("forker moves on", map[string]string{"forker.txt": "ahead\n"})
+	require.NotEqual(t, checkoutHead, repo.Head())
+
+	writeStdin(t, fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion))
+	captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin", "--checkout", standing}))
+	})
+	rows, err := store.List()
+	require.NoError(t, err)
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "merge" })
+	require.GreaterOrEqual(t, i, 0)
+	assert.Equal(t, []string{checkoutHead, "pricing.txt"}, []string{rows[i].Checkpoint, strings.Join(rows[i].WritePaths, ",")})
+}
+
 // An integration row that exited red was refused a same-id re-fork once its branch was
 // merged ("nothing to merge"), so a small follow-up needed a second row.
 func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
