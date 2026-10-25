@@ -306,7 +306,8 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	}) {
 		loc := location.jobs()
 		loc.Root, loc.DryRun = checkout, isDryRun(ctx)
-		leases = job.HardenWritten(ctx, job.NewStore(loc), leases)
+		store := job.NewStore(loc)
+		leases = hardenCovering(leases, rel, func(rows []types.Job) []types.Job { return job.HardenWritten(ctx, store, rows) })
 		live = types.PathHolders(leases)
 	}
 	if len(live) == 0 && !enrolled {
