@@ -225,18 +225,6 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		CallBackground: sf.CallBackground,
 		CallTimeout:    time.Duration(sf.CallTimeoutMs) * time.Millisecond,
 	}
-	if err := applyHostFacts(ctx, &req); err != nil {
-		verdict := types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
-			Decision:      "deny",
-			Reason: types.FormatDiagnostic(types.HookHostUnnamed,
-				fmt.Sprintf("this hook names host %q, which no harness spell answers to (%s): merge what `magus describe harness` prints into the host's hook configuration.", req.Host, err.Error())),
-		}
-		if err := writeGuardVerdict(out, opts, verdict); err != nil {
-			return err
-		}
-		return verdictExit(errOut, opts, verdict)
-	}
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
 	ctx = guard.BeginJudgment(ctx, guardCacheDir(""), req)
@@ -244,13 +232,22 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// The spell catalog is compiled in, so the raw-tool rule judges a lapsed call too.
 	base := guard.Dependencies{CacheDir: guardCacheDir(""), BinaryVersion: version, Spells: project.DefaultSpellRegistry().All}
 	base.Binary, _ = runningBinaryPath()
-	ctx = agent.ContextWithToolRows(ctx, req.Tools)
 	// The rules load inside the bound too: a magusfile's imports parse to the end however
 	// long they take.
 	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
 		// The hook ignores --root and loads no workspace up front: the one it judges in is
 		// wherever the host runs it.
 		deps := guardDependencies(ctx, "")
+		// The host's harness spell is wired by that workspace, so it loads after it.
+		if err := applyHostFacts(ctx, &req); err != nil {
+			return types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion,
+				Decision:      "deny",
+				Reason: types.FormatDiagnostic(types.HookHostUnnamed,
+					fmt.Sprintf("this hook names host %q, which no harness spell answers to (%s): merge what `magus describe harness` prints into the host's hook configuration.", req.Host, err.Error())),
+			}
+		}
+		ctx = agent.ContextWithToolRows(ctx, req.Tools)
 		stopJudge := traceFromContext(ctx).phase("guard.judge")
 		defer stopJudge()
 		return guard.Judge(ctx, deps, req)
