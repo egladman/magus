@@ -13,7 +13,7 @@ the shape of the API behind them: `Open` and `Inspect`, the interface roles, the
 asking why.
 
 Every code block on this page is a Go example in
-[`magus_test.go`](https://github.com/egladman/magus/blob/main/magus_test.go),
+package magus's tests ([`magus_test.go`](https://github.com/egladman/magus/blob/main/magus_test.go), [`plan_test.go`](https://github.com/egladman/magus/blob/main/plan_test.go), [`diff_test.go`](https://github.com/egladman/magus/blob/main/diff_test.go), [`judge_test.go`](https://github.com/egladman/magus/blob/main/judge_test.go)),
 copied here verbatim. The test suite compiles and runs each one and compares what it
 prints against its `// Output:` comment, so a block that stops working fails the build
 before the page goes stale.

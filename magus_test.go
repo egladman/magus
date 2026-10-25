@@ -20,7 +20,6 @@ import (
 
 	_ "github.com/egladman/magus/buzzengine" // Open and Inspect fail without the engine linked
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/gen/typestest"
@@ -477,41 +476,6 @@ func TestExpand_UnknownPath_Suggestion(t *testing.T) {
 	_, err := ws.ExpandPath(types.Target{Path: "aip", Name: "build"})
 	require.ErrorIs(t, err, types.ErrUnknownProject)
 	assert.Contains(t, err.Error(), `did you mean "api"`)
-}
-
-// TestParseTarget covers the canonical "target[:charm,...]" parsing cases.
-func TestParseTarget(t *testing.T) {
-	t.Parallel()
-
-	parseOK := func(input, wantName string, wantCharms []string) {
-		t.Run(input, func(t *testing.T) {
-			t.Parallel()
-			got, err := types.ParseTarget(input)
-			require.NoErrorf(t, err, "ParseTarget(%q)", input)
-			assert.Equalf(t, types.Target{Name: wantName, Charms: wantCharms}, got, "ParseTarget(%q)", input)
-		})
-	}
-	parseErr := func(name, input string) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			_, err := types.ParseTarget(input)
-			assert.Errorf(t, err, "ParseTarget(%q): want error", input)
-		})
-	}
-
-	parseOK("build", "build", nil) // bare target
-	parseOK("lint:read", "lint", []string{"read"})
-	parseOK("format:write", "format", []string{"write"})
-	parseErr("empty", "")
-	parseErr("empty charm", "lint:")               // empty charm
-	parseErr("slash in target", "web/studio:test") // '/' not allowed in target
-}
-
-// TestTargetString verifies the canonical "path:target" form.
-func TestTargetString(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "api:build", types.Target{Path: "api", Name: "build"}.String())
-	assert.Equal(t, ":test", types.Target{Name: "test"}.String())
 }
 
 // TestMagus_proxies asserts that the methods *Magus exposes
@@ -1416,35 +1380,6 @@ const twoHunkPatch = `diff --git a/api.go b/api.go
  }
 `
 
-// A file's hunks each carry the digest the parser gave them and only the symbols whose lines
-// that hunk changed.
-func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
-	open, closeID := goSymbol("api", "Open()."), goSymbol("api", "Close().")
-	head := newGraph(
-		rangedSymbol(open, "Open", "api.go:3", 5, "Function"),
-		rangedSymbol(closeID, "Close", "api.go:20", 22, "Function"),
-	)
-	files := []types.DiffFile{{Path: "api.go", Symbols: []types.DiffSymbol{{ID: closeID}, {ID: open}}}}
-	touched := touchedSymbols(head, twoHunkPatch, map[string]*types.DiffFile{"api.go": &files[0]})
-	places := map[string]map[string]hunkPlace{"api.go": {}}
-	for id, ts := range touched {
-		places["api.go"][id] = ts.place
-	}
-
-	attachHunks(files, twoHunkPatch, places)
-
-	parsed := changeset.Parse(twoHunkPatch)
-	require.Len(t, parsed, 1)
-	require.Len(t, parsed[0].Hunks, 2)
-	h0, h1 := parsed[0].Hunks[0], parsed[0].Hunks[1]
-	assert.Equal(t, []types.DiffHunk{
-		{Index: 0, Digest: h0.Digest, OldStart: 2, OldCount: 4, NewStart: 2, NewCount: 4, Declaration: "package api", Symbols: []string{open}},
-		{Index: 1, Digest: h1.Digest, OldStart: 20, OldCount: 3, NewStart: 20, NewCount: 3, Declaration: "func Close() {", Symbols: []string{closeID}},
-	}, files[0].Hunks)
-	assert.NotEmpty(t, h0.Digest)
-	assert.NotEqual(t, h0.Digest, h1.Digest)
-}
-
 // A hunk no listed symbol sits in is still a hunk, and a file the patch has no hunks for
 // gets none.
 func TestDiffHunksIncludeHunksWithoutSymbols(t *testing.T) {
@@ -1810,88 +1745,6 @@ func Example_listProjectsAndTargets() {
 	// build spell [guide-list]
 }
 
-// Example_runATarget runs a target, reads its result from the run's records, and
-// reads the stored output its ref names.
-func Example_runATarget() {
-	root, cleanup := newGuideWorkspace(map[string]string{
-		"magusfile.buzz":     "",
-		"api/magusfile.buzz": "",
-		"api/greeting.txt":   "hello\n",
-	})
-	defer cleanup()
-	var runs int
-	defer registerCopySpell("guide-run", &runs)()
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("api", WithSpell("guide-run"))
-
-	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("open:", err)
-		return
-	}
-	defer m.Close()
-
-	results, err := runRecorded(ctx, m, []types.Target{{Path: "api", Name: "build"}})
-	if err != nil {
-		fmt.Println("run:", err)
-		return
-	}
-	for _, r := range results {
-		fmt.Printf("%s:%s %s, cache hit %v\n", r.Project, r.Target, r.Status, r.CacheHit)
-
-		_, d, err := m.OutputByRef(ctx, r.Ref)
-		if err != nil {
-			fmt.Println("output:", err)
-			return
-		}
-		fmt.Printf("ref names %s:%s, failed %v\n", d.Project, d.Target, d.Failed)
-	}
-	built, err := os.ReadFile(filepath.Join(root, "api", "out", "greeting.txt"))
-	if err != nil {
-		fmt.Println("read output:", err)
-		return
-	}
-	fmt.Printf("api/out/greeting.txt: %s", built)
-	// Output:
-	// api:build ok, cache hit false
-	// ref names api:build, failed false
-	// api/out/greeting.txt: hello
-}
-
-// Example_whatADiffAffects asks which projects a change to one file reaches. web
-// depends on api, so a change inside api affects both.
-func Example_whatADiffAffects() {
-	root, cleanup := newGuideWorkspace(map[string]string{
-		"magusfile.buzz":     "",
-		"api/magusfile.buzz": "",
-		"api/greeting.txt":   "hello\n",
-		"web/magusfile.buzz": "",
-	})
-	defer cleanup()
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("web", WithDependsOn("api"))
-
-	ctx := context.Background()
-	ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("inspect:", err)
-		return
-	}
-	res, err := ws.AffectedFromPaths(ctx, []string{"api/greeting.txt"})
-	if err != nil {
-		fmt.Println("affected:", err)
-		return
-	}
-	fmt.Println("changed in:", res.Seed)
-	fmt.Println("affected:", res.Affected)
-	// Output:
-	// changed in: [api]
-	// affected: [api web]
-}
-
 // ExampleMagus_Context asks the workspace's knowledge graph for every project, on the
 // context m.Context returns. The verdict says whether zero matches would mean absent or
 // unknown.
@@ -1943,37 +1796,6 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     return magus\guard.allow();
 });
 `
-
-// Example_judgeAToolCall asks the guard about two shell commands before either runs.
-// A deny is an answer with a nil error.
-func Example_judgeAToolCall() {
-	root, cleanup := newGuideWorkspace(map[string]string{
-		"magusfile.buzz":     guardPolicy,
-		"api/magusfile.buzz": "",
-	})
-	defer cleanup()
-
-	ctx := context.Background()
-	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("open:", err)
-		return
-	}
-	defer m.Close()
-
-	for _, command := range []string{"cp api/greeting.txt api/out/", "magus run build api"} {
-		j, err := m.JudgeCommand(ctx, "guide-session", root, command)
-		if err != nil {
-			fmt.Println("judge:", err)
-			return
-		}
-		reason, _, _ := strings.Cut(j.Reason, "\n")
-		fmt.Printf("%s: %s %s %s\n", command, j.Decision, j.Rule, reason)
-	}
-	// Output:
-	// cp api/greeting.txt api/out/: deny workspace:targets-only Build through the target: magus run build api
-	// magus run build api: pass
-}
 
 // Example_aProgramThatIsItsOwnHarness is the whole loop in one program: an agent
 // proposes shell commands, the guard judges each before it runs, the allowed one runs as

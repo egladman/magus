@@ -635,3 +635,35 @@ func TestReleaseStageFromIsUnknownWithoutTags(t *testing.T) {
 	assert.False(t, releaseStageFrom(t.Context(), tagsDriver{err: errors.New("no tags")}, ".").Known(),
 		"a driver that cannot list tags is unknown, never pre-1.0 by guess")
 }
+
+// Example_whatADiffAffects asks which projects a change to one file reaches. web
+// depends on api, so a change inside api affects both.
+func Example_whatADiffAffects() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "",
+		"api/greeting.txt":   "hello\n",
+		"web/magusfile.buzz": "",
+	})
+	defer cleanup()
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("web", WithDependsOn("api"))
+
+	ctx := context.Background()
+	ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("inspect:", err)
+		return
+	}
+	res, err := ws.AffectedFromPaths(ctx, []string{"api/greeting.txt"})
+	if err != nil {
+		fmt.Println("affected:", err)
+		return
+	}
+	fmt.Println("changed in:", res.Seed)
+	fmt.Println("affected:", res.Affected)
+	// Output:
+	// changed in: [api]
+	// affected: [api web]
+}
