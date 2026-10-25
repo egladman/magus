@@ -1,0 +1,10 @@
+A subject in title case. An acronym and a single capital are not title case, and a
+capital after a conventional prefix is that prefix's grammar.
+-- hit/commit-message --
+Fix the port
+The cache keeps the old key
+-- pass/commit-message --
+fix the port
+URL-parse the port
+A hook for commits
+feat: Add a hook

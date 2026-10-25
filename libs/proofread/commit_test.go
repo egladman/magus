@@ -203,3 +203,131 @@ func TestCommitMessageSkipsPullRequestRules(t *testing.T) {
 		t.Errorf("got %+v, want none", got)
 	}
 }
+
+func denyCommit(rule Rule) []Option {
+	return []Option{WithOnly(rule), WithDecisions(map[Rule]Decision{rule: DecisionDeny})}
+}
+
+func TestSubjectCaseReportsTitleCaseAndShipsOff(t *testing.T) {
+	want := []Finding{{
+		Rule: RuleSubjectCase, Message: "Open the subject in lowercase; an acronym may lead: 'fix', not 'Fix'.",
+		Match: "Fix", Line: 1, Replacements: []string{"fix"},
+	}}
+
+	assertFindings(t, JudgeText("Fix the port", KindCommitMessage, denyCommit(RuleSubjectCase)...), want)
+
+	for _, text := range []string{"fix the port", "URL-parse the port", "A hook for commits", "feat: Add a hook"} {
+		if got := JudgeText(text, KindCommitMessage, denyCommit(RuleSubjectCase)...); len(got) != 0 {
+			t.Errorf("%q: got %+v, want none", text, got)
+		}
+	}
+
+	if got := JudgeText("Fix the port", KindCommitMessage); len(got) != 0 {
+		t.Errorf("ships off: got %+v", got)
+	}
+}
+
+func TestSubjectPunctReportsTheMarksAndSkipsAConventionalPrefix(t *testing.T) {
+	cases := []struct {
+		name, text string
+		want       []Finding
+	}{
+		{
+			name: "a comma",
+			text: "keep the key, stable",
+			want: []Finding{{
+				Rule: RuleSubjectPunct, Message: "Join clauses with a semicolon, not a comma.",
+				Match: ",", Line: 1, Replacements: []string{";"},
+			}},
+		},
+		{
+			name: "parentheses",
+			text: "keep the key (stable)",
+			want: []Finding{{
+				Rule: RuleSubjectPunct, Message: "Drop the parentheses. Join clauses with a semicolon.",
+				Match: "(", Line: 1,
+			}},
+		},
+		{
+			name: "an exclamation mark",
+			text: "keep the key!",
+			want: []Finding{{
+				Rule: RuleSubjectPunct, Message: "Drop the exclamation mark.",
+				Match: "!", Line: 1,
+			}},
+		},
+		{
+			name: "a question mark",
+			text: "keep the key?",
+			want: []Finding{{
+				Rule: RuleSubjectPunct, Message: "Drop the question mark. A subject states what the commit does.",
+				Match: "?", Line: 1,
+			}},
+		},
+		{
+			name: "a spaced hyphen",
+			text: "keep the key - stable",
+			want: []Finding{{
+				Rule: RuleSubjectPunct, Message: "Join clauses with a semicolon. A spaced hyphen is a dash.",
+				Match: " - ", Line: 1, Replacements: []string{"; "},
+			}},
+		},
+		{name: "a scope", text: "feat(cache): keep the key"},
+		{name: "a breaking prefix", text: "feat!: drop the flag"},
+		{name: "a scoped breaking prefix", text: "feat(cache)!: drop the flag"},
+		{name: "a semicolon", text: "keep the key; leave the lock"},
+		{
+			name: "a bang after the prefix",
+			text: "feat: drop the flag!",
+			want: []Finding{{
+				Rule: RuleSubjectPunct, Message: "Drop the exclamation mark.",
+				Match: "!", Line: 1,
+			}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFindings(t, JudgeText(tc.text, KindCommitMessage, denyCommit(RuleSubjectPunct)...), tc.want)
+		})
+	}
+
+	if got := JudgeText("keep the key, stable", KindCommitMessage); len(got) != 0 {
+		t.Errorf("ships off: got %+v", got)
+	}
+}
+
+func TestNoBodyReportsProseAndLeavesATrailer(t *testing.T) {
+	message := "Keep the commit to one subject line. Detail belongs in the pull request description."
+	prose := []Finding{{
+		Rule: RuleNoBody, Message: message, Match: "The detail belongs in the description.", Line: 3,
+	}}
+	tight := []Finding{{
+		Rule: RuleNoBody, Message: message, Match: "The detail belongs in the description.", Line: 2,
+	}}
+
+	cases := []struct {
+		name, text string
+		want       []Finding
+	}{
+		{"a body", "keep the key\n\nThe detail belongs in the description.", prose},
+		{"a body with no gap", "keep the key\nThe detail belongs in the description.", tight},
+		{"a subject alone", "keep the key", nil},
+		{"a blank line only", "keep the key\n\n", nil},
+		{"a trailer", "keep the key\nSigned-off-by: A Person <a@example.com>", nil},
+		{"a trailer after a blank line", "keep the key\n\nCo-Authored-By: A Person <a@example.com>", nil},
+		{"a breaking footer", "fix!: add the key\nBREAKING CHANGE: the old key is gone", nil},
+		{"a merge", "Merge branch 'main'\nThe merge brought the key.", nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFindings(t, JudgeText(tc.text, KindCommitMessage, denyCommit(RuleNoBody)...), tc.want)
+		})
+	}
+
+	body := "keep the key\n\nThe detail belongs in the description."
+	if got := JudgeText(body, KindCommitMessage); len(got) != 0 {
+		t.Errorf("ships off: got %+v", got)
+	}
+}

@@ -21,6 +21,15 @@ final RULES: {str: str} = {
     "ascii": "deny",
     // A commit, a pull request and a page in this repository credit no tool and no session.
     "attribution": "deny",
+    // A subject is lowercase. An acronym may lead. A capital after a conventional
+    // prefix is the base-branch grammar's check, not this one.
+    "subject-case": "deny",
+    // Clauses join with a semicolon. Parentheses and a bang in a conventional
+    // prefix are not the subject. A colon stays in the commit rule, which knows
+    // the branch.
+    "subject-punct": "deny",
+    // A commit is one subject line. A trailer block is not a body.
+    "no-body": "deny",
     // The doc-comment budgets the symbol-docs lint held every Go and TypeScript doc to.
     "comment-block": "deny",
     "comment-sentence": "deny",
