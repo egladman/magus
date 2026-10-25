@@ -57,8 +57,8 @@ your host config points at, and fails when it is stale or missing.
 
 One template per guard input: `magus-command.buzz` for shell commands and MCP calls,
 `magus-path.buzz` for file writes. A hook command is a plain argv (the host
-splits it and runs `magus buzz` itself), so what varies PER ENTRY rides on that
-argv, after `--`:
+splits it and runs `magus buzz` itself), so the host's name rides on that argv, after
+`--`, and is the one argument an entry takes:
 
 - `--agent-name <host>`, on every command. The template reads the host from there
   and nowhere else: not from the event's shape, not from the environment, never by
@@ -66,14 +66,11 @@ argv, after `--`:
   harness spell's own name. A template given none refuses the call
   ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answer in a
   guessed host's dialect, because a reply shaped for the wrong host can let a call
-  through.
-- `magus shell` flags an entry declares about itself, such as
-  `-- --agent-name claude-code --observes-skill-loads`. The template parses them
-  against the flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is
-  named on stderr and left out, and the call is judged anyway; your host shows that
-  line as a hook error. Nothing is dropped quietly: a guard running with flags nobody
-  chose is the failure this shape exists to avoid, and so is a guard that refuses to
-  answer because an entry was typed wrong.
+  through. magus reads every other fact about the host from its harness spell, as
+  install wrote them beside the host's tool rows. Any other argument is named on stderr and
+  left out, and the call is judged anyway; your host shows that line as a hook error.
+  Nothing is dropped quietly, and a guard does not refuse to answer because an entry was
+  typed wrong.
 
 Whether to forward the whole event is worked out from the event, not set on the
 entry: `magus-command.buzz` selects one field only when the tool is not in the

@@ -82,8 +82,7 @@ type HarnessDescriptor struct {
 	Prompts  []types.Prompt      `json:"prompts,omitempty"`
 	Agents   []types.AgentFile   `json:"agents,omitempty"`
 	Settings []types.Setting     `json:"settings,omitempty"`
-	// Limits.ForegroundDefaultMs is not read here: the wiring passes the same number to
-	// magus shell as --foreground-default-ms.
+	// Limits reaches the hook through the limits file install writes beside the tool rows.
 	Limits types.Limits `json:"limits,omitzero"`
 	// Tools is the host's tool table, nil for a harness that declares none.
 	Tools *types.HarnessTools `json:"tools,omitempty"`

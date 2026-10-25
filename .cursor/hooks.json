@@ -2,64 +2,64 @@
   "hooks": {
     "beforeMCPExecution": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "failClosed": true,
         "timeout": 10
       }
     ],
     "beforeShellExecution": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
     ],
     "beforeSubmitPrompt": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
     ],
     "postToolUse": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*",
         "timeout": 10
       },
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name cursor --observes-skill-loads",
+        "command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name cursor",
         "matcher": "Write|StrReplace|Edit",
         "timeout": 30
       }
     ],
     "postToolUseFailure": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*",
         "timeout": 10
       }
     ],
     "preCompact": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
     ],
     "preToolUse": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "matcher": "*",
         "timeout": 10
       }
     ],
     "sessionEnd": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
     ],
     "sessionStart": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
     ],
@@ -72,7 +72,7 @@
     ],
     "subagentStart": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools",
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
     ]

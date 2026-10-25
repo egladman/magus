@@ -589,8 +589,8 @@ where a workspace set them to `advise`: `capture-filter`, `check-timeout`,
   of half again that run, capped at the host's foreground maximum, or says the check
   cannot finish in the foreground and to ask for a narrower one, as it does when the
   call already waits the maximum. The host's foreground
-  default and maximum come from the wiring (`--foreground-default-ms`,
-  `--foreground-max-ms`), which the harness spell declares; without them it is silent.
+  default and maximum come from the harness spell's limits, which install writes beside its
+  tool rows; without them it is silent.
   Once per target per session.
 
 Everything else about the command itself passes. Two rules then read state
@@ -892,8 +892,9 @@ the host's own name, with what it can do: run a command, read, write, spawn, rea
 network, or touch nothing at all (a todo list, a plan, a web lookup, a read of a
 background task's output). The harness spell declares the rows (`mgs_listTools`), and
 `magus agent harness install` writes them beside the host's config, one file per
-capability with one tool name per line and a version file. The hook names that directory
-with `--tool-rows`, so the guard reads them with no workspace load. A call to a tool that
+capability with one tool name per line and a version file. magus finds that directory
+by the hook's `--agent-name`, from the host file install writes beside the rows, so it reads
+them with no workspace load. A call to a tool that
 touches nothing passes before any rule loads, so wiring every tool costs the host no wait
 it did not already pay. With no rows to read (a hook config older than them, an install
 that never ran) no tool is known, and the refusal says so and names the install;

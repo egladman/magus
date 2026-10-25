@@ -52,9 +52,9 @@ versions apart from your magus binary; see
 The spell is skills-only (empty config path): `magus describe harness` prints no
 hook config for OpenCode, and verify does not invent a stamp JSON for Magus to check.
 The guard is the TypeScript plugin, not managed hook fragments. The plugin sends
-every tool it does not restate to magus whole, with `--tool-rows .opencode/magus/tools`,
-the directory the install fills with the spell's tool rows. To adapt without
-Magus source edits, fork the spell and change only the import path; see
+every tool it does not restate to magus whole, with `--agent-name opencode`; magus finds
+the tool rows the install wrote to `.opencode/magus/tools` by the host file beside them.
+To adapt without Magus source edits, fork the spell and change only the import path; see
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md).
 
 `magus agent harness install --id opencode` refreshes `.opencode/skills` once the
@@ -180,10 +180,6 @@ import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
 const SUPPORTED_SCHEMA = 1;
-
-// The tool rows directory the opencode harness spell declares and `magus agent harness
-// install` writes; magus reads what each OpenCode tool does from it.
-const TOOL_ROWS = ["--tool-rows", ".opencode/magus/tools"] as const;
 
 /**
  * magus's guard verdict. A discriminated union on `decision`, so the compiler
@@ -468,7 +464,7 @@ export const MagusGuard: Plugin = async (ctx) => {
         const at = list.indexOf(flag);
         return at === -1 ? [...list] : [...list.slice(0, at), ...list.slice(at + 2)];
       };
-      const withoutName = ["--agent-name", "--session", "--agent", "--tool-rows"]
+      const withoutName = ["--agent-name", "--session", "--agent"]
         .reduce((list, flag) => withoutValued(list, flag), [...args])
         .filter((arg) => arg !== "--renders-ask");
       stdout = await runOnce(withoutName, input);
@@ -510,7 +506,6 @@ export const MagusGuard: Plugin = async (ctx) => {
     "--agent-name",
     "opencode",
     "--renders-ask",
-    ...TOOL_ROWS,
     "-o",
     "json",
   ];
@@ -690,7 +685,6 @@ export const MagusGuard: Plugin = async (ctx) => {
           "--agent-name",
           "opencode",
           "--renders-ask",
-          ...TOOL_ROWS,
           "-o",
           "json",
         ];

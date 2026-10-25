@@ -27,7 +27,7 @@ hook config.
 | compaction      | `preCompact`; the next `postToolUse` carries the brief again                   |
 | checkpoint      | `sessionEnd`                                                                   |
 | your messages   | `beforeSubmitPrompt`, recorded and always let through (not under `-p`)         |
-| skill loads     | the `Read` of a `SKILL.md` on `preToolUse`, with `--observes-skill-loads`      |
+| skill loads     | the `Read` of a `SKILL.md` on `preToolUse`                                     |
 | subagent spawns | `preToolUse` (`Task`), judged as a spawn                                       |
 | reply check     | opt-in: `stop`, a `followup_message` Cursor submits as another turn (not `-p`) |
 | scout agent     | `.cursor/agents/magus-scout.md`, `readonly: true`                              |
@@ -46,12 +46,12 @@ that grades it.
 
 Cursor has no skill tool: an agent loads a skill by reading its `SKILL.md`. That
 `Read` reaches `preToolUse`, and the script hands it to `magus shell` as the read
-it is, which magus records as the load. So the entry passes `--observes-skill-loads`, and
+it is, which magus records as the load. The spell's limits say this host's loads are seen, and
 the rules that require a skill load hold here as they do on Claude Code.
 
-It also passes `--tool-rows .cursor/magus/tools`, the directory
-`magus agent harness install` fills with the spell's tool rows. A tool the rows list as
-touching nothing passes before any rule loads.
+`magus agent harness install` fills `.cursor/magus/tools` with the spell's tool rows, its
+limits and a host file naming cursor, where magus finds them by the entry's `--agent-name`. A
+tool the rows list as touching nothing passes before any rule loads.
 
 An `advise` verdict reaches the model here too, on `postToolUse` rather than at
 the moment the call is gated; that guidance being in `AGENTS.md` as well is the
@@ -137,7 +137,7 @@ magus agent harness verify --id cursor
 ```
 
 That prints opaque fragments naming
-`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools`.
+`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor`.
 The script takes the host's name from that argument and nowhere else, and refuses a call
 without it ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)). It needs neither a
 POSIX shell nor `jq`. A portable install copies the script to `.cursor/hooks/cursor-hook.buzz`
@@ -147,20 +147,20 @@ and points every event at that copy, name included:
 {
   "version": 1,
   "hooks": {
-    "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }],
-    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }],
-    "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "failClosed": true, "timeout": 10 }],
-    "preToolUse": [{ "matcher": "*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }],
+    "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "failClosed": true, "timeout": 10 }],
+    "preToolUse": [{ "matcher": "*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
     "postToolUse": [
-      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }
     ],
     "postToolUseFailure": [
-      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }
     ],
-    "preCompact": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }],
-    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }],
-    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }],
-    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads --tool-rows .cursor/magus/tools", "timeout": 10 }]
+    "preCompact": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }]
   }
 }
 ```
@@ -224,7 +224,7 @@ script also accepts `file_path`.
 ```buzz
 // magus guard for Cursor. One file, every event.
 //
-// Run it as `magus buzz -s cursor-hook.buzz -- --agent-name cursor --observes-skill-loads`.
+// Run it as `magus buzz -s cursor-hook.buzz -- --agent-name cursor`.
 // `-s` is load-bearing: without it a BZZ advisory on stderr reads to the host as a hook
 // error. The command is an argv. Cursor splits it and runs magus itself, so there is no
 // shell and no jq. Flags after `--` are this file's argv.
@@ -235,9 +235,9 @@ script also accepts `file_path`.
 //
 // The host name is `--agent-name` and nowhere else: never the event's shape,
 // never the environment, never a default. Without it the gating events are
-// denied (MGS3024). `--observes-skill-loads` is passed on to `magus shell`: Cursor loads a
-// skill by reading its SKILL.md, and that Read reaches preToolUse, where this file hands
-// it over as the load it is.
+// denied (MGS3024). magus reads what else it knows of Cursor from its harness spell,
+// among it that Cursor loads a skill by reading its SKILL.md: that Read reaches preToolUse,
+// where this file hands it over as the load it is.
 //
 // Cursor splits across two events what every other host delivers from one. A deny
 // needs a gating event (preToolUse, beforeShellExecution, beforeMCPExecution), because
@@ -313,9 +313,6 @@ final UNREADABLE = "magus guard is NOT running for this call: the hook event on 
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
 final AGENT_NAME = "--agent-name";
-final OBSERVES_SKILL_LOADS = "--observes-skill-loads";
-// The tool rows directory the harness spell declares, forwarded to every judgment.
-final TOOL_ROWS = "--tool-rows";
 
 // How Cursor names an MCP call on preToolUse and postToolUse.
 final MCP_TOOL_PREFIX = "MCP:";

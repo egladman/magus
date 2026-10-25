@@ -150,8 +150,8 @@ type HarnessTool struct {
 }
 
 // HarnessTools is the table of a host's own tools: Dir is the workspace-relative directory
-// `magus agent harness install` writes the rows to, and the one the spell's hook wiring
-// names to `magus shell --tool-rows`. A tool no row names is one the guard cannot judge.
+// `magus agent harness install` writes the rows to, beside a host file magus shell finds
+// them by. A tool no row names is one the guard cannot judge.
 type HarnessTools struct {
 	Dir  string        `json:"dir"`
 	Rows []HarnessTool `json:"rows"`

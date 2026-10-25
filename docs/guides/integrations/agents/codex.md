@@ -154,7 +154,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking the call"
           }
         ]
@@ -166,7 +166,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: recording the subagent"
           }
         ]
@@ -196,7 +196,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: joining the subagent to its spawn"
           }
         ]
@@ -207,7 +207,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: recording the subagent's context"
           }
         ]
@@ -219,7 +219,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking approval"
           }
         ]
@@ -253,7 +253,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: noting the request"
           }
         ]
@@ -269,9 +269,9 @@ descriptor only merges those opaque fragments into `.codex/hooks.json`; Magus do
 not inject a codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the
 repository, or merge what `magus describe harness codex` prints.
 
-Each entry names `.codex/magus/tools` with `--tool-rows`. `magus agent harness install`
-writes the spell's tool rows there, and a tool the rows list as touching nothing passes
-before any rule loads. [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard)
+`magus agent harness install` writes the spell's tool rows to `.codex/magus/tools`, beside a
+host file naming codex, where magus finds them by the entry's `--agent-name`. A tool the rows
+list as touching nothing passes before any rule loads. [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard)
 has the rest.
 
 The two `PreToolUse` entries used to carry `__MAGUS_NO_ADVISE=1`, which rendered
@@ -365,7 +365,7 @@ the command glue on a spawn too, which magus judges the way it judges Claude Cod
 `spawn_agent|collaborationspawn_agent|Agent`: a matcher made only of letters, digits
 and underscores is an exact list of tool names, and v2 models call the tool
 `collaborationspawn_agent`, which a bare `spawn_agent` entry never fires on. `Agent` is
-the alias Codex's docs name. No entry declares `--observes-skill-loads`: Codex has
+the alias Codex's docs name. The spell's limits do not say skill loads are seen: Codex has
 no hook on a skill load, so a rule that requires one has nothing to read and stands
 down instead of denying forever.
 
