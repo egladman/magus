@@ -107,6 +107,10 @@ final MINIMUMS: {str: int} = {
     "reference": 82,
     // 49 pages under docs/guides; the lowest, docs/guides/migrating/from-nx.md, grades 92.4.
     "guide": 92,
+    // 43 design pages. The lowest, docs/design/judgment/manual-on-purpose.md, grades
+    // 80.4 on its participles. Measured 2026-10-25. The markdown lint classified
+    // these pages and did not judge them until this floor.
+    "principle": 80,
     // The 6 skills and AGENTS.md files an agent loads; every one grades 100.
     "agent-brief": 100,
     // The 16 shipped skill bodies; every one grades 100.
