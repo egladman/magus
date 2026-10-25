@@ -47,10 +47,10 @@ const advisorySpawnNestedWaiter hint.MarkerKind = "spawn-nested-waiter"
 const sleepPollFloor = 10 * time.Second
 
 var (
-	denySleepPoll = fmt.Sprintf("a sleep before a status read is a poll spread over calls; wait on the event: `%s` for the project lock, `gh run watch` for CI, or your backgrounded command's completion notice.",
-		hint.Status.With("--watch=15s"))
+	denySleepPoll = fmt.Sprintf("a sleep before a status read is a poll spread over calls; background the work as `%s` and wait for its notice, or `gh run watch` for CI.",
+		boundedRun)
 	denySleepPollWhy = "Each call spends a turn and the sleep's tool slot to look once, and the next call looks again. " +
-		"A watch reads continuously and ends with its subject; a backgrounded command is announced when it ends. Both answer when the state changes, where a sleep answers on its own schedule."
+		"A backgrounded run is announced when it ends, and a CI watch ends with its run. Both answer when the state changes, where a sleep answers on its own schedule."
 
 	denySleepTimer    = "a call that only sleeps is a timer; a backgrounded command already announces itself when it ends, so wait for that notice or do other work meanwhile."
 	denySleepTimerWhy = "The work's own backgrounded call is the waiter: its notice arrives with the result, where a timer's says only that time passed. " +

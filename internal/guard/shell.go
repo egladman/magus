@@ -1934,8 +1934,12 @@ var (
 		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched.",
 		hint.Refs.With("<symbol>", "--occurrences"))
 
-	denyBusyWait = fmt.Sprintf("this loop polls for work the host announces when it ends; wait for the task's completion notice, or `%s` for a job. `%s` is for a person watching, not a loop.",
-		hint.JobWait.With("<job>"), hint.Status.With("--watch"))
+	// boundedRun is the one wait an agent has for work it starts: a backgrounded run the
+	// host announces when it ends, which a subagent's stop leaves standing (refuseLeftStop).
+	boundedRun = hint.JobExec.With("--timeout", "<d>", "--", "<command>")
+
+	denyBusyWait = fmt.Sprintf("this loop polls for work the host announces when it ends; background that work as `%s` and wait for its notice, or `%s` for a job.",
+		boundedRun, hint.JobWait.With("<job>"))
 	denyBusyWaitWhy = "Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
 		"A watcher running the same loop is the same poll, and it wakes you again each time it fires or expires."
 
@@ -1943,12 +1947,13 @@ var (
 	// here announces that process's end to the caller, so it is sent to the record magus
 	// keeps of that work instead. Sending it to "your host's monitor" built piles of
 	// watchers, each running this loop.
-	denyBusyWaitForeign    = fmt.Sprintf("this loop waits on work you did not start; wait on its record: `%s` for a job, `%s` for the project lock.", hint.JobWait.With("<job>"), hint.Status.With("--watch=15s"))
+	denyBusyWaitForeign = fmt.Sprintf("this loop waits on work you did not start; wait on its record: `%s` for a job, or background your own call as `%s`.",
+		hint.JobWait.With("<job>"), boundedRun)
 	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on. " +
 		"A watcher running the same loop is the same poll; if nothing else records the work, one watcher, armed once, is the most it earns."
 
-	denyProcessPoll    = fmt.Sprintf("`pgrep`, `pidof` and `ps` poll for what the project lock already records; read it: `%s`.", hint.Status.With("--watch=15s"))
-	denyProcessPollWhy = "Status reads the project lock continuously (holder PID, command, age), where the process table invents an unbounded poll."
+	denyProcessPoll    = fmt.Sprintf("`pgrep`, `pidof` and `ps` poll for what the project lock already records; background your call as `%s` and wait for its notice.", boundedRun)
+	denyProcessPollWhy = "A run backgrounded that way waits out the lock and is announced when it ends, where the process table invents an unbounded poll."
 
 	// Names what the filter cuts, or the reader corrects the spelling instead of the
 	// mistake: the ref two lines under each failure's cause.
