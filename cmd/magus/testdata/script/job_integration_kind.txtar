@@ -58,7 +58,7 @@ stderr 'integrates: branch no-such-branch: '
 # allowed, and editor's hold on pricing.txt is a note, not MGS3032.
 stdin $WORK/integrate.json
 exec magus job fork --stdin
-stderr 'note: the record names no checkpoint, so the branches were compared with this checkout.s revision [0-9a-f]{40}'
+stderr 'note: the record names no checkpoint, so the branches were compared with the revision [0-9a-f]{40} of '
 stdout '^forked integrate, declared, with 2 write path\(s\)'
 stdout 'note: editor \(declared\) holds "pricing.txt", which the merge writes as "pricing.txt": the merge settles it'
 ! stderr 'MGS3032|MGS3036'

@@ -334,9 +334,10 @@ stdout '"permissionDecision":"deny"'
 stdout 'creating the new directory'
 
 # case: path/advise
-# Unflagged, the rule stands down and the new-directory advisory speaks instead.
+# On a host whose limits say no skill load is seen, the rule stands down and the
+# new-directory advisory speaks instead.
 stdin $WORK/arch-new-dir.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name blind
 stdout 'additionalContext'
 stdout 'NEW DIRECTORY'
 
@@ -1743,6 +1744,12 @@ testscript
 testscript
 -- arch-ws/.testscript/magus/tools/limits --
 {"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
+-- arch-ws/.blind/magus/tools/version --
+1
+-- arch-ws/.blind/magus/tools/host --
+blind
+-- arch-ws/.blind/magus/tools/limits --
+{}
 -- notes-ws/.testscript/magus/tools/version --
 1
 -- notes-ws/.testscript/magus/tools/host --
