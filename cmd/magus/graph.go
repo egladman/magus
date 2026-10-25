@@ -201,7 +201,10 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 		interactive.Hint(ctx, "guard index not written: "+err.Error())
 	}
 	if err := m.WriteScriptsIndex(ctx); err != nil {
-		return fmt.Errorf("magus graph build: %w", err)
+		if errors.Is(err, hint.ErrScriptDeclaration) {
+			return fmt.Errorf("magus graph build: %w", err)
+		}
+		interactive.Hint(ctx, "scripts index not written: "+err.Error())
 	}
 	return nil
 }

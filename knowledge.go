@@ -2377,7 +2377,7 @@ func (m *Magus) WriteScriptsIndex(ctx context.Context) error {
 		return fmt.Errorf("scripts index: %w", err)
 	}
 	if declErr != nil {
-		return fmt.Errorf("a script's SERVES declaration does not parse: %w", declErr)
+		return fmt.Errorf("%w: %w", hint.ErrScriptDeclaration, declErr)
 	}
 	return nil
 }

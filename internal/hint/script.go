@@ -239,6 +239,9 @@ func parseScriptSituation(entry string) (scriptSituation, error) {
 	return s, nil
 }
 
+// ErrScriptDeclaration is what a script whose SERVES declaration does not parse reports.
+var ErrScriptDeclaration = errors.New("a script's SERVES declaration does not parse")
+
 // BuildScriptsIndex indexes the top-level declarations of each slash-separated .buzz path
 // under root (EFFECT is optional, a write when absent):
 //
