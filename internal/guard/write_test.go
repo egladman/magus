@@ -1542,3 +1542,34 @@ func TestASoftPathItsHolderWroteIsOwned(t *testing.T) {
 	assert.Equal(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(got))
 	assert.Contains(t, got.Context, "lease holder")
 }
+
+// A write grade hands the hardening only the soft entries covering the written path, so an
+// integration row's hundreds of soft paths cost one entry, not one per path, against its diff.
+func TestHardenCoveringHandsOnlyTheEntriesCoveringThePath(t *testing.T) {
+	var soft []string
+	for i := range 500 {
+		soft = append(soft, fmt.Sprintf("internal/p%d/p_test.go", i))
+	}
+	rows := []types.Job{
+		{ID: "integrate", SoftPaths: append(slices.Clone(soft), "internal/guard/guard_test.go")},
+		{ID: "other", SoftPaths: []string{"internal/guard/*_test.go", "docs/a.md"}},
+		{ID: "quiet", WritePaths: []string{"internal/guard/guard.go"}},
+	}
+	var handed [][]string
+	got := hardenCovering(rows, "internal/guard/guard_test.go", func(narrowed []types.Job) []types.Job {
+		out := slices.Clone(narrowed)
+		for i, row := range narrowed {
+			handed = append(handed, row.SoftPaths)
+			if row.ID == "integrate" {
+				out[i].SoftPaths = nil
+			}
+		}
+		return out
+	})
+	assert.Equal(t, [][]string{{"internal/guard/guard_test.go"}, {"internal/guard/*_test.go"}, nil}, handed)
+	assert.Equal(t, []types.Job{
+		{ID: "integrate", SoftPaths: soft},
+		{ID: "other", SoftPaths: []string{"internal/guard/*_test.go", "docs/a.md"}},
+		{ID: "quiet", WritePaths: []string{"internal/guard/guard.go"}},
+	}, got)
+}
