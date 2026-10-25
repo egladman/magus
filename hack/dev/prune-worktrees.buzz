@@ -41,6 +41,9 @@ import "assert";
 
 import "hack/dev/ls-worktrees" as lsworktrees;
 
+final SUMMARY = "free disk by removing finished worktrees";
+final SERVES = ["rule:worktree-remove -- --go-cache", "event:disk-low -- --go-cache"];
+
 final USAGE = "usage: magus buzz hack/dev/prune-worktrees.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]";
 final HELP = "cost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --go-cache also empties the shared Go build cache\n{USAGE}";
 

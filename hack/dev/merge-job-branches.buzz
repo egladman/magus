@@ -958,6 +958,9 @@ final FIXTURE_MAGUSFILE = `import "magus";
 import "fs";
 import "sort";
 
+final SUMMARY = "merge job branches, settling generated conflicts";
+final SERVES = ["replaces:git merge", "replaces:git cherry-pick"];
+
 magus\project({});
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {

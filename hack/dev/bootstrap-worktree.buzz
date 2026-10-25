@@ -11,6 +11,9 @@ import "vcs";
 
 import "assert";
 
+final SUMMARY = "place ./magus and a lease in a job's worktree";
+final SERVES = ["rule:stale-binary"];
+
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> | --build-from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script compiles magus only under --build-from\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"

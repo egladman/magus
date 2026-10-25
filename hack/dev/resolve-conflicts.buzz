@@ -20,6 +20,9 @@ import "std";
 
 import "assert";
 
+final SUMMARY = "settle a conflicted file";
+final SERVES = ["rule:merge-side-checkout", "rule:conflict-rewrite"];
+
 final USAGE = "usage: magus buzz hack/dev/resolve-conflicts.buzz -- --file <path> [--take <n|all>=ours|theirs|both|base]... [--text <n>=<file>]... [--apply]";
 final HELP = "cost: none; reads and writes one file\n{USAGE}";
 
