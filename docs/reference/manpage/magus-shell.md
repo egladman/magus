@@ -87,7 +87,7 @@ not block every tool call.
 : The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job
 
 **--agent-name** *string*
-: Name of the agent host this invocation came from (attribution only); required with --transport
+: Name of the agent host this invocation came from, required with --transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name
 
 **--call-background**
 : The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
@@ -98,12 +98,6 @@ not block every tool call.
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
 
-**--foreground-default-ms** *int*
-: The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down
-
-**--foreground-max-ms** *int*
-: The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down
-
 **--lease** *string*
 : The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE
 
@@ -113,23 +107,14 @@ not block every tool call.
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 
-**--observes-skill-loads**
-: This hook wiring observes the host loading a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
-
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
 
 **--renders-ask**
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 
-**--resumes-on-background-from** *string*
-: The first host version that resumes a stopped subagent when a background task it left running completes, declared by the wiring; without it a subagent's stop with a background task running is refused
-
 **--session** *string*
 : The host's own session id for this invocation
-
-**--tool-rows** *magus agent harness install*
-: The directory, relative to the workspace root, holding the host's tool rows that magus agent harness install writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged
 
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
