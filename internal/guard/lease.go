@@ -1657,6 +1657,8 @@ var (
 		"stat": true, "wc": true, "pwd": true, "echo": true, "nl": true, "cut": true,
 		"diff": true, "cmp": true, "basename": true, "dirname": true, "realpath": true,
 		"readlink": true, "file": true, "du": true, "tree": true,
+		// `cd <checkout> && magus job exec <job>` is the bind a refusal names.
+		"cd": true,
 	}
 )
 

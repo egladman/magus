@@ -3236,3 +3236,22 @@ func TestWorkerRegenerateWaitsOnlyForAHolderOfTheSameCopy(t *testing.T) {
 		})
 	}
 }
+
+// The ended-binding refusal names `magus job exec`, so every spelling of that bind runs:
+// from inside the checkout after a `cd`, or with `--root`. A `cd` chained onto work is still
+// work.
+func TestTheEndedBindingRefusalLetsItsOwnFixRun(t *testing.T) {
+	t.Parallel()
+	ended := leaseStanding{endedBinding: "w"}
+	for command, refused := range map[string]bool{
+		"./magus job exec w":                                 false,
+		"cd /repos/w && ./magus job exec w":                  false,
+		"cd /repos/w; ./magus query output grd1":             false,
+		"./magus --root /repos/w job exec w":                 false,
+		"cd /repos/w && go test ./...":                       true,
+		"cd /repos/w && ./magus run go-test .":               true,
+		"cd /repos/w && ./magus job exec w > /tmp/bound.txt": true,
+	} {
+		assert.Equal(t, refused, denyUndeclaredLease(ended, "", command).refused(), "%q", command)
+	}
+}
