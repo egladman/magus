@@ -17,6 +17,12 @@ import (
 // apply, or no opinion. stop names what kept magus from claiming rel. rows are every job,
 // and dead the live ones holding rel whose holder [deadHolder] judged dead.
 func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, checkout string, me types.Job, rows []types.Job, dead []job.DeadHolder, rel string) (g writeGrade, stop string) {
+	// Observing the claim facts diffs the whole checkout against the checkpoint. An
+	// integration row's diff is every merged branch, which took the write judgment past
+	// its deadline on each write, and no edge from a merge's diff proves a claim.
+	if me.Integrating() {
+		return writeGrade{}, fmt.Sprintf("%s integrates %d branches, so a diff since its checkpoint proves no claim", me.ID, len(me.Integrates))
+	}
 	var projects []*types.Project
 	if repo, err := deps.inspect(ctx, checkout); err == nil && repo != nil {
 		projects = repo.All()

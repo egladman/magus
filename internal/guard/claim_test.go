@@ -52,6 +52,18 @@ func claimLease(id string, paths ...string) types.Job {
 	}
 }
 
+// A write outside an integration row's paths is refused with no claim observed: reading the
+// row's diff since its checkpoint took the whole judgment past its deadline.
+func TestAnIntegrationRowObservesNoClaimFacts(t *testing.T) {
+	row := claimLease("integration", "run.go")
+	row.Integrates = []string{"job-a", "job-b"}
+
+	g, stop := gradeClaimOutside(t.Context(), Dependencies{}, location{}, t.TempDir(), row, []types.Job{row}, nil, "other.go")
+
+	assert.Equal(t, writeGrade{}, g)
+	assert.Equal(t, "integration integrates 2 branches, so a diff since its checkpoint proves no claim", stop)
+}
+
 func TestGradeClaimedDeclarations(t *testing.T) {
 	ctx, root := claimFixture(t, claimLease("own-file", "other.go", "run.go"))
 	run := filepath.Join(root, "run.go")
