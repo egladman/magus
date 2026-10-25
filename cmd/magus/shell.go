@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
@@ -217,21 +218,24 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Window:     window,
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
-		// Declared by the wiring, because only a host whose skill loads magus observes can
-		// honestly say so. See guard.denySpawnWithoutBrief.
-		ObservesSkillLoads: sf.ObservesSkillLoads,
-		Tools:              shellToolRows(sf.ToolRows),
-		// Declared by the wiring for the same reason: only a glue that renders the host's
-		// approval prompt can say so, and one that predates ask renders it as an allow.
+		// Declared by the wiring, because only a glue that renders the host's approval
+		// prompt can say so, and one that predates ask renders it as an allow.
 		RendersAsk: sf.RendersAsk,
-		// The call's own word on how the host runs it, and the host's foreground limits
-		// as the wiring declares them; a flag left out leaves the rules that read it silent.
-		CallBackground:        sf.CallBackground,
-		CallTimeout:           time.Duration(sf.CallTimeoutMs) * time.Millisecond,
-		HostForegroundDefault: time.Duration(sf.ForegroundDefaultMs) * time.Millisecond,
-		HostForegroundMax:     time.Duration(sf.ForegroundMaxMs) * time.Millisecond,
-		// The first host version that resumes a stopped subagent, as the stop entries declare it.
-		HostResumesOnBackgroundFrom: sf.ResumesOnBackgroundFrom,
+		// The call's own word on how the host runs it.
+		CallBackground: sf.CallBackground,
+		CallTimeout:    time.Duration(sf.CallTimeoutMs) * time.Millisecond,
+	}
+	if err := applyHostFacts(ctx, &req); err != nil {
+		verdict := types.GuardJudgment{
+			SchemaVersion: agent.GuardSchemaVersion,
+			Decision:      "deny",
+			Reason: types.FormatDiagnostic(types.HookHostUnnamed,
+				fmt.Sprintf("this hook names host %q, which no harness spell answers to (%s): merge what `magus describe harness` prints into the host's hook configuration.", req.Host, err.Error())),
+		}
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		return verdictExit(errOut, opts, verdict)
 	}
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
@@ -472,14 +476,29 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 	}
 }
 
-// shellToolRows reads the tool rows directory the wiring names, relative to the guard's
-// workspace, or to the cwd outside one, where no workspace rule applies anyway.
-func shellToolRows(dir string) agent.ToolRows {
+// applyHostFacts fills req with what the named host's harness spell declares, so the glue
+// names only the host and no wiring can claim a fact its host lacks. A host no harness
+// spell answers to is an error. Tool rows outside a workspace read from the cwd.
+func applyHostFacts(ctx context.Context, req *guard.Request) error {
+	if strings.TrimSpace(req.Host) == "" {
+		return nil
+	}
 	root, err := guardRoot("")
 	if err != nil {
 		root = ""
 	}
-	return agent.ReadToolRows(root, dir)
+	d, _, err := agent.LoadHarness(ctx, cmp.Or(root, "."), req.Host)
+	if err != nil {
+		return err
+	}
+	req.ObservesSkillLoads = d.Limits.ObservesSkillLoads
+	if d.Tools != nil {
+		req.Tools = agent.ReadToolRows(root, d.Tools.Dir)
+	}
+	req.HostForegroundDefault = time.Duration(d.Limits.ForegroundDefaultMs) * time.Millisecond
+	req.HostForegroundMax = time.Duration(d.Limits.ForegroundMaxMs) * time.Millisecond
+	req.HostResumesOnBackgroundFrom = d.Limits.ResumesOnBackgroundFrom
+	return nil
 }
 
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,

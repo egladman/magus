@@ -223,11 +223,15 @@ type Setting struct {
 //
 // ResumesOnBackgroundFrom is the first host version, dotted such as 2.1.299, that resumes a
 // stopped subagent when a background task it left running completes; "" when none does.
+//
+// ObservesSkillLoads is true when the host's hook wiring sees it load a skill, so a rule
+// may require one before an act; without it those rules stand down.
 type Limits struct {
 	ForegroundDefaultMs     int64  `json:"foreground_default_ms,omitempty"`
 	ForegroundMaxMs         int64  `json:"foreground_max_ms,omitempty"`
 	HookTimeoutMs           int64  `json:"hook_timeout_ms,omitempty"`
 	ResumesOnBackgroundFrom string `json:"resumes_on_background_from,omitempty"`
+	ObservesSkillLoads      bool   `json:"observes_skill_loads,omitempty"`
 }
 
 // ShippedAgent is one subagent magus ships, as mgs_renderAgents receives it. Model is the

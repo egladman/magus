@@ -5216,5 +5216,6 @@ func ObjectLimits(v types.Limits) vm.Value {
 	out.MapSet("foregroundMaxMs", vm.IntValue(int64(v.ForegroundMaxMs)))
 	out.MapSet("hookTimeoutMs", vm.IntValue(int64(v.HookTimeoutMs)))
 	out.MapSet("resumesOnBackgroundFrom", vm.StrValue(v.ResumesOnBackgroundFrom))
+	out.MapSet("observesSkillLoads", vm.BoolValue(v.ObservesSkillLoads))
 	return out
 }

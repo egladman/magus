@@ -35,8 +35,8 @@
 //
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
-// attribution recorded on the activity event, never an input to the verdict. So does
-// `-- --observes-skill-loads`, the one capability an entry here may declare.
+// attribution recorded on the activity event, never an input to the verdict. magus reads
+// whether the host's wiring sees a skill load from that host's harness spell.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -140,42 +140,21 @@ fun warn(message: str) > void {
 // The host this entry is wired into; see AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
-// a config that also matches its host's skill tool says so, and a rule that wants a skill
-// read before a write can then hold the write.
-final SUPPORTED_FLAGS = ["--observes-skill-loads"];
-
-// EntryArgs is what this script's argv says: the host, and the supported flags it named.
-object EntryArgs {
-    agentName: str,
-    flags: [str],
-}
-
-// readEntryArgs reads the host and the supported flags off this script's argv, and reports
-// every other argument. An empty host is not defaulted: `magus shell` refuses installed
-// glue that names no host (MGS3024).
-//
-// An argument that arrives here means the wiring meant something by it, and reading none
-// at all accepted that in silence. Reported and then ignored, which is the same policy
-// every other arm of this file takes: a misconfigured entry must not block work, and must
-// not be invisible either.
-fun readEntryArgs(args: [str]) > EntryArgs {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
-    if (parsed == null) { return EntryArgs{ agentName = "", flags = [<str>] }; }
+// readAgentName reads the host off this script's argv, and reports every other argument.
+// An empty host is not defaulted: `magus shell` refuses installed glue that names no host
+// (MGS3024). A misconfigured entry must not block work, and must not be invisible either.
+fun readAgentName(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this hook accepts {AGENT_NAME_FLAG} and {SUPPORTED_FLAGS.join(", ")}. "
+        warn("unsupported argument \"{word}\"; this hook takes only {AGENT_NAME_FLAG} <host>. "
             + "Fix the hook command in your host config.");
     }
-    final named = mut [<str>];
-    foreach (name in SUPPORTED_FLAGS) {
-        if (parsed!.values[name] != null) { named.append(name); }
-    }
-    return EntryArgs{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", flags = named };
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    final entry = readEntryArgs(args);
-    final agentName = entry.agentName;
+    final agentName = readAgentName(args);
     // Empty unless the host names a field: the whole event goes, content included.
     final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
@@ -240,11 +219,7 @@ fun main(args: [str]) > void {
     // script made before it existed.
     //
     // Only that refusal is asked again: see rejectedFlag.
-    //
-    // The entry's own flags ride the attributed call only, as in magus-command.buzz: a
-    // binary too old for one cannot report a skill load either.
     final attributed = mut [<str>];
-    foreach (flag in entry.flags) { attributed.append(flag); }
     foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
         attributed.append(word);
     }
