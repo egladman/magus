@@ -144,6 +144,28 @@ func TestGuardIndexFreshness(t *testing.T) {
 	})
 }
 
+// An index built from a graph with no symbol cannot answer `magus refs`, and says so from
+// its header alone.
+func TestGuardIndexSaysWhetherItHoldsSymbols(t *testing.T) {
+	root, cacheDir, g := guardFixture(t)
+	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, GuardCheckout{}))
+	has, err := GuardIndexHasSymbols(cacheDir, root)
+	require.NoError(t, err)
+	assert.True(t, has)
+
+	bareDir := t.TempDir()
+	require.NoError(t, WriteGuardIndex(bareDir, root, NewGraph(), true, GuardCheckout{}))
+	has, err = GuardIndexHasSymbols(bareDir, root)
+	require.NoError(t, err)
+	assert.False(t, has)
+	x, err := ReadGuardIndex(bareDir, root)
+	require.NoError(t, err)
+	assert.False(t, x.HasSymbols())
+
+	_, err = GuardIndexHasSymbols(t.TempDir(), root)
+	assert.Error(t, err, "no index yet")
+}
+
 func TestGuardIndexRefusesAnotherRoot(t *testing.T) {
 	root, cacheDir, g := guardFixture(t)
 	_, err := ReadGuardIndex(cacheDir, root)

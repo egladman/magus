@@ -620,11 +620,15 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 // TestSymbolSearchOnAStaleIndex pins the rows the index state decides: a name the stale
 // index holds and a declaration it has not reached yet are refused with the rebuild served
 // first; a bare CamelCase word it does not hold is as often a string, and runs; with no
-// index at all the search runs, advised.
+// index at all, or one built with no symbols, the search runs, advised.
 func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 	root := recordedSearchTree(t)
 	cacheDir := t.TempDir()
-	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{}))
+	withSymbols := knowledge.NewGraph()
+	withSymbols.AddNode(types.KnowledgeNode{ID: "symbol:go pkg/CheckStatus().", Kind: types.KindSymbol, Label: "CheckStatus", Source: "pkg/a.go:2"})
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, withSymbols, true, knowledge.GuardCheckout{}))
+	bareDir := t.TempDir()
+	require.NoError(t, knowledge.WriteGuardIndex(bareDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{}))
 	held := map[string]bool{"CheckStatus": true}
 	stale := Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return held[name], false },
@@ -635,6 +639,8 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 	}
 	cold := stale
 	cold.CacheDir = func(string) (string, error) { return t.TempDir(), nil }
+	noSymbols := stale
+	noSymbols.CacheDir = func(string) (string, error) { return bareDir, nil }
 
 	for _, tt := range []struct {
 		command string
@@ -647,6 +653,7 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 		{`grep -rn 'workspaceOutputGlobs(' cmd/magus`, stale, "workspaceOutputGlobs", false},
 		{`grep -rn 'SubagentStop' internal`, stale, "", false},
 		{`grep -rn 'func settleTarget' cmd/magus`, cold, "", true},
+		{`grep -rn 'func settleTarget' cmd/magus`, noSymbols, "", true},
 	} {
 		v := Evaluate(strict(tt.deps), tt.command)
 		if tt.arg == "" {

@@ -1260,8 +1260,9 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 	return js
 }
 
-// symbolIndexBuilt reports whether `magus graph build` has written a symbol index for this
-// workspace at all, current or not.
+// symbolIndexBuilt reports whether `magus graph build` has written an index holding symbols
+// for this workspace, current or not. An index built with none cannot answer `magus refs`,
+// so a search stays text there.
 func symbolIndexBuilt(deps Dependencies) bool {
 	if deps.scope.root == "" {
 		return false
@@ -1274,8 +1275,8 @@ func symbolIndexBuilt(deps Dependencies) bool {
 	if err != nil {
 		return false
 	}
-	_, err = knowledge.ReadGuardIndexCheckout(cacheDir, root)
-	return err == nil
+	has, err := knowledge.GuardIndexHasSymbols(cacheDir, root)
+	return err == nil && has
 }
 
 // symbolIndexCause is why the symbol index cannot vouch for every site, as a clause
