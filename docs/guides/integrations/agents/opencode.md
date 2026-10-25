@@ -501,14 +501,7 @@ export const MagusGuard: Plugin = async (ctx) => {
 
   // --renders-ask: apply never lets an ask through unasked (it passes one to OpenCode's own
   // prompt or throws), so this plugin may receive one. Without it magus answers with a deny.
-  const shellArgs = [
-    "shell",
-    "--agent-name",
-    "opencode",
-    "--renders-ask",
-    "-o",
-    "json",
-  ];
+  const shellArgs = ["shell", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
 
   // A session's parent, null for a root. Filled by session.created, which fires before the
   // session's first call; a session first met any other way is asked of the SDK once, and
@@ -679,15 +672,7 @@ export const MagusGuard: Plugin = async (ctx) => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        const args = [
-          "shell",
-          "--path",
-          "--agent-name",
-          "opencode",
-          "--renders-ask",
-          "-o",
-          "json",
-        ];
+        const args = ["shell", "--path", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
         remember(input.callID, apply(await judge(inThread(args, who), path), false));
         return;
       }

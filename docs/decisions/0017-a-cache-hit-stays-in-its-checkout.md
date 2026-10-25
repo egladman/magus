@@ -87,29 +87,29 @@ unscoped one, using the same condition as the MGS2014 guard deny.
 
 ### State
 
-| Item                                                                                  | State                                      |
-| ------------------------------------------------------------------------------------- | ------------------------------------------ |
-| A hit writes a new attempt marked cached (`OutputDescriptor.Cached`)                  | done                                       |
-| `StepRef` and `AdoptImported` deleted                                                 | done                                       |
-| `Manifest.Checkout` records the producer root                                         | done                                       |
-| MGS8005 notice and error text, reports without failing the run                        | done                                       |
-| `readRef` logs the cross-checkout read at notice level, pinned in `checkouts_test.go` | done                                       |
-| MGS2014 guard deny for a direct `custom-gcl` run with an unscoped cache               | done                                       |
-| MGS2014 `magus doctor` finding                                                        | done                                       |
-| Per-checkout sandbox env scoping for tool result caches                               | decided; not checked in this record's tree |
-| `install-linter` clears the lint cache on rebuild                                     | decided; not checked in this record's tree |
+| Item                                                                                  | State                                                |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| A hit writes a new attempt marked cached (`OutputDescriptor.Cached`)                  | done                                                 |
+| `StepRef` and `AdoptImported` deleted                                                 | done                                                 |
+| `Manifest.Checkout` records the producer root                                         | done                                                 |
+| MGS8005 notice and error text, reports without failing the run                        | done                                                 |
+| `readRef` logs the cross-checkout read at notice level, pinned in `checkouts_test.go` | done                                                 |
+| MGS2014 guard deny for a direct `custom-gcl` run with an unscoped cache               | done                                                 |
+| MGS2014 `magus doctor` finding                                                        | done                                                 |
+| Per-checkout sandbox env scoping for tool result caches                               | planned (decided; not checked in this record's tree) |
+| `install-linter` clears the lint cache on rebuild                                     | planned (decided; not checked in this record's tree) |
 
 ### Doctrine checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. A replay from another
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. A replay from another
   checkout is never silent: a notice names the producer, and an error names the paths it
   cannot reach.
-- [Built for the expensive era](../doctrine.md#built-for-the-expensive-era): relied on. A
+- [Built for the expensive era](../design/principles/built-for-the-expensive-era.md): relied on. A
   cheaper model that replays a log gets the checkout and the path count in the line it
   reads, not a judgment it must make.
-- [Automation you can interrogate](../doctrine.md#automation-you-can-interrogate): relied
+- [Automation you can interrogate](../design/judgment/automation-you-can-interrogate.md): relied
   on. `Manifest.Checkout` records where a hit came from, so a reader can check it.
-- [A record of refusals](../doctrine.md#a-record-of-refusals): relied on. The MGS2014 deny
+- [A record of refusals](../design/refusals.md): relied on. The MGS2014 deny
   follows [ADR 0013](0013-the-guard-denies.md): it names its remedy, a scoped cache.
 
 ## Alternatives

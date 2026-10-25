@@ -341,9 +341,6 @@ object Scope {
     agent: str,
     session: str,
     transcript: str,
-    observesSkillLoads: bool,
-    // toolRows is the tool rows directory the entry declares, "" for none.
-    toolRows: str,
 }
 
 fun firstField(node: any?, keys: [str]) > str {
@@ -378,20 +375,16 @@ fun warn(message: str) > void {
 // Entry is what the hook entry's argv declares: the host name, "" when it names none.
 object Entry {
     agent: str,
-    observesSkillLoads: bool,
-    toolRows: str,
 }
 
 fun readArgs(args: [str]) > Entry {
-    final parsed = flags\parse(args, switches: [OBSERVES_SKILL_LOADS], valued: [AGENT_NAME, TOOL_ROWS]) catch null;
-    if (parsed == null) { return Entry{ agent = "", observesSkillLoads = false, toolRows = "" }; }
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME]) catch null;
+    if (parsed == null) { return Entry{ agent = "" }; }
     foreach (word in parsed!.unknown) {
         warn("unsupported argument {word}; this call was judged WITHOUT it");
     }
     return Entry{
         agent = parsed!.values[AGENT_NAME] ?? "",
-        observesSkillLoads = parsed!.values[OBSERVES_SKILL_LOADS] != null,
-        toolRows = parsed!.values[TOOL_ROWS] ?? "",
     };
 }
 
@@ -631,11 +624,6 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
     final extra = mut [<str>];
     if (asPath) { extra.append("--path"); }
     if (ask) { extra.append("--renders-ask"); }
-    if (scope.observesSkillLoads) { extra.append(OBSERVES_SKILL_LOADS); }
-    if (scope.toolRows != "") {
-        extra.append(TOOL_ROWS);
-        extra.append(scope.toolRows);
-    }
     foreach (word in ["-o", "json", AGENT_NAME, scope.agent, "--transport", "buzz", "--session", scope.session, "--transcript", scope.transcript]) {
         extra.append(word);
     }
@@ -1037,8 +1025,6 @@ fun main(args: [str]) > void {
         agent = entry.agent,
         session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
-        observesSkillLoads = entry.observesSkillLoads,
-        toolRows = entry.toolRows,
     };
     io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
 }
