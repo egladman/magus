@@ -3761,6 +3761,12 @@ func decodeLimits(v vm.Value, path string) (types.Limits, error) {
 				return out, err
 			}
 			out.ResumesOnBackgroundFrom = sResumesOnBackgroundFrom
+		case "observesSkillLoads":
+			bObservesSkillLoads, err := decodeBool(item, path+".observesSkillLoads")
+			if err != nil {
+				return out, err
+			}
+			out.ObservesSkillLoads = bObservesSkillLoads
 		default:
 			return out, unknownMember(path, "Limits", key)
 		}
