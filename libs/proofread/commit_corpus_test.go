@@ -2,6 +2,7 @@ package proofread
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,7 @@ func TestCommitRulesHoldTheForgeShapeThisRepositoryLands(t *testing.T) {
 
 	n := 0
 	var suffix, bullets []string
+	counts := map[commitShape]int{}
 
 	for _, raw := range bytes.Split(out, []byte{0}) {
 		text := strings.TrimLeft(string(raw), "\n")
@@ -46,6 +48,10 @@ func TestCommitRulesHoldTheForgeShapeThisRepositoryLands(t *testing.T) {
 				bullets = append(bullets, f.Match)
 			}
 		}
+
+		for _, s := range commitShapes(text) {
+			counts[s]++
+		}
 	}
 
 	// 1765 is the corpus measured on 2026-10-25. A shallow clone is smaller and
@@ -61,6 +67,25 @@ func TestCommitRulesHoldTheForgeShapeThisRepositoryLands(t *testing.T) {
 	if len(bullets) > 0 {
 		t.Fatalf("%d squash-list lines are flagged as a prose body; the first is %q", len(bullets), bullets[0])
 	}
+
+	var unnamed []string
+	for _, s := range shapesClearing(counts) {
+		if namedCommitShapes[s.commitShape] == "" {
+			unnamed = append(unnamed, fmt.Sprintf("%s %s holds %d of %d hits (%.2f)", s.Rule, s.Shape, s.Count, s.Hits, s.Share))
+		}
+	}
+	if len(unnamed) > 0 {
+		t.Fatalf("a shape is one population and unnamed:\n%s\nName it in namedCommitShapes with the reason, or change the rule.", strings.Join(unnamed, "\n"))
+	}
+}
+
+// namedCommitShapes are the populations this repository has already decided.
+// A shape the gate clears that is absent here fails the corpus test. The
+// forge trailer and the squash list are named from the 2026-10-25 measurement
+// even while each is under the gate, so crossing it later is not a new decision.
+var namedCommitShapes = map[commitShape]string{
+	{Rule: RuleSubjectPunct, Shape: shapeForgeTrailer}: "a trailing (#123) is the forge's, and subject-punct leaves it out",
+	{Rule: RuleNoBody, Shape: shapeSquashList}:         "a * list is the squash merge, and no-body leaves it out",
 }
 
 // repositoryRoot is the magus checkout that holds this module. The corpus is
