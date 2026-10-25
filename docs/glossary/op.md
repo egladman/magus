@@ -27,9 +27,9 @@ In the docs:
 - [Disambiguating "op" and "target"](../concepts/operations.md#disambiguating-op-and-target)
 - [Secrets in a spell op](../concepts/secrets.md#secrets-in-a-spell-op)
 - [A spell exports fun op(target: Target, req: Req) > Resp](../decisions/0011-typed-provider-calls.md#a-spell-exports-fun-optarget-target-req-req--resp)
+- [Only a comparison op can be accepted](../decisions/0017-a-change-accepts-the-findings-it-causes.md#only-a-comparison-op-can-be-accepted)
 - [Then a second op wanted the same grant](../recommendations.md#then-a-second-op-wanted-the-same-grant)
 - [MGS1102: this review provider does not implement that op](../reference/codes/capability/MGS1102.md#mgs1102-this-review-provider-does-not-implement-that-op)
-- [MGS1033: a cacheable target composes an op that reaches outside the tree](../reference/codes/magusfile/MGS1033.md#mgs1033-a-cacheable-target-composes-an-op-that-reaches-outside-the-tree)
 
 In the code (`magus refs <name>` lists every site):
 

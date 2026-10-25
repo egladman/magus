@@ -34,6 +34,7 @@ In the docs:
 
 - [Anti-pattern: a shared manifest as an input](../concepts/cache.md#anti-pattern-a-shared-manifest-as-an-input)
 - [podman-manifest](../concepts/spells/podman.md#podman-manifest)
+- [The manifest records the producing checkout](../decisions/0017-a-cache-hit-stays-in-its-checkout.md#the-manifest-records-the-producing-checkout)
 - [MGS1049: a target runs a manifest-defined script](../reference/codes/magusfile/MGS1049.md#mgs1049-a-target-runs-a-manifest-defined-script)
 
 In the code (`magus refs <name>` lists every site):
