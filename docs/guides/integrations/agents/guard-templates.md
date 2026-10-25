@@ -57,8 +57,8 @@ your host config points at, and fails when it is stale or missing.
 
 One template per guard input: `magus-command.buzz` for shell commands and MCP calls,
 `magus-path.buzz` for file writes. A hook command is a plain argv (the host
-splits it and runs `magus buzz` itself), so what varies PER ENTRY rides on that
-argv, after `--`:
+splits it and runs `magus buzz` itself), so the host's name rides on that argv, after
+`--`, and is the one argument an entry takes:
 
 - `--agent-name <host>`, on every command. The template reads the host from there
   and nowhere else: not from the event's shape, not from the environment, never by
@@ -66,14 +66,11 @@ argv, after `--`:
   harness spell's own name. A template given none refuses the call
   ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answer in a
   guessed host's dialect, because a reply shaped for the wrong host can let a call
-  through.
-- `magus shell` flags an entry declares about itself, such as
-  `-- --agent-name claude-code --observes-skill-loads`. The template parses them
-  against the flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is
-  named on stderr and left out, and the call is judged anyway; your host shows that
-  line as a hook error. Nothing is dropped quietly: a guard running with flags nobody
-  chose is the failure this shape exists to avoid, and so is a guard that refuses to
-  answer because an entry was typed wrong.
+  through. magus reads every other fact about the host from its harness spell, as
+  install wrote them beside the host's tool rows. Any other argument is named on stderr and
+  left out, and the call is judged anyway; your host shows that line as a hook error.
+  Nothing is dropped quietly, and a guard does not refuse to answer because an entry was
+  typed wrong.
 
 Whether to forward the whole event is worked out from the event, not set on the
 entry: `magus-command.buzz` selects one field only when the tool is not in the
@@ -141,36 +138,22 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // A hook command is an ARGV, not a shell line: the host splits it and runs the
 // program itself, so a `NAME=value` prefix only means anything where something
 // re-joins and re-parses the string. So this file is wired as a plain
-// `<interpreter> buzz -s <this file> [-- flags]` and takes the two knobs that vary
-// PER ENTRY from what it already has: the event decides whether to forward the whole
-// envelope, and the argv after `--` carries the `magus shell` flags this wiring
-// declares about itself. Everything else is still an environment variable, because
-// it is a property of the HOST rather than of one entry, and a host sets it once.
+// `<interpreter> buzz -s <this file> -- --agent-name <host>` and takes one argument:
 //
 //   -- --agent-name <host>  REQUIRED: the host this entry is wired into, the harness
 //                    spell's own name, which the configuration `magus describe
 //                    harness` prints puts on every command. It is the ONLY place this file
 //                    learns the host: never the event's shape, never the environment,
 //                    never a default. Without it `magus shell` refuses the call
-//                    (MGS3024), so a hand-written config that omits it fails loudly
-//   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
-//                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
-//                    that also matches its host's skill tool passes
-//                    `-- --observes-skill-loads`, and rules that require a skill load
-//                    stand down where it is absent. An argument this file does not know
-//                    is REPORTED on stderr and left out, and the call is judged anyway:
-//                    a misconfigured entry must not block work, and must not be silent
-//   -- --foreground-default-ms <ms> --foreground-max-ms <ms>  the host's foreground
-//                    limits for a shell command, declared by the harness spell on the
-//                    entry that judges one. With them, and the call's own
-//                    run_in_background and timeout read off the event, magus refuses a
-//                    leased worker's backgrounded magus run and advises a timeout that
-//                    covers it; without them that advice stands down
-//   -- --resumes-on-background-from <version>  the first host version that resumes a
-//                    stopped subagent when a background task it left running completes,
-//                    declared by the harness spell on the stop entries. At or past it a
-//                    subagent's stop with a task still running stands; without it the
-//                    stop is refused
+//                    (MGS3024), so a hand-written config that omits it fails loudly.
+//                    magus reads every other fact about the host from that spell: its
+//                    tool rows, its foreground limits, the release that resumes a stopped
+//                    subagent, and whether its wiring sees a skill load. Any other
+//                    argument is REPORTED on stderr and left out, and the call is judged
+//                    anyway: a misconfigured entry must not block work, and must not be
+//                    silent
+//
+// Everything else is an environment variable, a property of the HOST that it sets once.
 //
 // Override any of the variables below:
 //
@@ -337,36 +320,9 @@ final SHELL_METACHARACTERS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\\",
 // the interpolation a lone brace would open.
 final ENVELOPE_PREFIX = "\{";
 
-// Every `magus shell` flag an entry may declare on this script's argv, by exact spelling.
-//
-// A list rather than a rule, because this file has to be able to say "I do not know that
-// one". Capabilities only: a flag here states something about the WIRING that the event
-// cannot state for itself, which today is one thing, whether the config also matches its
-// host's skill tool. Policy stays in the workspace's own rules, where a reader can see it
-// and magus can change it without every installed config being edited.
-final SUPPORTED_FLAGS = ["--observes-skill-loads"];
-
-// The valued flags an entry may declare: the host's foreground limits in milliseconds, the
-// timeout a shell command that names none gets and the longest one it may name. They are
-// facts about the HOST that its event never states, and the harness spell declares them
-// once. Forwarded with the call facts below, never with the attribution, so a binary too
-// old for them drops them and keeps the rest.
-final FOREGROUND_FLAGS = ["--foreground-default-ms", "--foreground-max-ms"];
-
-// The host this entry is wired into. Valued, and read by this file rather than forwarded
-// as one of SUPPORTED_FLAGS, because the file needs it too: it picks the ask arm.
+// The host this entry is wired into, the one argument it takes. The file needs it too: it
+// picks the ask arm. magus reads every other fact about the host from its harness spell.
 final AGENT_NAME_FLAG = "--agent-name";
-
-// The workspace-relative directory holding the host's tool rows, which the harness spell
-// declares and `magus agent harness install` writes. Forwarded on every call, with the call
-// facts, so a binary too old for it drops it and keeps the rest.
-final TOOL_ROWS_FLAG = "--tool-rows";
-
-// The first host version that resumes a stopped subagent when a background task it left
-// running completes, which the harness spell declares on the stop entries. Forwarded on a
-// stop only, with the call facts, so a binary too old for it drops it and keeps the rest.
-final RESUME_FLAG = "--resumes-on-background-from";
-
 
 // findUp returns the nearest ancestor of start holding relative, or "" when there is none.
 fun findUp(relative: str, start: str) > str {
@@ -437,88 +393,6 @@ fun codexPromptBlocker(event: any?, rule: str?) > str {
     return codexRuleMissing(event, rule: rule!);
 }
 
-// shellFlags parses this script's own argv: the `magus shell` flags the entry that wired
-// it declares about itself, already split into words by the host that ran the command.
-//
-// Parsed against SUPPORTED_FLAGS, never filtered by shape. The three answers are: a flag
-// this file knows, which is used; anything else, which is REPORTED on stderr and left out;
-// and no argv at all, which is the ordinary entry. There is no fourth.
-//
-// Reporting is the whole point. Dropping an argument silently leaves a guard judging with
-// flags nobody chose and nothing anywhere saying so, which is the same failure this file
-// was just rewritten to remove. Forwarding an unknown one is no better: `magus shell`
-// rejects it, prints usage, exits non-zero, and the verdict is lost to a usage error.
-// Saying it and carrying on is the arm that matches every other thing that can go wrong
-// here (see the unavailable and could-not-judge notices): the call is not blocked for a
-// misconfiguration, and the misconfiguration is not silent. A host shows a hook's stderr
-// as an error notice, so the person who wrote the entry is the one who reads it.
-// The parse is the flags module's; the POLICY is this file's. It declares what it
-// supports, and decides for itself that an argument it did not declare is reported and
-// dropped rather than refused, because a misconfigured entry must not block work.
-fun shellFlags(args: [str]) > [str] {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
-    if (parsed == null) {
-        // A valued flag with no value after it. Caught because NOTHING here may raise.
-        warn("could not parse this entry's arguments; the call was judged without them");
-        return [<str>];
-    }
-    foreach (word in parsed!.unknown) {
-        // Named in quotes because an empty or whitespace argument otherwise produces
-        // "unsupported argument ;", and this line is the only remedy a misconfigured
-        // reader is offered.
-        warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
-            + "Supported: {SUPPORTED_FLAGS.join(", ")}, {FOREGROUND_FLAGS.join(" <ms>, ")} <ms>, {TOOL_ROWS_FLAG} <dir>, {RESUME_FLAG} <version>. Fix the hook command in your host config.");
-    }
-    final supported = mut [<str>];
-    foreach (name in SUPPORTED_FLAGS) {
-        if (parsed!.values[name] != null) { supported.append(name); }
-    }
-    return supported;
-}
-
-fun valuedFlags() > [str] {
-    final valued = mut [AGENT_NAME_FLAG, TOOL_ROWS_FLAG, RESUME_FLAG];
-    foreach (name in FOREGROUND_FLAGS) { valued.append(name); }
-    return valued;
-}
-
-// toolRowsFlags is the tool rows directory this entry declares, with its flag, and none
-// when the argv names none or does not parse: magus then knows no tool and says so.
-fun toolRowsFlags(args: [str]) > [str] {
-    return valuedFlag(args, name: TOOL_ROWS_FLAG);
-}
-
-// resumeFlags is the resume version this entry declares, with its flag, and none when the
-// argv names none or does not parse: magus then refuses a subagent's stop that leaves a
-// background task running.
-fun resumeFlags(args: [str]) > [str] {
-    return valuedFlag(args, name: RESUME_FLAG);
-}
-
-fun valuedFlag(args: [str], name: str) > [str] {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
-    if (parsed == null) { return [<str>]; }
-    final value = parsed!.values[name];
-    if (value == null) { return [<str>]; }
-    return [name, value!];
-}
-
-// foregroundFlags are the host's foreground limits this entry declares, each flag with its
-// value, and none when the argv does not parse: the rules that read them then stand down.
-fun foregroundFlags(args: [str]) > [str] {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
-    final declared = mut [<str>];
-    if (parsed == null) { return declared; }
-    foreach (name in FOREGROUND_FLAGS) {
-        final value = parsed!.values[name];
-        if (value != null) {
-            declared.append(name);
-            declared.append(value!);
-        }
-    }
-    return declared;
-}
-
 // callFlags is what a shell command's tool input asked of the host: to run it in the
 // background, and how long to wait on it. The whole event carries both too; these say it
 // where HOST_EVENT_PATH forwards the command alone. JSON numbers parse as double.
@@ -539,10 +413,22 @@ fun callFlags(event: any?) > [str] {
 }
 
 // readAgentName is the host this entry names on its argv, or "" when it names none. Empty is
-// not defaulted: `magus shell` refuses installed glue that names no host (MGS3024).
+// not defaulted: `magus shell` refuses installed glue that names no host (MGS3024). Any
+// other argument is REPORTED on stderr and left out, and the call is judged anyway: a
+// misconfigured entry must not block work, and must not be silent. A host shows a hook's
+// stderr as an error notice, so the person who wrote the entry is the one who reads it.
 fun readAgentName(args: [str]) > str {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
-    if (parsed == null) { return ""; }
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) {
+        // A valued flag with no value after it. Caught because NOTHING here may raise.
+        warn("could not parse this entry's arguments; the call was judged without them");
+        return "";
+    }
+    foreach (word in parsed!.unknown) {
+        // Quoted because an empty or whitespace argument otherwise reads as nothing.
+        warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
+            + "This hook takes only {AGENT_NAME_FLAG} <host>. Fix the hook command in your host config.");
+    }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
@@ -559,7 +445,6 @@ fun warn(message: str) > void {
 object Guard {
     bin: str,
     payload: str,
-    flags: [str],
     response: str,
     // The event's cwd. The guard reads its workspace, job store and lease binding from
     // its own working directory, and a host may start hooks in the repository's main
@@ -567,10 +452,8 @@ object Guard {
     dir: str,
 }
 
-// The entry's own flags ride in `extra` with everything else, so the unattributed retry
-// drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
-// failed BOTH attempts and the spawn entry could never recover where the Bash entry did, and a
-// binary too old to accept the flag cannot report a skill load to begin with.
+// Every flag rides in `extra`, so the unattributed retry drops them all: a binary too old
+// for one fails BOTH attempts otherwise.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
@@ -793,7 +676,7 @@ fun main(args: [str]) > void {
     if (!rawEvent) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
-    final guard = Guard{ bin = bin, payload = payload, flags = shellFlags(args), response = response, dir = cwd };
+    final guard = Guard{ bin = bin, payload = payload, response = response, dir = cwd };
 
     // Attribution is BEST EFFORT; the verdict is not.
     //
@@ -808,28 +691,21 @@ fun main(args: [str]) > void {
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
     //
-    // The call facts and the foreground limits are newer than the rest, so a binary that
-    // rejects one is asked again with everything else before it is asked with nothing:
-    // dropping them must not also drop the attribution and the ask.
+    // The call facts are newer than the rest, so a binary that rejects one is asked again
+    // with everything else before it is asked with nothing: dropping them must not also
+    // drop the attribution and the ask.
     //
     // --transport buzz names this glue as the caller. magus keeps a deny's full text and
     // its once-per-session notices per host, transport and session.
     final attributed = mut [<str>];
-    foreach (flag in guard.flags) { attributed.append(flag); }
     foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
         attributed.append(word);
     }
     foreach (flag in capabilities) { attributed.append(flag); }
     final newest = mut [<str>];
-    // Only a shell command the host runs has a background or a timeout to report. The
-    // whole event carries the call's own two as well; the host's limits only argv does.
+    // Only a shell command the host runs has a background or a timeout to report.
     if (shellCall) {
         foreach (word in callFlags(event)) { newest.append(word); }
-        foreach (word in foregroundFlags(args)) { newest.append(word); }
-    }
-    foreach (word in toolRowsFlags(args)) { newest.append(word); }
-    if (eventName == "Stop" or eventName == "SubagentStop") {
-        foreach (word in resumeFlags(args)) { newest.append(word); }
     }
     var result: proc\ExecResult? = null;
     if (newest.len() > 0) {
@@ -912,8 +788,8 @@ wasteful, not destructive.
 //
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
-// attribution recorded on the activity event, never an input to the verdict. So does
-// `-- --observes-skill-loads`, the one capability an entry here may declare.
+// attribution recorded on the activity event, never an input to the verdict. magus reads
+// whether the host's wiring sees a skill load from that host's harness spell.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -1017,42 +893,21 @@ fun warn(message: str) > void {
 // The host this entry is wired into; see AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
-// a config that also matches its host's skill tool says so, and a rule that wants a skill
-// read before a write can then hold the write.
-final SUPPORTED_FLAGS = ["--observes-skill-loads"];
-
-// EntryArgs is what this script's argv says: the host, and the supported flags it named.
-object EntryArgs {
-    agentName: str,
-    flags: [str],
-}
-
-// readEntryArgs reads the host and the supported flags off this script's argv, and reports
-// every other argument. An empty host is not defaulted: `magus shell` refuses installed
-// glue that names no host (MGS3024).
-//
-// An argument that arrives here means the wiring meant something by it, and reading none
-// at all accepted that in silence. Reported and then ignored, which is the same policy
-// every other arm of this file takes: a misconfigured entry must not block work, and must
-// not be invisible either.
-fun readEntryArgs(args: [str]) > EntryArgs {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
-    if (parsed == null) { return EntryArgs{ agentName = "", flags = [<str>] }; }
+// readAgentName reads the host off this script's argv, and reports every other argument.
+// An empty host is not defaulted: `magus shell` refuses installed glue that names no host
+// (MGS3024). A misconfigured entry must not block work, and must not be invisible either.
+fun readAgentName(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this hook accepts {AGENT_NAME_FLAG} and {SUPPORTED_FLAGS.join(", ")}. "
+        warn("unsupported argument \"{word}\"; this hook takes only {AGENT_NAME_FLAG} <host>. "
             + "Fix the hook command in your host config.");
     }
-    final named = mut [<str>];
-    foreach (name in SUPPORTED_FLAGS) {
-        if (parsed!.values[name] != null) { named.append(name); }
-    }
-    return EntryArgs{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", flags = named };
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    final entry = readEntryArgs(args);
-    final agentName = entry.agentName;
+    final agentName = readAgentName(args);
     // Empty unless the host names a field: the whole event goes, content included.
     final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
@@ -1117,11 +972,7 @@ fun main(args: [str]) > void {
     // script made before it existed.
     //
     // Only that refusal is asked again: see rejectedFlag.
-    //
-    // The entry's own flags ride the attributed call only, as in magus-command.buzz: a
-    // binary too old for one cannot report a skill load either.
     final attributed = mut [<str>];
-    foreach (flag in entry.flags) { attributed.append(flag); }
     foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
         attributed.append(word);
     }
@@ -2389,9 +2240,6 @@ import "std";
 import "lib/hook" as hook;
 
 final AGENT_NAME_FLAG = "--agent-name";
-// Cursor carries it on every tool hook. This check judges no call, so it reads nothing
-// from it, and accepting it keeps the unsupported-argument warning for real mistakes.
-final OBSERVES_SKILL_LOADS_FLAG = "--observes-skill-loads";
 
 fun warn(message: str) > void {
     io\stderr.write("magus-buzz-check.buzz: {message}\n") catch void;
@@ -2399,10 +2247,10 @@ fun warn(message: str) > void {
 
 // readAgentName reads the host off this script's argv, "" when the entry names none.
 fun readAgentName(args: [str]) > str {
-    final parsed = flags\parse(args, switches: [OBSERVES_SKILL_LOADS_FLAG], valued: [AGENT_NAME_FLAG]) catch null;
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG} and {OBSERVES_SKILL_LOADS_FLAG}. Fix the hook command in your host config.");
+        warn("unsupported argument \"{word}\"; this hook takes only {AGENT_NAME_FLAG} <host>. Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
