@@ -376,7 +376,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : How many \`magus run\`s one job tree's leased workers may have going at once; a run past it waits for a seat and says whose run holds it. A run with no lease (the root, a person) is never counted. Default 1; 0 = unlimited. Workspace only, like StaleAfter (default: 1). Config file key: **jobs.max_validations**.
 
 **MAGUS_JOBS_MAX_CLAIM_FILES**
-: How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more waives the path. Workspace only, like StaleAfter (default: 50). Config file key: **jobs.max_claim_files**.
+: How many files one glob write path may match before a job record refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep that needs more keeps the path with a deviation. Workspace only, like StaleAfter (default: 50). Config file key: **jobs.max_claim_files**.
 
 **MAGUS_JOBS_MAX_CLAIM_PROJECTS**
 : How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter (default: 1). Config file key: **jobs.max_claim_projects**.

@@ -95,6 +95,7 @@ github.com/egladman/magus.Magus.ComputeTargetKey method(ptr) func(ctx context.Co
 github.com/egladman/magus.Magus.ConcurrencyNudge method(ptr) func() string
 github.com/egladman/magus.Magus.Conformance method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ConformanceOutput, error)
 github.com/egladman/magus.Magus.ConformanceOptions method(ptr) func() (github.com/egladman/magus/types.ConformanceOptions, error)
+github.com/egladman/magus.Magus.Context method(ptr) func(parent context.Context) context.Context
 github.com/egladman/magus.Magus.ContextWithSecrets method(ptr) func(ctx context.Context) context.Context
 github.com/egladman/magus.Magus.CurrentRevision method(ptr) func(ctx context.Context) (name string, revision string, dirty bool)
 github.com/egladman/magus.Magus.Diff method(ptr) func(ctx context.Context, paths []string) (github.com/egladman/magus/types.Diff, error)
@@ -1428,6 +1429,7 @@ github.com/egladman/magus/types.Declaration.Claim field []JobClaimRequest "json:
 github.com/egladman/magus/types.Declaration.Criteria field string "json:\"criteria,omitempty\""
 github.com/egladman/magus/types.Declaration.DenyPaths field []string "json:\"deny_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.Declaration.DependsOn field []string "json:\"depends_on,omitempty\" schema:\"leaseid\""
+github.com/egladman/magus/types.Declaration.Deviations field []Deviation "json:\"deviations,omitempty\""
 github.com/egladman/magus/types.Declaration.Enter field string "json:\"enter,omitempty\""
 github.com/egladman/magus/types.Declaration.FoldLegacyNames method(ptr) func() error
 github.com/egladman/magus/types.Declaration.Follows field string "json:\"follows,omitempty\" schema:\"leaseid\""
@@ -1453,7 +1455,6 @@ github.com/egladman/magus/types.Declaration.Timeout field string "json:\"timeout
 github.com/egladman/magus/types.Declaration.Unmet method func(known []string) []string
 github.com/egladman/magus/types.Declaration.Validate method func() error
 github.com/egladman/magus/types.Declaration.Validation field string "json:\"validation,omitempty\""
-github.com/egladman/magus/types.Declaration.Waivers field []JobWaiver "json:\"waivers,omitempty\""
 github.com/egladman/magus/types.Declaration.Weight field *float64 "json:\"weight,omitempty\""
 github.com/egladman/magus/types.Declaration.WritePaths field []string "json:\"write_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.DeclarationSchema var SchemaLedger
@@ -1492,6 +1493,11 @@ github.com/egladman/magus/types.DependencyWaitFromContext func(ctx context.Conte
 github.com/egladman/magus/types.DescendantBoundaryCrossed const DiagnosticCode = "MGS3001"
 github.com/egladman/magus/types.DescribeGaps func(gaps []KnowledgeSymbolGap) string
 github.com/egladman/magus/types.DescribeStaleIndexes func(stale []KnowledgeStaleIndex) string
+github.com/egladman/magus/types.Deviation type struct
+github.com/egladman/magus/types.Deviation.Code field DiagnosticCode "json:\"code\""
+github.com/egladman/magus/types.Deviation.Permits method func(p JobProblem) bool
+github.com/egladman/magus/types.Deviation.Reason field string "json:\"reason\" schema:\"nonblank\""
+github.com/egladman/magus/types.Deviation.Subject field string "json:\"subject\""
 github.com/egladman/magus/types.Diagnostic type struct
 github.com/egladman/magus/types.Diagnostic.Code field string "json:\"code\" yaml:\"code\""
 github.com/egladman/magus/types.Diagnostic.Message field string "json:\"message\" yaml:\"message\""
@@ -2538,6 +2544,7 @@ github.com/egladman/magus/types.Job.Criteria field string "json:\"criteria,omite
 github.com/egladman/magus/types.Job.Deadline field int64 "json:\"deadline,omitempty\" yaml:\"deadline,omitempty\""
 github.com/egladman/magus/types.Job.DenyPaths field []string "json:\"deny_paths,omitempty\" yaml:\"deny_paths,omitempty\""
 github.com/egladman/magus/types.Job.DependsOn field []string "json:\"depends_on,omitempty\" yaml:\"depends_on,omitempty\""
+github.com/egladman/magus/types.Job.Deviations field []Deviation "json:\"deviations,omitempty\" yaml:\"deviations,omitempty\""
 github.com/egladman/magus/types.Job.EffectiveGoals method func() []Goal
 github.com/egladman/magus/types.Job.EndReason field string "json:\"end_reason,omitempty\" yaml:\"end_reason,omitempty\""
 github.com/egladman/magus/types.Job.EndedWithSession method func() bool
@@ -2585,7 +2592,6 @@ github.com/egladman/magus/types.Job.Updated field int64 "json:\"updated\" yaml:\
 github.com/egladman/magus/types.Job.Validated field int64 "json:\"validated,omitempty\" yaml:\"validated,omitempty\""
 github.com/egladman/magus/types.Job.Validation field string "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
 github.com/egladman/magus/types.Job.WaiterEvidence field *JobIntegration "json:\"waiter_evidence,omitempty\" yaml:\"waiter_evidence,omitempty\""
-github.com/egladman/magus/types.Job.Waivers field []JobWaiver "json:\"waivers,omitempty\" yaml:\"waivers,omitempty\""
 github.com/egladman/magus/types.Job.Weight field float64 "json:\"weight,omitzero\" yaml:\"weight,omitempty\""
 github.com/egladman/magus/types.Job.Widenings field int "json:\"widenings,omitempty\"  yaml:\"widenings,omitempty\""
 github.com/egladman/magus/types.Job.Worktree field *JobWorktree "json:\"worktree,omitempty\" yaml:\"worktree,omitempty\""
@@ -2635,8 +2641,8 @@ github.com/egladman/magus/types.JobDenial.Ts field int64 "json:\"ts\"           
 github.com/egladman/magus/types.JobDenial.VerdictRef field string "json:\"verdict_ref,omitempty\" yaml:\"verdict_ref,omitempty\""
 github.com/egladman/magus/types.JobDescendants func(rows []Job, id string) []Job
 github.com/egladman/magus/types.JobEdit type struct
+github.com/egladman/magus/types.JobEdit.AddDeviation field *Deviation "json:\"add_deviation,omitempty\""
 github.com/egladman/magus/types.JobEdit.AddGoal field *Goal "json:\"add_goal,omitempty\""
-github.com/egladman/magus/types.JobEdit.AddWaiver field *JobWaiver "json:\"add_waiver,omitempty\""
 github.com/egladman/magus/types.JobEdit.AddWritePath field string "json:\"add_write_path,omitempty\""
 github.com/egladman/magus/types.JobEdit.Apply method func(d *Declaration) bool
 github.com/egladman/magus/types.JobEdit.String method func() string
@@ -2752,7 +2758,7 @@ github.com/egladman/magus/types.JobProblemError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.JobProblems type []JobProblem
 github.com/egladman/magus/types.JobProblems.Err method func() error
 github.com/egladman/magus/types.JobProblems.Fixable method func() int
-github.com/egladman/magus/types.JobProblems.Waive method func(ws []JobWaiver) (kept JobProblems, waived JobProblems)
+github.com/egladman/magus/types.JobProblems.Permit method func(ds []Deviation) (kept JobProblems, permitted JobProblems)
 github.com/egladman/magus/types.JobPut type struct
 github.com/egladman/magus/types.JobPut.Breaks field *[]string "json:\"breaks,omitempty\""
 github.com/egladman/magus/types.JobPut.BriefFormat field *BriefFormat "json:\"brief_format,omitempty\""
@@ -2761,6 +2767,7 @@ github.com/egladman/magus/types.JobPut.Checkpoint field *string "json:\"checkpoi
 github.com/egladman/magus/types.JobPut.Criteria field *string "json:\"criteria,omitempty\""
 github.com/egladman/magus/types.JobPut.DenyPaths field *[]string "json:\"deny_paths,omitempty\""
 github.com/egladman/magus/types.JobPut.DependsOn field *[]string "json:\"depends_on,omitempty\""
+github.com/egladman/magus/types.JobPut.Deviations field *[]Deviation "json:\"deviations,omitempty\""
 github.com/egladman/magus/types.JobPut.Enter field *string "json:\"enter,omitempty\""
 github.com/egladman/magus/types.JobPut.Follows field *string "json:\"follows,omitempty\""
 github.com/egladman/magus/types.JobPut.FreshReason field *string "json:\"fresh_reason,omitempty\""
@@ -2773,7 +2780,6 @@ github.com/egladman/magus/types.JobPut.ReadOnly field *bool "json:\"read_only,om
 github.com/egladman/magus/types.JobPut.ReadPaths field *[]string "json:\"read_paths,omitempty\""
 github.com/egladman/magus/types.JobPut.State field *JobState "json:\"state,omitempty\""
 github.com/egladman/magus/types.JobPut.Timeout field *string "json:\"timeout,omitempty\""
-github.com/egladman/magus/types.JobPut.Waivers field *[]JobWaiver "json:\"waivers,omitempty\""
 github.com/egladman/magus/types.JobPut.Weight field *float64 "json:\"weight,omitempty\""
 github.com/egladman/magus/types.JobPut.WritePaths field *[]string "json:\"write_paths,omitempty\""
 github.com/egladman/magus/types.JobReadOnly type struct
@@ -2856,15 +2862,10 @@ github.com/egladman/magus/types.JobUngraded const DiagnosticCode = "MGS3039"
 github.com/egladman/magus/types.JobValidation type struct
 github.com/egladman/magus/types.JobValidation.Err method func() error
 github.com/egladman/magus/types.JobValidation.Job field Job "json:\"job\""
+github.com/egladman/magus/types.JobValidation.Permitted field JobProblems "json:\"permitted,omitempty\""
 github.com/egladman/magus/types.JobValidation.Problems field JobProblems "json:\"problems\""
 github.com/egladman/magus/types.JobValidation.Unchecked field []string "json:\"unchecked,omitempty\""
-github.com/egladman/magus/types.JobValidation.Waived field JobProblems "json:\"waived,omitempty\""
 github.com/egladman/magus/types.JobValidation.WriteProof field JobWriteProof "json:\"write_proof,omitempty\""
-github.com/egladman/magus/types.JobWaiver type struct
-github.com/egladman/magus/types.JobWaiver.Code field DiagnosticCode "json:\"code\""
-github.com/egladman/magus/types.JobWaiver.Reason field string "json:\"reason\" schema:\"nonblank\""
-github.com/egladman/magus/types.JobWaiver.Subject field string "json:\"subject\""
-github.com/egladman/magus/types.JobWaiver.Waives method func(p JobProblem) bool
 github.com/egladman/magus/types.JobWork type struct
 github.com/egladman/magus/types.JobWork.Calls field int "json:\"calls\"  yaml:\"calls\""
 github.com/egladman/magus/types.JobWork.ContextTokens field *int64 "json:\"context_tokens,omitempty\" yaml:\"context_tokens,omitempty\""
@@ -3892,6 +3893,7 @@ github.com/egladman/magus/types.PatternType.String method func() string
 github.com/egladman/magus/types.PatternType.Valid method func() bool
 github.com/egladman/magus/types.PatternType.Values method func() []string
 github.com/egladman/magus/types.PeakRSS func(ctx context.Context) int64
+github.com/egladman/magus/types.Permissible func(c DiagnosticCode) bool
 github.com/egladman/magus/types.Person type struct
 github.com/egladman/magus/types.Person.Email field string
 github.com/egladman/magus/types.Person.Name field string
@@ -5283,7 +5285,6 @@ github.com/egladman/magus/types.VolatilityTarget.Score field float64 "json:\"sco
 github.com/egladman/magus/types.VolatilityTarget.Target field string "json:\"target\"              yaml:\"target\""
 github.com/egladman/magus/types.VolatilityTarget.Volatile field bool "json:\"volatile,omitempty\"  yaml:\"volatile,omitempty\""
 github.com/egladman/magus/types.VolatilityTarget.VolatileCount field int "json:\"volatile_count\"      yaml:\"volatile_count\""
-github.com/egladman/magus/types.Waivable func(c DiagnosticCode) bool
 github.com/egladman/magus/types.WalkChain func(p *Project, target string, lookup func(path string) *Project, fn ChainWalkFunc) error
 github.com/egladman/magus/types.WithActiveDispatch func(ctx context.Context, a *ActiveDispatch) context.Context
 github.com/egladman/magus/types.WithCaptureLog func(ctx context.Context, path string) context.Context

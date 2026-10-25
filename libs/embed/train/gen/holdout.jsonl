@@ -17,8 +17,6 @@
 {"group":"dir:broker","path":"broker/group.go"}
 {"group":"dir:broker","path":"broker/group_other.go"}
 {"group":"dir:broker","path":"broker/group_test.go"}
-{"group":"dir:broker","path":"broker/ledger.go"}
-{"group":"dir:broker","path":"broker/ledger_test.go"}
 {"group":"dir:broker","path":"broker/listen.go"}
 {"group":"dir:broker","path":"broker/listen_test.go"}
 {"group":"dir:broker","path":"broker/owner.go"}
@@ -147,6 +145,7 @@
 {"group":"file:changes/unreleased/job-store-appends-changed-lines.md","path":"changes/unreleased/job-store-appends-changed-lines.md"}
 {"group":"file:changes/unreleased/job-store-is-json-lines.md","path":"changes/unreleased/job-store-is-json-lines.md"}
 {"group":"file:changes/unreleased/job-store-schema-not-commit.md","path":"changes/unreleased/job-store-schema-not-commit.md"}
+{"group":"file:changes/unreleased/job-verbs-stay-scoped-ended.md","path":"changes/unreleased/job-verbs-stay-scoped-ended.md"}
 {"group":"file:changes/unreleased/job-wait-accepts-a-same-second-run.md","path":"changes/unreleased/job-wait-accepts-a-same-second-run.md"}
 {"group":"file:changes/unreleased/jobs-retain.md","path":"changes/unreleased/jobs-retain.md"}
 {"group":"file:changes/unreleased/lapsed-judgment-passes-an-outside-append.md","path":"changes/unreleased/lapsed-judgment-passes-an-outside-append.md"}
@@ -895,6 +894,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/rename-symbol.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/resolve-conflicts.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/show-code-context.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-feedback.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-interrupted-session.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-memory-kills.buzz"}
