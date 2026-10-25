@@ -34,7 +34,9 @@ func TestNoteHeldFilesOneRowForTheTreeRoot(t *testing.T) {
 	assert.Contains(t, got.Message, "held by job mover")
 	// The id, the invocation and the clock are the raise's own; the message is checked above.
 	got.ID, got.Invocation, got.OpenedMs, got.Message = "", "", 0, ""
-	assert.Equal(t, sessions.AttentionRequest{Outcome: "failed", Severity: "warning", Lease: "orchestrator", Source: heldSource}, got)
+	assert.Equal(t, sessions.AttentionRequest{
+		Lease: "orchestrator", Source: heldSource, Outcome: string(types.OutcomeFailed), Severity: string(types.SeverityWarning),
+	}, got)
 }
 
 // A session that ends takes the job it was editing with it, tells the root once, and a
@@ -91,6 +93,31 @@ func TestEndSessionEndsATakenReadOnlyJob(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, types.StateNoReturn, ended.State)
 	assert.True(t, ended.EndedWithSession(), ended.EndReason)
+}
+
+// An integration row outlives its holder's turn: the merges it holds sit in a standing
+// checkout, so a session end leaves the row running and the binding live for the holder
+// that resumes it.
+func TestEndSessionLeavesAnIntegrationRowRunning(t *testing.T) {
+	repo := execRepo(t)
+	loc := tempLocation(t, repo.Root())
+	s := NewStore(loc)
+	seed(t, s, types.Job{ID: "integrate", Checkpoint: repo.Head(), State: types.StateDeclared, Integrates: []string{"feat-a"}})
+	_, err := s.Exec(t.Context(), "integrate")
+	require.NoError(t, err)
+	holder := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	require.NoError(t, s.Bind(holder, "integrate"))
+
+	_, ok, err := s.EndSession(t.Context(), holder)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	binding := s.Binding(holder)
+	assert.Equal(t, []any{"integrate", false}, []any{binding.Job, binding.Gone}, "the binding stays live, never a tombstone")
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Empty(t, attentionRows(t, repo.Root()))
 }
 
 func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {

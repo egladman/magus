@@ -539,6 +539,46 @@ func TestHostResumes(t *testing.T) {
 	}
 }
 
+// waitOnARun is the line every background-left refusal ends with: the one wait a subagent
+// has for its own run.
+const waitOnARun = "\nTo wait on a run, background it as `magus job exec --timeout <d> -- <command>` instead: a stop that leaves only such runs stands, and each one's end resumes you."
+
+// A subagent whose only live task is a run it bounded with `magus job exec --timeout` stops
+// to wait for it, on any host version: the stop stands, and its job stays bound for the turn
+// the completion notice starts.
+func TestASubagentWaitingOnItsBoundedRunKeepsItsJob(t *testing.T) {
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	const search = `cd ~/.claude/projects; grep -rhoE 'denied' --include='*.jsonl' . | sort | uniq -c`
+	const check = `./magus --root /repos/w job exec --timeout 30m -- ./magus run go-test .`
+	transcript := writeTranscript(t, strings.Replace(bgSearchCall, search, check, 1), bgSearchResult)
+
+	root := t.TempDir()
+	commitCheckout(t, root)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	require.NoError(t, err)
+	_, err = store.Exec(t.Context(), "w")
+	require.NoError(t, err)
+	worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
+	require.NoError(t, store.Bind(worker, "w"))
+	stop := subagentStop(t, worker.Agent, transcript)
+
+	said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
+	v, judged := judgeStop(Dependencies{}, said, stop, "", started.Add(time.Hour))
+	assert.Equal(t, []any{types.GuardJudgment{}, false}, []any{v, judged})
+	_, recorded := said.LastSeen(stoppedAgentKind(worker.Agent))
+	assert.False(t, recorded, "the subagent still holds its job, so its stop is not recorded")
+
+	ended, err := endStoppedSession(t.Context(), store, worker, stop, "", v)
+	require.NoError(t, err)
+	assert.False(t, ended)
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.False(t, store.Binding(worker).Gone)
+}
+
 // At or past the version the wiring declares, a subagent's stop with a live background task
 // stands with advice; below it, or with no version recorded, it is refused and says why.
 func TestJudgeStopLetsAResumedSubagentStop(t *testing.T) {
@@ -560,19 +600,19 @@ func TestJudgeStopLetsAResumedSubagentStop(t *testing.T) {
 		{"below the floor", "2.1.298", from, func(listing string) types.GuardJudgment {
 			return types.GuardJudgment{
 				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
-				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: host version 2.1.298 is below 2.1.299, the first that resumes a subagent when its background task completes.", listing),
+				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: host version 2.1.298 is below 2.1.299, the first that resumes a subagent when its background task completes.%s", listing, waitOnARun),
 			}
 		}},
 		{"no version recorded", "", from, func(listing string) types.GuardJudgment {
 			return types.GuardJudgment{
 				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
-				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: the transcript names no host version to compare with 2.1.299, the first that resumes a subagent when its background task completes.", listing),
+				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: the transcript names no host version to compare with 2.1.299, the first that resumes a subagent when its background task completes.%s", listing, waitOnARun),
 			}
 		}},
 		{"no floor declared", "2.1.299", "", func(listing string) types.GuardJudgment {
 			return types.GuardJudgment{
 				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
-				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: the wiring declares no host version that resumes a subagent when its background task completes.", listing),
+				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: the wiring declares no host version that resumes a subagent when its background task completes.%s", listing, waitOnARun),
 			}
 		}},
 	}

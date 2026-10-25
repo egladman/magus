@@ -137,7 +137,11 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 	if subagent && resumes && len(read.tasks) > 0 {
 		return adviseResumedStop(read.tasks, why, now), true, true
 	}
-	tasks := slices.DeleteFunc(read.tasks, func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
+	tasks := slices.DeleteFunc(slices.Clone(read.tasks), func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
+	if subagent && len(tasks) == 0 && len(read.tasks) > 0 {
+		// Stopping is how a subagent waits for these: each notice starts its next turn.
+		return types.GuardJudgment{}, false, true
+	}
 	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
 		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
@@ -147,24 +151,30 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 	if len(tasks) == 0 {
 		return types.GuardJudgment{}, false, false
 	}
-	listing := stoppableTasks(tasks, now)
 	// A subagent's notice arrives only after a stop this refuses, so stopping is its remedy.
 	if subagent && setting.Decision == builtin.Deny {
-		return types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
-			Decision:      decisionDeny,
-			Rule:          string(denyRuleBackgroundLeft),
-			Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each before you finish:\n%s\nNot let through: %s.",
-				plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing, why),
-		}, true, false
+		return refuseLeftStop(tasks, why, now), true, false
 	}
 	return types.GuardJudgment{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionAdvise,
 		Rule:          string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
-			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
+			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
 	}, true, false
+}
+
+// refuseLeftStop refuses a subagent's stop over tasks still running, naming each with the
+// call that stops it and the one wait a subagent has for its own run.
+func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
+	return types.GuardJudgment{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      decisionDeny,
+		Rule:          string(denyRuleBackgroundLeft),
+		Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each before you finish:\n%s\nNot let through: %s.\n"+
+			"To wait on a run, background it as `magus job exec --timeout <d> -- <command>` instead: a stop that leaves only such runs stands, and each one's end resumes you.",
+			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), stoppableTasks(tasks, now), why),
+	}
 }
 
 // adviseResumedStop lets a subagent's stop stand while tasks run, since why says its host
@@ -309,7 +319,8 @@ func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw,
 
 // resumedStop reports a subagent stop that leaves a background task running on a host that
 // resumes the subagent when the task completes, whatever background-left is set to. A task
-// that ends on its own counts too: its completion resumes the subagent all the same. A
+// that ends on its own resumes it on any host version: stopping is how a subagent waits for
+// its bounded run, and ending its job there tombstones the binding the next turn needs. A
 // subagent's transcript is short, so it is read whole, without judgeStop's checkpoint.
 func resumedStop(raw, resumesFrom string, now time.Time) bool {
 	env, ok := decodeStop(raw)
@@ -319,6 +330,9 @@ func resumedStop(raw, resumesFrom string, now time.Time) bool {
 	read, err := readBackgroundTranscript(env.AgentTranscriptPath, "", now)
 	if err != nil || len(read.tasks) == 0 {
 		return false
+	}
+	if slices.ContainsFunc(read.tasks, func(t backgroundTask) bool { return endsOnItsOwn(t.Command) }) {
+		return true
 	}
 	resumes, _ := hostResumes(resumesFrom, read.hostVersion)
 	return resumes

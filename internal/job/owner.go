@@ -71,6 +71,10 @@ func (s *Store) noteEnded(id, reason string) {
 //
 // An identity-less caller ends nothing: its record is the checkout's, shared by every
 // such caller there, so one caller's end says nothing about the rest.
+//
+// An integration row (one naming Integrates) neither ends nor loses its binding: its merges
+// sit in a standing checkout that outlives the holder's turn, and the holder resumed later
+// carries on from them. It ends with its deadline or its exit.
 func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, error) {
 	if !c.Identified() {
 		return types.Job{}, false, nil
@@ -83,9 +87,14 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 	now := s.now().Unix()
 	var ended types.Job
 	var outcomes endings
+	integrating := false
 	err := s.update(ctx, func(f *jobsFile) error {
 		outcomes = endings{}
 		i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == b.Job })
+		if i >= 0 && len(f.Jobs[i].Integrates) > 0 {
+			integrating = true
+			return file.ErrSkipWrite
+		}
 		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].Holder.OrSession() == types.HolderServer {
 			return file.ErrSkipWrite
 		}
@@ -99,7 +108,7 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 		ended = f.Jobs[i].Clone()
 		return outcomes.hold(s, f.Jobs, ended)
 	})
-	if err != nil {
+	if err != nil || integrating {
 		return types.Job{}, false, err
 	}
 	_ = file.ReplaceFile(path, fmt.Appendf(nil, "%s %s %d\n", tombstoneTag, b.Job, now), 0o600)
