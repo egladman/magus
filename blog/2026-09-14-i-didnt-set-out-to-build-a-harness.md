@@ -50,38 +50,38 @@ reg.RegisterProject("api", WithSpell("guide-harness"))
 ctx := context.Background()
 m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 if err != nil {
-	fmt.Println("open:", err)
-	return
+    fmt.Println("open:", err)
+    return
 }
 defer m.Close()
 
 // What a model asked to run, in order. A real harness reads these from its agent loop.
 proposed := []string{"cp api/greeting.txt api/out/", "magus run build api", "magus run build api"}
 for _, command := range proposed {
-	j, err := m.JudgeCommand(ctx, "guide-session", root, command)
-	if err != nil {
-		fmt.Println("judge:", err)
-		return
-	}
-	if j.Decision == "deny" {
-		reason, _, _ := strings.Cut(j.Reason, "\n")
-		fmt.Printf("denied %q: %s\n", command, reason)
-		continue
-	}
-	target, ok := strings.CutPrefix(command, "magus run ")
-	name, path, _ := strings.Cut(target, " ")
-	if !ok {
-		fmt.Printf("allowed %q, which this harness does not run\n", command)
-		continue
-	}
-	results, err := runRecorded(ctx, m, []types.Target{{Path: path, Name: name}})
-	if err != nil {
-		fmt.Println("run:", err)
-		return
-	}
-	for _, r := range results {
-		fmt.Printf("ran %s:%s: %s, cache hit %v, builds so far %d\n", r.Project, r.Target, r.Status, r.CacheHit, runs)
-	}
+    j, err := m.JudgeCommand(ctx, "guide-session", root, command)
+    if err != nil {
+        fmt.Println("judge:", err)
+        return
+    }
+    if j.Decision == "deny" {
+        reason, _, _ := strings.Cut(j.Reason, "\n")
+        fmt.Printf("denied %q: %s\n", command, reason)
+        continue
+    }
+    target, ok := strings.CutPrefix(command, "magus run ")
+    name, path, _ := strings.Cut(target, " ")
+    if !ok {
+        fmt.Printf("allowed %q, which this harness does not run\n", command)
+        continue
+    }
+    results, err := runRecorded(ctx, m, []types.Target{{Path: path, Name: name}})
+    if err != nil {
+        fmt.Println("run:", err)
+        return
+    }
+    for _, r := range results {
+        fmt.Printf("ran %s:%s: %s, cache hit %v, builds so far %d\n", r.Project, r.Target, r.Status, r.CacheHit, runs)
+    }
 }
 // Output:
 // denied "cp api/greeting.txt api/out/": Build through the target: magus run build api
