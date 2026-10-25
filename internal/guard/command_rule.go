@@ -64,10 +64,7 @@ type commandRuleInput struct {
 // verdict every compiled rule reached.
 func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
 	verdict = gradeStall(deps, gradeMainCommand(ctx, deps, verdict, in, who, at), in.lease, at)
-	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
-		return verdict, workspaceRuleRecord{}
-	}
-	if verdict.Decision == decisionDeny {
+	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil || verdict.Decision == decisionDeny {
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
