@@ -295,30 +295,30 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 		fn      string
 		exempt  []string
 	}{
-		{"graph", []string{"graph"}, "graph.go", "graphCmd", []string{
+		{"graph", []string{"graph"}, "graph.go", "graphCommand", []string{
 			"verify", // moved: hard-redirects to `magus doctor`'s agent-skills check
 		}},
-		{"config", []string{"config"}, "config.go", "configCmd", nil},
-		{"config history", []string{"config", "history"}, "config_history.go", "configHistoryCmd", nil},
-		{"config cache", []string{"config", "cache"}, "config_cache.go", "configCacheCmd", nil},
-		{"config mcp", []string{"config", "mcp"}, "config_mcp.go", "configMCPCmd", []string{
+		{"config", []string{"config"}, "config.go", "configCommand", nil},
+		{"config history", []string{"config", "history"}, "config_history.go", "configHistoryCommand", nil},
+		{"config cache", []string{"config", "cache"}, "config_cache.go", "configCacheCommand", nil},
+		{"config mcp", []string{"config", "mcp"}, "config_mcp.go", "configMCPCommand", []string{
 			"token", // moved: hard-redirects to `magus config token` (not an MCP credential)
 		}},
 		{"config mcp connector", []string{"config", "mcp", "connector"}, "config_mcp.go", "configMCPConnector", []string{
 			"list", // renamed to ls in v0.4.0
 		}},
-		{"config console", []string{"config", "console"}, "config_console.go", "configConsoleCmd", nil},
+		{"config console", []string{"config", "console"}, "config_console.go", "configConsoleCommand", nil},
 		{"config console token", []string{"config", "console", "token"}, "config_console.go", "configConsoleToken", nil},
 		{"config token", []string{"config", "token"}, "config_token.go", "configToken", nil},
-		{"notes", []string{"notes"}, "notes.go", "notesCmd", []string{
+		{"notes", []string{"notes"}, "notes.go", "notesCommand", []string{
 			"put", // deliberately absent: a note is written by a person, not a program
 		}},
-		{"self", []string{"self"}, "self.go", "selfCmd", nil},
-		{"vcs", []string{"vcs"}, "vcs.go", "vcsCmd", nil},
+		{"self", []string{"self"}, "self.go", "selfCommand", nil},
+		{"vcs", []string{"vcs"}, "vcs.go", "vcsCommand", nil},
 		{"queue", []string{"queue"}, "queue.go", "runQueue", []string{"-h", "--help", "help"}},
-		{"spell", []string{"spell"}, "spell.go", "spellCmd", nil},
-		{"agent", []string{"agent"}, "agent.go", "agentCmd", nil},
-		{"session", []string{"session"}, "session.go", "sessionCmd", []string{
+		{"spell", []string{"spell"}, "spell.go", "spellCommand", nil},
+		{"agent", []string{"agent"}, "agent.go", "agentCommand", nil},
+		{"session", []string{"session"}, "session.go", "sessionCommand", []string{
 			"hook", // moved: hard-redirects to `magus shell`, which is not session-scoped
 		}},
 	}
@@ -379,7 +379,7 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("serverCmd routes %v (via hint)\nregistry Children for \"server\" = %v", got, want)
+		t.Errorf("serverCommand routes %v (via hint)\nregistry Children for \"server\" = %v", got, want)
 	}
 }
 
