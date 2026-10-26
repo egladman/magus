@@ -1,0 +1,26 @@
+A prose body after the subject. A trailer block is not a body.
+-- hit/commit-message whole --
+keep the key
+
+The detail belongs in the description.
+-- hit/commit-message whole --
+keep the key
+The detail belongs in the description.
+-- pass/commit-message --
+keep the key
+-- pass/commit-message whole --
+keep the key
+Signed-off-by: A Person <a@example.com>
+-- pass/commit-message whole --
+keep the key
+
+Co-Authored-By: A Person <a@example.com>
+-- pass/commit-message whole --
+Merge branch 'main'
+The merge brought the key.
+-- pass/commit-message whole --
+fix(harness): close the gaps (#615)
+
+* close the gaps
+
+* leave the lock

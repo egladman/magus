@@ -510,25 +510,30 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			assert.NotEqual(t, decisionDeny, v.Decision, fmt.Sprintf("%s: %s", line, v.Reason))
 		}
 		for _, line := range []string{
-			`git -C . commit -m "Fix the port."`,
-			`hg -q commit -m "Fix the port."`,
-			`sl commit -m "Fix the port."`,
-			`jj --color=never commit -m "Fix the port."`,
-			`jj -R . describe -m "Fix the port."`,
+			`git -C . commit -m "fix(cache): keep the key"`,
+			`hg -q commit -m "fix(cache): keep the key"`,
+			`sl commit -m "fix(cache): keep the key"`,
+			`jj --color=never commit -m "fix(cache): keep the key"`,
+			`jj -R . describe -m "fix(cache): keep the key"`,
 		} {
 			v := run(line)
 			assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), line)
-			assert.Contains(t, v.Reason, "a capitalized first word", line)
+			assert.Contains(t, v.Reason, "a colon", line)
 			assert.Contains(t, v.Reason, "Write one subject line, lowercase and imperative", line)
 			assert.NotContains(t, v.Reason, "Skill(", line)
 		}
 
-		v := run("git add a.go && git commit -m \"$(cat <<'EOF'\nFix the port.\n\nCo-Authored-By: a <b@c>\nEOF\n)\"")
+		v := run("git add a.go && git commit -m \"$(cat <<'EOF'\nfix(cache): keep the key\n\nCo-Authored-By: a <b@c>\nEOF\n)\"")
 		assert.Equal(t, decisionDeny, v.Decision, v.Reason)
-		for _, want := range []string{"a capitalized first word", "an attribution", "a line break"} {
+		for _, want := range []string{"an attribution"} {
 			assert.Contains(t, v.Reason, want)
 		}
 		assert.Contains(t, run(`git commit -m "fix(cache): keep the key"`).Reason, "a colon", "off the base branch a prefix is denied")
+		for _, body := range []string{"why it matters", "* why it matters"} {
+			v := run(fmt.Sprintf("git commit -m 'trim a fragment\n\n%s'", body))
+			assert.Equal(t, decisionDeny, v.Decision, body)
+			assert.Contains(t, v.Reason, "a line break", body)
+		}
 	})
 
 	t.Run("commit-subject on the base branch", func(t *testing.T) {
