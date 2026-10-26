@@ -80,7 +80,7 @@ func TestMethodSource(t *testing.T) {
 }
 
 func TestFieldFuncName(t *testing.T) {
-	assert.Equal(t, "covResolverCtx", FieldFuncName(Field{Resolver: covResolverContext}))
+	assert.Equal(t, "covResolverContext", FieldFuncName(Field{Resolver: covResolverContext}))
 	assert.Empty(t, FieldFuncName(Field{}))
 }
 
