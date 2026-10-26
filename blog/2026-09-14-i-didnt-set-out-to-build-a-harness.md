@@ -3,7 +3,7 @@ title: "I didn't set out to build a harness"
 description: "magus started as a monorepo tool I didn't want anywhere near agents. Then I realized it had become a harness anyone can import from Go, and that starting at the tool layer is why it sits at the right layer."
 tags: [opinion]
 date: 2026-09-14
-draft: true
+draft: false
 ---
 
 # I didn't set out to build a harness
@@ -132,9 +132,12 @@ it is bound to break things or overextend itself.
 
 I don't agree with Pi. Its default tools are read, bash, edit and
 write,[^pi-tools] and its bash tool hands the model back one string of combined
-stdout and stderr.[^pi-bash] It needs more than that, and bash has no place
-here: it should be structured data only. I say that as a bash elitist who once
-wrote a TOML parser in pure bash, without even coreutils.
+stdout and stderr.[^pi-bash] That tool set is too minimal for what I want. The
+problem isn't that Bash is built for people; Bash serves people well, and I love
+it. I once wrote a TOML parser in pure Bash, without even coreutils. But an
+agent's tools need a typed interface, so it can pass structured data instead of
+relying on shell strings. The whole experience should be typed wherever it can
+be.
 
 DeepSeek Harness is TypeScript, about 4,400 `.ts` files across its packages,
 built on Cordis, where every part, the agent loop included, is a plugin.[^dsh]
