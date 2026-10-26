@@ -94,11 +94,25 @@ if (os\env("CI_PROVIDER") == "github-actions") {
 import "spells/endoflife-date" as eol;
 magus\lifecycle.provider(eol);
 
-magus\harness.provider(cursor);
-magus\harness.provider(codex);
-magus\harness.provider(claude);
+import "magus/modeltiers";
+import "./hack/magusfile/model-tiers" as tierhost;
+
+// The return value is the harness id a hosts key has to be. claude-code-mod wires
+// settings, not a model, so it stays out of the map.
+final cursorID = magus\harness.provider(cursor);
+final codexID = magus\harness.provider(codex);
+final claudeID = magus\harness.provider(claude);
 magus\harness.provider(claudeMod);
-magus\harness.provider(opencode);
+final opencodeID = magus\harness.provider(opencode);
+
+magus\job.modelTiers(modeltiers\ModelTier, default: modeltiers\defaultTier,
+    hosts: {
+        cursorID: tierhost\cursor,
+        codexID: tierhost\codex,
+        claudeID: tierhost\claude,
+        opencodeID: tierhost\opencode,
+    },
+    bounds: modeltiers\bounds, skills: modeltiers\skills);
 
 // Outputs are declared per target with ctx.writesFiles: a project-wide set would let
 // a go-build hit restore a stale MAGUS.md.
@@ -648,6 +662,8 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
     // govulncheck parses generated .go files, so it must follow generate or race mockery.
     ctx.needs(generate);
     advisories\govulncheck(ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), go: go, inheritedFatal: inheritedFatal);
+    // Cantrip: the filesystem license scan. Image scans call docker["trivy-image"].
+    // docs/glossary/cantrip.md
     proc\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
         "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
@@ -2442,7 +2458,7 @@ export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Builds the linter first, then golangci-lint, go vet, markdownlint,
-// shellcheck, and actionlint. govulncheck lives in `security`. install_linter compiles
+// shellcheck, and the actionlint cantrip. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
 //
 // Files after `--` scope it to them, as a job's lint goal passes the files it writes: each
@@ -2562,6 +2578,7 @@ fun scopedTools(ctx: magus\Context, files: [str], goPackages: [str]) > [[str]] {
     }
     final workflows = files.filter(fun (i: int, f: str) > bool => f.startsWith(".github/workflows/") and f.endsWith(".yaml"));
     if (workflows.len() > 0) {
+        // Cantrip, the same command lint runs. docs/glossary/cantrip.md
         tools.append(["actionlint"] + workflows);
     }
     return tools;

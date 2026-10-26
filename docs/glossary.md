@@ -47,6 +47,10 @@ A single tool-native command a target composes (long form: operation); the middl
 
 A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands. [Spell in full](glossary/spell.md).
 
+### Cantrip
+
+One command a target runs itself with proc\exec. A spell is the toolchain library a project binds; a cantrip stays in the target that owns the command. [Cantrip in full](glossary/cantrip.md).
+
 ### Manifest
 
 The file that declares what a package is: its name, dependencies, entry points and tool config (go.mod, package.json, pyproject.toml, Cargo.toml). How the workspace builds, tests and lints the package belongs in the magusfile, not in the manifest's scripts. [Manifest in full](glossary/manifest.md).

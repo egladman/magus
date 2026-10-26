@@ -202,6 +202,8 @@ export fun mgs_getSkills() > HarnessSkills {
 export fun mgs_listEntries() > [ManagedEntries] {
     return [ManagedEntries{path = ["hooks", "before"], entries = [{"match": "run", "commands": [{"type": "command", "command": "magus buzz -s magus-command.buzz"}]}]}];
 }
+
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }
 -- hooks.json --
 {
   "large": 9007199254740993,

@@ -844,10 +844,11 @@ covers every backend magus drives: `git push`, `hg push`, `sl push` (with or wit
 matches the gate to the revision by content hash (git and Mercurial nodes, jj commit
 ids); a revision it cannot match that way, such as a Mercurial local revision number or
 a jj change id, makes it stand down rather than guess. The
-host's own approval prompt shows it, and approving publishes the commit. Claude
-Code and Cursor prompt from the hook. Codex and OpenCode hooks cannot, so their
-harnesses write a native prompt rule (`.codex/rules/magus.rules`, and
-`permission.bash` in `opencode.json`) and the hook answers that prompt: allow for a
+host's own approval prompt shows it, and approving publishes the commit. Every
+harness exports `mgs_renderPrompts`. Claude Code and Cursor prompt from the
+hook and return no files. Codex and OpenCode hooks cannot, so their harnesses
+write a native prompt rule (`.codex/rules/magus.rules`, and `permission.bash`
+in `opencode.json`) and the hook answers that prompt: allow for a
 push a gate covers, ask for an ungated one. Where no prompt can happen, those two
 refuse the push and name the person's own terminal. A session bound to a job lease
 always gets `deny`, because workers do not publish. Nothing the agent types clears

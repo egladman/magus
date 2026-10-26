@@ -386,7 +386,7 @@ func writeContractFuncTables(b *bytes.Buffer, funcs, harness []contractFunc) {
 	fmt.Fprintln(b, "}")
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, "// HarnessFuncs is every function of the harness contract, in the order")
-	fmt.Fprintln(b, "// internal/spell's harnessContract declares them. Required marks the one a harness must export.")
+	fmt.Fprintln(b, "// internal/spell's harnessContract declares them. Required marks each function a harness must export.")
 	fmt.Fprintln(b, "var HarnessFuncs = []ContractFunc{")
 	for _, fn := range harness {
 		fmt.Fprintf(b, "\t{Name: %q, Field: %q, Returns: %q, Params: %q, Required: %t, Decode: func(v vm.Value) (any, error) { return decodeHarnessFunc%s(v) }},\n",

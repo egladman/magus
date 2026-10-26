@@ -793,6 +793,8 @@ export fun mgs_getSkills() > HarnessSkills {
 export fun mgs_getLimits() > Limits {
     return Limits{foregroundDefaultMs = 120000, foregroundMaxMs = 600000};
 }
+
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }
 `
 
 // testTarget is the `test` target the fork's check names, which the workspace must have.

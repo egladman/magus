@@ -52,7 +52,7 @@ var ContractFuncs = []ContractFunc{
 }
 
 // HarnessFuncs is every function of the harness contract, in the order
-// internal/spell's harnessContract declares them. Required marks the one a harness must export.
+// internal/spell's harnessContract declares them. Required marks each function a harness must export.
 var HarnessFuncs = []ContractFunc{
 	{Name: "mgs_getHarnessConfig", Field: "Config", Returns: "HarnessConfig", Params: "", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncConfig(v) }},
 	{Name: "mgs_getSkills", Field: "Skills", Returns: "HarnessSkills", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSkills(v) }},
@@ -64,7 +64,7 @@ var HarnessFuncs = []ContractFunc{
 	{Name: "mgs_listModels", Field: "Models", Returns: "[ModelRow]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncModels(v) }},
 	{Name: "mgs_listSettings", Field: "Settings", Returns: "[Setting]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSettings(v) }},
 	{Name: "mgs_renderAgents", Field: "RenderAgents", Returns: "[AgentFile]", Params: "agents: [ShippedAgent]", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderAgents(v) }},
-	{Name: "mgs_renderPrompts", Field: "RenderPrompts", Returns: "[Prompt]", Params: "humanOnly: {str: str}", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderPrompts(v) }},
+	{Name: "mgs_renderPrompts", Field: "RenderPrompts", Returns: "[Prompt]", Params: "humanOnly: {str: str}", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderPrompts(v) }},
 }
 
 func decodeContractName(v vm.Value) (string, error) {
