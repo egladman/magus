@@ -315,9 +315,9 @@ func verifyView(view string, refs []Ref, srcs map[string]string) error {
 	return nil
 }
 
-// Err reports every declared remote spell whose pin could not be served, the check
+// Error reports every declared remote spell whose pin could not be served, the check
 // `magus spell lock` runs without --update. nil when every pin is served.
-func (im *Imports) Err() error {
+func (im *Imports) Error() error {
 	if im == nil {
 		return nil
 	}

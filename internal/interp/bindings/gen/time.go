@@ -18,17 +18,17 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("format", vm.DirectValue("time.format", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		layout := ffi.Str(bzArgs, 0)
+		layout := ffi.String(bzArgs, 0)
 		unix_millis := ffi.Float(bzArgs, 1, 0)
 		ret0, err := std.TimeFormat(ctx, layout, unix_millis)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("parse", vm.DirectValue("time.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		layout := ffi.Str(bzArgs, 0)
-		value := ffi.Str(bzArgs, 1)
+		layout := ffi.String(bzArgs, 0)
+		value := ffi.String(bzArgs, 1)
 		ret0, err := std.TimeParse(ctx, layout, value)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -36,7 +36,7 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.FloatVal(ret0), nil
 	}))
 	m.MapSet("parseDuration", vm.DirectValue("time.parseDuration", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		duration := ffi.Str(bzArgs, 0)
+		duration := ffi.String(bzArgs, 0)
 		ret0, err := std.TimeParseDuration(ctx, duration)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -48,11 +48,11 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("add", vm.DirectValue("time.add", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		unix_millis := ffi.Float(bzArgs, 0, 0)
-		duration := ffi.Str(bzArgs, 1)
+		duration := ffi.String(bzArgs, 1)
 		ret0, err := std.TimeAdd(ctx, unix_millis, duration)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

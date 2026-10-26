@@ -18,8 +18,8 @@ import (
 // successful collect.
 func gcModule() vm.Value {
 	m := mod()
-	m.MapSet("allocated", fn("gc.allocated", gcAllocated))
-	m.MapSet("collect", fn("gc.collect", gcCollect))
+	m.MapSet("allocated", function("gc.allocated", gcAllocated))
+	m.MapSet("collect", function("gc.collect", gcCollect))
 	return m
 }
 

@@ -20,7 +20,7 @@ import (
 // traces each target body's proc\exec calls. A call behind a helper is seen, a branch
 // the probe does not take is not.
 func (r *runner) checkManifestScripts(projects []*types.Project) types.Check {
-	return checkManifestScripts(r.runCtx(), r.root, projects, project.DefaultSpellRegistry().All())
+	return checkManifestScripts(r.runContext(), r.root, projects, project.DefaultSpellRegistry().All())
 }
 
 func checkManifestScripts(ctx context.Context, root string, projects []*types.Project, all []*spells.Spell) types.Check {

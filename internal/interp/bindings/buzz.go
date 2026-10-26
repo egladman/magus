@@ -26,7 +26,7 @@ func init() { //nolint:gochecknoinits // internal/interp cannot link the Buzz VM
 //
 // These bindings (and the magus-utils bindings-emitted ones in bindings/gen) are written
 // directly against the concrete magus/gopherbuzz value system (NewMap, DirectValue,
-// StrValue, and friends) rather than behind the generic engine.Value /
+// StringValue, and friends) rather than behind the generic engine.Value /
 // engine.Session abstraction. That is deliberate, not a layering gap:
 //
 //   - Buzz is the only engine, so there is no second implementation to share with;
@@ -197,10 +197,10 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// build the target graph: anything resolved dynamically would drop the target-uses-spell
 	// edge and silently under-report the graph.
 	magus.MapSet("canonicalName", directVal(obs, "magus.canonicalName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() {
+		if len(args) == 0 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("magus.canonicalName: expected a name string")
 		}
-		return ffi.StrVal(types.Normalize(args[0].AsString())), nil
+		return ffi.StringVal(types.Normalize(args[0].AsString())), nil
 	}))
 
 	// magus.log.*: the one way to emit a message from a magusfile; there is no
@@ -211,15 +211,15 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// raise stay on magus itself because they end the run, and a namespace that mixed
 	// the two would let `magus\log.fatal(...)` read like one more level.
 	logLevels := vm.NewMap()
-	logLevels.MapSet("info", directVal(obs, "magus.log.info", buzzLogFn(slog.LevelInfo)))
-	logLevels.MapSet("debug", directVal(obs, "magus.log.debug", buzzLogFn(slog.LevelDebug)))
-	logLevels.MapSet("warn", directVal(obs, "magus.log.warn", buzzLogFn(slog.LevelWarn)))
-	logLevels.MapSet("error", directVal(obs, "magus.log.error", buzzLogFn(slog.LevelError)))
+	logLevels.MapSet("info", directVal(obs, "magus.log.info", buzzLogFunction(slog.LevelInfo)))
+	logLevels.MapSet("debug", directVal(obs, "magus.log.debug", buzzLogFunction(slog.LevelDebug)))
+	logLevels.MapSet("warn", directVal(obs, "magus.log.warn", buzzLogFunction(slog.LevelWarn)))
+	logLevels.MapSet("error", directVal(obs, "magus.log.error", buzzLogFunction(slog.LevelError)))
 	// hint(msg): advisory nudge (see emitMagusHint), non-fatal, deduped, honors the
 	// hints toggle. Not a level, but it emits and returns, which is the line this
 	// nested object is drawn on.
 	logLevels.MapSet("hint", directVal(obs, "magus.log.hint", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) > 0 && args[0].IsStr() {
+		if len(args) > 0 && args[0].IsString() {
 			emitMagusHint(ctx, args[0].AsString())
 		}
 		return vm.Null, nil
@@ -228,7 +228,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// magus.fatal(msg): log at error level, then abort with exit 1 via a typed
 	// ExitError (the CLI/server map it to the exit status).
 	magus.MapSet("fatal", directVal(obs, "magus.fatal", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		emitMagusLog(ctx, slog.LevelError, argStr(args, 0), nil)
+		emitMagusLog(ctx, slog.LevelError, argString(args, 0), nil)
 		types.CaptureExit(ctx, 1)
 		return vm.Null, types.ExitError{Code: 1}
 	}))

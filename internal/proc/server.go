@@ -51,8 +51,8 @@ func WithRoot(ctx context.Context, root string) context.Context {
 	return context.WithValue(ctx, rootCtxKey, root)
 }
 
-// WithCwd returns ctx carrying the client's working directory, readable via CwdFromContext.
-func WithCwd(ctx context.Context, cwd string) context.Context {
+// WithCurrentWorkingDirectory returns ctx carrying the client's working directory, readable via CurrentWorkingDirectoryFromContext.
+func WithCurrentWorkingDirectory(ctx context.Context, cwd string) context.Context {
 	return context.WithValue(ctx, cwdCtxKey, cwd)
 }
 
@@ -64,8 +64,8 @@ func RootFromContext(ctx context.Context) string {
 	return ""
 }
 
-// CwdFromContext returns the child's working directory stored by the proc server, or "".
-func CwdFromContext(ctx context.Context) string {
+// CurrentWorkingDirectoryFromContext returns the child's working directory stored by the proc server, or "".
+func CurrentWorkingDirectoryFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(cwdCtxKey).(string); ok {
 		return v
 	}
@@ -565,7 +565,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	defer cancel()
 
 	ctx = WithRoot(ctx, req.Root)
-	ctx = WithCwd(ctx, req.Cwd)
+	ctx = WithCurrentWorkingDirectory(ctx, req.Cwd)
 	ctx = types.WithJobLease(ctx, req.Lease)
 	// A run of its own, so its env\set reaches no other run this server holds.
 	ctx = environ.With(ctx)
@@ -677,7 +677,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		ctx, cancel := context.WithCancel(s.parentCtx)
 		defer cancel()
 		ctx = WithRoot(ctx, req.Root)
-		ctx = WithCwd(ctx, req.Cwd)
+		ctx = WithCurrentWorkingDirectory(ctx, req.Cwd)
 		ctx = journal.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = environ.With(ctx)

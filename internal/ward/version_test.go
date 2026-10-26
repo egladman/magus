@@ -95,7 +95,7 @@ func TestCheckRequiredVersion_ShippedReleaseBelowTheFloorIsRefused(t *testing.T)
 	assert.Contains(t, err.Error(), "v0.3.1", "the message names the build that is too old")
 }
 
-// realBuzzErr compiles src and returns the failure wrapped the way workspace load wraps it.
+// realBuzzError compiles src and returns the failure wrapped the way workspace load wraps it.
 //
 // It goes through the checker rather than hand-building a *diagnostics.Error, and that is the
 // whole point of the helper. The hand-built fixture is not the shape gopherbuzz returns (the
@@ -105,16 +105,16 @@ func TestCheckRequiredVersion_ShippedReleaseBelowTheFloorIsRefused(t *testing.T)
 //
 // The test-only import of gopherbuzz does not move this package's production dependency floor,
 // which is why version.go still spells the codes as literals.
-func realBuzzErr(t *testing.T, src string) error {
+func realBuzzError(t *testing.T, src string) error {
 	t.Helper()
 	err := buzz.NewSession(t.Context()).Exec(t.Context(), src)
 	require.Error(t, err, "the fixture must actually fail to compile, or it pins nothing")
 	return fmt.Errorf("magusfile: exec magusfile.buzz: %w", err)
 }
 
-// buzzErr builds a coded diagnostic directly, for codes no Buzz source can produce here (a
-// magus code, an unrelated BZZ one). The positive cases go through realBuzzErr instead.
-func buzzErr(code, msg string) error {
+// buzzError builds a coded diagnostic directly, for codes no Buzz source can produce here (a
+// magus code, an unrelated BZZ one). The positive cases go through realBuzzError instead.
+func buzzError(code, msg string) error {
 	return fmt.Errorf("magusfile: exec magusfile.buzz: %w", &diagnostics.Error{
 		Code: diagnostics.Code(code),
 		Msg:  msg,
@@ -131,7 +131,7 @@ func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
 		{"the import it cascades into", `import "spells/github/actions";`, "module not found"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			src := realBuzzErr(t, tc.src)
+			src := realBuzzError(t, tc.src)
 			got := ExplainStaleBinary(src, "v0.3.9", ">= 0.4.0")
 			require.Error(t, got)
 			assert.Contains(t, src.Error(), tc.want, "the fixture must be the shape it names")
@@ -150,7 +150,7 @@ func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
 // built before it) fails with an uncoded "has no field or method", the third shape an
 // out-of-date binary produces. It must read as stale, or the verdict never says so.
 func TestExplainStaleBinary_AnnotatesAMissingObjectMember(t *testing.T) {
-	err := realBuzzErr(t, "object Guard { rules: int }\nfinal g = Guard{ rules = 1 };\ng.builtins(1);")
+	err := realBuzzError(t, "object Guard { rules: int }\nfinal g = Guard{ rules = 1 };\ng.builtins(1);")
 	require.ErrorContains(t, err, `has no field or method "builtins"`)
 
 	got := ExplainStaleBinary(err, "v0.3.9", ">= 0.4.0")
@@ -173,9 +173,9 @@ func TestIsStaleBinary(t *testing.T) {
 	}{
 		"nil":                          {nil, false},
 		"a plain error":                {errors.New("magusfile: unexpected '}'"), false},
-		"a different buzz code":        {buzzErr("BZZ1006", "call may raise"), false},
-		"an undefined type":            {buzzErr("BZZ1002", `undefined type "Secret"`), true},
-		"an unresolved import":         {buzzErr("BZZ2001", "module not found"), true},
+		"a different buzz code":        {buzzError("BZZ1006", "call may raise"), false},
+		"an undefined type":            {buzzError("BZZ1002", `undefined type "Secret"`), true},
+		"an unresolved import":         {buzzError("BZZ2001", "module not found"), true},
 		"a missing object member":      {missingMember, true},
 		"a missing object field":       {errors.New(`magusfile: exec magusfile.buzz: object guard has no field "builtins"`), true},
 		"an unknown built-in rule":     {unknownRule, true},
@@ -246,8 +246,8 @@ func TestExplainStaleBinary_LeavesEverythingElseAlone(t *testing.T) {
 	}{
 		{"nil", nil},
 		{"a plain error", errors.New("magusfile: exec magusfile.buzz: unexpected '}'")},
-		{"a different buzz code", buzzErr("BZZ1006", "call may raise but is neither declared with !> nor caught")},
-		{"a magus code", buzzErr("MGS1002", "duplicate spell source")},
+		{"a different buzz code", buzzError("BZZ1006", "call may raise but is neither declared with !> nor caught")},
+		{"a magus code", buzzError("MGS1002", "duplicate spell source")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ExplainStaleBinary(tc.err, "0.4.0", ">= 0.4.0")
@@ -265,7 +265,7 @@ func TestExplainStaleBinary_LeavesAMissingImportAlone(t *testing.T) {
 		`final p = magus\project;`,
 	} {
 		t.Run(src, func(t *testing.T) {
-			err := realBuzzErr(t, src)
+			err := realBuzzError(t, src)
 			require.ErrorContains(t, err, "no import binds magus in this module")
 			got := ExplainStaleBinary(err, "v0.3.9", ">= 0.4.0")
 			assert.Equal(t, err, got, "must be returned untouched")
@@ -279,7 +279,7 @@ func TestExplainStaleBinary_LeavesAMissingImportAlone(t *testing.T) {
 // hint still has to say something useful, because a workspace with no floor is exactly
 // the one whose users get no warning from CheckRequiredVersion.
 func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
-	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), DevVersion, "")
+	got := ExplainStaleBinary(realBuzzError(t, `final s = Secret{value = "x"};`), DevVersion, "")
 	require.Error(t, got)
 	assert.Contains(t, got.Error(), "\n\nThis magus is an unstamped build, so its version is unknown, "+
 		"and the workspace declares no required_version floor.\n"+
@@ -293,7 +293,7 @@ func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
 // CheckRequiredVersion, which exempts them. A dev build predating a pull is the most
 // common way to reach this, so exempting it here would skip the majority case.
 func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
-	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), DevVersion, ">= 0.4.0")
+	got := ExplainStaleBinary(realBuzzError(t, `final s = Secret{value = "x"};`), DevVersion, ">= 0.4.0")
 	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
 	assert.Contains(t, got.Error(), "this magus is out of date")
 
@@ -307,9 +307,9 @@ func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
 // stale-shaped failure among several must not relabel the others as a stale binary, and
 // the version gap is stated once however many branches are stale.
 func TestExplainStaleBinary_NotesOnlyTheBranchItExplains(t *testing.T) {
-	first := realBuzzErr(t, `final s = Secret{value = "x"};`)
-	other := buzzErr("MGS1038", "option removed")
-	second := realBuzzErr(t, `import "spells/github/actions";`)
+	first := realBuzzError(t, `final s = Secret{value = "x"};`)
+	other := buzzError("MGS1038", "option removed")
+	second := realBuzzError(t, `import "spells/github/actions";`)
 	got := ExplainStaleBinary(errors.Join(first, other, second), "v0.3.9", ">= 0.4.0")
 
 	multi, ok := got.(interface{ Unwrap() []error })
@@ -388,7 +388,7 @@ func TestStaleBuildAdvice(t *testing.T) {
 // TestExplainStaleBinary_KeepsAMultiWrapWhole pins that only a join splits: a
 // "%w: %w" wrapper keeps its own text and is noted as one error.
 func TestExplainStaleBinary_KeepsAMultiWrapWhole(t *testing.T) {
-	stale := realBuzzErr(t, `final s = Secret{value = "x"};`)
+	stale := realBuzzError(t, `final s = Secret{value = "x"};`)
 	wrapped := fmt.Errorf("project a: %w: %w", errors.New("load"), stale)
 	got := ExplainStaleBinary(wrapped, "0.4.0", ">= 0.4.0")
 

@@ -20,7 +20,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("withEnv", vm.DirectValue("os.withEnv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		env := ffi.StrMap(bzArgs, 0)
+		env := ffi.StringMap(bzArgs, 0)
 		callback := ffi.CallbackArg(sess, bzArgs, 1)
 		if err := std.OsWithEnv(ctx, env, callback); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -32,7 +32,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.ListValue([]vm.Value{ffi.StrVal(ret0), ffi.StrVal(ret1), ffi.StrVal(ret2)}), nil
+		return vm.ListValue([]vm.Value{ffi.StringVal(ret0), ffi.StringVal(ret1), ffi.StringVal(ret2)}), nil
 	}))
 	m.MapSet("exit", vm.DirectValue("os.exit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		code := ffi.Int(bzArgs, 0, 0)
@@ -60,14 +60,14 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("executable", vm.DirectValue("os.executable", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsExecutable(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("retry", vm.DirectValue("os.retry", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		max := ffi.Int(bzArgs, 0, 0)

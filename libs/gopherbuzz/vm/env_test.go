@@ -30,7 +30,7 @@ func TestEnvGetMissingReturnsFalse(t *testing.T) {
 func TestEnvMultipleDefinesAccumulateInNames(t *testing.T) {
 	e := NewEnv()
 	e.Define("a", IntValue(1))
-	e.Define("b", StrValue("hello"))
+	e.Define("b", StringValue("hello"))
 	e.Define("c", BoolValue(true))
 
 	names := e.Names()

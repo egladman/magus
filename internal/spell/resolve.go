@@ -30,9 +30,9 @@ func isBuiltinResolve(ctx context.Context) bool {
 	return v
 }
 
-// providerFrom returns ctx's telemetry provider only when it is enabled, else nil
+// providerFromContext returns ctx's telemetry provider only when it is enabled, else nil
 // so spell instrumentation stays a true no-op off the server path.
-func providerFrom(ctx context.Context) observability.Provider {
+func providerFromContext(ctx context.Context) observability.Provider {
 	p := observability.FromContext(ctx)
 	if p == nil || !p.Enabled() {
 		return nil
@@ -66,7 +66,7 @@ type Resolved struct {
 // modules can register them and run its own Exec first. src is that session's own
 // source, which the contract check reads for the declared signatures.
 func Resolve(ctx context.Context, sess *buzz.Session, src string) (Resolved, error) {
-	p := providerFrom(ctx)
+	p := providerFromContext(ctx)
 	if p == nil {
 		return resolveSpell(ctx, sess, src)
 	}

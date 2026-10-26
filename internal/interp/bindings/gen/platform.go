@@ -18,22 +18,22 @@ func RegisterPlatform(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("arch", vm.DirectValue("platform.arch", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := ffi.Str(bzArgs, 0)
-		style := ffi.Str(bzArgs, 1)
+		name := ffi.String(bzArgs, 0)
+		style := ffi.String(bzArgs, 1)
 		ret0, err := std.PlatformArch(ctx, name, style)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("os", vm.DirectValue("platform.os", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := ffi.Str(bzArgs, 0)
-		style := ffi.Str(bzArgs, 1)
+		name := ffi.String(bzArgs, 0)
+		style := ffi.String(bzArgs, 1)
 		ret0, err := std.PlatformOS(ctx, name, style)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("memoryBytes", vm.DirectValue("platform.memoryBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.PlatformMemory(ctx)

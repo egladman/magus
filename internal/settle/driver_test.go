@@ -341,7 +341,7 @@ func TestMergeDriverRunsNoGitCommandThatTakesARepositoryLock(t *testing.T) {
 // TestMergeDriverRecordsOwedRegeneration pins the driver's half: in a git checkout it
 // keeps %A untouched and records the target that rebuilds the file.
 func TestMergeDriverRecordsOwedRegeneration(t *testing.T) {
-	m, root := openMergeDriverWorkspace(t, testkit.NewRepo(t, nil).Workspace)
+	m, root := openMergeDriverWorkspace(t, testkit.NewRepository(t, nil).Workspace)
 	result := writeResultFile(t, t.TempDir(), "generated: the current version\n")
 
 	require.NoError(t, settleFile(t, m, []string{"ancestor", result, "other", "7", "gen/catalog.md"}))

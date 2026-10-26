@@ -97,10 +97,10 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 	return append(kept, positionals...), negations
 }
 
-func queryCmd(ctx context.Context, root string, args []string) error {
+func queryCommand(ctx context.Context, root string, args []string) error {
 	args, negations := splitQueryNegations(args)
 	var qf *flaggen.QueryFlags
-	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("query", args, func(fs *flag.FlagSet) {
 		qf = flaggen.BindQuery(fs, flaggen.QueryDefaults{URL: defaultLogViewerURL})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
@@ -858,9 +858,9 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 	return nil
 }
 
-func explainCmd(ctx context.Context, root string, args []string) error {
+func explainCommand(ctx context.Context, root string, args []string) error {
 	var xf *flaggen.ExplainFlags
-	pos, err := cmdParse("explain", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("explain", args, func(fs *flag.FlagSet) {
 		xf = flaggen.BindExplain(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus explain <node-id-or-name> [flags]")
@@ -946,9 +946,9 @@ func writeExplainText(w io.Writer, root, asked string, nx nextGate, next []types
 	return reportIndexStaleness(w, res.Answer)
 }
 
-func pathCmd(ctx context.Context, root string, args []string) error {
+func pathCommand(ctx context.Context, root string, args []string) error {
 	var pf *flaggen.PathFlags
-	pos, err := cmdParse("path", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("path", args, func(fs *flag.FlagSet) {
 		pf = flaggen.BindPath(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus path <a> <b> [flags]")

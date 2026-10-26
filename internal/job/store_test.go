@@ -388,7 +388,7 @@ func TestStorePutReleasesADeclaration(t *testing.T) {
 	t.Parallel()
 
 	const src = "package run\n\nfunc A() {\n\ta()\n}\n\nfunc B() {\n\tb()\n}\n"
-	root := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src}).Root()
+	root := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src}).Root()
 	s := tempStore(t, root)
 	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"run.go#A", "run.go#B", "run.go#Gone"}, State: types.StateRunning})
 
@@ -453,7 +453,7 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	head := repo.Head()
 	s := tempStore(t, repo.Root())
 	declared := lease("a")
@@ -507,7 +507,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			s := tempStore(t, execRepo(t).Root())
+			s := tempStore(t, execRepository(t).Root())
 			_, err := s.Update(ctx, "a", fork("goal", []string{"a.go"}, nil))
 			require.NoError(t, err)
 			taken, err := s.Exec(ctx, "a")
@@ -570,7 +570,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			repo := testkit.NewRepo(t, nil)
+			repo := testkit.NewRepository(t, nil)
 			head := repo.Head()
 			stored, err := tc.fork(t, tempStore(t, repo.Root()), head)
 			require.NoError(t, err)

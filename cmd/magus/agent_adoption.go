@@ -206,9 +206,9 @@ func topPatterns(counts map[string]int, n int) []patternCount {
 	return out
 }
 
-// agentAdoptionCmd implements `magus agent adoption`: read shell commands (stdin or --commands),
+// agentAdoptionCommand implements `magus agent adoption`: read shell commands (stdin or --commands),
 // report how often the graph was used versus grep.
-func agentAdoptionCmd(args []string) error {
+func agentAdoptionCommand(args []string) error {
 	fset := flag.NewFlagSet("agent adoption", flag.ContinueOnError)
 	bindDisplayFlags(fset)
 	af := flaggen.BindAgentAdoption(fset)

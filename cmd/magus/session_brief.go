@@ -271,8 +271,8 @@ type briefFailure struct {
 	At             string `json:"at,omitempty"`
 }
 
-// sessionBriefCmd implements `magus session --brief`.
-func sessionBriefCmd(ctx context.Context, root string) error {
+// sessionBriefCommand implements `magus session --brief`.
+func sessionBriefCommand(ctx context.Context, root string) error {
 	root = resolveRootOrEmpty(root)
 	if root == "" {
 		return fmt.Errorf("magus session --brief: no workspace here: the brief is read out of a checkout, so run from inside one or pass --root <path>")

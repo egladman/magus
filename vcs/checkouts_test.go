@@ -18,7 +18,7 @@ var headRev = map[string]string{"git": "HEAD", "hg": ".", "sl": ".", "jj": "@-"}
 // command: its working copy is the commit.
 func commitIn(t *testing.T, b parityBackend, dir string) {
 	t.Helper()
-	writeRepoFile(t, dir, "b.txt", "two\n")
+	writeRepositoryFile(t, dir, "b.txt", "two\n")
 	switch b.name {
 	case "git":
 		vcsTestRun(t, dir, "git", "add", "b.txt")

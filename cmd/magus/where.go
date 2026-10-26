@@ -78,11 +78,11 @@ func normalizeFilters(filters []string, wsRoot string) []string {
 	return out
 }
 
-// whereCmd fuzzy-matches a project and prints its absolute path. On ambiguity, lists candidates and exits 2.
-func whereCmd(ctx context.Context, root string, args []string) error {
+// whereCommand fuzzy-matches a project and prints its absolute path. On ambiguity, lists candidates and exits 2.
+func whereCommand(ctx context.Context, root string, args []string) error {
 	var printAll bool
 	var filterPat, glob, regex, literal string
-	filters, err := cmdParse("where", args, func(fs *flag.FlagSet) {
+	filters, err := commandParse("where", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&printAll, "all", false, "Print all matching paths to stdout; do not error on ambiguity")
 		fs.BoolVar(&printAll, "A", false, "Short for --all")
 		fs.StringVar(&filterPat, "filter", "", "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>")

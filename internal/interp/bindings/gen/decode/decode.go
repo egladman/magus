@@ -37,13 +37,13 @@ func decodePath(v vm.Value, path string) (types.Path, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "value":
-			sValue, err := decodeStr(item, path+".value")
+			sValue, err := decodeString(item, path+".value")
 			if err != nil {
 				return out, err
 			}
 			out.Value = sValue
 		case "base":
-			sBase, err := decodeStr(item, path+".base")
+			sBase, err := decodeString(item, path+".base")
 			if err != nil {
 				return out, err
 			}
@@ -76,13 +76,13 @@ func decodeHint(v vm.Value, path string) (spells.Hint, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "contains":
-			sContains, err := decodeStr(item, path+".contains")
+			sContains, err := decodeString(item, path+".contains")
 			if err != nil {
 				return out, err
 			}
 			out.Contains = sContains
 		case "advise":
-			sAdvise, err := decodeStr(item, path+".advise")
+			sAdvise, err := decodeString(item, path+".advise")
 			if err != nil {
 				return out, err
 			}
@@ -109,31 +109,31 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "bin":
-			sBin, err := decodeStr(item, path+".bin")
+			sBin, err := decodeString(item, path+".bin")
 			if err != nil {
 				return out, err
 			}
 			out.Bin = sBin
 		case "args":
-			strsArgs, err := decodeStrs(item, path+".args")
+			strsArgs, err := decodeStringList(item, path+".args")
 			if err != nil {
 				return out, err
 			}
 			out.Args = strsArgs
 		case "defaultArgs":
-			strsDefaultArgs, err := decodeStrs(item, path+".defaultArgs")
+			strsDefaultArgs, err := decodeStringList(item, path+".defaultArgs")
 			if err != nil {
 				return out, err
 			}
 			out.DefaultArgs = strsDefaultArgs
 		case "trailingArgs":
-			strsTrailingArgs, err := decodeStrs(item, path+".trailingArgs")
+			strsTrailingArgs, err := decodeStringList(item, path+".trailingArgs")
 			if err != nil {
 				return out, err
 			}
 			out.TrailingArgs = strsTrailingArgs
 		case "needsArgs":
-			sNeedsArgs, err := decodeStr(item, path+".needsArgs")
+			sNeedsArgs, err := decodeString(item, path+".needsArgs")
 			if err != nil {
 				return out, err
 			}
@@ -158,7 +158,7 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 				out.Charms = mappedCharms
 			}
 		case "sources":
-			strsSources, err := decodeStrs(item, path+".sources")
+			strsSources, err := decodeStringList(item, path+".sources")
 			if err != nil {
 				return out, err
 			}
@@ -197,7 +197,7 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 				for _, keySecrets := range keys {
 					elemSecrets, _ := entriesSecrets.MapGet(keySecrets)
 					var valueSecrets string
-					sSecretsValue, err := decodeStr(elemSecrets, fmt.Sprintf("%s[%q]", path+".secrets", keySecrets))
+					sSecretsValue, err := decodeString(elemSecrets, fmt.Sprintf("%s[%q]", path+".secrets", keySecrets))
 					if err != nil {
 						return out, err
 					}
@@ -207,7 +207,7 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 				out.Secrets = mappedSecrets
 			}
 		case "envKeys":
-			strsEnvKeys, err := decodeStrs(item, path+".envKeys")
+			strsEnvKeys, err := decodeStringList(item, path+".envKeys")
 			if err != nil {
 				return out, err
 			}
@@ -250,7 +250,7 @@ func decodeInstall(v vm.Value, path string) (spells.Install, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
@@ -262,7 +262,7 @@ func decodeInstall(v vm.Value, path string) (spells.Install, error) {
 			}
 			out.Command = xCommand
 		case "dir":
-			sDir, err := decodeStr(item, path+".dir")
+			sDir, err := decodeString(item, path+".dir")
 			if err != nil {
 				return out, err
 			}
@@ -274,19 +274,19 @@ func decodeInstall(v vm.Value, path string) (spells.Install, error) {
 			}
 			out.Relocatable = bRelocatable
 		case "stamps":
-			strsStamps, err := decodeStrs(item, path+".stamps")
+			strsStamps, err := decodeStringList(item, path+".stamps")
 			if err != nil {
 				return out, err
 			}
 			out.Stamps = strsStamps
 		case "inputs":
-			strsInputs, err := decodeStrs(item, path+".inputs")
+			strsInputs, err := decodeStringList(item, path+".inputs")
 			if err != nil {
 				return out, err
 			}
 			out.Inputs = strsInputs
 		case "tools":
-			strsTools, err := decodeStrs(item, path+".tools")
+			strsTools, err := decodeStringList(item, path+".tools")
 			if err != nil {
 				return out, err
 			}
@@ -313,13 +313,13 @@ func decodeManifest(v vm.Value, path string) (spells.Manifest, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "value":
-			sValue, err := decodeStr(item, path+".value")
+			sValue, err := decodeString(item, path+".value")
 			if err != nil {
 				return out, err
 			}
 			out.Value = sValue
 		case "lockCandidates":
-			strsLockCandidates, err := decodeStrs(item, path+".lockCandidates")
+			strsLockCandidates, err := decodeStringList(item, path+".lockCandidates")
 			if err != nil {
 				return out, err
 			}
@@ -389,13 +389,13 @@ func decodeService(v vm.Value, path string) (spells.Service, error) {
 			}
 			out.Stop = xStop
 		case "distinct":
-			sDistinct, err := decodeStr(item, path+".distinct")
+			sDistinct, err := decodeString(item, path+".distinct")
 			if err != nil {
 				return out, err
 			}
 			out.Distinct = sDistinct
 		case "idle":
-			sIdle, err := decodeStr(item, path+".idle")
+			sIdle, err := decodeString(item, path+".idle")
 			if err != nil {
 				return out, err
 			}
@@ -428,7 +428,7 @@ func decodeSymbolIndexer(v vm.Value, path string) (spells.SymbolIndexer, error) 
 			}
 			out.Format = spells.SymbolFormat(sFormat)
 		case "op":
-			sOp, err := decodeStr(item, path+".op")
+			sOp, err := decodeString(item, path+".op")
 			if err != nil {
 				return out, err
 			}
@@ -440,7 +440,7 @@ func decodeSymbolIndexer(v vm.Value, path string) (spells.SymbolIndexer, error) 
 			}
 			out.Command = xCommand
 		case "uses":
-			strsUses, err := decodeStrs(item, path+".uses")
+			strsUses, err := decodeStringList(item, path+".uses")
 			if err != nil {
 				return out, err
 			}
@@ -462,7 +462,7 @@ func decodeSymbolIndexer(v vm.Value, path string) (spells.SymbolIndexer, error) 
 						for _, keyEnvsItem := range keys {
 							elemEnvsItem, _ := entriesEnvsItem.MapGet(keyEnvsItem)
 							var valueEnvsItem string
-							sEnvsItemValue, err := decodeStr(elemEnvsItem, fmt.Sprintf("%s[%q]", fmt.Sprintf("%s[%d]", path+".envs", indexEnvs), keyEnvsItem))
+							sEnvsItemValue, err := decodeString(elemEnvsItem, fmt.Sprintf("%s[%q]", fmt.Sprintf("%s[%d]", path+".envs", indexEnvs), keyEnvsItem))
 							if err != nil {
 								return out, err
 							}
@@ -539,19 +539,19 @@ func decodePatchOp(v vm.Value, path string) (spells.PatchOp, error) {
 			}
 			out.Op = spells.PatchOpKind(sOp)
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
 			out.Path = sPath
 		case "value":
-			sValue, err := decodeStr(item, path+".value")
+			sValue, err := decodeString(item, path+".value")
 			if err != nil {
 				return out, err
 			}
 			out.Value = sValue
 		case "fromPtr":
-			sFrom, err := decodeStr(item, path+".fromPtr")
+			sFrom, err := decodeString(item, path+".fromPtr")
 			if err != nil {
 				return out, err
 			}
@@ -578,7 +578,7 @@ func decodeVersionKey(v vm.Value, path string) (spells.VersionKey, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "const":
-			sConst, err := decodeStr(item, path+".const")
+			sConst, err := decodeString(item, path+".const")
 			if err != nil {
 				return out, err
 			}
@@ -611,13 +611,13 @@ func decodeVersionBounds(v vm.Value, path string) (spells.VersionBounds, error) 
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "min":
-			sMin, err := decodeStr(item, path+".min")
+			sMin, err := decodeString(item, path+".min")
 			if err != nil {
 				return out, err
 			}
 			out.Min = sMin
 		case "below":
-			sBelow, err := decodeStr(item, path+".below")
+			sBelow, err := decodeString(item, path+".below")
 			if err != nil {
 				return out, err
 			}
@@ -680,7 +680,7 @@ func decodeTool(v vm.Value, path string) (spells.Tool, error) {
 			}
 			out.Diagnostics = spells.DiagnosticFormat(sDiagnostics)
 		case "lifecycle":
-			sLifecycle, err := decodeStr(item, path+".lifecycle")
+			sLifecycle, err := decodeString(item, path+".lifecycle")
 			if err != nil {
 				return out, err
 			}
@@ -707,37 +707,37 @@ func decodeSandboxAllow(v vm.Value, path string) (spells.SandboxAllow, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
 			out.Name = sName
 		case "env":
-			sEnv, err := decodeStr(item, path+".env")
+			sEnv, err := decodeString(item, path+".env")
 			if err != nil {
 				return out, err
 			}
 			out.Env = sEnv
 		case "base":
-			sBase, err := decodeStr(item, path+".base")
+			sBase, err := decodeString(item, path+".base")
 			if err != nil {
 				return out, err
 			}
 			out.Base = sBase
 		case "bin":
-			sBin, err := decodeStr(item, path+".bin")
+			sBin, err := decodeString(item, path+".bin")
 			if err != nil {
 				return out, err
 			}
 			out.Bin = sBin
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
 			out.Path = sPath
 		case "requires":
-			sRequires, err := decodeStr(item, path+".requires")
+			sRequires, err := decodeString(item, path+".requires")
 			if err != nil {
 				return out, err
 			}
@@ -770,7 +770,7 @@ func decodeSandboxEnv(v vm.Value, path string) (spells.SandboxEnv, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "passthrough":
-			strsPassthrough, err := decodeStrs(item, path+".passthrough")
+			strsPassthrough, err := decodeStringList(item, path+".passthrough")
 			if err != nil {
 				return out, err
 			}
@@ -797,7 +797,7 @@ func decodeSandboxCache(v vm.Value, path string) (spells.SandboxCache, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "env":
-			sEnv, err := decodeStr(item, path+".env")
+			sEnv, err := decodeString(item, path+".env")
 			if err != nil {
 				return out, err
 			}
@@ -809,7 +809,7 @@ func decodeSandboxCache(v vm.Value, path string) (spells.SandboxCache, error) {
 			}
 			out.StampsUse = bStampsUse
 		case "skip":
-			strsSkip, err := decodeStrs(item, path+".skip")
+			strsSkip, err := decodeStringList(item, path+".skip")
 			if err != nil {
 				return out, err
 			}
@@ -895,13 +895,13 @@ func decodeCommentBlock(v vm.Value, path string) (spells.CommentBlock, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "open":
-			sOpen, err := decodeStr(item, path+".open")
+			sOpen, err := decodeString(item, path+".open")
 			if err != nil {
 				return out, err
 			}
 			out.Open = sOpen
 		case "close":
-			sClose, err := decodeStr(item, path+".close")
+			sClose, err := decodeString(item, path+".close")
 			if err != nil {
 				return out, err
 			}
@@ -928,13 +928,13 @@ func decodeQuote(v vm.Value, path string) (spells.Quote, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "open":
-			sOpen, err := decodeStr(item, path+".open")
+			sOpen, err := decodeString(item, path+".open")
 			if err != nil {
 				return out, err
 			}
 			out.Open = sOpen
 		case "close":
-			sClose, err := decodeStr(item, path+".close")
+			sClose, err := decodeString(item, path+".close")
 			if err != nil {
 				return out, err
 			}
@@ -967,7 +967,7 @@ func decodeCommentSyntax(v vm.Value, path string) (spells.CommentSyntax, error) 
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "lineComments":
-			strsLineComments, err := decodeStrs(item, path+".lineComments")
+			strsLineComments, err := decodeStringList(item, path+".lineComments")
 			if err != nil {
 				return out, err
 			}
@@ -1011,7 +1011,7 @@ func decodeCommentSyntax(v vm.Value, path string) (spells.CommentSyntax, error) 
 				out.Quotes = itemsQuotes
 			}
 		case "directives":
-			strsDirectives, err := decodeStrs(item, path+".directives")
+			strsDirectives, err := decodeStringList(item, path+".directives")
 			if err != nil {
 				return out, err
 			}
@@ -1038,19 +1038,19 @@ func decodeStubSyntax(v vm.Value, path string) (spells.StubSyntax, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "kinds":
-			strsKinds, err := decodeStrs(item, path+".kinds")
+			strsKinds, err := decodeStringList(item, path+".kinds")
 			if err != nil {
 				return out, err
 			}
 			out.Kinds = strsKinds
 		case "bodyStyle":
-			sBodyStyle, err := decodeStr(item, path+".bodyStyle")
+			sBodyStyle, err := decodeString(item, path+".bodyStyle")
 			if err != nil {
 				return out, err
 			}
 			out.BodyStyle = sBodyStyle
 		case "body":
-			sBody, err := decodeStr(item, path+".body")
+			sBody, err := decodeString(item, path+".body")
 			if err != nil {
 				return out, err
 			}
@@ -1118,13 +1118,13 @@ func decodeLanguage(v vm.Value, path string) (spells.Language, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
 			out.Name = sName
 		case "extensions":
-			strsExtensions, err := decodeStrs(item, path+".extensions")
+			strsExtensions, err := decodeStringList(item, path+".extensions")
 			if err != nil {
 				return out, err
 			}
@@ -1188,13 +1188,13 @@ func decodeGreenRun(v vm.Value, path string) (types.GreenRun, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "run":
-			sRun, err := decodeStr(item, path+".run")
+			sRun, err := decodeString(item, path+".run")
 			if err != nil {
 				return out, err
 			}
 			out.Run = sRun
 		case "commit":
-			sCommit, err := decodeStr(item, path+".commit")
+			sCommit, err := decodeString(item, path+".commit")
 			if err != nil {
 				return out, err
 			}
@@ -1221,7 +1221,7 @@ func decodeStrings(v vm.Value, path string) (types.Strings, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "items":
-			strsItems, err := decodeStrs(item, path+".items")
+			strsItems, err := decodeStringList(item, path+".items")
 			if err != nil {
 				return out, err
 			}
@@ -1275,7 +1275,7 @@ func decodeSecret(v vm.Value, path string) (spells.Secret, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "value":
-			sValue, err := decodeStr(item, path+".value")
+			sValue, err := decodeString(item, path+".value")
 			if err != nil {
 				return out, err
 			}
@@ -1302,19 +1302,19 @@ func decodeReleaseCycle(v vm.Value, path string) (spells.ReleaseCycle, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "cycle":
-			sCycle, err := decodeStr(item, path+".cycle")
+			sCycle, err := decodeString(item, path+".cycle")
 			if err != nil {
 				return out, err
 			}
 			out.Cycle = sCycle
 		case "released":
-			sReleased, err := decodeStr(item, path+".released")
+			sReleased, err := decodeString(item, path+".released")
 			if err != nil {
 				return out, err
 			}
 			out.Released = sReleased
 		case "eol":
-			sEOL, err := decodeStr(item, path+".eol")
+			sEOL, err := decodeString(item, path+".eol")
 			if err != nil {
 				return out, err
 			}
@@ -1326,7 +1326,7 @@ func decodeReleaseCycle(v vm.Value, path string) (spells.ReleaseCycle, error) {
 			}
 			out.LTS = bLTS
 		case "latest":
-			sLatest, err := decodeStr(item, path+".latest")
+			sLatest, err := decodeString(item, path+".latest")
 			if err != nil {
 				return out, err
 			}
@@ -1353,19 +1353,19 @@ func decodeLifecycle(v vm.Value, path string) (spells.Lifecycle, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "key":
-			sKey, err := decodeStr(item, path+".key")
+			sKey, err := decodeString(item, path+".key")
 			if err != nil {
 				return out, err
 			}
 			out.Key = sKey
 		case "source":
-			sSource, err := decodeStr(item, path+".source")
+			sSource, err := decodeString(item, path+".source")
 			if err != nil {
 				return out, err
 			}
 			out.Source = sSource
 		case "asOf":
-			sAsOf, err := decodeStr(item, path+".asOf")
+			sAsOf, err := decodeString(item, path+".asOf")
 			if err != nil {
 				return out, err
 			}
@@ -1408,37 +1408,37 @@ func decodeReviewTarget(v vm.Value, path string) (types.ReviewTarget, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "id":
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "repo":
-			sRepo, err := decodeStr(item, path+".repo")
+			sRepo, err := decodeString(item, path+".repo")
 			if err != nil {
 				return out, err
 			}
 			out.Repo = sRepo
 		case "reason":
-			sReason, err := decodeStr(item, path+".reason")
+			sReason, err := decodeString(item, path+".reason")
 			if err != nil {
 				return out, err
 			}
 			out.Reason = sReason
 		case "state":
-			sState, err := decodeStr(item, path+".state")
+			sState, err := decodeString(item, path+".state")
 			if err != nil {
 				return out, err
 			}
 			out.State = sState
 		case "author":
-			sAuthor, err := decodeStr(item, path+".author")
+			sAuthor, err := decodeString(item, path+".author")
 			if err != nil {
 				return out, err
 			}
 			out.Author = sAuthor
 		case "viewer":
-			sViewer, err := decodeStr(item, path+".viewer")
+			sViewer, err := decodeString(item, path+".viewer")
 			if err != nil {
 				return out, err
 			}
@@ -1465,13 +1465,13 @@ func decodeReviewComment(v vm.Value, path string) (types.ReviewComment, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "id":
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
@@ -1489,19 +1489,19 @@ func decodeReviewComment(v vm.Value, path string) (types.ReviewComment, error) {
 			}
 			out.Hunk = int(nHunk)
 		case "author":
-			sAuthor, err := decodeStr(item, path+".author")
+			sAuthor, err := decodeString(item, path+".author")
 			if err != nil {
 				return out, err
 			}
 			out.Author = sAuthor
 		case "body":
-			sBody, err := decodeStr(item, path+".body")
+			sBody, err := decodeString(item, path+".body")
 			if err != nil {
 				return out, err
 			}
 			out.Body = sBody
 		case "root":
-			sRoot, err := decodeStr(item, path+".root")
+			sRoot, err := decodeString(item, path+".root")
 			if err != nil {
 				return out, err
 			}
@@ -1513,7 +1513,7 @@ func decodeReviewComment(v vm.Value, path string) (types.ReviewComment, error) {
 			}
 			out.Outdated = bOutdated
 		case "diffHunk":
-			sDiffHunk, err := decodeStr(item, path+".diffHunk")
+			sDiffHunk, err := decodeString(item, path+".diffHunk")
 			if err != nil {
 				return out, err
 			}
@@ -1546,37 +1546,37 @@ func decodeProvidedProject(v vm.Value, path string) (spells.ProvidedProject, err
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
 			out.Path = sPath
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
 			out.Name = sName
 		case "spells":
-			strsSpells, err := decodeStrs(item, path+".spells")
+			strsSpells, err := decodeStringList(item, path+".spells")
 			if err != nil {
 				return out, err
 			}
 			out.Spells = strsSpells
 		case "depends_on":
-			strsDependsOn, err := decodeStrs(item, path+".depends_on")
+			strsDependsOn, err := decodeStringList(item, path+".depends_on")
 			if err != nil {
 				return out, err
 			}
 			out.DependsOn = strsDependsOn
 		case "sources":
-			strsSources, err := decodeStrs(item, path+".sources")
+			strsSources, err := decodeStringList(item, path+".sources")
 			if err != nil {
 				return out, err
 			}
 			out.Sources = strsSources
 		case "outputs":
-			strsOutputs, err := decodeStrs(item, path+".outputs")
+			strsOutputs, err := decodeStringList(item, path+".outputs")
 			if err != nil {
 				return out, err
 			}
@@ -1603,13 +1603,13 @@ func decodePerson(v vm.Value, path string) (types.Person, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
 			out.Name = sName
 		case "email":
-			sEmail, err := decodeStr(item, path+".email")
+			sEmail, err := decodeString(item, path+".email")
 			if err != nil {
 				return out, err
 			}
@@ -1636,13 +1636,13 @@ func decodeQueueIntegration(v vm.Value, path string) (queuetypes.Integration, er
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "id":
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
@@ -1669,19 +1669,19 @@ func decodeQueueRequiredCheck(v vm.Value, path string) (queuetypes.RequiredCheck
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "context":
-			sContext, err := decodeStr(item, path+".context")
+			sContext, err := decodeString(item, path+".context")
 			if err != nil {
 				return out, err
 			}
 			out.Context = sContext
 		case "integration":
-			sIntegration, err := decodeStr(item, path+".integration")
+			sIntegration, err := decodeString(item, path+".integration")
 			if err != nil {
 				return out, err
 			}
 			out.Integration = sIntegration
 		case "events":
-			strsEvents, err := decodeStrs(item, path+".events")
+			strsEvents, err := decodeStringList(item, path+".events")
 			if err != nil {
 				return out, err
 			}
@@ -1708,19 +1708,19 @@ func decodeQueueSetting(v vm.Value, path string) (queuetypes.Setting, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
 			out.Name = sName
 		case "value":
-			sValue, err := decodeStr(item, path+".value")
+			sValue, err := decodeString(item, path+".value")
 			if err != nil {
 				return out, err
 			}
 			out.Value = sValue
 		case "want":
-			sWant, err := decodeStr(item, path+".want")
+			sWant, err := decodeString(item, path+".want")
 			if err != nil {
 				return out, err
 			}
@@ -1747,49 +1747,49 @@ func decodeQueueApp(v vm.Value, path string) (queuetypes.App, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "slug":
-			sSlug, err := decodeStr(item, path+".slug")
+			sSlug, err := decodeString(item, path+".slug")
 			if err != nil {
 				return out, err
 			}
 			out.Slug = sSlug
 		case "id":
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "clientID":
-			sClientID, err := decodeStr(item, path+".clientID")
+			sClientID, err := decodeString(item, path+".clientID")
 			if err != nil {
 				return out, err
 			}
 			out.ClientID = sClientID
 		case "registrationURL":
-			sRegistrationURL, err := decodeStr(item, path+".registrationURL")
+			sRegistrationURL, err := decodeString(item, path+".registrationURL")
 			if err != nil {
 				return out, err
 			}
 			out.RegistrationURL = sRegistrationURL
 		case "installURL":
-			sInstallURL, err := decodeStr(item, path+".installURL")
+			sInstallURL, err := decodeString(item, path+".installURL")
 			if err != nil {
 				return out, err
 			}
 			out.InstallURL = sInstallURL
 		case "environment":
-			sEnvironment, err := decodeStr(item, path+".environment")
+			sEnvironment, err := decodeString(item, path+".environment")
 			if err != nil {
 				return out, err
 			}
 			out.Environment = sEnvironment
 		case "variable":
-			sVariable, err := decodeStr(item, path+".variable")
+			sVariable, err := decodeString(item, path+".variable")
 			if err != nil {
 				return out, err
 			}
 			out.Variable = sVariable
 		case "secret":
-			sSecret, err := decodeStr(item, path+".secret")
+			sSecret, err := decodeString(item, path+".secret")
 			if err != nil {
 				return out, err
 			}
@@ -1816,19 +1816,19 @@ func decodeQueueSetupStep(v vm.Value, path string) (queuetypes.SetupStep, error)
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "title":
-			sTitle, err := decodeStr(item, path+".title")
+			sTitle, err := decodeString(item, path+".title")
 			if err != nil {
 				return out, err
 			}
 			out.Title = sTitle
 		case "command":
-			sCommand, err := decodeStr(item, path+".command")
+			sCommand, err := decodeString(item, path+".command")
 			if err != nil {
 				return out, err
 			}
 			out.Command = sCommand
 		case "url":
-			sURL, err := decodeStr(item, path+".url")
+			sURL, err := decodeString(item, path+".url")
 			if err != nil {
 				return out, err
 			}
@@ -1858,7 +1858,7 @@ func decodeQueueSetup(v vm.Value, path string) (queuetypes.Setup, error) {
 		switch key {
 		case "statusContext":
 			hasStatusContext = true
-			sStatusContext, err := decodeStr(item, path+".statusContext")
+			sStatusContext, err := decodeString(item, path+".statusContext")
 			if err != nil {
 				return out, err
 			}
@@ -1960,21 +1960,21 @@ func decodeQueueSetupRefusedError(v vm.Value, path string) (queuetypes.SetupRefu
 		switch key {
 		case "reason":
 			hasReason = true
-			sReason, err := decodeStr(item, path+".reason")
+			sReason, err := decodeString(item, path+".reason")
 			if err != nil {
 				return out, err
 			}
 			out.Reason = sReason
 		case "url":
 			hasUrl = true
-			sURL, err := decodeStr(item, path+".url")
+			sURL, err := decodeString(item, path+".url")
 			if err != nil {
 				return out, err
 			}
 			out.URL = sURL
 		case "app":
 			hasApp = true
-			sApp, err := decodeStr(item, path+".app")
+			sApp, err := decodeString(item, path+".app")
 			if err != nil {
 				return out, err
 			}
@@ -2015,7 +2015,7 @@ func decodeQueueCapabilities(v vm.Value, path string) (queuetypes.Capabilities, 
 		switch key {
 		case "stackMerge":
 			hasStackMerge = true
-			sStackMerge, err := decodeStr(item, path+".stackMerge")
+			sStackMerge, err := decodeString(item, path+".stackMerge")
 			if err != nil {
 				return out, err
 			}
@@ -2036,7 +2036,7 @@ func decodeQueueCapabilities(v vm.Value, path string) (queuetypes.Capabilities, 
 			if len(listMethods) > 0 {
 				itemsMethods := make([]queuetypes.MergeMethod, len(listMethods))
 				for indexMethods, itemMethods := range listMethods {
-					sMethodsItem, err := decodeStr(itemMethods, fmt.Sprintf("%s[%d]", path+".methods", indexMethods))
+					sMethodsItem, err := decodeString(itemMethods, fmt.Sprintf("%s[%d]", path+".methods", indexMethods))
 					if err != nil {
 						return out, err
 					}
@@ -2052,7 +2052,7 @@ func decodeQueueCapabilities(v vm.Value, path string) (queuetypes.Capabilities, 
 			}
 			out.RequiredApprovals = int(nRequiredApprovals)
 		case "queueLabel":
-			sQueueLabel, err := decodeStr(item, path+".queueLabel")
+			sQueueLabel, err := decodeString(item, path+".queueLabel")
 			if err != nil {
 				return out, err
 			}
@@ -2155,65 +2155,65 @@ func decodeQueueChange(v vm.Value, path string) (queuetypes.Change, error) {
 		switch key {
 		case "id":
 			hasId = true
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "repo":
 			hasRepo = true
-			sRepo, err := decodeStr(item, path+".repo")
+			sRepo, err := decodeString(item, path+".repo")
 			if err != nil {
 				return out, err
 			}
 			out.Repo = sRepo
 		case "head":
 			hasHead = true
-			sHead, err := decodeStr(item, path+".head")
+			sHead, err := decodeString(item, path+".head")
 			if err != nil {
 				return out, err
 			}
 			out.Head = sHead
 		case "ref":
-			sRef, err := decodeStr(item, path+".ref")
+			sRef, err := decodeString(item, path+".ref")
 			if err != nil {
 				return out, err
 			}
 			out.Ref = sRef
 		case "branch":
-			sBranch, err := decodeStr(item, path+".branch")
+			sBranch, err := decodeString(item, path+".branch")
 			if err != nil {
 				return out, err
 			}
 			out.Branch = sBranch
 		case "base":
 			hasBase = true
-			sBase, err := decodeStr(item, path+".base")
+			sBase, err := decodeString(item, path+".base")
 			if err != nil {
 				return out, err
 			}
 			out.Base = sBase
 		case "title":
-			sTitle, err := decodeStr(item, path+".title")
+			sTitle, err := decodeString(item, path+".title")
 			if err != nil {
 				return out, err
 			}
 			out.Title = sTitle
 		case "author":
-			sAuthor, err := decodeStr(item, path+".author")
+			sAuthor, err := decodeString(item, path+".author")
 			if err != nil {
 				return out, err
 			}
 			out.Author = sAuthor
 		case "method":
 			hasMethod = true
-			sMethod, err := decodeStr(item, path+".method")
+			sMethod, err := decodeString(item, path+".method")
 			if err != nil {
 				return out, err
 			}
 			out.Method = queuetypes.MergeMethod(sMethod)
 		case "parent":
-			sParent, err := decodeStr(item, path+".parent")
+			sParent, err := decodeString(item, path+".parent")
 			if err != nil {
 				return out, err
 			}
@@ -2226,25 +2226,25 @@ func decodeQueueChange(v vm.Value, path string) (queuetypes.Change, error) {
 			}
 			out.Fork = bFork
 		case "affected":
-			strsAffected, err := decodeStrs(item, path+".affected")
+			strsAffected, err := decodeStringList(item, path+".affected")
 			if err != nil {
 				return out, err
 			}
 			out.Affected = strsAffected
 		case "unboundedBy":
-			sUnboundedBy, err := decodeStr(item, path+".unboundedBy")
+			sUnboundedBy, err := decodeString(item, path+".unboundedBy")
 			if err != nil {
 				return out, err
 			}
 			out.UnboundedBy = sUnboundedBy
 		case "stackBase":
-			sStackBase, err := decodeStr(item, path+".stackBase")
+			sStackBase, err := decodeString(item, path+".stackBase")
 			if err != nil {
 				return out, err
 			}
 			out.StackBase = sStackBase
 		case "below":
-			sBelow, err := decodeStr(item, path+".below")
+			sBelow, err := decodeString(item, path+".below")
 			if err != nil {
 				return out, err
 			}
@@ -2294,28 +2294,28 @@ func decodeQueueMergedChange(v vm.Value, path string) (queuetypes.MergedChange, 
 		switch key {
 		case "id":
 			hasId = true
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "head":
 			hasHead = true
-			sHead, err := decodeStr(item, path+".head")
+			sHead, err := decodeString(item, path+".head")
 			if err != nil {
 				return out, err
 			}
 			out.Head = sHead
 		case "commit":
 			hasCommit = true
-			sCommit, err := decodeStr(item, path+".commit")
+			sCommit, err := decodeString(item, path+".commit")
 			if err != nil {
 				return out, err
 			}
 			out.Commit = sCommit
 		case "method":
 			hasMethod = true
-			sMethod, err := decodeStr(item, path+".method")
+			sMethod, err := decodeString(item, path+".method")
 			if err != nil {
 				return out, err
 			}
@@ -2357,50 +2357,50 @@ func decodeQueueUnqueuedChange(v vm.Value, path string) (queuetypes.UnqueuedChan
 		switch key {
 		case "id":
 			hasId = true
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "repo":
-			sRepo, err := decodeStr(item, path+".repo")
+			sRepo, err := decodeString(item, path+".repo")
 			if err != nil {
 				return out, err
 			}
 			out.Repo = sRepo
 		case "head":
 			hasHead = true
-			sHead, err := decodeStr(item, path+".head")
+			sHead, err := decodeString(item, path+".head")
 			if err != nil {
 				return out, err
 			}
 			out.Head = sHead
 		case "title":
-			sTitle, err := decodeStr(item, path+".title")
+			sTitle, err := decodeString(item, path+".title")
 			if err != nil {
 				return out, err
 			}
 			out.Title = sTitle
 		case "author":
-			sAuthor, err := decodeStr(item, path+".author")
+			sAuthor, err := decodeString(item, path+".author")
 			if err != nil {
 				return out, err
 			}
 			out.Author = sAuthor
 		case "branch":
-			sBranch, err := decodeStr(item, path+".branch")
+			sBranch, err := decodeString(item, path+".branch")
 			if err != nil {
 				return out, err
 			}
 			out.Branch = sBranch
 		case "base":
-			sBase, err := decodeStr(item, path+".base")
+			sBase, err := decodeString(item, path+".base")
 			if err != nil {
 				return out, err
 			}
 			out.Base = sBase
 		case "mark":
-			sMark, err := decodeStr(item, path+".mark")
+			sMark, err := decodeString(item, path+".mark")
 			if err != nil {
 				return out, err
 			}
@@ -2435,13 +2435,13 @@ func decodeQueueClosedChange(v vm.Value, path string) (queuetypes.ClosedChange, 
 		switch key {
 		case "id":
 			hasId = true
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "repo":
-			sRepo, err := decodeStr(item, path+".repo")
+			sRepo, err := decodeString(item, path+".repo")
 			if err != nil {
 				return out, err
 			}
@@ -2474,19 +2474,19 @@ func decodeQueueChanges(v vm.Value, path string) (queuetypes.Changes, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "schema":
-			sSchema, err := decodeStr(item, path+".schema")
+			sSchema, err := decodeString(item, path+".schema")
 			if err != nil {
 				return out, err
 			}
 			out.Schema = sSchema
 		case "base":
-			sBase, err := decodeStr(item, path+".base")
+			sBase, err := decodeString(item, path+".base")
 			if err != nil {
 				return out, err
 			}
 			out.Base = sBase
 		case "remoteURL":
-			sRemoteURL, err := decodeStr(item, path+".remoteURL")
+			sRemoteURL, err := decodeString(item, path+".remoteURL")
 			if err != nil {
 				return out, err
 			}
@@ -2603,27 +2603,27 @@ func decodeQueueApproval(v vm.Value, path string) (queuetypes.Approval, error) {
 			out.Approved = bApproved
 		case "head":
 			hasHead = true
-			sHead, err := decodeStr(item, path+".head")
+			sHead, err := decodeString(item, path+".head")
 			if err != nil {
 				return out, err
 			}
 			out.Head = sHead
 		case "reason":
-			sReason, err := decodeStr(item, path+".reason")
+			sReason, err := decodeString(item, path+".reason")
 			if err != nil {
 				return out, err
 			}
 			out.Reason = sReason
 		case "base":
 			hasBase = true
-			sBase, err := decodeStr(item, path+".base")
+			sBase, err := decodeString(item, path+".base")
 			if err != nil {
 				return out, err
 			}
 			out.Base = sBase
 		case "method":
 			hasMethod = true
-			sMethod, err := decodeStr(item, path+".method")
+			sMethod, err := decodeString(item, path+".method")
 			if err != nil {
 				return out, err
 			}
@@ -2636,14 +2636,14 @@ func decodeQueueApproval(v vm.Value, path string) (queuetypes.Approval, error) {
 			}
 			out.Queued = bQueued
 		case "approvedCommit":
-			sApprovedCommit, err := decodeStr(item, path+".approvedCommit")
+			sApprovedCommit, err := decodeString(item, path+".approvedCommit")
 			if err != nil {
 				return out, err
 			}
 			out.ApprovedCommit = sApprovedCommit
 		case "branchSharedWith":
 			hasBranchSharedWith = true
-			strsBranchSharedWith, err := decodeStrs(item, path+".branchSharedWith")
+			strsBranchSharedWith, err := decodeStringList(item, path+".branchSharedWith")
 			if err != nil {
 				return out, err
 			}
@@ -2691,14 +2691,14 @@ func decodeQueueCheck(v vm.Value, path string) (queuetypes.Check, error) {
 		switch key {
 		case "name":
 			hasName = true
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
 			out.Name = sName
 		case "state":
 			hasState = true
-			sState, err := decodeStr(item, path+".state")
+			sState, err := decodeString(item, path+".state")
 			if err != nil {
 				return out, err
 			}
@@ -2735,21 +2735,21 @@ func decodeQueueGreenChange(v vm.Value, path string) (queuetypes.GreenChange, er
 		switch key {
 		case "id":
 			hasId = true
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "repo":
 			hasRepo = true
-			sRepo, err := decodeStr(item, path+".repo")
+			sRepo, err := decodeString(item, path+".repo")
 			if err != nil {
 				return out, err
 			}
 			out.Repo = sRepo
 		case "head":
 			hasHead = true
-			sHead, err := decodeStr(item, path+".head")
+			sHead, err := decodeString(item, path+".head")
 			if err != nil {
 				return out, err
 			}
@@ -2799,7 +2799,7 @@ func decodeQueueMergeAnswer(v vm.Value, path string) (queuetypes.MergeAnswer, er
 			}
 			out.ByProvider = bByProvider
 		case "reason":
-			sReason, err := decodeStr(item, path+".reason")
+			sReason, err := decodeString(item, path+".reason")
 			if err != nil {
 				return out, err
 			}
@@ -2836,28 +2836,28 @@ func decodeQueueRunOrigin(v vm.Value, path string) (queuetypes.RunOrigin, error)
 		switch key {
 		case "repo":
 			hasRepo = true
-			sRepo, err := decodeStr(item, path+".repo")
+			sRepo, err := decodeString(item, path+".repo")
 			if err != nil {
 				return out, err
 			}
 			out.Repo = sRepo
 		case "headRepo":
 			hasHeadRepo = true
-			sHeadRepo, err := decodeStr(item, path+".headRepo")
+			sHeadRepo, err := decodeString(item, path+".headRepo")
 			if err != nil {
 				return out, err
 			}
 			out.HeadRepo = sHeadRepo
 		case "headBranch":
 			hasHeadBranch = true
-			sHeadBranch, err := decodeStr(item, path+".headBranch")
+			sHeadBranch, err := decodeString(item, path+".headBranch")
 			if err != nil {
 				return out, err
 			}
 			out.HeadBranch = sHeadBranch
 		case "event":
 			hasEvent = true
-			sEvent, err := decodeStr(item, path+".event")
+			sEvent, err := decodeString(item, path+".event")
 			if err != nil {
 				return out, err
 			}
@@ -2871,7 +2871,7 @@ func decodeQueueRunOrigin(v vm.Value, path string) (queuetypes.RunOrigin, error)
 			out.BranchEvent = bBranchEvent
 		case "definition":
 			hasDefinition = true
-			sDefinition, err := decodeStr(item, path+".definition")
+			sDefinition, err := decodeString(item, path+".definition")
 			if err != nil {
 				return out, err
 			}
@@ -2919,14 +2919,14 @@ func decodeQueueArtifact(v vm.Value, path string) (queuetypes.Artifact, error) {
 		switch key {
 		case "name":
 			hasName = true
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
 			out.Name = sName
 		case "url":
 			hasUrl = true
-			sURL, err := decodeStr(item, path+".url")
+			sURL, err := decodeString(item, path+".url")
 			if err != nil {
 				return out, err
 			}
@@ -2985,7 +2985,7 @@ func decodeQueueArtifactListing(v vm.Value, path string) (queuetypes.ArtifactLis
 				for _, keyHeaders := range keys {
 					elemHeaders, _ := entriesHeaders.MapGet(keyHeaders)
 					var valueHeaders string
-					sHeadersValue, err := decodeStr(elemHeaders, fmt.Sprintf("%s[%q]", path+".headers", keyHeaders))
+					sHeadersValue, err := decodeString(elemHeaders, fmt.Sprintf("%s[%q]", path+".headers", keyHeaders))
 					if err != nil {
 						return out, err
 					}
@@ -3046,21 +3046,21 @@ func decodeQueueReview(v vm.Value, path string) (queuetypes.Review, error) {
 		switch key {
 		case "id":
 			hasId = true
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "reviewer":
 			hasReviewer = true
-			sReviewer, err := decodeStr(item, path+".reviewer")
+			sReviewer, err := decodeString(item, path+".reviewer")
 			if err != nil {
 				return out, err
 			}
 			out.Reviewer = sReviewer
 		case "commit":
 			hasCommit = true
-			sCommit, err := decodeStr(item, path+".commit")
+			sCommit, err := decodeString(item, path+".commit")
 			if err != nil {
 				return out, err
 			}
@@ -3099,7 +3099,7 @@ func decodeQueueReviews(v vm.Value, path string) (queuetypes.Reviews, error) {
 		switch key {
 		case "head":
 			hasHead = true
-			sHead, err := decodeStr(item, path+".head")
+			sHead, err := decodeString(item, path+".head")
 			if err != nil {
 				return out, err
 			}
@@ -3149,7 +3149,7 @@ func decodeHarnessConfig(v vm.Value, path string) (types.HarnessConfig, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
@@ -3195,7 +3195,7 @@ func decodeHarnessSkills(v vm.Value, path string) (types.HarnessSkills, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "paths":
-			strsPaths, err := decodeStrs(item, path+".paths")
+			strsPaths, err := decodeStringList(item, path+".paths")
 			if err != nil {
 				return out, err
 			}
@@ -3228,25 +3228,25 @@ func decodeHookCommand(v vm.Value, path string) (types.HookCommand, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "event":
-			sEvent, err := decodeStr(item, path+".event")
+			sEvent, err := decodeString(item, path+".event")
 			if err != nil {
 				return out, err
 			}
 			out.Event = sEvent
 		case "matcher":
-			sMatcher, err := decodeStr(item, path+".matcher")
+			sMatcher, err := decodeString(item, path+".matcher")
 			if err != nil {
 				return out, err
 			}
 			out.Matcher = sMatcher
 		case "script":
-			sScript, err := decodeStr(item, path+".script")
+			sScript, err := decodeString(item, path+".script")
 			if err != nil {
 				return out, err
 			}
 			out.Script = sScript
 		case "flags":
-			strsFlags, err := decodeStrs(item, path+".flags")
+			strsFlags, err := decodeStringList(item, path+".flags")
 			if err != nil {
 				return out, err
 			}
@@ -3279,7 +3279,7 @@ func decodeManagedEntries(v vm.Value, path string) (types.ManagedEntries, error)
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "path":
-			strsPath, err := decodeStrs(item, path+".path")
+			strsPath, err := decodeStringList(item, path+".path")
 			if err != nil {
 				return out, err
 			}
@@ -3341,37 +3341,37 @@ func decodeMcpServer(v vm.Value, path string) (types.McpServer, error) {
 			}
 			out.Transport = types.McpTransport(sTransport)
 		case "command":
-			strsCommand, err := decodeStrs(item, path+".command")
+			strsCommand, err := decodeStringList(item, path+".command")
 			if err != nil {
 				return out, err
 			}
 			out.Command = strsCommand
 		case "url":
-			sURL, err := decodeStr(item, path+".url")
+			sURL, err := decodeString(item, path+".url")
 			if err != nil {
 				return out, err
 			}
 			out.URL = sURL
 		case "tokenRef":
-			sTokenRef, err := decodeStr(item, path+".tokenRef")
+			sTokenRef, err := decodeString(item, path+".tokenRef")
 			if err != nil {
 				return out, err
 			}
 			out.TokenRef = sTokenRef
 		case "hint":
-			sHint, err := decodeStr(item, path+".hint")
+			sHint, err := decodeString(item, path+".hint")
 			if err != nil {
 				return out, err
 			}
 			out.Hint = sHint
 		case "docs":
-			sDocs, err := decodeStr(item, path+".docs")
+			sDocs, err := decodeString(item, path+".docs")
 			if err != nil {
 				return out, err
 			}
 			out.Docs = sDocs
 		case "register":
-			strsRegister, err := decodeStrs(item, path+".register")
+			strsRegister, err := decodeStringList(item, path+".register")
 			if err != nil {
 				return out, err
 			}
@@ -3482,19 +3482,19 @@ func decodeModelRow(v vm.Value, path string) (types.ModelRow, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "id":
-			sID, err := decodeStr(item, path+".id")
+			sID, err := decodeString(item, path+".id")
 			if err != nil {
 				return out, err
 			}
 			out.ID = sID
 		case "tier":
-			sTier, err := decodeStr(item, path+".tier")
+			sTier, err := decodeString(item, path+".tier")
 			if err != nil {
 				return out, err
 			}
 			out.Tier = sTier
 		case "alias":
-			sAlias, err := decodeStr(item, path+".alias")
+			sAlias, err := decodeString(item, path+".alias")
 			if err != nil {
 				return out, err
 			}
@@ -3539,7 +3539,7 @@ func decodeHarnessTool(v vm.Value, path string) (types.HarnessTool, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "name":
-			sName, err := decodeStr(item, path+".name")
+			sName, err := decodeString(item, path+".name")
 			if err != nil {
 				return out, err
 			}
@@ -3572,7 +3572,7 @@ func decodeHarnessTools(v vm.Value, path string) (types.HarnessTools, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "dir":
-			sDir, err := decodeStr(item, path+".dir")
+			sDir, err := decodeString(item, path+".dir")
 			if err != nil {
 				return out, err
 			}
@@ -3615,19 +3615,19 @@ func decodeAgentFile(v vm.Value, path string) (types.AgentFile, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
 			out.Path = sPath
 		case "content":
-			sContent, err := decodeStr(item, path+".content")
+			sContent, err := decodeString(item, path+".content")
 			if err != nil {
 				return out, err
 			}
 			out.Content = sContent
 		case "hint":
-			sHint, err := decodeStr(item, path+".hint")
+			sHint, err := decodeString(item, path+".hint")
 			if err != nil {
 				return out, err
 			}
@@ -3654,19 +3654,19 @@ func decodePrompt(v vm.Value, path string) (types.Prompt, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
 			out.Path = sPath
 		case "content":
-			sContent, err := decodeStr(item, path+".content")
+			sContent, err := decodeString(item, path+".content")
 			if err != nil {
 				return out, err
 			}
 			out.Content = sContent
 		case "key":
-			strsKey, err := decodeStrs(item, path+".key")
+			strsKey, err := decodeStringList(item, path+".key")
 			if err != nil {
 				return out, err
 			}
@@ -3699,13 +3699,13 @@ func decodeSetting(v vm.Value, path string) (types.Setting, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "path":
-			sPath, err := decodeStr(item, path+".path")
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
 			out.Path = sPath
 		case "key":
-			strsKey, err := decodeStrs(item, path+".key")
+			strsKey, err := decodeStringList(item, path+".key")
 			if err != nil {
 				return out, err
 			}
@@ -3756,7 +3756,7 @@ func decodeLimits(v vm.Value, path string) (types.Limits, error) {
 			}
 			out.HookTimeoutMs = nHookTimeoutMs
 		case "resumesOnBackgroundFrom":
-			sResumesOnBackgroundFrom, err := decodeStr(item, path+".resumesOnBackgroundFrom")
+			sResumesOnBackgroundFrom, err := decodeString(item, path+".resumesOnBackgroundFrom")
 			if err != nil {
 				return out, err
 			}
@@ -4203,8 +4203,8 @@ func missingMember(path, typ, key string) error {
 	return fmt.Errorf("%s: field %q is missing, and a %s requires it", path, key, typ)
 }
 
-func decodeStr(v vm.Value, path string) (string, error) {
-	if !v.IsStr() {
+func decodeString(v vm.Value, path string) (string, error) {
+	if !v.IsString() {
 		return "", mismatch(path, "str", v)
 	}
 	return v.AsString(), nil
@@ -4216,7 +4216,7 @@ func decodeEnum(v vm.Value, path, typ string, cases []string) (string, error) {
 	if backing, ok := v.EnumValue(); ok {
 		v = backing
 	}
-	if !v.IsStr() {
+	if !v.IsString() {
 		return "", mismatch(path, typ, v)
 	}
 	s := v.AsString()
@@ -4264,8 +4264,8 @@ func decodeFloat(v vm.Value, path string) (float64, error) {
 	return 0, mismatch(path, "double", v)
 }
 
-// decodeStrs decodes a [str]; an empty list is nil, like every other generated list.
-func decodeStrs(v vm.Value, path string) ([]string, error) {
+// decodeStringList decodes a [str]; an empty list is nil, like every other generated list.
+func decodeStringList(v vm.Value, path string) ([]string, error) {
 	items, err := decodeList(v, path, "[str]")
 	if err != nil {
 		return nil, err
@@ -4275,7 +4275,7 @@ func decodeStrs(v vm.Value, path string) ([]string, error) {
 	}
 	out := make([]string, len(items))
 	for i, item := range items {
-		s, err := decodeStr(item, fmt.Sprintf("%s[%d]", path, i))
+		s, err := decodeString(item, fmt.Sprintf("%s[%d]", path, i))
 		if err != nil {
 			return nil, err
 		}
@@ -4317,7 +4317,7 @@ func decodeAny(v vm.Value, path string) (any, error) {
 		return v.AsInt(), nil
 	case v.IsFloat():
 		return v.AsFloat(), nil
-	case v.IsStr():
+	case v.IsString():
 		return v.AsString(), nil
 	case v.IsList():
 		items := v.ListItems()

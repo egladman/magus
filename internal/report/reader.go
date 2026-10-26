@@ -209,8 +209,8 @@ func WithStage(ctx context.Context, s Stage) context.Context {
 	return context.WithValue(ctx, stageKey{}, s)
 }
 
-// StageFrom returns the stream WithStage carried, or the zero Stage when ctx carries none.
-func StageFrom(ctx context.Context) Stage {
+// StageFromContext returns the stream WithStage carried, or the zero Stage when ctx carries none.
+func StageFromContext(ctx context.Context) Stage {
 	s, _ := ctx.Value(stageKey{}).(Stage)
 	return s
 }

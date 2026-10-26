@@ -256,7 +256,7 @@ func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
 	typo := strings.Replace(described, `"projects"`, `"projectz"`, 1)
 	_, err = DecodeDeclarations(strings.NewReader(typo))
 	require.EqualError(t, err, fmt.Sprintf("record 1: %v", recordInvalid("projectz",
-		errors.New("\"projectz\" beside `job` is not a member `describe job -o json` prints")).Err()))
+		errors.New("\"projectz\" beside `job` is not a member `describe job -o json` prints")).Error()))
 }
 
 // A stored row prints its check twice, as the record and as the rendered line, and a

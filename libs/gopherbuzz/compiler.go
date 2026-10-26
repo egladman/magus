@@ -757,7 +757,7 @@ func blockHasDecls(stmts []ast.Node) bool {
 }
 
 func (c *compiler) nameConst(s string) int32 {
-	return c.chunk.AddConst(vmpackage.StrValue(s))
+	return c.chunk.AddConst(vmpackage.StringValue(s))
 }
 
 // globalName maps a top-level identifier to its shared-Env key. A private var,
@@ -1681,7 +1681,7 @@ func (c *compiler) compileFunChunk(name, doc string, params []string, stmts []as
 // on the AST before this lowering — never sees the synthetic reference.
 func (c *compiler) compileTestDecl(v *ast.TestDecl) error {
 	c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(testRegistrarName), 0)
-	c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(v.Name)), 0)
+	c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue(v.Name)), 0)
 	idx, err := c.compileFunChunk("test "+v.Name, "", nil, v.Body.Stmts)
 	if err != nil {
 		return err
@@ -1798,7 +1798,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	// starts as has to arrive on the stack. They follow the methods so the def
 	// builder can pop them first.
 	for _, f := range v.StaticFields {
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(f.Name)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue(f.Name)), 0)
 		if f.Default != nil {
 			if err := c.compileExpr(f.Default); err != nil {
 				return err
@@ -1820,7 +1820,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		if err != nil {
 			return err
 		}
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(defaultMember(f.Name))), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue(defaultMember(f.Name))), 0)
 		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
 		scoped++
 	}
@@ -1859,7 +1859,7 @@ func enumCaseValues(v *ast.EnumDecl) ([]vmpackage.Value, error) {
 		switch lit := explicit.(type) {
 		case nil:
 			if v.Backing == "str" {
-				out[i] = vmpackage.StrValue(name)
+				out[i] = vmpackage.StringValue(name)
 			} else {
 				out[i] = vmpackage.IntValue(int64(i))
 			}
@@ -1868,7 +1868,7 @@ func enumCaseValues(v *ast.EnumDecl) ([]vmpackage.Value, error) {
 		case *ast.FloatLit:
 			out[i] = vmpackage.FloatValue(lit.Val)
 		case *ast.StringLit:
-			out[i] = vmpackage.StrValue(lit.Val)
+			out[i] = vmpackage.StringValue(lit.Val)
 		case *ast.BoolLit:
 			out[i] = vmpackage.BoolValue(lit.Val)
 		default:
@@ -1915,7 +1915,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 	case *ast.FloatLit:
 		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.FloatValue(v.Val)), 0)
 	case *ast.StringLit:
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(v.Val)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue(v.Val)), 0)
 	case *ast.TypeExpr:
 		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.TypeValue(typeConstName(v.Resolved, v.Annot))), 0)
 	case *ast.TypeOfExpr:
@@ -2171,13 +2171,13 @@ func (c *compiler) compileExpr(n ast.Node) error {
 
 func (c *compiler) compileInterp(v *ast.InterpExpr) error {
 	if len(v.Parts) == 0 {
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue("")), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue("")), 0)
 		return nil
 	}
 	// Push each part's value; OpBuildStr will convert and join them all at once.
 	for _, part := range v.Parts {
 		if part.Expr == nil {
-			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(part.Lit)), 0)
+			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue(part.Lit)), 0)
 		} else {
 			if err := c.compileExpr(part.Expr); err != nil {
 				return err
@@ -2361,7 +2361,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 	}
 	if !ok {
 		for i, key := range v.Keys {
-			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(key)), 0)
+			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue(key)), 0)
 			if err := c.compileExpr(v.Values[i]); err != nil {
 				return err
 			}
@@ -2375,7 +2375,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 		overrides[k] = v.Values[i]
 	}
 	for _, f := range decl.Fields {
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(f.Name)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StringValue(f.Name)), 0)
 		if expr, hasOverride := overrides[f.Name]; hasOverride {
 			if err := c.compileExpr(expr); err != nil {
 				return err

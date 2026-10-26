@@ -370,7 +370,7 @@ func TestWithRepoLockHonorsCancellationWhileHeld(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	ran := false
-	err := withRepoLock(ctx, meta, func() error {
+	err := withRepositoryLock(ctx, meta, func() error {
 		ran = true
 		return nil
 	})

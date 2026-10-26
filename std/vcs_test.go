@@ -33,15 +33,15 @@ import (
 // So these run against a real driver failing on a non-repo, which is the path a user
 // actually hits: building from a release tarball or a container context.
 
-// chdirOutsideAnyRepo moves the process into a bare temp dir for the duration of the test,
+// chdirOutsideAnyRepository moves the process into a bare temp dir for the duration of the test,
 // so nothing resolves a VCS by walking up from the magus checkout the tests run in.
-func chdirOutsideAnyRepo(t *testing.T) {
+func chdirOutsideAnyRepository(t *testing.T) {
 	t.Helper()
 	t.Chdir(t.TempDir())
 }
 
 func TestVcsAccessorsRaiseWithNoVCS(t *testing.T) {
-	chdirOutsideAnyRepo(t)
+	chdirOutsideAnyRepository(t)
 	ctx := context.Background()
 
 	for name, call := range map[string]func() (string, error){
@@ -66,7 +66,7 @@ func TestVcsAccessorsRaiseWithNoVCS(t *testing.T) {
 // callers to test a FIELD (c.date == "") to discover there was no commit, which is the
 // same sentinel problem one level in.
 func TestVcsCommitRaisesWithNoVCS(t *testing.T) {
-	chdirOutsideAnyRepo(t)
+	chdirOutsideAnyRepository(t)
 
 	c, err := VcsCommit(context.Background(), "")
 	require.Error(t, err)
@@ -77,7 +77,7 @@ func TestVcsCommitRaisesWithNoVCS(t *testing.T) {
 // TestVcsHistoryRaisesWithNoVCS: an empty history and an unreadable one are different
 // answers, and only one of them means "this project has no commits".
 func TestVcsHistoryRaisesWithNoVCS(t *testing.T) {
-	chdirOutsideAnyRepo(t)
+	chdirOutsideAnyRepository(t)
 
 	got, err := VcsHistory(context.Background(), 5, nil, false)
 	require.Error(t, err)
@@ -88,12 +88,12 @@ func TestVcsHistoryRaisesWithNoVCS(t *testing.T) {
 // the driver whole, so paths narrow both the commits and their files, and limit 0 is
 // every commit rather than none.
 func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"docs/a.md": "docs/a.md", "other.txt": "other.txt"})
+	repo := testkit.NewRepository(t, map[string]string{"docs/a.md": "docs/a.md", "other.txt": "other.txt"})
 	dir := repo.Root()
 	repo.Git("commit", "-q", "--amend", "-m", "both")
 	repo.Commit("outside", map[string]string{"other.txt.2": "other.txt.2"})
 
-	got, err := VcsHistory(WithCwd(context.Background(), dir), 0, []string{"docs"}, true)
+	got, err := VcsHistory(WithCurrentWorkingDirectory(context.Background(), dir), 0, []string{"docs"}, true)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	// The revision's identity, author, date and parents are git's to stamp, not this test's to pin.
@@ -102,7 +102,7 @@ func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
 		Subject: "both", Files: []string{"docs/a.md"},
 	}, got[0])
 
-	all, err := VcsHistory(WithCwd(context.Background(), dir), 0, nil, false)
+	all, err := VcsHistory(WithCurrentWorkingDirectory(context.Background(), dir), 0, nil, false)
 	require.NoError(t, err)
 	assert.Len(t, all, 2)
 }
@@ -110,8 +110,8 @@ func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
 // A detached checkout names no ref, and says so with null: "" and "HEAD" both read as a
 // branch to a caller that does not know git.
 func TestVcsRefIsNullOnADetachedCheckout(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
-	ctx := WithCwd(context.Background(), repo.Root())
+	repo := testkit.NewRepository(t, nil)
+	ctx := WithCurrentWorkingDirectory(context.Background(), repo.Root())
 
 	ref, err := VcsRef(ctx, "")
 	require.NoError(t, err)
@@ -124,10 +124,10 @@ func TestVcsRefIsNullOnADetachedCheckout(t *testing.T) {
 	assert.Nil(t, ref)
 }
 
-// gitTopicRepo makes dir a git repository whose branch topic adds file on top of main.
-func gitTopicRepo(t *testing.T, topic, file string) *testkit.Repo {
+// gitTopicRepository makes dir a git repository whose branch topic adds file on top of main.
+func gitTopicRepository(t *testing.T, topic, file string) *testkit.Repo {
 	t.Helper()
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	repo.Git("switch", "-q", "-c", topic)
 	repo.Commit("add "+file, map[string]string{file: file})
 	return repo
@@ -136,12 +136,12 @@ func gitTopicRepo(t *testing.T, topic, file string) *testkit.Repo {
 // A dir argument reads the repository holding it, not the one holding the cwd: a guard
 // rule runs in the hook process's checkout while the caller pushes from its own.
 func TestVcsDirArgumentsReadTheRepositoryHoldingDir(t *testing.T) {
-	hookRepo := gitTopicRepo(t, "alpha", "a.txt")
-	callerRepo := gitTopicRepo(t, "beta", "b.txt")
+	hookRepo := gitTopicRepository(t, "alpha", "a.txt")
+	callerRepo := gitTopicRepository(t, "beta", "b.txt")
 	hook, caller := hookRepo.Root(), callerRepo.Root()
 	relative, err := filepath.Rel(hook, caller)
 	require.NoError(t, err)
-	ctx := WithCwd(context.Background(), hook)
+	ctx := WithCurrentWorkingDirectory(context.Background(), hook)
 
 	for name, dir := range map[string]string{"absolute": caller, "relative to the cwd": relative} {
 		t.Run(name, func(t *testing.T) {
@@ -247,8 +247,8 @@ func TestVcsDirReadsEachBackendsRepository(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	hook := gitTopicRepo(t, "alpha", "a.txt").Root()
-	ctx := WithCwd(context.Background(), hook)
+	hook := gitTopicRepository(t, "alpha", "a.txt").Root()
+	ctx := WithCurrentWorkingDirectory(context.Background(), hook)
 	for _, b := range dirBackends() {
 		t.Run(b.name, func(t *testing.T) {
 			if _, err := exec.LookPath(b.bin); err != nil {
@@ -282,7 +282,7 @@ func TestVcsDirArgumentsRaiseForAMissingDir(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	ctx := WithCwd(context.Background(), t.TempDir())
+	ctx := WithCurrentWorkingDirectory(context.Background(), t.TempDir())
 	missing := filepath.Join(t.TempDir(), "gone")
 
 	ref, err := VcsRef(ctx, missing)
@@ -311,10 +311,10 @@ func canonical(t *testing.T, dir string) string {
 // A repository's first commit is made on an unborn branch, and hack/git-hooks/commit-msg.buzz
 // falls back to symbolic-ref only because vcs\ref raises there.
 func TestVcsRefRaisesOnAnUnbornBranch(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	repo.Git("update-ref", "-d", "refs/heads/main")
 
-	ref, err := VcsRef(WithCwd(context.Background(), repo.Root()), "")
+	ref, err := VcsRef(WithCurrentWorkingDirectory(context.Background(), repo.Root()), "")
 	require.Error(t, err)
 	assert.Nil(t, ref)
 }
@@ -327,7 +327,7 @@ func TestVcsRefRaisesOnAnUnbornBranch(t *testing.T) {
 // The v == nil case (no git at all) still returns false, deliberately: that is a known
 // state which genuinely answers the question. Only a failed probe raises.
 func TestVcsIsDirtyRaisesWhenTheProbeFails(t *testing.T) {
-	chdirOutsideAnyRepo(t)
+	chdirOutsideAnyRepository(t)
 
 	_, err := VcsIsDirty(context.Background(), nil)
 	require.Error(t, err, "a failed status probe must not read as a clean tree")
@@ -340,7 +340,7 @@ func TestVcsIsDirtyRaisesWhenTheProbeFails(t *testing.T) {
 // "unable to access" warning, and needs no landlock: git skips a file that access(2)
 // already calls unreadable, which landlock's denial of open(2) never is.
 func TestVcsIsDirtySaysWhyGitFailed(t *testing.T) {
-	t.Chdir(testkit.NewRepo(t, nil).Root())
+	t.Chdir(testkit.NewRepository(t, nil).Root())
 	unreadable := t.TempDir()
 	t.Setenv("GIT_CONFIG_GLOBAL", unreadable)
 
@@ -357,7 +357,7 @@ func TestVcsIsDirtySaysWhyGitFailed(t *testing.T) {
 // resolved, the repository is what is missing. Asking it whether a directory is a checkout
 // would be a different question, and this is not it.
 func TestVcsNameNeverRaises(t *testing.T) {
-	chdirOutsideAnyRepo(t)
+	chdirOutsideAnyRepository(t)
 
 	_, err := VcsName(context.Background())
 	require.NoError(t, err, "detection must never raise; that is its whole job")
@@ -370,7 +370,7 @@ func TestVcsNameNeverRaises(t *testing.T) {
 // for the same cwd short-circuited to the stale (nil, "") even after whatever
 // caused the failure was gone.
 func TestResolveVCSDoesNotCacheAnError(t *testing.T) {
-	chdirOutsideAnyRepo(t)
+	chdirOutsideAnyRepository(t)
 	ctx := context.Background()
 
 	t.Setenv("MAGUS_VCS_NAME", "totally-bogus-vcs-name")
@@ -435,13 +435,13 @@ func TestFsExistsDistinguishesAbsenceFromDenial(t *testing.T) {
 // vcs.regions is the job footprint handed to scripts, so it must name the declaration a new
 // function adds as itself, which a hunk header gets wrong.
 func TestVcsRegionsNamesEachChangedDeclaration(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		".gitattributes": "*.go diff=golang\n",
 		"a.go":           "package a\n\nfunc One() int {\n\treturn 1\n}\n",
 	})
 	repo.Write("a.go", "package a\n\nfunc One() int {\n\treturn 2\n}\n\nfunc Two() int {\n\treturn One()\n}\n")
 
-	got, err := VcsRegions(WithCwd(context.Background(), repo.Root()), "main", "")
+	got, err := VcsRegions(WithCurrentWorkingDirectory(context.Background(), repo.Root()), "main", "")
 	require.NoError(t, err)
 	var placed []string
 	for _, r := range got {
@@ -459,9 +459,9 @@ func TestVcsRegionsNamesEachChangedDeclaration(t *testing.T) {
 // parallel: the job store resolves the per-repository state directory from the environment.
 func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	testkit.Isolate(t)
-	dir := testkit.NewRepo(t, nil).Root()
+	dir := testkit.NewRepository(t, nil).Root()
 
-	ws := types.WithWorkspace(WithCwd(t.Context(), dir), &ledgerWorkspace{cacheDir: t.TempDir(), root: dir})
+	ws := types.WithWorkspace(WithCurrentWorkingDirectory(t.Context(), dir), &ledgerWorkspace{cacheDir: t.TempDir(), root: dir})
 	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 	var asked []string
@@ -477,11 +477,11 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 		return refusal
 	})
 
-	_, err = VcsCmd(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, map[string]any{"quiet": true})
+	_, err = VcsCommand(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, map[string]any{"quiet": true})
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"worker git push origin main " + dir}, asked)
 
-	res, err := VcsCmd(ws, []string{"status", "--porcelain"}, map[string]any{"quiet": true})
+	res, err := VcsCommand(ws, []string{"status", "--porcelain"}, map[string]any{"quiet": true})
 	require.NoError(t, err, "no acting lease, so the gate is not asked")
 	assert.True(t, res.OK)
 	assert.Len(t, asked, 1)
@@ -490,7 +490,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	t.Setenv("GIT_INDEX_FILE", "/from/the/process")
 	err = OsWithEnv(types.WithJobLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
 		cbFunc(func(ctx context.Context) error {
-			_, err := VcsCmd(ctx, []string{"commit", "-m", "x"}, map[string]any{"quiet": true})
+			_, err := VcsCommand(ctx, []string{"commit", "-m", "x"}, map[string]any{"quiet": true})
 			return err
 		}))
 	require.ErrorIs(t, err, refusal)

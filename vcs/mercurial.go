@@ -44,7 +44,7 @@ func hgUsername(as types.Person) ([]string, error) {
 
 // writeHgMergeDriverSection routes the output and auto-resolve globs to the magus
 // merge tool in the hg-family config at path, each glob once. The caller holds
-// withRepoLock.
+// withRepositoryLock.
 //
 // merge-patterns has no exclusion, but filemerge._picktool takes the FIRST entry that
 // matches, so each carved file (see MergeDriverGlobs.Carved) is named ahead of the output
@@ -102,7 +102,7 @@ func hgMergeDriverCommand(ctx context.Context, prog, root string) (string, error
 }
 
 // writeHgRefreshSection registers an `update` hook running command in the hg-family config
-// at path, of the repository at root; prog is hg or sl. The caller holds withRepoLock.
+// at path, of the repository at root; prog is hg or sl. The caller holds withRepositoryLock.
 func writeHgRefreshSection(root, path, prog, command string, j stamp.Judge) (bool, error) {
 	body := fmt.Sprintf(`[hooks]
 %s = %s
@@ -111,7 +111,7 @@ func writeHgRefreshSection(root, path, prog, command string, j stamp.Judge) (boo
 }
 
 // writeHgDriftSection registers each of hgDriftHooks to run command in the hg-family config
-// at path, of the repository at root; prog is hg or sl. The caller holds withRepoLock.
+// at path, of the repository at root; prog is hg or sl. The caller holds withRepositoryLock.
 func writeHgDriftSection(root, path, prog, command string, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[hooks]\n")
@@ -305,7 +305,7 @@ func hgChangesByCommit(ctx context.Context, v types.VCSDriver, prog, template, d
 	if err != nil {
 		return nil, fmt.Errorf("%s log: %w", prog, err)
 	}
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
+	_, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +337,7 @@ func hgExportRevision(ctx context.Context, v types.VCSDriver, prog, dir, rev, ds
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s archive %q: %w", prog, rev, withOutput(err, string(out)))
 	}
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
+	_, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return err
 	}

@@ -38,7 +38,7 @@ func registerHTTPBytes(m vm.Value) {
 	// (not size) because a module map's built-in .size() method — its entry count —
 	// shadows a stored key of the same name.
 	m.MapSet("byteSize", vm.DirectValue("http.byteSize", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		path, err := resolveHTTPPath(ctx, httpStrArg(args, 0))
+		path, err := resolveHTTPPath(ctx, httpStringArg(args, 0))
 		if err != nil {
 			return vm.Null, fmt.Errorf("http.byteSize: %w", err)
 		}
@@ -60,16 +60,16 @@ func registerHTTPBytes(m vm.Value) {
 	// the whole file in one request with no Content-Range. Returns the final
 	// [status, body]; body is small (servers ack chunks with empty/JSON bodies).
 	m.MapSet("upload_chunked", vm.DirectValue("http.upload_chunked", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		method := httpStrArg(args, 0)
-		url := httpStrArg(args, 1)
-		src := httpStrArg(args, 2)
+		method := httpStringArg(args, 0)
+		url := httpStringArg(args, 1)
+		src := httpStringArg(args, 2)
 		chunk := httpIntArg(args, 3)
 		headers := httpMapArg(args, 4)
 		status, body, err := httpUploadChunked(ctx, method, url, src, chunk, headers)
 		if err != nil {
 			return vm.Null, err
 		}
-		return vm.ListValue([]vm.Value{vm.IntValue(int64(status)), vm.StrValue(body)}), nil
+		return vm.ListValue([]vm.Value{vm.IntValue(int64(status)), vm.StringValue(body)}), nil
 	}))
 }
 
@@ -146,22 +146,22 @@ func httpSendChunk(ctx context.Context, method, url string, body io.Reader, leng
 }
 
 // resolveHTTPPath resolves a relative path against the context working
-// directory (see command.go's dir resolution, std.EffectiveCwd), matching
+// directory (see command.go's dir resolution, std.EffectiveCurrentWorkingDirectory), matching
 // every other host module: a spell target's project directory, not the
 // process cwd.
 func resolveHTTPPath(ctx context.Context, path string) (string, error) {
 	if path == "" || filepath.IsAbs(path) {
 		return path, nil
 	}
-	base, err := std.EffectiveCwd(ctx)
+	base, err := std.EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		return path, err
 	}
 	return filepath.Join(base, path), nil
 }
 
-func httpStrArg(args []vm.Value, i int) string {
-	if i < len(args) && args[i].IsStr() {
+func httpStringArg(args []vm.Value, i int) string {
+	if i < len(args) && args[i].IsString() {
 		return args[i].AsString()
 	}
 	return ""
@@ -180,7 +180,7 @@ func httpMapArg(args []vm.Value, i int) map[string]string {
 	}
 	out := map[string]string{}
 	for _, k := range args[i].MapKeys() {
-		if v, ok := args[i].MapGet(k); ok && v.IsStr() {
+		if v, ok := args[i].MapGet(k); ok && v.IsString() {
 			out[k] = v.AsString()
 		}
 	}

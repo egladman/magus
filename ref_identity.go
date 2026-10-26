@@ -66,7 +66,7 @@ func projectTargets(p *types.Project) []string {
 //
 // Both nil-slice cases (ref not shaped like a ref, and a well-formed ref matching
 // nothing) render identically to a caller, which would be misleading for a garbage
-// string. That is deliberate here rather than a gap: cmd/magus/query.go's queryCmd
+// string. That is deliberate here rather than a gap: cmd/magus/query.go's queryCommand
 // and internal/handler/mcp's outputTool.Invoke both reject a non-ref-shaped ref with
 // cache.LooksLikeRef up front, before either reaches a code path that calls
 // IdentifyRef, so every real caller already knows ref is ref-shaped by the time the

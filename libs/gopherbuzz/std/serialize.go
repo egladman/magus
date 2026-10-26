@@ -45,12 +45,12 @@ func serializeModule() vm.Value {
 
 	// Boxed constructor map: Boxed.init(data)
 	boxedDef := mod()
-	boxedDef.MapSet("init", fn("Boxed.init", boxedInit))
+	boxedDef.MapSet("init", function("Boxed.init", boxedInit))
 	m.MapSet("Boxed", boxedDef)
 
-	m.MapSet("serialize", fn("serialize.serialize", serializeSerialize))
-	m.MapSet("jsonEncode", fn("serialize.jsonEncode", serializeJSONEncode))
-	m.MapSet("jsonDecode", fn("serialize.jsonDecode", serializeJSONDecode))
+	m.MapSet("serialize", function("serialize.serialize", serializeSerialize))
+	m.MapSet("jsonEncode", function("serialize.jsonEncode", serializeJSONEncode))
+	m.MapSet("jsonDecode", function("serialize.jsonDecode", serializeJSONDecode))
 	return m
 }
 
@@ -73,7 +73,7 @@ func makeBoxed(v vm.Value) vm.Value {
 	m := mod()
 	m.MapSet(boxedRawKey, v)
 
-	m.MapSet("q", fn("Boxed.q", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("q", function("Boxed.q", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		// Path segments come either as upstream's single list (q([any], with str
 		// keys for maps and int indices for lists) or the legacy variadic-string
 		// form (q("a", "b")). Accept both so the same source runs on both runtimes.
@@ -84,7 +84,7 @@ func makeBoxed(v vm.Value) vm.Value {
 		cur := v
 		for _, seg := range path {
 			switch {
-			case cur.IsMap() && seg.IsStr():
+			case cur.IsMap() && seg.IsString():
 				got, ok := cur.MapGet(seg.AsString())
 				if !ok {
 					return makeBoxed(vm.Null), nil
@@ -103,25 +103,25 @@ func makeBoxed(v vm.Value) vm.Value {
 		}
 		return makeBoxed(cur), nil
 	}))
-	m.MapSet("string", fn("Boxed.string", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsStr() {
+	m.MapSet("string", function("Boxed.string", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		if v.IsString() {
 			return v, nil
 		}
 		return vm.Null, nil
 	}))
-	m.MapSet("boolean", fn("Boxed.boolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("boolean", function("Boxed.boolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if v.IsBool() {
 			return v, nil
 		}
 		return vm.Null, nil
 	}))
-	m.MapSet("integer", fn("Boxed.integer", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("integer", function("Boxed.integer", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if v.IsInt() {
 			return v, nil
 		}
 		return vm.Null, nil
 	}))
-	floating := fn("Boxed.floating", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	floating := function("Boxed.floating", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if v.IsFloat() {
 			return v, nil
 		}
@@ -129,7 +129,7 @@ func makeBoxed(v vm.Value) vm.Value {
 	})
 	m.MapSet("floating", floating)
 	m.MapSet("float", floating) // upstream serialize names it float()
-	m.MapSet("map", fn("Boxed.map", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("map", function("Boxed.map", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if !v.IsMap() {
 			return vm.Null, nil
 		}
@@ -141,7 +141,7 @@ func makeBoxed(v vm.Value) vm.Value {
 		}
 		return out, nil
 	}))
-	m.MapSet("list", fn("Boxed.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("list", function("Boxed.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if !v.IsList() {
 			return vm.Null, nil
 		}
@@ -152,25 +152,25 @@ func makeBoxed(v vm.Value) vm.Value {
 		}
 		return vm.ListValue(out), nil
 	}))
-	m.MapSet("stringValue", fn("Boxed.stringValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsStr() {
+	m.MapSet("stringValue", function("Boxed.stringValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		if v.IsString() {
 			return v, nil
 		}
-		return vm.StrValue(""), nil
+		return vm.StringValue(""), nil
 	}))
-	m.MapSet("booleanValue", fn("Boxed.booleanValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("booleanValue", function("Boxed.booleanValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if v.IsBool() {
 			return v, nil
 		}
 		return vm.False, nil
 	}))
-	m.MapSet("integerValue", fn("Boxed.integerValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("integerValue", function("Boxed.integerValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if v.IsInt() {
 			return v, nil
 		}
 		return vm.IntValue(0), nil
 	}))
-	floatingValue := fn("Boxed.floatingValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	floatingValue := function("Boxed.floatingValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if v.IsFloat() {
 			return v, nil
 		}
@@ -178,7 +178,7 @@ func makeBoxed(v vm.Value) vm.Value {
 	})
 	m.MapSet("floatingValue", floatingValue)
 	m.MapSet("floatValue", floatingValue) // upstream serialize names it floatValue()
-	m.MapSet("mapValue", fn("Boxed.mapValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("mapValue", function("Boxed.mapValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if !v.IsMap() {
 			return vm.NewMap(), nil
 		}
@@ -189,7 +189,7 @@ func makeBoxed(v vm.Value) vm.Value {
 		}
 		return out, nil
 	}))
-	m.MapSet("listValue", fn("Boxed.listValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("listValue", function("Boxed.listValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if !v.IsList() {
 			return vm.ListValue(nil), nil
 		}
@@ -254,7 +254,7 @@ func serializeJSONEncode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if err != nil {
 		return vm.Null, fmt.Errorf("serialize.jsonEncode: %w", err)
 	}
-	return vm.StrValue(encoded), nil
+	return vm.StringValue(encoded), nil
 }
 
 // JSONEncode serializes a Buzz value with the same cycle checks and ordered-map
@@ -340,7 +340,7 @@ func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
 
 // serializeJSONDecode decodes a JSON string to a Boxed value.
 func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("serialize.jsonDecode: requires a str argument")
 	}
 	var raw any
@@ -373,7 +373,7 @@ func buzzToGo(v vm.Value, path []vm.Value) (any, error) {
 		return v.AsInt(), nil
 	case v.IsFloat():
 		return v.AsFloat(), nil
-	case v.IsStr():
+	case v.IsString():
 		return v.AsString(), nil
 	case v.IsList():
 		if identityPathHas(path, v) {
@@ -425,7 +425,7 @@ func goToBoxedBuzz(v any) vm.Value {
 		}
 		return vm.FloatValue(x)
 	case string:
-		return vm.StrValue(x)
+		return vm.StringValue(x)
 	case []any:
 		items := make([]vm.Value, len(x))
 		for i, it := range x {
@@ -439,6 +439,6 @@ func goToBoxedBuzz(v any) vm.Value {
 		}
 		return m
 	default:
-		return vm.StrValue(fmt.Sprintf("%v", v))
+		return vm.StringValue(fmt.Sprintf("%v", v))
 	}
 }

@@ -26,13 +26,13 @@ import (
 // sandbox denied a path", and reusing them here would tell a browser user to adjust
 // a policy that is not in play.
 func checkRead(_ context.Context, path string) error {
-	return errNoFilesystem("read", path)
+	return errorNoFilesystem("read", path)
 }
 
 func checkWrite(_ context.Context, path string) error {
-	return errNoFilesystem("write", path)
+	return errorNoFilesystem("write", path)
 }
 
-func errNoFilesystem(op, path string) error {
+func errorNoFilesystem(op, path string) error {
 	return fmt.Errorf("fs %s %q: not supported in the magus/buzz embedding: the wasm build has no filesystem", op, path)
 }

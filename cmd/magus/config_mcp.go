@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func configMCPCmd(args []string) error {
+func configMCPCommand(args []string) error {
 	fs := flag.NewFlagSet("config mcp", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {

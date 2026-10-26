@@ -730,7 +730,7 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 		if len(s.Key) != 2 || s.Key[0] != "extraKnownMarketplaces" || s.Key[1] != marketplace {
 			continue
 		}
-		if repo := marketplaceRepo(s.Value); repo != "" {
+		if repo := marketplaceRepository(s.Value); repo != "" {
 			source = repo
 		}
 	}
@@ -742,7 +742,7 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 	return reason
 }
 
-func marketplaceRepo(value any) string {
+func marketplaceRepository(value any) string {
 	spec, _ := value.(map[string]any)
 	source, _ := spec["source"].(map[string]any)
 	repo, _ := source["repo"].(string)
@@ -826,14 +826,14 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 		return HarnessVerification{}, pathErr
 	}
 	result.Path = path
-	body, readErr := os.ReadFile(path)
-	if os.IsNotExist(readErr) {
+	body, readError := os.ReadFile(path)
+	if os.IsNotExist(readError) {
 		result.Status, result.Reason = HarnessUncovered, "harness config does not exist"
 		verifyHarnessMCP(d, &result)
 		return result, nil
 	}
-	if readErr != nil {
-		return HarnessVerification{}, fmt.Errorf("agent: read harness config %s: %w", path, readErr)
+	if readError != nil {
+		return HarnessVerification{}, fmt.Errorf("agent: read harness config %s: %w", path, readError)
 	}
 	config := map[string]any{}
 	if decodeErr := decodeHarnessJSON(body, &config); decodeErr != nil {

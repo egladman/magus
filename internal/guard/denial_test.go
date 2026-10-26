@@ -286,7 +286,7 @@ func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
 // A verdict a hook stores from a linked worktree is stored in the primary checkout too,
 // which `magus query output` searches from every checkout of the repository.
 func TestStoreVerdictReachesThePrimaryCheckout(t *testing.T) {
-	r := newWorktreeRepo(t)
+	r := newWorktreeRepository(t)
 	session := r.add("session")
 	cacheDir := filepath.Join(session, ".magus")
 

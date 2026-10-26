@@ -18,7 +18,7 @@ import (
 // The CLI owns this rather than the console: the console never owns a capability, and a
 // toolchain view reachable only from a browser would make it the first that did.
 func describeTools(ctx context.Context, root string, args []string) error {
-	pos, err := cmdParse("describe tools", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe tools", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe tool[s] [<project>] [flags]")
 			fmt.Fprintln(os.Stderr, "")

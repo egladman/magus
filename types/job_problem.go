@@ -73,9 +73,9 @@ func (e JobEdit) String() string {
 	return "no edit"
 }
 
-// Err renders p as a DiagnosticError, so errors.Is matches its code. The text is the
+// Error renders p as a DiagnosticError, so errors.Is matches its code. The text is the
 // message, then the fix after a colon.
-func (p JobProblem) Err() *DiagnosticError {
+func (p JobProblem) Error() *DiagnosticError {
 	if p.Fix == "" {
 		return DiagnosticErrorf(p.Code, "%s", p.Message)
 	}
@@ -85,9 +85,9 @@ func (p JobProblem) Err() *DiagnosticError {
 // JobProblems are the problems of one record, in record order.
 type JobProblems []JobProblem
 
-// Err joins each problem as a [*JobProblemError] in record order, or returns nil when there
+// Error joins each problem as a [*JobProblemError] in record order, or returns nil when there
 // are none.
-func (ps JobProblems) Err() error {
+func (ps JobProblems) Error() error {
 	if len(ps) == 0 {
 		return nil
 	}
@@ -104,8 +104,8 @@ type JobProblemError struct {
 	Problem JobProblem
 }
 
-func (e *JobProblemError) Error() string { return e.Problem.Err().Error() }
-func (e *JobProblemError) Unwrap() error { return e.Problem.Err() }
+func (e *JobProblemError) Error() string { return e.Problem.Error().Error() }
+func (e *JobProblemError) Unwrap() error { return e.Problem.Error() }
 
 // Fixable counts the problems of ps that carry an Edit.
 func (ps JobProblems) Fixable() int {
@@ -181,5 +181,5 @@ type JobValidation struct {
 	WriteProof JobWriteProof `json:"write_proof,omitempty"`
 }
 
-// Err is the validation's problems as one error, nil when none are left.
-func (v JobValidation) Err() error { return v.Problems.Err() }
+// Error is the validation's problems as one error, nil when none are left.
+func (v JobValidation) Error() error { return v.Problems.Error() }

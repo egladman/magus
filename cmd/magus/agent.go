@@ -28,25 +28,25 @@ import (
 // and verification all live in internal/agent now; the CLI owns only presentation.
 var agentSkills = agent.Default(types.KnowledgeSchemaVersion)
 
-// agentCmd implements `magus agent <subcommand>`: the agent integration commands.
+// agentCommand implements `magus agent <subcommand>`: the agent integration commands.
 //
 // Destinations are explicit arguments, never auto-detected, and writing into a
 // repo's agent-config dirs happens only through `install`. AGENTS.md is the one
 // file magus refuses to write: `install` prints the block for the developer to
 // paste instead.
-func agentCmd(ctx context.Context, root string, args []string) error {
+func agentCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
-		return agentUsageErr()
+		return agentUsageError()
 	}
 	switch args[0] {
 	case "install":
-		return agentInstallCmd(ctx, args[1:])
+		return agentInstallCommand(ctx, args[1:])
 	case "harness":
-		return agentHarnessCmd(ctx, root, args[1:])
+		return agentHarnessCommand(ctx, root, args[1:])
 	case "starter":
-		return agentStarterCmd(ctx, root)
+		return agentStarterCommand(ctx, root)
 	case "adoption":
-		return agentAdoptionCmd(args[1:])
+		return agentAdoptionCommand(args[1:])
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
@@ -96,19 +96,19 @@ func agentUsage(w io.Writer) {
 	tty.ProseItem(w, tty.SystemProbe, "  --skill-form   ", "skill form: both (default), short, or full; choose explicitly when one body per skill is wanted")
 }
 
-func agentUsageErr() error {
+func agentUsageError() error {
 	agentUsage(os.Stderr)
 	return errors.New("a subcommand is required (try: magus agent install)")
 }
 
-// agentInstallCmd renders the embedded skills and either writes them under
+// agentInstallCommand renders the embedded skills and either writes them under
 // <dir>/<dest>... or streams a tar archive to stdout (--tar). Destinations
 // are explicit, never inferred from an agent-host name: magus writes the
 // standard format where told and stays out of the host-specific business.
 // Absolute destinations are refused unless --global is set; the supported
 // way to install skills outside the working tree is
 // `magus agent install --tar | tar -xf - -C <absolute path>`.
-func agentInstallCmd(ctx context.Context, args []string) error {
+func agentInstallCommand(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
 	// The display flags are global, so every command takes them: one gap decays the
 	// whole convention. `agent install ... -s` previously died on an undefined flag,
@@ -340,10 +340,10 @@ func agentStarterDoc(routingIndex bool) string {
 %s`, vcsSafetyRule, agentSkills.AgentsBlock(routingIndex))
 }
 
-// agentStarterCmd prints agentStarterDoc to stdout, never to a file. The starter is meant
+// agentStarterCommand prints agentStarterDoc to stdout, never to a file. The starter is meant
 // for the workspace root, so the root override or the working directory decides the routing
 // index line.
-func agentStarterCmd(ctx context.Context, rootOverride string) error {
+func agentStarterCommand(ctx context.Context, rootOverride string) error {
 	dir := rootOverride
 	if dir == "" {
 		dir = "."

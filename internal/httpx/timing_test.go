@@ -16,7 +16,7 @@ func TestRecorderNilIsUsable(t *testing.T) {
 	require.NotPanics(t, func() { rec.Add(time.Second) })
 	require.Zero(t, rec.Elapsed())
 	require.Zero(t, rec.Calls())
-	require.Nil(t, RecorderFrom(context.Background()), "no recorder installed is nil, not a zero value")
+	require.Nil(t, RecorderFromContext(context.Background()), "no recorder installed is nil, not a zero value")
 }
 
 func TestRecorderAccumulates(t *testing.T) {

@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// repoRoot resolves relative to this package's directory, which is go test's cwd
+// repositoryRoot resolves relative to this package's directory, which is go test's cwd
 // regardless of -trimpath (runtime.Caller(0) would return the module path under it).
-func repoRoot(t *testing.T) string {
+func repositoryRoot(t *testing.T) string {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
@@ -29,7 +29,7 @@ func repoRoot(t *testing.T) string {
 // rotation strands one path while the other works. That the verify guide publishes the
 // active key is checked with the page, in the docs project's conventions target.
 func TestReleaseTrustAnchorMatchesInstallerAndCI(t *testing.T) {
-	root := repoRoot(t)
+	root := repositoryRoot(t)
 	installer, err := os.ReadFile(filepath.Join(root, "docs", "gen", "install"))
 	require.NoError(t, err)
 	action, err := os.ReadFile(filepath.Join(root, ".github", "actions", "setup-magus", "action.yml"))

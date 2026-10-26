@@ -301,7 +301,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 	}
 	if t == reflect.TypeFor[time.Time]() {
 		s, at := "s"+name, "at"+name
-		fmt.Fprintf(w, "%s%s, err := decodeStr(%s, %s)\n", indent, s, src, path)
+		fmt.Fprintf(w, "%s%s, err := decodeString(%s, %s)\n", indent, s, src, path)
 		fmt.Fprintf(w, "%sif err != nil {\n%s\treturn out, err\n%s}\n", indent, indent, indent)
 		fmt.Fprintf(w, "%sif %s != \"\" {\n", indent, s)
 		fmt.Fprintf(w, "%s\t%s, err := time.Parse(time.RFC3339Nano, %s)\n", indent, at, s)
@@ -331,7 +331,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		ret(a)
 	case reflect.String:
 		s := "s" + name
-		fmt.Fprintf(w, "%s%s, err := decodeStr(%s, %s)\n", indent, s, src, path)
+		fmt.Fprintf(w, "%s%s, err := decodeString(%s, %s)\n", indent, s, src, path)
 		if t != reflect.TypeFor[string]() {
 			ret(fmt.Sprintf("%s(%s)", e.qualify(t), s))
 		} else {
@@ -376,7 +376,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		}
 		if t == reflect.TypeFor[[]string]() {
 			strs := "strs" + name
-			fmt.Fprintf(w, "%s%s, err := decodeStrs(%s, %s)\n", indent, strs, src, path)
+			fmt.Fprintf(w, "%s%s, err := decodeStringList(%s, %s)\n", indent, strs, src, path)
 			ret(strs)
 			return nil
 		}
@@ -601,8 +601,8 @@ func missingMember(path, typ, key string) error {
 	return fmt.Errorf("%s: field %q is missing, and a %s requires it", path, key, typ)
 }
 
-func decodeStr(v vm.Value, path string) (string, error) {
-	if !v.IsStr() {
+func decodeString(v vm.Value, path string) (string, error) {
+	if !v.IsString() {
 		return "", mismatch(path, "str", v)
 	}
 	return v.AsString(), nil
@@ -614,7 +614,7 @@ func decodeEnum(v vm.Value, path, typ string, cases []string) (string, error) {
 	if backing, ok := v.EnumValue(); ok {
 		v = backing
 	}
-	if !v.IsStr() {
+	if !v.IsString() {
 		return "", mismatch(path, typ, v)
 	}
 	s := v.AsString()
@@ -662,8 +662,8 @@ func decodeFloat(v vm.Value, path string) (float64, error) {
 	return 0, mismatch(path, "double", v)
 }
 
-// decodeStrs decodes a [str]; an empty list is nil, like every other generated list.
-func decodeStrs(v vm.Value, path string) ([]string, error) {
+// decodeStringList decodes a [str]; an empty list is nil, like every other generated list.
+func decodeStringList(v vm.Value, path string) ([]string, error) {
 	items, err := decodeList(v, path, "[str]")
 	if err != nil {
 		return nil, err
@@ -673,7 +673,7 @@ func decodeStrs(v vm.Value, path string) ([]string, error) {
 	}
 	out := make([]string, len(items))
 	for i, item := range items {
-		s, err := decodeStr(item, fmt.Sprintf("%s[%d]", path, i))
+		s, err := decodeString(item, fmt.Sprintf("%s[%d]", path, i))
 		if err != nil {
 			return nil, err
 		}
@@ -715,7 +715,7 @@ func decodeAny(v vm.Value, path string) (any, error) {
 		return v.AsInt(), nil
 	case v.IsFloat():
 		return v.AsFloat(), nil
-	case v.IsStr():
+	case v.IsString():
 		return v.AsString(), nil
 	case v.IsList():
 		items := v.ListItems()

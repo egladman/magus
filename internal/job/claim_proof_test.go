@@ -464,7 +464,7 @@ func TestForkRefusesAClaimCapPastTheCeiling(t *testing.T) {
 	assert.Empty(t, claimCeilingProblems(types.Job{ID: "a", MaxClaims: 10}, jobs))
 	assert.Empty(t, claimCeilingProblems(types.Job{ID: "a"}, jobs))
 
-	err := claimCeilingProblems(types.Job{ID: "a", MaxClaims: 11}, jobs).Err()
+	err := claimCeilingProblems(types.Job{ID: "a", MaxClaims: 11}, jobs).Error()
 	require.ErrorIs(t, err, types.JobForkLimitExceeded)
 	assert.Contains(t, err.Error(), "11 claims (max_claims on job a)")
 	assert.Contains(t, err.Error(), "ceiling of 10 (jobs.max_claims in magus.yaml)")

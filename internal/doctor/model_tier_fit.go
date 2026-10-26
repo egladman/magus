@@ -40,7 +40,7 @@ func (r *runner) checkModelTierFit(_ []*types.Project) types.Check {
 	const name = "model-tier-fit"
 
 	tiered, ok := r.ws.(modelTiered)
-	if !ok || tiered.ModelTiers(r.runCtx()) == nil {
+	if !ok || tiered.ModelTiers(r.runContext()) == nil {
 		return types.Check{
 			Name:     name,
 			Status:   types.CheckOK,
@@ -48,10 +48,10 @@ func (r *runner) checkModelTierFit(_ []*types.Project) types.Check {
 			Message:  "this workspace declares no model tiers, so no job is routed by one",
 		}
 	}
-	set := tiered.ModelTiers(r.runCtx())
+	set := tiered.ModelTiers(r.runContext())
 
 	var h forecast.History
-	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
+	if err := h.Load(r.runContext(), r.opts.cfg.HistoryPath); err != nil {
 		return historyUnreadableCheck(name, err)
 	}
 

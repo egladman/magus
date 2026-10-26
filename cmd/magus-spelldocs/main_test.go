@@ -36,10 +36,10 @@ func TestReadExampleHonorsSpellsDir(t *testing.T) {
 	}
 }
 
-// useRepoSpells points the example and doc-comment readers at the real spells/
+// useRepositorySpells points the example and doc-comment readers at the real spells/
 // tree. The tests run in this command's own directory; main() takes the path as
 // a flag because the caller knows where spells live in its own context.
-func useRepoSpells(t *testing.T) {
+func useRepositorySpells(t *testing.T) {
 	t.Helper()
 	orig := spellsDir
 	t.Cleanup(func() { spellsDir = orig })
@@ -74,7 +74,7 @@ func TestEveryBuiltinHasEditorialMetadata(t *testing.T) {
 // honest assertion is that each fact on the page follows from the registry entry
 // that produced it.
 func TestRenderSpellReportsTheDescriptor(t *testing.T) {
-	useRepoSpells(t)
+	useRepositorySpells(t)
 
 	for name, d := range spell.Builtins() {
 		t.Run(name, func(t *testing.T) {
@@ -139,7 +139,7 @@ func TestRenderSpellReportsTheDescriptor(t *testing.T) {
 // is inert text, and the whole point of the example is that a reader can see the
 // plan a target would produce without the toolchain installed.
 func TestExamplesAreMarkedRunnable(t *testing.T) {
-	useRepoSpells(t)
+	useRepositorySpells(t)
 
 	d := spell.Builtins()["go"]
 	require.NotEmpty(t, d.Ops)
@@ -154,7 +154,7 @@ func TestExamplesAreMarkedRunnable(t *testing.T) {
 // bytecode strips it), so the handler comments only survive in spell.buzz. A
 // silent read or parse miss renders every op with no description at all.
 func TestOpDocsComeFromTheSource(t *testing.T) {
-	useRepoSpells(t)
+	useRepositorySpells(t)
 
 	docsByOp := parseOpDocs("golang")
 	require.NotEmpty(t, docsByOp, "no op docs recovered from spells/golang/spell.buzz")
@@ -168,7 +168,7 @@ func TestOpDocsComeFromTheSource(t *testing.T) {
 }
 
 func TestParseOpDocsIsBestEffort(t *testing.T) {
-	useRepoSpells(t)
+	useRepositorySpells(t)
 	assert.Nil(t, parseOpDocs("no-such-spell"), "a missing source yields no docs rather than an error")
 }
 
@@ -273,7 +273,7 @@ func TestWriteArgsSectionNamesTheInvoker(t *testing.T) {
 // TestReadExampleReturnsNothingForAMissingFile: a missing example skips
 // the Example section rather than failing the page.
 func TestReadExampleReturnsNothingForAMissingFile(t *testing.T) {
-	useRepoSpells(t)
+	useRepositorySpells(t)
 	assert.Equal(t, "", readExample("go", "no-such-op"))
 }
 

@@ -29,7 +29,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // .gitattributes nor git config nor a hook. First install is `magus init --vcs`'s alone.
 func TestEnsureDriverNeverFirstInstalls(t *testing.T) {
 	ctx := context.Background()
-	root := testkit.NewRepo(t, map[string]string{
+	root := testkit.NewRepository(t, map[string]string{
 		"magusfile.buzz": driverTestMagusfile,
 		"gen/catalog.md": "kept\n",
 	}).Root()
@@ -53,7 +53,7 @@ func TestEnsureDriverNeverFirstInstalls(t *testing.T) {
 // writes into it.
 func TestEnsureDriverRefreshesAnExistingRegistration(t *testing.T) {
 	ctx := context.Background()
-	root := testkit.NewRepo(t, map[string]string{
+	root := testkit.NewRepository(t, map[string]string{
 		"magusfile.buzz": driverTestMagusfile,
 		"gen/catalog.md": "kept\n",
 	}).Root()

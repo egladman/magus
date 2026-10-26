@@ -21,7 +21,7 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == "grant" })]
 	var lasting time.Duration
 	var revoke bool
-	rest, err := cmdParse("job grant", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("job grant", args, func(fs *flag.FlagSet) {
 		fs.DurationVar(&lasting, "for", 0, "")
 		fs.BoolVar(&revoke, "revoke", false, "")
 		fs.Usage = func() {

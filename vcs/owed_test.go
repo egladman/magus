@@ -15,7 +15,7 @@ import (
 // project and target however many files the merge kept, a drop that removes only what
 // was settled, and no file at all once nothing is owed.
 func TestOwedRegenerationRecordMergesAndDrops(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"}).Root()
 	ctx := t.Context()
 
 	for _, o := range []OwedRegeneration{
@@ -55,7 +55,7 @@ func TestOwedRegenerationRecordMergesAndDrops(t *testing.T) {
 // TestOwedRegenerationRejectsUnknownSchema refuses to guess at a record a newer magus
 // wrote.
 func TestOwedRegenerationRejectsUnknownSchema(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"}).Root()
 	path, err := OwedRegenerationPath(t.Context(), dir)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte(`{"schema_version": 99, "owed": []}`), 0o644))

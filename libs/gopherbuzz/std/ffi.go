@@ -38,8 +38,8 @@ func ffiModule() vm.Value {
 	// cstr mirrors upstream's ffi.cstr. In this embedding a Buzz str is already a
 	// valid null-terminated char* at the zdef boundary, so cstr is the identity —
 	// kept so scripts written against upstream Buzz still parse and run.
-	m.MapSet("cstr", fn("ffi.cstr", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 1 || !args[0].IsStr() {
+	m.MapSet("cstr", function("ffi.cstr", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("ffi.cstr: requires a str argument")
 		}
 		// NUL-TERMINATED, which is what makes it a C string rather than the argument
@@ -51,14 +51,14 @@ func ffiModule() vm.Value {
 		if strings.HasSuffix(str, "\x00") {
 			return args[0], nil
 		}
-		return vm.StrValue(str + "\x00"), nil
+		return vm.StringValue(str + "\x00"), nil
 	}))
 
 	// callback(fn, retType, paramTypes): wrap a Buzz function as a C function
 	// pointer (returned as an int address) to pass where C expects a callback —
 	// e.g. the comparator of qsort. The matching zdef parameter is declared void*.
-	m.MapSet("callback", fn("ffi.callback", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 3 || !args[0].IsFun() || !args[1].IsStr() || !args[2].IsList() {
+	m.MapSet("callback", function("ffi.callback", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 3 || !args[0].IsFun() || !args[1].IsString() || !args[2].IsList() {
 			return vm.Null, fmt.Errorf("ffi.callback: requires (fun fn, str retType, [str] paramTypes)")
 		}
 		params, err := stringList("ffi.callback paramTypes", args[2:])
@@ -72,25 +72,25 @@ func ffiModule() vm.Value {
 		return vm.IntValue(int64(addr)), nil
 	}))
 
-	m.MapSet("sizeOf", fn("ffi.sizeOf", typeMetric("ffi.sizeOf", func(size, _ int) int { return size })))
-	m.MapSet("alignOf", fn("ffi.alignOf", typeMetric("ffi.alignOf", func(_, align int) int { return align })))
+	m.MapSet("sizeOf", function("ffi.sizeOf", typeMetric("ffi.sizeOf", func(size, _ int) int { return size })))
+	m.MapSet("alignOf", function("ffi.alignOf", typeMetric("ffi.alignOf", func(_, align int) int { return align })))
 
-	m.MapSet("sizeOfStruct", fn("ffi.sizeOfStruct", structMetric("ffi.sizeOfStruct", func(size, _ int) int { return size })))
-	m.MapSet("alignOfStruct", fn("ffi.alignOfStruct", structMetric("ffi.alignOfStruct", func(_, align int) int { return align })))
+	m.MapSet("sizeOfStruct", function("ffi.sizeOfStruct", structMetric("ffi.sizeOfStruct", func(size, _ int) int { return size })))
+	m.MapSet("alignOfStruct", function("ffi.alignOfStruct", structMetric("ffi.alignOfStruct", func(_, align int) int { return align })))
 
 	// structLayout returns {size, align, offsets} so a script can place each field
 	// at its correct C offset inside an alloc block.
 	// rawData exposes a foreign container's bytes. Upstream's ffi.buzz only asserts
 	// the ERROR path (a non-container raises), which is what makes the error type the
 	// point: a caller distinguishes "not a foreign value" from a real read failure.
-	m.MapSet("rawData", fn("ffi.rawData", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("rawData", function("ffi.rawData", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 {
-			return vm.Null, errValueNotForeignContainer("rawData: no value")
+			return vm.Null, errorValueNotForeignContainer("rawData: no value")
 		}
-		return vm.Null, errValueNotForeignContainer("rawData: the value is not a foreign container")
+		return vm.Null, errorValueNotForeignContainer("rawData: the value is not a foreign container")
 	}))
 
-	m.MapSet("structLayout", fn("ffi.structLayout", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("structLayout", function("ffi.structLayout", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		fields, err := stringList("ffi.structLayout", args)
 		if err != nil {
 			return vm.Null, err
@@ -110,7 +110,7 @@ func ffiModule() vm.Value {
 		return out, nil
 	}))
 
-	m.MapSet("alloc", fn("ffi.alloc", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("alloc", function("ffi.alloc", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsInt() {
 			return vm.Null, fmt.Errorf("ffi.alloc: requires an int size argument")
 		}
@@ -121,7 +121,7 @@ func ffiModule() vm.Value {
 		return vm.IntValue(int64(addr)), nil
 	}))
 
-	m.MapSet("free", fn("ffi.free", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("free", function("ffi.free", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsInt() {
 			return vm.Null, fmt.Errorf("ffi.free: requires an int address argument")
 		}
@@ -133,8 +133,8 @@ func ffiModule() vm.Value {
 
 	// write(addr, offset, ctype, value): store a scalar. float/double read value
 	// as a float; every other type reads it as an int.
-	m.MapSet("write", fn("ffi.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 4 || !args[0].IsInt() || !args[1].IsInt() || !args[2].IsStr() {
+	m.MapSet("write", function("ffi.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 4 || !args[0].IsInt() || !args[1].IsInt() || !args[2].IsString() {
 			return vm.Null, fmt.Errorf("ffi.write: requires (int addr, int offset, str ctype, value)")
 		}
 		addr := uintptr(args[0].AsInt())
@@ -162,8 +162,8 @@ func ffiModule() vm.Value {
 
 	// read(addr, offset, ctype): load a scalar, returning float for float/double
 	// and int otherwise.
-	m.MapSet("read", fn("ffi.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 3 || !args[1].IsInt() || !args[2].IsStr() {
+	m.MapSet("read", function("ffi.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 3 || !args[1].IsInt() || !args[2].IsString() {
 			return vm.Null, fmt.Errorf("ffi.read: requires (addr, int offset, str ctype)")
 		}
 		var addr uintptr
@@ -203,7 +203,7 @@ func numKind(isFloat bool) string {
 // and returns the chosen layout metric.
 func typeMetric(name string, pick func(size, align int) int) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 1 || !args[0].IsStr() {
+		if len(args) < 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("%s: requires a C type name str (e.g. \"int\", \"double\", \"char*\"); FFI here is C-ABI, not Zig", name)
 		}
 		size, align, ok := buzz.CTypeLayout(args[0].AsString())
@@ -254,7 +254,7 @@ func stringList(name string, args []vm.Value) ([]string, error) {
 	items := args[0].ListItems()
 	out := make([]string, len(items))
 	for i, it := range items {
-		if !it.IsStr() {
+		if !it.IsString() {
 			return nil, fmt.Errorf("%s: field %d must be a C type name str", name, i)
 		}
 		out[i] = it.AsString()
@@ -284,4 +284,4 @@ func (e valueNotForeignContainer) BuzzError() map[string]string {
 }
 func (e valueNotForeignContainer) BuzzErrorType() string { return "ValueNotForeignContainer" }
 
-func errValueNotForeignContainer(why string) error { return valueNotForeignContainer{why: why} }
+func errorValueNotForeignContainer(why string) error { return valueNotForeignContainer{why: why} }

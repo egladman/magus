@@ -35,7 +35,7 @@ func cryptoCoreModule() vm.Value {
 		"Sha3384",
 		"Sha3512",
 	}, nil))
-	m.MapSet("hash", fn("crypto.hash", cryptoHash))
+	m.MapSet("hash", function("crypto.hash", cryptoHash))
 	return m
 }
 
@@ -46,7 +46,7 @@ func cryptoHash(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if args[0].Kind() != "enum" {
 		return vm.Null, fmt.Errorf("crypto.hash: first argument must be a HashAlgorithm enum value, got %s", args[0].Kind())
 	}
-	if !args[1].IsStr() {
+	if !args[1].IsString() {
 		return vm.Null, fmt.Errorf("crypto.hash: second argument must be str, got %s", args[1].Kind())
 	}
 
@@ -91,5 +91,5 @@ func cryptoHash(_ context.Context, args []vm.Value) (vm.Value, error) {
 	h.Write(data)
 	// RAW digest bytes, not hex: upstream's `hash` returns the bytes as a str and its
 	// tests hex-encode with `.hex()`. Returning hex here made that call double-encode.
-	return vm.StrValue(string(h.Sum(nil))), nil
+	return vm.StringValue(string(h.Sum(nil))), nil
 }

@@ -74,7 +74,7 @@ func evalAndProbe(ctx context.Context, src string, charms []string, spells map[s
 	}
 	// The magus.Context every target receives as its first argument; its methods trace
 	// onto tr exactly as the global magus.* members do.
-	ctxVal := buildCtx(tr)
+	ctxVal := buildContext(tr)
 	for _, t := range targets {
 		tr.cur = t.key
 		// A failing body still yields the ops traced up to the failure; the

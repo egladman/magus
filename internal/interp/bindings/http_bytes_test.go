@@ -50,7 +50,7 @@ func TestSizeReportsByteLength(t *testing.T) {
 	src := `
 import "http" as xhttp
 export fun sz(p: str) > int { return xhttp\byteSize(p); }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "sz", vm.StrValue(p))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "sz", vm.StringValue(p))
 	assert.Equal(t, int64(len(blob)), got.AsInt())
 }
 
@@ -81,7 +81,7 @@ import "http" as xhttp
 export fun up(url: str, src: str, chunk: int) > any {
     return xhttp\upload_chunked("PATCH", url, src, chunk, {});
 }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StrValue(srv.URL), vm.StrValue(srcFile), vm.IntValue(4))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StringValue(srv.URL), vm.StringValue(srcFile), vm.IntValue(4))
 	require.True(t, got.IsList(), "upload return = %v, want [status, body]", got)
 	require.Len(t, got.ListItems(), 2, "upload return = %v, want [status, body]", got)
 	assert.Equal(t, int64(204), got.ListItems()[0].AsInt(), "final status")
@@ -119,7 +119,7 @@ import "http" as xhttp
 export fun up(url: str, src: str) > any {
     return xhttp\upload_chunked("PUT", url, src, 0, {});
 }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StrValue(srv.URL), vm.StrValue(srcFile))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StringValue(srv.URL), vm.StringValue(srcFile))
 	assert.Equal(t, int64(200), got.ListItems()[0].AsInt(), "status")
 	assert.Empty(t, gotRange, "single-shot upload sent Content-Range %q, want none", gotRange)
 	assert.Equal(t, blob, gotBody, "uploaded bytes")
@@ -146,7 +146,7 @@ export fun dl(url: str, dest: str) > int {
 	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(srv.URL), vm.StrValue(dest)})
+	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StringValue(srv.URL), vm.StringValue(dest)})
 	assert.Error(t, err, "expected sandbox write denial")
 	_, statErr := os.Stat(dest)
 	assert.True(t, os.IsNotExist(statErr), "sandbox-denied download must not write dest")
@@ -174,7 +174,7 @@ export fun up(url: str, src: str) > any {
 	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(srv.URL), vm.StrValue(srcFile)})
+	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StringValue(srv.URL), vm.StringValue(srcFile)})
 	assert.Error(t, err, "expected sandbox read denial")
 }
 
@@ -193,6 +193,6 @@ export fun sz(p: str) > int { return xhttp\byteSize(p); }`
 	policy := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), policy)
 
-	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(p)})
+	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StringValue(p)})
 	assert.Error(t, err, "expected sandbox read denial")
 }

@@ -475,10 +475,10 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					continue
 				}
 			}
-			name := vm.asStr(f.chunk.Consts[constIdx]).V
+			name := vm.asString(f.chunk.Consts[constIdx]).V
 			v, env, slot, ok := f.env.getWithSlot(name)
 			if !ok {
-				return Null, errUndefinedVar(name)
+				return Null, errorUndefinedVar(name)
 			}
 			vm.ncacheEnsure(f.chunk, f.env)
 			vm.ncache[constIdx] = envNameEntry{env: env, slot: slot}
@@ -503,17 +503,17 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					continue
 				}
 			}
-			name := vm.asStr(f.chunk.Consts[constIdx]).V
+			name := vm.asString(f.chunk.Consts[constIdx]).V
 			_, env, slot, ok := f.env.getWithSlot(name)
 			if !ok {
-				return Null, errAssignUndefined(name)
+				return Null, errorAssignUndefined(name)
 			}
 			env.slots[slot] = vm.pop()
 			vm.ncacheEnsure(f.chunk, f.env)
 			vm.ncache[constIdx] = envNameEntry{env: env, slot: slot}
 
 		case OpDefName:
-			name := vm.asStr(f.chunk.Consts[ins.A]).V
+			name := vm.asString(f.chunk.Consts[ins.A]).V
 			f.env.define(name, vm.pop())
 
 		case OpPushScope:
@@ -558,7 +558,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagFloat:
 				vm.push(FloatValue(-v.AsFloat()))
 			default:
-				return Null, errCannotNegate(v)
+				return Null, errorCannotNegate(v)
 			}
 
 		case OpNot:
@@ -834,7 +834,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// compares — no string comparison needed. On a miss the field index is
 			// found by name scan and learned. Non-object receivers (maps, lists, …)
 			// use getMember.
-			name := vm.asStr(f.chunk.Consts[ins.A]).V
+			name := vm.asString(f.chunk.Consts[ins.A]).V
 			obj := vm.pop()
 			if obj.tag() == tagObject {
 				inst := vm.asObject(obj)
@@ -860,13 +860,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpSetMember:
 			// Inline-cached member store; mirror of OpGetMember. Hit: pointer compare,
 			// direct indexed write. Miss: name scan + learn. Unknown fields → setMember.
-			name := vm.asStr(f.chunk.Consts[ins.A]).V
+			name := vm.asString(f.chunk.Consts[ins.A]).V
 			val := vm.pop()
 			obj := vm.pop()
 			if obj.tag() == tagObject {
 				inst := vm.asObject(obj)
 				if !inst.Mut {
-					return Null, errImmutable("object")
+					return Null, errorImmutable("object")
 				}
 				ip := f.ip - 1
 				if ip < len(vm.mcache) {
@@ -897,7 +897,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					continue
 				}
 			}
-			name := vm.asStr(f.chunk.Consts[ins.B]).V
+			name := vm.asString(f.chunk.Consts[ins.B]).V
 			v, err := getMember(vm, obj, name)
 			if err != nil {
 				return Null, err
@@ -911,14 +911,14 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			if obj.tag() == tagObject {
 				inst := vm.asObject(obj)
 				if !inst.Mut {
-					return Null, errImmutable("object")
+					return Null, errorImmutable("object")
 				}
 				if h := int(ins.A); h < len(inst.Fields) {
 					inst.Fields[h] = val
 					continue
 				}
 			}
-			name := vm.asStr(f.chunk.Consts[ins.B]).V
+			name := vm.asString(f.chunk.Consts[ins.B]).V
 			if err := setMember(vm, obj, name, val); err != nil {
 				return Null, err
 			}
@@ -1034,10 +1034,10 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagFun:
 				fn := vm.asFun(callee)
 				if fn.Chunk == nil {
-					return Null, errNoChunk()
+					return Null, errorNoChunk()
 				}
 				if len(vm.frames) >= maxFrames {
-					return Null, errStackOverflow()
+					return Null, errorStackOverflow()
 				}
 				if err := vm.checkCancel(); err != nil {
 					return Null, err
@@ -1084,7 +1084,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:calleeIdx+1]
 
 			default:
-				return Null, errNotCallable(callee)
+				return Null, errorNotCallable(callee)
 			}
 
 		case OpInvoke:
@@ -1098,7 +1098,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			stackLen := len(vm.stack)
 			recvIdx := stackLen - argCount - 1
 			receiver := vm.stack[recvIdx]
-			name := vm.asStr(f.chunk.Consts[ins.A]).V
+			name := vm.asString(f.chunk.Consts[ins.A]).V
 
 			if receiver.tag() == tagObject {
 				instance := vm.asObject(receiver)
@@ -1198,7 +1198,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 						}
 					}
 					// A name the map holds neither as a key nor as a builtin leaves callee
-					// Null, which errNotCallable reports below.
+					// Null, which errorNotCallable reports below.
 				} else if d := builtinMethod(vm, receiver, name); d != nil {
 					direct = d
 					// recv pins the exact receiver object, and every field a builtin
@@ -1253,9 +1253,9 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				}
 			default:
 				if callee.IsNull() && !hasStoredKey(vm, receiver, name) {
-					return Null, errUnknownMethod(f, receiver, name)
+					return Null, errorUnknownMethod(f, receiver, name)
 				}
-				return Null, errNotCallable(callee)
+				return Null, errorNotCallable(callee)
 			}
 
 		case OpReturn:
@@ -1308,7 +1308,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					return Null, err
 				}
 			} else {
-				typeName := vm.asStr(cv).V
+				typeName := vm.asString(cv).V
 				if err := vm.buildObjectVal(typeName, int(ins.B&^InstrMutBit), f.env, ins.B&InstrMutBit != 0); err != nil {
 					return Null, err
 				}
@@ -1325,7 +1325,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagList:
 				st.list = vm.asList(iter)
 			case tagStr:
-				st.strBytes = []byte(vm.asStr(iter).V)
+				st.strBytes = []byte(vm.asString(iter).V)
 			case tagEnumDef:
 				st.enumCases = vm.enumCases(iter)
 			case tagMap:
@@ -1337,7 +1337,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagFib:
 				st.fib = iter.asFib()
 			default:
-				return Null, errCannotIterate(iter)
+				return Null, errorCannotIterate(iter)
 			}
 			vm.push(vm.iterPool[s].val)
 
@@ -1374,7 +1374,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					if wantKey {
 						vm.push(IntValue(int64(state.idx)))
 					}
-					vm.push(StrValue(string(state.strBytes[state.idx : state.idx+1])))
+					vm.push(StringValue(string(state.strBytes[state.idx : state.idx+1])))
 					state.idx++
 				} else {
 					done = true
@@ -1383,7 +1383,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				m := state.mapObj
 				if state.idx < len(m.Keys) {
 					if wantKey {
-						vm.push(m.keyVals[state.idx]) // pre-built StrValue, zero alloc
+						vm.push(m.keyVals[state.idx]) // pre-built StringValue, zero alloc
 					}
 					vm.push(m.Vals[state.idx])
 					state.idx++
@@ -1442,12 +1442,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			hi := vm.pop()
 			lo := vm.pop()
 			if lo.tag() != tagInt || hi.tag() != tagInt {
-				return Null, errRangeOperands(lo, hi)
+				return Null, errorRangeOperands(lo, hi)
 			}
 			vm.push(rangeValue(lo.AsInt(), hi.AsInt()))
 
 		case OpIs:
-			name := vm.asStr(f.chunk.Consts[ins.A]).V
+			name := vm.asString(f.chunk.Consts[ins.A]).V
 			val := vm.pop()
 			// B=1 marks a nullable annotation (`x is int?`). The compiler already
 			// stripped the "?" and reduced the name, so this stays a flag test.
@@ -1467,7 +1467,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			vm.push(BoolValue(hit))
 
 		case OpAs:
-			name := vm.asStr(f.chunk.Consts[ins.A]).V
+			name := vm.asString(f.chunk.Consts[ins.A]).V
 			val := vm.pop()
 			if ins.B == 1 {
 				// `as?` is upstream's CHECKED cast, not a conversion: it yields the value
@@ -1503,7 +1503,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpThrow:
 			errVal := vm.pop()
 			if len(vm.catchStack) == 0 {
-				return Null, errUncaught(errVal)
+				return Null, errorUncaught(errVal)
 			}
 			entry := vm.catchStack[len(vm.catchStack)-1]
 			vm.catchStack = vm.catchStack[:len(vm.catchStack)-1]
@@ -1568,14 +1568,14 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			buf := vm.strScratch[:0]
 			for _, p := range parts {
 				if p.tag() == tagStr {
-					buf = append(buf, vm.asStr(p).V...)
+					buf = append(buf, vm.asString(p).V...)
 				} else {
 					buf = append(buf, p.String()...)
 				}
 			}
 			vm.strScratch = buf // retain the (possibly grown) backing array
 			vm.stack = vm.stack[:len(vm.stack)-n]
-			vm.push(StrValue(string(buf)))
+			vm.push(StringValue(string(buf)))
 
 		case OpBinLC:
 			// optimization: fused GetLocal;LoadConst;<binop>. Reads the local and the
@@ -1928,7 +1928,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				ok = v.tag() != tagNull
 			}
 			if !ok {
-				return Null, errCheckType(ins.A, v)
+				return Null, errorCheckType(ins.A, v)
 			}
 
 		default:
@@ -1963,38 +1963,38 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 //	construction (type errors, undefined names, overflow), never on a hot path.
 //
 //go:noinline
-func errUndefinedVar(name string) error {
+func errorUndefinedVar(name string) error {
 	return fmt.Errorf("buzz: undefined variable %q", name)
 }
 
 //go:noinline
-func errAssignUndefined(name string) error {
+func errorAssignUndefined(name string) error {
 	return fmt.Errorf("buzz: cannot assign to undefined variable %q", name)
 }
 
 //go:noinline
-func errCannotNegate(v Value) error { return fmt.Errorf("buzz: cannot negate %s", v.buzzKind()) }
+func errorCannotNegate(v Value) error { return fmt.Errorf("buzz: cannot negate %s", v.buzzKind()) }
 
 //go:noinline
-func errCannotBitwise(op OpCode, v Value) error {
+func errorCannotBitwise(op OpCode, v Value) error {
 	return fmt.Errorf("buzz: cannot apply %q to %s: bitwise operators require int operands",
 		opSymbol(op), v.buzzKind())
 }
 
 //go:noinline
-func errNoChunk() error { return fmt.Errorf("buzz: function has no compiled chunk") }
+func errorNoChunk() error { return fmt.Errorf("buzz: function has no compiled chunk") }
 
 //go:noinline
-func errStackOverflow() error { return fmt.Errorf("buzz: call stack overflow (limit %d)", maxFrames) }
+func errorStackOverflow() error { return fmt.Errorf("buzz: call stack overflow (limit %d)", maxFrames) }
 
 //go:noinline
-func errNotCallable(v Value) error { return fmt.Errorf("buzz: %s is not callable", v.buzzKind()) }
+func errorNotCallable(v Value) error { return fmt.Errorf("buzz: %s is not callable", v.buzzKind()) }
 
-// errUnknownMethod reports a call to a member the receiver does not have, at the
+// errorUnknownMethod reports a call to a member the receiver does not have, at the
 // call's source line: the checker cannot catch it when the receiver is untyped.
 //
 //go:noinline
-func errUnknownMethod(f *frame, receiver Value, name string) error {
+func errorUnknownMethod(f *frame, receiver Value, name string) error {
 	msg := fmt.Sprintf("unknown method %s on %s", name, receiver.buzzKind())
 	line := f.chunk.lineAt(f.ip - 1)
 	switch {
@@ -2032,7 +2032,9 @@ func (vm *VM) enumFromValue(enum Value, args []Value) (Value, error) {
 }
 
 //go:noinline
-func errCannotIterate(v Value) error { return fmt.Errorf("buzz: cannot iterate over %s", v.buzzKind()) }
+func errorCannotIterate(v Value) error {
+	return fmt.Errorf("buzz: cannot iterate over %s", v.buzzKind())
+}
 
 // fiberIterNext drives one step of `foreach (x in &fib())`: it resumes the fiber
 // and reports the next yielded value, or done=true once the fiber completes
@@ -2045,7 +2047,7 @@ func (vm *VM) fiberIterNext(f *fibObj) (Value, bool, error) {
 	if f.status == fibDone {
 		return Null, true, f.err
 	}
-	f.vm.SetCtx(vm.ctx)
+	f.vm.SetContext(vm.ctx)
 	f.status = fibRunning
 	res, err := f.vm.Exec()
 	if err != nil {
@@ -2090,12 +2092,12 @@ func (vm *VM) iterStateForSlot(s int) *iterStateObj {
 }
 
 //go:noinline
-func errRangeOperands(lo, hi Value) error {
+func errorRangeOperands(lo, hi Value) error {
 	return fmt.Errorf("buzz: range operands must be int, got %s..%s", lo.buzzKind(), hi.buzzKind())
 }
 
 //go:noinline
-func errUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s", v.String()) }
+func errorUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s", v.String()) }
 
 // caughtValue renders a host error as the value a `catch` binds.
 //
@@ -2115,11 +2117,11 @@ func errUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s", 
 func caughtValue(err error) Value {
 	var se StructuredError
 	if !errors.As(err, &se) {
-		return StrValue(err.Error())
+		return StringValue(err.Error())
 	}
 	fields := se.BuzzError()
 	if len(fields) == 0 {
-		return StrValue(err.Error())
+		return StringValue(err.Error())
 	}
 	if _, ok := fields["message"]; !ok {
 		fields = withMessage(fields, err.Error())
@@ -2132,7 +2134,7 @@ func caughtValue(err error) Value {
 	}
 	m := NewMap()
 	for k, v := range fields {
-		m.MapSet(k, StrValue(v))
+		m.MapSet(k, StringValue(v))
 	}
 	return m
 }
@@ -2165,16 +2167,16 @@ func errorObjectValue(typeName string, fields map[string]string) Value {
 	vals := make([]Value, len(names))
 	for i, n := range names {
 		def.Fields = append(def.Fields, ast.ObjField{Name: n})
-		vals[i] = StrValue(fields[n])
+		vals[i] = StringValue(fields[n])
 	}
 	return heapValue(tagObject, &objectInst{Def: def, Fields: vals})
 }
 
 //go:noinline
-func errUnknownOpcode(op OpCode) error { return fmt.Errorf("buzz: unknown opcode %d", op) }
+func errorUnknownOpcode(op OpCode) error { return fmt.Errorf("buzz: unknown opcode %d", op) }
 
 //go:noinline
-func errCheckType(code int32, v Value) error {
+func errorCheckType(code int32, v Value) error {
 	switch code {
 	case CheckNonNull:
 		return fmt.Errorf("buzz: force-unwrap of null value")
@@ -2320,7 +2322,7 @@ func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount, staticFieldCount
 		if name.tag() != tagStr {
 			return fmt.Errorf("buzz: object static field name is not a string")
 		}
-		statics[i] = staticFieldEntry{Name: vm.asStr(name).V, Val: val}
+		statics[i] = staticFieldEntry{Name: vm.asString(name).V, Val: val}
 	}
 	type method struct {
 		name string
@@ -2336,7 +2338,7 @@ func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount, staticFieldCount
 		if name.tag() != tagStr {
 			return fmt.Errorf("buzz: object method name is not a string")
 		}
-		methods[i] = method{vm.asStr(name).V, vm.asFun(fn)}
+		methods[i] = method{vm.asString(name).V, vm.asFun(fn)}
 	}
 	def := &objectDefObj{
 		Name:         decl.Name,
@@ -2378,7 +2380,7 @@ func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env, mut bool
 		if name.tag() != tagStr {
 			return fmt.Errorf("buzz: object field name is not a string")
 		}
-		pairs[i] = fieldPair{vm.asStr(name).V, val}
+		pairs[i] = fieldPair{vm.asString(name).V, val}
 	}
 	defVal, ok := env.get(typeName)
 	if !ok {
@@ -2461,7 +2463,7 @@ func (vm *VM) sameTypeDef(v Value, f *frame, keyConst int32) bool {
 	if keyConst == 0 {
 		return true
 	}
-	def, ok := f.env.get(vm.asStr(f.chunk.Consts[keyConst-1]).V)
+	def, ok := f.env.get(vm.asString(f.chunk.Consts[keyConst-1]).V)
 	if !ok {
 		return true
 	}
@@ -2632,9 +2634,9 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 			}
 			return IntValue(0), nil
 		case tagStr:
-			n, err := strconv.ParseInt(vm.asStr(v).V, 10, 64)
+			n, err := strconv.ParseInt(vm.asString(v).V, 10, 64)
 			if err != nil {
-				return Null, fmt.Errorf("buzz: cannot cast %q to int", vm.asStr(v).V)
+				return Null, fmt.Errorf("buzz: cannot cast %q to int", vm.asString(v).V)
 			}
 			return IntValue(n), nil
 		}
@@ -2645,14 +2647,14 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 		case tagInt:
 			return FloatValue(float64(v.AsInt())), nil
 		case tagStr:
-			f, err := strconv.ParseFloat(vm.asStr(v).V, 64)
+			f, err := strconv.ParseFloat(vm.asString(v).V, 64)
 			if err != nil {
-				return Null, fmt.Errorf("buzz: cannot cast %q to float", vm.asStr(v).V)
+				return Null, fmt.Errorf("buzz: cannot cast %q to float", vm.asString(v).V)
 			}
 			return FloatValue(f), nil
 		}
 	case "str":
-		return StrValue(v.String()), nil
+		return StringValue(v.String()), nil
 	case "bool":
 		return BoolValue(v.Bool()), nil
 	}
@@ -2665,8 +2667,8 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 
 // --- Exported debug and control methods ---
 
-// SetCtx updates the VM's context (used when resuming a fiber).
-func (vm *VM) SetCtx(ctx context.Context) { vm.ctx = ctx }
+// SetContext updates the VM's context (used when resuming a fiber).
+func (vm *VM) SetContext(ctx context.Context) { vm.ctx = ctx }
 
 // SetStepHook installs cb to fire on events matching mask.
 func (vm *VM) SetStepHook(mask StepMask, cb func(StepEvent, DebugFrame)) {
@@ -2803,10 +2805,10 @@ func (h Fiber) Return() Value { return h.f.returnVal }
 // SetReturn caches the fiber's return value for a later resolve.
 func (h Fiber) SetReturn(v Value) { h.f.returnVal = v }
 
-// Err reports the terminal error that ended the fiber, or nil if it completed
+// Error reports the terminal error that ended the fiber, or nil if it completed
 // cleanly or has not yet run to completion.
-func (h Fiber) Err() error { return h.f.err }
+func (h Fiber) Error() error { return h.f.err }
 
-// SetErr caches the terminal error that ended the fiber so a later resume/resolve
+// SetError caches the terminal error that ended the fiber so a later resume/resolve
 // re-surfaced it instead of silently returning null.
-func (h Fiber) SetErr(err error) { h.f.err = err }
+func (h Fiber) SetError(err error) { h.f.err = err }

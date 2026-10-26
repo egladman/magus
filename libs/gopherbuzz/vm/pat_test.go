@@ -33,7 +33,7 @@ func TestPatMatchBoundsCatastrophicBacktracking(t *testing.T) {
 		defer close(done)
 		// The result is expected to be a MatchTimeoutError once bounded; either
 		// outcome (match or error) is fine here, only completion is under test.
-		_, _ = fn.Fn(context.Background(), []Value{StrValue(subject)})
+		_, _ = fn.Fn(context.Background(), []Value{StringValue(subject)})
 	}()
 
 	select {

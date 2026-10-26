@@ -341,8 +341,8 @@ func (m *Model) nextHunk() bool {
 	return false
 }
 
-// prevHunk is nextHunk's mirror.
-func (m *Model) prevHunk() bool {
+// previousHunk is nextHunk's mirror.
+func (m *Model) previousHunk() bool {
 	if m.expanded(m.file) && m.hunk > 0 {
 		m.setCursor(m.file, m.hunk-1)
 		return true
@@ -365,8 +365,8 @@ func (m *Model) nextFile() bool {
 	return true
 }
 
-// prevFile moves to the previous file's heading. Reports whether it moved.
-func (m *Model) prevFile() bool {
+// previousFile moves to the previous file's heading. Reports whether it moved.
+func (m *Model) previousFile() bool {
 	if m.file <= 0 {
 		return false
 	}

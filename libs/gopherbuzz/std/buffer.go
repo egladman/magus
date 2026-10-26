@@ -39,7 +39,7 @@ import (
 func bufferModule() vm.Value {
 	m := mod()
 	bufInit := mod()
-	bufInit.MapSet("init", fn("Buffer.init", bufferInit))
+	bufInit.MapSet("init", function("Buffer.init", bufferInit))
 	m.MapSet("Buffer", bufInit)
 	return m
 }
@@ -113,12 +113,12 @@ func makeBufferValue(st *bufferState) vm.Value {
 	buf := &st.bytes
 	m := mod()
 
-	m.MapSet("write", fn("Buffer.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("write", function("Buffer.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		// Upstream's write takes a STR; gopherbuzz's took a [int]. Both are accepted
 		// rather than one replaced: the string form is what upstream's behavior suite
 		// uses, and the byte-list form is what this package's own callers already
 		// pass. They are unambiguous at the value level, so nothing has to choose.
-		if len(args) >= 1 && args[0].IsStr() {
+		if len(args) >= 1 && args[0].IsString() {
 			*buf = append(*buf, args[0].AsString()...)
 			return vm.Null, nil
 		}
@@ -134,15 +134,15 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.Null, nil
 	}))
 
-	m.MapSet("writeString", fn("Buffer.writeString", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 1 || !args[0].IsStr() {
+	m.MapSet("writeString", function("Buffer.writeString", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("Buffer.writeString: requires a str argument")
 		}
 		*buf = append(*buf, args[0].AsString()...)
 		return vm.Null, nil
 	}))
 
-	m.MapSet("read", fn("Buffer.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("read", function("Buffer.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsInt() {
 			return vm.Null, fmt.Errorf("Buffer.read: requires an int n argument")
 		}
@@ -157,7 +157,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		*buf = (*buf)[n:]
 		// A STR, as upstream returns. readAll and toList still hand back byte lists
 		// for callers that want the numeric view.
-		return vm.StrValue(string(chunk)), nil
+		return vm.StringValue(string(chunk)), nil
 	}))
 
 	// The binary API. Upstream's Buffer is how a Buzz program serialises values, and
@@ -169,7 +169,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// cannot afford.
 	const intWidth = 6
 
-	m.MapSet("writeInt", fn("Buffer.writeInt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("writeInt", function("Buffer.writeInt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsInt() {
 			return vm.Null, fmt.Errorf("Buffer.writeInt: requires an int argument")
 		}
@@ -179,7 +179,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.Null, nil
 	}))
 
-	m.MapSet("readInt", fn("Buffer.readInt", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("readInt", function("Buffer.readInt", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		// NULL on a short buffer rather than an error: upstream's caller writes
 		// `buffer.readInt() ?? -1`, so the miss is a value the program handles.
 		if len(*buf) < intWidth {
@@ -196,7 +196,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.IntValue(int64(u)), nil
 	}))
 
-	m.MapSet("writeDouble", fn("Buffer.writeDouble", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("writeDouble", function("Buffer.writeDouble", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !(args[0].IsFloat() || args[0].IsInt()) {
 			return vm.Null, fmt.Errorf("Buffer.writeDouble: requires a double argument")
 		}
@@ -207,7 +207,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.Null, nil
 	}))
 
-	m.MapSet("readDouble", fn("Buffer.readDouble", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("readDouble", function("Buffer.readDouble", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if len(*buf) < 8 {
 			return vm.Null, nil
 		}
@@ -216,7 +216,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.FloatValue(math.Float64frombits(u)), nil
 	}))
 
-	m.MapSet("writeBoolean", fn("Buffer.writeBoolean", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("writeBoolean", function("Buffer.writeBoolean", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsBool() {
 			return vm.Null, fmt.Errorf("Buffer.writeBoolean: requires a bool argument")
 		}
@@ -228,7 +228,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.Null, nil
 	}))
 
-	m.MapSet("readBoolean", fn("Buffer.readBoolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("readBoolean", function("Buffer.readBoolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if len(*buf) < 1 {
 			return vm.Null, nil
 		}
@@ -240,12 +240,12 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// empty() CLEARS the buffer. Note it is not the negation of isEmpty(), which
 	// only reports; upstream names them that way and both are kept as upstream has
 	// them rather than renamed for symmetry.
-	m.MapSet("empty", fn("Buffer.empty", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("empty", function("Buffer.empty", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		*buf = (*buf)[:0]
 		return vm.Null, nil
 	}))
 
-	m.MapSet("readAll", fn("Buffer.readAll", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("readAll", function("Buffer.readAll", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		items := make([]vm.Value, len(*buf))
 		for i, b := range *buf {
 			items[i] = vm.IntValue(int64(b))
@@ -257,7 +257,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// len(align) reports the buffer length divided by align. For a pinned
 	// (capacity) buffer that is the capacity; for the string API it is the number
 	// of bytes written. align defaults to 1, so len() is the byte count.
-	m.MapSet("len", fn("Buffer.len", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("len", function("Buffer.len", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		align := 1
 		if len(args) >= 1 && args[0].IsInt() && args[0].AsInt() > 0 {
 			align = int(args[0].AsInt())
@@ -269,11 +269,11 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.IntValue(int64(n / align)), nil
 	}))
 
-	m.MapSet("isEmpty", fn("Buffer.isEmpty", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("isEmpty", function("Buffer.isEmpty", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(len(*buf) == 0), nil
 	}))
 
-	m.MapSet("at", fn("Buffer.at", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("at", function("Buffer.at", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsInt() {
 			return vm.Null, fmt.Errorf("Buffer.at: requires an int index argument")
 		}
@@ -284,7 +284,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.IntValue(int64((*buf)[idx])), nil
 	}))
 
-	m.MapSet("setAt", fn("Buffer.setAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("setAt", function("Buffer.setAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 || !args[0].IsInt() || !args[1].IsInt() {
 			return vm.Null, fmt.Errorf("Buffer.setAt: requires (int index, int value)")
 		}
@@ -296,11 +296,11 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.Null, nil
 	}))
 
-	m.MapSet("toString", fn("Buffer.toString", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.StrValue(string(*buf)), nil
+	m.MapSet("toString", function("Buffer.toString", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StringValue(string(*buf)), nil
 	}))
 
-	m.MapSet("toList", fn("Buffer.toList", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("toList", function("Buffer.toList", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		items := make([]vm.Value, len(*buf))
 		for i, b := range *buf {
 			items[i] = vm.IntValue(int64(b))
@@ -308,8 +308,8 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.ListValue(items), nil
 	}))
 
-	m.MapSet("split", fn("Buffer.split", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 1 || !args[0].IsStr() {
+	m.MapSet("split", function("Buffer.split", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("Buffer.split: requires a str separator argument")
 		}
 		sep := []byte(args[0].AsString())
@@ -323,12 +323,12 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.ListValue(result), nil
 	}))
 
-	m.MapSet("trim", fn("Buffer.trim", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("trim", function("Buffer.trim", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		*buf = bytes.TrimSpace(*buf)
 		return vm.Null, nil
 	}))
 
-	m.MapSet("toFloat", fn("Buffer.toFloat", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("toFloat", function("Buffer.toFloat", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		f, err := strconv.ParseFloat(string(*buf), 64)
 		if err != nil {
 			return vm.Null, fmt.Errorf("Buffer.toFloat: %w", err)
@@ -336,7 +336,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return vm.FloatValue(f), nil
 	}))
 
-	m.MapSet("toInteger", fn("Buffer.toInteger", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("toInteger", function("Buffer.toInteger", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		n, err := strconv.ParseInt(string(*buf), 10, 64)
 		if err != nil {
 			return vm.Null, fmt.Errorf("Buffer.toInteger: %w", err)
@@ -347,7 +347,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// collect frees the pinned FFI block if one was allocated (the Zig/pointer
 	// API was used), and is idempotent — matching upstream Buffer.collect's
 	// double-free guard. It is a no-op for a purely in-memory (string-API) buffer.
-	m.MapSet("collect", fn("Buffer.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("collect", function("Buffer.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if st.addr != 0 && !st.freed {
 			if err := buzz.FreeFFI(st.addr); err != nil {
 				return vm.Null, err
@@ -368,8 +368,8 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// writeZ / readZAt are the Zig-typed binary API upstream's ffi.buzz uses to hand
 	// a buffer to a foreign function: writeZ appends each value encoded at the C
 	// width of zigType, readZAt decodes the element at an index.
-	m.MapSet("writeZ", fn("Buffer.writeZ", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 2 || !args[0].IsStr() || !args[1].IsList() {
+	m.MapSet("writeZ", function("Buffer.writeZ", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 2 || !args[0].IsString() || !args[1].IsList() {
 			return vm.Null, fmt.Errorf("Buffer.writeZ: requires (str zigType, [any] values)")
 		}
 		zt := args[0].AsString()
@@ -379,14 +379,14 @@ func makeBufferValue(st *bufferState) vm.Value {
 		}
 		for _, v := range args[1].ListItems() {
 			if !v.IsInt() {
-				return vm.Null, errFFITypeMismatch(zt, "a non-int value cannot be written as an integer type")
+				return vm.Null, errorFFITypeMismatch(zt, "a non-int value cannot be written as an integer type")
 			}
 			st.bytes = appendLE(st.bytes, uint64(v.AsInt()), size)
 		}
 		return vm.Null, nil
 	}))
-	m.MapSet("readZAt", fn("Buffer.readZAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 2 || !args[0].IsInt() || !args[1].IsStr() {
+	m.MapSet("readZAt", function("Buffer.readZAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 2 || !args[0].IsInt() || !args[1].IsString() {
 			return vm.Null, fmt.Errorf("Buffer.readZAt: requires (int at, str zigType)")
 		}
 		zt := args[1].AsString()
@@ -405,7 +405,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// writeStruct / readStruct move whole foreign structs through the buffer, laid
 	// out exactly as C would, which is what lets a script stage an array of them
 	// and hand the pointer to a callee.
-	m.MapSet("writeStruct", fn("Buffer.writeStruct", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("writeStruct", function("Buffer.writeStruct", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 || !args[1].IsList() {
 			return vm.Null, fmt.Errorf("Buffer.writeStruct: requires (Type, [Type] values)")
 		}
@@ -426,7 +426,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		}
 		return vm.Null, nil
 	}))
-	m.MapSet("readStruct", fn("Buffer.readStruct", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("readStruct", function("Buffer.readStruct", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 {
 			return vm.Null, fmt.Errorf("Buffer.readStruct: requires the struct type")
 		}
@@ -449,7 +449,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		return args[0].NewInstance(fields)
 	}))
 
-	m.MapSet("ptr", fn("Buffer.ptr", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("ptr", function("Buffer.ptr", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		at := 0
 		if len(args) >= 1 && args[0].IsInt() {
 			at = int(args[0].AsInt())
@@ -475,8 +475,8 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// writeZAt(at, zigType, values) stores the list `values` as consecutive
 	// zigType scalars starting at byte offset `at`. Mirrors upstream
 	// Buffer.writeZAt::<T>; the discarded ::<T> type argument is parsed away.
-	m.MapSet("writeZAt", fn("Buffer.writeZAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 3 || !args[0].IsInt() || !args[1].IsStr() || !args[2].IsList() {
+	m.MapSet("writeZAt", function("Buffer.writeZAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 3 || !args[0].IsInt() || !args[1].IsString() || !args[2].IsList() {
 			return vm.Null, fmt.Errorf("Buffer.writeZAt: requires (int at, str zigType, [any] values)")
 		}
 		at := int(args[0].AsInt())
@@ -519,8 +519,8 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// asymmetric: its read path multiplies by the type size while writeZAt's `at`
 	// (above) is a raw byte offset. Replicated here so one .buzz source runs on
 	// both runtimes (e.g. write a CGPoint's y at byte 8, read it back at index 1).
-	m.MapSet("readZAt", fn("Buffer.readZAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 2 || !args[0].IsInt() || !args[1].IsStr() {
+	m.MapSet("readZAt", function("Buffer.readZAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 2 || !args[0].IsInt() || !args[1].IsString() {
 			return vm.Null, fmt.Errorf("Buffer.readZAt: requires (int at, str zigType)")
 		}
 		addr, err := st.ensurePinned()
@@ -549,7 +549,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// Zig ABI methods: stub with a clear error.
 	for _, name := range []string{"writeNative", "readNative", "readNativeAll"} {
 		name := name
-		m.MapSet(name, fn("Buffer."+name, unsupported("Buffer."+name, "Zig ABI methods are not supported in the magus/buzz embedding")))
+		m.MapSet(name, function("Buffer."+name, unsupported("Buffer."+name, "Zig ABI methods are not supported in the magus/buzz embedding")))
 	}
 
 	return m
@@ -570,7 +570,7 @@ func (e ffiTypeMismatch) BuzzError() map[string]string {
 }
 func (e ffiTypeMismatch) BuzzErrorType() string { return "FFITypeMismatchError" }
 
-func errFFITypeMismatch(zigType, why string) error {
+func errorFFITypeMismatch(zigType, why string) error {
 	return ffiTypeMismatch{zigType: zigType, why: why}
 }
 
@@ -592,9 +592,9 @@ func intZigWidth(zigType string) (int, error) {
 	case "i64", "isize", "c_long", "c_longlong":
 		return 8, nil
 	case "u64", "usize", "c_ulong", "c_ulonglong":
-		return 0, errFFITypeMismatch(zigType, "a buzz int is an i64 and cannot represent the whole unsigned 64-bit range")
+		return 0, errorFFITypeMismatch(zigType, "a buzz int is an i64 and cannot represent the whole unsigned 64-bit range")
 	}
-	return 0, errFFITypeMismatch(zigType, "not an integer type buzz can write")
+	return 0, errorFFITypeMismatch(zigType, "not an integer type buzz can write")
 }
 
 // appendLE appends the low `size` bytes of v, little-endian.
@@ -649,7 +649,7 @@ func encodeField(st *bufferState, dst []byte, ctype string, v vm.Value) {
 	}
 	switch {
 	case strings.Contains(ctype, "*"):
-		if !v.IsStr() {
+		if !v.IsString() {
 			return
 		}
 		addr, err := buzz.AllocCString(v.AsString())
@@ -678,7 +678,7 @@ func decodeField(src []byte, ctype string) vm.Value {
 	}
 	switch {
 	case strings.Contains(ctype, "*"):
-		return vm.StrValue(buzz.ReadCString(uintptr(binary.LittleEndian.Uint64(src[:8]))))
+		return vm.StringValue(buzz.ReadCString(uintptr(binary.LittleEndian.Uint64(src[:8]))))
 	case ctype == "f64" || ctype == "double":
 		return vm.FloatValue(math.Float64frombits(binary.LittleEndian.Uint64(src[:8])))
 	case ctype == "f32" || ctype == "float":

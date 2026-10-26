@@ -38,8 +38,8 @@ func (f *ignoreFlag) Set(value string) error {
 	return nil
 }
 
-// watchCmd implements `magus watch`; output format matches `git diff --name-only` for pipe compatibility.
-func watchCmd(ctx context.Context, root string, rc runConfig, args []string) error {
+// watchCommand implements `magus watch`; output format matches `git diff --name-only` for pipe compatibility.
+func watchCommand(ctx context.Context, root string, rc runConfig, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	wf := flaggen.BindWatch(fs)

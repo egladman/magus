@@ -91,7 +91,7 @@ func TestRunConfigSet_BadInt(t *testing.T) {
 
 func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
 	cfg := config.Defaults()
-	err := configCmd(context.Background(), "", cfg, []string{"frobnicate"})
+	err := configCommand(context.Background(), "", cfg, []string{"frobnicate"})
 	require.Error(t, err, "expected error for unknown subcommand")
 	assert.Contains(t, err.Error(), "frobnicate", "error should mention subcommand name")
 }
@@ -102,7 +102,7 @@ func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
 // `magus man`, which exited 1 for the same mistake. Usage errors exit 2 across the CLI.
 func TestRunConfigCmd_NoArgs(t *testing.T) {
 	cfg := config.Defaults()
-	err := configCmd(context.Background(), "", cfg, nil)
+	err := configCommand(context.Background(), "", cfg, nil)
 	require.Error(t, err, "no args should be a usage error, not a quiet success")
 
 	assert.Equal(t, exit.Usage, mapExitCode(err))

@@ -76,20 +76,20 @@ func TestSpellHandleCarriesNameGlobsAndOps(t *testing.T) {
 	assert.Equal(t, "myspell", name.AsString())
 }
 
-// execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only
+// execContextValue builds what ctx.withEnv/withCwd produce: a marked map carrying only
 // execution overrides.
-func execCtxValue(env map[string]string, cwd string) vm.Value {
+func execContextValue(env map[string]string, cwd string) vm.Value {
 	m := vm.NewMap()
 	m.MapSet(ctxMarker, vm.BoolValue(true))
 	if env != nil {
 		e := vm.NewMap()
 		for k, v := range env {
-			e.MapSet(k, vm.StrValue(v))
+			e.MapSet(k, vm.StringValue(v))
 		}
 		m.MapSet("env", e)
 	}
 	if cwd != "" {
-		m.MapSet("cwd", vm.StrValue(cwd))
+		m.MapSet("cwd", vm.StringValue(cwd))
 	}
 	return m
 }
@@ -100,8 +100,8 @@ func execCtxValue(env map[string]string, cwd string) vm.Value {
 // an op that did not exist, so the assertion passed because nothing ran. A unit test on
 // the extractor cannot pass for that reason.
 func TestCtxOverridesReadFromAMarkedContext(t *testing.T) {
-	args := []vm.Value{execCtxValue(map[string]string{"CGO_ENABLED": "0"}, "sub")}
-	got, consumed := ctxOverridesFromBuzz(args, 0)
+	args := []vm.Value{execContextValue(map[string]string{"CGO_ENABLED": "0"}, "sub")}
+	got, consumed := contextOverridesFromBuzz(args, 0)
 
 	require.Equal(t, 1, consumed, "a marked context must be consumed as argument one")
 	assert.Equal(t, commandOpts{env: map[string]string{"CGO_ENABLED": "0"}, cwd: "sub"}, got, "env and cwd overrides, and nothing else")
@@ -112,9 +112,9 @@ func TestCtxOverridesReadFromAMarkedContext(t *testing.T) {
 // call form and silently read opts as overrides.
 func TestPlainOptsTableIsNotAContext(t *testing.T) {
 	o := vm.NewMap()
-	o.MapSet("args", vm.StrValue("-race"))
+	o.MapSet("args", vm.StringValue("-race"))
 	o.MapSet("env", vm.NewMap())
 
-	_, consumed := ctxOverridesFromBuzz([]vm.Value{o}, 0)
+	_, consumed := contextOverridesFromBuzz([]vm.Value{o}, 0)
 	assert.Zero(t, consumed, "an unmarked map is an opts table, never a context")
 }

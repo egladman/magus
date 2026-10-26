@@ -31,7 +31,7 @@ var xTargets = []string{"build", "test", "lint", "format", "clean", "generate", 
 // shorthand for `magus run`.
 func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	var step *bool
-	filters, err := cmdParse("x", args, func(fs *flag.FlagSet) {
+	filters, err := commandParse("x", args, func(fs *flag.FlagSet) {
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (implies --concurrency=1)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus x <ref>          reproduce the run that output ref recorded")

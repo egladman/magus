@@ -50,7 +50,7 @@ func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string)
 	guardRoot = func(string) (string, error) { return "", errors.New("no workspace rules in this test") }
 	global = globalFlags{}
 	defer func() { guardRoot, global = savedRoot, savedFlags }()
-	return shellCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
+	return shellCommandWithErrorWriter(ctx, in, out, os.Stderr, args)
 }
 
 // A -q that an earlier in-process command left in the process-global flags made a hook
@@ -266,7 +266,7 @@ func TestShellJudgesAnOperandTheSameAsStdin(t *testing.T) {
 
 	var fromStdin, fromOperand strings.Builder
 	require.Error(t, shellStdin(ctx, strings.NewReader("git stash"), &fromStdin, []string{"-o", "name"}))
-	require.Error(t, shellCmdWithErrorWriter(ctx, strings.NewReader(""), &fromOperand, os.Stderr,
+	require.Error(t, shellCommandWithErrorWriter(ctx, strings.NewReader(""), &fromOperand, os.Stderr,
 		[]string{"git stash", "-o", "name"}))
 
 	assert.Equal(t, "deny\n", fromStdin.String())
@@ -295,7 +295,7 @@ func TestShellRefusesAnUnquotedCommand(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	var out strings.Builder
-	err := shellCmdWithErrorWriter(context.Background(), strings.NewReader(""), &out, os.Stderr,
+	err := shellCommandWithErrorWriter(context.Background(), strings.NewReader(""), &out, os.Stderr,
 		[]string{"git", "stash"})
 	require.ErrorContains(t, err, "quote the whole command")
 	assert.Contains(t, err.Error(), "git stash", "the refusal hands back what to type")
@@ -1646,7 +1646,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // committedDenyRule is a git repository whose committed root magusfile is denyRules.
 func committedDenyRule(t *testing.T) *testkit.Repo {
 	t.Helper()
-	return testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyRules})
+	return testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyRules})
 }
 
 // A committed spawn rule still answers however the working tree leaves the root magusfile:
@@ -1915,7 +1915,7 @@ import "./policy/%s" as p;
 magus\guard.command(p\judge);
 `, name)
 	}
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":     "{}\n",
 		"policy/a.buzz":  rule("a", `magus\guard.deny("Not in this repository.")`),
 		"policy/b.buzz":  rule("b", `magus\guard.allow()`),
@@ -1944,7 +1944,7 @@ magus\guard.command(p\judge);
 func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	testkit.Isolate(t)
 	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
-	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
+	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
 	root := repo.Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
@@ -2017,7 +2017,7 @@ func TestWithinBudgetReturnsOnTime(t *testing.T) {
 func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	testkit.Isolate(t)
 	resetWorkspaceMemo(t)
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":     "{}\n",
 		"magusfile.buzz": "import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n",
 	})
@@ -2057,7 +2057,7 @@ func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
 	testkit.Isolate(t)
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":      "{}\n",
 		"magusfile.buzz":  "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n",
 		"lib/policy.buzz": "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.deny(\"no\");\n}\n",
@@ -2100,7 +2100,7 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", cache)
 	const rule = "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.%s;\n}\n"
 	const magusfile = "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n"
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":      "{}\n",
 		"magusfile.buzz":  magusfile,
 		"lib/policy.buzz": fmt.Sprintf(rule, `deny("no")`),

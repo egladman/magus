@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewRepoCommitsFilesOnMain(t *testing.T) {
-	r := NewRepo(t, map[string]string{"a.txt": "a", "sub/b.txt": "b"})
+	r := NewRepository(t, map[string]string{"a.txt": "a", "sub/b.txt": "b"})
 
 	assert.Equal(t, "main", r.Git("rev-parse", "--abbrev-ref", "HEAD"))
 	assert.Equal(t, []string{"a.txt", "sub/b.txt"}, strings.Split(r.Git("ls-files"), "\n"))
@@ -23,7 +23,7 @@ func TestNewRepoCommitsFilesOnMain(t *testing.T) {
 }
 
 func TestNewRepoWithNoFilesHasAHead(t *testing.T) {
-	r := NewRepo(t, nil)
+	r := NewRepository(t, nil)
 	assert.Len(t, r.Head(), 40)
 	assert.Empty(t, r.Git("ls-files"))
 }
@@ -31,7 +31,7 @@ func TestNewRepoWithNoFilesHasAHead(t *testing.T) {
 // TestNewRepoSetsTheFixtureConfig: the config must be the repository's own, since the
 // code under test runs git with the environment it builds, not the one Git uses.
 func TestNewRepoSetsTheFixtureConfig(t *testing.T) {
-	r := NewRepo(t, nil)
+	r := NewRepository(t, nil)
 	for _, kv := range repoConfig {
 		assert.Equal(t, kv[1], r.Git("config", "--local", "--get", kv[0]), kv[0])
 	}
@@ -48,7 +48,7 @@ func TestRepoGitIgnoresTheCallersGitEnvironment(t *testing.T) {
 	t.Setenv("GIT_DIR", home.Path("not-a-repo"))
 	t.Setenv("GIT_INDEX_FILE", home.Path("index"))
 
-	r := NewRepo(t, map[string]string{"a.txt": "a"})
+	r := NewRepository(t, map[string]string{"a.txt": "a"})
 	r.Commit("second", map[string]string{"a.txt": "b"})
 
 	assert.Equal(t, "b", r.Git("show", "HEAD:a.txt"))
@@ -63,13 +63,13 @@ func TestNewRepoIgnoresAGlobalIgnoreFile(t *testing.T) {
 	t.Setenv("HOME", home.Root())
 	t.Setenv("XDG_CONFIG_HOME", home.Path(".config"))
 
-	r := NewRepo(t, map[string]string{"a.txt": "a"})
+	r := NewRepository(t, map[string]string{"a.txt": "a"})
 
 	assert.Equal(t, "a.txt", r.Git("ls-files"))
 }
 
 func TestRepoCommitReturnsTheNewHead(t *testing.T) {
-	r := NewRepo(t, map[string]string{"a.txt": "a"})
+	r := NewRepository(t, map[string]string{"a.txt": "a"})
 	first := r.Head()
 
 	second := r.Commit("change a", map[string]string{"a.txt": "a2", "c.txt": "c"})
@@ -83,7 +83,7 @@ func TestRepoCommitReturnsTheNewHead(t *testing.T) {
 }
 
 func TestAddWorktreeBranchesAtHeadInItsOwnDirectory(t *testing.T) {
-	r := NewRepo(t, map[string]string{"a.txt": "a"})
+	r := NewRepository(t, map[string]string{"a.txt": "a"})
 	base := r.Head()
 
 	wt := r.AddWorktree("topic")
@@ -103,7 +103,7 @@ func TestAddWorktreeBranchesAtHeadInItsOwnDirectory(t *testing.T) {
 }
 
 func TestRepoGitFailsTheTestOnError(t *testing.T) {
-	r := NewRepo(t, nil)
+	r := NewRepository(t, nil)
 	fake := &fatalRecorder{TB: t}
 	broken := &Repo{Workspace: &Workspace{tb: fake, root: r.Root()}}
 

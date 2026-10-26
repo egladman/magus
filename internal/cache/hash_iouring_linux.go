@@ -96,7 +96,7 @@ func iouringHashBatch(files []relAbs) ([]string, error) {
 					return
 				}
 				localIdx := idx - winStart
-				if err := c.readErr(len(bufs[localIdx])); err != nil {
+				if err := c.readError(len(bufs[localIdx])); err != nil {
 					return
 				}
 				h := sha256.Sum256(bufs[localIdx])

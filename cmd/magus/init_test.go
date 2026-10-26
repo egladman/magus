@@ -79,7 +79,7 @@ func TestStarterMagusfileChecksClean(t *testing.T) {
 func TestInitSpellCmd(t *testing.T) {
 	t.Run("scaffolds a parseable, contract-complete spell", func(t *testing.T) {
 		dir := t.TempDir()
-		require.NoError(t, initSpellCmd(context.Background(), []string{"--dir", dir, "acme"}))
+		require.NoError(t, initSpellCommand(context.Background(), []string{"--dir", dir, "acme"}))
 
 		data, err := os.ReadFile(filepath.Join(dir, "acme", "spell.buzz"))
 		require.NoError(t, err, "expected spells/acme/spell.buzz")
@@ -103,18 +103,18 @@ func TestInitSpellCmd(t *testing.T) {
 
 	t.Run("rejects an invalid handle", func(t *testing.T) {
 		dir := t.TempDir()
-		err := initSpellCmd(context.Background(), []string{"--dir", dir, "1bad name"})
+		err := initSpellCommand(context.Background(), []string{"--dir", dir, "1bad name"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not a valid handle")
 	})
 
 	t.Run("refuses to overwrite without --force", func(t *testing.T) {
 		dir := t.TempDir()
-		require.NoError(t, initSpellCmd(context.Background(), []string{"--dir", dir, "acme"}))
-		err := initSpellCmd(context.Background(), []string{"--dir", dir, "acme"})
+		require.NoError(t, initSpellCommand(context.Background(), []string{"--dir", dir, "acme"}))
+		err := initSpellCommand(context.Background(), []string{"--dir", dir, "acme"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "already exists")
-		require.NoError(t, initSpellCmd(context.Background(), []string{"--dir", dir, "--force", "acme"}))
+		require.NoError(t, initSpellCommand(context.Background(), []string{"--dir", dir, "--force", "acme"}))
 	})
 }
 
@@ -153,7 +153,7 @@ func TestInitCmdRootWithoutLocalOrGlobalRefused(t *testing.T) {
 	t.Chdir(cwd)
 	root := t.TempDir()
 
-	err := initCmd(context.Background(), root, nil)
+	err := initCommand(context.Background(), root, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--local or --global")
 
@@ -172,7 +172,7 @@ func TestInitGlobalWritesNoDefaultKeys(t *testing.T) {
 	t.Chdir(t.TempDir())
 	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0", Commit: "abc1234", Date: "2026-09-26T00:00:00Z"})
 
-	require.NoError(t, initCmd(ctx, "", []string{"--global"}))
+	require.NoError(t, initCommand(ctx, "", []string{"--global"}))
 	path := filepath.Join(xdg, "magus", "magus.yaml")
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -181,7 +181,7 @@ func TestInitGlobalWritesNoDefaultKeys(t *testing.T) {
 	assert.Empty(t, keys, "init writes no key:\n%s", data)
 	assert.Contains(t, string(data), "# written by magus v0.5.0 (commit abc1234, 2026-09-26T00:00:00Z)")
 
-	require.NoError(t, initCmd(ctx, "", []string{"--global"}))
+	require.NoError(t, initCommand(ctx, "", []string{"--global"}))
 	again, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(data), string(again))
@@ -189,7 +189,7 @@ func TestInitGlobalWritesNoDefaultKeys(t *testing.T) {
 
 // The other half, that --local alongside --root lands both writes in root, is pinned by
 // testdata/script/init_root_scopes_writes.txtar rather than here. It cannot be an
-// in-process test: initCmd reaches loadMagus, which memoizes its root for the life of
+// in-process test: initCommand reaches loadMagus, which memoizes its root for the life of
 // the process and panics when a later call names a different one, so the assertion
 // passes alone and panics in a full run. Each script case is its own subprocess.
 

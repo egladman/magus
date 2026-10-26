@@ -114,9 +114,9 @@ const serverProbeTimeout = 500 * time.Millisecond
 
 func runVersion(ctx context.Context, args []string) error {
 	var vf *flaggen.VersionFlags
-	// version is dispatched straight from main, so without cmdParse the global
+	// version is dispatched straight from main, so without commandParse the global
 	// display flags are never bound and -o is silently inert in either position.
-	if _, err := cmdParse("version", args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("version", args, func(fs *flag.FlagSet) {
 		vf = flaggen.BindVersion(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus version [flags]")

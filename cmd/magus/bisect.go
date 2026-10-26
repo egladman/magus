@@ -27,7 +27,7 @@ import (
 // Supported VCSes: git, hg, sl. jj reports ErrUnsupported.
 func affectedBisect(ctx context.Context, root string, args []string) error {
 	var bf *flaggen.AffectedBisectFlags
-	if _, err := cmdParse("affected --bisect", args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("affected --bisect", args, func(fs *flag.FlagSet) {
 		bf = flaggen.BindAffectedBisect(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected --bisect <project> [flags]")

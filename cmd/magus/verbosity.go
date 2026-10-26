@@ -28,7 +28,7 @@ import (
 type dirHandler struct{ slog.Handler }
 
 func (h dirHandler) Handle(ctx context.Context, r slog.Record) error {
-	dir, ok := std.CwdFromContext(ctx)
+	dir, ok := std.CurrentWorkingDirectoryFromContext(ctx)
 	if !ok {
 		return h.Handler.Handle(ctx, r)
 	}

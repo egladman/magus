@@ -83,7 +83,7 @@ func (vm *VM) matchToRecords(subject string, m *regexp2.Match) Value {
 		}
 		items[i] = vm.allocObject(&objectInst{
 			Def:    patMatchDef,
-			Fields: []Value{StrValue(text), IntValue(int64(start)), IntValue(int64(start + len(text)))},
+			Fields: []Value{StringValue(text), IntValue(int64(start)), IntValue(int64(start + len(text)))},
 		})
 	}
 	return ListValue(items)
@@ -95,7 +95,7 @@ func matchToList(m *regexp2.Match) Value {
 	groups := m.Groups()
 	items := make([]Value, len(groups))
 	for i, g := range groups {
-		items[i] = StrValue(g.String())
+		items[i] = StringValue(g.String())
 	}
 	return ListValue(items)
 }
@@ -192,7 +192,7 @@ func patMethod(vm *VM, p Value, name string) *directObj {
 			if err != nil {
 				return Null, fmt.Errorf("pat.replace: %w", err)
 			}
-			return StrValue(out), nil
+			return StringValue(out), nil
 		})
 	case "replaceAll":
 		return newDirect("pat.replaceAll", func(_ context.Context, args []Value) (Value, error) {
@@ -204,7 +204,7 @@ func patMethod(vm *VM, p Value, name string) *directObj {
 			if err != nil {
 				return Null, fmt.Errorf("pat.replaceAll: %w", err)
 			}
-			return StrValue(out), nil
+			return StringValue(out), nil
 		})
 	}
 	return nil

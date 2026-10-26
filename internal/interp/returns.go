@@ -37,13 +37,13 @@ func buzzReturnToGo(v vm.Value) (any, error) {
 		// reaches the rendered result as a null field.
 		//nolint:nilnil // void target: no value, no error
 		return nil, nil
-	case v.IsStr():
+	case v.IsString():
 		return v.AsString(), nil
 	case v.IsList():
 		items := v.ListItems()
 		out := make([]string, 0, len(items))
 		for i, it := range items {
-			if !it.IsStr() {
+			if !it.IsString() {
 				return nil, fmt.Errorf("a returned list must hold only str, item %d is %s", i, buzzReturnKind(it))
 			}
 			out = append(out, it.AsString())

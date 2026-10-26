@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// checkpointCmd records where the work stands, for whoever comes back to it.
+// checkpointCommand records where the work stands, for whoever comes back to it.
 //
 // It is one command with two callers and no branch between them. A person runs it with
 // a --note before putting something down; an agent host's stop hook pipes its event
@@ -32,7 +32,7 @@ import (
 // no transcript, resolves no session anywhere, and starts nothing: the host's session id
 // and transcript path are opaque pointers, recorded so a PERSON can follow them with the
 // tool that wrote them.
-func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
+func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("checkpoint", flag.ContinueOnError)
 	bindDisplayFlags(fset)
 	cf := flaggen.BindSessionCheckpoint(fset)

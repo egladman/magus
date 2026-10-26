@@ -29,7 +29,7 @@ import (
 )
 
 // TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean drives the actual `magus buzz`
-// code path (buzzCmd, the same function main.go dispatches to) end-to-end: a script
+// code path (buzzCommand, the same function main.go dispatches to) end-to-end: a script
 // with an unused import must print the BZZ3001 warning to stderr and still exit
 // clean (nil error, which main.go turns into exit 0): the whole point of a warning
 // is that it never fails the run.
@@ -43,7 +43,7 @@ func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 	var runErr error
 	stderr := captureStderr(t, func() {
 		stdout := captureStdout(t, func() {
-			runErr = buzzCmd(context.Background(), "", []string{path})
+			runErr = buzzCommand(context.Background(), "", []string{path})
 		})
 		assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
 	})
@@ -66,7 +66,7 @@ func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 
 	var runErr error
 	stderr := captureStderr(t, func() {
-		runErr = buzzCmd(context.Background(), "", []string{"-s", path})
+		runErr = buzzCommand(context.Background(), "", []string{"-s", path})
 	})
 
 	require.NoError(t, runErr)
@@ -80,7 +80,7 @@ func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 const buzzSandboxTarget = "/magus-buzz-sandbox-test/victim"
 
 // buzzSandboxWorkspace builds a workspace whose magus.yaml sets the sandbox as asked,
-// opens it, and returns it on the context loadMagus reads so buzzCmd never touches the
+// opens it, and returns it on the context loadMagus reads so buzzCommand never touches the
 // process singleton.
 func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context, *magus.Magus, string) {
 	t.Helper()
@@ -108,7 +108,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeBestEffort)
 
-	err := buzzCmd(ctx, "", []string{"-s", script})
+	err := buzzCommand(ctx, "", []string{"-s", script})
 
 	require.Error(t, err, "a write outside the workspace must be refused")
 	assert.ErrorContains(t, err, string(types.PathWriteDenied))
@@ -167,7 +167,7 @@ func TestBuzzRunContextCarriesOneEvalMemo(t *testing.T) {
 func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeOff)
 
-	require.NoError(t, buzzCmd(ctx, "", []string{"-s", script}))
+	require.NoError(t, buzzCommand(ctx, "", []string{"-s", script}))
 
 	events, rerr := trail.ReadRecent(m.CacheDir(), 10)
 	require.NoError(t, rerr)
@@ -209,7 +209,7 @@ func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
 	})
 
 	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-s", script}) })
+	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
 
 	require.NoError(t, runErr)
 	assert.Equal(t, "hi\n", stdout)
@@ -231,7 +231,7 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	})
 
 	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-s", script}) })
+	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
 
 	require.NoError(t, runErr)
 	assert.Equal(t, "1\n", stdout)
@@ -312,7 +312,7 @@ func TestBuzzCmd_GuardGlueNeverOpensTheWorkspace(t *testing.T) {
 
 			var runErr error
 			withStdin(t, event, func() {
-				captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-s", script}) })
+				captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
 			})
 
 			require.NoError(t, runErr, "a hook script must never fail: its host reads a non-zero exit as an error notice, and exit 2 as a block")
@@ -353,7 +353,7 @@ func TestGuardGlueImportsNoWorkspaceReader(t *testing.T) {
 // never reads one is not warned about it, and a workspace member still raises MGS1022
 // with the reason it could not attach.
 func TestBuzzCmd_OutsideAWorkspace(t *testing.T) {
-	// buzzCmd's flag parse rebuilds the default logger on whatever os.Stderr is then,
+	// buzzCommand's flag parse rebuilds the default logger on whatever os.Stderr is then,
 	// which is the only reason captureStderr sees the warning. The text handler writes
 	// synchronously; the pretty one owns a terminal region.
 	prevLog, prevFormat, prevLevel := slog.Default(), globalCfg.Log.Format, globalCfg.Log.Level
@@ -375,13 +375,13 @@ func TestBuzzCmd_OutsideAWorkspace(t *testing.T) {
 
 	var runErr error
 	stderr := captureStderr(t, func() {
-		captureStdout(t, func() { runErr = buzzCmd(t.Context(), dir, []string{vanilla}) })
+		captureStdout(t, func() { runErr = buzzCommand(t.Context(), dir, []string{vanilla}) })
 	})
 	require.NoError(t, runErr)
 	assert.Equal(t, 0, *opens)
 	assert.NotContains(t, stderr, "workspace not attached", "a script that never asked for a workspace is not warned about one")
 
-	stderr = captureStderr(t, func() { runErr = buzzCmd(t.Context(), dir, []string{member}) })
+	stderr = captureStderr(t, func() { runErr = buzzCommand(t.Context(), dir, []string{member}) })
 	require.Error(t, runErr)
 	assert.ErrorContains(t, runErr, string(types.MagusfileOnlyMember))
 	assert.Contains(t, stderr, "workspace not attached")
@@ -398,7 +398,7 @@ func TestBuzzCmd_ScriptImportsResolveBesideTheFile(t *testing.T) {
 
 	var runErr error
 	stdout := captureStdout(t, func() {
-		runErr = buzzCmd(context.Background(), "", []string{script})
+		runErr = buzzCommand(context.Background(), "", []string{script})
 	})
 	require.NoError(t, runErr)
 	assert.Contains(t, stdout, "ok")
@@ -423,7 +423,7 @@ func TestBuzzCmd_WorkDirResolvesRootRelativeScripts(t *testing.T) {
 		t.Run(strings.Join(args[:len(args)-1], " "), func(t *testing.T) {
 			t.Chdir(filepath.Join(root, "sub", "deeper"))
 			var runErr error
-			stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), "", args) })
+			stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), "", args) })
 			require.NoError(t, runErr)
 			assert.Equal(t, "ok\n", stdout)
 		})
@@ -438,7 +438,7 @@ func TestBuzzCmd_WorkDirMissingNamesTheDirectory(t *testing.T) {
 		{"-e", "fun main() > void {}", "-C", missing},
 		{"-C", missing, "lsp"},
 	} {
-		err := buzzCmd(t.Context(), "", args)
+		err := buzzCommand(t.Context(), "", args)
 		require.Error(t, err, "%v", args)
 		assert.Contains(t, err.Error(), fmt.Sprintf("-C %s: no such file or directory", missing))
 	}
@@ -453,8 +453,8 @@ func TestSessionGlueAppendsTheWorkDirToTheEnvFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(envFile, []byte("export A=1\n"), 0o644))
 
 	glue := []string{"-C", repo, "-s", "docs/guides/integrations/agents/magus-session.buzz", "--"}
-	require.NoError(t, buzzCmd(t.Context(), "", append(glue, "--env-file", envFile)))
-	require.NoError(t, buzzCmd(t.Context(), "", append(glue, "--env-file", "")), "no env file is nothing to do")
+	require.NoError(t, buzzCommand(t.Context(), "", append(glue, "--env-file", envFile)))
+	require.NoError(t, buzzCommand(t.Context(), "", append(glue, "--env-file", "")), "no env file is nothing to do")
 
 	body, err := os.ReadFile(envFile)
 	require.NoError(t, err)
@@ -469,7 +469,7 @@ func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
 // --root names the checkout a script's vcs calls read. The process cwd here is the
 // magus checkout this test runs in, a different repository on a different ref.
 func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	r.Git("switch", "-q", "-c", "split-target")
 	repo := r.Root()
 	script := filepath.Join(t.TempDir(), "ref.buzz")
@@ -477,7 +477,7 @@ func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
 		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n"), 0o644))
 
 	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), repo, []string{"-s", script}) })
+	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), repo, []string{"-s", script}) })
 
 	require.NoError(t, runErr)
 	assert.Equal(t, "split-target\n", stdout)
@@ -491,20 +491,20 @@ func TestBuzzCmd_TopLevelRaiseNamesTheMainForm(t *testing.T) {
 	t.Cleanup(func() { global = saved })
 	var runErr error
 	captureStdout(t, func() {
-		runErr = buzzCmd(t.Context(), "", []string{"-s", "-e", `import "vcs"; final r = vcs\root();`})
+		runErr = buzzCommand(t.Context(), "", []string{"-s", "-e", `import "vcs"; final r = vcs\root();`})
 	})
 	require.ErrorContains(t, runErr, string(buzz.UnhandledRaise))
 	assert.ErrorContains(t, runErr, "fun main(args: [str]) > void !> any")
 
 	stdout := captureStdout(t, func() {
-		runErr = buzzCmd(t.Context(), "", []string{"-s", "-e",
+		runErr = buzzCommand(t.Context(), "", []string{"-s", "-e",
 			`import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print("root {vcs\root() != ""}"); }`})
 	})
 	require.NoError(t, runErr)
 	assert.Equal(t, "root true\n", stdout)
 }
 
-// buzzTrace runs buzzCmd under an enabled startup trace wired the way main does it,
+// buzzTrace runs buzzCommand under an enabled startup trace wired the way main does it,
 // with the trace's profile on ctx.
 func buzzTrace(t *testing.T, args []string) (stdout, trace string) {
 	t.Helper()
@@ -512,7 +512,7 @@ func buzzTrace(t *testing.T, args []string) (stdout, trace string) {
 	ctx := buzz.WithProfile(withTrace(context.Background(), tr), tr.profile)
 	var runErr error
 	stdout = captureStdout(t, func() {
-		runErr = buzzCmd(ctx, "", args)
+		runErr = buzzCommand(ctx, "", args)
 	})
 	require.NoError(t, runErr)
 	var buf bytes.Buffer
@@ -664,7 +664,7 @@ func TestBuzzReachesMagus(t *testing.T) {
 // TestBuzzCmd_ScriptArgvReachesMain pins the three shapes a caller has for handing a
 // script its own argv, which is what lets one file serve several callers without an
 // environment variable a shell has to set. The `--` form is the one that matters:
-// cmdParse reorders flags ahead of positionals, so a bare `script.buzz --raw` is
+// commandParse reorders flags ahead of positionals, so a bare `script.buzz --raw` is
 // magus's flag to parse and fails, and the separator is what hands it to the script.
 func TestBuzzCmd_ScriptArgvReachesMain(t *testing.T) {
 	dir := t.TempDir()
@@ -684,7 +684,7 @@ func TestBuzzCmd_ScriptArgvReachesMain(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var runErr error
 			stdout := captureStdout(t, func() {
-				runErr = buzzCmd(context.Background(), "", tc.args)
+				runErr = buzzCommand(context.Background(), "", tc.args)
 			})
 			require.NoError(t, runErr)
 			assert.Contains(t, stdout, tc.want)
@@ -846,7 +846,7 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 	var reply string
 	withStdin(t, a.event, func() {
 		reply = captureStdout(t, func() {
-			runErr = buzzCmd(t.Context(), dir, []string{"-s", script, "--", "--agent-name", a.host})
+			runErr = buzzCommand(t.Context(), dir, []string{"-s", script, "--", "--agent-name", a.host})
 		})
 	})
 	require.NoError(t, runErr, "%s (%s) must never fail: its host reads a non-zero exit as an error", name, a.label)
@@ -1165,7 +1165,7 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 			require.NoError(t, os.WriteFile(script, []byte(code), 0o644))
 
 			var runErr error
-			captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-t", script}) })
+			captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-t", script}) })
 			assert.Equal(t, tc.failed, runErr != nil, "%v", runErr)
 
 			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, []string{"-t"})))

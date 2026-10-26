@@ -30,7 +30,7 @@ type knowledgeGraphs interface {
 func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return nil, errNoWorkspace(member)
+		return nil, errorNoWorkspace(member)
 	}
 	g, ok := ws.(knowledgeGraphs)
 	if !ok {
@@ -290,7 +290,7 @@ type indexedGraph struct {
 func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return indexedGraph{}, errNoWorkspace(member)
+		return indexedGraph{}, errorNoWorkspace(member)
 	}
 	pw, ok := ws.(precedentWorkspace)
 	if !ok {
@@ -449,10 +449,10 @@ func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.D
 	}
 	var do types.DirsOptions
 	var err error
-	if do.Layer, err = o.str("layer"); err != nil {
+	if do.Layer, err = o.string("layer"); err != nil {
 		return nil, err
 	}
-	if do.Language, err = o.str("language"); err != nil {
+	if do.Language, err = o.string("language"); err != nil {
 		return nil, err
 	}
 	if do.Depth, err = o.count("depth"); err != nil {
@@ -513,7 +513,7 @@ func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (
 	if no.Relations, err = o.relations(); err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
-	dir, err := o.str("direction")
+	dir, err := o.string("direction")
 	if err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
@@ -522,7 +522,7 @@ func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (
 	default:
 		return types.KnowledgeNeighborhoodOutput{}, fmt.Errorf("magus\\neighborhood: direction must be %q, %q or empty for both, got %q", types.EdgeOut, types.EdgeIn, dir)
 	}
-	if no.Collapse, err = o.strs("collapse"); err != nil {
+	if no.Collapse, err = o.strings("collapse"); err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "neighborhood")
@@ -594,7 +594,7 @@ func (o optionReader) only(keys ...string) error {
 	return nil
 }
 
-func (o optionReader) str(key string) (string, error) {
+func (o optionReader) string(key string) (string, error) {
 	v, ok := o.opts[key]
 	if !ok || v == nil {
 		return "", nil
@@ -606,7 +606,7 @@ func (o optionReader) str(key string) (string, error) {
 	return s, nil
 }
 
-func (o optionReader) strs(key string) ([]string, error) {
+func (o optionReader) strings(key string) ([]string, error) {
 	switch v := o.opts[key].(type) {
 	case nil:
 		return nil, nil
@@ -640,7 +640,7 @@ func (o optionReader) count(key string) (int, error) {
 // relations reads the relations option, refusing a name the graph does not define: a
 // misspelt relation filters every edge out and reads as an empty neighborhood.
 func (o optionReader) relations() ([]types.RelationID, error) {
-	names, err := o.strs("relations")
+	names, err := o.strings("relations")
 	if err != nil {
 		return nil, err
 	}
@@ -676,7 +676,7 @@ func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 		cacheDir = cd.CacheDir()
 	}
 	if cacheDir == "" {
-		return types.OutputRecord{}, errNoWorkspace("output")
+		return types.OutputRecord{}, errorNoWorkspace("output")
 	}
 	data, desc, err := cache.NewOutputStore(cacheDir).ByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {

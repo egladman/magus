@@ -16,8 +16,8 @@ func TestUnusedWritePaths(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo, "a.md": "# A\n", "b.md": "# B\n"}
-	root := testkit.NewRepo(t, files).Root()
-	holderRepo := testkit.NewRepo(t, files)
+	root := testkit.NewRepository(t, files).Root()
+	holderRepo := testkit.NewRepository(t, files)
 	rev := holderRepo.Head()
 	holderRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1), "a.md": "# A2\n"})
 	s := NewStore(tempLocation(t, root))

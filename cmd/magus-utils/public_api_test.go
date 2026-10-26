@@ -405,7 +405,7 @@ func TestRunGoAPIRejectsAnUnknownFlag(t *testing.T) {
 	assert.Error(t, runGoAPI([]string{"-nosuchflag"}))
 }
 
-func renderRepoLock(t *testing.T) []string {
+func renderRepositoryLock(t *testing.T) []string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "api-go.lock")
 	require.NoError(t, runGoAPI([]string{"-dir", "../..", "-out", out}))
@@ -423,12 +423,12 @@ func TestGoAPILockUpToDate(t *testing.T) {
 	committed, err := os.ReadFile(filepath.Join("..", "..", "internal", "commands", "testdata", "api-go.lock"))
 	require.NoError(t, err, "read internal/commands/testdata/api-go.lock")
 
-	assert.Equal(t, strings.Split(strings.TrimSuffix(string(committed), "\n"), "\n"), renderRepoLock(t),
+	assert.Equal(t, strings.Split(strings.TrimSuffix(string(committed), "\n"), "\n"), renderRepositoryLock(t),
 		"internal/commands/testdata/api-go.lock is out of date; run: magus run go-api-generate .")
 }
 
 func TestGoAPILockCoversEveryPublicPackage(t *testing.T) {
-	lines := renderRepoLock(t)
+	lines := renderRepositoryLock(t)
 
 	require.NotEmpty(t, lines)
 	assert.True(t, slices.IsSorted(lines), "the lock must stay in byte order")

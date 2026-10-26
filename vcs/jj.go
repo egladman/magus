@@ -123,7 +123,7 @@ func (v jjVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
-	root, _, err := repoPathPrefix(ctx, v, dir)
+	root, _, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func (v jjVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, err
 // the whole workspace from any directory, exactly as git and hg do, so only the base
 // changes. Caller pathspecs are dir-relative by contract, so they are rebased to match.
 func (v jjVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
-	root, prefix, err := repoPathPrefix(ctx, v, dir)
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +346,7 @@ func (v jjVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 // is a unified diff rather than jj's default colorized summary. No context flag: jj's
 // spelling has moved across releases, and the caller bounds the size anyway.
 func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
-	root, prefix, err := repoPathPrefix(ctx, v, dir)
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return "", err
 	}
@@ -394,7 +394,7 @@ func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []st
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
-	root, prefix, err := repoPathPrefix(ctx, v, dir)
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return "", err
 	}
@@ -727,7 +727,7 @@ func (v jjVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]
 	if len(paths) == 0 {
 		return nil, nil
 	}
-	root, prefix, err := repoPathPrefix(ctx, v, dir)
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -785,7 +785,7 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 	if commits <= 0 {
 		commits = 1
 	}
-	root, prefix, err := repoPathPrefix(ctx, v, dir)
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -813,7 +813,7 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 // Heads live in the shared store. A secondary workspace's .jj/repo is a file
 // naming that store, and a commit in either workspace moves the same head.
 func (jjVCS) CheckoutID(dir string) (string, bool) {
-	repo, ok := jjRepoDir(dir)
+	repo, ok := jjRepositoryDir(dir)
 	if !ok {
 		return "", false
 	}
@@ -839,10 +839,10 @@ func (jjVCS) CheckoutID(dir string) (string, bool) {
 	return strings.Join(names, ","), true
 }
 
-// jjRepoDir is the store directory. A primary workspace keeps it at .jj/repo;
+// jjRepositoryDir is the store directory. A primary workspace keeps it at .jj/repo;
 // a secondary workspace's .jj/repo is a file whose contents name the primary
 // store, relative to the .jj directory.
-func jjRepoDir(dir string) (string, bool) {
+func jjRepositoryDir(dir string) (string, bool) {
 	repo := filepath.Join(dir, ".jj", "repo")
 	info, err := os.Lstat(repo)
 	if err != nil {
@@ -917,7 +917,7 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 	if err := checkRef(rev); err != nil {
 		return err
 	}
-	root, prefix, err := repoPathPrefix(ctx, v, dir)
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return err
 	}
@@ -1090,7 +1090,7 @@ func (v jjVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.M
 	if len(globs.AutoResolve) == 0 {
 		return false, nil
 	}
-	current, err := v.repoMergeTool(ctx, root)
+	current, err := v.repositoryMergeTool(ctx, root)
 	if err != nil {
 		return false, err
 	}
@@ -1103,7 +1103,7 @@ func (v jjVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.M
 // CheckMergeDriver implements types.MergeDriverInstaller: the tool is in the repository's
 // config exactly as jjMergeTool registers it.
 func (v jjVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
-	current, err := v.repoMergeTool(ctx, root)
+	current, err := v.repositoryMergeTool(ctx, root)
 	return err == nil && current == jjMergeToolListing(), err
 }
 
@@ -1184,9 +1184,9 @@ func jjTracks(ctx context.Context, root, rel string) bool {
 	return err != nil || strings.TrimSpace(string(out)) != ""
 }
 
-// repoMergeTool is the magus tool as the repository's own config holds it, one sorted
+// repositoryMergeTool is the magus tool as the repository's own config holds it, one sorted
 // "key = value" line per key.
-func (v jjVCS) repoMergeTool(ctx context.Context, root string) (string, error) {
+func (v jjVCS) repositoryMergeTool(ctx context.Context, root string) (string, error) {
 	cmd := vcsExec(ctx, "jj", "config", "list", "--repo", "merge-tools.magus")
 	cmd.Dir = root
 	out, err := cmd.Output()

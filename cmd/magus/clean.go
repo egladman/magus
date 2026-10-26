@@ -12,15 +12,15 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// cleanCmd implements `magus clean [flags] [project...]`.
+// cleanCommand implements `magus clean [flags] [project...]`.
 // It removes files matching each selected project's declared Outputs globs
 // (the regenerable build artifacts), keeping any the VCS tracks. With --cache
 // it also invalidates the cached build entries for those projects.
 //
 // Pass --dry-run (the global flag) to preview without deleting.
-func cleanCmd(ctx context.Context, root string, args []string) error {
+func cleanCommand(ctx context.Context, root string, args []string) error {
 	var cf *flaggen.CleanFlags
-	projectArgs, err := cmdParse("clean", args, func(fs *flag.FlagSet) {
+	projectArgs, err := commandParse("clean", args, func(fs *flag.FlagSet) {
 		cf = flaggen.BindClean(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus clean [flags] [project...]")
@@ -50,7 +50,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	targets, _, err := resolveTargets(ctx, m, types.Target{Name: "clean"}, runSelection{projects: projectArgs, cwd: clientCwd(ctx)})
+	targets, _, err := resolveTargets(ctx, m, types.Target{Name: "clean"}, runSelection{projects: projectArgs, cwd: clientCurrentWorkingDirectory(ctx)})
 	if err != nil {
 		return err
 	}

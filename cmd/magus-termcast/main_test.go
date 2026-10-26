@@ -14,9 +14,9 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 )
 
-// repoFile reads a path relative to the repo root. The tests run in the command's
+// repositoryFile reads a path relative to the repo root. The tests run in the command's
 // own directory, and every artifact this command owns lives two levels up.
-func repoFile(t *testing.T, path string) string {
+func repositoryFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile("../../" + path)
 	if err != nil {
@@ -34,11 +34,11 @@ func repoFile(t *testing.T, path string) string {
 func TestCoreLoopUpToDate(t *testing.T) {
 	for _, v := range screen.ThemeVariants {
 		path := screen.VariantPath(svgPath, v.Suffix)
-		want, err := render(repoFile(t, capturePath), v.Theme)
+		want, err := render(repositoryFile(t, capturePath), v.Theme)
 		if err != nil {
 			t.Fatalf("render %s: %v", path, err)
 		}
-		if got := repoFile(t, path); got != want {
+		if got := repositoryFile(t, path); got != want {
 			t.Errorf("%s is stale (%d bytes on disk, %d rendered); run `magus run termcast-generate .`",
 				path, len(got), len(want))
 		}
@@ -52,7 +52,7 @@ func TestCoreLoopUpToDate(t *testing.T) {
 // The recording is the first thing a reader sees, so a warning in it is a wrong
 // first impression no other gate would catch.
 func TestCaptureIsClean(t *testing.T) {
-	if err := checkClean(repoFile(t, capturePath)); err != nil {
+	if err := checkClean(repositoryFile(t, capturePath)); err != nil {
 		t.Error(err)
 	}
 }
@@ -64,7 +64,7 @@ func TestCaptureIsClean(t *testing.T) {
 // in prose beside the picture; a capture that still renders beautifully while
 // reporting "5 ran" three times would be a silent lie.
 func TestFramesTellTheStory(t *testing.T) {
-	capture := repoFile(t, capturePath)
+	capture := repositoryFile(t, capturePath)
 	segments := split(capture)
 	if len(segments) < 4 {
 		t.Fatalf("split gave %d segments, want the session's several", len(segments))
@@ -104,7 +104,7 @@ func TestFramesTellTheStory(t *testing.T) {
 // Cheap to assert and impossible to notice by eye once the animation is looping,
 // so it is asserted.
 func TestFinalFrameShowsTheNarrowing(t *testing.T) {
-	frames, err := replay(repoFile(t, capturePath))
+	frames, err := replay(repositoryFile(t, capturePath))
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestFinalFrameShowsTheNarrowing(t *testing.T) {
 
 // TestRenderIsDeterministic guards the property the drift gate depends on.
 func TestRenderIsDeterministic(t *testing.T) {
-	capture := repoFile(t, capturePath)
+	capture := repositoryFile(t, capturePath)
 	first, err := render(capture, screen.DarkTheme)
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -276,7 +276,7 @@ func TestPaceScalesWithWhatAFrameAdds(t *testing.T) {
 // frame against its predecessor and the first against an empty screen, a shape
 // no synthetic pair of frames exercises.
 func TestHoldsPacesEveryFrame(t *testing.T) {
-	frames, err := replay(repoFile(t, capturePath))
+	frames, err := replay(repositoryFile(t, capturePath))
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestHoldsPacesEveryFrame(t *testing.T) {
 // row counts: a frame that filled the screen and pushed the earlier output off
 // the top added all of it, and the row count alone would report zero.
 func TestAddedCountsWhatScrolledAway(t *testing.T) {
-	frames, err := replay(repoFile(t, capturePath))
+	frames, err := replay(repositoryFile(t, capturePath))
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}

@@ -211,12 +211,12 @@ func TestBuildBuzzNeeds(t *testing.T) {
 	t.Run("an exported target function resolves and dispatches", func(t *testing.T) {
 		var runs atomic.Int32
 		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
-		buildFn := vm.DirectValue("go-build", record)
+		buildFunction := vm.DirectValue("go-build", record)
 		targets := map[string]vm.Callable{"go-build": record}
-		exports := map[string]vm.Value{"go-build": buildFn}
+		exports := map[string]vm.Value{"go-build": buildFunction}
 		needs := buildBuzzNeeds(targets, exports, &externalHandles{})
 
-		v, err := needs(context.Background(), []vm.Value{buildFn})
+		v, err := needs(context.Background(), []vm.Value{buildFunction})
 		require.NoError(t, err)
 		require.Equal(t, vm.Null, v)
 		assert.Equal(t, int32(1), runs.Load())
@@ -224,7 +224,7 @@ func TestBuildBuzzNeeds(t *testing.T) {
 
 	t.Run("a string argument is rejected", func(t *testing.T) {
 		needs := buildBuzzNeeds(noopTargets("go-build"), nil, &externalHandles{})
-		_, err := needs(context.Background(), []vm.Value{vm.StrValue("go-build")})
+		_, err := needs(context.Background(), []vm.Value{vm.StringValue("go-build")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be a target function")
 		assert.Contains(t, err.Error(), "ctx.glob(...)")
@@ -281,7 +281,7 @@ func TestBuildBuzzGlob(t *testing.T) {
 
 	t.Run("resolves patterns to the matching target handles", func(t *testing.T) {
 		targets, exports := mkTargets("go-build", "go-test", "lint")
-		v, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StrValue("go-*")})
+		v, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StringValue("go-*")})
 		require.NoError(t, err)
 		require.True(t, v.IsList())
 		// matchBuzzTargets sorts, so the handles come back in target-name order.
@@ -307,7 +307,7 @@ func TestBuildBuzzGlob(t *testing.T) {
 		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
 		targets := map[string]vm.Callable{"go-build": record, "go-test": record, "lint": record}
 		exports := map[string]vm.Value{"go-build": vm.DirectValue("go-build", record), "go-test": vm.DirectValue("go-test", record), "lint": vm.DirectValue("lint", record)}
-		globbed, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StrValue("go-*")})
+		globbed, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StringValue("go-*")})
 		require.NoError(t, err)
 
 		needs := buildBuzzNeeds(targets, exports, &externalHandles{})
@@ -327,19 +327,19 @@ func TestGlobMatchingNothingRaises(t *testing.T) {
 	glob := buildBuzzGlob(targets, exports)
 
 	t.Run("names every pattern", func(t *testing.T) {
-		_, err := glob(context.Background(), []vm.Value{vm.StrValue("python-*"), vm.StrValue("*-lint")})
+		_, err := glob(context.Background(), []vm.Value{vm.StringValue("python-*"), vm.StringValue("*-lint")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `ctx.glob: "python-*", "*-lint" matches no exported target`)
 	})
 
 	t.Run("a match with no exported handle is still nothing", func(t *testing.T) {
-		_, err := glob(context.Background(), []vm.Value{vm.StrValue("scip-*")})
+		_, err := glob(context.Background(), []vm.Value{vm.StringValue("scip-*")})
 		require.Error(t, err, "scip-only is matched by name but carries no handle to need")
 		assert.Contains(t, err.Error(), `"scip-*" matches no exported target`)
 	})
 
 	t.Run("a bare target name points at passing the function", func(t *testing.T) {
-		_, err := glob(context.Background(), []vm.Value{vm.StrValue("go-build")})
+		_, err := glob(context.Background(), []vm.Value{vm.StringValue("go-build")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `never "go-build" itself`)
 		assert.Contains(t, err.Error(), "ctx.needs(go_build)")
@@ -391,7 +391,7 @@ func TestBuildCache(t *testing.T) {
 		cache := buildCache(workspace.ContextWithRegistry(context.Background(), reg), nil)
 
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("aws-s3"))
+		handle.MapSet("name", vm.StringValue("aws-s3"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
 		assert.Equal(t, "aws-s3", reg.RemoteBackend())
 	})
@@ -401,13 +401,13 @@ func TestBuildCache(t *testing.T) {
 		// simply records nothing.
 		cache := buildCache(context.Background(), nil)
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("aws-s3"))
+		handle.MapSet("name", vm.StringValue("aws-s3"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
 		cache := buildCache(context.Background(), nil)
-		err := callVoidDirect(t, requireDirect(t, cache, "remote"), vm.StrValue("aws-s3"))
+		err := callVoidDirect(t, requireDirect(t, cache, "remote"), vm.StringValue("aws-s3"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imported spell handle")
 	})
@@ -567,7 +567,7 @@ func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
 
 	handle := vm.NewMap()
-	handle.MapSet("name", vm.StrValue("onepassword"))
+	handle.MapSet("name", vm.StringValue("onepassword"))
 	require.NoError(t, callSecret(t, secretObj, "provider", handle))
 	assert.Equal(t, "onepassword", r.ProviderName())
 }
@@ -593,7 +593,7 @@ func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
 	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
 
-	require.NoError(t, callSecret(t, secretObj, "read", vm.StrValue("MAGUS_TEST_NS_TOKEN")))
+	require.NoError(t, callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_TOKEN")))
 
 	// Reading through the namespace is what registers the value, so redaction is live
 	// from this point on. That the read happened at all is what this masking proves.
@@ -604,13 +604,13 @@ func TestSecretReadRejectsEmptyReference(t *testing.T) {
 	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
 
 	require.ErrorContains(t, callSecret(t, secretObj, "read"), "non-empty reference string")
-	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StrValue("")), "non-empty reference string")
+	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StringValue("")), "non-empty reference string")
 }
 
 func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
 	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
 
-	err := callSecret(t, secretObj, "read", vm.StrValue("MAGUS_TEST_NS_ABSENT"))
+	err := callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_ABSENT"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "MAGUS_TEST_NS_ABSENT",
 		"the error must name the variable, so the fix is obvious without reading the magusfile")
@@ -658,7 +658,7 @@ func TestSecretReadIsAudited(t *testing.T) {
 	// reads its step from).
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	_, err := sess.CallValue(ctx, requireDirect(t, secretObj, "read"), []vm.Value{vm.StrValue("MAGUS_TEST_AUDIT_TOKEN")})
+	_, err := sess.CallValue(ctx, requireDirect(t, secretObj, "read"), []vm.Value{vm.StringValue("MAGUS_TEST_AUDIT_TOKEN")})
 	require.NoError(t, err)
 
 	rec.mu.Lock()
@@ -703,13 +703,13 @@ func TestReviewProviderTakesASpellHandle(t *testing.T) {
 	review := buildReview(t.Context(), nil)
 
 	handle := vm.NewMap()
-	handle.MapSet("name", vm.StrValue("github"))
+	handle.MapSet("name", vm.StringValue("github"))
 	require.NoError(t, callVoidDirect(t, requireDirect(t, review, "provider"), handle))
 	assert.Equal(t, "github", ReviewProvider())
 
 	// A bare string is the mistake worth naming: it looks like it should work, and accepting
 	// it would select a provider that never resolves to a spell.
-	assert.Error(t, callVoidDirect(t, requireDirect(t, review, "provider"), vm.StrValue("github")))
+	assert.Error(t, callVoidDirect(t, requireDirect(t, review, "provider"), vm.StringValue("github")))
 	// A map that is not a spell handle carries no name to select by.
 	assert.Error(t, callVoidDirect(t, requireDirect(t, review, "provider"), vm.NewMap()))
 }
@@ -855,8 +855,8 @@ func runUsesTarget(t *testing.T, target string) (trace string, err error) {
 	w.Magusfile(usesMagusfile)
 
 	_, err = interp.RunDir(context.Background(), dir, target, nil)
-	raw, readErr := os.ReadFile(filepath.Join(dir, "trace.txt"))
-	if readErr != nil {
+	raw, readError := os.ReadFile(filepath.Join(dir, "trace.txt"))
+	if readError != nil {
 		return "", err
 	}
 	return string(raw), err

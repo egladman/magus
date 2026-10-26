@@ -28,7 +28,7 @@ var (
 	overrideDiscoveryURL string
 )
 
-func activeOpts() selfupdate.Options {
+func activeOptions() selfupdate.Options {
 	opts := selfupdate.Options{DiscoveryURL: overrideDiscoveryURL, HTTPClient: overrideClient}
 	if overrideKeys != nil {
 		opts.Keys = overrideKeys
@@ -118,7 +118,7 @@ func archToken(goarch, goarm string) string {
 	return "armv6"
 }
 
-// selfUpdateCmd implements `magus self update`: atomically replaces the running
+// selfUpdateCommand implements `magus self update`: atomically replaces the running
 // binary with the latest (or a specified) release.
 //
 // Discovery reads ONLY the site's index.json. The GitHub API is not used.
@@ -132,7 +132,7 @@ func archToken(goarch, goarm string) string {
 // the index is used; a prerelease installs only when --version names it. A dev build (version == "unknown") has no baseline to compare
 // against, so it also requires --version or --force before auto-selecting a
 // release.
-func selfUpdateCmd(ctx context.Context, args []string) error {
+func selfUpdateCommand(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("self update", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {
@@ -159,7 +159,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		uf.Version = "v" + uf.Version
 	}
 
-	opts := activeOpts()
+	opts := activeOptions()
 
 	// Fetch and verify the release index. Fails closed on unreachable or bad sig.
 	idx, err := selfupdate.FetchAndVerifyIndex(ctx, opts)

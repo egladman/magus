@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-func configCmd(ctx context.Context, root string, cfg config.Config, args []string) error {
+func configCommand(ctx context.Context, root string, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {
@@ -51,13 +51,13 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 	case "set":
 		return runConfigSet(ctx, subArgs)
 	case "history":
-		return configHistoryCmd(ctx, root, cfg, subArgs)
+		return configHistoryCommand(ctx, root, cfg, subArgs)
 	case "cache":
-		return configCacheCmd(ctx, root, subArgs)
+		return configCacheCommand(ctx, root, subArgs)
 	case "mcp":
-		return configMCPCmd(subArgs)
+		return configMCPCommand(subArgs)
 	case "console":
-		return configConsoleCmd(subArgs)
+		return configConsoleCommand(subArgs)
 	case "token":
 		return configToken(subArgs)
 	case "-h", "--help", "help":
@@ -70,7 +70,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 }
 
 func runConfigView(cfg config.Config, args []string) error {
-	_, err := cmdParse("config view", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("config view", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus config view [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -101,14 +101,14 @@ func runConfigView(cfg config.Config, args []string) error {
 }
 
 func printConfigText(cfg config.Config) {
-	fmt.Printf("log.format: %s\n", strOrDef(cfg.Log.Format, "(default: pretty)"))
+	fmt.Printf("log.format: %s\n", stringOrDef(cfg.Log.Format, "(default: pretty)"))
 	fmt.Printf("concurrency: %s\n", intOrDef(cfg.Concurrency, "(from concurrency_profile)"))
-	fmt.Printf("concurrency_profile: %s\n", strOrDef(string(cfg.ConcurrencyProfile), "(default: balanced)"))
-	fmt.Printf("history_path: %s\n", strOrDef(cfg.HistoryPath, "(disabled)"))
+	fmt.Printf("concurrency_profile: %s\n", stringOrDef(string(cfg.ConcurrencyProfile), "(default: balanced)"))
+	fmt.Printf("history_path: %s\n", stringOrDef(cfg.HistoryPath, "(disabled)"))
 	fmt.Printf("dry_run:  %v\n", cfg.DryRun)
 	fmt.Println()
 	fmt.Println("cache:")
-	fmt.Printf("  dir:  %s\n", strOrDef(cfg.Cache.Dir, "(default)"))
+	fmt.Printf("  dir:  %s\n", stringOrDef(cfg.Cache.Dir, "(default)"))
 	fmt.Printf("  immutable: %v\n", !cfg.Cache.WriteEnabled())
 	fmt.Printf("  remote_write: %v\n", cfg.Cache.RemoteWriteEnabled())
 	fmt.Printf("  size_mb: %s\n", intOrDef(cfg.Cache.SizeMB, "(unlimited)"))
@@ -118,7 +118,7 @@ func printConfigText(cfg config.Config) {
 	fmt.Printf("  runner_pool_budget:  %s\n", intOrDef(cfg.CI.RunnerPoolBudget, "(unlimited)"))
 }
 
-func strOrDef(s, def string) string {
+func stringOrDef(s, def string) string {
 	if s == "" {
 		return def
 	}

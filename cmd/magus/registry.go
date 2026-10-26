@@ -469,7 +469,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	}
 	root := proc.RootFromContext(ctx)
 	if root == "" {
-		resolved, ferr := workspace.FindRoot(proc.CwdFromContext(ctx))
+		resolved, ferr := workspace.FindRoot(proc.CurrentWorkingDirectoryFromContext(ctx))
 		if ferr != nil {
 			return
 		}

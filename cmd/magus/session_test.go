@@ -80,7 +80,7 @@ func TestSessionsRendersTheLeaseColumnAttributedAndNot(t *testing.T) {
 	recordSession(t, root, "run", []string{"test"}, "invBare")
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCommand(context.Background(), root, nil))
 	})
 
 	assert.Contains(t, out, "LEASE")
@@ -102,7 +102,7 @@ func TestSessionsNamesLinesWrittenBeforeTheRename(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "0123456789abcdef.jsonl"), []byte(old), 0o644))
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCommand(context.Background(), root, nil))
 	})
 	assert.Contains(t, out, "1 line(s) not shown: written before magus called a per-process id an invocation")
 	assert.NotContains(t, out, "killed mid-write")
@@ -121,7 +121,7 @@ func TestSessionsRendersTheSpawnerAndParentFromTheEnvironment(t *testing.T) {
 	recordSession(t, root, "run", []string{"build"}, "invSpawned")
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCommand(context.Background(), root, nil))
 	})
 
 	assert.Contains(t, out, "SPAWNER")
@@ -153,7 +153,7 @@ func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 	recordSession(t, root, "run", []string{"build"}, "invQuiet")
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCommand(context.Background(), root, nil))
 	})
 	assert.NotContains(t, out, "attention request", "a quiet queue earns no footer")
 
@@ -169,7 +169,7 @@ func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 	require.True(t, opened)
 
 	out = captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCommand(context.Background(), root, nil))
 	})
 	assert.Contains(t, out, "1 attention request(s) open; `magus session attention` lists them")
 }
@@ -188,7 +188,7 @@ func TestSessionsJSONExposesTheModelAndHostVersionPair(t *testing.T) {
 	require.NoError(t, err)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, []string{"-o", "json"}))
+		require.NoError(t, sessionCommand(context.Background(), root, []string{"-o", "json"}))
 	})
 
 	assert.Contains(t, out, `"agent": {`)
@@ -216,7 +216,7 @@ func TestSessionsJSONCarriesEachTargetsClaimAndCost(t *testing.T) {
 	})
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, []string{"-o", "json"}))
+		require.NoError(t, sessionCommand(context.Background(), root, []string{"-o", "json"}))
 	})
 
 	for _, field := range []string{
@@ -235,14 +235,14 @@ func TestSessionsJSONCarriesEachTargetsClaimAndCost(t *testing.T) {
 }
 
 func TestSessionsRejectsPositionalArguments(t *testing.T) {
-	err := sessionCmd(context.Background(), t.TempDir(), []string{"yesterday"})
+	err := sessionCommand(context.Background(), t.TempDir(), []string{"yesterday"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--limit")
 	assert.Contains(t, err.Error(), "--since", "the rejected word is a time, so the error names the flag that takes one")
 }
 
 func TestSessionsRejectsANegativeLimit(t *testing.T) {
-	err := sessionCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
+	err := sessionCommand(context.Background(), t.TempDir(), []string{"--limit=-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "zero or more")
 	assert.Contains(t, err.Error(), "0 lists every invocation", "the error names the value that means what -1 was reaching for")
@@ -335,13 +335,13 @@ func TestSessionsListsThisCheckoutUnlessAll(t *testing.T) {
 	recordSessionIn(t, root, filepath.Join(root, "sibling-worktree"), "invElsewhere")
 
 	here := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCommand(context.Background(), root, nil))
 	})
 	assert.Contains(t, here, "invHere")
 	assert.NotContains(t, here, "invElsewhere")
 
 	every := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, []string{"--all"}))
+		require.NoError(t, sessionCommand(context.Background(), root, []string{"--all"}))
 	})
 	assert.Contains(t, every, "invHere")
 	assert.Contains(t, every, "invElsewhere")
@@ -359,13 +359,13 @@ func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
 	// A cutoff ahead of the recorded fact is the deterministic way to empty the window;
 	// a short duration would race the millisecond the fact was stamped in.
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "2099-01-01T00:00:00Z"}))
+		require.NoError(t, sessionCommand(context.Background(), root, []string{"--since", "2099-01-01T00:00:00Z"}))
 	})
 	assert.Contains(t, out, "no invocations in that window")
 	assert.NotContains(t, out, "no invocations recorded yet")
 
 	out = captureStdout(t, func() {
-		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "24h"}))
+		require.NoError(t, sessionCommand(context.Background(), root, []string{"--since", "24h"}))
 	})
 	assert.Contains(t, out, "invOld", "an invocation inside the window is still listed")
 }

@@ -21,10 +21,10 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return writeAtomic(path, bytes.NewReader(data), perm, true)
 }
 
-// WriteFrom is [WriteFileAtomic] for a stream: it copies r into the temp file, so a
+// WriteReader is [WriteFileAtomic] for a stream: it copies r into the temp file, so a
 // payload never has to be held in memory to be written whole. A read error from r fails
 // the write and leaves path as it was.
-func WriteFrom(path string, r io.Reader, perm os.FileMode) error {
+func WriteReader(path string, r io.Reader, perm os.FileMode) error {
 	return writeAtomic(path, r, perm, true)
 }
 

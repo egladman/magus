@@ -56,7 +56,7 @@ func TestSessionReleaseDropsOneReference(t *testing.T) {
 func TestScopeReleasesWhatAScriptHeld(t *testing.T) {
 	f := &countingRunner{}
 	ctx, sc := WithScope(context.Background())
-	require.Same(t, sc, ScopeFrom(ctx))
+	require.Same(t, sc, ScopeFromContext(ctx))
 
 	opened := 0
 	open := func() *Session {
@@ -64,7 +64,7 @@ func TestScopeReleasesWhatAScriptHeld(t *testing.T) {
 		return NewSession(New(f, 0), nil, nil)
 	}
 	for range 2 {
-		_, _, err := ScopeFrom(ctx).Session(open).Acquire(ctx, "machine", svc())
+		_, _, err := ScopeFromContext(ctx).Session(open).Acquire(ctx, "machine", svc())
 		require.NoError(t, err)
 	}
 	assert.Equal(t, 1, opened, "one session per script")
@@ -80,6 +80,6 @@ func TestScopeReleasesWhatAScriptHeld(t *testing.T) {
 func TestScopeWithNothingAcquiredOpensNothing(t *testing.T) {
 	_, sc := WithScope(context.Background())
 	sc.ReleaseAll(context.Background())
-	assert.Nil(t, ScopeFrom(context.Background()))
+	assert.Nil(t, ScopeFromContext(context.Background()))
 	assert.Nil(t, sc.sess)
 }

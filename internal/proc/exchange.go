@@ -38,12 +38,12 @@ var (
 	configReloadExchange = exchange{op: "config.reload", method: http.MethodPost, path: pathReload}
 )
 
-// ctxCause reports the context's error alongside err when the context is what ended the
+// contextCause reports the context's error alongside err when the context is what ended the
 // exchange. The connection carries ctx's deadline, and its timer can fire before ctx marks
 // itself done, so a deadline error on a ctx that HAS a deadline is that deadline, whether or
 // not ctx.Err has caught up. A caller testing for context.DeadlineExceeded must not see a
 // bare i/o timeout on the runs where the socket won.
-func ctxCause(ctx context.Context, err error) error {
+func contextCause(ctx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return fmt.Errorf("%w: %w", ctxErr, err)
 	}
@@ -115,12 +115,12 @@ func roundTrip[Reply any](ctx context.Context, addr string, x exchange, req any)
 	}
 	resp, err := socketClient(ep).Do(hreq)
 	if err != nil {
-		return reply, fmt.Errorf("proc: %s: %s: %w", x.op, ep, ctxCause(ctx, outdated(ep.String(), err)))
+		return reply, fmt.Errorf("proc: %s: %s: %w", x.op, ep, contextCause(ctx, outdated(ep.String(), err)))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil {
-		return reply, fmt.Errorf("proc: %s: read: %w", x.op, ctxCause(ctx, err))
+		return reply, fmt.Errorf("proc: %s: read: %w", x.op, contextCause(ctx, err))
 	}
 	if resp.StatusCode/100 != 2 {
 		return reply, fmt.Errorf("proc: %s: %w", x.op, decodeWireError(refusalMessage(raw)))

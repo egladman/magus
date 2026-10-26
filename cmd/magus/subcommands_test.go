@@ -71,11 +71,11 @@ func resolveCommandPath(tokens []string) error {
 }
 
 // TestCLICommandGraphLeavesAreRealSubcommands ties the graph-family hints to
-// graphCmd's own accept-list. `graph` routes its second token positionally, so a
+// graphCommand's own accept-list. `graph` routes its second token positionally, so a
 // hint like `magus graph export` is only valid while graphSubs still lists
 // "export". This is the strongest guard the hand-rolled dispatch allows: graphSubs
 // is the introspectable accept-list, not the switch itself, so it only catches
-// drift if graphSubs stays in sync with graphCmd's switch (which hint.Nearest
+// drift if graphSubs stays in sync with graphCommand's switch (which hint.Nearest
 // already depends on).
 func TestCLICommandGraphLeavesAreRealSubcommands(t *testing.T) {
 	for _, c := range []hint.Command{hint.GraphExport, hint.GraphStats} {
@@ -128,7 +128,7 @@ func childNames(t *testing.T, command string) []string {
 }
 
 // TestCLICommandServerLeavesAreRealSubcommands ties the server-family hints to the
-// tokens serverCmd routes on. serverCmd switches directly on hint.*.Leaf(), so
+// tokens serverCommand routes on. serverCommand switches directly on hint.*.Leaf(), so
 // the accepted form and the hint already share one source of truth; this asserts
 // they remain the exact set start/stop/job/reload, catching a stray edit that renames
 // one side only.
@@ -145,8 +145,8 @@ func TestCLICommandServerLeavesAreRealSubcommands(t *testing.T) {
 	}
 }
 
-// TestCLICommandQueryOutputForm locks the query-output hint to the form queryCmd
-// accepts. queryCmd matches its output positional against hint.QueryOutput.Leaf(),
+// TestCLICommandQueryOutputForm locks the query-output hint to the form queryCommand
+// accepts. queryCommand matches its output positional against hint.QueryOutput.Leaf(),
 // so the hint (`magus query output <ref>`) and the accepted form cannot disagree:
 // the exact bug that shipped `magus query <ref>`. This asserts the shape stays
 // two-token (a bare `magus query` would reopen that gap) and renders as expected.
@@ -154,7 +154,7 @@ func TestCLICommandServerLeavesAreRealSubcommands(t *testing.T) {
 // Limit: dispatch is hand-rolled positional matching, not an introspectable
 // command tree, so this cannot execute the router without a workspace. It guards
 // the constant's shape and its rendering; the tie to acceptance is structural
-// (queryCmd reads the same Leaf()), enforced at compile/review time rather than here.
+// (queryCommand reads the same Leaf()), enforced at compile/review time rather than here.
 func TestCLICommandQueryOutputForm(t *testing.T) {
 	if hint.QueryOutput.Head() != "query" {
 		t.Errorf("QueryOutput head = %q, want %q", hint.QueryOutput.Head(), "query")
@@ -295,30 +295,30 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 		fn      string
 		exempt  []string
 	}{
-		{"graph", []string{"graph"}, "graph.go", "graphCmd", []string{
+		{"graph", []string{"graph"}, "graph.go", "graphCommand", []string{
 			"verify", // moved: hard-redirects to `magus doctor`'s agent-skills check
 		}},
-		{"config", []string{"config"}, "config.go", "configCmd", nil},
-		{"config history", []string{"config", "history"}, "config_history.go", "configHistoryCmd", nil},
-		{"config cache", []string{"config", "cache"}, "config_cache.go", "configCacheCmd", nil},
-		{"config mcp", []string{"config", "mcp"}, "config_mcp.go", "configMCPCmd", []string{
+		{"config", []string{"config"}, "config.go", "configCommand", nil},
+		{"config history", []string{"config", "history"}, "config_history.go", "configHistoryCommand", nil},
+		{"config cache", []string{"config", "cache"}, "config_cache.go", "configCacheCommand", nil},
+		{"config mcp", []string{"config", "mcp"}, "config_mcp.go", "configMCPCommand", []string{
 			"token", // moved: hard-redirects to `magus config token` (not an MCP credential)
 		}},
 		{"config mcp connector", []string{"config", "mcp", "connector"}, "config_mcp.go", "configMCPConnector", []string{
 			"list", // renamed to ls in v0.4.0
 		}},
-		{"config console", []string{"config", "console"}, "config_console.go", "configConsoleCmd", nil},
+		{"config console", []string{"config", "console"}, "config_console.go", "configConsoleCommand", nil},
 		{"config console token", []string{"config", "console", "token"}, "config_console.go", "configConsoleToken", nil},
 		{"config token", []string{"config", "token"}, "config_token.go", "configToken", nil},
-		{"notes", []string{"notes"}, "notes.go", "notesCmd", []string{
+		{"notes", []string{"notes"}, "notes.go", "notesCommand", []string{
 			"put", // deliberately absent: a note is written by a person, not a program
 		}},
-		{"self", []string{"self"}, "self.go", "selfCmd", nil},
-		{"vcs", []string{"vcs"}, "vcs.go", "vcsCmd", nil},
+		{"self", []string{"self"}, "self.go", "selfCommand", nil},
+		{"vcs", []string{"vcs"}, "vcs.go", "vcsCommand", nil},
 		{"queue", []string{"queue"}, "queue.go", "runQueue", []string{"-h", "--help", "help"}},
-		{"spell", []string{"spell"}, "spell.go", "spellCmd", nil},
-		{"agent", []string{"agent"}, "agent.go", "agentCmd", nil},
-		{"session", []string{"session"}, "session.go", "sessionCmd", []string{
+		{"spell", []string{"spell"}, "spell.go", "spellCommand", nil},
+		{"agent", []string{"agent"}, "agent.go", "agentCommand", nil},
+		{"session", []string{"session"}, "session.go", "sessionCommand", []string{
 			"hook", // moved: hard-redirects to `magus shell`, which is not session-scoped
 		}},
 	}
@@ -359,7 +359,7 @@ func TestSelfManagesOnlyTheBinary(t *testing.T) {
 }
 
 // TestServerDispatcherChildrenAreDeclared covers `magus server` separately:
-// serverCmd's switch compares against hint.ServerStart.Leaf() and friends
+// serverCommand's switch compares against hint.ServerStart.Leaf() and friends
 // rather than string literals (see server.go), so dispatcherCases's literal
 // extraction finds nothing there. hint.AllCommands already carries the same four
 // leaves for the hint-drift test in subcommands_test.go; this asserts they also
@@ -379,7 +379,7 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("serverCmd routes %v (via hint)\nregistry Children for \"server\" = %v", got, want)
+		t.Errorf("serverCommand routes %v (via hint)\nregistry Children for \"server\" = %v", got, want)
 	}
 }
 
@@ -406,7 +406,7 @@ func walkRegistryCommands(cmds []cmdline.Command, prefix []string, visit func(pa
 // The full path, not just the deepest command, matters: a navigational child
 // (query's "output" and "invocation", for one) can declare no Flags of its
 // own while the real dispatcher parses the whole family's flags in one
-// flag.FlagSet at the PARENT (queryCmd calls cmdParse once, then matches
+// flag.FlagSet at the PARENT (queryCommand calls commandParse once, then matches
 // "output"/"invocation" positionally against the already-parsed result), so
 // a flag documented as "output <ref>: ..." lives on queryCommand.Flags, not
 // on the "output" child. Binding every node on the path, root to leaf, is
@@ -481,7 +481,7 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cmdline.Command) {
 // TestRegistryExamplesParse dry-parses every EXAMPLES entry in the CLI
 // registry (internal/commands/registry.go and every command's Children) against
 // the flag set its own resolved command actually binds: the same three
-// binders cmdParse composes (config flags, display flags, the command's own
+// binders commandParse composes (config flags, display flags, the command's own
 // declared Flags), so a bogus or misspelled flag in a documented example is
 // a build-time failure instead of something a reader discovers by pasting it.
 //
@@ -540,8 +540,8 @@ func TestRegistryExamplesParse(t *testing.T) {
 					}
 					parseArgs := gc.Args
 					if cmdPath[0].Name == "query" {
-						// Model query's real entrance: queryCmd shields the grammar's
-						// negation terms (-kind:op) from flag parsing before cmdParse.
+						// Model query's real entrance: queryCommand shields the grammar's
+						// negation terms (-kind:op) from flag parsing before commandParse.
 						parseArgs, _ = splitQueryNegations(parseArgs)
 					}
 					if err := fs.Parse(reorderFlagsFirst(fs, parseArgs)); err != nil {

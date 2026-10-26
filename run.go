@@ -147,7 +147,7 @@ func (o run) observed(ctx context.Context) context.Context {
 	return types.ContextWithGraphObserver(ctx, o.observer)
 }
 
-func applyRunOpts(opts []RunOption) run {
+func applyRunOptions(opts []RunOption) run {
 	var o run
 	for _, opt := range opts {
 		opt(&o)
@@ -164,7 +164,7 @@ func applyRunOpts(opts []RunOption) run {
 // a *types.GuardDeniedError and runs nothing; a judgment that cannot be made returns its
 // error. A ctx the CLI marked with guard.WithHostJudged is not judged again.
 func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOption) error {
-	o := applyRunOpts(opts)
+	o := applyRunOptions(opts)
 	ctx = o.observed(ctx)
 	lines, err := runLines(targets, o.ExtraArgs)
 	if err != nil {
@@ -306,7 +306,7 @@ func CharmsForCI(charms []string) []string {
 // It is judged as Run is, each target as `magus run <target> <project>`: `magus run ci`
 // is the verb that reaches it.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
-	o := applyRunOpts(opts)
+	o := applyRunOptions(opts)
 	ctx = o.observed(ctx)
 	lines, err := runLines(targets, o.ExtraArgs)
 	if err != nil {
@@ -410,7 +410,7 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 // It is judged as Run is, once, as `magus affected <target>`, with ` --base <ref>` for
 // WithBaseRef.
 func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOption) error {
-	o := applyRunOpts(opts)
+	o := applyRunOptions(opts)
 	ctx = o.observed(ctx)
 	lines, err := affectedLine(target, o.BaseRef)
 	if err != nil {
@@ -1942,7 +1942,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	prober := m.newToolProber()
 	m.prewarmInstallProbes(ctx, prober, stages)
 	var stdio *pipe.Stdio
-	if s, ok := pipe.StdioFrom(ctx); ok {
+	if s, ok := pipe.StdioFromContext(ctx); ok {
 		stdio = &s
 	}
 	// The streams are this invocation's own: a run a target starts in this process reads
@@ -2728,7 +2728,7 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 		if ops := findInstallOps(p, name); len(ops) > 0 {
 			for _, so := range ops {
 				if err := invokeSpell(ctx, p, so.name, so.spell); err != nil {
-					return errors.Join(spellErr(p, name, types.SpellFailure{Spell: so.spell.Name(), Err: err}), a.Finish(ctx, name))
+					return errors.Join(spellError(p, name, types.SpellFailure{Spell: so.spell.Name(), Err: err}), a.Finish(ctx, name))
 				}
 			}
 			return a.Finish(ctx, name)

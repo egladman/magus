@@ -158,8 +158,8 @@ func hasPositional(args []string) bool {
 	return false
 }
 
-// The cwd/path helpers (cwdKey, WithCwd, cwdFromContext, CwdFromContext,
-// resolvePath, EffectiveCwd) live in cwd.go so the pure-compute modules can share
+// The cwd/path helpers (cwdKey, WithCurrentWorkingDirectory, currentWorkingDirectoryFromContext, CurrentWorkingDirectoryFromContext,
+// resolvePath, EffectiveCurrentWorkingDirectory) live in cwd.go so the pure-compute modules can share
 // them without pulling this IO-heavy file into the wasm build. resolveDir stays
 // here since only the exec primitives use it.
 
@@ -167,7 +167,7 @@ func hasPositional(args []string) bool {
 // an explicit dir argument wins (joined onto the context cwd when relative);
 // otherwise the context cwd is used; "" means inherit the process cwd.
 func resolveDir(ctx context.Context, dir string) string {
-	base := cwdFromContext(ctx)
+	base := currentWorkingDirectoryFromContext(ctx)
 	if dir == "" {
 		return base
 	}

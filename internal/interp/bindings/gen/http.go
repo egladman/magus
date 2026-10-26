@@ -20,8 +20,8 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("get", vm.DirectValue("http.get", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		url := ffi.Str(bzArgs, 0)
-		headers := ffi.StrMap(bzArgs, 1)
+		url := ffi.String(bzArgs, 0)
+		headers := ffi.StringMap(bzArgs, 1)
 		opts := ffi.AnyMap(bzArgs, 2)
 		retry := ffi.AnyMap(bzArgs, 3)
 		ret0, err := std.HTTPGet(ctx, url, headers, opts, retry)
@@ -31,9 +31,9 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("download", vm.DirectValue("http.download", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		url := ffi.Str(bzArgs, 0)
-		dest := ffi.Str(bzArgs, 1)
-		headers := ffi.StrMap(bzArgs, 2)
+		url := ffi.String(bzArgs, 0)
+		dest := ffi.String(bzArgs, 1)
+		headers := ffi.StringMap(bzArgs, 2)
 		opts := ffi.AnyMap(bzArgs, 3)
 		retry := ffi.AnyMap(bzArgs, 4)
 		ret0, err := std.HTTPDownload(ctx, url, dest, headers, opts, retry)
@@ -43,9 +43,9 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("post", vm.DirectValue("http.post", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		url := ffi.Str(bzArgs, 0)
-		body := ffi.Str(bzArgs, 1)
-		headers := ffi.StrMap(bzArgs, 2)
+		url := ffi.String(bzArgs, 0)
+		body := ffi.String(bzArgs, 1)
+		headers := ffi.StringMap(bzArgs, 2)
 		opts := ffi.AnyMap(bzArgs, 3)
 		retry := ffi.AnyMap(bzArgs, 4)
 		ret0, err := std.HTTPPost(ctx, url, body, headers, opts, retry)
@@ -55,10 +55,10 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("request", vm.DirectValue("http.request", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		method := ffi.Str(bzArgs, 0)
-		url := ffi.Str(bzArgs, 1)
-		body := ffi.Str(bzArgs, 2)
-		headers := ffi.StrMap(bzArgs, 3)
+		method := ffi.String(bzArgs, 0)
+		url := ffi.String(bzArgs, 1)
+		body := ffi.String(bzArgs, 2)
+		headers := ffi.StringMap(bzArgs, 3)
 		opts := ffi.AnyMap(bzArgs, 4)
 		retry := ffi.AnyMap(bzArgs, 5)
 		ret0, err := std.HTTPRequest(ctx, method, url, body, headers, opts, retry)

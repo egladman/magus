@@ -140,20 +140,20 @@ func (w *Writer) drain() {
 	var batch int
 	flush := func() {
 		if err := w.bw.Flush(); err != nil {
-			w.setErr(err)
+			w.setError(err)
 		}
 		batch = 0
 	}
 
 	var line []byte
 	write := func(env envelope) {
-		if w.hasErr() {
+		if w.hasError() {
 			w.dropped.Add(1)
 			return
 		}
 		line = env.appendJSONL(line[:0])
 		if _, err := w.bw.Write(line); err != nil {
-			w.setErr(err)
+			w.setError(err)
 			return
 		}
 		w.flushed.Add(1)
@@ -201,7 +201,7 @@ func (w *Writer) Close() error {
 		<-w.done
 	})
 	var errs []error
-	if drainErr := w.peekErr(); drainErr != nil {
+	if drainErr := w.peekError(); drainErr != nil {
 		errs = append(errs, drainErr)
 	}
 	if w.f != nil {
@@ -227,7 +227,7 @@ func (w *Writer) Stats() Stats {
 	}
 }
 
-func (w *Writer) setErr(err error) {
+func (w *Writer) setError(err error) {
 	w.mu.Lock()
 	first := w.lastErr == nil
 	if first {
@@ -239,13 +239,13 @@ func (w *Writer) setErr(err error) {
 	}
 }
 
-func (w *Writer) hasErr() bool {
+func (w *Writer) hasError() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.lastErr != nil
 }
 
-func (w *Writer) peekErr() error {
+func (w *Writer) peekError() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.lastErr

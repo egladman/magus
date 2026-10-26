@@ -18,7 +18,7 @@ func RegisterJson(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("json.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := json.JSONParse(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -27,12 +27,12 @@ func RegisterJson(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("stringify", vm.DirectValue("json.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		value := ffi.Any(bzArgs, 0)
-		indent := ffi.Str(bzArgs, 1)
+		indent := ffi.String(bzArgs, 1)
 		ret0, err := json.JSONStringify(ctx, value, indent)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

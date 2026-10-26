@@ -303,7 +303,7 @@ func TestDocsCommandReferences(t *testing.T) {
 // the person regenerating it happened to have installed, so the drift gate failed
 // for everyone else and CI could never reproduce it.
 func TestFindDocFiles_SkipsVCSIgnored(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	root := r.Root()
 	write := r.Write
 

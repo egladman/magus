@@ -167,7 +167,7 @@ func ContextWithRemoteStats(ctx context.Context) context.Context {
 	return context.WithValue(ctx, remoteStatsKey{}, &remoteStats{})
 }
 
-func remoteStatsFrom(ctx context.Context) *remoteStats {
+func remoteStatsFromContext(ctx context.Context) *remoteStats {
 	s, _ := ctx.Value(remoteStatsKey{}).(*remoteStats)
 	return s
 }
@@ -189,7 +189,7 @@ type RemoteTally struct {
 // remote the run never touched reports true with every count zero. A cancelled ctx
 // stops the wait and reports what has finished.
 func (c *Cache) RemoteSummary(ctx context.Context) (RemoteTally, bool) {
-	stats := remoteStatsFrom(ctx)
+	stats := remoteStatsFromContext(ctx)
 	if c.remote == nil || stats == nil {
 		return RemoteTally{}, false
 	}

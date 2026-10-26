@@ -92,7 +92,7 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	assert.Equal(t, "fleet/bound", acting(context.Background()), "the binding, with no claim")
 	assert.Equal(t, "fleet/bound", acting(claimed), "the binding over a different claim")
 
-	err = agentHarnessInstallCmd(context.Background(), root, nil)
+	err = agentHarnessInstallCommand(context.Background(), root, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 }
@@ -347,7 +347,7 @@ done
 // through `describe harness` and the person merges it.
 func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
 	for _, verb := range []string{"apply", "remove"} {
-		err := agentHarnessCmd(context.Background(), t.TempDir(), []string{verb, "--id", "x"})
+		err := agentHarnessCommand(context.Background(), t.TempDir(), []string{verb, "--id", "x"})
 		require.Error(t, err, verb)
 		assert.Contains(t, err.Error(), "unknown subcommand", verb)
 		assert.Contains(t, err.Error(), "magus describe harness", verb)

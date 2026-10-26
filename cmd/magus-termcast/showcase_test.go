@@ -12,14 +12,14 @@ import (
 // assert the two agree. Both palettes are checked: a variant nothing gates is
 // a variant that goes stale.
 func TestShowcaseUpToDate(t *testing.T) {
-	capture := repoFile(t, showCapture)
+	capture := repositoryFile(t, showCapture)
 	for _, v := range screen.ThemeVariants {
 		path := screen.VariantPath(showSVG, v.Suffix)
 		want, err := renderShowcase(capture, v.Theme)
 		if err != nil {
 			t.Fatalf("render %s: %v", path, err)
 		}
-		if got := repoFile(t, path); got != want {
+		if got := repositoryFile(t, path); got != want {
 			t.Errorf("%s is stale (%d bytes on disk, %d rendered); run `magus run termcast-generate .`",
 				path, len(got), len(want))
 		}
@@ -30,7 +30,7 @@ func TestShowcaseUpToDate(t *testing.T) {
 // TestCaptureIsClean guards the core loop's, with the one difference the
 // showcase exists for: its failures ARE the subject, so only warnings are noise.
 func TestShowcaseCaptureIsClean(t *testing.T) {
-	if err := checkNoise(repoFile(t, showCapture), true); err != nil {
+	if err := checkNoise(repositoryFile(t, showCapture), true); err != nil {
 		t.Error(err)
 	}
 }

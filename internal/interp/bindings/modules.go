@@ -324,11 +324,11 @@ func RegisterSpellDecls(sess *buzz.Session) {
 	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
 }
 
-// buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes
+// buzzLogFunction builds the Buzz trampoline for magus.<level>(msg, fields?). It routes
 // through the shared emitMagusLog so every host log path formats identically.
-func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, error) {
+func buzzLogFunction(level slog.Level) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		emitMagusLog(ctx, level, argStr(args, 0), argStrMap(args, 1))
+		emitMagusLog(ctx, level, argString(args, 0), argStringMap(args, 1))
 		return vm.Null, nil
 	}
 }

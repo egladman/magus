@@ -54,7 +54,7 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 		return types.Job{}, err
 	}
 	v, merge := validateFork(ctx, store, rows, id, merge, limits, read)
-	if err := v.Err(); err != nil {
+	if err := v.Error(); err != nil {
 		return types.Job{}, err
 	}
 	return writeMerge(ctx, store, id, merge, limits, v.WriteProof)
@@ -226,7 +226,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			rows = append(rows, next)
 		}
 	}
-	if err := problems.Err(); err != nil {
+	if err := problems.Error(); err != nil {
 		return nil, err
 	}
 	if dryRun {

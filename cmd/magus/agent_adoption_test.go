@@ -225,7 +225,7 @@ top repo-wide patterns that look like symbols, with the graph query to try:
 			require.NoError(t, os.WriteFile(path, []byte(tt.commands), 0o644))
 
 			var err error
-			out := captureStdout(t, func() { err = agentAdoptionCmd([]string{"--commands", path}) })
+			out := captureStdout(t, func() { err = agentAdoptionCommand([]string{"--commands", path}) })
 			require.NoError(t, err)
 			require.Equal(t, tt.want, out)
 		})
@@ -233,7 +233,7 @@ top repo-wide patterns that look like symbols, with the graph query to try:
 }
 
 func TestAgentAdoptionCmdMissingCommandsFile(t *testing.T) {
-	err := agentAdoptionCmd([]string{"--commands", filepath.Join(t.TempDir(), "absent.txt")})
+	err := agentAdoptionCommand([]string{"--commands", filepath.Join(t.TempDir(), "absent.txt")})
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	assert.Contains(t, err.Error(), "agent adoption: ")
 }

@@ -98,7 +98,7 @@ func TestSerializeSerializeCircular(t *testing.T) {
 // value (serialize.jsonDecode's result) must encode as its data at any depth,
 // not as the method values a Boxed map also carries.
 func TestJSONEncodeUnwrapsBoxedAtAnyDepth(t *testing.T) {
-	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StrValue(`{"n":2}`)})
+	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`{"n":2}`)})
 	require.NoError(t, err)
 
 	top, err := JSONEncode(boxed)

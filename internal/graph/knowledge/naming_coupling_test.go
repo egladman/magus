@@ -69,21 +69,21 @@ func TestCouplingCheckIsSilentOnWhatStaysShared(t *testing.T) {
 	}{
 		{
 			name: "a stdlib-like wrapper",
-			fn:   couplingFn("/internal/json", "Marshal", "internal/json/json.go", 10, 10, "func Marshal(v any) ([]byte, error)", nil, files...),
+			fn:   couplingFunction("/internal/json", "Marshal", "internal/json/json.go", 10, 10, "func Marshal(v any) ([]byte, error)", nil, files...),
 		},
 		{
 			name: "a decision table, whose branches the index never records",
-			fn:   couplingFn("/internal/json", "Remedy", "internal/json/json.go", 20, 80, "func Remedy(kind string) string", nil, files...),
+			fn:   couplingFunction("/internal/json", "Remedy", "internal/json/json.go", 20, 80, "func Remedy(kind string) string", nil, files...),
 		},
 		{
 			name: "an edge flag between near callers",
-			fn: couplingFn("/internal/json", "NeutralizeTerminal", "internal/json/json.go", 100, 146,
+			fn: couplingFunction("/internal/json", "NeutralizeTerminal", "internal/json/json.go", 100, 146,
 				"func NeutralizeTerminal(s string, keepSGR bool) string", []string{"keepSGR"},
 				couplingFile("/internal/a"), couplingFile("/internal/b")),
 		},
 		{
 			name: "a helper taking the caller's code",
-			fn: couplingFn("/internal/json", "boundedPhase", "internal/json/json.go", 150, 190,
+			fn: couplingFunction("/internal/json", "boundedPhase", "internal/json/json.go", 150, 190,
 				"func boundedPhase(ctx context.Context, phase string, call func(context.Context) error) error", []string{"ok"}, files...),
 		},
 	} {
@@ -102,7 +102,7 @@ func TestCouplingCheckIsSilentOnWhatStaysShared(t *testing.T) {
 // functions under one name: the loadWorkspaceGraph shape.
 func TestCouplingCheckReportsABranchForOneCaller(t *testing.T) {
 	const graphGo, queryGo = "cmd/magus/graph.go", "cmd/magus/query.go"
-	load := couplingFn("/cmd/magus", "loadWorkspaceGraph", graphGo, 647, 700,
+	load := couplingFunction("/cmd/magus", "loadWorkspaceGraph", graphGo, 647, 700,
 		"func loadWorkspaceGraph(ctx context.Context, root string, global bool) (*Graph, error)", []string{"global"}, graphGo, queryGo)
 	g := couplingGraph(conformancePkg("/cmd/magus", []string{graphGo, queryGo}), load)
 	id := symbolID(load.Key)

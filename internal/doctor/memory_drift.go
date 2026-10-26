@@ -61,7 +61,7 @@ func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Check 
 	const name = "memory-declarations"
 
 	var h forecast.History
-	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
+	if err := h.Load(r.runContext(), r.opts.cfg.HistoryPath); err != nil {
 		return historyUnreadableCheck(name, err)
 	}
 	// A missing history file loads as an empty one, so this is the ordinary state of a

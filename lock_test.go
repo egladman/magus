@@ -253,12 +253,12 @@ func TestAcquireAllReleasesOnContention(t *testing.T) {
 func TestInProcessContentionQueues(t *testing.T) {
 	cacheDir := t.TempDir()
 	first := newProjectLocker(cacheDir, testWorkspaceRoot)
-	rel, err := first.acquire(ancestryCtx(t, "inv-client-a"), "app")
+	rel, err := first.acquire(ancestryContext(t, "inv-client-a"), "app")
 	if err != nil {
 		t.Fatalf("first acquire: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ancestryCtx(t, "inv-client-b"), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ancestryContext(t, "inv-client-b"), 10*time.Second)
 	defer cancel()
 	second := newProjectLocker(cacheDir, testWorkspaceRoot)
 	type result struct {
@@ -487,10 +487,10 @@ func TestLockOwnerNamesTheHolder(t *testing.T) {
 	}
 }
 
-// ancestryCtx builds the context a magus invocation runs under: the ancestry it inherited
+// ancestryContext builds the context a magus invocation runs under: the ancestry it inherited
 // plus its own id last, exactly as BeginInvocation assembles it. The ids belong to this
 // process, because that is the only pid a test can make the lock's owner record carry.
-func ancestryCtx(t *testing.T, ids ...string) context.Context {
+func ancestryContext(t *testing.T, ids ...string) context.Context {
 	t.Helper()
 	ctx := context.Background()
 	for _, id := range ids {
@@ -513,14 +513,14 @@ func ancestryCtx(t *testing.T, ids ...string) context.Context {
 func TestReentrantLockRefusedNotAwaited(t *testing.T) {
 	l := newProjectLocker(t.TempDir(), testWorkspaceRoot)
 
-	outer := ancestryCtx(t, "inv-outer")
+	outer := ancestryContext(t, "inv-outer")
 	release, err := l.acquire(outer, "app")
 	if err != nil {
 		t.Fatalf("outer acquire: %v", err)
 	}
 	defer release()
 
-	nested, cancel := context.WithTimeout(ancestryCtx(t, "inv-outer", "inv-nested"), 10*time.Second)
+	nested, cancel := context.WithTimeout(ancestryContext(t, "inv-outer", "inv-nested"), 10*time.Second)
 	defer cancel()
 
 	start := time.Now()
@@ -559,7 +559,7 @@ func TestUnrelatedContentionFailsFast(t *testing.T) {
 	waitForFile(t, filepath.Join(lockDir, "app", "ready"), 3*time.Second)
 
 	l := newProjectLocker(cacheDir, testWorkspaceRoot)
-	ctx := ancestryCtx(t, "inv-unrelated")
+	ctx := ancestryContext(t, "inv-unrelated")
 	_, err := l.acquire(ctx, "app")
 	var c *lockContendedError
 	if !errors.As(err, &c) {
@@ -575,7 +575,7 @@ func TestUnrelatedContentionFailsFast(t *testing.T) {
 func TestLockOwnerRecordsInvocation(t *testing.T) {
 	l := newProjectLocker(t.TempDir(), testWorkspaceRoot)
 
-	ctx := ancestryCtx(t, "inv-outer", "inv-mine")
+	ctx := ancestryContext(t, "inv-outer", "inv-mine")
 	release, err := l.acquire(ctx, "app")
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
@@ -971,14 +971,14 @@ func TestAnAncestorHolderIsRefusedNotSuperseded(t *testing.T) {
 
 	outer := newProjectLocker(cacheDir, testWorkspaceRoot, asGate())
 	outer.started = time.Now().Add(-time.Minute)
-	rel, err := outer.acquire(ancestryCtx(t, "inv-outer"), "app")
+	rel, err := outer.acquire(ancestryContext(t, "inv-outer"), "app")
 	if err != nil {
 		t.Fatalf("outer acquire: %v", err)
 	}
 	defer rel()
 
 	nested := newProjectLocker(cacheDir, testWorkspaceRoot, asGate())
-	ctx, cancel := context.WithTimeout(ancestryCtx(t, "inv-outer", "inv-nested"), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ancestryContext(t, "inv-outer", "inv-nested"), 5*time.Second)
 	defer cancel()
 	if _, err := nested.acquire(ctx, "app"); !errors.Is(err, types.ProjectLockHeldByAncestor) {
 		t.Fatalf("nested gate acquire = %v, want MGS3007", err)

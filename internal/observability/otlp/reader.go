@@ -14,7 +14,7 @@ import (
 // metricdata (histogram buckets and counters) without a network hop and without this
 // package importing the generated dashboard proto. It is deliberately NOT a method on the
 // fat Provider interface: only the local-collect server path needs it, so it is reached by
-// a concrete type assertion via CollectorFrom rather than by widening every Provider.
+// a concrete type assertion via ManualCollector rather than by widening every Provider.
 type Collector struct {
 	reader *sdkmetric.ManualReader
 }
@@ -28,11 +28,11 @@ func (c *Collector) Collect(ctx context.Context) (metricdata.ResourceMetrics, er
 	return rm, err
 }
 
-// CollectorFrom returns a Collector over p's in-process ManualReader, or (nil, false) when
+// ManualCollector returns a Collector over p's in-process ManualReader, or (nil, false) when
 // p is not an otelProvider that collects locally (the disabled CLI no-op, or an
 // export-only provider built without a manual reader). Callers gate the dashboard mount on
 // the bool.
-func CollectorFrom(p observability.Provider) (*Collector, bool) {
+func ManualCollector(p observability.Provider) (*Collector, bool) {
 	op, ok := p.(*otelProvider)
 	if !ok || op.manual == nil {
 		return nil, false

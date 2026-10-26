@@ -182,7 +182,7 @@ func TestAgentInstallReportsEachRemovalOnStdout(t *testing.T) {
 	retired, handAuthored, _ := plantSkillDirs(t, dir, dest)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, agentInstallCmd(context.Background(), []string{dest, "--dir", dir, "--skill-form", "full", "--force"}))
+		require.NoError(t, agentInstallCommand(context.Background(), []string{dest, "--dir", dir, "--skill-form", "full", "--force"}))
 	})
 
 	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
@@ -227,7 +227,7 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 	require.NoError(t, err)
 
 	before := dirSnapshot(t, dir)
-	out := noticesFrom(t, func() {
+	out := notices(t, func() {
 		written := []string{".claude/skills/magus-query/SKILL.md"}
 		printAgentInstallNextSteps(t.Context(), dir, written, written, types.SkillFormFull, false)
 	})
@@ -248,13 +248,13 @@ func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+agentSkills.AgentsBlock(false)), 0o644))
 
-	out := noticesFrom(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
+	out := notices(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
 	assert.Empty(t, out, "a current block is not reprinted")
 
 	// A stale one is, with the replace-in-place instruction rather than the add-it one.
 	stale := strings.Replace(agentSkills.AgentsBlock(false), "skill-content: ", "skill-content: 0", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+stale), 0o644))
-	out = noticesFrom(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
+	out = notices(t, func() { printAgentsBlockToPaste(t.Context(), dir) })
 	assert.Contains(t, out, "older copy")
 	assert.Contains(t, out, "<!-- magus:skills:begin")
 }
@@ -298,7 +298,7 @@ func TestDeclaresRoutingIndex(t *testing.T) {
 // bytes: a paste from `sample` must be gradeable by `magus doctor` exactly as a
 // paste from install's offer is.
 func TestAgentStarterPrintsAMarkedBlock(t *testing.T) {
-	out := captureStdout(t, func() { require.NoError(t, agentStarterCmd(context.Background(), "")) })
+	out := captureStdout(t, func() { require.NoError(t, agentStarterCommand(context.Background(), "")) })
 	assert.True(t, strings.HasPrefix(out, "# AGENTS.md\n"))
 	assert.Contains(t, out, "## Conventions")
 	assert.Contains(t, out, agentSkills.AgentsBlock(false))

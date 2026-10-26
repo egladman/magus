@@ -188,7 +188,7 @@ func HTTPDownload(ctx context.Context, url, dest string, headers map[string]stri
 		return 0, err
 	}
 
-	resp, err := sendHTTP(ctx, "http.download", http.MethodGet, url, nil, headers, parseHTTPOpts(opts), retryPolicy)
+	resp, err := sendHTTP(ctx, "http.download", http.MethodGet, url, nil, headers, parseHTTPOptions(opts), retryPolicy)
 	if err != nil {
 		return 0, err
 	}
@@ -242,7 +242,7 @@ func HTTPRequest(ctx context.Context, method, url, body string, headers map[stri
 // here rather than silently defaulting. The server runs until the process exits,
 // so callers pair it with a blocking call such as fs.watch to keep serving.
 func HTTPServe(ctx context.Context, opts map[string]any) (int, error) {
-	dir, mounts, port, err := parseServerOpts(opts)
+	dir, mounts, port, err := parseServerOptions(opts)
 	if err != nil {
 		return 0, err
 	}
@@ -284,12 +284,12 @@ func HTTPServe(ctx context.Context, opts map[string]any) (int, error) {
 // error prints, so the two never drift.
 var serverKnownOpts = []string{"dir", "mounts", "port"}
 
-// parseServerOpts validates the http.server options bag and returns the chosen
+// parseServerOptions validates the http.server options bag and returns the chosen
 // single-dir root (dir), the prefix->dir mount table (mounts), and the port.
 // Exactly one of dir/mounts is non-empty on success. It rejects unknown keys, a
 // missing or doubled dir/mounts choice, and mistyped values so a typo fails loudly
 // instead of falling through to a default.
-func parseServerOpts(opts map[string]any) (dir string, mounts map[string]string, port int, err error) {
+func parseServerOptions(opts map[string]any) (dir string, mounts map[string]string, port int, err error) {
 	var unknown []string
 	for k := range opts {
 		switch k {
@@ -299,7 +299,7 @@ func parseServerOpts(opts map[string]any) (dir string, mounts map[string]string,
 		}
 	}
 	if len(unknown) > 0 {
-		return "", nil, 0, unknownOptsError(unknown)
+		return "", nil, 0, unknownOptionsError(unknown)
 	}
 
 	_, hasDir := opts["dir"]
@@ -354,9 +354,9 @@ func parseServerOpts(opts map[string]any) (dir string, mounts map[string]string,
 	return dir, mounts, port, nil
 }
 
-// unknownOptsError builds the typo error listing the offending keys (sorted for a
+// unknownOptionsError builds the typo error listing the offending keys (sorted for a
 // deterministic message) alongside the known set.
-func unknownOptsError(unknown []string) error {
+func unknownOptionsError(unknown []string) error {
 	sort.Strings(unknown)
 	quoted := make([]string, len(unknown))
 	for i, k := range unknown {
@@ -491,7 +491,7 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	if body != "" {
 		bodyReader = strings.NewReader(body)
 	}
-	o := parseHTTPOpts(opts)
+	o := parseHTTPOptions(opts)
 	resp, err := sendHTTP(ctx, "http."+strings.ToLower(method), method, url, bodyReader, headers, o, retryPolicy)
 	if err != nil {
 		return types.HTTPResponse{}, err
@@ -730,9 +730,9 @@ func (o httpOpts) shouldRetry(r httpRetry, resp *http.Response, err error) bool 
 	return code >= 500 || code == http.StatusRequestTimeout || code == http.StatusTooManyRequests
 }
 
-// parseHTTPOpts reads the curl-style options map. Unknown keys are ignored;
+// parseHTTPOptions reads the curl-style options map. Unknown keys are ignored;
 // durations are read in seconds (curl's unit) and may be fractional.
-func parseHTTPOpts(m map[string]any) httpOpts {
+func parseHTTPOptions(m map[string]any) httpOpts {
 	var o httpOpts
 	if m == nil {
 		return o

@@ -155,7 +155,7 @@ func policyPending(ctx context.Context, deps Dependencies, at location) bool {
 	if files != nil {
 		scope = append([]string{"magusfile.buzz", "magusfiles"}, policyShapingFiles...)
 		for _, f := range files {
-			if rel, err := filepath.Rel(at.workspace, resolveFrom(at.workspace, f)); err == nil && filepath.IsLocal(rel) {
+			if rel, err := filepath.Rel(at.workspace, resolvePath(at.workspace, f)); err == nil && filepath.IsLocal(rel) {
 				scope = append(scope, filepath.ToSlash(rel))
 			}
 		}

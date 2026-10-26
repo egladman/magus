@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// checkpointRepo makes a throwaway git repo on a named branch with one committed file,
+// checkpointRepository makes a throwaway git repo on a named branch with one committed file,
 // and returns its dir plus the resolution Checkpoint takes.
-func checkpointRepo(t *testing.T) (string, types.VCSResolution) {
+func checkpointRepository(t *testing.T) (string, types.VCSResolution) {
 	t.Helper()
-	dir := testkit.NewRepo(t, map[string]string{"a.txt": "alpha\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{"a.txt": "alpha\n"}).Root()
 	// The tests assert on Branch, so it is a name they chose rather than the fixture's main.
 	gitRun(t, dir, "checkout", "-q", "-b", "work")
 	return dir, types.VCSResolution{Name: "git", VCS: gitVCS{}}
@@ -33,7 +33,7 @@ func writeFile(t *testing.T, dir, rel, content string) {
 // revision, the branch carrying it, not dirty, and NO digest: the digest is the one
 // field whose absence is meaningful, since a clean tree has no patch to fingerprint.
 func TestCheckpointCleanTree(t *testing.T) {
-	dir, res := checkpointRepo(t)
+	dir, res := checkpointRepository(t)
 	ctx := context.Background()
 
 	cp, err := Checkpoint(ctx, dir, res, false)
@@ -52,7 +52,7 @@ func TestCheckpointCleanTree(t *testing.T) {
 // not answer "did these two workers see the same tree", and one that did not change with
 // the patch would answer it wrong.
 func TestCheckpointDirtyTree(t *testing.T) {
-	dir, res := checkpointRepo(t)
+	dir, res := checkpointRepository(t)
 	ctx := context.Background()
 
 	writeFile(t, dir, "a.txt", "alpha changed\n")
@@ -84,7 +84,7 @@ func TestCheckpointDirtyTree(t *testing.T) {
 // is empty (diff does not), so the digest is the empty patch's. Two trees with different
 // untracked files therefore share a digest; see VCSCheckpoint.PatchDigest.
 func TestCheckpointRecordsWhatTheBackendReports(t *testing.T) {
-	dir, res := checkpointRepo(t)
+	dir, res := checkpointRepository(t)
 	ctx := context.Background()
 
 	writeFile(t, dir, "residue.txt", "build output\n")
@@ -137,7 +137,7 @@ func TestCheckpointTokenCoversUntrackedFiles(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("untracked only", func(t *testing.T) {
-		dir, res := checkpointRepo(t)
+		dir, res := checkpointRepository(t)
 		clean, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
 		require.Equal(t, clean.Revision, clean.Token(), "a clean tree is its revision")
@@ -158,7 +158,7 @@ func TestCheckpointTokenCoversUntrackedFiles(t *testing.T) {
 	})
 
 	t.Run("tracked edits plus untracked", func(t *testing.T) {
-		dir, res := checkpointRepo(t)
+		dir, res := checkpointRepository(t)
 		writeFile(t, dir, "a.txt", "alpha changed\n")
 		tracked, err := Checkpoint(ctx, dir, res, false)
 		require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestCheckpointTokenCoversUntrackedFiles(t *testing.T) {
 // asserted: off leaves no handle and no ref, on gives a handle that resolves to the
 // untracked file, which is why a digest alone is not enough.
 func TestCheckpointPreservesOnlyWhenAsked(t *testing.T) {
-	dir, res := checkpointRepo(t)
+	dir, res := checkpointRepository(t)
 	ctx := context.Background()
 	writeFile(t, dir, "tracked.txt", "v2\n")
 	writeFile(t, dir, "scratch.txt", "unfinished\n")
@@ -220,7 +220,7 @@ func (preserveFailsAfterMinting) Preserve(context.Context, string) (string, erro
 // returning a zero checkpoint alongside the error throws away the only thing that reaches
 // it, turning a recoverable failure into an orphan.
 func TestCheckpointKeepsTheHandleWhenPreservingFails(t *testing.T) {
-	dir, res := checkpointRepo(t)
+	dir, res := checkpointRepository(t)
 	writeFile(t, dir, "scratch.txt", "unfinished\n")
 	res.VCS = preserveFailsAfterMinting{VCSDriver: res.VCS}
 

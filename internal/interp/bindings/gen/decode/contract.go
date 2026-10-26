@@ -69,7 +69,7 @@ var HarnessFuncs = []ContractFunc{
 
 func decodeContractName(v vm.Value) (string, error) {
 	var out string
-	sName, err := decodeStr(v, "mgs_getName")
+	sName, err := decodeString(v, "mgs_getName")
 	if err != nil {
 		return out, err
 	}
@@ -263,7 +263,7 @@ func decodeContractModeArgs(v vm.Value) (map[string][]string, error) {
 		for _, keyModeArgs := range keys {
 			elemModeArgs, _ := entriesModeArgs.MapGet(keyModeArgs)
 			var valueModeArgs []string
-			strsModeArgsValue, err := decodeStrs(elemModeArgs, fmt.Sprintf("%s[%q]", "mgs_getModeArgs", keyModeArgs))
+			strsModeArgsValue, err := decodeStringList(elemModeArgs, fmt.Sprintf("%s[%q]", "mgs_getModeArgs", keyModeArgs))
 			if err != nil {
 				return out, err
 			}

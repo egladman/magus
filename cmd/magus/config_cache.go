@@ -20,7 +20,7 @@ func cacheNotice(ctx context.Context, verb, msg string) {
 	slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus config cache "+verb))
 }
 
-func configCacheCmd(ctx context.Context, root string, args []string) error {
+func configCacheCommand(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {

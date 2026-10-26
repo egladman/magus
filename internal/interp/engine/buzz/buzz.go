@@ -81,7 +81,7 @@ func toEngine(v vm.Value) engine.Value {
 		return engine.NumberValue(float64(v.AsInt()))
 	case v.IsFloat():
 		return engine.NumberValue(v.AsFloat())
-	case v.IsStr():
+	case v.IsString():
 		return engine.StringValue(v.AsString())
 	case v.IsList():
 		return &table{items: v.ListItems()}
@@ -101,7 +101,7 @@ func fromEngine(ev engine.Value) vm.Value {
 		return v.v
 	}
 	if s, ok := ev.AsString(); ok {
-		return vm.StrValue(s)
+		return vm.StringValue(s)
 	}
 	if n, ok := ev.AsNumber(); ok {
 		return vm.FloatValue(n)
@@ -138,7 +138,7 @@ type value struct{ v vm.Value }
 func (e value) IsNil() bool    { return e.v.IsNull() }
 func (e value) String() string { return e.v.String() }
 func (e value) AsString() (string, bool) {
-	if e.v.IsStr() {
+	if e.v.IsString() {
 		return e.v.AsString(), true
 	}
 	return "", false

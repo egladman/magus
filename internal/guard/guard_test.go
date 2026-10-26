@@ -562,7 +562,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		// a repository whose branch adds a shipped file and the changelog fragment its fix
 		// title owes. The judge's link is untracked and stays out of the diff.
 		branchRepo := func() (string, string) {
-			repo := testkit.NewRepo(t, map[string]string{"README.md": "# key\n"})
+			repo := testkit.NewRepository(t, map[string]string{"README.md": "# key\n"})
 			repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 			repo.Git("switch", "-q", "-c", "trim-key")
 			head := repo.Commit("sort the key", map[string]string{
@@ -1480,7 +1480,7 @@ func TestPendingTouchesLoad(t *testing.T) {
 // sentinel is dropped and git answers again.
 func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", "")
-	repo := testkit.NewRepo(t, map[string]string{"policy.buzz": "fun judge() > void {}\n"})
+	repo := testkit.NewRepository(t, map[string]string{"policy.buzz": "fun judge() > void {}\n"})
 	root := repo.Root()
 	git := func(args ...string) { repo.Git(args...) }
 	file := repo.Path("policy.buzz")
@@ -1535,7 +1535,7 @@ func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 // it. git runs a command in the repository.
 func gitPolicy(t *testing.T, files map[string]string) (root string, h headPolicy, git func(...string)) {
 	t.Helper()
-	repo := testkit.NewRepo(t, files)
+	repo := testkit.NewRepository(t, files)
 	root = repo.Root()
 	git = func(args ...string) { repo.Git(args...) }
 	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
@@ -1966,7 +1966,7 @@ func TestLoadApprovedBuiltinsWithoutAnAuthority(t *testing.T) {
 // branch checkout names its branch, a detached one names none, and a directory under no
 // version control is unknown.
 func TestCheckoutStateAt(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"README": "x\n"})
+	repo := testkit.NewRepository(t, map[string]string{"README": "x\n"})
 	root := repo.Root()
 	repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 

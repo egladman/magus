@@ -513,13 +513,13 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 	return seedJobStore(t, w.Root(), rows...)
 }
 
-// execRepoFixture is execFixture over a git repository holding the same magus.yaml.
-func execRepoFixture(t *testing.T, rows ...types.Job) (repo *testkit.Repo, cacheDir string) {
+// execRepositoryFixture is execFixture over a git repository holding the same magus.yaml.
+func execRepositoryFixture(t *testing.T, rows ...types.Job) (repo *testkit.Repo, cacheDir string) {
 	t.Helper()
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	repo = testkit.NewRepo(t, map[string]string{"magus.yaml": ""})
+	repo = testkit.NewRepository(t, map[string]string{"magus.yaml": ""})
 	_, cacheDir = seedJobStore(t, repo.Root(), rows...)
 	return repo, cacheDir
 }
@@ -540,7 +540,7 @@ func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string)
 // (MGS3031): the guard could only honor it by denying the whole file.
 func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	resetWorkspaceMemo(t)
-	repo, cacheDir := execRepoFixture(t)
+	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	repo.WriteTree(map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"})
 	fork := func(id, deny string) error {
@@ -610,7 +610,7 @@ func TestOpenJobsOpensTheStoreWhenTheWorkspaceWillNotLoad(t *testing.T) {
 // never held is refused and writes no row, and a real abbreviated one is stored in full.
 func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	resetWorkspaceMemo(t)
-	repo, cacheDir := execRepoFixture(t)
+	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	head := repo.Head()
 	fork := func(id, checkpoint string) error {
@@ -636,7 +636,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 // is refused rather than one of the two being dropped.
 func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	resetWorkspaceMemo(t)
-	repo, cacheDir := execRepoFixture(t, types.Job{
+	repo, cacheDir := execRepositoryFixture(t, types.Job{
 		ID: "live", State: types.StateRunning, WritePaths: []string{"a.go"},
 		Check: &types.LeaseCheck{Target: "test", Project: "."},
 	})
@@ -677,7 +677,7 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 // linked checkout bound its integrator to the forker's tree.
 func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 	resetWorkspaceMemo(t)
-	repo, cacheDir := execRepoFixture(t)
+	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	fork := func(at, stdin string, args ...string) error {
@@ -718,7 +718,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 // revision, not the forker's, so the integrator's merge is judged from where it starts.
 func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *testing.T) {
 	resetWorkspaceMemo(t)
-	repo, cacheDir := execRepoFixture(t)
+	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 
@@ -746,7 +746,7 @@ func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *t
 // merged ("nothing to merge"), so a small follow-up needed a second row.
 func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
 	resetWorkspaceMemo(t)
-	repo, cacheDir := execRepoFixture(t)
+	repo, cacheDir := execRepositoryFixture(t)
 	root := repo.Root()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
@@ -895,7 +895,7 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 			t.Cleanup(snapshotGlobals())
 			testkit.Isolate(t)
 			global = globalFlags{}
-			repo := testkit.NewRepo(t, map[string]string{
+			repo := testkit.NewRepository(t, map[string]string{
 				"magus.yaml":                   "",
 				"magusfile.buzz":               "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n" + testTarget,
 				"spells/limit-host/spell.buzz": limitHostSpell,
@@ -953,7 +953,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	holder := testkit.NewRepo(t, map[string]string{"magus.yaml": "", "a.go": "package a\n"})
+	holder := testkit.NewRepository(t, map[string]string{"magus.yaml": "", "a.go": "package a\n"})
 	waiter := holder.AddWorktree("waiter")
 	holderCache, err := magus.ResolveCacheDir(holder.Root())
 	require.NoError(t, err)
@@ -1235,7 +1235,7 @@ func bindCheckout(t *testing.T, cacheDir, id string) {
 func TestJobExecWritesNoMarker(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/docs", "")
 	row.State = types.StateRunning
-	repo, cacheDir := execRepoFixture(t, row)
+	repo, cacheDir := execRepositoryFixture(t, row)
 	root := repo.Root()
 
 	out := captureStdout(t, func() {
@@ -1266,7 +1266,7 @@ func TestJobExecWritesNoMarker(t *testing.T) {
 func TestJobPauseRefusesExecUntilResume(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/paused", "")
 	row.State = types.StateDeclared
-	repo, cacheDir := execRepoFixture(t, row)
+	repo, cacheDir := execRepositoryFixture(t, row)
 	root := repo.Root()
 
 	captureStdout(t, func() {
@@ -1295,7 +1295,7 @@ func TestJobPauseRefusesExecUntilResume(t *testing.T) {
 func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	done := leaseRow("lease-enforcement/wave4/done", "")
 	done.State = types.StatePass
-	repo, _ := execRepoFixture(t, done)
+	repo, _ := execRepositoryFixture(t, done)
 	root := repo.Root()
 
 	for name, args := range map[string][]string{
@@ -1313,7 +1313,7 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 func TestJobExecRefusesATypedBase(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/docs", "")
 	row.State = types.StateDeclared
-	repo, cacheDir := execRepoFixture(t, row)
+	repo, cacheDir := execRepositoryFixture(t, row)
 
 	err := jobExec(t.Context(), repo.Root(), []string{row.ID, "--base", repo.Head()})
 	require.Error(t, err)
@@ -1666,7 +1666,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	installCheckGrader(t, newCheckGrader())
@@ -1717,7 +1717,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
@@ -1769,7 +1769,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
@@ -1805,7 +1805,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "", "go.mod": goModule, "run.go": "package run\n"})
+	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "", "go.mod": goModule, "run.go": "package run\n"})
 	root := repo.Root()
 	own := filepath.Join(t.TempDir(), "own")
 	repo.Git("worktree", "add", "-q", "--detach", own)
@@ -1858,7 +1858,7 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
@@ -1897,7 +1897,7 @@ func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	var graded []string
@@ -1979,7 +1979,7 @@ func dryRunFork(t *testing.T, format string, args ...string) (stdout string, sto
 	if format != "" {
 		args = append([]string{"-o", format}, args...)
 	}
-	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	installCheckGrader(t, newCheckGrader())

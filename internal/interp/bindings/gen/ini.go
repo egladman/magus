@@ -18,20 +18,20 @@ func RegisterIni(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("ini.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := ffi.Str(bzArgs, 0)
+		source := ffi.String(bzArgs, 0)
 		ret0, err := ini.INIParse(ctx, source)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrMapMapVal(ret0), nil
+		return ffi.StringMapMapVal(ret0), nil
 	}))
 	m.MapSet("stringify", vm.DirectValue("ini.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		sections := ffi.StrMapMap(bzArgs, 0)
+		sections := ffi.StringMapMap(bzArgs, 0)
 		ret0, err := ini.INIStringify(ctx, sections)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

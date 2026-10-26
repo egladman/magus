@@ -111,11 +111,11 @@ func (r *spellRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// spellRepo commits a spell at spells/x in a fresh git repository with a fixed commit
+// spellRepository commits a spell at spells/x in a fresh git repository with a fixed commit
 // time and an ssh remote, returning the repository root, the spell directory and the commit.
-func spellRepo(t *testing.T) (root, dir, head string) {
+func spellRepository(t *testing.T) (root, dir, head string) {
 	t.Helper()
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	r.WriteTree(map[string]string{
 		"spells/x/spell.buzz":    "export fun mgs_getName() > str { return \"x\"; }\n",
 		"spells/x/lib/util.buzz": "fun util() > void {}\n",
@@ -139,7 +139,7 @@ func runSpell(t *testing.T, root string, args ...string) string {
 	resetStartupSingletons()
 	t.Cleanup(resetStartupSingletons)
 	var err error
-	out := captureStdout(t, func() { err = spellCmd(t.Context(), root, args) })
+	out := captureStdout(t, func() { err = spellCommand(t.Context(), root, args) })
 	require.NoError(t, err, "magus spell %v", args)
 	return out
 }
@@ -150,7 +150,7 @@ func runSpell(t *testing.T, root string, args ...string) string {
 func TestSpellBuildPushLsPull(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	reg := newSpellRegistry(t)
-	repo, dir, head := spellRepo(t)
+	repo, dir, head := spellRepository(t)
 	layerPath := filepath.Join(t.TempDir(), "spell.tar")
 
 	built := strings.TrimSpace(runSpell(t, repo, "build", dir, "--out", layerPath))
@@ -229,7 +229,7 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	reg := newSpellRegistry(t)
-	repo, dir, _ := spellRepo(t)
+	repo, dir, _ := spellRepository(t)
 	path := reg.host() + "/team/spells/x"
 	pinned := strings.TrimSpace(runSpell(t, repo, "push", dir, path+":v1"))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "magus.yaml"),
@@ -239,7 +239,7 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 `, path)), 0o644))
 
 	resetStartupSingletons()
-	err := spellCmd(t.Context(), repo, []string{"lock"})
+	err := spellCommand(t.Context(), repo, []string{"lock"})
 	require.ErrorIs(t, err, types.RemoteSpellLockStale, "nothing is pinned yet, and the check resolves no tag")
 
 	assert.Equal(t, pinned+"\n", runSpell(t, repo, "lock", "--update"))
@@ -263,7 +263,7 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 // directory: the same layer bytes, and the same manifest once the provenance is the
 // shipped one, which carries no revision or creation time.
 func TestSpellPullShippedMatchesBuild(t *testing.T) {
-	r := testkit.NewRepo(t, map[string]string{"magus.yaml": ""})
+	r := testkit.NewRepository(t, map[string]string{"magus.yaml": ""})
 	repo := r.Root()
 	dir := r.Path("spells", "golang")
 	require.NoError(t, os.CopyFS(dir, os.DirFS(filepath.Join("..", "..", "spells", "golang"))))
@@ -325,7 +325,7 @@ func TestSpellPullShippedRefuses(t *testing.T) {
 		{[]string{"pull", "magus/spell/golang", t.TempDir()}, `magus ships no spell "golang"`},
 	} {
 		resetStartupSingletons()
-		err := spellCmd(t.Context(), repo, c.args)
+		err := spellCommand(t.Context(), repo, c.args)
 		require.ErrorContains(t, err, c.want, "%v", c.args)
 	}
 }
@@ -359,7 +359,7 @@ func TestSpellPushShipped(t *testing.T) {
 		{[]string{"push", "magus/spell/go", reg.host() + "/team/spells/go:v1", "--source", "https://example.com/fork"}, "--source does not apply"},
 	} {
 		resetStartupSingletons()
-		require.ErrorContains(t, spellCmd(t.Context(), repo, c.args), c.want, "%v", c.args)
+		require.ErrorContains(t, spellCommand(t.Context(), repo, c.args), c.want, "%v", c.args)
 	}
 }
 

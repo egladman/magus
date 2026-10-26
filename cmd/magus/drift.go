@@ -111,7 +111,7 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 // none it is a commit's run, which is what a drift section an older magus installed calls.
 func parseCheckDriftArgs(args []string) (job.DriftHook, error) {
 	var h job.DriftHook
-	_, err := cmdParse("server "+job.NameCheckDrift, args, func(fs *flag.FlagSet) {
+	_, err := commandParse("server "+job.NameCheckDrift, args, func(fs *flag.FlagSet) {
 		fs.StringVar(&h.Hook, "hook", job.DriftHookPostCommit, "The hook this run is for: post-commit or pre-push")
 		fs.StringVar(&h.Remote, "remote", "", "The remote a push goes to")
 		fs.Func("push", "One ref a push sends, as <remote object>:<local object>; repeatable", func(v string) error {

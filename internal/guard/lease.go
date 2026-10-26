@@ -1912,7 +1912,7 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 		}
 		return rebind{problem: fmt.Sprintf("would take the lease on another job while lease %s is in flight", h.id), ask: "hand that job out"}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
-		if len(words) > 2 && descendsFrom(h.standing(), words[2]) {
+		if len(words) > 2 && isDescendant(h.standing(), words[2]) {
 			return rebind{}
 		}
 		return rebind{problem: fmt.Sprintf("would verify a job outside lease %s's tree", h.id), ask: "verify it"}
@@ -1936,8 +1936,8 @@ func boundedExecRebind(h holder) rebind {
 	}
 }
 
-// descendsFrom reports whether id sits below the held row in the parent chain.
-func descendsFrom(held leaseStanding, id string) bool {
+// isDescendant reports whether id sits below the held row in the parent chain.
+func isDescendant(held leaseStanding, id string) bool {
 	return held.declared && held.state.Live() &&
 		slices.ContainsFunc(types.JobDescendants(held.rows, held.row.ID), func(r types.Job) bool { return r.ID == id })
 }
@@ -2549,7 +2549,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 				site.gitDir = filepath.Join(site.dir, envDir)
 			}
 		}
-		if inFreshRepo(c.inv, site, unlocated, fresh) {
+		if inFreshRepository(c.inv, site, unlocated, fresh) {
 			continue
 		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
@@ -2580,12 +2580,12 @@ func nonLiteralInit(c locatedCall) string {
 	return ""
 }
 
-func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) } //nolint:gochecknoinits // std cannot import guard; every binary that links the guard registers the vcs lease gate
+func init() { std.RegisterVCSLeaseGate(vcsCommandRefusal) } //nolint:gochecknoinits // std cannot import guard; every binary that links the guard registers the vcs lease gate
 
-// vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
+// vcsCommandRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
 // env, the environment the child starts with. The process knows no session or subagent, so
 // row is graded as a worker: the answer the shell rule gives a caller that names neither.
-func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error {
+func vcsCommandRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error {
 	inv := hint.Invocation{Name: backend, Args: args}
 	site, unlocated := argvSite(inv, dir)
 	relocated := false
@@ -3021,7 +3021,7 @@ func initRefusal(row types.Job, inv hint.Invocation, site vcsSite, unlocated str
 		if strings.HasPrefix(operand, "~") || strings.Contains(operand, "://") {
 			return refuse("The directory it names is not one local literal path, so where it creates the repository cannot be read.")
 		}
-		dest = resolveFrom(site.dir, operand)
+		dest = resolvePath(site.dir, operand)
 	}
 	dest, err := filepath.Abs(dest)
 	if err != nil {
@@ -3075,11 +3075,11 @@ func checkoutOverlap(checkout, dir string) (why string) {
 	return ""
 }
 
-// inFreshRepo reports whether a worker may run inv at site because site is inside a
+// inFreshRepository reports whether a worker may run inv at site because site is inside a
 // repository an earlier init on the same line created, listed in fresh. The call must act
 // in that repository alone: not push, not name config the worker could point at the
 // checkout, and not be a verb that writes to a path its operands name.
-func inFreshRepo(inv hint.Invocation, site vcsSite, unlocated string, fresh []string) bool {
+func inFreshRepository(inv hint.Invocation, site vcsSite, unlocated string, fresh []string) bool {
 	if unlocated != "" || !slices.ContainsFunc(fresh, func(f string) bool {
 		return within(site.dir, f) && (site.gitDir == "" || within(site.gitDir, f))
 	}) || isPush(inv) || isInit(inv) {
@@ -3223,7 +3223,7 @@ func shellCommitSite(c locatedCall) (vcsSite, string) {
 		}
 		return argvSite(hint.Invocation{Name: c.inv.Name, Args: lits}, c.at.dir)
 	}
-	site, ok := pushFrom(c.inv.Name, c.args, c.at)
+	site, ok := parsePush(c.inv.Name, c.args, c.at)
 	if !ok {
 		return vcsSite{}, "The repository it names is not one literal path, so where it commits cannot be read."
 	}

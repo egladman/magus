@@ -161,7 +161,7 @@ func TestVCSClaims(t *testing.T) {
 }
 
 func TestDirtyGitPathScoped(t *testing.T) {
-	r := testkit.NewRepo(t, map[string]string{"a.txt": "alpha\n", "sub/b.txt": "beta\n"})
+	r := testkit.NewRepository(t, map[string]string{"a.txt": "alpha\n", "sub/b.txt": "beta\n"})
 	dir := r.Root()
 
 	t.Setenv("MAGUS_VCS_NAME", "git")
@@ -189,7 +189,7 @@ func TestDirtyGitPathScoped(t *testing.T) {
 }
 
 func TestDiffCommandsGit(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	dir := r.Root()
 	wantSHA := r.Head()
 
@@ -211,7 +211,7 @@ func TestDiffCommandsGit(t *testing.T) {
 // base...HEAD diff was empty. Diff must surface both an uncommitted edit to a
 // tracked file and a brand-new untracked file.
 func TestDiffGitIncludesWorkingTree(t *testing.T) {
-	r := testkit.NewRepo(t, map[string]string{"tracked.txt": "v1\n", ".gitignore": "*.log\n"})
+	r := testkit.NewRepository(t, map[string]string{"tracked.txt": "v1\n", ".gitignore": "*.log\n"})
 	dir := r.Root()
 	r.Write("ignored.log", "noise\n")
 	base := r.Head() // HEAD == base: base...HEAD would be empty
@@ -228,7 +228,7 @@ func TestDiffGitIncludesWorkingTree(t *testing.T) {
 }
 
 func TestFindCommitAndHistoryGit(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	dir := r.Root()
 	r.Git("config", "user.email", "alice@example.com")
 	r.Git("config", "user.name", "Alice")
@@ -310,7 +310,7 @@ func TestBisectRejectsFlagLikeRev(t *testing.T) {
 }
 
 func TestDescribeGit(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	dir := r.Root()
 
 	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{Name: "git"})
@@ -512,7 +512,7 @@ func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
 		{
 			name: "git",
 			bin:  "git",
-			init: func(t *testing.T, dir string) { gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) },
+			init: func(t *testing.T, dir string) { gitInitRepository(t, dir, map[string]string{"a.txt": "one\n"}) },
 		},
 		{
 			name: "hg",
@@ -539,7 +539,7 @@ func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
 		{
 			name: "sl",
 			bin:  "sl",
-			init: func(t *testing.T, dir string) { slInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) },
+			init: func(t *testing.T, dir string) { slInitRepository(t, dir, map[string]string{"a.txt": "one\n"}) },
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -571,14 +571,14 @@ func TestMetadataReportsDirtyAcrossBackends(t *testing.T) {
 		bin  string
 		init func(t *testing.T, dir string)
 	}{
-		{"git", "git", func(t *testing.T, dir string) { gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) }},
+		{"git", "git", func(t *testing.T, dir string) { gitInitRepository(t, dir, map[string]string{"a.txt": "one\n"}) }},
 		{"hg", "hg", func(t *testing.T, dir string) {
 			vcsTestRun(t, dir, "hg", "init")
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
 			vcsTestRun(t, dir, "hg", "add", "a.txt")
 			vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
 		}},
-		{"sl", "sl", func(t *testing.T, dir string) { slInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) }},
+		{"sl", "sl", func(t *testing.T, dir string) { slInitRepository(t, dir, map[string]string{"a.txt": "one\n"}) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := exec.LookPath(tc.bin); err != nil {
@@ -644,7 +644,7 @@ func TestAutodetectPrefersJJInAColocatedRepo(t *testing.T) {
 
 // git stays the answer where it is the only marker, and where there is none at all.
 func TestAutodetectKeepsGitForPlainRepositoriesAndAsTheDefault(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "one\n"}).Root()
 	res, err := Resolve(t.Context(), repo, "", types.VCSOptions{})
 	require.NoError(t, err, "Resolve")
 	assert.Equal(t, "git", res.Name)
@@ -746,36 +746,36 @@ type parityBackend struct {
 
 func parityBackends() []parityBackend {
 	return []parityBackend{
-		{"git", "git", gitVCS{}, gitInitRepo, gitReadback, gitListPreserved, true, true},
-		{"hg", "hg", hgVCS{}, hgInitRepo, hgReadback, hgListPreserved, true, true},
-		{"sl", "sl", saplingVCS{}, slInitRepo, slReadback, slListPreserved, true, false},
-		{"jj", "jj", jjVCS{}, jjInitRepo, jjReadback, mintsNothing, false, false},
+		{"git", "git", gitVCS{}, gitInitRepository, gitReadback, gitListPreserved, true, true},
+		{"hg", "hg", hgVCS{}, hgInitRepository, hgReadback, hgListPreserved, true, true},
+		{"sl", "sl", saplingVCS{}, slInitRepository, slReadback, slListPreserved, true, false},
+		{"jj", "jj", jjVCS{}, jjInitRepository, jjReadback, mintsNothing, false, false},
 	}
 }
 
-func hgInitRepo(t *testing.T, dir string, files map[string]string) {
+func hgInitRepository(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	vcsTestRun(t, dir, "hg", "init")
 	for name, body := range files {
-		writeRepoFile(t, dir, name, body)
+		writeRepositoryFile(t, dir, name, body)
 		vcsTestRun(t, dir, "hg", "add", name)
 	}
 	vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
 }
 
-func jjInitRepo(t *testing.T, dir string, files map[string]string) {
+func jjInitRepository(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	vcsTestRun(t, dir, "jj", "git", "init")
 	for name, body := range files {
-		writeRepoFile(t, dir, name, body)
+		writeRepositoryFile(t, dir, name, body)
 	}
 	// jj's working copy IS a commit, so the writes above land in @. `jj new` closes it and
 	// starts an empty one, which is jj's equivalent of a clean tree.
 	vcsTestRun(t, dir, "jj", "new")
 }
 
-// appendRepoFile adds to a file the backend already wrote, rather than replacing it.
-func appendRepoFile(t *testing.T, dir, name, body string) {
+// appendRepositoryFile adds to a file the backend already wrote, rather than replacing it.
+func appendRepositoryFile(t *testing.T, dir, name, body string) {
 	t.Helper()
 	path := filepath.Join(dir, filepath.FromSlash(name))
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
@@ -786,7 +786,7 @@ func appendRepoFile(t *testing.T, dir, name, body string) {
 	require.NoError(t, werr)
 }
 
-func writeRepoFile(t *testing.T, dir, name, body string) {
+func writeRepositoryFile(t *testing.T, dir, name, body string) {
 	t.Helper()
 	path := filepath.Join(dir, filepath.FromSlash(name))
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
@@ -1045,7 +1045,7 @@ func TestParityNonASCIIPathsSurvive(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "one\n"})
-		writeRepoFile(t, dir, "café.md", "x\n")
+		writeRepositoryFile(t, dir, "café.md", "x\n")
 		addPath(t, b, dir, "café.md")
 
 		got, err := b.drv.DirtyFiles(t.Context(), dir, nil)
@@ -1108,7 +1108,7 @@ func TestParityIgnoredFilesEchoesTheGivenPaths(t *testing.T) {
 		dir := t.TempDir()
 		name, body := ignoreRule(b, "build/")
 		b.init(t, dir, map[string]string{"a.txt": "one\n", name: body})
-		writeRepoFile(t, dir, "build/out.o", "x\n")
+		writeRepositoryFile(t, dir, "build/out.o", "x\n")
 
 		got, err := reporter.IgnoredFiles(t.Context(), dir, []string{"build", "a.txt"})
 		require.NoError(t, err, "IgnoredFiles")
@@ -1131,7 +1131,7 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"keep.log": "x\n"})
 		name, body := ignoreRule(b, "*.log")
-		writeRepoFile(t, dir, name, body)
+		writeRepositoryFile(t, dir, name, body)
 		addPath(t, b, dir, name)
 		commitAll(t, b, dir, "ignore logs")
 
@@ -1196,7 +1196,7 @@ func operationFork(t *testing.T, b parityBackend) (dir, main, side string) {
 	b.init(t, dir, map[string]string{"a.txt": "one\n"})
 	root := initialCommitID(t, b, dir)
 	commitLine := func(body string) string {
-		writeRepoFile(t, dir, "a.txt", body)
+		writeRepositoryFile(t, dir, "a.txt", body)
 		commitAll(t, b, dir, body)
 		c, err := b.drv.FindCommit(t.Context(), dir, "")
 		require.NoError(t, err)
@@ -1301,7 +1301,7 @@ func TestParityOperationInProgress(t *testing.T) {
 				if !ok {
 					return
 				}
-				writeRepoFile(t, dir, "a.txt", "resolved\n")
+				writeRepositoryFile(t, dir, "a.txt", "resolved\n")
 				for _, s := range conclude {
 					vcsTestRun(t, dir, s.bin, s.args(main, side)...)
 				}
@@ -1436,8 +1436,8 @@ func TestParityChangesByCommitReportsStatus(t *testing.T) {
 		reporter := b.drv
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"keep.txt": "one\n", "gone.txt": "two\n"})
-		writeRepoFile(t, dir, "keep.txt", "EDITED\n")
-		writeRepoFile(t, dir, "new.txt", "three\n")
+		writeRepositoryFile(t, dir, "keep.txt", "EDITED\n")
+		writeRepositoryFile(t, dir, "new.txt", "three\n")
 		addPath(t, b, dir, "new.txt")
 		removePath(t, b, dir, "gone.txt")
 		commitAll(t, b, dir, "edit one, add one, delete one")
@@ -1482,13 +1482,13 @@ func forceColor(t *testing.T, b parityBackend, dir string) {
 	case "git":
 		vcsTestRun(t, dir, "git", "config", "color.ui", "always")
 	case "hg":
-		writeRepoFile(t, dir, ".hg/hgrc", "[ui]\ncolor = always\n")
+		writeRepositoryFile(t, dir, ".hg/hgrc", "[ui]\ncolor = always\n")
 	case "sl":
-		// Sapling's repo config is .sl/config, NOT .sl/hgrc, and slInitRepo has already
+		// Sapling's repo config is .sl/config, NOT .sl/hgrc, and slInitRepository has already
 		// written a username into it, so this appends. Pointing at the hg path instead
 		// makes this helper do nothing, and the subtest then passes without ever forcing
 		// color, which is exactly how it first went green against a colorizing Sapling.
-		appendRepoFile(t, dir, ".sl/config", "\n[ui]\ncolor = always\n")
+		appendRepositoryFile(t, dir, ".sl/config", "\n[ui]\ncolor = always\n")
 	case "jj":
 		vcsTestRun(t, dir, "jj", "config", "set", "--repo", "ui.color", "always")
 	}
@@ -1509,7 +1509,7 @@ func TestParityDirtyDiffIsNeverColorized(t *testing.T) {
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"f.txt": "a\nb\n"})
 		forceColor(t, b, dir)
-		writeRepoFile(t, dir, "f.txt", "a\nB\n")
+		writeRepositoryFile(t, dir, "f.txt", "a\nB\n")
 
 		patch, err := b.drv.DirtyDiff(t.Context(), dir, nil)
 		require.NoError(t, err)
@@ -1912,7 +1912,7 @@ func checkoutRev(t *testing.T, b parityBackend, dir, rev string) {
 // initialCommitID returns the identifier of the commit b.init produced. Every backend
 // except jj answers with a plain FindCommit(dir, ""): the working copy IS that commit right
 // after init. jj's init additionally runs `jj new` to reach its own equivalent of a clean
-// tree (see jjInitRepo), which advances @ past it, so jj is asked about @- instead.
+// tree (see jjInitRepository), which advances @ past it, so jj is asked about @- instead.
 func initialCommitID(t *testing.T, b parityBackend, dir string) string {
 	t.Helper()
 	rev := ""
@@ -1937,14 +1937,14 @@ func TestParityRangeDiffIsSymmetricDifference(t *testing.T) {
 		b.init(t, dir, map[string]string{"root.txt": "r\n"})
 		root := initialCommitID(t, b, dir)
 
-		writeRepoFile(t, dir, "base-only.txt", "base\n")
+		writeRepositoryFile(t, dir, "base-only.txt", "base\n")
 		addPath(t, b, dir, "base-only.txt")
 		commitAll(t, b, dir, "base moves on")
 		base, err := b.drv.FindCommit(t.Context(), dir, "")
 		require.NoErrorf(t, err, "%s FindCommit(base)", b.name)
 
 		checkoutRev(t, b, dir, root)
-		writeRepoFile(t, dir, "head-only.txt", "head\n")
+		writeRepositoryFile(t, dir, "head-only.txt", "head\n")
 		addPath(t, b, dir, "head-only.txt")
 		commitAll(t, b, dir, "head diverges")
 		head, err := b.drv.FindCommit(t.Context(), dir, "")
@@ -1971,9 +1971,9 @@ func TestParityRangeDiffScopesToPaths(t *testing.T) {
 		base, err := b.drv.FindCommit(t.Context(), dir, "")
 		require.NoErrorf(t, err, "%s FindCommit(base)", b.name)
 
-		writeRepoFile(t, dir, "keep.txt", "k\n")
+		writeRepositoryFile(t, dir, "keep.txt", "k\n")
 		addPath(t, b, dir, "keep.txt")
-		writeRepoFile(t, dir, "drop.txt", "d\n")
+		writeRepositoryFile(t, dir, "drop.txt", "d\n")
 		addPath(t, b, dir, "drop.txt")
 		commitAll(t, b, dir, "two new files")
 		head, err := b.drv.FindCommit(t.Context(), dir, "")
@@ -2205,7 +2205,7 @@ func forkedRange(t *testing.T, b parityBackend) (dir, root, base, head string) {
 	b.init(t, dir, map[string]string{"root.txt": "r\n"})
 	root = initialCommitID(t, b, dir)
 
-	writeRepoFile(t, dir, "base-only.txt", "base\n")
+	writeRepositoryFile(t, dir, "base-only.txt", "base\n")
 	addPath(t, b, dir, "base-only.txt")
 	commitAll(t, b, dir, "base moves on")
 	c, err := b.drv.FindCommit(t.Context(), dir, "")
@@ -2213,12 +2213,12 @@ func forkedRange(t *testing.T, b parityBackend) (dir, root, base, head string) {
 	base = c.ID
 
 	checkoutRev(t, b, dir, root)
-	writeRepoFile(t, dir, "root.txt", "r\nedited\n")
+	writeRepositoryFile(t, dir, "root.txt", "r\nedited\n")
 	commitAll(t, b, dir, "head edits root")
 	if b.name == "jj" {
 		vcsTestRun(t, dir, "jj", "new")
 	}
-	writeRepoFile(t, dir, "head-only.txt", "head\n")
+	writeRepositoryFile(t, dir, "head-only.txt", "head\n")
 	addPath(t, b, dir, "head-only.txt")
 	commitAll(t, b, dir, "head adds a file")
 	c, err = b.drv.FindCommit(t.Context(), dir, "")
@@ -2333,9 +2333,9 @@ func TestParityRemoteURLByName(t *testing.T) {
 			gitRun(t, dir, "remote", "add", "origin", primary)
 			gitRun(t, dir, "remote", "add", "upstream", secondary)
 		case "hg":
-			appendRepoFile(t, dir, ".hg/hgrc", "\n[paths]\ndefault = "+primary+"\nupstream = "+secondary+"\n")
+			appendRepositoryFile(t, dir, ".hg/hgrc", "\n[paths]\ndefault = "+primary+"\nupstream = "+secondary+"\n")
 		case "sl":
-			appendRepoFile(t, dir, ".sl/config", "\n[paths]\ndefault = "+primary+"\nupstream = "+secondary+"\n")
+			appendRepositoryFile(t, dir, ".sl/config", "\n[paths]\ndefault = "+primary+"\nupstream = "+secondary+"\n")
 		case "jj":
 			vcsTestRun(t, dir, "jj", "git", "remote", "add", "origin", primary)
 			vcsTestRun(t, dir, "jj", "git", "remote", "add", "upstream", secondary)

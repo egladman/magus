@@ -45,17 +45,17 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// diffCmd implements `magus diff`: the working tree's changes, annotated and ordered by
+// diffCommand implements `magus diff`: the working tree's changes, annotated and ordered by
 // what they can break.
 //
 // It is the TERMINAL client of the same annotation join the console's Diff app reads
 // and an agent joins over MCP. One computation, three transports, so a person reviewing in a
 // terminal and an agent pairing with them are looking at the same ranking rather than two
 // tools' opinions of one changeset.
-func diffCmd(ctx context.Context, root string, args []string) error {
+func diffCommand(ctx context.Context, root string, args []string) error {
 	var rf *flaggen.DiffFlags
 	var gates types.DiffOptions
-	rest, err := cmdParse("diff", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("diff", args, func(fs *flag.FlagSet) {
 		rf = flaggen.BindDiff(fs)
 		fs.Float64Var(&gates.MinShare, flaggen.FlagDiffConformanceMinShare, 0,
 			"The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conformance.gates.min_share")
@@ -749,7 +749,7 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 		fail(err)
 		return
 	}
-	// compat: see diffCmd.
+	// compat: see diffCommand.
 	gates := conformance.Gates.Override(opts.MinCohort, opts.MinShare)
 	found := graph.Layout(knowledge.LayoutChange{Added: added, Generated: generated, Gates: gates})
 	for dir, checks := range found {
@@ -1965,7 +1965,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 
 	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
 	// the override they were first handed, so the anchors' graph load must spell the root
-	// exactly as diffCmd's own load did.
+	// exactly as diffCommand's own load did.
 	anchors, aerr := impactAnchors(ctx, rootOverride, rev)
 	if aerr != nil {
 		// Not a lens that degrades: a misdeclared notes store is a fault in the workspace's own
@@ -2335,7 +2335,7 @@ func changedPathsFromPatch(patch string) []string {
 }
 
 // impactAnchors joins the declared notes stores against the changeset. root is the override
-// diffCmd's own load was handed, because the graph loader is once-per-process and keyed on it.
+// diffCommand's own load was handed, because the graph loader is once-per-process and keyed on it.
 func impactAnchors(ctx context.Context, root string, rev types.Diff) ([]review.AnchorHit, error) {
 	declared := globalCfg.Knowledge.Notes
 	dirs := review.NoteDirs{Shared: declared.Shared, Private: declared.Private}

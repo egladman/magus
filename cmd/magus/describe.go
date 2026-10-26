@@ -51,7 +51,7 @@ var describeAlias = map[string]string{
 	"harness": "harness", "harnesses": "harness",
 }
 
-func describeCmd(ctx context.Context, root string, args []string) error {
+func describeCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		describeUsage()
 		return flag.ErrHelp
@@ -139,7 +139,7 @@ func describeUsage() {
 }
 
 func describeGraph(ctx context.Context, root string, args []string) error {
-	pos, err := cmdParse("describe graph", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe graph", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe graph [flags] [project...]")
 			fmt.Fprintln(os.Stderr, "")
@@ -301,7 +301,7 @@ func unknownEntity(kind, name string, all []string) error {
 
 func describeSpells(ctx context.Context, root string, args []string) error {
 	var sf *flaggen.DescribeSpellsFlags
-	pos, err := cmdParse("describe spells", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe spells", args, func(fs *flag.FlagSet) {
 		sf = flaggen.BindDescribeSpells(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe spell[s] [<name>] [flags]")
@@ -512,7 +512,7 @@ func printSpellVersions(vs []types.SpellVersion) {
 // workspace; a name details it (built-in meaning, workspace-default status, and the
 // targets that declare it with the argv edit each makes).
 func describeCharms(ctx context.Context, root string, args []string) error {
-	pos, err := cmdParse("describe charms", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe charms", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe charm[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -629,7 +629,7 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// positionals and do not re-parse, so flags are handled exactly once.
 	var tf *flaggen.DescribeTargetFlags
 	args, targetArgs := splitOnDashDash(args)
-	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe target", args, func(fs *flag.FlagSet) {
 		tf = flaggen.BindDescribeTarget(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target> [project]] [flags] [-- <args>]")
@@ -1116,7 +1116,7 @@ func describeTargets(ctx context.Context, root string) error {
 
 func describeProjects(ctx context.Context, root string, args []string) error {
 	var pf *flaggen.DescribeProjectsFlags
-	pos, err := cmdParse("describe projects", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe projects", args, func(fs *flag.FlagSet) {
 		pf = flaggen.BindDescribeProjects(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe project[s] [<path>] [flags]")
@@ -1431,7 +1431,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 }
 
 func describeWorkspaces(ctx context.Context, root string, args []string) error {
-	_, err := cmdParse("describe workspaces", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("describe workspaces", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe workspaces [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1527,7 +1527,7 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 }
 
 func describeMCPTools(args []string) error {
-	pos, err := cmdParse("describe mcp-tools", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe mcp-tools", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe mcp-tool[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1591,7 +1591,7 @@ func describeMCPTools(args []string) error {
 // the shell (or `git status --porcelain` piped through xargs), so several at a
 // time is the normal case.
 func describeFiles(ctx context.Context, root string, args []string) error {
-	pos, err := cmdParse("describe file", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe file", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe file <path> [<path>...] [flags]")
 			fmt.Fprintln(os.Stderr, "")

@@ -18,7 +18,7 @@ func RegisterYaml(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("yaml.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := ffi.Str(bzArgs, 0)
+		source := ffi.String(bzArgs, 0)
 		ret0, err := yaml.YAMLParse(ctx, source)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -26,7 +26,7 @@ func RegisterYaml(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("positions", vm.DirectValue("yaml.positions", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := ffi.Str(bzArgs, 0)
+		source := ffi.String(bzArgs, 0)
 		ret0, err := yaml.Positions(ctx, source)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -39,7 +39,7 @@ func RegisterYaml(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

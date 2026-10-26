@@ -32,7 +32,7 @@ func deltaGraph(defs map[string]string) *knowledge.Graph {
 func TestReadSymbolDelta(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"api.go":  "package a\n\nfunc Old() {}\n\nfunc Keep() { helper() }\n",
 		"util.go": "package a\n\nfunc helper() {}\n",
 	})

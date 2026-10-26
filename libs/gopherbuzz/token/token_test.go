@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func tokenStr(t Token) string {
+func tokenString(t Token) string {
 	switch t.Kind {
 	case Ident:
 		return fmt.Sprintf("ident(%s)", t.Val)
@@ -48,7 +48,7 @@ func tokenize(t *testing.T, src string) []string {
 	require.NoErrorf(t, err, "tokenize %q", src)
 	var got []string
 	for _, tok := range toks {
-		got = append(got, tokenStr(tok))
+		got = append(got, tokenString(tok))
 	}
 	return got
 }

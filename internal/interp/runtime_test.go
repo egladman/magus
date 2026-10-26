@@ -609,7 +609,7 @@ func BenchmarkMagusfileFacts(b *testing.B) {
 func TestBinaryAnswersCoverEveryForkingMember(t *testing.T) {
 	forks := stdForkingFuncs(t, filepath.Join("..", "..", "std"))
 	require.Contains(t, forks, "MagusDescribeRule", "the fork walk must see runMagusJSON")
-	require.Contains(t, forks, "MagusCmd", "the fork walk must see runMagusSub")
+	require.Contains(t, forks, "MagusCommand", "the fork walk must see runMagusSub")
 
 	bindingPrefix := map[string][]string{
 		filepath.Join("bindings", "gen", "magus.go"): nil,
@@ -823,7 +823,7 @@ fun body() > void !> any {
 `, errors.New("ctx.needs: gen-generate: generator failed"))
 	require.NoError(t, err, "the body caught the failure, so it succeeds")
 	caught := sess.Globals()["caught"]
-	require.True(t, caught.IsStr())
+	require.True(t, caught.IsString())
 	assert.Equal(t, "ctx.needs: gen-generate: generator failed", caught.AsString())
 }
 

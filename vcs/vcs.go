@@ -84,7 +84,7 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 		}
 		v, name, source = opts.Driver, opts.Driver.Name(), types.VCSSourceExplicit
 	case name != "":
-		impl, ok := lookupImpl(name)
+		impl, ok := lookupImplementation(name)
 		if !ok {
 			return types.VCSResolution{}, fmt.Errorf("%w: %q", types.ErrVCSUnknown, name)
 		}
@@ -120,7 +120,7 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 	return types.VCSResolution{Name: name, Source: source, Base: base, VCS: v}, nil
 }
 
-func lookupImpl(name string) (types.VCSDriver, bool) {
+func lookupImplementation(name string) (types.VCSDriver, bool) {
 	for _, v := range builtin {
 		if v.Name() == name {
 			return v, true
@@ -144,7 +144,7 @@ func InstallableVCSes() []string {
 // Installer returns the merge-driver installer for the named VCS, or (nil, false) for an
 // unknown name or a backend that cannot install one.
 func Installer(name string) (types.MergeDriverInstaller, bool) {
-	v, ok := lookupImpl(name)
+	v, ok := lookupImplementation(name)
 	if !ok || !installsMergeDriver(v) {
 		return nil, false
 	}
@@ -314,7 +314,7 @@ func checkRevsetRef(ref string) error {
 	return nil
 }
 
-// repoPathPrefix returns dir's path relative to the repository root, forward-slashed with
+// repositoryPathPrefix returns dir's path relative to the repository root, forward-slashed with
 // a trailing slash, or "" when dir IS the root.
 //
 // It exists because the four backends disagree about which directory their paths are
@@ -336,7 +336,7 @@ func checkRevsetRef(ref string) error {
 //
 // The returned root is the driver's own answer, unresolved-by-us, because callers use it
 // as a working directory rather than for comparison.
-func repoPathPrefix(ctx context.Context, v types.VCSDriver, dir string) (root, prefix string, err error) {
+func repositoryPathPrefix(ctx context.Context, v types.VCSDriver, dir string) (root, prefix string, err error) {
 	root, err = v.Root(ctx, dir)
 	if err != nil {
 		return "", "", fmt.Errorf("vcs: locate repository root: %w", err)

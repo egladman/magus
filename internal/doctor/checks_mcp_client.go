@@ -18,7 +18,7 @@ func (r *runner) checkMCPClient() types.Check {
 	if err != nil {
 		return unknownWiring(name, err)
 	}
-	ctx := agent.ContextWithWiredHarnesses(r.runCtx(), wired)
+	ctx := agent.ContextWithWiredHarnesses(r.runContext(), wired)
 	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckAdvice, Message: "cannot list harnesses: " + err.Error()}

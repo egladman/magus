@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// vcsCmd implements `magus vcs <subcommand>`.
+// vcsCommand implements `magus vcs <subcommand>`.
 //
 // Three of the verbs rest on one fact git does not have: which files are generated, and
 // which target rebuilds them. `ls-files` classifies dirty paths for staging, `resolve` settles a
@@ -40,7 +40,7 @@ import (
 //
 // `ls-files` lists and never stages: the person stages what it lists. Not a general git
 // proxy.
-func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error {
+func vcsCommand(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
 		return exit.Usagef("magus vcs: a subcommand is required (try: ls-files, resolve, checkpoint)")
@@ -48,13 +48,13 @@ func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error
 	verb, rest := splitVCSVerb(args)
 	switch verb {
 	case "ls-files":
-		return vcsLsFilesCmd(ctx, root, rest)
+		return vcsLsFilesCommand(ctx, root, rest)
 	case "resolve":
-		return vcsResolveCmd(ctx, root, rc, rest)
+		return vcsResolveCommand(ctx, root, rc, rest)
 	case "checkpoint":
-		return vcsCheckpointCmd(ctx, root, rest)
+		return vcsCheckpointCommand(ctx, root, rest)
 	case "merge-driver":
-		return mergeDriverCmd(ctx, root, rest)
+		return mergeDriverCommand(ctx, root, rest)
 	case "-h", "--help", "help":
 		vcsUsage(os.Stderr)
 		return nil
@@ -91,12 +91,12 @@ func vcsUsage(w io.Writer) {
 
 // ----------------------------------------------------------- vcs merge-driver
 
-// mergeDriverCmd dispatches `magus vcs merge-driver %O %A %B %L %P`, which settles one
+// mergeDriverCommand dispatches `magus vcs merge-driver %O %A %B %L %P`, which settles one
 // conflicted file (settle.File). Args: ancestor result other markerSize path (git and
 // hg), plus output when the VCS reads the result from a file of its own (jj). A non-zero
 // exit leaves the file conflicted, with markers. Per-clone wiring is installed by `magus
 // init`, not here.
-func mergeDriverCmd(ctx context.Context, root string, args []string) error {
+func mergeDriverCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		_ = mergeDriverUsage()
 		// git only ever calls this with all five placeholders, so a bare invocation is
@@ -206,11 +206,11 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --dry-run        classify and report; touch nothing (global flag)")
 }
 
-// vcsResolveCmd classifies every conflicted path, settles the generated ones in bulk,
+// vcsResolveCommand classifies every conflicted path, settles the generated ones in bulk,
 // regenerates once, and records the result.
-func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string) error {
+func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []string) error {
 	var rf *flaggen.VCSResolveFlags
-	pos, err := cmdParse("vcs resolve", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("vcs resolve", args, func(fs *flag.FlagSet) {
 		rf = flaggen.BindVCSResolve(fs)
 		fs.Usage = func() { vcsResolveUsage(os.Stderr) }
 	})
@@ -809,10 +809,10 @@ func vcsCheckpointUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -o json    the whole record (global flag; yaml, jsonl and template too)")
 }
 
-// vcsCheckpointCmd reads the working state's identity and prints it.
-func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
+// vcsCheckpointCommand reads the working state's identity and prints it.
+func vcsCheckpointCommand(ctx context.Context, root string, args []string) error {
 	var flags *flaggen.VCSCheckpointFlags
-	pos, err := cmdParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() { vcsCheckpointUsage(os.Stderr) }
 		flags = flaggen.BindVCSCheckpoint(fs)
 	})
@@ -827,7 +827,7 @@ func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// The RESOLVED workspace root, not the --root override, for the reason vcsLsFilesCmd
+	// The RESOLVED workspace root, not the --root override, for the reason vcsLsFilesCommand
 	// spells out: the override is empty unless you passed --root, and an empty dir sends
 	// every VCS call to the process cwd, which is a different repository the moment you
 	// run this from anywhere but the root.
@@ -1060,11 +1060,11 @@ func lsFilesRefusal(driver types.VCSDriver, include map[string]bool) error {
 // the parent commit, which would call each new file untracked.
 func keepsUntracked(driver types.VCSDriver) bool { return driver.Name() != "jj" }
 
-// vcsLsFilesCmd lists the dirty paths a commit of this change wants.
-func vcsLsFilesCmd(ctx context.Context, root string, args []string) error {
+// vcsLsFilesCommand lists the dirty paths a commit of this change wants.
+func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 	var lf *flaggen.VCSLsFilesFlags
 	var exclude, projects listFlag
-	pos, err := cmdParse("vcs ls-files", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("vcs ls-files", args, func(fs *flag.FlagSet) {
 		lf = flaggen.BindVCSLsFiles(fs)
 		fs.Var(&exclude, flaggen.FlagVCSLsFilesExclude, "Leave out paths this write-path `pattern` covers; repeatable or comma-separated")
 		fs.Var(&projects, flaggen.FlagVCSLsFilesProject, "List only the files this `project` owns; repeatable or comma-separated")

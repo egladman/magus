@@ -98,7 +98,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(["in.txt"]);
 }
 `
-	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": mf, "in.txt": "one"})
+	repo := testkit.NewRepository(t, map[string]string{"magusfile.buzz": mf, "in.txt": "one"})
 	wt := repo.AddWorktree("sibling")
 
 	storeA, err := config.StoreDir(repo.Root(), config.Config{})

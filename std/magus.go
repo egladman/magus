@@ -90,7 +90,7 @@ var Magus = Module{
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Raises:  true,
-			Impl:    MagusCmd,
+			Impl:    MagusCommand,
 		},
 		{
 			Name: "affected",
@@ -1277,14 +1277,14 @@ var typedDescribeNouns = map[string]string{
 	"mcp-tool": "mcpTool", "mcp-tools": "mcpTool",
 }
 
-// errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
+// errorNoWorkspace is the MGS1022 error a magus.* member raises when it is called
 // without the loaded workspace it reads from. Every such member serves its answer
 // IN-PROCESS off types.WorkspaceFromContext, which magus.Open puts there for a
 // magusfile target; a `magus buzz` script has no workspace open, and a member that
 // forks a nested magus (magus.cmd, most magus\describe methods) is what it reaches
 // for instead. Coded so the constraint is greppable and linkable rather than one
 // more bare sentence.
-func errNoWorkspace(member string) error {
+func errorNoWorkspace(member string) error {
 	return types.DiagnosticErrorf(types.MagusfileOnlyMember,
 		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not from a spell or a `magus buzz` script; reach for magus\\cmd or a magus\\describe method that forks a nested magus, which discovers the workspace itself", member)
 }
@@ -1301,7 +1301,7 @@ func errNoWorkspace(member string) error {
 func MagusDescribeProject(ctx context.Context) (types.ProjectsOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.ProjectsOutput{}, errNoWorkspace("describe.project")
+		return types.ProjectsOutput{}, errorNoWorkspace("describe.project")
 	}
 	return ws.ListProjects(ctx)
 }
@@ -1438,7 +1438,7 @@ func MagusDescribeMCPTool(ctx context.Context, name string, opts map[string]any)
 func MagusAffected(ctx context.Context, base string) (types.AffectedResult, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.AffectedResult{}, errNoWorkspace("affected")
+		return types.AffectedResult{}, errorNoWorkspace("affected")
 	}
 	res, err := ws.Affected(ctx, base)
 	if err != nil {
@@ -1453,7 +1453,7 @@ func MagusAffected(ctx context.Context, base string) (types.AffectedResult, erro
 func MagusWhere(ctx context.Context, dir string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return "", errNoWorkspace("where")
+		return "", errorNoWorkspace("where")
 	}
 	p, ok := ws.Where(dir)
 	if !ok {
@@ -1469,7 +1469,7 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 func MagusVCSCheckpoint(ctx context.Context) (types.VCSCheckpoint, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.VCSCheckpoint{}, errNoWorkspace("vcs.checkpoint")
+		return types.VCSCheckpoint{}, errorNoWorkspace("vcs.checkpoint")
 	}
 	res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions())
 	if err != nil {
@@ -1558,7 +1558,7 @@ func buzzCause(v any) (string, error) {
 func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.GraphView{}, errNoWorkspace("projectGraph")
+		return types.GraphView{}, errorNoWorkspace("projectGraph")
 	}
 	g, err := ws.Graph()
 	if err != nil {
@@ -1567,13 +1567,13 @@ func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	return g.View(), nil
 }
 
-// MagusCmd is the escape hatch: it runs `magus <sub> <args>` for a subcommand with no
+// MagusCommand is the escape hatch: it runs `magus <sub> <args>` for a subcommand with no
 // dedicated wrapper (status, affected, agent, ...). The subcommand is a parameter of its
 // own rather than args[0], which is what lets the warning below be exact instead of a
 // guess at a list's first element, and what keeps the invocation readable to anything
 // reading the source. Like the typed methods it runs in the contextual project dir
 // unless opts.dir says otherwise; see runMagus.
-func MagusCmd(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
+func MagusCommand(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
 	warnIfTypedSubcommand(ctx, sub, args)
 	return runMagusSub(ctx, sub, args, opts)
 }
@@ -1583,7 +1583,7 @@ func MagusCmd(ctx context.Context, sub string, args []string, opts map[string]an
 // A describe noun with no method draws nothing: magus.cmd is the way to reach it.
 // Neither does one asked for in an explicit -o format, since a typed record is not
 // the CLI's bytes (a file written for another reader wants those).
-// It is the pure decision half of MagusCmd, split out so it can be tested without
+// It is the pure decision half of MagusCommand, split out so it can be tested without
 // the nested exec.
 func warnIfTypedSubcommand(ctx context.Context, sub string, args []string) {
 	var hint string
@@ -1693,7 +1693,7 @@ func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer,
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return nil, errNoWorkspace(member)
+		return nil, errorNoWorkspace(member)
 	}
 	a, ok := ws.(types.InsightAnalyzer)
 	if !ok {
@@ -1808,7 +1808,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
+		// NOT errorNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
 		// which fork a nested magus and rediscover the root. Neither stands in here, and
 		// nor does `magus job`, which needs a workspace for the same reason this does.
 		// Same code, because the constraint is the same one.
@@ -2153,7 +2153,7 @@ func runMagusSub(ctx context.Context, sub string, args []string, opts map[string
 // same idea the same way. An absolute opts.dir wins outright, and with no contextual dir
 // there is nothing to resolve against, so it is used as given.
 func resolveRunDir(ctx context.Context, opts map[string]any) string {
-	dir, _ := CwdFromContext(ctx)
+	dir, _ := CurrentWorkingDirectoryFromContext(ctx)
 	sub, ok := opts["dir"].(string)
 	if !ok || sub == "" {
 		return dir
@@ -2172,7 +2172,7 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // launch or exits non-zero unless opts.allow_failure is true, mirroring proc.exec. label
 // names the calling method for error messages.
 //
-// The child runs in the working directory carried by ctx (WithCwd) but loads the whole
+// The child runs in the working directory carried by ctx (WithCurrentWorkingDirectory) but loads the whole
 // workspace, so a command scoped to one project names it. opts may carry "root",
 // emitted as the global --root flag, which precedes the subcommand.
 // nestedExecOptions is how a nested magus is launched: where it runs, what it inherits, and
@@ -2323,7 +2323,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 	if v == nil {
 		return clean, nil
 	}
-	dir, err := EffectiveCwd(ctx)
+	dir, err := EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		dir = ""
 	}

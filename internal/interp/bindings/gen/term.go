@@ -41,18 +41,18 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectTermSize(ret0), nil
 	}))
 	m.MapSet("colorize", vm.DirectValue("term.colorize", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
-		style := ffi.Str(bzArgs, 1)
+		s := ffi.String(bzArgs, 0)
+		style := ffi.String(bzArgs, 1)
 		ret0, err := std.TermColorize(ctx, s, style)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("pick", vm.DirectValue("term.pick", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		items := ffi.StrSlice(bzArgs, 0)
-		prompt := ffi.Str(bzArgs, 1)
-		initial_filter := ffi.Str(bzArgs, 2)
+		items := ffi.StringSlice(bzArgs, 0)
+		prompt := ffi.String(bzArgs, 1)
+		initial_filter := ffi.String(bzArgs, 2)
 		initial := ffi.Int(bzArgs, 3, 0)
 		max_rows := ffi.Int(bzArgs, 4, 0)
 		ret0, err := std.TermPick(ctx, items, prompt, initial_filter, initial, max_rows)
@@ -62,8 +62,8 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("notify", vm.DirectValue("term.notify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := ffi.Str(bzArgs, 0)
-		level := ffi.Str(bzArgs, 1)
+		message := ffi.String(bzArgs, 0)
+		level := ffi.String(bzArgs, 1)
 		ttl_ms := ffi.Int(bzArgs, 2, 0)
 		if err := std.TermNotify(ctx, message, level, ttl_ms); err != nil {
 			return vm.Null, ffi.Error(err)

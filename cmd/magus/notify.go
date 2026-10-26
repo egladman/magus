@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// notifyCmd turns one attention event into a stable types.Event record. It is a
+// notifyCommand turns one attention event into a stable types.Event record. It is a
 // local command: a notification belongs on the caller's desktop, never on a
 // server host. A producer sends either the canonical JSON envelope or plain
 // text on stdin. A host-specific wrapper is responsible for shaping its own
@@ -34,7 +34,7 @@ import (
 // has stopped until a person acts also opens a durable request `magus session attention`
 // lists; there is deliberately no `attention raise` twin, because one ingest path
 // is what keeps the queue's contents traceable to a single normalization.
-func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
+func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("notify", flag.ContinueOnError)
 	bindDisplayFlags(fset)
 	nf := flaggen.BindSessionNotify(fset)
@@ -50,9 +50,9 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 		return err
 	}
 
-	body, readErr := io.ReadAll(in)
-	if readErr != nil {
-		return fmt.Errorf("magus session notify: read stdin: %w", readErr)
+	body, readError := io.ReadAll(in)
+	if readError != nil {
+		return fmt.Errorf("magus session notify: read stdin: %w", readError)
 	}
 
 	ev := eventFromStdin(body)

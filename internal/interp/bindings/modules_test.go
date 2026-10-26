@@ -100,7 +100,7 @@ func TestRegisterModulesWithModules(t *testing.T) {
 	modules := bindgen.Modules.With("json", ffi.Registration{
 		Register: func(context.Context, *buzz.Session) vm.Value {
 			m := vm.NewMap()
-			m.MapSet("mocked", vm.StrValue("json"))
+			m.MapSet("mocked", vm.StringValue("json"))
 			return m
 		},
 		Capabilities: ffi.Capabilities(ffi.WASM),
@@ -1234,7 +1234,7 @@ func TestVcsBindings(t *testing.T) {
 	// being inside magus's own checkout, which is exactly the confusion the vcs probes
 	// were fixed for: a target carries its directory on the context and the runtime never
 	// chdirs, so "the process happens to be in a repo" is not the same as "this target is".
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	repo.Magusfile(`
 import "magus";
@@ -1805,7 +1805,7 @@ export fun wrapped(ctx: magus\Context, _a: [str]) > void !> any {
 }
 
 func TestVcsCmdRunsFromAMagusfile(t *testing.T) {
-	dir := testkit.NewRepo(t, nil).Root()
+	dir := testkit.NewRepository(t, nil).Root()
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";

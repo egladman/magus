@@ -118,7 +118,7 @@ var spellMeta = map[string]spellInfo{
 	},
 }
 
-// spellOptsSource is the file whose spellOptsFromBuzz parses each op options-map key.
+// spellOptsSource is the file whose spellOptionsFromBuzz parses each op options-map key.
 const spellOptsSource = "internal/interp/bindings/spell_object.go"
 
 // spellsDir is the path to the repo's spells/ directory, relative to the caller's
@@ -327,7 +327,7 @@ func renderSpell(d spells.Descriptor) string {
 // writes before the op index: a spell's own name on its page (`go["<op>"]`), or
 // the generic `spell` on the index. One helper keeps the per-spell pages and the
 // index identical, mirroring the real contract in
-// internal/interp/bindings.spellOptsFromBuzz.
+// internal/interp/bindings.spellOptionsFromBuzz.
 func writeArgsSection(b *strings.Builder, invoker string) {
 	// src links each key to spell_object.go, where it is parsed. The file and not the line:
 	// a line anchor would rewrite these committed docs whenever the parse moved.

@@ -71,7 +71,7 @@ func (r *runner) checkUnexplainedHotspots(_ []*types.Project) types.Check {
 			Message:  "this workspace exposes no history lens; skipped",
 		}
 	}
-	hot, err := analyzer.Hotspots(r.runCtx(), types.InsightOptions{Commits: unexplainedWindow, Files: true})
+	hot, err := analyzer.Hotspots(r.runContext(), types.InsightOptions{Commits: unexplainedWindow, Files: true})
 	if err != nil || len(hot.Files) == 0 {
 		// No history is the common shape of this (a fresh clone, a non-git tree), and it
 		// is emphatically not "the hot code is all explained".

@@ -111,9 +111,9 @@ func (c *Chunk) Current() int { return len(c.Code) }
 // AddConst appends v to the constant pool. String constants are deduplicated.
 func (c *Chunk) AddConst(v Value) int32 {
 	if v.tag() == tagStr {
-		sv := v.asStr().V
+		sv := v.asString().V
 		for i, e := range c.Consts {
-			if e.tag() == tagStr && e.asStr().V == sv {
+			if e.tag() == tagStr && e.asString().V == sv {
 				return int32(i)
 			}
 		}

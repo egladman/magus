@@ -37,7 +37,7 @@ import (
 // The store is grow-only, so an unbounded default would get slower forever.
 const sessionsDefaultLimit = 20
 
-// sessionCmd is the whole session family behind one noun. The grouping is the point:
+// sessionCommand is the whole session family behind one noun. The grouping is the point:
 // every subverb reads or writes the one store keyed by repository identity, none needs
 // the magusfile to load, and the machine ingest (hook, notify) lives beside the human
 // reads instead of burning top-level names no person types.
@@ -46,7 +46,7 @@ const sessionsDefaultLimit = 20
 // (actions against the server), this reads internal/sessions (facts a session
 // produced). The stores are meant to converge; until they do, each is named after
 // what it holds.
-func sessionCmd(ctx context.Context, root string, args []string) error {
+func sessionCommand(ctx context.Context, root string, args []string) error {
 	verb, rest := "ls", args
 	// A leading flag belongs to the default verb, so `magus session -o json` and
 	// `magus session --since 2h` read as listings rather than unknown subcommands.
@@ -70,9 +70,9 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 	case "dispose":
 		return attentionDispose(root, rest)
 	case "checkpoint":
-		return checkpointCmd(ctx, root, os.Stdin, os.Stdout, rest)
+		return checkpointCommand(ctx, root, os.Stdin, os.Stdout, rest)
 	case "notify":
-		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
+		return notifyCommand(ctx, root, os.Stdin, os.Stdout, rest)
 	case "hook":
 		// Removed, not renamed-in-place: the verdict was never session-scoped, and the
 		// one thing worse than moving it is leaving a second door onto the same rules.
@@ -119,7 +119,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
 	var brief, all bool
-	rest, err := cmdParse("session", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("session", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&all, "all", false, "List invocations from every checkout of this repository, not only this one")
 		fs.IntVar(&limit, "limit", sessionsDefaultLimit, "Show at most this many invocations (0 for all)")
 		fs.StringVar(&since, "since", "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
@@ -132,7 +132,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
 	}
 	if brief {
-		return sessionBriefCmd(ctx, root)
+		return sessionBriefCommand(ctx, root)
 	}
 	if limit < 0 {
 		return exit.Usagef("magus session: --limit must be zero or more (got %d); 0 lists every invocation", limit)
@@ -584,7 +584,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 // sessionLoad implements `magus session load`.
 func sessionLoad(ctx context.Context, root string, args []string) error {
 	var file string
-	rest, err := cmdParse("session load", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("session load", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "file", "", "Read the event stream from this file instead of stdin")
 		fs.Usage = sessionLoadUsage(fs)
 	})
@@ -659,7 +659,7 @@ func readLoadStream(in io.Reader, dir string, rejudge rejudgeFunc) (sessionLoadS
 		summary.Rejects = append(summary.Rejects, fmt.Sprintf("line %d: ", line)+fmt.Sprintf(format, args...))
 	}
 
-	sameRepo := repoScope(dir)
+	sameRepo := repositoryScope(dir)
 	// ReadSlice over a buffer one byte wider than the cap is what bounds memory: ReadString
 	// would grow without limit on a line that never ends, and the overlong case has to be
 	// reported and skipped, not read to completion.
@@ -821,7 +821,7 @@ func commandProgram(text string) string {
 	return trail.CommandProgram(text)
 }
 
-// repoScope reports whether a cwd belongs to the repository whose store is dir,
+// repositoryScope reports whether a cwd belongs to the repository whose store is dir,
 // memoized because a stream names a handful of checkouts across thousands of
 // events and each answer costs a config read.
 //
@@ -830,7 +830,7 @@ func commandProgram(text string) string {
 // hole in a load: the phase 0 measurement found 45% of commands were run in
 // worktrees that had since been removed. Closing it needs an identity the deleted
 // path can still be resolved through, which nothing records today.
-func repoScope(dir string) func(string) bool {
+func repositoryScope(dir string) func(string) bool {
 	seen := map[string]bool{}
 	return func(cwd string) bool {
 		if match, ok := seen[cwd]; ok {
@@ -913,7 +913,7 @@ const sessionTrailEvents = 5000
 
 // sessionShow implements `magus session show <id>`.
 func sessionShow(root string, args []string) error {
-	rest, err := cmdParse("session show", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("session show", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus session show <session-id>")
 			fmt.Fprintln(os.Stderr, "")

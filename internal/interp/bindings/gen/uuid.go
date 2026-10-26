@@ -22,14 +22,14 @@ func RegisterUuid(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("v7", vm.DirectValue("uuid.v7", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.UUIDv7(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("randomHex", vm.DirectValue("uuid.randomHex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		n := ffi.Int(bzArgs, 0, 0)
@@ -37,7 +37,7 @@ func RegisterUuid(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("randomToken", vm.DirectValue("uuid.randomToken", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		n := ffi.Int(bzArgs, 0, 0)
@@ -45,7 +45,7 @@ func RegisterUuid(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

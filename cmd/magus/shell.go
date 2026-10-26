@@ -96,7 +96,7 @@ func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
 }
 
-// shellCmd implements `magus shell`: evaluate one shell command or file path and emit a
+// shellCommand implements `magus shell`: evaluate one shell command or file path and emit a
 // verdict. The caller owns extraction from its own event shape; magus owns only the
 // host-neutral policy.
 //
@@ -104,23 +104,23 @@ func shellUsage(w io.Writer) {
 // call blocked. An input that fails to READ is the opposite case and fails CLOSED,
 // because bytes were on their way and were lost, so the guard has judged nothing and the
 // command it never saw must not be reported as cleared.
-func shellCmd(ctx context.Context, args []string) error {
-	return shellCmdWithErrorWriter(ctx, os.Stdin, os.Stdout, os.Stderr, args)
+func shellCommand(ctx context.Context, args []string) error {
+	return shellCommandWithErrorWriter(ctx, os.Stdin, os.Stdout, os.Stderr, args)
 }
 
 type envRefusalKey struct{}
 
-// withEnvRefusal hands shellCmd the MGS1046 error startup found, for it to answer as the
+// withEnvRefusal hands shellCommand the MGS1046 error startup found, for it to answer as the
 // verdict instead of judging the input.
 func withEnvRefusal(ctx context.Context, err error) context.Context {
 	return context.WithValue(ctx, envRefusalKey{}, err)
 }
 
-// shellCmdWithErrorWriter is shellCmd's transport seam. The CLI reports a deny reason on
+// shellCommandWithErrorWriter is shellCommand's transport seam. The CLI reports a deny reason on
 // stderr for machine-readable output, while a host adapter has already carried that
 // reason in its host reply and must not leak a second, non-protocol message into the
 // host's hook stream.
-func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
+func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
 	// Started here rather than in Judge, so loading the rules spends the same budget.
 	ctx, cancel := guard.WithHookDeadline(ctx)
 	defer cancel()
@@ -175,9 +175,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		return verdictExit(errOut, opts, verdict)
 	}
 
-	input, readErr := shellInput(in, fset.Args())
-	if exit.Code(readErr) == exit.Usage {
-		return readErr
+	input, readError := shellInput(in, fset.Args())
+	if exit.Code(readError) == exit.Usage {
+		return readError
 	}
 	// A failed read is not an empty input, and collapsing the two cleared every
 	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
@@ -185,13 +185,13 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// so a host that blocks on 2 fails closed in both cases. --observe and --message are
 	// exempt because they carry no verdict: there is nothing to fail closed about, and
 	// the documented contract is that they always exit 0.
-	if readErr != nil && !sf.Observe && !sf.Message {
+	if readError != nil && !sf.Observe && !sf.Message {
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
 			// "from stdin" is accurate whichever way this command is called: an operand
 			// is read off argv and cannot fail, so a read error is always the piped path.
-			Reason: fmt.Sprintf("magus shell could not read its input from stdin: %s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", readErr.Error()),
+			Reason: fmt.Sprintf("magus shell could not read its input from stdin: %s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", readError.Error()),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err

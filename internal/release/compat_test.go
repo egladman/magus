@@ -109,7 +109,7 @@ func TestJudge(t *testing.T) {
 func TestCheckCompat_LoadsTheTaggedTree(t *testing.T) {
 	testkit.Isolate(t)
 	broken := "magus.project({});\n"
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":       "",
 		"a/magusfile.buzz": broken,
 		"b/magusfile.buzz": broken,
@@ -135,7 +135,7 @@ fun unused() > void { magus.project({}); }
 }
 
 func TestCheckCompat_UnknownTagIsAnError(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	_, err := CheckCompat(t.Context(), repo.Root(), "v9.9.9")
 	assert.ErrorContains(t, err, "release: export v9.9.9")
 }

@@ -85,13 +85,13 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// shadows them.
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		m := vm.NewMap()
-		m.MapSet("name", vm.StrValue(importPath))
+		m.MapSet("name", vm.StringValue(importPath))
 		return m, true
 	})
 }
 
-// fn is a small constructor alias matching the std package's helper.
-func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
+// function is a small constructor alias matching the std package's helper.
+func function(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
 	return vm.DirectValue(name, f)
 }
 
@@ -104,7 +104,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m := vm.NewMap()
 
-	m.MapSet("project", fn("magus.project", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("project", function("magus.project", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		path, opts := captureConfigure(args)
 		if err := tr.traceProject(ctx, path, opts); err != nil {
 			return vm.Null, err
@@ -113,13 +113,13 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}))
 
 	// Dependency and footprint declarations live only on the magus.Context a target
-	// receives (ctx.needs / ctx.glob / ctx.readsFiles / ctx.writesFiles; see buildCtx), not on
+	// receives (ctx.needs / ctx.glob / ctx.readsFiles / ctx.writesFiles; see buildContext), not on
 	// the magus.* global, mirroring the real bindings.
 
 	// magus.cache.<...>: a namespace in the real module (cache.remote, ...); stub as
 	// a no-op so cache.remote(github) at magusfile top level doesn't blow up.
 	cache := vm.NewMap()
-	cache.MapSet("remote", fn("magus.cache.remote", retNull))
+	cache.MapSet("remote", function("magus.cache.remote", retNull))
 	m.MapSet("cache", cache)
 
 	// magus.ci.<...>: selects the CI provider spell in the real module.
@@ -127,33 +127,33 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// it at top level, and the dry playground evaluates that without a VM
 	// able to resolve a spell.
 	ci := vm.NewMap()
-	ci.MapSet("provider", fn("magus.ci.provider", retNull))
+	ci.MapSet("provider", function("magus.ci.provider", retNull))
 	m.MapSet("ci", ci)
 
 	// magus.guard / magus.harness: additive bash rules and harness-spell selection
 	// at magusfile top level. Stubbed no-ops like cache.remote.
 	guard := vm.NewMap()
-	guard.MapSet("shell", fn("magus.guard.shell", retNull))
-	guard.MapSet("spawn", fn("magus.guard.spawn", retNull))
-	guard.MapSet("command", fn("magus.guard.command", retNull))
-	guard.MapSet("write", fn("magus.guard.write", retNull))
+	guard.MapSet("shell", function("magus.guard.shell", retNull))
+	guard.MapSet("spawn", function("magus.guard.spawn", retNull))
+	guard.MapSet("command", function("magus.guard.command", retNull))
+	guard.MapSet("write", function("magus.guard.write", retNull))
 	m.MapSet("guard", guard)
 	harness := vm.NewMap()
-	harness.MapSet("provider", fn("magus.harness.provider", retNull))
+	harness.MapSet("provider", function("magus.harness.provider", retNull))
 	m.MapSet("harness", harness)
 
 	// magus.review.<...>: selects the spell that connects this workspace to wherever its
 	// changes are discussed. Stubbed for the same reason as the two above: a magusfile calls
 	// it at top level, and the playground has no VM able to resolve a spell handle.
 	review := vm.NewMap()
-	review.MapSet("provider", fn("magus.review.provider", retNull))
+	review.MapSet("provider", function("magus.review.provider", retNull))
 	m.MapSet("review", review)
 
 	// magus.lifecycle.<...>: selects the spell that answers when release cycles end.
 	// Stubbed for the same reason as review: a top-level selection with no VM here to
 	// resolve the handle.
 	lifecycle := vm.NewMap()
-	lifecycle.MapSet("provider", fn("magus.lifecycle.provider", retNull))
+	lifecycle.MapSet("provider", function("magus.lifecycle.provider", retNull))
 	m.MapSet("lifecycle", lifecycle)
 
 	// magus.secret.<...>: selects the secret provider spell and reads a credential
@@ -172,20 +172,20 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// that accepts what the real call rejects inverts its whole point: `read()` with no
 	// reference, or `provider("onepassword")` passing a string where a spell handle
 	// belongs, would pass the dry run and fail the real one.
-	secret.MapSet("provider", fn("magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	secret.MapSet("provider", function("magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: expected an imported spell handle`)
 		}
-		if nv, ok := args[0].MapGet("name"); !ok || !nv.IsStr() || nv.AsString() == "" {
+		if nv, ok := args[0].MapGet("name"); !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: argument is not a spell handle (no name)`)
 		}
 		return vm.Null, nil
 	}))
-	secret.MapSet("read", fn("magus.secret.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() || args[0].AsString() == "" {
+	secret.MapSet("read", function("magus.secret.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsString() || args[0].AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.read: expected a non-empty reference string`)
 		}
-		return vm.StrValue("<secret>"), nil
+		return vm.StringValue("<secret>"), nil
 	}))
 	// grant() and endpoint() validate exactly like the real namespace and then do
 	// nothing. A grant registers a rule rather than resolving anything, so there is no
@@ -196,11 +196,11 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// make a trace die on the string concat a magusfile does with it (ctx.with_env),
 	// and a real listener has no business existing in a dry run; port 0 cannot be
 	// connected to, so a trace that leaks this into a command leaks nothing that works.
-	secret.MapSet("endpoint", fn("magus.secret.endpoint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	secret.MapSet("endpoint", function("magus.secret.endpoint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if err := secretGrantStubArg("endpoint", args); err != nil {
 			return vm.Null, err
 		}
-		return vm.StrValue("http://127.0.0.1:0"), nil
+		return vm.StringValue("http://127.0.0.1:0"), nil
 	}))
 	m.MapSet("secret", secret)
 
@@ -208,24 +208,24 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// Stubbed no-op for the same reason as the two above; the playground has no
 	// workspace to fold provided projects into, and no VM to run the provider.
 	ws := vm.NewMap()
-	ws.MapSet("provider", fn("magus.workspace.provider", retNull))
+	ws.MapSet("provider", function("magus.workspace.provider", retNull))
 	m.MapSet("workspace", ws)
 
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
 	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
-	// ctx.has_charm (see buildCtx).
-	m.MapSet("hasCharm", fn("magus.hasCharm", traceHasCharm(tr)))
+	// ctx.has_charm (see buildContext).
+	m.MapSet("hasCharm", function("magus.hasCharm", traceHasCharm(tr)))
 
 	// magus.log.*: the emitting members, grouped as they are in the real bindings.
 	// hint rides along here rather than with the runtime-only stubs below because it
 	// emits, and a dry run should show it in target order like any other message.
 	logLevels := vm.NewMap()
 	for _, level := range []string{"info", "warn", "error", "debug", "hint"} {
-		logLevels.MapSet(level, fn("magus.log."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		logLevels.MapSet(level, function("magus.log."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			// Traced as a per-target op (attributed to tr.cur) so a dry-run shows
 			// each target's logs in order; writing to the shared output buffer would
 			// mix every probed target's logs together.
-			tr.addOp("log", level, strArg(args, 0))
+			tr.addOp("log", level, stringArg(args, 0))
 			return vm.Null, nil
 		}))
 	}
@@ -234,8 +234,8 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// magus.raise(code, message, cause?, url?) fails with a coded diagnostic. A dry run
 	// must not actually fail, so it traces the code and message and returns; the point
 	// of the probe is which branch a target would take, not that it aborts there.
-	m.MapSet("raise", fn("magus.raise", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		tr.addOp("raise", strArg(args, 0), strArg(args, 1))
+	m.MapSet("raise", function("magus.raise", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		tr.addOp("raise", stringArg(args, 0), stringArg(args, 1))
 		return vm.Null, nil
 	}))
 
@@ -243,8 +243,8 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// can't re-enter the runner, so it traces the invocation (the target and any
 	// :charm suffix from argv[0]) as an op, the one imperative alternative to a
 	// ctx.needs() DAG edge.
-	m.MapSet("run", fn("magus.run", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if ref := firstListStr(args); ref != "" {
+	m.MapSet("run", function("magus.run", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if ref := firstListString(args); ref != "" {
 			target, charms := splitTargetRef(ref)
 			display := target
 			if len(charms) > 0 {
@@ -257,7 +257,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 
 	// magus.cmd returns a captured-command result on the real module; stub it as an
 	// empty success so `magus.cmd(...).stdout` and the like don't blow up in a dry run.
-	m.MapSet("cmd", fn("magus.cmd", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("cmd", function("magus.cmd", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return emptyExecResult(), nil
 	}))
 
@@ -266,9 +266,9 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// record), so field access (magus\describe.project().projects, .affected) still
 	// resolves instead of blowing up on null.
 	m.MapSet("describe", dryDescribe())
-	m.MapSet("affected", fn("magus.affected", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("affected", function("magus.affected", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("base", vm.StrValue(""))
+		res.MapSet("base", vm.StringValue(""))
 		res.MapSet("changed", vm.ListValue(nil))
 		res.MapSet("seed", vm.ListValue(nil))
 		res.MapSet("filesBySeed", vm.NewMap())
@@ -280,16 +280,16 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
 	// internal/spell/gen/types.
-	m.MapSet("clean", fn("magus.clean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("clean", function("magus.clean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("removed", vm.ListValue(nil))
 		res.MapSet("tracked", vm.ListValue(nil))
 		res.MapSet("dryRun", vm.BoolValue(false))
 		return res, nil
 	}))
-	m.MapSet("doctor", fn("magus.doctor", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("doctor", function("magus.doctor", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("workspace", vm.StringValue(""))
 		res.MapSet("checks", vm.ListValue(nil))
 		summary := vm.NewMap()
 		summary.MapSet("ok", vm.IntValue(0))
@@ -298,24 +298,24 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("summary", summary)
 		return res, nil
 	}))
-	m.MapSet("attention", fn("magus.attention", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("attention", function("magus.attention", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("requests", vm.ListValue(nil))
-		res.MapSet("store", vm.StrValue(""))
+		res.MapSet("store", vm.StringValue(""))
 		return res, nil
 	}))
-	m.MapSet("diff", fn("magus.diff", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("diff", function("magus.diff", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("base", vm.StrValue(""))
+		res.MapSet("base", vm.StringValue(""))
 		res.MapSet("files", vm.ListValue(nil))
 		res.MapSet("seedProjects", vm.ListValue(nil))
 		res.MapSet("affectedProjects", vm.ListValue(nil))
 		res.MapSet("notes", vm.ListValue(nil))
 		return res, nil
 	}))
-	m.MapSet("impact", fn("magus.impact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("impact", function("magus.impact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("base", vm.StrValue(""))
+		res.MapSet("base", vm.StringValue(""))
 		res.MapSet("changedFileCount", vm.IntValue(0))
 		res.MapSet("changedFiles", vm.ListValue(nil))
 		res.MapSet("seedProjects", vm.ListValue(nil))
@@ -328,20 +328,20 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// A dry run performs no VCS probe, so nothing has drifted by construction. The
 	// shape still has to match the real verdict, so a magusfile reading .files or
 	// .drifted behaves the same under --dry-run as it does for real.
-	m.MapSet("diagnoseDrift", fn("magus.diagnoseDrift", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("diagnoseDrift", function("magus.diagnoseDrift", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("drifted", vm.BoolValue(false))
-		res.MapSet("code", vm.StrValue(""))
-		res.MapSet("message", vm.StrValue(""))
-		res.MapSet("url", vm.StrValue(""))
+		res.MapSet("code", vm.StringValue(""))
+		res.MapSet("message", vm.StringValue(""))
+		res.MapSet("url", vm.StringValue(""))
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
 	// insight nests a record per lens rather than a list, so each one is shaped
 	// too: a null lens would break `.ownership.projects` where an empty list does not.
-	m.MapSet("insight", fn("magus.insight", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("insight", function("magus.insight", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		stats := vm.NewMap()
-		stats.MapSet("definition", vm.StrValue(""))
+		stats.MapSet("definition", vm.StringValue(""))
 		stats.MapSet("nodeCount", vm.IntValue(0))
 		stats.MapSet("edgeCount", vm.IntValue(0))
 		stats.MapSet("gods", vm.ListValue(nil))
@@ -366,28 +366,28 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		// `.unreferenced.answer.verdict` would hit a member access on nothing, which is
 		// the same silent truncation the shaped stubs exist to avoid.
 		answer := vm.NewMap()
-		answer.MapSet("verdict", vm.StrValue(""))
-		answer.MapSet("reason", vm.StrValue(""))
+		answer.MapSet("verdict", vm.StringValue(""))
+		answer.MapSet("reason", vm.StringValue(""))
 		answer.MapSet("uncovered", vm.ListValue(nil))
 		unreferenced := vm.NewMap()
-		unreferenced.MapSet("definition", vm.StrValue(""))
+		unreferenced.MapSet("definition", vm.StringValue(""))
 		unreferenced.MapSet("symbols", vm.ListValue(nil))
 		unreferenced.MapSet("answer", answer)
 
 		duplication := vm.NewMap()
-		duplication.MapSet("definition", vm.StrValue(""))
+		duplication.MapSet("definition", vm.StringValue(""))
 		duplication.MapSet("groups", vm.ListValue(nil))
 		duplication.MapSet("answer", answer)
 
 		conformance := vm.NewMap()
-		conformance.MapSet("definition", vm.StrValue(""))
+		conformance.MapSet("definition", vm.StringValue(""))
 		conformance.MapSet("rows", vm.ListValue(nil))
 		conformance.MapSet("stale", vm.ListValue(nil))
 		conformance.MapSet("excluded", vm.IntValue(0))
 		conformance.MapSet("answer", answer)
 
 		modelTiers := vm.NewMap()
-		modelTiers.MapSet("definition", vm.StrValue(""))
+		modelTiers.MapSet("definition", vm.StringValue(""))
 		modelTiers.MapSet("rows", vm.ListValue(nil))
 
 		res := vm.NewMap()
@@ -403,10 +403,10 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("graphStats", stats)
 		return res, nil
 	}))
-	m.MapSet("where", fn("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.StrValue(""), nil
+	m.MapSet("where", function("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StringValue(""), nil
 	}))
-	m.MapSet("projectGraph", fn("magus.projectGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("projectGraph", function("magus.projectGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("nodes", vm.ListValue(nil))
 		res.MapSet("dependsOn", vm.NewMap())
@@ -418,47 +418,47 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// shaped-but-zero row rather than the one a script asked to record, the same "no
 	// real effect" rule diagnoseDrift documents above.
 	job := vm.NewMap()
-	job.MapSet("list", fn("magus.job.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	job.MapSet("list", function("magus.job.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("units", vm.ListValue(nil))
 		res.MapSet("overlaps", vm.ListValue(nil))
 		return res, nil
 	}))
-	job.MapSet("put", fn("magus.job.put", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	job.MapSet("put", function("magus.job.put", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("id", vm.StrValue(""))
-		res.MapSet("parent", vm.StrValue(""))
-		res.MapSet("goal", vm.StrValue(""))
-		res.MapSet("checkpoint", vm.StrValue(""))
+		res.MapSet("id", vm.StringValue(""))
+		res.MapSet("parent", vm.StringValue(""))
+		res.MapSet("goal", vm.StringValue(""))
+		res.MapSet("checkpoint", vm.StringValue(""))
 		res.MapSet("writePaths", vm.ListValue(nil))
 		res.MapSet("denyPaths", vm.ListValue(nil))
 		res.MapSet("readPaths", vm.ListValue(nil))
 		res.MapSet("dependsOn", vm.ListValue(nil))
-		res.MapSet("model", vm.StrValue(""))
-		res.MapSet("validation", vm.StrValue(""))
-		res.MapSet("state", vm.StrValue(""))
+		res.MapSet("model", vm.StringValue(""))
+		res.MapSet("validation", vm.StringValue(""))
+		res.MapSet("state", vm.StringValue(""))
 		res.MapSet("readOnly", vm.BoolValue(false))
 		res.MapSet("releases", vm.ListValue(nil))
 		res.MapSet("created", vm.IntValue(0))
 		res.MapSet("updated", vm.IntValue(0))
 		return res, nil
 	}))
-	job.MapSet("clear", fn("magus.job.clear", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	job.MapSet("clear", function("magus.job.clear", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.IntValue(0), nil
 	}))
 	m.MapSet("job", job)
 
 	// A dry run starts no service: acquire answers with an unowned lease, release does nothing.
 	service := vm.NewMap()
-	service.MapSet("acquire", fn("magus.service.acquire", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	service.MapSet("acquire", function("magus.service.acquire", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("key", vm.StrValue(""))
+		res.MapSet("key", vm.StringValue(""))
 		res.MapSet("owned", vm.BoolValue(false))
 		res.MapSet("brokered", vm.BoolValue(false))
-		res.MapSet("idle", vm.StrValue(""))
+		res.MapSet("idle", vm.StringValue(""))
 		return res, nil
 	}))
-	service.MapSet("release", fn("magus.service.release", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	service.MapSet("release", function("magus.service.release", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, nil
 	}))
 	m.MapSet("service", service)
@@ -466,7 +466,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// The knowledge-graph reads, output and vcs.checkpoint read real state the
 	// dry run never opens, so each answers with its snake_case record shaped and empty.
 	shaped := func(name string, fields map[string]vm.Value) vm.Value {
-		return fn(name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return function(name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 			res := vm.NewMap()
 			for k, v := range fields {
 				res.MapSet(k, v)
@@ -476,21 +476,21 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}
 	empty := vm.ListValue(nil)
 	m.MapSet("query", shaped("magus.query", map[string]vm.Value{
-		"definition": vm.StrValue(""), "query": vm.StrValue(""), "match_count": vm.IntValue(0),
+		"definition": vm.StringValue(""), "query": vm.StringValue(""), "match_count": vm.IntValue(0),
 		"matches": empty, "nodes": empty, "links": empty, "answer": vm.NewMap(),
 	}))
 	m.MapSet("explain", shaped("magus.explain", map[string]vm.Value{
-		"definition": vm.StrValue(""), "node": vm.NewMap(), "blast_radius": vm.NewMap(), "out": empty, "in": empty,
+		"definition": vm.StringValue(""), "node": vm.NewMap(), "blast_radius": vm.NewMap(), "out": empty, "in": empty,
 	}))
 	m.MapSet("path", shaped("magus.path", map[string]vm.Value{
-		"definition": vm.StrValue(""), "from": vm.StrValue(""), "to": vm.StrValue(""), "found": vm.BoolValue(false), "steps": empty,
+		"definition": vm.StringValue(""), "from": vm.StringValue(""), "to": vm.StringValue(""), "found": vm.BoolValue(false), "steps": empty,
 	}))
 	m.MapSet("refs", shaped("magus.refs", map[string]vm.Value{
-		"definition": vm.StrValue(""), "symbol": vm.StrValue(""), "file_count": vm.IntValue(0),
+		"definition": vm.StringValue(""), "symbol": vm.StringValue(""), "file_count": vm.IntValue(0),
 		"ref_count": vm.IntValue(0), "defs": empty, "refs": empty, "answer": vm.NewMap(),
 	}))
 	m.MapSet("stats", shaped("magus.stats", map[string]vm.Value{
-		"definition": vm.StrValue(""), "node_count": vm.IntValue(0), "edge_count": vm.IntValue(0),
+		"definition": vm.StringValue(""), "node_count": vm.IntValue(0), "edge_count": vm.IntValue(0),
 		"gods": empty, "orphans": empty, "coverage": empty,
 	}))
 	// indexed stays false: the dry run read no index, and a drift check has to refuse on that.
@@ -499,7 +499,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	// indexed stays false for the reason importGraph's does.
 	m.MapSet("symbolIndexDigest", shaped("magus.symbolIndexDigest", map[string]vm.Value{
-		"digest": vm.StrValue(""), "indexed": vm.BoolValue(false), "projects": empty, "gaps": empty,
+		"digest": vm.StringValue(""), "indexed": vm.BoolValue(false), "projects": empty, "gaps": empty,
 	}))
 	// No index was read, so there are no indexes to vouch for the rows and no rows: a gate
 	// reading this refuses on the missing index rather than passing on an empty list.
@@ -512,29 +512,29 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	// Empty for the reason precedents is.
 	m.MapSet("conformance", shaped("magus.conformance", map[string]vm.Value{
-		"definition": vm.StrValue(""), "rows": empty, "stale": empty, "excluded": vm.IntValue(0),
+		"definition": vm.StringValue(""), "rows": empty, "stale": empty, "excluded": vm.IntValue(0),
 		"answer": vm.NewMap(), "indexes": empty,
 	}))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
 	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.
 	firstStr := func(args []vm.Value) string {
-		if len(args) > 0 && args[0].IsStr() {
+		if len(args) > 0 && args[0].IsString() {
 			return args[0].AsString()
 		}
 		return ""
 	}
-	m.MapSet("dir", fn("magus.dir", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("dir", function("magus.dir", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		p := firstStr(args)
 		return bindgen.ObjectDir(types.Dir{Path: p, ID: fmt.Sprintf("%s:%s", types.KindDir, p)}), nil
 	}))
-	m.MapSet("dirs", fn("magus.dirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("dirs", function("magus.dirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
-	m.MapSet("layer", fn("magus.layer", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("layer", function("magus.layer", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
 	}))
-	m.MapSet("neighborhood", fn("magus.neighborhood", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("neighborhood", function("magus.neighborhood", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
 			Definition: types.KnowledgeNeighborhoodDefinition,
 			Focus:      firstStr(args),
@@ -542,13 +542,13 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
-		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),
-		"failed": vm.BoolValue(false), "duration_ms": vm.IntValue(0), "output": vm.StrValue(""),
+		"ref": vm.StringValue(""), "project": vm.StringValue(""), "target": vm.StringValue(""),
+		"failed": vm.BoolValue(false), "duration_ms": vm.IntValue(0), "output": vm.StringValue(""),
 	}))
 	vcs := vm.NewMap()
 	vcs.MapSet("checkpoint", shaped("magus.vcs.checkpoint", map[string]vm.Value{
-		"revision": vm.StrValue(""), "branch": vm.StrValue(""), "dirty": vm.BoolValue(false), "patchDigest": vm.StrValue(""),
-		"untrackedDigest": vm.StrValue(""), "vcs": vm.StrValue(""), "preserved": vm.StrValue(""),
+		"revision": vm.StringValue(""), "branch": vm.StringValue(""), "dirty": vm.BoolValue(false), "patchDigest": vm.StringValue(""),
+		"untrackedDigest": vm.StringValue(""), "vcs": vm.StringValue(""), "preserved": vm.StringValue(""),
 	}))
 	m.MapSet("vcs", vcs)
 
@@ -556,19 +556,19 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// into the WASM playground, so they answer as a line the parser cannot read. read and
 	// marks find no trail; mark echoes a zero row for the reason job.put does.
 	trail := vm.NewMap()
-	trail.MapSet("read", fn("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	trail.MapSet("read", function("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectTrail(types.Trail{}), nil
 	}))
-	trail.MapSet("shape", fn("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.StrValue(""), nil
+	trail.MapSet("shape", function("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StringValue(""), nil
 	}))
-	trail.MapSet("shapes", fn("magus.trail.shapes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	trail.MapSet("shapes", function("magus.trail.shapes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
-	trail.MapSet("marks", fn("magus.trail.marks", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	trail.MapSet("marks", function("magus.trail.marks", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
-	trail.MapSet("mark", fn("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	trail.MapSet("mark", function("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectTrailMark(types.TrailMark{}), nil
 	}))
 	m.MapSet("trail", trail)
@@ -576,7 +576,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	addPureMagus(m)
 
 	// The skill catalog is internal/agent's, which the sandbox does not link either.
-	m.MapSet("skills", fn("magus.skills", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("skills", function("magus.skills", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
 
@@ -584,7 +584,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
 	// satisfy the API parity guard, not because the dry run acts on them.
 	for _, name := range []string{"fatal", "pry", "bustCache"} {
-		m.MapSet(name, fn("magus."+name, retNull))
+		m.MapSet(name, function("magus."+name, retNull))
 	}
 
 	return m
@@ -596,9 +596,9 @@ func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, ni
 // definition/commits/since header and differ only in which lists they carry.
 func insightLens(listKeys ...string) vm.Value {
 	v := vm.NewMap()
-	v.MapSet("definition", vm.StrValue(""))
+	v.MapSet("definition", vm.StringValue(""))
 	v.MapSet("commits", vm.IntValue(0))
-	v.MapSet("since", vm.StrValue(""))
+	v.MapSet("since", vm.StringValue(""))
 	for _, k := range listKeys {
 		v.MapSet(k, vm.ListValue(nil))
 	}
@@ -652,7 +652,7 @@ func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 		// union, so it is a property of the whole list, not of one pattern in isolation.
 		var patterns []string
 		for _, a := range args {
-			if !a.IsStr() {
+			if !a.IsString() {
 				continue
 			}
 			patterns = append(patterns, a.AsString())
@@ -671,7 +671,7 @@ func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 		}
 		handles := make([]vm.Value, 0, len(matched))
 		for _, name := range matched {
-			handles = append(handles, fn(name, retNull))
+			handles = append(handles, function(name, retNull))
 		}
 		return vm.ListValue(handles), nil
 	}
@@ -685,7 +685,7 @@ func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, erro
 		// Normalize the query the way types.HasCharm does on the real path: the
 		// stored set is canonical, so a raw compare here answers differently than
 		// the run being traced.
-		name := types.Normalize(strArg(args, 0))
+		name := types.Normalize(stringArg(args, 0))
 		for _, c := range tr.charms {
 			if c == name {
 				return vm.BoolValue(true), nil
@@ -695,21 +695,21 @@ func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, erro
 	}
 }
 
-// buildCtx builds the magus.Context value a target receives as its first argument in a
+// buildContext builds the magus.Context value a target receives as its first argument in a
 // dry run. Its methods mirror the tracing magus.* members (needs/glob trace and expand
 // graph edges, has_charm reads the active charm set), so a ctx-form body traces exactly
 // as the old global form did. File declarations are inert: the dry graph reads the footprint
 // statically (describe.Extract), never by tracing the body.
-func buildCtx(tr *Tracer) vm.Value {
+func buildContext(tr *Tracer) vm.Value {
 	c := vm.NewMap()
-	c.MapSet("needs", fn("ctx.needs", traceNeeds(tr)))
-	c.MapSet("glob", fn("ctx.glob", traceGlob(tr)))
-	c.MapSet("hasCharm", fn("ctx.hasCharm", traceHasCharm(tr)))
+	c.MapSet("needs", function("ctx.needs", traceNeeds(tr)))
+	c.MapSet("glob", function("ctx.glob", traceGlob(tr)))
+	c.MapSet("hasCharm", function("ctx.hasCharm", traceHasCharm(tr)))
 	// A dry run narrows nothing, so it traces the whole-suite arm.
-	c.MapSet("narrowed", fn("ctx.narrowed", func(context.Context, []vm.Value) (vm.Value, error) { return vm.BoolValue(false), nil }))
-	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
-	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
-	c.MapSet("observes", fn("ctx.observes", retNull))
+	c.MapSet("narrowed", function("ctx.narrowed", func(context.Context, []vm.Value) (vm.Value, error) { return vm.BoolValue(false), nil }))
+	c.MapSet("readsFiles", function("ctx.readsFiles", retNull))
+	c.MapSet("writesFiles", function("ctx.writesFiles", retNull))
+	c.MapSet("observes", function("ctx.observes", retNull))
 	// Inert, like the file declarations above: a dry run holds nothing, and driving
 	// the resource fiber would run its acquire and release halves for real, which is
 	// exactly what a dry run promises not to do.
@@ -720,7 +720,7 @@ func buildCtx(tr *Tracer) vm.Value {
 	// closure argument, a region would hide graph edges. Settle before ctx.uses is
 	// used anywhere real. Sitting next to needs makes it MORE acute, not less: the
 	// pairing invites exactly the composition that goes untraced.
-	c.MapSet("uses", fn("ctx.uses", retNull))
+	c.MapSet("uses", function("ctx.uses", retNull))
 	return c
 }
 
@@ -731,7 +731,7 @@ func buildCtx(tr *Tracer) vm.Value {
 func captureConfigure(args []vm.Value) (string, vm.Value) {
 	path := "."
 	var opts = vm.Null
-	if len(args) >= 1 && args[0].IsStr() {
+	if len(args) >= 1 && args[0].IsString() {
 		path = args[0].AsString()
 		if len(args) >= 2 {
 			opts = args[1]
@@ -775,7 +775,7 @@ func checkUnknownKeys(ctx context.Context, m vm.Value, known []string, where str
 }
 
 // traceProject flattens the path and emitted options of a magus.project
-// call into the graph model. It mirrors parseBuzzProjectOpts in the real binding,
+// call into the graph model. It mirrors parseBuzzProjectOptions in the real binding,
 // including its unknown-key and bad-slots-value validation.
 func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) error {
 	p := Project{Path: path}
@@ -800,7 +800,7 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 			}
 			for _, dir := range v.MapKeys() {
 				nv, _ := v.MapGet(dir)
-				if !nv.IsStr() {
+				if !nv.IsString() {
 					return types.DiagnosticErrorf(types.LayerDeclarationInvalid,
 						`magus.project: "layers"[%q]: the layer name must be a string, got a %s`, dir, nv.Kind())
 				}
@@ -812,7 +812,7 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 		if v, ok := opts.MapGet("spells"); ok && v.IsList() {
 			for _, item := range v.ListItems() {
 				if item.IsMap() {
-					if nv, ok := item.MapGet("name"); ok && nv.IsStr() {
+					if nv, ok := item.MapGet("name"); ok && nv.IsString() {
 						p.Spells = append(p.Spells, nv.AsString())
 					}
 				}
@@ -857,7 +857,7 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 				// magusfile that `magus run` refuses to load.
 				if sv, ok := pv.MapGet("skip_cache"); ok {
 					var reason string
-					if sv.IsStr() {
+					if sv.IsString() {
 						reason = strings.TrimSpace(sv.AsString())
 					}
 					if reason == "" {
@@ -869,7 +869,7 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 				}
 				if hv, ok := pv.MapGet("human_only"); ok {
 					var reason string
-					if hv.IsStr() {
+					if hv.IsString() {
 						reason = strings.TrimSpace(hv.AsString())
 					}
 					if reason == "" {
@@ -903,16 +903,16 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 // and the handle metadata fields the real spell handle exposes.
 func buildSpell(name string, ops []string, tr *Tracer) vm.Value {
 	h := vm.NewMap()
-	h.MapSet("name", vm.StrValue(name))
+	h.MapSet("name", vm.StringValue(name))
 	for _, op := range ops {
-		h.MapSet(op, fn("spell."+op, func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		h.MapSet(op, function("spell."+op, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			tr.addOp("spell", op, spellArgsDetail(args))
 			return vm.Null, nil
 		}))
 	}
 	opsCopy := append([]string(nil), ops...)
-	h.MapSet("listTargets", fn("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return strsToList(opsCopy), nil
+	h.MapSet("listTargets", function("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return stringsToList(opsCopy), nil
 	}))
 	return h
 }
@@ -922,8 +922,8 @@ func buildSpell(name string, ops []string, tr *Tracer) vm.Value {
 // would, with /bin/sh as the default shell on every platform.
 func buildProc(tr *Tracer) vm.Value {
 	m := vm.NewMap()
-	m.MapSet("exec", fn("proc.exec", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if bin := strArg(args, 0); bin != "" {
+	m.MapSet("exec", function("proc.exec", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if bin := stringArg(args, 0); bin != "" {
 			var rest []string
 			if len(args) > 1 {
 				rest = valToStrings(args[1])
@@ -932,30 +932,30 @@ func buildProc(tr *Tracer) vm.Value {
 		}
 		return bindgen.ObjectExecResult(types.ExecResult{OK: true}), nil
 	}))
-	m.MapSet("shell", fn("proc.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		shell := cmp.Or(strArg(args, 1), "/bin/sh")
-		return bindgen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", strArg(args, 0)}}), nil
+	m.MapSet("shell", function("proc.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		shell := cmp.Or(stringArg(args, 1), "/bin/sh")
+		return bindgen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", stringArg(args, 0)}}), nil
 	}))
 	return m
 }
 
-func strsToList(ss []string) vm.Value {
+func stringsToList(ss []string) vm.Value {
 	items := make([]vm.Value, len(ss))
 	for i, s := range ss {
-		items[i] = vm.StrValue(s)
+		items[i] = vm.StringValue(s)
 	}
 	return vm.ListValue(items)
 }
 
 // valToStrings reads a Buzz str or [str] into a Go slice.
 func valToStrings(v vm.Value) []string {
-	if v.IsStr() {
+	if v.IsString() {
 		return []string{v.AsString()}
 	}
 	if v.IsList() {
 		var out []string
 		for _, item := range v.ListItems() {
-			if item.IsStr() {
+			if item.IsString() {
 				out = append(out, item.AsString())
 			}
 		}
@@ -964,9 +964,9 @@ func valToStrings(v vm.Value) []string {
 	return nil
 }
 
-// strArg returns args[i] as a string, or fallback if it is absent or not a str.
-func strArg(args []vm.Value, i int) string {
-	if i < len(args) && args[i].IsStr() {
+// stringArg returns args[i] as a string, or fallback if it is absent or not a str.
+func stringArg(args []vm.Value, i int) string {
+	if i < len(args) && args[i].IsString() {
 		return args[i].AsString()
 	}
 	return ""
@@ -986,8 +986,8 @@ func spellArgsDetail(args []vm.Value) string {
 // magus.* members return; a dry-run stub reports an empty success.
 func emptyExecResult() vm.Value {
 	res := vm.NewMap()
-	res.MapSet("stdout", vm.StrValue(""))
-	res.MapSet("stderr", vm.StrValue(""))
+	res.MapSet("stdout", vm.StringValue(""))
+	res.MapSet("stderr", vm.StringValue(""))
 	res.MapSet("code", vm.IntValue(0))
 	res.MapSet("success", vm.BoolValue(true))
 	return res
@@ -1002,43 +1002,43 @@ func dryDescribe() vm.Value {
 	d := vm.NewMap()
 	emptyList := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.ListValue(nil), nil }
 	for _, name := range []string{"module", "spell", "charm", "target", "evaluatedTarget", "evaluatedProject", "workspace", "rule", "harness", "mcpTool"} {
-		d.MapSet(name, fn("magus.describe."+name, emptyList))
+		d.MapSet(name, function("magus.describe."+name, emptyList))
 	}
-	d.MapSet("file", fn("magus.describe.file", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	d.MapSet("file", function("magus.describe.file", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("definition", vm.StrValue(""))
+		res.MapSet("definition", vm.StringValue(""))
 		res.MapSet("count", vm.IntValue(0))
 		res.MapSet("files", vm.ListValue(nil))
 		res.MapSet("overlaps", vm.ListValue(nil))
 		return res, nil
 	}))
-	d.MapSet("project", fn("magus.describe.project", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	d.MapSet("project", function("magus.describe.project", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("workspace", vm.StringValue(""))
 		res.MapSet("count", vm.IntValue(0))
 		res.MapSet("projects", vm.ListValue(nil))
 		return res, nil
 	}))
-	d.MapSet("graph", fn("magus.describe.graph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	d.MapSet("graph", function("magus.describe.graph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("projects", vm.ListValue(nil))
 		return res, nil
 	}))
-	d.MapSet("graphMarkdown", fn("magus.describe.graphMarkdown", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.StrValue(""), nil
+	d.MapSet("graphMarkdown", function("magus.describe.graphMarkdown", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StringValue(""), nil
 	}))
 	// tool probes and fetches in the live host; here it is the empty report with its
 	// lifecycle unwired.
-	d.MapSet("tool", fn("magus.describe.tool", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	d.MapSet("tool", function("magus.describe.tool", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		lifecycle := vm.NewMap()
-		lifecycle.MapSet("provider", vm.StrValue(""))
-		lifecycle.MapSet("state", vm.StrValue(types.LifecycleUnwired))
+		lifecycle.MapSet("provider", vm.StringValue(""))
+		lifecycle.MapSet("state", vm.StringValue(types.LifecycleUnwired))
 		lifecycle.MapSet("sources", vm.ListValue(nil))
-		lifecycle.MapSet("asOf", vm.StrValue(""))
-		lifecycle.MapSet("fetchedAt", vm.StrValue(""))
-		lifecycle.MapSet("detail", vm.StrValue(""))
+		lifecycle.MapSet("asOf", vm.StringValue(""))
+		lifecycle.MapSet("fetchedAt", vm.StringValue(""))
+		lifecycle.MapSet("detail", vm.StringValue(""))
 		res := vm.NewMap()
-		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("workspace", vm.StringValue(""))
 		res.MapSet("count", vm.IntValue(0))
 		res.MapSet("lifecycle", lifecycle)
 		res.MapSet("tools", vm.ListValue(nil))
@@ -1047,14 +1047,14 @@ func dryDescribe() vm.Value {
 	return d
 }
 
-// firstListStr returns the first string element of the first argument when it is a
+// firstListString returns the first string element of the first argument when it is a
 // list (magus.run's argv), else "".
-func firstListStr(args []vm.Value) string {
+func firstListString(args []vm.Value) string {
 	if len(args) == 0 || !args[0].IsList() {
 		return ""
 	}
 	items := args[0].ListItems()
-	if len(items) == 0 || !items[0].IsStr() {
+	if len(items) == 0 || !items[0].IsString() {
 		return ""
 	}
 	return items[0].AsString()
@@ -1104,11 +1104,11 @@ func normalizeTarget(name string) string {
 // rather than a share of the whole module.
 func addPureMagus(m vm.Value) {
 	// The one canonicalizer for every entity name: target, charm, spell op.
-	m.MapSet("canonicalName", fn("magus.canonicalName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() {
+	m.MapSet("canonicalName", function("magus.canonicalName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("magus.canonicalName: expected a name string")
 		}
-		return vm.StrValue(types.Normalize(args[0].AsString())), nil
+		return vm.StringValue(types.Normalize(args[0].AsString())), nil
 	}))
 }
 
@@ -1153,7 +1153,7 @@ func secretGrantStubArg(method string, args []vm.Value) error {
 		if !ok {
 			return ""
 		}
-		if !v.IsStr() {
+		if !v.IsString() {
 			if bad == nil {
 				bad = fmt.Errorf(`magus\secret.%s: field %q must be a str`, method, name)
 			}

@@ -18,20 +18,20 @@ func RegisterHex(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("encode", vm.DirectValue("hex.encode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		data := ffi.Str(bzArgs, 0)
+		data := ffi.String(bzArgs, 0)
 		ret0, err := hex.HexEncode(ctx, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("decode", vm.DirectValue("hex.decode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := hex.HexDecode(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

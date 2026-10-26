@@ -106,16 +106,16 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 //
 // It is judged as Run is, once, as `magus affected ci`, the verb that sizes a gate.
 func (m *Magus) RunGate(ctx context.Context, rep types.RiskReport, opts ...RunOption) error {
-	ctx = applyRunOpts(opts).observed(ctx)
+	ctx = applyRunOptions(opts).observed(ctx)
 	lines, err := affectedLine(types.TargetCI, "")
 	if err != nil {
 		return err
 	}
-	if err := m.judgeRun(ctx, applyRunOpts(opts), lines); err != nil {
+	if err := m.judgeRun(ctx, applyRunOptions(opts), lines); err != nil {
 		return err
 	}
 	for _, r := range sizedRuns(rep) {
-		o := applyRunOpts(opts)
+		o := applyRunOptions(opts)
 		if r.narrowing != nil {
 			n := *r.narrowing
 			o.narrowing = &n

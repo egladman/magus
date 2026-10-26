@@ -772,21 +772,21 @@ func TestCheckVCSBaseRef(t *testing.T) {
 	})
 
 	t.Run("valid HEAD ref", func(t *testing.T) {
-		root := testkit.NewRepo(t, map[string]string{"README": "hello"}).Root()
+		root := testkit.NewRepository(t, map[string]string{"README": "hello"}).Root()
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
 		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
 		assert.Equal(t, types.CheckOK, got.Status, got.Details)
 	})
 
 	t.Run("bogus ref fails", func(t *testing.T) {
-		root := testkit.NewRepo(t, map[string]string{"README": "hello"}).Root()
+		root := testkit.NewRepository(t, map[string]string{"README": "hello"}).Root()
 		t.Setenv("MAGUS_VCS_BASE_REF", "refs/does/not/exist")
 		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
 		assert.Equal(t, types.CheckFail, got.Status)
 	})
 
 	t.Run("detached HEAD ok when base_ref resolves", func(t *testing.T) {
-		repo := testkit.NewRepo(t, map[string]string{"README": "hello"})
+		repo := testkit.NewRepository(t, map[string]string{"README": "hello"})
 		repo.Git("checkout", "--detach", "HEAD")
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
 		got := checkVCSBaseRef(context.Background(), repo.Root(), types.VCSOptions{})

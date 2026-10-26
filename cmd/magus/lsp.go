@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
-// lspCmd implements `magus buzz lsp`: a stdio Language Server that exposes the
+// lspCommand implements `magus buzz lsp`: a stdio Language Server that exposes the
 // completion, hover, and signature-help analysis in internal/langservice to any
 // editor with a generic LSP client. The analysis engine already exists and is
 // tested; this is the transport that lets an editor reach it, so magusfile
@@ -29,7 +29,7 @@ import (
 // It speaks JSON-RPC 2.0 over the LSP base protocol (Content-Length framed) on
 // stdin/stdout and needs no workspace, config, or server: every request is
 // answered from the document text the editor sends.
-func lspCmd(_ context.Context, args []string) error {
+func lspCommand(_ context.Context, args []string) error {
 	fs := flag.NewFlagSet("buzz lsp", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {

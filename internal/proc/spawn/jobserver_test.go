@@ -175,14 +175,14 @@ func TestSeatJobserverSizesThePoolToTheSlots(t *testing.T) {
 	one, closeOne, err := SeatJobserver(ctx, 1)
 	require.NoError(t, err)
 	closeOne()
-	assert.Nil(t, jobserverFrom(one), "a one-slot seat withdraws the pool it inherited")
+	assert.Nil(t, jobserverFromContext(one), "a one-slot seat withdraws the pool it inherited")
 
 	if !jobserverSupported(t) {
 		return
 	}
 	four, closeFour, err := SeatJobserver(ctx, 4)
 	require.NoError(t, err)
-	j := jobserverFrom(four)
+	j := jobserverFromContext(four)
 	require.NotNil(t, j)
 	assert.NotSame(t, outer, j)
 	assert.Equal(t, 3, j.tokens)

@@ -130,7 +130,7 @@ func TestDecodeJobResultUsesTheVersionedStrictDecoder(t *testing.T) {
 // before writing it: a made-up revision raises, a real abbreviated one is stored in full.
 func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
 	testkit.Isolate(t)
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root, head := repo.Root(), repo.Head()
 
 	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: root}
@@ -151,11 +151,11 @@ export fun put(id: str, checkpoint: str) > str !> any {
 	require.True(t, ok, "exported Buzz entrypoint is missing")
 
 	const madeUp = "34b41fd546ba8fa9c71a6a64e4ea0f3e93d5a7bc"
-	_, err := sess.CallValue(ctx, put, []vm.Value{vm.StrValue("made-up"), vm.StrValue(madeUp)})
+	_, err := sess.CallValue(ctx, put, []vm.Value{vm.StringValue("made-up"), vm.StringValue(madeUp)})
 	require.ErrorContains(t, err, madeUp)
 	require.ErrorContains(t, err, "`magus vcs checkpoint -o name`")
 
-	got, err := sess.CallValue(ctx, put, []vm.Value{vm.StrValue("real"), vm.StrValue(head[:9])})
+	got, err := sess.CallValue(ctx, put, []vm.Value{vm.StringValue("real"), vm.StringValue(head[:9])})
 	require.NoError(t, err)
 	assert.Equal(t, head, got.AsString())
 }

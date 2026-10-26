@@ -22,7 +22,7 @@ func collectLocal(t *testing.T) (observability.Provider, *Collector) {
 	p, err := New(context.Background(), observability.Config{LocalCollect: true, ServiceName: "magus-test"})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Shutdown(context.Background()) })
-	coll, ok := CollectorFrom(p)
+	coll, ok := ManualCollector(p)
 	require.True(t, ok, "expected a local collector")
 	return p, coll
 }

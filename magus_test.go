@@ -247,7 +247,7 @@ func TestWithObserverRidesTheRun(t *testing.T) {
 			builds++
 		}
 	}).Return().Maybe()
-	ctx := applyRunOpts([]RunOption{WithObserver(obs)}).observed(context.Background())
+	ctx := applyRunOptions([]RunOption{WithObserver(obs)}).observed(context.Background())
 	_, err = m.AffectedFromPaths(ctx, []string{"magusfile.buzz"})
 	require.NoError(t, err)
 	assert.NotZero(t, builds, "WithObserver: no build observed under the run's context")
@@ -566,16 +566,16 @@ func b64Pub(t *testing.T) (pub string, seed string) {
 // TestRemoteCacheRequiresTrustSet is the paranoid root: a wired remote backend
 // with no declared trust set must be a hard error, not a silent unverified cache.
 func TestRemoteCacheRequiresTrustSet(t *testing.T) {
-	_, err := remoteCacheSigningOpts(nil, false, "", "")
+	_, err := remoteCacheSigningOptions(nil, false, "", "")
 	assert.Error(t, err, "empty trust set was accepted; a remote cache must require trusted_keys")
-	_, err = remoteCacheSigningOpts([]string{}, false, "", "")
+	_, err = remoteCacheSigningOptions([]string{}, false, "", "")
 	assert.Error(t, err, "empty trust-set slice was accepted")
 }
 
 // TestRemoteCacheInsecureSkipsTrustSet: the explicit opt-out accepts a wired
 // backend with no trust set and no signing key, yielding the insecure option.
 func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
-	opts, err := remoteCacheSigningOpts(nil, true, "single-repo CI cache; nothing outside this repo can write it", "")
+	opts, err := remoteCacheSigningOptions(nil, true, "single-repo CI cache; nothing outside this repo can write it", "")
 	require.NoError(t, err, "insecure mode rejected empty trust set")
 	assert.Len(t, opts, 1, "insecure: want 1 opt (WithInsecureRemote)")
 }
@@ -585,11 +585,11 @@ func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
 // satisfies it, because an existing config it breaks has to be repairable from the
 // message alone.
 func TestRemoteCacheInsecureNeedsAReason(t *testing.T) {
-	_, err := remoteCacheSigningOpts(nil, true, "", "")
+	_, err := remoteCacheSigningOptions(nil, true, "", "")
 	require.Error(t, err, "a bare cache.remote.insecure switched off signature verification with nothing recorded")
 	assert.Contains(t, err.Error(), "cache.remote.insecure_reason", "the refusal must name the exact key that satisfies it")
 
-	_, err = remoteCacheSigningOpts(nil, true, "   ", "")
+	_, err = remoteCacheSigningOptions(nil, true, "   ", "")
 	assert.Error(t, err, "whitespace is not prose")
 }
 
@@ -598,11 +598,11 @@ func TestRemoteCacheInsecureNeedsAReason(t *testing.T) {
 func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 	pub, seed := b64Pub(t)
 
-	opts, err := remoteCacheSigningOpts([]string{pub}, false, "", "")
+	opts, err := remoteCacheSigningOptions([]string{pub}, false, "", "")
 	require.NoError(t, err, "valid trust set rejected")
 	assert.Len(t, opts, 1, "verify-only: want 1 opt (trusted keys only)")
 
-	opts, err = remoteCacheSigningOpts([]string{pub}, false, "", seed)
+	opts, err = remoteCacheSigningOptions([]string{pub}, false, "", seed)
 	require.NoError(t, err, "valid trust set + signing key rejected")
 	assert.Len(t, opts, 2, "signing: want 2 opts (trusted keys + signing key)")
 }
@@ -610,10 +610,10 @@ func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 // TestRemoteCacheRejectsMalformedKeys: bad base64 in either the trust set or the
 // signing key is a clear configuration error, not a silent fallback.
 func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
-	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false, "", "")
+	_, err := remoteCacheSigningOptions([]string{"not!base64!"}, false, "", "")
 	assert.Error(t, err, "malformed trusted key was accepted")
 	pub, _ := b64Pub(t)
-	_, err = remoteCacheSigningOpts([]string{pub}, false, "", "not!base64!")
+	_, err = remoteCacheSigningOptions([]string{pub}, false, "", "not!base64!")
 	assert.Error(t, err, "malformed signing key was accepted")
 }
 
@@ -1017,7 +1017,7 @@ func TestStatusLinePath(t *testing.T) {
 // A brand-new file is the thing a reviewer most wants to see, and a tree-against-index diff
 // misses it entirely. This is the regression test for that gap.
 func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"tracked.txt": "one\ntwo\n"})
+	repo := testkit.NewRepository(t, map[string]string{"tracked.txt": "one\ntwo\n"})
 
 	// One modified tracked file and one brand-new untracked file.
 	repo.Write("tracked.txt", "one\nCHANGED\n")
@@ -1039,7 +1039,7 @@ func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
 }
 
 func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"seed.txt": "x\n"})
+	repo := testkit.NewRepository(t, map[string]string{"seed.txt": "x\n"})
 
 	repo.Write("blob.bin", string([]byte{0x00, 0x01, 0x02, 0x00}))
 
@@ -1061,7 +1061,7 @@ func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
 func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 	// Seed a file with NO trailing newline, then change it: git renders "\ No newline at end
 	// of file" and the diff's own last line is unterminated.
-	repo := testkit.NewRepo(t, map[string]string{"nonewline.txt": "one"})
+	repo := testkit.NewRepository(t, map[string]string{"nonewline.txt": "one"})
 	repo.Write("nonewline.txt", "two")
 	repo.Write("brand-new.txt", "fresh\n")
 
@@ -1085,7 +1085,7 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 
 // A clean tree has nothing to review, and must not synthesize a patch out of ignored files.
 func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"a.txt": "x\n"})
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "x\n"})
 
 	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)

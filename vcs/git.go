@@ -1461,14 +1461,14 @@ var gitDriftHooks = []string{"post-commit", "pre-push"}
 // install cannot pair one's attributes with the other's registration. A root outside any
 // git repository is an error.
 func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) error {
-	paths, ok, err := resolveGitRepoPaths(ctx, root)
+	paths, ok, err := resolveGitRepositoryPaths(ctx, root)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("vcs: install merge driver: %s is not in a git repository", root)
 	}
-	return withRepoLock(ctx, paths.commonDir, func() error {
+	return withRepositoryLock(ctx, paths.commonDir, func() error {
 		j := WriteJudge(ctx, root)
 		if _, err := writeManagedSection(root, filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(globs), configFile, j); err != nil {
 			return err
@@ -1720,7 +1720,7 @@ func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error)
 // missing, since Ensure overwrites it. Nil means complete, or root is not in a git
 // repository. A torn managed section is an error.
 func MissingDiffDrivers(ctx context.Context, root string) ([]string, error) {
-	if _, ok, err := resolveGitRepoPaths(ctx, root); err != nil || !ok {
+	if _, ok, err := resolveGitRepositoryPaths(ctx, root); err != nil || !ok {
 		return nil, err
 	}
 	path := filepath.Join(root, ".gitattributes")
@@ -2119,9 +2119,9 @@ type gitRepoPaths struct {
 	commonDir string
 }
 
-// resolveGitRepoPaths resolves root's gitRepoPaths in one git call. ok is false when root is
+// resolveGitRepositoryPaths resolves root's gitRepoPaths in one git call. ok is false when root is
 // not inside a git repository; any other failure, cancellation included, is an error.
-func resolveGitRepoPaths(ctx context.Context, root string) (paths gitRepoPaths, ok bool, err error) {
+func resolveGitRepositoryPaths(ctx context.Context, root string) (paths gitRepoPaths, ok bool, err error) {
 	// The C locale keeps git's "not a git repository" wording what the test below reads.
 	cmd := gitExec(ctx, root, gitOpts{Env: []string{"LC_ALL=C"}}, "rev-parse", "--git-path", "hooks", "--git-common-dir")
 	var stderr bytes.Buffer
@@ -2153,7 +2153,7 @@ func resolveGitRepoPaths(ctx context.Context, root string) (paths gitRepoPaths, 
 // named hook of root's repository under one repository lock, and returns the hooks it
 // changed. A root outside any git repository installs nothing.
 func installGitHookSections(ctx context.Context, root string, names []string, m managedMarkers, body func(name string) string) ([]string, error) {
-	paths, ok, err := resolveGitRepoPaths(ctx, root)
+	paths, ok, err := resolveGitRepositoryPaths(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -2173,7 +2173,7 @@ func installGitHookSections(ctx context.Context, root string, names []string, m 
 	}
 	var installed []string
 	j := WriteJudge(ctx, root)
-	err = withRepoLock(ctx, paths.commonDir, func() error {
+	err = withRepositoryLock(ctx, paths.commonDir, func() error {
 		for _, name := range names {
 			changed, err := writeManagedSection(root, filepath.Join(paths.hooksDir, name), m, body(name), hookFile, j)
 			if err != nil {
@@ -2263,7 +2263,7 @@ type GitRefreshHook struct {
 // is installed. A root outside any git repository is [types.ErrVCSUnsupported]: another
 // VCS keeps its hooks elsewhere, so "none installed" would be a guess.
 func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, ok bool, err error) {
-	paths, inRepo, err := resolveGitRepoPaths(ctx, root)
+	paths, inRepo, err := resolveGitRepositoryPaths(ctx, root)
 	if err != nil {
 		return GitRefreshHook{}, false, err
 	}
@@ -2324,7 +2324,7 @@ func gitDriftHookBody(name, command string) string {
 // [types.ErrVCSUnsupported].
 func ReadGitDriftHook(ctx context.Context, root string) (command string, ok bool, err error) {
 	const hook = "post-commit"
-	paths, inRepo, err := resolveGitRepoPaths(ctx, root)
+	paths, inRepo, err := resolveGitRepositoryPaths(ctx, root)
 	if err != nil {
 		return "", false, err
 	}

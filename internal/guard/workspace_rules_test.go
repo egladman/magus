@@ -35,7 +35,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // beside it, and returns the rules for a caller that records where they came from.
 func TestNewDependenciesLoadsTheWorkspaceRules(t *testing.T) {
 	testkit.Isolate(t)
-	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": shellAndCommandRules})
+	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": shellAndCommandRules})
 
 	deps, rules := guard.NewDependencies(t.Context(), guard.Wiring{Root: repo.Root()})
 	require.NotNil(t, rules)
@@ -56,7 +56,7 @@ func TestNewDependenciesLoadsTheWorkspaceRules(t *testing.T) {
 // on the dependencies and the approved sources still judge.
 func TestNewDependenciesReportsAMagusfileThatDoesNotLoad(t *testing.T) {
 	testkit.Isolate(t)
-	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": shellAndCommandRules})
+	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": shellAndCommandRules})
 	repo.Magusfile("import \"magus\";\n\nmagus\\guard.shell(\n")
 
 	deps, rules := guard.NewDependencies(t.Context(), guard.Wiring{Root: repo.Root()})

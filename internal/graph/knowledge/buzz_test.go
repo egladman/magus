@@ -108,7 +108,7 @@ export fun f(ctx: magus\Context, args: [str]) > void {}
 // 2026-09-23: one .buzz file under the ignored dist/ put itself second in the file row
 // and its hub function first in the function row.
 func TestSourceWalksSkipVCSIgnored(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	root := r.Root()
 	r.Write(".gitignore", "/dist/\n")
 	r.Write("kept.buzz", "fun kept() > void {}\n")

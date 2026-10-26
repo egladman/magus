@@ -144,7 +144,7 @@ func (s *Service) StreamEvents(ctx context.Context, req *connect.Request[viewerv
 	defer ticker.Stop()
 	var offset int64
 	for {
-		events, next, err := s.runs.InvocationEventsFrom(inv, offset)
+		events, next, err := s.runs.InvocationEventsSince(inv, offset)
 		if err != nil {
 			// On the first read the run is unknown; later it means the journal aged out from under
 			// the stream. Both leave the caller with no run to follow.

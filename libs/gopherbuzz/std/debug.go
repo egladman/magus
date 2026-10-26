@@ -14,8 +14,8 @@ import (
 // https://buzz-lang.dev/0.5.0/reference/std/debug.html
 func debugModule() vm.Value {
 	m := mod()
-	m.MapSet("dump", fn("debug.dump", debugDump))
-	m.MapSet("ast", fn("debug.ast", debugAST))
+	m.MapSet("dump", function("debug.dump", debugDump))
+	m.MapSet("ast", function("debug.ast", debugAST))
 	return m
 }
 
@@ -29,7 +29,7 @@ func debugDump(_ context.Context, args []vm.Value) (vm.Value, error) {
 }
 
 func debugAST(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("debug.ast: requires a str source argument")
 	}
 	prog, err := buzz.Parse(args[0].AsString())
@@ -44,7 +44,7 @@ func debugAST(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if err != nil {
 		return vm.Null, fmt.Errorf("debug.ast: %w", err)
 	}
-	return vm.StrValue(string(b)), nil
+	return vm.StringValue(string(b)), nil
 }
 
 func nodeToMap(n ast.Node) any {

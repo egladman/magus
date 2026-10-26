@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func cmdFunc(name, params string) types.KnowledgeSymbol {
+func commandFunc(name, params string) types.KnowledgeSymbol {
 	return goSym("cmd/magus", fmt.Sprintf("%s().", name), name, "Function", fmt.Sprintf("func %s(%s) error", name, params), fmt.Sprintf("cmd/magus/%s.go", name))
 }
 
@@ -17,15 +17,15 @@ func cmdFunc(name, params string) types.KnowledgeSymbol {
 // writer they report to, and it takes them the other way round.
 func TestConformanceFindsParameterOrderDrift(t *testing.T) {
 	peers := []types.KnowledgeSymbol{
-		cmdFunc("applyDoctorFixes", "ctx context.Context, root string, out io.Writer"),
-		cmdFunc("checkpointCmd", "ctx context.Context, root string, args []string, out io.Writer"),
-		cmdFunc("notifyCmd", "ctx context.Context, root string, out io.Writer"),
-		cmdFunc("printPlan", "root string, out io.Writer"),
-		cmdFunc("writeReport", "root string, name string, out io.Writer"),
+		commandFunc("applyDoctorFixes", "ctx context.Context, root string, out io.Writer"),
+		commandFunc("checkpointCmd", "ctx context.Context, root string, args []string, out io.Writer"),
+		commandFunc("notifyCmd", "ctx context.Context, root string, out io.Writer"),
+		commandFunc("printPlan", "root string, out io.Writer"),
+		commandFunc("writeReport", "root string, name string, out io.Writer"),
 		// Takes neither name, so it is no evidence either way.
-		cmdFunc("unrelated", "ctx context.Context, w io.Writer"),
+		commandFunc("unrelated", "ctx context.Context, w io.Writer"),
 	}
-	subj := cmdFunc("jobWatchFiles", "ctx context.Context, out io.Writer, root string, plan func() []types.Job")
+	subj := commandFunc("jobWatchFiles", "ctx context.Context, out io.Writer, root string, plan func() []types.Job")
 	g := namingGraph(t, append(peers, subj))
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
@@ -57,18 +57,18 @@ func TestConformanceFindsParameterOrderDriftInTypeScript(t *testing.T) {
 
 func TestConformanceSilentOnUndecidedParameterOrder(t *testing.T) {
 	peers := []types.KnowledgeSymbol{
-		cmdFunc("a1", "root string, out io.Writer"),
-		cmdFunc("a2", "root string, out io.Writer"),
-		cmdFunc("a3", "root string, out io.Writer"),
-		cmdFunc("a4", "root string, out io.Writer"),
-		cmdFunc("a5", "root string, out io.Writer"),
-		cmdFunc("b1", "out io.Writer, root string"),
-		cmdFunc("b2", "out io.Writer, root string"),
-		cmdFunc("b3", "out io.Writer, root string"),
-		cmdFunc("b4", "out io.Writer, root string"),
+		commandFunc("a1", "root string, out io.Writer"),
+		commandFunc("a2", "root string, out io.Writer"),
+		commandFunc("a3", "root string, out io.Writer"),
+		commandFunc("a4", "root string, out io.Writer"),
+		commandFunc("a5", "root string, out io.Writer"),
+		commandFunc("b1", "out io.Writer, root string"),
+		commandFunc("b2", "out io.Writer, root string"),
+		commandFunc("b3", "out io.Writer, root string"),
+		commandFunc("b4", "out io.Writer, root string"),
 	}
-	subj := cmdFunc("c1", "out io.Writer, root string")
-	other := cmdFunc("c2", "root string, out io.Writer")
+	subj := commandFunc("c1", "out io.Writer, root string")
+	other := commandFunc("c2", "root string, out io.Writer")
 	g := namingGraph(t, append(peers, subj, other))
 
 	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj, other)}),

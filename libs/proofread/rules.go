@@ -98,7 +98,7 @@ func fillerExempt(text string, at []int) bool {
 
 	word := text[at[0]:at[1]]
 	next := strings.TrimRight(strings.Fields(text[at[1]:] + " .")[0], ".,;:!?)")
-	prev := prevWord(text, at[0])
+	prev := previousWord(text, at[0])
 
 	if mentioned(text, at[0]) || (comparing[prev] && selling.MatchString(word)) {
 		return true
@@ -113,7 +113,7 @@ func fillerExempt(text string, at []int) bool {
 		return !merely(text, at[0]) || next == "as" || strings.HasSuffix(next, "ed") ||
 			strings.HasPrefix(next, "#") || strings.IndexFunc(next, unicode.IsDigit) == 0
 	case "very":
-		return sameLead[prevWord(text, at[0])] || measured[strings.ToLower(next)]
+		return sameLead[previousWord(text, at[0])] || measured[strings.ToLower(next)]
 	case "actually":
 		return word == "actually"
 	case "really":
@@ -128,7 +128,7 @@ var (
 	only = wordSet("this", "that", "the", "these", "those", "one", "a", "not")
 
 	// intensified are the words before a "really" that make it an intensifier:
-	// a pronoun or what prevWord leaves of a negation.
+	// a pronoun or what previousWord leaves of a negation.
 	intensified = wordSet("i", "we", "you", "they", "t", "not")
 
 	// comparing are the words before a selling word that make it a comparison.
@@ -152,7 +152,7 @@ func mentioned(text string, at int) bool {
 // merely reports whether the word before at makes a "just" there mean merely:
 // a copula, or a negated one.
 func merely(text string, at int) bool {
-	prev := prevWord(text, at)
+	prev := previousWord(text, at)
 	if prev != "t" {
 		return mereLead[prev]
 	}

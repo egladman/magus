@@ -36,7 +36,7 @@ func (r *runner) checkConformanceRatchet(_ []*types.Project) types.Check {
 	if !ok {
 		return unmeasured("this workspace exposes no conformance lens")
 	}
-	out, err := analyzer.Conformance(r.runCtx())
+	out, err := analyzer.Conformance(r.runContext())
 	if err != nil {
 		// The lens errors on a policy it cannot honor, a ratchet that fails Validate among
 		// them, and a misconfiguration is a failure rather than a quiet pass.
@@ -57,7 +57,7 @@ func (r *runner) checkConformanceRatchet(_ []*types.Project) types.Check {
 	}
 
 	conformance := r.opts.cfg.Knowledge.Conformance
-	ratchet, readErr := r.readConformanceRatchet(conformance.Ratchet)
+	ratchet, readError := r.readConformanceRatchet(conformance.Ratchet)
 
 	var details []string
 	var tighter int
@@ -73,8 +73,8 @@ func (r *runner) checkConformanceRatchet(_ []*types.Project) types.Check {
 		details = append(details, fmt.Sprintf("%s: known %s entry no longer violates; magus never edits the record, so delete by hand or with a workspace target: %s",
 			conformanceRatchetAt(conformance.Ratchet, k.Line), k.Metric, strings.Join(k.Items, ", ")))
 	}
-	if readErr != nil && len(details) > 0 {
-		details = append(details, "ratchet lines unavailable: "+readErr.Error())
+	if readError != nil && len(details) > 0 {
+		details = append(details, "ratchet lines unavailable: "+readError.Error())
 	}
 
 	if len(details) == 0 {

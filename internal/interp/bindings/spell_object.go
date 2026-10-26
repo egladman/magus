@@ -17,9 +17,9 @@ import (
 // magusfile can use: the name, the globs, and a callable per op.
 func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h := vm.NewMap()
-	h.MapSet("name", vm.StrValue(m.Name))
-	h.MapSet("needs", strSliceToBuzzList(m.Needs))
-	h.MapSet("provides", strSliceToBuzzList(m.Provides))
+	h.MapSet("name", vm.StringValue(m.Name))
+	h.MapSet("needs", stringSliceToBuzzList(m.Needs))
+	h.MapSet("provides", stringSliceToBuzzList(m.Provides))
 	bindBuzzTargetDispatch(h, m.Name, m.Ops)
 	return h
 }
@@ -36,7 +36,7 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
 func bindBuzzTargetDispatch(h vm.Value, spellName string, targets map[string]spells.Op) {
 	h.MapSet("listTargets", vm.DirectValue("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return strSliceToBuzzList(commandTargetNames(targets)), nil
+		return stringSliceToBuzzList(commandTargetNames(targets)), nil
 	}))
 	for name, tgt := range targets {
 		bindBuzzCommandMethod(h, spellName, name, tgt)
@@ -51,13 +51,13 @@ func bindBuzzCommandMethod(h vm.Value, spellName, target string, tgt spells.Op) 
 		// argument one on TYPE: f(), f(ctx), f({args:...}), f(ctx, {args:...}), which
 		// reads fine to the author and badly to everyone else. One shape always, and a
 		// grep that finds every op invocation.
-		base, consumed := ctxOverridesFromBuzz(args, 0)
+		base, consumed := contextOverridesFromBuzz(args, 0)
 		if consumed == 0 {
 			return vm.Null, fmt.Errorf(
 				"%s: pass the target's context as the first argument, %s(ctx), override env or cwd for one call with ctx.withEnv({...}) / ctx.withCwd(\"..\")",
 				target, target)
 		}
-		opts, err := spellOptsFromBuzz(args, consumed)
+		opts, err := spellOptionsFromBuzz(args, consumed)
 		if err != nil {
 			return vm.Null, fmt.Errorf("%s: %w", target, err)
 		}
@@ -87,7 +87,7 @@ func execRecordToBuzz(rec map[string]any) vm.Value {
 	for k, v := range rec {
 		switch x := v.(type) {
 		case string:
-			m.MapSet(k, vm.StrValue(x))
+			m.MapSet(k, vm.StringValue(x))
 		case bool:
 			m.MapSet(k, vm.BoolValue(x))
 		case int:
@@ -108,7 +108,7 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn
 	return runCommand(ctx, tgt, opts)
 }
 
-// ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
+// contextOverridesFromBuzz reads execution overrides off a leading magus.Context and
 // reports how many arguments it consumed, so the caller can parse opts from the next
 // one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
 // context; go["go-test"]({args: [...]}) (no context) is the transitional form and
@@ -117,7 +117,7 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn
 // Charms are deliberately NOT readable here. They are run-level (what makes "what did
 // this run do" answerable from the invocation alone), and a per-op override would move
 // that reasoning from global to local.
-// ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
+// contextOverridesFromBuzz reads execution overrides off a leading magus.Context and
 // reports how many arguments it consumed, so the caller can parse opts from the next
 // one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
 // context; go["go-test"]({args: [...]}) (no context) is the transitional form and
@@ -126,7 +126,7 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn
 // Charms are deliberately NOT readable here. They are run-level (what makes "what did
 // this run do" answerable from the invocation alone), and a per-op override would move
 // that reasoning from global to local.
-func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed int) {
+func contextOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed int) {
 	if idx >= len(args) || !args[idx].IsMap() {
 		return opts, 0
 	}
@@ -134,13 +134,13 @@ func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed 
 		return opts, 0
 	}
 	c := args[idx]
-	if cv, ok := c.MapGet("cwd"); ok && cv.IsStr() {
+	if cv, ok := c.MapGet("cwd"); ok && cv.IsString() {
 		opts.cwd = cv.AsString()
 	}
 	if ev, ok := c.MapGet("env"); ok && ev.IsMap() {
 		opts.env = map[string]string{}
 		for _, k := range ev.MapKeys() {
-			if v, ok := ev.MapGet(k); ok && v.IsStr() {
+			if v, ok := ev.MapGet(k); ok && v.IsString() {
 				opts.env[k] = v.AsString()
 			}
 		}
@@ -148,10 +148,10 @@ func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed 
 	return opts, 1
 }
 
-// spellOptsFromBuzz reads an optional {cwd=, args=[...], env={...}} options table at
+// spellOptionsFromBuzz reads an optional {cwd=, args=[...], env={...}} options table at
 // args[idx]. opts.hasArgs reports whether an "args" key was present, so callers know to
 // fall back to project.ExtraArgs when it was not.
-func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
+func spellOptionsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 	if idx >= len(args) || !args[idx].IsMap() {
 		return opts, nil
 	}
@@ -170,7 +170,7 @@ func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 		opts.args = buzzValToStringSlice(av)
 		opts.hasArgs = true
 	}
-	if sv, ok := o.MapGet("stdin"); ok && sv.IsStr() {
+	if sv, ok := o.MapGet("stdin"); ok && sv.IsString() {
 		opts.stdin = sv.AsString()
 	}
 	return opts, nil
@@ -180,15 +180,15 @@ func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 // name, needs, claims, provides, plus listTargets() and a callable per target.
 func buzzSpellObject(name string) vm.Value {
 	m := vm.NewMap()
-	m.MapSet("name", vm.StrValue(name))
+	m.MapSet("name", vm.StringValue(name))
 
 	spec, ok := spell.Builtins()[name]
 	if !ok {
 		return m
 	}
 
-	m.MapSet("needs", strSliceToBuzzList(spec.Needs))
-	m.MapSet("provides", strSliceToBuzzList(spec.Provides))
+	m.MapSet("needs", stringSliceToBuzzList(spec.Needs))
+	m.MapSet("provides", stringSliceToBuzzList(spec.Provides))
 
 	// listTargets() + a callable per fork target (go.test(), docker.build()).
 	bindBuzzTargetDispatch(m, name, spec.Ops)

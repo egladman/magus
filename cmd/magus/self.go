@@ -14,33 +14,33 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// selfCmd is the dispatcher for `magus self <subcommand>`.
+// selfCommand is the dispatcher for `magus self <subcommand>`.
 //
 // This file carries NO build tag, and that is the point. `self` is the noun for
 // "things magus does to its own installation", and only the UPDATER is what
 // `-tags noselfupdate` removes. The dispatcher used to be written twice, once per
 // tag, so every subcommand had to be added to both files and a subcommand that has
 // nothing to do with updating still disappeared from the stub if you forgot. The
-// tagged files now supply one function each (selfUpdateCmd), and everything else
+// tagged files now supply one function each (selfUpdateCommand), and everything else
 // lives here and works in both builds.
-func selfCmd(ctx context.Context, _ string, args []string) error {
+func selfCommand(ctx context.Context, _ string, args []string) error {
 	if len(args) == 0 {
-		selfCmdUsage()
+		selfCommandUsage()
 		return exit.Usagef("magus self: subcommand required (want %s)", selfSubcommands())
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "-h", "--help", "help":
-		selfCmdUsage()
+		selfCommandUsage()
 		return nil
 	case "update":
-		return selfUpdateCmd(ctx, rest)
+		return selfUpdateCommand(ctx, rest)
 	case "install-shorthand":
-		return installShorthandCmd(rest)
+		return installShorthandCommand(rest)
 	case "place":
-		return selfPlaceCmd(ctx, rest)
+		return selfPlaceCommand(ctx, rest)
 	default:
-		selfCmdUsage()
+		selfCommandUsage()
 		return exit.Usagef("magus self: unknown subcommand %q (want %s)", sub, selfSubcommands())
 	}
 }
@@ -54,7 +54,7 @@ func selfSubcommands() string {
 	return "install-shorthand, place"
 }
 
-func selfCmdUsage() {
+func selfCommandUsage() {
 	update := "update magus to the latest release (replaces running binary)"
 	if !selfUpdateCompiled {
 		update = "not available (built with -tags noselfupdate)"
@@ -71,9 +71,9 @@ Run 'magus self <subcommand> --help' for subcommand flags.
 `, update)
 }
 
-// selfPlaceCmd implements `magus self place <binary>`. The target gets a new inode:
+// selfPlaceCommand implements `magus self place <binary>`. The target gets a new inode:
 // on macOS an in-place rewrite leaves a stale code signature and the next exec is killed.
-func selfPlaceCmd(ctx context.Context, args []string) error {
+func selfPlaceCommand(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("self place", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)

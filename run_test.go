@@ -1308,7 +1308,7 @@ func TestCurrentRevisionNoVCS(t *testing.T) {
 // TestCurrentRevisionWithVCS pins the success path CurrentRevisionNoVCS does not
 // reach: a real git repo yields meta.ID/meta.IsDirty verbatim as (revision, dirty).
 func TestCurrentRevisionWithVCS(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	writeCommit(t, repo, "magusfile.buzz", "")
 	// Open creates the .magus cache dir as a side effect; untracked, it would

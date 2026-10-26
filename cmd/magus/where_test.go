@@ -87,15 +87,15 @@ func TestCwdAnchor(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sub, 0o755), "mkdir")
 
 	t.Run("subdir resolves to slash-relative anchor", func(t *testing.T) {
-		assert.Equal(t, "web/studio", cwdAnchor(root, sub))
+		assert.Equal(t, "web/studio", currentWorkingDirectoryAnchor(root, sub))
 	})
 
 	t.Run("root resolves to dot", func(t *testing.T) {
-		assert.Equal(t, ".", cwdAnchor(root, root))
+		assert.Equal(t, ".", currentWorkingDirectoryAnchor(root, root))
 	})
 
 	t.Run("empty cwd falls back to dot", func(t *testing.T) {
-		assert.Equal(t, ".", cwdAnchor(root, ""))
+		assert.Equal(t, ".", currentWorkingDirectoryAnchor(root, ""))
 	})
 
 	// The --root regression. filepath.Rel answers a cwd outside the workspace with a
@@ -105,11 +105,11 @@ func TestCwdAnchor(t *testing.T) {
 	t.Run("cwd outside the workspace anchors at the root", func(t *testing.T) {
 		outside := filepath.Join(filepath.Dir(root), "elsewhere")
 		require.NoError(t, os.MkdirAll(outside, 0o755), "mkdir")
-		assert.Equal(t, ".", cwdAnchor(root, outside))
+		assert.Equal(t, ".", currentWorkingDirectoryAnchor(root, outside))
 	})
 
 	t.Run("cwd in the workspace parent anchors at the root", func(t *testing.T) {
-		assert.Equal(t, ".", cwdAnchor(root, filepath.Dir(root)))
+		assert.Equal(t, ".", currentWorkingDirectoryAnchor(root, filepath.Dir(root)))
 	})
 }
 

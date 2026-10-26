@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// shorthandFileName is what installShorthandCmd writes on this platform.
+// shorthandFileName is what installShorthandCommand writes on this platform.
 func shorthandFileName() string {
 	if runtime.GOOS == "windows" {
 		return shorthandName + ".exe"
@@ -21,7 +21,7 @@ func shorthandFileName() string {
 
 func TestInstallShorthand(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, installShorthandCmd([]string{"--dir", dir}))
+	require.NoError(t, installShorthandCommand([]string{"--dir", dir}))
 
 	target, err := runningBinaryPath()
 	require.NoError(t, err)
@@ -32,8 +32,8 @@ func TestInstallShorthand(t *testing.T) {
 
 func TestInstallShorthandIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, installShorthandCmd([]string{"--dir", dir}))
-	require.NoError(t, installShorthandCmd([]string{"--dir", dir}))
+	require.NoError(t, installShorthandCommand([]string{"--dir", dir}))
+	require.NoError(t, installShorthandCommand([]string{"--dir", dir}))
 }
 
 func TestInstallShorthandRefusesToClobberWithoutForce(t *testing.T) {
@@ -41,12 +41,12 @@ func TestInstallShorthandRefusesToClobberWithoutForce(t *testing.T) {
 	dir := w.Root()
 	occupied := w.WriteExecutable(shorthandFileName(), "not magus")
 
-	assert.ErrorContains(t, installShorthandCmd([]string{"--dir", dir}), "already exists")
+	assert.ErrorContains(t, installShorthandCommand([]string{"--dir", dir}), "already exists")
 	content, err := os.ReadFile(occupied)
 	require.NoError(t, err)
 	assert.Equal(t, "not magus", string(content))
 
-	require.NoError(t, installShorthandCmd([]string{"--dir", dir, "--force"}))
+	require.NoError(t, installShorthandCommand([]string{"--dir", dir, "--force"}))
 	target, err := runningBinaryPath()
 	require.NoError(t, err)
 	resolved, err := filepath.EvalSymlinks(occupied)
@@ -55,5 +55,5 @@ func TestInstallShorthandRefusesToClobberWithoutForce(t *testing.T) {
 }
 
 func TestInstallShorthandRejectsUnknownInput(t *testing.T) {
-	assert.ErrorContains(t, installShorthandCmd([]string{"extra"}), `unexpected argument "extra"`)
+	assert.ErrorContains(t, installShorthandCommand([]string{"extra"}), `unexpected argument "extra"`)
 }

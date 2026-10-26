@@ -389,7 +389,7 @@ func (p *Pool) Dispatch(ctx context.Context, names []string, ancestors []string)
 	if len(names) == 0 {
 		return nil
 	}
-	sem := p.getSemFrom(ctx)
+	sem := p.getSemFromContext(ctx)
 	if sem == nil {
 		return p.dispatchInner(ctx, names, ancestors)
 	}
@@ -483,7 +483,7 @@ func (p *Pool) executeTarget(ctx context.Context, name string, ancestors []strin
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	sem := p.getSemFrom(ctx)
+	sem := p.getSemFromContext(ctx)
 	if sem != nil && !alreadyAdmitted {
 		held, release, err := sem.Acquire(ctx, name)
 		if err != nil {
@@ -519,7 +519,7 @@ func (p *Pool) executeTarget(ctx context.Context, name string, ancestors []strin
 	if fn == nil {
 		return nil // parse mode stub
 	}
-	if obs := observerFrom(ctx); obs != nil {
+	if obs := observerFromContext(ctx); obs != nil {
 		start := time.Now()
 		_, err = fn(ctx, nil)
 		obs.TargetEnd(ctx, name, time.Since(start), err)
@@ -529,7 +529,7 @@ func (p *Pool) executeTarget(ctx context.Context, name string, ancestors []strin
 	return err
 }
 
-func (p *Pool) getSemFrom(ctx context.Context) Semaphore {
+func (p *Pool) getSemFromContext(ctx context.Context) Semaphore {
 	if p.getSem == nil {
 		return nil
 	}
@@ -544,7 +544,7 @@ func (p *Pool) acquireWorker(ctx context.Context) (*poolWorker, error) {
 		p.idle = p.idle[:n-1]
 		idle := len(p.idle)
 		p.mu.Unlock()
-		if obs := poolObserverFrom(ctx); obs != nil {
+		if obs := poolObserverFromContext(ctx); obs != nil {
 			obs.SessionAcquire(ctx, SessionReused, idle)
 		}
 		return w, nil
@@ -552,7 +552,7 @@ func (p *Pool) acquireWorker(ctx context.Context) (*poolWorker, error) {
 	p.mu.Unlock()
 	// No idle session: a cold checkout. Report the miss before warming; newWorker
 	// then reports the warm cost (idle is 0; nothing was idle to leave behind).
-	if obs := poolObserverFrom(ctx); obs != nil {
+	if obs := poolObserverFromContext(ctx); obs != nil {
 		obs.SessionAcquire(ctx, SessionCold, 0)
 	}
 	return p.newWorker(ctx)
@@ -567,7 +567,7 @@ func (p *Pool) releaseWorker(ctx context.Context, w *poolWorker) {
 	idle := len(p.idle)
 	p.mu.Unlock()
 
-	obs := poolObserverFrom(ctx)
+	obs := poolObserverFromContext(ctx)
 	if retained {
 		if obs != nil {
 			obs.SessionRelease(ctx, SessionRetained, idle)
@@ -583,7 +583,7 @@ func (p *Pool) releaseWorker(ctx context.Context, w *poolWorker) {
 func (p *Pool) newWorker(ctx context.Context) (*poolWorker, error) {
 	start := time.Now()
 	ws, err := p.newSession(ctx)
-	if obs := poolObserverFrom(ctx); obs != nil {
+	if obs := poolObserverFromContext(ctx); obs != nil {
 		obs.SessionWarm(ctx, time.Since(start), err)
 	}
 	if err != nil {

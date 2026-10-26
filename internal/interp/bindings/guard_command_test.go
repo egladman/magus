@@ -147,7 +147,7 @@ func TestCommandRuleMisdeclarationIsCoded(t *testing.T) {
 	}
 
 	t.Run("not a function", func(t *testing.T) {
-		err := callVoidDirect(t, register(t.Context()), vm.StrValue("rule"))
+		err := callVoidDirect(t, register(t.Context()), vm.StringValue("rule"))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "fun(req: CommandRequest) > GuardVerdict")
 	})

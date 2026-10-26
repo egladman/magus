@@ -36,7 +36,7 @@ func hookChangedFiles(ctx context.Context, root string, op HookOperation) ([]str
 	} else {
 		args = append(args, op.base, "HEAD")
 	}
-	out, err := gitOutput(ctx, root, op.gitOpts(gitOpts{}), args...)
+	out, err := gitOutput(ctx, root, op.gitOptions(gitOpts{}), args...)
 	if err != nil {
 		return nil, fmt.Errorf("git diff: %w", err)
 	}
@@ -49,7 +49,7 @@ func hookChangedFiles(ctx context.Context, root string, op HookOperation) ([]str
 // not listed, since staging it again adds nothing and, for one the merge deleted, names
 // a path git add cannot match.
 func HookDirtyFiles(ctx context.Context, root string, op HookOperation) ([]string, error) {
-	out, err := gitOutput(ctx, root, op.gitOpts(gitOpts{KeepLeadingSpace: true}), "status", "--porcelain", "--untracked-files=normal")
+	out, err := gitOutput(ctx, root, op.gitOptions(gitOpts{KeepLeadingSpace: true}), "status", "--porcelain", "--untracked-files=normal")
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
 	}
@@ -64,16 +64,16 @@ func HookDirtyFiles(ctx context.Context, root string, op HookOperation) ([]strin
 func HookStage(ctx context.Context, root string, op HookOperation, paths []string) error {
 	for _, chunk := range gitPathChunks(paths) {
 		argv := slices.Concat([]string{"add", "--"}, chunk)
-		if _, err := gitOutput(ctx, root, op.gitOpts(gitOpts{Literal: true}), argv...); err != nil {
+		if _, err := gitOutput(ctx, root, op.gitOptions(gitOpts{Literal: true}), argv...); err != nil {
 			return fmt.Errorf("git add: %w", err)
 		}
 	}
 	return nil
 }
 
-// gitOpts adds the operation's index to o. gitEnviron scrubs GIT_INDEX_FILE from the
+// gitOptions adds the operation's index to o. gitEnviron scrubs GIT_INDEX_FILE from the
 // process environment, which is right for every other caller and wrong inside a hook.
-func (op HookOperation) gitOpts(o gitOpts) gitOpts {
+func (op HookOperation) gitOptions(o gitOpts) gitOpts {
 	if op.indexFile != "" {
 		o.Env = append(o.Env, "GIT_INDEX_FILE="+op.indexFile)
 	}

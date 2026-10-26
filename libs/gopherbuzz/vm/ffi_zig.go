@@ -123,7 +123,7 @@ func parseSingleZigDecl(src string, structs map[string][]string) (CFuncSig, erro
 	// Zig declaration" until a struct became something worth parsing fully.
 	src = strings.TrimPrefix(src, "pub ")
 	if rest, ok := strings.CutPrefix(src, "fn "); ok {
-		return parseZigFn(rest, structs)
+		return parseZigFunction(rest, structs)
 	}
 	if rest, ok := strings.CutPrefix(src, "const "); ok {
 		if strings.Contains(rest, "extern struct") || strings.Contains(rest, "extern union") {
@@ -221,7 +221,7 @@ func parseZigVar(src string) (CFuncSig, error) {
 	return CFuncSig{Name: name, Ret: kind, IsVar: true, VarTypeName: typeTok}, nil
 }
 
-func parseZigFn(src string, structs map[string][]string) (CFuncSig, error) {
+func parseZigFunction(src string, structs map[string][]string) (CFuncSig, error) {
 	lp := strings.Index(src, "(")
 	rp := strings.LastIndex(src, ")")
 	if lp < 0 || rp < lp {

@@ -281,7 +281,7 @@ func TestOutputImportWritesNothing(t *testing.T) {
 	before := treeDigest(t, root)
 	writeStdin(t, jsonl)
 	out := captureStdout(t, func() {
-		require.NoError(t, queryCmd(ctx, "", []string{"output", "--stdin"}))
+		require.NoError(t, queryCommand(ctx, "", []string{"output", "--stdin"}))
 	})
 	assert.Equal(t, "hello\n", out)
 	assert.Equal(t, before, treeDigest(t, root), "reading records changes no file in the workspace or its cache")
@@ -306,12 +306,12 @@ func TestOutputImportRefusesActingOnARecord(t *testing.T) {
 	global = globalFlags{}
 	for _, flags := range [][]string{{"--open"}, {"--print", "--open"}, {"--publish"}, {"--attempts"}, {"--identity"}} {
 		args := append([]string{"output", "--stdin"}, flags...)
-		assert.Error(t, queryCmd(context.Background(), "", args), "%v", args)
+		assert.Error(t, queryCommand(context.Background(), "", args), "%v", args)
 	}
-	assert.Error(t, queryCmd(context.Background(), "", []string{"output", "out1a2b3c", "--stdin"}), "--stdin takes no ref")
+	assert.Error(t, queryCommand(context.Background(), "", []string{"output", "out1a2b3c", "--stdin"}), "--stdin takes no ref")
 
 	global.output = string(outputJSON)
-	assert.Error(t, queryCmd(context.Background(), "", []string{"output", "--stdin"}), "-o json with --stdin")
+	assert.Error(t, queryCommand(context.Background(), "", []string{"output", "--stdin"}), "-o json with --stdin")
 }
 
 func TestOutputImportNeutralizesWhatItPrints(t *testing.T) {

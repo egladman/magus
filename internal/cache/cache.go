@@ -635,7 +635,7 @@ func replayLocal(hash string) RunOption {
 // this step, and a NoCache or SkipReplay step never replays, so none of those hash here.
 // A hashing error answers "" and leaves Run to hash again and report it.
 func (c *Cache) localHitKey(ctx context.Context, s *Step) string {
-	if c.machine == nil || admissionFrom(ctx).machineClaim || s.NoCache || s.SkipReplay {
+	if c.machine == nil || admissionFromContext(ctx).machineClaim || s.NoCache || s.SkipReplay {
 		return ""
 	}
 	hashCtx, endHash := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.hash")
@@ -782,20 +782,20 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	var paths []string
 	owned, err := ownedOutputs(e.manifest, s.withoutForeignOutputs())
 	if err == nil {
-		paths, err = c.replayFrom(replayCtx, owned, s.WorkspaceRoot, e.root)
+		paths, err = c.replayBlobs(replayCtx, owned, s.WorkspaceRoot, e.root)
 	}
 	endReplay(err)
 	result.Duration = time.Since(start)
 	if err != nil {
 		if e.remote != "" {
-			remoteStatsFrom(ctx).failed(e.bytes)
+			remoteStatsFromContext(ctx).failed(e.bytes)
 		}
 		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("replay from %s failed for %s (%s): %v", cmp.Or(e.remote, "the local tier"), s.ProjectPath, shortHash(hash), err)))
 		return result, false
 	}
 	if e.remote != "" {
-		remoteStatsFrom(ctx).hit(e.bytes)
+		remoteStatsFromContext(ctx).hit(e.bytes)
 	}
 	// A hit in the local store is a use, whether it was already there or just promoted,
 	// so it is the last thing eviction reaches.
@@ -1241,7 +1241,7 @@ func stepSlots(s Step, lim *Limiter) int {
 // its members claim their own. The retake is fallible, since a stranger can refuse it
 // after they ran, but a held wait hung on a need shared by siblings filling every slot.
 func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
-	held := admissionFrom(ctx)
+	held := admissionFromContext(ctx)
 	if held.machineClaim {
 		return withMachineHold(ctx, nil), func() {}, nil
 	}
@@ -1678,7 +1678,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if key == "" || errors.Is(err, errLocalEntryGone) {
 				ran = false
 				var claim stepClaim
-				if !admissionFrom(gctx).machineClaim {
+				if !admissionFromContext(gctx).machineClaim {
 					claim.MemoryMB, claim.Sizing = s.MemoryMB, s.MemorySizing
 				}
 				// The machine budget comes before the slot, so a step queues for it holding
@@ -2226,7 +2226,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			// off the top exactly when they are the only thing wanted. Use the same
 			// diagnostic-focused excerpt the default display uses, and keep the
 			// full-log path so nothing is unreachable.
-			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
 				excerpt, omitted := failureExcerpt(data, maxFailTailLines)
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				if omitted > 0 {
@@ -2243,7 +2243,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			// the entire raw log: the latter often hides the cause under successful test
 			// lines. The cache error emitted immediately afterward supplies the output
 			// ref for the complete, verbatim log.
-			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				excerpt, omitted := failureExcerpt(data, maxFailureExcerptLines)
 				if omitted > 0 {
@@ -2255,7 +2255,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				}
 			}
 		case quiet:
-			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				_, _ = io.WriteString(os.Stderr, ann.Defang(string(data)))
 				_, _ = fmt.Fprintln(os.Stderr)

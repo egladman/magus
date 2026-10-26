@@ -59,7 +59,7 @@ func noGofmtList(context.Context, string, []string) ([]string, error) {
 // TestCheckDriftForCommit_Clean pins case 1: a source change with its matching output
 // change in the same commit prints nothing.
 func TestCheckDriftForCommit_Clean(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.txt", "a\n", "first")
 	writeAndCommit(t, repo, "b.txt", "b\n", "second")
@@ -80,7 +80,7 @@ func TestCheckDriftForCommit_Clean(t *testing.T) {
 // output, on a commit that is unpushed and still HEAD, prints the regenerate command
 // AND the amend command naming that commit's hash.
 func TestCheckDriftForCommit_UnpushedHead(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.txt", "a\n", "first")
 	remote := t.TempDir()
@@ -113,7 +113,7 @@ func TestCheckDriftForCommit_UnpushedHead(t *testing.T) {
 // fixup/autosquash form and must NOT offer a plain amend, which would silently rewrite
 // the wrong commit.
 func TestCheckDriftForCommit_UnpushedNotHead(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.txt", "a\n", "first")
 	remote := t.TempDir()
@@ -144,7 +144,7 @@ func TestCheckDriftForCommit_UnpushedNotHead(t *testing.T) {
 // TestCheckDriftForCommit_Pushed pins case 4: the drifted commit already reached the
 // remote. Neither rewrite form appears; the notice says to follow up instead.
 func TestCheckDriftForCommit_Pushed(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.txt", "a\n", "first")
 	remote := t.TempDir()
@@ -174,7 +174,7 @@ func TestCheckDriftForCommit_Pushed(t *testing.T) {
 // the format target governs, gofmtList reports which are unformatted, and the notice
 // carries MGS4009 (not MGS4006, which is the other class) for it.
 func TestCheckDriftForCommit_FormattingOnly(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.go", "package a\n", "first")
 	writeAndCommit(t, repo, "b.go", "package a\n\nfunc B() {}\n", "second")
@@ -202,7 +202,7 @@ func TestCheckDriftForCommit_FormattingOnly(t *testing.T) {
 // format target's declared globs never reaches gofmtList at all: the narrowing happens
 // before the (only) live check runs.
 func TestCheckDriftForCommit_FormatGlobsScopeTheCheck(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.go", "package a\n", "first")
 	writeAndCommit(t, repo, "vendor/b.go", "package a\n", "second")
@@ -224,7 +224,7 @@ func TestCheckDriftForCommit_RealGofmt(t *testing.T) {
 	if _, err := exec.LookPath("gofmt"); err != nil {
 		t.Skip("gofmt not available")
 	}
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.go", "package a\n", "first")
 	const misformatted = "package a\nfunc   B(){}\n" // gofmt -l flags this
@@ -356,7 +356,7 @@ func TestUnreadRangeNoticeCountsWhatNoMarkCovers(t *testing.T) {
 // it, a ref the remote does not have yet reads against the remote's default branch, and a
 // range that cannot be read adds no line.
 func TestPushedUnreadReadsExactlyThePushedRange(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	writeAndCommit(t, repo, "a.txt", "a\n", "first")
 	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})

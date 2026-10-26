@@ -20,13 +20,13 @@ func ioCoreModule(sess *buzz.Session, env buzz.ModuleEnv) vm.Value {
 	m := mod()
 	m.MapSet("FileMode", vm.EnumDefValue("FileMode", []string{"read", "write", "update"}, nil))
 	fileDef := mod()
-	fileDef.MapSet("open", fn("File.open", fileOpen))
+	fileDef.MapSet("open", function("File.open", fileOpen))
 	m.MapSet("File", fileDef)
 	m.MapSet("stdin", makeFileValue(os.Stdin))
 	m.MapSet("stdout", makeStreamValue(os.Stdout, env.StdoutFunc))
 	m.MapSet("stderr", makeStreamValue(os.Stderr, env.StderrFunc))
-	m.MapSet("runFile", fn("io.runFile", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 1 || !args[0].IsStr() {
+	m.MapSet("runFile", function("io.runFile", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("io.runFile: requires a str path argument")
 		}
 		src, err := os.ReadFile(resolve(ctx, args[0].AsString()))
@@ -48,7 +48,7 @@ func fileOpen(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 2 {
 		return vm.Null, fmt.Errorf("File.open: requires (str filename, FileMode mode)")
 	}
-	if !args[0].IsStr() {
+	if !args[0].IsString() {
 		return vm.Null, fmt.Errorf("File.open: filename must be str, got %s", args[0].Kind())
 	}
 	if args[1].Kind() != "enum" {
@@ -82,8 +82,8 @@ func makeStreamValue(f *os.File, pick func(context.Context) io.Writer) vm.Value 
 	if pick == nil {
 		return v
 	}
-	v.MapSet("write", fn("File.write", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 1 || !args[0].IsStr() {
+	v.MapSet("write", function("File.write", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("File.write: requires a str bytes argument")
 		}
 		w := pick(ctx)
@@ -105,20 +105,20 @@ func makeFileValue(f *os.File) vm.Value {
 	// consistent cursor position. Writes are flushed immediately after each call.
 	rw := bufio.NewReadWriter(bufio.NewReader(f), bufio.NewWriter(f))
 
-	m.MapSet("collect", fn("File.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("collect", function("File.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, f.Close()
 	}))
-	m.MapSet("close", fn("File.close", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("close", function("File.close", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, f.Close()
 	}))
-	m.MapSet("isTTY", fn("File.isTTY", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("isTTY", function("File.isTTY", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		fi, err := f.Stat()
 		if err != nil {
 			return vm.False, nil
 		}
 		return vm.BoolValue(fi.Mode()&os.ModeCharDevice != 0), nil
 	}))
-	m.MapSet("readAll", fn("File.readAll", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("readAll", function("File.readAll", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		var limit int64 = -1
 		if len(args) >= 1 && args[0].IsInt() {
 			limit = args[0].AsInt()
@@ -140,14 +140,14 @@ func makeFileValue(f *os.File) vm.Value {
 		if err != nil {
 			return vm.Null, fmt.Errorf("File.readAll: %w", err)
 		}
-		return vm.StrValue(string(data)), nil
+		return vm.StringValue(string(data)), nil
 	}))
-	m.MapSet("readLine", fn("File.readLine", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("readLine", function("File.readLine", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		line, err := rw.ReadString('\n')
 		if err != nil {
 			if err == io.EOF && len(line) > 0 {
 				// partial line at EOF — return it
-				return vm.StrValue(line), nil
+				return vm.StringValue(line), nil
 			}
 			if err == io.EOF {
 				return vm.Null, nil
@@ -157,9 +157,9 @@ func makeFileValue(f *os.File) vm.Value {
 		if len(line) > 0 && line[len(line)-1] == '\n' {
 			line = line[:len(line)-1]
 		}
-		return vm.StrValue(line), nil
+		return vm.StringValue(line), nil
 	}))
-	m.MapSet("read", fn("File.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("read", function("File.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		n := int64(1)
 		if len(args) >= 1 && args[0].IsInt() {
 			n = args[0].AsInt()
@@ -175,10 +175,10 @@ func makeFileValue(f *os.File) vm.Value {
 			}
 			return vm.Null, fmt.Errorf("File.read: %w", err)
 		}
-		return vm.StrValue(string(buf[:count])), nil
+		return vm.StringValue(string(buf[:count])), nil
 	}))
-	m.MapSet("write", fn("File.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) < 1 || !args[0].IsStr() {
+	m.MapSet("write", function("File.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("File.write: requires a str bytes argument")
 		}
 		if _, err := rw.WriteString(args[0].AsString()); err != nil {

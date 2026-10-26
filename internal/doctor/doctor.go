@@ -144,11 +144,11 @@ func Run(ctx context.Context, root string, ws types.WorkspaceReader, wsErr error
 	return r.run(wsErr)
 }
 
-// runCtx is the run's context, defaulting to Background when unset. Run always supplies
+// runContext is the run's context, defaulting to Background when unset. Run always supplies
 // one; the fallback is for a runner built directly, which is how every check in this
 // package is unit tested. Without it a zero-value runner panics inside exec.CommandContext
 // rather than failing the check it was asked about.
-func (r *runner) runCtx() context.Context {
+func (r *runner) runContext() context.Context {
 	if r.ctx == nil {
 		return context.Background()
 	}

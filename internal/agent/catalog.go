@@ -1135,7 +1135,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form types.SkillF
 			// A read error counts as changed: the install is about to overwrite whatever is
 			// there, and claiming "unchanged" for a file magus could not read would be the
 			// one answer that stops a reader looking.
-			if prev, readErr := os.ReadFile(outPath); readErr != nil || !bytes.Equal(prev, f.body) {
+			if prev, readError := os.ReadFile(outPath); readError != nil || !bytes.Equal(prev, f.body) {
 				changed = append(changed, filepath.Join(dest, rel))
 			}
 			if err := os.WriteFile(outPath, f.body, 0o644); err != nil {
@@ -1618,11 +1618,11 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 // leftoverReason names a directory install cannot prune and the command that removes
 // it. An empty one has nothing in it to lose; one whose SKILL.md cannot be read may
 // hold someone's files, so it is removed by the person after a look.
-func leftoverReason(abs, rel string, readErr error) string {
+func leftoverReason(abs, rel string, readError error) string {
 	if entries, err := os.ReadDir(abs); err == nil && len(entries) == 0 {
 		return "empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir " + rel
 	}
-	return fmt.Sprintf("cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", readErr, rel)
+	return fmt.Sprintf("cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", readError, rel)
 }
 
 // sortReasons orders gradeDest's collected reasons so a version/schema mismatch

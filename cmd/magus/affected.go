@@ -76,7 +76,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 
 	// Find the target even if global flags precede it (`magus affected --dry-run ci`);
-	// mirrors `magus run`. rest carries the hoisted flags for cmdParse below.
+	// mirrors `magus run`. rest carries the hoisted flags for commandParse below.
 	rawTarget, rest, ok := splitTargetFromArgs(args, nil)
 	if !ok {
 		affectedUsage()
@@ -94,7 +94,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
 	var af *flaggen.AffectedFlags
-	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
+	_, err := commandParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		af = flaggen.BindAffected(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
@@ -348,7 +348,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	// The client's cwd (carried on ctx for an adopted affected run), not the server's
 	// process cwd, so the invocation's journal records where the user actually ran.
-	cwd := clientCwd(ctx)
+	cwd := clientCurrentWorkingDirectory(ctx)
 	liveBC, stopLive := beginLive(ctx, af.Open)
 	defer stopLive()
 	// An adopted affected run (dispatched by the server) also feeds the server's live-run
@@ -385,7 +385,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}
-	if reportedRunErr(err) {
+	if reportedRunError(err) {
 		return exit.Reported(exit.Failure)
 	}
 	if err != nil {
@@ -765,7 +765,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 
 	var pf *flaggen.AffectedPlanFlags
-	if _, err := cmdParse(fmt.Sprintf("affected %s --plan", target), flagArgs, func(fs *flag.FlagSet) {
+	if _, err := commandParse(fmt.Sprintf("affected %s --plan", target), flagArgs, func(fs *flag.FlagSet) {
 		pf = flaggen.BindAffectedPlan(fs, flaggen.AffectedPlanDefaults{
 			MaxShards:         globalCfg.CI.MaxShards,
 			MaxParallelBudget: globalCfg.CI.RunnerPoolBudget,
@@ -1133,7 +1133,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	// --impact routed us here (hasModeFlag); bind it so the flag parser accepts it,
 	// then parse --base like the other forensic modes. No positional target is read.
 	var imf *flaggen.AffectedImpactFlags
-	if _, err := cmdParse("affected --impact", args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("affected --impact", args, func(fs *flag.FlagSet) {
 		imf = flaggen.BindAffectedImpact(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected --impact [--base <ref>]")

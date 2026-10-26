@@ -109,7 +109,7 @@ func RecordOwedRegeneration(ctx context.Context, root string, o OwedRegeneration
 	if err != nil || !ok {
 		return false, err
 	}
-	return true, withRepoLock(ctx, p.commonDir, func() error {
+	return true, withRepositoryLock(ctx, p.commonDir, func() error {
 		owed, err := readOwed(p.record)
 		if err != nil {
 			return err
@@ -134,7 +134,7 @@ func DropOwedRegenerations(ctx context.Context, root string, settled []OwedRegen
 	if err != nil || !ok {
 		return err
 	}
-	return withRepoLock(ctx, p.commonDir, func() error {
+	return withRepositoryLock(ctx, p.commonDir, func() error {
 		owed, err := readOwed(p.record)
 		if err != nil {
 			return err
@@ -174,7 +174,7 @@ func readOwed(path string) ([]OwedRegeneration, error) {
 }
 
 // writeOwed stores owed, removing the file when nothing is owed. The caller holds
-// withRepoLock.
+// withRepositoryLock.
 func writeOwed(path string, owed []OwedRegeneration) error {
 	if len(owed) == 0 {
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {

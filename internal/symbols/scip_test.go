@@ -324,9 +324,9 @@ const (
 	fieldMoniker  = "scip-go gomod example.com/foo v1 Holder#field."
 )
 
-// fnDoc builds a document whose caller definition spans lines 0-9 and whose callee is
+// functionDoc builds a document whose caller definition spans lines 0-9 and whose callee is
 // defined on line 20, so a reference placed inside the caller's span attributes to it.
-func fnDoc(refs ...*scip.Occurrence) *scip.Document {
+func functionDoc(refs ...*scip.Occurrence) *scip.Document {
 	occs := []*scip.Occurrence{
 		{
 			Symbol:      callerMoniker,
@@ -366,7 +366,7 @@ func symbolCalls(t *testing.T, syms []types.KnowledgeSymbol, key string) []types
 // A reference inside the caller's enclosing range is attributed to it, and repeated
 // occurrences collapse into one entry with a count.
 func TestParseIndexAttributesCalls(t *testing.T) {
-	idx := &scip.Index{Documents: []*scip.Document{fnDoc(
+	idx := &scip.Index{Documents: []*scip.Document{functionDoc(
 		&scip.Occurrence{Symbol: calleeMoniker, Range: []int32{3, 2, 8}},
 		&scip.Occurrence{Symbol: calleeMoniker, Range: []int32{5, 2, 8}},
 	)}}
@@ -382,7 +382,7 @@ func TestParseIndexAttributesCalls(t *testing.T) {
 // belongs to no body and must not be attributed to whichever definition happens to be
 // nearest.
 func TestParseIndexCallsIgnoresOccurrencesOutsideAnyBody(t *testing.T) {
-	idx := &scip.Index{Documents: []*scip.Document{fnDoc(
+	idx := &scip.Index{Documents: []*scip.Document{functionDoc(
 		&scip.Occurrence{Symbol: calleeMoniker, Range: []int32{15, 2, 8}},
 	)}}
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
@@ -393,7 +393,7 @@ func TestParseIndexCallsIgnoresOccurrencesOutsideAnyBody(t *testing.T) {
 // An enclosing range spans the whole declaration, signature included, so most occurrences
 // inside it are types and fields rather than calls. Only a callable callee earns the edge.
 func TestParseIndexCallsSkipsNonCallableCallee(t *testing.T) {
-	idx := &scip.Index{Documents: []*scip.Document{fnDoc(
+	idx := &scip.Index{Documents: []*scip.Document{functionDoc(
 		&scip.Occurrence{Symbol: fieldMoniker, Range: []int32{3, 2, 8}},
 	)}}
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
@@ -404,7 +404,7 @@ func TestParseIndexCallsSkipsNonCallableCallee(t *testing.T) {
 // Recursion would mint a source==target edge, which the graph's edge key cannot express
 // and no reader wants.
 func TestParseIndexCallsDropsSelfEdge(t *testing.T) {
-	idx := &scip.Index{Documents: []*scip.Document{fnDoc(
+	idx := &scip.Index{Documents: []*scip.Document{functionDoc(
 		&scip.Occurrence{Symbol: callerMoniker, Range: []int32{3, 2, 8}},
 	)}}
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
@@ -416,7 +416,7 @@ func TestParseIndexCallsDropsSelfEdge(t *testing.T) {
 // its usage is still recorded by the referencing file's `references` edge.
 func TestParseIndexCallsSkipsCalleeDefinedElsewhere(t *testing.T) {
 	const external = "scip-go gomod example.com/dep v1 Helper()."
-	doc := fnDoc(&scip.Occurrence{Symbol: external, Range: []int32{3, 2, 8}})
+	doc := functionDoc(&scip.Occurrence{Symbol: external, Range: []int32{3, 2, 8}})
 	doc.Symbols = append(doc.Symbols, &scip.SymbolInformation{
 		Symbol: external, DisplayName: "Helper", Kind: scip.SymbolInformation_Function,
 	})
@@ -516,7 +516,7 @@ func TestParseIndexReadsImplementsRelationships(t *testing.T) {
 
 // An indexer that emits no enclosing ranges gives no calls rather than a guess.
 func TestParseIndexNoEnclosingRangeYieldsNoCalls(t *testing.T) {
-	doc := fnDoc(&scip.Occurrence{Symbol: calleeMoniker, Range: []int32{3, 2, 8}})
+	doc := functionDoc(&scip.Occurrence{Symbol: calleeMoniker, Range: []int32{3, 2, 8}})
 	//nolint:staticcheck // the deprecated packed field is the ONE scip-go emits; clearing
 	// the typed oneof instead would test a shape no real index has.
 	doc.Occurrences[0].EnclosingRange = nil

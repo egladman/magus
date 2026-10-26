@@ -509,8 +509,8 @@ func TestRecordAttrExtraction(t *testing.T) {
 		slog.Int("hits", 7),
 	)
 
-	assert.Equal(t, "web/studio", recordStr(r, "project"))
-	assert.Empty(t, recordStr(r, "missing"), "recordStr(missing) should be empty")
+	assert.Equal(t, "web/studio", recordString(r, "project"))
+	assert.Empty(t, recordString(r, "missing"), "recordStr(missing) should be empty")
 	assert.Equal(t, 123*time.Millisecond, recordDur(r, "duration"))
 	assert.Equal(t, 7, recordInt(r, "hits"))
 }

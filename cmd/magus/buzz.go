@@ -36,7 +36,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the
+// buzzCommand runs Buzz source from a file, stdin, or an inline snippet using the
 // Buzz interpreter with the full set of magus modules (Buzz stdlib plus every
 // magus host module: fs, os, http, markdown, template, ...) and the magus.*
 // namespace. The magus.* members that declare into a workspace being loaded
@@ -139,7 +139,7 @@ func contextKeyReadBy(read func(context.Context)) any {
 	return r.key
 }
 
-func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
+func buzzCommand(ctx context.Context, root string, args []string) (retErr error) {
 	// A relative --root names a directory from where magus started, so it is pinned
 	// before -C moves the process.
 	if root != "" {
@@ -164,11 +164,11 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// top-level subcommand contract. Intercept it before flag parsing, which would
 	// otherwise read "lsp" as a script filename.
 	if len(args) > 0 && args[0] == "lsp" {
-		return lspCmd(ctx, args[1:])
+		return lspCommand(ctx, args[1:])
 	}
 
 	// Everything after `--` is the SCRIPT's argv, never magus's. The boundary is
-	// needed because cmdParse reorders flags ahead of positionals, so a bare
+	// needed because commandParse reorders flags ahead of positionals, so a bare
 	// `script.buzz --raw` would have magus parsing --raw and failing; it is also the
 	// separator this CLI already uses to forward args to a tool (`run go::go-test . --
 	// -run X`). A script reads them as main's [str], the way cmd/buzz and upstream do.
@@ -179,7 +179,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// marks the second AliasOf the first; modeled as two flags they would get two
 	// destinations and the shorthand would parse and then do nothing.
 	var bf *flaggen.BuzzFlags
-	rest, err := cmdParse("buzz", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("buzz", args, func(fs *flag.FlagSet) {
 		bf = flaggen.BindBuzz(fs)
 		fs.Usage = buzzUsage
 	})
@@ -345,7 +345,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 		// rather than an environment variable a shell has to set.
 		items := make([]vm.Value, 0, len(scriptArgs))
 		for _, a := range scriptArgs {
-			items = append(items, vm.StrValue(a))
+			items = append(items, vm.StringValue(a))
 		}
 		stopMain := tr.phase("buzz.main")
 		ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)})
@@ -804,12 +804,12 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 	ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), journal.NewInvocationID())
 	// --root is the directory a script runs as if started in, as -C is for make: its
 	// vcs calls, execs and relative paths resolve there, not in the process cwd.
-	if _, set := std.CwdFromContext(ctx); root != "" && !set {
+	if _, set := std.CurrentWorkingDirectoryFromContext(ctx); root != "" && !set {
 		abs, err := filepath.Abs(root)
 		if err != nil {
 			return nil, fmt.Errorf("magus buzz: --root: %w", err)
 		}
-		ctx = std.WithCwd(ctx, abs)
+		ctx = std.WithCurrentWorkingDirectory(ctx, abs)
 	}
 	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Mode.Enabled() {
 		return newLazyWorkspaceContext(ctx, root), nil

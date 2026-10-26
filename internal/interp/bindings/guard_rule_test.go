@@ -38,12 +38,12 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // deny's and advise's opts name the rule.
 func TestVerdictRuleOpt(t *testing.T) {
 	opts := vm.NewMap()
-	opts.MapSet("rule", vm.StrValue("pull-request-text"))
+	opts.MapSet("rule", vm.StringValue("pull-request-text"))
 	got, err := verdictRuleOpt("deny", opts)
 	require.NoError(t, err)
 	assert.Equal(t, "pull-request-text", got)
 
-	_, err = verdictRuleOpt("advise", vm.StrValue("pull-request-text"))
+	_, err = verdictRuleOpt("advise", vm.StringValue("pull-request-text"))
 	require.ErrorContains(t, err, `magus\guard.advise: opts must be a {rule: str} record`)
 }
 
@@ -59,23 +59,23 @@ func TestGuardVerdictRuleNameIsValidated(t *testing.T) {
 		return m
 	}
 
-	err := callVoidDirect(t, deny, vm.StrValue("why"), opts("rule", vm.StrValue("Pull_Request")))
+	err := callVoidDirect(t, deny, vm.StringValue("why"), opts("rule", vm.StringValue("Pull_Request")))
 	require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 	require.ErrorContains(t, err, `guard rule name "Pull_Request" is not lowercase letters and digits joined by single hyphens, as in "pull-request"`)
 
-	err = callVoidDirect(t, deny, vm.StrValue("why"), opts("rule", vm.StrValue("command")))
+	err = callVoidDirect(t, deny, vm.StringValue("why"), opts("rule", vm.StringValue("command")))
 	require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 
-	err = callVoidDirect(t, deny, vm.StrValue("why"), opts("rule", vm.IntValue(1)))
+	err = callVoidDirect(t, deny, vm.StringValue("why"), opts("rule", vm.IntValue(1)))
 	require.ErrorContains(t, err, `magus\guard.deny: "rule" must be a string`)
 
-	err = callVoidDirect(t, deny, vm.StrValue("why"), opts("name", vm.StrValue("x")))
+	err = callVoidDirect(t, deny, vm.StringValue("why"), opts("name", vm.StringValue("x")))
 	require.ErrorContains(t, err, `magus\guard.deny: unknown opts field "name"`)
 
 	literal := vm.NewMap()
-	literal.MapSet("decision", vm.StrValue("deny"))
-	literal.MapSet("reason", vm.StrValue("why"))
-	literal.MapSet("rule", vm.StrValue("NotKebab"))
+	literal.MapSet("decision", vm.StringValue("deny"))
+	literal.MapSet("reason", vm.StringValue("why"))
+	literal.MapSet("rule", vm.StringValue("NotKebab"))
 	_, err = decodeGuardVerdict(`magus\guard.command`, literal)
 	require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 }

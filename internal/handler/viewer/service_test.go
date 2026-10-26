@@ -46,10 +46,10 @@ func (f *storedRuns) InvocationEventsByID(string) (journal.Invocation, []journal
 	return f.header, f.events, nil
 }
 
-// InvocationEventsFrom serves the tail the same way the store does, with an event INDEX standing in
+// InvocationEventsSince serves the tail the same way the store does, with an event INDEX standing in
 // for the store's byte offset: both say "resume where the last read stopped", which is all the
 // handler does with the cursor.
-func (f *storedRuns) InvocationEventsFrom(_ string, from int64) ([]journal.Event, int64, error) {
+func (f *storedRuns) InvocationEventsSince(_ string, from int64) ([]journal.Event, int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {

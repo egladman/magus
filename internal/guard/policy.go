@@ -256,5 +256,5 @@ func isGuardSource(deps Dependencies, at location, path string) bool {
 			files = m.Files
 		}
 	}
-	return slices.ContainsFunc(files, func(f string) bool { return samePath(resolveFrom(at.workspace, f), target) })
+	return slices.ContainsFunc(files, func(f string) bool { return samePath(resolvePath(at.workspace, f), target) })
 }

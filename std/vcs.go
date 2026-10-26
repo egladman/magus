@@ -146,7 +146,7 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Raises:  true,
-			Impl:    VcsCmd,
+			Impl:    VcsCommand,
 		},
 		{
 			Name: "tags",
@@ -180,7 +180,7 @@ var (
 )
 
 func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
-	wd, err := EffectiveCwd(ctx)
+	wd, err := EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		wd = "."
 	}
@@ -352,12 +352,12 @@ func VcsRegions(ctx context.Context, base, dir string) ([]types.RegionChange, er
 // runBuzz deliberately does NOT os.Chdir (it carries the target's directory on the
 // context so projects can execute concurrently without corrupting a shared process cwd),
 // so passing "" means the PROCESS cwd, a different place. resolveVCS already picks the
-// driver from EffectiveCwd.
+// driver from EffectiveCurrentWorkingDirectory.
 //
 // Harmless while both sit in the same repository. Not harmless in the server, where the
 // process cwd belongs to the server and the context cwd comes from the request.
 func vcsDir(ctx context.Context) string {
-	dir, err := EffectiveCwd(ctx)
+	dir, err := EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		return ""
 	}
@@ -404,7 +404,7 @@ func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
 	if v == nil {
 		return types.Status{Clean: true}, nil
 	}
-	dir, err := EffectiveCwd(ctx)
+	dir, err := EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		dir = ""
 	}
@@ -429,10 +429,10 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 	if v == nil {
 		return false, nil
 	}
-	// Run the probe in the project's working directory (set via WithCwd for spell
+	// Run the probe in the project's working directory (set via WithCurrentWorkingDirectory for spell
 	// targets, the process cwd for magusfile targets) so pathspecs resolve against
 	// the project, not wherever the process happens to be.
-	dir, err := EffectiveCwd(ctx)
+	dir, err := EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		dir = ""
 	}
@@ -458,7 +458,7 @@ func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
 	if v == nil {
 		return "", nil
 	}
-	dir, err := EffectiveCwd(ctx)
+	dir, err := EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		dir = ""
 	}
@@ -553,7 +553,7 @@ func vcsExe(ctx context.Context) (string, error) {
 	return path, nil
 }
 
-// VcsCmd runs the active VCS binary with args.
+// VcsCommand runs the active VCS binary with args.
 //
 // This replaced vcs.exe, which handed back a PATH and left every caller to write
 // proc.exec(<the vcs binary>, [...]): two calls, and a silent no-op when the path came back
@@ -561,7 +561,7 @@ func vcsExe(ctx context.Context) (string, error) {
 // on the same typed footing as magus.cmd and proc.exec instead of a bare string. "exe" was
 // the wrong word besides: it reads as a Windows file extension, and the value is a
 // binary on every platform magus runs.
-func VcsCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+func VcsCommand(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
 	bin, err := vcsExe(ctx)
 	if err != nil {
 		return types.ExecResult{}, err

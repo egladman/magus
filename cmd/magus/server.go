@@ -34,7 +34,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-func serverCmd(ctx context.Context, root string, args []string) error {
+func serverCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		serverUsage()
 		return exit.Usagef("magus server: target required (want start, stop, status, or reload)")
@@ -99,7 +99,7 @@ func serverUsage() {
 // It exits non-zero with no server, matching `server stop`, so a script can chain on it.
 func serverStatus(ctx context.Context, args []string) error {
 	var socket string
-	rest, err := cmdParse("server status", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("server status", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&socket, "socket", "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server status [--socket <addr>] [flags]")
@@ -178,7 +178,7 @@ const serverReadyTimeout = 60 * time.Second
 func serverStart(ctx context.Context, args []string) error {
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
 	var sf *flaggen.ServerStartFlags
-	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("server start", args, func(fs *flag.FlagSet) {
 		sf = flaggen.BindServerStart(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server start [--foreground] [flags]")
@@ -406,13 +406,13 @@ func detachedChildEnv() []string {
 	return out
 }
 
-// detachedCmd builds the re-exec command with Path set to exe verbatim, skipping
+// detachedCommand builds the re-exec command with Path set to exe verbatim, skipping
 // exec.Command's resolution. exe is the running binary's own path, so PATH and PATHEXT have
 // no say in which binary it is. On Windows their say is fatal: given an absolute path with
 // no extension, exec.Command demands a PATHEXT sibling on disk, and setup-magus installs an
 // extensionless magus, so the binary could not re-exec itself ("executable file not found
 // in %PATH%") and no broker ever started.
-func detachedCmd(exe string, args []string) *exec.Cmd {
+func detachedCommand(exe string, args []string) *exec.Cmd {
 	return &exec.Cmd{Path: exe, Args: append([]string{exe}, args...)}
 }
 
@@ -423,7 +423,7 @@ func detachedCmd(exe string, args []string) *exec.Cmd {
 func spawnDetached(args []string, logPath string) (pid int, err error) {
 	exe, err := os.Executable()
 	if err != nil {
-		// argv[0] may be a bare name, which detachedCmd will not search for; resolve it the
+		// argv[0] may be a bare name, which detachedCommand will not search for; resolve it the
 		// way exec.Command used to.
 		exe = os.Args[0]
 		if lp, lerr := exec.LookPath(exe); lerr == nil {
@@ -439,7 +439,7 @@ func spawnDetached(args []string, logPath string) (pid int, err error) {
 	}
 	defer func() { _ = logf.Close() }()
 
-	cmd := detachedCmd(exe, args)
+	cmd := detachedCommand(exe, args)
 	cmd.Env = detachedChildEnv()
 	cmd.Stdin = nil
 	cmd.Stdout = logf
@@ -605,7 +605,7 @@ func wantsForeground(args []string) bool {
 // per-process pool parents whose build differs from this binary.
 func serverStop(ctx context.Context, args []string) error {
 	var tf *flaggen.ServerStopFlags
-	_, err := cmdParse("server stop", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("server stop", args, func(fs *flag.FlagSet) {
 		tf = flaggen.BindServerStop(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server stop [flags]")
@@ -849,7 +849,7 @@ func jobRunUsage() {
 // server too. The trail lives under the workspace cache dir, the same base the MCP handler
 // writes and the ActivityService reads. Normally reached via `magus job run rotate-activities`.
 func serverRotateActivities(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server rotate-activities", args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("server rotate-activities", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-activities")
 			fmt.Fprintln(os.Stderr, "")
@@ -873,7 +873,7 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 // when dispatched as a job and works standalone too. Normally reached via
 // `magus job run rotate-logs`.
 func serverRotateLogs(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server rotate-logs", args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("server rotate-logs", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-logs")
 			fmt.Fprintln(os.Stderr, "")
@@ -903,7 +903,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 // housekeeping has nothing else to report, and a store nobody can prune any more has to be
 // visible somewhere. Here that is the job's outcome in the activity trail.
 func serverPrunePreserved(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server "+job.NamePrunePreserved, args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("server "+job.NamePrunePreserved, args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server prune-preserved")
 			fmt.Fprintln(os.Stderr, "")
@@ -1026,7 +1026,7 @@ func refreshVCSHook(ctx context.Context, driver types.VCSDriver, name, root stri
 // control operation on the server, like `stop`, and sits beside it.
 func serverReload(ctx context.Context, args []string) error {
 	var socket string
-	_, err := cmdParse("server reload", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("server reload", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&socket, "socket", "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server reload [flags]")
@@ -1092,7 +1092,7 @@ func serverReload(ctx context.Context, args []string) error {
 // trail for it, exactly as it already does for a share being opened. Normally reached via
 // `magus job run check-review`.
 func serverCheckReview(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server "+job.NameCheckReview, args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("server "+job.NameCheckReview, args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
 			fmt.Fprintln(os.Stderr, "")

@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// eventsCmd implements `magus events`: the subscribe command third-party
+// eventsCommand implements `magus events`: the subscribe command third-party
 // integrations build against: an editor plugin, a status bar, a notifier.
 //
 // It is the OUTBOUND half of magus's machine-facing commands and the dual of `magus
@@ -28,9 +28,9 @@ import (
 // (magus.ResolveCacheDir), so an editor can attach to a repository whose
 // magusfile is mid-edit or outright broken. A subscriber that only comes up when
 // the workspace is healthy is useless at exactly the moment someone wants it.
-func eventsCmd(ctx context.Context, root string, args []string) error {
+func eventsCommand(ctx context.Context, root string, args []string) error {
 	var ef *flaggen.EventsFlags
-	rest, err := cmdParse("events", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("events", args, func(fs *flag.FlagSet) {
 		ef = flaggen.BindEvents(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus events [flags]")

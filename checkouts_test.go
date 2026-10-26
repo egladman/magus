@@ -25,7 +25,7 @@ import (
 // so they compare equal to the roots a workspace records.
 func linkedWorktrees(t *testing.T, names ...string) (primary string, worktrees []string) {
 	t.Helper()
-	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": ""})
+	repo := testkit.NewRepository(t, map[string]string{"magusfile.buzz": ""})
 	for _, name := range names {
 		worktrees = append(worktrees, repo.AddWorktree(name).Root())
 	}
