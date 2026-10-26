@@ -55,7 +55,7 @@ func TestAllDeclaredAreRegistered(t *testing.T) {
 	}
 }
 
-// declaredCommands returns every "magus ..." path declared with cmd() in cli_command.go,
+// declaredCommands returns every "magus ..." path declared with command() in cli_command.go,
 // read from the file so a new declaration is picked up without anyone remembering to
 // list it.
 func declaredCommands(t *testing.T) []string {
@@ -70,14 +70,14 @@ func declaredCommands(t *testing.T) []string {
 		if !ok {
 			return true
 		}
-		if id, isIdent := call.Fun.(*ast.Ident); !isIdent || id.Name != "cmd" {
+		if id, isIdent := call.Fun.(*ast.Ident); !isIdent || id.Name != "command" {
 			return true
 		}
 		tokens := make([]string, 0, len(call.Args))
 		for _, a := range call.Args {
 			lit, isLit := a.(*ast.BasicLit)
 			if !isLit || lit.Kind != token.STRING {
-				t.Fatalf("cmd() called with a non-literal argument; this test reads literals only")
+				t.Fatalf("command() called with a non-literal argument; this test reads literals only")
 			}
 			tokens = append(tokens, lit.Value[1:len(lit.Value)-1])
 		}
@@ -85,7 +85,7 @@ func declaredCommands(t *testing.T) []string {
 		return true
 	})
 	if len(out) == 0 {
-		t.Fatal("found no cmd() declarations; the test is reading the wrong file")
+		t.Fatal("found no command() declarations; the test is reading the wrong file")
 	}
 	return out
 }

@@ -168,7 +168,7 @@ func runTexts(args []string) error {
 	d.report.LeftOut = slices.Sorted(maps.Keys(leftOut))
 
 	mix := textMix{forced: map[string]bool{}, excluded: map[string]int{}, decontam: d}
-	if err := mix.addRepo(records, files, *rev, *sourcesPath, *maxBytes); err != nil {
+	if err := mix.addRepository(records, files, *rev, *sourcesPath, *maxBytes); err != nil {
 		return err
 	}
 	repo := len(mix.texts)
@@ -377,11 +377,11 @@ type textMix struct {
 	docs, queries  int
 }
 
-// addRepo adds the in-repo texts the manifest records: each train-split file that
+// addRepository adds the in-repo texts the manifest records: each train-split file that
 // excludedReason lets in, which must hash to its pinned digest at rev, cut into chunks
 // of at most maxBytes, and each figure outside eval fold 0. It collects the forced
 // tokens and the input records for addCornstack.
-func (m *textMix) addRepo(records []sourceRecord, files map[string][]byte, rev, sourcesPath string, maxBytes int) error {
+func (m *textMix) addRepository(records []sourceRecord, files map[string][]byte, rev, sourcesPath string, maxBytes int) error {
 	for _, r := range records {
 		switch r.Kind {
 		case "file":
