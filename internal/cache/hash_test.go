@@ -61,6 +61,10 @@ func TestHashFileWithMtimeReusesStoredHash(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "src.go")
 	require.NoError(t, os.WriteFile(p, []byte("v1"), 0o644))
+	// Age the mtime past the coarse window. A just-written file is hashed from
+	// its bytes, so the stored fingerprint this test restores has to be older.
+	past := time.Now().Add(-time.Minute)
+	require.NoError(t, os.Chtimes(p, past, past))
 
 	h1, err := c.hashFileWithMtime(p)
 	require.NoError(t, err)
@@ -882,4 +886,44 @@ func TestExpandSourcesPrefixWalkMatchesTheFullWalk(t *testing.T) {
 		rels = append(rels, ra.rel)
 	}
 	assert.Equal(t, []string{"web/b.ts", "web/src/a.ts"}, rels)
+}
+
+// Both hashing paths must ignore and avoid saving fingerprints while their mtime
+// is unsettled. A future mtime keeps this independent of scheduler delays.
+func TestUnsettledMtimeAlwaysHashesTheBytes(t *testing.T) {
+	paths := map[string]func(*Cache, string) (string, error){
+		"single": func(c *Cache, path string) (string, error) { return c.hashFileWithMtime(path) },
+		"batch": func(c *Cache, path string) (string, error) {
+			hashes, _, err := c.hashFiles(t.Context(), []relAbs{{rel: "src.go", abs: path}})
+			if err != nil {
+				return "", err
+			}
+			return hashes[0], nil
+		},
+	}
+	for name, hash := range paths {
+		t.Run(name, func(t *testing.T) {
+			c := newBareCache(t)
+			c.mtimes.load(t.Context())
+			path := filepath.Join(t.TempDir(), "src.go")
+			require.NoError(t, os.WriteFile(path, []byte("v1"), 0o644))
+			future := time.Now().Add(time.Hour)
+			require.NoError(t, os.Chtimes(path, future, future))
+			info, err := os.Stat(path)
+			require.NoError(t, err)
+			first, err := hash(c, path)
+			require.NoError(t, err)
+			_, stored := c.mtimes.get(path, info.ModTime().UnixNano(), info.Size())
+			assert.False(t, stored, "an unsettled fingerprint must not be stored")
+			c.mtimes.set(path, first, info.ModTime().UnixNano(), info.Size())
+			require.NoError(t, os.WriteFile(path, []byte("v2"), 0o644))
+			require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+			want, err := hashFile(path)
+			require.NoError(t, err)
+			got, err := hash(c, path)
+			require.NoError(t, err)
+			assert.NotEqual(t, first, got, "a same-sized rewrite with the same mtime must be seen")
+			assert.Equal(t, want, got)
+		})
+	}
 }
