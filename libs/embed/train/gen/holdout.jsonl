@@ -129,6 +129,7 @@
 {"group":"file:changes/unreleased/guard-unread-command.md","path":"changes/unreleased/guard-unread-command.md"}
 {"group":"file:changes/unreleased/hack-script-names.md","path":"changes/unreleased/hack-script-names.md"}
 {"group":"file:changes/unreleased/harness-merge-command-reruns.md","path":"changes/unreleased/harness-merge-command-reruns.md"}
+{"group":"file:changes/unreleased/harness-render-prompts.md","path":"changes/unreleased/harness-render-prompts.md"}
 {"group":"file:changes/unreleased/hook-glue-binary-from-event-cwd.md","path":"changes/unreleased/hook-glue-binary-from-event-cwd.md"}
 {"group":"file:changes/unreleased/integration-defers-the-settle.md","path":"changes/unreleased/integration-defers-the-settle.md"}
 {"group":"file:changes/unreleased/job-edit.md","path":"changes/unreleased/job-edit.md"}
@@ -254,6 +255,7 @@
 {"group":"file:changes/unreleased/surface-names.md","path":"changes/unreleased/surface-names.md"}
 {"group":"file:changes/unreleased/termcast-shots.md","path":"changes/unreleased/termcast-shots.md"}
 {"group":"file:changes/unreleased/test-shell-loops-end.md","path":"changes/unreleased/test-shell-loops-end.md"}
+{"group":"file:changes/unreleased/token-view-names.md","path":"changes/unreleased/token-view-names.md"}
 {"group":"file:changes/unreleased/tool-rules-on-the-server.md","path":"changes/unreleased/tool-rules-on-the-server.md"}
 {"group":"file:changes/unreleased/tool-with-no-version-fails-run-as-mgs3035.md","path":"changes/unreleased/tool-with-no-version-fails-run-as-mgs3035.md"}
 {"group":"file:changes/unreleased/toolchain-releases-eol-unknown.md","path":"changes/unreleased/toolchain-releases-eol-unknown.md"}
@@ -266,6 +268,7 @@
 {"group":"file:changes/unreleased/vale-port.md","path":"changes/unreleased/vale-port.md"}
 {"group":"file:changes/unreleased/vcs-capabilities-that-combine-revisions-without.md","path":"changes/unreleased/vcs-capabilities-that-combine-revisions-without.md"}
 {"group":"file:changes/unreleased/vcsdriver-preserve-required.md","path":"changes/unreleased/vcsdriver-preserve-required.md"}
+{"group":"file:changes/unreleased/verdicts-are-typed-enums.md","path":"changes/unreleased/verdicts-are-typed-enums.md"}
 {"group":"file:changes/unreleased/worker-merges-a-dependency-branch.md","path":"changes/unreleased/worker-merges-a-dependency-branch.md"}
 {"group":"file:changes/unreleased/write-path-config-key-claims.md","path":"changes/unreleased/write-path-config-key-claims.md"}
 {"group":"file:changes/unreleased/write-that-opens-unrelated-unit-work.md","path":"changes/unreleased/write-that-opens-unrelated-unit-work.md"}
@@ -643,6 +646,7 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/broker.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/buzz.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/cache.md"}
+{"group":"dir:docs/glossary","path":"docs/glossary/cantrip.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/charm.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/chord.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/ci.md"}
@@ -952,6 +956,7 @@
 {"group":"dir:hack/magusfile","path":"hack/magusfile/harness.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/index.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/mockassert.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/model-tiers.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/releases.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/ruledocs.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/run-golangci.buzz"}
