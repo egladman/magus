@@ -5,24 +5,24 @@ in the root `conventions_test.go` that walked the tree as text; as an analyzer i
 runs in `magus run lint` beside the stock linters, reports at the offending line,
 and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 
-| Linter          | Reports                                                                                                     |
-| --------------- | ----------------------------------------------------------------------------------------------------------- |
-| `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path                                    |
-| `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                   |
-| `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                              |
-| `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                        |
-| `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark           |
-| `stutter`       | an exported package-level name opening with its package's name                                              |
-| `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                            |
-| `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                            |
+| Linter          | Reports                                                                                                                       |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path                                                      |
+| `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                                     |
+| `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                                                |
+| `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                                          |
+| `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark                             |
+| `stutter`       | an exported package-level name opening with its package's name                                                                |
+| `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                                              |
+| `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                                              |
 | `namewords`     | a function or method name, exported or not, ending in a listed word (`Of`, `For`) or using a listed short form (`Src`, `Ctx`) |
-| `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
-| `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it            |
-| `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
-| `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
-| `diagmsg`       | a diagnostic that runs long, stacks reasons, names two commands or opens with a one- to three-word tag      |
-| `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record    |
-| `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see        |
+| `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                                              |
+| `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it                              |
+| `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once                              |
+| `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import)                   |
+| `diagmsg`       | a diagnostic that runs long, stacks reasons, names two commands or opens with a one- to three-word tag                        |
+| `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record                      |
+| `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see                          |
 
 Every path, word list, host name, ceiling and exemption lives in the root
 `.golangci.yml`, so the analyzers carry the mechanism and the config carries the
