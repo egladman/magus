@@ -43,7 +43,9 @@ func TestStampsGateTheReplay(t *testing.T) {
 	assert.False(t, run().Hit, "a deleted tree must reinstall")
 	assert.Equal(t, 2, calls)
 
-	require.NoError(t, os.WriteFile(stamp, []byte("lock v0"), 0o644))
+	// A different length, not only different bytes. A same-sized rewrite in one coarse
+	// timestamp tick keeps the mtime, and the mtime store is specified to reuse the stored hash.
+	require.NoError(t, os.WriteFile(stamp, []byte("lock version 0"), 0o644))
 	assert.False(t, run().Hit, "a stamp another tool rewrote no longer vouches for the entry")
 	assert.Equal(t, 3, calls)
 }
