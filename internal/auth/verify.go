@@ -21,8 +21,8 @@ import (
 // with its route's Need.
 //
 // It answers from an in-memory view of both stores, so a request costs three stat calls and
-// no file read, however many come. The view is reloaded when the operator file, tokens.d, or
-// the state directory holding them changes on disk, and at least every revalidateEvery
+// a listing of tokens.d, however many come. The view reloads when the operator file,
+// tokens.d, or the state directory changes on disk, and at least every revalidateEvery
 // regardless, which catches an edit that rewrites a token file in place. So a rotate, mint or
 // revoke takes effect without a restart, and a load error fails closed. A store that fails to
 // load (a retired connectors.d, say) refuses stored tokens only: the operator token never
@@ -109,8 +109,9 @@ func currentView() view {
 }
 
 // statSignature stats the state directory (a retired connectors.d appearing changes it), the
-// operator file, and tokens.d (a mint links a file in and a revoke unlinks one, both of which
-// change it). It opens nothing.
+// operator file, and tokens.d. A second link or unlink in one coarse timestamp tick leaves
+// the directory mtime and its size unchanged, so the token file names are in the signature.
+// It reads no token file.
 func statSignature(state string) string {
 	var b strings.Builder
 	for _, p := range []string{state, filepath.Join(state, "mcp_token"), filepath.Join(state, "tokens.d")} {
@@ -121,5 +122,20 @@ func statSignature(state string) string {
 		}
 		fmt.Fprintf(&b, "|%d:%d:%o", info.Size(), info.ModTime().UnixNano(), info.Mode())
 	}
+	appendTokenNames(&b, filepath.Join(state, "tokens.d"))
 	return b.String()
+}
+
+// appendTokenNames records dir's entry names. os.ReadDir sorts them, so two calls agree.
+func appendTokenNames(b *strings.Builder, dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		b.WriteString("|names:-")
+		return
+	}
+	b.WriteString("|names:")
+	for _, entry := range entries {
+		b.WriteString(entry.Name())
+		b.WriteByte('\n')
+	}
 }
