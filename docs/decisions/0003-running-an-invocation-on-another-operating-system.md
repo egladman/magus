@@ -499,5 +499,5 @@ invocation in a container, where building an image meant driving a runtime. Asse
 no runtime and executes nothing: it is a deterministic transform of files into an image
 layout on disk. magus still never runs a container, never reads or authors a Dockerfile or
 Containerfile, and never detects a runtime. The rest of that list, including exposing no
-container API to Buzz, is unchanged. [ADR 0016](0016-magus-assembles-oci-images.md) records
+container API to Buzz, is unchanged. [ADR 0018](0018-magus-assembles-oci-images.md) records
 the decision and its limits.

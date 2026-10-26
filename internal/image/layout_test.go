@@ -2,6 +2,7 @@ package image
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -41,7 +42,7 @@ func snapshot(t *testing.T, dir string) map[string]string {
 			require.NoError(t, err)
 			body = string(b)
 		}
-		out[rel] = info.Mode().String() + "|" + body
+		out[rel] = fmt.Sprintf("%s|%s", info.Mode(), body)
 		return nil
 	}))
 	return out
@@ -66,7 +67,7 @@ func TestImageLayoutWriteThenOpen(t *testing.T) {
 
 	assert.Equal(t, `{"imageLayoutVersion":"1.0.0"}`, snapshotBody(t, filepath.Join(dest, "oci-layout")))
 	assert.JSONEq(t,
-		`{"schemaVersion":2,"manifests":[{"mediaType":"`+testManifestType+`","digest":"`+root.Digest.String()+`","size":19,"platform":{"architecture":"arm64","os":"linux","variant":"v8"}}]}`,
+		fmt.Sprintf(`{"schemaVersion":2,"manifests":[{"mediaType":%q,"digest":%q,"size":19,"platform":{"architecture":"arm64","os":"linux","variant":"v8"}}]}`, testManifestType, root.Digest),
 		snapshotBody(t, filepath.Join(dest, "index.json")))
 	assert.ElementsMatch(t,
 		[]string{blobs[0].desc.Digest.Encoded(), blobs[1].desc.Digest.Encoded()},
@@ -257,8 +258,7 @@ func TestImageLayoutOpenRefusesWrongDescriptorCount(t *testing.T) {
 	root, blobs := testRoot(t)
 	for name, index := range map[string]string{
 		"none": `{"schemaVersion":2,"manifests":[]}`,
-		"two": `{"schemaVersion":2,"manifests":[{"mediaType":"` + testManifestType + `","digest":"` + root.Digest.String() + `","size":19},` +
-			`{"mediaType":"` + testManifestType + `","digest":"` + root.Digest.String() + `","size":19}]}`,
+		"two":  fmt.Sprintf(`{"schemaVersion":2,"manifests":[{"mediaType":%q,"digest":%q,"size":19},{"mediaType":%q,"digest":%q,"size":19}]}`, testManifestType, root.Digest, testManifestType, root.Digest),
 	} {
 		t.Run(name, func(t *testing.T) {
 			dest := filepath.Join(t.TempDir(), "out")

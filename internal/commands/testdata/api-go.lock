@@ -297,7 +297,7 @@ github.com/egladman/magus/libs/testkit.Isolated func(m *testing.M, keep ...strin
 github.com/egladman/magus/libs/testkit.IsolatedM type struct
 github.com/egladman/magus/libs/testkit.IsolatedM.Run method func() int
 github.com/egladman/magus/libs/testkit.Main func(m *testing.M, keep ...string)
-github.com/egladman/magus/libs/testkit.NewRepository func(tb TB, files map[string]string) *Repo
+github.com/egladman/magus/libs/testkit.NewRepo func(tb TB, files map[string]string) *Repo
 github.com/egladman/magus/libs/testkit.NewWorkspace func(tb TB) *Workspace
 github.com/egladman/magus/libs/testkit.Projects func(paths ...string) []*github.com/egladman/magus/types.Project
 github.com/egladman/magus/libs/testkit.Repo type struct
@@ -390,12 +390,12 @@ github.com/egladman/magus/std.CryptoSha512Hex func(_ context.Context, data strin
 github.com/egladman/magus/std.CryptoSign func(_ context.Context, alg string, data string, keyHex string) (string, error)
 github.com/egladman/magus/std.CryptoSignFile func(ctx context.Context, alg string, path string, keyHex string) (string, error)
 github.com/egladman/magus/std.CryptoVerify func(_ context.Context, alg string, data string, sigHex string, pubHex string) (bool, error)
-github.com/egladman/magus/std.CurrentWorkingDirectoryFromContext func(ctx context.Context) (string, bool)
+github.com/egladman/magus/std.CwdFromContext func(ctx context.Context) (string, bool)
 github.com/egladman/magus/std.Diff var Module
 github.com/egladman/magus/std.DiffEqual func(_ context.Context, a string, b string) (bool, error)
 github.com/egladman/magus/std.DiffStat func(_ context.Context, a string, b string) (string, error)
 github.com/egladman/magus/std.DiffUnified func(_ context.Context, a string, b string, fromLabel string, toLabel string, contextLines int) (string, error)
-github.com/egladman/magus/std.EffectiveCurrentWorkingDirectory func(ctx context.Context) (string, error)
+github.com/egladman/magus/std.EffectiveCwd func(ctx context.Context) (string, error)
 github.com/egladman/magus/std.Env var Module
 github.com/egladman/magus/std.EnvExpand func(ctx context.Context, s string) (string, error)
 github.com/egladman/magus/std.EnvGet func(ctx context.Context, name string) (string, error)
@@ -416,7 +416,7 @@ github.com/egladman/magus/std.Field.Resolver field any
 github.com/egladman/magus/std.Field.Type field TypeTag
 github.com/egladman/magus/std.FieldFuncName func(f Field) string
 github.com/egladman/magus/std.FieldResolverPackage func(f Field) (importPath string, pkgIdent string)
-github.com/egladman/magus/std.FieldResolverTakesContext func(f Field) bool
+github.com/egladman/magus/std.FieldResolverTakesCtx func(f Field) bool
 github.com/egladman/magus/std.Flags var Module
 github.com/egladman/magus/std.FlagsParse func(_ context.Context, argv []string, switches []string, valued []string, required []string, repeated []string, command bool) (github.com/egladman/magus/types.FlagParse, error)
 github.com/egladman/magus/std.Fmt var Module
@@ -462,6 +462,11 @@ github.com/egladman/magus/std.HTTPPost func(ctx context.Context, url string, bod
 github.com/egladman/magus/std.HTTPRequest func(ctx context.Context, method string, url string, body string, headers map[string]string, opts map[string]any, retryPolicy map[string]any) (github.com/egladman/magus/types.HTTPResponse, error)
 github.com/egladman/magus/std.HTTPServe func(ctx context.Context, opts map[string]any) (int, error)
 github.com/egladman/magus/std.HostPlatform func() (osName string, arch string, variant string)
+github.com/egladman/magus/std.Image var Module
+github.com/egladman/magus/std.ImageIndex func(_ context.Context, _ []string, _ string) (github.com/egladman/magus/types.ImageLayout, error)
+github.com/egladman/magus/std.ImagePublish func(_ context.Context, _ string, _ string, _ []string, _ map[string]any) (github.com/egladman/magus/types.ImagePublished, error)
+github.com/egladman/magus/std.ImagePull func(_ context.Context, _ string, platform map[string]any, _ string) (github.com/egladman/magus/types.ImageLayout, error)
+github.com/egladman/magus/std.ImageWrite func(_ context.Context, spec map[string]any, _ string) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.Log var Module
 github.com/egladman/magus/std.LogAt func(ctx context.Context, level string, message string, attrs map[string]any) error
 github.com/egladman/magus/std.LogDebug func(ctx context.Context, message string, attrs map[string]any) error
@@ -485,7 +490,7 @@ github.com/egladman/magus/std.MagusAttention func(ctx context.Context, args []st
 github.com/egladman/magus/std.MagusBustCache func(ctx context.Context, projectPath string) error
 github.com/egladman/magus/std.MagusClean func(ctx context.Context, args []string, opts map[string]any) (github.com/egladman/magus/types.CleanReport, error)
 github.com/egladman/magus/std.MagusClearJob func(ctx context.Context) (int, error)
-github.com/egladman/magus/std.MagusCommand func(ctx context.Context, sub string, args []string, opts map[string]any) (github.com/egladman/magus/types.ExecResult, error)
+github.com/egladman/magus/std.MagusCmd func(ctx context.Context, sub string, args []string, opts map[string]any) (github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.MagusConformance func(ctx context.Context) (map[string]any, error)
 github.com/egladman/magus/std.MagusDescribeCharm func(ctx context.Context, name string, opts map[string]any) ([]github.com/egladman/magus/types.CharmEntry, error)
 github.com/egladman/magus/std.MagusDescribeEvaluatedProject func(ctx context.Context, path string, opts map[string]any) ([]github.com/egladman/magus/types.EvaluatedProject, error)
@@ -562,7 +567,7 @@ github.com/egladman/magus/std.Method.Name field string
 github.com/egladman/magus/std.Method.Raises field bool
 github.com/egladman/magus/std.Method.Returns field []Ret
 github.com/egladman/magus/std.MethodFuncName func(m Method) string
-github.com/egladman/magus/std.MethodImplementationPackage func(m Method) (importPath string, pkgIdent string)
+github.com/egladman/magus/std.MethodImplPackage func(m Method) (importPath string, pkgIdent string)
 github.com/egladman/magus/std.MethodSource func(m Method, repoRoot string) string
 github.com/egladman/magus/std.Module type struct
 github.com/egladman/magus/std.Module.Doc field string
@@ -722,7 +727,7 @@ github.com/egladman/magus/std.ValidateModule func(m Module) error
 github.com/egladman/magus/std.Vcs var Module
 github.com/egladman/magus/std.VcsBase func(ctx context.Context, dir string) (string, error)
 github.com/egladman/magus/std.VcsChangedFiles func(ctx context.Context, base string, dir string) ([]github.com/egladman/magus/types.Path, error)
-github.com/egladman/magus/std.VcsCommand func(ctx context.Context, args []string, opts map[string]any) (github.com/egladman/magus/types.ExecResult, error)
+github.com/egladman/magus/std.VcsCmd func(ctx context.Context, args []string, opts map[string]any) (github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.VcsCommit func(ctx context.Context, rev string) (github.com/egladman/magus/types.Commit, error)
 github.com/egladman/magus/std.VcsDescribe func(ctx context.Context) (string, error)
 github.com/egladman/magus/std.VcsDiffStat func(ctx context.Context, base string, dir string) ([]github.com/egladman/magus/types.FileStat, error)
@@ -735,7 +740,7 @@ github.com/egladman/magus/std.VcsRegions func(ctx context.Context, base string, 
 github.com/egladman/magus/std.VcsRoot func(ctx context.Context) (string, error)
 github.com/egladman/magus/std.VcsStatus func(ctx context.Context, paths []string) (github.com/egladman/magus/types.Status, error)
 github.com/egladman/magus/std.VcsTags func(ctx context.Context, pattern string) ([]github.com/egladman/magus/types.VCSTag, error)
-github.com/egladman/magus/std.WithCurrentWorkingDirectory func(ctx context.Context, dir string) context.Context
+github.com/egladman/magus/std.WithCwd func(ctx context.Context, dir string) context.Context
 github.com/egladman/magus/types.Ack type struct
 github.com/egladman/magus/types.Ack.OK field bool
 github.com/egladman/magus/types.ActiveDispatch type struct
@@ -2390,6 +2395,47 @@ github.com/egladman/magus/types.IgnorePattern.Pattern field string "json:\"patte
 github.com/egladman/magus/types.IgnorePattern.Type field PatternType "json:\"type\" yaml:\"type\" validate:\"required,oneof=glob regex literal\""
 github.com/egladman/magus/types.IgnoredFileReporter type interface
 github.com/egladman/magus/types.IgnoredFileReporter.IgnoredFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
+github.com/egladman/magus/types.ImageFile type struct
+github.com/egladman/magus/types.ImageFile.Destination field string
+github.com/egladman/magus/types.ImageFile.GID field int
+github.com/egladman/magus/types.ImageFile.Mode field int
+github.com/egladman/magus/types.ImageFile.Source field string
+github.com/egladman/magus/types.ImageFile.UID field int
+github.com/egladman/magus/types.ImageLayout type struct
+github.com/egladman/magus/types.ImageLayout.Digest field string
+github.com/egladman/magus/types.ImageLayout.MediaType field string
+github.com/egladman/magus/types.ImageLayout.Path field string
+github.com/egladman/magus/types.ImageLayout.Platform field ImagePlatform
+github.com/egladman/magus/types.ImageLayout.Size field int
+github.com/egladman/magus/types.ImagePlatform type struct
+github.com/egladman/magus/types.ImagePlatform.Architecture field string
+github.com/egladman/magus/types.ImagePlatform.OS field string
+github.com/egladman/magus/types.ImagePlatform.Variant field string
+github.com/egladman/magus/types.ImagePublished type struct
+github.com/egladman/magus/types.ImagePublished.Digest field string
+github.com/egladman/magus/types.ImagePublished.Repository field string
+github.com/egladman/magus/types.ImagePublished.Tags field []string
+github.com/egladman/magus/types.ImageSpec type struct
+github.com/egladman/magus/types.ImageSpec.Annotations field map[string]string
+github.com/egladman/magus/types.ImageSpec.Base field string
+github.com/egladman/magus/types.ImageSpec.Cmd field []string
+github.com/egladman/magus/types.ImageSpec.Created field string
+github.com/egladman/magus/types.ImageSpec.Entrypoint field []string
+github.com/egladman/magus/types.ImageSpec.Env field map[string]string
+github.com/egladman/magus/types.ImageSpec.Files field []ImageFile
+github.com/egladman/magus/types.ImageSpec.Labels field map[string]string
+github.com/egladman/magus/types.ImageSpec.Platform field ImagePlatform
+github.com/egladman/magus/types.ImageSpec.ResetCmd field bool
+github.com/egladman/magus/types.ImageSpec.ResetEntrypoint field bool
+github.com/egladman/magus/types.ImageSpec.Symlinks field []ImageSymlink
+github.com/egladman/magus/types.ImageSpec.UnsetEnv field []string
+github.com/egladman/magus/types.ImageSpec.User field string
+github.com/egladman/magus/types.ImageSpec.WorkingDir field string
+github.com/egladman/magus/types.ImageSymlink type struct
+github.com/egladman/magus/types.ImageSymlink.Destination field string
+github.com/egladman/magus/types.ImageSymlink.GID field int
+github.com/egladman/magus/types.ImageSymlink.Target field string
+github.com/egladman/magus/types.ImageSymlink.UID field int
 github.com/egladman/magus/types.ImpactCoverage type struct
 github.com/egladman/magus/types.ImpactCoverage.Covered field int "json:\"covered_stmts\" yaml:\"covered_stmts\""
 github.com/egladman/magus/types.ImpactCoverage.Ratio field float64 "json:\"ratio\"         yaml:\"ratio\""
@@ -2747,7 +2793,7 @@ github.com/egladman/magus/types.JobOverlapFootprint.Verdict field string "json:\
 github.com/egladman/magus/types.JobProblem type struct
 github.com/egladman/magus/types.JobProblem.Code field DiagnosticCode "json:\"code\""
 github.com/egladman/magus/types.JobProblem.Edit field *JobEdit "json:\"edit,omitempty\""
-github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
+github.com/egladman/magus/types.JobProblem.Err method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
@@ -2757,7 +2803,7 @@ github.com/egladman/magus/types.JobProblemError.Error method(ptr) func() string
 github.com/egladman/magus/types.JobProblemError.Problem field JobProblem
 github.com/egladman/magus/types.JobProblemError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.JobProblems type []JobProblem
-github.com/egladman/magus/types.JobProblems.Error method func() error
+github.com/egladman/magus/types.JobProblems.Err method func() error
 github.com/egladman/magus/types.JobProblems.Fixable method func() int
 github.com/egladman/magus/types.JobProblems.Permit method func(ds []Deviation) (kept JobProblems, permitted JobProblems)
 github.com/egladman/magus/types.JobPut type struct
@@ -2861,7 +2907,7 @@ github.com/egladman/magus/types.JobUnattributedWrite.Digest field string "json:\
 github.com/egladman/magus/types.JobUnattributedWrite.Path field string "json:\"path\"   yaml:\"path\""
 github.com/egladman/magus/types.JobUngraded const DiagnosticCode = "MGS3039"
 github.com/egladman/magus/types.JobValidation type struct
-github.com/egladman/magus/types.JobValidation.Error method func() error
+github.com/egladman/magus/types.JobValidation.Err method func() error
 github.com/egladman/magus/types.JobValidation.Job field Job "json:\"job\""
 github.com/egladman/magus/types.JobValidation.Permitted field JobProblems "json:\"permitted,omitempty\""
 github.com/egladman/magus/types.JobValidation.Problems field JobProblems "json:\"problems\""

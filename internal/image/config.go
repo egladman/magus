@@ -25,7 +25,7 @@ func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.
 		cfg.OS = spec.Platform.OS
 		cfg.Architecture = spec.Platform.Architecture
 		cfg.Variant = spec.Platform.Variant
-		cfg.RootFS = ocispec.RootFS{Type: "layers"}
+		cfg.RootFS = ocispec.RootFS{Type: "layers", DiffIDs: []digest.Digest{}}
 	} else {
 		cfg = cloneConfig(*base)
 	}
@@ -96,7 +96,7 @@ func mergeEnv(base []string, set map[string]string, unset []string) ([]string, e
 	}
 	out := slices.Clone(base)
 	for _, k := range slices.Sorted(maps.Keys(set)) {
-		entry := k + "=" + set[k]
+		entry := fmt.Sprintf("%s=%s", k, set[k])
 		i := slices.IndexFunc(out, func(e string) bool { return strings.HasPrefix(e, k+"=") })
 		if i >= 0 {
 			out[i] = entry
@@ -126,9 +126,53 @@ func resolveList(base, spec []string, reset bool) []string {
 
 // configBlob marshals cfg (R19) and describes the bytes.
 func configBlob(cfg ocispec.Image) ([]byte, ocispec.Descriptor, error) {
-	data, err := json.Marshal(cfg)
+	data, err := configJSON(cfg)
 	if err != nil {
 		return nil, ocispec.Descriptor{}, fmt.Errorf("image.write: config: %w", err)
 	}
 	return data, blobDescriptor(ocispec.MediaTypeImageConfig, data), nil
+}
+
+// The image-spec structs use v1 omitempty on two bools. Adapt only those fields
+// to the shared v2 codec, keeping every other encoded member intact.
+func configJSON(cfg ocispec.Image) ([]byte, error) {
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(fields["config"], &config); err != nil {
+		return nil, err
+	}
+	var argsEscaped bool
+	if err := json.Unmarshal(config["ArgsEscaped"], &argsEscaped); err != nil {
+		return nil, err
+	}
+	if !argsEscaped {
+		delete(config, "ArgsEscaped")
+		fields["config"], err = json.Marshal(config)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(cfg.History) > 0 {
+		var history []map[string]json.RawMessage
+		if err := json.Unmarshal(fields["history"], &history); err != nil {
+			return nil, err
+		}
+		for i, entry := range cfg.History {
+			if !entry.EmptyLayer {
+				delete(history[i], "empty_layer")
+			}
+		}
+		fields["history"], err = json.Marshal(history)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(fields)
 }

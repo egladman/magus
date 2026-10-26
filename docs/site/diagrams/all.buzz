@@ -13,6 +13,7 @@ import "site/diagrams/server-share" as _;
 import "site/diagrams/ci-pipeline" as _;
 import "site/diagrams/ci-providers" as _;
 import "site/diagrams/image-build" as _;
+import "site/diagrams/oci-assembly" as _;
 import "site/diagrams/dogfood" as _;
 import "site/diagrams/project-reference" as _;
 import "site/diagrams/volatility" as _;
@@ -49,6 +50,7 @@ export fun allFigures() > [figure\Figure] !> any {
         ciPipelineFigure(),
         ciProvidersFigure(),
         imageBuildFigure(),
+        ociAssemblyFigure(),
         dogfoodFigure(),
         projectReferenceFigure(),
         volatilityFigure(),

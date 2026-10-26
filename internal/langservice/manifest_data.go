@@ -191,6 +191,16 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "image",
+		Doc:  "Build, assemble and publish OCI images. Layouts are directories holding exactly one manifest or index; equal inputs give byte-identical layouts.",
+		Methods: []Method{
+			{Name: "pull", Doc: "Fetch the image at reference, a name@sha256:<hex> digest reference, for platform into the OCI layout directory dest. Returns the layout.", Sig: "image\\pull(reference, platform, dest) -> ImageLayout"},
+			{Name: "write", Doc: "Write the image described by spec, at most one new layer over spec.base, into the OCI layout directory dest. Returns the layout.", Sig: "image\\write(spec, dest) -> ImageLayout"},
+			{Name: "index", Doc: "Combine layouts, each holding one platform manifest, into an image index written to the OCI layout directory dest. Returns the layout.", Sig: "image\\index(layouts, dest) -> ImageLayout"},
+			{Name: "publish", Doc: "Push the layout to repository, then tag it with each of tags; an empty tags list pushes by digest only. Returns what the registry confirmed.", Sig: "image\\publish(layout, repository, tags, [opts]) -> ImagePublished"},
+		},
+	},
+	{
 		Name: "ini",
 		Doc:  "INI/properties config parsing and rendering (.npmrc, .gitconfig, .editorconfig).",
 		Methods: []Method{

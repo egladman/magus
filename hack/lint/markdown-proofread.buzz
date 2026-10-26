@@ -81,7 +81,7 @@ final ALLOW = [
     "Swift", "TypeScript", "Unix", "Windows",
     // Acronyms and initialisms.
     "ADR", "AI", "API", "CI", "CLI", "CSS", "CWD", "FAQ", "FFI", "HTTP", "ID", "IDs", "JIT", "JSON",
-    "LLM", "MCP", "PATH", "PF", "REPL", "RFC", "SBOM", "SCIP", "SDK", "UI", "URL", "URLs",
+    "LLM", "MCP", "OCI", "PATH", "PF", "REPL", "RFC", "SBOM", "SCIP", "SDK", "UI", "URL", "URLs",
     "VCS", "YAML",
 ];
 

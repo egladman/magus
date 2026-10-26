@@ -177,7 +177,7 @@ func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 		r.issued++
 		tok := fmt.Sprintf("issued-%d", r.issued)
 		r.valid[tok] = !r.rejectTokens
-		_, _ = w.Write([]byte(`{"token":"` + tok + `"}`))
+		_, _ = fmt.Fprintf(w, `{"token":%q}`, tok)
 	case strings.HasPrefix(p, "/upload/"):
 		body, err := io.ReadAll(req.Body)
 		want := req.URL.Query().Get("digest")
@@ -225,7 +225,7 @@ func (r *inMemoryRegistry) serveBlob(w http.ResponseWriter, req *http.Request, l
 		return
 	}
 	if r.blobRedirect != "" {
-		w.Header().Set("Location", r.blobRedirect+"/"+last)
+		w.Header().Set("Location", fmt.Sprintf("%s/%s", r.blobRedirect, last))
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		return
 	}

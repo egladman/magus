@@ -91,6 +91,10 @@ http.post
 http.request
 http.server
 http.upload_chunked
+image.index
+image.publish
+image.pull
+image.write
 log.at
 log.debug
 log.error

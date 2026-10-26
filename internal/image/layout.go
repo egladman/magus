@@ -101,7 +101,7 @@ func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blob
 	}
 
 	dest = filepath.Clean(dest)
-	staging, err := os.MkdirTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".staging-*")
+	staging, err := os.MkdirTemp(filepath.Dir(dest), fmt.Sprintf(".%s.staging-*", filepath.Base(dest)))
 	if err != nil {
 		return fmt.Errorf("image.write: layout: staging directory: %w", err)
 	}

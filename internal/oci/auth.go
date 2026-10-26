@@ -83,7 +83,7 @@ func (c *Client) forget(ref Reference, actions, auth string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, cached := range c.tokens {
-		if cached == auth && key.scope == "repository:"+ref.Repository+":"+actions {
+		if cached == auth && key.scope == fmt.Sprintf("repository:%s:%s", ref.Repository, actions) {
 			delete(c.tokens, key)
 		}
 	}

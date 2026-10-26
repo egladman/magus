@@ -1,13 +1,14 @@
 ---
-title: "ADR 0016: magus assembles OCI images from built files"
-order: 16
-description: Whether magus should produce the container images a Dockerfile builds today. This record has magus assemble an OCI image layout from files a target already built, in Go, exposed to Buzz as the generated std module image with recipes written in Buzz. It is not Dockerfile support: no parser, no RUN, no container execution, no package installation, no runtime detection. It fixes the scope limits, the determinism rules, the timestamp policy at Unix 0, the loud-failure rules and a registry transport that extends internal/oci, and leaves SBOM and provenance and the dynamic image open.
+title: "ADR 0018: magus assembles OCI images from built files"
+order: 18
+description: >-
+  Whether magus should produce the container images a Dockerfile builds today. This record has magus assemble an OCI image layout from files a target already built, in Go, exposed to Buzz as the generated std module image with recipes written in Buzz. It is not Dockerfile support: no parser, no RUN, no container execution, no package installation, no runtime detection. It fixes the scope limits, the determinism rules, the timestamp policy at Unix 0, the loud-failure rules and a registry transport that extends internal/oci, and leaves SBOM and provenance and the dynamic image open.
 tags: [adr, decision, images, oci, containers, buzz, std, release, determinism]
 status: proposed
 date: 2026-10-23
 ---
 
-# ADR 0016: magus assembles `OCI` images from built files
+# ADR 0018: magus assembles OCI images from built files
 
 ## Context
 
@@ -43,13 +44,15 @@ adds at most one new layer holding the files and symlinks a recipe lists, rewrit
 image config, and writes a new OCI image layout. A separate, explicit step publishes a
 layout to a registry. `Index` joins single-platform layouts into one image index.
 
-| Item                                                                                          | State    |
-| --------------------------------------------------------------------------------------------- | -------- |
-| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`   | proposed |
-| The std `image` module, trampolines generated like `archive`                                  | proposed |
+| Item                                                                                           | State    |
+| ---------------------------------------------------------------------------------------------- | -------- |
+| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`    | proposed |
+| The std `image` module, trampolines generated like `archive`                                   | proposed |
 | Our own static image recipe, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | proposed |
-| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                    | proposed |
-| The release path publishes the layout instead of running `docker buildx`                      | proposed |
+| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                     | proposed |
+| The release path publishes the layout instead of running `docker buildx`                       | proposed |
+
+<!--diagram:oci-assembly-->
 
 ### Go owns the rules, Buzz owns the recipe
 
@@ -126,10 +129,10 @@ that time into the target key through its input.
 
 ### Doctrine checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. A tag, an unsupported
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. A tag, an unsupported
   platform or a mismatched base fails with the accepted set named, and nothing is
   relabeled or substituted.
-- [A record of refusals](../doctrine.md#a-record-of-refusals): relied on. ADR 0003's
+- [A record of refusals](../design/refusals.md): relied on. ADR 0003's
   refusal to run containers and expose a container API stands. The ledger rows for this
   record are added separately.
 - The determinism rules follow the repository's reproducibility stance: output is a

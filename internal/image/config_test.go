@@ -1,9 +1,12 @@
 package image
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/internal/json"
 
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -196,10 +199,44 @@ func TestImageConfigBlobBytes(t *testing.T) {
 	data, desc, err := configBlob(cfg)
 	require.NoError(t, err)
 
-	assert.Equal(t, `{"architecture":"amd64","os":"linux","config":{"ArgsEscaped":false},"rootfs":{"type":"layers","diff_ids":["`+string(imageTestDiffID)+`"]},"history":[{"created_by":"magus image write","empty_layer":false}]}`, string(data))
+	assert.Equal(t, fmt.Sprintf(`{"architecture":"amd64","config":{},"history":[{"created_by":"magus image write"}],"os":"linux","rootfs":{"type":"layers","diff_ids":[%q]}}`, imageTestDiffID), string(data))
 	assert.Equal(t, ocispec.Descriptor{
 		MediaType: "application/vnd.oci.image.config.v1+json",
 		Digest:    digest.FromBytes(data),
 		Size:      int64(len(data)),
 	}, desc)
+}
+
+func TestImageConfigOptionalBooleans(t *testing.T) {
+	for _, value := range []bool{false, true} {
+		t.Run(fmt.Sprint(value), func(t *testing.T) {
+			cfg := imageTestBase()
+			cfg.Author = "base author"
+			cfg.OSVersion = "base version"
+			cfg.OSFeatures = []string{"base feature"}
+			require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(`{"ArgsEscaped":%t}`, value)), &cfg.Config))
+			cfg.Config.ExposedPorts = map[string]struct{}{"443/tcp": {}}
+			cfg.History[0].EmptyLayer = value
+			cfg.History[0].Comment = "base comment"
+			data, _, err := configBlob(*cfg)
+			require.NoError(t, err)
+			var decoded ocispec.Image
+			require.NoError(t, json.Unmarshal(data, &decoded))
+			assert.Equal(t, *cfg, decoded)
+
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(data, &fields))
+			var config map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(fields["config"], &config))
+			var history []map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(fields["history"], &history))
+			if value {
+				assert.JSONEq(t, "true", string(config["ArgsEscaped"]))
+				assert.JSONEq(t, "true", string(history[0]["empty_layer"]))
+			} else {
+				assert.NotContains(t, config, "ArgsEscaped")
+				assert.NotContains(t, history[0], "empty_layer")
+			}
+		})
+	}
 }

@@ -340,7 +340,7 @@ func (d *decoder) strMap(m map[string]any, key string) map[string]string {
 	for k, v := range in {
 		sv, ok := v.(string)
 		if !ok {
-			d.fail(key+"."+k, "a string", v)
+			d.fail(fmt.Sprintf("%s.%s", key, k), "a string", v)
 			continue
 		}
 		out[k] = sv
