@@ -163,6 +163,17 @@ func (s *mtimeStore) load(ctx context.Context) {
 	}
 }
 
+// coarseMtimeWindow is how long a fresh mtime stays untrusted. Linux coarse
+// timestamps share one tick, often a few milliseconds, and a write inside that
+// tick does not move the mtime.
+const coarseMtimeWindow = 100 * time.Millisecond
+
+// mtimeSettled reports whether unixNano is old enough that a later write would
+// have moved it.
+func mtimeSettled(unixNano int64) bool {
+	return time.Since(time.Unix(0, unixNano)) >= coarseMtimeWindow
+}
+
 // get returns the cached hash for abs if the stat fingerprint matches.
 func (s *mtimeStore) get(abs string, mtime, size int64) (string, bool) {
 	key := shardKey(abs)

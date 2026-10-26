@@ -357,8 +357,10 @@ func (c *Cache) hashFiles(ctx context.Context, files []relAbs) ([]string, []os.F
 		}
 		modes[i] = md
 		fps[i] = fingerprint{mt, sz, true}
-		if h, ok := c.mtimes.get(f.abs, fps[i].mtime, fps[i].size); ok {
-			hashes[i] = h
+		if mtimeSettled(fps[i].mtime) {
+			if h, ok := c.mtimes.get(f.abs, fps[i].mtime, fps[i].size); ok {
+				hashes[i] = h
+			}
 		}
 	}
 
@@ -373,7 +375,7 @@ func (c *Cache) hashFiles(ctx context.Context, files []relAbs) ([]string, []os.F
 			if err != nil {
 				continue
 			}
-			if mt != fps[i].mtime || sz != fps[i].size {
+			if mt != fps[i].mtime || sz != fps[i].size || !mtimeSettled(fps[i].mtime) {
 				continue
 			}
 			c.mtimes.set(f.abs, hashes[i], fps[i].mtime, fps[i].size)
@@ -456,8 +458,10 @@ func (c *Cache) hashFileWithMtime(abs string) (string, error) {
 	mtime := info.ModTime().UnixNano()
 	size := info.Size()
 
-	if h, ok := c.mtimes.get(abs, mtime, size); ok {
-		return h, nil
+	if mtimeSettled(mtime) {
+		if h, ok := c.mtimes.get(abs, mtime, size); ok {
+			return h, nil
+		}
 	}
 
 	h, err := hashFile(abs)
@@ -468,7 +472,7 @@ func (c *Cache) hashFileWithMtime(abs string) (string, error) {
 	// read, skip the store to avoid recording a stale fingerprint; matches the
 	// io_uring tier's same guard above.
 	info2, err := os.Stat(abs)
-	if err != nil || info2.ModTime().UnixNano() != mtime || info2.Size() != size {
+	if err != nil || info2.ModTime().UnixNano() != mtime || info2.Size() != size || !mtimeSettled(mtime) {
 		//nolint:nilerr // a failed re-stat means skip the fingerprint store, not fail the hash: h was computed from bytes we did read, and the store is an optimization.
 		return h, nil
 	}

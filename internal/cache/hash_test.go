@@ -61,6 +61,10 @@ func TestHashFileWithMtimeReusesStoredHash(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "src.go")
 	require.NoError(t, os.WriteFile(p, []byte("v1"), 0o644))
+	// Age the mtime past the coarse window. A just-written file is hashed from
+	// its bytes, so the stored fingerprint this test restores has to be older.
+	past := time.Now().Add(-time.Minute)
+	require.NoError(t, os.Chtimes(p, past, past))
 
 	h1, err := c.hashFileWithMtime(p)
 	require.NoError(t, err)
