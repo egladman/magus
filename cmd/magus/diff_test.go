@@ -2071,7 +2071,7 @@ func TestDiffSourceFromFlags(t *testing.T) {
 func TestDiffThreadRefusesWhatAnswersForTheWholeChangeset(t *testing.T) {
 	for _, other := range []string{"--unread", "--ack", "--impact"} {
 		t.Run(other, func(t *testing.T) {
-			err := diffCmd(t.Context(), t.TempDir(), []string{"--thread", "c1", other})
+			err := diffCommand(t.Context(), t.TempDir(), []string{"--thread", "c1", other})
 
 			require.Error(t, err)
 			assert.Equal(t, exit.Usage, exit.Code(err))
@@ -2085,7 +2085,7 @@ func TestDiffThreadRefusesWhatAnswersForTheWholeChangeset(t *testing.T) {
 func TestDiffNoLongerTakesThePromptOrPrintHookFlags(t *testing.T) {
 	for _, gone := range []string{"--prompt", "--print-hook"} {
 		t.Run(gone, func(t *testing.T) {
-			err := diffCmd(t.Context(), t.TempDir(), []string{gone})
+			err := diffCommand(t.Context(), t.TempDir(), []string{gone})
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), strings.TrimPrefix(gone, "--"))

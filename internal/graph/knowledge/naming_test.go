@@ -47,8 +47,8 @@ func goFunc(dir, name, sig string) types.KnowledgeSymbol {
 	return goSym(dir, name+"().", name, "Function", sig, file)
 }
 
-// ctxReader is a function that reads a value from a context, the family EntryPointFrom missed.
-func ctxReader(dir, name string) types.KnowledgeSymbol {
+// contextReader is a function that reads a value from a context, the family EntryPointFrom missed.
+func contextReader(dir, name string) types.KnowledgeSymbol {
 	return goFunc(dir, name, fmt.Sprintf("func %s(ctx context.Context) *%sValue", name, name))
 }
 
@@ -91,9 +91,9 @@ func advice(name, message string, details ...string) types.Check {
 func fromContextFamily() []types.KnowledgeSymbol {
 	var out []types.KnowledgeSymbol
 	for i, name := range []string{"Cwd", "Lease", "Root", "Base", "Charms", "Progress", "Runtime", "Writer"} {
-		out = append(out, ctxReader(fmt.Sprintf("internal/p%d", i), name+"FromContext"))
+		out = append(out, contextReader(fmt.Sprintf("internal/p%d", i), name+"FromContext"))
 	}
-	return append(out, ctxReader("internal/obs", "RecorderFrom"))
+	return append(out, contextReader("internal/obs", "RecorderFrom"))
 }
 
 func entryPointFrom() types.KnowledgeSymbol {
@@ -114,7 +114,7 @@ func TestConformanceFlagsEntryPointFrom(t *testing.T) {
 }
 
 func TestConformanceSilentOnConformingAndUnrelatedNames(t *testing.T) {
-	conforming := ctxReader("internal/trail", "EntryPointFromContext")
+	conforming := contextReader("internal/trail", "EntryPointFromContext")
 	unrelated := goFunc("internal/vm", "NewVM", "func NewVM(ctx context.Context) *VM")
 	// A predicate saying both words of the family is a different shape, not a drifted name.
 	predicate := goFunc("internal/job", "IsFromContext", "func IsFromContext(ctx context.Context) bool")
@@ -204,7 +204,7 @@ func TestConformanceExcludesTheChangesOwnNames(t *testing.T) {
 
 	var fresh []types.KnowledgeSymbol
 	for i := range 6 {
-		fresh = append(fresh, ctxReader(fmt.Sprintf("internal/new%d", i), fmt.Sprintf("Fresh%sFromContext", greek[i])))
+		fresh = append(fresh, contextReader(fmt.Sprintf("internal/new%d", i), fmt.Sprintf("Fresh%sFromContext", greek[i])))
 	}
 	lone := entryPointFrom()
 	g = namingGraph(t, append(fresh, lone))
@@ -352,10 +352,10 @@ func TestConformanceIsDeterministicOnTies(t *testing.T) {
 	var syms []types.KnowledgeSymbol
 	for i := range 6 {
 		syms = append(syms,
-			ctxReader(fmt.Sprintf("internal/a%d", i), greek[i]+"FromContext"),
-			ctxReader(fmt.Sprintf("internal/b%d", i), "ReadOnly"+greek[i]))
+			contextReader(fmt.Sprintf("internal/a%d", i), greek[i]+"FromContext"),
+			contextReader(fmt.Sprintf("internal/b%d", i), "ReadOnly"+greek[i]))
 	}
-	subj := ctxReader("internal/c", "ReadFrom")
+	subj := contextReader("internal/c", "ReadFrom")
 	g := namingGraph(t, append(syms, subj))
 	change := ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj)}
 

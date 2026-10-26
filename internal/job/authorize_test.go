@@ -341,7 +341,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 	t.Setenv(EnvStampedLease, "1")
 	// A checkout with a revision, so the exec below is refused for its caller and not for
 	// a missing base.
-	loc := tempLocation(t, execRepo(t).Root())
+	loc := tempLocation(t, execRepository(t).Root())
 	seed(t, NewStore(loc), workerRow())
 	loc.Actor = nil
 	s := NewStore(loc)

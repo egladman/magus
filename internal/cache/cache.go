@@ -2226,7 +2226,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			// off the top exactly when they are the only thing wanted. Use the same
 			// diagnostic-focused excerpt the default display uses, and keep the
 			// full-log path so nothing is unreachable.
-			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
 				excerpt, omitted := failureExcerpt(data, maxFailTailLines)
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				if omitted > 0 {
@@ -2243,7 +2243,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			// the entire raw log: the latter often hides the cause under successful test
 			// lines. The cache error emitted immediately afterward supplies the output
 			// ref for the complete, verbatim log.
-			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				excerpt, omitted := failureExcerpt(data, maxFailureExcerptLines)
 				if omitted > 0 {
@@ -2255,7 +2255,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				}
 			}
 		case quiet:
-			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				_, _ = io.WriteString(os.Stderr, ann.Defang(string(data)))
 				_, _ = fmt.Fprintln(os.Stderr)

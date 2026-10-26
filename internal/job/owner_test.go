@@ -42,7 +42,7 @@ func TestNoteHeldFilesOneRowForTheTreeRoot(t *testing.T) {
 // A session that ends takes the job it was editing with it, tells the root once, and a
 // session resuming the work in the same checkout takes the row back with its next exec.
 func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
-	repo := execRepo(t)
+	repo := execRepository(t)
 	root := repo.Root()
 	loc := tempLocation(t, root)
 	s := NewStore(loc)
@@ -79,7 +79,7 @@ func TestEndSessionEndsTheTakenJobAndExecTakesItBack(t *testing.T) {
 // A read-only row ends with its session as a writing one does: it holds no paths, and
 // left running it would sit in the stale list until somebody pruned it.
 func TestEndSessionEndsATakenReadOnlyJob(t *testing.T) {
-	repo := execRepo(t)
+	repo := execRepository(t)
 	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "scout", Checkpoint: repo.Head(), State: types.StateDeclared, ReadOnly: true})
@@ -99,7 +99,7 @@ func TestEndSessionEndsATakenReadOnlyJob(t *testing.T) {
 // checkout, so a session end leaves the row running and the binding live for the holder
 // that resumes it.
 func TestEndSessionLeavesAnIntegrationRowRunning(t *testing.T) {
-	repo := execRepo(t)
+	repo := execRepository(t)
 	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "integrate", Checkpoint: repo.Head(), State: types.StateDeclared, Integrates: []string{"feat-a"}})
@@ -148,7 +148,7 @@ func TestEndSessionLeavesWorkItDidNotTake(t *testing.T) {
 }
 
 func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
-	s := tempStore(t, execRepo(t).Root())
+	s := tempStore(t, execRepository(t).Root())
 	seed(t, s, types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
 	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
 		f.Jobs[0].EndReason = "overdue: its deadline passed 1m0s ago"
@@ -160,7 +160,7 @@ func TestExecDoesNotTakeBackARowEndedForAnotherReason(t *testing.T) {
 }
 
 func TestExecTakesBackASessionEndedRowOnlyInItsOwnCheckout(t *testing.T) {
-	loc := tempLocation(t, execRepo(t).Root())
+	loc := tempLocation(t, execRepository(t).Root())
 	elsewhere := t.TempDir()
 	seed(t, NewStore(loc), types.Job{ID: "w", Checkpoint: baseA, State: types.StateNoReturn})
 	require.NoError(t, NewStore(loc).update(t.Context(), func(f *jobsFile) error {

@@ -363,7 +363,7 @@ func TestUndeclaredOnlySeedsKeepsWhatContainmentAloneSelected(t *testing.T) {
 // this diagnostic exists for, and a filter that swallowed it would leave the code in
 // place doing nothing.
 func TestTrackedUndeclaredSeedsDropsWhatTheRunItselfWrote(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 
 	repo.Commit("seed", map[string]string{"LICENSE": "x"})

@@ -88,7 +88,7 @@ func TestBaseNamesTheMainlineNotTip(t *testing.T) {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
-	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	hgInitRepository(t, dir, map[string]string{"a.txt": "one\n"})
 
 	vcsTestRun(t, dir, "hg", "branch", "feature")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644))
@@ -109,7 +109,7 @@ func TestHgPrunePreservedSparesAShelfMagusDidNotWrite(t *testing.T) {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
-	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	hgInitRepository(t, dir, map[string]string{"a.txt": "one\n"})
 
 	// A user shelf shaped exactly like a mint; only the message tells the two apart.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("half a refactor\n"), 0o644))
@@ -144,7 +144,7 @@ func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
-	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	hgInitRepository(t, dir, map[string]string{"a.txt": "one\n"})
 
 	// The timestamp shelfName writes into the name is the only thing dating an hg shelf.
 	aged := func(days int, suffix string) string {
@@ -182,7 +182,7 @@ func TestHgPreserveRestoresAPathCarryingWhitespace(t *testing.T) {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
-	hgInitRepo(t, dir, map[string]string{" leading.txt": "l\n", "tracked.txt": "one\n"})
+	hgInitRepository(t, dir, map[string]string{" leading.txt": "l\n", "tracked.txt": "one\n"})
 
 	require.NoError(t, os.Remove(filepath.Join(dir, " leading.txt")))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("two\n"), 0o644))
@@ -206,9 +206,9 @@ func TestHgPreserveRestoresAPathCarryingWhitespace(t *testing.T) {
 	})
 }
 
-// hgHistoryRepo builds assertHistoryScenario's history with prog, hg or sl, whose
+// hgHistoryRepository builds assertHistoryScenario's history with prog, hg or sl, whose
 // commands for it are the same.
-func hgHistoryRepo(t *testing.T, prog string) string {
+func hgHistoryRepository(t *testing.T, prog string) string {
 	t.Helper()
 	if _, err := exec.LookPath(prog); err != nil {
 		t.Skipf("%s not available", prog)
@@ -216,26 +216,26 @@ func hgHistoryRepo(t *testing.T, prog string) string {
 	dir := t.TempDir()
 	run := func(args ...string) { vcsTestRun(t, dir, prog, args...) }
 	if prog == "sl" {
-		slInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+		slInitRepository(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
 	} else {
-		hgInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+		hgInitRepository(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
 	}
 	commit := func(msg string) { run("commit", "-m", msg, "-u", "test") }
-	writeRepoFile(t, dir, "docs/b.md", "b\n")
+	writeRepositoryFile(t, dir, "docs/b.md", "b\n")
 	run("add", "docs/b.md")
 	commit("side adds docs")
 	run("update", "-r", "desc('init')")
-	writeRepoFile(t, dir, "docs/a.md", "a2\n")
+	writeRepositoryFile(t, dir, "docs/a.md", "a2\n")
 	commit("main edits docs")
 	run("merge", "-r", "desc('side adds docs')")
 	commit("merge side")
-	writeRepoFile(t, dir, "x.txt", "x2\n")
+	writeRepositoryFile(t, dir, "x.txt", "x2\n")
 	commit("main edits x")
 	return dir
 }
 
 func TestHgHistoryFollowsPathsAndFirstParent(t *testing.T) {
-	assertHistoryScenario(t, hgVCS{}, hgHistoryRepo(t, "hg"))
+	assertHistoryScenario(t, hgVCS{}, hgHistoryRepository(t, "hg"))
 }
 
 // A count that disagrees with the fields after it is an error, never a guess at where the
@@ -284,7 +284,7 @@ func TestHgCheckoutIDIsTheParentAndStatusLeavesIt(t *testing.T) {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
-	hgInitRepo(t, dir, map[string]string{"a.buzz": "one\n"})
+	hgInitRepository(t, dir, map[string]string{"a.buzz": "one\n"})
 	node, err := vcsOutput(t.Context(), dir, "hg", "log", "-r", ".", "-T", "{node}")
 	require.NoError(t, err)
 	id, ok := hgVCS{}.CheckoutID(dir)
@@ -308,7 +308,7 @@ func TestHgObjectBatchReadsCommittedFiles(t *testing.T) {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
-	hgInitRepo(t, dir, map[string]string{"a.buzz": "one\n", "dir/b.buzz": "two\n"})
+	hgInitRepository(t, dir, map[string]string{"a.buzz": "one\n", "dir/b.buzz": "two\n"})
 	batch, err := hgVCS{}.OpenObjectBatch(t.Context(), dir, "")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, batch.Close()) }()
@@ -327,9 +327,9 @@ func TestHgObjectBatchReadsCommittedFiles(t *testing.T) {
 	assert.Equal(t, "one\n", got)
 }
 
-// cmdFrames encodes command-server messages: a channel byte, a big-endian
+// commandFrames encodes command-server messages: a channel byte, a big-endian
 // length, then the data.
-func cmdFrames(msgs ...string) string {
+func commandFrames(msgs ...string) string {
 	var buf bytes.Buffer
 	for _, m := range msgs {
 		var n [4]byte
@@ -341,7 +341,7 @@ func cmdFrames(msgs ...string) string {
 	return buf.String()
 }
 
-func cmdBatchReading(stdout string) *cmdBatch {
+func commandBatchReading(stdout string) *cmdBatch {
 	return &cmdBatch{
 		prog:   "hg",
 		rev:    ".",
@@ -354,12 +354,12 @@ func cmdBatchReading(stdout string) *cmdBatch {
 // The command-server protocol makes an unknown lowercase channel optional, so
 // a server that adds a debug channel still answers.
 func TestCmdBatchSkipsAnUnknownLowercaseChannel(t *testing.T) {
-	b := cmdBatchReading(cmdFrames("ddebug", "oone\n", "r\x00\x00\x00\x00"))
+	b := commandBatchReading(commandFrames("ddebug", "oone\n", "r\x00\x00\x00\x00"))
 	got, err := b.Read("a.buzz")
 	require.NoError(t, err)
 	assert.Equal(t, "one\n", got)
 
-	b = cmdBatchReading(cmdFrames("I\x00\x00\x10\x00"))
+	b = commandBatchReading(commandFrames("I\x00\x00\x10\x00"))
 	_, err = b.Read("a.buzz")
 	require.ErrorContains(t, err, "channel 'I'")
 }
@@ -367,7 +367,7 @@ func TestCmdBatchSkipsAnUnknownLowercaseChannel(t *testing.T) {
 // A malformed reply leaves the stream out of step with its commands, so every
 // later read returns that failure instead of a reply meant for another path.
 func TestCmdBatchFailureIsSticky(t *testing.T) {
-	b := cmdBatchReading(cmdFrames("r\x00\x00", "otwo\n", "r\x00\x00\x00\x00"))
+	b := commandBatchReading(commandFrames("r\x00\x00", "otwo\n", "r\x00\x00\x00\x00"))
 	_, first := b.Read("a.buzz")
 	require.Error(t, first)
 	_, err := b.Read("b.buzz")

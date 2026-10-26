@@ -64,8 +64,8 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&global.silent, "s", global.silent, "short for --silent")
 }
 
-// cmdParse binds config/display flags, runs local registration, parses args, and returns positionals.
-func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, error) {
+// commandParse binds config/display flags, runs local registration, parses args, and returns positionals.
+func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]string, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
@@ -87,7 +87,7 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 }
 
 // commandsWithoutOutput names the verbs that render nothing structured, keyed by the
-// name they hand cmdParse.
+// name they hand commandParse.
 //
 // -o is bound into EVERY FlagSet (bindDisplayFlags), because it is a global flag that
 // may precede or follow the subcommand. A verb that never consults it therefore accepted
@@ -186,7 +186,7 @@ func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 // global/display flags precede it, so `magus run --dry-run build` sees "build" as the
 // target instead of mistaking the flag for it. It hoists global/display flags out first,
 // then returns the first positional as the target and the remaining flags+positionals for
-// the subcommand's own cmdParse. ok is false when there is no positional target at all.
+// the subcommand's own commandParse. ok is false when there is no positional target at all.
 //
 // bind registers the command's OWN flags, and is what keeps the prescan from reading a
 // value-taking local flag as a bool: with the flag unknown here its value is hoisted out
@@ -223,7 +223,7 @@ func outputOptionsOrDefault() (output.Options, error) {
 // for the few readers that scan a raw argument tail instead of a FlagSet.
 //
 // Go accepts all FOUR spellings of every flag (`-f v`, `--f v`, `-f=v`,
-// `--f=v`) so every magus flag does too, for free, everywhere cmdParse is used.
+// `--f=v`) so every magus flag does too, for free, everywhere commandParse is used.
 // A hand-rolled scanner only accepts the spellings its author happened to write,
 // and the resulting gap is invisible until someone types the missing one:
 //
@@ -254,7 +254,7 @@ func parseFlagValue(arg, name string) string {
 // The registry declares every command's flags and the binders in cmd/magus/gen are
 // generated from it, so a generated flag cannot drift from its man page. What still can
 // is a flag bound by hand: a FlagCustom flag's fs.Var call, and the config-derived
-// globals. cmdParse is the single funnel every command's flags pass through, so
+// globals. commandParse is the single funnel every command's flags pass through, so
 // recording there yields each command's real, fully-bound flag set (config flags,
 // display flags and local ones alike) and TestManpageFlagsMatchTheCLI compares that
 // against the registry.
@@ -276,7 +276,7 @@ type recordedFlag struct {
 	Bool bool
 }
 
-// recordFlagSet snapshots every flag bound for name. Called by cmdParse AFTER the local
+// recordFlagSet snapshots every flag bound for name. Called by commandParse AFTER the local
 // registration closure, so the record is the complete set the parser will honor.
 func recordFlagSet(name string, fs *flag.FlagSet) {
 	var flags []recordedFlag

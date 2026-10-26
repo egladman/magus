@@ -514,9 +514,9 @@ type answer struct {
 
 var notFound = answer{http.StatusNotFound, `{"message": "Not Found"}`}
 
-// repoAnswers are the reads every describe with a status context makes of acme/widgets,
+// repositoryAnswers are the reads every describe with a status context makes of acme/widgets,
 // owned by a user or an organization, whose main branch nothing protects.
-func repoAnswers(ownerType string) map[string]answer {
+func repositoryAnswers(ownerType string) map[string]answer {
 	return map[string]answer{
 		"GET /repos/acme/widgets": {200, fmt.Sprintf(`{"allow_auto_merge": true, "allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": false,
 			"owner": {"type": "%s"}}`, ownerType)},
@@ -539,7 +539,7 @@ func githubDescribe(t *testing.T, answers map[string]answer, app string, steps b
 // A private app on an organization's repository is hidden from GET /apps/<slug>, and an
 // owner's token finds its App ID among the organization's installations: nobody types it.
 func TestDescribeGitHubReadsAPrivateAppsIDFromTheOrganizationsInstallations(t *testing.T) {
-	answers := repoAnswers("Organization")
+	answers := repositoryAnswers("Organization")
 	answers["GET /orgs/acme/installations?per_page=100&page=1"] = answer{200, `{"total_count": 2, "installations": [
 		{"app_id": 15368, "app_slug": "github-actions"}, {"app_id": 2034567, "app_slug": "q"}]}`}
 	got, err := githubDescribe(t, answers, "q", false)
@@ -558,8 +558,8 @@ func TestDescribeGitHubReadsAPrivateAppsIDFromTheOrganizationsInstallations(t *t
 // Where GitHub shows the App ID to no token describe holds, describe names where it is
 // and which app, and describes nothing.
 func TestDescribeGitHubRefusesAPrivateAppWhoseIDItCannotRead(t *testing.T) {
-	user := repoAnswers("User")
-	org := repoAnswers("Organization")
+	user := repositoryAnswers("User")
+	org := repositoryAnswers("Organization")
 	org["GET /orgs/acme/installations?per_page=100&page=1"] = notFound
 	for name, tc := range map[string]struct {
 		answers map[string]answer
@@ -590,7 +590,7 @@ func TestDescribeGitHubRefusesAPrivateAppWhoseIDItCannotRead(t *testing.T) {
 // A slug GitHub has no bot user for names no app at all, so describe asks for the slug
 // again rather than for an id; with no app named it links the registration.
 func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
-	answers := repoAnswers("User")
+	answers := repositoryAnswers("User")
 	answers["GET /users/q[bot]"] = notFound
 	_, err := githubDescribe(t, answers, "q", true)
 	var refused *types.SetupRefusedError
@@ -601,7 +601,7 @@ func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
 		URL:    web + "/settings/apps", App: "<slug>",
 	}, refused)
 
-	_, err = githubDescribe(t, repoAnswers("User"), "", true)
+	_, err = githubDescribe(t, repositoryAnswers("User"), "", true)
 	require.ErrorAs(t, err, &refused)
 	web = cannedWeb()
 	assert.Equal(t, &types.SetupRefusedError{
@@ -614,7 +614,7 @@ func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
 // The id a person gives is the pin's integration when GitHub hides the app, and GitHub's
 // own answer when it does not; one that is not an App ID, or disagrees, is an error.
 func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
-	answers := repoAnswers("User")
+	answers := repositoryAnswers("User")
 	answers["GET /repos/acme/widgets/pulls?state=all&base=main&sort=updated&direction=desc&per_page=20"] = answer{200, `[]`}
 	got, err := githubDescribe(t, answers, "q:2034567", true)
 	require.NoError(t, err)
@@ -644,7 +644,7 @@ func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 		},
 	}, got.Setup)
 
-	readable := repoAnswers("User")
+	readable := repositoryAnswers("User")
 	readable["GET /apps/q"] = answer{200, `{"slug": "q", "id": 812, "client_id": "Iv23li", "name": "Q queue"}`}
 	for app, want := range map[string]string{
 		"q:0812": "github: the app 'q:0812' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero",
@@ -661,7 +661,7 @@ func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 
 // Only 404 means GitHub hides the app; a 403 is the token's, and says so.
 func TestDescribeGitHubReportsAForbiddenAppRead(t *testing.T) {
-	answers := repoAnswers("User")
+	answers := repositoryAnswers("User")
 	answers["GET /apps/q"] = answer{http.StatusForbidden, `{"message": "Forbidden"}`}
 	_, err := githubDescribe(t, answers, "q:2034567", false)
 	require.ErrorContains(t, err, `github: read the app q: HTTP 403: either it does not exist or the token lacks access to it: {"message": "Forbidden"}`)

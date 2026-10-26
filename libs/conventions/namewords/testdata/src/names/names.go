@@ -12,6 +12,38 @@ func URLFor() {} // want `URLFor ends in the word "For"`
 
 func parseSrc() {} // want `parseSrc uses the short form "Src"`
 
+func loadCtx() {} // want `loadCtx uses the short form "Ctx"`
+
+func readReq() {} // want `readReq uses the short form "Req"`
+
+func writeResp() {} // want `writeResp uses the short form "Resp"`
+
+func writeRsp() {} // want `writeRsp uses the short form "Rsp"`
+
+func fillBuf() {} // want `fillBuf uses the short form "Buf"`
+
+func buildFn() {} // want `buildFn uses the short form "Fn"`
+
+func parseOpts() {} // want `parseOpts uses the short form "Opts"`
+
+func decodeStr() {} // want `decodeStr uses the short form "Str"`
+
+func decodeStrs() {} // want `decodeStrs uses the short form "Strs"`
+
+func checkErr() {} // want `checkErr uses the short form "Err"`
+
+func runCmd() {} // want `runCmd uses the short form "Cmd"`
+
+func withCwd() {} // want `withCwd uses the short form "Cwd"`
+
+func histPrev() {} // want `histPrev uses the short form "Prev"`
+
+func lookupImpl() {} // want `lookupImpl uses the short form "Impl"`
+
+func findRepo() {} // want `findRepo uses the short form "Repo"`
+
+func Ctx() {} // want `Ctx uses the short form "Ctx"`
+
 func srcAndOffset() {} // want `srcAndOffset uses the short form "src"`
 
 func ensureDstSafe() {} // want `ensureDstSafe uses the short form "Dst"`
@@ -22,6 +54,8 @@ type Ring struct{}
 
 func (Ring) moveTo() {} // want `moveTo ends in the word "To"`
 
+func (Ring) bindCtx() {} // want `bindCtx uses the short form "Ctx"`
+
 // WriteTo satisfies io.WriterTo, which chose the name.
 func (*Ring) WriteTo(w io.Writer) (int64, error) { return 0, nil }
 
@@ -30,8 +64,8 @@ type Sink struct{}
 // WriteTo here does not match io.WriterTo's signature, so the name is its own.
 func (Sink) WriteTo(path string) error { return nil } // want `WriteTo ends in the word "To"`
 
-// One-word names, words that only contain a listed one, and what is not a
-// function or method all pass.
+// Suffixes skip a one-word name. A one-word short form is still judged, and
+// what is not a function or method passes.
 func Of() {}
 
 func offset() {}

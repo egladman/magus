@@ -40,14 +40,14 @@ func RefuseVCS(label string, argv []string, dir string) error {
 	for _, c := range argvCommands(argv) {
 		if isVCSBinary(c.Name) {
 			return fmt.Errorf(`%s %s: %s runs only through vcs\cmd, which holds it to the lease rules: call %s instead`,
-				label, argv[0], c.Name, vcsCmdCall(c.Args, dir))
+				label, argv[0], c.Name, vcsCommandCall(c.Args, dir))
 		}
 	}
 	return nil
 }
 
-// vcsCmdCall renders the vcs\cmd call that runs args in dir.
-func vcsCmdCall(args []string, dir string) string {
+// vcsCommandCall renders the vcs\cmd call that runs args in dir.
+func vcsCommandCall(args []string, dir string) string {
 	quoted := make([]string, len(args))
 	for i, a := range args {
 		quoted[i] = strconv.Quote(a)

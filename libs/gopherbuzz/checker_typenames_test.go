@@ -24,7 +24,7 @@ func TestCheck_UndefinedTypeName(t *testing.T) {
 		{"extern", `extern fun f(r: Nope) > void;`, `undefined type "Nope"`},
 		{"type parameter out of scope", `fun f::<T>() > void {} fun g(x: T) > void {}`, `undefined type "T"`},
 	} {
-		t.Run(tc.name, func(t *testing.T) { checkErr(t, tc.src, tc.want) })
+		t.Run(tc.name, func(t *testing.T) { checkError(t, tc.src, tc.want) })
 	}
 }
 

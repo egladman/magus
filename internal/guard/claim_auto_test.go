@@ -36,7 +36,7 @@ var autoClaimTree = map[string]string{
 // and others. Hub is used by 26 files and every other name by one.
 func autoClaimFixture(t *testing.T, row types.Job, others ...types.Job) (context.Context, string, Dependencies) {
 	t.Helper()
-	repo := testkit.NewRepo(t, autoClaimTree)
+	repo := testkit.NewRepository(t, autoClaimTree)
 	row.CheckoutRoot, row.Checkpoint = repo.Root(), repo.Head()
 	repo.Write("internal/hint/render.go", "package hint\n\nfunc Render() string {\n\treturn \"y\"\n}\n")
 	ctx, _ := fleetFixture(t, append([]types.Job{row}, others...)...)

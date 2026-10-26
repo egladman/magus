@@ -974,7 +974,7 @@ func (g *Graph) Dirs(glob string, opts types.DirsOptions, layers map[string]stri
 		return nil, fmt.Errorf("%q is not a valid glob", glob)
 	}
 	if opts.Layer != "" && len(layerDeclarations(opts.Layer, layers)) == 0 {
-		return nil, errLayerNotDeclared(opts.Layer, layers)
+		return nil, errorLayerNotDeclared(opts.Layer, layers)
 	}
 	g.ensureAdj()
 	tree := g.dirTree()
@@ -1006,7 +1006,7 @@ func (g *Graph) Dirs(glob string, opts types.DirsOptions, layers map[string]stri
 func (g *Graph) Layer(name string, layers map[string]string) (types.Layer, error) {
 	declared := layerDeclarations(name, layers)
 	if len(declared) == 0 {
-		return types.Layer{}, errLayerNotDeclared(name, layers)
+		return types.Layer{}, errorLayerNotDeclared(name, layers)
 	}
 	dirs, err := g.Dirs("**", types.DirsOptions{Layer: name}, layers)
 	if err != nil {
@@ -1027,7 +1027,7 @@ func layerDeclarations(name string, layers map[string]string) []string {
 	return out
 }
 
-func errLayerNotDeclared(name string, layers map[string]string) error {
+func errorLayerNotDeclared(name string, layers map[string]string) error {
 	names := slices.Compact(slices.Sorted(maps.Values(layers)))
 	if len(names) == 0 {
 		return types.DiagnosticErrorf(types.LayerNotDeclared,

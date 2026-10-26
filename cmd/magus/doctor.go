@@ -21,9 +21,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) error {
+func doctorCommand(ctx context.Context, root string, rc runConfig, args []string) error {
 	var probe, fix, list bool
-	_, err := cmdParse("doctor", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("doctor", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&probe, "probe", false,
 			"Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
 		fs.BoolVar(&fix, "fix", false,

@@ -278,7 +278,7 @@ func TestEval_ConstBinding(t *testing.T) {
 	sess := newSession(context.Background())
 	require.NoError(t, sess.Exec(context.Background(), `final x = "hello";`))
 	v := sess.GetGlobal("x")
-	assert.True(t, v.IsStr(), "x should be str")
+	assert.True(t, v.IsString(), "x should be str")
 	assert.Equal(t, "hello", v.AsString(), "x")
 }
 
@@ -297,7 +297,7 @@ func TestEval_DirectCall(t *testing.T) {
 func TestEval_MemberAccess(t *testing.T) {
 	sess := newSession(context.Background())
 	m := vmpackage.NewMap()
-	m.MapSet("name", vmpackage.StrValue("test"))
+	m.MapSet("name", vmpackage.StringValue("test"))
 	sess.SetGlobal("obj", m)
 
 	var gotName vmpackage.Value
@@ -309,7 +309,7 @@ func TestEval_MemberAccess(t *testing.T) {
 	}))
 
 	require.NoError(t, sess.Exec(context.Background(), `capture(obj.name);`))
-	assert.True(t, gotName.IsStr(), "obj.name should be str")
+	assert.True(t, gotName.IsString(), "obj.name should be str")
 	assert.Equal(t, "test", gotName.AsString(), "obj.name")
 }
 
@@ -773,7 +773,7 @@ export final tag = "w";
 
 	v, err := sess.Eval(ctx, `import "widget"; return tag;`)
 	require.NoError(t, err, "eval")
-	assert.True(t, v.IsStr(), "tag should be str")
+	assert.True(t, v.IsString(), "tag should be str")
 	assert.Equal(t, "w", v.AsString(), "tag")
 }
 
@@ -1314,9 +1314,9 @@ func wantInt(t *testing.T, v vmpackage.Value, want int64) {
 	assert.Equalf(t, want, v.AsInt(), "got %v (%s), want int %d", v.String(), v.Kind(), want)
 }
 
-func wantStr(t *testing.T, v vmpackage.Value, want string) {
+func wantString(t *testing.T, v vmpackage.Value, want string) {
 	t.Helper()
-	assert.Truef(t, v.IsStr(), "got %v (%s), want str %q", v.String(), v.Kind(), want)
+	assert.Truef(t, v.IsString(), "got %v (%s), want str %q", v.String(), v.Kind(), want)
 	assert.Equalf(t, want, v.AsString(), "got %v (%s), want str %q", v.String(), v.Kind(), want)
 }
 
@@ -1369,7 +1369,7 @@ func TestArithmetic(t *testing.T) {
 }
 
 func TestStringConcat(t *testing.T) {
-	wantStr(t, evalResult(t, `"foo" + "bar"`), "foobar")
+	wantString(t, evalResult(t, `"foo" + "bar"`), "foobar")
 }
 
 func TestComparison(t *testing.T) {
@@ -1389,8 +1389,8 @@ func TestLogical(t *testing.T) {
 }
 
 func TestNullCoalesce(t *testing.T) {
-	wantStr(t, evalResult(t, `null ?? "fallback"`), "fallback")
-	wantStr(t, evalResult(t, `"value" ?? "fallback"`), "value")
+	wantString(t, evalResult(t, `null ?? "fallback"`), "fallback")
+	wantString(t, evalResult(t, `"value" ?? "fallback"`), "value")
 }
 
 func TestStringInterpolation(t *testing.T) {
@@ -1401,7 +1401,7 @@ final n = 42;
 final greeting = "hello {name}, n+1 = {n + 1}!";
 `
 	require.NoError(t, sess.Exec(context.Background(), src))
-	wantStr(t, sess.GetGlobal("greeting"), "hello world, n+1 = 43!")
+	wantString(t, sess.GetGlobal("greeting"), "hello world, n+1 = 43!")
 }
 
 func TestIfElse(t *testing.T) {
@@ -1418,7 +1418,7 @@ if (x > 10) {
 }
 `
 	require.NoError(t, sess.Exec(context.Background(), src))
-	wantStr(t, sess.GetGlobal("result"), "medium")
+	wantString(t, sess.GetGlobal("result"), "medium")
 }
 
 func TestWhileLoop(t *testing.T) {
@@ -1487,7 +1487,7 @@ foreach (k, v in m) {
 }
 `
 	require.NoError(t, sess.Exec(context.Background(), src))
-	wantStr(t, sess.GetGlobal("keys"), "abc") // insertion order preserved
+	wantString(t, sess.GetGlobal("keys"), "abc") // insertion order preserved
 	wantInt(t, sess.GetGlobal("sum"), 6)
 }
 
@@ -1501,7 +1501,7 @@ final b = m["key"];
 `
 	require.NoError(t, sess.Exec(context.Background(), src))
 	wantInt(t, sess.GetGlobal("a"), 200)
-	wantStr(t, sess.GetGlobal("b"), "val")
+	wantString(t, sess.GetGlobal("b"), "val")
 }
 
 func TestIndexAssign(t *testing.T) {
@@ -1589,7 +1589,7 @@ final cn = c.name;
 final cc = c.count;
 `
 	require.NoError(t, sess.Exec(context.Background(), src))
-	wantStr(t, sess.GetGlobal("cn"), "custom")
+	wantString(t, sess.GetGlobal("cn"), "custom")
 	wantInt(t, sess.GetGlobal("cc"), 1)
 }
 
@@ -1640,8 +1640,8 @@ foreach (i, label in labels) {
 final msg = describe(3);
 `
 	require.NoError(t, sess.Exec(context.Background(), src))
-	wantStr(t, sess.GetGlobal("joined"), "abc")
-	wantStr(t, sess.GetGlobal("msg"), "has 3 items")
+	wantString(t, sess.GetGlobal("joined"), "abc")
+	wantString(t, sess.GetGlobal("msg"), "has 3 items")
 }
 
 // promoteOpts is SharedGlobals with top-level slot promotion enabled — the mode
@@ -1692,7 +1692,7 @@ func TestPromoteEquivalence(t *testing.T) {
 		// the nanbox build; under buzz_safe/buzz_unsafe any two same-tag heap
 		// values compare equal, so compare by kind + rendered content instead.
 		assert.Equalf(t, shared.String(), promote.String(), "promote vs shared mismatch for %q", src)
-		assert.Equalf(t, shared.IsStr(), promote.IsStr(), "promote vs shared kind mismatch for %q", src)
+		assert.Equalf(t, shared.IsString(), promote.IsString(), "promote vs shared kind mismatch for %q", src)
 	}
 }
 

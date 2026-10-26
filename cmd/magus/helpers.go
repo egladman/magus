@@ -290,11 +290,11 @@ func listTargets(scope string, targets []types.Target, source string) {
 	}
 }
 
-// reportedRunErr reports whether err was already surfaced to the user, per project,
+// reportedRunError reports whether err was already surfaced to the user, per project,
 // by the cache's pretty handler as a "[xx] <project> (error): ..." line — i.e. a
 // spell/run failure during a fan-out. When true the top-level handler should exit
 // non-zero via exit.Reported rather than reprinting the same text as a "[error] ..." line.
-func reportedRunErr(err error) bool {
+func reportedRunError(err error) bool {
 	var se *types.SpellErrors
 	var logged cache.ReportedError
 	return errors.As(err, &se) || errors.As(err, &logged)

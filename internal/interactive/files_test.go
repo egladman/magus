@@ -21,7 +21,7 @@ func mkfile(t *testing.T, root, rel string) {
 	require.NoError(t, os.WriteFile(abs, nil, 0o644))
 }
 
-func ignorePatternFn(t *testing.T, root string, typ types.PatternType, pattern string) func(string) bool {
+func ignorePatternFunction(t *testing.T, root string, typ types.PatternType, pattern string) func(string) bool {
 	t.Helper()
 	p := types.IgnorePattern{Type: typ, Pattern: pattern}
 	require.NoError(t, watch.ValidatePattern(p), "invalid pattern")
@@ -129,7 +129,7 @@ func TestSearchFilesPatternGlob(t *testing.T) {
 	mkfile(t, root, "api/config.yaml")
 	mkfile(t, root, "web/users.go")
 
-	matchFn := ignorePatternFn(t, root, types.PatternGlob, "**/*.go")
+	matchFn := ignorePatternFunction(t, root, types.PatternGlob, "**/*.go")
 
 	// With filter token: only .go files under api.
 	got, err := SearchFiles(context.Background(), root, []string{"api"}, matchFn)
@@ -151,7 +151,7 @@ func TestSearchFilesPatternRegex(t *testing.T) {
 	mkfile(t, root, "api/users_test.go")
 	mkfile(t, root, "web/handler_test.go")
 
-	matchFn := ignorePatternFn(t, root, types.PatternRegex, `_test\.go$`)
+	matchFn := ignorePatternFunction(t, root, types.PatternRegex, `_test\.go$`)
 	got, err := SearchFiles(context.Background(), root, []string{}, matchFn)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
@@ -166,7 +166,7 @@ func TestSearchFilesPatternLiteral(t *testing.T) {
 	mkfile(t, root, "web/Dockerfile")
 	mkfile(t, root, "api/main.go")
 
-	matchFn := ignorePatternFn(t, root, types.PatternLiteral, "Dockerfile")
+	matchFn := ignorePatternFunction(t, root, types.PatternLiteral, "Dockerfile")
 	got, err := SearchFiles(context.Background(), root, []string{}, matchFn)
 	require.NoError(t, err)
 	require.Len(t, got, 2)

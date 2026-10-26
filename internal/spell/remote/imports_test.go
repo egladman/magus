@@ -64,7 +64,7 @@ func TestRelockThenLoadFrozen(t *testing.T) {
 
 	im, err := LoadImports(t.Context(), root, cfg, opts)
 	require.NoError(t, err)
-	require.NoError(t, im.Err())
+	require.NoError(t, im.Error())
 	dir, err := im.Dir(path)
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(im.View(), filepath.FromSlash(path)), dir, "the view is laid out by import path")
@@ -88,7 +88,7 @@ func TestLoadImportsHoldsAStaleLockAgainstThePath(t *testing.T) {
 	_, err = im.Dir(lint)
 	require.ErrorIs(t, err, types.RemoteSpellLockStale)
 	require.ErrorContains(t, err, "pins no digest")
-	require.ErrorIs(t, im.Err(), types.RemoteSpellLockStale)
+	require.ErrorIs(t, im.Error(), types.RemoteSpellLockStale)
 
 	lock := Lock{Version: lockVersion, Spells: map[string]LockEntry{
 		lint: {Tag: "1.3", Digest: digest.FromBytes([]byte("m"))},

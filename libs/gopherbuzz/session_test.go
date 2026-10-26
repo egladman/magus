@@ -2463,7 +2463,7 @@ func TestParity_ImmutableCollectionsRejectSorting(t *testing.T) {
 	// compiles: an earlier failure for the same rule, and what upstream does.
 	//
 	// The VM's guard is unchanged and still load-bearing: it catches a receiver whose
-	// mutability the checker cannot determine, so errImmutable is not dead code.
+	// mutability the checker cannot determine, so errorImmutable is not dead code.
 	ctx := context.Background()
 	s := NewSession(ctx)
 	t.Cleanup(func() { _ = s.Close() })

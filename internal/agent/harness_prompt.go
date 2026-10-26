@@ -52,11 +52,11 @@ func planWholeFile(root, rel, content string) (types.HarnessFile, error) {
 	if err != nil {
 		return types.HarnessFile{}, err
 	}
-	existing, readErr := os.ReadFile(path)
-	if readErr != nil && !os.IsNotExist(readErr) {
-		return types.HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readErr)
+	existing, readError := os.ReadFile(path)
+	if readError != nil && !os.IsNotExist(readError) {
+		return types.HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readError)
 	}
-	file := types.HarnessFile{Exists: readErr == nil}
+	file := types.HarnessFile{Exists: readError == nil}
 	if !bytes.Equal(existing, []byte(content)) {
 		file.Content = content
 		file.Changes = []types.HarnessChange{{Op: types.HarnessWrite}}
@@ -93,11 +93,11 @@ func planJSONKey(root, rel string, key []string, value any, conflict func(got an
 	if err != nil {
 		return types.HarnessFile{}, err
 	}
-	existing, readErr := os.ReadFile(path)
-	if readErr != nil && !os.IsNotExist(readErr) {
-		return types.HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readErr)
+	existing, readError := os.ReadFile(path)
+	if readError != nil && !os.IsNotExist(readError) {
+		return types.HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readError)
 	}
-	file := types.HarnessFile{Exists: readErr == nil}
+	file := types.HarnessFile{Exists: readError == nil}
 	doc := map[string]any{}
 	if len(existing) > 0 {
 		if err := decodeHarnessJSON(existing, &doc); err != nil {

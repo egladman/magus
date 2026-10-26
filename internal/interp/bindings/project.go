@@ -31,10 +31,10 @@ import (
 // exported targets. It is bound implicitly for every project (see the "spells"
 // handling below), so a magusfile's targets run whether or not the author lists
 // it, and since listing it therefore changes nothing, listing it is now an
-// error rather than a no-op that implies otherwise. See magusfileNotASpellErr.
+// error rather than a no-op that implies otherwise. See magusfileNotASpellError.
 const magusfileSpellName = "magusfile"
 
-// magusfileNotASpellErr is the migration diagnostic for a magusfile that still
+// magusfileNotASpellError is the migration diagnostic for a magusfile that still
 // declares the magusfile driver as one of its spells, or imports it.
 //
 // A spell is a library of tool-native ops for ONE TOOLCHAIN: go-build,
@@ -44,7 +44,7 @@ const magusfileSpellName = "magusfile"
 // made implicit precisely because "listing it should never have been the author's
 // job", which left the import and the list entry doing nothing while still
 // teaching every reader that magusfile is a spell. This finishes that change.
-func magusfileNotASpellErr(what string) error {
+func magusfileNotASpellError(what string) error {
 	return fmt.Errorf(
 		"[%s] magusfile is not a spell, so %s does nothing: magus binds it to every "+
 			"project automatically (it is what makes a magusfile's targets runnable, "+
@@ -105,7 +105,7 @@ func buildProject(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		}
 		var path string
 		var optsVal vm.Value
-		if args[0].IsStr() {
+		if args[0].IsString() {
 			path = args[0].AsString()
 			if len(args) >= 2 {
 				optsVal = args[1]
@@ -117,10 +117,10 @@ func buildProject(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		if !optsVal.IsMap() {
 			return vm.Null, fmt.Errorf(
 				"magus.project expects an options map `magus.project({...})`%s",
-				configureFnHint(args[0]))
+				configureFunctionHint(args[0]))
 		}
 
-		opts, err := parseBuzzProjectOpts(callCtx, optsVal)
+		opts, err := parseBuzzProjectOptions(callCtx, optsVal)
 		if err != nil {
 			return vm.Null, err
 		}
@@ -131,16 +131,16 @@ func buildProject(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	})
 }
 
-// configureFnHint nudges a caller still passing the old configurator function
+// configureFunctionHint nudges a caller still passing the old configurator function
 // toward the direct options map; empty for any other bad argument.
-func configureFnHint(arg vm.Value) string {
+func configureFunctionHint(arg vm.Value) string {
 	if arg.IsFun() {
 		return "; pass the options map directly: magus.project({...})"
 	}
 	return ""
 }
 
-func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectOption, error) {
+func parseBuzzProjectOptions(ctx context.Context, v vm.Value) ([]workspace.ProjectOption, error) {
 	if !v.IsMap() {
 		return nil, nil
 	}
@@ -168,7 +168,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			opts = append(opts, workspace.WithSources(paths...))
 		}
 	}
-	if nv, ok := v.MapGet("name"); ok && nv.IsStr() {
+	if nv, ok := v.MapGet("name"); ok && nv.IsString() {
 		if name := strings.TrimSpace(nv.AsString()); name != "" {
 			opts = append(opts, workspace.WithName(name))
 		}
@@ -178,7 +178,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	// no toolchain spell instead of finding a switch someone flipped.
 	if nv, ok := v.MapGet("no_language"); ok {
 		var reason string
-		if nv.IsStr() {
+		if nv.IsString() {
 			reason = strings.TrimSpace(nv.AsString())
 		}
 		if reason == "" {
@@ -192,7 +192,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	if rv, ok := v.MapGet("review_required"); ok && rv.IsList() {
 		var globs []string
 		for _, item := range rv.ListItems() {
-			if item.IsStr() && strings.TrimSpace(item.AsString()) != "" {
+			if item.IsString() && strings.TrimSpace(item.AsString()) != "" {
 				globs = append(globs, strings.TrimSpace(item.AsString()))
 			}
 		}
@@ -210,7 +210,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 		var globs []string
 		for _, item := range gv.ListItems() {
-			if !item.IsStr() || strings.TrimSpace(item.AsString()) == "" {
+			if !item.IsString() || strings.TrimSpace(item.AsString()) == "" {
 				return nil, fmt.Errorf(`magus.project: "gate_low_risk" entries must be non-empty glob strings`)
 			}
 			globs = append(globs, strings.TrimSpace(item.AsString()))
@@ -223,7 +223,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 		var globs []string
 		for _, item := range mv.ListItems() {
-			if !item.IsStr() || strings.TrimSpace(item.AsString()) == "" {
+			if !item.IsString() || strings.TrimSpace(item.AsString()) == "" {
 				return nil, fmt.Errorf(`magus.project: "merge_low_risk" entries must be non-empty glob strings`)
 			}
 			globs = append(globs, strings.TrimSpace(item.AsString()))
@@ -256,7 +256,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				continue
 			}
 			nv, ok := item.MapGet("name")
-			if !ok || !nv.IsStr() || nv.AsString() == "" {
+			if !ok || !nv.IsString() || nv.AsString() == "" {
 				continue
 			}
 			name := nv.AsString()
@@ -271,7 +271,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", "spell", name)
 			}
 			if name == magusfileSpellName {
-				return nil, magusfileNotASpellErr("listing it in \"spells\"")
+				return nil, magusfileNotASpellError("listing it in \"spells\"")
 			}
 			opts = append(opts, workspace.WithRegisteredSpell(name))
 		}
@@ -285,7 +285,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		// own proto project (spells: [buf]) had three no-op targets that way,
 		// including the ci anchor that `magus affected ci` gates on.
 		//
-		// Unconditional: declaring it is now an error (see magusfileNotASpellErr), so
+		// Unconditional: declaring it is now an error (see magusfileNotASpellError), so
 		// there is no author-listed case left to avoid double-binding against. Order
 		// no longer matters for the primary slot either: an internal registration
 		// never claims it (spells.WithInternal).
@@ -335,13 +335,13 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			var b spells.VersionBounds
 			if mv, ok := bv.MapGet("min"); ok {
-				if !mv.IsStr() {
+				if !mv.IsString() {
 					return nil, fmt.Errorf("magus.project: tools[%q].min must be a string version, e.g. \"22\"", bin)
 				}
 				b.Min = mv.AsString()
 			}
 			if lv, ok := bv.MapGet("below"); ok {
-				if !lv.IsStr() {
+				if !lv.IsString() {
 					return nil, fmt.Errorf("magus.project: tools[%q].below must be a string version, e.g. \"25\"", bin)
 				}
 				b.Below = lv.AsString()
@@ -378,7 +378,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			// workarounds for a snapshot error the engine no longer raises.
 			if sv, ok := pv.MapGet("skip_cache"); ok {
 				var reason string
-				if sv.IsStr() {
+				if sv.IsString() {
 					reason = strings.TrimSpace(sv.AsString())
 				}
 				if reason == "" {
@@ -395,7 +395,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			// the second reads green in CI either way.
 			if rv, ok := pv.MapGet("retry_on_volatile"); ok {
 				var reason string
-				if rv.IsStr() {
+				if rv.IsString() {
 					reason = strings.TrimSpace(rv.AsString())
 				}
 				if reason == "" {
@@ -411,7 +411,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			// somebody switched off after a bad week.
 			if av, ok := pv.MapGet("advisory"); ok {
 				var reason string
-				if av.IsStr() {
+				if av.IsString() {
 					reason = strings.TrimSpace(av.AsString())
 				}
 				if reason == "" {
@@ -425,7 +425,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			// to approve the run, so a bare `true` would leave both asking why.
 			if hv, ok := pv.MapGet("human_only"); ok {
 				var reason string
-				if hv.IsStr() {
+				if hv.IsString() {
 					reason = strings.TrimSpace(hv.AsString())
 				}
 				if reason == "" {
@@ -451,7 +451,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 						name, dv.AsString())
 				}
 				var reason string
-				if rv, ok := pv.MapGet("drift_reason"); ok && rv.IsStr() {
+				if rv, ok := pv.MapGet("drift_reason"); ok && rv.IsString() {
 					reason = strings.TrimSpace(rv.AsString())
 				}
 				// Same bar skip_cache sets: switching a check off is a claim about this
@@ -533,7 +533,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			// load error for the same reason slots is: a ceiling that silently decoded
 			// to "unbounded" would look exactly like the guard working.
 			if tv, ok := pv.MapGet("timeout"); ok {
-				if !tv.IsStr() {
+				if !tv.IsString() {
 					return nil, fmt.Errorf(
 						"magus.project: targets[%q].timeout must be a duration string such as \"15m\", got a %s",
 						name, tv.Kind())
@@ -594,7 +594,7 @@ func parseLayers(v vm.Value) (map[string]string, error) {
 	layers := make(map[string]string, len(keys))
 	for _, dir := range keys {
 		nv, _ := v.MapGet(dir)
-		if !nv.IsStr() {
+		if !nv.IsString() {
 			return nil, types.DiagnosticErrorf(types.LayerDeclarationInvalid,
 				`magus.project: "layers"[%q]: the layer name must be a string, got a %s`, dir, nv.Kind())
 		}

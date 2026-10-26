@@ -178,7 +178,7 @@ func TestNativeCanSuspendTheFiberItRunsInside(t *testing.T) {
 		// what the call evaluates to once resumed, so the native answers the body here
 		// and runs exactly once.
 		resumes++
-		return vm.Null, vm.Suspend(vm.StrValue("dependencies"))
+		return vm.Null, vm.Suspend(vm.StringValue("dependencies"))
 	}))
 	s.SetNativeModule("host", mod)
 
@@ -196,7 +196,7 @@ fun body() > void *> str !> any {
 	// First resume runs until the native parks it, and reports what it is waiting on.
 	waitingOn, err := s.ResumeFiber(t.Context(), fiber)
 	require.NoError(t, err)
-	require.True(t, waitingOn.IsStr(), "the native's suspend value must reach the driver")
+	require.True(t, waitingOn.IsString(), "the native's suspend value must reach the driver")
 	assert.Equal(t, "dependencies", waitingOn.AsString())
 
 	reached, ok := s.Globals()["reached"]
@@ -210,7 +210,7 @@ fun body() > void *> str !> any {
 	reached, ok = s.Globals()["reached"]
 	require.True(t, ok)
 	require.Equalf(t, 1, resumes, "the native must run ONCE; ran %d time(s)", resumes)
-	require.Truef(t, reached.IsStr(), "after resume the body assigned a %s", reached.Kind())
+	require.Truef(t, reached.IsString(), "after resume the body assigned a %s", reached.Kind())
 	assert.Equal(t, "dependencies", reached.AsString(),
 		"the call evaluates to the suspended value, exactly as `yield v` evaluates to v")
 }
@@ -225,7 +225,7 @@ func TestNativeSuspendSurvivesNestedFrames(t *testing.T) {
 	mod := vm.NewMap()
 	mod.MapSet("wait", vm.DirectValue("host.wait", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		calls++
-		return vm.Null, vm.Suspend(vm.StrValue("answered"))
+		return vm.Null, vm.Suspend(vm.StringValue("answered"))
 	}))
 	s.SetNativeModule("host", mod)
 
@@ -242,7 +242,7 @@ fun body() > void *> str !> any { landed = middle(); }
 
 	parked, err := s.ResumeFiber(t.Context(), fiber)
 	require.NoError(t, err)
-	require.True(t, parked.IsStr())
+	require.True(t, parked.IsString())
 	assert.Equal(t, "answered", parked.AsString(), "the suspend must cross three frames to reach the driver")
 
 	_, err = s.ResumeFiber(t.Context(), fiber)
@@ -250,7 +250,7 @@ fun body() > void *> str !> any { landed = middle(); }
 
 	landed, ok := s.Globals()["landed"]
 	require.True(t, ok)
-	require.Truef(t, landed.IsStr(), "after resume the nested call assigned a %s", landed.Kind())
+	require.Truef(t, landed.IsString(), "after resume the nested call assigned a %s", landed.Kind())
 	assert.Equal(t, "answered", landed.AsString(), "execution must resume inside the innermost frame")
 	assert.Equal(t, 1, calls, "the native runs once; the suspend value is its answer")
 }
@@ -265,7 +265,7 @@ func TestNativeSuspendUnderResolve(t *testing.T) {
 	mod := vm.NewMap()
 	mod.MapSet("wait", vm.DirectValue("host.wait", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		calls++
-		return vm.Null, vm.Suspend(vm.StrValue("resolved"))
+		return vm.Null, vm.Suspend(vm.StringValue("resolved"))
 	}))
 	s.SetNativeModule("host", mod)
 
@@ -282,7 +282,7 @@ fun body() > void *> str !> any { landed = host\wait(); }
 
 	landed, ok := s.Globals()["landed"]
 	require.True(t, ok)
-	require.Truef(t, landed.IsStr(), "resolve left a %s behind", landed.Kind())
+	require.Truef(t, landed.IsString(), "resolve left a %s behind", landed.Kind())
 	assert.Equal(t, "resolved", landed.AsString())
 }
 
@@ -322,7 +322,7 @@ fun body() > void *> void !> any {
 	require.NoError(t, err, "a try around the call catches the thrown error")
 
 	caught := s.Globals()["caught"]
-	require.True(t, caught.IsStr())
+	require.True(t, caught.IsString())
 	assert.Equal(t, "dependency failed", caught.AsString())
 	assert.False(t, s.Globals()["after"].AsBool(), "the throw must skip the rest of the try body")
 	f, _ := vm.AsFiber(fiber)

@@ -35,9 +35,9 @@ func couplingFiles() []string {
 	return out
 }
 
-// couplingFn is a Go function in pkg at file lines start through end, with a signature, the
+// couplingFunction is a Go function in pkg at file lines start through end, with a signature, the
 // identifiers its body branches on, and the files that call it.
-func couplingFn(pkg, name, file string, start, end int, sig string, branches []string, callers ...string) types.KnowledgeSymbol {
+func couplingFunction(pkg, name, file string, start, end int, sig string, branches []string, callers ...string) types.KnowledgeSymbol {
 	s := types.KnowledgeSymbol{
 		Key: fmt.Sprintf("%s%s().", conformanceNS(pkg), name), Label: name, Language: "go", Namespace: conformanceNS(pkg), Signature: sig,
 		Source: fmt.Sprintf("%s:%d", file, start), DefEndLine: end, Defs: []string{file}, BranchIdents: branches,
@@ -80,7 +80,7 @@ func couplingPackages() []types.KnowledgeSymbol {
 func execShape() []types.KnowledgeSymbol {
 	files := couplingFiles()
 	return []types.KnowledgeSymbol{
-		couplingFn(runPkg, "Exec", "internal/proc/run/exec.go", 135, 291, "func Exec(ctx context.Context, opts Options) error", nil, files...),
+		couplingFunction(runPkg, "Exec", "internal/proc/run/exec.go", 135, 291, "func Exec(ctx context.Context, opts Options) error", nil, files...),
 		{
 			Key: conformanceNS(runPkg) + "Options#", Label: "Options", Language: "go", Namespace: conformanceNS(runPkg),
 			Source: "internal/proc/run/exec.go:70", Defs: []string{"internal/proc/run/exec.go"},

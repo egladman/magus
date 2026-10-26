@@ -369,18 +369,18 @@ func encodeHeap(t valueTag, idx uint64) Value {
 }
 
 // heapValue interns ptr into the global heap table and returns the NaN-box Value.
-// This is the shared constructor used by StrValue, ListValue, NewMap, etc.
+// This is the shared constructor used by StringValue, ListValue, NewMap, etc.
 func heapValue[T heapVal](tag valueTag, ptr T) Value {
 	return encodeHeap(tag, gHeapAlloc(ptr, nil))
 }
 
-// internedStrValue returns the string Value for an interned *strObj, caching its
+// internedStringValue returns the string Value for an interned *strObj, caching its
 // global-heap index on the object (stored as index+1, 0 = unset) so every Value
 // for the same content shares one heap entry instead of appending a fresh one on
-// each StrValue call. This keeps string-churning loops (e.g. a sliding sub())
+// each StringValue call. This keeps string-churning loops (e.g. a sliding sub())
 // from growing the never-freed heap. A lost CAS race orphans one heap slot,
 // which is bounded and harmless since it still points at the same strObj.
-func internedStrValue(o *strObj) Value {
+func internedStringValue(o *strObj) Value {
 	if e := atomic.LoadUint64(&o.heapIdx); e != 0 {
 		return encodeHeap(tagStr, e-1)
 	}
@@ -400,7 +400,7 @@ func sameObj(a, b Value) bool {
 // value-level asX accessors: look up the global heap table.
 
 func nanboxObj(v Value) heapVal            { return gHeapGet(uint64(v) & idxMaskHeap) }
-func (v Value) asStr() *strObj             { return nanboxObj(v).(*strObj) }
+func (v Value) asString() *strObj          { return nanboxObj(v).(*strObj) }
 func (v Value) asUD() *udObj               { return nanboxObj(v).(*udObj) }
 func (v Value) asList() *listObj           { return nanboxObj(v).(*listObj) }
 func (v Value) asMap() *mapObj             { return nanboxObj(v).(*mapObj) }
@@ -421,7 +421,7 @@ func (v Value) asType() *typeObj           { return nanboxObj(v).(*typeObj) }
 func (v Value) asObjDecl() *ast.ObjectDecl { return nanboxObj(v).(*objDeclPayload).ObjectDecl }
 
 // VM-context accessors: delegate to the value-level forms (global heap).
-func (vm *VM) asStr(v Value) *strObj             { return v.asStr() }
+func (vm *VM) asString(v Value) *strObj          { return v.asString() }
 func (vm *VM) asList(v Value) *listObj           { return v.asList() }
 func (vm *VM) asMap(v Value) *mapObj             { return v.asMap() }
 func (vm *VM) asFun(v Value) *funObj             { return v.asFun() }

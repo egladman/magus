@@ -130,14 +130,14 @@ func (s *TokenSuite) TestGuardHotReload() {
 	h, err := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
 	require.NoError(t, err)
 
-	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+a))
+	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+a))
 	b, _ := GenerateOperator()
 	_, err = SaveOperator(b)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, reqStatus(h, "Bearer "+a), "old token after rotate")
-	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+b))
+	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+a), "old token after rotate")
+	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+b))
 	require.NoError(t, RevokeOperator())
-	assert.Equal(t, http.StatusUnauthorized, reqStatus(h, "Bearer "+b), "after revoke")
+	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+b), "after revoke")
 }
 
 // EnsureOperator persists a token on first use and never writes the secret to the log.
@@ -176,9 +176,9 @@ func TestTokenIDStable(t *testing.T) {
 	assert.Len(t, TokenID("abc"), 8)
 }
 
-// reqStatus drives one request from a loopback peer through h with the given Authorization
+// requestStatus drives one request from a loopback peer through h with the given Authorization
 // header (empty = none).
-func reqStatus(h http.Handler, authHeader string) int {
+func requestStatus(h http.Handler, authHeader string) int {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.RemoteAddr = "127.0.0.1:40000"
 	if authHeader != "" {

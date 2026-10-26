@@ -28,9 +28,9 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// spellCmd is the home of a spell as an artifact: what a workspace publishes so another
+// spellCommand is the home of a spell as an artifact: what a workspace publishes so another
 // imports it by registry path. Authoring a spell stays `magus init spell`.
-func spellCmd(ctx context.Context, root string, args []string) error {
+func spellCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		spellUsage()
 		return flag.ErrHelp
@@ -79,7 +79,7 @@ type spellBuildResult struct {
 
 func spellBuild(ctx context.Context, root string, args []string) error {
 	var out, source string
-	pos, err := cmdParse("spell build", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("spell build", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&out, "out", "", "also write the packed layer (an uncompressed tar) to this file")
 		fs.StringVar(&source, "source", "", "the org.opencontainers.image.source URL; default: the VCS remote")
 		fs.Usage = func() {
@@ -188,7 +188,7 @@ var shippedSpellsPath = strings.TrimSuffix(spells.ModulePrefix, "/")
 func spellPush(ctx context.Context, root string, args []string) error {
 	var user, source string
 	var tags stringList
-	pos, err := cmdParse("spell push", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("spell push", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&user, "username", "", "the registry username; the password is then read from stdin, overriding spells.registries")
 		fs.Var(&tags, "tag", "another tag to write the same manifest under; repeatable")
 		fs.StringVar(&source, "source", "", "the org.opencontainers.image.source URL; default: the VCS remote")
@@ -283,7 +283,7 @@ type spellOverride struct {
 
 func spellPull(ctx context.Context, root string, args []string) error {
 	var user string
-	pos, err := cmdParse("spell pull", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("spell pull", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&user, "username", "", "the registry username; the password is then read from stdin, overriding spells.registries")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus spell pull <registry>/<repository>[:<tag>|@sha256:<digest>] [<dir>] [flags]")
@@ -454,7 +454,7 @@ type spellLockEntry struct {
 
 func spellLock(ctx context.Context, root string, args []string) error {
 	var update bool
-	pos, err := cmdParse("spell lock", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("spell lock", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&update, "update", false, "ask the registry what each declared tag names now, and rewrite magus.lock")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus spell lock [--update] [flags]")
@@ -520,7 +520,7 @@ func verifyLock(ctx context.Context, wsRoot string, spells config.SpellsConfig, 
 	if err != nil {
 		return err
 	}
-	if err := im.Err(); err != nil {
+	if err := im.Error(); err != nil {
 		return err
 	}
 	lock, err := remotespell.ReadLock(wsRoot)
@@ -590,7 +590,7 @@ type spellLsResult struct {
 
 func spellLs(ctx context.Context, root string, args []string) error {
 	var user string
-	pos, err := cmdParse("spell ls", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("spell ls", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&user, "username", "", "the registry username; the password is then read from stdin, overriding spells.registries")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus spell ls <registry>/<repository> [flags]")

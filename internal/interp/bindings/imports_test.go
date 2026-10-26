@@ -26,9 +26,9 @@ type spellImportsWS struct {
 
 func (w spellImportsWS) SpellImports() *remotespell.Imports { return w.imports }
 
-// declaredCtx resolves cfg for the workspace at root the way a workspace load does,
+// declaredContext resolves cfg for the workspace at root the way a workspace load does,
 // and returns a context carrying it.
-func declaredCtx(t *testing.T, root string, cfg config.SpellsConfig) context.Context {
+func declaredContext(t *testing.T, root string, cfg config.SpellsConfig) context.Context {
 	t.Helper()
 	im, err := remotespell.LoadImports(t.Context(), root, cfg, remotespell.LoadOptions{
 		Embedded: func(name string) bool { _, ok := spell.Builtins()[name]; return ok },
@@ -53,7 +53,7 @@ func TestWorkspaceSpellWithAnEmbeddedNameIsRefused(t *testing.T) {
 	w.Write("spells/go/spell.buzz", `export fun mgs_getName() > str { return "go"; }`)
 	w.Write("magusfile.buzz", "import \"magus\";\nimport \"spells/go\" as gocopy;\n")
 
-	err := parseIn(declaredCtx(t, root, config.SpellsConfig{}), t, root)
+	err := parseIn(declaredContext(t, root, config.SpellsConfig{}), t, root)
 	require.ErrorIs(t, err, types.SpellShadowed)
 	require.ErrorContains(t, err, "spells: {magus/spell/go: {path: <dir>}}")
 }
@@ -63,7 +63,7 @@ func TestOverrideMustCarryTheEmbeddedName(t *testing.T) {
 	root := w.Root()
 	w.Write("spells/mygo/spell.buzz", `export fun mgs_getName() > str { return "mygo"; }`)
 	w.Write("magusfile.buzz", "import \"magus\";\nimport \"magus/spell/go\";\n")
-	ctx := declaredCtx(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
+	ctx := declaredContext(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
 		"magus/spell/go": {Path: "spells/mygo"},
 	}})
 
@@ -87,7 +87,7 @@ fun vet(t: Target) > Command { return Command{bin = "go", args = ["vet", "./..."
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"vet": vet}; }
 `)
 	w.Write("magusfile.buzz", "import \"magus\";\nimport \"magus/spell/go\";\n")
-	ctx := declaredCtx(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
+	ctx := declaredContext(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
 		"magus/spell/go": {Path: "spells/go"},
 	}})
 
@@ -102,7 +102,7 @@ func TestUndeclaredRemoteImportIsRefused(t *testing.T) {
 	root := w.Root()
 	w.Write("magusfile.buzz", "import \"magus\";\nimport \"ghcr.io/team/spells/lint\";\n")
 
-	err := parseIn(declaredCtx(t, root, config.SpellsConfig{}), t, root)
+	err := parseIn(declaredContext(t, root, config.SpellsConfig{}), t, root)
 	require.ErrorIs(t, err, types.RemoteSpellUndeclared)
 }
 
@@ -119,7 +119,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     if (lint.name != "lintcopy") { throw "lint.name: " + lint.name; }
 }
 `)
-	ctx := declaredCtx(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
+	ctx := declaredContext(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
 		"ghcr.io/team/spells/lint": {Path: "vendor/lint"},
 	}})
 
@@ -195,7 +195,7 @@ func TestResolveLocalSpellImportWithProbes(t *testing.T) {
 	w.Write("spells/flat.buzz", `export fun mgs_getName() > str { return "probeflat"; }`)
 	w.Write("web/lib.buzz", "export fun f() > void {}\n")
 	src := &interp.Source{Dir: filepath.Join(root, "web")}
-	base := interp.WithSource(declaredCtx(t, root, config.SpellsConfig{}), src)
+	base := interp.WithSource(declaredContext(t, root, config.SpellsConfig{}), src)
 	im := remotespell.ImportsFromContext(base)
 	ctx, seal := interp.WithImportProbes(base)
 	defer seal()
@@ -242,7 +242,7 @@ func escapeeSpell(t *testing.T) (w *testkit.Workspace, root, outside string) {
 func TestSpellImportAboveTheRootIsNeitherProbedNorLoaded(t *testing.T) {
 	w, root, outside := escapeeSpell(t)
 	w.Write("ws/app/magusfile.buzz", "import \"magus\";\n")
-	base := interp.WithSource(declaredCtx(t, root, config.SpellsConfig{}), &interp.Source{Dir: filepath.Join(root, "app")})
+	base := interp.WithSource(declaredContext(t, root, config.SpellsConfig{}), &interp.Source{Dir: filepath.Join(root, "app")})
 	ctx, seal := interp.WithImportProbes(base)
 	defer seal()
 	probes := interp.ImportProbesFromContext(ctx)
@@ -264,7 +264,7 @@ func TestSpellImportEscapingEveryLevelIsRefused(t *testing.T) {
 	w, root, _ := escapeeSpell(t)
 	w.Write("ws/magusfile.buzz", "import \"magus\";\nimport \"../spells/escapee\" as escapee;\n")
 
-	err := parseIn(declaredCtx(t, root, config.SpellsConfig{}), t, root)
+	err := parseIn(declaredContext(t, root, config.SpellsConfig{}), t, root)
 
 	require.ErrorIs(t, err, types.SpellImportEscapesWorkspace)
 	require.ErrorContains(t, err, fmt.Sprintf(
@@ -281,7 +281,7 @@ func TestSpellImportMemoIsKeyedOnTheAbsoluteCandidate(t *testing.T) {
 	root := w.Root()
 	w.Write("a/spells/p/spell.buzz", `export fun mgs_getName() > str { return "memoa"; }`)
 	w.Write("b/spells/p/spell.buzz", `export fun mgs_getName() > str { return "memob"; }`)
-	base, seal := interp.WithImportProbes(declaredCtx(t, root, config.SpellsConfig{}))
+	base, seal := interp.WithImportProbes(declaredContext(t, root, config.SpellsConfig{}))
 	defer seal()
 	im := remotespell.ImportsFromContext(base)
 	name := func(project string) string {

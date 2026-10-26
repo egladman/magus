@@ -99,7 +99,7 @@ func reflectArgToBuzz(v reflect.Value, kind CType) Value {
 	case CUint:
 		return IntValue(int64(v.Uint()))
 	case CCharPtr:
-		return StrValue(v.String())
+		return StringValue(v.String())
 	case CVoidPtr:
 		return UDValue(uintptr(v.Uint())) // foreign pointer (ud), full 64-bit
 	default:
@@ -220,9 +220,9 @@ func loadExternVar(sig CFuncSig, sym uintptr) (Value, error) {
 	case CCharPtr:
 		p := *(*uintptr)(foreignPointer(sym))
 		if p == 0 {
-			return StrValue(""), nil
+			return StringValue(""), nil
 		}
-		return StrValue(goCString(p)), nil
+		return StringValue(goCString(p)), nil
 	case CBool:
 		return BoolValue(*(*byte)(foreignPointer(sym)) != 0), nil
 	case CFloat:
@@ -385,7 +385,7 @@ func buzzToReflectArg(v Value, kind CType) (reflect.Value, error) {
 		if v.tag() != tagStr {
 			return reflect.Value{}, fmt.Errorf("buzz: ffi: cannot convert %s to char*", v.buzzKind())
 		}
-		return reflect.ValueOf(v.asStr().V), nil
+		return reflect.ValueOf(v.asString().V), nil
 	case CVoidPtr:
 		switch {
 		case v.IsNull():
@@ -420,7 +420,7 @@ func reflectRetToValue(r reflect.Value, kind CType) Value {
 		// Buzz and one handed back must compare equal, and upstream's ffi.buzz asserts
 		// exactly that (`get_data_msg(data) == "bye world\000"`). Dropping the
 		// terminator here would make a round trip through C silently change the string.
-		return StrValue(r.String() + "\x00")
+		return StringValue(r.String() + "\x00")
 	case CVoidPtr:
 		// A null pointer (address 0) surfaces as Buzz `null`, not 0, so
 		// `handle != null` nil-checks behave like upstream buzz (a zdef
@@ -638,7 +638,7 @@ func marshalStructArg(inst *objectInst) (structArg, error) {
 		// A pointer field needs a C string of its own: the block holds the ADDRESS,
 		// so the bytes have to live somewhere for the duration of the call.
 		if strings.Contains(ct, "*") && v.tag() == tagStr {
-			sp, err := AllocCString(v.asStr().V)
+			sp, err := AllocCString(v.asString().V)
 			if err != nil {
 				return sa, err
 			}

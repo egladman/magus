@@ -17,7 +17,7 @@ func TestResolveAgainstContextCwd(t *testing.T) {
 	if got := resolve(context.Background(), "rel/path"); got != "rel/path" {
 		t.Fatalf("resolve without cwd = %q, want unchanged", got)
 	}
-	ctx := WithCwd(context.Background(), "/work/dir")
+	ctx := WithCurrentWorkingDirectory(context.Background(), "/work/dir")
 	if got := resolve(ctx, "rel/path"); got != filepath.Join("/work/dir", "rel/path") {
 		t.Fatalf("resolve with cwd = %q, want /work/dir/rel/path", got)
 	}
@@ -27,18 +27,18 @@ func TestResolveAgainstContextCwd(t *testing.T) {
 }
 
 // TestStdlibResolvesCwd verifies the fs builtins resolve relative paths against
-// an embedder-set context cwd (WithCwd) — so a script run "from" a directory
+// an embedder-set context cwd (WithCurrentWorkingDirectory) — so a script run "from" a directory
 // sees that directory without the process actually chdir-ing.
 func TestStdlibResolvesCwd(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hi"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ctx := WithCwd(context.Background(), dir)
+	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
 	// fs.makeDirectory("made") creates the dir under the context cwd, not the
 	// process cwd.
-	if _, err := fsMakeDirectory(ctx, []vm.Value{vm.StrValue("made")}); err != nil {
+	if _, err := fsMakeDirectory(ctx, []vm.Value{vm.StringValue("made")}); err != nil {
 		t.Fatalf("fsMakeDirectory: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "made")); err != nil {
@@ -46,7 +46,7 @@ func TestStdlibResolvesCwd(t *testing.T) {
 	}
 
 	// fs.list(".") resolves to the cwd and lists its entries.
-	listed, err := fsList(ctx, []vm.Value{vm.StrValue(".")})
+	listed, err := fsList(ctx, []vm.Value{vm.StringValue(".")})
 	if err != nil {
 		t.Fatalf("fsList: %v", err)
 	}

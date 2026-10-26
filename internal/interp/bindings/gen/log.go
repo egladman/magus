@@ -18,7 +18,7 @@ func RegisterLog(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("trace", vm.DirectValue("log.trace", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := ffi.Str(bzArgs, 0)
+		message := ffi.String(bzArgs, 0)
 		attrs := ffi.AnyMap(bzArgs, 1)
 		if err := std.LogTrace(ctx, message, attrs); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -26,7 +26,7 @@ func RegisterLog(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	m.MapSet("debug", vm.DirectValue("log.debug", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := ffi.Str(bzArgs, 0)
+		message := ffi.String(bzArgs, 0)
 		attrs := ffi.AnyMap(bzArgs, 1)
 		if err := std.LogDebug(ctx, message, attrs); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -34,7 +34,7 @@ func RegisterLog(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	m.MapSet("info", vm.DirectValue("log.info", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := ffi.Str(bzArgs, 0)
+		message := ffi.String(bzArgs, 0)
 		attrs := ffi.AnyMap(bzArgs, 1)
 		if err := std.LogInfo(ctx, message, attrs); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -42,7 +42,7 @@ func RegisterLog(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	m.MapSet("warn", vm.DirectValue("log.warn", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := ffi.Str(bzArgs, 0)
+		message := ffi.String(bzArgs, 0)
 		attrs := ffi.AnyMap(bzArgs, 1)
 		if err := std.LogWarn(ctx, message, attrs); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -50,7 +50,7 @@ func RegisterLog(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	m.MapSet("error", vm.DirectValue("log.error", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := ffi.Str(bzArgs, 0)
+		message := ffi.String(bzArgs, 0)
 		attrs := ffi.AnyMap(bzArgs, 1)
 		if err := std.LogError(ctx, message, attrs); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -58,8 +58,8 @@ func RegisterLog(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	m.MapSet("at", vm.DirectValue("log.at", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		level := ffi.Str(bzArgs, 0)
-		message := ffi.Str(bzArgs, 1)
+		level := ffi.String(bzArgs, 0)
+		message := ffi.String(bzArgs, 1)
 		attrs := ffi.AnyMap(bzArgs, 2)
 		if err := std.LogAt(ctx, level, message, attrs); err != nil {
 			return vm.Null, ffi.Error(err)

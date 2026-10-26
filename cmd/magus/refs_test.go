@@ -288,7 +288,7 @@ func TestEmitDefinitionsStaleIndex(t *testing.T) {
 
 // TestRefsTextPrintsMatchingLines pins the output shape: path:line:text, the one
 // every grep-shaped tool and every agent already parses. classify is nil (the
-// cold-worktree case: no workspace, no graph, no symbol index); refsTextCmd
+// cold-worktree case: no workspace, no graph, no symbol index); refsTextCommand
 // must still answer, which is the whole reason it runs textScan directly
 // instead of going through refs' usual symbol-graph path.
 func TestRefsTextPrintsMatchingLines(t *testing.T) {
@@ -297,7 +297,7 @@ func TestRefsTextPrintsMatchingLines(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, 0, nil)
+		err = refsTextCommand(context.Background(), w.Root(), "NEEDLE", nil, false, 0, nil)
 	})
 	require.NoError(t, err, "a match exits 0, like grep")
 	assert.Equal(t, w.Path("a.go")+":2:const Ref = \"NEEDLE\"\n", out)
@@ -314,7 +314,7 @@ func TestRefsTextNoMatchExitsOneAndPrintsNothing(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", nil, false, 0, nil)
+		err = refsTextCommand(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", nil, false, 0, nil)
 	})
 	assert.Equal(t, exit.Reported(exit.Failure), err)
 	assert.Empty(t, out)
@@ -330,16 +330,16 @@ func TestRefsTextUnreadableRootExitsTwo(t *testing.T) {
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), missing, "NEEDLE", nil, false, 0, nil)
+		err = refsTextCommand(context.Background(), missing, "NEEDLE", nil, false, 0, nil)
 	})
 	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.Contains(t, errOut, missing)
 }
 
 // TestRefsTextAnswersColdWithNoClassifier is the case the whole task exists to
-// guarantee: refsTextCmd must never answer `unknown`. A nil classify is exactly
+// guarantee: refsTextCommand must never answer `unknown`. A nil classify is exactly
 // what a cold worktree with no workspace, no graph, and no symbol index hands
-// refsCmd (inspectWorkspace failed), and the search must still find real
+// refsCommand (inspectWorkspace failed), and the search must still find real
 // matches rather than erroring out or reporting nothing.
 func TestRefsTextAnswersColdWithNoClassifier(t *testing.T) {
 	w := testkit.NewWorkspace(t)
@@ -347,7 +347,7 @@ func TestRefsTextAnswersColdWithNoClassifier(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, 0, nil)
+		err = refsTextCommand(context.Background(), w.Root(), "NEEDLE", nil, false, 0, nil)
 	})
 	require.NoError(t, err)
 	assert.Contains(t, out, "NEEDLE")
@@ -365,7 +365,7 @@ func TestRefsTextScopesToNamedPaths(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{w.Path("internal/guard")}, false, 0, nil)
+		err = refsTextCommand(context.Background(), w.Root(), "NEEDLE", []string{w.Path("internal/guard")}, false, 0, nil)
 	})
 	require.NoError(t, err)
 	assert.Contains(t, out, filepath.Join("internal", "guard", "shell.go"))
@@ -380,7 +380,7 @@ func TestRefsTextScopeOutsideWorkspaceExitsTwo(t *testing.T) {
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{filepath.Join(w.Root(), "..")}, false, 0, nil)
+		err = refsTextCommand(context.Background(), w.Root(), "NEEDLE", []string{filepath.Join(w.Root(), "..")}, false, 0, nil)
 	})
 	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.Contains(t, errOut, "outside the workspace")
@@ -415,7 +415,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	var out, errOut string
 	errOut = captureStderr(t, func() {
 		out = captureStdout(t, func() {
-			cmdErr = refsTextCmd(ctx, root, "NEEDLE", nil, true, 0, m.ClassifyFiles)
+			cmdErr = refsTextCommand(ctx, root, "NEEDLE", nil, true, 0, m.ClassifyFiles)
 		})
 	})
 	require.NoError(t, cmdErr, "the hand-written file still matches")
@@ -426,14 +426,14 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 
 // TestRefsTextExitsTwoOnScanError covers the remaining error path (not a root
 // problem): an unparseable request. An empty pattern is textindex.Scan's own
-// refusal, and refsTextCmd must surface it as exit 2, not silently match nothing.
+// refusal, and refsTextCommand must surface it as exit 2, not silently match nothing.
 func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Write("a.go", "anything\n")
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "", nil, false, 0, nil)
+		err = refsTextCommand(context.Background(), w.Root(), "", nil, false, 0, nil)
 	})
 	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.NotEmpty(t, errOut)

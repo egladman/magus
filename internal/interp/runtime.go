@@ -54,14 +54,14 @@ type sourceReaderCtxKey struct{}
 // magusfile identifier.
 const TargetContextGlobal = "__magus_target_context"
 
-// CtxFormTargetKeys returns the normalized keys of the exported functions in src whose
+// ContextFormTargetKeys returns the normalized keys of the exported functions in src whose
 // FIRST parameter is annotated `magus\Context` (types.ContextParamAnnotation): the target
 // contract. execBuzzSource uses it to enforce that contract at load (an exported function
 // missing the context is rejected with MGS1008) and to prepend the context at dispatch.
 // It does NOT build the graph: the dependency graph is read statically by
 // describe.Extract, which sees ctx-form declarations directly. Best-effort: a parse
 // failure yields nil, matching the extractor's never-error contract.
-func CtxFormTargetKeys(src string) map[string]bool {
+func ContextFormTargetKeys(src string) map[string]bool {
 	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil || prog == nil {
 		return nil
@@ -356,8 +356,8 @@ func (w *binaryAnswerWalk) reaches(m *buzzModule, fn string) bool {
 	return found
 }
 
-// removedAPIErr reports a magusfile still calling an API magus no longer binds.
-func removedAPIErr(call, replacement string) error {
+// removedAPIError reports a magusfile still calling an API magus no longer binds.
+func removedAPIError(call, replacement string) error {
 	return types.DiagnosticErrorf(types.MagusfileAPIRemoved,
 		"%s was removed: %s instead", call, replacement)
 }
@@ -957,7 +957,7 @@ func computeMagusfileFacts(code string) magusfileFacts {
 		SpellHandles:  spellImportNames(code),
 		RemoteImports: remoteImportPaths(code),
 	}
-	f.CtxForm = slices.Sorted(maps.Keys(CtxFormTargetKeys(code)))
+	f.CtxForm = slices.Sorted(maps.Keys(ContextFormTargetKeys(code)))
 	f.RemovedCall, f.Replacement, _ = RemovedAPICall(code)
 	return f
 }
@@ -992,9 +992,9 @@ func loadMagusfileFacts(store buzz.BytecodeStore, code string) magusfileFacts {
 	return f
 }
 
-// importTargetCollisionErr reports a target whose name shadows a same-named import,
+// importTargetCollisionError reports a target whose name shadows a same-named import,
 // which makes the module read null on member access.
-func importTargetCollisionErr(name, importPath string) error {
+func importTargetCollisionError(name, importPath string) error {
 	return fmt.Errorf("magusfile: target %q shadows the module import %q, so %s.<member> "+
 		"reads null, rename the target or alias the import", name, importPath, name)
 }
@@ -1007,7 +1007,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	// re-enters the interpreter) execute concurrently without corrupting a shared
 	// process working directory.
 	if workDir != "" {
-		ctx = std.WithCwd(ctx, workDir)
+		ctx = std.WithCurrentWorkingDirectory(ctx, workDir)
 	}
 	slog.With(attr.Component("interp")).DebugContext(ctx, "run magusfile target", "target", target, "dir", workDir)
 
@@ -1038,7 +1038,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	// rather than null when no extra args were given.
 	items := make([]vm.Value, len(extraArgs))
 	for i, s := range extraArgs {
-		items[i] = vm.StrValue(s)
+		items[i] = vm.StringValue(s)
 	}
 	buzzArgs := []vm.Value{vm.ListValue(items)}
 	ctx, exitCode := types.WithExitCapture(ctx)
@@ -1107,18 +1107,18 @@ func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
 	return out, nil
 }
 
-// targetCollisionErr reports two source target names that normalize to the same
+// targetCollisionError reports two source target names that normalize to the same
 // canonical key. Used by the Buzz registration path so the message
 // stays identical across engines.
-func targetCollisionErr(prev, cur, key string) error {
+func targetCollisionError(prev, cur, key string) error {
 	return fmt.Errorf("magusfile: targets %q and %q both normalize to %q, "+
 		"target names are matched case- and delimiter-insensitively, so rename one", prev, cur, key)
 }
 
-// ctxlessTargetErr reports an exported magusfile function missing the magus.Context
+// ctxlessTargetError reports an exported magusfile function missing the magus.Context
 // first parameter every target must declare. The signature is the contract magus reads
 // statically to build the graph, so the ctx-less form is rejected at load.
-func ctxlessTargetErr(name string) error {
+func ctxlessTargetError(name string) error {
 	return types.DiagnosticErrorf(types.TargetMissingContext,
 		"target %q must receive a %s as its first parameter: "+
 			"change its signature to export fun %s(ctx: %s, args: [str])",
@@ -1247,7 +1247,7 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		// complaint about the callback's parameter).
 		if facts.RemovedCall != "" {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIErr(facts.RemovedCall, facts.Replacement))
+			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIError(facts.RemovedCall, facts.Replacement))
 		}
 		execErr := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) })
 		// An import that failed to bind is the cause of whatever Exec tripped on next,
@@ -1286,19 +1286,19 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		// A target that shadows a same-named import makes the module read null; fail at load.
 		if importPath, clash := importNames[name]; clash {
 			_ = buzzSess.Close()
-			return nil, importTargetCollisionErr(name, importPath)
+			return nil, importTargetCollisionError(name, importPath)
 		}
 		key := types.Normalize(name)
 		if prev, dup := seen[key]; dup {
 			_ = buzzSess.Close()
-			return nil, targetCollisionErr(prev, name, key)
+			return nil, targetCollisionError(prev, name, key)
 		}
 		// Every target must receive a magus.Context as its first parameter: the
 		// signature IS the contract magus reads statically to build the graph. Reject the
 		// old ctx-less form at load rather than dispatching it with the wrong arguments.
 		if !ctxForm[key] {
 			_ = buzzSess.Close()
-			return nil, ctxlessTargetErr(name)
+			return nil, ctxlessTargetError(name)
 		}
 		seen[key] = name
 		captured := val

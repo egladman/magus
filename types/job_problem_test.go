@@ -13,19 +13,19 @@ import (
 func TestJobProblemErrCarriesItsCodeAndFix(t *testing.T) {
 	p := JobProblem{Code: WritePathIsDirectory, Field: "write_paths[0]", Message: `"internal/job" is a directory`, Fix: "list the files"}
 
-	err := p.Err()
+	err := p.Error()
 
 	require.ErrorIs(t, err, WritePathIsDirectory)
 	assert.Equal(t, `"internal/job" is a directory: list the files`, err.Msg)
 }
 
 func TestJobProblemErrWithoutAFixIsTheMessage(t *testing.T) {
-	assert.Equal(t, "bad", JobProblem{Code: JobRecordInvalid, Message: "bad"}.Err().Msg)
+	assert.Equal(t, "bad", JobProblem{Code: JobRecordInvalid, Message: "bad"}.Error().Msg)
 }
 
 func TestJobProblemsErrIsNilWhenEmpty(t *testing.T) {
-	require.NoError(t, JobProblems(nil).Err())
-	require.NoError(t, JobValidation{}.Err())
+	require.NoError(t, JobProblems(nil).Error())
+	require.NoError(t, JobValidation{}.Error())
 }
 
 func TestJobProblemsErrJoinsEveryProblemInRecordOrder(t *testing.T) {
@@ -34,7 +34,7 @@ func TestJobProblemsErrJoinsEveryProblemInRecordOrder(t *testing.T) {
 		{Code: JobGoalInvalid, Field: "goals[0].id", Message: "second"},
 	}
 
-	err := JobValidation{Problems: ps}.Err()
+	err := JobValidation{Problems: ps}.Error()
 
 	require.ErrorIs(t, err, JobRecordInvalid)
 	require.ErrorIs(t, err, JobGoalInvalid)
@@ -80,7 +80,7 @@ func TestPermitNeverPermitsAnUnpermissibleCode(t *testing.T) {
 
 func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
 	edit := &JobEdit{AddWritePath: "docs/x.md"}
-	err := JobProblems{{Code: OutputOutsideWritePaths, Message: "x", Fix: "add it", Edit: edit}}.Err()
+	err := JobProblems{{Code: OutputOutsideWritePaths, Message: "x", Fix: "add it", Edit: edit}}.Error()
 
 	var carried *JobProblemError
 	require.ErrorAs(t, err, &carried)

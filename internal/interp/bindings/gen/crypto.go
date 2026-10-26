@@ -18,78 +18,78 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("sha256Hex", vm.DirectValue("crypto.sha256Hex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		data := ffi.Str(bzArgs, 0)
+		data := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoSha256Hex(ctx, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("sha256File", vm.DirectValue("crypto.sha256File", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoSha256File(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("sha512Hex", vm.DirectValue("crypto.sha512Hex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		data := ffi.Str(bzArgs, 0)
+		data := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoSha512Hex(ctx, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("sha512File", vm.DirectValue("crypto.sha512File", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoSha512File(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("sha1Hex", vm.DirectValue("crypto.sha1Hex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		data := ffi.Str(bzArgs, 0)
+		data := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoSha1Hex(ctx, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("sha1File", vm.DirectValue("crypto.sha1File", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoSha1File(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("sign", vm.DirectValue("crypto.sign", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		alg := ffi.Str(bzArgs, 0)
-		data := ffi.Str(bzArgs, 1)
-		key := ffi.Str(bzArgs, 2)
+		alg := ffi.String(bzArgs, 0)
+		data := ffi.String(bzArgs, 1)
+		key := ffi.String(bzArgs, 2)
 		ret0, err := std.CryptoSign(ctx, alg, data, key)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("signFile", vm.DirectValue("crypto.signFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		alg := ffi.Str(bzArgs, 0)
-		path := ffi.Str(bzArgs, 1)
-		key := ffi.Str(bzArgs, 2)
+		alg := ffi.String(bzArgs, 0)
+		path := ffi.String(bzArgs, 1)
+		key := ffi.String(bzArgs, 2)
 		ret0, err := std.CryptoSignFile(ctx, alg, path, key)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("verify", vm.DirectValue("crypto.verify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		alg := ffi.Str(bzArgs, 0)
-		data := ffi.Str(bzArgs, 1)
-		sig_hex := ffi.Str(bzArgs, 2)
-		pub_hex := ffi.Str(bzArgs, 3)
+		alg := ffi.String(bzArgs, 0)
+		data := ffi.String(bzArgs, 1)
+		sig_hex := ffi.String(bzArgs, 2)
+		pub_hex := ffi.String(bzArgs, 3)
 		ret0, err := std.CryptoVerify(ctx, alg, data, sig_hex, pub_hex)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -97,29 +97,29 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("publicKey", vm.DirectValue("crypto.publicKey", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		alg := ffi.Str(bzArgs, 0)
-		key := ffi.Str(bzArgs, 1)
+		alg := ffi.String(bzArgs, 0)
+		key := ffi.String(bzArgs, 1)
 		ret0, err := std.CryptoPublicKey(ctx, alg, key)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("md5Hex", vm.DirectValue("crypto.md5Hex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		data := ffi.Str(bzArgs, 0)
+		data := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoMd5Hex(ctx, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("md5File", vm.DirectValue("crypto.md5File", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoMd5File(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("hmacSha256", vm.DirectValue("crypto.hmacSha256", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		key := ffi.ByteSlice(bzArgs, 0)
@@ -137,7 +137,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("base64EncodeBytes", vm.DirectValue("crypto.base64EncodeBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		data := ffi.ByteSlice(bzArgs, 0)
@@ -145,10 +145,10 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("base64DecodeBytes", vm.DirectValue("crypto.base64DecodeBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := std.CryptoBase64DecodeBytes(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

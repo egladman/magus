@@ -78,7 +78,7 @@ comparison used to heap-allocate, take a global mutex, and append a permanent en
 the global heap table. What remains is measured and not yet done: `rangeValue` allocates
 on every range arm even though the bounds are compile-time constants, and folding it into
 the const pool needs a bytecode format bump because the codec has no `tagRange`.
-Separately `strMethod` allocates a closure plus a wrapper on every string method call,
+Separately `stringMethod` allocates a closure plus a wrapper on every string method call,
 which is a larger and more general win than match.
 
 **`mapops` at 1.4x** is the next-best relative showing, so the map implementation is not

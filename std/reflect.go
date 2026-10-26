@@ -32,10 +32,10 @@ func MethodSource(m Method, repoRoot string) string {
 	return filepath.ToSlash(rel)
 }
 
-// implName returns the package-qualified Go name of a method's Impl, e.g.
+// implementationName returns the package-qualified Go name of a method's Impl, e.g.
 // "std.FsGlob" — the import path is stripped. Empty when Impl is nil or not a
 // function.
-func implName(m Method) string {
+func implementationName(m Method) string {
 	if m.Impl == nil {
 		return ""
 	}
@@ -58,7 +58,7 @@ func implName(m Method) string {
 // MethodFuncName returns just the bare function name of m's Impl (e.g. "FsGlob")
 // without the package qualifier. Useful for generating trampoline names.
 func MethodFuncName(m Method) string {
-	return bareName(implName(m))
+	return bareName(implementationName(m))
 }
 
 // FieldFuncName returns the bare function name of f.Resolver (e.g. "VcsName").
@@ -76,9 +76,9 @@ func FieldFuncName(f Field) string {
 	return bareName(full)
 }
 
-// FieldResolverTakesCtx reports whether f.Resolver's signature is
+// FieldResolverTakesContext reports whether f.Resolver's signature is
 // (context.Context) (T, error) rather than () (T, error).
-func FieldResolverTakesCtx(f Field) bool {
+func FieldResolverTakesContext(f Field) bool {
 	if f.Resolver == nil {
 		return false
 	}
@@ -95,7 +95,7 @@ func bareName(qualified string) string {
 	return qualified
 }
 
-// MethodImplPackage returns the Go import path and local package identifier
+// MethodImplementationPackage returns the Go import path and local package identifier
 // of m.Impl: e.g. ("github.com/egladman/magus/std", "std") for a method still
 // implemented in std's own flat root, or
 // ("github.com/egladman/magus/std/encoding/json", "json") for one implemented
@@ -106,23 +106,23 @@ func bareName(qualified string) string {
 // once std/encoding split nine modules into their own packages, so the
 // qualifier (and the import it needs) now has to come from wherever the
 // Impl actually is.
-func MethodImplPackage(m Method) (importPath, pkgIdent string) {
-	return implPackage(m.Impl)
+func MethodImplementationPackage(m Method) (importPath, pkgIdent string) {
+	return implementationPackage(m.Impl)
 }
 
-// FieldResolverPackage is MethodImplPackage for a Field's Resolver.
+// FieldResolverPackage is MethodImplementationPackage for a Field's Resolver.
 func FieldResolverPackage(f Field) (importPath, pkgIdent string) {
-	return implPackage(f.Resolver)
+	return implementationPackage(f.Resolver)
 }
 
-// implPackage derives (importPath, pkgIdent) from a Method.Impl or
+// implementationPackage derives (importPath, pkgIdent) from a Method.Impl or
 // Field.Resolver function value's runtime-reported name, which has the shape
 // "full/import/path.FuncName" (or "...FuncName-fm" for a method value). The
 // function name itself never contains a dot or a slash, so splitting on the
 // LAST dot separates the import path from the func name unambiguously, and
 // the segment after the import path's last slash is the package identifier a
 // caller in another file would write.
-func implPackage(fn any) (importPath, pkgIdent string) {
+func implementationPackage(fn any) (importPath, pkgIdent string) {
 	if fn == nil {
 		return "", ""
 	}

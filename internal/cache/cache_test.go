@@ -1461,9 +1461,9 @@ func benchStep(root, project, outRel string) Step {
 	}
 }
 
-// buildFn returns a fn that creates the declared output file at
+// buildFunction returns a fn that creates the declared output file at
 // <root>/<outRel>, simulating a build step with negligible CPU cost.
-func buildFn(root, outRel string) func(context.Context) error {
+func buildFunction(root, outRel string) func(context.Context) error {
 	return func(_ context.Context) error {
 		abs := filepath.Join(root, outRel)
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
@@ -1480,7 +1480,7 @@ func BenchmarkCacheMiss(b *testing.B) {
 	root := b.TempDir()
 	outRel := writeBenchProject(b, root, "pkg")
 	step := benchStep(root, "pkg", outRel)
-	fn := buildFn(root, outRel)
+	fn := buildFunction(root, outRel)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -1502,7 +1502,7 @@ func BenchmarkCacheHit(b *testing.B) {
 	cdir := filepath.Join(b.TempDir(), ".magus")
 	outRel := writeBenchProject(b, root, "pkg")
 	step := benchStep(root, "pkg", outRel)
-	fn := buildFn(root, outRel)
+	fn := buildFunction(root, outRel)
 	ctx := context.Background()
 
 	warm := openBenchCache(b, cdir, true)
@@ -1543,7 +1543,7 @@ func BenchmarkRunAll(b *testing.B) {
 				p := fmt.Sprintf("svc-%d", i+1)
 				outRel := writeBenchProject(b, root, p)
 				steps[i] = benchStep(root, p, outRel)
-				fns[i] = buildFn(root, outRel)
+				fns[i] = buildFunction(root, outRel)
 			}
 
 			ctx := context.Background()
@@ -1611,7 +1611,7 @@ func BenchmarkRunAllColdMtime(b *testing.B) {
 		p := fmt.Sprintf("svc-%02d", i)
 		outRel := writeBenchProjectFiles(b, root, p, nFiles)
 		steps[i] = benchStep(root, p, outRel)
-		fns[i] = buildFn(root, outRel)
+		fns[i] = buildFunction(root, outRel)
 	}
 	ctx := context.Background()
 

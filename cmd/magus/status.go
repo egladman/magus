@@ -56,7 +56,7 @@ func bindStatus(f **flaggen.StatusFlags) func(*flag.FlagSet) {
 
 func status(ctx context.Context, args []string) error {
 	var f *flaggen.StatusFlags
-	if _, err := cmdParse("status", args, bindStatus(&f)); err != nil {
+	if _, err := commandParse("status", args, bindStatus(&f)); err != nil {
 		return err
 	}
 

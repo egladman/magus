@@ -497,9 +497,36 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           # A function is named for what it returns or does: graphOf builds a graph,
-          # so it is buildGraph, and configFor answers a question, so name the question.
+          # so it is buildGraph, and loadCtx reads a context, so it is loadContext.
+          # Exported and unexported names are both judged. An initialism Go spells in
+          # caps stays (ID, URL, HTTP, JSON, API), as does a word the standard library
+          # spells the same way (Dir, Env, Addr, Attr, Exec) and this tree's Ref.
           suffixes: [To, For, Of]
-          short-forms: [Src, Dst, Cfg, Msg, Idx, Tmp, Ptr]
+          short-forms:
+            [
+              Src,
+              Dst,
+              Cfg,
+              Msg,
+              Idx,
+              Tmp,
+              Ptr,
+              Ctx,
+              Req,
+              Resp,
+              Rsp,
+              Buf,
+              Fn,
+              Opts,
+              Str,
+              Strs,
+              Err,
+              Cmd,
+              Cwd,
+              Prev,
+              Impl,
+              Repo,
+            ]
 
       testisolation:
         type: module

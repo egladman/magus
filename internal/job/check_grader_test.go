@@ -170,7 +170,7 @@ func TestDeniedCheckProblemsGradeEveryGoalCheck(t *testing.T) {
 	assert.Equal(t, row.Goals, rec.graded[1].Goals)
 
 	goalsOnly := types.Job{ID: "g", Goals: []types.Goal{{ID: "paid", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "."}}}}
-	require.ErrorContains(t, deniedCheckProblems(t.Context(), s, goalsOnly).Err(), "g's goal paid's check", "a row with no check of its own still has its goals graded")
+	require.ErrorContains(t, deniedCheckProblems(t.Context(), s, goalsOnly).Error(), "g's goal paid's check", "a row with no check of its own still has its goals graded")
 
 	assert.Empty(t, deniedCheckProblems(t.Context(), s, types.Job{ID: "ok", Check: &lint}), "an ordinary check passes")
 

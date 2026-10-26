@@ -181,7 +181,7 @@ func TestResolveBackendSpellMissingName(t *testing.T) {
 	assert.Error(t, err, "expected error for unregistered spell name")
 }
 
-func repoRoot(t *testing.T) string {
+func repositoryRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func repoRoot(t *testing.T) string {
 
 func ghaBackend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "spells", "github", "actions", "spell.buzz")
+	path := filepath.Join(repositoryRoot(t), "spells", "github", "actions", "spell.buzz")
 	// NOT t.Skipf. This skipped silently for who knows how long (the path carried an
 	// extra "magus" segment from before the repo was flattened), so the only coverage of
 	// magus's own GitHub Actions cache backend was dead, and read as passing.
@@ -380,11 +380,11 @@ export final cname = build().charms[0];
 	exp := sess.Exports()
 	tname, ok := exp["tname"]
 	require.True(t, ok, "tname not exported")
-	require.True(t, tname.IsStr(), "tname not a string: %v", tname.String())
+	require.True(t, tname.IsString(), "tname not a string: %v", tname.String())
 	assert.Equal(t, "test", tname.AsString())
 	cname, ok := exp["cname"]
 	require.True(t, ok, "cname not exported")
-	require.True(t, cname.IsStr(), "cname not a string: %v", cname.String())
+	require.True(t, cname.IsString(), "cname not a string: %v", cname.String())
 	assert.Equal(t, "fast", cname.AsString())
 }
 
@@ -539,7 +539,7 @@ func TestDedupStrings(t *testing.T) {
 
 func s3Backend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "spells", "aws", "s3-cache", "spell.buzz")
+	path := filepath.Join(repositoryRoot(t), "spells", "aws", "s3-cache", "spell.buzz")
 	// NOT t.Skipf, for the reason ghaBackend gives: this path went stale with the repo
 	// flattening and every S3 test skipped silently until the tier rework found it.
 	require.FileExists(t, path, "s3 spell missing; this test must run, not skip")

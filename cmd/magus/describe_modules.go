@@ -19,7 +19,7 @@ import (
 // `magus describe module <name>` (detail). Modules are static — the magus
 // standard library — so this needs no workspace.
 func describeModules(ctx context.Context, args []string) error {
-	rest, err := cmdParse("describe modules", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("describe modules", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe module[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")

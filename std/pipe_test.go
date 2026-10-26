@@ -20,7 +20,7 @@ const (
 	pipeFailedLine = `{"schema":5,"type":"run.target.result","project":"api","target":"test","status":"failed","cache_hit":false,"error":"exit 1","ref":"out0123456789ab"}`
 )
 
-func pipeCtx(t *testing.T, upstream string) (context.Context, *bytes.Buffer) {
+func pipeContext(t *testing.T, upstream string) (context.Context, *bytes.Buffer) {
 	t.Helper()
 	var out bytes.Buffer
 	return report.WithStage(t.Context(), report.Stage{In: report.NewReader(strings.NewReader(upstream), nil), Out: &out}), &out
@@ -29,7 +29,7 @@ func pipeCtx(t *testing.T, upstream string) (context.Context, *bytes.Buffer) {
 // A script reads the upstream's records in order as typed values, with the fields it
 // filters on lifted out and the whole record kept as its body.
 func TestPipeReadsRecordsInOrder(t *testing.T) {
-	ctx, _ := pipeCtx(t, pipeScopeLine+"\n"+pipeFailedLine+"\n")
+	ctx, _ := pipeContext(t, pipeScopeLine+"\n"+pipeFailedLine+"\n")
 
 	more, err := PipeMore(ctx)
 	require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestExportArtifact(t *testing.T) {
 // A record read upstream passes through byte for byte; one a script builds is written as
 // magus writes a record, schema and type first, so the next stage reads it as one.
 func TestPipeEmit(t *testing.T) {
-	ctx, out := pipeCtx(t, "")
+	ctx, out := pipeContext(t, "")
 	require.NoError(t, PipeEmit(ctx, map[string]any{"type": "run.target.result", "body": pipeFailedLine}))
 	require.NoError(t, PipeEmit(ctx, map[string]any{
 		"schema": int64(0), "type": "run.scope", "project": "", "projects": []any{"libs/x", "."},

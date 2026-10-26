@@ -18,73 +18,73 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "ls":
 		return ls(ctx, root, subArgs)
 	case "describe":
-		return describeCmd(ctx, root, subArgs)
+		return describeCommand(ctx, root, subArgs)
 	case "run":
 		return runTarget(ctx, root, rc, subArgs)
 	case "x":
 		return x(ctx, root, rc, subArgs)
 	case "where":
-		return whereCmd(ctx, root, subArgs)
+		return whereCommand(ctx, root, subArgs)
 	case "affected":
 		return affected(ctx, root, rc, subArgs)
 	case "query":
-		return queryCmd(ctx, root, subArgs)
+		return queryCommand(ctx, root, subArgs)
 	case "explain":
-		return explainCmd(ctx, root, subArgs)
+		return explainCommand(ctx, root, subArgs)
 	case "path":
-		return pathCmd(ctx, root, subArgs)
+		return pathCommand(ctx, root, subArgs)
 	case "refs":
-		return refsCmd(ctx, root, subArgs)
+		return refsCommand(ctx, root, subArgs)
 	case "graph":
-		return graphCmd(ctx, root, subArgs)
+		return graphCommand(ctx, root, subArgs)
 	case "spell":
-		return spellCmd(ctx, root, subArgs)
+		return spellCommand(ctx, root, subArgs)
 	case "watch":
-		return watchCmd(ctx, root, rc, subArgs)
+		return watchCommand(ctx, root, rc, subArgs)
 	case "events":
-		return eventsCmd(ctx, root, subArgs)
+		return eventsCommand(ctx, root, subArgs)
 	case "status":
 		return status(ctx, subArgs)
 	case "clean":
-		return cleanCmd(ctx, root, subArgs)
+		return cleanCommand(ctx, root, subArgs)
 	case "vcs":
-		return vcsCmd(ctx, root, rc, subArgs)
+		return vcsCommand(ctx, root, rc, subArgs)
 	case "queue":
-		return queueCmd(ctx, root, subArgs)
+		return queueCommand(ctx, root, subArgs)
 	case "doctor":
-		return doctorCmd(ctx, root, rc, subArgs)
+		return doctorCommand(ctx, root, rc, subArgs)
 	case "config":
-		return configCmd(ctx, root, globalCfg, subArgs)
+		return configCommand(ctx, root, globalCfg, subArgs)
 	case "session":
-		return sessionCmd(ctx, root, subArgs)
+		return sessionCommand(ctx, root, subArgs)
 	case "shell":
-		return shellCmd(ctx, subArgs)
+		return shellCommand(ctx, subArgs)
 	case "job":
-		return jobCmd(ctx, root, subArgs)
+		return jobCommand(ctx, root, subArgs)
 	case "gate":
-		return gateCmd(ctx, root, subArgs)
+		return gateCommand(ctx, root, subArgs)
 	case "notes":
-		return notesCmd(ctx, root, subArgs)
+		return notesCommand(ctx, root, subArgs)
 	case "diff":
-		return diffCmd(ctx, root, subArgs)
+		return diffCommand(ctx, root, subArgs)
 	case "server":
-		return serverCmd(ctx, root, subArgs)
+		return serverCommand(ctx, root, subArgs)
 	case "broker":
-		return brokerCmd(ctx, subArgs)
+		return brokerCommand(ctx, subArgs)
 	case "mcp":
-		return mcpCmd(ctx, root, subArgs)
+		return mcpCommand(ctx, root, subArgs)
 	case "completion":
 		return completion(subArgs)
 	case "man":
-		return manCmd(subArgs)
+		return manCommand(subArgs)
 	case "init":
-		return initCmd(ctx, root, subArgs)
+		return initCommand(ctx, root, subArgs)
 	case "agent":
-		return agentCmd(ctx, root, subArgs)
+		return agentCommand(ctx, root, subArgs)
 	case "self":
-		return selfCmd(ctx, root, subArgs)
+		return selfCommand(ctx, root, subArgs)
 	case "buzz":
-		return buzzCmd(ctx, root, subArgs)
+		return buzzCommand(ctx, root, subArgs)
 	default:
 		slog.ErrorContext(ctx, fmt.Sprintf("unknown subcommand %q", sub), attr.Notice(""), attr.Component("magus"))
 		if suggestion := hint.Nearest(sub, knownSubcommands); suggestion != "" {

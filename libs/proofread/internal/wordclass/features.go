@@ -54,7 +54,7 @@ func newFeature(template byte) Feature {
 }
 
 // 0xff never occurs in UTF-8, so it separates parts without escaping.
-func (h Feature) str(s string) Feature {
+func (h Feature) string(s string) Feature {
 	for i := 0; i < len(s); i++ {
 		h = (h ^ Feature(s[i])) * fnvPrime
 	}
@@ -155,28 +155,28 @@ func AppendFeatures(dst []Feature, padded []string, i int, word string, prev, pr
 	sh := shape(word)
 	return append(dst,
 		newFeature(fBias),
-		newFeature(fSuffix1).str(suffix(lower, 1)),
-		newFeature(fSuffix2).str(suffix(lower, 2)),
-		newFeature(fSuffix3).str(suffix(lower, 3)),
-		newFeature(fSuffix4).str(suffix(lower, 4)),
-		newFeature(fPrefix1).str(prefix(word, 1)),
-		newFeature(fPrefix2).str(prefix(lower, 2)),
-		newFeature(fPrefix3).str(prefix(lower, 3)),
-		newFeature(fShape).str(sh),
+		newFeature(fSuffix1).string(suffix(lower, 1)),
+		newFeature(fSuffix2).string(suffix(lower, 2)),
+		newFeature(fSuffix3).string(suffix(lower, 3)),
+		newFeature(fSuffix4).string(suffix(lower, 4)),
+		newFeature(fPrefix1).string(prefix(word, 1)),
+		newFeature(fPrefix2).string(prefix(lower, 2)),
+		newFeature(fPrefix3).string(prefix(lower, 3)),
+		newFeature(fShape).string(sh),
 		newFeature(fPrevTag).tag(prev),
 		newFeature(fPrev2Tag).tag(prev2),
 		newFeature(fPrevTags).tag(prev).tag(prev2),
-		newFeature(fWord).str(w),
-		newFeature(fPrevTagWord).tag(prev).str(w),
-		newFeature(fPrevWord).str(padded[i+1]),
-		newFeature(fPrevSuffix).str(suffix(padded[i+1], 3)),
-		newFeature(fPrev2Word).str(padded[i]),
-		newFeature(fNextWord).str(padded[i+3]),
-		newFeature(fNextSuffix).str(suffix(padded[i+3], 3)),
-		newFeature(fNext2Word).str(padded[i+4]),
-		newFeature(fPrevWordWord).str(padded[i+1]).str(w),
-		newFeature(fWordNextWord).str(w).str(padded[i+3]),
-		newFeature(fPrevTagSuffix).tag(prev).str(suffix(lower, 3)),
-		newFeature(fShapePrevTag).str(sh).tag(prev),
+		newFeature(fWord).string(w),
+		newFeature(fPrevTagWord).tag(prev).string(w),
+		newFeature(fPrevWord).string(padded[i+1]),
+		newFeature(fPrevSuffix).string(suffix(padded[i+1], 3)),
+		newFeature(fPrev2Word).string(padded[i]),
+		newFeature(fNextWord).string(padded[i+3]),
+		newFeature(fNextSuffix).string(suffix(padded[i+3], 3)),
+		newFeature(fNext2Word).string(padded[i+4]),
+		newFeature(fPrevWordWord).string(padded[i+1]).string(w),
+		newFeature(fWordNextWord).string(w).string(padded[i+3]),
+		newFeature(fPrevTagSuffix).tag(prev).string(suffix(lower, 3)),
+		newFeature(fShapePrevTag).string(sh).tag(prev),
 	)
 }

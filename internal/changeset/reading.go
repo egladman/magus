@@ -70,10 +70,10 @@ func (s *Store) readingLog() file.JSONL[ReadingMark] {
 		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active}
 }
 
-// errNoReadingDir is [ErrNoStateDir] with the consequence spelled out. Every other persisted mark
+// errorNoReadingDir is [ErrNoStateDir] with the consequence spelled out. Every other persisted mark
 // is best-effort, but a person who pressed "I am reading this now" and was not recorded would be
 // told nothing by the missing report later, so this one says so.
-func errNoReadingDir() error {
+func errorNoReadingDir() error {
 	return fmt.Errorf("record that a review is being read: %w", ErrNoStateDir)
 }
 
@@ -86,7 +86,7 @@ func errNoReadingDir() error {
 func (s *Store) SetReading(ctx context.Context, at types.ReviewTarget, now time.Time) (ReadingMark, error) {
 	path := s.readingPath()
 	if path == "" {
-		return ReadingMark{}, errNoReadingDir()
+		return ReadingMark{}, errorNoReadingDir()
 	}
 	var out ReadingMark
 	err := s.readingLog().Update(ctx, func(stored []ReadingMark) []ReadingMark {
@@ -118,7 +118,7 @@ func (s *Store) ClearReadingIf(ctx context.Context, mark ReadingMark) (bool, err
 func (s *Store) clearReading(ctx context.Context, want func(ReadingMark) bool) (bool, error) {
 	path := s.readingPath()
 	if path == "" {
-		return false, errNoReadingDir()
+		return false, errorNoReadingDir()
 	}
 	cleared := false
 	err := s.readingLog().Update(ctx, func(stored []ReadingMark) []ReadingMark {

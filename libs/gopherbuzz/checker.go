@@ -3138,7 +3138,7 @@ func (c *checker) checkMutableDefault(pos ast.Pos, what, name, annot string, def
 
 // listMutators and mapMutators name the built-in collection methods that mutate the
 // receiver IN PLACE, so calling one on an immutable collection cannot work. The sets
-// mirror the VM's own guards exactly (vm/operators.go, `errImmutable`); the runtime
+// mirror the VM's own guards exactly (vm/operators.go, `errorImmutable`); the runtime
 // already refuses these, so this only moves a guaranteed failure from run time to
 // compile time. Keep the two in step: a mutator added there and missed here silently
 // loses the static check.

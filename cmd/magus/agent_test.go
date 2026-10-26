@@ -182,7 +182,7 @@ func TestAgentInstallReportsEachRemovalOnStdout(t *testing.T) {
 	retired, handAuthored, _ := plantSkillDirs(t, dir, dest)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, agentInstallCmd(context.Background(), []string{dest, "--dir", dir, "--skill-form", "full", "--force"}))
+		require.NoError(t, agentInstallCommand(context.Background(), []string{dest, "--dir", dir, "--skill-form", "full", "--force"}))
 	})
 
 	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
@@ -298,7 +298,7 @@ func TestDeclaresRoutingIndex(t *testing.T) {
 // bytes: a paste from `sample` must be gradeable by `magus doctor` exactly as a
 // paste from install's offer is.
 func TestAgentStarterPrintsAMarkedBlock(t *testing.T) {
-	out := captureStdout(t, func() { require.NoError(t, agentStarterCmd(context.Background(), "")) })
+	out := captureStdout(t, func() { require.NoError(t, agentStarterCommand(context.Background(), "")) })
 	assert.True(t, strings.HasPrefix(out, "# AGENTS.md\n"))
 	assert.Contains(t, out, "## Conventions")
 	assert.Contains(t, out, agentSkills.AgentsBlock(false))

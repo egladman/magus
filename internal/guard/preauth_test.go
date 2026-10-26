@@ -270,7 +270,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 				fmt.Sprintf("%s --root %s job exec harness/worker", filepath.Join(wt, "magus"), wt)
 		}},
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
-			r := newWorktreeRepo(t)
+			r := newWorktreeRepository(t)
 			wt, row := r.workerWorktree(types.StatePass)
 			row.ID = "remedy-lock"
 			seedRemedyJob(t, at, row)
@@ -278,7 +278,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 			return Request{Input: "git worktree remove " + wt, Dir: r.main, Host: "claude", Session: "remedy"}, "git worktree remove -f -f " + wt
 		}},
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
-			r := newWorktreeRepo(t)
+			r := newWorktreeRepository(t)
 			wt, row := r.workerWorktree(types.StateExited)
 			row.ID, row.Result = "remedy-wait", &types.JobResult{}
 			seedRemedyJob(t, at, row)

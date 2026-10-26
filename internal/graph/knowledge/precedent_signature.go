@@ -150,8 +150,8 @@ func (m precedentMiner) paramOrder() []types.Precedent {
 	return out
 }
 
-// ctxFirst counts the functions taking a context by whether it is their first parameter.
-func (m precedentMiner) ctxFirst() []types.Precedent {
+// contextFirst counts the functions taking a context by whether it is their first parameter.
+func (m precedentMiner) contextFirst() []types.Precedent {
 	byLang := map[string]*types.Precedent{}
 	for _, d := range m.x.callables {
 		at := slices.IndexFunc(d.shape.Params, func(p namingParam) bool { return paramClass(d, p) == "ctx" })

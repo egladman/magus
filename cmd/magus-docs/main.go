@@ -29,12 +29,12 @@ var callbackURL = docs.SourceURL("std/module.go")
 // main() so the docs the tests generate via renderModule match the ones `go run`
 // writes: `go test` runs from the package directory and never calls main(), so
 // anything resolved there would silently differ under test and trip the drift gate.
-var repoRoot = findRepoRoot()
+var repoRoot = findRepositoryRoot()
 
-// findRepoRoot walks up from the working directory to the directory holding go.mod
+// findRepositoryRoot walks up from the working directory to the directory holding go.mod
 // (the module root), so source paths resolve whether the process runs from the
 // repo root (go run) or a package directory (go test).
-func findRepoRoot() string {
+func findRepositoryRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "."

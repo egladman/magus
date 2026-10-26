@@ -18,13 +18,13 @@ func RegisterFmt(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("sprintf", vm.DirectValue("fmt.sprintf", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		format := ffi.Str(bzArgs, 0)
-		args := ffi.VariadicStr(bzArgs, 1)
+		format := ffi.String(bzArgs, 0)
+		args := ffi.VariadicString(bzArgs, 1)
 		ret0, err := std.FmtSprintf(ctx, format, args...)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

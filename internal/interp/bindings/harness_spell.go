@@ -72,7 +72,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	if d.Settings, _, err = callHarness[[]types.Setting](ctx, drv, "mgs_listSettings"); err != nil {
 		return fail(err)
 	}
-	if d.Prompts, _, err = callHarness[[]types.Prompt](ctx, drv, "mgs_renderPrompts", ffi.StrMapVal(humanOnlyReasons(ctx))); err != nil {
+	if d.Prompts, _, err = callHarness[[]types.Prompt](ctx, drv, "mgs_renderPrompts", ffi.StringMapVal(humanOnlyReasons(ctx))); err != nil {
 		return fail(err)
 	}
 	// The model rows come first: the agents magus ships run on the one a row names for the

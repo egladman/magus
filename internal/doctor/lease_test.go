@@ -72,7 +72,7 @@ func wireGuardHook(t *testing.T, w *testkit.Workspace) {
 func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 	cacheDir, root, _ := newWorkspaceLedger(t)
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -86,7 +86,7 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -128,7 +128,7 @@ func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{Status: types.CheckFail, Evidence: types.EvidenceUnknown}, withoutWording(got))
 	require.Contains(t, got.Message, "could not read the job store")
@@ -138,7 +138,7 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 	cacheDir, root, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/no-such-lease")
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -156,7 +156,7 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
 	bindCheckout(t, cacheDir, "adj/done")
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -176,7 +176,7 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{"id":"adj/stateless","created":1,"updated":1}`+"\n"), 0o644))
 	bindCheckout(t, cacheDir, "adj/stateless")
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -191,7 +191,7 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
 	bindCheckout(t, cacheDir, "adj/live")
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -204,7 +204,7 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 	cacheDir, w := registeredLease(t, "adj/unwired")
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, w.Root()))
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, w.Root()))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -218,7 +218,7 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 	cacheDir, w := registeredLease(t, "adj/enforcing")
 	wireGuardHook(t, w)
 
-	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, w.Root()), "test-host")
+	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, w.Root()), "test-host")
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -233,7 +233,7 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 func registeredLease(t *testing.T, id string) (cacheDir string, w *testkit.Workspace) {
 	t.Helper()
 	// A git checkout: exec reads the base from it.
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	w = repo.Workspace
 	cacheDir, store := ledgerIn(t, w.Root())
 	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: repo.Head()})

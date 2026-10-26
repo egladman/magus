@@ -63,7 +63,7 @@ func newIsolatedService(t *testing.T, view shareView) *Service {
 	return &Service{share: view}
 }
 
-func req[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
+func request[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
 
 // as is a context carrying the credential the bearer guard would have verified.
 func as(grant types.Grant) context.Context {
@@ -114,7 +114,7 @@ func TestListCarriesClassAndGrant(t *testing.T) {
 	mint(t, "laptop", types.GrantConsole)
 	mint(t, "tv", types.GrantViewer)
 
-	list, err := s.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
+	list, err := s.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
 	require.NoError(t, err)
 	type row struct {
 		class tokenv1.CredentialClass
@@ -142,7 +142,7 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 	secret, rec := mint(t, "client", types.GrantConnector)
 	require.Len(t, rec.SHA256, 64)
 
-	resp, err := s.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
+	resp, err := s.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.GetTokens(), 2)
 	protoBytes, err := proto.Marshal(resp.Msg)
@@ -165,7 +165,7 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 func TestRevokeShareTokenClosesListener(t *testing.T) {
 	sh := liveShare("feedface")
 	s := newIsolatedService(t, sh)
-	resp, err := s.RevokeToken(as(types.GrantConsole), req(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
+	resp, err := s.RevokeToken(as(types.GrantConsole), request(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
 	require.NoError(t, err)
 	assert.True(t, sh.closed)
 	assert.Equal(t, "feedface", sh.closeIfArg)
@@ -190,7 +190,7 @@ func TestRevokeTokenNeverReachesPastTheCallersGrant(t *testing.T) {
 		{types.Grant{}, "feedface"},
 		{types.GrantConnector, "share to phone"},
 	} {
-		_, err := s.RevokeToken(as(c.caller), req(&tokenv1.RevokeTokenRequest{Name: c.name}))
+		_, err := s.RevokeToken(as(c.caller), request(&tokenv1.RevokeTokenRequest{Name: c.name}))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "%s revoking %s", c.caller, c.name)
 	}
 	assert.False(t, sh.closed)
@@ -202,7 +202,7 @@ func TestRevokeShareLostRaceIsNotFound(t *testing.T) {
 	sh := liveShare("feedface")
 	sh.closeIfFail = true
 	s := newIsolatedService(t, sh)
-	_, err := s.RevokeToken(operator(), req(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
+	_, err := s.RevokeToken(operator(), request(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	assert.False(t, sh.closed)
 }
@@ -214,11 +214,11 @@ func TestRevokeTakesNoPrefix(t *testing.T) {
 	sh := liveShare(rec.ID[:1] + "0000000")
 	s.share = sh
 	for _, q := range []string{rec.ID[:1], rec.ID[:4], "c"} {
-		_, err := s.RevokeToken(operator(), req(&tokenv1.RevokeTokenRequest{Name: q}))
+		_, err := s.RevokeToken(operator(), request(&tokenv1.RevokeTokenRequest{Name: q}))
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), q)
 	}
 	assert.False(t, sh.closed)
-	resp, err := s.RevokeToken(operator(), req(&tokenv1.RevokeTokenRequest{Name: rec.ID}))
+	resp, err := s.RevokeToken(operator(), request(&tokenv1.RevokeTokenRequest{Name: rec.ID}))
 	require.NoError(t, err)
 	assert.Equal(t, rec.ID, resp.Msg.GetId())
 }
@@ -227,10 +227,10 @@ func TestNilShareManagerConstructor(t *testing.T) {
 	testkit.Isolate(t)
 	s := NewService((*share.Manager)(nil))
 	assert.Nil(t, s.share)
-	list, err := s.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
+	list, err := s.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
 	require.NoError(t, err)
 	assert.Empty(t, list.Msg.GetTokens())
-	_, err = s.RevokeToken(operator(), req(&tokenv1.RevokeTokenRequest{Name: "share to phone"}))
+	_, err = s.RevokeToken(operator(), request(&tokenv1.RevokeTokenRequest{Name: "share to phone"}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
@@ -244,12 +244,12 @@ func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 	_, err = auth.SaveOperator(op)
 	require.NoError(t, err)
 
-	list, err := s.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
+	list, err := s.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
 	require.NoError(t, err)
 	require.Len(t, list.Msg.GetTokens(), 1)
 	assert.Equal(t, rec.ID, list.Msg.GetTokens()[0].GetId())
 
-	_, err = s.RevokeToken(operator(), req(&tokenv1.RevokeTokenRequest{Name: auth.TokenID(op)}))
+	_, err = s.RevokeToken(operator(), request(&tokenv1.RevokeTokenRequest{Name: auth.TokenID(op)}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	loaded, err := auth.LoadOperator()
 	require.NoError(t, err)
@@ -271,11 +271,11 @@ func TestCreateTokenNeverExceedsTheCallersGrant(t *testing.T) {
 		{types.GrantConnector, wire(none, none, write)},
 	}
 	for _, c := range cases {
-		_, err := s.CreateToken(as(c.caller), req(&tokenv1.CreateTokenRequest{Grant: c.grant, ExpireTime: exp}))
+		_, err := s.CreateToken(as(c.caller), request(&tokenv1.CreateTokenRequest{Grant: c.grant, ExpireTime: exp}))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "%s minting %v", c.caller, c.grant)
 	}
 	// With no guard in front at all, the caller holds nothing and mints nothing.
-	_, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{Grant: wire(none, none, read), ExpireTime: exp}))
+	_, err := s.CreateToken(context.Background(), request(&tokenv1.CreateTokenRequest{Grant: wire(none, none, read), ExpireTime: exp}))
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 	assert.Empty(t, stored(t))
 }
@@ -292,7 +292,7 @@ func TestCreateTokenRefusesWhatTheConsoleMayNotMint(t *testing.T) {
 		"mcp=read":  wire(none, read, none),
 		"unknown":   {Console: tokenv1.Level(9)},
 	} {
-		_, err := s.CreateToken(operator(), req(&tokenv1.CreateTokenRequest{
+		_, err := s.CreateToken(operator(), request(&tokenv1.CreateTokenRequest{
 			Name: "escalate", Grant: g, ExpireTime: timestamppb.New(time.Now().Add(time.Hour)),
 		}))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), name)
@@ -311,12 +311,12 @@ func TestCreateTokenRefusesAnExpiryItCannotHonor(t *testing.T) {
 		"367 days":  timestamppb.New(time.Now().Add(367 * 24 * time.Hour)),
 		"two years": timestamppb.New(time.Now().Add(2 * 366 * 24 * time.Hour)),
 	} {
-		_, err := s.CreateToken(operator(), req(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: exp}))
+		_, err := s.CreateToken(operator(), request(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: exp}))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), name)
 		assert.ErrorIs(t, err, types.TokenLifetimeOutOfRange, name)
 	}
 	asked := time.Now().Add(300 * 24 * time.Hour)
-	resp, err := s.CreateToken(operator(), req(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: timestamppb.New(asked)}))
+	resp, err := s.CreateToken(operator(), request(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: timestamppb.New(asked)}))
 	require.NoError(t, err)
 	assert.WithinDuration(t, asked, resp.Msg.GetToken().GetExpireTime().AsTime(), time.Second)
 }
@@ -329,7 +329,7 @@ func TestCreateTokenDiskFailureIsInternal(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o700))
 	require.NoError(t, os.WriteFile(dir, []byte("not a directory"), 0o600))
-	_, err = s.CreateToken(operator(), req(&tokenv1.CreateTokenRequest{Grant: wire(none, none, read), ExpireTime: timestamppb.New(time.Now().Add(time.Hour))}))
+	_, err = s.CreateToken(operator(), request(&tokenv1.CreateTokenRequest{Grant: wire(none, none, read), ExpireTime: timestamppb.New(time.Now().Add(time.Hour))}))
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }
 
@@ -339,7 +339,7 @@ func TestCreateTokenMintsTheGrantItNames(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	exp := timestamppb.New(time.Now().Add(time.Hour))
 	for _, want := range []types.Grant{types.GrantConsole, types.GrantViewer} {
-		resp, err := s.CreateToken(operator(), req(&tokenv1.CreateTokenRequest{Grant: wireGrant(want), ExpireTime: exp}))
+		resp, err := s.CreateToken(operator(), request(&tokenv1.CreateTokenRequest{Grant: wireGrant(want), ExpireTime: exp}))
 		require.NoError(t, err)
 		got, err := fromWireGrant(resp.Msg.GetToken().GetGrant())
 		require.NoError(t, err)
@@ -366,24 +366,24 @@ func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 	for _, g := range []types.Grant{types.GrantConnector, types.GrantConsole, types.GrantViewer} {
 		secret, _ := mint(t, strings.ReplaceAll(g.String(), "=", "-"), g)
 		c := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(bearer(secret)))
-		_, err := c.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
+		_, err := c.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), g.String())
-		_, err = c.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: timestamppb.New(time.Now().Add(time.Hour))}))
+		_, err = c.CreateToken(context.Background(), request(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: timestamppb.New(time.Now().Add(time.Hour))}))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), g.String())
-		_, err = c.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "console-read"}))
+		_, err = c.RevokeToken(context.Background(), request(&tokenv1.RevokeTokenRequest{Name: "console-read"}))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), g.String())
 	}
 	assert.Len(t, stored(t), 3, "no refused call minted or revoked anything")
 
 	opClient := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(bearer(op)))
-	resp, err := opClient.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: timestamppb.New(time.Now().Add(time.Hour))}))
+	resp, err := opClient.CreateToken(context.Background(), request(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: timestamppb.New(time.Now().Add(time.Hour))}))
 	require.NoError(t, err)
 	got, err := fromWireGrant(resp.Msg.GetToken().GetGrant())
 	require.NoError(t, err)
 	assert.Equal(t, types.GrantConsole, got)
 
 	anon := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
-	_, err = anon.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
+	_, err = anon.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
@@ -422,13 +422,13 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	c := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
 	exp := time.Now().Add(time.Hour)
 	create := func() (string, string) {
-		resp, err := c.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{Name: "laptop",
+		resp, err := c.CreateToken(context.Background(), request(&tokenv1.CreateTokenRequest{Name: "laptop",
 			Grant: wire(none, none, write), ExpireTime: timestamppb.New(exp)}))
 		require.NoError(t, err)
 		return resp.Msg.GetSecret(), resp.Msg.GetToken().GetId()
 	}
 	firstSecret, firstID := create()
-	_, err := c.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "laptop"}))
+	_, err := c.RevokeToken(context.Background(), request(&tokenv1.RevokeTokenRequest{Name: "laptop"}))
 	require.NoError(t, err)
 	secondSecret, secondID := create()
 	require.NotEqual(t, firstID, secondID)

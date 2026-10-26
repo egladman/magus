@@ -1463,7 +1463,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 // whose working tree then holds worktree in its place.
 func committedSpawnRule(t *testing.T, worktree string) string {
 	t.Helper()
-	r := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEverySpawn})
+	r := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEverySpawn})
 	r.Magusfile(worktree)
 	return r.Root()
 }

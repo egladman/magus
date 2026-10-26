@@ -107,11 +107,11 @@ func TestListTargetsPrintsOnlyPaths(t *testing.T) {
 // cache's handler already rendered a per-project line, so the top-level handler must exit
 // silently rather than reprint it.
 func TestReportedRunErr(t *testing.T) {
-	assert.False(t, reportedRunErr(nil))
-	assert.False(t, reportedRunErr(errors.New("plain")))
-	assert.True(t, reportedRunErr(&types.SpellErrors{Project: "web"}))
-	assert.True(t, reportedRunErr(errors.Join(errors.New("other"), &types.SpellErrors{Project: "web"})))
-	assert.True(t, reportedRunErr(fmt.Errorf("run: %w", cache.ReportedError{Err: errors.New("step failed")})),
+	assert.False(t, reportedRunError(nil))
+	assert.False(t, reportedRunError(errors.New("plain")))
+	assert.True(t, reportedRunError(&types.SpellErrors{Project: "web"}))
+	assert.True(t, reportedRunError(errors.Join(errors.New("other"), &types.SpellErrors{Project: "web"})))
+	assert.True(t, reportedRunError(fmt.Errorf("run: %w", cache.ReportedError{Err: errors.New("step failed")})),
 		"a step failure the cache logged is not printed again")
 }
 
@@ -254,8 +254,8 @@ func TestPluralSuffixAndLinesSuffix(t *testing.T) {
 }
 
 func TestStrOrDefAndIntOrDef(t *testing.T) {
-	assert.Equal(t, "(default)", strOrDef("", "(default)"))
-	assert.Equal(t, "set", strOrDef("set", "(default)"))
+	assert.Equal(t, "(default)", stringOrDef("", "(default)"))
+	assert.Equal(t, "set", stringOrDef("set", "(default)"))
 
 	// Zero means "nothing was configured", not "zero builds may run", so it renders as
 	// the placeholder rather than as the number.

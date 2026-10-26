@@ -45,7 +45,7 @@ import (
 // checkBridgeReachability probes the console endpoint (/api/v1/graph) by
 // issuing a real HTTP GET (a 401 proves the guarded route exists).
 func (r *runner) checkBridgeReachability() types.Check {
-	return probeBridgeReachability(r.runCtx(), r.opts.serverInfo)
+	return probeBridgeReachability(r.runContext(), r.opts.serverInfo)
 }
 
 // checkNearDuplicateServices is the static, whole-workspace half of MGS5001: it
@@ -213,7 +213,7 @@ func (r *runner) checkGraphBounds() types.Check {
 	if r.opts.graphNodes == nil {
 		return types.Check{Name: graphBoundsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no knowledge graph supplied; skipped"}
 	}
-	nodes, err := r.opts.graphNodes(r.runCtx())
+	nodes, err := r.opts.graphNodes(r.runContext())
 	if err != nil {
 		return types.Check{Name: graphBoundsCheck, Status: types.CheckFail, Message: fmt.Sprintf("could not build the knowledge graph: %v", err)}
 	}
@@ -524,7 +524,7 @@ func (r *runner) checkCacheWritable() types.Check {
 }
 
 func (r *runner) checkVCSBaseRef() types.Check {
-	return checkVCSBaseRef(r.runCtx(), r.root, r.ws.VCSOptions())
+	return checkVCSBaseRef(r.runContext(), r.root, r.ws.VCSOptions())
 }
 
 func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) types.Check {
@@ -1031,7 +1031,7 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.Check {
 	const name = "dead-output-globs"
 
 	var tracked types.TrackedFileReporter
-	if res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
+	if res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
 		tracked = res.VCS
 	}
 
@@ -1050,7 +1050,7 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.Check {
 				return err == nil && glob.Excludes(filepath.ToSlash(rel))
 			})
 			if len(hits) > 0 {
-				if provesBuilt(r.runCtx(), tracked, p.Dir, hits) {
+				if provesBuilt(r.runContext(), tracked, p.Dir, hits) {
 					builtAny = true
 				}
 				continue
@@ -1238,13 +1238,13 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.Check {
 func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Check {
 	const name = "undeclared-seeding-files"
 
-	res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions())
+	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no VCS to enumerate committed files with"}
 	}
 	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
 	// per candidate: the check has no candidate set until it has the file list.
-	files, err := res.VCS.TrackedFiles(r.runCtx(), r.root, []string{"."})
+	files, err := res.VCS.TrackedFiles(r.runContext(), r.root, []string{"."})
 	if errors.Is(err, types.ErrVCSUnsupported) {
 		return types.Check{Name: name, Status: types.CheckOK, Message: res.Name + " cannot report tracked files"}
 	}
@@ -1697,7 +1697,7 @@ func (r *runner) checkStaleSockets() types.Check {
 	// on a configured server.address inside this directory, which competes with server.sock.
 	var stale, others []string
 	probe := func(p string) socketState {
-		if isSocketAlive(r.runCtx(), p) {
+		if isSocketAlive(r.runContext(), p) {
 			return socketLive
 		}
 		stale = append(stale, p)
@@ -1766,7 +1766,7 @@ func (r *runner) checkStaleSockets() types.Check {
 	if len(stale) > 0 {
 		parts = append(parts, fmt.Sprintf("%d stale socket(s)", len(stale)))
 	}
-	stalePools, err := proc.StalePoolsIn(r.runCtx(), sockDir, si.ClientVersion)
+	stalePools, err := proc.StalePoolsIn(r.runContext(), sockDir, si.ClientVersion)
 	if err != nil {
 		return types.Check{Name: "sockets", Status: types.CheckFail, Message: err.Error()}
 	}
@@ -1850,7 +1850,7 @@ func (r *runner) checkGuardBinary() types.Check {
 		if wiredErr != nil {
 			return unknownWiring(name, wiredErr)
 		}
-		if wired := configsNamingOwnBinary(r.runCtx(), r.ws.Root(), harnesses...); len(wired) > 0 {
+		if wired := configsNamingOwnBinary(r.runContext(), r.ws.Root(), harnesses...); len(wired) > 0 {
 			return types.Check{
 				Name:    name,
 				Status:  types.CheckAdvice,
@@ -1859,7 +1859,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			}
 		}
 		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
-			if skew, ok := interpreterSkew(r.runCtx(), found, r.ownVersion()); ok {
+			if skew, ok := interpreterSkew(r.runContext(), found, r.ownVersion()); ok {
 				return skew
 			}
 			return types.Check{Name: name, Status: types.CheckOK, Message: fmt.Sprintf("hook would run %s (from PATH; no ./magus built)", found)}
@@ -1889,7 +1889,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			},
 		}
 	}
-	if skew, ok := interpreterSkew(r.runCtx(), bin, r.ownVersion()); ok {
+	if skew, ok := interpreterSkew(r.runContext(), bin, r.ownVersion()); ok {
 		return skew
 	}
 	return types.Check{Name: name, Status: types.CheckOK, Message: "hook would run ./magus, newer than every tracked Go source"}
@@ -2269,7 +2269,7 @@ func (r *runner) checkGuardWiring() types.Check {
 	if err != nil {
 		return unknownWiring("guard-wiring", err)
 	}
-	return checkGuardWiring(r.runCtx(), r.ws.Root(), guardProbeBudget, wired...)
+	return checkGuardWiring(r.runContext(), r.ws.Root(), guardProbeBudget, wired...)
 }
 
 // HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
@@ -2450,7 +2450,7 @@ func (r *runner) checkAgentSkills() types.Check {
 	if err != nil {
 		return unknownWiring(name, err)
 	}
-	statuses := r.opts.skills.CheckStatuses(r.runCtx(), root, wired...)
+	statuses := r.opts.skills.CheckStatuses(r.runContext(), root, wired...)
 	if len(statuses) == 0 {
 		return types.Check{
 			Name:    name,
@@ -2557,11 +2557,11 @@ const (
 func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check {
 	const name = "self-staling-outputs"
 
-	res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions())
+	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no VCS resolved; nothing to check"}
 	}
-	meta, err := res.VCS.Metadata(r.runCtx(), r.root)
+	meta, err := res.VCS.Metadata(r.runContext(), r.root)
 	if err != nil || meta.ID == "" {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no commit yet; nothing to check"}
 	}
@@ -2573,7 +2573,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 		if len(rels) == 0 {
 			continue
 		}
-		tracked, err := res.VCS.TrackedFiles(r.runCtx(), p.Dir, rels)
+		tracked, err := res.VCS.TrackedFiles(r.runContext(), p.Dir, rels)
 		if errors.Is(err, types.ErrVCSUnsupported) {
 			return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
 		}
@@ -2708,7 +2708,7 @@ func isHexByte(data []byte, i int) bool {
 // from unchanged inputs. That is the drift gate's job.
 func (r *runner) checkGeneratedDrift() types.Check {
 	const name = "generated-output"
-	ctx := r.runCtx()
+	ctx := r.runContext()
 	res, err := vcs.Resolve(ctx, r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no vcs resolved; skipped"}

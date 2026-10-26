@@ -175,12 +175,12 @@ func TestGuardIndexRefusesAnotherRoot(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// guardRepo is guardFixture committed to a git repository on main, with a runner for more
+// guardRepository is guardFixture committed to a git repository on main, with a runner for more
 // git commands there. A rebase is the one command allowed to fail: the tests want the
 // state it stops in.
-func guardRepo(t *testing.T) (root, cacheDir string, g *Graph, git func(args ...string) string) {
+func guardRepository(t *testing.T) (root, cacheDir string, g *Graph, git func(args ...string) string) {
 	t.Helper()
-	r := testkit.NewRepo(t, guardFiles)
+	r := testkit.NewRepository(t, guardFiles)
 	git = func(args ...string) string {
 		t.Helper()
 		if args[0] != "rebase" {
@@ -199,7 +199,7 @@ var guardKinds = []string{GuardSymbol, types.KindDocSection, types.KindTarget, t
 // An index answers only for the revision it was built at: a rewrite that moves HEAD and
 // touches no indexed file leaves every stamp holding, and still makes every kind stale.
 func TestGuardIndexStaleAtAnotherRevision(t *testing.T) {
-	root, cacheDir, g, git := guardRepo(t)
+	root, cacheDir, g, git := guardRepository(t)
 	at := ReadGuardCheckout(t.Context(), root)
 	require.Equal(t, git("rev-parse", "HEAD"), at.Revision)
 	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, at))
@@ -226,7 +226,7 @@ func TestGuardIndexStaleAtAnotherRevision(t *testing.T) {
 // An index built while a rebase is stopped describes a tree the rebase is about to
 // change, and says so even though its revision and stamps match the checkout.
 func TestGuardIndexStaleDuringARebase(t *testing.T) {
-	root, cacheDir, g, git := guardRepo(t)
+	root, cacheDir, g, git := guardRepository(t)
 	git("checkout", "-q", "-b", "topic")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a.go"), []byte("package pkg\nfunc Topic() {}\n"), 0o644))
 	git("commit", "-q", "-am", "topic")
@@ -250,7 +250,7 @@ func TestGuardIndexStaleDuringARebase(t *testing.T) {
 // A rebase stopped on a pick that applied cleanly has no conflict to find, and the next
 // pick still moves the tree.
 func TestGuardIndexStaleDuringARebaseStoppedOnACleanPick(t *testing.T) {
-	root, cacheDir, g, git := guardRepo(t)
+	root, cacheDir, g, git := guardRepository(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a.go"), []byte("package pkg\nfunc Two() {}\n"), 0o644))
 	git("commit", "-q", "-am", "two")
 	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, ReadGuardCheckout(t.Context(), root)))

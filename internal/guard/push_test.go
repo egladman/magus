@@ -600,7 +600,7 @@ func TestPushAfterACommitStandsDownWithNoRunLog(t *testing.T) {
 func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gated, replayed string) {
 	t.Helper()
 	testkit.Isolate(t)
-	repo = testkit.NewRepo(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
+	repo = testkit.NewRepository(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
 	cacheDir := filepath.Join(repo.Root(), ".magus")
 	require.NoError(t, os.MkdirAll(filepath.Join(cacheDir, cache.RunsDir), 0o755))
 	dir, err := sessions.Dir(repo.Root())

@@ -50,7 +50,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 func TestFixForkNeverMovesACheckpointToHead(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, loadableFiles)
+	repo := testkit.NewRepository(t, loadableFiles)
 	repo.Git("switch", "-q", "-c", "elsewhere")
 	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
 	repo.Git("switch", "-q", "main")

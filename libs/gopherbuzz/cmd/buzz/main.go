@@ -144,7 +144,7 @@ func run(argv []string) error {
 		var items []vm.Value
 		if len(o.args) > 1 {
 			for _, a := range o.args[1:] {
-				items = append(items, vm.StrValue(a))
+				items = append(items, vm.StringValue(a))
 			}
 		}
 		if _, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)}); err != nil {

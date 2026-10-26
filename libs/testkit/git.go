@@ -44,10 +44,10 @@ type Repo struct {
 	*Workspace
 }
 
-// NewRepo makes a git repository in a fresh Workspace, writes files into it (keyed by
+// NewRepository makes a git repository in a fresh Workspace, writes files into it (keyed by
 // workspace-relative path) and commits them, so HEAD exists even when files is empty.
 // It skips the test when git is not on PATH.
-func NewRepo(tb TB, files map[string]string) *Repo {
+func NewRepository(tb TB, files map[string]string) *Repo {
 	tb.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		tb.Skip("testkit: git not on PATH")

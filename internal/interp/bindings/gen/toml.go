@@ -18,7 +18,7 @@ func RegisterToml(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("toml.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := ffi.Str(bzArgs, 0)
+		source := ffi.String(bzArgs, 0)
 		ret0, err := toml.TOMLParse(ctx, source)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -31,7 +31,7 @@ func RegisterToml(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

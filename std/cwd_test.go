@@ -8,29 +8,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCwdHelpers covers the split between the two accessors: EffectiveCwd falls
+// TestCwdHelpers covers the split between the two accessors: EffectiveCurrentWorkingDirectory falls
 // back to the process cwd so a host module always has a base, while
-// CwdFromContext reports only a cwd a target actually established.
+// CurrentWorkingDirectoryFromContext reports only a cwd a target actually established.
 func TestCwdHelpers(t *testing.T) {
 	dir := t.TempDir()
-	ctx := WithCwd(context.Background(), dir)
+	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
-	got, err := EffectiveCwd(ctx)
+	got, err := EffectiveCurrentWorkingDirectory(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, dir, got)
 
-	base, ok := CwdFromContext(ctx)
+	base, ok := CurrentWorkingDirectoryFromContext(ctx)
 	assert.True(t, ok)
 	assert.Equal(t, dir, base)
 
-	base, ok = CwdFromContext(context.Background())
+	base, ok = CurrentWorkingDirectoryFromContext(context.Background())
 	assert.False(t, ok, "no target established a cwd, so there is none to report")
 	assert.Empty(t, base)
 
 	// An empty dir is a no-op rather than an erasure.
-	assert.Equal(t, context.Background(), WithCwd(context.Background(), ""))
+	assert.Equal(t, context.Background(), WithCurrentWorkingDirectory(context.Background(), ""))
 
-	process, err := EffectiveCwd(context.Background())
+	process, err := EffectiveCurrentWorkingDirectory(context.Background())
 	require.NoError(t, err)
 	assert.NotEmpty(t, process, "without a context cwd the process cwd is the base")
 }

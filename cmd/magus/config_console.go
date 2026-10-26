@@ -28,7 +28,7 @@ func mintConsoleLinkCode() (string, error) {
 	return code, err
 }
 
-func configConsoleCmd(args []string) error {
+func configConsoleCommand(args []string) error {
 	fs := flag.NewFlagSet("config console", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {

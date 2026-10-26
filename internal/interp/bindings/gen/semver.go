@@ -18,8 +18,8 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("compare", vm.DirectValue("semver.compare", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := ffi.Str(bzArgs, 0)
-		b := ffi.Str(bzArgs, 1)
+		a := ffi.String(bzArgs, 0)
+		b := ffi.String(bzArgs, 1)
 		ret0, err := std.SemverCompare(ctx, a, b)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -27,7 +27,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("isValid", vm.DirectValue("semver.isValid", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
+		v := ffi.String(bzArgs, 0)
 		ret0, err := std.SemverIsValid(ctx, v)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -35,7 +35,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("isStable", vm.DirectValue("semver.isStable", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
+		v := ffi.String(bzArgs, 0)
 		ret0, err := std.SemverIsStable(ctx, v)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -43,32 +43,32 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("canonical", vm.DirectValue("semver.canonical", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
+		v := ffi.String(bzArgs, 0)
 		ret0, err := std.SemverCanonical(ctx, v)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("major", vm.DirectValue("semver.major", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
+		v := ffi.String(bzArgs, 0)
 		ret0, err := std.SemverMajor(ctx, v)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("majorMinor", vm.DirectValue("semver.majorMinor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
+		v := ffi.String(bzArgs, 0)
 		ret0, err := std.SemverMajorMinor(ctx, v)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("satisfies", vm.DirectValue("semver.satisfies", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
-		constraint := ffi.Str(bzArgs, 1)
+		v := ffi.String(bzArgs, 0)
+		constraint := ffi.String(bzArgs, 1)
 		ret0, err := std.SemverSatisfies(ctx, v, constraint)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -76,7 +76,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("parse", vm.DirectValue("semver.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
+		v := ffi.String(bzArgs, 0)
 		ret0, err := std.SemverParse(ctx, v)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -84,7 +84,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectSemverVersion(ret0), nil
 	}))
 	m.MapSet("next", vm.DirectValue("semver.next", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		v := ffi.Str(bzArgs, 0)
+		v := ffi.String(bzArgs, 0)
 		ret0, err := std.SemverNext(ctx, v)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

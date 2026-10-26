@@ -31,13 +31,13 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		}))
 	}
 	bind("file", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		report, err := std.MagusDescribeFile(ctx, ffi.StrSlice(args, 0), ffi.AnyMap(args, 1))
+		report, err := std.MagusDescribeFile(ctx, ffi.StringSlice(args, 0), ffi.AnyMap(args, 1))
 		return bindgen.ObjectFileReport(report), err
 	})
 	// In-process rather than forked: the registry is this process's own, and
 	// hostmodules.Describe already returns the collection `describe module` prints.
 	bind("module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		name := ffi.Str(args, 0)
+		name := ffi.String(args, 0)
 		out := dropMagusMethods(hostmodules.Describe(name), withheld)
 		if name != "" && len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.describe.module: unknown module %q", name)
@@ -45,11 +45,11 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return ffi.ObjectSlice(out, bindgen.ObjectModuleEntry), nil
 	})
 	bind("spell", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeSpell(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
+		out, err := std.MagusDescribeSpell(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
 		return ffi.ObjectSlice(out, bindgen.ObjectSpell), err
 	})
 	bind("charm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeCharm(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
+		out, err := std.MagusDescribeCharm(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
 		return ffi.ObjectSlice(out, bindgen.ObjectCharmEntry), err
 	})
 	bind("target", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -57,7 +57,7 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return ffi.ObjectSlice(out, bindgen.ObjectTargetEntry), err
 	})
 	bind("evaluatedTarget", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeEvaluatedTarget(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
+		out, err := std.MagusDescribeEvaluatedTarget(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
 		return ffi.ObjectSlice(out, bindgen.ObjectEvaluatedTarget), err
 	})
 	bind("project", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
@@ -65,7 +65,7 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return bindgen.ObjectProjectsOutput(out), err
 	})
 	bind("evaluatedProject", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeEvaluatedProject(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
+		out, err := std.MagusDescribeEvaluatedProject(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
 		return ffi.ObjectSlice(out, bindgen.ObjectEvaluatedProject), err
 	})
 	bind("graph", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -73,8 +73,8 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return bindgen.ObjectTargetGraphOutput(out), err
 	})
 	bind("graphMarkdown", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeGraphMarkdown(ctx, ffi.StrSlice(args, 0), ffi.AnyMap(args, 1))
-		return ffi.StrVal(out), err
+		out, err := std.MagusDescribeGraphMarkdown(ctx, ffi.StringSlice(args, 0), ffi.AnyMap(args, 1))
+		return ffi.StringVal(out), err
 	})
 	bind("workspace", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		out, err := std.MagusDescribeWorkspace(ctx, ffi.AnyMap(args, 0))
@@ -85,15 +85,15 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return bindgen.ObjectToolReport(out), err
 	})
 	bind("rule", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeRule(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
+		out, err := std.MagusDescribeRule(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
 		return ffi.ObjectSlice(out, bindgen.ObjectRuleDoc), err
 	})
 	bind("harness", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeHarness(ctx, ffi.Str(args, 0))
+		out, err := std.MagusDescribeHarness(ctx, ffi.String(args, 0))
 		return bindgen.ObjectHarnessPlan(out), err
 	})
 	bind("mcpTool", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeMCPTool(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
+		out, err := std.MagusDescribeMCPTool(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
 		return ffi.ObjectSlice(out, bindgen.ObjectMCPTool), err
 	})
 	return d

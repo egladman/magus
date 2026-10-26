@@ -309,12 +309,12 @@ func FsGlob(ctx context.Context, pattern string) ([]types.Path, error) {
 	// here and thrown away, so every caller had to know out of band which directory the
 	// strings were measured from, and a target's cwd is its PROJECT directory, not the
 	// workspace root, which is exactly the distinction a bare string cannot express.
-	// EffectiveCwd, not cwdFromContext: outside a target there is no context cwd, but the
+	// EffectiveCurrentWorkingDirectory, not currentWorkingDirectoryFromContext: outside a target there is no context cwd, but the
 	// matches are still relative (to the PROCESS cwd), so reporting an empty base would
-	// hand back a relative value that names nothing. EffectiveCwd falls back to the
+	// hand back a relative value that names nothing. EffectiveCurrentWorkingDirectory falls back to the
 	// process cwd, which makes "a glob result always knows its base" total rather than
 	// true-only-inside-a-target.
-	base, cwdErr := EffectiveCwd(ctx)
+	base, cwdErr := EffectiveCurrentWorkingDirectory(ctx)
 	if cwdErr != nil {
 		base = ""
 	}
@@ -824,7 +824,7 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 	}
 	defer func() { _ = w.Close() }()
 
-	cwd, _ := EffectiveCwd(ctx)
+	cwd, _ := EffectiveCurrentWorkingDirectory(ctx)
 	// A watch loop is legitimately idle: it is the one supported shape that blocks
 	// indefinitely while producing nothing, so the stall watchdog would abort it
 	// (MGS3012). Beating while parked says "waiting on purpose" rather than "wedged".
@@ -845,7 +845,7 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 			if !ok {
 				return nil
 			}
-			ret, err := cb.Call(ctx, relToCwd(cwd, batch.Paths))
+			ret, err := cb.Call(ctx, relToCurrentWorkingDirectory(cwd, batch.Paths))
 			if err != nil {
 				return err
 			}
@@ -861,7 +861,7 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 // Sandbox-denied entries are silently skipped (dirs skip their whole subtree;
 // files are just omitted), matching the filtering policy of FsGlob.
 func FsWalk(ctx context.Context, root string, cb Callback) error {
-	base := cwdFromContext(ctx)
+	base := currentWorkingDirectoryFromContext(ctx)
 	root = resolvePath(ctx, root)
 	if err := checkRead(ctx, root); err != nil {
 		return err
@@ -1043,9 +1043,9 @@ func FsScratchCheckoutDir(ctx context.Context, purpose string) (string, error) {
 	return dir, nil
 }
 
-// relToCwd renders absolute watch paths relative to base when possible, so the
+// relToCurrentWorkingDirectory renders absolute watch paths relative to base when possible, so the
 // callback sees the same project-relative paths the rest of fs.* works with.
-func relToCwd(base string, abs []string) []string {
+func relToCurrentWorkingDirectory(base string, abs []string) []string {
 	out := make([]string, len(abs))
 	for i, p := range abs {
 		if rel, err := filepath.Rel(base, p); err == nil {

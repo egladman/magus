@@ -101,7 +101,7 @@ func TestHgMergeToolRoutesOnlyWhatOutputsClaim(t *testing.T) {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
-	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n", "gen/x.go": "x\n", "gen/runtime.go": "hand\n"})
+	hgInitRepository(t, dir, map[string]string{"a.txt": "one\n", "gen/x.go": "x\n", "gen/runtime.go": "hand\n"})
 	_, err := writeHgMergeDriverSection(dir, filepath.Join(dir, ".hg", "hgrc"),
 		types.MergeDriverGlobs{Outputs: []string{"gen/*.go"}, Carved: []string{"gen/runtime.go"}}, stamp.Judge{})
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestHgOperationInProgressReadsTheDotDir(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			for name, body := range tt.files {
-				writeRepoFile(t, root, ".sl/"+name, string(body))
+				writeRepositoryFile(t, root, ".sl/"+name, string(body))
 			}
 			require.NoError(t, os.Mkdir(filepath.Join(root, "sub"), 0o755))
 			for _, at := range []string{root, filepath.Join(root, "sub")} {
@@ -180,7 +180,7 @@ func TestHgHookValueSkipsATrackedRelativeBinary(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			hgInitRepo(t, dir, tc.files)
+			hgInitRepository(t, dir, tc.files)
 			sentinel := sentinelMagus(t, dir)
 			cmd := exec.CommandContext(t.Context(), "sh", "-c", value)
 			cmd.Dir = dir

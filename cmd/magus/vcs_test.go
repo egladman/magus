@@ -179,7 +179,7 @@ func TestSelectLsFilesNamesWhatItLeftOut(t *testing.T) {
 // TestLsFilesRefusesStateTheBackendLacks: an --include flag for a state the backend does
 // not keep is refused rather than answered with nothing.
 func TestLsFilesRefusesStateTheBackendLacks(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	git := resolveGitDriver(t, repo.Root())
 	require.NoError(t, lsFilesRefusal(git, map[string]bool{lsGroupStaged: true, lsGroupUntracked: true}))
 
@@ -227,7 +227,7 @@ func TestWorkspaceRelPatterns(t *testing.T) {
 // So: keep every path that exists; keep a path gone from disk but still tracked, since
 // that is how a deletion or rename gets recorded; drop only what is neither.
 func TestFilterStageable(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 
 	// tracked.txt is committed, then deleted from disk without `git rm`, the "old half
@@ -270,7 +270,7 @@ func TestFilterStageableNonGit(t *testing.T) {
 //
 // where every other path in the batch was silently left unstaged.
 func TestStagePathsSurvivesStalePath(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	repo.Write("present.txt", "y")
 
@@ -343,7 +343,7 @@ func TestMergeDriverArgCount(t *testing.T) {
 		"empty": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := mergeDriverCmd(context.Background(), t.TempDir(), args)
+			err := mergeDriverCommand(context.Background(), t.TempDir(), args)
 			require.Error(t, err)
 			assert.ErrorContains(t, err, "expected 5 arguments")
 		})
@@ -411,7 +411,7 @@ func TestOtherLeasesPaths(t *testing.T) {
 
 // The CLI leaves the context unstamped, so the caller's lease is the one its BAGGAGE claims.
 func TestHeldForOtherLeasesReadsTheCallersEnvironmentLease(t *testing.T) {
-	repo, _ := execRepoFixture(t)
+	repo, _ := execRepositoryFixture(t)
 	root := repo.Root()
 	mine := leaseRow("mine", "")
 	mine.CheckoutRoot, mine.WritePaths = root, []string{"api/**"}

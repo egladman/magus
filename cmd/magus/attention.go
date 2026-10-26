@@ -21,7 +21,7 @@ import (
 )
 
 // The attention queue: blocks waiting on a person (what agents raised, and the one
-// command that closes one). Both subverbs live under sessionCmd.
+// command that closes one). Both subverbs live under sessionCommand.
 //
 // Discovery is automated and disposition is not, which is the whole shape of the
 // feature (docs/design/judgment/manual-on-purpose.md). There is no expiry, no
@@ -52,7 +52,7 @@ func attentionList(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	rest, err := cmdParse("session attention", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("session attention", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus session attention [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -176,7 +176,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	var reason string
-	rest, err := cmdParse("session dispose", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("session dispose", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&reason, "reason", "", "Record why the request is being closed, alongside the disposition")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus session dispose <id> [-reason <text>]")

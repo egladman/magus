@@ -26,7 +26,7 @@ type serviceSessions interface {
 func buildService(obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()
 	ns.MapSet("acquire", directVal(obs, "magus.service.acquire", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		lease, err := acquireService(ctx, ffi.Str(args, 0), ffi.Str(args, 1))
+		lease, err := acquireService(ctx, ffi.String(args, 0), ffi.String(args, 1))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -88,7 +88,7 @@ func releaseService(ctx context.Context, args []vm.Value) error {
 	var key string
 	if len(args) > 0 {
 		if fields, ok := args[0].MapView(); ok {
-			if v, ok := fields.MapGet("key"); ok && v.IsStr() {
+			if v, ok := fields.MapGet("key"); ok && v.IsString() {
 				key = v.AsString()
 			}
 		}

@@ -71,10 +71,10 @@ const (
 
 // strObj backs Buzz strings. V is the immutable content.
 //
-// heapIdx is used only by the NaN-box build (internedStrValue): it caches this
+// heapIdx is used only by the NaN-box build (internedStringValue): it caches this
 // interned string's global-heap index (stored as index+1, 0 = unset) so that
 // every Value for the same content shares one heap entry instead of appending a
-// fresh one on each StrValue call. The safe/unsafe builds store the *strObj
+// fresh one on each StringValue call. The safe/unsafe builds store the *strObj
 // pointer in the Value directly and never read it.
 type strObj struct {
 	V       string
@@ -367,10 +367,10 @@ func (*udObj) heapKind() valueTag        { return tagUD }
 
 // strIntern maps string content → *strObj so equal strings share one pointer.
 // The pointer-equality fast path in valuesEqual then resolves string equality
-// without a content scan for any string that was created through StrValue.
+// without a content scan for any string that was created through StringValue.
 var strIntern sync.Map // string → *strObj
 
-func internStr(s string) *strObj {
+func internString(s string) *strObj {
 	if v, ok := strIntern.Load(s); ok {
 		return v.(*strObj)
 	}
@@ -381,13 +381,13 @@ func internStr(s string) *strObj {
 	return obj
 }
 
-// StrValue returns a Buzz string Value wrapping s. Interns the *strObj so that
+// StringValue returns a Buzz string Value wrapping s. Interns the *strObj so that
 // equal strings always share the same pointer, enabling O(1) equality via
-// pointer comparison in valuesEqual. internedStrValue is build-specific: the
+// pointer comparison in valuesEqual. internedStringValue is build-specific: the
 // NaN-box build caches one global-heap index per interned string (so repeated
 // content does not churn the heap), while the safe/unsafe builds carry the
 // pointer in the Value directly.
-func StrValue(s string) Value { return internedStrValue(internStr(s)) }
+func StringValue(s string) Value { return internedStringValue(internString(s)) }
 
 // UDValue boxes a foreign FFI pointer (`ud`). See udObj for why it is heap-boxed.
 func UDValue(addr uintptr) Value { return heapValue(tagUD, &udObj{Addr: addr}) }
@@ -473,8 +473,8 @@ func (v Value) IsInt() bool { return v.tag() == tagInt }
 // IsFloat reports whether v is a float.
 func (v Value) IsFloat() bool { return v.tag() == tagFloat }
 
-// IsStr reports whether v is a string.
-func (v Value) IsStr() bool { return v.tag() == tagStr }
+// IsString reports whether v is a string.
+func (v Value) IsString() bool { return v.tag() == tagStr }
 
 // IsUD reports whether v is a foreign FFI pointer (`ud`).
 func (v Value) IsUD() bool { return v.tag() == tagUD }
@@ -629,7 +629,7 @@ func (v Value) stringPath(path []Value) string {
 	case tagFloat:
 		return strconv.FormatFloat(math.Float64frombits(v.num()), 'g', -1, 64)
 	case tagStr:
-		return v.asStr().V
+		return v.asString().V
 	case tagList:
 		if pathHasIdentity(path, v) {
 			return "[...]"
@@ -766,7 +766,7 @@ func (m *mapObj) keyIndex(key string) int {
 		// Keys is only a display string here, so "1" would match the int key 1.
 		// Scan keyVals for a str of the same content instead.
 		for i, kv := range m.keyVals {
-			if kv.tag() == tagStr && kv.asStr().V == key {
+			if kv.tag() == tagStr && kv.asString().V == key {
 				return i
 			}
 		}
@@ -807,7 +807,7 @@ func mapKeyEqual(a, b Value) bool {
 	}
 	switch a.tag() {
 	case tagStr:
-		ap, bp := a.asStr(), b.asStr()
+		ap, bp := a.asString(), b.asString()
 		return ap == bp || ap.V == bp.V
 	case tagNull:
 		return true
@@ -824,7 +824,7 @@ func mapKeyEqual(a, b Value) bool {
 func (m *mapObj) indexOfVal(key Value) int {
 	if !m.objKeyed {
 		if key.tag() == tagStr {
-			return m.keyIndex(key.asStr().V)
+			return m.keyIndex(key.asString().V)
 		}
 		// A non-str key cannot be present in a str-keyed map.
 		return -1
@@ -842,7 +842,7 @@ func (m *mapObj) set(key string, v Value) {
 		m.Vals[i] = v
 		return
 	}
-	m.appendEntry(key, StrValue(key), v)
+	m.appendEntry(key, StringValue(key), v)
 }
 
 // setVal stores key→v keying by value, the general form of set.
@@ -936,7 +936,7 @@ func valuesEqual(a, b Value) bool {
 	case tagFloat:
 		return math.Float64frombits(a.num()) == math.Float64frombits(b.num())
 	case tagStr:
-		ap, bp := a.asStr(), b.asStr()
+		ap, bp := a.asString(), b.asString()
 		return ap == bp || ap.V == bp.V // pointer fast path (interned), then content
 	case tagEnumVal:
 		ae, be := a.asEnumVal(), b.asEnumVal()
@@ -1022,10 +1022,10 @@ func (v Value) FunDoc() string {
 	return ""
 }
 
-// AsString returns the string payload. Only valid when IsStr() is true.
+// AsString returns the string payload. Only valid when IsString() is true.
 // Named AsString (not AsStr) to match the cross-engine engine.Value accessor
 // convention shared with the gopherlua/luajit/js backends.
-func (v Value) AsString() string { return v.asStr().V }
+func (v Value) AsString() string { return v.asString().V }
 
 // ListItems returns the list items slice. Only valid when IsList() is true.
 func (v Value) ListItems() []Value { return v.asList().Items }

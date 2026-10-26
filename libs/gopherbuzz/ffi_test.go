@@ -51,7 +51,7 @@ func (f *echoingFFI) OpenLibrary(libname string, sigs []CFuncSig) (vmpackage.Val
 			if len(args) > 0 && args[0].IsInt() {
 				return vmpackage.IntValue(args[0].AsInt() * 2), nil
 			}
-			return vmpackage.StrValue("called:" + sig.Name), nil
+			return vmpackage.StringValue("called:" + sig.Name), nil
 		}))
 	}
 	return m, nil

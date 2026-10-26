@@ -13,8 +13,8 @@ import (
 
 // --- arg decoders (0-indexed; a missing or wrong-typed arg yields the zero value) ---
 
-// Str reads arg n as a string, "" if absent or not a string.
-func Str(args []vm.Value, n int) string {
+// String reads arg n as a string, "" if absent or not a string.
+func String(args []vm.Value, n int) string {
 	if n >= len(args) {
 		return ""
 	}
@@ -28,7 +28,7 @@ func Str(args []vm.Value, n int) string {
 	if inner, isEnum := v.EnumValue(); isEnum {
 		v = inner
 	}
-	if v.IsStr() {
+	if v.IsString() {
 		return v.AsString()
 	}
 	return ""
@@ -75,24 +75,24 @@ func Bool(args []vm.Value, n int, def bool) bool {
 	return def
 }
 
-// StrSlice reads arg n as []string, nil if absent or not a list.
-func StrSlice(args []vm.Value, n int) []string {
+// StringSlice reads arg n as []string, nil if absent or not a list.
+func StringSlice(args []vm.Value, n int) []string {
 	if n >= len(args) {
 		return nil
 	}
-	return strSliceFromValue(args[n])
+	return stringSliceFromValue(args[n])
 }
 
-// strSliceFromValue converts a Buzz list to []string, stringifying non-string
+// stringSliceFromValue converts a Buzz list to []string, stringifying non-string
 // items. Returns nil if v is not a list.
-func strSliceFromValue(v vm.Value) []string {
+func stringSliceFromValue(v vm.Value) []string {
 	if !v.IsList() {
 		return nil
 	}
 	items := v.ListItems()
 	out := make([]string, 0, len(items))
 	for _, it := range items {
-		if it.IsStr() {
+		if it.IsString() {
 			out = append(out, it.AsString())
 		} else {
 			out = append(out, it.String())
@@ -101,8 +101,8 @@ func strSliceFromValue(v vm.Value) []string {
 	return out
 }
 
-// StrMap reads arg n as map[string]string, nil if absent or not a map.
-func StrMap(args []vm.Value, n int) map[string]string {
+// StringMap reads arg n as map[string]string, nil if absent or not a map.
+func StringMap(args []vm.Value, n int) map[string]string {
 	if n >= len(args) {
 		return nil
 	}
@@ -116,7 +116,7 @@ func StrMap(args []vm.Value, n int) map[string]string {
 		if !ok {
 			continue
 		}
-		if mv.IsStr() {
+		if mv.IsString() {
 			out[k] = mv.AsString()
 		} else {
 			out[k] = mv.String()
@@ -144,14 +144,14 @@ func Any(args []vm.Value, n int) any {
 	return valToAny(args[n])
 }
 
-// VariadicStr collects args from index n onward as []string.
-func VariadicStr(args []vm.Value, n int) []string {
+// VariadicString collects args from index n onward as []string.
+func VariadicString(args []vm.Value, n int) []string {
 	if n >= len(args) {
 		return nil
 	}
 	out := make([]string, 0, len(args)-n)
 	for _, v := range args[n:] {
-		if v.IsStr() {
+		if v.IsString() {
 			out = append(out, v.AsString())
 		} else {
 			out = append(out, v.String())
@@ -172,17 +172,17 @@ func CallbackArg(sess *buzz.Session, args []vm.Value, n int) std.Callback {
 	return nil
 }
 
-func StrVal(s string) vm.Value    { return vm.StrValue(s) }
+func StringVal(s string) vm.Value { return vm.StringValue(s) }
 func IntVal(i int) vm.Value       { return vm.IntValue(int64(i)) }
 func BoolVal(b bool) vm.Value     { return vm.BoolValue(b) }
 func FloatVal(f float64) vm.Value { return vm.FloatValue(f) }
 
-// OptStrVal is a `str?` return: nil crosses as null.
-func OptStrVal(s *string) vm.Value {
+// OptStringVal is a `str?` return: nil crosses as null.
+func OptStringVal(s *string) vm.Value {
 	if s == nil {
 		return vm.Null
 	}
-	return vm.StrValue(*s)
+	return vm.StringValue(*s)
 }
 
 // ByteSlice converts argument n to raw bytes, accepting either a str (taken as
@@ -197,7 +197,7 @@ func ByteSlice(args []vm.Value, n int) []byte {
 		return nil
 	}
 	v := args[n]
-	if v.IsStr() {
+	if v.IsString() {
 		return []byte(v.AsString())
 	}
 	if !v.IsList() {
@@ -226,8 +226,8 @@ func ByteSliceVal(b []byte) vm.Value {
 	return vm.ListValue(items)
 }
 
-// StrSliceSlice converts argument n to [][]string, skipping non-list rows.
-func StrSliceSlice(args []vm.Value, n int) [][]string {
+// StringSliceSlice converts argument n to [][]string, skipping non-list rows.
+func StringSliceSlice(args []vm.Value, n int) [][]string {
 	if n >= len(args) {
 		return nil
 	}
@@ -241,23 +241,23 @@ func StrSliceSlice(args []vm.Value, n int) [][]string {
 		if !row.IsList() {
 			continue
 		}
-		out = append(out, strSliceFromValue(row))
+		out = append(out, stringSliceFromValue(row))
 	}
 	return out
 }
 
-// StrSliceSliceVal converts [][]string to a Buzz list of lists.
-func StrSliceSliceVal(rows [][]string) vm.Value {
+// StringSliceSliceVal converts [][]string to a Buzz list of lists.
+func StringSliceSliceVal(rows [][]string) vm.Value {
 	items := make([]vm.Value, len(rows))
 	for i, row := range rows {
-		items[i] = StrSliceVal(row)
+		items[i] = StringSliceVal(row)
 	}
 	return vm.ListValue(items)
 }
 
-// StrMapMap converts argument n to map[string]map[string]string, skipping
+// StringMapMap converts argument n to map[string]map[string]string, skipping
 // entries whose value is not itself a map.
-func StrMapMap(args []vm.Value, n int) map[string]map[string]string {
+func StringMapMap(args []vm.Value, n int) map[string]map[string]string {
 	if n >= len(args) {
 		return nil
 	}
@@ -277,7 +277,7 @@ func StrMapMap(args []vm.Value, n int) map[string]map[string]string {
 			if !ok {
 				continue
 			}
-			if iv.IsStr() {
+			if iv.IsString() {
 				section[ik] = iv.AsString()
 			} else {
 				section[ik] = iv.String()
@@ -288,11 +288,11 @@ func StrMapMap(args []vm.Value, n int) map[string]map[string]string {
 	return out
 }
 
-// StrMapMapVal converts map[string]map[string]string to a Buzz map of maps.
-func StrMapMapVal(m map[string]map[string]string) vm.Value {
+// StringMapMapVal converts map[string]map[string]string to a Buzz map of maps.
+func StringMapMapVal(m map[string]map[string]string) vm.Value {
 	out := vm.NewMap()
 	for k, inner := range m {
-		out.MapSet(k, StrMapVal(inner))
+		out.MapSet(k, StringMapVal(inner))
 	}
 	return out
 }
@@ -333,20 +333,20 @@ func FloatSliceVal(f []float64) vm.Value {
 	return vm.ListValue(items)
 }
 
-// StrSliceVal converts []string to a Buzz list.
-func StrSliceVal(s []string) vm.Value {
+// StringSliceVal converts []string to a Buzz list.
+func StringSliceVal(s []string) vm.Value {
 	items := make([]vm.Value, len(s))
 	for i, v := range s {
-		items[i] = vm.StrValue(v)
+		items[i] = vm.StringValue(v)
 	}
 	return vm.ListValue(items)
 }
 
-// StrMapVal converts map[string]string to a Buzz map.
-func StrMapVal(m map[string]string) vm.Value {
+// StringMapVal converts map[string]string to a Buzz map.
+func StringMapVal(m map[string]string) vm.Value {
 	out := vm.NewMap()
 	for k, v := range m {
-		out.MapSet(k, vm.StrValue(v))
+		out.MapSet(k, vm.StringValue(v))
 	}
 	return out
 }
@@ -366,7 +366,7 @@ func AnyVal(v any) vm.Value {
 	case nil:
 		return vm.Null
 	case string:
-		return vm.StrValue(x)
+		return vm.StringValue(x)
 	case bool:
 		return vm.BoolValue(x)
 	case int:
@@ -376,7 +376,7 @@ func AnyVal(v any) vm.Value {
 	case float64:
 		return vm.FloatValue(x)
 	case []string:
-		return StrSliceVal(x)
+		return StringSliceVal(x)
 	case []any:
 		items := make([]vm.Value, len(x))
 		for i, vv := range x {
@@ -395,7 +395,7 @@ func AnyVal(v any) vm.Value {
 	case types.BuzzObject:
 		return AnyMapVal(x)
 	case map[string]string:
-		return StrMapVal(x)
+		return StringMapVal(x)
 	}
 	// A DEFINED type over a basic kind (types.CheckStatus, types.TargetRunState,
 	// spells.PatchOpKind) matches none of the cases above, because a type switch
@@ -420,7 +420,7 @@ func namedBasicVal(v any) vm.Value {
 	}
 	switch rv.Kind() {
 	case reflect.String:
-		return vm.StrValue(rv.String())
+		return vm.StringValue(rv.String())
 	case reflect.Bool:
 		return vm.BoolValue(rv.Bool())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -449,7 +449,7 @@ func valToAny(v vm.Value) any {
 		return v.AsInt()
 	case v.IsFloat():
 		return v.AsFloat()
-	case v.IsStr():
+	case v.IsString():
 		return v.AsString()
 	case v.IsList():
 		items := v.ListItems()

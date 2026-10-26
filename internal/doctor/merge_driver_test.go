@@ -16,7 +16,7 @@ import (
 // TestCheckOwedRegeneration: an empty record passes, and a recorded one fails naming
 // the run that settles it, so a stale generated file is visible before it is committed.
 func TestCheckOwedRegeneration(t *testing.T) {
-	root := testkit.NewRepo(t, nil).Root()
+	root := testkit.NewRepository(t, nil).Root()
 	r := &runner{ws: rootedWorkspace{root: root}}
 
 	assert.Equal(t, types.Check{Name: "owed-regeneration", Status: types.CheckOK,
@@ -53,7 +53,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 	if err != nil {
 		t.Skip("no true executable")
 	}
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	register := func() { repo.Git("config", "merge.magus.driver", trueExe+" vcs merge-driver %O %A %B %L %P") }
 	register()

@@ -1321,7 +1321,7 @@ func pathOutsideWorkspace(p string) string {
 
 // Validate reports what is wrong with a declared row, or nil: every problem
 // [Declaration.Problems] finds, joined.
-func (r Declaration) Validate() error { return r.Problems().Err() }
+func (r Declaration) Validate() error { return r.Problems().Error() }
 
 // Problems is every problem the record shows on its own, without a workspace: each field's
 // shape, the check, the deviations and the goals. It never stops at the first.
@@ -1564,7 +1564,7 @@ func oneSignaturePerSymbol(goals []Goal) JobProblems {
 
 // Validate reports whether a goal can be matched to an output record without
 // interpreting a shell command: every problem it shows on its own, joined.
-func (g Goal) Validate() error { return g.problems("").Err() }
+func (g Goal) Validate() error { return g.problems("").Error() }
 
 // problems is every problem g shows on its own, each Field under field (`goals[1]`).
 func (g Goal) problems(field string) JobProblems {

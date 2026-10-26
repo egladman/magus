@@ -19,7 +19,7 @@ func (r *runner) checkCheckpointWiring() types.Check {
 	if err != nil {
 		return unknownWiring("checkpoint-wiring", err)
 	}
-	return checkCheckpointWiring(r.runCtx(), r.ws.Root(), wired...)
+	return checkCheckpointWiring(r.runContext(), r.ws.Root(), wired...)
 }
 
 // checkCheckpointWiring reports a host that magus is wired into but that records no

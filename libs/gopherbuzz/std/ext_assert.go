@@ -49,21 +49,21 @@ var osSource string
 // structural equality over an opaque `any`, and a type name for failure messages.
 func assertCoreModule() vm.Value {
 	m := mod()
-	m.MapSet("deepEqual", fn("assertcore.deepEqual", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("deepEqual", function("assertcore.deepEqual", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 {
 			return vm.Null, fmt.Errorf("assertcore.deepEqual: requires 2 arguments")
 		}
 		return vm.BoolValue(deepEqualValue(args[0], args[1])), nil
 	}))
-	m.MapSet("typeName", fn("assertcore.typeName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("typeName", function("assertcore.typeName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 {
 			return vm.Null, fmt.Errorf("assertcore.typeName: requires 1 argument")
 		}
-		return vm.StrValue(typeNameValue(args[0])), nil
+		return vm.StringValue(typeNameValue(args[0])), nil
 	}))
 	// length returns the element count of a str (codepoints), list, or map; null
 	// for a value that has no length, so the assert layer can raise a typed message.
-	m.MapSet("length", fn("assertcore.length", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("length", function("assertcore.length", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 {
 			return vm.Null, fmt.Errorf("assertcore.length: requires 1 argument")
 		}
@@ -74,7 +74,7 @@ func assertCoreModule() vm.Value {
 	}))
 	// contains reports membership: a substring in a str, an element (by deep
 	// equality) in a list, or a key in a map. False for any other container type.
-	m.MapSet("contains", fn("assertcore.contains", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("contains", function("assertcore.contains", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 {
 			return vm.Null, fmt.Errorf("assertcore.contains: requires 2 arguments")
 		}
@@ -82,7 +82,7 @@ func assertCoreModule() vm.Value {
 	}))
 	// compare orders two values: -1, 0, or 1 for two numbers (ints and doubles
 	// compare across type) or two strings; null when they are not comparable.
-	m.MapSet("compare", fn("assertcore.compare", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("compare", function("assertcore.compare", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 {
 			return vm.Null, fmt.Errorf("assertcore.compare: requires 2 arguments")
 		}
@@ -94,9 +94,9 @@ func assertCoreModule() vm.Value {
 	// skip aborts the current test by returning a sentinel-wrapped error. A test
 	// runner recognizes it via SkipMessage and reports the test as skipped rather
 	// than failed. The `assert` module's skip() is a thin wrapper over this.
-	m.MapSet("skip", fn("assertcore.skip", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("skip", function("assertcore.skip", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		msg := ""
-		if len(args) > 0 && args[0].IsStr() {
+		if len(args) > 0 && args[0].IsString() {
 			msg = args[0].AsString()
 		}
 		return vm.Null, fmt.Errorf("%s%s%s", skipPrefix, msg, skipSuffix)
@@ -136,7 +136,7 @@ func SkipMessage(err error) (string, bool) {
 // list items, map keys, or an object's fields) and whether it was measurable.
 func lengthValue(v vm.Value) (int, bool) {
 	switch {
-	case v.IsStr():
+	case v.IsString():
 		return utf8.RuneCountInString(v.AsString()), true
 	case v.IsList():
 		return len(v.ListItems()), true
@@ -154,8 +154,8 @@ func lengthValue(v vm.Value) (int, bool) {
 // deep-equal element for lists, key for maps.
 func containsValue(container, item vm.Value) bool {
 	switch {
-	case container.IsStr():
-		return item.IsStr() && strings.Contains(container.AsString(), item.AsString())
+	case container.IsString():
+		return item.IsString() && strings.Contains(container.AsString(), item.AsString())
 	case container.IsList():
 		for _, el := range container.ListItems() {
 			if deepEqualValue(el, item) {
@@ -164,7 +164,7 @@ func containsValue(container, item vm.Value) bool {
 		}
 		return false
 	case container.IsMap():
-		if item.IsStr() {
+		if item.IsString() {
 			_, ok := container.MapGet(item.AsString())
 			return ok
 		}
@@ -186,7 +186,7 @@ func compareValue(a, b vm.Value) (int, bool) {
 		default:
 			return 0, true
 		}
-	case a.IsStr() && b.IsStr():
+	case a.IsString() && b.IsString():
 		return strings.Compare(a.AsString(), b.AsString()), true
 	}
 	return 0, false
@@ -287,7 +287,7 @@ func scalarEqualValue(a, b vm.Value) bool {
 		return a.IsNull() && b.IsNull()
 	case a.IsBool() && b.IsBool():
 		return a.AsBool() == b.AsBool()
-	case a.IsStr() && b.IsStr():
+	case a.IsString() && b.IsString():
 		return a.AsString() == b.AsString()
 	case a.IsInt() && b.IsInt():
 		return a.AsInt() == b.AsInt()
@@ -316,7 +316,7 @@ func typeNameValue(v vm.Value) string {
 		return "int"
 	case v.IsFloat():
 		return "double"
-	case v.IsStr():
+	case v.IsString():
 		return "str"
 	case v.IsList():
 		return "list"

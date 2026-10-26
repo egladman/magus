@@ -15,7 +15,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `stutter`       | an exported package-level name opening with its package's name                                              |
 | `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                            |
 | `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                            |
-| `namewords`     | a function or method name ending in a listed word (`Of`, `For`) or using a listed short form (`Src`)        |
+| `namewords`     | a function or method name, exported or not, ending in a listed word (`Of`, `For`) or using a listed short form (`Src`, `Ctx`) |
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
 | `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
@@ -40,9 +40,10 @@ origin once.
 ## Scope
 
 golangci-lint stops at a `go.mod`, so the root `lint` target runs it once more in
-each module under `libs/`, on the same config, with only `hostagnostic`,
-`stutter` and `filenames` enabled: the rules the old tree walks held everywhere.
-The rest name root-module paths.
+each module under `libs/`, on the same config, with only `filenames`,
+`hostagnostic`, `namewords`, `stutter`, `testifylint`, `testlayout` and
+`testpair` enabled, plus `errmsg` outside gopherbuzz: the rules that hold in
+every module. The rest name root-module paths.
 
 `filenames` reads beyond its package on purpose: its vocabulary is every Go file
 name the go tool would read under the root of `module`, nested modules included,
@@ -99,11 +100,13 @@ assigned from a call into that package, which already named it.
 carries one of `notice-attrs`: the record names who is speaking, the error rides
 as an attribute, and the display names a shared origin once.
 
-`namewords` judges only declared functions and methods, split into words at
-underscores, camel-case boundaries and digit runs. It skips a test, benchmark,
-fuzz or example entry point, a generated file, and a method that satisfies an
-interface of a standard library package its package reaches, such as
+`namewords` judges only declared functions and methods, exported or not, split
+into words at underscores, camel-case boundaries and digit runs. It skips a test,
+benchmark, fuzz or example entry point, a generated file, and a method that
+satisfies an interface of a standard library package its package reaches, such as
 `io.WriterTo`'s `WriteTo`. A one-word name is never judged against `suffixes`.
+A short form is a clipped word (`Ctx` for context). An initialism Go spells in
+caps, and a word the standard library spells the same way, is not one.
 
 ## Not here
 

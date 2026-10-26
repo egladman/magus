@@ -92,13 +92,13 @@ func TestForkLimitProblemsNameTheKey(t *testing.T) {
 		{ID: "other", State: types.StateRunning},
 	}
 
-	err := forkLimitProblems(rows, "root/a/deep", "root/a", config.Jobs{MaxDepth: 1}).Err()
+	err := forkLimitProblems(rows, "root/a/deep", "root/a", config.Jobs{MaxDepth: 1}).Error()
 	require.ErrorIs(t, err, types.JobForkLimitExceeded)
 	assert.Contains(t, err.Error(), "jobs.max_depth")
 	assert.Contains(t, err.Error(), "root/a/deep")
 	assert.Empty(t, forkLimitProblems(rows, "root/c", "root", config.Jobs{MaxDepth: 1}))
 
-	err = forkLimitProblems(rows, "root/c", "root", config.Jobs{MaxLive: 2}).Err()
+	err = forkLimitProblems(rows, "root/c", "root", config.Jobs{MaxLive: 2}).Error()
 	require.ErrorIs(t, err, types.JobForkLimitExceeded)
 	assert.Contains(t, err.Error(), "jobs.max_live")
 	assert.Empty(t, forkLimitProblems(rows, "root/c", "root", config.Jobs{MaxLive: 3}),
@@ -115,7 +115,7 @@ func TestForkLimitRefusesAClaimCapPastJobsMaxClaims(t *testing.T) {
 
 	limits := config.Jobs{MaxClaims: 4}
 	assert.Empty(t, claimCeilingProblems(types.Job{ID: "w", MaxClaims: 4}, limits))
-	err := claimCeilingProblems(types.Job{ID: "w", MaxClaims: 5}, limits).Err()
+	err := claimCeilingProblems(types.Job{ID: "w", MaxClaims: 5}, limits).Error()
 	require.ErrorIs(t, err, types.JobForkLimitExceeded)
 	assert.Contains(t, err.Error(), "5 claims (max_claims on job w)")
 	assert.Contains(t, err.Error(), "ceiling of 4 (jobs.max_claims in magus.yaml)")
@@ -422,7 +422,7 @@ func TestResolveSymbolGoalsDerivesClaims(t *testing.T) {
 func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 	t.Parallel()
 
-	root := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo, "notes.txt": "func Notes()\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo, "notes.txt": "func Notes()\n"}).Root()
 	read := symbolReader(map[string]SymbolFact{
 		"A":     {DefinedIn: []string{"run.go"}, Signature: "func A(ctx int)"},
 		"Notes": {DefinedIn: []string{"notes.txt"}, Signature: "func Notes()"},
@@ -659,7 +659,7 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(tempLocation(t, testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"}).Root()))
+	s := NewStore(tempLocation(t, testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"}).Root()))
 	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}
 	}, config.Jobs{}, nil)
@@ -699,7 +699,7 @@ func TestUngradedProblemsHoldAWritingJobToACheckOrAGoal(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := ungradedProblems(tc.row).Err()
+			err := ungradedProblems(tc.row).Error()
 			if !tc.refused {
 				require.NoError(t, err)
 				return
@@ -735,7 +735,7 @@ func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := unscopedProblems(tc.row).Err()
+			err := unscopedProblems(tc.row).Error()
 			if !tc.refused {
 				require.NoError(t, err)
 				return
@@ -752,7 +752,7 @@ func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 // root holding each path, the way `magus job apply` finds a live job.
 func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 	t.Helper()
-	root := loadableRepo(t)
+	root := loadableRepository(t)
 	for _, p := range write {
 		require.NoError(t, os.WriteFile(filepath.Join(root, p), []byte(p+"\n"), 0o644))
 	}
@@ -815,7 +815,7 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	deviation := types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
 	derived := func(t *testing.T) *Store {
 		t.Helper()
-		root := loadableRepo(t)
+		root := loadableRepository(t)
 		rec := spec("a.go", "a_test.go", "b_test.go")
 		rec.SoftPaths, rec.Deviations = []string{"a_test.go", "b_test.go"}, []types.Deviation{deviation}
 		s := NewStore(tempLocation(t, root))

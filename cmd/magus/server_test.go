@@ -237,7 +237,7 @@ func TestDetachedCmdReExecsTheGivenPathWithoutResolvingIt(t *testing.T) {
 		{"with the windows extension", filepath.Join(t.TempDir(), "magus.exe")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := detachedCmd(tc.exe, []string{"broker"})
+			cmd := detachedCommand(tc.exe, []string{"broker"})
 
 			require.NoError(t, cmd.Err, "re-execing a known absolute path performs no lookup that could fail")
 			assert.Equal(t, tc.exe, cmd.Path, "the path is used verbatim, never a PATHEXT sibling")
@@ -256,7 +256,7 @@ func TestDetachedCmdIgnoresPATH(t *testing.T) {
 	t.Setenv("PATH", decoy)
 
 	want := filepath.Join(t.TempDir(), "magus")
-	cmd := detachedCmd(want, nil)
+	cmd := detachedCommand(want, nil)
 
 	assert.Equal(t, want, cmd.Path, "the decoy on PATH is not consulted")
 	assert.NotEqual(t, filepath.Join(decoy, "magus"), cmd.Path)

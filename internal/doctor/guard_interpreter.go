@@ -98,7 +98,7 @@ func (r *runner) checkGuardBinaryEverywhere(projects []*types.Project) types.Che
 	if got.Status == types.CheckFail {
 		return got
 	}
-	if skew, ok := projectBinarySkew(r.runCtx(), root, projects, r.ownVersion()); ok {
+	if skew, ok := projectBinarySkew(r.runContext(), root, projects, r.ownVersion()); ok {
 		return skew
 	}
 	return got

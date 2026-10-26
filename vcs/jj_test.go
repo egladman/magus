@@ -64,7 +64,7 @@ func TestJJMergeDriverRegistersTheToolInTheRepoConfig(t *testing.T) {
 		t.Skip("jj not available")
 	}
 	dir := t.TempDir()
-	jjInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	jjInitRepository(t, dir, map[string]string{"a.txt": "a\n"})
 	ctx := t.Context()
 	globs := types.MergeDriverGlobs{AutoResolve: []string{"CHANGELOG.md"}}
 
@@ -101,16 +101,16 @@ func TestJJHistoryFollowsPathsAndFirstParent(t *testing.T) {
 	}
 	dir := t.TempDir()
 	run := func(args ...string) { vcsTestRun(t, dir, "jj", args...) }
-	jjInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+	jjInitRepository(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
 	run("describe", "-r", "@-", "-m", "init")
 	run("edit", "@-")
 	run("new", "-m", "side adds docs")
-	writeRepoFile(t, dir, "docs/b.md", "b\n")
+	writeRepositoryFile(t, dir, "docs/b.md", "b\n")
 	run("new", `subject(exact:"init")`, "-m", "main edits docs")
-	writeRepoFile(t, dir, "docs/a.md", "a2\n")
+	writeRepositoryFile(t, dir, "docs/a.md", "a2\n")
 	run("new", "@", `subject(exact:"side adds docs")`, "-m", "merge side")
 	run("new", "-m", "main edits x")
-	writeRepoFile(t, dir, "x.txt", "x2\n")
+	writeRepositoryFile(t, dir, "x.txt", "x2\n")
 
 	assertHistoryScenario(t, jjVCS{}, dir)
 }
@@ -162,7 +162,7 @@ func TestJJCheckoutIDSurvivesACleanDiff(t *testing.T) {
 		t.Skip("jj not available")
 	}
 	dir := t.TempDir()
-	jjInitRepo(t, dir, map[string]string{"a.buzz": "one\n"})
+	jjInitRepository(t, dir, map[string]string{"a.buzz": "one\n"})
 	id, ok := jjVCS{}.CheckoutID(dir)
 	require.True(t, ok)
 	require.NotEmpty(t, id)

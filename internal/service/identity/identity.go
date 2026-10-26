@@ -303,7 +303,7 @@ func containerPort(spec string) string {
 func volumeTarget(spec string) string {
 	fields := strings.Split(spec, ":")
 	// Drop a trailing options token so "/host:/data:ro" targets "/data".
-	if n := len(fields); n >= 3 && isMountOpts(fields[n-1]) {
+	if n := len(fields); n >= 3 && isMountOptions(fields[n-1]) {
 		fields = fields[:n-1]
 	}
 	switch len(fields) {
@@ -332,8 +332,8 @@ func mountTarget(spec string) string {
 	return ""
 }
 
-// isMountOpts reports whether tok is a docker volume mount-options token.
-func isMountOpts(tok string) bool {
+// isMountOptions reports whether tok is a docker volume mount-options token.
+func isMountOptions(tok string) bool {
 	switch tok {
 	case "ro", "rw", "z", "Z", "cached", "delegated", "consistent", "nocopy":
 		return true

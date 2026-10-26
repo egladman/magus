@@ -42,7 +42,7 @@ func TestStartBlobServesOnceCORSLocked(t *testing.T) {
 func TestStartBlobPreflight(t *testing.T) {
 	bs, err := StartBlob("https://example.test", "/graph.json", "application/json", []byte("{}"))
 	require.NoError(t, err)
-	defer bs.WaitServed(canceledCtx())
+	defer bs.WaitServed(canceledContext())
 
 	req, _ := http.NewRequest(http.MethodOptions, bs.SourceURL(), nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -58,7 +58,7 @@ func TestStartBlobPreflight(t *testing.T) {
 func TestStartBlobRequiresToken(t *testing.T) {
 	bs, err := StartBlob("https://example.test", "/graph.json", "application/json", []byte("{}"))
 	require.NoError(t, err)
-	defer bs.WaitServed(canceledCtx())
+	defer bs.WaitServed(canceledContext())
 
 	assert.Contains(t, bs.SourceURL(), "token="+bs.Token())
 
@@ -73,7 +73,7 @@ func TestStartBlobRequiresToken(t *testing.T) {
 func TestStartBlobEphemeralPort(t *testing.T) {
 	bs, err := StartBlob("https://example.test", "/b", "text/plain", []byte("x"))
 	require.NoError(t, err)
-	defer bs.WaitServed(canceledCtx())
+	defer bs.WaitServed(canceledContext())
 
 	host, portStr, err := net.SplitHostPort(bs.Addr())
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestStartBlobEphemeralPort(t *testing.T) {
 	assert.Greater(t, port, 0, "StartBlob binds a real ephemeral loopback port")
 }
 
-func canceledCtx() context.Context {
+func canceledContext() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	return ctx

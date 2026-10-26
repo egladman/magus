@@ -67,17 +67,17 @@ func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 	case err != nil:
 		return types.Declaration{}, asRecordInvalid(err)
 	case !json.Valid(raw):
-		return types.Declaration{}, recordInvalid("", errors.New("the job is not JSON")).Err()
+		return types.Declaration{}, recordInvalid("", errors.New("the job is not JSON")).Error()
 	}
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
 		if missing := (*missingVersion)(nil); errors.As(err, &missing) {
-			return types.Declaration{}, recordInvalid("schema_version", err).Err()
+			return types.Declaration{}, recordInvalid("schema_version", err).Error()
 		}
 		return types.Declaration{}, err
 	}
 	var row types.Declaration
 	if err := json.UnmarshalStrict(raw, &row); err != nil {
-		return types.Declaration{}, memberProblems(raw, err).Err()
+		return types.Declaration{}, memberProblems(raw, err).Error()
 	}
 	return row, errors.Join(row.FoldLegacyNames(), row.Validate())
 }
@@ -222,7 +222,7 @@ func unwrapDescribed(raw []byte) ([]byte, error) {
 	}
 	if len(unknown) > 0 {
 		return nil, recordInvalid(unknown[0], fmt.Errorf("%s beside `job` is not a member `describe job -o json` prints",
-			quoteAll(unknown))).Err()
+			quoteAll(unknown))).Error()
 	}
 	if _, named := row["schema_version"]; !named {
 		row["schema_version"] = json.RawMessage(strconv.Itoa(types.JobSchemaVersion))
@@ -265,7 +265,7 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 		}
 	}
 	if len(parts) == 0 {
-		return nil, recordInvalid("", errors.New("the records hold no job")).Err()
+		return nil, recordInvalid("", errors.New("the records hold no job")).Error()
 	}
 	rows := make([]types.Declaration, 0, len(parts))
 	seen := map[string]int{}
@@ -321,7 +321,7 @@ func (e *invalidInput) Error() string {
 // itself otherwise.
 func asRecordInvalid(err error) error {
 	if invalid := (*invalidInput)(nil); errors.As(err, &invalid) {
-		return recordInvalid("", invalid).Err()
+		return recordInvalid("", invalid).Error()
 	}
 	return err
 }

@@ -47,7 +47,7 @@ func TestRunBoundaryDecode(t *testing.T) {
 	assert.Contains(t, dec, `return decodeLanguage(v, "language")`)
 	assert.Contains(t, dec, "func DecodeCommand(v vm.Value) (spells.Command, error)")
 	assert.Contains(t, dec, "func DecodePath(v vm.Value) (types.Path, error)")
-	assert.Contains(t, dec, "decodeStrs(", "a [str] reads through the one shared list helper")
+	assert.Contains(t, dec, "decodeStringList(", "a [str] reads through the one shared list helper")
 	// The key is the mirror's field name, tag renames included, never the Go name.
 	assert.Contains(t, dec, `case "blockComments":`)
 	assert.Contains(t, dec, `case "ignoreEscape":`)

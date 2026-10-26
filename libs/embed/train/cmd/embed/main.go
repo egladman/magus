@@ -500,9 +500,9 @@ func (m *textMix) write(out string) (string, error) {
 
 func readSources(path string) ([]sourceRecord, error) {
 	var out []sourceRecord
-	var readErr error
+	var readError error
 	fail := func(_ sourceRecord, err error) bool {
-		readErr = err
+		readError = err
 		return false
 	}
 	for n, line := range jsonLines(path, fail) {
@@ -512,8 +512,8 @@ func readSources(path string) ([]sourceRecord, error) {
 		}
 		out = append(out, r)
 	}
-	if readErr != nil {
-		return nil, readErr
+	if readError != nil {
+		return nil, readError
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("%s holds no records", path)

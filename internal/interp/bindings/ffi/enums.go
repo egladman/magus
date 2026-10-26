@@ -43,7 +43,7 @@ var EnumBacking EnumCases = enumBacking{}
 
 type enumBacking struct{}
 
-func (enumBacking) Case(_, value string) vm.Value { return vm.StrValue(value) }
+func (enumBacking) Case(_, value string) vm.Value { return vm.StringValue(value) }
 
 type sessionEnums struct {
 	ctx    context.Context
@@ -105,7 +105,7 @@ func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
 	out := make(map[string]vm.Value, len(names))
 	for _, c := range list.ListItems() {
 		backing, _ := c.EnumValue()
-		if !backing.IsStr() {
+		if !backing.IsString() {
 			return nil, fmt.Errorf("case %s is not str-backed", describeCase(c))
 		}
 		out[backing.AsString()] = c

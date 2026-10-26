@@ -2549,7 +2549,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 				site.gitDir = filepath.Join(site.dir, envDir)
 			}
 		}
-		if inFreshRepo(c.inv, site, unlocated, fresh) {
+		if inFreshRepository(c.inv, site, unlocated, fresh) {
 			continue
 		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
@@ -2580,12 +2580,12 @@ func nonLiteralInit(c locatedCall) string {
 	return ""
 }
 
-func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) } //nolint:gochecknoinits // std cannot import guard; every binary that links the guard registers the vcs lease gate
+func init() { std.RegisterVCSLeaseGate(vcsCommandRefusal) } //nolint:gochecknoinits // std cannot import guard; every binary that links the guard registers the vcs lease gate
 
-// vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
+// vcsCommandRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
 // env, the environment the child starts with. The process knows no session or subagent, so
 // row is graded as a worker: the answer the shell rule gives a caller that names neither.
-func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error {
+func vcsCommandRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error {
 	inv := hint.Invocation{Name: backend, Args: args}
 	site, unlocated := argvSite(inv, dir)
 	relocated := false
@@ -3075,11 +3075,11 @@ func checkoutOverlap(checkout, dir string) (why string) {
 	return ""
 }
 
-// inFreshRepo reports whether a worker may run inv at site because site is inside a
+// inFreshRepository reports whether a worker may run inv at site because site is inside a
 // repository an earlier init on the same line created, listed in fresh. The call must act
 // in that repository alone: not push, not name config the worker could point at the
 // checkout, and not be a verb that writes to a path its operands name.
-func inFreshRepo(inv hint.Invocation, site vcsSite, unlocated string, fresh []string) bool {
+func inFreshRepository(inv hint.Invocation, site vcsSite, unlocated string, fresh []string) bool {
 	if unlocated != "" || !slices.ContainsFunc(fresh, func(f string) bool {
 		return within(site.dir, f) && (site.gitDir == "" || within(site.gitDir, f))
 	}) || isPush(inv) || isInit(inv) {

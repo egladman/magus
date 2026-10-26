@@ -30,12 +30,12 @@ import (
 
 // describeRules lists the catalog, or details one rule when named.
 //
-// Parsed through cmdParse like every other describe noun, so `-o json` and the rest of
+// Parsed through commandParse like every other describe noun, so `-o json` and the rest of
 // the display set work after the noun exactly as they do on `describe targets`. A
 // hand-rolled loop here accepted the flags nowhere and made this the one noun that lied
 // about its flags.
 func describeRules(ctx context.Context, args []string) error {
-	names, err := cmdParse("describe rules", args, func(fs *flag.FlagSet) {
+	names, err := commandParse("describe rules", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe rule[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")

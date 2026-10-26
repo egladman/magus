@@ -59,7 +59,7 @@ func TestFsGlob(t *testing.T) {
 
 	// With a context cwd, matches come back relative to it (slash-separated by the
 	// pattern), independent of the process working directory.
-	ctx := WithCwd(context.Background(), dir)
+	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
 	tests := []struct {
 		name    string
@@ -469,9 +469,9 @@ func TestFsWriteFileRefusesASchemaDowngrade(t *testing.T) {
 		"the atomic spelling shares the precondition")
 }
 
-// gitRepoWithIgnoredExport returns a git repo whose .gitignore covers gen/*.json, holding a
+// gitRepositoryWithIgnoredExport returns a git repo whose .gitignore covers gen/*.json, holding a
 // newer-stamped ignored export and a newer-stamped tracked document.
-func gitRepoWithIgnoredExport(t *testing.T) (ignored, tracked string) {
+func gitRepositoryWithIgnoredExport(t *testing.T) (ignored, tracked string) {
 	t.Helper()
 	dir := t.TempDir()
 	out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput()
@@ -493,7 +493,7 @@ func gitRepoWithIgnoredExport(t *testing.T) (ignored, tracked string) {
 // must be able to regenerate it instead of stranding graph-generate.
 func TestFsWriteFileOverwritesAnIgnoredNewerStamp(t *testing.T) {
 	ctx := context.Background()
-	ignored, _ := gitRepoWithIgnoredExport(t)
+	ignored, _ := gitRepositoryWithIgnoredExport(t)
 
 	require.NoError(t, FsWriteFile(ctx, ignored, "regenerated"))
 	got, err := os.ReadFile(ignored)
@@ -507,7 +507,7 @@ func TestFsWriteFileOverwritesAnIgnoredNewerStamp(t *testing.T) {
 }
 
 func TestFsWriteFileStillRefusesATrackedNewerStamp(t *testing.T) {
-	_, tracked := gitRepoWithIgnoredExport(t)
+	_, tracked := gitRepositoryWithIgnoredExport(t)
 
 	err := FsWriteFile(context.Background(), tracked, "rendered by an older build")
 	require.Error(t, err)
@@ -515,7 +515,7 @@ func TestFsWriteFileStillRefusesATrackedNewerStamp(t *testing.T) {
 }
 
 func TestFsWriteFileRefusesWhenTheVCSCannotAnswer(t *testing.T) {
-	ignored, _ := gitRepoWithIgnoredExport(t)
+	ignored, _ := gitRepositoryWithIgnoredExport(t)
 	t.Setenv("MAGUS_VCS_NAME", "no-such-vcs")
 
 	err := FsWriteFile(context.Background(), ignored, "rendered by an older build")
@@ -602,7 +602,7 @@ func TestFsReadFile(t *testing.T) {
 	assert.Equal(t, "payload", got)
 
 	// A relative path resolves against the context cwd, not the process cwd.
-	got, err = FsReadFile(WithCwd(context.Background(), dir), "f.txt")
+	got, err = FsReadFile(WithCurrentWorkingDirectory(context.Background(), dir), "f.txt")
 	require.NoError(t, err)
 	assert.Equal(t, "payload", got)
 
@@ -620,7 +620,7 @@ func TestFsWalk(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "b.txt"), []byte("b"), 0o644))
 
-	ctx := WithCwd(context.Background(), dir)
+	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
 	cb, v := recordVisits(t, false)
 	require.NoError(t, FsWalk(ctx, ".", cb))
@@ -640,7 +640,7 @@ func TestFsWalkStopsEarly(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "b.txt"), []byte("b"), 0o644))
 
 	cb, v := recordVisits(t, true)
-	require.NoError(t, FsWalk(WithCwd(context.Background(), dir), ".", cb))
+	require.NoError(t, FsWalk(WithCurrentWorkingDirectory(context.Background(), dir), ".", cb))
 	assert.Len(t, v.seen, 1, "the first truthy answer ends the walk")
 }
 

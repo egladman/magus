@@ -30,7 +30,7 @@ func TestCtxAttrHandlerInjectsDir(t *testing.T) {
 
 	t.Run("injects ctx cwd", func(t *testing.T) {
 		var buf bytes.Buffer
-		ctx := std.WithCwd(context.Background(), "/ws/api")
+		ctx := std.WithCurrentWorkingDirectory(context.Background(), "/ws/api")
 		newLogger(&buf).InfoContext(ctx, "build")
 		if got := buf.String(); !strings.Contains(got, `dir=/ws/api`) {
 			t.Fatalf("expected dir attr, got: %s", got)
@@ -39,7 +39,7 @@ func TestCtxAttrHandlerInjectsDir(t *testing.T) {
 
 	t.Run("explicit dir wins", func(t *testing.T) {
 		var buf bytes.Buffer
-		ctx := std.WithCwd(context.Background(), "/ws/api")
+		ctx := std.WithCurrentWorkingDirectory(context.Background(), "/ws/api")
 		newLogger(&buf).InfoContext(ctx, "exec", "dir", "/ws/api/sub")
 		got := buf.String()
 		if !strings.Contains(got, `dir=/ws/api/sub`) {
@@ -63,7 +63,7 @@ func TestCtxAttrHandlerInjectsDir(t *testing.T) {
 // each default handler the CLI installs: pretty leads the message with it, as
 // the tag in the message text used to, and text keeps it an attribute.
 func TestDirHandlerRendersComponentByFormat(t *testing.T) {
-	ctx := std.WithCwd(context.Background(), "/ws/api")
+	ctx := std.WithCurrentWorkingDirectory(context.Background(), "/ws/api")
 
 	var pretty bytes.Buffer
 	slog.New(dirHandler{cache.NewPrettyHandler(&pretty, slog.LevelInfo)}).

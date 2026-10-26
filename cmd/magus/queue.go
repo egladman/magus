@@ -50,7 +50,7 @@ type queueEnv struct {
 	stderr io.Writer
 }
 
-func queueCmd(ctx context.Context, root string, args []string) error {
+func queueCommand(ctx context.Context, root string, args []string) error {
 	return runQueue(ctx, root, args, os.Stdin, os.Stdout, os.Stderr)
 }
 
@@ -180,12 +180,12 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 		flags F
 		set   *flag.FlagSet
 	)
-	got, err := cmdParse("queue "+verb, args, func(fs *flag.FlagSet) {
+	got, err := commandParse("queue "+verb, args, func(fs *flag.FlagSet) {
 		set, flags = fs, bind(fs)
 		fs.SetOutput(e.stderr)
 		fs.Usage = func() {
 			// nodisplayflags: this set only prints the verb's own flags in its usage; the
-			// set that parses is cmdParse's, which binds them.
+			// set that parses is commandParse's, which binds them.
 			own := flag.NewFlagSet("queue "+verb, flag.ContinueOnError)
 			own.SetOutput(e.stderr)
 			bind(own)

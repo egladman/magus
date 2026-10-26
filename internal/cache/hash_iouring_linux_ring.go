@@ -81,9 +81,9 @@ type CQE struct {
 	Result   int32  // bytes read on success, negated errno on failure
 }
 
-// readErr returns nil if the read completed exactly wantLen bytes,
+// readError returns nil if the read completed exactly wantLen bytes,
 // a syscall.Errno for a kernel error, or an error for a short read.
-func (c CQE) readErr(wantLen int) error {
+func (c CQE) readError(wantLen int) error {
 	if c.Result < 0 {
 		return syscall.Errno(-c.Result)
 	}

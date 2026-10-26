@@ -16,7 +16,7 @@ import (
 // worktreeStore is a job store over a fresh git repository, and that repository.
 func worktreeStore(t *testing.T) (*Store, Location, *testkit.Repo) {
 	t.Helper()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	loc := Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()}
 	return NewStore(loc), loc, repo
 }
@@ -368,11 +368,11 @@ func TestBuildInputsAreTheChangedPathsALinkedPackageReaches(t *testing.T) {
 	}
 }
 
-// goModuleRepo is a git checkout holding a Go module whose ./cmd/magus links lib, beside a
+// goModuleRepository is a git checkout holding a Go module whose ./cmd/magus links lib, beside a
 // package nothing links and a docs file.
-func goModuleRepo(t *testing.T) *testkit.Repo {
+func goModuleRepository(t *testing.T) *testkit.Repo {
 	t.Helper()
-	return testkit.NewRepo(t, map[string]string{
+	return testkit.NewRepository(t, map[string]string{
 		"go.mod":            "module example.com/m\n\ngo 1.26\n",
 		"cmd/magus/main.go": "package main\n\nimport \"example.com/m/lib\"\n\nfunc main() { lib.Run() }\n",
 		"lib/lib.go":        "package lib\n\nfunc Run() {}\n",
@@ -397,7 +397,7 @@ func TestForkWorktreePlacesABinaryWhoseBuildInputsMatchTheBase(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			repo := goModuleRepo(t)
+			repo := goModuleRepository(t)
 			s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
 			built := repo.Head()
 			later := repo.Commit(name, tc.files)
@@ -422,7 +422,7 @@ func TestForkWorktreePlacesABinaryWhoseBuildInputsMatchTheBase(t *testing.T) {
 // the job: built before the checkpoint's Go build inputs, it names the bootstrap.
 func TestLandingBootstrapNamesTheBuildAStaleMagusNeeds(t *testing.T) {
 	t.Parallel()
-	repo := goModuleRepo(t)
+	repo := goModuleRepository(t)
 	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
 	built := repo.Head()
 	docs := repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
@@ -456,7 +456,7 @@ func TestCheckoutBootstrapNamesTheScript(t *testing.T) {
 
 func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
 	t.Parallel()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	built := repo.Head()
 	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
 	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})

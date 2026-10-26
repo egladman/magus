@@ -12,7 +12,7 @@ import (
 func TestSnapshotFromContext(t *testing.T) {
 	t.Parallel()
 
-	readErr := errors.New("jobs.jsonl line 1: unexpected end of JSON input")
+	readError := errors.New("jobs.jsonl line 1: unexpected end of JSON input")
 	row := func() types.Job {
 		return types.Job{ID: "orchestrator/guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	}
@@ -24,7 +24,7 @@ func TestSnapshotFromContext(t *testing.T) {
 	}{
 		{"nothing pinned", nil, Snapshot{}, false},
 		{"rows", &Snapshot{Rows: []types.Job{row()}}, Snapshot{Rows: []types.Job{row()}}, true},
-		{"an unreadable store", &Snapshot{Err: readErr}, Snapshot{Err: readErr}, true},
+		{"an unreadable store", &Snapshot{Err: readError}, Snapshot{Err: readError}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

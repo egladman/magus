@@ -90,7 +90,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 		paths = append(paths, p.Path)
 	}
 	// The CLI and the server stamp invocation ancestry at their own entry points; a
-	// LIBRARY caller (a Go test driving magus in-process) has none, so reentrantErr
+	// LIBRARY caller (a Go test driving magus in-process) has none, so reentrantError
 	// could never fire for it and a re-entrant acquire hung instead of reporting
 	// MGS3007. The env var is already in this process; read it here so the third
 	// entry point is covered too, and only when nothing upstream stamped one.
@@ -338,7 +338,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *pro
 	return l
 }
 
-// reentrantErr returns the MGS3007 diagnostic when the process holding projectPath's lock
+// reentrantError returns the MGS3007 diagnostic when the process holding projectPath's lock
 // is running one of THIS invocation's ancestors, and nil for every other contention.
 //
 // The deadlock a plain wait cannot survive: a target running magus against a project its
@@ -349,7 +349,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *pro
 // Best-effort by design: no owner record, or an ancestry that never reached this process,
 // yields nil and the contention is judged like any other. Over-detecting would refuse a
 // legitimate concurrent run.
-func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) error {
+func (l *projectLocker) reentrantError(ctx context.Context, projectPath string) error {
 	rec := l.readOwner(projectPath)
 	if !types.HasInvocationAncestor(ctx, rec.PID, rec.Inv) {
 		return nil
@@ -467,7 +467,7 @@ func (l *projectLocker) takeLocal(ctx context.Context, projectPath string, local
 	if local.tryTake() {
 		return nil
 	}
-	if err := l.reentrantErr(ctx, projectPath); err != nil {
+	if err := l.reentrantError(ctx, projectPath); err != nil {
 		return err
 	}
 	holder, superseding := l.supersedes(projectPath)
@@ -488,7 +488,7 @@ func (l *projectLocker) takeLocal(ctx context.Context, projectPath string, local
 func (l *projectLocker) contend(ctx context.Context, projectPath string, fl *flock.Flock) (bool, error) {
 	// A lock held by one of this invocation's OWN ancestors can never be released,
 	// because the ancestor is blocked waiting on this process to exit.
-	if err := l.reentrantErr(ctx, projectPath); err != nil {
+	if err := l.reentrantError(ctx, projectPath); err != nil {
 		return false, err
 	}
 	// A later gate does not queue behind an earlier one on the same tree: the earlier
@@ -774,7 +774,7 @@ func (l *projectLocker) yieldPath(projectPath string) string {
 // them is superseded, because a supersede that cannot prove it is the later run is a
 // coin toss.
 //
-// An ancestor holding the lock never reaches here: reentrantErr answers that one first,
+// An ancestor holding the lock never reaches here: reentrantError answers that one first,
 // and MGS3007 stays the more specific diagnosis.
 func (l *projectLocker) supersedes(projectPath string) (processRecord, bool) {
 	if !l.gate || l.root == "" {

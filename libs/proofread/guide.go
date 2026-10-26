@@ -277,7 +277,7 @@ func condescension(in input) []Finding {
 
 var (
 	// negations before "easy" or "easily" turn a promise into a warning:
-	// "cannot easily audit". The "t" is what prevWord leaves of "isn't".
+	// "cannot easily audit". The "t" is what previousWord leaves of "isn't".
 	negations = wordSet("not", "cannot", "never", "no", "hardly", "t")
 
 	// easyMistake follows an "easy" that warns rather than reassures: "an order
@@ -298,7 +298,7 @@ func condescensionExempt(text string, at []int) bool {
 	case "just":
 		return !imperatives[strings.ToLower(firstWord(strings.TrimLeft(text[at[1]:], " ")))]
 	case "easy", "easily":
-		return negations[prevWord(text, at[0])] || easyMistake.MatchString(text[at[1]:])
+		return negations[previousWord(text, at[0])] || easyMistake.MatchString(text[at[1]:])
 	case "obviously":
 		return firstPerson.MatchString(sentenceBefore(text, at[0])) ||
 			firstWord(strings.TrimLeft(text[at[1]:], " ")) == "I"

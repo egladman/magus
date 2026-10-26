@@ -801,13 +801,13 @@ var insecureRemoteOverride = ward.Override{
 	Records:  "stays in the committed config, where every machine that trusts this cache reads it",
 }
 
-// remoteCacheSigningOpts turns the declared trust set (base64 public keys) plus the
+// remoteCacheSigningOptions turns the declared trust set (base64 public keys) plus the
 // signing key (signingSeedB64, read from signingKeyEnv; empty for none) into cache options. A wired remote backend must declare a non-empty
 // trust set, so a shared cache never comes up unverified. The exception is insecure, the
 // explicit opt-out that accepts and produces unsigned artifacts (no trust set, no signing
 // key) for trusted single-repo CI or backend validation. That opt-out has to say why; see
 // [ward.RequireReason].
-func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason, signingSeedB64 string) ([]cache.Option, error) {
+func remoteCacheSigningOptions(trustedB64 []string, insecure bool, insecureReason, signingSeedB64 string) ([]cache.Option, error) {
 	if insecure {
 		if err := ward.RequireReason(insecureRemoteOverride, true, insecureReason); err != nil {
 			return nil, fmt.Errorf("magus: %w", err)
@@ -919,7 +919,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 			m.cacheBackend.Name(), name)
 	}
 	if name != "" || m.cacheBackend != nil {
-		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason, m.env(signingKeyEnv))
+		trusted, sErr := remoteCacheSigningOptions(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason, m.env(signingKeyEnv))
 		if sErr != nil {
 			shutdownTel()
 			return nil, sErr
@@ -2365,13 +2365,13 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	// own definition, so it decides what the name means there.
 	if only := magusfileOverride(p, resolved, target); only >= 0 {
 		if err := fn(ctx, resolved[only]); err != nil {
-			return spellErr(p, target, types.SpellFailure{Spell: resolved[only].Name(), Err: err})
+			return spellError(p, target, types.SpellFailure{Spell: resolved[only].Name(), Err: err})
 		}
 		return nil
 	}
 	if len(resolved) == 1 {
 		if err := fn(ctx, resolved[0]); err != nil {
-			return spellErr(p, target, types.SpellFailure{Spell: resolved[0].Name(), Err: err})
+			return spellError(p, target, types.SpellFailure{Spell: resolved[0].Name(), Err: err})
 		}
 		return nil
 	}
@@ -2391,17 +2391,17 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 			wg.Add(1)
 			go func(i int, s *spells.Spell) {
 				defer wg.Done()
-				spellCtx := ctx
+				spellContext := ctx
 				if bounded {
 					held, release, err := lim.Admit(ctx, s.Name()+" spell")
 					if err != nil {
 						results[i] = result{name: s.Name(), err: err}
 						return
 					}
-					spellCtx = held
+					spellContext = held
 					defer release()
 				}
-				results[i] = result{name: s.Name(), err: fn(spellCtx, s)}
+				results[i] = result{name: s.Name(), err: fn(spellContext, s)}
 			}(i, s)
 		}
 		wg.Wait()
@@ -2423,14 +2423,14 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	if len(failed) == 0 {
 		return nil
 	}
-	return spellErr(p, target, failed...)
+	return spellError(p, target, failed...)
 }
 
-// spellErr builds the aggregate error for a target's spell failures. It exists so
+// spellError builds the aggregate error for a target's spell failures. It exists so
 // every construction site carries the project's DISPLAY label alongside its path:
 // the path of a root project is ".", and a message built from it read "magus lint
 // .:", where the dot lands as punctuation rather than as the project it names.
-func spellErr(p *types.Project, target string, failed ...types.SpellFailure) *types.SpellErrors {
+func spellError(p *types.Project, target string, failed ...types.SpellFailure) *types.SpellErrors {
 	return &types.SpellErrors{
 		Project:      p.Path,
 		ProjectLabel: types.ProjectDisplayName(p.Path, p.Name, p.Dir),
@@ -2447,7 +2447,7 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 			continue
 		}
 		if err := fn(ctx, s); err != nil {
-			return spellErr(p, target, types.SpellFailure{Spell: s.Name(), Err: err})
+			return spellError(p, target, types.SpellFailure{Spell: s.Name(), Err: err})
 		}
 		return nil
 	}

@@ -158,7 +158,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		Handler: func(hctx context.Context, args []string) error {
 			root := proc.RootFromContext(hctx)
 			if root == "" {
-				cwd := proc.CwdFromContext(hctx)
+				cwd := proc.CurrentWorkingDirectoryFromContext(hctx)
 				r, rerr := workspace.FindRoot(cwd)
 				if rerr != nil {
 					return fmt.Errorf("locate workspace root from %s: %w", cwd, rerr)

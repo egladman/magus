@@ -68,7 +68,7 @@ func TestConformanceFindsARenameLeftoverInTypeScript(t *testing.T) {
 }
 
 func TestConformanceSilentOnRenamesItCannotTellApart(t *testing.T) {
-	longer := referencedFrom(ctxReader("internal/trail", "EntryPointFromContext"), "internal/cmd/run.go")
+	longer := referencedFrom(contextReader("internal/trail", "EntryPointFromContext"), "internal/cmd/run.go")
 	oneWord := referencedFrom(goFunc("internal/queue", "Apply", "func Apply(p Plan) error"), "internal/cmd/run.go")
 	shared := referencedFrom(goFunc("internal/vcs", "ReadFileAt", "func ReadFileAt(path string) string"), "internal/cmd/run.go")
 	// Another casing of the old name is still a live symbol, which a mention may mean.

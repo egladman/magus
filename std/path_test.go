@@ -34,7 +34,7 @@ func TestPathIsAbs(t *testing.T) {
 
 func TestPathAbsUsesContextCwd(t *testing.T) {
 	dir := t.TempDir()
-	ctx := WithCwd(context.Background(), dir)
+	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
 	got, err := PathAbs(ctx, "x")
 	require.NoError(t, err)

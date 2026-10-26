@@ -29,7 +29,7 @@ func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 			return vm.Null, fmt.Errorf(`magus\harness.provider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
-		if !ok || !nv.IsStr() {
+		if !ok || !nv.IsString() {
 			return vm.Null, fmt.Errorf(`magus\harness.provider: argument is not a spell handle (no name)`)
 		}
 		name := strings.TrimSpace(nv.AsString())
@@ -39,7 +39,7 @@ func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.AddHarness(name)
 		}
-		return vm.StrValue(name), nil
+		return vm.StringValue(name), nil
 	}))
 	return harness
 }

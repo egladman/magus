@@ -377,7 +377,7 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not in PATH")
 	}
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	dir := repo.Root()
 	t.Chdir(dir)
 	repo.Git("config", "user.name", "A")

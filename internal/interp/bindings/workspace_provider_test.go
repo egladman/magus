@@ -21,7 +21,7 @@ func TestBuildWorkspace(t *testing.T) {
 		workspaceMap := buildWorkspace(workspace.ContextWithRegistry(context.Background(), reg), nil)
 
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("nx"))
+		handle.MapSet("name", vm.StringValue("nx"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), handle))
 		assert.Equal(t, []string{"nx"}, reg.Providers())
 	})
@@ -33,7 +33,7 @@ func TestBuildWorkspace(t *testing.T) {
 
 		for _, name := range []string{"nx", "cargo", "nx"} {
 			handle := vm.NewMap()
-			handle.MapSet("name", vm.StrValue(name))
+			handle.MapSet("name", vm.StringValue(name))
 			require.NoError(t, callVoidDirect(t, provider, handle))
 		}
 		assert.Equal(t, []string{"nx", "cargo"}, reg.Providers(),
@@ -43,13 +43,13 @@ func TestBuildWorkspace(t *testing.T) {
 	t.Run("no registry in context is a silent no-op", func(t *testing.T) {
 		workspaceMap := buildWorkspace(context.Background(), nil)
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("nx"))
+		handle.MapSet("name", vm.StringValue("nx"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), handle))
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
 		workspaceMap := buildWorkspace(context.Background(), nil)
-		err := callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), vm.StrValue("nx"))
+		err := callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), vm.StringValue("nx"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imported spell handle")
 	})

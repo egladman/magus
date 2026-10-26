@@ -27,17 +27,17 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	enums := ffi.SessionEnums(ctx, sess, "magus")
 	m.MapSet("cmd", vm.DirectValue("magus.cmd", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		sub := ffi.Str(bzArgs, 0)
-		args := ffi.StrSlice(bzArgs, 1)
+		sub := ffi.String(bzArgs, 0)
+		args := ffi.StringSlice(bzArgs, 1)
 		opts := ffi.AnyMap(bzArgs, 2)
-		ret0, err := std.MagusCmd(ctx, sub, args, opts)
+		ret0, err := std.MagusCommand(ctx, sub, args, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("affected", vm.DirectValue("magus.affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := ffi.Str(bzArgs, 0)
+		base := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusAffected(ctx, base)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -52,16 +52,16 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectGraphView(ret0), nil
 	}))
 	m.MapSet("where", vm.DirectValue("magus.where", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		dir := ffi.Str(bzArgs, 0)
+		dir := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusWhere(ctx, dir)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("raise", vm.DirectValue("magus.raise", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		code := ffi.Str(bzArgs, 0)
-		message := ffi.Str(bzArgs, 1)
+		code := ffi.String(bzArgs, 0)
+		message := ffi.String(bzArgs, 1)
 		opts := ffi.AnyMap(bzArgs, 2)
 		if err := std.MagusRaise(ctx, code, message, opts); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -69,7 +69,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	m.MapSet("run", vm.DirectValue("magus.run", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := ffi.StrSlice(bzArgs, 0)
+		args := ffi.StringSlice(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusRun(ctx, args, opts)
 		if err != nil {
@@ -86,7 +86,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectInsightReport(ret0, enums), nil
 	}))
 	m.MapSet("query", vm.DirectValue("magus.query", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		query := ffi.Str(bzArgs, 0)
+		query := ffi.String(bzArgs, 0)
 		opts, err := decodeKnowledgeQueryOptions("magus\\query", ffi.AnyMap(bzArgs, 1))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -98,7 +98,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectKnowledgeQueryOutput(ret0, enums), nil
 	}))
 	m.MapSet("explain", vm.DirectValue("magus.explain", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		node := ffi.Str(bzArgs, 0)
+		node := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusExplain(ctx, node)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -106,8 +106,8 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectKnowledgeExplainOutput(ret0, enums), nil
 	}))
 	m.MapSet("path", vm.DirectValue("magus.path", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		node := ffi.Str(bzArgs, 0)
-		to := ffi.Str(bzArgs, 1)
+		node := ffi.String(bzArgs, 0)
+		to := ffi.String(bzArgs, 1)
 		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.MagusPath(ctx, node, to, opts)
 		if err != nil {
@@ -116,7 +116,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectKnowledgePathOutput(ret0), nil
 	}))
 	m.MapSet("refs", vm.DirectValue("magus.refs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		symbol := ffi.Str(bzArgs, 0)
+		symbol := ffi.String(bzArgs, 0)
 		opts, err := decodeKnowledgeRefsOptions("magus\\refs", ffi.AnyMap(bzArgs, 1))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -128,7 +128,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectKnowledgeRefsOutput(ret0, enums), nil
 	}))
 	m.MapSet("stats", vm.DirectValue("magus.stats", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		kind := ffi.Str(bzArgs, 0)
+		kind := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusStats(ctx, kind)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -171,7 +171,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.AnyMapVal(ret0), nil
 	}))
 	m.MapSet("dir", vm.DirectValue("magus.dir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusDir(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -179,7 +179,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectDir(ret0), nil
 	}))
 	m.MapSet("dirs", vm.DirectValue("magus.dirs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		glob := ffi.Str(bzArgs, 0)
+		glob := ffi.String(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusDirs(ctx, glob, opts)
 		if err != nil {
@@ -188,7 +188,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.ObjectSlice(ret0, ObjectDir), nil
 	}))
 	m.MapSet("layer", vm.DirectValue("magus.layer", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := ffi.Str(bzArgs, 0)
+		name := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusLayer(ctx, name)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -196,7 +196,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectLayer(ret0), nil
 	}))
 	m.MapSet("neighborhood", vm.DirectValue("magus.neighborhood", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		focus := ffi.Str(bzArgs, 0)
+		focus := ffi.String(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusNeighborhood(ctx, focus, opts)
 		if err != nil {
@@ -205,7 +205,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectKnowledgeNeighborhoodOutput(ret0, enums), nil
 	}))
 	m.MapSet("output", vm.DirectValue("magus.output", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ref := ffi.Str(bzArgs, 0)
+		ref := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusOutput(ctx, ref)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -213,7 +213,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectOutputRecord(ret0), nil
 	}))
 	m.MapSet("impact", vm.DirectValue("magus.impact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := ffi.Str(bzArgs, 0)
+		base := ffi.String(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusImpact(ctx, base, opts)
 		if err != nil {
@@ -230,7 +230,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectDiff(ret0, enums), nil
 	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := ffi.StrSlice(bzArgs, 0)
+		args := ffi.StringSlice(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusDoctor(ctx, args, opts)
 		if err != nil {
@@ -239,7 +239,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectDoctorReport(ret0, enums), nil
 	}))
 	m.MapSet("clean", vm.DirectValue("magus.clean", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := ffi.StrSlice(bzArgs, 0)
+		args := ffi.StringSlice(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusClean(ctx, args, opts)
 		if err != nil {
@@ -248,7 +248,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectCleanReport(ret0), nil
 	}))
 	m.MapSet("attention", vm.DirectValue("magus.attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := ffi.StrSlice(bzArgs, 0)
+		args := ffi.StringSlice(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.MagusAttention(ctx, args, opts)
 		if err != nil {
@@ -257,8 +257,8 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.AnyMapVal(ret0), nil
 	}))
 	m.MapSet("diagnoseDrift", vm.DirectValue("magus.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		outputs := ffi.StrSlice(bzArgs, 0)
-		inputs := ffi.StrSlice(bzArgs, 1)
+		outputs := ffi.StringSlice(bzArgs, 0)
+		inputs := ffi.StringSlice(bzArgs, 1)
 		ret0, err := std.MagusDiagnoseDrift(ctx, outputs, inputs)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -266,14 +266,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectDriftResult(ret0), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		project_path := ffi.Str(bzArgs, 0)
+		project_path := ffi.String(bzArgs, 0)
 		if err := std.MagusBustCache(ctx, project_path); err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("hasCharm", vm.DirectValue("magus.hasCharm", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := ffi.Str(bzArgs, 0)
+		name := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusHasCharm(ctx, name)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

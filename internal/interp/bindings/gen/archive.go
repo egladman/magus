@@ -20,8 +20,8 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("uncompress", vm.DirectValue("archive.uncompress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := ffi.Str(bzArgs, 0)
-		dest := ffi.Str(bzArgs, 1)
+		src := ffi.String(bzArgs, 0)
+		dest := ffi.String(bzArgs, 1)
 		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveUncompress(ctx, src, dest, opts)
 		if err != nil {
@@ -30,8 +30,8 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectUncompressResult(ret0), nil
 	}))
 	m.MapSet("compress", vm.DirectValue("archive.compress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := ffi.Str(bzArgs, 0)
-		dest := ffi.Str(bzArgs, 1)
+		src := ffi.String(bzArgs, 0)
+		dest := ffi.String(bzArgs, 1)
 		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveCompress(ctx, src, dest, opts)
 		if err != nil {
@@ -40,7 +40,7 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectCompressResult(ret0), nil
 	}))
 	m.MapSet("list", vm.DirectValue("archive.list", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := ffi.Str(bzArgs, 0)
+		src := ffi.String(bzArgs, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := std.ArchiveList(ctx, src, opts)
 		if err != nil {
@@ -49,14 +49,14 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.ObjectSlice(ret0, ObjectArchiveEntry), nil
 	}))
 	m.MapSet("readFile", vm.DirectValue("archive.readFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		src := ffi.Str(bzArgs, 0)
-		name := ffi.Str(bzArgs, 1)
+		src := ffi.String(bzArgs, 0)
+		name := ffi.String(bzArgs, 1)
 		opts := ffi.AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveReadFile(ctx, src, name, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

@@ -28,7 +28,7 @@ func TestIsFiberBoolIsFalse(t *testing.T) {
 }
 
 func TestIsFiberStrIsFalse(t *testing.T) {
-	assert.False(t, IsFiber(StrValue("fiber")), "IsFiber(StrValue('fiber'))")
+	assert.False(t, IsFiber(StringValue("fiber")), "IsFiber(StrValue('fiber'))")
 }
 
 func TestIsFiberListIsFalse(t *testing.T) {
@@ -124,7 +124,7 @@ func invokeChunk(recv Value, name string, lines bool) *Chunk {
 	c.Emit(OpLoadConst, c.AddConst(recv), 0)
 	c.CurLine = 3
 	c.Emit(OpLoadConst, c.AddConst(IntValue(1)), 0)
-	c.Emit(OpInvoke, c.AddConst(StrValue(name)), 1)
+	c.Emit(OpInvoke, c.AddConst(StringValue(name)), 1)
 	c.Emit(OpReturn, 0, 0)
 	return c
 }
@@ -140,7 +140,7 @@ func TestUnknownMethodCarriesItsLine(t *testing.T) {
 	list := ListValue([]Value{IntValue(1)})
 
 	assert.EqualError(t, run(invokeChunk(list, "push", true)), "buzz: probe.buzz:3: unknown method push on list")
-	assert.EqualError(t, run(invokeChunk(StrValue("abc"), "toUpperCase", true)), "buzz: probe.buzz:3: unknown method toUpperCase on str")
+	assert.EqualError(t, run(invokeChunk(StringValue("abc"), "toUpperCase", true)), "buzz: probe.buzz:3: unknown method toUpperCase on str")
 
 	noFile := invokeChunk(list, "push", true)
 	noFile.SourceFile = ""

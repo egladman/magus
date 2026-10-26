@@ -57,12 +57,12 @@ func RegisterPipe(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("exportTo", vm.DirectValue("pipe.exportTo", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		artifact := ffi.AnyMap(bzArgs, 0)
-		dest := ffi.Str(bzArgs, 1)
+		dest := ffi.String(bzArgs, 1)
 		ret0, err := std.PipeExport(ctx, artifact, dest)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("history", vm.DirectValue("pipe.history", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		artifact := ffi.AnyMap(bzArgs, 0)

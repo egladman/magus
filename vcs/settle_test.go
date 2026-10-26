@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// settleRepo is a repository whose main branch changed f and whose side branch changed
+// settleRepository is a repository whose main branch changed f and whose side branch changed
 // g, so a merge of side changes exactly g against main.
-func settleRepo(t *testing.T) string {
+func settleRepository(t *testing.T) string {
 	t.Helper()
-	dir := testkit.NewRepo(t, map[string]string{"f": "base\n", "g": "base\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{"f": "base\n", "g": "base\n"}).Root()
 	gitRun(t, dir, "checkout", "-q", "-b", "side")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "g"), []byte("side\n"), 0o644))
 	gitRun(t, dir, "commit", "-q", "-am", "side")
@@ -39,7 +39,7 @@ func pendingMergeOp(t *testing.T, dir, indexFile string) HookOperation {
 // TestHookStageHonorsTheOperationsIndex: `git commit -a` builds the commit from a
 // temporary index, and the hook reads and stages through that one.
 func TestHookStageHonorsTheOperationsIndex(t *testing.T) {
-	dir := settleRepo(t)
+	dir := settleRepository(t)
 	ctx := t.Context()
 	gitRun(t, dir, "merge", "-q", "--no-commit", "--no-ff", "side")
 	// A second index, as git commit -a would hand the hook, with h staged in it alone.
@@ -68,7 +68,7 @@ func TestHookStageHonorsTheOperationsIndex(t *testing.T) {
 // read run while the person's git may hold index.lock. A status that refreshes the index
 // takes that lock, so reads must leave the index exactly as git left it.
 func TestSettleReadsWriteNoIndex(t *testing.T) {
-	dir := settleRepo(t)
+	dir := settleRepository(t)
 	ctx := t.Context()
 	gitRun(t, dir, "merge", "-q", "--no-commit", "--no-ff", "side")
 	// Same content, new stat data: a refreshing status would rewrite this entry.
@@ -95,7 +95,7 @@ func TestSettleReadsWriteNoIndex(t *testing.T) {
 // that follows writes other outputs, and staging those must not name the deleted path,
 // which git add refuses once neither the index nor the tree holds it.
 func TestHookStageAfterAMergeThatDeletesAFile(t *testing.T) {
-	dir := settleRepo(t)
+	dir := settleRepository(t)
 	ctx := t.Context()
 	gitRun(t, dir, "checkout", "-q", "-b", "drop")
 	gitRun(t, dir, "rm", "-q", "f")

@@ -221,7 +221,7 @@ func TestTreeWalkDigestMovesWithTheFilesTheScansRead(t *testing.T) {
 
 // One walk serves every scan, and the first scan's ignore query answers for all of them.
 func TestTreeWalkScansShareOneWalkAndOneIgnoreQuery(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	root := r.Root()
 	write := r.Write
 	write(".gitignore", "dist/\n*.out.md\n")

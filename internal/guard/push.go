@@ -531,13 +531,13 @@ func (w *callWalk) stmt(s *syntax.Stmt, at shellDir) shellDir {
 		return at
 	}
 	if s.Background {
-		w.cmd(s.Cmd, at)
+		w.command(s.Cmd, at)
 		return at
 	}
-	return w.cmd(s.Cmd, at)
+	return w.command(s.Cmd, at)
 }
 
-func (w *callWalk) cmd(c syntax.Command, at shellDir) shellDir {
+func (w *callWalk) command(c syntax.Command, at shellDir) shellDir {
 	switch c := c.(type) {
 	case *syntax.CallExpr:
 		return w.call(c, at)

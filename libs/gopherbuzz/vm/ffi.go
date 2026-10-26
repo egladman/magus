@@ -469,8 +469,8 @@ func builtinZdef(_ context.Context, args []Value) (Value, error) {
 		return Null, fmt.Errorf("buzz: zdef() FFI is not supported on this platform " +
 			"(no FFI provider registered); see buzz.RegisterFFIProvider")
 	}
-	libName := args[0].asStr().V
-	cdecl := args[1].asStr().V
+	libName := args[0].asString().V
+	cdecl := args[1].asString().V
 
 	// Two declaration dialects, one type model: upstream-Buzz Zig
 	// declarations (fn add(a: c_int) c_int;) and C prototypes. Sniffed per

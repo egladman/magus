@@ -59,7 +59,7 @@ func replies(texts ...string) []any {
 	return out
 }
 
-func runRoundCmd(t *testing.T, want int, args ...string) string {
+func runRoundCommand(t *testing.T, want int, args ...string) string {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
@@ -109,7 +109,7 @@ func TestRoundSampleDrawsTheSameRoundFromTheSameSeed(t *testing.T) {
 	writeJSONL(t, beta, replies("Indexing drops from 9s to 3s.", "The sweep is 2x faster.", "Startup falls by 50ms.")...)
 
 	draw := func(dir string, seed int) []candidate {
-		runRoundCmd(t, 0, "sample", "-rules", "claim", "-seed", fmt.Sprint(seed), "-per-rule", "8", "-min-per-source", "4",
+		runRoundCommand(t, 0, "sample", "-rules", "claim", "-seed", fmt.Sprint(seed), "-per-rule", "8", "-min-per-source", "4",
 			"-round", "7", "-out", dir, alpha, beta)
 
 		return readCandidates(t, dir)
@@ -175,7 +175,7 @@ func TestRoundSampleExcludesWhatWasShownBefore(t *testing.T) {
 	writeJSONL(t, earlier, map[string]any{"id": "v0001", "context": "...in review. [[The cache warms in 40ms now.]] Ship it."})
 
 	dir := filepath.Join(tmp, "round8")
-	runRoundCmd(t, 0, "sample", "-rules", "claim", "-seed", "5", "-min-per-source", "0", "-exclude", earlier, "-out", dir, src)
+	runRoundCommand(t, 0, "sample", "-rules", "claim", "-seed", "5", "-min-per-source", "0", "-exclude", earlier, "-out", dir, src)
 
 	counts := readCounts(t, dir)
 	rc := counts.ByRule["claim"]
@@ -198,7 +198,7 @@ func TestRoundSampleExcludesWhatWasShownBefore(t *testing.T) {
 		}
 	}
 
-	out := runRoundCmd(t, exitError, "sample", "-rules", "claim", "-seed", "6", "-out", dir, src)
+	out := runRoundCommand(t, exitError, "sample", "-rules", "claim", "-seed", "6", "-out", dir, src)
 	if !strings.Contains(out, "a round is drawn once") {
 		t.Errorf("a second draw into %s: %s", dir, out)
 	}
@@ -222,7 +222,7 @@ func TestRoundSampleRefusesAnUnusableCall(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := runRoundCmd(t, exitError, append([]string{"sample"}, tt.args...)...)
+			out := runRoundCommand(t, exitError, append([]string{"sample"}, tt.args...)...)
 			if !strings.Contains(out, tt.want) {
 				t.Errorf("output %q does not name %q", out, tt.want)
 			}
@@ -336,7 +336,7 @@ func TestRoundScoreTalliesAdjudicatedLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	table := runRoundCmd(t, 0, "score", "-dir", dir, "-replay")
+	table := runRoundCommand(t, 0, "score", "-dir", dir, "-replay")
 
 	var rec scoresRecord
 	if err := readJSONFile(filepath.Join(dir, scoresFile), &rec); err != nil {
@@ -384,7 +384,7 @@ func TestRoundScoreTalliesAdjudicatedLabels(t *testing.T) {
 	}
 
 	spot := func() []string {
-		runRoundCmd(t, 0, "score", "-dir", dir, "-replay")
+		runRoundCommand(t, 0, "score", "-dir", dir, "-replay")
 
 		var again scoresRecord
 		if err := readJSONFile(filepath.Join(dir, scoresFile), &again); err != nil {
@@ -416,7 +416,7 @@ func TestRoundScoreRefusesAnOpenOrUnfrozenRound(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "round9")
 	writeLabeledRound(t, dir, []labeled{{"s", "CORRECT", "WRONG", ""}, {"s", "CORRECT", "CORRECT", ""}})
 
-	if out := runRoundCmd(t, exitError, "score", "-dir", dir, "-replay"); !strings.Contains(out, "only once frozen") {
+	if out := runRoundCommand(t, exitError, "score", "-dir", dir, "-replay"); !strings.Contains(out, "only once frozen") {
 		t.Errorf("an unfrozen round: %s", out)
 	}
 
@@ -424,7 +424,7 @@ func TestRoundScoreRefusesAnOpenOrUnfrozenRound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if out := runRoundCmd(t, exitError, "score", "-dir", dir, "-replay"); !strings.Contains(out, "1 disagreements have no row") {
+	if out := runRoundCommand(t, exitError, "score", "-dir", dir, "-replay"); !strings.Contains(out, "1 disagreements have no row") {
 		t.Errorf("an unadjudicated disagreement: %s", out)
 	}
 }
@@ -447,7 +447,7 @@ func TestRoundScoreFailsAgreementOnAnUnnotedDisagreement(t *testing.T) {
 	}
 
 	score := func() *ruleScore {
-		runRoundCmd(t, 0, "score", "-dir", dir, "-replay")
+		runRoundCommand(t, 0, "score", "-dir", dir, "-replay")
 
 		var rec scoresRecord
 		if err := readJSONFile(filepath.Join(dir, scoresFile), &rec); err != nil {
@@ -521,19 +521,19 @@ func TestRoundFreezeSealsTheRuleCommit(t *testing.T) {
 	}
 
 	dir := filepath.Join(t.TempDir(), "round5")
-	runRoundCmd(t, 0, "sample", "-rules", "claim", "-seed", "3", "-out", dir, data)
+	runRoundCommand(t, 0, "sample", "-rules", "claim", "-seed", "3", "-out", dir, data)
 
 	// A dirty rule file refuses the freeze.
 	if err := os.WriteFile(ruleFile, []byte("package proofread\n\nvar x = 1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if out := runRoundCmd(t, exitError, "freeze", "-dir", dir, "-guideline", guideline); !strings.Contains(out, "not committed") {
+	if out := runRoundCommand(t, exitError, "freeze", "-dir", dir, "-guideline", guideline); !strings.Contains(out, "not committed") {
 		t.Errorf("a dirty freeze: %s", out)
 	}
 
 	git(t, "checkout", "--", ".")
-	runRoundCmd(t, 0, "freeze", "-dir", dir, "-guideline", guideline, "-gates", "alpha=0.9,source-firings=5")
+	runRoundCommand(t, 0, "freeze", "-dir", dir, "-guideline", guideline, "-gates", "alpha=0.9,source-firings=5")
 
 	fr, err := readFreeze(filepath.Join(dir, freezeFile))
 	if err != nil {
@@ -562,7 +562,7 @@ func TestRoundFreezeSealsTheRuleCommit(t *testing.T) {
 
 	writeJSONL(t, filepath.Join(dir, labelsAFile), rows...)
 	writeJSONL(t, filepath.Join(dir, labelsBFile), rows...)
-	runRoundCmd(t, 0, "score", "-dir", dir)
+	runRoundCommand(t, 0, "score", "-dir", dir)
 
 	// A committed rule change after the freeze voids the round.
 	if err := os.WriteFile(ruleFile, []byte("package proofread\n\nvar y = 2\n"), 0o600); err != nil {
@@ -571,11 +571,11 @@ func TestRoundFreezeSealsTheRuleCommit(t *testing.T) {
 
 	git(t, "commit", "-q", "-am", "tune the rule")
 
-	if out := runRoundCmd(t, exitError, "score", "-dir", dir); !strings.Contains(out, "is void") || !strings.Contains(out, "rule.go") {
+	if out := runRoundCommand(t, exitError, "score", "-dir", dir); !strings.Contains(out, "is void") || !strings.Contains(out, "rule.go") {
 		t.Errorf("a score after a rule change: %s", out)
 	}
 
-	runRoundCmd(t, 0, "score", "-dir", dir, "-replay")
+	runRoundCommand(t, 0, "score", "-dir", dir, "-replay")
 }
 
 // poolTestRound is a scored round as pooling reads it: each rule's n and
@@ -714,8 +714,8 @@ func TestRoundPoolReadsTwoFrozenRoundsAndWritesNothingBeside(t *testing.T) {
 		writeJSONL(t, data, replies(texts...)...)
 
 		dir := filepath.Join(t.TempDir(), fmt.Sprintf("round%d", n))
-		runRoundCmd(t, 0, "sample", "-rules", "claim", "-seed", "3", "-out", dir, source+"="+data)
-		runRoundCmd(t, 0, "freeze", "-dir", dir, "-guideline", guideline, "-gates", "deny-firings=10")
+		runRoundCommand(t, 0, "sample", "-rules", "claim", "-seed", "3", "-out", dir, source+"="+data)
+		runRoundCommand(t, 0, "freeze", "-dir", dir, "-guideline", guideline, "-gates", "deny-firings=10")
 
 		var rows []any
 
@@ -738,7 +738,7 @@ func TestRoundPoolReadsTwoFrozenRoundsAndWritesNothingBeside(t *testing.T) {
 	b := round(6, "beta", claims[6:], 1)
 
 	var pooled poolRecord
-	if err := json.Unmarshal([]byte(runRoundCmd(t, 0, "pool", "-dir", a, "-dir", b)), &pooled); err != nil {
+	if err := json.Unmarshal([]byte(runRoundCommand(t, 0, "pool", "-dir", a, "-dir", b)), &pooled); err != nil {
 		t.Fatal(err)
 	}
 
@@ -748,7 +748,7 @@ func TestRoundPoolReadsTwoFrozenRoundsAndWritesNothingBeside(t *testing.T) {
 	}
 
 	out := filepath.Join(t.TempDir(), "pool.json")
-	if table := runRoundCmd(t, 0, "pool", "-dir", a, "-dir", b, "-out", out); !strings.Contains(table, "pass") {
+	if table := runRoundCommand(t, 0, "pool", "-dir", a, "-dir", b, "-out", out); !strings.Contains(table, "pass") {
 		t.Errorf("table:\n%s", table)
 	}
 
@@ -758,15 +758,15 @@ func TestRoundPoolReadsTwoFrozenRoundsAndWritesNothingBeside(t *testing.T) {
 		}
 	}
 
-	if got := runRoundCmd(t, exitError, "pool", "-dir", a, "-dir", b, "-out", filepath.Join(a, "pool.json")); !strings.Contains(got, "inside the round directory") {
+	if got := runRoundCommand(t, exitError, "pool", "-dir", a, "-dir", b, "-out", filepath.Join(a, "pool.json")); !strings.Contains(got, "inside the round directory") {
 		t.Errorf("an -out inside a round: %s", got)
 	}
 
-	if got := runRoundCmd(t, exitError, "pool", "-dir", a); !strings.Contains(got, "twice") {
+	if got := runRoundCommand(t, exitError, "pool", "-dir", a); !strings.Contains(got, "twice") {
 		t.Errorf("one -dir: %s", got)
 	}
 
-	if got := runRoundCmd(t, exitError, "pool", "-dir", a, "-dir", a); !strings.Contains(got, "both draw from source alpha") {
+	if got := runRoundCommand(t, exitError, "pool", "-dir", a, "-dir", a); !strings.Contains(got, "both draw from source alpha") {
 		t.Errorf("the same round twice: %s", got)
 	}
 
@@ -777,7 +777,7 @@ func TestRoundPoolReadsTwoFrozenRoundsAndWritesNothingBeside(t *testing.T) {
 
 	git(t, "commit", "-q", "-am", "tune the rule")
 
-	if got := runRoundCmd(t, exitError, "pool", "-dir", a, "-dir", b); !strings.Contains(got, "is void") {
+	if got := runRoundCommand(t, exitError, "pool", "-dir", a, "-dir", b); !strings.Contains(got, "is void") {
 		t.Errorf("a pool after a rule change: %s", got)
 	}
 
@@ -786,7 +786,7 @@ func TestRoundPoolReadsTwoFrozenRoundsAndWritesNothingBeside(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := runRoundCmd(t, exitError, "pool", "-dir", b, "-dir", a); !strings.Contains(got, "only once frozen") {
+	if got := runRoundCommand(t, exitError, "pool", "-dir", b, "-dir", a); !strings.Contains(got, "only once frozen") {
 		t.Errorf("an unfrozen round: %s", got)
 	}
 }

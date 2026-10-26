@@ -102,9 +102,9 @@ func TestArgvCommands(t *testing.T) {
 }
 
 func TestVcsCmdStillRunsWhereProcExecIsRefused(t *testing.T) {
-	ctx := WithCwd(t.Context(), testkit.NewRepo(t, nil).Root())
+	ctx := WithCurrentWorkingDirectory(t.Context(), testkit.NewRepository(t, nil).Root())
 
-	res, err := VcsCmd(ctx, []string{"rev-parse", "--is-inside-work-tree"}, map[string]any{"quiet": true})
+	res, err := VcsCommand(ctx, []string{"rev-parse", "--is-inside-work-tree"}, map[string]any{"quiet": true})
 	require.NoError(t, err)
 	assert.Equal(t, "true", res.Stdout)
 }
@@ -113,13 +113,13 @@ func TestVcsCmdStillRunsWhereProcExecIsRefused(t *testing.T) {
 // environment is what keeps these rows out of the developer's own store.
 func TestVcsCmdIsStillLeaseGraded(t *testing.T) {
 	testkit.Isolate(t)
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: repo.Root()})
 	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 	refusal := errors.New("lease-vcs: refused")
 	withVCSLeaseGate(t, func(context.Context, types.Job, string, []string, string, []string) error { return refusal })
 
-	_, err = VcsCmd(types.WithJobLease(WithCwd(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, nil)
+	_, err = VcsCommand(types.WithJobLease(WithCurrentWorkingDirectory(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, nil)
 	assert.ErrorIs(t, err, refusal)
 }

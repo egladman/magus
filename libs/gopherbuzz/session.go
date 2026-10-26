@@ -446,7 +446,7 @@ type TestEntry struct {
 // registerTest is the session-bound implementation of the test-block registrar.
 // The compiler calls it once per test block with (name, bodyClosure).
 func (s *Session) registerTest(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
-	if len(args) != 2 || !args[0].IsStr() {
+	if len(args) != 2 || !args[0].IsString() {
 		return vmpackage.Null, fmt.Errorf("buzz: internal: malformed test registration")
 	}
 	s.tests = append(s.tests, TestEntry{Name: args[0].AsString(), Fn: args[1]})
@@ -477,12 +477,12 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 		// upstream: resume on a completed fiber returns null. If the fiber ended
 		// in an error, re-surface it rather than swallowing it (Err is nil for a
 		// clean completion, so this returns null, nil in that case).
-		return vmpackage.Null, fib.Err()
+		return vmpackage.Null, fib.Error()
 	case vmpackage.FiberRunning:
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resume a running fiber (recursive resume)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetCtx(ctx)
+	fibVM.SetContext(ctx)
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	result, err := fibVM.Exec()
@@ -493,7 +493,7 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 			return vmpackage.YieldValue(ys), nil
 		}
 		fib.SetStatus(vmpackage.FiberDone)
-		fib.SetErr(err) // cache so a later resume/resolve re-surfaces it
+		fib.SetError(err) // cache so a later resume/resolve re-surfaces it
 		return vmpackage.Null, err
 	}
 	fib.SetStatus(vmpackage.FiberDone)
@@ -517,12 +517,12 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 	case vmpackage.FiberDone:
 		// idempotent: return the cached return value, re-surfacing a cached error
 		// (Err is nil for a clean completion).
-		return fib.Return(), fib.Err()
+		return fib.Return(), fib.Error()
 	case vmpackage.FiberRunning:
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resolve a running fiber (recursive resolve)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetCtx(ctx)
+	fibVM.SetContext(ctx)
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	for {
@@ -531,7 +531,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 		// reach between suspends, leaving cancellation latency otherwise unbounded.
 		if err := ctx.Err(); err != nil {
 			fib.SetStatus(vmpackage.FiberDone)
-			fib.SetErr(err)
+			fib.SetError(err)
 			return vmpackage.Null, err
 		}
 		result, err := fibVM.Exec()
@@ -546,7 +546,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 			continue
 		}
 		fib.SetStatus(vmpackage.FiberDone)
-		fib.SetErr(err)
+		fib.SetError(err)
 		return vmpackage.Null, err
 	}
 }
@@ -1099,7 +1099,7 @@ func (s *Session) noteEntryQualified(chunk *vmpackage.Chunk) {
 func entryQualifiedIn(chunk *vmpackage.Chunk) map[string]bool {
 	var out map[string]bool
 	for _, c := range chunk.Consts {
-		if !c.IsStr() {
+		if !c.IsString() {
 			continue
 		}
 		if name, ok := strings.CutPrefix(c.AsString(), entryKeyPrefix); ok {

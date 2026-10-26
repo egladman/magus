@@ -614,8 +614,8 @@ func (v saplingVCS) start(ctx context.Context, dir, bad, good string) error {
 	return run("bisect", "--good", good)
 }
 
-func (v saplingVCS) run(ctx context.Context, dir, shellCmd string) error {
-	cmd := vcsExec(ctx, "sl", "bisect", "--command", shellCmd)
+func (v saplingVCS) run(ctx context.Context, dir, shellCommand string) error {
+	cmd := vcsExec(ctx, "sl", "bisect", "--command", shellCommand)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr

@@ -32,8 +32,8 @@ func TestApplyValidationsGroupsApplysProblemsByRecord(t *testing.T) {
 	t.Parallel()
 
 	err := errors.Join(
-		prefixed("b", types.JobProblems{{Code: types.JobUngraded, Message: "nothing grades the job", Fix: "add a check"}}).Err(),
-		prefixed("a", types.JobProblems{{Code: types.JobCheckUnrunnable, Message: "no such target"}, {Code: types.JobUngraded, Message: "no grade"}}).Err(),
+		prefixed("b", types.JobProblems{{Code: types.JobUngraded, Message: "nothing grades the job", Fix: "add a check"}}).Error(),
+		prefixed("a", types.JobProblems{{Code: types.JobCheckUnrunnable, Message: "no such target"}, {Code: types.JobUngraded, Message: "no grade"}}).Error(),
 	)
 	got, ok := ApplyValidations(err, []string{"a", "b"})
 
@@ -101,7 +101,7 @@ func TestApplyValidationsKeepsEachProblemsEdit(t *testing.T) {
 	t.Parallel()
 
 	edit := &types.JobEdit{AddWritePath: "docs/x.md"}
-	err := prefixed("a", types.JobProblems{{Code: types.OutputOutsideWritePaths, Message: "x regenerates docs/x.md", Edit: edit}}).Err()
+	err := prefixed("a", types.JobProblems{{Code: types.OutputOutsideWritePaths, Message: "x regenerates docs/x.md", Edit: edit}}).Error()
 
 	got, ok := ApplyValidations(err, []string{"a"})
 

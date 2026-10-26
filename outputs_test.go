@@ -183,7 +183,7 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 		{"workspace nested in a checkout", "sub/ws"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			checkout := testkit.NewRepo(t, nil)
+			checkout := testkit.NewRepository(t, nil)
 			root := checkout.Path(filepath.FromSlash(tc.workspace))
 			checkout.Write(filepath.Join(tc.workspace, "magusfile.buzz"), "")
 			checkout.Write(".gitignore", ".magus/\n")
@@ -396,7 +396,7 @@ func TestOutputReadsAreConcurrencySafe(t *testing.T) {
 // out named one by one. An untracked hand file, and one another declaration claims, are
 // not carved.
 func TestCarvedOutputsNamesTrackedHandFilesAmongOutputs(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	repo.Write(".gitignore", ".magus/\n")
 	repo.Magusfile(`import "magus";
@@ -662,8 +662,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	_, statErr := os.Stat(produced)
 	assert.True(t, os.IsNotExist(statErr), "a declared output should still be deleted")
 
-	got, readErr := os.ReadFile(edited)
-	require.NoError(t, readErr, "editsExistingSource file must survive clean")
+	got, readError := os.ReadFile(edited)
+	require.NoError(t, readError, "editsExistingSource file must survive clean")
 	assert.Equal(t, prose, string(got), "editsExistingSource file must survive clean byte for byte")
 }
 

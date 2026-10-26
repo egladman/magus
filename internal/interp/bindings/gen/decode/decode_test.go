@@ -84,7 +84,7 @@ func populate(v reflect.Value) {
 	}
 }
 
-func str(s string) vm.Value { return vm.StrValue(s) }
+func stringValue(s string) vm.Value { return vm.StringValue(s) }
 
 func record(kv ...any) vm.Value {
 	m := vm.NewMap()
@@ -97,30 +97,30 @@ func record(kv ...any) vm.Value {
 func TestDecodeIsStrict(t *testing.T) {
 	block := func(open, close vm.Value) vm.Value { return record("open", open, "close", close) }
 	lang := func(comments vm.Value) vm.Value {
-		return record("name", str("go"), "syntax", record("comments", comments))
+		return record("name", stringValue("go"), "syntax", record("comments", comments))
 	}
 
 	t.Run("a wrong kind names the field path", func(t *testing.T) {
 		comments := record("blockComments", vm.ListValue([]vm.Value{
-			block(str("/*"), str("*/")),
-			block(str("/*"), vm.IntValue(1)),
+			block(stringValue("/*"), stringValue("*/")),
+			block(stringValue("/*"), vm.IntValue(1)),
 		}))
 		_, err := DecodeLanguage(lang(comments))
 		require.EqualError(t, err, "language.syntax.comments.blockComments[1].close: want str, got int")
 	})
 
 	t.Run("a wrong container kind names the Buzz type", func(t *testing.T) {
-		_, err := DecodeLanguage(record("extensions", str(".go")))
+		_, err := DecodeLanguage(record("extensions", stringValue(".go")))
 		require.EqualError(t, err, "language.extensions: want [str], got str")
 	})
 
 	t.Run("a record where a scalar belongs", func(t *testing.T) {
-		_, err := DecodeLanguage(str("go"))
+		_, err := DecodeLanguage(stringValue("go"))
 		require.EqualError(t, err, "language: want Language, got str")
 	})
 
 	t.Run("an unknown member is refused", func(t *testing.T) {
-		_, err := DecodeLanguage(record("name", str("go"), "extension", vm.ListValue(nil)))
+		_, err := DecodeLanguage(record("name", stringValue("go"), "extension", vm.ListValue(nil)))
 		require.EqualError(t, err, `language: Language has no member "extension"`)
 	})
 
@@ -130,11 +130,11 @@ func TestDecodeIsStrict(t *testing.T) {
 	})
 
 	t.Run("an absent or null optional stays nil", func(t *testing.T) {
-		got, err := DecodeLanguage(record("name", str("go")))
+		got, err := DecodeLanguage(record("name", stringValue("go")))
 		require.NoError(t, err)
 		assert.Equal(t, spells.Language{Name: "go"}, got)
 
-		got, err = DecodeLanguage(record("name", str("go"), "syntax", vm.Null))
+		got, err = DecodeLanguage(record("name", stringValue("go"), "syntax", vm.Null))
 		require.NoError(t, err)
 		assert.Nil(t, got.Syntax)
 
@@ -146,9 +146,9 @@ func TestDecodeIsStrict(t *testing.T) {
 
 	t.Run("nested records decode in full", func(t *testing.T) {
 		comments := record(
-			"lineComments", vm.ListValue([]vm.Value{str("//")}),
-			"blockComments", vm.ListValue([]vm.Value{block(str("/*"), str("*/"))}),
-			"quotes", vm.ListValue([]vm.Value{record("open", str("`"), "close", str("`"), "ignoreEscape", vm.True)}),
+			"lineComments", vm.ListValue([]vm.Value{stringValue("//")}),
+			"blockComments", vm.ListValue([]vm.Value{block(stringValue("/*"), stringValue("*/"))}),
+			"quotes", vm.ListValue([]vm.Value{record("open", stringValue("`"), "close", stringValue("`"), "ignoreEscape", vm.True)}),
 		)
 		got, err := DecodeLanguage(lang(comments))
 		require.NoError(t, err)
@@ -160,30 +160,30 @@ func TestDecodeIsStrict(t *testing.T) {
 	})
 }
 
-func strs(ss ...string) vm.Value {
+func strings(ss ...string) vm.Value {
 	items := make([]vm.Value, len(ss))
 	for i, s := range ss {
-		items[i] = str(s)
+		items[i] = stringValue(s)
 	}
 	return vm.ListValue(items)
 }
 
 func TestDecodeCommand(t *testing.T) {
 	t.Run("a command decodes in full", func(t *testing.T) {
-		got, err := DecodeCommand(record("bin", str("go"), "args", strs("vet", "./...")))
+		got, err := DecodeCommand(record("bin", stringValue("go"), "args", strings("vet", "./...")))
 		require.NoError(t, err)
 		assert.Equal(t, spells.Command{Bin: "go", Args: []string{"vet", "./..."}}, got)
 	})
 
 	t.Run("an unknown member is refused", func(t *testing.T) {
-		_, err := DecodeCommand(record("bin", str("go"), "argv", strs("vet")))
+		_, err := DecodeCommand(record("bin", stringValue("go"), "argv", strings("vet")))
 		require.EqualError(t, err, `command: Command has no member "argv"`)
 	})
 }
 
 func TestDecodeSandbox(t *testing.T) {
 	t.Run("a sandbox decodes in full", func(t *testing.T) {
-		allow := record("base", str("xdgData"), "path", str("x"), "mode", str("rw"))
+		allow := record("base", stringValue("xdgData"), "path", stringValue("x"), "mode", stringValue("rw"))
 		got, err := DecodeSandbox(record("allow", vm.ListValue([]vm.Value{allow})))
 		require.NoError(t, err)
 		assert.Equal(t, spells.Sandbox{Allow: []spells.SandboxAllow{
@@ -200,9 +200,9 @@ func TestDecodeSandbox(t *testing.T) {
 func TestDecodeService(t *testing.T) {
 	t.Run("a service decodes in full", func(t *testing.T) {
 		got, err := DecodeService(record(
-			"command", record("bin", str("docker"), "args", strs("run", "postgres:16")),
-			"readiness", record("bin", str("pg_isready")),
-			"stop", record("bin", str("docker"), "args", strs("stop", "magus-pg")),
+			"command", record("bin", stringValue("docker"), "args", strings("run", "postgres:16")),
+			"readiness", record("bin", stringValue("pg_isready")),
+			"stop", record("bin", stringValue("docker"), "args", strings("stop", "magus-pg")),
 		))
 		require.NoError(t, err)
 		assert.Equal(t, spells.Service{
@@ -213,7 +213,7 @@ func TestDecodeService(t *testing.T) {
 	})
 
 	t.Run("an unknown member is refused", func(t *testing.T) {
-		_, err := DecodeService(record("command", record("bin", str("docker")), "ready", record("bin", str("true"))))
+		_, err := DecodeService(record("command", record("bin", stringValue("docker")), "ready", record("bin", stringValue("true"))))
 		require.EqualError(t, err, `service: Service has no member "ready"`)
 	})
 }

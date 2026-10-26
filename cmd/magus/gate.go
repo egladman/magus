@@ -30,8 +30,8 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// gateCmd implements `magus gate`, a person's decisions about the local gate.
-func gateCmd(ctx context.Context, root string, args []string) error {
+// gateCommand implements `magus gate`, a person's decisions about the local gate.
+func gateCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		return exit.Usagef("magus gate: requires a subcommand (waive)")
 	}
@@ -60,7 +60,7 @@ func gateCommandSpec() cmdline.Command {
 func gateWaive(ctx context.Context, root string, args []string) error {
 	var reason string
 	var revoke bool
-	rest, err := cmdParse("gate waive", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("gate waive", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&reason, "reason", "", "")
 		fs.BoolVar(&revoke, "revoke", false, "")
 		fs.Usage = func() {

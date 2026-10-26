@@ -259,7 +259,7 @@ func blame(in input) []Finding {
 		"'someone forgot to update the key'."
 
 	out := matchFindings(in, counterfactual, func(text string, at []int) bool {
-		return hypothetical[prevWord(text, at[0])] || singleQuoted(text, at[0])
+		return hypothetical[previousWord(text, at[0])] || singleQuoted(text, at[0])
 	}, message)
 	out = append(out, matchFindings(in, contempt, contemptExempt, message)...)
 
@@ -274,7 +274,7 @@ func blame(in input) []Finding {
 func contemptExempt(text string, at []int) bool {
 	word := text[at[0]:at[1]]
 	lower := strings.ToLower(word)
-	prev := prevWord(text, at[0])
+	prev := previousWord(text, at[0])
 	before := sentenceBefore(text, at[0])
 
 	switch {
@@ -346,7 +346,7 @@ func verdict(in input) []Finding {
 
 func verdictExempt(text string, at []int) bool {
 	w := strings.ToLower(text[at[0]:at[1]])
-	prev := prevWord(text, at[0])
+	prev := previousWord(text, at[0])
 	before := sentenceBefore(text, at[0])
 	sentence := sentenceHolding(text, at[0])
 	words := strings.Fields(strings.ToLower(before))
@@ -441,7 +441,7 @@ func absoluteExempt(text string, at []int) bool {
 		return strings.EqualFold(text[at[4]:at[5]], "nothing") && !hasObjectAfter(text[at[1]:])
 	}
 
-	if strings.HasPrefix(strings.ToLower(text[at[0]:]), "never") && contract[prevWord(text, at[0])] {
+	if strings.HasPrefix(strings.ToLower(text[at[0]:]), "never") && contract[previousWord(text, at[0])] {
 		return true
 	}
 
@@ -546,7 +546,7 @@ func intentExempt(text string, at []int) bool {
 	case word == "guessed":
 		return !guessedClause.MatchString(rest)
 	case strings.HasSuffix(word, "care"):
-		return indifferent[prevWord(text, at[0])]
+		return indifferent[previousWord(text, at[0])]
 	case strings.HasPrefix(text[at[0]:at[1]], "Pretend"):
 		return strings.TrimLeft(before, " *_(") == ""
 	}
@@ -910,7 +910,7 @@ func judgmentAsFact(in input) []Finding {
 			at := recommendation.FindStringIndex(text)
 			if at == nil || strings.HasSuffix(text, "?") || reasonGiven.MatchString(text) ||
 				ownedCall.MatchString(text) || groundGiven.MatchString(text) ||
-				(at[0] > 0 && text[at[0]] == 'S') || prevWord(text, at[0]) == "would" ||
+				(at[0] > 0 && text[at[0]] == 'S') || previousWord(text, at[0]) == "would" ||
 				parenthesized(text, at[0]) || singleQuoted(text, at[0]) {
 				continue
 			}

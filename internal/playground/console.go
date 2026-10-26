@@ -178,11 +178,11 @@ func (s *Console) Complete(line string) (replacement string, listing []Line) {
 	return line, listing
 }
 
-// HistPrev and HistNext walk command history for the up/down keys. Both share one
+// HistPrevious and HistNext walk command history for the up/down keys. Both share one
 // contract: the bool reports whether the input should be replaced with the returned
 // line. At either end of the history they return ("", false), so pressing down at
 // the newest entry leaves the in-progress line untouched rather than clearing it.
-func (s *Console) HistPrev() (string, bool) {
+func (s *Console) HistPrevious() (string, bool) {
 	if s.hpos > 0 {
 		s.hpos--
 		return s.hist[s.hpos], true

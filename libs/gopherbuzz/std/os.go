@@ -18,22 +18,22 @@ import (
 // https://buzz-lang.dev/0.5.0/reference/std/os.html
 func osModule() vm.Value {
 	m := mod()
-	m.MapSet("sleep", fn("os.sleep", osSleep))
-	m.MapSet("time", fn("os.time", osTime))
-	m.MapSet("env", fn("os.env", osEnv))
-	m.MapSet("tmpDir", fn("os.tmpDir", osTempDir))
-	m.MapSet("tmpFilename", fn("os.tmpFilename", osTempFilename))
-	m.MapSet("exit", fn("os.exit", osExit))
-	m.MapSet("execute", fn("os.execute", osExecute))
+	m.MapSet("sleep", function("os.sleep", osSleep))
+	m.MapSet("time", function("os.time", osTime))
+	m.MapSet("env", function("os.env", osEnv))
+	m.MapSet("tmpDir", function("os.tmpDir", osTempDir))
+	m.MapSet("tmpFilename", function("os.tmpFilename", osTempFilename))
+	m.MapSet("exit", function("os.exit", osExit))
+	m.MapSet("execute", function("os.execute", osExecute))
 
 	m.MapSet("SocketProtocol", vm.EnumDefValue("SocketProtocol", []string{"tcp", "udp", "ipc"}, nil))
 
 	socketDef := mod()
-	socketDef.MapSet("connect", fn("Socket.connect", socketConnect))
+	socketDef.MapSet("connect", function("Socket.connect", socketConnect))
 	m.MapSet("Socket", socketDef)
 
 	serverDef := mod()
-	serverDef.MapSet("init", fn("TcpServer.init", tcpServerInit))
+	serverDef.MapSet("init", function("TcpServer.init", tcpServerInit))
 	m.MapSet("TcpServer", serverDef)
 
 	return m
@@ -70,23 +70,23 @@ func osTime(_ context.Context, _ []vm.Value) (vm.Value, error) {
 }
 
 func osEnv(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("os.env: requires a str key argument")
 	}
 	v, ok := os.LookupEnv(args[0].AsString())
 	if !ok {
 		return vm.Null, nil
 	}
-	return vm.StrValue(v), nil
+	return vm.StringValue(v), nil
 }
 
 func osTempDir(_ context.Context, _ []vm.Value) (vm.Value, error) {
-	return vm.StrValue(os.TempDir()), nil
+	return vm.StringValue(os.TempDir()), nil
 }
 
 func osTempFilename(_ context.Context, args []vm.Value) (vm.Value, error) {
 	prefix := "buzz"
-	if len(args) >= 1 && args[0].IsStr() {
+	if len(args) >= 1 && args[0].IsString() {
 		prefix = args[0].AsString()
 	}
 	f, err := os.CreateTemp("", prefix+"*")
@@ -96,7 +96,7 @@ func osTempFilename(_ context.Context, args []vm.Value) (vm.Value, error) {
 	name := f.Name()
 	_ = f.Close()
 	_ = os.Remove(name) // return the name only, don't leave the file
-	return vm.StrValue(name), nil
+	return vm.StringValue(name), nil
 }
 
 func osExit(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -161,7 +161,7 @@ func osExecute(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	}
 	argv := make([]string, len(items))
 	for i, it := range items {
-		if !it.IsStr() {
+		if !it.IsString() {
 			return vm.Null, fmt.Errorf("os.execute: command argument %d must be str, got %s", i, it.Kind())
 		}
 		argv[i] = it.AsString()
@@ -169,7 +169,7 @@ func osExecute(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	warnIfProbeBin(argv)
 	//nolint:gosec -- argv is supplied by the Buzz script; the caller controls what it executes
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir = cwdFromContext(ctx) // run in the embedder-set cwd ("" inherits the process cwd)
+	cmd.Dir = currentWorkingDirectoryFromContext(ctx) // run in the embedder-set cwd ("" inherits the process cwd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -190,7 +190,7 @@ func socketConnect(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if args[0].Kind() != "enum" {
 		return vm.Null, fmt.Errorf("Socket.connect: first argument must be a SocketProtocol enum value")
 	}
-	if !args[1].IsStr() {
+	if !args[1].IsString() {
 		return vm.Null, fmt.Errorf("Socket.connect: host must be str")
 	}
 	if !args[2].IsInt() {
@@ -258,7 +258,7 @@ func socketReceive(conn net.Conn, args []vm.Value) (vm.Value, error) {
 func makeSocketValue(conn net.Conn) vm.Value {
 	m := mod()
 
-	m.MapSet("send", fn("Socket.send", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("send", function("Socket.send", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsList() {
 			return vm.Null, fmt.Errorf("Socket.send: requires a [int] bytes argument")
 		}
@@ -274,15 +274,15 @@ func makeSocketValue(conn net.Conn) vm.Value {
 		return vm.Null, err
 	}))
 
-	m.MapSet("receive", fn("Socket.receive", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("receive", function("Socket.receive", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return socketReceive(conn, args)
 	}))
 
-	m.MapSet("close", fn("Socket.close", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("close", function("Socket.close", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, conn.Close()
 	}))
 
-	m.MapSet("collect", fn("Socket.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("collect", function("Socket.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, conn.Close()
 	}))
 
@@ -324,7 +324,7 @@ func tcpServerInit(ctx context.Context, args []vm.Value) (vm.Value, error) {
 func makeTCPServerValue(ln net.Listener) vm.Value {
 	m := mod()
 
-	m.MapSet("accept", fn("TcpServer.accept", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("accept", function("TcpServer.accept", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		conn, err := ln.Accept()
 		if err != nil {
 			return vm.Null, fmt.Errorf("TcpServer.accept: %w", err)
@@ -332,11 +332,11 @@ func makeTCPServerValue(ln net.Listener) vm.Value {
 		return makeSocketValue(conn), nil
 	}))
 
-	m.MapSet("close", fn("TcpServer.close", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("close", function("TcpServer.close", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, ln.Close()
 	}))
 
-	m.MapSet("collect", fn("TcpServer.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("collect", function("TcpServer.collect", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, ln.Close()
 	}))
 

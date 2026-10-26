@@ -168,7 +168,7 @@ func TestObjectEnumFieldsCrossAsTheResolversCase(t *testing.T) {
 type namingEnums struct{}
 
 func (namingEnums) Case(enum, value string) vm.Value {
-	return vm.StrValue(fmt.Sprintf("%s.%s", enum, value))
+	return vm.StringValue(fmt.Sprintf("%s.%s", enum, value))
 }
 
 func objectMap(t *testing.T, v vm.Value) map[string]any {
