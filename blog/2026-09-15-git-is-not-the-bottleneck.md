@@ -3,7 +3,7 @@ title: "Git is not the bottleneck"
 description: "A take going around says Git will not survive agents: three people, ninety pull requests a day, twenty-minute checks, twelve clones per laptop. Every number in it is real. None of them is Git. The scarce thing is a trustworthy verdict, and here is what that costs in this repository, measured today."
 tags: [opinion]
 date: 2026-09-15
-draft: true
+draft: false
 ---
 
 # Git is not the bottleneck
