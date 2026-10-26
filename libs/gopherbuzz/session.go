@@ -35,6 +35,11 @@ type Session struct {
 	// VISIBILITY: a name a flat import made private stays visible if another module
 	// exported it.
 	exportedNames map[string]bool
+	// chunkDefined is the names the chunk runChunk last ran defined: its exports
+	// and its private globals. An aliased import keeps these in its map even when
+	// the parent already bound the name. The host-global snapshot copied into the
+	// sub-session would otherwise hide that export and the alias would answer null.
+	chunkDefined []string
 	// rootExportedNames is the subset from chunks run outside an import. Exports()
 	// answers with this, because its callers ask what a file OWNS: conflated, an
 	// `import "lcov"` turned lcov's exports into the importer's targets (MGS1008).
@@ -774,6 +779,10 @@ func (s *Session) runChunk(ctx context.Context, chunk *vmpackage.Chunk) ([]strin
 	if _, err := vm.Run(chunk, s.env); err != nil {
 		return nil, err
 	}
+	// The names this chunk defined, kept for the aliased-import map. An export
+	// whose name the parent already bound still belongs to the module. Reading
+	// the list here is what loadImportAsAlias uses after Exec returns.
+	s.chunkDefined = append(append([]string{}, chunk.Exports...), chunk.Private...)
 	for _, name := range chunk.Exports {
 		s.exportedNames[name] = true
 		// collectImportPrivate is on for exactly the duration of an import.
@@ -2384,28 +2393,35 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 		s.lastClosure = append([]bytecodeFile(nil), sub.lastClosure...)
 	}
 
-	// Collect new globals: anything in sub-session not in the host snapshot.
+	// A name this module defines belongs in its alias map even when the parent
+	// already bound it. Skipping every host snapshot name dropped that export,
+	// and the qualified call then resolved to null.
+	defined := make(map[string]bool, len(sub.chunkDefined))
+	for _, name := range sub.chunkDefined {
+		defined[name] = true
+	}
 	m := vmpackage.NewMap()
 	for name, slot := range sub.env.Names() {
-		if _, wasHost := hostNames[name]; !wasHost {
-			v := sub.env.Slots()[slot]
-			m.MapSet(name, v)
-			// An object TYPE also gets bound in the parent under its bare name.
-			//
-			// `ns\Name{...}` compiles to a construction of the BARE name (the parser
-			// resolves it that way on purpose, "to the same object def upstream reaches
-			// as ns\Name"), and the VM then looks the def up in the env. Leaving it only
-			// inside the alias map made `testing\PrefixMe{}` fail at RUN time with
-			// "unknown object type", after type-checking cleanly.
-			//
-			// Values are NOT bound this way: isolation is the point of an aliased
-			// import, and a type declaration is a compile-time fact rather than state.
-			// An existing binding wins, so a local type still shadows an imported one,
-			// matching how the compiler seeds its typeDecls.
-			if v.IsObjectDef() {
-				if _, exists := s.env.Get(name); !exists {
-					s.env.Define(name, v)
-				}
+		if _, wasHost := hostNames[name]; wasHost && !defined[name] {
+			continue
+		}
+		v := sub.env.Slots()[slot]
+		m.MapSet(name, v)
+		// An object TYPE also gets bound in the parent under its bare name.
+		//
+		// `ns\Name{...}` compiles to a construction of the BARE name (the parser
+		// resolves it that way on purpose, "to the same object def upstream reaches
+		// as ns\Name"), and the VM then looks the def up in the env. Leaving it only
+		// inside the alias map made `testing\PrefixMe{}` fail at RUN time with
+		// "unknown object type", after type-checking cleanly.
+		//
+		// Values are NOT bound this way: isolation is the point of an aliased
+		// import, and a type declaration is a compile-time fact rather than state.
+		// An existing binding wins, so a local type still shadows an imported one,
+		// matching how the compiler seeds its typeDecls.
+		if v.IsObjectDef() {
+			if _, exists := s.env.Get(name); !exists {
+				s.env.Define(name, v)
 			}
 		}
 	}
