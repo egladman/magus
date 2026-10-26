@@ -298,13 +298,11 @@ below was checked against the contract. Each one is the host.
 
 `mgs_listModels` is Claude Code's, written by hand from its price page. A
 harness that publishes none contributes no facts about a model, and that is
-not an error. A cursor, codex, or opencode job whose model id matches no
-Claude row takes the declared default tier. `claude-opus-5-5-high` is one id
-cursor sends and no Claude row names. Copying the Claude rows onto the other
-hosts would map ids those hosts do not send. A row for another host waits on
-a cited price page, the way Claude Code's did. `agents.models` in `magus.yaml`
-is the fill the Claude spell already names for a model released after the
-rows.
+not an error. `claude-opus-5-5-high` is one id cursor sends and no Claude
+row names. Copying the Claude rows onto the other hosts would map ids those
+hosts do not send. A row for another host waits on a cited price page, the
+way Claude Code's did. `agents.models` in `magus.yaml` is the fill the Claude
+spell already names for a model released after the rows.
 
 `mgs_getLimits` is Claude Code's and Cursor's. Zero means the host does not
 declare that limit, so Codex and OpenCode omit the function.

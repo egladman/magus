@@ -176,3 +176,58 @@ knowledge:
     adapters:
       - host: claude-code
         command: ["magus", "buzz", "-s", "docs/guides/integrations/agents/magus-session-load-claude-code.buzz"]
+
+# Prices for model ids the harness spells do not publish, read 2026-10-25.
+# Codex rows are developers.openai.com/api/docs/models/gpt-6-luna, gpt-6.1-sol and
+# gpt-6-astra. cache_write_5m is that page's 30-minute cache write and cache_write_1h
+# its 12-hour write, the short and long write the table has fields for. A prompt over
+# 272000 tokens is 2x input and cache and 1.5x output, which one step_factor cannot
+# say, so these rows keep the short-context rate. OpenCode rows are the Claude prices
+# from platform.claude.com/docs/en/about-claude/pricing under the provider/model id
+# OpenCode sends. Cursor's composer-2.5 has no published token price.
+agents:
+  models:
+    gpt-6-luna:
+      window: 1050000
+      input: 0.10
+      output: 0.50
+      cache_read: 0.01
+      cache_write_5m: 0.125
+      cache_write_1h: 0.25
+    gpt-6.1-sol:
+      window: 1050000
+      input: 2.0
+      output: 10.0
+      cache_read: 0.10
+      cache_write_5m: 2.5
+      cache_write_1h: 5.0
+    gpt-6-astra:
+      window: 1050000
+      input: 10.0
+      output: 50.0
+      cache_read: 1.0
+      cache_write_5m: 12.5
+      cache_write_1h: 25.0
+    "anthropic/claude-haiku-5-5":
+      window: 1000000
+      input: 0.10
+      output: 0.50
+      cache_read: 0.01
+      cache_write_5m: 0.125
+      cache_write_1h: 0.20
+      price_step: 100000
+      step_factor: 5
+    "anthropic/claude-sonnet-5-5":
+      window: 1000000
+      input: 2.0
+      output: 10.0
+      cache_read: 0.10
+      cache_write_5m: 2.5
+      cache_write_1h: 4.0
+    "anthropic/claude-opus-5-5":
+      window: 1000000
+      input: 4.0
+      output: 20.0
+      cache_read: 0.20
+      cache_write_5m: 5.0
+      cache_write_1h: 8.0
