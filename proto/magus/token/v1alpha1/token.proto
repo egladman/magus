@@ -102,9 +102,9 @@ message CreateTokenRequest {
 // the secret is NOT part of the resource: TokenInfo is secret-free so that listing tokens
 // cannot leak one, and the plaintext exists only in this reply.
 message CreateTokenResponse {
-  TokenInfo token = 1;
+  TokenInfo token = 1 [debug_redact = true];
   // The plaintext token. Returned once and never retrievable again.
-  string secret = 2;
+  string secret = 2 [debug_redact = true];
 }
 
 message RevokeTokenRequest {
