@@ -20,13 +20,3 @@ export extern fun error(message: str, attrs: {str: any} = {<str: any>}) > void;
 export extern fun info(message: str, attrs: {str: any} = {<str: any>}) > void;
 export extern fun trace(message: str, attrs: {str: any} = {<str: any>}) > void;
 export extern fun warn(message: str, attrs: {str: any} = {<str: any>}) > void;
-// Injectable logger matching the free log.* methods.
-export protocol Logger {
-    fun at(level: LogLevel, message: str, attrs: {str: any} = {<str: any>}) > void !> any;
-    fun debug(message: str, attrs: {str: any} = {<str: any>}) > void;
-    fun error(message: str, attrs: {str: any} = {<str: any>}) > void;
-    fun info(message: str, attrs: {str: any} = {<str: any>}) > void;
-    fun trace(message: str, attrs: {str: any} = {<str: any>}) > void;
-    fun warn(message: str, attrs: {str: any} = {<str: any>}) > void;
-}
-

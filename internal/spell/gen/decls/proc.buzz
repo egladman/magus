@@ -6,6 +6,13 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object ExecOptions {
+    stdin: str = "",
+    quiet: bool = false,
+    tty: bool = false,
+    allowFailure: bool = false,
+}
+
 export object ExecResult {
     stdout: str = "",
     stderr: str = "",
@@ -18,7 +25,7 @@ export object ShellCommand {
     args: [str] = [],
 }
 
-export extern fun exec(cmd: str, args: [str] = [<str>], dir: str = "", opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun exec(cmd: str, args: [str] = [<str>], dir: str = "", opts: ExecOptions = ExecOptions{}) > ExecResult !> any;
 export extern fun shell(line: str, shell: str = "") > ShellCommand;
 export extern fun stdinIsTerminal() > bool;
 export extern fun which(cmd: str) > str !> any;

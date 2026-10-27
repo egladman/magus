@@ -110,9 +110,9 @@ fun main(args: [str]) > void {
     // Captured rather than streamed, because the json arm has to wrap it. stderr is
     // discarded by `quiet`: a magus too old for `session --brief` prints its usage
     // there, and that would otherwise be injected as this hook's answer.
-    final result = proc\exec(bin, args: ["session", "--brief"], dir: cwd, opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["session", "--brief"], dir: cwd, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return; }
 

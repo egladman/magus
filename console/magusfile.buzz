@@ -94,7 +94,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 
     final scripts = mut ["--test"];
     foreach (s in fs\glob("scripts/*.test.mjs")) { scripts.append(s.value); }
-    proc\exec("node", scripts, ".", {});
+    proc\exec("node", scripts, ".");
 
     // Both projects name their files src/..., so textsearch's paths get a prefix before the merge.
     final textsearch_report = fs\readFile(fs\join("..", "libs", "textsearch", "coverage.lcov"))
@@ -116,7 +116,7 @@ export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["src/apps/diff/gen/*.ts"]);
     proc\exec("go", ["run", "../cmd/magus-utils", "diffdemo",
                      "-patch", "src/apps/diff/demo.patch",
-                     "-out", "src/apps/diff/gen/demo.ts"], ".", {});
+                     "-out", "src/apps/diff/gen/demo.ts"], ".");
 }
 
 // The shell stylesheet, bundled with the base, layout, component and utility sheets it @imports.
@@ -193,9 +193,9 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
               fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
              dir: fs\join("gen", "wasm"));
 
-    proc\exec("node", ["scripts/app-stubs.mjs"], ".", {});
+    proc\exec("node", ["scripts/app-stubs.mjs"], ".");
     // Last: it hashes every file above into sw.js's precache stamp.
-    proc\exec("node", ["scripts/stamp-build.mjs"], ".", {});
+    proc\exec("node", ["scripts/stamp-build.mjs"], ".");
 }
 
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
@@ -212,10 +212,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                     "../libs/proofread/gen/proofread.inputs", "../hack/policy/gen/proofread-decisions.json"]);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
-    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
-    proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".", {});
+    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
+    proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".");
     judgeCssComments();
-    proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".", {});
+    proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".");
 }
 
 // judgeCssComments holds the comments of every stylesheet to proofread's stylesheet rules
@@ -226,7 +226,7 @@ fun judgeCssComments() > void !> any {
     foreach (f in fs\glob("src/**/*.css")) {
         args.append(f.value);
     }
-    final run = proc\exec("../libs/proofread/gen/proofread", args: args, dir: ".", opts: {"quiet": true, "allow_failure": true});
+    final run = proc\exec("../libs/proofread/gen/proofread", args: args, dir: ".", opts: proc\ExecOptions{quiet = true, allowFailure = true});
     if (run.code != 0) {
         throw "lint: proofread exited {run.code} on the stylesheets: " + run.stderr.trim();
     }

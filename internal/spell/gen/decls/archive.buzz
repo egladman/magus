@@ -6,6 +6,15 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object Options {
+    format: str = "",
+    strip: int = 0,
+    maxSize: int = 0,
+    threads: int = 0,
+    level: int? = null,
+    followSymlinks: bool = false,
+}
+
 export object Path {
     value: str = "",
     base: str = "",
@@ -29,7 +38,7 @@ export object UncompressResult {
     bytes: int = 0,
 }
 
-export extern fun compress(src: str, dest: str, opts: {str: any} = {<str: any>}) > CompressResult !> any;
-export extern fun list(src: str, opts: {str: any} = {<str: any>}) > [ArchiveEntry] !> any;
-export extern fun readFile(src: str, name: str, opts: {str: any} = {<str: any>}) > str !> any;
-export extern fun uncompress(src: str, dest: str, opts: {str: any} = {<str: any>}) > UncompressResult !> any;
+export extern fun compress(src: str, dest: str, opts: Options = Options{}) > CompressResult !> any;
+export extern fun list(src: str, opts: Options = Options{}) > [ArchiveEntry] !> any;
+export extern fun readFile(src: str, name: str, opts: Options = Options{}) > str !> any;
+export extern fun uncompress(src: str, dest: str, opts: Options = Options{}) > UncompressResult !> any;

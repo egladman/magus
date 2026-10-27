@@ -8,4 +8,4 @@
 
 export extern fun freePort() > int !> any;
 export extern fun isPortOpen(host: str, port: int) > bool !> any;
-export extern fun waitForPort(host: str, port: int, timeout_ms: int = 0) > bool !> any;
+export extern fun waitForPort(host: str, port: int, timeoutMs: int = 0) > bool !> any;

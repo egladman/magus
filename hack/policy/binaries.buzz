@@ -60,7 +60,7 @@ export fun onDisk() > Disk {
         binaryScopes = fun (root: str) > [str]? {
             final listed = proc\exec("env", args: ["GOEXPERIMENT=jsonv2", "go", "list", "-deps", "-f",
                 `{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus"],
-                dir: root, opts: {"quiet": true, "allow_failure": true}) catch null;
+                dir: root, opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
             if (listed == null or listed!.code != 0) { return null; }
             return builds\packageScopes(listed!.stdout, root: root);
         },

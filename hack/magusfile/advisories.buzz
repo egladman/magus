@@ -98,7 +98,7 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
         return false;
     }
     final res = proc\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
-        opts: {"allow_failure": true});
+        opts: proc\ExecOptions{allowFailure = true});
     if (res.code != 0) {
         return false; // registry unreachable: defer rather than fail on a network blip
     }
@@ -304,7 +304,7 @@ fun readBase(path: str) > BaseFile {
     }
     // A failed read is no base, never an empty one: a blobless clone fetches the blob on
     // demand, and a sandbox without network must not turn every finding introduced.
-    final res = vcs\cmd(showArgs(rev, path: path), opts: {"quiet": true, "allow_failure": true}) catch null;
+    final res = vcs\cmd(showArgs(rev, path: path), opts: vcs\CommandOptions{quiet = true, allowFailure = true}) catch null;
     if (res == null or !res!.ok) {
         return BaseFile{ text = null, missing = "{path} is unreadable at {rev}" };
     }
@@ -421,7 +421,7 @@ packages:
 // printed and carried. Throws to fail the calling target.
 export fun audit(inheritedFatal: bool = false) > void !> any {
     final res = proc\exec("pnpm", args: ["audit", "--json"], dir: ".",
-        opts: {"allow_failure": true});
+        opts: proc\ExecOptions{allowFailure = true});
     if (res.code == 0) {
         std\print("audit: no advisories match this tree");
         std\print("security: 0 introduced, 0 inherited, 0 deferred");

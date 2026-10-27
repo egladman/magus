@@ -4643,6 +4643,816 @@ func decodeImageDocument(v vm.Value, path string) (types.ImageDocument, error) {
 	return out, nil
 }
 
+// DecodeDirsOptions decodes a Buzz DirsOptions, an object instance or a map, into a types.DirsOptions.
+func DecodeDirsOptions(v vm.Value) (types.DirsOptions, error) {
+	return decodeDirsOptions(v, "dirsOptions")
+}
+
+func decodeDirsOptions(v vm.Value, path string) (types.DirsOptions, error) {
+	var out types.DirsOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "DirsOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "layer":
+			sLayer, err := decodeString(item, path+".layer")
+			if err != nil {
+				return out, err
+			}
+			out.Layer = sLayer
+		case "language":
+			sLanguage, err := decodeString(item, path+".language")
+			if err != nil {
+				return out, err
+			}
+			out.Language = sLanguage
+		case "depth":
+			nDepth, err := decodeInt(item, path+".depth")
+			if err != nil {
+				return out, err
+			}
+			out.Depth = int(nDepth)
+		default:
+			return out, unknownMember(path, "DirsOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeKnowledgeNeighborhoodOptions decodes a Buzz NeighborhoodOptions, an object instance or a map, into a types.KnowledgeNeighborhoodOptions.
+func DecodeKnowledgeNeighborhoodOptions(v vm.Value) (types.KnowledgeNeighborhoodOptions, error) {
+	return decodeKnowledgeNeighborhoodOptions(v, "neighborhoodOptions")
+}
+
+func decodeKnowledgeNeighborhoodOptions(v vm.Value, path string) (types.KnowledgeNeighborhoodOptions, error) {
+	var out types.KnowledgeNeighborhoodOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "NeighborhoodOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "depth":
+			nDepth, err := decodeInt(item, path+".depth")
+			if err != nil {
+				return out, err
+			}
+			out.Depth = int(nDepth)
+		case "relations":
+			listRelations, err := decodeList(item, path+".relations", "[RelationID]")
+			if err != nil {
+				return out, err
+			}
+			if len(listRelations) > 0 {
+				itemsRelations := make([]types.RelationID, len(listRelations))
+				for indexRelations, itemRelations := range listRelations {
+					sRelationsItem, err := decodeEnum(itemRelations, fmt.Sprintf("%s[%d]", path+".relations", indexRelations), "RelationID", enumRelationIDValues)
+					if err != nil {
+						return out, err
+					}
+					itemsRelations[indexRelations] = types.RelationID(sRelationsItem)
+				}
+				out.Relations = itemsRelations
+			}
+		case "direction":
+			sDirection, err := decodeEnum(item, path+".direction", "EdgeDirection", enumEdgeDirectionValues)
+			if err != nil {
+				return out, err
+			}
+			out.Direction = types.EdgeDirection(sDirection)
+		case "collapse":
+			strsCollapse, err := decodeStringList(item, path+".collapse")
+			if err != nil {
+				return out, err
+			}
+			out.Collapse = strsCollapse
+		default:
+			return out, unknownMember(path, "NeighborhoodOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeKnowledgePathOptions decodes a Buzz PathOptions, an object instance or a map, into a types.KnowledgePathOptions.
+func DecodeKnowledgePathOptions(v vm.Value) (types.KnowledgePathOptions, error) {
+	return decodeKnowledgePathOptions(v, "pathOptions")
+}
+
+func decodeKnowledgePathOptions(v vm.Value, path string) (types.KnowledgePathOptions, error) {
+	var out types.KnowledgePathOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "PathOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "relations":
+			listRelations, err := decodeList(item, path+".relations", "[RelationID]")
+			if err != nil {
+				return out, err
+			}
+			if len(listRelations) > 0 {
+				itemsRelations := make([]types.RelationID, len(listRelations))
+				for indexRelations, itemRelations := range listRelations {
+					sRelationsItem, err := decodeEnum(itemRelations, fmt.Sprintf("%s[%d]", path+".relations", indexRelations), "RelationID", enumRelationIDValues)
+					if err != nil {
+						return out, err
+					}
+					itemsRelations[indexRelations] = types.RelationID(sRelationsItem)
+				}
+				out.Relations = itemsRelations
+			}
+		default:
+			return out, unknownMember(path, "PathOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeKnowledgeQueryOptions decodes a Buzz QueryOptions, an object instance or a map, into a types.KnowledgeQueryOptions.
+func DecodeKnowledgeQueryOptions(v vm.Value) (types.KnowledgeQueryOptions, error) {
+	return decodeKnowledgeQueryOptions(v, "queryOptions")
+}
+
+func decodeKnowledgeQueryOptions(v vm.Value, path string) (types.KnowledgeQueryOptions, error) {
+	var out types.KnowledgeQueryOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueryOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "budget":
+			nBudget, err := decodeInt(item, path+".budget")
+			if err != nil {
+				return out, err
+			}
+			out.Budget = int(nBudget)
+		case "limit":
+			nLimit, err := decodeInt(item, path+".limit")
+			if err != nil {
+				return out, err
+			}
+			out.Limit = int(nLimit)
+		case "offset":
+			nOffset, err := decodeInt(item, path+".offset")
+			if err != nil {
+				return out, err
+			}
+			out.Offset = int(nOffset)
+		default:
+			return out, unknownMember(path, "QueryOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeKnowledgeRefsOptions decodes a Buzz RefsOptions, an object instance or a map, into a types.KnowledgeRefsOptions.
+func DecodeKnowledgeRefsOptions(v vm.Value) (types.KnowledgeRefsOptions, error) {
+	return decodeKnowledgeRefsOptions(v, "refsOptions")
+}
+
+func decodeKnowledgeRefsOptions(v vm.Value, path string) (types.KnowledgeRefsOptions, error) {
+	var out types.KnowledgeRefsOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "RefsOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "limit":
+			nLimit, err := decodeInt(item, path+".limit")
+			if err != nil {
+				return out, err
+			}
+			out.Limit = int(nLimit)
+		case "offset":
+			nOffset, err := decodeInt(item, path+".offset")
+			if err != nil {
+				return out, err
+			}
+			out.Offset = int(nOffset)
+		default:
+			return out, unknownMember(path, "RefsOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeInsightOptions decodes a Buzz InsightOptions, an object instance or a map, into a types.InsightOptions.
+func DecodeInsightOptions(v vm.Value) (types.InsightOptions, error) {
+	return decodeInsightOptions(v, "insightOptions")
+}
+
+func decodeInsightOptions(v vm.Value, path string) (types.InsightOptions, error) {
+	var out types.InsightOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "InsightOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "dir":
+			sDir, err := decodeString(item, path+".dir")
+			if err != nil {
+				return out, err
+			}
+			out.Dir = sDir
+		case "commits":
+			nCommits, err := decodeInt(item, path+".commits")
+			if err != nil {
+				return out, err
+			}
+			out.Commits = int(nCommits)
+		case "since":
+			sSince, err := decodeString(item, path+".since")
+			if err != nil {
+				return out, err
+			}
+			out.Since = sSince
+		case "files":
+			bFiles, err := decodeBool(item, path+".files")
+			if err != nil {
+				return out, err
+			}
+			out.Files = bFiles
+		default:
+			return out, unknownMember(path, "InsightOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeExecOptions decodes a Buzz ExecOptions, an object instance or a map, into a types.ExecOptions.
+func DecodeExecOptions(v vm.Value) (types.ExecOptions, error) {
+	return decodeExecOptions(v, "execOptions")
+}
+
+func decodeExecOptions(v vm.Value, path string) (types.ExecOptions, error) {
+	var out types.ExecOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ExecOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "stdin":
+			sStdin, err := decodeString(item, path+".stdin")
+			if err != nil {
+				return out, err
+			}
+			out.Stdin = sStdin
+		case "quiet":
+			bQuiet, err := decodeBool(item, path+".quiet")
+			if err != nil {
+				return out, err
+			}
+			out.Quiet = bQuiet
+		case "tty":
+			bTTY, err := decodeBool(item, path+".tty")
+			if err != nil {
+				return out, err
+			}
+			out.TTY = bTTY
+		case "allowFailure":
+			bAllowFailure, err := decodeBool(item, path+".allowFailure")
+			if err != nil {
+				return out, err
+			}
+			out.AllowFailure = bAllowFailure
+		default:
+			return out, unknownMember(path, "ExecOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeMagusCommandOptions decodes a Buzz CommandOptions, an object instance or a map, into a types.MagusCommandOptions.
+func DecodeMagusCommandOptions(v vm.Value) (types.MagusCommandOptions, error) {
+	return decodeMagusCommandOptions(v, "commandOptions")
+}
+
+func decodeMagusCommandOptions(v vm.Value, path string) (types.MagusCommandOptions, error) {
+	var out types.MagusCommandOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "CommandOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "root":
+			sRoot, err := decodeString(item, path+".root")
+			if err != nil {
+				return out, err
+			}
+			out.Root = sRoot
+		case "dir":
+			sDir, err := decodeString(item, path+".dir")
+			if err != nil {
+				return out, err
+			}
+			out.Dir = sDir
+		case "stdin":
+			sStdin, err := decodeString(item, path+".stdin")
+			if err != nil {
+				return out, err
+			}
+			out.Stdin = sStdin
+		case "quiet":
+			bQuiet, err := decodeBool(item, path+".quiet")
+			if err != nil {
+				return out, err
+			}
+			out.Quiet = bQuiet
+		case "allowFailure":
+			bAllowFailure, err := decodeBool(item, path+".allowFailure")
+			if err != nil {
+				return out, err
+			}
+			out.AllowFailure = bAllowFailure
+		default:
+			return out, unknownMember(path, "CommandOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeVCSCommandOptions decodes a Buzz CommandOptions, an object instance or a map, into a types.VCSCommandOptions.
+func DecodeVCSCommandOptions(v vm.Value) (types.VCSCommandOptions, error) {
+	return decodeVCSCommandOptions(v, "commandOptions")
+}
+
+func decodeVCSCommandOptions(v vm.Value, path string) (types.VCSCommandOptions, error) {
+	var out types.VCSCommandOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "CommandOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "dir":
+			sDir, err := decodeString(item, path+".dir")
+			if err != nil {
+				return out, err
+			}
+			out.Dir = sDir
+		case "stdin":
+			sStdin, err := decodeString(item, path+".stdin")
+			if err != nil {
+				return out, err
+			}
+			out.Stdin = sStdin
+		case "quiet":
+			bQuiet, err := decodeBool(item, path+".quiet")
+			if err != nil {
+				return out, err
+			}
+			out.Quiet = bQuiet
+		case "tty":
+			bTTY, err := decodeBool(item, path+".tty")
+			if err != nil {
+				return out, err
+			}
+			out.TTY = bTTY
+		case "allowFailure":
+			bAllowFailure, err := decodeBool(item, path+".allowFailure")
+			if err != nil {
+				return out, err
+			}
+			out.AllowFailure = bAllowFailure
+		default:
+			return out, unknownMember(path, "CommandOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeMagusDiffOptions decodes a Buzz DiffOptions, an object instance or a map, into a types.MagusDiffOptions.
+func DecodeMagusDiffOptions(v vm.Value) (types.MagusDiffOptions, error) {
+	return decodeMagusDiffOptions(v, "diffOptions")
+}
+
+func decodeMagusDiffOptions(v vm.Value, path string) (types.MagusDiffOptions, error) {
+	var out types.MagusDiffOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "DiffOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "root":
+			sRoot, err := decodeString(item, path+".root")
+			if err != nil {
+				return out, err
+			}
+			out.MagusCommandOptions.Root = sRoot
+		case "dir":
+			sDir, err := decodeString(item, path+".dir")
+			if err != nil {
+				return out, err
+			}
+			out.MagusCommandOptions.Dir = sDir
+		case "stdin":
+			sStdin, err := decodeString(item, path+".stdin")
+			if err != nil {
+				return out, err
+			}
+			out.MagusCommandOptions.Stdin = sStdin
+		case "quiet":
+			bQuiet, err := decodeBool(item, path+".quiet")
+			if err != nil {
+				return out, err
+			}
+			out.MagusCommandOptions.Quiet = bQuiet
+		case "allowFailure":
+			bAllowFailure, err := decodeBool(item, path+".allowFailure")
+			if err != nil {
+				return out, err
+			}
+			out.MagusCommandOptions.AllowFailure = bAllowFailure
+		case "from":
+			sFrom, err := decodeString(item, path+".from")
+			if err != nil {
+				return out, err
+			}
+			out.From = sFrom
+		case "baseline":
+			sBaseline, err := decodeString(item, path+".baseline")
+			if err != nil {
+				return out, err
+			}
+			out.Baseline = sBaseline
+		case "rev":
+			sRev, err := decodeString(item, path+".rev")
+			if err != nil {
+				return out, err
+			}
+			out.Rev = sRev
+		case "patch":
+			sPatch, err := decodeString(item, path+".patch")
+			if err != nil {
+				return out, err
+			}
+			out.Patch = sPatch
+		case "minCohort":
+			nMinCohort, err := decodeInt(item, path+".minCohort")
+			if err != nil {
+				return out, err
+			}
+			out.MinCohort = int(nMinCohort)
+		case "minShare":
+			nMinShare, err := decodeFloat(item, path+".minShare")
+			if err != nil {
+				return out, err
+			}
+			out.MinShare = nMinShare
+		default:
+			return out, unknownMember(path, "DiffOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeRaiseOptions decodes a Buzz RaiseOptions, an object instance or a map, into a types.RaiseOptions.
+func DecodeRaiseOptions(v vm.Value) (types.RaiseOptions, error) {
+	return decodeRaiseOptions(v, "raiseOptions")
+}
+
+func decodeRaiseOptions(v vm.Value, path string) (types.RaiseOptions, error) {
+	var out types.RaiseOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "RaiseOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "cause":
+			aCause, err := decodeAny(item, path+".cause")
+			if err != nil {
+				return out, err
+			}
+			out.Cause = aCause
+		case "url":
+			sURL, err := decodeString(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		default:
+			return out, unknownMember(path, "RaiseOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSkillsOptions decodes a Buzz SkillsOptions, an object instance or a map, into a types.SkillsOptions.
+func DecodeSkillsOptions(v vm.Value) (types.SkillsOptions, error) {
+	return decodeSkillsOptions(v, "skillsOptions")
+}
+
+func decodeSkillsOptions(v vm.Value, path string) (types.SkillsOptions, error) {
+	var out types.SkillsOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "SkillsOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeString(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "form":
+			sForm, err := decodeEnum(item, path+".form", "SkillForm", enumSkillFormValues)
+			if err != nil {
+				return out, err
+			}
+			out.Form = types.SkillForm(sForm)
+		default:
+			return out, unknownMember(path, "SkillsOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHTTPOptions decodes a Buzz Options, an object instance or a map, into a types.HTTPOptions.
+func DecodeHTTPOptions(v vm.Value) (types.HTTPOptions, error) {
+	return decodeHTTPOptions(v, "options")
+}
+
+func decodeHTTPOptions(v vm.Value, path string) (types.HTTPOptions, error) {
+	var out types.HTTPOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Options", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "fail":
+			bFail, err := decodeBool(item, path+".fail")
+			if err != nil {
+				return out, err
+			}
+			out.Fail = bFail
+		case "failWithBody":
+			bFailWithBody, err := decodeBool(item, path+".failWithBody")
+			if err != nil {
+				return out, err
+			}
+			out.FailWithBody = bFailWithBody
+		case "failEarly":
+			bFailEarly, err := decodeBool(item, path+".failEarly")
+			if err != nil {
+				return out, err
+			}
+			out.FailEarly = bFailEarly
+		case "timeoutSeconds":
+			nTimeoutSeconds, err := decodeFloat(item, path+".timeoutSeconds")
+			if err != nil {
+				return out, err
+			}
+			out.TimeoutSeconds = nTimeoutSeconds
+		default:
+			return out, unknownMember(path, "Options", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHTTPServerOptions decodes a Buzz ServerOptions, an object instance or a map, into a types.HTTPServerOptions.
+func DecodeHTTPServerOptions(v vm.Value) (types.HTTPServerOptions, error) {
+	return decodeHTTPServerOptions(v, "serverOptions")
+}
+
+func decodeHTTPServerOptions(v vm.Value, path string) (types.HTTPServerOptions, error) {
+	var out types.HTTPServerOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ServerOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "dir":
+			sDir, err := decodeString(item, path+".dir")
+			if err != nil {
+				return out, err
+			}
+			out.Dir = sDir
+		case "mounts":
+			entriesMounts, err := decodeMap(item, path+".mounts", "{str: str}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesMounts.MapKeys(); len(keys) > 0 {
+				mappedMounts := make(map[string]string, len(keys))
+				for _, keyMounts := range keys {
+					elemMounts, _ := entriesMounts.MapGet(keyMounts)
+					var valueMounts string
+					sMountsValue, err := decodeString(elemMounts, fmt.Sprintf("%s[%q]", path+".mounts", keyMounts))
+					if err != nil {
+						return out, err
+					}
+					valueMounts = sMountsValue
+					mappedMounts[keyMounts] = valueMounts
+				}
+				out.Mounts = mappedMounts
+			}
+		case "port":
+			nPort, err := decodeInt(item, path+".port")
+			if err != nil {
+				return out, err
+			}
+			out.Port = int(nPort)
+		default:
+			return out, unknownMember(path, "ServerOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHTTPRetry decodes a Buzz Retry, an object instance or a map, into a types.HTTPRetry.
+func DecodeHTTPRetry(v vm.Value) (types.HTTPRetry, error) {
+	return decodeHTTPRetry(v, "retry")
+}
+
+func decodeHTTPRetry(v vm.Value, path string) (types.HTTPRetry, error) {
+	var out types.HTTPRetry
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Retry", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "attempts":
+			nAttempts, err := decodeInt(item, path+".attempts")
+			if err != nil {
+				return out, err
+			}
+			out.Attempts = int(nAttempts)
+		case "delay_ms":
+			nDelayMs, err := decodeFloat(item, path+".delay_ms")
+			if err != nil {
+				return out, err
+			}
+			out.DelayMs = nDelayMs
+		case "max_delay_ms":
+			nMaxDelayMs, err := decodeFloat(item, path+".max_delay_ms")
+			if err != nil {
+				return out, err
+			}
+			out.MaxDelayMs = nMaxDelayMs
+		case "max_elapsed_ms":
+			nMaxElapsedMs, err := decodeFloat(item, path+".max_elapsed_ms")
+			if err != nil {
+				return out, err
+			}
+			out.MaxElapsedMs = nMaxElapsedMs
+		case "fixed":
+			bFixed, err := decodeBool(item, path+".fixed")
+			if err != nil {
+				return out, err
+			}
+			out.Fixed = bFixed
+		case "all_errors":
+			bAllErrors, err := decodeBool(item, path+".all_errors")
+			if err != nil {
+				return out, err
+			}
+			out.AllErrors = bAllErrors
+		case "conn_refused":
+			bConnRefused, err := decodeBool(item, path+".conn_refused")
+			if err != nil {
+				return out, err
+			}
+			out.ConnRefused = bConnRefused
+		default:
+			return out, unknownMember(path, "Retry", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeArchiveOptions decodes a Buzz Options, an object instance or a map, into a types.ArchiveOptions.
+func DecodeArchiveOptions(v vm.Value) (types.ArchiveOptions, error) {
+	return decodeArchiveOptions(v, "options")
+}
+
+func decodeArchiveOptions(v vm.Value, path string) (types.ArchiveOptions, error) {
+	var out types.ArchiveOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Options", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "format":
+			sFormat, err := decodeString(item, path+".format")
+			if err != nil {
+				return out, err
+			}
+			out.Format = sFormat
+		case "strip":
+			nStrip, err := decodeInt(item, path+".strip")
+			if err != nil {
+				return out, err
+			}
+			out.Strip = int(nStrip)
+		case "maxSize":
+			nMaxSize, err := decodeInt(item, path+".maxSize")
+			if err != nil {
+				return out, err
+			}
+			out.MaxSize = int(nMaxSize)
+		case "threads":
+			nThreads, err := decodeInt(item, path+".threads")
+			if err != nil {
+				return out, err
+			}
+			out.Threads = int(nThreads)
+		case "level":
+			if !item.IsNull() {
+				var optLevel int
+				nLevel, err := decodeInt(item, path+".level")
+				if err != nil {
+					return out, err
+				}
+				optLevel = int(nLevel)
+				out.Level = &optLevel
+			}
+		case "followSymlinks":
+			bFollowSymlinks, err := decodeBool(item, path+".followSymlinks")
+			if err != nil {
+				return out, err
+			}
+			out.FollowSymlinks = bFollowSymlinks
+		default:
+			return out, unknownMember(path, "Options", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeRetryOptions decodes a Buzz RetryOptions, an object instance or a map, into a types.RetryOptions.
+func DecodeRetryOptions(v vm.Value) (types.RetryOptions, error) {
+	return decodeRetryOptions(v, "retryOptions")
+}
+
+func decodeRetryOptions(v vm.Value, path string) (types.RetryOptions, error) {
+	var out types.RetryOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "RetryOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "backoffMs":
+			if !item.IsNull() {
+				var optBackoffMs float64
+				nBackoffMs, err := decodeFloat(item, path+".backoffMs")
+				if err != nil {
+					return out, err
+				}
+				optBackoffMs = nBackoffMs
+				out.BackoffMs = &optBackoffMs
+			}
+		case "maxBackoffMs":
+			if !item.IsNull() {
+				var optMaxBackoffMs float64
+				nMaxBackoffMs, err := decodeFloat(item, path+".maxBackoffMs")
+				if err != nil {
+					return out, err
+				}
+				optMaxBackoffMs = nMaxBackoffMs
+				out.MaxBackoffMs = &optMaxBackoffMs
+			}
+		default:
+			return out, unknownMember(path, "RetryOptions", key)
+		}
+	}
+	return out, nil
+}
+
 // ProviderFuncs is every provider op a spell may export, one row per spell-family
 // cmd/magus-utils providerOps entry and in its order. Required is false on every row:
 // which ops a provider needs is its family's to say.
@@ -5047,12 +5857,14 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 
 var enumArchitectureValues = []string{"", "amd64", "arm64"}
 var enumDiagnosticFormatValues = []string{"", "gnu"}
+var enumEdgeDirectionValues = []string{"", "out", "in"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}
 var enumMediaTypeValues = []string{"", "application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.config.v1+json", "application/vnd.oci.image.layer.v1.tar", "application/vnd.oci.image.layer.v1.tar+gzip", "application/vnd.oci.image.layer.v1.tar+zstd", "application/vnd.oci.empty.v1+json", "application/spdx+json", "application/vnd.in-toto+json"}
 var enumModePolicyValues = []string{"", "fixed", "executable-bit"}
 var enumOSValues = []string{"", "linux"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
+var enumRelationIDValues = []string{"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"}
 var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
 var enumSkillFormValues = []string{"", "both", "short", "full"}
 var enumSymbolFormatValues = []string{"", "scip"}

@@ -83,7 +83,7 @@ fun from_security(ref: str) > Secret !> any {
     }
 
     final res = proc\exec("security", args: ["find-generic-password", "-s", ref, "-w"], dir: ".",
-        opts: {"allow_failure": true, "quiet": true});
+        opts: proc\ExecOptions{allowFailure = true, quiet = true});
     if (res["code"] != 0) {
         final err = "{res["stderr"]}";
         if (has(err, "could not be found")) {
@@ -119,7 +119,7 @@ fun from_secret_tool(ref: str) > Secret !> any {
     }
 
     final res = proc\exec("secret-tool", args: ["lookup", "service", ref], dir: ".",
-        opts: {"allow_failure": true, "quiet": true});
+        opts: proc\ExecOptions{allowFailure = true, quiet = true});
     final value = "{res["stdout"]}";
     if (res["code"] != 0 or value == "") {
         throw "system-keychain: no secret is stored under service " + ref + ". Store one with\n"

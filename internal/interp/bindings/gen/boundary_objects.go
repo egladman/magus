@@ -503,8 +503,8 @@ func ObjectKnowledgeIndexCause(v types.KnowledgeIndexCause) vm.Value {
 
 func ObjectKnowledgeAnswer(v types.KnowledgeAnswer, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("verdict", vm.StringValue(string(v.Verdict)))
-	out.MapSet("reason", vm.StringValue(string(v.Reason)))
+	out.MapSet("verdict", enums.Case("KnowledgeVerdict", string(v.Verdict)))
+	out.MapSet("reason", enums.Case("KnowledgeUnknownReason", string(v.Reason)))
 	itemsGaps := make([]vm.Value, len(v.Gaps))
 	for indexGaps := range v.Gaps {
 		itemsGaps[indexGaps] = ObjectKnowledgeSymbolGap(v.Gaps[indexGaps], enums)
@@ -565,7 +565,7 @@ func ObjectDuplicationHistory(v types.DuplicationHistory) vm.Value {
 	return out
 }
 
-func ObjectDuplicationGroup(v types.DuplicationGroup) vm.Value {
+func ObjectDuplicationGroup(v types.DuplicationGroup, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	itemsMembers := make([]vm.Value, len(v.Members))
 	for indexMembers := range v.Members {
@@ -583,9 +583,9 @@ func ObjectDuplicationGroup(v types.DuplicationGroup) vm.Value {
 		itemsPackages[indexPackages] = vm.StringValue(v.Packages[indexPackages])
 	}
 	out.MapSet("packages", vm.ListValue(itemsPackages))
-	out.MapSet("placement", vm.StringValue(string(v.Placement)))
+	out.MapSet("placement", enums.Case("DuplicationPlacement", string(v.Placement)))
 	out.MapSet("home", vm.StringValue(v.Home))
-	out.MapSet("shape", vm.StringValue(string(v.Shape)))
+	out.MapSet("shape", enums.Case("DuplicationShape", string(v.Shape)))
 	out.MapSet("removable", vm.IntValue(int64(v.Removable)))
 	out.MapSet("siblings", vm.BoolValue(v.Siblings))
 	optHistory := vm.Null
@@ -601,17 +601,17 @@ func ObjectDuplicationOutput(v types.DuplicationOutput, enums ffi.EnumCases) vm.
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	itemsGroups := make([]vm.Value, len(v.Groups))
 	for indexGroups := range v.Groups {
-		itemsGroups[indexGroups] = ObjectDuplicationGroup(v.Groups[indexGroups])
+		itemsGroups[indexGroups] = ObjectDuplicationGroup(v.Groups[indexGroups], enums)
 	}
 	out.MapSet("groups", vm.ListValue(itemsGroups))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	return out
 }
 
-func ObjectConformanceKey(v types.ConformanceKey) vm.Value {
+func ObjectConformanceKey(v types.ConformanceKey, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("metric", vm.StringValue(string(v.Metric)))
-	out.MapSet("population", vm.StringValue(string(v.Population)))
+	out.MapSet("metric", enums.Case("ConformanceMetric", string(v.Metric)))
+	out.MapSet("population", enums.Case("ConformancePopulation", string(v.Population)))
 	out.MapSet("scope", vm.StringValue(v.Scope))
 	return out
 }
@@ -627,9 +627,9 @@ func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
 	return out
 }
 
-func ObjectConformanceRow(v types.ConformanceRow) vm.Value {
+func ObjectConformanceRow(v types.ConformanceRow, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("key", ObjectConformanceKey(v.Key))
+	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
 	out.MapSet("n", vm.IntValue(int64(v.N)))
 	out.MapSet("p50", vm.IntValue(int64(v.P50)))
 	out.MapSet("p90", vm.IntValue(int64(v.P90)))
@@ -640,7 +640,7 @@ func ObjectConformanceRow(v types.ConformanceRow) vm.Value {
 	out.MapSet("anchor", vm.IntValue(int64(v.Anchor)))
 	out.MapSet("propose", vm.IntValue(int64(v.Propose)))
 	out.MapSet("known", vm.IntValue(int64(v.Known)))
-	out.MapSet("source", vm.StringValue(string(v.Source)))
+	out.MapSet("source", enums.Case("ConformanceSource", string(v.Source)))
 	itemsViolations := make([]vm.Value, len(v.Violations))
 	for indexViolations := range v.Violations {
 		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
@@ -649,9 +649,9 @@ func ObjectConformanceRow(v types.ConformanceRow) vm.Value {
 	return out
 }
 
-func ObjectConformanceKnown(v types.ConformanceKnown) vm.Value {
+func ObjectConformanceKnown(v types.ConformanceKnown, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("metric", vm.StringValue(string(v.Metric)))
+	out.MapSet("metric", enums.Case("ConformanceMetric", string(v.Metric)))
 	itemsItems := make([]vm.Value, len(v.Items))
 	for indexItems := range v.Items {
 		itemsItems[indexItems] = vm.StringValue(v.Items[indexItems])
@@ -666,9 +666,9 @@ func ObjectConformanceKnown(v types.ConformanceKnown) vm.Value {
 	return out
 }
 
-func ObjectConformanceCarry(v types.ConformanceCarry) vm.Value {
+func ObjectConformanceCarry(v types.ConformanceCarry, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("metric", vm.StringValue(string(v.Metric)))
+	out.MapSet("metric", enums.Case("ConformanceMetric", string(v.Metric)))
 	out.MapSet("from", vm.StringValue(v.From))
 	itemsTo := make([]vm.Value, len(v.To))
 	for indexTo := range v.To {
@@ -683,22 +683,22 @@ func ObjectConformanceOutput(v types.ConformanceOutput, enums ffi.EnumCases) vm.
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	itemsRows := make([]vm.Value, len(v.Rows))
 	for indexRows := range v.Rows {
-		itemsRows[indexRows] = ObjectConformanceRow(v.Rows[indexRows])
+		itemsRows[indexRows] = ObjectConformanceRow(v.Rows[indexRows], enums)
 	}
 	out.MapSet("rows", vm.ListValue(itemsRows))
 	itemsStale := make([]vm.Value, len(v.Stale))
 	for indexStale := range v.Stale {
-		itemsStale[indexStale] = ObjectConformanceKnown(v.Stale[indexStale])
+		itemsStale[indexStale] = ObjectConformanceKnown(v.Stale[indexStale], enums)
 	}
 	out.MapSet("stale", vm.ListValue(itemsStale))
 	itemsCarried := make([]vm.Value, len(v.Carried))
 	for indexCarried := range v.Carried {
-		itemsCarried[indexCarried] = ObjectConformanceCarry(v.Carried[indexCarried])
+		itemsCarried[indexCarried] = ObjectConformanceCarry(v.Carried[indexCarried], enums)
 	}
 	out.MapSet("carried", vm.ListValue(itemsCarried))
 	itemsAmbiguous := make([]vm.Value, len(v.Ambiguous))
 	for indexAmbiguous := range v.Ambiguous {
-		itemsAmbiguous[indexAmbiguous] = ObjectConformanceCarry(v.Ambiguous[indexAmbiguous])
+		itemsAmbiguous[indexAmbiguous] = ObjectConformanceCarry(v.Ambiguous[indexAmbiguous], enums)
 	}
 	out.MapSet("ambiguous", vm.ListValue(itemsAmbiguous))
 	mappedShapes := vm.NewMap()
@@ -905,11 +905,11 @@ func ObjectKnowledgeNode(v types.KnowledgeNode) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeEdge(v types.KnowledgeEdge) vm.Value {
+func ObjectKnowledgeEdge(v types.KnowledgeEdge, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("source", vm.StringValue(v.Source))
 	out.MapSet("target", vm.StringValue(v.Target))
-	out.MapSet("relation", vm.StringValue(string(v.Relation)))
+	out.MapSet("relation", enums.Case("RelationID", string(v.Relation)))
 	out.MapSet("confidence", vm.StringValue(v.Confidence))
 	out.MapSet("score", vm.FloatValue(float64(v.Score)))
 	out.MapSet("provenance", vm.StringValue(v.Provenance))
@@ -958,7 +958,7 @@ func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCase
 	out.MapSet("nodes", vm.ListValue(itemsNodes))
 	itemsLinks := make([]vm.Value, len(v.Links))
 	for indexLinks := range v.Links {
-		itemsLinks[indexLinks] = ObjectKnowledgeEdge(v.Links[indexLinks])
+		itemsLinks[indexLinks] = ObjectKnowledgeEdge(v.Links[indexLinks], enums)
 	}
 	out.MapSet("links", vm.ListValue(itemsLinks))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
@@ -970,10 +970,10 @@ func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCase
 	return out
 }
 
-func ObjectKnowledgeEdgeRef(v types.KnowledgeEdgeRef) vm.Value {
+func ObjectKnowledgeEdgeRef(v types.KnowledgeEdgeRef, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("relation", vm.StringValue(string(v.Relation)))
-	out.MapSet("direction", vm.StringValue(string(v.Direction)))
+	out.MapSet("relation", enums.Case("RelationID", string(v.Relation)))
+	out.MapSet("direction", enums.Case("EdgeDirection", string(v.Direction)))
 	out.MapSet("other", vm.StringValue(v.Other))
 	out.MapSet("otherKind", vm.StringValue(v.OtherKind))
 	out.MapSet("otherLabel", vm.StringValue(v.OtherLabel))
@@ -1004,12 +1004,12 @@ func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput, enums ffi.Enum
 	out.MapSet("blastRadius", vm.IntValue(int64(v.BlastRadius)))
 	itemsOut := make([]vm.Value, len(v.Out))
 	for indexOut := range v.Out {
-		itemsOut[indexOut] = ObjectKnowledgeEdgeRef(v.Out[indexOut])
+		itemsOut[indexOut] = ObjectKnowledgeEdgeRef(v.Out[indexOut], enums)
 	}
 	out.MapSet("out", vm.ListValue(itemsOut))
 	itemsIn := make([]vm.Value, len(v.In))
 	for indexIn := range v.In {
-		itemsIn[indexIn] = ObjectKnowledgeEdgeRef(v.In[indexIn])
+		itemsIn[indexIn] = ObjectKnowledgeEdgeRef(v.In[indexIn], enums)
 	}
 	out.MapSet("in", vm.ListValue(itemsIn))
 	out.MapSet("docsURL", vm.StringValue(v.DocsURL))
@@ -1023,16 +1023,16 @@ func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput, enums ffi.Enum
 	return out
 }
 
-func ObjectKnowledgePathStep(v types.KnowledgePathStep) vm.Value {
+func ObjectKnowledgePathStep(v types.KnowledgePathStep, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("from", vm.StringValue(v.From))
 	out.MapSet("to", vm.StringValue(v.To))
-	out.MapSet("relation", vm.StringValue(string(v.Relation)))
+	out.MapSet("relation", enums.Case("RelationID", string(v.Relation)))
 	out.MapSet("forward", vm.BoolValue(v.Forward))
 	return out
 }
 
-func ObjectKnowledgePathOutput(v types.KnowledgePathOutput) vm.Value {
+func ObjectKnowledgePathOutput(v types.KnowledgePathOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
@@ -1041,7 +1041,7 @@ func ObjectKnowledgePathOutput(v types.KnowledgePathOutput) vm.Value {
 	out.MapSet("found", vm.BoolValue(v.Found))
 	itemsSteps := make([]vm.Value, len(v.Steps))
 	for indexSteps := range v.Steps {
-		itemsSteps[indexSteps] = ObjectKnowledgePathStep(v.Steps[indexSteps])
+		itemsSteps[indexSteps] = ObjectKnowledgePathStep(v.Steps[indexSteps], enums)
 	}
 	out.MapSet("steps", vm.ListValue(itemsSteps))
 	return out
@@ -1244,15 +1244,15 @@ func ObjectLayer(v types.Layer) vm.Value {
 	return out
 }
 
-func ObjectKnowledgeNeighborhoodOptions(v types.KnowledgeNeighborhoodOptions) vm.Value {
+func ObjectKnowledgeNeighborhoodOptions(v types.KnowledgeNeighborhoodOptions, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("depth", vm.IntValue(int64(v.Depth)))
 	itemsRelations := make([]vm.Value, len(v.Relations))
 	for indexRelations := range v.Relations {
-		itemsRelations[indexRelations] = vm.StringValue(string(v.Relations[indexRelations]))
+		itemsRelations[indexRelations] = enums.Case("RelationID", string(v.Relations[indexRelations]))
 	}
 	out.MapSet("relations", vm.ListValue(itemsRelations))
-	out.MapSet("direction", vm.StringValue(string(v.Direction)))
+	out.MapSet("direction", enums.Case("EdgeDirection", string(v.Direction)))
 	itemsCollapse := make([]vm.Value, len(v.Collapse))
 	for indexCollapse := range v.Collapse {
 		itemsCollapse[indexCollapse] = vm.StringValue(v.Collapse[indexCollapse])
@@ -1275,7 +1275,7 @@ func ObjectKnowledgeNeighborhoodOutput(v types.KnowledgeNeighborhoodOutput, enum
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
 	out.MapSet("focus", vm.StringValue(v.Focus))
 	out.MapSet("resolution", enums.Case("KnowledgeResolution", string(v.Resolution)))
-	out.MapSet("options", ObjectKnowledgeNeighborhoodOptions(v.Options))
+	out.MapSet("options", ObjectKnowledgeNeighborhoodOptions(v.Options, enums))
 	itemsNodes := make([]vm.Value, len(v.Nodes))
 	for indexNodes := range v.Nodes {
 		itemsNodes[indexNodes] = ObjectKnowledgeNode(v.Nodes[indexNodes])
@@ -1283,7 +1283,7 @@ func ObjectKnowledgeNeighborhoodOutput(v types.KnowledgeNeighborhoodOutput, enum
 	out.MapSet("nodes", vm.ListValue(itemsNodes))
 	itemsLinks := make([]vm.Value, len(v.Links))
 	for indexLinks := range v.Links {
-		itemsLinks[indexLinks] = ObjectKnowledgeEdge(v.Links[indexLinks])
+		itemsLinks[indexLinks] = ObjectKnowledgeEdge(v.Links[indexLinks], enums)
 	}
 	out.MapSet("links", vm.ListValue(itemsLinks))
 	itemsFolds := make([]vm.Value, len(v.Folds))
@@ -1406,7 +1406,7 @@ func ObjectCheck(v types.Check, enums ffi.EnumCases) vm.Value {
 		itemsDetails[indexDetails] = vm.StringValue(v.Details[indexDetails])
 	}
 	out.MapSet("details", vm.ListValue(itemsDetails))
-	out.MapSet("evidence", vm.StringValue(string(v.Evidence)))
+	out.MapSet("evidence", enums.Case("Evidence", string(v.Evidence)))
 	itemsFix := make([]vm.Value, len(v.Fix))
 	for indexFix := range v.Fix {
 		itemsFix[indexFix] = vm.StringValue(v.Fix[indexFix])
@@ -1905,18 +1905,18 @@ func ObjectURL(v types.URL) vm.Value {
 	return out
 }
 
-func ObjectFileChange(v types.FileChange) vm.Value {
+func ObjectFileChange(v types.FileChange, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("prevPath", vm.StringValue(v.PrevPath))
-	out.MapSet("status", vm.StringValue(string(v.Status)))
+	out.MapSet("status", enums.Case("ChangeStatus", string(v.Status)))
 	return out
 }
 
-func ObjectRegionChange(v types.RegionChange) vm.Value {
+func ObjectRegionChange(v types.RegionChange, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("file", ObjectFileChange(v.File))
-	out.MapSet("side", vm.StringValue(string(v.Side)))
+	out.MapSet("file", ObjectFileChange(v.File, enums))
+	out.MapSet("side", enums.Case("RegionSide", string(v.Side)))
 	itemsLines := make([]vm.Value, len(v.Lines))
 	for indexLines := range v.Lines {
 		itemsLines[indexLines] = vm.IntValue(int64(v.Lines[indexLines]))
@@ -2008,7 +2008,7 @@ func ObjectYAMLPositions(v types.YAMLPositions) vm.Value {
 	return out
 }
 
-func ObjectTarget(v types.Target) vm.Value {
+func ObjectTarget(v types.Target, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("projectPath", vm.StringValue(v.Path))
 	out.MapSet("name", vm.StringValue(v.Name))
@@ -2038,7 +2038,7 @@ func ObjectTarget(v types.Target) vm.Value {
 	out.MapSet("slots", vm.IntValue(int64(v.Slots)))
 	out.MapSet("memory_mb", vm.IntValue(int64(v.MemoryMB)))
 	out.MapSet("timeout", vm.StringValue(v.Timeout))
-	out.MapSet("drift", vm.StringValue(string(v.Drift)))
+	out.MapSet("drift", enums.Case("DriftPolicy", string(v.Drift)))
 	out.MapSet("drift_reason", vm.StringValue(v.DriftReason))
 	out.MapSet("retry_on_volatile", vm.BoolValue(v.RetryOnVolatile))
 	out.MapSet("retry_on_volatile_reason", vm.StringValue(v.RetryOnVolatileReason))
@@ -3299,7 +3299,7 @@ func ObjectEvaluatedSpell(v types.EvaluatedSpell) vm.Value {
 	return out
 }
 
-func ObjectEvaluatedTarget(v types.EvaluatedTarget) vm.Value {
+func ObjectEvaluatedTarget(v types.EvaluatedTarget, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
 	out.MapSet("target", vm.StringValue(v.Target))
@@ -3341,13 +3341,13 @@ func ObjectEvaluatedTarget(v types.EvaluatedTarget) vm.Value {
 	out.MapSet("spells", vm.ListValue(itemsSpells))
 	optPolicy := vm.Null
 	if v.Policy != nil {
-		optPolicy = ObjectTarget((*v.Policy))
+		optPolicy = ObjectTarget((*v.Policy), enums)
 	}
 	out.MapSet("policy", optPolicy)
 	return out
 }
 
-func ObjectEvaluatedProject(v types.EvaluatedProject) vm.Value {
+func ObjectEvaluatedProject(v types.EvaluatedProject, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.ProjectEntry.Path))
 	out.MapSet("name", vm.StringValue(v.ProjectEntry.Name))
@@ -3391,7 +3391,7 @@ func ObjectEvaluatedProject(v types.EvaluatedProject) vm.Value {
 	out.MapSet("resolvedSpells", vm.ListValue(itemsResolvedSpells))
 	mappedTargetPolicies := vm.NewMap()
 	for keyTargetPolicies, itemTargetPolicies := range v.TargetPolicies {
-		mappedTargetPolicies.MapSet(keyTargetPolicies, ObjectTarget(itemTargetPolicies))
+		mappedTargetPolicies.MapSet(keyTargetPolicies, ObjectTarget(itemTargetPolicies, enums))
 	}
 	out.MapSet("targetPolicies", mappedTargetPolicies)
 	return out
@@ -3407,7 +3407,7 @@ func ObjectWorkspaceEntry(v types.WorkspaceEntry) vm.Value {
 	return out
 }
 
-func ObjectRuleDoc(v types.RuleDoc) vm.Value {
+func ObjectRuleDoc(v types.RuleDoc, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
 	out.MapSet("decision", vm.StringValue(v.Decision))
@@ -3415,7 +3415,7 @@ func ObjectRuleDoc(v types.RuleDoc) vm.Value {
 	out.MapSet("fixed", vm.BoolValue(v.Fixed))
 	itemsVerdicts := make([]vm.Value, len(v.Verdicts))
 	for indexVerdicts := range v.Verdicts {
-		itemsVerdicts[indexVerdicts] = vm.StringValue(string(v.Verdicts[indexVerdicts]))
+		itemsVerdicts[indexVerdicts] = enums.Case("GuardDecision", string(v.Verdicts[indexVerdicts]))
 	}
 	out.MapSet("verdicts", vm.ListValue(itemsVerdicts))
 	out.MapSet("catches", vm.StringValue(v.Catches))
@@ -3439,15 +3439,15 @@ func ObjectHarnessWired(v types.HarnessWired) vm.Value {
 	return out
 }
 
-func ObjectHarnessChange(v types.HarnessChange) vm.Value {
+func ObjectHarnessChange(v types.HarnessChange, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("op", vm.StringValue(string(v.Op)))
+	out.MapSet("op", enums.Case("HarnessChangeOp", string(v.Op)))
 	out.MapSet("key", vm.StringValue(v.Key))
 	out.MapSet("value", ffi.AnyVal(v.Value))
 	return out
 }
 
-func ObjectHarnessFile(v types.HarnessFile) vm.Value {
+func ObjectHarnessFile(v types.HarnessFile, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("exists", vm.BoolValue(v.Exists))
 	mappedFragment := vm.NewMap()
@@ -3458,18 +3458,18 @@ func ObjectHarnessFile(v types.HarnessFile) vm.Value {
 	out.MapSet("content", vm.StringValue(v.Content))
 	itemsChanges := make([]vm.Value, len(v.Changes))
 	for indexChanges := range v.Changes {
-		itemsChanges[indexChanges] = ObjectHarnessChange(v.Changes[indexChanges])
+		itemsChanges[indexChanges] = ObjectHarnessChange(v.Changes[indexChanges], enums)
 	}
 	out.MapSet("changes", vm.ListValue(itemsChanges))
 	return out
 }
 
-func ObjectHarnessPlan(v types.HarnessPlan) vm.Value {
+func ObjectHarnessPlan(v types.HarnessPlan, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	mappedFiles := vm.NewMap()
 	for keyFiles, itemFiles := range v.Files {
-		mappedFiles.MapSet(keyFiles, ObjectHarnessFile(itemFiles))
+		mappedFiles.MapSet(keyFiles, ObjectHarnessFile(itemFiles, enums))
 	}
 	out.MapSet("files", mappedFiles)
 	out.MapSet("merge", vm.StringValue(v.Merge))
@@ -3572,31 +3572,31 @@ func ObjectGrant(v types.Grant) vm.Value {
 	return out
 }
 
-func ObjectCredential(v types.Credential) vm.Value {
+func ObjectCredential(v types.Credential, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("class", vm.StringValue(string(v.Kind)))
+	out.MapSet("class", enums.Case("CredentialKind", string(v.Kind)))
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("name", vm.StringValue(v.Name))
 	out.MapSet("grant", ObjectGrant(v.Grant))
 	return out
 }
 
-func ObjectOrigin(v types.Origin) vm.Value {
+func ObjectOrigin(v types.Origin, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("user", vm.StringValue(v.User))
 	out.MapSet("uid", vm.StringValue(v.UID))
-	out.MapSet("entryPoint", vm.StringValue(string(v.EntryPoint)))
+	out.MapSet("entryPoint", enums.Case("EntryPoint", string(v.EntryPoint)))
 	out.MapSet("host", vm.StringValue(v.Host))
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("agent", vm.StringValue(v.Agent))
-	out.MapSet("credential", ObjectCredential(v.Credential))
+	out.MapSet("credential", ObjectCredential(v.Credential, enums))
 	return out
 }
 
-func ObjectJobEntry(v types.JobEntry) vm.Value {
+func ObjectJobEntry(v types.JobEntry, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("by", ObjectOrigin(v.By))
+	out.MapSet("by", ObjectOrigin(v.By, enums))
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("consumed", vm.IntValue(int64(v.Consumed)))
 	return out
@@ -3617,7 +3617,7 @@ func ObjectLeaseCheck(v types.LeaseCheck) vm.Value {
 	return out
 }
 
-func ObjectGoal(v types.Goal) vm.Value {
+func ObjectGoal(v types.Goal, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("description", vm.StringValue(v.Description))
@@ -3626,8 +3626,8 @@ func ObjectGoal(v types.Goal) vm.Value {
 		itemsDependsOn[indexDependsOn] = vm.StringValue(v.DependsOn[indexDependsOn])
 	}
 	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
-	out.MapSet("kind", vm.StringValue(string(v.Kind)))
-	out.MapSet("expect", vm.StringValue(string(v.Expect)))
+	out.MapSet("kind", enums.Case("GoalKind", string(v.Kind)))
+	out.MapSet("expect", enums.Case("GoalExpect", string(v.Expect)))
 	out.MapSet("check", ObjectLeaseCheck(v.Check))
 	itemsPaths := make([]vm.Value, len(v.Paths))
 	for indexPaths := range v.Paths {
@@ -3811,7 +3811,7 @@ func ObjectModelTierRequest(v types.ModelTierRequest, enums ffi.EnumCases) vm.Va
 	out.MapSet("check", optCheck)
 	itemsGoals := make([]vm.Value, len(v.Goals))
 	for indexGoals := range v.Goals {
-		itemsGoals[indexGoals] = ObjectGoal(v.Goals[indexGoals])
+		itemsGoals[indexGoals] = ObjectGoal(v.Goals[indexGoals], enums)
 	}
 	out.MapSet("goals", vm.ListValue(itemsGoals))
 	out.MapSet("kind", enums.Case("JobKind", string(v.Kind)))
@@ -3865,19 +3865,19 @@ func ObjectJobDenial(v types.JobDenial) vm.Value {
 	return out
 }
 
-func ObjectRetryVerdict(v types.RetryVerdict) vm.Value {
+func ObjectRetryVerdict(v types.RetryVerdict, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("retryable", vm.BoolValue(v.Retryable))
-	out.MapSet("change", vm.StringValue(string(v.Change)))
+	out.MapSet("change", enums.Case("RetryChange", string(v.Change)))
 	out.MapSet("reason", vm.StringValue(v.Reason))
 	out.MapSet("code", vm.StringValue(string(v.Code)))
 	return out
 }
 
-func ObjectPriorAttempt(v types.PriorAttempt) vm.Value {
+func ObjectPriorAttempt(v types.PriorAttempt, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("n", vm.IntValue(int64(v.N)))
-	out.MapSet("state", vm.StringValue(string(v.State)))
+	out.MapSet("state", enums.Case("JobState", string(v.State)))
 	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
 	out.MapSet("endReason", vm.StringValue(v.EndReason))
 	out.MapSet("modelTier", vm.StringValue(v.ModelTier))
@@ -3912,7 +3912,7 @@ func ObjectPriorAttempt(v types.PriorAttempt) vm.Value {
 	}
 	out.MapSet("denials", vm.ListValue(itemsDenials))
 	out.MapSet("denialsKnown", vm.BoolValue(v.DenialsKnown))
-	out.MapSet("retry", ObjectRetryVerdict(v.Retry))
+	out.MapSet("retry", ObjectRetryVerdict(v.Retry, enums))
 	return out
 }
 
@@ -3954,7 +3954,7 @@ func ObjectJobClaim(v types.JobClaim, enums ffi.EnumCases) vm.Value {
 	out.MapSet("evidence", ObjectClaimEvidence(v.Evidence, enums))
 	out.MapSet("proof", vm.StringValue(v.Proof))
 	out.MapSet("at", vm.IntValue(int64(v.At)))
-	out.MapSet("by", ObjectOrigin(v.By))
+	out.MapSet("by", ObjectOrigin(v.By, enums))
 	return out
 }
 
@@ -4026,13 +4026,13 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("maxClaims", vm.IntValue(int64(v.MaxClaims)))
 	out.MapSet("weight", vm.FloatValue(float64(v.Weight)))
 	out.MapSet("paused", vm.IntValue(int64(v.Paused)))
-	out.MapSet("pausedBy", ObjectOrigin(v.PausedBy))
+	out.MapSet("pausedBy", ObjectOrigin(v.PausedBy, enums))
 	out.MapSet("pauseReason", vm.StringValue(v.PauseReason))
 	out.MapSet("pausedUntil", vm.IntValue(int64(v.PausedUntil)))
 	out.MapSet("attempts", vm.IntValue(int64(v.Attempts)))
 	itemsPrior := make([]vm.Value, len(v.Prior))
 	for indexPrior := range v.Prior {
-		itemsPrior[indexPrior] = ObjectPriorAttempt(v.Prior[indexPrior])
+		itemsPrior[indexPrior] = ObjectPriorAttempt(v.Prior[indexPrior], enums)
 	}
 	out.MapSet("prior", vm.ListValue(itemsPrior))
 	optRejection := vm.Null
@@ -4048,11 +4048,11 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("validation", vm.StringValue(v.Validation))
 	itemsGoals := make([]vm.Value, len(v.Goals))
 	for indexGoals := range v.Goals {
-		itemsGoals[indexGoals] = ObjectGoal(v.Goals[indexGoals])
+		itemsGoals[indexGoals] = ObjectGoal(v.Goals[indexGoals], enums)
 	}
 	out.MapSet("goals", vm.ListValue(itemsGoals))
-	out.MapSet("state", vm.StringValue(string(v.State)))
-	out.MapSet("holder", vm.StringValue(string(v.Holder)))
+	out.MapSet("state", enums.Case("JobState", string(v.State)))
+	out.MapSet("holder", enums.Case("JobHolder", string(v.Holder)))
 	out.MapSet("readOnly", vm.BoolValue(v.ReadOnly))
 	itemsReleases := make([]vm.Value, len(v.Releases))
 	for indexReleases := range v.Releases {
@@ -4066,10 +4066,10 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("unattributed", vm.ListValue(itemsUnattributed))
 	itemsEntries := make([]vm.Value, len(v.Entries))
 	for indexEntries := range v.Entries {
-		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries])
+		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries], enums)
 	}
 	out.MapSet("entries", vm.ListValue(itemsEntries))
-	out.MapSet("writeProof", vm.StringValue(string(v.WriteProof)))
+	out.MapSet("writeProof", enums.Case("JobWriteProof", string(v.WriteProof)))
 	itemsDeviations := make([]vm.Value, len(v.Deviations))
 	for indexDeviations := range v.Deviations {
 		itemsDeviations[indexDeviations] = ObjectDeviation(v.Deviations[indexDeviations])
@@ -4077,8 +4077,8 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("deviations", vm.ListValue(itemsDeviations))
 	out.MapSet("validated", vm.IntValue(int64(v.Validated)))
 	out.MapSet("reportedBase", vm.StringValue(v.ReportedBase))
-	out.MapSet("baseVerdict", vm.StringValue(string(v.BaseVerdict)))
-	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))
+	out.MapSet("baseVerdict", enums.Case("JobBaseVerdict", string(v.BaseVerdict)))
+	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy, enums))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
 	out.MapSet("checkoutRoot", vm.StringValue(v.CheckoutRoot))
 	optWorktree := vm.Null
@@ -4158,11 +4158,11 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 	return out
 }
 
-func ObjectJobBlock(v types.JobBlock) vm.Value {
+func ObjectJobBlock(v types.JobBlock, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("job", vm.StringValue(v.Job))
 	out.MapSet("on", vm.StringValue(v.On))
-	out.MapSet("state", vm.StringValue(string(v.State)))
+	out.MapSet("state", enums.Case("JobState", string(v.State)))
 	return out
 }
 
@@ -4200,7 +4200,7 @@ func ObjectInflightNeighbour(v types.InflightNeighbour) vm.Value {
 	return out
 }
 
-func ObjectInflightChange(v types.InflightChange) vm.Value {
+func ObjectInflightChange(v types.InflightChange, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("title", vm.StringValue(v.Title))
@@ -4223,7 +4223,7 @@ func ObjectInflightChange(v types.InflightChange) vm.Value {
 	out.MapSet("position", vm.IntValue(int64(v.Position)))
 	out.MapSet("below", vm.StringValue(v.Below))
 	out.MapSet("mine", vm.BoolValue(v.Mine))
-	out.MapSet("attention", vm.StringValue(string(v.Attention)))
+	out.MapSet("attention", enums.Case("InflightAttention", string(v.Attention)))
 	itemsNeighbours := make([]vm.Value, len(v.Neighbours))
 	for indexNeighbours := range v.Neighbours {
 		itemsNeighbours[indexNeighbours] = ObjectInflightNeighbour(v.Neighbours[indexNeighbours])
@@ -4272,7 +4272,7 @@ func ObjectJobList(v types.JobList, enums ffi.EnumCases) vm.Value {
 	out.MapSet("stale", vm.ListValue(itemsStale))
 	itemsBlocked := make([]vm.Value, len(v.Blocked))
 	for indexBlocked := range v.Blocked {
-		itemsBlocked[indexBlocked] = ObjectJobBlock(v.Blocked[indexBlocked])
+		itemsBlocked[indexBlocked] = ObjectJobBlock(v.Blocked[indexBlocked], enums)
 	}
 	out.MapSet("blocked", vm.ListValue(itemsBlocked))
 	itemsReadOnly := make([]vm.Value, len(v.ReadOnly))
@@ -4282,7 +4282,7 @@ func ObjectJobList(v types.JobList, enums ffi.EnumCases) vm.Value {
 	out.MapSet("readOnly", vm.ListValue(itemsReadOnly))
 	itemsChanges := make([]vm.Value, len(v.Changes))
 	for indexChanges := range v.Changes {
-		itemsChanges[indexChanges] = ObjectInflightChange(v.Changes[indexChanges])
+		itemsChanges[indexChanges] = ObjectInflightChange(v.Changes[indexChanges], enums)
 	}
 	out.MapSet("changes", vm.ListValue(itemsChanges))
 	optFetched := vm.Null
@@ -4298,7 +4298,7 @@ func ObjectJobList(v types.JobList, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectJobStatus(v types.JobStatus) vm.Value {
+func ObjectJobStatus(v types.JobStatus, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("job", vm.StringValue(v.Job))
 	out.MapSet("verified", vm.BoolValue(v.Verified))
@@ -4330,7 +4330,7 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
 	itemsFootprint := make([]vm.Value, len(v.Footprint))
 	for indexFootprint := range v.Footprint {
-		itemsFootprint[indexFootprint] = ObjectRegionChange(v.Footprint[indexFootprint])
+		itemsFootprint[indexFootprint] = ObjectRegionChange(v.Footprint[indexFootprint], enums)
 	}
 	out.MapSet("footprint", vm.ListValue(itemsFootprint))
 	out.MapSet("footprintKnown", vm.BoolValue(v.FootprintKnown))
@@ -4342,7 +4342,7 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	out.MapSet("footprintUnclaimed", vm.ListValue(itemsFootprintUnclaimed))
 	itemsEntries := make([]vm.Value, len(v.Entries))
 	for indexEntries := range v.Entries {
-		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries])
+		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries], enums)
 	}
 	out.MapSet("entries", vm.ListValue(itemsEntries))
 	out.MapSet("linesAdded", vm.IntValue(int64(v.LinesAdded)))
@@ -4363,16 +4363,16 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	return out
 }
 
-func ObjectContextWindow(v types.ContextWindow) vm.Value {
+func ObjectContextWindow(v types.ContextWindow, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("tokens", vm.IntValue(int64(v.Tokens)))
 	out.MapSet("window", vm.IntValue(int64(v.Window)))
 	out.MapSet("model", vm.StringValue(v.Model))
-	out.MapSet("source", vm.StringValue(string(v.Source)))
+	out.MapSet("source", enums.Case("ContextSource", string(v.Source)))
 	return out
 }
 
-func ObjectSpawnTarget(v types.SpawnTarget) vm.Value {
+func ObjectSpawnTarget(v types.SpawnTarget, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("agent", vm.StringValue(v.Agent))
 	optIdleMs := vm.Null
@@ -4389,7 +4389,7 @@ func ObjectSpawnTarget(v types.SpawnTarget) vm.Value {
 	out.MapSet("contextTokens", optContextTokens)
 	itemsEntries := make([]vm.Value, len(v.Entries))
 	for indexEntries := range v.Entries {
-		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries])
+		itemsEntries[indexEntries] = ObjectJobEntry(v.Entries[indexEntries], enums)
 	}
 	out.MapSet("entries", vm.ListValue(itemsEntries))
 	return out
@@ -4397,7 +4397,7 @@ func ObjectSpawnTarget(v types.SpawnTarget) vm.Value {
 
 func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("kind", vm.StringValue(string(v.Kind)))
+	out.MapSet("kind", enums.Case("SpawnKind", string(v.Kind)))
 	out.MapSet("host", vm.StringValue(v.Host))
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("model", vm.StringValue(v.Model))
@@ -4410,7 +4410,7 @@ func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("checkout", vm.StringValue(v.Checkout))
 	out.MapSet("agent", vm.StringValue(v.Agent))
 	out.MapSet("parent", vm.StringValue(v.Parent))
-	out.MapSet("role", vm.StringValue(string(v.Role)))
+	out.MapSet("role", enums.Case("AgentRole", string(v.Role)))
 	optLease := vm.Null
 	if v.Lease != nil {
 		optLease = ObjectJob((*v.Lease), enums)
@@ -4421,17 +4421,17 @@ func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 		optModelTier = ObjectJobModelTier((*v.ModelTier), enums)
 	}
 	out.MapSet("modelTier", optModelTier)
-	out.MapSet("thread", vm.StringValue(string(v.Thread)))
-	out.MapSet("threadFrom", vm.StringValue(string(v.ThreadFrom)))
-	out.MapSet("orchestration", vm.StringValue(string(v.Orchestration)))
+	out.MapSet("thread", enums.Case("AgentThread", string(v.Thread)))
+	out.MapSet("threadFrom", enums.Case("ThreadSource", string(v.ThreadFrom)))
+	out.MapSet("orchestration", enums.Case("Orchestration", string(v.Orchestration)))
 	optWindow := vm.Null
 	if v.Window != nil {
-		optWindow = ObjectContextWindow((*v.Window))
+		optWindow = ObjectContextWindow((*v.Window), enums)
 	}
 	out.MapSet("window", optWindow)
 	optTarget := vm.Null
 	if v.Target != nil {
-		optTarget = ObjectSpawnTarget((*v.Target))
+		optTarget = ObjectSpawnTarget((*v.Target), enums)
 	}
 	out.MapSet("target", optTarget)
 	return out
@@ -4492,18 +4492,18 @@ func ObjectCommandRequest(v types.CommandRequest, enums ffi.EnumCases) vm.Value 
 	out.MapSet("commands", vm.ListValue(itemsCommands))
 	out.MapSet("agent", vm.StringValue(v.Agent))
 	out.MapSet("parent", vm.StringValue(v.Parent))
-	out.MapSet("role", vm.StringValue(string(v.Role)))
+	out.MapSet("role", enums.Case("AgentRole", string(v.Role)))
 	optLease := vm.Null
 	if v.Lease != nil {
 		optLease = ObjectJob((*v.Lease), enums)
 	}
 	out.MapSet("lease", optLease)
-	out.MapSet("thread", vm.StringValue(string(v.Thread)))
-	out.MapSet("threadFrom", vm.StringValue(string(v.ThreadFrom)))
-	out.MapSet("orchestration", vm.StringValue(string(v.Orchestration)))
+	out.MapSet("thread", enums.Case("AgentThread", string(v.Thread)))
+	out.MapSet("threadFrom", enums.Case("ThreadSource", string(v.ThreadFrom)))
+	out.MapSet("orchestration", enums.Case("Orchestration", string(v.Orchestration)))
 	optWindow := vm.Null
 	if v.Window != nil {
-		optWindow = ObjectContextWindow((*v.Window))
+		optWindow = ObjectContextWindow((*v.Window), enums)
 	}
 	out.MapSet("window", optWindow)
 	optCheckout := vm.Null
@@ -4527,18 +4527,18 @@ func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("agent", vm.StringValue(v.Agent))
 	out.MapSet("parent", vm.StringValue(v.Parent))
-	out.MapSet("role", vm.StringValue(string(v.Role)))
+	out.MapSet("role", enums.Case("AgentRole", string(v.Role)))
 	optLease := vm.Null
 	if v.Lease != nil {
 		optLease = ObjectJob((*v.Lease), enums)
 	}
 	out.MapSet("lease", optLease)
-	out.MapSet("thread", vm.StringValue(string(v.Thread)))
-	out.MapSet("threadFrom", vm.StringValue(string(v.ThreadFrom)))
-	out.MapSet("orchestration", vm.StringValue(string(v.Orchestration)))
+	out.MapSet("thread", enums.Case("AgentThread", string(v.Thread)))
+	out.MapSet("threadFrom", enums.Case("ThreadSource", string(v.ThreadFrom)))
+	out.MapSet("orchestration", enums.Case("Orchestration", string(v.Orchestration)))
 	optWindow := vm.Null
 	if v.Window != nil {
-		optWindow = ObjectContextWindow((*v.Window))
+		optWindow = ObjectContextWindow((*v.Window), enums)
 	}
 	out.MapSet("window", optWindow)
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -4549,9 +4549,9 @@ func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
+func ObjectGuardVerdict(v types.GuardVerdict, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("decision", vm.StringValue(string(v.Decision)))
+	out.MapSet("decision", enums.Case("GuardDecision", string(v.Decision)))
 	out.MapSet("reason", vm.StringValue(v.Reason))
 	out.MapSet("rule", vm.StringValue(v.Rule))
 	return out
@@ -4643,13 +4643,13 @@ func ObjectTrail(v types.Trail) vm.Value {
 	return out
 }
 
-func ObjectTrailMark(v types.TrailMark) vm.Value {
+func ObjectTrailMark(v types.TrailMark, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
-	out.MapSet("section", vm.StringValue(string(v.Section)))
+	out.MapSet("section", enums.Case("TrailSection", string(v.Section)))
 	out.MapSet("key", vm.StringValue(v.Key))
 	out.MapSet("rule", vm.StringValue(v.Rule))
-	out.MapSet("verdict", vm.StringValue(string(v.Verdict)))
+	out.MapSet("verdict", enums.Case("TrailVerdict", string(v.Verdict)))
 	out.MapSet("note", vm.StringValue(v.Note))
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("at", vm.IntValue(int64(v.At)))
@@ -5493,5 +5493,169 @@ func ObjectImageProvenance(v types.ImageProvenance, enums ffi.EnumCases) vm.Valu
 		itemsMaterials[indexMaterials] = ObjectImageMaterial(v.Materials[indexMaterials], enums)
 	}
 	out.MapSet("materials", vm.ListValue(itemsMaterials))
+	return out
+}
+
+func ObjectDirsOptions(v types.DirsOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("layer", vm.StringValue(v.Layer))
+	out.MapSet("language", vm.StringValue(v.Language))
+	out.MapSet("depth", vm.IntValue(int64(v.Depth)))
+	return out
+}
+
+func ObjectKnowledgePathOptions(v types.KnowledgePathOptions, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	itemsRelations := make([]vm.Value, len(v.Relations))
+	for indexRelations := range v.Relations {
+		itemsRelations[indexRelations] = enums.Case("RelationID", string(v.Relations[indexRelations]))
+	}
+	out.MapSet("relations", vm.ListValue(itemsRelations))
+	return out
+}
+
+func ObjectKnowledgeQueryOptions(v types.KnowledgeQueryOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("budget", vm.IntValue(int64(v.Budget)))
+	out.MapSet("limit", vm.IntValue(int64(v.Limit)))
+	out.MapSet("offset", vm.IntValue(int64(v.Offset)))
+	return out
+}
+
+func ObjectKnowledgeRefsOptions(v types.KnowledgeRefsOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("limit", vm.IntValue(int64(v.Limit)))
+	out.MapSet("offset", vm.IntValue(int64(v.Offset)))
+	return out
+}
+
+func ObjectInsightOptions(v types.InsightOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
+	out.MapSet("since", vm.StringValue(v.Since))
+	out.MapSet("files", vm.BoolValue(v.Files))
+	return out
+}
+
+func ObjectExecOptions(v types.ExecOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("stdin", vm.StringValue(v.Stdin))
+	out.MapSet("quiet", vm.BoolValue(v.Quiet))
+	out.MapSet("tty", vm.BoolValue(v.TTY))
+	out.MapSet("allowFailure", vm.BoolValue(v.AllowFailure))
+	return out
+}
+
+func ObjectMagusCommandOptions(v types.MagusCommandOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("root", vm.StringValue(v.Root))
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	out.MapSet("stdin", vm.StringValue(v.Stdin))
+	out.MapSet("quiet", vm.BoolValue(v.Quiet))
+	out.MapSet("allowFailure", vm.BoolValue(v.AllowFailure))
+	return out
+}
+
+func ObjectVCSCommandOptions(v types.VCSCommandOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	out.MapSet("stdin", vm.StringValue(v.Stdin))
+	out.MapSet("quiet", vm.BoolValue(v.Quiet))
+	out.MapSet("tty", vm.BoolValue(v.TTY))
+	out.MapSet("allowFailure", vm.BoolValue(v.AllowFailure))
+	return out
+}
+
+func ObjectMagusDiffOptions(v types.MagusDiffOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("root", vm.StringValue(v.MagusCommandOptions.Root))
+	out.MapSet("dir", vm.StringValue(v.MagusCommandOptions.Dir))
+	out.MapSet("stdin", vm.StringValue(v.MagusCommandOptions.Stdin))
+	out.MapSet("quiet", vm.BoolValue(v.MagusCommandOptions.Quiet))
+	out.MapSet("allowFailure", vm.BoolValue(v.MagusCommandOptions.AllowFailure))
+	out.MapSet("from", vm.StringValue(v.From))
+	out.MapSet("baseline", vm.StringValue(v.Baseline))
+	out.MapSet("rev", vm.StringValue(v.Rev))
+	out.MapSet("patch", vm.StringValue(v.Patch))
+	out.MapSet("minCohort", vm.IntValue(int64(v.MinCohort)))
+	out.MapSet("minShare", vm.FloatValue(float64(v.MinShare)))
+	return out
+}
+
+func ObjectRaiseOptions(v types.RaiseOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("cause", ffi.AnyVal(v.Cause))
+	out.MapSet("url", vm.StringValue(v.URL))
+	return out
+}
+
+func ObjectSkillsOptions(v types.SkillsOptions, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("form", enums.Case("SkillForm", string(v.Form)))
+	return out
+}
+
+func ObjectHTTPOptions(v types.HTTPOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("fail", vm.BoolValue(v.Fail))
+	out.MapSet("failWithBody", vm.BoolValue(v.FailWithBody))
+	out.MapSet("failEarly", vm.BoolValue(v.FailEarly))
+	out.MapSet("timeoutSeconds", vm.FloatValue(float64(v.TimeoutSeconds)))
+	return out
+}
+
+func ObjectHTTPServerOptions(v types.HTTPServerOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	mappedMounts := vm.NewMap()
+	for keyMounts, itemMounts := range v.Mounts {
+		mappedMounts.MapSet(keyMounts, vm.StringValue(itemMounts))
+	}
+	out.MapSet("mounts", mappedMounts)
+	out.MapSet("port", vm.IntValue(int64(v.Port)))
+	return out
+}
+
+func ObjectHTTPRetry(v types.HTTPRetry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("attempts", vm.IntValue(int64(v.Attempts)))
+	out.MapSet("delay_ms", vm.FloatValue(float64(v.DelayMs)))
+	out.MapSet("max_delay_ms", vm.FloatValue(float64(v.MaxDelayMs)))
+	out.MapSet("max_elapsed_ms", vm.FloatValue(float64(v.MaxElapsedMs)))
+	out.MapSet("fixed", vm.BoolValue(v.Fixed))
+	out.MapSet("all_errors", vm.BoolValue(v.AllErrors))
+	out.MapSet("conn_refused", vm.BoolValue(v.ConnRefused))
+	return out
+}
+
+func ObjectArchiveOptions(v types.ArchiveOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("format", vm.StringValue(v.Format))
+	out.MapSet("strip", vm.IntValue(int64(v.Strip)))
+	out.MapSet("maxSize", vm.IntValue(int64(v.MaxSize)))
+	out.MapSet("threads", vm.IntValue(int64(v.Threads)))
+	optLevel := vm.Null
+	if v.Level != nil {
+		optLevel = vm.IntValue(int64((*v.Level)))
+	}
+	out.MapSet("level", optLevel)
+	out.MapSet("followSymlinks", vm.BoolValue(v.FollowSymlinks))
+	return out
+}
+
+func ObjectRetryOptions(v types.RetryOptions) vm.Value {
+	out := vm.NewMap()
+	optBackoffMs := vm.Null
+	if v.BackoffMs != nil {
+		optBackoffMs = vm.FloatValue(float64((*v.BackoffMs)))
+	}
+	out.MapSet("backoffMs", optBackoffMs)
+	optMaxBackoffMs := vm.Null
+	if v.MaxBackoffMs != nil {
+		optMaxBackoffMs = vm.FloatValue(float64((*v.MaxBackoffMs)))
+	}
+	out.MapSet("maxBackoffMs", optMaxBackoffMs)
 	return out
 }

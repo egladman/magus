@@ -335,7 +335,7 @@ export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding]? {
         }
         final run = proc\exec("{dir}/{proofread\binary}",
             args: ["stylesheet", "--stdin", "--decisions", workspace + "/" + decisions\DECISIONS_FILE],
-            opts: {"stdin": css, "quiet": true, "allow_failure": true}) catch null;
+            opts: proc\ExecOptions{stdin = css, quiet = true, allowFailure = true}) catch null;
         // Exit 1 is a deny finding, written to stdout like any other.
         if (run == null or (run!.code != 0 and run!.code != 1)) {
             return null;
@@ -462,7 +462,7 @@ export fun decideComments(path: str, before: str, after: str, once: fun (key: st
     }
     if (fileExtension(path) == ".go") {
         final graded = decideGo(path, before: before, after: after);
-        if (graded.decision != "allow") {
+        if (graded.decision != magus\GuardDecision.allow) {
             return graded;
         }
     }
@@ -495,10 +495,10 @@ fun commentLines(n: int, indent: str) > str {
 test "a write that adds a comment to code is advised once per session" {
     final once = helpers\counter();
     final v = decideComments("/w/internal/cache/key.go", before: "", after: "package cache\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}", once: once);
-    std\assert(v.decision == "advise", message: "the first");
+    std\assert(v.decision == magus\GuardDecision.advise, message: "the first");
     std\assert(v.reason.indexOf("keep only the comments that say what the code cannot") != null, message: "states the rule");
     std\assert(v.reason.indexOf("Skill(") == null, message: "sends the reader to no skill");
-    std\assert(decideComments("/w/a.go", before: "", after: "package a\n// again", once: once).decision == "allow", message: "only once");
+    std\assert(decideComments("/w/a.go", before: "", after: "package a\n// again", once: once).decision == magus\GuardDecision.allow, message: "only once");
 }
 
 test "every comment form counts" {
@@ -514,7 +514,7 @@ test "every comment form counts" {
         "b.go": "package b\nx := 1 // a note",
         "b.py": "x = 1  # a note",
     }) {
-        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == "advise", message: path);
+        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == magus\GuardDecision.advise, message: path);
     }
 }
 
@@ -527,11 +527,11 @@ test "prose, a shebang, code alone and an unchanged comment stay silent" {
         "a.go": "package a\nx := a/b",
         "b.go": "",
     }) {
-        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == "allow", message: path);
+        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == magus\GuardDecision.allow, message: path);
     }
     final before = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}\n";
     final after = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() int \{ return 1 }\n";
-    std\assert(decideComments("a.go", before: before, after: after, once: helpers\counter()).decision == "allow", message: "the comment was already there");
+    std\assert(decideComments("a.go", before: before, after: after, once: helpers\counter()).decision == magus\GuardDecision.allow, message: "the comment was already there");
 }
 
 test "goComments tells the kinds apart and sizes the declaration a doc comment documents" {
@@ -547,15 +547,15 @@ test "goComments tells the kinds apart and sizes the declaration a doc comment d
 
 test "a short why-comment passes the Go budget" {
     final after = "package p\n\nfunc f() \{\n\t// keys are sorted; the bsearch below depends on it\n\tsort()\n}\n";
-    std\assert(decideComments("a.go", before: "", after: after, once: spent()).decision == "allow", message: "in budget");
+    std\assert(decideComments("a.go", before: "", after: after, once: spent()).decision == magus\GuardDecision.allow, message: "in budget");
     final doc = "package p\n\n" + commentLines(8, indent: "") + "\nfunc Exported() \{}\n";
-    std\assert(decideComments("a.go", before: "", after: doc, once: spent()).decision == "allow", message: "an exported doc earns 8");
+    std\assert(decideComments("a.go", before: "", after: doc, once: spent()).decision == magus\GuardDecision.allow, message: "an exported doc earns 8");
 }
 
 test "a narrated block over its budget is advised with the budget, the size and the remedy" {
     final after = "package p\n\nfunc f() \{\n" + commentLines(5, indent: "\t") + "\n\tx()\n}\n";
     final v = decideComments("/w/internal/a.go", before: "", after: after, once: spent());
-    std\assert(v.decision == "advise", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.decision);
     std\assert(v.reason.indexOf("repository owner's house style") != null, message: "names whose style");
     std\assert(v.reason.indexOf("/w/internal/a.go:4: comment inside a body, 5 lines against a budget of 3.") != null, message: v.reason);
     std\assert(v.reason.indexOf("Cut each to the why") != null, message: "remedy");
@@ -568,25 +568,25 @@ test "a narrated block over its budget is advised with the budget, the size and 
 test "a huge block is refused" {
     final after = "package p\n\nfunc f() \{\n" + commentLines(7, indent: "\t") + "\n\tx()\n}\n";
     final v = decideComments("a.go", before: "", after: after, once: spent());
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     verdict\assertVerdict(v.reason, label: "a huge block");
     std\assert(v.reason.startsWith("a comment block breaks the house style: a.go:4: comment inside a body, 7 lines"), message: v.reason);
     std\assert(v.reason.indexOf("a.go:4: comment inside a body, 7 lines against a budget of 3.") != null, message: v.reason);
     final doc = "package p\n\n" + commentLines(17, indent: "") + "\nfunc Exported() \{}\n";
-    std\assert(decideComments("a.go", before: "", after: doc, once: spent()).decision == "deny", message: "17 on an exported declaration");
+    std\assert(decideComments("a.go", before: "", after: doc, once: spent()).decision == magus\GuardDecision.deny, message: "17 on an exported declaration");
     final mixed = "package p\n\n" + commentLines(9, indent: "") + "\nfunc Exported() \{}\n\nfunc f() \{\n" + commentLines(7, indent: "\t") + "\n}\n";
     final both = decideComments("a.go", before: "", after: mixed, once: spent());
-    std\assert(both.decision == "deny", message: "one refusal wins");
+    std\assert(both.decision == magus\GuardDecision.deny, message: "one refusal wins");
     std\assert(both.reason.indexOf("a.go:3:") != null and both.reason.indexOf("a.go:15:") != null, message: both.reason);
 }
 
 test "a comment above the package clause is refused, the lines Go tooling reads pass" {
     final v = decideComments("a.go", before: "", after: "// Package p does things.\npackage p\n", once: spent());
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     verdict\assertVerdict(v.reason, label: "a preamble");
     std\assert(v.reason.indexOf("a.go:1: 1 comment lines above the package clause.") != null, message: v.reason);
     std\assert(v.reason.indexOf("keeps no package comment") != null, message: "says a package keeps none");
-    std\assert(decideComments("a.go", before: "", after: "// a note\n//go:build linux\n\npackage p\n", once: spent()).decision == "deny", message: "prose beside a directive");
+    std\assert(decideComments("a.go", before: "", after: "// a note\n//go:build linux\n\npackage p\n", once: spent()).decision == magus\GuardDecision.deny, message: "prose beside a directive");
     foreach (name, text in {
         "build tag": "//go:build linux && !noffi\n\npackage p\n",
         "old build tag": "// +build linux\n\npackage p\n",
@@ -594,22 +594,22 @@ test "a comment above the package clause is refused, the lines Go tooling reads 
         "license": "// Copyright 2026 The Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage p\n",
         "directive": "//go:generate go run gen.go\n\npackage p\n",
     }) {
-        std\assert(decideComments("a.go", before: "", after: text, once: spent()).decision == "allow", message: name);
+        std\assert(decideComments("a.go", before: "", after: text, once: spent()).decision == magus\GuardDecision.allow, message: name);
     }
-    std\assert(decideComments("p/doc.go", before: "", after: "// Package p is the thing.\npackage p\n", once: spent()).decision == "deny", message: "doc.go is no exception");
+    std\assert(decideComments("p/doc.go", before: "", after: "// Package p is the thing.\npackage p\n", once: spent()).decision == magus\GuardDecision.deny, message: "doc.go is no exception");
 }
 
 test "an edit that leaves an old long comment alone passes; growing one is graded by the growth" {
     final old = "package p\n\nfunc f() \{\n" + commentLines(12, indent: "\t") + "\n\tx()\n}\n";
     final touched = old + "\nfunc g() \{\n\t// one why\n\ty()\n}\n";
-    std\assert(decideComments("a.go", before: old, after: touched, once: spent()).decision == "allow", message: "the old block is not the write's");
+    std\assert(decideComments("a.go", before: old, after: touched, once: spent()).decision == magus\GuardDecision.allow, message: "the old block is not the write's");
     final grown = "package p\n\nfunc f() \{\n" + commentLines(12, indent: "\t") + "\n\t// a thirteenth line\n\t// and a fourteenth\n\tx()\n}\n";
-    std\assert(decideComments("a.go", before: old, after: grown, once: spent()).decision == "allow", message: "two lines of growth");
+    std\assert(decideComments("a.go", before: old, after: grown, once: spent()).decision == magus\GuardDecision.allow, message: "two lines of growth");
     final overgrown = "package p\n\nfunc f() \{\n" + commentLines(12, indent: "\t") + "\n" + commentLines(5, indent: "\t").replace("line ", with: "new ") + "\n\tx()\n}\n";
     final v = decideComments("a.go", before: old, after: overgrown, once: spent());
-    std\assert(v.decision == "advise" and v.reason.indexOf("5 lines against a budget of 3") != null, message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.advise and v.reason.indexOf("5 lines against a budget of 3") != null, message: v.reason);
     final preamble = "// Package p is old.\n" + old;
-    std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == "allow", message: "an old package comment is not the write's");
+    std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == magus\GuardDecision.allow, message: "an old package comment is not the write's");
 }
 
 fun noJudge() > fun (css: str) > [CssFinding]? {
@@ -635,24 +635,24 @@ fun cssComment(n: int) > str {
 test "a stylesheet write is judged by proofread on the lines it adds" {
     final after = ".a \{ color: red; }\n\n/* Simply put. */\n.b \{ color: blue; }\n";
     final v = decideWrite("/w/console/src/a.css", before: "", after: after, once: spent(), judge: judgeSays("filler", line: 3));
-    std\assert(v.decision == "advise", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.decision);
     std\assert(v.reason.indexOf("/w/console/src/a.css:3: Drop 'simply': state the fact. [filler]") != null, message: v.reason);
     std\assert(v.reason.indexOf("same prose rules as Go ones") != null, message: "states the rule");
     final kept = decideWrite("a.css", before: after, after: after + ".c \{ color: pink; }\n", once: spent(), judge: judgeSays("filler", line: 3));
-    std\assert(kept.decision == "allow", message: "a finding on a comment the write did not add");
+    std\assert(kept.decision == magus\GuardDecision.allow, message: "a finding on a comment the write did not add");
     final unread = decideWrite("a.css", before: "", after: after, once: helpers\counter(), judge: noJudge());
-    std\assert(unread.decision == "advise" and unread.reason.indexOf("Skill(") == null and unread.reason.indexOf("keep only the comments") != null, message: "a judge that cannot run falls back to the generic advice once");
+    std\assert(unread.decision == magus\GuardDecision.advise and unread.reason.indexOf("Skill(") == null and unread.reason.indexOf("keep only the comments") != null, message: "a judge that cannot run falls back to the generic advice once");
 }
 
 test "a stylesheet comment over twice the largest budget is refused" {
     final v = decideWrite("a.css", before: "", after: cssComment(17) + ".a \{ color: red; }\n", once: spent(), judge: noJudge());
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     verdict\assertVerdict(v.reason, label: "a CSS comment");
     std\assert(v.reason.startsWith("a CSS comment runs 17 lines against a budget of at most "), message: v.reason);
     std\assert(v.reason.indexOf("\nThe write is to a.css. ") != null, message: v.reason);
-    std\assert(decideWrite("a.css", before: "", after: cssComment(16) + ".a \{ color: red; }\n", once: spent(), judge: noJudge()).decision == "allow", message: "16 lines");
+    std\assert(decideWrite("a.css", before: "", after: cssComment(16) + ".a \{ color: red; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.allow, message: "16 lines");
     final old = cssComment(30) + ".a \{ color: red; }\n";
-    std\assert(decideWrite("a.css", before: old, after: old + ".b \{ color: blue; }\n", once: spent(), judge: noJudge()).decision == "allow", message: "an old long comment is not the write's");
+    std\assert(decideWrite("a.css", before: old, after: old + ".b \{ color: blue; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.allow, message: "an old long comment is not the write's");
 }
 
 test "longestAddedCssComment counts the lines a new comment spans" {
@@ -670,6 +670,6 @@ test "judge findings parse from stdin lines" {
 
 test "a write to a file that is not a stylesheet meets the Go rules" {
     final v = decideWrite("a.go", before: "", after: "package a\n// note\n", once: spent(), judge: judgeSays("filler", line: 2));
-    std\assert(v.decision == "allow" or v.decision == "advise", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.allow or v.decision == magus\GuardDecision.advise, message: v.decision);
     std\assert(v.reason.indexOf("same prose rules") == null, message: "not the CSS rule");
 }

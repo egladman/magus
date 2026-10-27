@@ -325,7 +325,7 @@ fun queriesFor(terms: str, opts: Options) > [str] {
 }
 
 fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > void !> any {
-    final res: magus\QueryResult = magus\query(q, opts: {"limit": fetch, "budget": fetch});
+    final res: magus\QueryResult = magus\query(q, opts: magus\QueryOptions{limit = fetch, budget = fetch});
     pool.total = pool.total + res.matchCount;
     pool.fetched = pool.fetched + res.matches.len();
     if (res.answer.verdict == UNKNOWN and (alone or res.answer.reason != DOMAIN_ONLY)) {
@@ -648,7 +648,7 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
 // references lists every file that uses the symbol with its first lines, and counts the
 // test files among them.
 fun references(h: Hit, opts: Options) > Section !> any {
-    final refs: magus\RefsResult = magus\refs(h.id, opts: {"limit": 200});
+    final refs: magus\RefsResult = magus\refs(h.id, opts: magus\RefsOptions{limit = 200});
     final files = mut [<Neighbor>];
     var testFiles = 0;
     foreach (r in refs.refs) {
@@ -692,7 +692,7 @@ fun nodeAround(h: Hit, opts: Options) > [Section] !> any {
 
 // docs are the doc sections a query for the hit's name matches on every word.
 fun docs(h: Hit, opts: Options) > Section !> any {
-    final q: magus\QueryResult = magus\query("kind=docsection {shortLabel(h.label)}", opts: {"limit": cap(opts.neighbors)});
+    final q: magus\QueryResult = magus\query("kind=docsection {shortLabel(h.label)}", opts: magus\QueryOptions{limit = cap(opts.neighbors)});
     final all = mut [<Neighbor>];
     foreach (m in q.matches) {
         var whole = true;

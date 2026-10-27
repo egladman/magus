@@ -92,20 +92,6 @@ var Log = Module{
 			Impl:    LogAt,
 		},
 	},
-	// Logger is the injectable face of the free functions: same methods, for
-	// object<Logger> call sites that swap Std vs Quiet without rewriting callers.
-	Protocols: []Protocol{{
-		Name: "Logger",
-		Doc:  "Injectable logger matching the free log.* methods.",
-		Methods: []Method{
-			{Name: "at", Args: []Arg{{Name: "level", Type: TypeString, Enum: "LogLevel"}, {Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}, Raises: true},
-			{Name: "debug", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
-			{Name: "error", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
-			{Name: "info", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
-			{Name: "trace", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
-			{Name: "warn", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
-		},
-	}},
 }
 
 // LogTrace logs message at trace level.

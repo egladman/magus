@@ -124,9 +124,9 @@ fun firstLine(text: str) > str {
 // loadFailure loads the workspace with bin, the way any command would, and returns the error
 // it printed. "" means it loaded; a binary that would not even start reports that.
 fun loadFailure(bin: str, root: str) > str {
-    final result = proc\exec(bin, args: ["--root", root, "ls", "-o", "name"], dir: root, opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["--root", root, "ls", "-o", "name"], dir: root, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return "it could not be started"; }
     if (result!.code == 0) { return ""; }

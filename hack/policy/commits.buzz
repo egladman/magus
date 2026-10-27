@@ -324,7 +324,7 @@ test "a plain lowercase imperative subject passes in every tool" {
         ["jj", "desc", "--message=trim a fragment"],
     ]) {
         final v = ask(call);
-        std\assert(v.decision == "allow", message: "{call.join(" ")}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.allow, message: "{call.join(" ")}: {v.reason}");
     }
 }
 
@@ -351,14 +351,14 @@ test "each subject rule is named when broken" {
     };
     foreach (subject, want in cases) {
         final v = ask(["git", "commit", "-m", subject]);
-        std\assert(v.decision == "deny", message: subject);
+        std\assert(v.decision == magus\GuardDecision.deny, message: subject);
         std\assert(v.reason.indexOf(want) != null, message: "{subject}: {v.reason}");
     }
 }
 
 test "the words of a subject are proofread's, not this rule's" {
     foreach (subject in ["added a vale spell", "fixing the key", "trim a fragment.", "x".repeat(101), "add a robust vale spell"]) {
-        std\assert(ask(["git", "commit", "-m", subject]).decision == "allow", message: "judged by proofread's commit-message kind: {subject}");
+        std\assert(ask(["git", "commit", "-m", subject]).decision == magus\GuardDecision.allow, message: "judged by proofread's commit-message kind: {subject}");
     }
 }
 
@@ -402,8 +402,8 @@ test "a commit on the base branch keeps its prefix out of the wording rules" {
     final onBase = fun (subject: str) > GuardVerdict {
         return judged(helpers\vcsRequest([["git", "commit", "-m", subject]]), baseBranch: "main");
     };
-    std\assert(onBase("fix(cache): keep the key stable").decision == "allow", message: "conventional");
-    std\assert(onBase("feat(proofread): adds a vale spell").decision == "allow", message: "mood is proofread's");
+    std\assert(onBase("fix(cache): keep the key stable").decision == magus\GuardDecision.allow, message: "conventional");
+    std\assert(onBase("feat(proofread): adds a vale spell").decision == magus\GuardDecision.allow, message: "mood is proofread's");
 }
 
 test "a body, a second -m and an attribution are denied" {
@@ -428,10 +428,10 @@ test "a commit on the base branch takes the conventional subject the commit-msg 
         ["jj", "describe", "-m", "docs: README framing; one line per audience"],
     ]) {
         final v = onBase(call);
-        std\assert(v.decision == "allow", message: "{call.join(" ")}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.allow, message: "{call.join(" ")}: {v.reason}");
     }
     final plain = onBase(["git", "commit", "-m", "trim a fragment"]);
-    std\assert(plain.decision == "deny", message: "a plain subject on the base branch");
+    std\assert(plain.decision == magus\GuardDecision.deny, message: "a plain subject on the base branch");
     std\assert(plain.reason.indexOf("\"trim a fragment\": " + conventional\problem("trim a fragment")) != null, message: plain.reason);
     std\assert(plain.reason.indexOf("A commit made on main lands as written") != null, message: "states the rule");
     std\assert(plain.reason.indexOf("`<type>(<scope>): <description>`") != null, message: "states the fix");
@@ -446,15 +446,15 @@ test "every problem is named, once, across chained commits" {
         ["jj", "commit", "-m", "fix(scope): keep the key"],
     ]);
     final v = judged(line, baseBranch: "");
-    std\assert(v.decision == "deny", message: "denied");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "denied");
     std\assert(v.reason.split("- a colon").len() == 2, message: "named once");
     final second = helpers\vcsRequest([["git", "commit", "-m", "trim a fragment"], ["git", "commit", "-m", "fix(cache): keep the key"]]);
-    std\assert(judged(second, baseBranch: "").decision == "deny", message: "the second commit is judged on its own");
+    std\assert(judged(second, baseBranch: "").decision == magus\GuardDecision.deny, message: "the second commit is judged on its own");
 }
 
 test "a line that only mentions a commit, and other version-control calls, stay silent" {
     final quiet = helpers\request([["rg", "git commit"], ["echo", "git", "commit", "-m", "Bad."]]);
-    std\assert(judged(quiet, baseBranch: "").decision == "allow", message: "no version control ran");
+    std\assert(judged(quiet, baseBranch: "").decision == magus\GuardDecision.allow, message: "no version control ran");
     foreach (call in [
         ["git", "log", "-m", "Bad."],
         ["git", "help", "commit"],
@@ -464,7 +464,7 @@ test "a line that only mentions a commit, and other version-control calls, stay 
         ["jj", "new", "-m", "Bad."],
         ["jj", "describe", "-h"],
     ]) {
-        std\assert(ask(call).decision == "allow", message: call.join(" "));
+        std\assert(ask(call).decision == magus\GuardDecision.allow, message: call.join(" "));
     }
 }
 
@@ -478,13 +478,13 @@ test "a message written through a heredoc substitution is judged from its body" 
     std\assert(slots[0].len() == 1 and slots[0][0] == 1, message: "the -m value is the slot");
     final filled = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs(line));
     final v = judged(filled, baseBranch: "");
-    std\assert(v.decision == "deny", message: "denied");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "denied");
     foreach (want in ["an attribution"]) {
         std\assert(v.reason.indexOf(want) != null, message: want);
     }
     final plain = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs("git commit -m \"$(cat <<'EOF'\ntrim a fragment\nEOF\n)\""));
-    std\assert(judged(plain, baseBranch: "").decision == "allow", message: "a one-line heredoc subject passes");
-    std\assert(judged(programs, baseBranch: "").decision == "allow", message: "a value known only at run time goes unjudged");
+    std\assert(judged(plain, baseBranch: "").decision == magus\GuardDecision.allow, message: "a one-line heredoc subject passes");
+    std\assert(judged(programs, baseBranch: "").decision == magus\GuardDecision.allow, message: "a value known only at run time goes unjudged");
 }
 
 test "no message sends the reader to a skill" {
@@ -500,7 +500,7 @@ test "a problem that quotes a long subject keeps the verdict to one short line" 
     final long = "fix the `cache` key: it stays stable across every run of the build, however many shards it fans out to";
     foreach (baseBranch in ["", "main"]) {
         final v = judged(helpers\vcsRequest([["git", "commit", "-m", long]]), baseBranch: baseBranch);
-        std\assert(v.decision == "deny", message: baseBranch);
+        std\assert(v.decision == magus\GuardDecision.deny, message: baseBranch);
         std\assert(v.reason.split("\n")[0].startsWith("this commit message breaks a subject rule"), message: v.reason);
     }
 }

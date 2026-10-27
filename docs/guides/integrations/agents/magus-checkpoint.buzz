@@ -102,5 +102,5 @@ fun main(args: [str]) > void {
     proc\exec(bin, args: [
         "session", "checkpoint",
         "--agent-name", agentName,
-    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
+    ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = event}) catch void;
 }

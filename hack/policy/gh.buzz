@@ -274,7 +274,7 @@ test "a gh call that blocks until CI finishes is denied" {
         ["gh", "run", "view", "34069443069", "--watch"],
     ]) {
         final v = ask(argv);
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("GREEN CHANGES NOTHING") != null, message: "keeps the reason");
         std\assert(v.reason.indexOf(failureReader) != null, message: "names the failure reader");
     }
@@ -282,7 +282,7 @@ test "a gh call that blocks until CI finishes is denied" {
 
 test "a CI read that a loop or watch repeats is a watch too" {
     final looped = judged(helpers\request([["loop:", "gh", "run", "view", "34069443069", "--watch"], ["loop:", "sleep", "30"]]), once: helpers\counter());
-    std\assert(looped.decision == "deny", message: "a while loop over gh run view");
+    std\assert(looped.decision == magus\GuardDecision.deny, message: "a while loop over gh run view");
 }
 
 test "watching the merge queue's runs is denied, naming the queue" {
@@ -292,7 +292,7 @@ test "watching the merge queue's runs is denied, naming the queue" {
         ["loop:", "gh", "run", "view", "--workflow", "queue-apply.yaml"],
     ]) {
         final v = ask(argv);
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("magus queue ls") != null, message: "names the queue's own answer");
     }
 }
@@ -308,7 +308,7 @@ test "CI status summaries name the failure artifact reader" {
         ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs?per_page=100"],
     ]) {
         final v = ask(argv);
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf(failureReader) != null, message: v.reason);
         std\assert(v.reason.indexOf(rootFailureReader) != null, message: "names a read a root handing out work may run");
         std\assert(v.reason.indexOf("gh pr list") == null, message: "does not route back to status summaries");
@@ -325,11 +325,11 @@ test "one-shot log reads remain available when failure artifacts are missing" {
         final once = helpers\counter();
         final request = helpers\request([argv]);
         final v = judged(request, once: once);
-        std\assert(v.decision == "advise", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.advise, message: argv.join(" "));
         std\assert(v.reason.indexOf(failureRunReader) != null, message: v.reason);
         std\assert(v.reason.indexOf("without target artifacts") != null, message: v.reason);
-        std\assert(judged(request, once: once).decision == "allow", message: "only once");
-        std\assert(judged(helpers\request([ ["loop:"] + argv ]), once: once).decision == "deny",
+        std\assert(judged(request, once: once).decision == magus\GuardDecision.allow, message: "only once");
+        std\assert(judged(helpers\request([ ["loop:"] + argv ]), once: once).decision == magus\GuardDecision.deny,
             message: "repeated log reads still watch");
     }
 }
@@ -342,12 +342,12 @@ test "polling the merge queue through GitHub is advised once per session" {
         ["gh", "pr", "view", "212", "--json", "labels", "--jq", ".labels[] | select(.name == \"queue\")"],
     ]) {
         final v = ask(argv);
-        std\assert(v.decision == "advise", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.advise, message: argv.join(" "));
         std\assert(v.reason.indexOf("magus queue ls") != null, message: "names the queue's answer, not the board");
     }
     final poll = helpers\request([["gh", "run", "list", "--workflow", "queue.yaml"]]);
-    std\assert(judged(poll, once: once).decision == "advise", message: "first");
-    std\assert(judged(poll, once: once).decision == "allow", message: "only once");
+    std\assert(judged(poll, once: once).decision == magus\GuardDecision.advise, message: "first");
+    std\assert(judged(poll, once: once).decision == magus\GuardDecision.allow, message: "only once");
 }
 
 test "PR content, artifact retrieval and unrelated programs stay silent" {
@@ -361,7 +361,7 @@ test "PR content, artifact retrieval and unrelated programs stay silent" {
         ["watch", "-n", "5", "free", "-m"],
         ["git", "status"],
     ]) {
-        std\assert(ask(argv).decision == "allow", message: argv.join(" "));
+        std\assert(ask(argv).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
 }
 
@@ -372,7 +372,7 @@ test "an admin merge is denied, naming the queue's entry" {
         ["gh", "-R", "egladman/magus", "pr", "merge", "12", "--admin=true", "--rebase"],
     ]) {
         final v = ask(argv);
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("--auto --squash") != null, message: "names the entry");
     }
 }
@@ -392,7 +392,7 @@ fun chain(merge: [str]) > [helpers\Program] {
 
 test "an admin merge anywhere on a line is denied" {
     final v = judged(chain(["gh", "pr", "merge", "topic", "--squash", "--admin"]), once: helpers\counter());
-    std\assert(v.decision == "deny", message: "the chained line that merged past the queue");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "the chained line that merged past the queue");
     std\assert(v.reason.indexOf("--auto --squash") != null, message: "names the entry");
     foreach (target in ["417", "topic", "https://github.com/egladman/magus/pull/417"]) {
         final merge = ["gh", "pr", "merge", target, "--admin"];
@@ -402,7 +402,7 @@ test "an admin merge anywhere on a line is denied" {
             helpers\request([["git", "status"], merge, ["echo", "merged"]]),
             chain(merge),
         ]) {
-            std\assert(judged(programs, once: helpers\counter()).decision == "deny", message: target);
+            std\assert(judged(programs, once: helpers\counter()).decision == magus\GuardDecision.deny, message: target);
         }
     }
 }
@@ -413,7 +413,7 @@ test "a queued merge on the same line is denied, handing the command to the pers
         ["gh", "pr", "merge", "417", "--auto", "--rebase"],
     ]) {
         final v = judged(chain(merge), once: helpers\counter());
-        std\assert(v.decision == "deny", message: merge.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: merge.join(" "));
         std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
     }
 }
@@ -426,7 +426,7 @@ test "a pull request's state read again and again is denied, naming the monitor"
         [["loop:", "gh", "pr", "status"]],
     ]) {
         final v = judged(helpers\request(argvs), once: helpers\counter());
-        std\assert(v.decision == "deny", message: argvs[0].join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argvs[0].join(" "));
         std\assert(v.reason.indexOf("CI monitor") != null, message: "names the host's monitor");
     }
 }
@@ -439,7 +439,7 @@ test "one read of a pull request's state, and a loop over its content, stay sile
         [["loop:", "gh", "api", "repos/egladman/magus/pulls/300/files"]],
     ]) {
         final v = judged(helpers\request(argvs), once: helpers\counter());
-        std\assert(v.decision == "allow", message: argvs[0].join(" "));
+        std\assert(v.decision == magus\GuardDecision.allow, message: argvs[0].join(" "));
     }
 }
 
@@ -453,7 +453,7 @@ test "enabling auto-merge through gh pr merge is denied, telling the person's co
         ["gh", "pr", "merge", "--repo", "egladman/magus", "--auto", "12"],
     ]) {
         final v = ask(argv);
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
         std\assert(v.reason.indexOf("gh pr merge <number> --auto") != null, message: "names the command to tell the person");
     }
@@ -467,12 +467,12 @@ test "enabling auto-merge through gh api is denied" {
         ["gh", "api", "-X", "POST", "graphql", "-f", "query=" + mutation, "-f", "id=PR_x"],
     ]) {
         final v = ask(argv);
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
     }
     final fed = judged(helpers\request([["gh", "api", "graphql", "--input", "-"]]), once: helpers\counter(),
         line: "gh api graphql --input - <<'EOF'\n" + mutation + "\nEOF");
-    std\assert(fed.decision == "deny", message: "a body fed through a heredoc");
+    std\assert(fed.decision == magus\GuardDecision.deny, message: "a body fed through a heredoc");
 }
 
 test "the admin merge's denial hands the person the queue's command, not an order to run it" {
@@ -491,13 +491,13 @@ test "disabling or reading auto-merge, and other gh calls, stay silent" {
         ["git", "log", "--grep", "--auto"],
         ["echo", "gh", "pr", "merge", "--auto"],
     ]) {
-        std\assert(ask(argv).decision == "allow", message: argv.join(" "));
+        std\assert(ask(argv).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
 }
 
 test "auto-merge enabled anywhere on a chained line is denied" {
     foreach (merge in [["gh", "pr", "merge", "topic", "--squash", "--auto"], ["gh", "pr", "merge", "--auto", "topic"]]) {
-        std\assert(judged(chain(merge), once: helpers\counter()).decision == "deny", message: merge.join(" "));
+        std\assert(judged(chain(merge), once: helpers\counter()).decision == magus\GuardDecision.deny, message: merge.join(" "));
     }
 }
 
@@ -507,6 +507,6 @@ test "unqueuing a pull request and other gh calls stay silent" {
         ["gh", "pr", "view", "12", "--json", "autoMergeRequest"],
         ["gh", "api", "repos/egladman/magus/collaborators/egladman/permission", "--jq", ".permission == \"admin\""],
     ]) {
-        std\assert(ask(argv).decision == "allow", message: argv.join(" "));
+        std\assert(ask(argv).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
 }

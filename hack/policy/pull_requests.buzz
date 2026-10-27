@@ -753,7 +753,7 @@ export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: 
 export fun pullRequestDiff(workspace: str) > fun (head: str, base: str, number: str) > Facts {
     final view = fun (number: str) > PullRef? {
         final run = proc\exec("gh", args: ["pr", "view", number, "--json", "headRefOid,baseRefName"],
-            opts: {"quiet": true, "allow_failure": true}) catch null;
+            opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
         if (run == null or run!.code != 0) {
             return null;
         }
@@ -770,7 +770,7 @@ export fun pullRequestDiff(workspace: str) > fun (head: str, base: str, number: 
             return vcs\diffStat(ref, dir: workspace) catch null;
         }
         final run = vcs\cmd(["diff", "--numstat", "--no-renames", "{ref}...{head}"],
-            opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+            opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
         if (run == null or run!.code != 0) {
             return null;
         }
@@ -780,7 +780,7 @@ export fun pullRequestDiff(workspace: str) > fun (head: str, base: str, number: 
         if (head == "") {
             return fs\readFile("{workspace}/{path}") catch null;
         }
-        final run = vcs\cmd(["show", "{head}:{path}"], opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+        final run = vcs\cmd(["show", "{head}:{path}"], opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
         if (run == null or run!.code != 0) {
             return null;
         }
@@ -842,7 +842,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         final found = mut [<Judged>];
         final words = kind.split(" ");
         final run = proc\exec(bin, args: words + ["--stdin", "--decisions", table],
-            opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
+            opts: proc\ExecOptions{stdin = text, quiet = true, allowFailure = true}) catch null;
         fs\remove(table) catch void;
         // proofread exits 1 when it writes a deny finding, a grade under its kind's minimum among them.
         if (run == null or (run!.code != 0 and run!.code != 1)) {
@@ -874,7 +874,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
 // proofread failing is.
 fun outsideFindings(outside: OutsideJudge, text: str) > [Judged] {
     final run = proc\exec(outside.argv[0], args: outside.argv.sub(1),
-        opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
+        opts: proc\ExecOptions{stdin = text, quiet = true, allowFailure = true}) catch null;
     if (run == null or run!.code != 0) {
         var why = "it did not start";
         if (run != null) {
@@ -1265,7 +1265,7 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
     if (t.body != null) {
         foreach (f in judge(text, kind: judgedKind(t))) {
             // A judge that did not run is this rule's own advice; proofread's grades the rest.
-            if (f.decision != "advise") {
+            if (f.decision != magus\GuardDecision.advise) {
                 problems.append(judgedProblem(f, kind: t.kind));
             } else if (f.rule == "judge") {
                 advice.append(judgedProblem(f, kind: t.kind));
@@ -1540,7 +1540,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         problems.append(problem);
     }
     foreach (f in judge(shellQuote.replaceAll(line, with: ""), kind: kind)) {
-        if (f.decision == "deny" and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
+        if (f.decision == magus\GuardDecision.deny and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
             problems.append("{f.message} [{f.rule}]");
         }
     }
@@ -1889,7 +1889,7 @@ test "a conventional title and a plain description pass" {
         ["gh", "-R", "egladman/magus", "pr", "edit", "412", "--title=docs: README framing; one line per audience"],
     ]) {
         final v = judged(helpers\request([argv]), line: argv.join(" "), files: {<str: str>});
-        std\assert(v.decision == "allow", message: "{argv.join(" ")}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.allow, message: "{argv.join(" ")}: {v.reason}");
     }
 }
 
@@ -1904,7 +1904,7 @@ test "every deny finding is listed with where it sits and its rule, under the ru
     final lead = Judged{ rule = "lead-context", line = 2, message = "It opens with a heading: open with a paragraph." };
     final v = decided(create(goodTitle, body: "## Summary"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(lead), once: helpers\counter());
-    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
     std\assert(v.rule == "pull-request-text", message: "named: {v.rule}");
     std\assert(v.reason.indexOf("description line 1: It opens with a heading: open with a paragraph. [lead-context]") != null, message: v.reason);
     final title = Judged{ rule = "filler", line = 1, message = "Drop 'robust': state the fact.", matched = "robust" };
@@ -1918,7 +1918,7 @@ test "an advise finding is graded by proofread, so this rule neither denies nor 
     final verdict = Judged{ rule = "verdict", line = 2, message = "Name the behavior 'broken' stands for.", decision = "advise" };
     final v = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(verdict), once: helpers\counter());
-    std\assert(v.decision == "allow", message: "{v.decision}: {v.reason}");
+    std\assert(v.decision == magus\GuardDecision.allow, message: "{v.decision}: {v.reason}");
 }
 
 fun run(ref: str, project: str, target: str, failed: bool) > magus\OutputRecord {
@@ -1940,7 +1940,7 @@ fun citing(body: str, cited: fun (ref: str) > Citation) > GuardVerdict {
 
 test "a cited ref this checkout does not hold is denied" {
     final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding({<str: magus\OutputRecord>}, asked: mut [<str>]));
-    std\assert(v.decision == "deny" and v.rule == "pull-request-text", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.deny and v.rule == "pull-request-text", message: v.reason);
     std\assert(v.reason.indexOf("`out1a2b3c4d5e6f` cites a run this checkout holds no record of") != null, message: v.reason);
     std\assert(v.reason.indexOf("magus query output out1a2b3c4d5e6f") != null, message: "says how to cite one: {v.reason}");
 }
@@ -1948,14 +1948,14 @@ test "a cited ref this checkout does not hold is denied" {
 test "a cited ref that names a failed run is denied with its project and target" {
     final runs = {"out1a2b3c4d5e6f": run("out1a2b3c4d5e6f", project: "libs/cache", target: "go-test", failed: true)};
     final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding(runs, asked: mut [<str>]));
-    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
     std\assert(v.reason.indexOf("`out1a2b3c4d5e6f` cites a failed run (libs/cache:go-test)") != null, message: v.reason);
 }
 
 test "a cited ref that names a passing run passes" {
     final runs = {"out1a2b3c4d5e6f": run("out1a2b3c4d5e6f", project: "libs/cache", target: "go-test", failed: false)};
     final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding(runs, asked: mut [<str>]));
-    std\assert(v.decision == "allow", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
 }
 
 test "a cited ref the store lacks is denied and a lookup that failed is advised" {
@@ -1965,11 +1965,11 @@ test "a cited ref the store lacks is denied and a lookup that failed is advised"
     std\assert(broken.problem == "", message: broken.problem);
     std\assert(broken.note.indexOf("`out1a2b3c4d5e6f` went unchecked") != null and broken.note.indexOf("permission denied") != null, message: broken.note);
     final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: fun (ref: str) > Citation => lookupFailed(ref, code: "", message: "magus\\output: open outputs: permission denied"));
-    std\assert(v.decision == "advise" and v.reason.indexOf("went unchecked") != null, message: "{v.decision}: {v.reason}");
+    std\assert(v.decision == magus\GuardDecision.advise and v.reason.indexOf("went unchecked") != null, message: "{v.decision}: {v.reason}");
 }
 
 test "CI skips the cited refs a checkout cannot hold" {
-    std\assert(citing("`TestX` passed (out1a2b3c4d5e6f).", cited: skipCited).decision == "allow", message: "decideCiting");
+    std\assert(citing("`TestX` passed (out1a2b3c4d5e6f).", cited: skipCited).decision == magus\GuardDecision.allow, message: "decideCiting");
     final found = judgeText(Text{ kind = descriptionKind, title = goodTitle, body = "`TestX` passed (out1a2b3c4d5e6f)." },
         facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
     std\assert(found.denies.len() == 0, message: "judgeText: {found.denies}");
@@ -1999,7 +1999,7 @@ test "a review reply is not held to the runs it cites" {
     final v = decideCiting(helpers\request([["gh", "pr", "comment", "412", "--body", "It passed (out1a2b3c4d5e6f)."]]), line: "",
         files: {<str: str>}, diff: facts(readable()), judge: passing(), once: helpers\counter(),
         cited: holding({<str: magus\OutputRecord>}, asked: asked));
-    std\assert(v.decision == "allow" and asked.len() == 0, message: "{v.reason} {asked}");
+    std\assert(v.decision == magus\GuardDecision.allow and asked.len() == 0, message: "{v.reason} {asked}");
 }
 
 test "proofread reads the title and the description as one pull request" {
@@ -2056,7 +2056,7 @@ test "a reply denial teaches a reply, not a description" {
     final opener = Judged{ rule = "reply-opener", line = 1, message = "Open with the point you answer." };
     final v = decidePullRequest(helpers\request([["gh", "pr", "comment", "412", "--body", "No, as I said."]]), line: "",
         files: {<str: str>}, diff: facts(readable()), judge: reporting(opener), once: helpers\counter());
-    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
     std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 1: Open with the point you answer. [reply-opener]") != null, message: v.reason);
     std\assert(v.reason.indexOf("say whether you made the change") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
@@ -2135,7 +2135,7 @@ test "a commit message denial names the subject, its rule and the shape, under i
     final mood = Judged{ rule = "subject-mood", line = 1, message = "Open the subject with the imperative: 'Add', not 'Added'.", matched = "Added" };
     final v = decidePullRequest(commit("Added the key"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(mood), once: helpers\counter());
-    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
     std\assert(v.rule == "commit-message-text", message: "named: {v.rule}");
     std\assert(v.reason.startsWith("this commit message breaks a writing rule"), message: v.reason);
     std\assert(v.reason.indexOf("the subject: Open the subject with the imperative: 'Add', not 'Added'. [subject-mood]") != null, message: v.reason);
@@ -2150,25 +2150,25 @@ test "a commit message's advise finding is graded by proofread and allowed here"
     final claim = Judged{ rule = "claim", line = 1, message = "Put the evidence in the sentence.", decision = "advise" };
     final v = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(claim), once: helpers\counter());
-    std\assert(v.decision == "allow", message: "{v.decision} {v.reason}");
+    std\assert(v.decision == magus\GuardDecision.allow, message: "{v.decision} {v.reason}");
     final low = Judged{ rule = "grade", line = 0, message = "Grade 0.0 is under the minimum of 20." };
     final denied = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(low), once: helpers\counter());
-    std\assert(denied.decision == "deny" and denied.reason.indexOf("[grade]") != null, message: "{denied.decision} {denied.reason}");
+    std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("[grade]") != null, message: "{denied.decision} {denied.reason}");
 }
 
 test "a judge that did not run is advice for a commit message and a denial for a pull request" {
     final unrun = Judged{ rule = "judge", line = 0, message = "proofread cannot run: it is not built; run `build`, then retry" };
     final c = decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
-    std\assert(c.decision == "advise", message: "{c.decision} {c.reason}");
+    std\assert(c.decision == magus\GuardDecision.advise, message: "{c.decision} {c.reason}");
     std\assert(c.reason.indexOf("proofread cannot run") != null, message: c.reason);
     final p = decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
-    std\assert(p.decision == "deny", message: "{p.decision} {p.reason}");
+    std\assert(p.decision == magus\GuardDecision.deny, message: "{p.decision} {p.reason}");
     final denied = Judged{ rule = "subject-mood", line = 1, message = "Open with the imperative." };
     std\assert(decidePullRequest(commit("Added it"), line: "", files: {<str: str>}, diff: facts(readable()),
-        judge: reporting(denied), once: helpers\counter()).decision == "deny", message: "a finding of a judge that ran still denies");
+        judge: reporting(denied), once: helpers\counter()).decision == magus\GuardDecision.deny, message: "a finding of a judge that ran still denies");
 }
 
 test "an issue is judged with its title on line 1 and denied under the forge-text rule" {
@@ -2177,10 +2177,10 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
     final argv = [["gh", "issue", "create", "--title", "The guard crashes", "--body", "It crashes.\n\nWhoever wrote it forgot."]];
     final graded = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(repro), once: helpers\counter());
-    std\assert(graded.decision == "allow", message: "{graded.decision} {graded.reason}");
+    std\assert(graded.decision == magus\GuardDecision.allow, message: "{graded.decision} {graded.reason}");
     final denied = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(bad), once: helpers\counter());
-    std\assert(denied.decision == "deny" and denied.rule == "forge-text", message: denied.reason);
+    std\assert(denied.decision == magus\GuardDecision.deny and denied.rule == "forge-text", message: denied.reason);
     std\assert(denied.reason.startsWith("this issue breaks a writing rule"), message: denied.reason);
     std\assert(denied.reason.indexOf("body line 2: Describe what happened. [blame]") != null, message: denied.reason);
     std\assert(denied.reason.indexOf("what happened against what you expected") != null, message: "teaches the issue shape");
@@ -2190,16 +2190,16 @@ test "release notes are judged as written, with no title, budget or shape" {
     final hedge = Judged{ rule = "hedge", line = 2, message = "Drop 'might fix'." };
     final v = decidePullRequest(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\nMight fix the key."]]),
         line: "", files: {<str: str>}, diff: facts(readable()), judge: reporting(hedge), once: helpers\counter());
-    std\assert(v.decision == "deny" and v.rule == "forge-text", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.deny and v.rule == "forge-text", message: v.reason);
     std\assert(v.reason.startsWith("these release notes break a writing rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 2: Drop 'might fix'. [hedge]") != null, message: v.reason);
     std\assert(v.reason.indexOf("Added, Changed, Deprecated, Removed, Fixed or Security") != null, message: "teaches the groups");
     final clean = judged(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\n- **The key is stable.**"]]),
         line: "", files: {<str: str>});
-    std\assert(clean.decision == "allow", message: clean.reason);
+    std\assert(clean.decision == magus\GuardDecision.allow, message: clean.reason);
     final hyphen = judged(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "The key - fixed."]]),
         line: "", files: {<str: str>});
-    std\assert(hyphen.decision == "deny", message: "a spaced hyphen is denied in every text");
+    std\assert(hyphen.decision == magus\GuardDecision.deny, message: "a spaced hyphen is denied in every text");
 }
 
 test "parseJudged reads each finding's line, decision and page" {
@@ -2207,7 +2207,7 @@ test "parseJudged reads each finding's line, decision and page" {
         + "\"rule\":\"hedge\",\"code\":\"PRF3002\",\"decision\":\"deny\",\"message\":\"Drop 'might fix'.\",\"match\":\"might fix\","
         + "\"url\":\"https://eli.gladman.cc/magus/reference/proofread/hedge/\"}]");
     std\assert(got.len() == 1 and got[0].rule == "hedge" and got[0].line == 3 and got[0].matched == "might fix"
-        and got[0].decision == "deny" and got[0].url.endsWith("/proofread/hedge/"), message: "{got.len()}");
+        and got[0].decision == magus\GuardDecision.deny and got[0].url.endsWith("/proofread/hedge/"), message: "{got.len()}");
     std\assert(judgedProblem(got[0], kind: "change-description") == "description line 2: Drop 'might fix'. [hedge]", message: judgedProblem(got[0], kind: "change-description"));
     std\assert(judgedProblem(got[0], kind: "review-reply") == "line 3: Drop 'might fix'. [hedge]", message: judgedProblem(got[0], kind: "review-reply"));
     std\assert(parseJudged("[]").len() == 0, message: "no finding");
@@ -2258,7 +2258,7 @@ test "proofread runs from a relative workspace and its absence is a finding" {
     fs\chmod(bin, mode: 0b111101101) catch void;
     fs\writeFile("{dir}/{proofread\inputsFile}", content: (proofread\inputs(dir) catch "") + "\n") catch void;
     final ran = judgeRunner(relative)("docs: a title\nA body.", kind: "change-description");
-    std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2 and ran[0].decision == "advise",
+    std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2 and ran[0].decision == magus\GuardDecision.advise,
         message: if (ran.len() > 0) ran[0].message else "no finding");
     fs\removeAll(ws) catch void;
 }
@@ -2272,10 +2272,10 @@ test "an outside judge's findings take this repository's decisions" {
         + "\{\"source\":\"stdin:3\",\"rule\":\"team-voice\",\"decision\":\"advise\",\"message\":\"Ours.\",\"match\":\"y\"}]'\n") catch void;
     fs\chmod(bin, mode: 0b111101101) catch void;
     final got = outsideFindings(OutsideJudge{ argv = [bin], kinds = ["change-description"] }, text: "t\nb");
-    std\assert(got.len() == 2 and got[0].decision == "deny" and got[1].decision == "advise",
+    std\assert(got.len() == 2 and got[0].decision == magus\GuardDecision.deny and got[1].decision == magus\GuardDecision.advise,
         message: "the table turns attribution to deny and leaves the rest: {got.len()}");
     final broken = outsideFindings(OutsideJudge{ argv = ["{dir}/missing"], kinds = ["change-description"] }, text: "t");
-    std\assert(broken.len() == 1 and broken[0].rule == "judge" and broken[0].decision == "deny", message: "a judge that did not run is a finding");
+    std\assert(broken.len() == 1 and broken[0].rule == "judge" and broken[0].decision == magus\GuardDecision.deny, message: "a judge that did not run is a finding");
     fs\removeAll(dir) catch void;
 }
 
@@ -2309,25 +2309,25 @@ test "the budget counts the changes the diff proves" {
 
 test "words after the lead past the budget are denied with the budget and why; the lead is free" {
     final small = shipping(0, lines: 10);
-    std\assert(verdictWith(goodTitle, body: sized(110), f: small).decision == "allow", message: "110 is the budget for one change");
+    std\assert(verdictWith(goodTitle, body: sized(110), f: small).decision == magus\GuardDecision.allow, message: "110 is the budget for one change");
     final over = verdictWith(goodTitle, body: sized(111), f: small);
-    std\assert(over.decision == "deny", message: over.reason);
+    std\assert(over.decision == magus\GuardDecision.deny, message: over.reason);
     std\assert(over.reason.indexOf("111 words after the lead, past this pull request's budget of 110 (60 + 50 for each of 1 change, the most of 0 changelog fragments, 1 title clause, 0 shipped source files (counting 1) and 10 changed lines outside generated files (counting 1))") != null, message: over.reason);
     std\assert(over.reason.indexOf("split the pull request") != null, message: "names the other fix");
     final wide = verdictWith(goodTitle, body: sized(210), f: shipping(3, lines: 250));
-    std\assert(wide.decision == "allow", message: "three changes earn 210 words: {wide.reason}");
-    std\assert(verdictWith(goodTitle, body: sized(80) + "\n\n```\n" + "code ".repeat(200) + "\n```", f: small).decision == "allow", message: "fenced code is not counted");
+    std\assert(wide.decision == magus\GuardDecision.allow, message: "three changes earn 210 words: {wide.reason}");
+    std\assert(verdictWith(goodTitle, body: sized(80) + "\n\n```\n" + "code ".repeat(200) + "\n```", f: small).decision == magus\GuardDecision.allow, message: "fenced code is not counted");
     final longLead = "word ".repeat(55) + "\n\n" + sized(100).sub(sized(0).len() + 1);
-    std\assert(verdictWith(goodTitle, body: longLead, f: small).decision == "allow", message: "the lead is not counted");
+    std\assert(verdictWith(goodTitle, body: longLead, f: small).decision == magus\GuardDecision.allow, message: "the lead is not counted");
 }
 
 test "a diff that cannot be read is denied with the fetch that makes it readable" {
     final v = verdictWith(goodTitle, body: sized(120), f: unknownFacts());
-    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
     std\assert(v.reason.indexOf("run `git fetch origin main`") != null, message: v.reason);
     final release = helpers\request([["gh", "pr", "create", "--base", "release", "--title", goodTitle, "--body", "Pins the key."]]);
     final other = decided(release, line: "", files: {<str: str>}, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter());
-    std\assert(other.decision == "deny" and other.reason.indexOf("run `git fetch origin release`") != null, message: other.reason);
+    std\assert(other.decision == magus\GuardDecision.deny and other.reason.indexOf("run `git fetch origin release`") != null, message: other.reason);
 }
 
 test "the diff is read once per description, for the head and base the call names" {
@@ -2365,24 +2365,24 @@ fun shippedDiff(fragments: [str]) > Facts {
 test "a feat that ships code with no fragment is denied with the fix, and a fragment settles it" {
     final bare = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
-    std\assert(bare.decision == "deny", message: bare.reason);
+    std\assert(bare.decision == magus\GuardDecision.deny, message: bare.reason);
     std\assert(bare.reason.indexOf("adds no changelog fragment") != null and bare.reason.indexOf("changes/unreleased/<branch>.md") != null, message: bare.reason);
     final refactor = decided(create("refactor(cache): hash the key in sorted order", body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
-    std\assert(refactor.decision == "allow", message: "a title that owes no entry needs none: " + refactor.reason);
+    std\assert(refactor.decision == magus\GuardDecision.allow, message: "a title that owes no entry needs none: " + refactor.reason);
 
     final fragments = fs\glob("changes/unreleased/*.md") catch [<fs\Path>];
     if (fragments.len() > 0) {
         final settled = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
             diff: facts(shippedDiff([fragments[0].value])), judge: passing(), once: helpers\counter());
-        std\assert(settled.decision == "allow", message: "a well-formed fragment: " + settled.reason);
+        std\assert(settled.decision == magus\GuardDecision.allow, message: "a well-formed fragment: " + settled.reason);
     }
 }
 
 test "a fragment that fails lint is denied even when the title owes none" {
     final malformed = decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(shippedDiff(["changes/README.md"])), judge: passing(), once: helpers\counter());
-    std\assert(malformed.decision == "deny", message: malformed.reason);
+    std\assert(malformed.decision == magus\GuardDecision.deny, message: malformed.reason);
     std\assert(malformed.reason.indexOf("malformed changelog fragment(s)") != null, message: malformed.reason);
 }
 
@@ -2463,11 +2463,11 @@ test "an area the diff touches and the description never names is a question, no
     final touched = Facts{ known = true, fragments = 0, shipped = 2, lines = 40,
         paths = ["internal/guard/dir.go", "docs/guard.md"], areas = ["internal/guard", "docs", "libs/conventions"] };
     final v = verdictWith(goodTitle, body: "The guard keeps the key; the docs say so.", f: touched);
-    std\assert(v.decision == "advise", message: v.reason);
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.reason);
     std\assert(v.reason.indexOf("why does this touch libs/conventions?") != null, message: v.reason);
     std\assert(v.reason.indexOf("touch internal/guard") == null and v.reason.indexOf("touch docs") == null, message: "named areas ask nothing: {v.reason}");
     final named = verdictWith(goodTitle, body: "The guard keeps the key, the docs say so, and conventions pin it.", f: touched);
-    std\assert(named.decision == "allow", message: named.reason);
+    std\assert(named.decision == magus\GuardDecision.allow, message: named.reason);
 }
 
 test "touchedAreas names projects and top-level packages, generated files and fragments aside" {
@@ -2554,7 +2554,7 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
             + "- [ ] Not verified: Linux, which CI runs.",
     ]) {
         final v = verdictWith(goodTitle, body: body, f: readable());
-        std\assert(v.decision == "allow", message: "{body}: {v.reason}");
+        std\assert(v.decision == magus\GuardDecision.allow, message: "{body}: {v.reason}");
     }
     final advised = {
         lead + "\n\nIt now pins the digest.": "prose between the lead and the first heading",
@@ -2565,7 +2565,7 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
     };
     foreach (body, want in advised) {
         final v = verdictWith(goodTitle, body: body, f: shipping(5, lines: 500));
-        std\assert(v.decision == "advise", message: "{body}: {v.decision}");
+        std\assert(v.decision == magus\GuardDecision.advise, message: "{body}: {v.decision}");
         std\assert(v.reason.indexOf(want) != null and v.reason.indexOf("The shape:") != null, message: v.reason);
     }
 }
@@ -2634,7 +2634,7 @@ test "other commands and a line that only mentions gh pr create stay silent" {
         ["glab", "mr", "view", "12"],
     ]) {
         final v = judged(helpers\request([argv]), line: argv.join(" "), files: {<str: str>});
-        std\assert(v.decision == "allow", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
 }
 

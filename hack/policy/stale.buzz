@@ -248,7 +248,7 @@ export fun onBase(workspace: str) > fun (commit: str) > BaseCheck {
         }
         final base = resolved!;
         final res = vcs\cmd(["merge-base", "--is-ancestor", commit, base],
-            opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+            opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
         if (res == null or (res!.code != 0 and res!.code != 1)) {
             return BaseCheck{ base = base, known = false, contained = false };
         }
@@ -267,7 +267,7 @@ export fun stampedDiff(commit: str, base: str) > [str] {
 }
 
 fun sameStampedInputs(commit: str, base: str, workspace: str) > bool {
-    final res = vcs\cmd(stampedDiff(commit, base: base), opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+    final res = vcs\cmd(stampedDiff(commit, base: base), opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
     return res != null and res!.code == 0;
 }
 
@@ -371,12 +371,12 @@ fun stale(moved: [str]) > HookBinary {
 test "a ./magus whose sources moved is advised once per moved set, naming them" {
     final once = helpers\counter();
     final v = decideStale(stale(["internal/guard/shell.go"]), once: once);
-    std\assert(v.decision == "advise", message: "moved");
+    std\assert(v.decision == magus\GuardDecision.advise, message: "moved");
     std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names the file");
     std\assert(v.reason.indexOf("./magus run go-build .") != null, message: "names the rebuild");
     std\assert(v.reason.indexOf("magus.old") == null, message: "no deadlock talk for a Go source");
-    std\assert(decideStale(stale(["internal/guard/shell.go"]), once: once).decision == "allow", message: "once per set");
-    std\assert(decideStale(stale(["internal/guard/shell.go", "internal/guard/guard.go"]), once: once).decision == "advise", message: "a new set speaks again");
+    std\assert(decideStale(stale(["internal/guard/shell.go"]), once: once).decision == magus\GuardDecision.allow, message: "once per set");
+    std\assert(decideStale(stale(["internal/guard/shell.go", "internal/guard/guard.go"]), once: once).decision == magus\GuardDecision.advise, message: "a new set speaks again");
 
     final decls = decideStale(stale(["internal/spell/gen/decls/magus.buzz"]), once: helpers\counter());
     std\assert(decls.reason.indexOf("go run -trimpath ./cmd/magus run go-build --no-cache .") != null, message: "host declarations name the escape");
@@ -390,10 +390,10 @@ test "a ./magus whose sources moved is advised once per moved set, naming them" 
 test "an unstamped ./magus is advised once; another binary and an unmoved one stay silent" {
     final once = helpers\counter();
     final unstamped = HookBinary{ ours = true, stamped = false, moved = [<str>] };
-    std\assert(decideStale(unstamped, once: once).decision == "advise", message: "unstamped");
-    std\assert(decideStale(unstamped, once: once).decision == "allow", message: "once");
-    std\assert(decideStale(HookBinary{ ours = false, stamped = false, moved = [<str>] }, once: helpers\counter()).decision == "allow", message: "not ours");
-    std\assert(decideStale(stale([<str>]), once: helpers\counter()).decision == "allow", message: "nothing moved");
+    std\assert(decideStale(unstamped, once: once).decision == magus\GuardDecision.advise, message: "unstamped");
+    std\assert(decideStale(unstamped, once: once).decision == magus\GuardDecision.allow, message: "once");
+    std\assert(decideStale(HookBinary{ ours = false, stamped = false, moved = [<str>] }, once: helpers\counter()).decision == magus\GuardDecision.allow, message: "not ours");
+    std\assert(decideStale(stale([<str>]), once: helpers\counter()).decision == magus\GuardDecision.allow, message: "nothing moved");
 }
 
 test "the rebuild itself is not held up by the staleness it cures" {
@@ -476,34 +476,34 @@ test "a stale ./magus is denied every state-writing verb, naming the rebuild" {
         ["./magus", "agent", "harness", "install"],
     ]) {
         final v = writeVerdict(argv, bin: staleBin, onBase: mainHolds(["c1"]));
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names what moved");
         std\assert(v.reason.indexOf("/repo/magus is stale against /repo") != null, message: "names the hook's binary and its checkout");
         std\assert(v.reason.indexOf("`/repo/magus --root /repo run go-build .`") != null, message: "names the rebuild of that binary");
     }
     final unstamped = fun () > HookBinary { return HookBinary{ ours = true, stamped = false, moved = [<str>] }; };
     final v = writeVerdict(["./magus", "init"], bin: unstamped, onBase: mainHolds([<str>]));
-    std\assert(v.decision == "deny" and v.reason.indexOf("no go-build stamp") != null, message: "unstamped");
+    std\assert(v.decision == magus\GuardDecision.deny and v.reason.indexOf("no go-build stamp") != null, message: "unstamped");
 }
 
 test "a build off the base branch is denied shared writes and allowed its own checkout's" {
     foreach (argv in stateWriters) {
         final v = writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"]));
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("./magus was not built from origin/main; run this from a checkout at origin/main") == 0, message: v.reason);
-        std\assert(writeVerdict(argv, bin: built("c1"), onBase: mainHolds(["c1"])).decision == "allow", message: "on the base: " + argv.join(" "));
+        std\assert(writeVerdict(argv, bin: built("c1"), onBase: mainHolds(["c1"])).decision == magus\GuardDecision.allow, message: "on the base: " + argv.join(" "));
     }
     foreach (argv in [
         ["./magus", "agent", "install", ".claude/skills", "--force"],
         ["./magus", "config", "set", "key=cache.dir,value=/tmp/c"],
         ["./magus", "agent", "harness", "install"],
     ]) {
-        std\assert(writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"])).decision == "allow", message: argv.join(" "));
+        std\assert(writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"])).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
     final unknownBase = fun (commit: str) > BaseCheck { return BaseCheck{ base = "origin/main", known = false, contained = false }; };
-    std\assert(writeVerdict(["./magus", "init"], bin: built("f00d"), onBase: unknownBase).decision == "allow", message: "a base the repository cannot answer for");
+    std\assert(writeVerdict(["./magus", "init"], bin: built("f00d"), onBase: unknownBase).decision == magus\GuardDecision.allow, message: "a base the repository cannot answer for");
     final noCommit = writeVerdict(["./magus", "init"], bin: built(""), onBase: mainHolds([<str>]));
-    std\assert(noCommit.decision == "deny" and noCommit.reason.indexOf("names no commit") != null, message: "a stamp with no commit");
+    std\assert(noCommit.decision == magus\GuardDecision.deny and noCommit.reason.indexOf("names no commit") != null, message: "a stamp with no commit");
 }
 
 test "a base ref that cannot be resolved denies shared writes, naming why" {
@@ -515,10 +515,10 @@ test "a base ref that cannot be resolved denies shared writes, naming why" {
     final broken = fun (commit: str) > BaseCheck { return check; };
     foreach (argv in stateWriters) {
         final v = writeVerdict(argv, bin: built("c1"), onBase: broken);
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf(check.unreadable) != null, message: v.reason);
     }
-    std\assert(writeVerdict(["./magus", "config", "set", "key=cache.dir,value=/tmp/c"], bin: built("c1"), onBase: broken).decision == "allow",
+    std\assert(writeVerdict(["./magus", "config", "set", "key=cache.dir,value=/tmp/c"], bin: built("c1"), onBase: broken).decision == magus\GuardDecision.allow,
         message: "a checkout's own state is not judged against the base");
 }
 
@@ -534,10 +534,10 @@ test "read-only verbs, dry runs and another binary stay with the advisory" {
         ["./magus", "run", "lint", "."],
         ["./magus", "doctor"],
     ]) {
-        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == "allow", message: argv.join(" "));
+        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
     final other = fun () > HookBinary { return HookBinary{ ours = false, stamped = false, moved = [<str>] }; };
-    std\assert(writeVerdict(["magus", "init"], bin: other, onBase: mainHolds([<str>])).decision == "allow", message: "not this workspace's binary");
+    std\assert(writeVerdict(["magus", "init"], bin: other, onBase: mainHolds([<str>])).decision == magus\GuardDecision.allow, message: "not this workspace's binary");
 }
 
 test "a squash-merged build is judged by its stamped sources, not its ancestry" {
@@ -547,7 +547,7 @@ test "a squash-merged build is judged by its stamped sources, not its ancestry" 
 
     final sameSources = fun (commit: str) > BaseCheck { return BaseCheck{ base = "origin/main", known = true, contained = true }; };
     foreach (argv in stateWriters) {
-        std\assert(writeVerdict(argv, bin: built("squashed"), onBase: sameSources).decision == "allow", message: argv.join(" "));
+        std\assert(writeVerdict(argv, bin: built("squashed"), onBase: sameSources).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
 }
 
@@ -558,7 +558,7 @@ test "every refusal names a rebuild the role can run" {
         return HookBinary{ ours = true, stamped = true, moved = ["internal/guard/shell.go"], path = "/repo/magus", workspace = "/repo" };
     }, onBase: mainHolds(["c1"]));
     foreach (v in [off, none, old]) {
-        std\assert(v.decision == "deny", message: v.reason);
+        std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
         std\assert(v.reason.indexOf("run go-build .`") != null, message: "the main session's rebuild: " + v.reason);
         std\assert(v.reason.indexOf("hack/dev/bootstrap-worktree.buzz -- --job <id> --build-from <main checkout>`") != null,
             message: "a leased worker's placement: " + v.reason);

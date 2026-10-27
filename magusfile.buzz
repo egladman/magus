@@ -273,7 +273,7 @@ fun version() > str !> any {
             return tag;
         }
         final v = vcs\cmd(["describe", "--tags", "--always", "--dirty", "--match", "v[0-9]*"],
-            {"quiet": true}).stdout.trim();
+            vcs\CommandOptions{quiet = true}).stdout.trim();
         if (v == "") { return "unknown"; }
         return v;
     } catch (e) {
@@ -326,7 +326,7 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     });
     // macOS assesses a new executable on its first exec, which can outlast a hook's
     // budget; run it here so no hook pays for that.
-    final said = proc\exec("./magus", ["version"], ".", {}).stdout;
+    final said = proc\exec("./magus", ["version"], ".").stdout;
     if (!said.startsWith("magus ")) {
         throw "go-build: the built ./magus did not answer `version` with a `magus ` line: {said}";
     }
@@ -468,7 +468,7 @@ fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: st
     if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
         magus\raise(code, message: "the `" + a + "` and `" + b
             + "` charms both answer " + question + " - name one",
-            opts: {"url": "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+            opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
     }
 }
 
@@ -529,7 +529,7 @@ fun channel(ctx: magus\Context) > str !> any {
         magus\raise("WS1002", message: "the `tagged` charm reads which channel to publish "
             + "to off the release tag, so naming `stable` or `unstable` beside it answers "
             + "that question twice - name one",
-            opts: {"url": "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+            opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
     }
     if (!wantStable and !wantUnstable and !wantTagged) { return "commit"; }
 
@@ -675,7 +675,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
         // the tree: a shard renamed mid-walk failed the scan. .claude/worktrees holds whole
         // other checkouts in a local clone. Neither carries a dependency's license.
         "--skip-dirs", ".magus,.claude/worktrees",
-        "."], ".", {});
+        "."], ".");
 }
 
 // Renders the roff man pages into manpage/ and refreshes internal/commands/testdata/api.lock,
@@ -967,9 +967,9 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".opencode/skills/magus-sdk*/**",
         ".opencode/skills/magus-vcs-hygiene*/**",
         ".opencode/skills/magus-workspace-rules*/**"]);
-    magus\cmd("agent", args: ["install", ".claude/skills", "--force"], opts: {"quiet": true});
-    magus\cmd("agent", args: ["install", ".agents/skills", "--force"], opts: {"quiet": true});
-    magus\cmd("agent", args: ["install", ".opencode/skills", "--force"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install", ".claude/skills", "--force"], opts: magus\CommandOptions{quiet = true});
+    magus\cmd("agent", args: ["install", ".agents/skills", "--force"], opts: magus\CommandOptions{quiet = true});
+    magus\cmd("agent", args: ["install", ".opencode/skills", "--force"], opts: magus\CommandOptions{quiet = true});
 }
 
 // Regenerates the CLI config-flag plumbing from internal/config/config.go.
@@ -1023,10 +1023,10 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Declared although gitignored: console's build consumes the pair.
     ctx.writesFiles(["gen/knowledge-graph.json", "gen/target-graph.json"]);
     fs\mkdirAll("gen");
-    final knowledge = magus\cmd("graph", args: ["export", "--reproducible", "-o", "json"], opts: {"quiet": true}).stdout;
+    final knowledge = magus\cmd("graph", args: ["export", "--reproducible", "-o", "json"], opts: magus\CommandOptions{quiet = true}).stdout;
     fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
     // The CLI's bytes, not magus\describe.graph(): the console reads the -o json field names.
-    final targets = magus\cmd("describe", args: ["graph", "-o", "json"], opts: {"quiet": true}).stdout;
+    final targets = magus\cmd("describe", args: ["graph", "-o", "json"], opts: magus\CommandOptions{quiet = true}).stdout;
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
     // ci strips cd, so the gate never pushes.
     if (ctx.hasCharm("cd")) {
@@ -1046,7 +1046,7 @@ fun publish_graph(ctx: magus\Context) > void !> any {
     }
     foreach (tag in tags) {
         magus\cmd("graph", args: ["push", "--ref", reg.repository + ":" + tag, "--username", user],
-            opts: {"stdin": token});
+            opts: magus\CommandOptions{stdin = token});
     }
     magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
 }
@@ -1056,7 +1056,7 @@ fun publish_graph(ctx: magus\Context) > void !> any {
 // is kept unless the run is mutable. Without cd it only prints each pinned reference.
 export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
     final listed = json\parse(magus\cmd("spell", args: ["ls", "magus/spell", "-o", "json"],
-        opts: {"quiet": true}).stdout);
+        opts: magus\CommandOptions{quiet = true}).stdout);
     final reg = GHCR_SPELLS;
     var shipped = mut {<str: str>};
     foreach (s in listed["spells"]) {
@@ -1086,7 +1086,7 @@ export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
         final published = registry_tags(repo, user: user, token: token).indexOf(tag) != null;
         if (publish_action(ctx, unit: repo + ":" + tag, published: published) == releases\KEEP) { continue; }
         magus\cmd("spell", args: ["push", "magus/spell/" + name, repo + ":" + tag,
-            "--username", user], opts: {"stdin": token});
+            "--username", user], opts: magus\CommandOptions{stdin = token});
     }
 }
 
@@ -1104,7 +1104,7 @@ export fun spell_lock(ctx: magus\Context, args: [str]) > void !> any {
 
 // Logs counts from the insight report (hotspots, ownership, affinity, volatility).
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    final r = magus\insight({});
+    final r = magus\insight();
     magus\log.info("hotspots: {r.hotspots.files.len()} file(s) ranked by churn against complexity");
     magus\log.info("ownership: {r.ownership.projects.len()} project(s) attributed");
     magus\log.info("affinity: {r.affinity.pairs.len()} coupled project pair(s)");
@@ -1234,8 +1234,8 @@ fun goarm_level(goos: str, goarch: str) > str {
 // Reads the module list from the shipped binary, not go.mod: the two variants link
 // different modules.
 fun write_notices(stage: str, tool: str, binary: str) > void !> any {
-    final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
-    final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
+    final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".").stdout.split(separator: "\n")[0];
+    final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".").stdout;
 
     var body = "THIRD-PARTY NOTICES\n\n"
         + tool + " is licensed under the terms in the accompanying LICENSE file. It links the\n"
@@ -1323,7 +1323,7 @@ fun archive_release_stage(stage: str, tool: str, binary: str, readme: str, asset
     fs\writeFile(fs\join(stage, "BUILDINFO"), buildinfo
         + "\nRun `go version -m " + tool + "` for the full module list and build settings.\n");
 
-    archive\compress(stage, asset, {});
+    archive\compress(stage, asset);
     fs\removeAll(stage);
 
     // sha256File returns hex; crypto.hash returns raw bytes `sha256sum -c` cannot read.
@@ -1481,7 +1481,7 @@ fun publish_action(ctx: magus\Context, unit: str, published: bool) > str {
 // an anonymous read of a private package and of a missing one with the same denial.
 fun registry_tags(repository: str, user: str, token: str) > [str] !> any {
     final res = magus\cmd("spell", args: ["ls", repository, "--username", user, "-o", "json"],
-        opts: {"quiet": true, "allow_failure": true, "stdin": token});
+        opts: magus\CommandOptions{quiet = true, allowFailure = true, stdin = token});
     if (!res.ok) {
         if (res.stderr.indexOf("NAME_UNKNOWN") != null) { return []; }
         throw "cannot list the tags of {repository}, so whether a release is already published"
@@ -1499,7 +1499,7 @@ fun registry_tags(repository: str, user: str, token: str) > [str] !> any {
 // was interrupted, and replacing it takes the mutable charm like any other.
 fun release_assets(tag: str) > [str]? !> any {
     final res = proc\exec("gh", args: ["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
+        dir: ".", opts: proc\ExecOptions{quiet = true, allowFailure = true});
     if (!res.ok) {
         if (res.stderr.indexOf("release not found") != null) { return null; }
         throw "release: cannot read the {tag} GitHub Release: {res.stderr.trim()}";
@@ -1517,7 +1517,7 @@ fun release_assets(tag: str) > [str]? !> any {
 // unverified one is never trusted.
 fun download_release(tag: str) > void !> any {
     fs\mkdirAll("dist");
-    proc\exec("gh", args: ["release", "download", tag, "--dir", "dist", "--clobber"], dir: ".", opts: {"quiet": true});
+    proc\exec("gh", args: ["release", "download", tag, "--dir", "dist", "--clobber"], dir: ".", opts: proc\ExecOptions{quiet = true});
     final sumsPath = fs\join("dist", "SHA256SUMS");
     final sigPath = sumsPath + ".sig";
     var problems = mut [<str>];
@@ -1573,9 +1573,9 @@ export fun release_publish(ctx: magus\Context, args: [str]) > void !> any {
         // Never left to the default, which hands a candidate the repository's latest pointer
         // that audit's compat job and `magus self update` follow.
         if (!semver\isStable(tag)) { create.append("--prerelease"); }
-        proc\exec("gh", args: create + files, dir: ".", opts: {});
+        proc\exec("gh", args: create + files, dir: ".");
     } else {
-        proc\exec("gh", args: ["release", "upload", tag, "--clobber"] + files, dir: ".", opts: {});
+        proc\exec("gh", args: ["release", "upload", tag, "--clobber"] + files, dir: ".");
     }
 }
 
@@ -1589,14 +1589,14 @@ export fun release_manifest(ctx: magus\Context, args: [str]) > void !> any {
     final tag = release_tag("release-manifest");
     download_release(tag);
     final manifestPath = fs\join("releases", tag + ".yaml");
-    vcs\cmd(["fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"], {"quiet": true});
-    final onMain = vcs\cmd(["show", "origin/main:" + manifestPath], {"quiet": true, "allow_failure": true});
+    vcs\cmd(["fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"], vcs\CommandOptions{quiet = true});
+    final onMain = vcs\cmd(["show", "origin/main:" + manifestPath], vcs\CommandOptions{quiet = true, allowFailure = true});
     if (publish_action(ctx, unit: "main's " + manifestPath, published: onMain.ok) == releases\KEEP) {
         // cut converges on main's copy when it names these archives, and refuses one naming others.
         fs\writeFile(manifestPath, content: onMain.stdout);
     }
     proc\exec("go", args: ["run", "./cmd/magus-utils", "cut", "-version", tag, "-artifacts", "./dist",
-        "-unreleased", "./changes/unreleased", "-out", "./releases"], dir: ".", opts: {});
+        "-unreleased", "./changes/unreleased", "-out", "./releases"], dir: ".");
     final manifest = fs\readFile(manifestPath);
     if (onMain.ok and manifest == onMain.stdout) {
         magus\log.info("release-manifest: main already carries {manifestPath}; the index has nothing new");
@@ -1608,17 +1608,17 @@ export fun release_manifest(ctx: magus\Context, args: [str]) > void !> any {
     }
     final branch = releases\manifestBranch(tag);
     final dir = fs\tempDir("release-manifest-");
-    vcs\cmd(["worktree", "add", "--detach", dir, "origin/main"], {"quiet": true});
+    vcs\cmd(["worktree", "add", "--detach", dir, "origin/main"], vcs\CommandOptions{quiet = true});
     fs\writeFile(fs\join(dir, manifestPath), content: manifest);
-    vcs\cmd(["add", "--", manifestPath], {"dir": dir, "quiet": true});
+    vcs\cmd(["add", "--", manifestPath], vcs\CommandOptions{dir = dir, quiet = true});
     vcs\cmd(["-c", "user.name=github-actions[bot]",
         "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
-        "commit", "-m", "chore(release): stage the {tag} release manifest"], {"dir": dir, "quiet": true});
+        "commit", "-m", "chore(release): stage the {tag} release manifest"], vcs\CommandOptions{dir = dir, quiet = true});
     // Force: a rerun stages the same manifest on the same branch, which only this target writes.
-    vcs\cmd(["push", "--force", "origin", "HEAD:refs/heads/" + branch], {"dir": dir, "quiet": true});
-    vcs\cmd(["worktree", "remove", "--force", dir], {"quiet": true});
+    vcs\cmd(["push", "--force", "origin", "HEAD:refs/heads/" + branch], vcs\CommandOptions{dir = dir, quiet = true});
+    vcs\cmd(["worktree", "remove", "--force", dir], vcs\CommandOptions{quiet = true});
     proc\exec("gh", args: ["workflow", "run", "release-index.yaml", "--ref", branch,
-        "-f", "reason=the {tag} release"], dir: ".", opts: {});
+        "-f", "reason=the {tag} release"], dir: ".");
     magus\log.info("release-manifest: staged {manifestPath} on {branch}; release-index.yaml signs main's index with it and opens the pull request");
 }
 
@@ -1679,7 +1679,7 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
     vcs\cmd(["push", "--force", "origin", branch]);
 
     final open = proc\exec("gh", args: ["pr", "list", "--head", branch, "--state", "open",
-        "--json", "number", "--jq", ".[].number"], dir: ".", opts: {"quiet": true}).stdout.trim();
+        "--json", "number", "--jq", ".[].number"], dir: ".", opts: proc\ExecOptions{quiet = true}).stdout.trim();
     if (open != "") {
         magus\log.info("release-index: a pull request for " + branch + " is already open");
         return;
@@ -1688,7 +1688,7 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
     // branch is the deliverable, so a refusal only warns.
     final created = proc\exec("gh", args: ["pr", "create", "--base", "main", "--head", branch,
         "--title", subject, "--body", releases\releaseIndexPrBody()],
-        dir: ".", opts: {"allow_failure": true});
+        dir: ".", opts: proc\ExecOptions{allowFailure = true});
     if (!created.ok) {
         magus\log.warn(releases\releaseIndexPrFallback(os\env("GITHUB_REPOSITORY") ?? "",
             branch: branch));
@@ -1713,7 +1713,7 @@ fun noted(name: str, detail: str) > Verdict {
 fun local_branches() > [str] !> any {
     var names = mut [<str>];
     final listing = vcs\cmd(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"],
-        {"quiet": true}).stdout;
+        vcs\CommandOptions{quiet = true}).stdout;
     foreach (line in listing.split("\n")) {
         final name = line.trim();
         if (name != "") { names.append(name); }
@@ -2077,7 +2077,7 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles([".github/actions/advice/*.buzz", ".github/actions/ci-outcome/*.buzz", ".github/actions/magus/*.buzz"]);
     foreach (dir in [".github/actions/advice", ".github/actions/ci-outcome", ".github/actions/magus"]) {
         foreach (script in fs\glob(dir + "/*.buzz")) {
-            magus\cmd("buzz", args: ["-t", fs\basename(script.value)], opts: {"dir": dir});
+            magus\cmd("buzz", args: ["-t", fs\basename(script.value)], opts: magus\CommandOptions{dir = dir});
         }
     }
 }
@@ -2153,7 +2153,7 @@ fun raced_packages() > [str] !> any {
     final module = cov\modulePath(fs\readFile("go.mod"));
     final skip = module + CMD_MAGUS_PKG.sub(1);
     var raced = mut [<str>];
-    foreach (line in proc\exec("go", ["list", "./..."], ".", {"quiet": true}).stdout.split("\n")) {
+    foreach (line in proc\exec("go", ["list", "./..."], ".", proc\ExecOptions{quiet = true}).stdout.split("\n")) {
         final pkg = line.trim();
         if (pkg != "" and pkg != skip) { raced.append(pkg); }
     }
@@ -2295,7 +2295,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         // Coverprofile paths are relative to docs/, so SF: records are rewritten before merging.
         final frag = "coverage/buzz/docs_" + lib.replace("/", "_") + ".lcov";
         magus\cmd("buzz", args: ["-t", "--embedded", "--coverprofile", "../" + frag, lib],
-            opts: {"dir": "docs"});
+            opts: magus\CommandOptions{dir = "docs"});
         if (fs\exists(frag)) {
             reports.append(fs\readFile(frag).replace("SF:lib/", "SF:docs/lib/"));
         }
@@ -2439,7 +2439,7 @@ export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
                     ".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json",
                     ".codex/rules/*.rules", "opencode.json"]);
     final plans = mut [<magus\HarnessPlan>];
-    foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: {"quiet": true}).stdout.trim().split("\n")) {
+    foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{quiet = true}).stdout.trim().split("\n")) {
         if (id != "") { plans.append(magus\describe.harness(id)); }
     }
     final report = hostconfig\stale(plans);
@@ -2533,7 +2533,7 @@ fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
     final failures = mut [<str>];
     // The rules judge from the symbol indexes; magus\precedents freshens them, as in lint_rules.
     _ = magus\precedents();
-    if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: {"allow_failure": true}).ok) {
+    if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
         failures.append("hack/lint/run.buzz reported findings above");
     }
     final libs = mut [<str>];
@@ -2546,7 +2546,7 @@ fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
     }
     // Each tool prints its own findings; a failing one is named and the rest still run.
     foreach (argv in scopedTools(ctx, files: files, goPackages: packages["."] ?? [<str>])) {
-        if (!proc\exec(argv[0], argv.sub(1, len: argv.len() - 1), opts: {"allow_failure": true}).ok) {
+        if (!proc\exec(argv[0], argv.sub(1, len: argv.len() - 1), opts: proc\ExecOptions{allowFailure = true}).ok) {
             failures.append("{argv[0]} reported findings above");
         }
     }
@@ -2756,7 +2756,7 @@ export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) { manifest = args[0]; }
     final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
     os\withEnv({"CLAUDE_CODE_OAUTH_TOKEN": token}, callback: fun () > void !> any {
-        proc\exec("./run.sh", args: ["--manifest", manifest], dir: "benchmarks/agent", opts: {});
+        proc\exec("./run.sh", args: ["--manifest", manifest], dir: "benchmarks/agent");
     });
 }
 
@@ -2797,7 +2797,7 @@ export fun retrieval_eval_test(ctx: magus\Context, args: [str]) > void !> any {
 export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["internal/compress/*.go"]);
     foreach (lib in ["libzstd", "liblzma"]) {
-        proc\exec("pkg-config", ["--exists", lib], ".", {});
+        proc\exec("pkg-config", ["--exists", lib], ".");
     }
     // Explicit args replace go-test's `./...`, so this compiles one package under cgo.
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"}),
@@ -2862,7 +2862,7 @@ export fun serve(ctx: magus\Context, args: [str]) > void !> any {
 
     // No port: http.server takes the first free one from 8080.
     // /console/ wins by longest prefix.
-    final port = http\server({"mounts": {"/": DOCS_GEN, "/console/": CONSOLE_GEN}});
+    final port = http\server(http\ServerOptions{mounts = {"/": DOCS_GEN, "/console/": CONSOLE_GEN}});
     magus\log.info("serving the deploy at http://localhost:{port}/");
     magus\log.info("  /          -> " + DOCS_GEN + "  (docs)");
     magus\log.info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");

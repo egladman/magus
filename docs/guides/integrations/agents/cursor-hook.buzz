@@ -307,9 +307,9 @@ fun citations(stdout: str) > [str] {
 // next open-web look prefers those hosts. Empty when nothing matches.
 fun linkBias(bin: str, terms: str) > str {
     if (terms == "") { return ""; }
-    final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null or result!.code != 0) { return ""; }
     final urls = citations(result!.stdout);
@@ -325,16 +325,16 @@ fun linkBias(bin: str, terms: str) > str {
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult? {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
-    return proc\exec(guard.bin, args: args, opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": guard.payload,
+    return proc\exec(guard.bin, args: args, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = guard.payload,
     }) catch null;
 }
 
 fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
-    final probe = proc\exec(guard.bin, args: ["version"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final probe = proc\exec(guard.bin, args: ["version"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
     var why = "";
@@ -531,9 +531,9 @@ fun gateMcp(scope: Scope, event: any?) > str {
 // answers nothing. Profile a suspect run with MAGUS_PPROF=mem:/tmp/s.mem (and buzz
 // --profile on the outer hook).
 fun brief(bin: str, root: str) > str {
-    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["session", "--brief"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return ""; }
     var context = hook\trimTrailingNewlines(result!.stdout);
@@ -626,9 +626,9 @@ fun toolPath(event: any?) > str {
 }
 
 fun checkpoint(bin: str, agent: str, session: str, transcript: str) > void {
-    proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch void;
 }
 
@@ -644,10 +644,10 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
             "subagent_type": hook\field(event, dotPath: "subagent_type"),
         },
     };
-    proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": json\stringify(body) catch "",
+    proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = json\stringify(body) catch "",
     }) catch void;
 }
 
@@ -660,10 +660,10 @@ fun recordMessage(scope: Scope, event: any?) > void {
         "shell", "--message", AGENT_NAME, scope.agent, "--transport", "buzz",
         "--session", scope.session, "--transcript", scope.transcript,
         "--event", "beforeSubmitPrompt",
-    ], opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": message,
+    ], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = message,
     }) catch void;
 }
 

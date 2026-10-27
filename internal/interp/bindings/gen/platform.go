@@ -36,7 +36,7 @@ func RegisterPlatform(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("memoryBytes", vm.DirectValue("platform.memoryBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.PlatformMemory(ctx)
+		ret0, err := std.PlatformMemoryBytes(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

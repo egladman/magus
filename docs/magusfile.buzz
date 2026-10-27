@@ -149,7 +149,7 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
 // capping, so the list depends on the tree alone and never on how a search ranked it.
 fun termUsage(title: str) > str !> any {
     final candidates = mut [<dictionary\UsageDoc>];
-    foreach (m in magus\query("kind=docsection id=~^docsection:docs/ {title}", opts: {"limit": 5000}).matches) {
+    foreach (m in magus\query("kind=docsection id=~^docsection:docs/ {title}", opts: magus\QueryOptions{limit = 5000}).matches) {
         if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
         if (m.label.lower().indexOf(title.lower()) == null) { continue; }
         candidates.append(dictionary\docFromID(m.id, label: m.label));
@@ -168,7 +168,7 @@ fun termUsage(title: str) > str !> any {
     }
     final symbols = mut [<dictionary\UsageSymbol>];
     final names = mut {<str: bool>};
-    final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: {"limit": 5000});
+    final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
     if (found.answer.verdict == "unknown") {
         throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
     }
@@ -268,7 +268,7 @@ export fun proofread_docs_generate(ctx: magus\Context, args: [str]) > void !> an
         proofreadmod\file("internal/calibrate/cases/*.txtar"), workspace\file("hack/magusfile/ruledocs.buzz")]);
     ctx.writesFiles(["reference/proofread/*.md"]);
     ruledocs\writeProofread("reference/proofread",
-        raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".", {}).stdout);
+        raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".").stdout);
     pruneGeneratedPageCopies("reference/proofread/*.md");
 }
 
@@ -442,7 +442,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(workspace\lint_rules);
     markdown.typos(ctx);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
-    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
+    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
 }
 // build renders the site cd.yaml publishes. It is uncommitted, so no drift gate applies.
 export fun build(ctx: magus\Context, args: [str]) > void {
@@ -498,9 +498,9 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
         proc\exec("go",
             ["build", "-trimpath", "-ldflags=-s -w",
              "-o", "docs/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
-            "..", {});
+            "..");
     });
-    final goroot = proc\exec("go", ["env", "GOROOT"], ".", {}).stdout.trim();
+    final goroot = proc\exec("go", ["env", "GOROOT"], ".").stdout.trim();
     fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "gen/playground/wasm_exec.js");
 }
 
@@ -539,7 +539,7 @@ export fun figure_engine_digest_generate(ctx: magus\Context, args: [str]) > void
     ctx.writesFiles(["gen/figure-engine.sha256"]);
     final body = magus\cmd("version",
         args: ["--client", "-o", "template=\{\{.embedded.figure_sha256}}"],
-        opts: {"quiet": true}).stdout.trim() + "\n";
+        opts: magus\CommandOptions{quiet = true}).stdout.trim() + "\n";
     final path = fs\join("gen", "figure-engine.sha256");
     if (fs\exists(path) and fs\readFile(path) == body) { return; }
     fs\mkdirAll("gen");

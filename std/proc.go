@@ -25,16 +25,16 @@ var Proc = Module{
 	Methods: []Method{
 		{
 			Name: "exec",
-			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console. opts.tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their color and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only. A version-control binary (git, hg, sl, jj) is refused, whether named, given by path, behind a wrapper such as env, or inside a proc.shell line: run it with vcs\\cmd, which holds it to the lease rules.",
+			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allowFailure is true. Optional dir runs cmd there (relative to the target's cwd). opts is an ExecOptions: stdin is fed to the process as standard input - pipe by passing a prior call's stdout. quiet captures the output without echoing it to the console. tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their color and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only. A version-control binary (git, hg, sl, jj) is refused, whether named, given by path, behind a wrapper such as env, or inside a proc.shell line: run it with vcs\\cmd, which holds it to the lease rules.",
 			Args: []Arg{
 				{Name: "cmd", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice, Optional: true},
 				{Name: "dir", Type: TypeString, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "ExecOptions"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Raises:  true,
-			Impl:    OsExec,
+			Impl:    ProcExec,
 		},
 		{
 			Name: "shell",
@@ -44,7 +44,7 @@ var Proc = Module{
 				{Name: "shell", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ShellCommand"}},
-			Impl:    OsShell,
+			Impl:    ProcShell,
 		},
 		{
 			Name:    "which",
@@ -52,7 +52,7 @@ var Proc = Module{
 			Args:    []Arg{{Name: "cmd", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
-			Impl:    OsWhich,
+			Impl:    ProcWhich,
 		},
 		{
 			Name: "with_slots",
@@ -63,14 +63,14 @@ var Proc = Module{
 			},
 			Returns: nil,
 			Raises:  true,
-			Impl:    OsWithSlots,
+			Impl:    ProcWithSlots,
 		},
 		{
 			Name:    "stdin_is_terminal",
 			Doc:     "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeBool}},
-			Impl:    OsStdinIsTerminal,
+			Impl:    ProcStdinIsTerminal,
 		},
 	},
 }

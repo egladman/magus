@@ -7,9 +7,11 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // buildDescribe assembles magus\describe: one typed read per `magus describe` noun.
@@ -31,7 +33,11 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		}))
 	}
 	bind("file", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		report, err := std.MagusDescribeFile(ctx, ffi.StringSlice(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("file", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		report, err := std.MagusDescribeFile(ctx, ffi.StringSlice(args, 0), opts)
 		return bindgen.ObjectFileReport(report), err
 	})
 	// In-process rather than forked: the registry is this process's own, and
@@ -45,19 +51,35 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return ffi.ObjectSlice(out, bindgen.ObjectModuleEntry), nil
 	})
 	bind("spell", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeSpell(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("spell", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeSpell(ctx, ffi.String(args, 0), opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectSpell), err
 	})
 	bind("charm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeCharm(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("charm", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeCharm(ctx, ffi.String(args, 0), opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectCharmEntry), err
 	})
 	bind("target", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeTarget(ctx, ffi.AnyMap(args, 0))
+		opts, err := describeOptions("target", args, 0)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeTarget(ctx, opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectTargetEntry), err
 	})
 	bind("evaluatedTarget", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeEvaluatedTarget(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("evaluatedTarget", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeEvaluatedTarget(ctx, ffi.String(args, 0), opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectEvaluatedTarget), err
 	})
 	bind("project", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
@@ -65,19 +87,35 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return bindgen.ObjectProjectsOutput(out), err
 	})
 	bind("evaluatedProject", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeEvaluatedProject(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("evaluatedProject", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeEvaluatedProject(ctx, ffi.String(args, 0), opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectEvaluatedProject), err
 	})
 	bind("graph", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeGraph(ctx, ffi.AnyMap(args, 0))
+		opts, err := describeOptions("graph", args, 0)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeGraph(ctx, opts)
 		return bindgen.ObjectTargetGraphOutput(out), err
 	})
 	bind("graphMarkdown", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeGraphMarkdown(ctx, ffi.StringSlice(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("graphMarkdown", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeGraphMarkdown(ctx, ffi.StringSlice(args, 0), opts)
 		return ffi.StringVal(out), err
 	})
 	bind("workspace", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeWorkspace(ctx, ffi.AnyMap(args, 0))
+		opts, err := describeOptions("workspace", args, 0)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeWorkspace(ctx, opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectWorkspaceEntry), err
 	})
 	bind("tool", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
@@ -85,7 +123,11 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return bindgen.ObjectToolReport(out), err
 	})
 	bind("rule", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeRule(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("rule", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeRule(ctx, ffi.String(args, 0), opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectRuleDoc), err
 	})
 	bind("harness", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -93,8 +135,21 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return bindgen.ObjectHarnessPlan(out), err
 	})
 	bind("mcpTool", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeMCPTool(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
+		opts, err := describeOptions("mcpTool", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeMCPTool(ctx, ffi.String(args, 0), opts)
 		return ffi.ObjectSlice(out, bindgen.ObjectMCPTool), err
 	})
 	return d
+}
+
+// describeOptions decodes the CommandOptions a forking describe member takes at arg n,
+// strictly: an unknown or mistyped member raises. An omitted one is the zero record.
+func describeOptions(member string, args []vm.Value, n int) (types.MagusCommandOptions, error) {
+	if !ffi.Present(args, n) {
+		return types.MagusCommandOptions{}, nil
+	}
+	return ffi.Object(`magus\describe.`+member, "opts", args, n, decode.DecodeMagusCommandOptions)
 }

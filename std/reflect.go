@@ -61,7 +61,7 @@ func MethodFuncName(m Method) string {
 	return bareName(implementationName(m))
 }
 
-// FieldFuncName returns the bare function name of f.Resolver (e.g. "VcsName").
+// FieldFuncName returns the bare function name of f.Resolver (e.g. "VCSName").
 func FieldFuncName(f Field) string {
 	if f.Resolver == nil {
 		return ""

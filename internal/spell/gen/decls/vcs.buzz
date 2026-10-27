@@ -6,10 +6,32 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export enum<str> ChangeStatus {
+    none = "",
+    added = "added",
+    modified = "modified",
+    deleted = "deleted",
+    renamed = "renamed",
+}
+
+export enum<str> RegionSide {
+    none = "",
+    old = "old",
+    new = "new",
+}
+
 export object Path {
     value: str = "",
     base: str = "",
     isDir: bool = false,
+}
+
+export object CommandOptions {
+    dir: str = "",
+    stdin: str = "",
+    quiet: bool = false,
+    tty: bool = false,
+    allowFailure: bool = false,
 }
 
 export object ExecResult {
@@ -45,12 +67,12 @@ export object FileStat {
 export object FileChange {
     path: str = "",
     prevPath: str = "",
-    status: str = "",
+    status: ChangeStatus = ChangeStatus.none,
 }
 
 export object RegionChange {
     file: FileChange = FileChange{},
-    side: str = "",
+    side: RegionSide = RegionSide.none,
     lines: [int] = [],
     declaration: str = "",
     driver: str = "",
@@ -80,12 +102,12 @@ export object Tag {
 
 export extern fun base(dir: str = "") > str !> any;
 export extern fun changedFiles(base: str = "", dir: str = "") > [Path] !> any;
-export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun cmd(args: [str], opts: CommandOptions = CommandOptions{}) > ExecResult !> any;
 export extern fun commit(rev: str = "") > Commit !> any;
 export extern fun describe() > str !> any;
 export extern fun diffStat(base: str = "", dir: str = "") > [FileStat] !> any;
 export extern fun dirtyDiff(paths: [str] = [<str>]) > str;
-export extern fun history(limit: int = 10, paths: [str] = [<str>], first_parent: bool = false) > [Commit] !> any;
+export extern fun history(limit: int = 10, paths: [str] = [<str>], firstParent: bool = false) > [Commit] !> any;
 export extern fun isDirty(paths: [str] = [<str>]) > bool !> any;
 export extern fun name() > str;
 export extern fun ref(dir: str = "") > str? !> any;

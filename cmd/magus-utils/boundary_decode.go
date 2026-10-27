@@ -114,6 +114,24 @@ var inboundTypes = []string{
 	"Material",
 	"Provenance",
 	"Document",
+	// The host doors' option records, each decoded strictly at its door.
+	"DirsOptions",
+	"NeighborhoodOptions",
+	"PathOptions",
+	"QueryOptions",
+	"RefsOptions",
+	"InsightOptions",
+	"ExecOptions",
+	`magus\CommandOptions`,
+	`vcs\CommandOptions`,
+	`magus\DiffOptions`,
+	"RaiseOptions",
+	"SkillsOptions",
+	`http\Options`,
+	`http\ServerOptions`,
+	`http\Retry`,
+	`archive\Options`,
+	"RetryOptions",
 }
 
 // requiredMembers names, per inbound type, the members its decoder refuses an answer
@@ -275,7 +293,7 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	fmt.Fprintln(&body, "\tif !ok {")
 	fmt.Fprintf(&body, "\t\treturn out, mismatch(path, %q, v)\n", entry.Name)
 	fmt.Fprintln(&body, "\t}")
-	required := requiredMembers[entry.Name]
+	required := requiredMembers[entry.key()]
 	declared := map[string]bool{}
 	for _, bf := range boundaryFields(t) {
 		declared[buzzVMFieldName(bf.StructField)] = true
@@ -579,7 +597,7 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 			enums = ", ffi.EnumBacking"
 		}
 		fmt.Fprintf(&b, "\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return Object%s(v.(%s)%s) }, Decode: func(v vm.Value) (any, error) { return decode.Decode%s(v) }},\n",
-			entry.Name, q, typeIdent(t), q, enums, typeIdent(t))
+			entry.key(), q, typeIdent(t), q, enums, typeIdent(t))
 	}
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)

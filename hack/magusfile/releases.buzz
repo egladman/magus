@@ -410,7 +410,7 @@ export fun verifySignature(data: str, sig: str, pubHex: str, sigPath: str) > voi
     if (sig.len() != 64) {
         throw "{sigPath} is {sig.len()} bytes, want 64";
     }
-    if (!crypto\verify(crypto\SignAlgorithm.Ed25519, data: data, sig_hex: sig.hex(), pub_hex: pubHex)) {
+    if (!crypto\verify(crypto\SignAlgorithm.Ed25519, data: data, sigHex: sig.hex(), pubHex: pubHex)) {
         throw "signature check failed: {sigPath} does not match the active release key";
     }
 }

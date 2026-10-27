@@ -33,7 +33,7 @@ import (
 func TestOsExecTeesToOutputWriters(t *testing.T) {
 	var tee bytes.Buffer
 	ctx := spawn.WithOutputWriters(context.Background(), &tee, &tee)
-	res, err := OsExec(ctx, "printf", []string{"hello"}, "", nil)
+	res, err := ProcExec(ctx, "printf", []string{"hello"}, "", nil)
 	require.NoError(t, err)
 	got := res.Stdout
 	assert.Equal(t, "hello", got)
@@ -43,7 +43,7 @@ func TestOsExecTeesToOutputWriters(t *testing.T) {
 // TestOsExecStdin verifies opts.stdin is fed to the process: the plumbing under
 // pipe-style chaining (a prior call's stdout becomes the next call's stdin).
 func TestOsExecStdin(t *testing.T) {
-	res, err := OsExec(context.Background(), "cat", nil, "", map[string]any{"stdin": "piped-input"})
+	res, err := ProcExec(context.Background(), "cat", nil, "", map[string]any{"stdin": "piped-input"})
 	require.NoError(t, err)
 	got := res.Stdout
 	assert.Equal(t, "piped-input", got, "stdin not delivered")
@@ -110,7 +110,7 @@ func TestOsExecResolvesCwd(t *testing.T) {
 
 	runPwd := func(ctxCwd, dirArg, wantDir string) {
 		ctx := WithCurrentWorkingDirectory(context.Background(), ctxCwd)
-		res, err := OsExec(ctx, "pwd", nil, dirArg, nil)
+		res, err := ProcExec(ctx, "pwd", nil, dirArg, nil)
 		require.NoError(t, err)
 		require.Equal(t, 0, res.Code, "pwd exit code")
 		// exec trims stdout, so res.Stdout is the bare path.
@@ -144,7 +144,7 @@ func TestOsWithSlots(t *testing.T) {
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
 	ran := false
-	err := OsWithSlots(ctx, 3, cbFunc(func(context.Context) error {
+	err := ProcWithSlots(ctx, 3, cbFunc(func(context.Context) error {
 		ran = true
 		assert.Equal(t, 3, lim.Snapshot().Running, "Running during with_slots")
 		return nil
@@ -161,7 +161,7 @@ func TestOsWithSlotsGivesBackHeldSlot(t *testing.T) {
 	require.NoError(t, lim.Acquire(context.Background())) // simulate the held build slot
 	ctx := cache.WithSlotHeld(cache.ContextWithLimiter(context.Background(), lim))
 
-	err := OsWithSlots(ctx, 3, cbFunc(func(context.Context) error {
+	err := ProcWithSlots(ctx, 3, cbFunc(func(context.Context) error {
 		assert.Equal(t, 3, lim.Snapshot().Running, "Running during with_slots (held slot should be handed back)")
 		return nil
 	}))
@@ -187,7 +187,7 @@ func TestOsWithSlotsReseatsTheJobserver(t *testing.T) {
 	// blocks for as long as the test runs.
 	probe := func(n int, script string) string {
 		var got string
-		err := OsWithSlots(stepCtx, n, cbFunc(func(ctx context.Context) error {
+		err := ProcWithSlots(stepCtx, n, cbFunc(func(ctx context.Context) error {
 			res, err := spawn.Exec(ctx, "sh", []string{"-c", script}, spawn.ExecOptions{Capture: true, Quiet: true})
 			got = res.Stdout
 			return err
@@ -201,7 +201,7 @@ func TestOsWithSlotsReseatsTheJobserver(t *testing.T) {
 
 func TestOsWithSlotsNoLimiter(t *testing.T) {
 	ran := false
-	err := OsWithSlots(context.Background(), 4, cbFunc(func(context.Context) error {
+	err := ProcWithSlots(context.Background(), 4, cbFunc(func(context.Context) error {
 		ran = true
 		return nil
 	}))
@@ -518,7 +518,7 @@ func TestExecCancelledReportsCancellation(t *testing.T) {
 		cancel()
 	}()
 
-	_, err := OsExec(ctx, "sleep", []string{"30"}, ".", nil)
+	_, err := ProcExec(ctx, "sleep", []string{"30"}, ".", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled, "a cancelled run must say so")
 	assert.NotContains(t, err.Error(), "exit -1",
@@ -549,7 +549,7 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	}()
 
 	// The rename publishes the pid whole, and the exec keeps it for sleep.
-	_, err := OsExec(context.Background(), "sh", []string{"-c", `echo $$ > "$0.new" && mv "$0.new" "$0" && exec sleep 31`, pidFile}, ".", nil)
+	_, err := ProcExec(context.Background(), "sh", []string{"-c", `echo $$ > "$0.new" && mv "$0.new" "$0" && exec sleep 31`, pidFile}, ".", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signal: killed", "the signal is the whole diagnosis")
 	assert.Contains(t, err.Error(), "OOM killer", "say what usually does this on CI")
@@ -559,7 +559,7 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 // allow_failure hands back the result instead of raising, and a signal leaves no status
 // and no stderr, so the signal goes in Stderr or the caller reads a bare -1.
 func TestExecAllowFailureNamesTheSignal(t *testing.T) {
-	res, err := OsExec(context.Background(), "sh", []string{"-c", "kill -9 $$"}, ".", map[string]any{"allow_failure": true})
+	res, err := ProcExec(context.Background(), "sh", []string{"-c", "kill -9 $$"}, ".", map[string]any{"allow_failure": true})
 	require.NoError(t, err)
 	assert.Equal(t, -1, res.Code)
 	assert.Contains(t, res.Stderr, "signal: killed")
@@ -569,16 +569,16 @@ func TestExecAllowFailureNamesTheSignal(t *testing.T) {
 // the three cannot drift into offering different option sets. Capture stays on
 // regardless: a quiet call is still consuming the value, just not echoing it.
 func TestOsExecQuietStillCaptures(t *testing.T) {
-	res, err := OsExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
+	res, err := ProcExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
 		map[string]any{"quiet": true})
 	require.NoError(t, err)
 	assert.Equal(t, types.ExecResult{Stdout: "captured", Code: 0, OK: true}, res, "proc.exec trims captured output")
 }
 
 func TestProcShellQuietStillCaptures(t *testing.T) {
-	c, err := OsShell(context.Background(), "echo captured", "")
+	c, err := ProcShell(context.Background(), "echo captured", "")
 	require.NoError(t, err)
-	res, err := OsExec(context.Background(), c.Bin, c.Args, "", map[string]any{"quiet": true})
+	res, err := ProcExec(context.Background(), c.Bin, c.Args, "", map[string]any{"quiet": true})
 	require.NoError(t, err)
 	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
 }
@@ -587,7 +587,7 @@ func TestProcShellQuietStillCaptures(t *testing.T) {
 // log that silently stopped showing command output would be a worse regression than
 // any noise it removed.
 func TestOsExecDefaultsToNotQuiet(t *testing.T) {
-	res, err := OsExec(context.Background(), "sh", []string{"-c", "echo shown"}, "", nil)
+	res, err := ProcExec(context.Background(), "sh", []string{"-c", "echo shown"}, "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "shown", res.Stdout)
 }
@@ -814,7 +814,7 @@ func TestOsPlatform(t *testing.T) {
 }
 
 func TestOsStdinIsTerminal(t *testing.T) {
-	got, err := OsStdinIsTerminal(context.Background())
+	got, err := ProcStdinIsTerminal(context.Background())
 	require.NoError(t, err)
 	assert.False(t, got, "the test binary's stdin is never a terminal")
 }

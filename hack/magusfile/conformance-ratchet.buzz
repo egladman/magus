@@ -28,7 +28,7 @@ object Pruned {
 // format must not pay for, so run asks `magus status` before it and changes the record
 // only when every index is already current.
 export fun run(path: str) > void !> any {
-    final status: {str: any} = json\parse(magus\cmd("status", args: ["--symbols", "-o", "json"], opts: {"quiet": true}).stdout);
+    final status: {str: any} = json\parse(magus\cmd("status", args: ["--symbols", "-o", "json"], opts: magus\CommandOptions{quiet = true}).stdout);
     if (!status.hasKey("symbol_indexes")) {
         throw "conformance-ratchet: `magus status --symbols -o json` reported no symbol_indexes";
     }

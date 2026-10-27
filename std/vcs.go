@@ -24,7 +24,7 @@ var Vcs = Module{
 			Name:    "name",
 			Doc:     "VCS short name (e.g. \"git\"). Empty if unresolved, which is how a caller tests for a VCS without catching.",
 			Returns: []Ret{{Type: TypeString}},
-			Impl:    VcsName,
+			Impl:    VCSName,
 		},
 		{
 			Name: "base",
@@ -34,14 +34,14 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
-			Impl:    VcsBase,
+			Impl:    VCSBase,
 		},
 		{
 			Name:    "root",
 			Doc:     "Absolute path of the repository root.",
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
-			Impl:    VcsRoot,
+			Impl:    VCSRoot,
 		},
 		{
 			Name: "changed_files",
@@ -52,7 +52,7 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
 			Raises:  true,
-			Impl:    VcsChangedFiles,
+			Impl:    VCSChangedFiles,
 		},
 		{
 			Name: "regions",
@@ -63,7 +63,7 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[RegionChange]"}},
 			Raises:  true,
-			Impl:    VcsRegions,
+			Impl:    VCSRegions,
 		},
 		{
 			Name: "diff_stat",
@@ -74,7 +74,7 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[FileStat]"}},
 			Raises:  true,
-			Impl:    VcsDiffStat,
+			Impl:    VCSDiffStat,
 		},
 		{
 			Name: "ref",
@@ -84,7 +84,7 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeString, Nullable: true}},
 			Raises:  true,
-			Impl:    VcsRef,
+			Impl:    VCSRef,
 		},
 		{
 			Name: "status",
@@ -94,7 +94,7 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "Status"}},
 			Raises:  true,
-			Impl:    VcsStatus,
+			Impl:    VCSStatus,
 		},
 		{
 			Name: "is_dirty",
@@ -104,7 +104,7 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeBool}},
 			Raises:  true,
-			Impl:    VcsIsDirty,
+			Impl:    VCSIsDirty,
 		},
 		{
 			Name: "dirty_diff",
@@ -113,7 +113,7 @@ var Vcs = Module{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeString}},
-			Impl:    VcsDirtyDiff,
+			Impl:    VCSDirtyDiff,
 		},
 		{
 			Name: "commit",
@@ -123,30 +123,30 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "Commit"}},
 			Raises:  true,
-			Impl:    VcsCommit,
+			Impl:    VCSCommit,
 		},
 		{
 			Name: "history",
-			Doc:  "Up to limit commits reachable from the current revision, newest first, in one VCS call however many there are; each is the object vcs\\commit returns, with files set to the repository-relative paths it changed against its first parent (a rename is both paths). limit defaults to 10; 0 means every commit. paths keeps only the commits that changed one of those literal repository-relative paths (a directory keeps what is under it) and narrows each commit's files to them. first_parent follows only the first parent of a merge, the line a branch landed on. An empty list when no VCS is resolved.",
+			Doc:  "Up to limit commits reachable from the current revision, newest first, in one VCS call however many there are; each is the object vcs\\commit returns, with files set to the repository-relative paths it changed against its first parent (a rename is both paths). limit defaults to 10; 0 means every commit. paths keeps only the commits that changed one of those literal repository-relative paths (a directory keeps what is under it) and narrows each commit's files to them. firstParent follows only the first parent of a merge, the line a branch landed on. An empty list when no VCS is resolved.",
 			Args: []Arg{
 				{Name: "limit", Type: TypeInt, Optional: true, Default: 10},
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
-				{Name: "first_parent", Type: TypeBool, Optional: true},
+				{Name: "firstParent", Type: TypeBool, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Commit]"}},
 			Raises:  true,
-			Impl:    VcsHistory,
+			Impl:    VCSHistory,
 		},
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus\\cmd and proc\\exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc\\exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs\\name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus\\cmd and proc\\exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allowFailure. opts is a CommandOptions: dir runs it elsewhere (relative to the target's cwd, unlike proc\\exec's positional dir); quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs\\name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Raises:  true,
-			Impl:    VcsCommand,
+			Impl:    VCSCommand,
 		},
 		{
 			Name: "tags",
@@ -156,14 +156,14 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Tag]"}},
 			Raises:  true,
-			Impl:    VcsTags,
+			Impl:    VCSTags,
 		},
 		{
 			Name:    "describe",
 			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs\\commit().short as a fallback.",
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
-			Impl:    VcsDescribe,
+			Impl:    VCSDescribe,
 		},
 	},
 }
@@ -240,10 +240,10 @@ func vcsAt(ctx context.Context, method, dir string) (types.VCSDriver, string, st
 	return v, base, wd, nil
 }
 
-// VcsName returns the active VCS short name (e.g. "git"), or "" if unresolved.
+// VCSName returns the active VCS short name (e.g. "git"), or "" if unresolved.
 // Resolution is per call and honors the call's cancellation; resolveVCS caches
 // on cwd, so repeated reads cost a mutex rather than a probe.
-func VcsName(ctx context.Context) (string, error) {
+func VCSName(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return "", nil
@@ -251,15 +251,15 @@ func VcsName(ctx context.Context) (string, error) {
 	return v.Name(), nil
 }
 
-// VcsBase returns the base ref resolved for the repository holding dir, "" meaning the
+// VCSBase returns the base ref resolved for the repository holding dir, "" meaning the
 // target's cwd; it raises only for a dir that does not exist.
-func VcsBase(ctx context.Context, dir string) (string, error) {
+func VCSBase(ctx context.Context, dir string) (string, error) {
 	_, base, _, err := vcsAt(ctx, "base", dir)
 	return base, err
 }
 
-// VcsRoot returns the absolute path of the repository root, or "" if unresolved.
-func VcsRoot(ctx context.Context) (string, error) {
+// VCSRoot returns the absolute path of the repository root, or "" if unresolved.
+func VCSRoot(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return "", nil
@@ -271,7 +271,7 @@ func VcsRoot(ctx context.Context) (string, error) {
 	return root, nil
 }
 
-// VcsChangedFiles lists files changed against base, defaulting to the base ref resolved
+// VCSChangedFiles lists files changed against base, defaulting to the base ref resolved
 // for the repository holding dir; dir "" is the target's cwd.
 //
 // Paths carry the repository root as their base: a VCS reports diff paths from the root
@@ -280,7 +280,7 @@ func VcsRoot(ctx context.Context) (string, error) {
 // The probe runs where the driver was resolved (vcsAt). Running it at the PROCESS cwd
 // instead would resolve the driver from one directory and run it in another, identical
 // only while both sit in the same repository.
-func VcsChangedFiles(ctx context.Context, base, dir string) ([]types.Path, error) {
+func VCSChangedFiles(ctx context.Context, base, dir string) ([]types.Path, error) {
 	v, defaultBase, dir, err := vcsAt(ctx, "changedFiles", dir)
 	if err != nil {
 		return nil, err
@@ -313,11 +313,11 @@ func vcsFailed(err error, format string, args ...any) error {
 	return types.WrapDiagnostic(types.VCSUnavailable, err, format+": %v", append(args, err)...)
 }
 
-// VcsRegions refines the files VcsChangedFiles lists into the declarations their changed
+// VCSRegions refines the files VCSChangedFiles lists into the declarations their changed
 // lines land in, through the driver's Regions: the one implementation the job store's
 // footprint reads, so a script and `magus job wait` never disagree about a declaration.
 // dir "" is the target's cwd.
-func VcsRegions(ctx context.Context, base, dir string) ([]types.RegionChange, error) {
+func VCSRegions(ctx context.Context, base, dir string) ([]types.RegionChange, error) {
 	v, defaultBase, dir, err := vcsAt(ctx, "regions", dir)
 	if err != nil {
 		return nil, err
@@ -364,11 +364,11 @@ func vcsDir(ctx context.Context) string {
 	return dir
 }
 
-// VcsRef returns the movable name at the current revision (a git branch, an hg named
+// VCSRef returns the movable name at the current revision (a git branch, an hg named
 // branch, a jj bookmark) of the repository holding dir, "" meaning the target's cwd, or
 // nil when none names it; raises when no VCS or metadata is available, or dir does not
 // exist.
-func VcsRef(ctx context.Context, dir string) (*string, error) {
+func VCSRef(ctx context.Context, dir string) (*string, error) {
 	v, _, dir, err := vcsAt(ctx, "ref", dir)
 	if err != nil {
 		return nil, err
@@ -387,7 +387,7 @@ func VcsRef(ctx context.Context, dir string) (*string, error) {
 	return name, nil
 }
 
-// VcsStatus reports the working tree's uncommitted state as a typed Status.
+// VCSStatus reports the working tree's uncommitted state as a typed Status.
 //
 // Handing a magusfile the backend's own status lines (git porcelain, hg status, jj diff
 // --name-only) would make every caller reimplement the parsing and know which VCS it is on.
@@ -399,7 +399,7 @@ func VcsRef(ctx context.Context, dir string) (*string, error) {
 //
 // RAISES on a failed probe rather than reporting clean: a gate that cannot read the tree
 // has no answer, and a quiet empty list would let it pass having checked nothing.
-func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
+func VCSStatus(ctx context.Context, paths []string) (types.Status, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return types.Status{Clean: true}, nil
@@ -423,8 +423,8 @@ func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
 	return types.Status{Clean: len(files) == 0, Files: files}, nil
 }
 
-// VcsIsDirty reports whether the working tree has uncommitted changes.
-func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
+// VCSIsDirty reports whether the working tree has uncommitted changes.
+func VCSIsDirty(ctx context.Context, paths []string) (bool, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return false, nil
@@ -449,11 +449,11 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 	return dirty, nil
 }
 
-// VcsDirtyDiff returns the working tree's uncommitted diff for paths. Unlike VcsIsDirty
+// VCSDirtyDiff returns the working tree's uncommitted diff for paths. Unlike VCSIsDirty
 // this does NOT raise on a failed probe: it is a diagnostic printed beside a failure that
 // has already been decided, so a backend that cannot produce a diff must not become the
 // reason the build fails. "" reads as "no diff to show".
-func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
+func VCSDirtyDiff(ctx context.Context, paths []string) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return "", nil
@@ -469,11 +469,11 @@ func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
 	return diff, nil
 }
 
-// VcsCommit resolves rev (empty = current revision) to its commit object. It
+// VCSCommit resolves rev (empty = current revision) to its commit object. It
 // RAISES when no VCS is resolved and RAISES when the revision can't be looked
 // up: a caller uses vcs\name() to test for a VCS first, and try/catch for a
 // revision that may not exist.
-func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
+func VCSCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return types.Commit{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs\\name() to test before looking up a commit")
@@ -489,10 +489,10 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	return c, nil
 }
 
-// VcsHistory returns the commits the query selects (newest first) as objects, or an
+// VCSHistory returns the commits the query selects (newest first) as objects, or an
 // empty list when no VCS is resolved. It RAISES when the query fails: an empty
 // list there would read as "no history" for "could not read history".
-func VcsHistory(ctx context.Context, limit int, paths []string, firstParent bool) ([]types.Commit, error) {
+func VCSHistory(ctx context.Context, limit int, paths []string, firstParent bool) ([]types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return nil, nil
@@ -505,11 +505,11 @@ func VcsHistory(ctx context.Context, limit int, paths []string, firstParent bool
 	return commits, nil
 }
 
-// VcsDescribe returns a human-readable version string from the nearest tag (see
+// VCSDescribe returns a human-readable version string from the nearest tag (see
 // the driver Describe methods), or "" when no VCS is resolved or the backend has
 // no describe concept. It RAISES when the query fails: "" is reserved for the
 // two no-op cases above, not for a probe that could not run.
-func VcsDescribe(ctx context.Context) (string, error) {
+func VCSDescribe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return "", nil
@@ -521,9 +521,9 @@ func VcsDescribe(ctx context.Context) (string, error) {
 	return out, nil
 }
 
-// VcsTags returns the repository's tags newest-first, filtered by pattern. An
+// VCSTags returns the repository's tags newest-first, filtered by pattern. An
 // empty list when no VCS is resolved; a failed query is returned, not swallowed.
-func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
+func VCSTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return nil, nil
@@ -553,7 +553,7 @@ func vcsExe(ctx context.Context) (string, error) {
 	return path, nil
 }
 
-// VcsCommand runs the active VCS binary with args.
+// VCSCommand runs the active VCS binary with args.
 //
 // This replaced vcs.exe, which handed back a PATH and left every caller to write
 // proc.exec(<the vcs binary>, [...]): two calls, and a silent no-op when the path came back
@@ -561,7 +561,7 @@ func vcsExe(ctx context.Context) (string, error) {
 // on the same typed footing as magus.cmd and proc.exec instead of a bare string. "exe" was
 // the wrong word besides: it reads as a Windows file extension, and the value is a
 // binary on every platform magus runs.
-func VcsCommand(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+func VCSCommand(ctx context.Context, args []string, opts types.VCSCommandOptions) (types.ExecResult, error) {
 	bin, err := vcsExe(ctx)
 	if err != nil {
 		return types.ExecResult{}, err
@@ -570,10 +570,11 @@ func VcsCommand(ctx context.Context, args []string, opts map[string]any) (types.
 		return types.ExecResult{}, types.DiagnosticErrorf(types.VCSUnavailable,
 			`vcs\cmd: no VCS is resolved for this directory, so there is no binary to run`)
 	}
-	dir := resolveDir(ctx, optStringDefault(opts, "dir", ""))
+	dir := resolveDir(ctx, opts.Dir)
 	v, _ := resolveVCS(ctx)
 	if err := vcsLeaseRefusal(ctx, v.Name(), args, dir, childEnv(ctx)); err != nil {
 		return types.ExecResult{}, err
 	}
-	return runResult(ctx, bin, args, dir, `vcs\cmd`, bin, opts)
+	execOpts := types.ExecOptions{Stdin: opts.Stdin, Quiet: opts.Quiet, TTY: opts.TTY, AllowFailure: opts.AllowFailure}
+	return runResult(ctx, bin, args, dir, `vcs\cmd`, bin, execOpts)
 }

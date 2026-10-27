@@ -8,13 +8,15 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // RegisterOs builds the "os" module map and returns it.
-// The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module.
+// The machine and this process: CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module.
 func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -26,13 +28,6 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
-	}))
-	m.MapSet("platform", vm.DirectValue("os.platform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, ret1, ret2, err := std.OsPlatform(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return vm.ListValue([]vm.Value{ffi.StringVal(ret0), ffi.StringVal(ret1), ffi.StringVal(ret2)}), nil
 	}))
 	m.MapSet("exit", vm.DirectValue("os.exit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		code := ffi.Int(bzArgs, 0, 0)
@@ -72,7 +67,14 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("retry", vm.DirectValue("os.retry", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		max := ffi.Int(bzArgs, 0, 0)
 		fn := ffi.CallbackArg(sess, bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.RetryOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("os\\retry", "opts", bzArgs, 2, decode.DecodeRetryOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.OsRetry(ctx, max, fn, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

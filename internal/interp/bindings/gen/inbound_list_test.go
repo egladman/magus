@@ -97,17 +97,40 @@ var inboundTypes = []inboundType{
 	{Name: "Material", Zero: types.ImageMaterial{}, Encode: func(v any) vm.Value { return ObjectImageMaterial(v.(types.ImageMaterial), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageMaterial(v) }},
 	{Name: "Provenance", Zero: types.ImageProvenance{}, Encode: func(v any) vm.Value { return ObjectImageProvenance(v.(types.ImageProvenance), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageProvenance(v) }},
 	{Name: "Document", Zero: types.ImageDocument{}, Encode: func(v any) vm.Value { return ObjectImageDocument(v.(types.ImageDocument), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDocument(v) }},
+	{Name: "DirsOptions", Zero: types.DirsOptions{}, Encode: func(v any) vm.Value { return ObjectDirsOptions(v.(types.DirsOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDirsOptions(v) }},
+	{Name: "NeighborhoodOptions", Zero: types.KnowledgeNeighborhoodOptions{}, Encode: func(v any) vm.Value {
+		return ObjectKnowledgeNeighborhoodOptions(v.(types.KnowledgeNeighborhoodOptions), ffi.EnumBacking)
+	}, Decode: func(v vm.Value) (any, error) { return decode.DecodeKnowledgeNeighborhoodOptions(v) }},
+	{Name: "PathOptions", Zero: types.KnowledgePathOptions{}, Encode: func(v any) vm.Value {
+		return ObjectKnowledgePathOptions(v.(types.KnowledgePathOptions), ffi.EnumBacking)
+	}, Decode: func(v vm.Value) (any, error) { return decode.DecodeKnowledgePathOptions(v) }},
+	{Name: "QueryOptions", Zero: types.KnowledgeQueryOptions{}, Encode: func(v any) vm.Value { return ObjectKnowledgeQueryOptions(v.(types.KnowledgeQueryOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeKnowledgeQueryOptions(v) }},
+	{Name: "RefsOptions", Zero: types.KnowledgeRefsOptions{}, Encode: func(v any) vm.Value { return ObjectKnowledgeRefsOptions(v.(types.KnowledgeRefsOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeKnowledgeRefsOptions(v) }},
+	{Name: "InsightOptions", Zero: types.InsightOptions{}, Encode: func(v any) vm.Value { return ObjectInsightOptions(v.(types.InsightOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeInsightOptions(v) }},
+	{Name: "ExecOptions", Zero: types.ExecOptions{}, Encode: func(v any) vm.Value { return ObjectExecOptions(v.(types.ExecOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeExecOptions(v) }},
+	{Name: "magus\\CommandOptions", Zero: types.MagusCommandOptions{}, Encode: func(v any) vm.Value { return ObjectMagusCommandOptions(v.(types.MagusCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusCommandOptions(v) }},
+	{Name: "vcs\\CommandOptions", Zero: types.VCSCommandOptions{}, Encode: func(v any) vm.Value { return ObjectVCSCommandOptions(v.(types.VCSCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCommandOptions(v) }},
+	{Name: "magus\\DiffOptions", Zero: types.MagusDiffOptions{}, Encode: func(v any) vm.Value { return ObjectMagusDiffOptions(v.(types.MagusDiffOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusDiffOptions(v) }},
+	{Name: "RaiseOptions", Zero: types.RaiseOptions{}, Encode: func(v any) vm.Value { return ObjectRaiseOptions(v.(types.RaiseOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRaiseOptions(v) }},
+	{Name: "SkillsOptions", Zero: types.SkillsOptions{}, Encode: func(v any) vm.Value { return ObjectSkillsOptions(v.(types.SkillsOptions), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSkillsOptions(v) }},
+	{Name: "http\\Options", Zero: types.HTTPOptions{}, Encode: func(v any) vm.Value { return ObjectHTTPOptions(v.(types.HTTPOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHTTPOptions(v) }},
+	{Name: "http\\ServerOptions", Zero: types.HTTPServerOptions{}, Encode: func(v any) vm.Value { return ObjectHTTPServerOptions(v.(types.HTTPServerOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHTTPServerOptions(v) }},
+	{Name: "http\\Retry", Zero: types.HTTPRetry{}, Encode: func(v any) vm.Value { return ObjectHTTPRetry(v.(types.HTTPRetry)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHTTPRetry(v) }},
+	{Name: "archive\\Options", Zero: types.ArchiveOptions{}, Encode: func(v any) vm.Value { return ObjectArchiveOptions(v.(types.ArchiveOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeArchiveOptions(v) }},
+	{Name: "RetryOptions", Zero: types.RetryOptions{}, Encode: func(v any) vm.Value { return ObjectRetryOptions(v.(types.RetryOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRetryOptions(v) }},
 }
 
 var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.ImageArchitecture]():  {"", "amd64", "arm64"},
 	reflect.TypeFor[spells.DiagnosticFormat]():  {"", "gnu"},
+	reflect.TypeFor[types.EdgeDirection]():      {"", "out", "in"},
 	reflect.TypeFor[spells.External]():          {"", "reads-external", "mutates-external"},
 	reflect.TypeFor[types.McpTransport]():       {"", "stdio", "http"},
 	reflect.TypeFor[types.ImageMediaType]():     {"", "application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.config.v1+json", "application/vnd.oci.image.layer.v1.tar", "application/vnd.oci.image.layer.v1.tar+gzip", "application/vnd.oci.image.layer.v1.tar+zstd", "application/vnd.oci.empty.v1+json", "application/spdx+json", "application/vnd.in-toto+json"},
 	reflect.TypeFor[types.ImageModePolicy]():    {"", "fixed", "executable-bit"},
 	reflect.TypeFor[types.ImageOS]():            {"", "linux"},
 	reflect.TypeFor[spells.PatchOpKind]():       {"", "add", "remove", "replace", "move", "copy", "test"},
+	reflect.TypeFor[types.RelationID]():         {"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"},
 	reflect.TypeFor[spells.SandboxAccess]():     {"", "ro", "rx", "rw", "rwx"},
 	reflect.TypeFor[types.SkillForm]():          {"", "both", "short", "full"},
 	reflect.TypeFor[spells.SymbolFormat]():      {"", "scip"},

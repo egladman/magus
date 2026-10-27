@@ -47,7 +47,7 @@ var Module = std.Module{
 		{
 			Name:    "parse",
 			Doc:     "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
-			Args:    []std.Arg{{Name: "raw_url", Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "rawUrl", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeAnyMap, Object: "URL"}},
 			Raises:  true,
 			Impl:    URLParse,

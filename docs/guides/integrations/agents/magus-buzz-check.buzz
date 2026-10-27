@@ -117,7 +117,7 @@ fun main(args: [str]) > void {
         final check = mut ["buzz", "--check"];
         if (embedded(rel)) { check.append("--embedded"); }
         check.append(rel);
-        final result = proc\exec(bin, args: check, dir: if (root != "") root else ".", opts: {"quiet": true, "allow_failure": true}) catch null;
+        final result = proc\exec(bin, args: check, dir: if (root != "") root else ".", opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
         if (result == null or result!.ok) { continue; }
         failures.append("`magus {check.join(" ")}` failed:\n" + (result!.stdout + result!.stderr).trim());
     }

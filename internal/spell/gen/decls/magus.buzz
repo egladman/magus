@@ -13,6 +13,14 @@ export enum<str> CheckStatus {
     advice = "advice",
 }
 
+export enum<str> Evidence {
+    none = "",
+    measured = "measured",
+    declared = "declared",
+    inferred = "inferred",
+    unknown = "unknown",
+}
+
 export enum<str> DiffWhyRelation {
     none = "",
     starts = "starts",
@@ -46,6 +54,35 @@ export enum<str> DiffReadState {
     unknown = "unknown",
 }
 
+export enum<str> RelationID {
+    none = "",
+    dependsOn = "depends_on",
+    contains = "contains",
+    uses = "uses",
+    references = "references",
+    documents = "documents",
+    calls = "calls",
+    implements = "implements",
+    imports = "imports",
+    rationaleFor = "rationale_for",
+    emits = "emits",
+    owns = "owns",
+    defines = "defines",
+    produces = "produces",
+    consumes = "consumes",
+    authored = "authored",
+    annotates = "annotates",
+    depicts = "depicts",
+    coChanges = "co_changes",
+    splits = "splits",
+}
+
+export enum<str> EdgeDirection {
+    none = "",
+    outward = "out",
+    inward = "in",
+}
+
 export enum<str> KnowledgeResolution {
     none = "",
     id = "id",
@@ -59,6 +96,72 @@ export enum<str> SymbolIndexFreshness {
     outOfDate = "out-of-date",
     notIndexed = "not-indexed",
     unvouched = "unvouched",
+}
+
+export enum<str> KnowledgeVerdict {
+    none = "",
+    found = "found",
+    absent = "absent",
+    unknown = "unknown",
+}
+
+export enum<str> KnowledgeUnknownReason {
+    none = "",
+    symbolIndexMissing = "symbol-index-missing",
+    symbolsNotLoaded = "symbols-not-loaded",
+    coverageUnknown = "coverage-unknown",
+    indexStale = "index-stale",
+}
+
+export enum<str> DuplicationPlacement {
+    none = "",
+    member = "member",
+    dependency = "dependency",
+    newPackage = "new-package",
+    blocked = "blocked",
+    unknown = "unknown",
+}
+
+export enum<str> DuplicationShape {
+    none = "",
+    parameterize = "parameterize",
+    sharedCore = "shared-core",
+    siblingHelper = "sibling-helper",
+    leave = "leave",
+}
+
+export enum<str> ConformanceMetric {
+    none = "",
+    fileLines = "file-lines",
+    funcLines = "func-lines",
+    typeMethods = "type-methods",
+    fileSymbols = "file-symbols",
+    depFanout = "dep-fanout",
+    cloneTokens = "clone-tokens",
+    exportScope = "export-scope",
+    callSequence = "call-sequence",
+    sharedBody = "shared-body",
+    sharedReach = "shared-reach",
+    callerSpread = "caller-spread",
+    modeKnobs = "mode-knobs",
+    aliasShare = "alias-share",
+    nameClash = "name-clash",
+    mainLogic = "main-logic",
+    storePathExport = "store-path-export",
+    fileSplit = "file-split",
+}
+
+export enum<str> ConformancePopulation {
+    none = "",
+    source = "source",
+    main = "main",
+    test = "test",
+}
+
+export enum<str> ConformanceSource {
+    none = "",
+    ratchet = "ratchet",
+    anchor = "anchor",
 }
 
 export enum<str> JobKind {
@@ -82,6 +185,13 @@ export enum<str> GroupingVerdict {
     unknown = "unknown",
 }
 
+export enum<str> GuardDecision {
+    none = "",
+    allow = "allow",
+    advise = "advise",
+    deny = "deny",
+}
+
 export enum<str> SkillVariant {
     short = "short",
     full = "full",
@@ -102,10 +212,122 @@ export enum<str> ClaimKind {
     dead = "dead",
 }
 
+export enum<str> CredentialKind {
+    none = "",
+    operator = "operator",
+    stored = "stored",
+    share = "share",
+    exchange = "exchange",
+    stdio = "stdio",
+    socketPeer = "socket-peer",
+}
+
+export enum<str> EntryPoint {
+    none = "",
+    cli = "cli",
+    hook = "hook",
+    mcp = "mcp",
+    rpc = "rpc",
+    server = "server",
+}
+
+export enum<str> RetryChange {
+    none = "",
+    config = "config",
+    widening = "widening",
+    person = "person",
+    upgrade = "upgrade",
+}
+
+export enum<str> JobState {
+    none = "",
+    declared = "declared",
+    running = "running",
+    exited = "exited",
+    pass = "pass",
+    fail = "fail",
+    noReturn = "no_return",
+}
+
+export enum<str> GoalKind {
+    none = "",
+    check = "check",
+    paths = "paths",
+    symbol = "symbol",
+}
+
+export enum<str> GoalExpect {
+    none = "",
+    passed = "passed",
+    changed = "changed",
+    present = "present",
+    absent = "absent",
+    unreferenced = "unreferenced",
+    signature = "signature",
+}
+
 export enum<str> BriefFormat {
     none = "",
     markdown = "markdown",
     buzz = "buzz",
+}
+
+export enum<str> JobHolder {
+    none = "",
+    server = "server",
+    session = "session",
+}
+
+export enum<str> JobWriteProof {
+    none = "",
+    alone = "alone",
+    disjoint = "disjoint",
+    overlapping = "overlapping",
+}
+
+export enum<str> JobBaseVerdict {
+    none = "",
+    matches = "match",
+    revisionMatch = "revision-match",
+    diverged = "diverged",
+    unknown = "unknown",
+}
+
+export enum<str> ContextSource {
+    none = "",
+    transcript = "transcript",
+}
+
+export enum<str> SpawnKind {
+    none = "",
+    spawn = "spawn",
+    continuation = "continue",
+}
+
+export enum<str> AgentRole {
+    none = "",
+    root = "root",
+    worker = "worker",
+    integrator = "integrator",
+}
+
+export enum<str> AgentThread {
+    none = "",
+    main = "main",
+    sub = "sub",
+    unknown = "unknown",
+}
+
+export enum<str> ThreadSource {
+    none = "",
+    reported = "reported",
+    inferred = "inferred",
+}
+
+export enum<str> Orchestration {
+    none = "",
+    inferred = "inferred",
+    proven = "proven",
 }
 
 export enum<str> BriefRefKind {
@@ -117,6 +339,60 @@ export enum<str> BriefRefKind {
     commit = "commit",
 }
 
+export enum<str> InflightAttention {
+    unset = "",
+    author = "author",
+    review = "review",
+    queue = "queue",
+    none = "none",
+}
+
+export enum<str> ChangeStatus {
+    none = "",
+    added = "added",
+    modified = "modified",
+    deleted = "deleted",
+    renamed = "renamed",
+}
+
+export enum<str> RegionSide {
+    none = "",
+    old = "old",
+    new = "new",
+}
+
+export enum<str> DriftPolicy {
+    none = "",
+    fail = "fail",
+    warn = "warn",
+    off = "off",
+}
+
+export enum<str> HarnessChangeOp {
+    none = "",
+    add = "add",
+    replace = "replace",
+    retire = "retire",
+    set = "set",
+    write = "write",
+}
+
+export enum<str> TrailSection {
+    none = "",
+    refused = "refused",
+    advised = "advised",
+    unguarded = "unguarded",
+    nextNotTaken = "next-not-taken",
+}
+
+export enum<str> TrailVerdict {
+    none = "",
+    shouldDeny = "should-deny",
+    shouldAdvise = "should-advise",
+    wrongDeny = "wrong-deny",
+    fine = "fine",
+}
+
 export object Affected {
     base: str = "",
     changed: [str] = [],
@@ -124,6 +400,14 @@ export object Affected {
     filesBySeed: {str: [str]} = {},
     affected: [str] = [],
     undeclaredBySeed: {str: [str]} = {},
+}
+
+export object CommandOptions {
+    root: str = "",
+    dir: str = "",
+    stdin: str = "",
+    quiet: bool = false,
+    allowFailure: bool = false,
 }
 
 export object CleanReport {
@@ -153,6 +437,20 @@ export object DriftResult {
     files: [Path] = [],
 }
 
+export object DiffOptions {
+    root: str = "",
+    dir: str = "",
+    stdin: str = "",
+    quiet: bool = false,
+    allowFailure: bool = false,
+    @"from": str = "",
+    baseline: str = "",
+    rev: str = "",
+    patch: str = "",
+    minCohort: int = 0,
+    minShare: double = 0.0,
+}
+
 export object ImpactCoverage {
     ratio: double = 0.0,
     covered: int = 0,
@@ -164,7 +462,7 @@ export object Check {
     status: CheckStatus = CheckStatus.none,
     message: str = "",
     details: [str] = [],
-    evidence: str = "",
+    evidence: Evidence = Evidence.none,
     fix: [str] = [],
 }
 
@@ -413,8 +711,8 @@ export object KnowledgeNode {
 }
 
 export object EdgeRef {
-    relation: str = "",
-    direction: str = "",
+    relation: RelationID = RelationID.none,
+    direction: EdgeDirection = EdgeDirection.none,
     other: str = "",
     otherKind: str = "",
     otherLabel: str = "",
@@ -472,6 +770,13 @@ export object ImportGraph {
     indexed: bool = false,
     packages: {str: [str]} = {},
     languages: {str: str} = {},
+}
+
+export object InsightOptions {
+    dir: str = "",
+    commits: int = 0,
+    since: str = "",
+    files: bool = false,
 }
 
 export object Node {
@@ -607,8 +912,8 @@ export object KnowledgeIndexCause {
 }
 
 export object KnowledgeAnswer {
-    verdict: str = "",
-    reason: str = "",
+    verdict: KnowledgeVerdict = KnowledgeVerdict.none,
+    reason: KnowledgeUnknownReason = KnowledgeUnknownReason.none,
     gaps: [KnowledgeSymbolGap] = [],
     staleIndexes: [str] = [],
     text: KnowledgeTextPresence? = null,
@@ -643,9 +948,9 @@ export object DuplicationGroup {
     score: double = 0.0,
     shared: [str] = [],
     packages: [str] = [],
-    placement: str = "",
+    placement: DuplicationPlacement = DuplicationPlacement.none,
     home: str = "",
-    shape: str = "",
+    shape: DuplicationShape = DuplicationShape.none,
     removable: int = 0,
     siblings: bool = false,
     history: DuplicationHistory? = null,
@@ -658,8 +963,8 @@ export object Duplication {
 }
 
 export object ConformanceKey {
-    metric: str = "",
-    population: str = "",
+    metric: ConformanceMetric = ConformanceMetric.none,
+    population: ConformancePopulation = ConformancePopulation.none,
     scope: str = "",
 }
 
@@ -684,19 +989,19 @@ export object ConformanceRow {
     anchor: int = 0,
     propose: int = 0,
     known: int = 0,
-    source: str = "",
+    source: ConformanceSource = ConformanceSource.none,
     violations: [ConformanceItem] = [],
 }
 
 export object ConformanceKnown {
-    metric: str = "",
+    metric: ConformanceMetric = ConformanceMetric.none,
     items: [str] = [],
     reason: str = "",
     shapes: {str: str} = {},
 }
 
 export object ConformanceCarry {
-    metric: str = "",
+    metric: ConformanceMetric = ConformanceMetric.none,
     @"from": str = "",
     to: [str] = [],
 }
@@ -783,15 +1088,15 @@ export object Layer {
 
 export object NeighborhoodOptions {
     depth: int = 0,
-    relations: [str] = [],
-    direction: str = "",
+    relations: [RelationID] = [],
+    direction: EdgeDirection = EdgeDirection.none,
     collapse: [str] = [],
 }
 
 export object KnowledgeEdge {
     source: str = "",
     target: str = "",
-    relation: str = "",
+    relation: RelationID = RelationID.none,
     confidence: str = "",
     score: double = 0.0,
     provenance: str = "",
@@ -826,13 +1131,13 @@ export object OutputRecord {
 }
 
 export object PathOptions {
-    relations: [str] = [],
+    relations: [RelationID] = [],
 }
 
 export object PathStep {
     @"from": str = "",
     to: str = "",
-    relation: str = "",
+    relation: RelationID = RelationID.none,
     forward: bool = false,
 }
 
@@ -849,6 +1154,12 @@ export object Graph {
     nodes: [str] = [],
     dependsOn: {str: [str]} = {},
     blastRadius: {str: int} = {},
+}
+
+export object QueryOptions {
+    budget: int = 0,
+    limit: int = 0,
+    offset: int = 0,
 }
 
 export object KnowledgeTermScore {
@@ -900,6 +1211,16 @@ export object QueryResult {
     links: [KnowledgeEdge] = [],
     answer: KnowledgeAnswer = KnowledgeAnswer{},
     ranking: KnowledgeRanking? = null,
+}
+
+export object RaiseOptions {
+    cause: any? = null,
+    url: str = "",
+}
+
+export object RefsOptions {
+    limit: int = 0,
+    offset: int = 0,
 }
 
 export object RefSite {
@@ -974,7 +1295,7 @@ export object SymbolIndexDigest {
 }
 
 export object GuardVerdict {
-    decision: str = "",
+    decision: GuardDecision = GuardDecision.none,
     reason: str = "",
     rule: str = "",
 }
@@ -1006,7 +1327,7 @@ export object Grant {
 }
 
 export object Credential {
-    class: str = "",
+    class: CredentialKind = CredentialKind.none,
     id: str = "",
     name: str = "",
     grant: Grant = Grant{},
@@ -1015,7 +1336,7 @@ export object Credential {
 export object Origin {
     user: str = "",
     uid: str = "",
-    entryPoint: str = "",
+    entryPoint: EntryPoint = EntryPoint.none,
     host: str = "",
     session: str = "",
     agent: str = "",
@@ -1049,14 +1370,14 @@ export object JobDenial {
 
 export object RetryVerdict {
     retryable: bool = false,
-    change: str = "",
+    change: RetryChange = RetryChange.none,
     reason: str = "",
     code: str = "",
 }
 
 export object PriorAttempt {
     n: int = 0,
-    state: str = "",
+    state: JobState = JobState.none,
     observedGeneration: int = 0,
     endReason: str = "",
     modelTier: str = "",
@@ -1094,8 +1415,8 @@ export object Goal {
     id: str = "",
     description: str = "",
     dependsOn: [str] = [],
-    kind: str = "",
-    expect: str = "",
+    kind: GoalKind = GoalKind.none,
+    expect: GoalExpect = GoalExpect.none,
     check: LeaseCheck = LeaseCheck{},
     paths: [str] = [],
     symbols: [str] = [],
@@ -1240,17 +1561,17 @@ export object Job {
     check: LeaseCheck? = null,
     validation: str = "",
     goals: [Goal] = [],
-    state: str = "",
-    holder: str = "",
+    state: JobState = JobState.none,
+    holder: JobHolder = JobHolder.none,
     readOnly: bool = false,
     releases: [JobRelease] = [],
     unattributed: [JobUnattributedWrite] = [],
     entries: [JobEntry] = [],
-    writeProof: str = "",
+    writeProof: JobWriteProof = JobWriteProof.none,
     deviations: [Deviation] = [],
     validated: int = 0,
     reportedBase: str = "",
-    baseVerdict: str = "",
+    baseVerdict: JobBaseVerdict = JobBaseVerdict.none,
     registeredBy: Origin = Origin{},
     registered: int = 0,
     checkoutRoot: str = "",
@@ -1271,7 +1592,7 @@ export object ContextWindow {
     tokens: int = 0,
     window: int = 0,
     model: str = "",
-    source: str = "",
+    source: ContextSource = ContextSource.none,
 }
 
 export object SpawnTarget {
@@ -1284,7 +1605,7 @@ export object SpawnTarget {
 }
 
 export object SpawnRequest {
-    kind: str = "",
+    kind: SpawnKind = SpawnKind.none,
     host: str = "",
     session: str = "",
     model: str = "",
@@ -1297,12 +1618,12 @@ export object SpawnRequest {
     checkout: str = "",
     agent: str = "",
     parent: str = "",
-    role: str = "",
+    role: AgentRole = AgentRole.none,
     lease: Job? = null,
     modelTier: JobModelTier? = null,
-    thread: str = "",
-    threadFrom: str = "",
-    orchestration: str = "",
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
     window: ContextWindow? = null,
     target: SpawnTarget? = null,
 }
@@ -1335,11 +1656,11 @@ export object CommandRequest {
     commands: [CommandInvocation] = [],
     agent: str = "",
     parent: str = "",
-    role: str = "",
+    role: AgentRole = AgentRole.none,
     lease: Job? = null,
-    thread: str = "",
-    threadFrom: str = "",
-    orchestration: str = "",
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
     window: ContextWindow? = null,
     checkout: CheckoutState? = null,
     dir: str = "",
@@ -1352,11 +1673,11 @@ export object WriteRequest {
     session: str = "",
     agent: str = "",
     parent: str = "",
-    role: str = "",
+    role: AgentRole = AgentRole.none,
     lease: Job? = null,
-    thread: str = "",
-    threadFrom: str = "",
-    orchestration: str = "",
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
     window: ContextWindow? = null,
     path: str = "",
     workspace: str = "",
@@ -1402,7 +1723,7 @@ export object JobOverlap {
 export object JobBlock {
     job: str = "",
     on: str = "",
-    state: str = "",
+    state: JobState = JobState.none,
 }
 
 export object JobReadOnly {
@@ -1437,7 +1758,7 @@ export object InflightChange {
     position: int = 0,
     below: str = "",
     mine: bool = false,
-    attention: str = "",
+    attention: InflightAttention = InflightAttention.unset,
     neighbours: [InflightNeighbour] = [],
 }
 
@@ -1466,12 +1787,12 @@ export object JobList {
 export object FileChange {
     path: str = "",
     prevPath: str = "",
-    status: str = "",
+    status: ChangeStatus = ChangeStatus.none,
 }
 
 export object RegionChange {
     file: FileChange = FileChange{},
-    side: str = "",
+    side: RegionSide = RegionSide.none,
     lines: [int] = [],
     declaration: str = "",
     driver: str = "",
@@ -1580,7 +1901,7 @@ export object Target {
     slots: int = 0,
     memory_mb: int = 0,
     timeout: str = "",
-    drift: str = "",
+    drift: DriftPolicy = DriftPolicy.none,
     drift_reason: str = "",
     retry_on_volatile: bool = false,
     retry_on_volatile_reason: str = "",
@@ -1722,7 +2043,7 @@ export object TargetGraph {
 }
 
 export object HarnessChange {
-    op: str = "",
+    op: HarnessChangeOp = HarnessChangeOp.none,
     key: str = "",
     value: any? = null,
 }
@@ -1807,7 +2128,7 @@ export object Rule {
     decision: str = "",
     workspace: str = "",
     fixed: bool = false,
-    verdicts: [str] = [],
+    verdicts: [GuardDecision] = [],
     catches: str = "",
     why: str = "",
 }
@@ -1930,10 +2251,10 @@ export object ServiceLease {
 
 export object TrailMark {
     id: str = "",
-    section: str = "",
+    section: TrailSection = TrailSection.none,
     key: str = "",
     rule: str = "",
-    verdict: str = "",
+    verdict: TrailVerdict = TrailVerdict.none,
     note: str = "",
     session: str = "",
     at: int = 0,
@@ -1974,35 +2295,35 @@ export object Trail {
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
-export extern fun attention(args: [str], opts: {str: any} = {<str: any>}) > {str: any} !> any;
-export extern fun bustCache(project_path: str = "") > void !> any;
+export extern fun attention(args: [str], opts: CommandOptions = CommandOptions{}) > {str: any} !> any;
+export extern fun bustCache(projectPath: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
-export extern fun clean(args: [str], opts: {str: any} = {<str: any>}) > CleanReport !> any;
-export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun clean(args: [str], opts: CommandOptions = CommandOptions{}) > CleanReport !> any;
+export extern fun cmd(sub: str, args: [str], opts: CommandOptions = CommandOptions{}) > ExecResult !> any;
 export extern fun conformance() > {str: any} !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
-export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
+export extern fun diff(opts: DiffOptions = DiffOptions{}) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;
-export extern fun dirs(glob: str, opts: DirsOptions = {<str: any>}) > [Dir] !> any;
-export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
+export extern fun dirs(glob: str, opts: DirsOptions = DirsOptions{}) > [Dir] !> any;
+export extern fun doctor(args: [str], opts: CommandOptions = CommandOptions{}) > DoctorReport !> any;
 export extern fun explain(node: str) > ExplainResult !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
-export extern fun impact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
+export extern fun impact(base: str = "", opts: CommandOptions = CommandOptions{}) > Impact !> any;
 export extern fun importGraph() > ImportGraph !> any;
-export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
+export extern fun insight(opts: InsightOptions = InsightOptions{}) > InsightReport !> any;
 export extern fun layer(name: str) > Layer !> any;
-export extern fun neighborhood(focus: str, opts: NeighborhoodOptions = {<str: any>}) > NeighborhoodResult !> any;
+export extern fun neighborhood(focus: str, opts: NeighborhoodOptions = NeighborhoodOptions{}) > NeighborhoodResult !> any;
 export extern fun output(ref: str) > OutputRecord !> any;
-export extern fun path(node: str, to: str, opts: PathOptions = {<str: any>}) > PathResult !> any;
+export extern fun path(node: str, to: str, opts: PathOptions = PathOptions{}) > PathResult !> any;
 export extern fun precedents() > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
-export extern fun query(query: str, opts: {str: any} = {<str: any>}) > QueryResult !> any;
-export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
-export extern fun refs(symbol: str, opts: {str: any} = {<str: any>}) > RefsResult !> any;
-export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun query(query: str, opts: QueryOptions = QueryOptions{}) > QueryResult !> any;
+export extern fun raise(code: str, message: str, opts: RaiseOptions = RaiseOptions{}) > void !> any;
+export extern fun refs(symbol: str, opts: RefsOptions = RefsOptions{}) > RefsResult !> any;
+export extern fun run(args: [str], opts: CommandOptions = CommandOptions{}) > ExecResult !> any;
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
@@ -2084,21 +2405,21 @@ export object job {
 
 // Typed reads of what `magus describe <noun>` prints, one method per noun: `magus\describe.spell("go")` returns the Spell records `magus describe spell go -o json` carries. A method whose noun takes a name takes it as an optional SELECTOR and returns a collection either way, so detailing one reads `[0]`. A report that carries more than its collection (a file classification's overlaps, the tools' lifecycle state) comes back whole. The methods that fork a nested magus work from a `magus buzz` script with no workspace loaded; opts.root and opts.dir are as for magus\run. Bound by hand in internal/interp/bindings (buildDescribe): a Namespace's methods are Extern by construction. A noun with no method here is reached through magus\cmd("describe", [...]).
 export object describe {
-    static extern fun charm(name: str = "", opts: {str: any} = {<str: any>}) > [CharmEntry] !> any;
-    static extern fun evaluatedProject(path: str = "", opts: {str: any} = {<str: any>}) > [EvaluatedProject] !> any;
-    static extern fun evaluatedTarget(ref: str, opts: {str: any} = {<str: any>}) > [EvaluatedTarget] !> any;
-    static extern fun file(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
-    static extern fun graph(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
-    static extern fun graphMarkdown(projects: [str] = [<str>], opts: {str: any} = {<str: any>}) > str !> any;
+    static extern fun charm(name: str = "", opts: CommandOptions = CommandOptions{}) > [CharmEntry] !> any;
+    static extern fun evaluatedProject(path: str = "", opts: CommandOptions = CommandOptions{}) > [EvaluatedProject] !> any;
+    static extern fun evaluatedTarget(ref: str, opts: CommandOptions = CommandOptions{}) > [EvaluatedTarget] !> any;
+    static extern fun file(paths: [str], opts: CommandOptions = CommandOptions{}) > FileReport !> any;
+    static extern fun graph(opts: CommandOptions = CommandOptions{}) > TargetGraph !> any;
+    static extern fun graphMarkdown(projects: [str] = [<str>], opts: CommandOptions = CommandOptions{}) > str !> any;
     static extern fun harness(id: str) > HarnessPlan !> any;
-    static extern fun mcpTool(name: str = "", opts: {str: any} = {<str: any>}) > [MCPTool] !> any;
+    static extern fun mcpTool(name: str = "", opts: CommandOptions = CommandOptions{}) > [MCPTool] !> any;
     static extern fun module(name: str = "") > [Module] !> any;
     static extern fun project() > Projects !> any;
-    static extern fun rule(name: str = "", opts: {str: any} = {<str: any>}) > [Rule] !> any;
-    static extern fun spell(name: str = "", opts: {str: any} = {<str: any>}) > [Spell] !> any;
-    static extern fun target(opts: {str: any} = {<str: any>}) > [TargetEntry] !> any;
+    static extern fun rule(name: str = "", opts: CommandOptions = CommandOptions{}) > [Rule] !> any;
+    static extern fun spell(name: str = "", opts: CommandOptions = CommandOptions{}) > [Spell] !> any;
+    static extern fun target(opts: CommandOptions = CommandOptions{}) > [TargetEntry] !> any;
     static extern fun tool() > ToolReport !> any;
-    static extern fun workspace(opts: {str: any} = {<str: any>}) > [WorkspaceEntry] !> any;
+    static extern fun workspace(opts: CommandOptions = CommandOptions{}) > [WorkspaceEntry] !> any;
 }
 
 // Shared services a `magus buzz` script holds, the way a target holds one through ctx.needs: routed to the broker when one is up, so the service stays warm past the script, and hosted in-process otherwise. Every lease a script still holds is released when it ends, however it ends. Raises MGS1022 outside a workspace, and from a magusfile, where ctx.needs is the way to hold one. Bound by hand in internal/interp/bindings (buildService), for the reason magus\job is.

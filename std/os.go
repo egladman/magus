@@ -243,11 +243,11 @@ var Os = Module{
 		},
 		{
 			Name: "retry",
-			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.",
+			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts is a RetryOptions: backoffMs is the first pause (default 500) and maxBackoffMs caps it (default 30000); a negative option raises.",
 			Args: []Arg{
 				{Name: "max", Type: TypeInt},
 				{Name: "fn", Type: TypeFunc, Func: "fun () > any !> any"},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "RetryOptions"},
 			},
 			Returns: []Ret{{Type: TypeAny}},
 			Raises:  true,
@@ -292,13 +292,13 @@ func OsExecutable(_ context.Context) (string, error) {
 	return resolved, nil
 }
 
-// OsStdinIsTerminal reports whether stdin is a TTY, reusing the shared terminal
+// ProcStdinIsTerminal reports whether stdin is a TTY, reusing the shared terminal
 // check (see internal/interactive/tty).
-func OsStdinIsTerminal(_ context.Context) (bool, error) {
+func ProcStdinIsTerminal(_ context.Context) (bool, error) {
 	return tty.StdinIsTerminal(), nil
 }
 
-// OsWhich resolves cmd against PATH, RAISING when it is not there.
+// ProcWhich resolves cmd against PATH, RAISING when it is not there.
 //
 // It used to return "" so a magusfile could branch on `proc.which(cmd) == ""`. That is the
 // same sentinel the vcs accessors carried, with the same two problems: the check is
@@ -308,7 +308,7 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 // in these modules:
 //
 //	try { final vhs = proc\which("vhs"); ... } catch (e) { magus\log.info("vhs not installed"); }
-func OsWhich(ctx context.Context, cmd string) (string, error) {
+func ProcWhich(ctx context.Context, cmd string) (string, error) {
 	path, err := spawn.LookPath(ctx, cmd)
 	if err != nil {
 		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", cmd)
@@ -357,33 +357,14 @@ func OsPlatform(_ context.Context) (string, string, string, error) {
 	return osName, arch, variant, nil
 }
 
-// optBool reads a boolean option from opts: false when it is absent or not a bool.
-func optBool(opts map[string]any, key string) bool {
-	b, _ := opts[key].(bool)
-	return b
-}
-
-// optStringDefault reads a string option from opts, returning def when absent.
-func optStringDefault(opts map[string]any, key, def string) string {
-	if opts == nil {
-		return def
-	}
-	if v, ok := opts[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return def
-}
-
 // runResult forks name+args through spawn.Exec (sharing the fork/sandbox/env/cancel
 // core with fork spell targets), capturing output for the returned {stdout,
 // stderr} object while still streaming it to `magus tail` and the report. Per-call
 // os.with_env overrides ride ctx (withEnvKey). label/cmd name the command in the
-// raise message. A non-zero exit raises unless opts.allow_failure is true, which
+// raise message. A non-zero exit raises unless opts.AllowFailure is set, which
 // returns the object instead; a sandbox exec denial always propagates.
 //
-// opts.quiet keeps the capture and drops the live streaming, which is what a caller
+// opts.Quiet keeps the capture and drops the live streaming, which is what a caller
 // consuming a value rather than watching a build wants. It is read HERE, the one path
 // proc.exec, proc.shell, and vcs.cmd all share, so the three cannot offer different
 // option sets by accident, and it spells the option the same way the magus.* methods
@@ -392,20 +373,20 @@ func optStringDefault(opts map[string]any, key, def string) string {
 // Without it a chatty command has no quiet form at all: `git ls-remote --tags` against
 // nodejs/node is 954 lines, streamed in full before the caller sees its own output.
 // Capture stays on regardless, so a quiet call still returns stdout.
-func runResult(ctx context.Context, name string, args []string, dir, label, cmd string, opts map[string]any) (types.ExecResult, error) {
+func runResult(ctx context.Context, name string, args []string, dir, label, cmd string, opts types.ExecOptions) (types.ExecResult, error) {
 	overrides, _ := ctx.Value(withEnvKey{}).([]string)
 	res, err := spawn.Exec(ctx, name, args, spawn.ExecOptions{
 		Dir:     dir,
 		Env:     overrides,
-		Stdin:   optStringDefault(opts, "stdin", ""),
+		Stdin:   opts.Stdin,
 		Capture: true,
-		Quiet:   optBool(opts, "quiet"),
-		TTY:     optBool(opts, "tty"),
+		Quiet:   opts.Quiet,
+		TTY:     opts.TTY,
 	})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
 	}
-	if res.Code != 0 && !optBool(opts, "allow_failure") {
+	if res.Code != 0 && !opts.AllowFailure {
 		if !res.Started {
 			// Process never started. Common footgun: proc.exec runs a single program
 			// with no shell, so a command line ("a | b", "cd x", "$VAR") fails to
@@ -467,12 +448,12 @@ func looksLikeShellCommand(cmd string) bool {
 	return false
 }
 
-// OsExec runs cmd with args directly (no shell). Output streams live and is
+// ProcExec runs cmd with args directly (no shell). Output streams live and is
 // captured; it returns {stdout, stderr, code, ok}, raising on a non-zero exit
-// unless opts.allow_failure is true. The optional dir runs cmd in that directory
+// unless opts.AllowFailure is set. The optional dir runs cmd in that directory
 // (relative to the context cwd); omitted, it inherits the context (or process) cwd.
 // A VCS binary is refused before anything starts; see procVCSRefusal.
-func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map[string]any) (types.ExecResult, error) {
+func ProcExec(ctx context.Context, cmd string, args []string, dir string, opts types.ExecOptions) (types.ExecResult, error) {
 	if err := procVCSRefusal(cmd, args, dir); err != nil {
 		return types.ExecResult{}, err
 	}
@@ -486,7 +467,7 @@ func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map
 	return runResult(ctx, cmd, args, wd, `proc\exec`, cmd, opts)
 }
 
-// OsShell builds the argv that runs line through the platform shell and returns
+// ProcShell builds the argv that runs line through the platform shell and returns
 // it, rather than running it. It replaced proc.shell, which had zero callers in
 // this tree: where a shell was genuinely wanted, people wrote proc.exec("sh",
 // ["-c", ...]) by hand, which says out loud what exec_sh hid.
@@ -497,7 +478,7 @@ func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map
 // selection IS worth having, so it survives here as a pure function: the shell
 // choice becomes a value you can print before anything executes, instead of a
 // decision taken inside a call you cannot see into.
-func OsShell(_ context.Context, line string, shell string) (types.ShellCommand, error) {
+func ProcShell(_ context.Context, line string, shell string) (types.ShellCommand, error) {
 	bin, flag := shellExe(shell)
 	return types.ShellCommand{Bin: bin, Args: []string{flag, line}}, nil
 }
@@ -552,8 +533,8 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 
 // OsRetry calls fn up to max times, retrying on error with exponential backoff.
 // On success it returns fn's first return value; on exhaustion it errors.
-// opts keys: backoff_ms (initial delay, default 500), max_backoff_ms (cap, default 30000).
-// A key of the wrong type, or a negative value, is an error naming the key.
+// opts.BackoffMs is the initial delay (default 500) and opts.MaxBackoffMs its cap (default
+// 30000); a negative value is an error naming the option.
 //
 // An error [types.ClassifyRetry] calls non-retryable ends the loop at once and is
 // returned as it is. A host error raised inside a Buzz fn keeps its chain across the VM, so
@@ -562,15 +543,15 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 // This is not [retry.Do] on purpose: fn runs once even on a cancelled context, its value
 // comes back, the knobs are float milliseconds, and the exhaustion text below is a
 // contract Buzz authors match on. The backoff arithmetic is shared: [retry.Backoff].
-func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (any, error) {
+func OsRetry(ctx context.Context, max int, fn Callback, opts types.RetryOptions) (any, error) {
 	if fn == nil {
 		return nil, fmt.Errorf(`os\retry: fn must not be nil`)
 	}
-	backoff, err := retryMillis(opts, "backoff_ms", 500)
+	backoff, err := retryMillis("backoffMs", opts.BackoffMs, 500)
 	if err != nil {
 		return nil, err
 	}
-	maxBackoff, err := retryMillis(opts, "max_backoff_ms", 30000)
+	maxBackoff, err := retryMillis("maxBackoffMs", opts.MaxBackoffMs, 30000)
 	if err != nil {
 		return nil, err
 	}
@@ -600,45 +581,31 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (an
 	return nil, fmt.Errorf(`os\retry: %d attempt(s): %w`, max, lastErr)
 }
 
-// retryMillis reads the millisecond option key as a duration, def when absent. A value that
-// is not a number, or is negative, is an error naming the key.
-func retryMillis(opts map[string]any, key string, def float64) (time.Duration, error) {
-	ms := def
-	if v, ok := opts[key]; ok {
-		f, isNum := retryFloat(v)
-		if !isNum || math.IsNaN(f) || f < 0 {
-			return 0, fmt.Errorf(`os\retry: %s must be a non-negative number, got %v`, key, v)
+// retryMillis reads a millisecond option as a duration, def when it is null. A negative or
+// NaN value is an error naming the option.
+func retryMillis(name string, ms *float64, def float64) (time.Duration, error) {
+	v := def
+	if ms != nil {
+		if math.IsNaN(*ms) || *ms < 0 {
+			return 0, fmt.Errorf(`os\retry: %s must be a non-negative number, got %v`, name, *ms)
 		}
-		ms = f
+		v = *ms
 	}
 	const maxMs = float64(math.MaxInt64 / time.Millisecond)
-	if ms > maxMs {
+	if v > maxMs {
 		return time.Duration(math.MaxInt64), nil
 	}
-	return time.Duration(ms * float64(time.Millisecond)), nil
+	return time.Duration(v * float64(time.Millisecond)), nil
 }
 
-// retryFloat extracts a float64 from a Go any value (int, int64, or float64).
-func retryFloat(v any) (float64, bool) {
-	switch x := v.(type) {
-	case float64:
-		return x, true
-	case int:
-		return float64(x), true
-	case int64:
-		return float64(x), true
-	}
-	return 0, false
-}
-
-// OsWithSlots reserves n slots from magus's concurrency limiter for the duration
+// ProcWithSlots reserves n slots from magus's concurrency limiter for the duration
 // of cb, so a callback running its own internally-parallel work (make -j, a test
 // runner) does not oversubscribe the global budget. With no limiter on ctx (e.g. a
 // standalone run) it just invokes cb. Mirrors archive.*: the build slot already
 // held is handed back while the n are reserved, so peak in-flight stays within the
 // cap rather than cap+n. Processes cb starts share a jobserver of n slots
 // (spawn.SeatJobserver), so a `make` or cargo given no -j of its own runs n wide.
-func OsWithSlots(ctx context.Context, n int, cb Callback) error {
+func ProcWithSlots(ctx context.Context, n int, cb Callback) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
 		// reserving n cannot deadlock on slots we pin ourselves.

@@ -160,7 +160,7 @@ func renderRecordDecls(mod std.Module) (string, error) {
 		b.WriteByte('\n')
 	}
 	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name) // collectMirrors already resolved every name it returns
+		entry, _ := boundaryTypeIn(mod.Name, name) // collectMirrors already resolved every name it returns
 		out, err := renderBuzzMirrorDecl(name, entry.Type)
 		if err != nil {
 			return "", err
@@ -306,6 +306,14 @@ func nullable(m std.Method, i int) string {
 func optionalDefault(m std.Method, i int) (string, error) {
 	if takesPointer(m, i) {
 		return "null", nil
+	}
+	// An omitted record is the record with every field at its default, spelled as the
+	// mirror constructs it rather than as a map the checker has to coerce.
+	if obj := m.Args[i].Object; obj != "" {
+		if strings.HasPrefix(obj, "[") {
+			return fmt.Sprintf("[<%s>]", strings.Trim(obj, "[]")), nil
+		}
+		return obj + "{}", nil
 	}
 	return buzzDefault(m.Args[i])
 }
@@ -503,7 +511,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		if name == "" || seen[name] {
 			return nil
 		}
-		entry, ok := boundaryTypeNamed(name)
+		entry, ok := boundaryTypeIn(mod.Name, name)
 		if !ok {
 			return fmt.Errorf("object %q is not declared in boundaryTypes", name)
 		}
@@ -614,7 +622,7 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		}
 	}
 	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name)
+		entry, _ := boundaryTypeIn(mod.Name, name)
 		for _, e := range enumsUsedBy(entry.Type) {
 			if err := add(e.Name, name); err != nil {
 				return nil, err
