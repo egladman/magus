@@ -1265,7 +1265,7 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
     if (t.body != null) {
         foreach (f in judge(text, kind: judgedKind(t))) {
             // A judge that did not run is this rule's own advice; proofread's grades the rest.
-            if (f.decision != magus\GuardDecision.advise) {
+            if (f.decision != "advise") {
                 problems.append(judgedProblem(f, kind: t.kind));
             } else if (f.rule == "judge") {
                 advice.append(judgedProblem(f, kind: t.kind));
@@ -1540,7 +1540,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         problems.append(problem);
     }
     foreach (f in judge(shellQuote.replaceAll(line, with: ""), kind: kind)) {
-        if (f.decision == magus\GuardDecision.deny and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
+        if (f.decision == "deny" and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
             problems.append("{f.message} [{f.rule}]");
         }
     }
@@ -2207,7 +2207,7 @@ test "parseJudged reads each finding's line, decision and page" {
         + "\"rule\":\"hedge\",\"code\":\"PRF3002\",\"decision\":\"deny\",\"message\":\"Drop 'might fix'.\",\"match\":\"might fix\","
         + "\"url\":\"https://eli.gladman.cc/magus/reference/proofread/hedge/\"}]");
     std\assert(got.len() == 1 and got[0].rule == "hedge" and got[0].line == 3 and got[0].matched == "might fix"
-        and got[0].decision == magus\GuardDecision.deny and got[0].url.endsWith("/proofread/hedge/"), message: "{got.len()}");
+        and got[0].decision == "deny" and got[0].url.endsWith("/proofread/hedge/"), message: "{got.len()}");
     std\assert(judgedProblem(got[0], kind: "change-description") == "description line 2: Drop 'might fix'. [hedge]", message: judgedProblem(got[0], kind: "change-description"));
     std\assert(judgedProblem(got[0], kind: "review-reply") == "line 3: Drop 'might fix'. [hedge]", message: judgedProblem(got[0], kind: "review-reply"));
     std\assert(parseJudged("[]").len() == 0, message: "no finding");
@@ -2258,7 +2258,7 @@ test "proofread runs from a relative workspace and its absence is a finding" {
     fs\chmod(bin, mode: 0b111101101) catch void;
     fs\writeFile("{dir}/{proofread\inputsFile}", content: (proofread\inputs(dir) catch "") + "\n") catch void;
     final ran = judgeRunner(relative)("docs: a title\nA body.", kind: "change-description");
-    std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2 and ran[0].decision == magus\GuardDecision.advise,
+    std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2 and ran[0].decision == "advise",
         message: if (ran.len() > 0) ran[0].message else "no finding");
     fs\removeAll(ws) catch void;
 }
@@ -2272,10 +2272,10 @@ test "an outside judge's findings take this repository's decisions" {
         + "\{\"source\":\"stdin:3\",\"rule\":\"team-voice\",\"decision\":\"advise\",\"message\":\"Ours.\",\"match\":\"y\"}]'\n") catch void;
     fs\chmod(bin, mode: 0b111101101) catch void;
     final got = outsideFindings(OutsideJudge{ argv = [bin], kinds = ["change-description"] }, text: "t\nb");
-    std\assert(got.len() == 2 and got[0].decision == magus\GuardDecision.deny and got[1].decision == magus\GuardDecision.advise,
+    std\assert(got.len() == 2 and got[0].decision == "deny" and got[1].decision == "advise",
         message: "the table turns attribution to deny and leaves the rest: {got.len()}");
     final broken = outsideFindings(OutsideJudge{ argv = ["{dir}/missing"], kinds = ["change-description"] }, text: "t");
-    std\assert(broken.len() == 1 and broken[0].rule == "judge" and broken[0].decision == magus\GuardDecision.deny, message: "a judge that did not run is a finding");
+    std\assert(broken.len() == 1 and broken[0].rule == "judge" and broken[0].decision == "deny", message: "a judge that did not run is a finding");
     fs\removeAll(dir) catch void;
 }
 

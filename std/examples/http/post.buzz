@@ -9,7 +9,7 @@ try {
         "https://httpbin.org/post",
         "\{\"target\":\"build\"\}",
         {"Content-Type": "application/json"},
-        http\Options{timeoutSeconds = 10},
+        http\Options{timeoutSeconds = 10.0},
         http\Retry{ attempts = 3, delayMs = 500.0 },
     );
     std\print(r.status);

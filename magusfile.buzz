@@ -2250,7 +2250,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
 
-    fun cover_module(mod: str, extra: [str], opts: {str: any}) > void !> any {
+    fun cover_module(mod: str, extra: [str], opts: magus\CommandOptions) > void !> any {
         final profile = "coverage/buzz/" + mod.replace("/", "_") + ".lcov";
         final argv = mut [<str>];
         argv.append("-t");
@@ -2265,20 +2265,20 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 
     foreach (mod in fs\glob("std/lib/*.buzz")) {
-        cover_module(mod.value, ["--embedded"], {});
+        cover_module(mod.value, ["--embedded"], magus\CommandOptions{});
     }
     // The mode follows the caller: a script a person or workflow runs is run bare, so it is
     // gated strict, and a magusfile import parses embedded, where strict would reject legal
     // constructs.
     foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
-            cover_module(mod.value, [], {});
+            cover_module(mod.value, [], magus\CommandOptions{});
         }
     }
-    cover_module("hack/lint/run.buzz", [], {});
+    cover_module("hack/lint/run.buzz", [], magus\CommandOptions{});
     foreach (dir in ["hack/magusfile", "hack/policy"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
-            cover_module(mod.value, ["--embedded"], {});
+            cover_module(mod.value, ["--embedded"], magus\CommandOptions{});
         }
     }
     // Globbed so a new spell is covered: a spell no magusfile imports reaches no other gate.
@@ -2287,7 +2287,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // spells/examples/**.
     foreach (spell in fs\glob("spells/**/*.buzz")) {
         if (spell.value.startsWith("spells/examples/")) { continue; }
-        cover_module(spell.value, ["--embedded"], {});
+        cover_module(spell.value, ["--embedded"], magus\CommandOptions{});
     }
     foreach (lib in ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
                      "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",

@@ -22,7 +22,7 @@ final gateDenial = "a worker mid-change does not run the gate; finish with the n
 // is true for the holder of a live `job fork --checkout` row whose gate calls all run in that
 // row's own checkout (gatesInHeldCheckout).
 export object Caller {
-    role: str,
+    role: magus\AgentRole,
     title: str,
     holdsCheckout: bool = false,
 }

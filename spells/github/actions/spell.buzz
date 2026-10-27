@@ -98,7 +98,7 @@ final SERVICE = "twirp/github.actions.results.api.v1.CacheService/";
 // BLOB_TIMEOUT_SECS bounds a blob download end to end (curl --max-time, not an idle
 // timeout; http has none). A spell cache bundle has run past a gigabyte, which the
 // 30s default sized for an API call cut off mid-transfer; the Twirp calls keep it.
-final BLOB_TIMEOUT_SECS = 300;
+final BLOB_TIMEOUT_SECS = 300.0;
 
 fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
 // token reads ACTIONS_RUNTIME_TOKEN through the SECRET PROVIDER, not getenv.

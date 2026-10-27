@@ -148,8 +148,8 @@ fun capitalize(s: str) > str {
 // documentedBy maps each node of kind to the doc page an extracted `documents` edge
 // names; an inferred edge only says a page mentions the node.
 fun documentedBy(kind: str) > {str: str} !> any {
-    final probe: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": 1, "budget": 1});
-    final q: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": probe.matchCount, "budget": probe.matchCount * 8 + 1000});
+    final probe: magus\QueryResult = magus\query("kind={kind}", opts: magus\QueryOptions{limit = 1, budget = 1});
+    final q: magus\QueryResult = magus\query("kind={kind}", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * 8 + 1000});
     final pages: mut {str: str} = mut {};
     foreach (e in q.links) {
         if (e.relation == "documents" and e.confidence == "extracted" and e.source.startsWith("doc:") and e.target.startsWith("{kind}:")) {

@@ -185,7 +185,7 @@ export fun buildCommits(site: Site) > {str: str} !> any {
     var sources: mut [str] = mut [<str>];
     final releases = site.metaPrefix + "releases";
     foreach (p in ["README.md", "docs", "blog", "releases"]) { sources.append(site.metaPrefix + p); }
-    foreach (c in vcs\history(0, paths: sources, first_parent: true)) {
+    foreach (c in vcs\history(0, paths: sources, firstParent: true)) {
         final header = c.id + "|" + c.short + "|" + utcStamp(c.date);
         foreach (file in c.files) {
             if (m[releases] == null and file.startsWith(releases + "/")) { m[releases] = header; }
@@ -473,7 +473,7 @@ fun collectMarkdown(base: str, rel: str, acc: mut [str]) > void !> any {
 // force-added page in. A VCS other than git, or none, filters nothing.
 fun dropIgnored(base: str, rels: [str]) > [str] !> any {
     if (vcs\name() != "git" or rels.len() == 0) { return rels; }
-    final probe = vcs\cmd(["check-ignore", "--"] + rels, {"dir": base, "quiet": true, "allow_failure": true});
+    final probe = vcs\cmd(["check-ignore", "--"] + rels, vcs\CommandOptions{dir = base, quiet = true, allowFailure = true});
     // Exit 1 is "nothing ignored"; anything above it is a failed probe, not an answer.
     if (probe.code > 1) {
         throw "git check-ignore failed in " + base + ": " + probe.stderr;
@@ -491,12 +491,12 @@ fun dropIgnored(base: str, rels: [str]) > [str] !> any {
 
 test "dropIgnored skips ignored untracked pages and keeps tracked and force-added ones" {
     final repo = fs\tempDir("magus-dropignored-");
-    vcs\cmd(["init", "-q"], {"dir": repo, "quiet": true});
+    vcs\cmd(["init", "-q"], vcs\CommandOptions{dir = repo, quiet = true});
     fs\writeFile(repo + "/.gitignore", "/rendered.md\n/forced.md\n");
     fs\writeFile(repo + "/rendered.md", "[x](gone.md)\n");
     fs\writeFile(repo + "/forced.md", "x\n");
     fs\writeFile(repo + "/tracked.md", "x\n");
-    vcs\cmd(["add", "-f", "--", "forced.md", "tracked.md"], {"dir": repo, "quiet": true});
+    vcs\cmd(["add", "-f", "--", "forced.md", "tracked.md"], vcs\CommandOptions{dir = repo, quiet = true});
     final kept = dropIgnored(repo, ["forced.md", "rendered.md", "tracked.md"]);
     fs\removeAll(repo);
     assert\equal(kept.join(","), "forced.md,tracked.md", "only the ignored untracked page is dropped");
@@ -512,7 +512,7 @@ fun conventionPages(base: str) > [str] !> any {
 
 test "conventionPages lists a tracked page and not a stale ignored render" {
     final repo = fs\tempDir("magus-conventions-");
-    vcs\cmd(["init", "-q"], {"dir": repo, "quiet": true});
+    vcs\cmd(["init", "-q"], vcs\CommandOptions{dir = repo, quiet = true});
     fs\writeFile(repo + "/.gitignore", "/docs/changelog.md\n");
     fs\mkdirAll(repo + "/docs/guides");
     fs\writeFile(repo + "/docs/changelog.md", "See [gone](migrating/gone.md).\n");

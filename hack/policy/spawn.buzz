@@ -27,7 +27,7 @@ final integrateRole = "integrate";
 // Spawn is what the rules read of one spawn, copied out of the request because a Buzz test
 // cannot build the host's SpawnRequest: constructing its Job fails on a nested default.
 export object Spawn {
-    kind: str,
+    kind: magus\SpawnKind,
     title: str,
     isolated: bool,
     model: str = "",

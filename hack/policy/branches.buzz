@@ -75,7 +75,7 @@ final synonyms = {
 // description magus saw it spawned with, session the host's session id, and agent the
 // host's subagent id. Each is a fact the guard recorded, never one the caller declares.
 export object Pusher {
-    role: str,
+    role: magus\AgentRole,
     title: str,
     session: str,
     agent: str = "",
