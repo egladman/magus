@@ -57,6 +57,10 @@ const (
 	// key-value pairs.
 	TypeStringMapMap
 	TypeAnyMap
+	// TypeAnySlice is a list of values, typically objects crossing as maps.
+	// It is the list counterpart of TypeAnyMap: an Impl takes []any and
+	// decodes each element, rather than taking a bare any and asserting.
+	TypeAnySlice
 	TypeFunc
 	TypeAny
 	// TypeIndex is an int that names a position in a list. Buzz lists are
@@ -91,6 +95,8 @@ func (t TypeTag) GoType() string {
 		return "map[string]string"
 	case TypeAnyMap:
 		return "map[string]any"
+	case TypeAnySlice:
+		return "[]any"
 	case TypeFunc:
 		return "Callback"
 	case TypeAny:
@@ -180,6 +186,18 @@ type Namespace struct {
 	// function, and its parameter type lives only in the author's annotation. Listing
 	// them here is what declares them to the checker.
 	Objects []string
+}
+
+// Protocol is a Buzz `protocol` the module exports: a set of method signatures a
+// Buzz `object<P>` must implement. Declared here so moduledecls emits it beside the
+// free-function externs; CallMethod is how Go invokes a conforming object.
+//
+// Methods carry Args/Returns/Raises like a Method, but no Impl: a protocol is a
+// type, not a binding. Pioneer: log.Logger.
+type Protocol struct {
+	Name    string
+	Doc     string
+	Methods []Method
 }
 
 // Method declares one host function bound into the VM.
@@ -274,6 +292,8 @@ type Module struct {
 	Doc     string
 	Fields  []Field
 	Methods []Method
+	// Protocols are Buzz protocols this module exports; see Protocol.
+	Protocols []Protocol
 	// Namespaces are member groups the runtime assembles; see Namespace.
 	Namespaces []Namespace
 	// WASM marks a module the browser playground can install: pure compute, with no

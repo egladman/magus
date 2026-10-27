@@ -192,12 +192,15 @@ var modules = []Module{
 	},
 	{
 		Name: "image",
-		Doc:  "Build, assemble and publish OCI images. Layouts are directories holding exactly one manifest or index; equal inputs give byte-identical layouts.",
+		Doc:  "Assemble and publish OCI images. An Image is the artifact; a Container is a running instance. Layouts hold one Image Manifest or Image Index.",
 		Methods: []Method{
-			{Name: "pull", Doc: "Fetch the image at reference, a name@sha256:<hex> digest reference, for platform into the OCI layout directory dest. Returns the layout.", Sig: "image\\pull(reference, platform, dest) -> ImageLayout"},
-			{Name: "write", Doc: "Write the image described by spec, at most one new layer over spec.base, into the OCI layout directory dest. Returns the layout.", Sig: "image\\write(spec, dest) -> ImageLayout"},
-			{Name: "index", Doc: "Combine layouts, each holding one platform manifest, into an image index written to the OCI layout directory dest. Returns the layout.", Sig: "image\\index(layouts, dest) -> ImageLayout"},
-			{Name: "publish", Doc: "Push the layout to repository, then tag it with each of tags; an empty tags list pushes by digest only. Returns what the registry confirmed.", Sig: "image\\publish(layout, repository, tags, [opts]) -> ImagePublished"},
+			{Name: "pullLayout", Doc: "Fetch the image at reference (name@sha256:<hex>) for platform into dest as an OCI Image Layout. Optional auth: {username, password:{value}}.", Sig: "image\\pullLayout(reference, platform, dest, [auth]) -> ImageLayout"},
+			{Name: "assembleLayout", Doc: "Assemble an OCI Image Layout from spec into dest: optional base, at most one new Layer for files/symlinks, then config and Image Manifest.", Sig: "image\\assembleLayout(spec, dest) -> ImageLayout"},
+			{Name: "assembleIndex", Doc: "Combine single-platform layouts into an Image Index at dest.", Sig: "image\\assembleIndex(layouts, dest) -> ImageLayout"},
+			{Name: "publishLayout", Doc: "Push the layout to repository under tags; empty tags means digest only. Optional auth: {username, password:{value}}.", Sig: "image\\publishLayout(layout, repository, tags, [auth]) -> ImagePublished"},
+			{Name: "writeSbom", Doc: "Write an SPDX SBOM for layout to dest and return the document descriptor.", Sig: "image\\writeSbom(layout, dest) -> ImageSBOM"},
+			{Name: "writeProvenance", Doc: "Write an in-toto provenance statement for layout using spec to dest.", Sig: "image\\writeProvenance(layout, spec, dest) -> ImageProvenance"},
+			{Name: "attachArtifacts", Doc: "Attach optional sbomPath and provenancePath documents onto the Image Index at layout.", Sig: "image\\attachArtifacts(layout, [sbomPath], [provenancePath]) -> ImageLayout"},
 		},
 	},
 	{
@@ -226,11 +229,11 @@ var modules = []Module{
 	},
 	{
 		Name: "log",
-		Doc:  "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line.",
+		Doc:  "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line. Message text uses Buzz `{expr}` interpolation; pass structured fields as `attrs` so they stay queryable in the run log rather than baked into the string. `Logger` is the protocol for an injectable logger (same methods as the free functions): `import \"log\" as _` then `object<Logger>` to swap Std for Quiet without rewriting call sites.",
 		Methods: []Method{
 			{Name: "trace", Doc: "Log at trace level (shown at -vvv). For detail worth having when reconstructing a run and noise at any other time.", Sig: "log\\trace(message, [attrs])"},
 			{Name: "debug", Doc: "Log at debug level (shown at -v).", Sig: "log\\debug(message, [attrs])"},
-			{Name: "info", Doc: "Log at info level (shown by default, hidden by -q).", Sig: "log\\info(message, [attrs])"},
+			{Name: "info", Doc: "Log at info level (shown by default, hidden by -q). Prefer `log\\info(\"pulled {ref}\", attrs: {\"digest\": d})` over stuffing fields into the message.", Sig: "log\\info(message, [attrs])"},
 			{Name: "warn", Doc: "Log at warn level: something the reader should act on eventually.", Sig: "log\\warn(message, [attrs])"},
 			{Name: "error", Doc: "Log at error level. This RECORDS a problem; it does not fail the target - raise (or os\\exit) is what ends a run.", Sig: "log\\error(message, [attrs])"},
 			{Name: "at", Doc: "Log at a level chosen at runtime. Use it when the level is DATA rather than a literal - mapping a scanner's severity onto magus's levels, say - and the five named methods when it is not.", Sig: "log\\at(level, message, [attrs])"},

@@ -1,14 +1,14 @@
-// banned-words refuses three words the repository does not use: surface as a noun, lane
-// and corpus. Each names nothing; the fix says what the thing is. The verb "surfaces an
-// error" passes.
+// banned-words refuses four words the repository does not use: surface as a noun, lane,
+// corpus, and recipe. Each names nothing; the fix says what the thing is. The verb
+// "surfaces an error" passes.
 //
 // surface is refused only in frames that make it a noun: a determiner or quantifier
 // directly before it, matched for number so a verb passes (`this surfaces it`, `both
 // surface a gap`); a modifier from a closed list before the singular; a hyphen compound
 // other than `re-`; `surface area`; a file name; and any identifier carrying it, less the
 // verb forms. A noun behind a free modifier (`the health surface`) passes: the frames
-// trade that miss for refusing almost no verb. lane and corpus are refused as any word,
-// in prose or inside an identifier.
+// trade that miss for refusing almost no verb. lane, corpus and recipe are refused as any
+// word, in prose or inside an identifier.
 //
 // A word in backticks on its own (`lane`) is a mention, not a use, and passes.
 //
@@ -82,13 +82,15 @@ final WORD = std\pattern(`[A-Z]*[a-z]+|[A-Z]+|[0-9]+`);
 final VERB_FORM = std\pattern(`^(?:un|re)?surfac(?:e|es|ed|ing)$`);
 final VERB_TEST = std\pattern(`^Test[A-Za-z0-9_]*Surfaces[A-Z]`);
 
-final MENTIONS = ["`surface`", "`surfaces`", "`lane`", "`lanes`", "`corpus`", "`corpora`"];
+final MENTIONS = ["`surface`", "`surfaces`", "`lane`", "`lanes`", "`corpus`", "`corpora`",
+    "`recipe`", "`recipes`"];
 
 final SURFACE_FIX = "Say what the thing is: the CLI, the MCP tools, the console page, the API. A verb "
     + "this refuses reads better reworded (\"appears on\", \"shows\").";
 final IDENTIFIER_FIX = "Rename it for what it is: Console, Tools, API, Page.";
 final LANE_FIX = "Say \"write paths\", or what it means here.";
 final CORPUS_FIX = "Say \"the cases\" or \"the inputs\".";
+final RECIPE_FIX = "Say what it is: a Spec, a target, the steps, or the make rule.";
 
 export fun check(files: [Path]) > [Finding] !> any {
     return sanction(findings(files), sanctioned: SANCTIONED);
@@ -138,7 +140,8 @@ fun isGeneratedGo(rel: str, src: str) > bool {
 // fileFindings is every banned word in src, the file at rel.
 export fun fileFindings(rel: str, src: str) > [Finding] !> any {
     final lower = src.lower();
-    if (lower.indexOf("surface") == null and lower.indexOf("lane") == null and lower.indexOf("corp") == null) {
+    if (lower.indexOf("surface") == null and lower.indexOf("lane") == null
+        and lower.indexOf("corp") == null and lower.indexOf("recipe") == null) {
         return [<Finding>];
     }
     final lanesAllowed = path\matchesAny(LANES_ARE_ROUTING, path: rel);
@@ -154,7 +157,8 @@ export fun fileFindings(rel: str, src: str) > [Finding] !> any {
         if (low.indexOf("surface") != null) {
             foreach (finding in nounFindings(rel, line: line, n: n)) { found.append(finding); }
         }
-        if (low.indexOf("surface") != null or low.indexOf("lane") != null or low.indexOf("corp") != null) {
+        if (low.indexOf("surface") != null or low.indexOf("lane") != null
+            or low.indexOf("corp") != null or low.indexOf("recipe") != null) {
             foreach (finding in tokenFindings(rel, line: line, n: n, lanesAllowed: lanesAllowed)) { found.append(finding); }
         }
     }
@@ -186,7 +190,7 @@ fun nounFindings(rel: str, line: str, n: int) > [Finding] !> any {
     return found;
 }
 
-// tokenFindings reports identifiers carrying surface, and lane or corpus as any word.
+// tokenFindings reports identifiers carrying surface, and lane, corpus or recipe as any word.
 fun tokenFindings(rel: str, line: str, n: int, lanesAllowed: bool) > [Finding] !> any {
     final found = mut [<Finding>];
     var next = 0;
@@ -207,6 +211,9 @@ fun tokenFindings(rel: str, line: str, n: int, lanesAllowed: bool) > [Finding] !
             } else if (word == "corpus" or word == "corpora") {
                 found.append(Finding{ path = rel, line = n, col = at + 1,
                     message = "\"{token}\" says {word}", fix = CORPUS_FIX });
+            } else if (word == "recipe" or word == "recipes") {
+                found.append(Finding{ path = rel, line = n, col = at + 1,
+                    message = "\"{token}\" says {word}", fix = RECIPE_FIX });
             }
         }
     }
@@ -294,10 +301,13 @@ test "an identifier carrying surface is refused, its verb forms are not" {
             "1:18 the identifier surface_kind carries surface as a noun"], message: "identifiers");
 }
 
-test "lane and corpus are refused as any word, in prose or an identifier" {
+test "lane, corpus and recipe are refused as any word, in prose or an identifier" {
     assert\equal(lines("a.go", src: "// a write lane\nvar testCorpus, CORPUS_DIR = 1, 2\n// planes and the planet\n"),
         want: ["1:12 \"lane\" says lane", "2:5 \"testCorpus\" says corpus", "2:17 \"CORPUS_DIR\" says corpus"],
         message: "words");
+    assert\equal(lines("b.go", src: "// a build recipe\nvar imageRecipes, RECIPE_DIR = 1, 2\n"),
+        want: ["1:12 \"recipe\" says recipe", "2:5 \"imageRecipes\" says recipes", "2:19 \"RECIPE_DIR\" says recipe"],
+        message: "recipe");
 }
 
 test "the figure router keeps its lanes" {
@@ -306,7 +316,7 @@ test "the figure router keeps its lanes" {
 }
 
 test "a word in backticks on its own is a mention" {
-    assert\equal(lines("docs/conventions.md", src: "Never write `lane`, `corpus` or `surface` as a noun.\n"),
+    assert\equal(lines("docs/conventions.md", src: "Never write `lane`, `corpus`, `recipe` or `surface` as a noun.\n"),
         want: [<str>], message: "mentions pass");
 }
 

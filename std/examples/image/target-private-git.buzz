@@ -1,0 +1,12 @@
+// BuildKit's RUN --mount=type=ssh exists so a Dockerfile can git-clone during image build.
+// magus refuses that verb on image.*. Private fetch belongs on a host target (SSH agent or
+// Secret), then assembleLayout only sees files under the work root.
+//
+// Seam (wire to your project's fetch/build targets):
+//   1. target "fetch" uses the agent or a Secret to clone or download
+//   2. target "build" compiles into bin/app
+//   3. image\assembleLayout places bin/app — never an SSH mount on image.*
+//
+export fun stance() > str {
+    return "private git and caches: targets; OCI packaging: image assembleLayout";
+}

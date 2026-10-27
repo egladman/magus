@@ -33,7 +33,7 @@ func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.
 	if spec.Created != "" {
 		t, err := time.Parse(time.RFC3339, spec.Created)
 		if err != nil {
-			return ocispec.Image{}, fmt.Errorf("image.write: created %q: want RFC 3339: %w", spec.Created, err)
+			return ocispec.Image{}, fmt.Errorf("image.assemble: created %q: want RFC 3339: %w", spec.Created, err)
 		}
 		cfg.Created = &t
 	}
@@ -50,7 +50,7 @@ func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.
 		cfg.Config.WorkingDir = spec.WorkingDir
 	}
 	cfg.Config.Entrypoint = resolveList(cfg.Config.Entrypoint, spec.Entrypoint, spec.ResetEntrypoint)
-	cfg.Config.Cmd = resolveList(cfg.Config.Cmd, spec.Cmd, spec.ResetCmd)
+	cfg.Config.Cmd = resolveList(cfg.Config.Cmd, spec.Command, spec.ResetCommand)
 	if len(spec.Labels) > 0 {
 		labels := maps.Clone(cfg.Config.Labels)
 		if labels == nil {
@@ -128,7 +128,7 @@ func resolveList(base, spec []string, reset bool) []string {
 func configBlob(cfg ocispec.Image) ([]byte, ocispec.Descriptor, error) {
 	data, err := configJSON(cfg)
 	if err != nil {
-		return nil, ocispec.Descriptor{}, fmt.Errorf("image.write: config: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("image.assemble: config: %w", err)
 	}
 	return data, blobDescriptor(ocispec.MediaTypeImageConfig, data), nil
 }

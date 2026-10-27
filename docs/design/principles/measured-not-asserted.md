@@ -10,7 +10,7 @@ tags: [design, principle, evidence]
 A design reading well proves less than it used to, so a claim needs an artifact
 someone else can check: a benchmark committed with the hardware, the date and
 the competing tool versions; a run journal; a count over transcripts with the
-recipe to reproduce it. Weigh anything without one as experience, and say so in
+procedure to reproduce it. Weigh anything without one as experience, and say so in
 the sentence that makes the claim.
 
 Measurement cuts both ways, and the useful half is the one that says no. A
@@ -48,7 +48,7 @@ first edits were never anchored, and all 27 cases read by hand were matcher arti
 The graph makes agents 3x faster.
 ```
 
-No run, no control, no date, no recipe. Nobody can check it, and it outlives
+No run, no control, no date, no procedure. Nobody can check it, and it outlives
 whatever it was ever true of.
 
 ## See also

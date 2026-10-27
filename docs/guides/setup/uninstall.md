@@ -93,7 +93,7 @@ back.
 ## Shell setup
 
 The lines you added by hand in [Shell setup](shell-setup.md) are still there.
-Depending on which recipes you followed:
+Depending on which setup steps you followed:
 
 | Path                                    | What                                       |
 | --------------------------------------- | ------------------------------------------ |

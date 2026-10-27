@@ -38,7 +38,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"

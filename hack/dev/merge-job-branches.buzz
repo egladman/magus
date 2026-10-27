@@ -421,7 +421,7 @@ export fun readyFailure(text: str) > str {
 }
 
 // readyAt builds a ./magus at the tree's own HEAD, plus the graph and symbol digest it
-// needs, with the recipe every gate uses.
+// needs, with the steps every gate uses.
 fun readyAt(dir: str) > [str] !> any {
     return bootstrap\gateReady(bootstrap\liveHost(), dir: dir);
 }

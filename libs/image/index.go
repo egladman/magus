@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-// Index assembles a multi-platform OCI image layout.
-func Index(ctx context.Context, layouts []string, dest string) (Layout, error) {
+// AssembleIndex joins single-platform layouts into one Image Index at dest.
+func AssembleIndex(ctx context.Context, layouts []string, dest string) (Layout, error) {
 	if len(layouts) == 0 {
 		return Layout{}, fmt.Errorf("image.index: no input layouts")
 	}
@@ -60,7 +60,11 @@ func Index(ctx context.Context, layouts []string, dest string) (Layout, error) {
 	if err := writeLayout(ctx, dest, root, blobs); err != nil {
 		return Layout{}, fmt.Errorf("image.index: %w", err)
 	}
-	return Layout{Path: dest, Descriptor: root}, nil
+	return Layout{
+		Path:       dest,
+		Descriptor: root,
+		Op:         OpAssembleIndex,
+	}, nil
 }
 
 type platformLayout struct {
@@ -71,7 +75,7 @@ type platformLayout struct {
 }
 
 func readPlatformLayout(ctx context.Context, path string) (platformLayout, error) {
-	layout, err := Open(path)
+	layout, err := OpenLayout(path)
 	if err != nil {
 		return platformLayout{}, err
 	}

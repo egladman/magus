@@ -95,6 +95,13 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		}
 		b.WriteString(decl)
 	}
+	for _, p := range sortedProtocols(mod) {
+		decl, err := protocolDecl(p)
+		if err != nil {
+			return "", fmt.Errorf("protocol %s: %w", p.Name, err)
+		}
+		b.WriteString(decl)
+	}
 	// A Namespace renders as an OBJECT whose members are static extern methods:
 	// `magus\cache.remote(...)` is member access on a value, not a nested namespace,
 	// which Buzz does not have. Declaring it this way is what makes an unknown member
@@ -161,6 +168,81 @@ func sortedNamespaceMethods(ns std.Namespace) []std.Method {
 	out := slices.Clone(ns.Methods)
 	slices.SortFunc(out, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
 	return out
+}
+
+// sortedProtocols orders a module's protocols by name for stable generated output.
+func sortedProtocols(mod std.Module) []std.Protocol {
+	out := slices.Clone(mod.Protocols)
+	slices.SortFunc(out, func(a, b std.Protocol) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+// protocolDecl renders `export protocol Name { fun ...; }` from a Protocol.
+func protocolDecl(p std.Protocol) (string, error) {
+	var b strings.Builder
+	if p.Doc != "" {
+		fmt.Fprintf(&b, "// %s\n", p.Doc)
+	}
+	fmt.Fprintf(&b, "export protocol %s {\n", p.Name)
+	methods := slices.Clone(p.Methods)
+	slices.SortFunc(methods, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
+	for _, m := range methods {
+		sig, err := protocolMethodSig(m)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", m.Name, err)
+		}
+		fmt.Fprintf(&b, "    %s\n", sig)
+	}
+	b.WriteString("}\n\n")
+	return b.String(), nil
+}
+
+// protocolMethodSig renders one protocol method as `fun name(params) > ret[!> any];`.
+func protocolMethodSig(m std.Method) (string, error) {
+	name := std.CamelCase(m.Name)
+	if m.BuzzName != "" {
+		name = m.BuzzName
+	}
+	params := make([]string, 0, len(m.Args))
+	for _, a := range m.Args {
+		typ, err := buzzArgType(a.Type)
+		if err != nil {
+			return "", fmt.Errorf("arg %s: %w", a.Name, err)
+		}
+		if a.Object != "" {
+			typ = a.Object
+		}
+		if a.Enum != "" {
+			typ = a.Enum
+		}
+		if a.Func != "" {
+			if a.Type != std.TypeFunc {
+				return "", fmt.Errorf("arg %s: Func is set on a %v argument, it types only a TypeFunc", a.Name, a.Type)
+			}
+			typ = a.Func
+		}
+		if a.Type == std.TypeByteSlice {
+			typ = "any"
+		}
+		param := fmt.Sprintf("%s: %s", a.Name, typ)
+		if a.Optional {
+			def, derr := buzzDefault(a)
+			if derr != nil {
+				return "", fmt.Errorf("arg %s: %w", a.Name, derr)
+			}
+			param += " = " + def
+		}
+		params = append(params, param)
+	}
+	ret, err := buzzReturnType(m)
+	if err != nil {
+		return "", err
+	}
+	raises := ""
+	if m.Raises {
+		raises = " !> any"
+	}
+	return fmt.Sprintf("fun %s(%s) > %s%s;", name, strings.Join(params, ", "), ret, raises), nil
 }
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
@@ -269,6 +351,8 @@ func buzzArgType(t std.TypeTag) (string, error) {
 		return "{str: str}", nil
 	case std.TypeAnyMap:
 		return "{str: any}", nil
+	case std.TypeAnySlice:
+		return "[any]", nil
 	case std.TypeFunc:
 		// A Buzz function type fixes its arity and parameter types, and a TypeFunc
 		// Arg carries neither; the host checks the callable when it is called.
@@ -367,6 +451,8 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "{<str: str>}", nil
 	case std.TypeAnyMap:
 		return "{<str: any>}", nil
+	case std.TypeAnySlice:
+		return "[<any>]", nil
 	case std.TypeAny:
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
 		// annotates cleanly.
@@ -486,6 +572,13 @@ func collectMirrors(mod std.Module) ([]string, error) {
 			}
 		}
 	}
+	for _, p := range sortedProtocols(mod) {
+		for _, m := range p.Methods {
+			if err := visitMethod(m); err != nil {
+				return nil, fmt.Errorf("protocol %s: %w", p.Name, err)
+			}
+		}
+	}
 	return order, nil
 }
 
@@ -519,6 +612,20 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		for _, r := range m.Returns {
 			if err := add(r.Enum, m.Name); err != nil {
 				return nil, err
+			}
+		}
+	}
+	for _, p := range sortedProtocols(mod) {
+		for _, m := range p.Methods {
+			for _, a := range m.Args {
+				if err := add(a.Enum, p.Name+"."+m.Name); err != nil {
+					return nil, err
+				}
+			}
+			for _, r := range m.Returns {
+				if err := add(r.Enum, p.Name+"."+m.Name); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

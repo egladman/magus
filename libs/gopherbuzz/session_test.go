@@ -2710,3 +2710,99 @@ fun probe() > int {
 	folded := evalParity(t, `fun probe() > int { return 2 + 3 * 4; }`)
 	assert.Equal(t, int64(14), folded.AsInt(), "constant folding still applies off a branch")
 }
+
+// protocolPet execs a protocol and a conforming object, then returns the session and
+// a protocol-typed instance built inside Buzz, the shape a Go adapter receives.
+func protocolPet(t *testing.T) (*Session, vm.Value) {
+	t.Helper()
+	ctx := context.Background()
+	s := NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	require.NoError(t, s.Exec(ctx, `
+protocol Petlike {
+    mut fun rename(name: str) > void;
+    fun size() > int;
+    fun label(prefix: str, n: int) > str;
+}
+
+object<Petlike> Pet {
+    name: str,
+    mut fun rename(name: str) > void { this.name = name; }
+    fun size() > int => 4;
+    fun label(prefix: str, n: int) > str => "{prefix}{this.name}{n}";
+}
+
+fun make() > Petlike {
+    return mut Pet{ name = "bandit" };
+}`))
+	pet, err := s.CallValue(ctx, s.Globals()["make"], nil)
+	require.NoError(t, err, "make()")
+	return s, pet
+}
+
+func TestSessionCallMethod_ProtocolObject(t *testing.T) {
+	ctx := context.Background()
+	s, pet := protocolPet(t)
+
+	got, err := s.CallMethod(ctx, pet, "size", nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(4), got.AsInt())
+
+	got, err = s.CallMethod(ctx, pet, "label", []vm.Value{vm.StringValue("x-"), vm.IntValue(7)})
+	require.NoError(t, err)
+	assert.Equal(t, "x-bandit7", got.AsString())
+
+	// A mutating method changes the receiver the next call sees: this is the one
+	// instance, not a copy.
+	got, err = s.CallMethod(ctx, pet, "rename", []vm.Value{vm.StringValue("Chili")})
+	require.NoError(t, err)
+	assert.True(t, got.IsNull(), "a void method answers null")
+	got, err = s.CallMethod(ctx, pet, "label", []vm.Value{vm.StringValue(""), vm.IntValue(1)})
+	require.NoError(t, err)
+	assert.Equal(t, "Chili1", got.AsString())
+}
+
+func TestSessionCallMethod_FailsLoudly(t *testing.T) {
+	ctx := context.Background()
+	s, pet := protocolPet(t)
+
+	_, err := s.CallMethod(ctx, pet, "fly", nil)
+	require.ErrorContains(t, err, "unknown method fly", "a missing method is not Null")
+
+	_, err = s.CallMethod(ctx, pet, "label", []vm.Value{vm.StringValue("x")})
+	require.ErrorContains(t, err, "takes 2 argument(s), got 1", "too few arguments")
+
+	_, err = s.CallMethod(ctx, pet, "size", []vm.Value{vm.IntValue(1)})
+	require.ErrorContains(t, err, "takes 0 argument(s), got 1", "too many arguments")
+
+	_, err = s.CallMethod(ctx, vm.IntValue(3), "size", nil)
+	require.ErrorContains(t, err, "unknown method size", "a receiver with no such member")
+
+	// The failures above must not poison the session.
+	got, err := s.CallMethod(ctx, pet, "size", nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(4), got.AsInt())
+}
+
+func TestSessionCallMethod_BuiltinAndThrow(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	require.NoError(t, s.Exec(ctx, `
+object Boom {
+    fun go() > void !> str { throw "boom"; }
+}
+fun make() > Boom { return Boom{}; }
+fun words() > [str] { return ["a", "b"]; }`))
+
+	words, err := s.CallValue(ctx, s.Globals()["words"], nil)
+	require.NoError(t, err)
+	got, err := s.CallMethod(ctx, words, "len", nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), got.AsInt(), "a builtin method answers its result, not null")
+
+	boom, err := s.CallValue(ctx, s.Globals()["make"], nil)
+	require.NoError(t, err)
+	_, err = s.CallMethod(ctx, boom, "go", nil)
+	require.Error(t, err, "an uncaught throw surfaces to the caller")
+}

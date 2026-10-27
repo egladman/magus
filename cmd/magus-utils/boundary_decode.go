@@ -102,7 +102,11 @@ var inboundTypes = []string{
 	// The image module's arguments, leaf first: ImageSpec holds the three before it.
 	"ImagePlatform",
 	"ImageFile",
+	"ImageDirPlacement",
 	"ImageSymlink",
+	"ImageSecret",
+	"ImageRegistryAuth",
+	"ImageProvenanceSpec",
 	"ImageSpec",
 }
 

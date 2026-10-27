@@ -31,7 +31,7 @@
 //   unknown:    no base to read. Fatal like introduced, and said so once.
 // A fresh CVE against a year-old module then reddens main and the schedule, not every open
 // pull request whose author cannot fix it there. docs/guides/security-scanning.md is the
-// recipe for copying this.
+// guide for copying this.
 //
 // This is the part a task orchestrator with a real language can do and a YAML `run:` step
 // cannot. The scanner gives you JSON and an exit code; deciding what that MEANS for this

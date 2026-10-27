@@ -91,10 +91,13 @@ http.post
 http.request
 http.server
 http.upload_chunked
-image.index
-image.publish
-image.pull
-image.write
+image.assembleIndex
+image.assembleLayout
+image.attachArtifacts
+image.publishLayout
+image.pullLayout
+image.writeProvenance
+image.writeSbom
 log.at
 log.debug
 log.error

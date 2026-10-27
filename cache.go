@@ -327,8 +327,8 @@ func ResolveCacheDir(root string, opts ...Option) (string, error) {
 	return resolveCacheDir(root, cfg), nil
 }
 
-// CacheKeyVersion is the hashing-recipe version this binary computes cache keys
-// with. Two keys from different recipes are not comparable, which is what makes a
+// CacheKeyVersion is the hashing-scheme version this binary computes cache keys
+// with. Two keys from different schemes are not comparable, which is what makes a
 // mismatch worth reporting rather than treating as changed inputs.
 const CacheKeyVersion = cache.KeyVersion
 

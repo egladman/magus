@@ -73,19 +73,26 @@ func imageTestLayerEntries(t *testing.T, data []byte) ([]tar.Header, digest.Dige
 	return entries, digest.FromBytes(tarData)
 }
 
-func TestImageWriteIndependentReader(t *testing.T) {
+func TestImageAssembleIndependentReader(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "program")
 	require.NoError(t, os.WriteFile(src, []byte("hello image"), 0o600))
 	dest := filepath.Join(t.TempDir(), "layout")
 	p := Platform{OS: "linux", Architecture: "amd64"}
-	got, err := Write(context.Background(), Spec{Platform: p,
+	got, err := AssembleLayout(context.Background(), Spec{Platform: p,
 		Files:    []File{{Source: src, Destination: "/usr/bin/program", Mode: 0o755, UID: 3, GID: 4}},
 		Symlinks: []Symlink{{Destination: "/program", Target: "/usr/bin/program"}},
 		Env:      map[string]string{"A": "1"}, Created: "2026-10-23T12:00:00Z",
 	}, dest)
 	require.NoError(t, err)
 	root, manifest, cfg := imageTestReadManifest(t, dest)
-	assert.Equal(t, Layout{Path: dest, Descriptor: root, Platform: p}, got)
+	assert.Equal(t, dest, got.Path)
+	assert.Equal(t, root, got.Descriptor)
+	assert.Equal(t, p, got.Platform)
+	assert.Equal(t, OpAssembleLayout, got.Op)
+	assert.Equal(t, "2026-10-23T12:00:00Z", got.Created)
+	assert.False(t, got.Layer.IsZero())
+	assert.Equal(t, "sha256", got.Layer.Digest.Algorithm())
+	assert.Equal(t, ocispec.MediaTypeImageLayerGzip, got.Layer.MediaType)
 	assert.Equal(t, ocispec.MediaTypeImageManifest, root.MediaType)
 	assert.Equal(t, ocispec.MediaTypeImageConfig, manifest.Config.MediaType)
 	require.Len(t, manifest.Layers, 1)
@@ -103,17 +110,18 @@ func TestImageWriteIndependentReader(t *testing.T) {
 	assert.Equal(t, "2026-10-23T12:00:00Z", cfg.Created.Format(time.RFC3339))
 }
 
-func TestImageWriteBaseInheritanceAndEmptyLayer(t *testing.T) {
+func TestImageAssembleBaseInheritanceAndEmptyLayer(t *testing.T) {
 	p := Platform{OS: "linux", Architecture: "amd64"}
 	src := filepath.Join(t.TempDir(), "base-file")
 	require.NoError(t, os.WriteFile(src, []byte("base"), 0o600))
 	basePath := filepath.Join(t.TempDir(), "base")
-	_, err := Write(context.Background(), Spec{Platform: p, Files: []File{{Source: src, Destination: "/base", Mode: 0o644}}, Env: map[string]string{"A": "1"}, User: "42", Entrypoint: []string{"/base"}, Cmd: []string{"run"}, Created: "2026-01-02T03:04:05Z"}, basePath)
+	_, err := AssembleLayout(context.Background(), Spec{Platform: p, Files: []File{{Source: src, Destination: "/base", Mode: 0o644}}, Env: map[string]string{"A": "1"}, User: "42", Entrypoint: []string{"/base"}, Command: []string{"run"}, Created: "2026-01-02T03:04:05Z"}, basePath)
 	require.NoError(t, err)
 	baseRoot, baseManifest, baseCfg := imageTestReadManifest(t, basePath)
 	dest := filepath.Join(t.TempDir(), "derived")
-	_, err = Write(context.Background(), Spec{Base: basePath, Platform: p, Env: map[string]string{"B": "2"}}, dest)
+	derived, err := AssembleLayout(context.Background(), Spec{Base: basePath, Platform: p, Env: map[string]string{"B": "2"}}, dest)
 	require.NoError(t, err)
+	assert.Equal(t, "2026-01-02T03:04:05Z", derived.Created)
 	_, manifest, cfg := imageTestReadManifest(t, dest)
 	assert.Equal(t, baseManifest.Layers, manifest.Layers)
 	wantCfg := baseCfg
@@ -125,14 +133,26 @@ func TestImageWriteBaseInheritanceAndEmptyLayer(t *testing.T) {
 	for _, layer := range baseManifest.Layers {
 		assert.Equal(t, imageTestReadBlob(t, basePath, layer), imageTestReadBlob(t, dest, layer))
 	}
-	_, err = Write(context.Background(), Spec{Base: basePath, Platform: Platform{OS: "linux", Architecture: "arm64"}}, filepath.Join(t.TempDir(), "bad"))
+	_, err = AssembleLayout(context.Background(), Spec{Base: basePath, Platform: Platform{OS: "linux", Architecture: "arm64"}}, filepath.Join(t.TempDir(), "bad"))
 	require.ErrorContains(t, err, "base config platform")
 }
 
-func TestImageWriteScratchWithoutLayer(t *testing.T) {
+func TestImageAssembleMissingBaseIsLocalOnly(t *testing.T) {
+	t.Parallel()
+	p := Platform{OS: "linux", Architecture: "amd64"}
+	missing := filepath.Join(t.TempDir(), "no-such-layout")
+	_, err := AssembleLayout(context.Background(), Spec{Base: missing, Platform: p}, filepath.Join(t.TempDir(), "out"))
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "local layout only")
+	assert.ErrorContains(t, err, "update charm")
+	assert.ErrorContains(t, err, missing)
+	assert.False(t, errors.Is(err, context.Canceled), "assemble must not touch the network for a missing base")
+}
+
+func TestImageAssembleScratchWithoutLayer(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "layout")
 	p := Platform{OS: "linux", Architecture: "amd64"}
-	_, err := Write(context.Background(), Spec{Platform: p}, dest)
+	_, err := AssembleLayout(context.Background(), Spec{Platform: p}, dest)
 	require.NoError(t, err)
 	_, manifest, cfg := imageTestReadManifest(t, dest)
 	assert.Equal(t, []ocispec.Descriptor{}, manifest.Layers)
@@ -143,7 +163,7 @@ func TestImageWriteScratchWithoutLayer(t *testing.T) {
 	}, cfg)
 }
 
-func TestImageWriteChecksEveryBaseLayerDescriptor(t *testing.T) {
+func TestImageAssembleChecksEveryBaseLayerDescriptor(t *testing.T) {
 	p := Platform{OS: "linux", Architecture: "amd64"}
 	basePath := imageTestPlatformLayout(t, p)
 	root, manifest, _ := imageTestReadManifest(t, basePath)
@@ -165,21 +185,21 @@ func TestImageWriteChecksEveryBaseLayerDescriptor(t *testing.T) {
 	require.NoError(t, os.WriteFile(indexPath, indexData, 0o644))
 
 	dest := filepath.Join(t.TempDir(), "derived")
-	_, err = Write(context.Background(), Spec{Base: basePath, Platform: p}, dest)
+	_, err = AssembleLayout(context.Background(), Spec{Base: basePath, Platform: p}, dest)
 	require.ErrorContains(t, err, "layer")
 	require.ErrorContains(t, err, "size")
 	_, err = os.Stat(dest)
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestImageWriteConfigOnlyKeepsLayerDigest(t *testing.T) {
+func TestImageAssembleConfigOnlyKeepsLayerDigest(t *testing.T) {
 	p := Platform{OS: "linux", Architecture: "amd64"}
 	src := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(src, []byte("same"), 0o600))
 	write := func(env string) (ocispec.Manifest, ocispec.Image) {
 		t.Helper()
 		dest := filepath.Join(t.TempDir(), "layout")
-		_, err := Write(context.Background(), Spec{Platform: p, Files: []File{{Source: src, Destination: "/file", Mode: 0o644}}, Env: map[string]string{"A": env}}, dest)
+		_, err := AssembleLayout(context.Background(), Spec{Platform: p, Files: []File{{Source: src, Destination: "/file", Mode: 0o644}}, Env: map[string]string{"A": env}}, dest)
 		require.NoError(t, err)
 		_, m, c := imageTestReadManifest(t, dest)
 		return m, c
@@ -191,7 +211,7 @@ func TestImageWriteConfigOnlyKeepsLayerDigest(t *testing.T) {
 	assert.NotEqual(t, m1.Config.Digest, m2.Config.Digest)
 }
 
-func TestImageWriteDeterministicAcrossHostState(t *testing.T) {
+func TestImageAssembleDeterministicAcrossHostState(t *testing.T) {
 	p := Platform{OS: "linux", Architecture: "amd64"}
 	build := func(reverse bool, stamp time.Time) string {
 		t.Helper()
@@ -206,7 +226,7 @@ func TestImageWriteDeterministicAcrossHostState(t *testing.T) {
 			require.NoError(t, os.Chtimes(path, stamp, stamp))
 		}
 		dest := filepath.Join(t.TempDir(), "layout")
-		_, err := Write(context.Background(), Spec{Platform: p, Files: []File{
+		_, err := AssembleLayout(context.Background(), Spec{Platform: p, Files: []File{
 			{Source: filepath.Join(root, names[0]), Destination: "/" + names[0], Mode: 0o644},
 			{Source: filepath.Join(root, names[1]), Destination: "/" + names[1], Mode: 0o644},
 		}}, dest)

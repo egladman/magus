@@ -2587,3 +2587,17 @@ func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpa
 	result, err := vm.Exec()
 	return result, err
 }
+
+// CallMethod runs recv.name(args): how Go calls a method of a Buzz object, such as
+// one conforming to a protocol. A missing method, a non-callable member or the
+// wrong argument count is an error, never Null. recv and args become the session's,
+// as in CallValue.
+func (s *Session) CallMethod(ctx context.Context, recv vmpackage.Value, name string, args []vmpackage.Value) (vmpackage.Value, error) {
+	vm := vmpackage.NewVM(ctx)
+	defer s.enter(vm)()
+	s.owner.Claim(recv)
+	for _, arg := range args {
+		s.owner.Claim(arg)
+	}
+	return vm.Invoke(recv, name, args)
+}

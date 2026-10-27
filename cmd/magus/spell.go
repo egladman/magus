@@ -17,7 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"

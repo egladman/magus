@@ -73,7 +73,7 @@ func TestImageLayoutWriteThenOpen(t *testing.T) {
 		[]string{blobs[0].desc.Digest.Encoded(), blobs[1].desc.Digest.Encoded()},
 		entries(t, filepath.Join(dest, "blobs", "sha256")))
 
-	got, err := Open(dest)
+	got, err := OpenLayout(dest)
 	require.NoError(t, err)
 	assert.Equal(t, Layout{
 		Path:       dest,
@@ -140,7 +140,7 @@ func TestImageLayoutFailedWriteLeavesDestIdentical(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			err := writeLayout(context.Background(), dest, other, bs)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "image.write: layout: blob")
+			assert.Contains(t, err.Error(), "image.layout: blob")
 			assert.Equal(t, before, snapshot(t, dest))
 			assert.Equal(t, []string{"out"}, entries(t, parent), "no staging directory remains")
 		})
@@ -226,7 +226,7 @@ func TestImageLayoutOpenRefusesCorruptedBlob(t *testing.T) {
 			p := blobPath(dest, root.Digest)
 			require.NoError(t, os.WriteFile(p, tc.mutate(snapshotBytes(t, p)), 0o644))
 
-			_, err := Open(dest)
+			_, err := OpenLayout(dest)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "image.open")
@@ -248,7 +248,7 @@ func TestImageLayoutOpenRefusesMissingBlob(t *testing.T) {
 	require.NoError(t, writeLayout(context.Background(), dest, root, blobs))
 	require.NoError(t, os.Remove(blobPath(dest, root.Digest)))
 
-	_, err := Open(dest)
+	_, err := OpenLayout(dest)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), root.Digest.String())
@@ -265,7 +265,7 @@ func TestImageLayoutOpenRefusesWrongDescriptorCount(t *testing.T) {
 			require.NoError(t, writeLayout(context.Background(), dest, root, blobs))
 			require.NoError(t, os.WriteFile(filepath.Join(dest, "index.json"), []byte(index), 0o644))
 
-			_, err := Open(dest)
+			_, err := OpenLayout(dest)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "exactly 1")
@@ -279,7 +279,7 @@ func TestImageLayoutOpenRefusesBadMarker(t *testing.T) {
 	require.NoError(t, writeLayout(context.Background(), dest, root, blobs))
 	require.NoError(t, os.WriteFile(filepath.Join(dest, "oci-layout"), []byte(`{"imageLayoutVersion":"2.0.0"}`), 0o644))
 
-	_, err := Open(dest)
+	_, err := OpenLayout(dest)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "oci-layout version")

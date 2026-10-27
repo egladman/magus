@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"

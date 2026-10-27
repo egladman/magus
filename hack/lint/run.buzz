@@ -111,7 +111,7 @@ export fun rules() > [Rule] {
 
 // PRUNED are the directories the walk never enters: VCS metadata, local state, installed
 // dependencies and generated output hold nothing this repository authors.
-final PRUNED = {".git": true, ".magus": true, "node_modules": true, "gen": true};
+final PRUNED = {".git": true, ".magus": true, "node_modules": true, ".pnpm-store": true, "gen": true};
 
 // PRUNED_PATHS are pruned by their whole path: other checkouts of this repository, whose
 // files would each be reported twice.

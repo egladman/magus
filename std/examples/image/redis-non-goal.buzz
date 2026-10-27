@@ -1,0 +1,21 @@
+// library/redis debian Dockerfile (7.4) is the mid/high complexity Official Image:
+// groupadd/useradd, apt install tzdata, fetch+verify gosu, wget+compile redis from
+// source with jemalloc patches, VOLUME, ENTRYPOINT script, EXPOSE, CMD.
+//
+// Upstream: https://github.com/docker-library/redis/blob/master/7.4/debian/Dockerfile
+//
+// Almost every RUN is in-image build or package install. magus will not recreate that
+// inside assembleLayout. Options at the seam:
+//
+//   A. Keep docker/buildx for that image (ADR 0018 cannot-express / alternative A)
+//   B. Target builds a static redis-server on the host; assembleLayout is scratch+binary
+//      (hello-world / static-go shape)—losing the debian user/gosu/VOLUME theatre
+//   C. Pull a digest-pinned redis base Layout; assembleLayout only your redis.conf
+//      (config-overlay.buzz)
+//
+// Same seam for docker-library/python slim-bookworm (apt + compile CPython from
+// tarball): https://github.com/docker-library/python
+//
+export fun whyNot() > str {
+    return "redis official image needs apt, gosu fetch, and compile-from-source; that is not an OCI placement";
+}

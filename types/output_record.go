@@ -67,7 +67,7 @@ type OutputDescriptor struct {
 	FailedNeedRef    string `json:"failed_need_ref,omitempty"`    // ref of that member's own run, deepest when members compose further
 
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
-	KeyVersion   int    `json:"key_version,omitempty"` // key recipe version that produced Key
+	KeyVersion   int    `json:"key_version,omitempty"` // key hashing-scheme version that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id
 	MagusVersion string `json:"magus_version,omitempty"`
 

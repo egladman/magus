@@ -44,7 +44,7 @@ func buildManifest(config ocispec.Descriptor, baseLayers []ocispec.Descriptor, n
 func manifestBlob(m ocispec.Manifest) ([]byte, ocispec.Descriptor, error) {
 	data, err := json.Marshal(m)
 	if err != nil {
-		return nil, ocispec.Descriptor{}, fmt.Errorf("image.write: manifest: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("image.assemble: manifest: %w", err)
 	}
 	return data, blobDescriptor(ocispec.MediaTypeImageManifest, data), nil
 }

@@ -1,0 +1,26 @@
+// Mirrors docker-library/hello-world Dockerfile-linux.template:
+//
+//   FROM scratch
+//   COPY hello /
+//   CMD ["/hello"]
+//
+// Upstream builds hello.c into a static binary, then packages it. magus does the same
+// split: a target produces the binary; assembleLayout places it. No shell-form CMD.
+//
+import "image";
+
+// assembleHelloWorld packages a prebuilt static hello binary the way the official
+// hello-world image does: scratch base, one file at /hello, command argv ["/hello"].
+// helloBin must already exist under the work root (target output). Resolve home/env at
+// the call site before passing the path—Spec does not expand $HOME.
+export fun assembleHelloWorld(helloBin: str, dest: str) > image\ImageLayout !> any {
+    return image\assembleLayout(image\ImageSpec{
+        platform = image\ImagePlatform{ os = "linux", architecture = "amd64" },
+        files = [image\ImageFile{
+            source = helloBin,
+            destination = "/hello",
+            mode = 493, // 0o755
+        }],
+        command = ["/hello"],
+    }, dest);
+}

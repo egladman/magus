@@ -1,0 +1,29 @@
+// Shape of a golang multi-stage *application* Dockerfile without becoming the Official
+// golang toolchain image (docker-library/golang: apt + unpack a Go tarball into the
+// image — ADR 0018 "What this API cannot express").
+//
+// The app pattern people want from multi-stage is:
+//
+//   FROM golang:… AS build
+//   RUN go build -o /out/app …
+//   FROM scratch
+//   COPY --from=build /out/app /usr/local/bin/app
+//   ENTRYPOINT ["/usr/local/bin/app"]
+//
+// magus: a target is the build stage; assembleLayout is only the packaging stage.
+//
+import "image";
+
+export fun assembleStaticGoApp(binPath: str, dest: str) > image\ImageLayout !> any {
+    return image\assembleLayout(image\ImageSpec{
+        platform = image\ImagePlatform{ os = "linux", architecture = "amd64" },
+        files = [image\ImageFile{
+            source = binPath,
+            destination = "/usr/local/bin/app",
+            mode = 493, // 0o755
+        }],
+        user = "65532:65532",
+        entrypoint = ["/usr/local/bin/app"],
+        command = [<str>],
+    }, dest);
+}

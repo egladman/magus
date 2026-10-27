@@ -145,8 +145,9 @@ type ModelRow struct {
 // HarnessTool is one row of a host's tool table: a tool by the host's own name, and what
 // it can do.
 type HarnessTool struct {
-	Name       string         `json:"name"`
-	Capability ToolCapability `json:"capability"`
+	Name                  string         `json:"name"`
+	Capability            ToolCapability `json:"capability"`
+	SpawnDescriptionField string         `json:"spawn_description_field,omitempty"`
 }
 
 // HarnessTools is the table of a host's own tools: Dir is the workspace-relative directory

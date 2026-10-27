@@ -117,7 +117,7 @@ func TestImageConfigAppliesSpec(t *testing.T) {
 		User:       "65532:65532",
 		WorkingDir: "/app",
 		Entrypoint: []string{"/magus"},
-		ResetCmd:   true,
+		ResetCommand: true,
 		Labels:     map[string]string{"over": "new", "add": "y"},
 	}
 	got, err := buildConfig(imageTestBase(), spec, imageTestDiffID)
@@ -181,7 +181,7 @@ func TestImageConfigHistoryCarriesNoCreated(t *testing.T) {
 }
 
 func TestImageConfigScratch(t *testing.T) {
-	spec := Spec{Platform: Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}, Cmd: []string{"ls"}}
+	spec := Spec{Platform: Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}, Command: []string{"ls"}}
 	got, err := buildConfig(nil, spec, imageTestDiffID)
 	require.NoError(t, err)
 

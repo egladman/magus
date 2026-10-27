@@ -1,0 +1,30 @@
+// Mirrors docker-library/busybox latest/*/Dockerfile (packaging stage):
+//
+//   FROM scratch
+//   ADD busybox.tar.gz /
+//   CMD ["sh"]
+//
+// Upstream builds a rootfs tarball in Dockerfile.builder (gcc, apt, make — host/target
+// work). The published packaging step only unpacks that tree onto scratch. magus does
+// the same split: a target produces an unpacked rootfs directory; DirPlacement with
+// strip=1 places its contents at / (tar --strip-components=1 on basename(source)/rel).
+// Spec does not ADD a .tar.gz byte-for-byte—unpack on the host, then place.
+//
+// Upstream: https://github.com/docker-library/busybox/blob/master/latest/glibc/Dockerfile
+//
+import "image";
+
+// assembleBusyboxRootfs packages a pre-unpacked busybox rootfs the way the official
+// packaging Dockerfile does: scratch, tree at /, command argv ["sh"].
+export fun assembleBusyboxRootfs(rootfsDir: str, dest: str) > image\ImageLayout !> any {
+    return image\assembleLayout(image\ImageSpec{
+        platform = image\ImagePlatform{ os = "linux", architecture = "amd64" },
+        dirs = [image\ImageDirPlacement{
+            source = rootfsDir,
+            destination = "/",
+            // strip=1: like tar --strip-components=1 on basename(rootfsDir)/… → contents at /
+            strip = 1,
+        }],
+        command = ["sh"],
+    }, dest);
+}

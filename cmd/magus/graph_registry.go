@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"

@@ -55,7 +55,7 @@ func checkSHA256(d digest.Digest) bool {
 // layoutIndex checks root against blobs and returns the encoded index.json.
 func layoutIndex(root ocispec.Descriptor, blobs []blob) ([]byte, error) {
 	if !checkSHA256(root.Digest) {
-		return nil, fmt.Errorf("image.write: layout: root digest %q is not a sha256 digest", root.Digest)
+		return nil, fmt.Errorf("image.layout: root digest %q is not a sha256 digest", root.Digest)
 	}
 	rootHeld := false
 	for _, b := range blobs {
@@ -64,14 +64,14 @@ func layoutIndex(root ocispec.Descriptor, blobs []blob) ([]byte, error) {
 		}
 	}
 	if !rootHeld {
-		return nil, fmt.Errorf("image.write: layout: root %s is not among the blobs", root.Digest)
+		return nil, fmt.Errorf("image.layout: root %s is not among the blobs", root.Digest)
 	}
 	index, err := json.Marshal(ocispec.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		Manifests: []ocispec.Descriptor{root},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("image.write: layout: index.json: %w", err)
+		return nil, fmt.Errorf("image.layout: index.json: %w", err)
 	}
 	return index, nil
 }
@@ -81,10 +81,10 @@ func layoutIndex(root ocispec.Descriptor, blobs []blob) ([]byte, error) {
 func makeLayoutDirs(staging, blobDir string) error {
 	for _, dir := range []string{staging, filepath.Join(staging, "blobs"), blobDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("image.write: layout: %w", err)
+			return fmt.Errorf("image.layout: %w", err)
 		}
 		if err := os.Chmod(dir, 0o755); err != nil {
-			return fmt.Errorf("image.write: layout: %w", err)
+			return fmt.Errorf("image.layout: %w", err)
 		}
 	}
 	return nil
@@ -103,7 +103,7 @@ func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blob
 	dest = filepath.Clean(dest)
 	staging, err := os.MkdirTemp(filepath.Dir(dest), fmt.Sprintf(".%s.staging-*", filepath.Base(dest)))
 	if err != nil {
-		return fmt.Errorf("image.write: layout: staging directory: %w", err)
+		return fmt.Errorf("image.layout: staging directory: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -116,18 +116,18 @@ func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blob
 		return err
 	}
 	if err := file.WriteFileAtomic(filepath.Join(staging, "oci-layout"), []byte(layoutMarker), 0o644); err != nil {
-		return fmt.Errorf("image.write: layout: oci-layout: %w", err)
+		return fmt.Errorf("image.layout: oci-layout: %w", err)
 	}
 	if err := file.WriteFileAtomic(filepath.Join(staging, "index.json"), index, 0o644); err != nil {
-		return fmt.Errorf("image.write: layout: index.json: %w", err)
+		return fmt.Errorf("image.layout: index.json: %w", err)
 	}
 	written := map[digest.Digest]bool{}
 	for _, b := range blobs {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("image.write: layout: %w", err)
+			return fmt.Errorf("image.layout: %w", err)
 		}
 		if !checkSHA256(b.desc.Digest) {
-			return fmt.Errorf("image.write: layout: blob digest %q is not a sha256 digest", b.desc.Digest)
+			return fmt.Errorf("image.layout: blob digest %q is not a sha256 digest", b.desc.Digest)
 		}
 		if written[b.desc.Digest] {
 			continue
@@ -138,7 +138,7 @@ func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blob
 		written[b.desc.Digest] = true
 	}
 	if err := syncDir(blobDir); err != nil {
-		return fmt.Errorf("image.write: layout: %w", err)
+		return fmt.Errorf("image.layout: %w", err)
 	}
 	return replaceDir(staging, dest)
 }
@@ -146,15 +146,15 @@ func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blob
 func writeBlob(target string, b blob) error {
 	src, err := b.open()
 	if err != nil {
-		return fmt.Errorf("image.write: layout: blob %s: %w", b.desc.Digest, err)
+		return fmt.Errorf("image.layout: blob %s: %w", b.desc.Digest, err)
 	}
 	defer src.Close()
 	v := &verifier{want: b.desc, digester: digest.SHA256.Digester()}
-	if err := file.WriteFrom(target, io.TeeReader(src, v), 0o644); err != nil {
-		return fmt.Errorf("image.write: layout: blob %s: %w", b.desc.Digest, err)
+	if err := file.WriteReader(target, io.TeeReader(src, v), 0o644); err != nil {
+		return fmt.Errorf("image.layout: blob %s: %w", b.desc.Digest, err)
 	}
 	if err := v.check(); err != nil {
-		return fmt.Errorf("image.write: layout: blob %s: %w", b.desc.Digest, err)
+		return fmt.Errorf("image.layout: blob %s: %w", b.desc.Digest, err)
 	}
 	return nil
 }
@@ -189,7 +189,7 @@ func replaceDir(staging, dest string) error {
 	hadOld := true
 	if err := os.Rename(dest, aside); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("image.write: layout: move %s aside: %w", dest, err)
+			return fmt.Errorf("image.layout: move %s aside: %w", dest, err)
 		}
 		hadOld = false
 	}
@@ -197,11 +197,11 @@ func replaceDir(staging, dest string) error {
 		if hadOld {
 			_ = os.Rename(aside, dest)
 		}
-		return fmt.Errorf("image.write: layout: install %s: %w", dest, err)
+		return fmt.Errorf("image.layout: install %s: %w", dest, err)
 	}
 	if hadOld {
 		if err := os.RemoveAll(aside); err != nil {
-			return fmt.Errorf("image.write: layout: %s is installed but the old tree %s remains: %w", dest, aside, err)
+			return fmt.Errorf("image.layout: %s is installed but the old tree %s remains: %w", dest, aside, err)
 		}
 	}
 	return nil
@@ -216,9 +216,9 @@ func syncDir(dir string) error {
 	return f.Sync()
 }
 
-// Open reads the layout at path. It refuses one that does not hold exactly one
+// OpenLayout reads the layout at path. It refuses one that does not hold exactly one
 // descriptor and one whose root blob fails its digest or size (R23).
-func Open(path string) (Layout, error) {
+func OpenLayout(path string) (Layout, error) {
 	marker, err := os.ReadFile(filepath.Join(path, "oci-layout"))
 	if err != nil {
 		return Layout{}, fmt.Errorf("image.open: %s: %w", path, err)

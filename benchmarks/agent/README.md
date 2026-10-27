@@ -1,6 +1,6 @@
 # Agent harness-effectiveness benchmark
 
-Same model, same tasks, two provisioning recipes. The question is not "is magus
+Same model, same tasks, two provisioning setups. The question is not "is magus
 good" but two falsifiable claims:
 
 1. The agent with the magus integration spends fewer tokens and dollars to reach the
@@ -41,7 +41,7 @@ rather than switched.
 - `docker`, for every SWE-bench trial (below)
 
 `_selftest` is not an arm. It provisions nothing and exists so the runner can be
-exercised without the real recipes; `tasks/_placeholder` is its counterpart.
+exercised without the real setups; `tasks/_placeholder` is its counterpart.
 Neither is part of the task set.
 
 ## Headline metric

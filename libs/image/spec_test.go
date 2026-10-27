@@ -143,7 +143,7 @@ func TestImageSpecEnvKeys(t *testing.T) {
 }
 
 func TestImageSpecValidatePlatform(t *testing.T) {
-	wantErr(t, Spec{}.Validate(), "image.write: image: platform os")
+	wantErr(t, Spec{}.Validate(), "image.assemble: image: platform os")
 }
 
 func TestImageSpecDecode(t *testing.T) {
@@ -158,8 +158,8 @@ func TestImageSpecDecode(t *testing.T) {
 		"workingDir":      "/w",
 		"entrypoint":      []any{"/e"},
 		"resetEntrypoint": true,
-		"cmd":             []any{"c"},
-		"resetCmd":        true,
+		"command":             []any{"c"},
+		"resetCommand":        true,
 		"labels":          map[string]any{"l": "v"},
 		"annotations":     map[string]any{"a": "v"},
 		"created":         "2020-01-01T00:00:00Z",
@@ -179,8 +179,8 @@ func TestImageSpecDecode(t *testing.T) {
 		WorkingDir:      "/w",
 		Entrypoint:      []string{"/e"},
 		ResetEntrypoint: true,
-		Cmd:             []string{"c"},
-		ResetCmd:        true,
+		Command:             []string{"c"},
+		ResetCommand:        true,
 		Labels:          map[string]string{"l": "v"},
 		Annotations:     map[string]string{"a": "v"},
 		Created:         "2020-01-01T00:00:00Z",
@@ -200,7 +200,7 @@ func TestImageSpecDecodeErrors(t *testing.T) {
 		{"unknown key", map[string]any{"bogus": 1}, `unknown key "bogus"`},
 		{"snake case key", map[string]any{"working_dir": "/"}, "unknown key"},
 		{"base type", map[string]any{"base": 1}, "base: want a string"},
-		{"flag type", map[string]any{"resetCmd": "yes"}, "resetCmd: want a bool"},
+		{"flag type", map[string]any{"resetCommand": "yes"}, "resetCommand: want a bool"},
 		{"platform type", map[string]any{"platform": "linux"}, "platform: want an object"},
 		{"platform key", map[string]any{"platform": map[string]any{"arch": "amd64"}}, `unknown key "arch"`},
 		{"platform field type", map[string]any{"platform": map[string]any{"os": 1}}, "os: want a string"},
@@ -214,7 +214,7 @@ func TestImageSpecDecodeErrors(t *testing.T) {
 		{"symlink uid type", map[string]any{"symlinks": []any{map[string]any{"uid": "0"}}}, "uid: want an int"},
 		{"env value type", map[string]any{"env": map[string]any{"A": 1}}, "env.A: want a string"},
 		{"env type", map[string]any{"env": []any{}}, "env: want a map"},
-		{"cmd element", map[string]any{"cmd": []any{1}}, "cmd[0]: want a string"},
+		{"command element", map[string]any{"command": []any{1}}, "command[0]: want a string"},
 		{"entrypoint type", map[string]any{"entrypoint": "x"}, "entrypoint: want a list"},
 	}
 	for _, tt := range tests {

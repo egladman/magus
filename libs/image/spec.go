@@ -1,6 +1,7 @@
 package image
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"math"
@@ -27,11 +28,12 @@ type Symlink struct {
 	UID, GID            int
 }
 
-// Spec is everything one write needs.
+// Spec is everything one assembleLayout needs. Prefer NewSpec and With* in Go.
 type Spec struct {
 	Base            string
 	Platform        Platform
 	Files           []File
+	Dirs            []DirPlacement
 	Symlinks        []Symlink
 	Env             map[string]string
 	UnsetEnv        []string
@@ -39,26 +41,51 @@ type Spec struct {
 	WorkingDir      string
 	Entrypoint      []string
 	ResetEntrypoint bool
-	Cmd             []string
-	ResetCmd        bool
+	Command         []string // OCI config Cmd (argv); not magus.cmd / ShellCommand
+	ResetCommand    bool
 	Labels          map[string]string
 	Annotations     map[string]string
 	Created         string
 }
 
-// Layout is an OCI image layout on disk and the descriptor of the one manifest
-// or index it holds.
+// expandDirs folds DirPlacements into Files/Symlinks.
+func (s *Spec) expandDirs(ctx context.Context) error {
+	for i, d := range s.Dirs {
+		files, symlinks, _, err := d.expand(ctx)
+		if err != nil {
+			return fmt.Errorf("image.assemble: dirs[%d]: %w", i, err)
+		}
+		s.Files = append(s.Files, files...)
+		s.Symlinks = append(s.Symlinks, symlinks...)
+	}
+	s.Dirs = nil
+	return nil
+}
+
+// Layout is an OCI image layout on disk and the facts of the operation that
+// wrote it. It is not a log: callers that want prose about the op print their own.
 type Layout struct {
-	Path       string
-	Descriptor ocispec.Descriptor
-	Platform   Platform
+	Path         string
+	Descriptor   ocispec.Descriptor
+	Platform     Platform
+	Op           Op
+	Base         string // layout path or registry reference used as base; empty for scratch
+	BaseDigest   Digest
+	FileCount    int
+	SymlinkCount int
+	Layer        Layer  // new OCI Layer; zero when assemble added none
+	ConfigDigest Digest // ManifestDigest is Descriptor.Digest
+	// Created is the image config Created timestamp (RFC 3339), empty when the
+	// config omits it. Callers compare it to wall clock to decide whether to :update.
+	Created string
 }
 
 // Published is what a registry confirmed after a push.
 type Published struct {
 	Repository string
-	Digest     string
+	Digest     Digest
 	Tags       []string
+	Op         Op
 }
 
 // Validate applies R1: linux on amd64, or on arm64 with no variant or v8.
@@ -85,7 +112,7 @@ func (p Platform) Validate() error {
 // touching the host or the base layout.
 func (s Spec) Validate() error {
 	if err := s.Platform.Validate(); err != nil {
-		return fmt.Errorf("image.write: %w", err)
+		return fmt.Errorf("image.assemble: %w", err)
 	}
 	var dests []string
 	for _, f := range s.Files {
@@ -93,7 +120,7 @@ func (s Spec) Validate() error {
 			return err
 		}
 		if f.Mode&^0o7777 != 0 {
-			return fmt.Errorf("image.write: file %q: mode %#o: only permission, setuid, setgid and sticky bits are allowed", f.Destination, uint32(f.Mode))
+			return fmt.Errorf("image.assemble: file %q: mode %#o: only permission, setuid, setgid and sticky bits are allowed", f.Destination, uint32(f.Mode))
 		}
 		dests = append(dests, f.Destination)
 	}
@@ -102,10 +129,10 @@ func (s Spec) Validate() error {
 			return err
 		}
 		if l.Target == "" {
-			return fmt.Errorf("image.write: symlink %q: target is empty", l.Destination)
+			return fmt.Errorf("image.assemble: symlink %q: target is empty", l.Destination)
 		}
 		if strings.ContainsRune(l.Target, 0) {
-			return fmt.Errorf("image.write: symlink %q: target contains NUL", l.Destination)
+			return fmt.Errorf("image.assemble: symlink %q: target contains NUL", l.Destination)
 		}
 		dests = append(dests, l.Destination)
 	}
@@ -128,17 +155,17 @@ func (s Spec) Validate() error {
 func validateDestination(d string) error {
 	switch {
 	case d == "" || d[0] != '/':
-		return fmt.Errorf("image.write: destination %q: must be absolute", d)
+		return fmt.Errorf("image.assemble: destination %q: must be absolute", d)
 	case d == "/":
-		return fmt.Errorf("image.write: destination %q: must not be the root", d)
+		return fmt.Errorf("image.assemble: destination %q: must not be the root", d)
 	case strings.ContainsRune(d, 0):
-		return fmt.Errorf("image.write: destination %q: contains NUL", d)
+		return fmt.Errorf("image.assemble: destination %q: contains NUL", d)
 	case strings.HasSuffix(d, "/"):
-		return fmt.Errorf("image.write: destination %q: trailing slash", d)
+		return fmt.Errorf("image.assemble: destination %q: trailing slash", d)
 	case slices.Contains(strings.Split(d, "/"), ".."):
-		return fmt.Errorf("image.write: destination %q: contains a .. element", d)
+		return fmt.Errorf("image.assemble: destination %q: contains a .. element", d)
 	case path.Clean(d) != d:
-		return fmt.Errorf("image.write: destination %q: not clean, want %q", d, path.Clean(d))
+		return fmt.Errorf("image.assemble: destination %q: not clean, want %q", d, path.Clean(d))
 	}
 	return nil
 }
@@ -150,10 +177,10 @@ func checkOverlap(dests []string) error {
 	for i := 1; i < len(sorted); i++ {
 		prev, cur := sorted[i-1], sorted[i]
 		if prev == cur {
-			return fmt.Errorf("image.write: destination %q: placed twice", cur)
+			return fmt.Errorf("image.assemble: destination %q: placed twice", cur)
 		}
 		if strings.HasPrefix(cur, prev+"/") {
-			return fmt.Errorf("image.write: destination %q: below %q, which is not a directory", cur, prev)
+			return fmt.Errorf("image.assemble: destination %q: below %q, which is not a directory", cur, prev)
 		}
 	}
 	return nil
@@ -161,14 +188,14 @@ func checkOverlap(dests []string) error {
 
 func validateEnvKey(k string) error {
 	if k == "" || strings.Contains(k, "=") {
-		return fmt.Errorf("image.write: env key %q: must be non-empty and contain no =", k)
+		return fmt.Errorf("image.assemble: env key %q: must be non-empty and contain no =", k)
 	}
 	return nil
 }
 
 var specKeys = []string{
-	"base", "platform", "files", "symlinks", "env", "unsetEnv", "user", "workingDir",
-	"entrypoint", "resetEntrypoint", "cmd", "resetCmd", "labels", "annotations", "created",
+	"base", "platform", "files", "dirs", "symlinks", "env", "unsetEnv", "user", "workingDir",
+	"entrypoint", "resetEntrypoint", "command", "resetCommand", "labels", "annotations", "created",
 }
 
 // DecodeSpec reads the map a Buzz ImageSpec arrives as. Keys are the Buzz field
@@ -178,7 +205,7 @@ func DecodeSpec(m map[string]any) (Spec, error) {
 	var s Spec
 	for k := range m {
 		if !slices.Contains(specKeys, k) {
-			return Spec{}, fmt.Errorf("image.write: spec: unknown key %q", k)
+			return Spec{}, fmt.Errorf("image.assemble: spec: unknown key %q", k)
 		}
 	}
 	d := decoder{what: "spec"}
@@ -187,9 +214,9 @@ func DecodeSpec(m map[string]any) (Spec, error) {
 	s.WorkingDir = d.str(m, "workingDir")
 	s.Created = d.str(m, "created")
 	s.ResetEntrypoint = d.boolean(m, "resetEntrypoint")
-	s.ResetCmd = d.boolean(m, "resetCmd")
+	s.ResetCommand = d.boolean(m, "resetCommand")
 	s.Entrypoint = d.strs(m, "entrypoint")
-	s.Cmd = d.strs(m, "cmd")
+	s.Command = d.strs(m, "command")
 	s.UnsetEnv = d.strs(m, "unsetEnv")
 	s.Env = d.strMap(m, "env")
 	s.Labels = d.strMap(m, "labels")
@@ -209,6 +236,14 @@ func DecodeSpec(m map[string]any) (Spec, error) {
 			continue
 		}
 		s.Files = append(s.Files, d.file(i, fm))
+	}
+	for i, raw := range d.list(m, "dirs") {
+		dm, ok := raw.(map[string]any)
+		if !ok {
+			d.fail(fmt.Sprintf("dirs[%d]", i), "an object", raw)
+			continue
+		}
+		s.Dirs = append(s.Dirs, d.dir(i, dm))
 	}
 	for i, raw := range d.list(m, "symlinks") {
 		lm, ok := raw.(map[string]any)
@@ -246,14 +281,14 @@ type decoder struct {
 
 func (d *decoder) fail(key, want string, got any) {
 	if d.err == nil {
-		d.err = fmt.Errorf("image.write: %s: %s: want %s, got %T", d.what, key, want, got)
+		d.err = fmt.Errorf("image.assemble: %s: %s: want %s, got %T", d.what, key, want, got)
 	}
 }
 
 func (d *decoder) only(m map[string]any, keys ...string) {
 	for k := range m {
 		if !slices.Contains(keys, k) && d.err == nil {
-			d.err = fmt.Errorf("image.write: %s: unknown key %q", d.what, k)
+			d.err = fmt.Errorf("image.assemble: %s: unknown key %q", d.what, k)
 		}
 	}
 }
@@ -372,4 +407,29 @@ func (d *decoder) symlink(i int, m map[string]any) Symlink {
 	}
 	d.err = sub.err
 	return l
+}
+
+func (d *decoder) dir(i int, m map[string]any) DirPlacement {
+	sub := decoder{what: fmt.Sprintf("spec.dirs[%d]", i), err: d.err}
+	sub.only(m, "source", "destination", "strip", "include", "exclude", "maxDepth",
+		"modePolicy", "fileMode", "dirMode", "uid", "gid", "symlinks", "emptyDirs", "maxFiles", "maxBytes")
+	placement := DirPlacement{
+		Source:      HostDir{Value: sub.str(m, "source")},
+		Destination: ImageDir{Value: sub.str(m, "destination")},
+		Strip:       sub.integer(m, "strip"),
+		Include:     sub.strs(m, "include"),
+		Exclude:     sub.strs(m, "exclude"),
+		MaxDepth:    sub.integer(m, "maxDepth"),
+		ModePolicy:  ModePolicy(sub.str(m, "modePolicy")),
+		FileMode:    Mode(sub.integer(m, "fileMode")),
+		DirMode:     Mode(sub.integer(m, "dirMode")),
+		UID:         sub.integer(m, "uid"),
+		GID:         sub.integer(m, "gid"),
+		Symlinks:    SymlinkPolicy(sub.str(m, "symlinks")),
+		EmptyDirs:   sub.boolean(m, "emptyDirs"),
+		MaxFiles:    sub.integer(m, "maxFiles"),
+		MaxBytes:    int64(sub.integer(m, "maxBytes")),
+	}
+	d.err = sub.err
+	return placement
 }

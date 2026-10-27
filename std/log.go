@@ -40,7 +40,8 @@ const logLevelTrace slog.Level = slog.LevelDebug - 4
 var Log = Module{
 	Name: "log",
 	WASM: true,
-	Doc:  "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line.",
+	Doc: "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line. Message text uses Buzz `{expr}` interpolation; pass structured fields as `attrs` so they stay queryable in the run log rather than baked into the string. `Logger` is the protocol for an injectable logger (same methods as the free functions): `import \"log\" as _` then `object<Logger>` to swap Std for Quiet without rewriting call sites.",
+
 	Methods: []Method{
 		{
 			Name:    "trace",
@@ -58,7 +59,8 @@ var Log = Module{
 		},
 		{
 			Name:    "info",
-			Doc:     "Log at info level (shown by default, hidden by -q).",
+			Doc:     "Log at info level (shown by default, hidden by -q). Prefer `log\\info(\"pulled {ref}\", attrs: {\"digest\": d})` over stuffing fields into the message.",
+
 			Args:    []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}},
 			Returns: nil,
 			Impl:    LogInfo,
@@ -90,6 +92,20 @@ var Log = Module{
 			Impl:    LogAt,
 		},
 	},
+	// Logger is the injectable face of the free functions: same methods, for
+	// object<Logger> call sites that swap Std vs Quiet without rewriting callers.
+	Protocols: []Protocol{{
+		Name: "Logger",
+		Doc:  "Injectable logger matching the free log.* methods.",
+		Methods: []Method{
+			{Name: "at", Args: []Arg{{Name: "level", Type: TypeString, Enum: "LogLevel"}, {Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}, Raises: true},
+			{Name: "debug", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
+			{Name: "error", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
+			{Name: "info", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
+			{Name: "trace", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
+			{Name: "warn", Args: []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}}},
+		},
+	}},
 }
 
 // LogTrace logs message at trace level.

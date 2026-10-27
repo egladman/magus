@@ -86,7 +86,11 @@ var inboundTypes = []inboundType{
 	{Name: "Limits", Zero: types.Limits{}, Encode: func(v any) vm.Value { return bindgen.ObjectLimits(v.(types.Limits)) }, Decode: func(v vm.Value) (any, error) { return DecodeLimits(v) }},
 	{Name: "ImagePlatform", Zero: types.ImagePlatform{}, Encode: func(v any) vm.Value { return bindgen.ObjectImagePlatform(v.(types.ImagePlatform)) }, Decode: func(v vm.Value) (any, error) { return DecodeImagePlatform(v) }},
 	{Name: "ImageFile", Zero: types.ImageFile{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageFile(v.(types.ImageFile)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageFile(v) }},
+	{Name: "ImageDirPlacement", Zero: types.ImageDirPlacement{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageDirPlacement(v.(types.ImageDirPlacement)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageDirPlacement(v) }},
 	{Name: "ImageSymlink", Zero: types.ImageSymlink{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageSymlink(v.(types.ImageSymlink)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageSymlink(v) }},
+	{Name: "ImageSecret", Zero: types.ImageSecret{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageSecret(v.(types.ImageSecret)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageSecret(v) }},
+	{Name: "ImageRegistryAuth", Zero: types.ImageRegistryAuth{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageRegistryAuth(v.(types.ImageRegistryAuth)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageRegistryAuth(v) }},
+	{Name: "ImageProvenanceSpec", Zero: types.ImageProvenanceSpec{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageProvenanceSpec(v.(types.ImageProvenanceSpec)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageProvenanceSpec(v) }},
 	{Name: "ImageSpec", Zero: types.ImageSpec{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageSpec(v.(types.ImageSpec)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageSpec(v) }},
 }
 

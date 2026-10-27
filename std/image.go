@@ -4,10 +4,9 @@ package std
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/egladman/magus/internal/image"
+	"github.com/egladman/magus/libs/image"
 
 	"github.com/egladman/magus/types"
 )
@@ -18,92 +17,261 @@ import (
 // without a daemon or a Dockerfile, and moves them to and from a registry.
 var Image = Module{
 	Name: "image",
-	Doc:  "Build, assemble and publish OCI images. Layouts are directories holding exactly one manifest or index; equal inputs give byte-identical layouts.",
+	Doc:  "Assemble and publish OCI images. An Image is the artifact; a Container is a running instance. Layouts hold one Image Manifest or Image Index.",
 	Methods: []Method{
 		{
-			Name: "pull",
-			Doc:  "Fetch the image at reference, a name@sha256:<hex> digest reference, for platform into the OCI layout directory dest. Returns the layout.",
+			Name: "pullLayout",
+			Doc:  "Fetch the image at reference (name@sha256:<hex>) for platform into dest as an OCI Image Layout. Optional auth: {username, password:{value}}.",
 			Args: []Arg{
 				{Name: "reference", Type: TypeString},
 				{Name: "platform", Type: TypeAnyMap, Object: "ImagePlatform"},
 				{Name: "dest", Type: TypeString},
+				{Name: "auth", Type: TypeAnyMap, Object: "ImageRegistryAuth", Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ImageLayout"}},
 			Raises:  true,
-			Impl:    ImagePull,
+			Impl:    ImagePullLayout,
 		},
 		{
-			Name: "write",
-			Doc:  "Write the image described by spec, at most one new layer over spec.base, into the OCI layout directory dest. Returns the layout.",
+			Name: "assembleLayout",
+			Doc:  "Assemble an OCI Image Layout from spec into dest: optional base, at most one new Layer for files/symlinks, then config and Image Manifest.",
 			Args: []Arg{
 				{Name: "spec", Type: TypeAnyMap, Object: "ImageSpec"},
 				{Name: "dest", Type: TypeString},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ImageLayout"}},
 			Raises:  true,
-			Impl:    ImageWrite,
+			Impl:    ImageAssembleLayout,
 		},
 		{
-			Name: "index",
-			Doc:  "Combine layouts, each holding one platform manifest, into an image index written to the OCI layout directory dest. Returns the layout.",
+			Name: "assembleIndex",
+			Doc:  "Combine single-platform layouts into an Image Index at dest.",
 			Args: []Arg{
 				{Name: "layouts", Type: TypeStringSlice},
 				{Name: "dest", Type: TypeString},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ImageLayout"}},
 			Raises:  true,
-			Impl:    ImageIndex,
+			Impl:    ImageAssembleIndex,
 		},
 		{
-			Name: "publish",
-			Doc:  "Push the layout to repository, then tag it with each of tags; an empty tags list pushes by digest only. Returns what the registry confirmed.",
+			Name: "publishLayout",
+			Doc:  "Push the layout to repository under tags; empty tags means digest only. Optional auth: {username, password:{value}}.",
 			Args: []Arg{
 				{Name: "layout", Type: TypeString},
 				{Name: "repository", Type: TypeString},
 				{Name: "tags", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "auth", Type: TypeAnyMap, Object: "ImageRegistryAuth", Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ImagePublished"}},
 			Raises:  true,
-			Impl:    ImagePublish,
+			Impl:    ImagePublishLayout,
+		},
+		{
+			Name: "writeSbom",
+			Doc:  "Write an SPDX SBOM for layout to dest and return the document descriptor.",
+			Args: []Arg{
+				{Name: "layout", Type: TypeString},
+				{Name: "dest", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ImageSBOM"}},
+			Raises:  true,
+			Impl:    ImageWriteSbom,
+		},
+		{
+			Name: "writeProvenance",
+			Doc:  "Write an in-toto provenance statement for layout using spec to dest.",
+			Args: []Arg{
+				{Name: "layout", Type: TypeString},
+				{Name: "spec", Type: TypeAnyMap, Object: "ImageProvenanceSpec"},
+				{Name: "dest", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ImageProvenance"}},
+			Raises:  true,
+			Impl:    ImageWriteProvenance,
+		},
+		{
+			Name: "attachArtifacts",
+			Doc:  "Attach optional sbomPath and provenancePath documents onto the Image Index at layout.",
+			Args: []Arg{
+				{Name: "layout", Type: TypeString},
+				{Name: "sbomPath", Type: TypeString, Optional: true},
+				{Name: "provenancePath", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ImageLayout"}},
+			Raises:  true,
+			Impl:    ImageAttachArtifacts,
 		},
 	},
 }
 
-// ImagePull fetches the image named by a digest reference into an OCI layout
-// at dest. A tag reference is an error; it does not relabel the platform.
-func ImagePull(_ context.Context, _ string, platform map[string]any, _ string) (types.ImageLayout, error) {
+func layoutToTypes(l image.Layout) types.ImageLayout {
+	return types.ImageLayout{
+		Path:      l.Path,
+		Digest:    digestToTypes(image.MustDigest(l.Descriptor.Digest)),
+		MediaType: l.Descriptor.MediaType,
+		Size:      int(l.Descriptor.Size),
+		Platform: types.ImagePlatform{
+			OS: l.Platform.OS, Architecture: l.Platform.Architecture, Variant: l.Platform.Variant,
+		},
+		Op:           string(l.Op),
+		Base:         l.Base,
+		BaseDigest:   digestToTypes(l.BaseDigest),
+		FileCount:    l.FileCount,
+		SymlinkCount: l.SymlinkCount,
+		Layer:        layerToTypes(l.Layer),
+		ConfigDigest: digestToTypes(l.ConfigDigest),
+		Created:      l.Created,
+	}
+}
+
+func digestToTypes(d image.Digest) types.ImageDigest {
+	if d.IsZero() {
+		return types.ImageDigest{}
+	}
+	return types.ImageDigest{Algorithm: d.Algorithm(), Encoded: d.Encoded()}
+}
+
+func diffIDToTypes(d image.DiffID) types.ImageDigest {
+	return digestToTypes(d.Digest())
+}
+
+func layerToTypes(l image.Layer) types.ImageLayer {
+	if l.IsZero() {
+		return types.ImageLayer{}
+	}
+	return types.ImageLayer{
+		Digest: digestToTypes(l.Digest), DiffID: diffIDToTypes(l.DiffID),
+		Size: int(l.Size), MediaType: l.MediaType,
+	}
+}
+
+func decodeAuth(m map[string]any) (*image.RegistryAuth, error) {
+	if m == nil {
+		return nil, nil
+	}
+	auth := &image.RegistryAuth{}
+	if u, ok := m["username"].(string); ok {
+		auth.Username = u
+	}
+	switch p := m["password"].(type) {
+	case nil:
+	case string:
+		return nil, fmt.Errorf("image: auth.password: want Secret object {value}, got string")
+	case map[string]any:
+		v, _ := p["value"].(string)
+		auth.Password = image.NewSecret(v)
+	default:
+		return nil, fmt.Errorf("image: auth.password: want Secret object, got %T", p)
+	}
+	return auth, nil
+}
+
+// ImagePullLayout fetches a digest-pinned image into dest.
+func ImagePullLayout(ctx context.Context, reference string, platform map[string]any, dest string, auth map[string]any) (types.ImageLayout, error) {
 	p, err := image.DecodePlatform(platform)
 	if err != nil {
 		return types.ImageLayout{}, fmt.Errorf("image.pull: %w", err)
 	}
-	if err := p.Validate(); err != nil {
+	a, err := decodeAuth(auth)
+	if err != nil {
 		return types.ImageLayout{}, err
 	}
-	return types.ImageLayout{}, errors.New("image.pull: not built yet")
+	l, err := image.PullLayout(ctx, reference, p, dest, a)
+	if err != nil {
+		return types.ImageLayout{}, err
+	}
+	return layoutToTypes(l), nil
 }
 
-// ImageWrite assembles spec into an OCI layout at dest, adding at most one
-// layer. A failed write leaves dest untouched.
-func ImageWrite(_ context.Context, spec map[string]any, _ string) (types.ImageLayout, error) {
+// ImageAssembleLayout builds an OCI Image Layout from spec at dest.
+func ImageAssembleLayout(ctx context.Context, spec map[string]any, dest string) (types.ImageLayout, error) {
 	s, err := image.DecodeSpec(spec)
 	if err != nil {
 		return types.ImageLayout{}, err
 	}
-	if err := s.Validate(); err != nil {
+	l, err := image.AssembleLayout(ctx, s, dest)
+	if err != nil {
 		return types.ImageLayout{}, err
 	}
-	return types.ImageLayout{}, errors.New("image.write: not built yet")
+	return layoutToTypes(l), nil
 }
 
-// ImageIndex joins single-platform layouts into one image index at dest.
-// Two layouts for the same platform are an error.
-func ImageIndex(_ context.Context, _ []string, _ string) (types.ImageLayout, error) {
-	return types.ImageLayout{}, errors.New("image.index: not built yet")
+// ImageAssembleIndex joins single-platform layouts into an Image Index.
+func ImageAssembleIndex(ctx context.Context, layouts []string, dest string) (types.ImageLayout, error) {
+	l, err := image.AssembleIndex(ctx, layouts, dest)
+	if err != nil {
+		return types.ImageLayout{}, err
+	}
+	return layoutToTypes(l), nil
 }
 
-// ImagePublish pushes a layout to repository under each of tags and reports
-// the digest. It refuses when MAGUS_OFFLINE is set.
-func ImagePublish(_ context.Context, _, _ string, _ []string, _ map[string]any) (types.ImagePublished, error) {
-	return types.ImagePublished{}, errors.New("image.publish: not built yet")
+// ImagePublishLayout pushes a layout to a repository.
+func ImagePublishLayout(ctx context.Context, layout, repository string, tags []string, auth map[string]any) (types.ImagePublished, error) {
+	a, err := decodeAuth(auth)
+	if err != nil {
+		return types.ImagePublished{}, err
+	}
+	p, err := image.PublishLayout(ctx, layout, repository, tags, a)
+	if err != nil {
+		return types.ImagePublished{}, err
+	}
+	return types.ImagePublished{
+		Repository: p.Repository, Digest: digestToTypes(p.Digest), Tags: p.Tags,
+		Op: string(p.Op),
+	}, nil
+}
+
+// ImageWriteSbom writes an SPDX document for the layout.
+func ImageWriteSbom(ctx context.Context, layoutPath, dest string) (types.ImageSBOM, error) {
+	l, err := image.OpenLayout(layoutPath)
+	if err != nil {
+		return types.ImageSBOM{}, fmt.Errorf("image.sbom: %w", err)
+	}
+	doc, err := image.WriteSBOM(ctx, l, dest)
+	if err != nil {
+		return types.ImageSBOM{}, err
+	}
+	return types.ImageSBOM{Path: doc.Path, MediaType: doc.MediaType, Digest: digestToTypes(doc.Digest)}, nil
+}
+
+// ImageWriteProvenance writes an in-toto provenance statement.
+func ImageWriteProvenance(ctx context.Context, layoutPath string, spec map[string]any, dest string) (types.ImageProvenance, error) {
+	l, err := image.OpenLayout(layoutPath)
+	if err != nil {
+		return types.ImageProvenance{}, fmt.Errorf("image.provenance: %w", err)
+	}
+	ps := image.ProvenanceSpec{}
+	if v, ok := spec["sourceRevision"].(string); ok {
+		ps.SourceRevision = v
+	}
+	if v, ok := spec["builderId"].(string); ok {
+		ps.BuilderID = v
+	}
+	doc, err := image.WriteProvenance(ctx, l, ps, dest)
+	if err != nil {
+		return types.ImageProvenance{}, err
+	}
+	return types.ImageProvenance{Path: doc.Path, MediaType: doc.MediaType, Digest: digestToTypes(doc.Digest)}, nil
+}
+
+// ImageAttachArtifacts binds SBOM/provenance files onto an Image Index layout.
+func ImageAttachArtifacts(ctx context.Context, layoutPath, sbomPath, provenancePath string) (types.ImageLayout, error) {
+	l, err := image.OpenLayout(layoutPath)
+	if err != nil {
+		return types.ImageLayout{}, fmt.Errorf("image.attach: %w", err)
+	}
+	var sbom *image.SBOMDoc
+	var prov *image.ProvenanceDoc
+	if sbomPath != "" {
+		sbom = &image.SBOMDoc{Path: sbomPath}
+	}
+	if provenancePath != "" {
+		prov = &image.ProvenanceDoc{Path: provenancePath}
+	}
+	out, err := image.AttachArtifacts(ctx, l, sbom, prov)
+	if err != nil {
+		return types.ImageLayout{}, err
+	}
+	return layoutToTypes(out), nil
 }

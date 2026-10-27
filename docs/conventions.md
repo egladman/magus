@@ -666,9 +666,9 @@ reader a step is easy (`condescension`: `easy`, `simple`, `obviously`, `of cours
 `clearly`, `please`, and `just` before a verb).
 
 The `banned-words` lint rule holds hand-written Go, Buzz, Markdown, TypeScript, CSS,
-HTML, YAML, proto and txtar files to three bans: `surface` as a noun, where the verb in
-`surfaces an error` passes, `lane` and `corpus`. Each finding names what to write instead:
-what the thing is, `write paths`, or `the cases`.
+HTML, YAML, proto and txtar files to four bans: `surface` as a noun, where the verb in
+`surfaces an error` passes, `lane`, `corpus`, and `recipe`. Each finding names what to write
+instead: what the thing is, `write paths`, `the cases`, or a Spec, target, or the steps.
 
 Quoted text and code are mentions, not use, so a page can name the words a rule refuses.
 The guard and the check also ask, as advice that fails nothing, why a pull request touches

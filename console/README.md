@@ -309,7 +309,7 @@ between 0.04 and 0.09em, three weights, with adjacent labels on one app disagree
   does the separating. Both sizes are the 12px body token, the floor for any text.
 
 Write `text-transform: uppercase` yourself; it is the label's defining property, and the rule keys
-on it to require the three tokens. Which recipe an element takes is the author's call; what is not
+on it to require the three tokens. Which pattern an element takes is the author's call; what is not
 optional is taking one of them.
 
 ### Corner style (two tiers, locked house style)

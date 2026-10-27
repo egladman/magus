@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"

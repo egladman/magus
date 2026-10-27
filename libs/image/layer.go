@@ -58,7 +58,7 @@ func layerEntries(spec Spec) ([]layerEntry, error) {
 	byDest := make(map[string]layerEntry, len(spec.Files)+len(spec.Symlinks))
 	for _, f := range spec.Files {
 		if f.UID < 0 || f.GID < 0 {
-			return nil, fmt.Errorf("image.write: file %q: uid and gid must not be negative", f.Destination)
+			return nil, fmt.Errorf("image.layer: file %q: uid and gid must not be negative", f.Destination)
 		}
 		name := strings.TrimPrefix(f.Destination, "/")
 		byDest[f.Destination] = layerEntry{
@@ -68,7 +68,7 @@ func layerEntries(spec Spec) ([]layerEntry, error) {
 	}
 	for _, l := range spec.Symlinks {
 		if l.UID < 0 || l.GID < 0 {
-			return nil, fmt.Errorf("image.write: symlink %q: uid and gid must not be negative", l.Destination)
+			return nil, fmt.Errorf("image.layer: symlink %q: uid and gid must not be negative", l.Destination)
 		}
 		name := strings.TrimPrefix(l.Destination, "/")
 		byDest[l.Destination] = layerEntry{
@@ -102,7 +102,7 @@ func layerEntries(spec Spec) ([]layerEntry, error) {
 // of the bytes written to w). limit bounds the uncompressed tar.
 func writeLayer(ctx context.Context, w io.Writer, spec Spec, limit int64) (layerBlob, error) {
 	if len(spec.Files) == 0 && len(spec.Symlinks) == 0 {
-		return layerBlob{}, fmt.Errorf("image.write: layer: no files or symlinks to place")
+		return layerBlob{}, fmt.Errorf("image.layer: no files or symlinks to place")
 	}
 	entries, err := layerEntries(spec)
 	if err != nil {
@@ -113,7 +113,7 @@ func writeLayer(ctx context.Context, w io.Writer, spec Spec, limit int64) (layer
 	blobSize := &countWriter{}
 	gz, err := gzip.NewWriterLevel(io.MultiWriter(w, blob.Hash(), blobSize), gzip.BestCompression)
 	if err != nil {
-		return layerBlob{}, fmt.Errorf("image.write: layer: gzip: %w", err)
+		return layerBlob{}, fmt.Errorf("image.layer: gzip: %w", err)
 	}
 	gz.Header = gzip.Header{OS: 255}
 
@@ -122,17 +122,17 @@ func writeLayer(ctx context.Context, w io.Writer, spec Spec, limit int64) (layer
 
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
-			return layerBlob{}, fmt.Errorf("image.write: layer: %w", err)
+			return layerBlob{}, fmt.Errorf("image.layer: %w", err)
 		}
 		if err := writeEntry(ctx, tw, e); err != nil {
 			return layerBlob{}, err
 		}
 	}
 	if err := tw.Close(); err != nil {
-		return layerBlob{}, fmt.Errorf("image.write: layer: tar: %w", err)
+		return layerBlob{}, fmt.Errorf("image.layer: tar: %w", err)
 	}
 	if err := gz.Close(); err != nil {
-		return layerBlob{}, fmt.Errorf("image.write: layer: gzip: %w", err)
+		return layerBlob{}, fmt.Errorf("image.layer: gzip: %w", err)
 	}
 	return layerBlob{
 		diffID: diff.Digest(),
@@ -148,37 +148,37 @@ func writeEntry(ctx context.Context, tw *tar.Writer, e layerEntry) error {
 	hdr := e.header
 	if hdr.Typeflag != tar.TypeReg {
 		if err := tw.WriteHeader(&hdr); err != nil {
-			return fmt.Errorf("image.write: layer: %q: %w", hdr.Name, err)
+			return fmt.Errorf("image.layer: %q: %w", hdr.Name, err)
 		}
 		return nil
 	}
 
 	info, err := os.Lstat(e.source)
 	if err != nil {
-		return fmt.Errorf("image.write: source %q: %w", e.source, err)
+		return fmt.Errorf("image.layer: source %q: %w", e.source, err)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("image.write: source %q: not a regular file (%s)", e.source, info.Mode().Type())
+		return fmt.Errorf("image.layer: source %q: not a regular file (%s)", e.source, info.Mode().Type())
 	}
 	f, err := os.Open(e.source)
 	if err != nil {
-		return fmt.Errorf("image.write: source %q: %w", e.source, err)
+		return fmt.Errorf("image.layer: source %q: %w", e.source, err)
 	}
 	defer f.Close()
 	opened, err := f.Stat()
 	if err != nil {
-		return fmt.Errorf("image.write: source %q: %w", e.source, err)
+		return fmt.Errorf("image.layer: source %q: %w", e.source, err)
 	}
 	if !os.SameFile(info, opened) {
-		return fmt.Errorf("image.write: source %q: replaced while being read", e.source)
+		return fmt.Errorf("image.layer: source %q: replaced while being read", e.source)
 	}
 
 	hdr.Size = opened.Size()
 	if err := tw.WriteHeader(&hdr); err != nil {
-		return fmt.Errorf("image.write: layer: %q: %w", hdr.Name, err)
+		return fmt.Errorf("image.layer: %q: %w", hdr.Name, err)
 	}
 	if _, err := io.CopyN(tw, &ctxReader{ctx: ctx, r: f}, hdr.Size); err != nil {
-		return fmt.Errorf("image.write: source %q: %w", e.source, err)
+		return fmt.Errorf("image.layer: source %q: %w", e.source, err)
 	}
 	return nil
 }
@@ -200,7 +200,7 @@ type limitWriter struct {
 
 func (l *limitWriter) Write(p []byte) (int, error) {
 	if l.n+int64(len(p)) > l.limit {
-		return 0, fmt.Errorf("image.write: layer: uncompressed size exceeds %d bytes", l.limit)
+		return 0, fmt.Errorf("image.layer: uncompressed size exceeds %d bytes", l.limit)
 	}
 	n, err := l.w.Write(p)
 	l.n += int64(n)

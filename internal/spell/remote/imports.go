@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )

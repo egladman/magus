@@ -14,49 +14,79 @@ import (
 )
 
 // RegisterImage builds the "image" module map and returns it.
-// Build, assemble and publish OCI images. Layouts are directories holding exactly one manifest or index; equal inputs give byte-identical layouts.
+// Assemble and publish OCI images. An Image is the artifact; a Container is a running instance. Layouts hold one Image Manifest or Image Index.
 func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
-	m.MapSet("pull", vm.DirectValue("image.pull", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		reference := ffi.Str(bzArgs, 0)
+	m.MapSet("pullLayout", vm.DirectValue("image.pullLayout", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		reference := ffi.String(bzArgs, 0)
 		platform := ffi.AnyMap(bzArgs, 1)
-		dest := ffi.Str(bzArgs, 2)
-		ret0, err := std.ImagePull(ctx, reference, platform, dest)
+		dest := ffi.String(bzArgs, 2)
+		auth := ffi.AnyMap(bzArgs, 3)
+		ret0, err := std.ImagePullLayout(ctx, reference, platform, dest, auth)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectImageLayout(ret0), nil
 	}))
-	m.MapSet("write", vm.DirectValue("image.write", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("assembleLayout", vm.DirectValue("image.assembleLayout", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		spec := ffi.AnyMap(bzArgs, 0)
-		dest := ffi.Str(bzArgs, 1)
-		ret0, err := std.ImageWrite(ctx, spec, dest)
+		dest := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageAssembleLayout(ctx, spec, dest)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectImageLayout(ret0), nil
 	}))
-	m.MapSet("index", vm.DirectValue("image.index", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		layouts := ffi.StrSlice(bzArgs, 0)
-		dest := ffi.Str(bzArgs, 1)
-		ret0, err := std.ImageIndex(ctx, layouts, dest)
+	m.MapSet("assembleIndex", vm.DirectValue("image.assembleIndex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		layouts := ffi.StringSlice(bzArgs, 0)
+		dest := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageAssembleIndex(ctx, layouts, dest)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectImageLayout(ret0), nil
 	}))
-	m.MapSet("publish", vm.DirectValue("image.publish", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		layout := ffi.Str(bzArgs, 0)
-		repository := ffi.Str(bzArgs, 1)
-		tags := ffi.StrSlice(bzArgs, 2)
-		opts := ffi.AnyMap(bzArgs, 3)
-		ret0, err := std.ImagePublish(ctx, layout, repository, tags, opts)
+	m.MapSet("publishLayout", vm.DirectValue("image.publishLayout", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		layout := ffi.String(bzArgs, 0)
+		repository := ffi.String(bzArgs, 1)
+		tags := ffi.StringSlice(bzArgs, 2)
+		auth := ffi.AnyMap(bzArgs, 3)
+		ret0, err := std.ImagePublishLayout(ctx, layout, repository, tags, auth)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectImagePublished(ret0), nil
+	}))
+	m.MapSet("writeSbom", vm.DirectValue("image.writeSbom", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		layout := ffi.String(bzArgs, 0)
+		dest := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageWriteSbom(ctx, layout, dest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageSBOM(ret0), nil
+	}))
+	m.MapSet("writeProvenance", vm.DirectValue("image.writeProvenance", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		layout := ffi.String(bzArgs, 0)
+		spec := ffi.AnyMap(bzArgs, 1)
+		dest := ffi.String(bzArgs, 2)
+		ret0, err := std.ImageWriteProvenance(ctx, layout, spec, dest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageProvenance(ret0), nil
+	}))
+	m.MapSet("attachArtifacts", vm.DirectValue("image.attachArtifacts", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		layout := ffi.String(bzArgs, 0)
+		sbomPath := ffi.String(bzArgs, 1)
+		provenancePath := ffi.String(bzArgs, 2)
+		ret0, err := std.ImageAttachArtifacts(ctx, layout, sbomPath, provenancePath)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageLayout(ret0), nil
 	}))
 	return m
 }

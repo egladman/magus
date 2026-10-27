@@ -315,9 +315,9 @@ func studentTQuantile(upper, df float64) float64 {
 	return lo + (hi-lo)/2
 }
 
-// regularizedBeta is I_x(a, b) by the continued fraction of Numerical Recipes
-// (Press et al., 3rd ed., 6.4), evaluated with modified Lentz on whichever of
-// x and 1-x converges fast.
+// regularizedBeta is I_x(a, b) by the continued fraction of Press et al.
+// (3rd ed., 6.4), evaluated with modified Lentz on whichever of x and 1-x
+// converges fast.
 func regularizedBeta(x, a, b float64) float64 {
 	if x <= 0 {
 		return 0

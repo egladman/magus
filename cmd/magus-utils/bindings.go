@@ -408,6 +408,8 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 		fmt.Fprintf(w, "\t\t%s := ffi.StringMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
 		fmt.Fprintf(w, "\t\t%s := ffi.AnyMap(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeAnySlice:
+		fmt.Fprintf(w, "\t\t%s := ffi.AnySlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeFunc:
 		fmt.Fprintf(w, "\t\t%s := ffi.CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAny:

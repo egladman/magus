@@ -124,9 +124,13 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "HarnessWired", Zero: types.HarnessWired{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessWired(v.(types.HarnessWired)) }},
 	{Name: "Hotspots", Zero: types.HotspotOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspotOutput(v.(types.HotspotOutput)) }},
 	{Name: "HttpResponse", Zero: types.HTTPResponse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},
+	{Name: "ImageDigest", Zero: types.ImageDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(types.ImageDigest)) }},
+	{Name: "ImageLayer", Zero: types.ImageLayer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayer(v.(types.ImageLayer)) }},
 	{Name: "ImageLayout", Zero: types.ImageLayout{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayout(v.(types.ImageLayout)) }},
 	{Name: "ImagePlatform", Zero: types.ImagePlatform{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePlatform(v.(types.ImagePlatform)) }},
+	{Name: "ImageProvenance", Zero: types.ImageProvenance{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageProvenance(v.(types.ImageProvenance)) }},
 	{Name: "ImagePublished", Zero: types.ImagePublished{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePublished(v.(types.ImagePublished)) }},
+	{Name: "ImageSBOM", Zero: types.ImageSBOM{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageSBOM(v.(types.ImageSBOM)) }},
 	{Name: "Impact", Zero: types.ImpactResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactResult(v.(types.ImpactResult)) }},
 	{Name: "ImpactCoverage", Zero: types.ImpactCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactCoverage(v.(types.ImpactCoverage)) }},
 	{Name: "ImpactFileCoverage", Zero: types.ImpactFileCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {

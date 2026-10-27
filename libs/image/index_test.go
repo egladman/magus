@@ -19,7 +19,7 @@ func imageTestPlatformLayout(t *testing.T, p Platform) string {
 	src := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(src, []byte(p.Architecture), 0o600))
 	dest := filepath.Join(t.TempDir(), "layout")
-	_, err := Write(context.Background(), Spec{Platform: p, Files: []File{{Source: src, Destination: "/file", Mode: 0o644}}}, dest)
+	_, err := AssembleLayout(context.Background(), Spec{Platform: p, Files: []File{{Source: src, Destination: "/file", Mode: 0o644}}}, dest)
 	require.NoError(t, err)
 	return dest
 }
@@ -28,7 +28,7 @@ func TestImageIndexIndependentReaderAndOrdering(t *testing.T) {
 	arm := imageTestPlatformLayout(t, Platform{OS: "linux", Architecture: "arm64"})
 	amd := imageTestPlatformLayout(t, Platform{OS: "linux", Architecture: "amd64"})
 	dest := filepath.Join(t.TempDir(), "index")
-	got, err := Index(context.Background(), []string{arm, amd}, dest)
+	got, err := AssembleIndex(context.Background(), []string{arm, amd}, dest)
 	require.NoError(t, err)
 	assert.Equal(t, ocispec.MediaTypeImageIndex, got.Descriptor.MediaType)
 	assert.Equal(t, Platform{}, got.Platform)
@@ -58,26 +58,26 @@ func TestImageIndexIndependentReaderAndOrdering(t *testing.T) {
 		assert.Equal(t, []string{"file"}, []string{entries[0].Name})
 	}
 	reversed := filepath.Join(t.TempDir(), "reversed")
-	other, err := Index(context.Background(), []string{amd, arm}, reversed)
+	other, err := AssembleIndex(context.Background(), []string{amd, arm}, reversed)
 	require.NoError(t, err)
 	assert.Equal(t, got.Descriptor, other.Descriptor)
 	compareImageTrees(t, dest, reversed)
 }
 
 func TestImageIndexRejectsInvalidInputs(t *testing.T) {
-	_, err := Index(context.Background(), nil, filepath.Join(t.TempDir(), "none"))
+	_, err := AssembleIndex(context.Background(), nil, filepath.Join(t.TempDir(), "none"))
 	require.ErrorContains(t, err, "no input")
 	amd := imageTestPlatformLayout(t, Platform{OS: "linux", Architecture: "amd64"})
-	_, err = Index(context.Background(), []string{amd, amd}, filepath.Join(t.TempDir(), "duplicate"))
+	_, err = AssembleIndex(context.Background(), []string{amd, amd}, filepath.Join(t.TempDir(), "duplicate"))
 	require.ErrorContains(t, err, "duplicate platform")
 	index := filepath.Join(t.TempDir(), "index")
-	_, err = Index(context.Background(), []string{amd}, index)
+	_, err = AssembleIndex(context.Background(), []string{amd}, index)
 	require.NoError(t, err)
-	_, err = Index(context.Background(), []string{index}, filepath.Join(t.TempDir(), "nested"))
+	_, err = AssembleIndex(context.Background(), []string{index}, filepath.Join(t.TempDir(), "nested"))
 	require.ErrorContains(t, err, "platform manifest")
 	_, manifest, _ := imageTestReadManifest(t, amd)
 	layer := manifest.Layers[0]
 	require.NoError(t, os.WriteFile(filepath.Join(amd, "blobs", "sha256", layer.Digest.Encoded()), []byte("broken"), 0o644))
-	_, err = Index(context.Background(), []string{amd}, filepath.Join(t.TempDir(), "corrupt"))
+	_, err = AssembleIndex(context.Background(), []string{amd}, filepath.Join(t.TempDir(), "corrupt"))
 	require.ErrorContains(t, err, "layer")
 }

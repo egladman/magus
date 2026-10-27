@@ -6,24 +6,38 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object ImageDigest {
+    algorithm: str = "",
+    encoded: str = "",
+}
+
 export object ImagePlatform {
     os: str = "",
     architecture: str = "",
     variant: str = "",
 }
 
+export object ImageLayer {
+    digest: ImageDigest = ImageDigest{},
+    diffID: ImageDigest = ImageDigest{},
+    size: int = 0,
+    mediaType: str = "",
+}
+
 export object ImageLayout {
     path: str = "",
-    digest: str = "",
+    digest: ImageDigest = ImageDigest{},
     mediaType: str = "",
     size: int = 0,
     platform: ImagePlatform = ImagePlatform{},
-}
-
-export object ImagePublished {
-    repository: str = "",
-    digest: str = "",
-    tags: [str] = [],
+    op: str = "",
+    base: str = "",
+    baseDigest: ImageDigest = ImageDigest{},
+    fileCount: int = 0,
+    symlinkCount: int = 0,
+    layer: ImageLayer = ImageLayer{},
+    configDigest: ImageDigest = ImageDigest{},
+    created: str = "",
 }
 
 export object ImageFile {
@@ -32,6 +46,24 @@ export object ImageFile {
     mode: int = 0,
     uid: int = 0,
     gid: int = 0,
+}
+
+export object ImageDirPlacement {
+    source: str = "",
+    destination: str = "",
+    strip: int = 0,
+    include: [str] = [],
+    exclude: [str] = [],
+    maxDepth: int = 0,
+    modePolicy: str = "",
+    fileMode: int = 0,
+    dirMode: int = 0,
+    uid: int = 0,
+    gid: int = 0,
+    symlinks: str = "",
+    emptyDirs: bool = false,
+    maxFiles: int = 0,
+    maxBytes: int = 0,
 }
 
 export object ImageSymlink {
@@ -45,6 +77,7 @@ export object ImageSpec {
     base: str = "",
     platform: ImagePlatform = ImagePlatform{},
     files: [ImageFile] = [],
+    dirs: [ImageDirPlacement] = [],
     symlinks: [ImageSymlink] = [],
     env: {str: str} = {},
     unsetEnv: [str] = [],
@@ -52,14 +85,50 @@ export object ImageSpec {
     workingDir: str = "",
     entrypoint: [str] = [],
     resetEntrypoint: bool = false,
-    cmd: [str] = [],
-    resetCmd: bool = false,
+    command: [str] = [],
+    resetCommand: bool = false,
     labels: {str: str} = {},
     annotations: {str: str} = {},
     created: str = "",
 }
 
-export extern fun index(layouts: [str], dest: str) > ImageLayout !> any;
-export extern fun publish(layout: str, repository: str, tags: [str], opts: {str: any} = {<str: any>}) > ImagePublished !> any;
-export extern fun pull(reference: str, platform: ImagePlatform, dest: str) > ImageLayout !> any;
-export extern fun write(spec: ImageSpec, dest: str) > ImageLayout !> any;
+export object ImageSecret {
+    value: str = "",
+}
+
+export object ImageRegistryAuth {
+    username: str = "",
+    password: ImageSecret = ImageSecret{},
+}
+
+export object ImagePublished {
+    repository: str = "",
+    digest: ImageDigest = ImageDigest{},
+    tags: [str] = [],
+    op: str = "",
+}
+
+export object ImageProvenanceSpec {
+    sourceRevision: str = "",
+    builderID: str = "",
+}
+
+export object ImageProvenance {
+    path: str = "",
+    mediaType: str = "",
+    digest: ImageDigest = ImageDigest{},
+}
+
+export object ImageSBOM {
+    path: str = "",
+    mediaType: str = "",
+    digest: ImageDigest = ImageDigest{},
+}
+
+export extern fun assembleIndex(layouts: [str], dest: str) > ImageLayout !> any;
+export extern fun assembleLayout(spec: ImageSpec, dest: str) > ImageLayout !> any;
+export extern fun attachArtifacts(layout: str, sbomPath: str = "", provenancePath: str = "") > ImageLayout !> any;
+export extern fun publishLayout(layout: str, repository: str, tags: [str], auth: ImageRegistryAuth = {<str: any>}) > ImagePublished !> any;
+export extern fun pullLayout(reference: str, platform: ImagePlatform, dest: str, auth: ImageRegistryAuth = {<str: any>}) > ImageLayout !> any;
+export extern fun writeProvenance(layout: str, spec: ImageProvenanceSpec, dest: str) > ImageProvenance !> any;
+export extern fun writeSbom(layout: str, dest: str) > ImageSBOM !> any;

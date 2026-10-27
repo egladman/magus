@@ -6,7 +6,7 @@
 // or ControlRun per line, analysis.json one Analysis.
 package bench
 
-// The two recipes the paired comparison names. A record's arm stays a plain
+// The two setups the paired comparison names. A record's arm stays a plain
 // string: the runner accepts arms outside this pair (_selftest), and cells
 // and pass rates cover whatever ran.
 const (

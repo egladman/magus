@@ -144,6 +144,19 @@ func Any(args []vm.Value, n int) any {
 	return valToAny(args[n])
 }
 
+// AnySlice reads arg n as []any, nil if absent or not a list.
+func AnySlice(args []vm.Value, n int) []any {
+	v := Any(args, n)
+	if v == nil {
+		return nil
+	}
+	out, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	return out
+}
+
 // VariadicString collects args from index n onward as []string.
 func VariadicString(args []vm.Value, n int) []string {
 	if n >= len(args) {

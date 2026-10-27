@@ -1,0 +1,8 @@
+// Official images publish an Image Index across architectures. magus does not hide that
+// behind one flag: assemble one Layout per platform, then assembleIndex.
+//
+import "image";
+
+export fun assembleMultiArch(amdLayout: str, armLayout: str, dest: str) > image\ImageLayout !> any {
+    return image\assembleIndex([amdLayout, armLayout], dest);
+}

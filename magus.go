@@ -34,7 +34,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/report"
