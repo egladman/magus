@@ -107,7 +107,7 @@ assuming a row's call takes the arguments you expect.
 | `( cd d && tool )` | `proc\exec("tool", args: [...], dir: d)` |
 | `a \| b` across two real tools | `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })` |
 | `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records |
-| `magus run t p` | `ctx.needs(t)` inside a target; `magus\run([...])` in a script |{{else}}Signatures: `{{cmd "describe"}} module <name>`. Check before assuming arguments.
+| `{{cmd "run"}} t p` | `ctx.needs(t)` inside a target; `magus\run([...])` in a script |{{else}}Signatures: `{{cmd "describe"}} module <name>`. Check before assuming arguments.
 shell: Buzz
 `set -euo pipefail`, `|| exit 1`: nothing; host call raises; declare `!> any`
 `echo "msg" >&2; exit 1`: `throw "msg";`
@@ -136,7 +136,7 @@ shell: Buzz
 `( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
 `a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
 `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records
-`magus run t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script{{end}}
+`{{cmd "run"}} t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script{{end}}
 
 ## Pairs
 
@@ -194,24 +194,8 @@ fun fetchPage(api: str, offset: int) > [any] !> any {
 
 {{if .Full}}The temp directory and its trap existed because `jq` reads files. With the body in memory
 both go. Without a `retry` argument a request runs exactly once. When a real directory is
-needed, remove it on both paths:{{else}}Temp dir and trap existed because `jq` reads files; body in memory -> both go. No `retry` argument: request runs once. Real directory needed -> remove on both paths:{{end}}
-
-```buzz
-import "fs";
-import "archive";
-
-fun unpackInto(tarball: str, dest: str) > void !> any {
-    final work = fs\tempDir("unpack-");
-    try {
-        archive\uncompress(tarball, dest: work, opts: archive\Options{ strip = 1 });
-        fs\copyDir(fs\join(work, name: "bin"), dst: dest);
-    } catch (err: any) {
-        fs\removeAll(work);
-        throw err;
-    }
-    fs\removeAll(work);
-}
-```
+needed, [reference.md](reference.md#a-temp-directory-that-must-exist) removes it on both
+paths.{{else}}Temp dir and trap existed because `jq` reads files; body in memory -> both go. No `retry` argument: request runs once. Real directory needed: [reference.md](reference.md#a-temp-directory-that-must-exist).{{end}}
 
 ### Digests, counts and key=value files
 
@@ -384,50 +368,8 @@ fun main(args: [str]) > void !> any {
 which holds them to the lease rules. Prefer the typed members; they also work for hg, sl
 and jj. Reach for `vcs\cmd` only when no member answers.{{else}}`proc\exec("git", ...)` refused: VCS binaries run through `vcs\cmd` (lease rules). Prefer typed members (also hg, sl, jj); `vcs\cmd` only when no member answers.{{end}}
 
-### Running a real tool, and pipes between tools
-
-```sh
-( cd "$wt/packages/http" && node --test )
-node gen.mjs | prettier --stdin-filepath out.md > out.md
-```
-
-```buzz
-import "fs";
-import "proc";
-
-fun main(args: [str]) > void !> any {
-    proc\exec("node", args: ["--test"], dir: "packages/http");
-    final generated = proc\exec("node", args: ["gen.mjs"], opts: proc\ExecOptions{ quiet = true });
-    final pretty = proc\exec("prettier", args: ["--stdin-filepath", "out.md"],
-        opts: proc\ExecOptions{ stdin = generated.stdout, quiet = true });
-    fs\writeFile("out.md", content: pretty.stdout);
-}
-```
-
-{{if .Full}}This is where `proc\exec` belongs: `node` and `prettier` are the programs the script
-exists to run. It takes an argument list, never a command line, so nothing needs quoting.
-It raises on a non-zero exit.{{else}}`proc\exec` belongs here: `node`, `prettier` ARE programs script exists to run. Argument list, never command line; nothing to quote. Raises on non-zero exit.{{end}}
-
-### Asking magus
-
-```sh
-role=$(./magus describe file go.mod -o json | jq -r '.files[0].role')
-./magus run generate docs
-```
-
-```buzz
-import "std";
-import "magus";
-
-fun main(args: [str]) > void !> any {
-    final report: magus\FileReport = magus\describe.file(["go.mod"]);
-    std\print(report.files[0].role);
-    magus\run(["generate", "docs"]);
-}
-```
-
-{{if .Full}}A typed record fails the check on a misspelled field. A `jq` path returns `null` and
-the script carries on.{{else}}Typed record fails check on misspelled field; `jq` path returns `null`, script carries on.{{end}}
+{{if .Full}}Running the real tool a script exists for, piping between two tools, asking magus for a
+typed record, and one whole rewrite are in [reference.md](reference.md).{{else}}Real tool, pipes between tools, asking magus, whole rewrite: [reference.md](reference.md).{{end}}
 
 ## Anti-patterns
 
@@ -536,71 +478,7 @@ translate them:
 {{if .Full}}**Keeping a generator as a script.** A script that writes files other work reads belongs
 in a target. Otherwise its output is never cached, never checked for drift, and never
 rerun when its inputs change.{{else}}Generator kept as script: writes files other work reads -> target. Otherwise never cached, never drift-checked, never rerun on input change.{{end}}
-{{if .Full}}
-## A whole rewrite
 
-A dataset fetch script, 50 lines of bash: `mktemp` and a trap, five `curl` calls into
-page files, a `jq -e` length check per page, `jq -s` to merge, sort and drop a field,
-`wc -l` to count rows, a `sha256sum`-or-`shasum` fallback, and `cut` to compare against a
-pinned digest. It reads one URL and writes one JSONL file, so it stays a script: it runs on
-demand and nothing builds from its output.
-
-```buzz
-import "std";
-import "fs";
-import "http";
-import "crypto";
-import "encoding/json";
-
-final API = "https://datasets-server.huggingface.co/rows?dataset=SWE-bench%2FSWE-bench_Verified&config=default&split=test";
-
-fun fetchPage(offset: int) > [any] !> any {
-    final res = http\get("{API}&offset={offset}&length=100",
-        opts: http\Options{ fail = true },
-        retry: http\Retry{ attempts = 5, delayMs = 2000.0, allErrors = true });
-    final rows: [any] = json\parse(res.body)["rows"];
-    if (rows.len() != 100) {
-        throw "page at offset {offset} returned {rows.len()} rows, not 100";
-    }
-    return rows;
-}
-
-fun main(args: [str]) > void !> any {
-    final table = "verified.jsonl";
-    final pin = "verified.sha256";
-    final byId = mut {<str: str>};
-    foreach (offset in [0, 100, 200, 300, 400]) {
-        foreach (row in fetchPage(offset)) {
-            final record: {str: any} = row["row"];
-            final kept = record.cloneMutable();
-            kept.remove("hints_text");
-            byId["{record["instance_id"]}"] = json\stringify(kept);
-        }
-    }
-    if (byId.len() != 500) {
-        throw "expected 500 rows, got {byId.len()}";
-    }
-    final ids = byId.keys().cloneMutable();
-    ids.sort(fun (a: str, b: str) > bool => a < b);
-    fs\writeLines(table, lines: ids.map(fun (i: int, id: str) > str => byId[id]!));
-
-    final sum = crypto\sha256File(table);
-    std\print("{sum}  {table}");
-    if (fs\isFile(pin)) {
-        final pinned = fs\readFile(pin).split(" ")[0];
-        if (pinned != sum) {
-            throw "{table} digest {sum} differs from the pinned {pinned}; the upstream table changed";
-        }
-    }
-}
-```
-
-What went: the temp directory, the trap, every `jq` program, the row-count pipeline, and the
-digest tool fallback. What stayed: the five pages, the two counts, the pinned-digest
-comparison. Those are what the script does. Before replacing the shell, run both and
-compare the JSONL files byte for byte. A `jq -c` and a `json\stringify` can order keys
-differently, and only the diff says so.
-{{end}}
 ## Verify the port
 
 ```sh
