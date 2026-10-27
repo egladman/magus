@@ -1,6 +1,7 @@
 package image
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -295,4 +296,117 @@ func TestImageLayoutBlobReusedFromAnotherLayout(t *testing.T) {
 	require.NoError(t, writeLayout(context.Background(), dest, root, reused))
 
 	assert.Equal(t, snapshot(t, src), snapshot(t, dest))
+}
+
+func TestImageLayoutDiskBlobHardlinks(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	payload := []byte("hardlink-me")
+	require.NoError(t, os.WriteFile(src, payload, 0o600))
+	desc := ocispec.Descriptor{
+		MediaType: "application/octet-stream",
+		Digest:    digest.FromBytes(payload),
+		Size:      int64(len(payload)),
+	}
+	root := desc
+	dest := filepath.Join(dir, "layout")
+	require.NoError(t, writeLayout(context.Background(), dest, root, []blob{{
+		desc: desc,
+		path: src,
+		open: func() (io.ReadCloser, error) { return os.Open(src) },
+	}}))
+
+	installed := blobPath(dest, desc.Digest)
+	srcInfo, err := os.Stat(src)
+	require.NoError(t, err)
+	dstInfo, err := os.Stat(installed)
+	require.NoError(t, err)
+	assert.True(t, os.SameFile(srcInfo, dstInfo), "same-fs install must hardlink, not copy")
+	assert.Equal(t, os.FileMode(0o644), dstInfo.Mode().Perm())
+}
+
+// layerPayloadSize is large enough that link vs stream shows wall-clock and
+// alloc delta; small enough for a unit-test sandbox.
+const layerPayloadSize = 4 << 20 // 4 MiB
+
+func benchBlob(size int) (blob, []byte) {
+	data := bytes.Repeat([]byte("m"), size)
+	desc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageLayerGzip,
+		Digest:    digest.FromBytes(data),
+		Size:      int64(len(data)),
+	}
+	return blob{
+		desc: desc,
+		open: func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(data)), nil
+		},
+	}, data
+}
+
+func BenchmarkWriteBlobStream(b *testing.B) {
+	bl, _ := benchBlob(layerPayloadSize)
+	dir := b.TempDir()
+	b.SetBytes(int64(layerPayloadSize))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		target := filepath.Join(dir, bl.desc.Digest.Encoded()+".stream")
+		if err := writeBlob(target, bl); err != nil {
+			b.Fatal(err)
+		}
+		_ = os.Remove(target)
+	}
+}
+
+func BenchmarkWriteBlobDiskLink(b *testing.B) {
+	_, data := benchBlob(layerPayloadSize)
+	dir := b.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.WriteFile(src, data, 0o644); err != nil {
+		b.Fatal(err)
+	}
+	desc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageLayerGzip,
+		Digest:    digest.FromBytes(data),
+		Size:      int64(len(data)),
+	}
+	bl := blob{
+		desc: desc,
+		path: src,
+		open: func() (io.ReadCloser, error) { return os.Open(src) },
+	}
+	b.SetBytes(int64(layerPayloadSize))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		target := filepath.Join(dir, desc.Digest.Encoded()+".link")
+		if err := writeBlob(target, bl); err != nil {
+			b.Fatal(err)
+		}
+		_ = os.Remove(target)
+	}
+}
+
+func BenchmarkWriteLayoutReuse(b *testing.B) {
+	root, blobs := func() (ocispec.Descriptor, []blob) {
+		data := bytes.Repeat([]byte("x"), layerPayloadSize)
+		layer := bytesBlob(ocispec.MediaTypeImageLayerGzip, data)
+		man := bytesBlob(testManifestType, []byte(`{"schemaVersion":2}`))
+		return man.desc, []blob{man, layer}
+	}()
+	src := filepath.Join(b.TempDir(), "src")
+	if err := writeLayout(context.Background(), src, root, blobs); err != nil {
+		b.Fatal(err)
+	}
+	reused := []blob{layoutBlob(src, blobs[0].desc), layoutBlob(src, blobs[1].desc)}
+	b.SetBytes(int64(layerPayloadSize))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dest := filepath.Join(b.TempDir(), "dest")
+		if err := writeLayout(context.Background(), dest, root, reused); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

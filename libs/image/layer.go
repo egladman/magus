@@ -112,7 +112,12 @@ func putEmptyDirs(byDest map[string]layerEntry, dirs []emptyDir) error {
 }
 
 func putParentDirs(byDest map[string]layerEntry) {
+	// Snapshot keys so synthetic parents are not re-walked (O(entries·depth)).
+	dests := make([]string, 0, len(byDest))
 	for dest := range byDest {
+		dests = append(dests, dest)
+	}
+	for _, dest := range dests {
 		for dir := path.Dir(dest); dir != "/"; dir = path.Dir(dir) {
 			if _, ok := byDest[dir]; ok {
 				continue
@@ -138,7 +143,8 @@ func writeLayer(ctx context.Context, w io.Writer, spec Spec, limit int64) (layer
 
 	blob := digest.Canonical.Digester()
 	blobSize := &countWriter{}
-	gz, err := gzip.NewWriterLevel(io.MultiWriter(w, blob.Hash(), blobSize), gzip.BestCompression)
+	// optimization: DefaultCompression (level 9 is near-linear slower, little size gain).
+	gz, err := gzip.NewWriterLevel(io.MultiWriter(w, blob.Hash(), blobSize), gzip.DefaultCompression)
 	if err != nil {
 		return layerBlob{}, fmt.Errorf("image.layer: gzip: %w", err)
 	}

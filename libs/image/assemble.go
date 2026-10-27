@@ -63,6 +63,7 @@ func AssembleLayout(ctx context.Context, spec Spec, dest string) (Layout, error)
 		added = layerFromBlob(layer)
 		blobs = append(blobs, blob{
 			desc: layer.descriptor,
+			path: layerPath,
 			open: func() (io.ReadCloser, error) { return os.Open(layerPath) },
 		})
 	}

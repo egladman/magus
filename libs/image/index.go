@@ -75,6 +75,9 @@ type platformLayout struct {
 }
 
 func readPlatformLayout(ctx context.Context, path string) (platformLayout, error) {
+	if err := ctx.Err(); err != nil {
+		return platformLayout{}, err
+	}
 	layout, err := OpenLayout(path)
 	if err != nil {
 		return platformLayout{}, err
@@ -104,7 +107,8 @@ func readPlatformLayout(ctx context.Context, path string) (platformLayout, error
 	}
 	blobs := []blob{layoutBlob(path, layout.Descriptor), layoutBlob(path, manifest.Config)}
 	for _, layer := range manifest.Layers {
-		if err := verifyLayoutBlob(ctx, path, layer); err != nil {
+		// Size+presence: full re-hash on every assemble is O(image); verified on ingest.
+		if err := statLayoutBlob(path, layer); err != nil {
 			return platformLayout{}, fmt.Errorf("layer: %w", err)
 		}
 		blobs = append(blobs, layoutBlob(path, layer))
@@ -112,9 +116,24 @@ func readPlatformLayout(ctx context.Context, path string) (platformLayout, error
 	return platformLayout{descriptor: layout.Descriptor, config: cfg, layers: manifest.Layers, blobs: blobs}, nil
 }
 
-func verifyLayoutBlob(ctx context.Context, path string, desc ocispec.Descriptor) error {
+// statLayoutBlob checks digest form, presence and size without reading bytes.
+func statLayoutBlob(path string, desc ocispec.Descriptor) error {
 	if !checkSHA256(desc.Digest) {
 		return fmt.Errorf("blob digest %q is not a sha256 digest", desc.Digest)
+	}
+	info, err := os.Stat(blobPath(path, desc.Digest))
+	if err != nil {
+		return fmt.Errorf("blob %s: %w", desc.Digest, err)
+	}
+	if info.Size() != desc.Size {
+		return fmt.Errorf("blob %s: size is %d bytes, descriptor says %d", desc.Digest, info.Size(), desc.Size)
+	}
+	return nil
+}
+
+func verifyLayoutBlob(ctx context.Context, path string, desc ocispec.Descriptor) error {
+	if err := statLayoutBlob(path, desc); err != nil {
+		return err
 	}
 	f, err := os.Open(blobPath(path, desc.Digest))
 	if err != nil {

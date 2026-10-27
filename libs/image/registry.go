@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -12,6 +13,7 @@ import (
 	"github.com/egladman/magus/libs/oci"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"golang.org/x/sync/errgroup"
 )
 
 // PullLayout fetches a digest-pinned image for platform into dest as an OCI layout.
@@ -65,6 +67,7 @@ func PullLayout(ctx context.Context, reference string, platform Platform, dest s
 	if err != nil {
 		return Layout{}, err
 	}
+	defer removeBlobTemps(blobs)
 	root := raw.Descriptor
 	if err := writeLayout(ctx, dest, root, blobs); err != nil {
 		return Layout{}, fmt.Errorf("image.pull: %w", err)
@@ -113,6 +116,7 @@ func PublishLayout(ctx context.Context, layoutPath, repository string, tags []st
 	}
 	seen := map[digest.Digest]bool{}
 	var manifests []blob
+	var layers []blob
 	for _, b := range blobs {
 		if seen[b.desc.Digest] {
 			continue
@@ -125,15 +129,26 @@ func PublishLayout(ctx context.Context, layoutPath, repository string, tags []st
 			}
 			continue
 		}
-		r, err := b.open()
-		if err != nil {
-			return Published{}, fmt.Errorf("image.publish: open %s: %w", b.desc.Digest, err)
-		}
-		err = client.PushBlob(ctx, repository, b.desc, r)
-		_ = r.Close()
-		if err != nil {
-			return Published{}, fmt.Errorf("image.publish: blob %s: %w", b.desc.Digest, err)
-		}
+		layers = append(layers, b)
+	}
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(max(4, runtime.GOMAXPROCS(0)))
+	for _, b := range layers {
+		g.Go(func() error {
+			r, err := b.open()
+			if err != nil {
+				return fmt.Errorf("image.publish: open %s: %w", b.desc.Digest, err)
+			}
+			err = client.PushBlob(gctx, repository, b.desc, r)
+			_ = r.Close()
+			if err != nil {
+				return fmt.Errorf("image.publish: blob %s: %w", b.desc.Digest, err)
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return Published{}, err
 	}
 	for _, m := range manifests {
 		body, err := readAllBlob(m)
@@ -198,16 +213,34 @@ func materializeManifest(ctx context.Context, client *oci.Client, repo string, r
 	if err := json.Unmarshal(raw.Body, &man); err != nil {
 		return nil, fmt.Errorf("image.pull: decode manifest: %w", err)
 	}
-	out := []blob{bytesBlob(raw.MediaType, raw.Body)}
 	descs := append([]ocispec.Descriptor{man.Config}, man.Layers...)
-	for _, d := range descs {
-		b, err := fetchRegistryBlob(ctx, client, repo, d)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b)
+	out := make([]blob, len(descs)+1)
+	out[0] = bytesBlob(raw.MediaType, raw.Body)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(max(4, runtime.GOMAXPROCS(0)))
+	for i, d := range descs {
+		g.Go(func() error {
+			b, err := fetchRegistryBlob(gctx, client, repo, d)
+			if err != nil {
+				return err
+			}
+			out[i+1] = b
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		removeBlobTemps(out)
+		return nil, err
 	}
 	return out, nil
+}
+
+func removeBlobTemps(blobs []blob) {
+	for _, b := range blobs {
+		if b.removeAfter && b.path != "" {
+			_ = os.Remove(b.path)
+		}
+	}
 }
 
 func fetchRegistryBlob(ctx context.Context, client *oci.Client, repo string, d ocispec.Descriptor) (blob, error) {
@@ -229,26 +262,11 @@ func fetchRegistryBlob(ctx context.Context, client *oci.Client, repo string, d o
 		return blob{}, fmt.Errorf("image.pull: blob %s: %w", d.Digest, err)
 	}
 	return blob{
-		desc: d,
-		open: func() (io.ReadCloser, error) {
-			f, err := os.Open(tmp)
-			if err != nil {
-				return nil, err
-			}
-			return &removeOnClose{File: f, path: tmp}, nil
-		},
+		desc:        d,
+		path:        tmp,
+		removeAfter: true,
+		open:        func() (io.ReadCloser, error) { return os.Open(tmp) },
 	}, nil
-}
-
-type removeOnClose struct {
-	*os.File
-	path string
-}
-
-func (r *removeOnClose) Close() error {
-	err := r.File.Close()
-	_ = os.Remove(r.path)
-	return err
 }
 
 func collectLayoutBlobs(ctx context.Context, layout Layout) ([]blob, error) {
@@ -293,12 +311,20 @@ func blobsFromManifest(ctx context.Context, path string, manData []byte) ([]blob
 		return nil, fmt.Errorf("decode manifest: %w", err)
 	}
 	descs := append([]ocispec.Descriptor{man.Config}, man.Layers...)
-	out := make([]blob, 0, len(descs))
-	for _, d := range descs {
-		if err := verifyLayoutBlob(ctx, path, d); err != nil {
-			return nil, err
-		}
-		out = append(out, layoutBlob(path, d))
+	out := make([]blob, len(descs))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(max(4, runtime.GOMAXPROCS(0)))
+	for i, d := range descs {
+		g.Go(func() error {
+			if err := verifyLayoutBlob(gctx, path, d); err != nil {
+				return err
+			}
+			out[i] = layoutBlob(path, d)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

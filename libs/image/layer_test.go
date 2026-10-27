@@ -208,7 +208,7 @@ func TestImageLayerGzipHeader(t *testing.T) {
 	if wantHeader := (gzip.Header{Extra: []byte{}, OS: 255}); !reflect.DeepEqual(h, wantHeader) {
 		t.Errorf("gzip header: %+v", h)
 	}
-	if want := []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 2, 255}; !bytes.Equal(gz[:10], want) {
+	if want := []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255}; !bytes.Equal(gz[:10], want) {
 		t.Errorf("gzip header bytes: got % x, want % x", gz[:10], want)
 	}
 	entries, _ := readLayer(t, gz)
@@ -375,4 +375,30 @@ func TestNewLayerReturnsOCIDigests(t *testing.T) {
 		Digest: layer.Digest, DiffID: layer.DiffID,
 		Size: int64(buf.Len()), MediaType: ocispec.MediaTypeImageLayerGzip,
 	}, layer)
+}
+
+func BenchmarkWriteLayer(b *testing.B) {
+	dir := b.TempDir()
+	src := filepath.Join(dir, "payload")
+	payload := bytes.Repeat([]byte("layer-bench"), 64<<10) // ~768 KiB
+	if err := os.WriteFile(src, payload, 0o644); err != nil {
+		b.Fatal(err)
+	}
+	spec := Spec{
+		Platform: Platform{OS: "linux", Architecture: "amd64"},
+		Files: []File{{
+			Source:      src,
+			Destination: "/app/payload",
+			Mode:        0o644,
+		}},
+	}
+	b.SetBytes(int64(len(payload)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		if _, err := writeLayer(context.Background(), &buf, spec, maxLayerBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
