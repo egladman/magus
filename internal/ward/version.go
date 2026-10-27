@@ -173,7 +173,7 @@ func pinnedRelease(constraint string) string {
 	}
 	clauses := strings.Split(constraint, ",")
 	if len(clauses) == 1 {
-		if m := constraintClause.FindStringSubmatch(strings.TrimSpace(clauses[0])); m != nil && strings.Trim(m[1], "=") == "" {
+		if m := constraintClause.FindStringSubmatch(strings.TrimSpace(clauses[0])); len(m) == 3 && strings.Trim(m[1], "=") == "" {
 			return "v" + m[2]
 		}
 	}
