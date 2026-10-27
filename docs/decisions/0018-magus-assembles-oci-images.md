@@ -203,20 +203,20 @@ State stays _proposed_ until the code moves.
 
 #### Packaging and dual modules
 
-| Item                                                                                                                                              | State                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `libs/oci`: distribution client moved from `internal/oci` (artifacts and images)                                                                  | done                                                          |
-| `libs/image`: one package (types, layout I/O, assembleLayout, assembleIndex, pull/publish, sbom, provenance, attach)                              | done                                                          |
-| Typed `Digest` / `DiffID` (sha256 only); digests on Layout are not bare strings                                                                   | done                                                          |
-| Op, digests, counts, Created live on Layout / Published (facts only; no Notes log, no nested Report)                                              | done                                                          |
-| Buzz module `image`: facade (`pullLayout`, `assembleLayout`, `assembleIndex`, `publishLayout`, `writeSbom`, `writeProvenance`, `attachArtifacts`) | done                                                          |
-| Public Go API is `libs/image` and `libs/oci`; the root magus SDK does not re-export them                                                          | done                                                          |
-| Nested `libs/image/{layout,assemble,index,…}` one-line reexports                                                                                  | rejected: thin layers                                         |
-| `writeEach` multi-platform helper                                                                                                                 | rejected: call-site loop + `assembleLayout` + `assembleIndex` |
-| Exported `Layer` + `NewLayer` (OCI fs-diff; Digest + DiffID)                                                                                      | done: still at most one new Layer per `assembleLayout`        |
-| Dockerfile vocabulary (`FROM`/`COPY`/`RUN`/…) in the Go or Buzz modules                                                                           | rejected: see DevX below                                      |
-| Go `NewSpec` + pointer `With*` chain ending in `AssembleLayout`                                                                                   | done                                                          |
-| Registry referrers `attest` after publish                                                                                                         | open: `attachArtifacts` covers layout-local artifacts first   |
+| Item                                                                                                                                              | State                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `libs/oci`: distribution client moved from `internal/oci` (artifacts and images)                                                                  | done                                                            |
+| `libs/image`: one package (types, layout I/O, assembleLayout, assembleIndex, pull/publish, sbom, provenance, attach)                              | done                                                            |
+| Typed `Digest` / `DiffID` (sha256 only); digests on Layout are not bare strings                                                                   | done                                                            |
+| Op, digests, counts, Created live on Layout / Published (facts only; no Notes log, no nested Report)                                              | done                                                            |
+| Buzz module `image`: facade (`pullLayout`, `assembleLayout`, `assembleIndex`, `publishLayout`, `writeSbom`, `writeProvenance`, `attachArtifacts`) | done                                                            |
+| Public Go API is `libs/image` and `libs/oci`; the root magus SDK does not re-export them                                                          | done                                                            |
+| Nested `libs/image/{layout,assemble,index,…}` one-line reexports                                                                                  | not built (thin layers)                                         |
+| `writeEach` multi-platform helper                                                                                                                 | not built (call-site loop + `assembleLayout` + `assembleIndex`) |
+| Exported `Layer` + `NewLayer` (OCI fs-diff; Digest + DiffID)                                                                                      | done (still at most one new Layer per `assembleLayout`)         |
+| Dockerfile vocabulary (`FROM`/`COPY`/`RUN`/…) in the Go or Buzz modules                                                                           | not built (see DevX below)                                      |
+| Go `NewSpec` + pointer `With*` chain ending in `AssembleLayout`                                                                                   | done                                                            |
+| Registry referrers `attest` after publish                                                                                                         | planned (`attachArtifacts` covers layout-local artifacts first) |
 
 `libs/oci` stays a sibling of `libs/image`: spell and graph publish import the registry
 client without assembly. Nesting registry under `image/` would force that dependency the
