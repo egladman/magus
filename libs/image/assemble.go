@@ -52,7 +52,7 @@ func AssembleLayout(ctx context.Context, spec Spec, dest string) (Layout, error)
 	var newLayer *ocispec.Descriptor
 	var diffID digest.Digest
 	var added Layer
-	if len(spec.Files)+len(spec.Symlinks) > 0 {
+	if len(spec.Files)+len(spec.Symlinks)+len(spec.emptyDirs) > 0 {
 		layerPath, layer, err := stageLayer(ctx, spec, dest)
 		if err != nil {
 			return Layout{}, err

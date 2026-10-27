@@ -75,32 +75,10 @@ func layerEntries(spec Spec) ([]layerEntry, error) {
 			header: layerHeader(name, tar.TypeSymlink, 0o777, l.UID, l.GID, l.Target),
 		}
 	}
-	for _, dir := range spec.emptyDirs {
-		if _, ok := byDest[dir.Destination]; ok {
-			continue
-		}
-		if dir.UID < 0 || dir.GID < 0 {
-			return nil, fmt.Errorf("image.layer: dir %q: uid and gid must not be negative", dir.Destination)
-		}
-		name := strings.TrimPrefix(dir.Destination, "/") + "/"
-		mode := int64(dir.Mode)
-		if mode == 0 {
-			mode = 0o755
-		}
-		byDest[dir.Destination] = layerEntry{
-			header: layerHeader(name, tar.TypeDir, mode, dir.UID, dir.GID, ""),
-		}
+	if err := putEmptyDirs(byDest, spec.emptyDirs); err != nil {
+		return nil, err
 	}
-	for dest := range byDest {
-		for dir := path.Dir(dest); dir != "/"; dir = path.Dir(dir) {
-			if _, ok := byDest[dir]; ok {
-				continue
-			}
-			byDest[dir] = layerEntry{
-				header: layerHeader(strings.TrimPrefix(dir, "/")+"/", tar.TypeDir, 0o755, 0, 0, ""),
-			}
-		}
-	}
+	putParentDirs(byDest)
 	dests := make([]string, 0, len(byDest))
 	for dest := range byDest {
 		dests = append(dests, dest)
@@ -113,12 +91,45 @@ func layerEntries(spec Spec) ([]layerEntry, error) {
 	return entries, nil
 }
 
+func putEmptyDirs(byDest map[string]layerEntry, dirs []emptyDir) error {
+	for _, dir := range dirs {
+		if _, ok := byDest[dir.Destination]; ok {
+			continue
+		}
+		if dir.UID < 0 || dir.GID < 0 {
+			return fmt.Errorf("image.layer: dir %q: uid and gid must not be negative", dir.Destination)
+		}
+		mode := int64(dir.Mode)
+		if mode == 0 {
+			mode = 0o755
+		}
+		name := strings.TrimPrefix(dir.Destination, "/") + "/"
+		byDest[dir.Destination] = layerEntry{
+			header: layerHeader(name, tar.TypeDir, mode, dir.UID, dir.GID, ""),
+		}
+	}
+	return nil
+}
+
+func putParentDirs(byDest map[string]layerEntry) {
+	for dest := range byDest {
+		for dir := path.Dir(dest); dir != "/"; dir = path.Dir(dir) {
+			if _, ok := byDest[dir]; ok {
+				continue
+			}
+			byDest[dir] = layerEntry{
+				header: layerHeader(strings.TrimPrefix(dir, "/")+"/", tar.TypeDir, 0o755, 0, 0, ""),
+			}
+		}
+	}
+}
+
 // writeLayer writes the spec's one new layer to w as a deterministic tar+gzip
 // and returns its DiffID (sha256 of the tar) and descriptor (sha256 and length
 // of the bytes written to w). limit bounds the uncompressed tar.
 func writeLayer(ctx context.Context, w io.Writer, spec Spec, limit int64) (layerBlob, error) {
-	if len(spec.Files) == 0 && len(spec.Symlinks) == 0 {
-		return layerBlob{}, fmt.Errorf("image.layer: no files or symlinks to place")
+	if len(spec.Files) == 0 && len(spec.Symlinks) == 0 && len(spec.emptyDirs) == 0 {
+		return layerBlob{}, fmt.Errorf("image.layer: no files, symlinks or empty dirs to place")
 	}
 	entries, err := layerEntries(spec)
 	if err != nil {
