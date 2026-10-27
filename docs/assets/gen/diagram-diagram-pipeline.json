@@ -1,13 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 5,
+    "imports": 2
   },
   "figure": "diagram-pipeline",
-  "findings": [
-    "figure \"diagram-pipeline\": \"libs/image\" is in scope(\"libs/**\") but nothing draws it; add it to a box or a group, or except([...], why:)",
-    "figure \"diagram-pipeline\": \"libs/oci\" is in scope(\"libs/**\") but nothing draws it; add it to a box or a group, or except([...], why:)"
-  ],
-  "stamp": ""
+  "findings": [],
+  "stamp": "sha256:0764e6b336d74aa88362474ecefb609c96d53e2877e749e7e198f1c474d5e077"
 }
