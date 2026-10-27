@@ -361,3 +361,95 @@ insufficient. Analogy to a debugger: inspect the produced Layout and receipt, no
 
 Reopens if someone needs a first-class `magus image inspect` / layout-to-tar verb with
 evidence the Layout directory is not enough.
+
+### 2026-10-27: targets, OCI vocabulary, one schema
+
+**Paradigm.** No program runs inside an image, and the module has no `run`. Each stage,
+layer, platform, index and push is a magus target: a stage runs its tool on the host, a
+layer is one `image\assemble` over the previous target's layout, a platform is one target,
+an Image Index is a target that `ctx.needs` every platform target, and a push is a
+`skip_cache` target. Fibers add no parallelism (a host call blocks the fiber's thread);
+targets and `ctx.needs` do. Multi-stage has two shapes and no core change to cache keys or
+needs ordering (MGS4010 stays as it is): stages in other projects, whose declared outputs a
+cross-project `needs` finishes before the consumer starts; or stages in one project, where
+the image target lists the stage's sources in `readsFiles`, never its output
+(`TestStageInOneProjectCachesAndRekeysOnItsSource` pins the cache hit and the rekey).
+
+**Verbs and names are OCI's.** `Cmd`, not command. The module namespaces its records, so
+their Buzz names drop the `Image` prefix (`image\Spec`, `image\Platform`). No doc defines a
+thing by what Docker calls it.
+
+**Config follows image-spec config.md.** A null field inherits the base's value and an
+empty list clears it; `ExposedPorts`, `Volumes` and `StopSignal` are added; the reset
+booleans are gone.
+
+**Placements.** `Tree` replaces `DirPlacement`: it places the contents of its source;
+`strip`, the size and depth caps and the umask-dependent "preserve" mode are deleted.
+`Directory` places a directory with its own mode and owner. Implicit parents are written
+only on scratch: over a base an upper directory entry would replace the base's mode and
+owner.
+
+**One schema.** The Buzz boundary decodes every image argument with the generated strict
+decoder; an unknown or wrong-typed member raises. Closed sets are registered enums, each
+starting with an unset case that Go refuses, so an omitted platform is never linux/amd64.
+`fs\mode` builds a mode from octal or rwx notation; mode 0 is refused. Registry auth takes
+the `Secret` mirror, never a string.
+
+**Digests.** `ImageDigest{algorithm, encoded}` stays at the Buzz boundary and has
+`string()` (Go: `String()`) returning `sha256:<hex>`.
+
+**Referrers.** `attachReferrers` writes OCI 1.1 artifact manifests with `subject` set to
+the image's root descriptor and the empty config descriptor, to a new layout. The subject
+layout is never edited. Push sends the referrers after the image.
+
+**Pull.** A digest-pinned pull is an ordinary cacheable op. A tag-only pull is refused
+outside the `update` charm, which resolves the tag and then pulls the digest. Pull fetches
+straight into the new layout, hashing each blob once. Platforms compare normalized:
+linux/arm64 matches linux/arm64/v8.
+
+**Determinism caveat.** Layer bytes depend on compress/flate, which Go does not pin across
+releases: a toolchain bump may change layer digests, and the determinism claim excludes it.
+Base blobs are size-checked, not rehashed, on reuse. A base blob is hardlinked only when it
+is already 0644, so assemble never changes another layout's file.
+
+#### OCI spec conformance
+
+The image-spec v1.1.1 and distribution-spec v1.1.1 MUSTs the first cut broke are fixed,
+each pinned by a test in `libs/oci` or `libs/image`. This supersedes the 10-26 rows that
+refused Docker media types and that read index.json by position.
+
+| Rule                                                                       | State   | Pinned by                                                                |
+| -------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------ |
+| `docker.io` and `index.docker.io` go to `registry-1.docker.io`; a one-segment Docker Hub name is refused naming `library/` | built | `TestDockerHubRequestsGoToRegistry1AndABareNameIsRefused` |
+| Pull and Push copy Docker schema 2 and unknown layer types as served; a non-distributable layer is described, not fetched or uploaded | built | `TestPullCopiesADockerImageAndAssembleConvertsIt`, `TestPullDescribesANonDistributableLayerAndAssembleRefusesIt` |
+| Assemble converts a Docker base to OCI and refuses a non-distributable or unknown base layer | built | same two tests |
+| A referrer pushed to a registry that answers without `OCI-Subject` is added to the `sha256-<hex>` tag index; `Client.Referrers` reads the Referrers API, then that tag on a 404 | built | `TestPushManifestKeepsTheReferrersTagWhenTheRegistryHasNoReferrersAPI`, `TestPushThenPullRoundTripsAnAttachedIndex` |
+| A layout's image is the index.json entry with no subject, chosen by `org.opencontainers.image.ref.name` when there are several; referrers are the entries whose subject it is; unknown entries are passed over | built | `TestOpenLayoutSelectsAnImageByRefNameAndPassesOverUnknownEntries`, `TestOpenLayoutFindsReferrersBySubject` |
+| Pull records the reference pinned at the platform manifest, so `base.name` and `base.digest` name the same manifest | built | `TestBaseNameAndBaseDigestNameTheSameManifest` |
+| Config members the image-spec types do not model are carried over from the base | built | `TestAssembleKeepsTheBaseConfigFieldsItDoesNotModel` |
+| A placed path named `.wh.*` is refused | built | `TestAssembleRefusesAWhiteoutName` |
+| A registry error body is parsed into its codes; 403 is `ErrDenied`; a 429 with a short `Retry-After` is retried; `Warning: 299` is logged | built | `TestStatusErrorReadsTheSpecErrorBody`, `TestTooManyRequests*`, `TestRegistryWarningIsLogged` |
+| Platform carries `os.version` and `os.features`; amd64 takes variants v1 to v3 | built in Go | `TestPlatformCarriesOSVersionAndOSFeatures`, `TestParsePlatformRoundTrips` |
+| index.json carries its `mediaType` | built | `TestIndexJSONNamesItsMediaType` |
+| Buzz `mediaType` and `artifactType` are `str`, with the media types as named constants | not built | the boundary decoders and declarations are generated outputs another lease holds |
+| Buzz `osVersion`, `osFeatures`, amd64 `v2`/`v3`, `image\open(layout, name)` | not built | same |
+
+Go names follow the verb rule: `Get` for a network read (`oci.Client.GetManifest`,
+`GetBlob`), `Push` for an upload (`PushManifest`, `PushBlob`), `Write` only for a file
+(`WriteSBOM`, `WriteProvenance`). `image.Pull(ctx, client, ref, platform, dest)` and
+`image.Push(ctx, client, layout, repo, tags...)` take every required input as a parameter
+and Push returns the pinned `oci.Reference`; `PullOptions`, `PushOptions`, `AllowTag` and
+`Pushed` are deleted. `ManifestLayout` is `Manifest`, `Layout.Manifest(ctx, platform)`
+replaces `ResolvePlatform`, the layer receipt `Added` is `Layer`, the policy constants carry
+their type's name (`ModePolicyFixed`, `SymlinkPolicyKeep`), `Tree.Modes` is
+`Tree.ModePolicy`, `Provenance.Materials` is SLSA v1's `Dependencies`, and `Verify` and
+`ParseDigest` moved to `oci.VerifyBlob` and `oci.ParseDigest`. Running a finished image is
+a later decision and changes nothing here.
+
+#### Principles checked
+
+- [No silent defaults](../design/judgment/no-silent-defaults.md): a bare Docker Hub name
+  is refused rather than completed with `library/`; a base config's unmodelled members are
+  kept rather than dropped; a whiteout name is refused rather than placed.
+- [One vocabulary](../glossary/one-vocabulary-rule.md): blob, referrer, subject,
+  `ref.name` and `Get`/`Push` are the specs' words.

@@ -92,7 +92,15 @@ image\assemble(image\Spec{
 - On scratch, parents no entry places are written as root 0755. Over a base none are:
   an upper directory entry would replace the base's mode and owner.
 - Over a base, the manifest carries `org.opencontainers.image.base.digest`, and
-  `base.name` when the base came from `image\pull`.
+  `base.name` when the base came from `image\pull`. Both name the platform manifest the
+  image is built over, never the index the pull was pinned to.
+- Config members the image-spec types do not model, such as a base's `Healthcheck` or
+  `Shell`, are carried over from the base config unchanged.
+- A base in Docker's media types is written back as OCI: its layers keep their bytes and
+  take the OCI type image-spec names as their equal. A base with a non-distributable
+  layer, or a layer type magus does not know, is refused.
+- A path whose name starts with `.wh.` is refused, from a `File` or a `Tree` alike: in a
+  layer it is a whiteout, which deletes the base's path of that name.
 - Every path resolves against the magusfile's directory and goes through the sandbox.
 
 ## Registries
@@ -100,10 +108,18 @@ image\assemble(image\Spec{
 - `image\pull(reference, platform:, layout:, auth:)` with a `name@sha256:<hex>`
   reference is content-addressed, so a target that pulls caches like any other. A
   tag-only reference is refused outside the `update` charm: a tag can name new bytes
-  tomorrow. Docker media types are refused before anything is written.
+  tomorrow. The pull copies what the registry serves as is, Docker's media types
+  included; a non-distributable layer is described and not fetched.
+- `docker.io/<namespace>/<name>` and `index.docker.io/...` go to `registry-1.docker.io`,
+  the host that serves Docker Hub's API. An official image is `docker.io/library/<name>`;
+  a one-segment Docker Hub name is refused with that spelling, never completed for you.
 - `image\push(layout, repository:, tags:, auth:)` uploads only blobs the registry
   lacks, eight at a time, hashing each once while it uploads, and returns `reference`,
   the `repository@digest` a signer or a deploy consumes.
+- A registry's error body is reported by its codes (`MANIFEST_UNKNOWN`, `DENIED`,
+  `TOOMANYREQUESTS`). A `429` whose `Retry-After` is at most a minute is retried, up to
+  three times; a longer one fails at once and says how long to wait. A `Warning: 299`
+  header is logged.
 - `auth` is an `image\RegistryAuth` whose password is a `Secret`, never a bare string.
 
 ## SBOM, provenance and referrers
@@ -113,14 +129,22 @@ in-toto Statement v1 with SLSA v1 provenance) naming the image by digest. Proven
 each base digest to its resolved dependencies. `image\attachReferrers` writes a **new**
 layout with the image and one OCI 1.1 referrer per document, `subject` set and the empty
 config descriptor; the subject layout is never edited. `image\push` pushes the referrers
-after the image.
+after the image. A registry that answers a referrer's push without `OCI-Subject` has no
+Referrers API, so the push also lists the referrer in the subject's `sha256-<hex>` tag
+index, the fallback the distribution spec defines; `cosign`, `oras discover` and
+`trivy` find it either way. In Go, `oci.Client.Referrers` reads them back the same two
+ways.
 
 ## Reading a layout back
 
-`image\open(layout)` returns the layout's descriptor, its referrers, and for a
-single-platform image its platform, config and layers. Each descriptor's
-`digest.string()` is the OCI form, `sha256:<hex>`. In Go, `image.OpenLayout`,
-`Layout.Manifests` and `Layout.ResolvePlatform` do the same.
+`image\open(layout)` returns the layout's image, the referrers whose `subject` is that
+image, and for a single-platform image its platform, config and layers. Each
+descriptor's `digest.string()` is the OCI form, `sha256:<hex>`. An image is an
+`index.json` entry with no subject; a layout holding several (as skopeo or oras write
+them) is opened in Go by `org.opencontainers.image.ref.name` with
+`image.OpenLayout(ctx, path, name)`, and entries of a media type magus does not read are
+passed over. `Layout.Manifests` lists the platform manifests and
+`Layout.Manifest(ctx, platform)` reads one.
 
 ## What this cannot express
 
@@ -129,7 +153,7 @@ single-platform image its platform, config and layers. Each descriptor's
 | Running a program inside the image          | A target runs the tool on the host, or on a Linux runner for cgo and native addons.          |
 | A package manager inside the image          | A container engine, or a pinned base that already holds the packages.                        |
 | Cache or SSH mounts for in-image steps      | There are no in-image steps. Caches and SSH agents belong to targets.                        |
-| Windows images                              | Not yet: platforms are linux/amd64 and linux/arm64.                                           |
+| Windows images                              | Not yet: platforms are linux/amd64 and linux/arm64 (Go also takes amd64 v2 and v3).          |
 
 ## Related
 
