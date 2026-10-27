@@ -2680,7 +2680,7 @@ object Fixture {
 test "the ten pull requests the budget was calibrated on keep their verdicts" {
     foreach (fx in calibration()) {
         final v = verdictWith(fx.title, body: fx.body, f: fx.facts);
-        std\assert(v.decision == fx.verdict, message: "#{fx.number}: want {fx.verdict}, got {v.decision}: {v.reason}");
+        std\assert(v.decision.value == fx.verdict, message: "#{fx.number}: want {fx.verdict}, got {v.decision}: {v.reason}");
         if (fx.verdict == "advise") {
             std\assert(v.reason.indexOf("prose between the lead and the first heading") != null, message: "#{fx.number}: {v.reason}");
         }

@@ -224,6 +224,16 @@ export object JobRow {
     checkoutRoot: str = "",
 }
 
+// jobState is the JobState case whose value is s, none for any other.
+fun jobState(s: str) > magus\JobState {
+    foreach (c in magus\JobState) {
+        if (c.value == s) {
+            return c;
+        }
+    }
+    return magus\JobState.none;
+}
+
 // jobRows is a job store, each row spelled as [id, state] or [id, state, parent].
 export fun jobRows(specs: [[str]]) > [JobRow] {
     final rows = mut [<JobRow>];
@@ -232,7 +242,7 @@ export fun jobRows(specs: [[str]]) > [JobRow] {
         if (spec.len() > 2) {
             parent = spec[2];
         }
-        rows.append(JobRow{ id = spec[0], state = spec[1], parent = parent });
+        rows.append(JobRow{ id = spec[0], state = jobState(spec[1]), parent = parent });
     }
     return rows;
 }

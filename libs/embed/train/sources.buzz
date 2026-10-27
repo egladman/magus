@@ -150,7 +150,7 @@ fun outputLinks(generated: {str: bool}, kept: {str: bool}) > [[str]] !> any {
     final q: magus\QueryResult = magus\query("kind=doc", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * 8 + 1000});
     final links: mut [[str]] = mut [];
     foreach (e in q.links) {
-        if (e.relation != "documents" or e.confidence != "extracted" or !e.source.startsWith("doc:")) {
+        if (e.relation != magus\RelationID.documents or e.confidence != "extracted" or !e.source.startsWith("doc:")) {
             continue;
         }
         final page = e.source.sub(4, len: e.source.len() - 4);
@@ -235,7 +235,7 @@ export fun load() > Snapshot !> any {
     symbols.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
     final refLinks: mut [magus\KnowledgeEdge] = mut [];
     foreach (e in q.links) {
-        if (e.relation == "references" and e.source.startsWith("file:") and e.target.startsWith("symbol:")) {
+        if (e.relation == magus\RelationID.references and e.source.startsWith("file:") and e.target.startsWith("symbol:")) {
             refLinks.append(e);
         }
     }

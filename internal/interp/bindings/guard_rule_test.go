@@ -60,6 +60,47 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
 }
 
+// A rule that denies on the caller's role denies a worker and passes the root.
+func TestCommandRuleDeniesOnRole(t *testing.T) {
+	rule, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.role == magus\AgentRole.worker) {
+        return magus\guard.deny("A worker does not build.");
+    }
+    return magus\guard.allow();
+});
+`)
+	require.NoError(t, err)
+	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
+
+	got, err := rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleWorker}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "A worker does not build."}, got)
+
+	got, err = rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleRoot}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+}
+
+// Comparing a boundary record's enum field to a string literal is always false, so a
+// rule that does it would never fire: the checker refuses it at load.
+func TestCommandRuleComparingAnEnumFieldToAStringFailsToLoad(t *testing.T) {
+	_, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.role == "worker") {
+        return magus\guard.deny("A worker does not build.");
+    }
+    return magus\guard.allow();
+});
+`)
+	require.ErrorContains(t, err, "BZZ1005")
+	require.ErrorContains(t, err, "== between an enum and `str` is always false")
+}
+
 // deny's and advise's opts name the rule.
 func TestVerdictRuleOpt(t *testing.T) {
 	opts := vm.NewMap()

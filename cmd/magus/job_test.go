@@ -1653,7 +1653,7 @@ magus\project({"spells": [go]});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     foreach (c in req.commands) {
-        if (req.role == "worker" and c.args.indexOf("go-build") != null) {
+        if (req.role == magus\AgentRole.worker and c.args.indexOf("go-build") != null) {
             return magus\guard.deny("a worker does not build magus");
         }
     }
@@ -1702,7 +1702,7 @@ const denyBuildFromElsewhereRule = `import "magus";
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     foreach (c in req.commands) {
-        if (req.role == "worker" and c.args.indexOf("go-build") != null and req.dir.indexOf("elsewhere") != null) {
+        if (req.role == magus\AgentRole.worker and c.args.indexOf("go-build") != null and req.dir.indexOf("elsewhere") != null) {
             return magus\guard.deny("judged from the wrong directory");
         }
     }
@@ -1756,7 +1756,7 @@ const denyBuildRule = `import "magus";
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     foreach (c in req.commands) {
-        if (req.role == "worker" and c.args.indexOf("go-build") != null) {
+        if (req.role == magus\AgentRole.worker and c.args.indexOf("go-build") != null) {
             return magus\guard.deny("builds are refused here");
         }
     }
@@ -1846,7 +1846,7 @@ import "magus/spell/go";
 magus\project({"spells": [go]});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
-    if (req.role == "worker") {
+    if (req.role == magus\AgentRole.worker) {
         return magus\guard.deny("the hook binary is older than the tree\nrebuild it");
     }
     return magus\guard.allow();

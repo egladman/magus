@@ -41,7 +41,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     }
     var lease = "";
     if (req.lease != null) { lease = req.lease!.id; }
-    final said = "{req.host}|{req.description}|{req.role}|{lease}|{req.parent}|{req.agent}|{seen}";
+    final said = "{req.host}|{req.description}|{req.role.value}|{lease}|{req.parent}|{req.agent}|{seen}";
     if (req.command.startsWith("gh")) { return magus\guard.deny(said); }
     return magus\guard.advise(said);
 });

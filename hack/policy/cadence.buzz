@@ -53,10 +53,10 @@ export fun decideCadence(programs: [helpers\Program], caller: Caller, checkout: 
 // row was taken in, or the holder of a `job fork --checkout` row in that checkout. The holder
 // is a separate predicate: the integrator role also lets a caller build and bootstrap.
 fun mayGate(caller: Caller) > bool {
-    if (caller.role != "worker" and caller.title == "") {
+    if (caller.role != magus\AgentRole.worker and caller.title == "") {
         return true;
     }
-    return caller.role == "integrator" or caller.holdsCheckout;
+    return caller.role == magus\AgentRole.integrator or caller.holdsCheckout;
 }
 
 // liveCheckoutRoot: the checkout of a live row (declared, running or exited) taken with
@@ -65,7 +65,7 @@ fun liveCheckoutRoot(lease: magus\Job?) > str {
     if (lease == null or lease!.worktree == null) {
         return "";
     }
-    final live = lease!.state == "declared" or lease!.state == "running" or lease!.state == "exited";
+    final live = lease!.state == magus\JobState.declared or lease!.state == magus\JobState.running or lease!.state == magus\JobState.exited;
     if (!live) {
         return "";
     }

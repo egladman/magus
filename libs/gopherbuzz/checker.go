@@ -1846,7 +1846,9 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 // the enum one, for the reason the ordering arm in inferBinary gives. null passes
 // because `E?` erases to E here, and any or an inference gap passes unjudged.
 func (c *checker) checkEnumEquality(p ast.Pos, op string, left, right types.Type) {
-	enum, other := enumAndOther(left, right)
+	// A declared object's field holds its annotation unresolved, so `req.role` reaches
+	// here as a bare name until it is looked up.
+	enum, other := enumAndOther(c.resolveType(left), c.resolveType(right))
 	if enum == nil || len(enum.Cases) == 0 {
 		return
 	}

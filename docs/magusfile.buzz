@@ -169,7 +169,7 @@ fun termUsage(title: str) > str !> any {
     final symbols = mut [<dictionary\UsageSymbol>];
     final names = mut {<str: bool>};
     final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
-    if (found.answer.verdict == "unknown") {
+    if (found.answer.verdict == magus\KnowledgeVerdict.unknown) {
         throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
     }
     final ids = mut [<str>];

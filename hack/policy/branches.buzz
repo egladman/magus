@@ -85,7 +85,7 @@ export object Pusher {
 // authorityDenial is why caller may not publish, "" when it may.
 export fun authorityDenial(caller: Pusher) > str {
     final why = mut [<str>];
-    if (caller.role == "worker" or caller.role == "integrator") {
+    if (caller.role == magus\AgentRole.worker or caller.role == magus\AgentRole.integrator) {
         var bound = "a lease";
         if (caller.lease != "") {
             bound = "lease {caller.lease}";
