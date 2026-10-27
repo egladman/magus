@@ -26,7 +26,7 @@ filesystem diffs; invalidate a lower card and everything above must be reassembl
 
 This page is the stance and the seams. The Buzz module is [`image`](../../reference/buzz/image.md).
 The decision record is [ADR 0018](../../decisions/0018-magus-assembles-oci-images.md).
-Worked examples live under [`std/examples/image/`](../../../std/examples/image/).
+Worked examples live under [`std/examples/image/`](https://github.com/egladman/magus/tree/main/std/examples/image/).
 
 ## Goals
 
@@ -83,14 +83,14 @@ Worked examples live under [`std/examples/image/`](../../../std/examples/image/)
 Assemble and index never phone the registry. `pullLayout` and `publishLayout` are the only
 registry verbs. A missing base fails naming the local path and `:update` / `pullLayout`;
 there is no magus `--pull` flag. The ask is the **`update`** charm (same grant as
-`go mod tidy` / `trivy-image`). See [`pull-base.buzz`](../../../std/examples/image/pull-base.buzz).
+`go mod tidy` / `trivy-image`). See [`pull-base.buzz`](https://github.com/egladman/magus/blob/main/std/examples/image/pull-base.buzz).
 
 Use `env\home()`, `path\expandUser`, `env\require` / `env\expand` at the call site, then
 pass the resolved path into a placement. Spec fields are paths and argv, not env-name
 types. See [env](../../reference/buzz/env.md) and [path](../../reference/buzz/path.md).
 
 Document SSH and cache mounts as target patterns (example under
-[`std/examples/image/`](../../../std/examples/image/)), never as `image\withSSHMount`.
+[`std/examples/image/`](https://github.com/egladman/magus/tree/main/std/examples/image/)), never as `image\withSSHMount`.
 
 ## Stack of cards
 
