@@ -132,27 +132,32 @@ func (s *sessionEnums) qualify(enum string) string {
 	return fmt.Sprintf(`%s\%s`, s.module[strings.LastIndex(s.module, "/")+1:], enum)
 }
 
-// read evaluates the enum's cases in the session, since only the VM that holds a
-// definition can intern its cases.
+// definition is the enum's definition on the module value the session registered.
+// An import puts it there, so a session that has not imported the module yet imports
+// it here, compiling once; every later read, and every session that imported it
+// already, compiles nothing.
+func (s *sessionEnums) definition(enum string) (vm.Value, error) {
+	if mod, ok := s.sess.NativeModule(s.module); ok {
+		if def, found := mod.MapGet(enum); found {
+			return def, nil
+		}
+	}
+	return s.value("def", enum, s.qualify(enum))
+}
+
+// read takes the enum's cases from its definition: the cases a Buzz `Enum.case` in
+// the session evaluates to.
 func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
-	def, err := s.value("def", enum, s.qualify(enum))
+	def, err := s.definition(enum)
 	if err != nil {
 		return nil, err
 	}
-	_, names, ok := def.EnumDef()
+	cases, ok := def.EnumCases()
 	if !ok {
 		return nil, fmt.Errorf("it is a %s, not an enum", def.Kind())
 	}
-	refs := make([]string, len(names))
-	for i, name := range names {
-		refs[i] = fmt.Sprintf("%s.%s", s.qualify(enum), name)
-	}
-	list, err := s.value("cases", enum, fmt.Sprintf("[%s]", strings.Join(refs, ", ")))
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]vm.Value, len(names))
-	for _, c := range list.ListItems() {
+	out := make(map[string]vm.Value, len(cases))
+	for _, c := range cases {
 		backing, _ := c.EnumValue()
 		if !backing.IsString() {
 			return nil, fmt.Errorf("case %s is not str-backed", describeCase(c))

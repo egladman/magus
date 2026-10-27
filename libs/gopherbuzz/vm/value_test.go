@@ -200,6 +200,28 @@ func TestValueEqualFunctionIdentity(t *testing.T) {
 	assert.False(t, fnA.Equal(fnB), "distinct function values are not equal")
 }
 
+func TestValueEnumCases(t *testing.T) {
+	def := EnumDefValue("Tier", []string{"low", "high"}, []Value{StringValue("lo"), StringValue("hi")})
+	cases, ok := def.EnumCases()
+	require.True(t, ok)
+	require.Len(t, cases, 2)
+	_, name, _ := cases[1].EnumCase()
+	assert.Equal(t, "high", name)
+	backing, _ := cases[1].EnumValue()
+	assert.Equal(t, "hi", backing.AsString())
+	assert.Equal(t, NewVM(context.Background()).enumCase(def, 1), cases[1], "the case Buzz code evaluates")
+
+	cases[0] = NullValue()
+	again, _ := def.EnumCases()
+	assert.Equal(t, NewVM(context.Background()).enumCase(def, 0), again[0], "the returned cases are a copy")
+
+	for _, v := range []Value{cases[1], NewMap(), StringValue("Tier"), NullValue()} {
+		got, ok := v.EnumCases()
+		assert.False(t, ok, "%s is not an enum definition", v.Kind())
+		assert.Nil(t, got)
+	}
+}
+
 func TestValueEnumDef(t *testing.T) {
 	def := EnumDefValue("Tier", []string{"low", "high"}, nil)
 	name, cases, ok := def.EnumDef()
