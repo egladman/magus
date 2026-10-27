@@ -198,6 +198,11 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		}
 		return verdictExit(errOut, opts, verdict)
 	}
+	if sf.Transport != "" {
+		if handled, err := delegateToCheckout(ctx, input, out, errOut); handled {
+			return err
+		}
+	}
 	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
 	window := terminalWindow()
 	entry := types.EntryPointHook
