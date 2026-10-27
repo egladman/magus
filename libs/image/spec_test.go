@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func validSpec() Spec {
@@ -270,14 +272,13 @@ func TestNewSpecWithChainAssemblesLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if layout.Op != OpAssembleLayout {
-		t.Fatalf("op: %s", layout.Op)
-	}
+	assert.Equal(t, Layout{
+		Path: dest, Op: OpAssembleLayout, Platform: NewLinuxAmd64(),
+		FileCount: 1, Descriptor: layout.Descriptor, Layer: layout.Layer,
+		ConfigDigest: layout.ConfigDigest, Created: layout.Created,
+	}, layout)
 	if layout.Layer.IsZero() {
 		t.Fatal("expected a layer")
-	}
-	if layout.Path != dest {
-		t.Fatalf("path: %s", layout.Path)
 	}
 	_, manifest, cfg := imageTestReadManifest(t, dest)
 	if len(manifest.Layers) != 1 {

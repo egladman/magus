@@ -1074,12 +1074,17 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				Cwd       string          `json:"cwd"`
 			}
 			require.NoError(t, json.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
-			assert.Equal(t, "Grep", payload.ToolName)
-			assert.Equal(t, "grep-session", payload.SessionID)
-			assert.Equal(t, ".", payload.Cwd)
 			want, err := json.Marshal(input)
 			require.NoError(t, err)
-			assert.JSONEq(t, string(want), string(payload.Input), "context and scope must survive the Cursor adapter")
+			gotInput := payload.Input
+			payload.Input = nil
+			assert.Equal(t, struct {
+				ToolName  string          `json:"tool_name"`
+				Input     json.RawMessage `json:"tool_input"`
+				SessionID string          `json:"session_id"`
+				Cwd       string          `json:"cwd"`
+			}{ToolName: "Grep", SessionID: "grep-session", Cwd: "."}, payload)
+			assert.JSONEq(t, string(want), string(gotInput), "context and scope must survive the Cursor adapter")
 			if event == "preToolUse" {
 				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
 			} else {

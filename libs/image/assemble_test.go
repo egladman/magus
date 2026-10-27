@@ -85,11 +85,11 @@ func TestImageAssembleIndependentReader(t *testing.T) {
 	}, dest)
 	require.NoError(t, err)
 	root, manifest, cfg := imageTestReadManifest(t, dest)
-	assert.Equal(t, dest, got.Path)
-	assert.Equal(t, root, got.Descriptor)
-	assert.Equal(t, p, got.Platform)
-	assert.Equal(t, OpAssembleLayout, got.Op)
-	assert.Equal(t, "2026-10-23T12:00:00Z", got.Created)
+	assert.Equal(t, Layout{
+		Path: dest, Descriptor: root, Platform: p, Op: OpAssembleLayout,
+		FileCount: 1, SymlinkCount: 1, Layer: got.Layer, ConfigDigest: got.ConfigDigest,
+		Created: "2026-10-23T12:00:00Z",
+	}, got)
 	assert.False(t, got.Layer.IsZero())
 	assert.Equal(t, "sha256", got.Layer.Digest.Algorithm())
 	assert.Equal(t, ocispec.MediaTypeImageLayerGzip, got.Layer.MediaType)

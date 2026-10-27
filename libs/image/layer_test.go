@@ -16,6 +16,7 @@ import (
 
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/assert"
 )
 
 func layerSource(t *testing.T, content string) string {
@@ -370,10 +371,8 @@ func TestNewLayerReturnsOCIDigests(t *testing.T) {
 	if layer.Digest.String() == layer.DiffID.String() {
 		t.Fatal("compressed digest must differ from DiffID")
 	}
-	if layer.MediaType != ocispec.MediaTypeImageLayerGzip {
-		t.Fatalf("media type: %s", layer.MediaType)
-	}
-	if layer.Size != int64(buf.Len()) {
-		t.Fatalf("size: got %d want %d", layer.Size, buf.Len())
-	}
+	assert.Equal(t, Layer{
+		Digest: layer.Digest, DiffID: layer.DiffID,
+		Size: int64(buf.Len()), MediaType: ocispec.MediaTypeImageLayerGzip,
+	}, layer)
 }
