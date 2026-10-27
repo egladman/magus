@@ -36,8 +36,7 @@ Write the rule.
 - The Buzz checker rejects a comparison that cannot be true, such as an enum
   against a string (BZZ1005); `TestCommandRuleComparingAnEnumFieldToAStringFailsToLoad`
   pins it for guard rules.
-- The spell contract refuses a declaration it can see is wrong at load, and
-  provider ops are held to their typed signature
+- Provider ops are held to their typed signature at load
   ([typed provider calls](../../decisions/0011-typed-provider-calls.md)).
 - Generated decoders are strict: an unknown or mistyped field is an error at
   the boundary, never a zero value.
@@ -56,9 +55,11 @@ BZZ1005: == between an enum and `str` is always false
 
 The author sees it while writing the rule, on the line that caused it.
 
-The spell contract works the same way. Passing an environment value through
-argv is refused when the spell loads (decision 67), before any target runs and
-before the value lands in a process listing.
+The spell contract is meant to work the same way. Environment variables go
+through the typed env field, never through argv as a `NAME=value` token, an
+`env` wrapper or `sh -c`. The intended refusal happens when the spell loads,
+before any target runs. That refusal, in the spell contract and in `proc\exec`,
+is planned and not built.
 
 ## Bad
 
