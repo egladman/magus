@@ -192,8 +192,14 @@ Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds
 .SS job grant options
 .RS
 .TP
+\fB\-\-commit\fR \fIstring\fR
+Waive the push gate for this one commit instead of lowering a rule for a job; takes only push\-ungated
+.TP
 \fB\-\-for\fR \fIduration\fR
 End the grant after this long (e.g. 2h); unset, it lasts until the job ends
+.TP
+\fB\-\-reason\fR \fIstring\fR
+Why the gate was skipped, recorded with the waiver; required with \-\-commit unless \-\-revoke
 .TP
 \fB\-\-revoke\fR
 End the job's grant of the rule
@@ -316,6 +322,18 @@ magus job prune --dry-run
 magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core
 .EE
 .PP
+\fIPush HEAD without the local gate, saying why\fR
+.PP
+.EX
+magus job grant --commit HEAD push-ungated --reason "CI gates this release branch"
+.EE
+.PP
+\fITake that waiver back\fR
+.PP
+.EX
+magus job grant --commit HEAD push-ungated --revoke
+.EE
+.PP
 .SH SEE ALSO
 \fBmagus\fR(1),
 \fBmagus\-ls\fR(1),
@@ -336,7 +354,6 @@ magus job pause session-load/core --reason 'release build needs the machine' --u
 \fBmagus\-session\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

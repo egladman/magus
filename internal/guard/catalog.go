@@ -641,7 +641,6 @@ var ruleDocGrantIsAPersons = types.RuleDoc{
 		"`magus job grant --commit <commit> push-ungated --reason \"...\"` is the one commit-scoped form: a person's waiver of the push gate for that commit alone, ended by `--revoke`. The store refuses it from a process carrying a lease, as it does a grant.",
 }
 
-
 var ruleDocLeaseRowUnknown = types.RuleDoc{
 	Name:    string(denyRuleLeaseRowUnknown),
 	Catches: "a leased call judged by a magus older than the job row it reads",

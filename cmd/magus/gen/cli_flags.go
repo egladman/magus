@@ -209,10 +209,6 @@ const (
 	FlagExplainGlobal = "global"
 	// explain: --refresh
 	FlagExplainRefresh = "refresh"
-	// gate waive: --reason
-	FlagGateWaiveReason = "reason"
-	// gate waive: --revoke
-	FlagGateWaiveRevoke = "revoke"
 	// graph build: --no-sessions
 	FlagGraphBuildNoSessions = "no-sessions"
 	// graph build: --no-symbols
@@ -333,8 +329,12 @@ const (
 	FlagJobForkTimeout = "timeout"
 	// job fork: --write-paths
 	FlagJobForkWritePaths = "write-paths"
+	// job grant: --commit
+	FlagJobGrantCommit = "commit"
 	// job grant: --for
 	FlagJobGrantFor = "for"
+	// job grant: --reason
+	FlagJobGrantReason = "reason"
 	// job grant: --revoke
 	FlagJobGrantRevoke = "revoke"
 	// job pause: --reason
@@ -1528,6 +1528,8 @@ func BindJobPause(fs *flag.FlagSet) *JobPauseFlags {
 type JobGrantFlags struct {
 	For    time.Duration // --for
 	Revoke bool          // --revoke
+	Commit string        // --commit
+	Reason string        // --reason
 }
 
 // BindJobGrant registers `magus job grant`'s flags on fs and returns the destination.
@@ -1535,6 +1537,8 @@ func BindJobGrant(fs *flag.FlagSet) *JobGrantFlags {
 	var f JobGrantFlags
 	fs.DurationVar(&f.For, FlagJobGrantFor, 0, "End the grant after this long (e.g. 2h); unset, it lasts until the job ends")
 	fs.BoolVar(&f.Revoke, FlagJobGrantRevoke, false, "End the job's grant of the rule")
+	fs.StringVar(&f.Commit, FlagJobGrantCommit, "", "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated")
+	fs.StringVar(&f.Reason, FlagJobGrantReason, "", "Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke")
 	return &f
 }
 
@@ -1763,20 +1767,6 @@ func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
 	fs.StringVar(&f.Target, FlagQueueReviewsTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueReviewsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueReviewsVCS, "git", "Version control `backend` of the checkout at --root")
-	return &f
-}
-
-// GateWaiveFlags are the flags declared for `magus gate waive`.
-type GateWaiveFlags struct {
-	Reason string // --reason
-	Revoke bool   // --revoke
-}
-
-// BindGateWaive registers `magus gate waive`'s flags on fs and returns the destination.
-func BindGateWaive(fs *flag.FlagSet) *GateWaiveFlags {
-	var f GateWaiveFlags
-	fs.StringVar(&f.Reason, FlagGateWaiveReason, "", "Why the gate was skipped, recorded with the waiver; required unless --revoke")
-	fs.BoolVar(&f.Revoke, FlagGateWaiveRevoke, false, "Remove the commit's waiver")
 	return &f
 }
 

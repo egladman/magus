@@ -287,7 +287,6 @@ subcommand diff
 subcommand doctor
 subcommand events
 subcommand explain
-subcommand gate
 subcommand graph
 subcommand init
 subcommand job

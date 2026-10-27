@@ -105,7 +105,6 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [unknown-env](unknown-env.md)                         | a retired or misspelled MAGUS_* variable handed to a command                                         |
 | [unread-command](unread-command.md)                   | a program or VCS subcommand the shell computes before it runs, which no rule can read                |
 | [vcs-off-switch](vcs-off-switch.md)                   | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
-| [waiver-is-a-persons](waiver-is-a-persons.md)         | an agent running `magus gate waive`, in any spelling and any role                                    |
 | [whole-tree](whole-tree.md)                           | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                           |
 | [worker-background-run](worker-background-run.md)     | a bound worker running a magus target in the background                                              |
 | [worker-check-only](worker-check-only.md)             | a bound worker running other than its check or a writer of its write paths, or writing past them     |
@@ -140,6 +139,9 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease            |
 | [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                       |
 | [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                  |
+| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                      |
+| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                        |
+| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it           |
 | [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it             |
 | [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it        |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                          |
@@ -148,7 +150,4 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                   |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at            |
 | [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                          |
-| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                      |
-| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                        |
-| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it           |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                   |
