@@ -45,6 +45,10 @@ func indexBody(t *testing.T) []byte {
 	return []byte(`{"schemaVersion":2,"mediaType":"` + ocispec.MediaTypeImageIndex + `","manifests":[]}`)
 }
 
+func raw(mediaType string, body []byte) RawManifest {
+	return RawManifest{Descriptor: ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(body), Size: int64(len(body))}, Body: body}
+}
+
 // requestCount reads the registry's request counter under its lock.
 func (r *inMemoryRegistry) requestCount() int {
 	r.mu.Lock()
@@ -52,13 +56,13 @@ func (r *inMemoryRegistry) requestCount() int {
 	return r.requests
 }
 
-func TestImageManifestFetchesAnIndexByDigest(t *testing.T) {
+func TestImageGetManifestFetchesAnIndexByDigest(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
-	want, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body, "v1")
+	want, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, body), "v1")
 	require.NoError(t, err)
 
-	got, err := reg.client().Manifest(t.Context(), reg.pinned(want))
+	got, err := reg.client().GetManifest(t.Context(), reg.pinned(want))
 	require.NoError(t, err)
 
 	assert.Equal(t, RawManifest{
@@ -72,38 +76,38 @@ func TestImageManifestFetchesAnIndexByDigest(t *testing.T) {
 	}, ", ")}, reg.accept)
 }
 
-func TestImageManifestFetchesADockerManifest(t *testing.T) {
+func TestImageGetManifestFetchesADockerManifest(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := []byte(`{"schemaVersion":2,"mediaType":"` + mediaTypeDockerManifest + `"}`)
-	d, err := reg.client().PutManifest(t.Context(), reg.repository(), mediaTypeDockerManifest, body)
+	d, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(mediaTypeDockerManifest, body))
 	require.NoError(t, err)
 
-	got, err := reg.client().Manifest(t.Context(), reg.pinned(d))
+	got, err := reg.client().GetManifest(t.Context(), reg.pinned(d))
 	require.NoError(t, err)
 	assert.Equal(t, ocispec.Descriptor{MediaType: mediaTypeDockerManifest, Digest: d, Size: int64(len(body))}, got.Descriptor)
 }
 
-func TestImageManifestRefusesATag(t *testing.T) {
+func TestImageGetManifestRefusesATag(t *testing.T) {
 	reg := newInMemoryRegistry(t)
-	_, err := reg.client().Manifest(t.Context(), reg.ref("team/image", "v1"))
+	_, err := reg.client().GetManifest(t.Context(), reg.ref("team/image", "v1"))
 	require.ErrorContains(t, err, "name a digest")
 	assert.Zero(t, reg.requestCount(), "a tag is refused before any request")
 }
 
-func TestImageManifestRefusesBytesThatMissTheDigest(t *testing.T) {
+func TestImageGetManifestRefusesBytesThatMissTheDigest(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
-	d, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body)
+	d, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, body))
 	require.NoError(t, err)
 	reg.mu.Lock()
 	reg.tags[d.String()] = []byte(`{"schemaVersion":2,"manifests":[{}]}`)
 	reg.mu.Unlock()
 
-	_, err = reg.client().Manifest(t.Context(), reg.pinned(d))
+	_, err = reg.client().GetManifest(t.Context(), reg.pinned(d))
 	require.ErrorIs(t, err, ErrManifestDigest)
 }
 
-func TestImageManifestRefusesAContentTypeThatDisagreesWithTheBody(t *testing.T) {
+func TestImageGetManifestRefusesAContentTypeThatDisagreesWithTheBody(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
 	d := digest.FromBytes(body)
@@ -112,11 +116,11 @@ func TestImageManifestRefusesAContentTypeThatDisagreesWithTheBody(t *testing.T) 
 	reg.types[d.String()] = ocispec.MediaTypeImageManifest
 	reg.mu.Unlock()
 
-	_, err := reg.client().Manifest(t.Context(), reg.pinned(d))
+	_, err := reg.client().GetManifest(t.Context(), reg.pinned(d))
 	require.ErrorContains(t, err, "disagrees with the manifest's mediaType")
 }
 
-func TestImageManifestRefusesAnUnknownMediaType(t *testing.T) {
+func TestImageGetManifestRefusesAnUnknownMediaType(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := []byte(`{"schemaVersion":2}`)
 	d := digest.FromBytes(body)
@@ -125,18 +129,18 @@ func TestImageManifestRefusesAnUnknownMediaType(t *testing.T) {
 	reg.types[d.String()] = "text/html"
 	reg.mu.Unlock()
 
-	_, err := reg.client().Manifest(t.Context(), reg.pinned(d))
+	_, err := reg.client().GetManifest(t.Context(), reg.pinned(d))
 	require.ErrorContains(t, err, `media type "text/html" is not a manifest or index`)
 }
 
-func TestImagePushBlobThenFetchBlobStreamsTheBytes(t *testing.T) {
+func TestImagePushBlobThenGetBlobStreamsTheBytes(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	payload := bytes.Repeat([]byte("layer-bytes-"), 1000)
 	desc := blobDescriptor(payload)
 
 	require.NoError(t, reg.client().PushBlob(t.Context(), reg.repository(), desc, bytes.NewReader(payload)))
 	var got bytes.Buffer
-	require.NoError(t, reg.client().FetchBlob(t.Context(), reg.repository(), desc, &got))
+	require.NoError(t, reg.client().GetBlob(t.Context(), reg.repository(), desc, &got))
 
 	assert.Equal(t, payload, got.Bytes())
 	reg.mu.Lock()
@@ -228,7 +232,7 @@ func TestImagePushBlobRefusesAnUnprotectedUploadLocation(t *testing.T) {
 	assert.Empty(t, reg.blobs)
 }
 
-func TestImageFetchBlobRefusesBytesThatMissTheDescriptor(t *testing.T) {
+func TestImageGetBlobRefusesBytesThatMissTheDescriptor(t *testing.T) {
 	payload := []byte("registry blob content")
 	for name, tc := range map[string]struct {
 		served []byte
@@ -248,13 +252,13 @@ func TestImageFetchBlobRefusesBytesThatMissTheDescriptor(t *testing.T) {
 			reg.blobs[desc.Digest.String()] = tc.served
 			reg.mu.Unlock()
 
-			err := reg.client().FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
+			err := reg.client().GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }
 
-func TestImageFetchBlobFollowsARedirectWithoutCredentialsAcrossHosts(t *testing.T) {
+func TestImageGetBlobFollowsARedirectWithoutCredentialsAcrossHosts(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	payload := []byte("served from blob storage")
 	desc := blobDescriptor(payload)
@@ -274,7 +278,7 @@ func TestImageFetchBlobFollowsARedirectWithoutCredentialsAcrossHosts(t *testing.
 	reg.mu.Unlock()
 
 	var got bytes.Buffer
-	require.NoError(t, reg.client().FetchBlob(t.Context(), reg.repository(), desc, &got))
+	require.NoError(t, reg.client().GetBlob(t.Context(), reg.repository(), desc, &got))
 
 	assert.Equal(t, payload, got.Bytes())
 	reg.mu.Lock()
@@ -286,7 +290,7 @@ func TestImageFetchBlobFollowsARedirectWithoutCredentialsAcrossHosts(t *testing.
 	assert.Empty(t, storageSaw[0].Values("Authorization"), "the token never reaches the storage host")
 }
 
-func TestImageFetchBlobRefusesARedirectToHTTP(t *testing.T) {
+func TestImageGetBlobRefusesARedirectToHTTP(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	payload := []byte("must not be fetched over http")
 	desc := blobDescriptor(payload)
@@ -305,7 +309,7 @@ func TestImageFetchBlobRefusesARedirectToHTTP(t *testing.T) {
 	reg.mu.Unlock()
 
 	var got bytes.Buffer
-	err := reg.client().FetchBlob(t.Context(), reg.repository(), desc, &got)
+	err := reg.client().GetBlob(t.Context(), reg.repository(), desc, &got)
 
 	require.ErrorContains(t, err, "refused a redirect from https to "+plain.URL)
 	assert.Empty(t, got.Bytes())
@@ -319,11 +323,11 @@ func TestImageErrorsAreBranchable(t *testing.T) {
 	payload := []byte("absent")
 	desc := blobDescriptor(payload)
 
-	err := reg.client().FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
+	err := reg.client().GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
 	require.ErrorIs(t, err, ErrNotFound)
 	var status *StatusError
 	require.ErrorAs(t, err, &status)
-	assert.Equal(t, 404, status.Code)
+	assert.Equal(t, 404, status.StatusCode)
 
 	reg.mu.Lock()
 	reg.enforceAuth, reg.rejectTokens = true, true
@@ -332,13 +336,13 @@ func TestImageErrorsAreBranchable(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnauthorized)
 
 	t.Setenv("MAGUS_OFFLINE", "1")
-	require.ErrorIs(t, reg.client().FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer)), ErrOffline)
+	require.ErrorIs(t, reg.client().GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer)), ErrOffline)
 }
 
 func TestImageResolveReadsATagAndReturnsItsDigest(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
-	want, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body, "v1")
+	want, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, body), "v1")
 	require.NoError(t, err)
 
 	got, err := reg.client().Resolve(t.Context(), reg.ref("team/image", "v1"))
@@ -362,7 +366,7 @@ func TestReferenceTextRoundTrips(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestImagePutManifestWritesTheDigestThenEachTag(t *testing.T) {
+func TestImagePushManifestWritesTheDigestThenEachTag(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
 	want := digest.FromBytes(body)
@@ -370,7 +374,7 @@ func TestImagePutManifestWritesTheDigestThenEachTag(t *testing.T) {
 	reg.dockerDigest = func(b []byte) string { return digest.FromBytes(b).String() }
 	reg.mu.Unlock()
 
-	got, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body, "v1", "latest", "v1")
+	got, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, body), "v1", "latest", "v1")
 
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
@@ -382,11 +386,11 @@ func TestImagePutManifestWritesTheDigestThenEachTag(t *testing.T) {
 	}, reg.types)
 }
 
-func TestImagePutManifestWithoutTagsWritesTheDigestOnly(t *testing.T) {
+func TestImagePushManifestWithoutTagsWritesTheDigestOnly(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
 
-	got, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body)
+	got, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, body))
 
 	require.NoError(t, err)
 	reg.mu.Lock()
@@ -394,7 +398,7 @@ func TestImagePutManifestWithoutTagsWritesTheDigestOnly(t *testing.T) {
 	assert.Equal(t, map[string][]byte{got.String(): body}, reg.tags)
 }
 
-func TestImagePutManifestRefusesADigestTheRegistryDoesNotConfirm(t *testing.T) {
+func TestImagePushManifestRefusesADigestTheRegistryDoesNotConfirm(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
 	other := digest.FromString("something else")
@@ -402,19 +406,19 @@ func TestImagePutManifestRefusesADigestTheRegistryDoesNotConfirm(t *testing.T) {
 	reg.dockerDigest = func([]byte) string { return other.String() }
 	reg.mu.Unlock()
 
-	_, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body, "v1")
+	_, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, body), "v1")
 
 	require.ErrorContains(t, err, "the registry confirmed "+other.String())
 }
 
-func TestImagePutManifestRefusesBadInputBeforeAnyRequest(t *testing.T) {
+func TestImagePushManifestRefusesBadInputBeforeAnyRequest(t *testing.T) {
 	reg := newInMemoryRegistry(t)
 	body := indexBody(t)
 
-	_, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body, "v1", "bad tag")
+	_, err := reg.client().PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, body), "v1", "bad tag")
 	require.ErrorContains(t, err, `tag "bad tag"`)
-	_, err = reg.client().PutManifest(t.Context(), reg.repository(), "text/plain", body)
-	require.ErrorContains(t, err, `media type "text/plain" is not a manifest or index`)
+	_, err = reg.client().PushManifest(t.Context(), reg.repository(), raw("", body))
+	require.ErrorContains(t, err, "the manifest has no media type")
 
 	assert.Zero(t, reg.requestCount())
 }
@@ -426,17 +430,17 @@ func TestImageRequestsRefuseWhenOffline(t *testing.T) {
 	desc := blobDescriptor(payload)
 	c := reg.client()
 
-	_, manifestErr := c.Manifest(t.Context(), reg.pinned(desc.Digest))
-	fetchErr := c.FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
+	_, manifestErr := c.GetManifest(t.Context(), reg.pinned(desc.Digest))
+	fetchErr := c.GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
 	pushErr := c.PushBlob(t.Context(), reg.repository(), desc, bytes.NewReader(payload))
-	_, putErr := c.PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, indexBody(t), "v1")
+	_, putErr := c.PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, indexBody(t)), "v1")
 	_, artifactErr := c.Artifact(t.Context(), reg.ref("team/image", "v1"), "")
 	_, tagsErr := c.Tags(t.Context(), reg.ref("team/image", ""))
 	_, legacyPushErr := c.Push(t.Context(), reg.ref("team/image", "v1"), testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
 
 	for name, err := range map[string]error{
-		"Manifest": manifestErr, "FetchBlob": fetchErr, "PushBlob": pushErr,
-		"PutManifest": putErr, "Artifact": artifactErr, "Tags": tagsErr, "Push": legacyPushErr,
+		"GetManifest": manifestErr, "GetBlob": fetchErr, "PushBlob": pushErr,
+		"PushManifest": putErr, "Artifact": artifactErr, "Tags": tagsErr, "Push": legacyPushErr,
 	} {
 		require.ErrorContains(t, err, "MAGUS_OFFLINE is set, so no request is sent", name)
 	}
@@ -453,10 +457,10 @@ func TestImageExpiredTokenIsRefreshedOnce(t *testing.T) {
 	reg.mu.Unlock()
 	c := reg.client()
 
-	require.NoError(t, c.FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer)))
+	require.NoError(t, c.GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer)))
 	reg.expire()
 	var got bytes.Buffer
-	require.NoError(t, c.FetchBlob(t.Context(), reg.repository(), desc, &got))
+	require.NoError(t, c.GetBlob(t.Context(), reg.repository(), desc, &got))
 
 	assert.Equal(t, payload, got.Bytes())
 	reg.mu.Lock()
@@ -473,7 +477,7 @@ func TestImageRefusedTokenIsNotRetriedForever(t *testing.T) {
 	reg.enforceAuth, reg.rejectTokens = true, true
 	reg.mu.Unlock()
 
-	err := reg.client().FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
+	err := reg.client().GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
 
 	require.ErrorContains(t, err, "401")
 	reg.mu.Lock()
@@ -512,9 +516,9 @@ func TestImagePasswordNeverAppearsInAnErrorOrALog(t *testing.T) {
 		reg.mu.Unlock()
 		c := reg.client()
 		c.Credentials = creds
-		_, err := c.Manifest(t.Context(), reg.pinned(desc.Digest))
+		_, err := c.GetManifest(t.Context(), reg.pinned(desc.Digest))
 		errs = append(errs, fmt.Sprint(err))
-		errs = append(errs, fmt.Sprint(c.FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))))
+		errs = append(errs, fmt.Sprint(c.GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))))
 		errs = append(errs, fmt.Sprint(c.PushBlob(t.Context(), reg.repository(), desc, bytes.NewReader(payload[:2]))))
 	}
 	errs = append(errs, fmt.Sprintf("%v %+v %#v %q", creds, creds, creds, creds))

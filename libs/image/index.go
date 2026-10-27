@@ -18,24 +18,24 @@ func AssembleIndex(ctx context.Context, layouts []string, dest string) (Layout, 
 	if len(layouts) == 0 {
 		return Layout{}, fmt.Errorf("image.index: no input layouts")
 	}
-	var inputs []ManifestLayout
-	seen := map[Platform]string{}
+	var inputs []Manifest
+	seen := map[string]string{}
 	for _, p := range layouts {
-		opened, err := OpenLayout(ctx, p)
+		opened, err := OpenLayout(ctx, p, "")
 		if err != nil {
 			return Layout{}, fmt.Errorf("image.index: %w", err)
 		}
 		if opened.Descriptor.MediaType != ocispec.MediaTypeImageManifest {
-			return Layout{}, fmt.Errorf("image.index: %s holds an index, but each input is one platform's manifest", p)
+			return Layout{}, fmt.Errorf("image.index: %s holds %s, but each input is one platform's OCI image manifest", p, opened.Descriptor.MediaType)
 		}
 		m, err := opened.manifest(ctx, opened.Descriptor)
 		if err != nil {
 			return Layout{}, fmt.Errorf("image.index: %w", err)
 		}
-		if prev, dup := seen[m.Platform.Normalize()]; dup {
+		if prev, dup := seen[m.Platform.Normalize().String()]; dup {
 			return Layout{}, fmt.Errorf("image.index: %s and %s are both %s", prev, p, m.Platform)
 		}
-		seen[m.Platform.Normalize()] = p
+		seen[m.Platform.Normalize().String()] = p
 		inputs = append(inputs, m)
 	}
 
@@ -54,7 +54,7 @@ func AssembleIndex(ctx context.Context, layouts []string, dest string) (Layout, 
 	return Layout{Path: dest, Descriptor: root}, nil
 }
 
-func indexInto(ctx context.Context, st *staging, inputs []ManifestLayout) (ocispec.Descriptor, error) {
+func indexInto(ctx context.Context, st *staging, inputs []Manifest) (ocispec.Descriptor, error) {
 	manifests := make([]ocispec.Descriptor, 0, len(inputs))
 	for _, in := range inputs {
 		for _, d := range append([]ocispec.Descriptor{in.Descriptor, in.Config}, in.Layers...) {

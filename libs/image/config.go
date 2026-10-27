@@ -3,6 +3,7 @@ package image
 import (
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -21,9 +22,7 @@ const historyCreatedBy = "magus image.assemble"
 func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.Image, error) {
 	var cfg ocispec.Image
 	if base == nil {
-		cfg.OS = spec.Platform.OS
-		cfg.Architecture = spec.Platform.Architecture
-		cfg.Variant = spec.Platform.Variant
+		cfg.Platform = *spec.Platform.oci()
 		cfg.RootFS = ocispec.RootFS{Type: "layers", DiffIDs: []digest.Digest{}}
 	} else {
 		cfg = cloneConfig(*base)
@@ -62,6 +61,60 @@ func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.
 	}
 	cfg.History = append(cfg.History, entry)
 	return cfg, nil
+}
+
+// keepUnmodelled copies into fields and config each member of base that the image-spec
+// types have no field for. A modelled member is never copied: buildConfig decided it,
+// and an omitted one was cleared on purpose.
+func keepUnmodelled(fields, config map[string]json.RawMessage, base []byte) error {
+	var baseFields map[string]json.RawMessage
+	if err := json.Unmarshal(base, &baseFields); err != nil {
+		return err
+	}
+	for k, v := range baseFields {
+		if !imageMembers[k] {
+			fields[k] = v
+		}
+	}
+	raw, ok := baseFields["config"]
+	if !ok {
+		return nil
+	}
+	var baseConfig map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &baseConfig); err != nil {
+		return err
+	}
+	for k, v := range baseConfig {
+		if !imageConfigMembers[k] {
+			config[k] = v
+		}
+	}
+	return nil
+}
+
+var (
+	imageMembers       = jsonMembers(reflect.TypeFor[ocispec.Image]())
+	imageConfigMembers = jsonMembers(reflect.TypeFor[ocispec.ImageConfig]())
+)
+
+// jsonMembers names the JSON members t encodes, an embedded struct's included, so the
+// set follows the image-spec module rather than a list kept by hand.
+func jsonMembers(t reflect.Type) map[string]bool {
+	out := map[string]bool{}
+	for i := range t.NumField() {
+		f := t.Field(i)
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		switch {
+		case f.Anonymous && name == "":
+			maps.Copy(out, jsonMembers(f.Type))
+		case name == "-":
+		case name == "":
+			out[f.Name] = true
+		default:
+			out[name] = true
+		}
+	}
+	return out
 }
 
 func setString(dst *string, v *string) {
@@ -130,8 +183,11 @@ func mergeEnv(base []string, set map[string]string, unset []string) []string {
 }
 
 // configJSON adapts the two image-spec bools that use v1 omitempty to the shared v2
-// codec, keeping every other encoded member intact.
-func configJSON(cfg ocispec.Image) ([]byte, error) {
+// codec, keeping every other encoded member intact. Every member of base, the base
+// config as written, that ocispec.Image does not model is carried over at the top level
+// and in config: config.md says extra fields MUST NOT be an error, and a Healthcheck or
+// Shell a base set must survive a rebuild.
+func configJSON(cfg ocispec.Image, base []byte) ([]byte, error) {
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, err
@@ -150,10 +206,15 @@ func configJSON(cfg ocispec.Image) ([]byte, error) {
 	}
 	if !argsEscaped {
 		delete(config, "ArgsEscaped")
-		fields["config"], err = json.Marshal(config)
-		if err != nil {
-			return nil, err
+	}
+	if len(base) > 0 {
+		if err := keepUnmodelled(fields, config, base); err != nil {
+			return nil, fmt.Errorf("base config: %w", err)
 		}
+	}
+	fields["config"], err = json.Marshal(config)
+	if err != nil {
+		return nil, err
 	}
 	if len(cfg.History) > 0 {
 		var history []map[string]json.RawMessage

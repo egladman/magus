@@ -8,7 +8,7 @@ import (
 )
 
 func TestParsePlatformRoundTrips(t *testing.T) {
-	for _, s := range []string{"linux/amd64", "linux/arm64", "linux/arm64/v8"} {
+	for _, s := range []string{"linux/amd64", "linux/amd64/v3", "linux/arm64", "linux/arm64/v8"} {
 		p, err := ParsePlatform(s)
 		require.NoError(t, err, s)
 		assert.Equal(t, s, p.String())
@@ -18,7 +18,7 @@ func TestParsePlatformRoundTrips(t *testing.T) {
 		require.NoError(t, back.UnmarshalText(text))
 		assert.Equal(t, p, back)
 	}
-	for _, s := range []string{"", "linux", "windows/amd64", "linux/riscv64", "linux/amd64/v2", "a/b/c/d"} {
+	for _, s := range []string{"", "linux", "windows/amd64", "linux/riscv64", "linux/amd64/v4", "linux/arm64/v9", "a/b/c/d"} {
 		_, err := ParsePlatform(s)
 		require.Error(t, err, s)
 	}
@@ -29,6 +29,8 @@ func TestParsePlatformRoundTrips(t *testing.T) {
 func TestNormalizeMakesArm64AndV8Equal(t *testing.T) {
 	assert.Equal(t, Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}.Normalize(), Platform{OS: "linux", Architecture: "arm64"}.Normalize())
 	assert.Equal(t, amd64, amd64.Normalize())
+	assert.True(t, Platform{OS: "linux", Architecture: "amd64", Variant: "v1"}.Matches(amd64), "image-spec: amd64 v1 is the baseline registries omit")
+	assert.False(t, Platform{OS: "linux", Architecture: "amd64", Variant: "v3"}.Matches(amd64), "a v3 binary does not run on a v1 machine")
 }
 
 func TestParsePlatformsRefusesADuplicate(t *testing.T) {
@@ -43,6 +45,9 @@ func TestGoEnv(t *testing.T) {
 	env, err := Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}.GoEnv()
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"GOOS": "linux", "GOARCH": "arm64"}, env)
+	env, err = Platform{OS: "linux", Architecture: "amd64", Variant: "v3"}.GoEnv()
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"GOOS": "linux", "GOARCH": "amd64", "GOAMD64": "v3"}, env)
 	_, err = Platform{}.GoEnv()
 	require.Error(t, err)
 }
@@ -64,13 +69,4 @@ func TestParseMode(t *testing.T) {
 	var m Mode
 	require.NoError(t, m.UnmarshalText([]byte("rw-------")))
 	assert.Equal(t, ModePrivate, m)
-}
-
-func TestParseDigestTakesSHA256Only(t *testing.T) {
-	_, err := ParseDigest("sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	require.NoError(t, err)
-	for _, s := range []string{"", "latest", "0123", "sha512:" + "00"} {
-		_, err := ParseDigest(s)
-		require.Error(t, err, s)
-	}
 }

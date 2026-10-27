@@ -2,8 +2,6 @@ package image
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,7 +15,6 @@ import (
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
@@ -125,7 +122,7 @@ func (r *registry) put(mediaType string, body []byte, tags ...string) ocispec.De
 	defer r.mu.Unlock()
 	d := ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(body), Size: int64(len(body))}
 	switch mediaType {
-	case ocispec.MediaTypeImageManifest, ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.v2+json":
+	case ocispec.MediaTypeImageManifest, ocispec.MediaTypeImageIndex, mediaTypeDockerManifest, mediaTypeDockerManifestList:
 		r.manifests[d.Digest.String()] = stored{mediaType, body}
 		for _, t := range tags {
 			r.manifests[t] = stored{mediaType, body}
@@ -161,115 +158,6 @@ func (r *registry) publish(p Platform, content string) ocispec.Descriptor {
 func pinned(repo oci.Reference, d digest.Digest) oci.Reference {
 	repo.Digest = d
 	return repo
-}
-
-func TestPullMatchesAnArm64IndexEntryListedAsV8(t *testing.T) {
-	reg := newRegistry(t)
-	amd := reg.publish(Platform{OS: "linux", Architecture: "amd64"}, "amd")
-	arm := reg.publish(Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}, "arm")
-	amd.Platform = &ocispec.Platform{OS: "linux", Architecture: "amd64"}
-	arm.Platform = &ocispec.Platform{OS: "linux", Architecture: "arm64", Variant: "v8"}
-	idx := reg.putJSON(ocispec.MediaTypeImageIndex, ocispec.Index{
-		Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex,
-		Manifests: []ocispec.Descriptor{amd, arm},
-	})
-
-	dest := filepath.Join(t.TempDir(), "base")
-	got, err := Pull(t.Context(), pinned(reg.repository(), idx.Digest), dest, PullOptions{
-		Client: reg.client(), Platform: Platform{OS: "linux", Architecture: "arm64"},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, arm.Digest, got.Descriptor.Digest)
-	assert.Equal(t, "v8", got.Platform.Variant)
-	assert.Equal(t, pinned(reg.repository(), idx.Digest).String(), got.Descriptor.Annotations[ocispec.AnnotationRefName])
-}
-
-func TestPullRefusesADockerManifestAndLeavesDestAlone(t *testing.T) {
-	reg := newRegistry(t)
-	d := reg.put("application/vnd.docker.distribution.manifest.v2+json",
-		[]byte(`{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json"}`))
-	dest := filepath.Join(t.TempDir(), "base")
-	require.NoError(t, os.MkdirAll(dest, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dest, "keep"), []byte("x"), 0o644))
-
-	_, err := Pull(t.Context(), pinned(reg.repository(), d.Digest), dest, PullOptions{
-		Client: reg.client(), Platform: Platform{OS: "linux", Architecture: "amd64"},
-	})
-	require.ErrorContains(t, err, "only OCI image manifests and indexes")
-	assert.FileExists(t, filepath.Join(dest, "keep"), "a refused pull leaves dest as it was")
-}
-
-func TestPullRefusesATagUnlessAllowed(t *testing.T) {
-	reg := newRegistry(t)
-	m := reg.publish(Platform{OS: "linux", Architecture: "amd64"}, "x")
-	reg.put(m.MediaType, mustManifest(t, reg, m), "v1")
-	ref := reg.repository()
-	ref.Tag = "v1"
-	opts := PullOptions{Client: reg.client(), Platform: Platform{OS: "linux", Architecture: "amd64"}}
-
-	_, err := Pull(t.Context(), ref, filepath.Join(t.TempDir(), "a"), opts)
-	require.ErrorContains(t, err, "names a tag")
-
-	opts.AllowTag = true
-	got, err := Pull(t.Context(), ref, filepath.Join(t.TempDir(), "b"), opts)
-	require.NoError(t, err)
-	assert.Equal(t, m.Digest, got.Descriptor.Digest)
-}
-
-func mustManifest(t *testing.T, reg *registry, d ocispec.Descriptor) []byte {
-	reg.mu.Lock()
-	defer reg.mu.Unlock()
-	m, ok := reg.manifests[d.Digest.String()]
-	require.True(t, ok)
-	return m.body
-}
-
-func TestPushThenPullRoundTripsAnAttachedIndex(t *testing.T) {
-	reg := newRegistry(t)
-	root := t.TempDir()
-	idx := assembleIndex(t, root)
-	sbom, err := WriteSBOM(t.Context(), idx, filepath.Join(root, "sbom.spdx.json"))
-	require.NoError(t, err)
-	attached, err := AttachReferrers(t.Context(), idx, []Document{sbom}, filepath.Join(root, "attached"))
-	require.NoError(t, err)
-
-	t.Setenv("MAGUS_OFFLINE", "0")
-	pushed, err := Push(t.Context(), attached.Path, reg.repository(), PushOptions{Client: reg.client(), Tags: []string{"v1"}})
-	require.NoError(t, err, "MAGUS_OFFLINE=0 means online, as libs/oci reads it")
-	assert.Equal(t, attached.Descriptor.Digest, pushed.Digest)
-	assert.Equal(t, pinned(reg.repository(), pushed.Digest), pushed.Reference())
-
-	for _, p := range []Platform{{OS: "linux", Architecture: "amd64"}, {OS: "linux", Architecture: "arm64"}} {
-		_, err := Pull(t.Context(), pinned(reg.repository(), pushed.Digest), filepath.Join(root, "pulled-"+p.Architecture),
-			PullOptions{Client: reg.client(), Platform: p})
-		require.NoError(t, err, "every platform manifest the index names reached the registry")
-	}
-	reg.mu.Lock()
-	_, ok := reg.manifests[attached.Referrers[0].Digest.String()]
-	reg.mu.Unlock()
-	assert.True(t, ok, "the referrer manifest is pushed")
-}
-
-func TestPushSkipsBlobsTheRegistryHolds(t *testing.T) {
-	reg := newRegistry(t)
-	root := t.TempDir()
-	l := assembleOne(t, root, Platform{OS: "linux", Architecture: "amd64"})
-	_, err := Push(t.Context(), l, reg.repository(), PushOptions{Client: reg.client()})
-	require.NoError(t, err)
-	first := reg.uploadCount()
-	assert.Positive(t, first)
-
-	_, err = Push(t.Context(), l, reg.repository(), PushOptions{Client: reg.client()})
-	require.NoError(t, err)
-	assert.Equal(t, first, reg.uploadCount(), "a second push uploads nothing")
-}
-
-func TestPushRefusesAnOfflineClient(t *testing.T) {
-	reg := newRegistry(t)
-	l := assembleOne(t, t.TempDir(), Platform{OS: "linux", Architecture: "amd64"})
-	t.Setenv("MAGUS_OFFLINE", "1")
-	_, err := Push(context.Background(), l, reg.repository(), PushOptions{Client: reg.client()})
-	require.True(t, errors.Is(err, oci.ErrOffline), "%v", err)
 }
 
 func tarArchive(t *testing.T, files map[string]string) []byte {

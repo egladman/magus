@@ -37,11 +37,11 @@ type entry struct {
 	uid, gid int
 }
 
-// Added is the receipt of the one layer an assemble wrote: its descriptor, its DiffID
-// (the sha256 of the uncompressed tar, which config.rootfs.diff_ids lists) and what it
-// holds.
-type Added struct {
-	Layer       ocispec.Descriptor
+// Layer is the receipt of the one layer an assemble wrote: its descriptor, its DiffID
+// (the sha256 of the uncompressed tar, which config.rootfs.diff_ids lists) and how many
+// entries of each kind it holds.
+type Layer struct {
+	ocispec.Descriptor
 	DiffID      digest.Digest
 	Files       int
 	Symlinks    int

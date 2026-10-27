@@ -8,16 +8,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/libs/oci"
 )
 
 var amd64 = Platform{OS: "linux", Architecture: "amd64"}
@@ -31,10 +28,10 @@ func write(t *testing.T, path, content string, mode os.FileMode) string {
 }
 
 // layerHeaders reads the new layer of the image at layout back as tar headers.
-func layerHeaders(t *testing.T, m ManifestLayout) map[string]*tar.Header {
+func layerHeaders(t *testing.T, m Manifest) map[string]*tar.Header {
 	t.Helper()
 	require.NotNil(t, m.Added)
-	f, err := os.Open(blobPath(m.Path, m.Added.Layer.Digest))
+	f, err := os.Open(blobPath(m.Path, m.Added.Descriptor.Digest))
 	require.NoError(t, err)
 	defer f.Close()
 	gz, err := gzip.NewReader(f)
@@ -51,7 +48,7 @@ func layerHeaders(t *testing.T, m ManifestLayout) map[string]*tar.Header {
 	}
 }
 
-func readManifest(t *testing.T, m ManifestLayout) ocispec.Manifest {
+func readManifest(t *testing.T, m Manifest) ocispec.Manifest {
 	t.Helper()
 	data, err := os.ReadFile(blobPath(m.Path, m.Descriptor.Digest))
 	require.NoError(t, err)
@@ -60,7 +57,7 @@ func readManifest(t *testing.T, m ManifestLayout) ocispec.Manifest {
 	return man
 }
 
-func readConfig(t *testing.T, m ManifestLayout) ocispec.Image {
+func readConfig(t *testing.T, m Manifest) ocispec.Image {
 	t.Helper()
 	data, err := os.ReadFile(blobPath(m.Path, m.Config.Digest))
 	require.NoError(t, err)
@@ -78,7 +75,7 @@ func TestAssembleIsDeterministic(t *testing.T) {
 	b, err := Assemble(t.Context(), spec, filepath.Join(root, "b"))
 	require.NoError(t, err)
 	assert.Equal(t, a.Descriptor.Digest, b.Descriptor.Digest)
-	want := Added{Layer: b.Added.Layer, DiffID: b.Added.DiffID, Files: 1, Directories: 2}
+	want := Layer{Descriptor: b.Added.Descriptor, DiffID: b.Added.DiffID, Files: 1, Directories: 2}
 	require.NotNil(t, a.Added)
 	assert.Equal(t, want, *a.Added, "scratch gets /usr and /usr/bin")
 }
@@ -101,7 +98,7 @@ func TestTreePlacesContentsAndIncludeReachesNestedFiles(t *testing.T) {
 	write(t, filepath.Join(tree, "usr", "lib", "x86", "README"), "r", 0o644)
 	write(t, filepath.Join(tree, "bin", "tool"), "t", 0o755)
 	m, err := Assemble(t.Context(), Spec{Scratch: true, Platform: amd64, Trees: []Tree{
-		{Source: tree, Path: "/opt", Include: []string{"**/*.so", "bin/*"}, Modes: ModeExecutableBit, Symlinks: SymlinkRefuse},
+		{Source: tree, Path: "/opt", Include: []string{"**/*.so", "bin/*"}, ModePolicy: ModePolicyExecutableBit, Symlinks: SymlinkPolicyRefuse},
 	}}, filepath.Join(root, "out"))
 	require.NoError(t, err)
 	h := layerHeaders(t, m)
@@ -112,11 +109,11 @@ func TestTreePlacesContentsAndIncludeReachesNestedFiles(t *testing.T) {
 }
 
 func TestTreeRefusesABadPatternAndAnUnsetPolicy(t *testing.T) {
-	spec := Spec{Scratch: true, Platform: amd64, Trees: []Tree{{Source: "x", Path: "/x", Include: []string{"[a-"}, Modes: ModeFixed, Symlinks: SymlinkRefuse}}}
+	spec := Spec{Scratch: true, Platform: amd64, Trees: []Tree{{Source: "x", Path: "/x", Include: []string{"[a-"}, ModePolicy: ModePolicyFixed, Symlinks: SymlinkPolicyRefuse}}}
 	require.ErrorContains(t, spec.Validate(), "not a valid doublestar glob")
 	spec.Trees[0].Include = nil
-	spec.Trees[0].Modes = ""
-	require.ErrorContains(t, spec.Validate(), "modes is unset")
+	spec.Trees[0].ModePolicy = ""
+	require.ErrorContains(t, spec.Validate(), "modePolicy is unset")
 }
 
 func TestTreeKeepRefusesAnAbsoluteHostTarget(t *testing.T) {
@@ -125,7 +122,7 @@ func TestTreeKeepRefusesAnAbsoluteHostTarget(t *testing.T) {
 	require.NoError(t, os.MkdirAll(tree, 0o755))
 	require.NoError(t, os.Symlink("/etc/passwd", filepath.Join(tree, "link")))
 	_, err := Assemble(t.Context(), Spec{Scratch: true, Platform: amd64, Trees: []Tree{
-		{Source: tree, Path: "/t", Modes: ModeFixed, Symlinks: SymlinkKeep},
+		{Source: tree, Path: "/t", ModePolicy: ModePolicyFixed, Symlinks: SymlinkPolicyKeep},
 	}}, filepath.Join(root, "out"))
 	require.ErrorContains(t, err, "names a host path")
 }
@@ -142,10 +139,10 @@ func TestAssembleOverABaseReportsTheNewConfigAndAnnotatesTheBase(t *testing.T) {
 
 	man := readManifest(t, m)
 	assert.Equal(t, man.Config, m.Config, "Config is the manifest's own config, never the base's")
-	baseLayout, err := OpenLayout(t.Context(), base)
+	baseLayout, err := OpenLayout(t.Context(), base, "")
 	require.NoError(t, err)
 	assert.Equal(t, baseLayout.Descriptor.Digest.String(), man.Annotations[ocispec.AnnotationBaseImageDigest])
-	baseManifest, err := baseLayout.Manifest(t.Context())
+	baseManifest, err := baseLayout.Manifest(t.Context(), amd64)
 	require.NoError(t, err)
 	want := readConfig(t, baseManifest).Config
 	require.Equal(t, []string{"/app"}, want.Entrypoint)
@@ -176,9 +173,9 @@ func TestAssembleOverABaseKeepsTheBasesDirectories(t *testing.T) {
 func TestAssembleNeverChangesALinkedBaseBlob(t *testing.T) {
 	root := t.TempDir()
 	base := assembleOne(t, root, amd64)
-	opened, err := OpenLayout(t.Context(), base)
+	opened, err := OpenLayout(t.Context(), base, "")
 	require.NoError(t, err)
-	m, err := opened.Manifest(t.Context())
+	m, err := opened.Manifest(t.Context(), amd64)
 	require.NoError(t, err)
 	layer := blobPath(base, m.Layers[0].Digest)
 	require.NoError(t, os.Chmod(layer, 0o600))
@@ -248,11 +245,11 @@ func TestAttachReferrersWritesANewLayoutAndKeepsEveryBlob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "the subject layout is never edited")
 
-	opened, err := OpenLayout(t.Context(), out.Path)
+	opened, err := OpenLayout(t.Context(), out.Path, "")
 	require.NoError(t, err)
 	require.Len(t, opened.Referrers, 2)
 	for _, p := range []Platform{amd64, {OS: "linux", Architecture: "arm64"}} {
-		m, err := opened.ResolvePlatform(t.Context(), p)
+		m, err := opened.Manifest(t.Context(), p)
 		require.NoError(t, err)
 		for _, l := range m.Layers {
 			assert.FileExists(t, blobPath(out.Path, l.Digest), "every layer the image reaches is carried over")
@@ -323,7 +320,7 @@ func TestProvenanceNamesTheDigestAndAddsTheBase(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &st))
 	assert.Equal(t, "https://in-toto.io/Statement/v1", st.Type)
 	assert.Equal(t, over.Descriptor.Digest.String(), st.Subject[0].Name, "a digest, never a host path")
-	baseLayout, err := OpenLayout(t.Context(), base)
+	baseLayout, err := OpenLayout(t.Context(), base, "")
 	require.NoError(t, err)
 	require.Len(t, st.Predicate.BuildDefinition.ResolvedDependencies, 1)
 	assert.Equal(t, baseLayout.Descriptor.Digest.Encoded(), st.Predicate.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
@@ -337,11 +334,6 @@ func TestAssembleIndexRefusesTheSamePlatformTwiceOnceNormalized(t *testing.T) {
 	require.ErrorContains(t, err, "are both")
 }
 
-func TestVerifyReportsADigestMismatch(t *testing.T) {
-	desc := ocispec.Descriptor{Digest: digest.FromString("a"), Size: 1}
-	require.ErrorIs(t, Verify(t.Context(), strings.NewReader("b"), desc), oci.ErrBlobDigest)
-	require.NoError(t, Verify(t.Context(), strings.NewReader("a"), desc))
-}
 
 func BenchmarkAssembleLayer(b *testing.B) {
 	root := b.TempDir()

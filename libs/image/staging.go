@@ -184,7 +184,7 @@ func (s *staging) fetch(ctx context.Context, client *oci.Client, repo oci.Refere
 	tmp := f.Name()
 	defer os.Remove(tmp)
 	buf := bufio.NewWriterSize(f, 1<<20)
-	err = client.FetchBlob(ctx, repo, desc, buf)
+	err = client.GetBlob(ctx, repo, desc, buf)
 	if err == nil {
 		err = buf.Flush()
 	}
@@ -208,7 +208,7 @@ func (s *staging) commit(manifests ...ocispec.Descriptor) error {
 			return fmt.Errorf("index.json names %s, which no blob holds", m.Digest)
 		}
 	}
-	index, err := json.Marshal(ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: manifests})
+	index, err := json.Marshal(ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex, Manifests: manifests})
 	if err != nil {
 		return err
 	}

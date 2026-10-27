@@ -128,6 +128,12 @@ type inMemoryRegistry struct {
 	uploadLocation string
 	// dockerDigest, when set, supplies the Docker-Content-Digest of a manifest PUT.
 	dockerDigest func(body []byte) string
+	// referrersAPI serves GET /referrers/<digest> and answers a PUT of a manifest with a
+	// subject with OCI-Subject; without it the referrers endpoint is a 404.
+	referrersAPI bool
+	// intercept, when set, sees each request first and answers it itself by returning
+	// true. The caller holds r.mu.
+	intercept func(w http.ResponseWriter, req *http.Request) bool
 }
 
 // expire invalidates every token issued so far.
@@ -158,9 +164,14 @@ func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.requests++
+	if r.intercept != nil && r.intercept(w, req) {
+		return
+	}
 	p := req.URL.Path
 	last := p[strings.LastIndex(p, "/")+1:]
 	switch {
+	case strings.Contains(p, "/referrers/"):
+		r.serveReferrers(w, last)
 	case p == "/v2/":
 		r.pings++
 		realm := fmt.Sprintf("https://%s/token", req.Host)
@@ -249,6 +260,9 @@ func (r *inMemoryRegistry) serveManifest(w http.ResponseWriter, req *http.Reques
 		if r.dockerDigest != nil {
 			w.Header().Set("Docker-Content-Digest", r.dockerDigest(body))
 		}
+		if subject := subjectOf(body); r.referrersAPI && subject != "" {
+			w.Header().Set("OCI-Subject", subject)
+		}
 		w.WriteHeader(http.StatusCreated)
 		return
 	}
@@ -262,6 +276,40 @@ func (r *inMemoryRegistry) serveManifest(w http.ResponseWriter, req *http.Reques
 		w.Header().Set("Content-Type", ct)
 	}
 	_, _ = w.Write(b)
+}
+
+func subjectOf(body []byte) string {
+	var m struct {
+		Subject *ocispec.Descriptor `json:"subject"`
+	}
+	if json.Unmarshal(body, &m) != nil || m.Subject == nil {
+		return ""
+	}
+	return m.Subject.Digest.String()
+}
+
+// serveReferrers answers the Referrers API from every manifest held by digest; the caller
+// holds r.mu.
+func (r *inMemoryRegistry) serveReferrers(w http.ResponseWriter, subject string) {
+	if !r.referrersAPI {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	idx := ocispec.Index{MediaType: ocispec.MediaTypeImageIndex, Manifests: []ocispec.Descriptor{}}
+	idx.SchemaVersion = 2
+	for name, body := range r.tags {
+		if !strings.HasPrefix(name, "sha256:") || subjectOf(body) != subject {
+			continue
+		}
+		var m ocispec.Manifest
+		_ = json.Unmarshal(body, &m)
+		idx.Manifests = append(idx.Manifests, ocispec.Descriptor{
+			MediaType: r.types[name], Digest: digest.Digest(name), Size: int64(len(body)), ArtifactType: m.ArtifactType,
+		})
+	}
+	body, _ := json.Marshal(idx)
+	w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
+	_, _ = w.Write(body)
 }
 
 // serveTags answers tags/list in lexical order, after ?last= and at most pageSize per
@@ -375,7 +423,7 @@ func TestBlobRefusesContentTheManifestDoesNotDescribe(t *testing.T) {
 
 	_, err = art.Layer(t.Context(), "shard")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "manifest declared",
+	assert.Contains(t, err.Error(), "its descriptor declares",
 		"an overlong body must be named as a size mismatch, not blamed on the digest")
 }
 

@@ -40,7 +40,7 @@ type tokenKey struct {
 // a push that uploads several blobs asks once. An expired token is dropped by forget when
 // a request answers 401.
 func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (string, error) {
-	ch, err := c.challenge(ctx, ref.Registry)
+	ch, err := c.challenge(ctx, ref.endpoint())
 	if err != nil {
 		return "", err
 	}

@@ -23,7 +23,7 @@ const (
 // path. It names the image by its root digest, so two checkouts write the same bytes;
 // a file inventory is left to a scanner that reads the image itself.
 func WriteSBOM(ctx context.Context, layout, path string) (Document, error) {
-	l, err := OpenLayout(ctx, layout)
+	l, err := OpenLayout(ctx, layout, "")
 	if err != nil {
 		return Document{}, fmt.Errorf("image.sbom: %w", err)
 	}

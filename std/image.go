@@ -5,6 +5,7 @@ package std
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -141,7 +142,7 @@ func ImageAssemble(ctx context.Context, spec types.ImageSpec, dest string) (type
 	if err != nil {
 		return types.ImageLayout{}, err
 	}
-	return manifestLayoutToTypes(l), nil
+	return manifestToTypes(l), nil
 }
 
 // ImageAssembleIndex writes one Image Index over layouts at dest.
@@ -179,15 +180,22 @@ func ImagePull(ctx context.Context, reference string, platform types.ImagePlatfo
 	if err := imageCheck(ctx, nil, []string{dest}); err != nil {
 		return types.ImageLayout{}, fmt.Errorf("image.pull: %w", err)
 	}
-	allowTag := types.HasCharm(ctx, types.CharmUpdate)
-	if ref.Digest == "" && !allowTag {
-		return types.ImageLayout{}, fmt.Errorf("image.pull: %s names a tag, which can move: pin it as name@sha256:<hex>, or run the target under the update charm (magus run <target>:update) to resolve it", reference)
+	client := imageClient(auth)
+	if ref.Digest == "" {
+		if !types.HasCharm(ctx, types.CharmUpdate) {
+			return types.ImageLayout{}, fmt.Errorf("image.pull: %s names a tag, which can move: pin it as name@sha256:<hex>, or run the target under the update charm (magus run <target>:update) to resolve it", reference)
+		}
+		resolved, err := client.Resolve(ctx, ref)
+		if err != nil {
+			return types.ImageLayout{}, fmt.Errorf("image.pull: %w", err)
+		}
+		ref.Digest = resolved.Digest
 	}
-	l, err := image.Pull(ctx, ref, dest, image.PullOptions{Client: imageClient(auth), Platform: platformFromTypes(platform), AllowTag: allowTag})
+	l, err := image.Pull(ctx, client, ref, platformFromTypes(platform), dest)
 	if err != nil {
 		return types.ImageLayout{}, err
 	}
-	return manifestLayoutToTypes(l), nil
+	return manifestToTypes(l), nil
 }
 
 // ImagePush pushes the layout at layout to repository under tags.
@@ -203,15 +211,15 @@ func ImagePush(ctx context.Context, layout, repository string, tags []string, au
 	if err := imageCheck(ctx, []string{layout}, nil); err != nil {
 		return types.ImagePushed{}, fmt.Errorf("image.push: %w", err)
 	}
-	p, err := image.Push(ctx, layout, repo, image.PushOptions{Client: imageClient(auth), Tags: tags})
+	pinned, err := image.Push(ctx, imageClient(auth), layout, repo, tags...)
 	if err != nil {
 		return types.ImagePushed{}, err
 	}
 	return types.ImagePushed{
-		Repository: p.Repository.String(),
-		Digest:     digestToTypes(p.Digest),
-		Tags:       p.Tags,
-		Reference:  p.Reference().String(),
+		Repository: repo.String(),
+		Digest:     digestToTypes(pinned.Digest),
+		Tags:       slices.Clone(tags),
+		Reference:  pinned.String(),
 	}, nil
 }
 
@@ -242,7 +250,7 @@ func ImageWriteProvenance(ctx context.Context, layout string, p types.ImageProve
 		if err != nil {
 			return types.ImageDocument{}, fmt.Errorf("image.provenance: materials[%d]: %w", i, err)
 		}
-		prov.Materials = append(prov.Materials, image.Material{URI: m.URI, Digest: d})
+		prov.Dependencies = append(prov.Dependencies, image.Dependency{URI: m.URI, Digest: d})
 	}
 	layout, path = resolvePath(ctx, layout), resolvePath(ctx, path)
 	if err := imageCheck(ctx, []string{layout}, []string{path}); err != nil {
@@ -290,18 +298,21 @@ func ImageOpen(ctx context.Context, path string) (types.ImageLayout, error) {
 	if err := imageCheck(ctx, []string{path}, nil); err != nil {
 		return types.ImageLayout{}, fmt.Errorf("image.open: %w", err)
 	}
-	l, err := image.OpenLayout(ctx, path)
+	l, err := image.OpenLayout(ctx, path, "")
 	if err != nil {
 		return types.ImageLayout{}, err
 	}
-	if l.Descriptor.MediaType != ocispec.MediaTypeImageManifest {
+	// A manifest's platform is in its config; the index.json entry names it for every
+	// layout magus writes, and without it there is no platform to ask Manifest for.
+	if l.Descriptor.MediaType != ocispec.MediaTypeImageManifest || l.Descriptor.Platform == nil {
 		return layoutToTypes(l), nil
 	}
-	m, err := l.Manifest(ctx)
+	p := l.Descriptor.Platform
+	m, err := l.Manifest(ctx, image.Platform{OS: p.OS, Architecture: p.Architecture, Variant: p.Variant})
 	if err != nil {
 		return types.ImageLayout{}, fmt.Errorf("image.open: %w", err)
 	}
-	return manifestLayoutToTypes(m), nil
+	return manifestToTypes(m), nil
 }
 
 // ImageParsePlatform parses "os/architecture[/variant]".
@@ -398,7 +409,7 @@ func imageSpec(ctx context.Context, in types.ImageSpec) (image.Spec, error) {
 	for _, t := range in.Trees {
 		s.Trees = append(s.Trees, image.Tree{
 			Source: resolvePath(ctx, t.Source), Path: t.Path, Include: t.Include, Exclude: t.Exclude,
-			Modes: image.ModePolicy(t.Modes), Symlinks: image.SymlinkPolicy(t.Symlinks), UID: t.UID, GID: t.GID,
+			ModePolicy: image.ModePolicy(t.Modes), Symlinks: image.SymlinkPolicy(t.Symlinks), UID: t.UID, GID: t.GID,
 		})
 	}
 	for _, l := range in.Symlinks {
@@ -448,7 +459,7 @@ func digestToTypes(d digest.Digest) types.ImageDigest {
 }
 
 func digestFromTypes(d types.ImageDigest) (digest.Digest, error) {
-	return image.ParseDigest(d.String())
+	return oci.ParseDigest(d.String())
 }
 
 func descriptorToTypes(d ocispec.Descriptor) types.ImageDescriptor {
@@ -486,14 +497,14 @@ func layoutToTypes(l image.Layout) types.ImageLayout {
 	return types.ImageLayout{Path: l.Path, Descriptor: descriptorToTypes(l.Descriptor), Referrers: descriptorsToTypes(l.Referrers)}
 }
 
-func manifestLayoutToTypes(m image.ManifestLayout) types.ImageLayout {
+func manifestToTypes(m image.Manifest) types.ImageLayout {
 	out := layoutToTypes(m.Layout)
 	p := platformToTypes(m.Platform)
 	cfg := descriptorToTypes(m.Config)
 	out.Platform, out.Config, out.Layers, out.Created = &p, &cfg, descriptorsToTypes(m.Layers), m.Created
 	if m.Added != nil {
 		out.Added = &types.ImageAdded{
-			Layer:       descriptorToTypes(m.Added.Layer),
+			Layer:       descriptorToTypes(m.Added.Descriptor),
 			DiffID:      digestToTypes(m.Added.DiffID),
 			Files:       m.Added.Files,
 			Symlinks:    m.Added.Symlinks,

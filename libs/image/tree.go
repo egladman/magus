@@ -97,7 +97,7 @@ func (t Tree) place(root, p, rel string, de fs.DirEntry) (entry, error) {
 
 func (t Tree) file(source, dest string, info fs.FileInfo) entry {
 	mode := ModeFile
-	if t.Modes == ModeExecutableBit && info.Mode().Perm()&0o100 != 0 {
+	if t.ModePolicy == ModePolicyExecutableBit && info.Mode().Perm()&0o100 != 0 {
 		mode = ModeExecutable
 	}
 	return entry{path: dest, kind: kindFile, source: source, mode: mode, uid: t.UID, gid: t.GID}
@@ -105,7 +105,7 @@ func (t Tree) file(source, dest string, info fs.FileInfo) entry {
 
 func (t Tree) symlink(root, p, rel, dest string) (entry, error) {
 	switch t.Symlinks {
-	case SymlinkKeep:
+	case SymlinkPolicyKeep:
 		target, err := os.Readlink(p)
 		if err != nil {
 			return entry{}, err
@@ -117,7 +117,7 @@ func (t Tree) symlink(root, p, rel, dest string) (entry, error) {
 			return entry{}, fmt.Errorf("symlink to %q leaves the tree", target)
 		}
 		return entry{path: dest, kind: kindSymlink, target: target, uid: t.UID, gid: t.GID}, nil
-	case SymlinkFollow:
+	case SymlinkPolicyFollow:
 		real, err := filepath.EvalSymlinks(p)
 		if err != nil {
 			return entry{}, err

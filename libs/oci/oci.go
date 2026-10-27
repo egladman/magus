@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
@@ -95,7 +98,26 @@ func parseName(s string) (Reference, error) {
 	if !ok || host == "" || repo == "" || !isRegistryHost(host) {
 		return Reference{}, fmt.Errorf("oci: %q names no registry host, write <registry>/<repository>:<tag>", s)
 	}
+	if dockerHubHosts[host] && !strings.Contains(repo, "/") {
+		return Reference{}, fmt.Errorf("oci: %q names a Docker Hub repository with no namespace: an official image is %s/library/%s", s, host, repo)
+	}
 	return Reference{Registry: host, Repository: repo, Tag: tag, Digest: d}, nil
+}
+
+// dockerHubHosts are the names people write for Docker Hub. Neither serves the
+// distribution API: docker.io answers /v2/ with a redirect to www.docker.com, so every
+// request goes to dockerHubEndpoint instead.
+var dockerHubHosts = map[string]bool{"docker.io": true, "index.docker.io": true}
+
+const dockerHubEndpoint = "registry-1.docker.io"
+
+// endpoint is the host requests for r go to: Registry, except that a Docker Hub name
+// maps to the host that serves its API. Registry keeps what the person wrote.
+func (r Reference) endpoint() string {
+	if dockerHubHosts[r.Registry] {
+		return dockerHubEndpoint
+	}
+	return r.Registry
 }
 
 // tagPattern is the distribution spec's tag grammar.
@@ -220,9 +242,12 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 
 // send builds and sends one request authorized for actions on ref's repository. A 401
 // that follows a cached bearer token means the token expired, so it is dropped and the
-// request is sent once more with a fresh one.
+// request is sent once more with a fresh one. A 429 whose Retry-After is at most
+// maxRetryAfter is sent again after that wait, up to maxRateLimitRetries times; any other
+// 429 is returned for statusError to report.
 func (c *Client) send(ctx context.Context, ref Reference, actions string, build func(auth string) (*http.Request, error)) (*http.Response, error) {
-	for attempt := 0; ; attempt++ {
+	refreshed, limited := false, 0
+	for {
 		auth, err := c.authorize(ctx, ref, actions)
 		if err != nil {
 			return nil, err
@@ -235,12 +260,88 @@ func (c *Client) send(ctx context.Context, ref Reference, actions string, build 
 		if err != nil {
 			return nil, err
 		}
-		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 && c.forget(ref, actions, auth) {
+		reportWarnings(ctx, ref, resp)
+		if resp.StatusCode == http.StatusUnauthorized && !refreshed && c.forget(ref, actions, auth) {
+			refreshed = true
 			resp.Body.Close()
+			continue
+		}
+		if wait, ok := retryAfter(resp); ok && limited < maxRateLimitRetries {
+			limited++
+			resp.Body.Close()
+			if err := sleep(ctx, wait); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		return resp, nil
 	}
+}
+
+const (
+	maxRateLimitRetries = 3
+	maxRetryAfter       = time.Minute
+)
+
+// retryAfter reads a 429's Retry-After, in seconds or as an HTTP date. ok is false for
+// any other status, a missing or unreadable header, or a wait over maxRetryAfter: a
+// registry asking for an hour is answered with the error, not a hung build.
+func retryAfter(resp *http.Response) (time.Duration, bool) {
+	if resp.StatusCode != http.StatusTooManyRequests {
+		return 0, false
+	}
+	h := resp.Header.Get("Retry-After")
+	var wait time.Duration
+	if secs, err := strconv.Atoi(h); err == nil {
+		wait = time.Duration(secs) * time.Second
+	} else if at, err := http.ParseTime(h); err == nil {
+		wait = time.Until(at)
+	} else {
+		return 0, false
+	}
+	return max(wait, 0), wait <= maxRetryAfter
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+// reportWarnings logs each `Warning: 299 - "<text>"` header, which the distribution
+// spec says a client SHOULD show: a registry announces deprecations and quota changes
+// this way and nowhere else.
+func reportWarnings(ctx context.Context, ref Reference, resp *http.Response) {
+	for _, h := range resp.Header.Values("Warning") {
+		text, ok := parseWarning(h)
+		if !ok {
+			continue
+		}
+		slog.WarnContext(ctx, "the registry sent a warning", "registry", ref.Registry, "repository", ref.Repository, "warning", text)
+	}
+}
+
+// parseWarning reads the text of a 299 warning; the spec defines no other code for
+// registries, and the agent field is always "-".
+func parseWarning(h string) (string, bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(h), "299 ")
+	if !ok {
+		return "", false
+	}
+	_, quoted, ok := strings.Cut(rest, " ")
+	if !ok {
+		return "", false
+	}
+	text, err := strconv.Unquote(strings.TrimSpace(quoted))
+	if err != nil {
+		return "", false
+	}
+	return text, true
 }
 
 // Artifact is one pull in progress: the manifest, plus the token that fetched it. A
@@ -287,9 +388,9 @@ func (c *Client) Artifact(ctx context.Context, ref Reference, wantArtifactType s
 // else. The registry served a different manifest than the one the reference pins.
 var ErrManifestDigest = errors.New("oci: manifest does not match the digest its reference pins")
 
-// ErrBlobDigest reports a layer whose bytes do not hash to the digest its manifest
+// ErrBlobDigest reports a blob whose bytes do not hash to the digest its descriptor
 // names.
-var ErrBlobDigest = errors.New("oci: layer does not match the digest its manifest names")
+var ErrBlobDigest = errors.New("oci: blob does not match the digest its descriptor names")
 
 // Find returns the descriptor of the layer titled name, and whether there is one. The
 // first match wins; a publisher that titled two layers alike has already lost the ability
@@ -397,7 +498,7 @@ func (c *Client) blob(ctx context.Context, ref Reference, want ocispec.Descripto
 		return nil, fmt.Errorf("oci: fetch %s blob: %w", ref, err)
 	}
 	if int64(len(blob)) != want.Size {
-		return nil, fmt.Errorf("oci: %s layer is %d bytes, manifest declared %d", ref, len(blob), want.Size)
+		return nil, fmt.Errorf("oci: %s blob is %d bytes, its descriptor declares %d", ref, len(blob), want.Size)
 	}
 	return blob, nil
 }
@@ -415,7 +516,7 @@ func (c *Client) newGetRequest(ctx context.Context, ref Reference, auth, path st
 }
 
 func (c *Client) base(ref Reference) string {
-	return fmt.Sprintf("https://%s/v2/%s", ref.Registry, ref.Repository)
+	return fmt.Sprintf("https://%s/v2/%s", ref.endpoint(), ref.Repository)
 }
 
 // Layer is one named payload in an artifact. Name becomes the layer descriptor's title
@@ -508,7 +609,7 @@ func (c *Client) Push(ctx context.Context, ref Reference, content Content, moreT
 		}
 	}
 	for _, tag := range tags {
-		if _, err := c.putManifest(ctx, ref, tag, ocispec.MediaTypeImageManifest, raw); err != nil {
+		if _, _, err := c.putManifest(ctx, ref, tag, ocispec.MediaTypeImageManifest, raw); err != nil {
 			return "", err
 		}
 	}
@@ -628,8 +729,9 @@ func (c *Client) blobExists(ctx context.Context, ref Reference, actions string, 
 
 // putManifest PUTs body under reference (a tag or a digest) and returns the digest the
 // registry confirmed: its Docker-Content-Digest header when it sends one, which must
-// match the digest of body, else the computed one.
-func (c *Client) putManifest(ctx context.Context, ref Reference, reference, mediaType string, body []byte) (digest.Digest, error) {
+// match the digest of body, else the computed one. subjectSeen reports the OCI-Subject
+// header, which a registry serving the Referrers API sends for a manifest with a subject.
+func (c *Client) putManifest(ctx context.Context, ref Reference, reference, mediaType string, body []byte) (confirmed digest.Digest, subjectSeen bool, err error) {
 	dest := ref
 	dest.Tag = reference
 	resp, err := c.send(ctx, ref, "push,pull", func(auth string) (*http.Request, error) {
@@ -642,57 +744,107 @@ func (c *Client) putManifest(ctx context.Context, ref Reference, reference, medi
 		return req, nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("tag %s: %w", dest, err)
+		return "", false, fmt.Errorf("tag %s: %w", dest, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("oci: tag %s: %w", dest, statusError(resp))
+		return "", false, fmt.Errorf("oci: tag %s: %w", dest, statusError(resp))
 	}
 	want := digest.FromBytes(body)
 	if got := resp.Header.Get("Docker-Content-Digest"); got != "" && got != want.String() {
-		return "", fmt.Errorf("oci: tag %s: the registry confirmed %s, the manifest is %s", dest, got, want)
+		return "", false, fmt.Errorf("oci: tag %s: the registry confirmed %s, the manifest is %s", dest, got, want)
 	}
-	return want, nil
+	return want, resp.Header.Get("OCI-Subject") != "", nil
 }
 
 // ErrNotFound reports a registry answering 404: the repository, manifest or blob is not
 // there. A caller choosing between pushing and failing branches on it with errors.Is.
 var ErrNotFound = errors.New("oci: not found")
 
-// ErrUnauthorized reports a registry answering 401 or 403 after any token exchange:
-// the credentials are missing, wrong, or lack the scope.
+// ErrUnauthorized reports a registry answering 401 after any token exchange: the
+// credentials are missing or wrong.
 var ErrUnauthorized = errors.New("oci: unauthorized")
+
+// ErrDenied reports a registry answering 403: the credentials were accepted and lack
+// access to the repository or the action.
+var ErrDenied = errors.New("oci: denied")
+
+// ErrTooManyRequests reports a registry answering 429 after any retry Retry-After
+// allowed: a rate limit, such as Docker Hub's anonymous pull limit.
+var ErrTooManyRequests = errors.New("oci: too many requests")
 
 // ErrOffline reports a request refused before it was sent because MAGUS_OFFLINE is set.
 var ErrOffline = errors.New("oci: offline")
 
-// StatusError is a registry's non-success answer: the status plus whatever the registry
-// said about it, bounded, because an error body can be a whole HTML page. It unwraps to
-// ErrNotFound or ErrUnauthorized when the code is one of theirs.
+// StatusError is a registry's non-success answer. Errors holds the distribution spec's
+// error body when the registry sent one; Body holds any other body, bounded, because an
+// error page can be a whole HTML document. It unwraps to ErrNotFound, ErrUnauthorized,
+// ErrDenied or ErrTooManyRequests when the status is one of theirs.
 type StatusError struct {
-	Code   int
-	Status string
-	Detail string
+	StatusCode int
+	Status     string
+	Errors     []RegistryError
+	Body       string
+	// RetryAfter is the 429 answer's Retry-After header as sent, empty otherwise.
+	RetryAfter string
+}
+
+// RegistryError is one member of the distribution spec's `{"errors": [...]}` body. Code
+// is one of the spec's codes, such as MANIFEST_UNKNOWN, DENIED or TOOMANYREQUESTS, or a
+// registry's own.
+type RegistryError struct {
+	Code    string          `json:"code"`
+	Message string          `json:"message"`
+	Detail  json.RawMessage `json:"detail,omitempty"`
 }
 
 func (e *StatusError) Error() string {
-	if e.Detail == "" {
+	var parts []string
+	for _, re := range e.Errors {
+		parts = append(parts, strings.TrimSuffix(fmt.Sprintf("%s: %s", re.Code, re.Message), ": "))
+	}
+	if len(parts) == 0 && e.Body != "" {
+		parts = append(parts, e.Body)
+	}
+	if e.RetryAfter != "" {
+		parts = append(parts, fmt.Sprintf("retry after %s", e.RetryAfter))
+	}
+	if len(parts) == 0 {
 		return e.Status
 	}
-	return fmt.Sprintf("%s: %s", e.Status, e.Detail)
+	return fmt.Sprintf("%s: %s", e.Status, strings.Join(parts, "; "))
 }
 
 func (e *StatusError) Unwrap() error {
-	switch e.Code {
+	switch e.StatusCode {
 	case http.StatusNotFound:
 		return ErrNotFound
-	case http.StatusUnauthorized, http.StatusForbidden:
+	case http.StatusUnauthorized:
 		return ErrUnauthorized
+	case http.StatusForbidden:
+		return ErrDenied
+	case http.StatusTooManyRequests:
+		return ErrTooManyRequests
 	}
 	return nil
 }
 
+// errorBodyLimit bounds an error body read for its message.
+const errorBodyLimit = 4 << 10
+
 func statusError(resp *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	return &StatusError{Code: resp.StatusCode, Status: resp.Status, Detail: strings.TrimSpace(string(body))}
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLimit))
+	e := &StatusError{StatusCode: resp.StatusCode, Status: resp.Status}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		e.RetryAfter = resp.Header.Get("Retry-After")
+	}
+	var body struct {
+		Errors []RegistryError `json:"errors"`
+	}
+	if json.Unmarshal(raw, &body) == nil && len(body.Errors) > 0 {
+		e.Errors = body.Errors
+		return e
+	}
+	e.Body = strings.TrimSpace(string(raw))
+	return e
 }

@@ -54,7 +54,7 @@ type Tree struct {
 	// Include and Exclude are doublestar patterns over each file's path relative to
 	// Source. Empty Include takes every file; Exclude wins over Include.
 	Include, Exclude []string
-	Modes            ModePolicy
+	ModePolicy       ModePolicy
 	Symlinks         SymlinkPolicy
 	UID, GID         int
 }
@@ -94,44 +94,44 @@ type Config struct {
 type ModePolicy string
 
 const (
-	// ModeFixed places every file at ModeFile.
-	ModeFixed ModePolicy = "fixed"
-	// ModeExecutableBit places a file whose host owner-execute bit is set at
+	// ModePolicyFixed places every file at ModeFile.
+	ModePolicyFixed ModePolicy = "fixed"
+	// ModePolicyExecutableBit places a file whose host owner-execute bit is set at
 	// ModeExecutable and any other at ModeFile; that bit is in the cache key already.
-	ModeExecutableBit ModePolicy = "executable-bit"
+	ModePolicyExecutableBit ModePolicy = "executable-bit"
 )
 
 // SymlinkPolicy decides what a Tree does with a host symlink.
 type SymlinkPolicy string
 
 const (
-	// SymlinkRefuse fails the assemble.
-	SymlinkRefuse SymlinkPolicy = "refuse"
-	// SymlinkKeep places the link. Its target must be relative and stay inside the
+	// SymlinkPolicyRefuse fails the assemble.
+	SymlinkPolicyRefuse SymlinkPolicy = "refuse"
+	// SymlinkPolicyKeep places the link. Its target must be relative and stay inside the
 	// tree: an absolute target names a host path.
-	SymlinkKeep SymlinkPolicy = "keep"
-	// SymlinkFollow places the regular file the link resolves to.
-	SymlinkFollow SymlinkPolicy = "follow"
+	SymlinkPolicyKeep SymlinkPolicy = "keep"
+	// SymlinkPolicyFollow places the regular file the link resolves to.
+	SymlinkPolicyFollow SymlinkPolicy = "follow"
 )
 
 func (m ModePolicy) validate() error {
 	switch m {
-	case ModeFixed, ModeExecutableBit:
+	case ModePolicyFixed, ModePolicyExecutableBit:
 		return nil
 	case "":
-		return fmt.Errorf("modes is unset, want %s or %s", ModeFixed, ModeExecutableBit)
+		return fmt.Errorf("modePolicy is unset, want %s or %s", ModePolicyFixed, ModePolicyExecutableBit)
 	}
-	return fmt.Errorf("modes %q, want %s or %s", string(m), ModeFixed, ModeExecutableBit)
+	return fmt.Errorf("modePolicy %q, want %s or %s", string(m), ModePolicyFixed, ModePolicyExecutableBit)
 }
 
 func (s SymlinkPolicy) validate() error {
 	switch s {
-	case SymlinkRefuse, SymlinkKeep, SymlinkFollow:
+	case SymlinkPolicyRefuse, SymlinkPolicyKeep, SymlinkPolicyFollow:
 		return nil
 	case "":
-		return fmt.Errorf("symlinks is unset, want %s, %s or %s", SymlinkRefuse, SymlinkKeep, SymlinkFollow)
+		return fmt.Errorf("symlinks is unset, want %s, %s or %s", SymlinkPolicyRefuse, SymlinkPolicyKeep, SymlinkPolicyFollow)
 	}
-	return fmt.Errorf("symlinks %q, want %s, %s or %s", string(s), SymlinkRefuse, SymlinkKeep, SymlinkFollow)
+	return fmt.Errorf("symlinks %q, want %s, %s or %s", string(s), SymlinkPolicyRefuse, SymlinkPolicyKeep, SymlinkPolicyFollow)
 }
 
 // Validate checks the spec's own shape without touching the host or the base.
@@ -215,7 +215,7 @@ func (t Tree) validate() error {
 			return err
 		}
 	}
-	if err := t.Modes.validate(); err != nil {
+	if err := t.ModePolicy.validate(); err != nil {
 		return err
 	}
 	if err := t.Symlinks.validate(); err != nil {
@@ -282,6 +282,16 @@ func checkImagePath(p string) error {
 	case path.Clean(p) != p:
 		return fmt.Errorf("path %q: not clean, want %q", p, path.Clean(p))
 	}
+	return checkWhiteout(p)
+}
+
+// checkWhiteout refuses a basename starting with .wh.: image-spec layer.md makes such an
+// entry a whiteout, which deletes the base's path of that name (or, as .wh..wh..opq,
+// the whole directory), and magus places no whiteouts.
+func checkWhiteout(p string) error {
+	if strings.HasPrefix(path.Base(p), ".wh.") {
+		return fmt.Errorf("path %q: a name starting with .wh. is an OCI whiteout, which would delete a base path", p)
+	}
 	return nil
 }
 
@@ -305,6 +315,9 @@ func checkEnvKey(k string) error {
 func checkPlacements(entries []entry) error {
 	kinds := make(map[string]entryKind, len(entries))
 	for _, e := range entries {
+		if err := checkWhiteout(e.path); err != nil {
+			return fmt.Errorf("image.assemble: %w", err)
+		}
 		if _, dup := kinds[e.path]; dup {
 			return fmt.Errorf("image.assemble: %s is placed twice", e.path)
 		}
