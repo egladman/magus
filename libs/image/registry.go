@@ -171,7 +171,7 @@ func readAllBlob(b blob) ([]byte, error) {
 
 func registryClient(auth *RegistryAuth) *oci.Client {
 	client := &oci.Client{}
-	if auth != nil {
+	if auth != nil && (auth.Username != "" || auth.Password.Value != "") {
 		client.Credentials = oci.Credentials{
 			Username: auth.Username,
 			Password: secret.NewValue(auth.Password.Value),
