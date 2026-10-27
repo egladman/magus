@@ -94,7 +94,7 @@ func (b *buffer) Apply(edits ...edit) error {
 	for i, e := range edits {
 		s := b.Resolve(e.Anchor) + e.Offset
 		if e.Delete < 0 || s < 0 || s+e.Delete > b.Len() {
-			return fmt.Errorf("edit %d: %w: [%d, %d) in [0, %d]", i, errRange, s, s+e.Delete, b.Len())
+			return fmt.Errorf("edit %d [%d, %d) in [0, %d]: %w", i, s, s+e.Delete, b.Len(), errRange)
 		}
 		spans = append(spans, span{s, s + e.Delete, i})
 	}

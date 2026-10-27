@@ -146,7 +146,7 @@ func (r *rope) appendRange(dst []byte, start, end int) []byte {
 // chunk boundary belongs to the chunk it ends, so appends extend that chunk.
 func (r *rope) locate(off int) (idx, start int) {
 	var p chunkPath
-	r.pathTo(off, &p)
+	r.descend(off, &p)
 	return p.index, p.start
 }
 
@@ -181,7 +181,7 @@ func (r *rope) Point(off int) (point, error) {
 			}
 			return point{acc.rows, acc.col + len(part)}, nil
 		}
-		acc = acc.add(textSum{int(c.n), int(c.rows), int(c.col)})
+		acc = acc.add(acc.measure(c))
 	}
 	return point{}, nil
 }
@@ -213,7 +213,7 @@ func (r *rope) Offset(p point) (int, error) {
 	}
 	for k := range n.items {
 		c := &n.items[k]
-		end := acc.add(textSum{int(c.n), int(c.rows), int(c.col)})
+		end := acc.add(acc.measure(c))
 		if reaches(end) {
 			if off, ok := c.offset(acc, p); ok {
 				return acc.bytes + off, nil
@@ -283,7 +283,7 @@ func (r *rope) replaceInChunk(s, e int, text string) bool {
 		return false
 	}
 	var p chunkPath
-	r.pathTo(s, &p)
+	r.descend(s, &p)
 	leaf := p.nodes[p.depth]
 	c := &leaf.items[p.slots[p.depth]]
 	lo, hi := s-p.start, e-p.start
@@ -324,8 +324,8 @@ type chunkPath struct {
 	depth, index, start int
 }
 
-// pathTo fills p with the descent to the chunk holding off.
-func (r *rope) pathTo(off int, p *chunkPath) {
+// descend fills p with the descent to the chunk holding off.
+func (r *rope) descend(off int, p *chunkPath) {
 	n := r.t.root
 	for n.height > 0 {
 		last := len(n.kids) - 1
@@ -378,7 +378,7 @@ func (r *rope) resum(p *chunkPath, grow int) {
 func sumChunks(items []chunk) textSum {
 	var s textSum
 	for i := range items {
-		s = s.add(textSum{int(items[i].n), int(items[i].rows), int(items[i].col)})
+		s = s.add(s.measure(&items[i]))
 	}
 	return s
 }

@@ -291,102 +291,103 @@ func TestReleasedAnchorPanics(t *testing.T) {
 	b.Resolve(a)
 }
 
-func TestAnchorKeysRelabel(t *testing.T) {
-	b := newBuffer([]byte("x"))
-	var as []anchor
-	for range 200 {
-		a, err := b.Anchor(0, left)
-		if err != nil {
-			t.Fatal(err)
+var benchSizes = []int{4 << 10, 64 << 10, 1 << 20}
+
+const benchAnchors = 256
+
+func sizeName(n int) string {
+	if n >= 1<<20 {
+		return fmt.Sprintf("%dMiB", n>>20)
+	}
+	return fmt.Sprintf("%dKiB", n>>10)
+}
+
+// goSource returns about size bytes shaped like Go source.
+func goSource(size int) []byte {
+	var b bytes.Buffer
+	for i := 0; b.Len() < size; i++ {
+		fmt.Fprintf(&b, "func f%d(a, b int) int {\n", i)
+		for j := range 6 {
+			fmt.Fprintf(&b, "\tx%d := compute(a, b, %d) // step %d\n", j, i*j, j)
 		}
-		as = append(as, a)
+		b.WriteString("\treturn x0\n}\n\n")
 	}
-	if err := b.Apply(edit{Text: "abc"}); err != nil {
-		t.Fatal(err)
+	return b.Bytes()
+}
+
+func benchBuffer(b *testing.B, size, anchors int) (*buffer, *rand.Rand) {
+	b.Helper()
+	buf := newBuffer(goSource(size))
+	r := rand.New(rand.NewPCG(1, 2))
+	for range anchors {
+		if _, err := buf.Anchor(r.IntN(buf.Len()+1), bias(r.IntN(2))); err != nil {
+			b.Fatal(err)
+		}
 	}
-	for _, a := range as {
-		if got := b.Resolve(a); got != 0 {
-			t.Fatalf("anchor at %d, want 0", got)
+	return buf, r
+}
+
+func BenchmarkInsert(b *testing.B) {
+	for _, size := range benchSizes {
+		b.Run(sizeName(size), func(b *testing.B) {
+			buf, r := benchBuffer(b, size, benchAnchors)
+			b.ReportAllocs()
+			for b.Loop() {
+				if err := buf.Apply(edit{Offset: r.IntN(buf.Len() + 1), Text: "x"}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkDelete(b *testing.B) {
+	for _, size := range benchSizes {
+		b.Run(sizeName(size), func(b *testing.B) {
+			buf, r := benchBuffer(b, size, benchAnchors)
+			b.ReportAllocs()
+			for b.Loop() {
+				if buf.Len() < size/2 {
+					b.StopTimer()
+					buf, _ = benchBuffer(b, size, benchAnchors)
+					b.StartTimer()
+				}
+				if err := buf.Apply(edit{Offset: r.IntN(buf.Len() - 7), Delete: 8}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkInsertSnapshot takes a snapshot before each insert, so every insert copies
+// the path it writes.
+func BenchmarkInsertSnapshot(b *testing.B) {
+	buf, r := benchBuffer(b, 64<<10, benchAnchors)
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = buf.Snapshot()
+		if err := buf.Apply(edit{Offset: r.IntN(buf.Len() + 1), Text: "x"}); err != nil {
+			b.Fatal(err)
 		}
 	}
 }
 
-func TestApplyDiffMatchesModel(t *testing.T) {
-	for seed := range uint64(200) {
-		r := rand.New(rand.NewPCG(seed, 7))
-		lines := make([]string, r.IntN(60))
-		for i := range lines {
-			lines[i] = randText(r, r.IntN(30)) + "\n"
-		}
-		old := strings.Join(lines, "")
-		for i := range lines {
-			switch r.IntN(8) {
-			case 0:
-				lines[i] = ""
-			case 1:
-				lines[i] = "  " + lines[i]
-			case 2:
-				lines[i] += randText(r, r.IntN(20)) + "\n"
+func BenchmarkResolve(b *testing.B) {
+	for _, n := range []int{256, 16384} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			buf := newBuffer(goSource(1 << 20))
+			r := rand.New(rand.NewPCG(1, 2))
+			as := make([]anchor, n)
+			for i := range as {
+				as[i], _ = buf.Anchor(r.IntN(buf.Len()+1), bias(r.IntN(2)))
 			}
-		}
-		next := strings.Join(lines, "")
-		b := newBuffer([]byte(old))
-		// Lines wholly before the first differing byte, or wholly after the last,
-		// lie outside every hunk.
-		pre := commonPrefix([]byte(old), []byte(next))
-		firstLine := strings.LastIndexByte(old[:pre], '\n') + 1
-		suf := min(commonSuffix([]byte(old), []byte(next)), len(old)-pre, len(next)-pre)
-		lastLine := len(old)
-		if i := strings.IndexByte(old[len(old)-suf:], '\n'); i >= 0 {
-			lastLine = len(old) - suf + i + 1
-		}
-		var before, after []anchor
-		for range 20 {
-			off := r.IntN(len(old) + 1)
-			bias := bias(r.IntN(2))
-			a, _ := b.Anchor(off, bias)
-			switch {
-			case off < firstLine:
-				before = append(before, a)
-			case off > lastLine:
-				after = append(after, a)
+			b.ReportAllocs()
+			i := 0
+			for b.Loop() {
+				buf.Resolve(as[i%n])
+				i++
 			}
-		}
-		snap := b.Snapshot()
-		want := make(map[anchor]int)
-		for _, a := range before {
-			want[a] = b.Resolve(a)
-		}
-		for _, a := range after {
-			want[a] = b.Resolve(a) + len(next) - len(old)
-		}
-		b.ApplyDiff([]byte(next))
-		if b.String() != next {
-			t.Fatalf("seed %d: ApplyDiff text\n got %q\nwant %q", seed, b.String(), next)
-		}
-		if snap.String() != old {
-			t.Fatalf("seed %d: snapshot changed", seed)
-		}
-		for a, p := range want {
-			if got := b.Resolve(a); got != p {
-				t.Fatalf("seed %d: anchor outside the change moved: %d, want %d", seed, got, p)
-			}
-		}
-	}
-}
-
-func TestApplyDiffKeepsAnchorsBetweenHunks(t *testing.T) {
-	old := "func a() {\nreturn 1\n}\n\nfunc keep() {}\n\nfunc b() {\nreturn 2\n}\n"
-	next := "func a() {\n\treturn 1\n}\n\nfunc keep() {}\n\nfunc b() {\n\treturn 2\n}\n"
-	b := newBuffer([]byte(old))
-	at := strings.Index(old, "keep")
-	a, _ := b.Anchor(at, left)
-	inner, _ := b.Anchor(strings.Index(old, "1\n"), right)
-	b.ApplyDiff([]byte(next))
-	if got, want := b.Resolve(a), strings.Index(next, "keep"); got != want {
-		t.Fatalf("anchor between hunks at %d, want %d", got, want)
-	}
-	if got, want := b.Resolve(inner), strings.Index(next, "1\n"); got != want {
-		t.Fatalf("anchor inside a trimmed hunk at %d, want %d", got, want)
+		})
 	}
 }

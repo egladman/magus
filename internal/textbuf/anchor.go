@@ -75,27 +75,27 @@ func (a *anchorTree) seek(at int, inclusive bool) (idx, prevPos int, prevKey uin
 	if !passes(a.t.sum.pos) {
 		return a.t.count, a.t.sum.pos, a.t.sum.maxKey, false
 	}
+	var prev anchorSum
 	for n.height > 0 {
 		for k := range n.kids {
 			c := &n.kids[k]
-			if passes(prevPos + c.sum.pos) {
+			if passes(prev.pos + c.sum.pos) {
 				n = c.node
 				break
 			}
-			prevPos += c.sum.pos
-			prevKey = max(prevKey, c.sum.maxKey)
+			prev = prev.add(c.sum)
 			idx += c.count
 		}
 	}
+	// Keys rise along the leaf, so an entry's key is the running maximum: no add.
 	for k := range n.items {
-		e := &n.items[k]
-		if passes(prevPos + e.gap) {
-			return idx + k, prevPos, prevKey, true
+		s := prev.measure(&n.items[k])
+		if passes(prev.pos + s.pos) {
+			return idx + k, prev.pos, prev.maxKey, true
 		}
-		prevPos += e.gap
-		prevKey = e.key
+		prev = anchorSum{prev.pos + s.pos, s.maxKey}
 	}
-	return idx, prevPos, prevKey, false
+	return idx, prev.pos, prev.maxKey, false
 }
 
 // find returns the index and position of the entry with key.

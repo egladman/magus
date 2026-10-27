@@ -16,8 +16,9 @@ const maxDiffEdits = 4096
 // formatter output and file reloads come in.
 func (b *buffer) ApplyDiff(text []byte) {
 	old := b.Bytes()
-	var edits []edit
-	for _, h := range lineDiff(old, text) {
+	hunks := lineDiff(old, text)
+	edits := make([]edit, 0, len(hunks))
+	for _, h := range hunks {
 		a, n := trim(old[h.a0:h.a1], text[h.b0:h.b1])
 		edits = append(edits, edit{Offset: h.a0 + a.start, Delete: a.end - a.start, Text: string(n)})
 	}
