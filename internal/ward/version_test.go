@@ -343,7 +343,7 @@ func TestPinnedRelease(t *testing.T) {
 		"soon":               "",
 		"":                   "",
 	} {
-		assert.Equal(t, want, pinnedRelease(constraint), constraint)
+		assert.Equal(t, want, PinnedRelease(constraint), constraint)
 	}
 }
 

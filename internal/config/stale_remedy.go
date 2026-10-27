@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,14 +26,14 @@ const (
 	staleOwnSource
 )
 
-// StaleRemedy is the fix for a binary that cannot load its workspace, as data. Every report
+// staleRemedy is the fix for a binary that cannot load its workspace, as data. Every report
 // of a stale binary computes one and renders it where it prints, so the guard, MGS1021 and
 // doctor cannot word the same fix three ways.
-type StaleRemedy struct {
+type staleRemedy struct {
 	kind staleCase
-	// Version is the release a staleRelease installs, "" for the newest. A workspace whose
-	// required_version pins one names it: the newest may be one it refuses, and self update
-	// does not read magus.yaml.
+	// Version is the release a staleRelease installs, "" for the newest: ward.PinnedRelease,
+	// so the guard names the same release as MGS1021. A required_version bounded from above
+	// may refuse the newest, and self update does not read magus.yaml.
 	Version string
 	// Checkout, Package and Output are a staleOwnSource's link: `go -C Checkout build -o
 	// Output ./Package`. Bootstrap replaces the link with ward.BootstrapCommand, the
@@ -48,14 +47,14 @@ type StaleRemedy struct {
 
 // ReleaseRemedy is the release fix for a workspace declaring constraint as its
 // required_version, "" for none.
-func ReleaseRemedy(constraint string) StaleRemedy {
-	return StaleRemedy{kind: staleRelease, Version: pinnedVersion(constraint)}
+func ReleaseRemedy(constraint string) staleRemedy {
+	return staleRemedy{kind: staleRelease, Version: ward.PinnedRelease(constraint)}
 }
 
 // SourceRemedy is the fix for a binary built from checkout's own sources and older than
 // them: link pkg into output, or run the module's own bootstrap when bootstrap is set.
-func SourceRemedy(checkout, pkg, output string, bootstrap bool) StaleRemedy {
-	return StaleRemedy{kind: staleOwnSource, Checkout: checkout, Package: pkg, Output: output, Bootstrap: bootstrap}
+func SourceRemedy(checkout, pkg, output string, bootstrap bool) staleRemedy {
+	return staleRemedy{kind: staleOwnSource, Checkout: checkout, Package: pkg, Output: output, Bootstrap: bootstrap}
 }
 
 // RequiredVersionAt is the required_version root's magus.yaml declares, read leniently: a
@@ -79,20 +78,8 @@ func requiredVersion(data []byte) string {
 	return head.RequiredVersion
 }
 
-var exactPin = regexp.MustCompile(`^\s*=?=?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\s*$`)
-
-// pinnedVersion is the one release constraint admits, "vX.Y.Z", or "" when it admits a
-// range or is empty.
-func pinnedVersion(constraint string) string {
-	m := exactPin.FindStringSubmatch(constraint)
-	if m == nil {
-		return ""
-	}
-	return "v" + m[1]
-}
-
 // Steps are the fix's commands as argv, in the order they run.
-func (r StaleRemedy) Steps() [][]string {
+func (r staleRemedy) Steps() [][]string {
 	switch r.kind {
 	case staleRelease:
 		if r.Version != "" {
@@ -120,7 +107,7 @@ func bootstrapIn(dir string) []string {
 }
 
 // Lines are Steps quoted for a POSIX shell, one command per line.
-func (r StaleRemedy) Lines() []string {
+func (r staleRemedy) Lines() []string {
 	steps := r.Steps()
 	lines := make([]string, len(steps))
 	for i, argv := range steps {
