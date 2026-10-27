@@ -48,8 +48,8 @@ func TestValidationError_Error(t *testing.T) {
 func TestValidate_SpellRegistries(t *testing.T) {
 	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	valid.Spells.Registries = []SpellRegistry{
-		{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"},
-		{Host: "localhost:5000", Username: "me", Password: "op://dev/registry/token"},
+		{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"},
+		{Host: "localhost:5000", Username: "me", PasswordRef: "op://dev/registry/token"},
 	}
 	require.NoError(t, Validate(valid))
 
@@ -58,11 +58,11 @@ func TestValidate_SpellRegistries(t *testing.T) {
 		want FieldFailure
 	}{
 		"scheme": {
-			regs: []SpellRegistry{{Host: "https://ghcr.io", Username: "u", Password: "P"}},
+			regs: []SpellRegistry{{Host: "https://ghcr.io", Username: "u", PasswordRef: "P"}},
 			want: FieldFailure{Field: "spells.registries[0].host", Tag: "registry_host", Value: "https://ghcr.io"},
 		},
 		"uppercase": {
-			regs: []SpellRegistry{{Host: "GHCR.io", Username: "u", Password: "P"}},
+			regs: []SpellRegistry{{Host: "GHCR.io", Username: "u", PasswordRef: "P"}},
 			want: FieldFailure{Field: "spells.registries[0].host", Tag: "registry_host", Value: "GHCR.io"},
 		},
 		"no password ref": {
@@ -70,7 +70,7 @@ func TestValidate_SpellRegistries(t *testing.T) {
 			want: FieldFailure{Field: "spells.registries[0].password", Tag: "required"},
 		},
 		"duplicate host": {
-			regs: []SpellRegistry{{Host: "ghcr.io", Username: "a", Password: "A"}, {Host: "ghcr.io", Username: "b", Password: "B"}},
+			regs: []SpellRegistry{{Host: "ghcr.io", Username: "a", PasswordRef: "A"}, {Host: "ghcr.io", Username: "b", PasswordRef: "B"}},
 			want: FieldFailure{Field: "spells.registries", Tag: "unique", Param: "Host"},
 		},
 	} {
@@ -229,10 +229,10 @@ func TestValidate_MCPHTTP(t *testing.T) {
 }
 
 func TestSpellsConfigRegistry(t *testing.T) {
-	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}}}
+	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"}}}
 	got, ok := s.Registry("GHCR.IO")
 	assert.True(t, ok, "a reference's host matches case-insensitively")
-	assert.Equal(t, SpellRegistry{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}, got)
+	assert.Equal(t, SpellRegistry{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"}, got)
 	_, ok = s.Registry("docker.io")
 	assert.False(t, ok)
 }

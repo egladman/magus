@@ -49,9 +49,9 @@ type Provider interface {
 	// redaction, which is the security-critical part. Two verbs so the two contracts
 	// cannot be confused at a call site.
 	//
-	// Returns a [Value], so a provider implementation cannot accidentally log or format
-	// the credential it just fetched on its way back.
-	Fetch(ctx context.Context, ref string) (Value, error)
+	// Returns a [types.Secret], so a provider implementation cannot accidentally log or
+	// format the credential it just fetched on its way back.
+	Fetch(ctx context.Context, ref string) (types.Secret, error)
 }
 
 // minRedactLen is the shortest value [Resolver.Redact] will mask. Below it, masking does
@@ -75,15 +75,15 @@ type envProvider struct{}
 // Fetch returns the environment variable named by ref. Unset and set-to-empty are both
 // errors: returning "" would hand the caller a credential-shaped blank that fails later
 // at whatever consumes it, with an error far from the cause.
-func (envProvider) Fetch(_ context.Context, ref string) (Value, error) {
+func (envProvider) Fetch(_ context.Context, ref string) (types.Secret, error) {
 	v, ok := os.LookupEnv(ref)
 	if !ok {
-		return Value{}, fmt.Errorf("$%s is not set", ref)
+		return types.Secret{}, fmt.Errorf("$%s is not set", ref)
 	}
 	if v == "" {
-		return Value{}, fmt.Errorf("$%s is set but empty", ref)
+		return types.Secret{}, fmt.Errorf("$%s is set but empty", ref)
 	}
-	return NewValue(v), nil
+	return types.NewSecret(v), nil
 }
 
 // providerOpener builds a Provider from a selected spell's name. It is an extension
@@ -136,10 +136,10 @@ type Resolver struct {
 	// providerName is the spell a magusfile selected; empty means the built-in.
 	providerName string
 	// memo avoids re-invoking a provider that shells out (`op read`, `vault kv get`).
-	memo map[memoKey]string
+	memo map[memoKey]types.Secret
 	// redactable holds every distinct value read, longest first so [Resolver.Redact]
 	// masks a containing secret before one nested inside it.
-	redactable []string
+	redactable []types.Secret
 	// timeouts bound a provider read, from magus.yaml. They ride the Resolver because it
 	// is created where config is loaded, which keeps this package free of a config import
 	// and of any global to reach around it.
@@ -166,7 +166,7 @@ type Resolver struct {
 	// unrelated Redact, which sits on the output capture hot path.
 	//
 	// LOCK ORDER: endpointMu then mu, never the reverse. OpenEndpoint holds endpointMu
-	// across registerRedactable, which takes mu. Nothing may take mu and then reach for
+	// across Register, which takes mu. Nothing may take mu and then reach for
 	// endpointMu.
 	endpointMu sync.Mutex
 	// endpoints are the loopback forwarders opened through this resolver, one per
@@ -315,12 +315,12 @@ func (r *Resolver) ProviderName() string {
 //
 // A value shorter than minRedactLen is returned but NOT registered; see that constant.
 // Callers that care must treat such a value as unprotected; nothing reports it.
-func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
+func (r *Resolver) Read(ctx context.Context, ref string) (types.Secret, error) {
 	if r == nil {
-		return Value{}, errNoResolver
+		return types.Secret{}, errNoResolver
 	}
 	if ref == "" {
-		return Value{}, errors.New("secret: empty reference")
+		return types.Secret{}, errors.New("secret: empty reference")
 	}
 
 	name := r.ProviderName()
@@ -330,7 +330,7 @@ func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
 	v, hit := r.memo[key]
 	r.mu.RUnlock()
 	if hit {
-		return NewValue(v), nil
+		return v, nil
 	}
 
 	// singleflight rather than a lock held across the fetch: two targets reading the
@@ -371,24 +371,20 @@ func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
 					"secret %q is shorter than %d characters, so its value is NOT redacted from magus output; see %s",
 					ref, minRedactLen, types.CodeURL(types.SecretTooShortToMask))))
 		}
-		// Reveal at the single registration site: the redaction set has to hold the
-		// plaintext to match against, and the memo has to hand it back. This is one of
-		// the handful of Reveal call sites the type exists to make greppable.
-		plain := val.Reveal()
-		r.record(key, plain)
-		return plain, nil
+		r.record(key, val)
+		return val, nil
 	})
 	if err != nil {
-		return Value{}, err
+		return types.Secret{}, err
 	}
-	v, ok := got.(string)
+	v, ok := got.(types.Secret)
 	if !ok {
-		// Unreachable: the flight function above returns only a string or an error.
+		// Unreachable: the flight function above returns only a Secret or an error.
 		// Checked anyway rather than asserting, so a future edit that returns another
 		// type fails loudly here instead of panicking inside a credential path.
-		return Value{}, fmt.Errorf("secret %q: provider returned %T, not a string", ref, got)
+		return types.Secret{}, fmt.Errorf("secret %q: provider returned %T, not a secret", ref, got)
 	}
-	return NewValue(v), nil
+	return v, nil
 }
 
 // provider returns the backend for name, falling back to the built-in when a magusfile
@@ -427,12 +423,12 @@ var errNoResolver = errors.New("secret: no resolver on this context")
 // 3-byte groups, so `base64(user + ":" + secret)` contains `base64(secret)` only when
 // the prefix length is a multiple of 3: `us:` matches and `user:` does not, so an
 // `Authorization: Basic` header is covered about one time in three. Closing that needs
-// the value to mask itself before concatenation, which is what a secret.Value is for.
-func (r *Resolver) record(key memoKey, v string) {
+// the value to mask itself before concatenation, which is what a types.Secret is for.
+func (r *Resolver) record(key memoKey, v types.Secret) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.memo == nil {
-		r.memo = make(map[memoKey]string)
+		r.memo = make(map[memoKey]types.Secret)
 	}
 	r.memo[key] = v
 	// Gated on the SOURCE length, not each encoded form. Encoding inflates: base64 of a
@@ -440,7 +436,7 @@ func (r *Resolver) record(key memoKey, v string) {
 	// minRedactLen on their own. Checking per form therefore registered derivatives of
 	// exactly the values this refuses to protect, shredding ordinary output with a
 	// 4-character match while MGS2011 told the user the value was NOT redacted.
-	if len(v) < minRedactLen {
+	if v.Len() < minRedactLen {
 		return
 	}
 	for _, form := range encodedForms(v) {
@@ -448,15 +444,15 @@ func (r *Resolver) record(key memoKey, v string) {
 	}
 }
 
-// registerRedactable adds v to the redaction set without memoizing it as a resolved
-// reference. It exists for values magus MINTS rather than reads (an endpoint's path
-// token and base URL, which authorize an authenticated request), which need the same
-// masking as a credential but belong to no provider and no reference.
+// Register adds v to the redaction set without memoizing it as a resolved reference. It
+// exists for credentials magus MINTS or receives outside a provider (an endpoint's path
+// token and base URL, a registry token read from stdin), which need the same masking but
+// belong to no provider and no reference. A nil Resolver ignores it.
 //
 // Encoded forms are registered too, for the same reason record does it: a value a tool
 // percent-escapes into a config file would otherwise pass straight through.
-func (r *Resolver) registerRedactable(v string) {
-	if r == nil || len(v) < minRedactLen {
+func (r *Resolver) Register(v types.Secret) {
+	if r == nil || v.Len() < minRedactLen {
 		return
 	}
 	r.mu.Lock()
@@ -477,24 +473,24 @@ func (r *Resolver) registerRedactable(v string) {
 // Without this the set grew for the server's lifetime: a fresh token plus a base URL
 // plus seven encoded forms of each, per rebind, per run, all of it scanned linearly by
 // Redact on the output-capture hot path.
-func (r *Resolver) unregisterRedactable(v string) {
-	if r == nil || len(v) < minRedactLen {
+func (r *Resolver) unregisterRedactable(v types.Secret) {
+	if r == nil || v.Len() < minRedactLen {
 		return
 	}
 	drop := make(map[string]bool, len(encodedForms(v)))
 	for _, form := range encodedForms(v) {
-		drop[form] = true
+		drop[form.Reveal()] = true
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	kept := r.redactable[:0]
 	for _, existing := range r.redactable {
-		if !drop[existing] {
+		if !drop[existing.Reveal()] {
 			kept = append(kept, existing)
 		}
 	}
 	for i := len(kept); i < len(r.redactable); i++ {
-		r.redactable[i] = ""
+		r.redactable[i] = types.Secret{}
 	}
 	r.redactable = kept
 }
@@ -502,31 +498,32 @@ func (r *Resolver) unregisterRedactable(v string) {
 // encodedForms returns v plus the encodings of it worth matching. Duplicates are harmless
 // (addRedactable dedupes) and expected: a value with no special characters percent-escapes
 // to itself.
-func encodedForms(v string) []string {
-	return []string{
+func encodedForms(v types.Secret) []types.Secret {
+	plain := v.Reveal()
+	return []types.Secret{
 		v,
-		base64.StdEncoding.EncodeToString([]byte(v)),
-		base64.RawStdEncoding.EncodeToString([]byte(v)),
-		base64.URLEncoding.EncodeToString([]byte(v)),
-		hex.EncodeToString([]byte(v)),
-		url.QueryEscape(v),
-		url.PathEscape(v),
+		types.NewSecret(base64.StdEncoding.EncodeToString([]byte(plain))),
+		types.NewSecret(base64.RawStdEncoding.EncodeToString([]byte(plain))),
+		types.NewSecret(base64.URLEncoding.EncodeToString([]byte(plain))),
+		types.NewSecret(hex.EncodeToString([]byte(plain))),
+		types.NewSecret(url.QueryEscape(plain)),
+		types.NewSecret(url.PathEscape(plain)),
 	}
 }
 
 // addRedactable inserts one value into the redaction set, keeping it ordered longest
 // first. Callers hold r.mu.
-func (r *Resolver) addRedactable(v string) {
-	if len(v) < minRedactLen {
+func (r *Resolver) addRedactable(v types.Secret) {
+	if v.Len() < minRedactLen {
 		return
 	}
 	for _, existing := range r.redactable {
-		if existing == v {
+		if existing.Reveal() == v.Reveal() {
 			return
 		}
 	}
 	r.redactable = append(r.redactable, v)
-	for i := len(r.redactable) - 1; i > 0 && len(r.redactable[i]) > len(r.redactable[i-1]); i-- {
+	for i := len(r.redactable) - 1; i > 0 && r.redactable[i].Len() > r.redactable[i-1].Len(); i-- {
 		r.redactable[i], r.redactable[i-1] = r.redactable[i-1], r.redactable[i]
 	}
 }
@@ -561,7 +558,7 @@ func (r *Resolver) Redact(p []byte) []byte {
 	s := string(p)
 	out := s
 	for _, v := range r.redactable {
-		out = strings.ReplaceAll(out, v, mask)
+		out = strings.ReplaceAll(out, v.Reveal(), mask)
 	}
 	if out == s {
 		return p
@@ -590,7 +587,7 @@ func (r *Resolver) RedactString(s string) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, v := range r.redactable {
-		s = strings.ReplaceAll(s, v, mask)
+		s = strings.ReplaceAll(s, v.Reveal(), mask)
 	}
 	return s
 }

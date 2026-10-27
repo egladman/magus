@@ -700,11 +700,11 @@ func shippedSpells() ([]shippedSpell, error) {
 func registryClient(ctx context.Context, root, host, username string) (*oci.Client, error) {
 	c := &oci.Client{HTTP: registryHTTP()}
 	if username != "" {
-		pass, err := readToken()
+		pass, err := readToken(ctx)
 		if err != nil {
 			return nil, err
 		}
-		c.Credentials = oci.Credentials{Username: username, Password: secret.NewValue(pass)}
+		c.Credentials = oci.Credentials{Username: username, Password: pass}
 		return c, nil
 	}
 	if _, ok := globalCfg.Spells.Registry(host); !ok {
@@ -727,14 +727,14 @@ func registryClient(ctx context.Context, root, host, username string) (*oci.Clie
 
 // registryCredential resolves host's spells.registries entry through r, which registers
 // the value for redaction before returning it.
-func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, secret.Value, error) {
+func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, types.Secret, error) {
 	entry, ok := spells.Registry(host)
 	if !ok {
-		return "", secret.Value{}, fmt.Errorf("spells.registries has no entry for %s", host)
+		return "", types.Secret{}, fmt.Errorf("spells.registries has no entry for %s", host)
 	}
-	pass, err := r.Read(ctx, entry.Password)
+	pass, err := r.Read(ctx, entry.PasswordRef)
 	if err != nil {
-		return "", secret.Value{}, fmt.Errorf("spells.registries %s: %w", host, err)
+		return "", types.Secret{}, fmt.Errorf("spells.registries %s: %w", host, err)
 	}
 	return entry.Username, pass, nil
 }

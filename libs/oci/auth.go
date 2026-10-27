@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // challenge is what a registry's unauthenticated /v2/ asks for, per the distribution
@@ -54,36 +55,35 @@ func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (
 	}
 	key := tokenKey{realm: ch.realm, service: ch.service, scope: fmt.Sprintf("repository:%s:%s", ref.Repository, actions)}
 	c.mu.Lock()
-	cached, ok := c.tokens[key]
+	tok, ok := c.tokens[key]
 	c.mu.Unlock()
-	if ok {
-		return cached, nil
+	if !ok {
+		tok, err = c.fetchToken(ctx, key)
+		if err != nil {
+			return "", fmt.Errorf("token for %s: %w", ref.Repository, err)
+		}
+		c.mu.Lock()
+		if c.tokens == nil {
+			c.tokens = map[tokenKey]types.Secret{}
+		}
+		c.tokens[key] = tok
+		c.mu.Unlock()
 	}
-	tok, err := c.fetchToken(ctx, key)
-	if err != nil {
-		return "", fmt.Errorf("token for %s: %w", ref.Repository, err)
-	}
-	auth := "Bearer " + tok
-	c.mu.Lock()
-	if c.tokens == nil {
-		c.tokens = map[tokenKey]string{}
-	}
-	c.tokens[key] = auth
-	c.mu.Unlock()
-	return auth, nil
+	return "Bearer " + tok.Reveal(), nil
 }
 
 // forget drops the cached bearer token that auth names and reports whether a retry can
 // help: only a bearer token can be refreshed. A token already replaced by another request
 // is left in place.
 func (c *Client) forget(ref Reference, actions, auth string) bool {
-	if !strings.HasPrefix(auth, "Bearer ") {
+	bearer, ok := strings.CutPrefix(auth, "Bearer ")
+	if !ok {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, cached := range c.tokens {
-		if cached == auth && key.scope == fmt.Sprintf("repository:%s:%s", ref.Repository, actions) {
+		if cached.Reveal() == bearer && key.scope == fmt.Sprintf("repository:%s:%s", ref.Repository, actions) {
 			delete(c.tokens, key)
 		}
 	}
@@ -187,10 +187,10 @@ func parseChallenge(h string) (string, map[string]string) {
 
 // fetchToken asks key's realm for a token, with the client's credentials when it has
 // any.
-func (c *Client) fetchToken(ctx context.Context, key tokenKey) (string, error) {
+func (c *Client) fetchToken(ctx context.Context, key tokenKey) (types.Secret, error) {
 	u, err := url.Parse(key.realm)
 	if err != nil {
-		return "", err
+		return types.Secret{}, err
 	}
 	q := u.Query()
 	if key.service != "" {
@@ -200,37 +200,47 @@ func (c *Client) fetchToken(ctx context.Context, key tokenKey) (string, error) {
 	u.RawQuery = q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return "", err
+		return types.Secret{}, err
 	}
 	if !c.Credentials.isZero() {
 		req.SetBasicAuth(c.Credentials.Username, c.Credentials.Password.Reveal())
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return "", err
+		return types.Secret{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", statusError(resp)
+		return types.Secret{}, statusError(resp)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit))
 	if err != nil {
-		return "", err
+		return types.Secret{}, err
 	}
 	var body struct {
-		Token       string `json:"token"`
-		AccessToken string `json:"access_token"`
+		Token       issuedToken `json:"token"`
+		AccessToken issuedToken `json:"access_token"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
-		return "", err
+		return types.Secret{}, err
 	}
-	if body.Token != "" {
-		return body.Token, nil
+	if !body.Token.IsZero() {
+		return body.Token.Secret, nil
 	}
-	if body.AccessToken != "" {
-		return body.AccessToken, nil
+	if !body.AccessToken.IsZero() {
+		return body.AccessToken.Secret, nil
 	}
-	return "", errors.New("the realm returned no token")
+	return types.Secret{}, errors.New("the realm returned no token")
+}
+
+// issuedToken decodes a token reply member straight into a [types.Secret], which has no
+// decoder of its own so that plaintext cannot become one by accident. This is the one
+// place a registry hands magus a bearer, and it is wrapped before anything can print it.
+type issuedToken struct{ types.Secret }
+
+func (t *issuedToken) UnmarshalText(b []byte) error {
+	t.Secret = types.NewSecret(string(b))
+	return nil
 }
 
 // setAuth attaches auth, a whole Authorization value, when there is one.

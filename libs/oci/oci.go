@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -175,15 +175,15 @@ type Client struct {
 	Credentials Credentials
 
 	mu         sync.Mutex
-	challenges map[string]challenge // by registry host
-	tokens     map[tokenKey]string  // Authorization values by (realm, service, scope)
+	challenges map[string]challenge      // by registry host
+	tokens     map[tokenKey]types.Secret // bearer tokens by (realm, service, scope)
 }
 
-// Credentials is a registry login. The password is a secret.Value, revealed only where
+// Credentials is a registry login. The password is a [types.Secret], revealed only where
 // the Authorization header or the token request is built.
 type Credentials struct {
 	Username string
-	Password secret.Value
+	Password types.Secret
 }
 
 func (c Credentials) isZero() bool { return c.Username == "" && c.Password.IsZero() }

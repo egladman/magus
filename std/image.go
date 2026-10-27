@@ -10,7 +10,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/types"
@@ -370,7 +369,7 @@ func imageClient(auth *types.ImageRegistryAuth) *oci.Client {
 	if auth == nil {
 		return &oci.Client{}
 	}
-	return &oci.Client{Credentials: oci.Credentials{Username: auth.Username, Password: secret.NewValue(auth.Password.Value)}}
+	return &oci.Client{Credentials: oci.Credentials{Username: auth.Username, Password: types.NewSecret(auth.Password.Value)}}
 }
 
 func imageSpec(ctx context.Context, in types.ImageSpec) (image.Spec, error) {

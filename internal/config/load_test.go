@@ -35,7 +35,7 @@ func TestLoadFileReadsInlineSpellImports(t *testing.T) {
 	cfg, err := LoadFile(path, true)
 	require.NoError(t, err)
 	assert.Equal(t, SpellsConfig{
-		Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}},
+		Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"}},
 		Imports: map[string]SpellImport{
 			"ghcr.io/team/spells/lint": {Tag: "1.4"},
 			"magus/spell/go":           {Path: "spells/go"},

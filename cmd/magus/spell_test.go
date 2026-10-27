@@ -203,7 +203,7 @@ func TestSpellBuildPushLsPull(t *testing.T) {
 // provider, so the value is registered for redaction like any magus\secret.read.
 func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	spells := config.SpellsConfig{Registries: []config.SpellRegistry{
-		{Host: "ghcr.io", Username: "ci", Password: "SPELL_REGISTRY_TOKEN"},
+		{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_TOKEN"},
 	}}
 	r := secret.New()
 	t.Setenv("SPELL_REGISTRY_TOKEN", "ghp_abcdef123456")
@@ -217,7 +217,7 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	_, _, err = registryCredential(t.Context(), spells, "docker.io", r)
 	require.ErrorContains(t, err, "no entry for docker.io")
 
-	unset := config.SpellsConfig{Registries: []config.SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "SPELL_REGISTRY_UNSET"}}}
+	unset := config.SpellsConfig{Registries: []config.SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_UNSET"}}}
 	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", secret.New())
 	require.ErrorContains(t, err, "$SPELL_REGISTRY_UNSET is not set")
 }

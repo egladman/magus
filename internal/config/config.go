@@ -294,16 +294,16 @@ type SpellImport struct {
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
-// SpellRegistry authenticates to one registry host. Password is a secret REFERENCE,
+// SpellRegistry authenticates to one registry host. PasswordRef is a secret REFERENCE,
 // never the value: it resolves through the workspace's selected secret provider
 // exactly as magus\secret.read does, so under the built-in provider it names an
 // environment variable (GITHUB_TOKEN for ghcr.io in Actions), and under a provider
 // spell it is that provider's own path.
 type SpellRegistry struct {
 	// Host is the registry as a reference spells it: "ghcr.io", "localhost:5000".
-	Host     string `json:"host" yaml:"host" validate:"required,registry_host"`
-	Username string `json:"username" yaml:"username" validate:"required"`
-	Password string `json:"password" yaml:"password" validate:"required"`
+	Host        string `json:"host" yaml:"host" validate:"required,registry_host"`
+	Username    string `json:"username" yaml:"username" validate:"required"`
+	PasswordRef string `json:"password" yaml:"password" validate:"required"`
 }
 
 // Registry returns the entry for host, and whether there is one.

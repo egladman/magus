@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -536,7 +536,7 @@ func TestTokenCarriesCredentialsOnPull(t *testing.T) {
 	require.NoError(t, err)
 
 	authed := reg.client()
-	authed.Credentials = Credentials{Username: "bot", Password: secret.NewValue("s3cret-token")}
+	authed.Credentials = Credentials{Username: "bot", Password: types.NewSecret("s3cret-token")}
 	_, err = authed.Artifact(t.Context(), reg.ref("team/graph", "v1"), testArtifactType)
 	require.NoError(t, err)
 	_, err = authed.Tags(t.Context(), reg.ref("team/graph", ""))
@@ -618,7 +618,7 @@ func TestAuthorizeAnswersABasicChallenge(t *testing.T) {
 	reg.basicOnly = true
 	reg.mu.Unlock()
 	c := reg.client()
-	c.Credentials = Credentials{Username: "bot", Password: secret.NewValue("s3cret-token")}
+	c.Credentials = Credentials{Username: "bot", Password: types.NewSecret("s3cret-token")}
 
 	ref := reg.ref("team/x", "v1")
 	_, err := c.Push(t.Context(), ref, testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))

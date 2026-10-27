@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -149,7 +148,7 @@ func publish(t *testing.T, reg *registry, dir string) Ref {
 	dest := oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1"}
 	content, err := Build(t.Context(), dir, allTracked{}, Provenance{Title: "x"})
 	require.NoError(t, err)
-	c := &oci.Client{HTTP: reg.srv.Client(), Credentials: oci.Credentials{Username: reg.user, Password: secret.NewValue(reg.pass)}}
+	c := &oci.Client{HTTP: reg.srv.Client(), Credentials: oci.Credentials{Username: reg.user, Password: types.NewSecret(reg.pass)}}
 	d, err := c.Push(t.Context(), dest, content)
 	require.NoError(t, err)
 	ref, err := Pinned(reg.host()+"/team/spells/x", d)
@@ -508,7 +507,7 @@ func TestResolveAuthenticatesAPrivatePull(t *testing.T) {
 	_, err := Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
 	require.ErrorContains(t, err, "401", "an anonymous pull of a private repository is refused")
 
-	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client(), Credentials: oci.Credentials{Username: "bot", Password: secret.NewValue("s3cret-token")}})
+	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client(), Credentials: oci.Credentials{Username: "bot", Password: types.NewSecret("s3cret-token")}})
 	require.NoError(t, err)
 }
 
