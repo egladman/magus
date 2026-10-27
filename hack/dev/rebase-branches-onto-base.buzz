@@ -308,29 +308,18 @@ export fun findGenerated(paths: [str]) > [str] !> any {
 fun liveShell() > Shell {
     return Shell{
         git = fun (dir: str, args: [str]) > Ran !> any {
-            final opts = mut {<str: any>};
-            opts["quiet"] = true;
-            opts["allow_failure"] = true;
-            if (dir != "") {
-                opts["dir"] = dir;
-            }
-            final r = vcs\cmd(args, opts: opts);
+            final r = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, allowFailure = true, dir = dir });
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         gh = fun (args: [str]) > str !> any {
-            return proc\exec("gh", args: args, opts: {"quiet": true}).stdout;
+            return proc\exec("gh", args: args, opts: proc\ExecOptions{ quiet = true }).stdout;
         },
         run = fun (dir: str, sub: str, args: [str]) > Ran !> any {
-            final opts = mut {<str: any>};
-            opts["allow_failure"] = true;
             if (dir != "") {
-                opts["dir"] = dir;
-            }
-            if (dir != "") {
-                final ran = proc\exec(fs\join(dir, name: "magus"), args: [sub] + args, dir: dir, opts: {"allow_failure": true});
+                final ran = proc\exec(fs\join(dir, name: "magus"), args: [sub] + args, dir: dir, opts: proc\ExecOptions{ allowFailure = true });
                 return Ran{ stdout = ran.stdout, stderr = ran.stderr, code = ran.code };
             }
-            final r = magus\cmd(sub, args: args, opts: opts);
+            final r = magus\cmd(sub, args: args, opts: magus\CommandOptions{ allowFailure = true });
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         generated = findGenerated,

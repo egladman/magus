@@ -84,13 +84,13 @@ export fun fold(marks: [TrailMark]) > obj{ backlog: [Item], settled: int } {
     foreach (id in order) {
         final t = byID[id]!;
         final m = t.latest;
-        if (m.verdict == "fine") {
+        if (m.verdict == magus\TrailVerdict.fine) {
             settled = settled + 1;
             continue;
         }
         items.append(Item{
-            id = id, section = m.section, key = m.key, rule = m.rule, verdict = m.verdict, note = m.note,
-            sessions = t.sessions.size(), marks = t.marks, wants = wants(m.section, verdict: m.verdict, rule: m.rule), examples = t.examples,
+            id = id, section = m.section.value, key = m.key, rule = m.rule, verdict = m.verdict.value, note = m.note,
+            sessions = t.sessions.size(), marks = t.marks, wants = wants(m.section.value, verdict: m.verdict.value,rule: m.rule), examples = t.examples,
         });
     }
     final ranked = items.sort(fun (a: Item, b: Item) > bool {
@@ -179,8 +179,8 @@ export fun marksFromJSONL(text: str) > [TrailMark] !> any {
             examples.append(e);
         }
         marks.append(TrailMark{
-            id = m["id"] ?? "", section = m["section"] ?? "", key = m["key"] ?? "", rule = m["rule"] ?? "",
-            verdict = m["verdict"] ?? "", note = m["note"] ?? "", session = m["session"] ?? "",
+            id = m["id"] ?? "", section = magus\TrailSection(m["section"] ?? ""), key = m["key"] ?? "", rule = m["rule"] ?? "",
+            verdict = magus\TrailVerdict(m["verdict"] ?? ""), note = m["note"] ?? "", session = m["session"] ?? "",
             at = std\toInt(m["at"] ?? 0), examples = examples,
         });
     }

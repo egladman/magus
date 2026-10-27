@@ -140,27 +140,25 @@ fun readStdin() > str !> any {
 
 // readDiff reads the changeset once. A patch or saved diff of - is read from stdin.
 export fun readDiff(input: Input) > magus\Diff !> any {
-    final opts = mut {<str: any>};
-    if (input.baseline != "") {
-        opts["baseline"] = input.baseline;
-    }
+    var savedPath = "";
+    var patch = "";
+    var rev = "";
     if (input.saved != "") {
         var path = input.saved;
         if (path == "-") {
             path = fs\tempFile("show-review-context-");
             fs\writeFile(path, content: readStdin());
         }
-        opts["from"] = path;
+        savedPath = path;
     } else if (input.patch != "") {
-        final patch = if (input.patch == "-") readStdin() else fs\readFile(input.patch);
+        patch = if (input.patch == "-") readStdin() else fs\readFile(input.patch);
         if (patch.trim() == "") {
             throw "show-review-context: the patch in {input.patch} is empty\n{USAGE}";
         }
-        opts["patch"] = patch;
     } else if (input.rev != "") {
-        opts["rev"] = input.rev;
+        rev = input.rev;
     }
-    return magus\diff(opts);
+    return magus\diff(opts: magus\DiffOptions{ baseline = input.baseline, from = savedPath, patch = patch, rev = rev });
 }
 
 // namespaceSymbol reports a package or namespace, whose SCIP descriptor ends in a slash in
@@ -272,7 +270,7 @@ fun guarded(name: str, read: fun () > Section !> any) > Section {
 }
 
 fun around(focus: str, relation: str, direction: str, depth: int) > magus\NeighborhoodResult !> any {
-    return magus\neighborhood(focus, opts: magus\NeighborhoodOptions{ depth = depth, relations = [relation], direction = direction, collapse = [<str>] });
+    return magus\neighborhood(focus, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID(relation)], direction = magus\EdgeDirection(direction), collapse = [<str>] });
 }
 
 fun others(n: magus\NeighborhoodResult, focus: str) > [magus\KnowledgeNode] {
@@ -288,8 +286,8 @@ fun others(n: magus\NeighborhoodResult, focus: str) > [magus\KnowledgeNode] {
 // fromGraph is listed, except that nothing found where the graph admits a blind spot is
 // unknown rather than absent.
 fun fromGraph(name: str, n: magus\NeighborhoodResult, items: [str], note: str) > Section {
-    if (items.len() == 0 and n.answer.verdict == UNKNOWN) {
-        return unknownSection(name, note: "the graph cannot vouch for an empty answer: {n.answer.reason}");
+    if (items.len() == 0 and n.answer.verdict == magus\KnowledgeVerdict.unknown) {
+        return unknownSection(name, note: "the graph cannot vouch for an empty answer: {n.answer.reason.value}");
     }
     return listed(name, items: items, note: note);
 }
@@ -483,9 +481,9 @@ export fun card(c: Candidate, depth: int) > Card {
 
 // symbolCandidate resolves a name or ID to the one symbol the symbol step cards.
 export fun symbolCandidate(name: str) > Candidate !> any {
-    final r: magus\RefsResult = magus\refs(name, opts: {"limit": 1});
+    final r: magus\RefsResult = magus\refs(name, opts: magus\RefsOptions{ limit = 1 });
     if (r.symbol == "") {
-        throw "show-review-context: no indexed symbol answers to {name} ({r.answer.verdict} {r.answer.reason})";
+        throw "show-review-context: no indexed symbol answers to {name} ({r.answer.verdict.value} {r.answer.reason.value})";
     }
     return Candidate{
         id = r.symbol, label = r.label, qualified = r.label, path = if (r.defs.len() > 0) r.defs[0].file else "",
@@ -699,7 +697,7 @@ export fun terms(all: [Candidate]) > [str] {
 // vocabularyTerm is what a word already means in the workspace: the glossary entries and the
 // targets, spells, ops, diagnostics and docs whose names carry it.
 export fun vocabularyTerm(term: str) > Term !> any {
-    final q: magus\QueryResult = magus\query(term, opts: {"limit": 20});
+    final q: magus\QueryResult = magus\query(term, opts: magus\QueryOptions{ limit = 20 });
     final meanings = mut [<str>];
     foreach (m in q.matches) {
         if (m.kind == "symbol" or m.kind == "file" or splitWords(m.label).indexOf(term) == null) {
@@ -719,8 +717,8 @@ export fun vocabularyTerm(term: str) > Term !> any {
         }
         return Term{ term = term, verdict = FOUND, note = "already names {meanings.len()} things here", meanings = shown };
     }
-    if (q.answer.verdict == UNKNOWN) {
-        return Term{ term = term, verdict = UNKNOWN, note = q.answer.reason, meanings = [<str>] };
+    if (q.answer.verdict == magus\KnowledgeVerdict.unknown) {
+        return Term{ term = term, verdict = UNKNOWN, note = q.answer.reason.value, meanings = [<str>] };
     }
     return Term{ term = term, verdict = ABSENT, note = "nothing in the workspace is named with it yet", meanings = [<str>] };
 }
@@ -1017,12 +1015,12 @@ fun labels(cs: [Candidate]) > [str] {
 }
 
 test "a card goes only to a touched symbol: never unchanged, generated or a package" {
-    final d = magus\diff({"from": FIXTURE});
+    final d = magus\diff(opts: magus\DiffOptions{ from = FIXTURE });
     assert\equal(labels(candidates(d)), want: ["Render", "NewWidget", "parse_widget_name"], message: "carded");
 }
 
 test "the budget cuts the narrowest and names what it cut" {
-    final d = magus\diff({"from": FIXTURE});
+    final d = magus\diff(opts: magus\DiffOptions{ from = FIXTURE });
     final s = select(candidates(d), budget: 2);
     assert\equal(labels(s.carded), want: ["NewWidget", "parse_widget_name"], message: "added or re-signed first");
     assert\equal(labels(s.omitted), want: ["Render"], message: "cut");
@@ -1091,7 +1089,7 @@ test "a member's prefix is its ID through the enclosing type" {
 }
 
 test "-o json keeps its shape" {
-    final d = magus\diff({"from": FIXTURE});
+    final d = magus\diff(opts: magus\DiffOptions{ from = FIXTURE });
     final b = Bundle{ base = d.base, rev = "main...HEAD", lens = "all", files = fileRows(d), notes = d.notes,
         selection = select(candidates(d), budget: 1), cards = [<Card>], architecture = [<Section>], vocabulary = [<Term>] };
     final shape = json\parse(json\stringify(bundleJSON(b)));

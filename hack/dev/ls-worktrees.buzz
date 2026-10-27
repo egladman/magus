@@ -92,7 +92,7 @@ export fun render(rows: [Row]) > [str] {
 }
 
 fun git(dir: str, args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"dir": dir, "quiet": true}).stdout;
+    return vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true }).stdout;
 }
 
 fun countLines(text: str) > int {
@@ -113,7 +113,7 @@ fun jobsByCheckout() > {str: str} !> any {
     foreach (j in list.jobs) {
         if (j.checkoutRoot != "" and j.updated >= (newest[j.checkoutRoot] ?? -1)) {
             newest[j.checkoutRoot] = j.updated;
-            label[j.checkoutRoot] = "{j.id} ({j.state})";
+            label[j.checkoutRoot] = "{j.id} ({j.state.value})";
         }
     }
     return label;

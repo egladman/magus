@@ -138,7 +138,7 @@ final SLICE = 2048;
 // reader sees in the published package rather than carrying that prefix around.
 fun digestInsideTarball(url: str, inner: str, marker: str) > str !> any {
     final tgz = fs\tempFile("magus-upstream");
-    fs\writeFile(tgz, content: http\get(url, opts: {"fail": true}).body);
+    fs\writeFile(tgz, content: http\get(url, opts: http\Options{ fail = true }).body);
     final body = archive\readFile(tgz, name: "package/" + inner);
     fs\remove(tgz);
 
@@ -192,7 +192,7 @@ export fun schemas(write: bool) > [Schema] !> any {
         }
 
         final recorded = code(cells, index: 5);
-        final body = http\get(url, opts: {"fail": true}).body;
+        final body = http\get(url, opts: http\Options{ fail = true }).body;
         final digest = crypto\sha256Hex(body);
         checked = checked + 1;
         final moved = digest != recorded;

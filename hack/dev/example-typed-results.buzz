@@ -36,8 +36,8 @@ export fun fileLines(paths: [str]) > [str] !> any {
 // queryLines are a knowledge-graph search's matches. Read the verdict before trusting an
 // empty list: `unknown` means part of the workspace had no index to search.
 export fun queryLines(terms: str) > [str] !> any {
-    final q: magus\QueryResult = magus\query(terms, opts: {"limit": 5});
-    final lines = mut ["{q.matchCount} matches ({q.answer.verdict})"];
+    final q: magus\QueryResult = magus\query(terms, opts: magus\QueryOptions{ limit = 5 });
+    final lines = mut ["{q.matchCount} matches ({q.answer.verdict.value})"];
     foreach (m in q.matches) {
         lines.append("  {m.kind} {m.label}");
     }
@@ -46,8 +46,8 @@ export fun queryLines(terms: str) > [str] !> any {
 
 // refsLines are where a code symbol is defined and how widely it is used.
 export fun refsLines(symbol: str) > [str] !> any {
-    final r: magus\RefsResult = magus\refs(symbol, opts: {"limit": 5});
-    final lines = mut ["{r.label}: {r.refCount} references in {r.fileCount} files ({r.answer.verdict})"];
+    final r: magus\RefsResult = magus\refs(symbol, opts: magus\RefsOptions{ limit = 5 });
+    final lines = mut ["{r.label}: {r.refCount} references in {r.fileCount} files ({r.answer.verdict.value})"];
     foreach (d in r.defs) {
         lines.append("  defined in {d.file}:{d.lines.join(",")}");
     }
@@ -60,8 +60,8 @@ export fun jobLines() > [str] !> any {
     final byState = mut {<str: int>};
     final declared = mut [<str>];
     foreach (j in list.jobs) {
-        byState[j.state] = (byState[j.state] ?? 0) + 1;
-        if (j.state == "declared" and j.writePaths.len() > 0) {
+        byState[j.state.value] = (byState[j.state.value] ?? 0) + 1;
+        if (j.state == magus\JobState.declared and j.writePaths.len() > 0) {
             declared.append("  {j.id}: {j.writePaths.len()} write paths");
         }
     }

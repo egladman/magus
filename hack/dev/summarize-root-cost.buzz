@@ -241,10 +241,10 @@ export fun main(args: [str]) > void !> any {
     if (parsed.values["--all"] != null) {
         listArgs.append("--all");
     }
-    final listing = magus\cmd("session", args: listArgs, opts: {"quiet": true}).stdout;
+    final listing = magus\cmd("session", args: listArgs, opts: magus\CommandOptions{ quiet = true }).stdout;
     final shows = mut [<str>];
     foreach (id in sessionIds(listing)) {
-        final shown = magus\cmd("session", args: ["show", id, "-o", "json"], opts: {"quiet": true, "allow_failure": true});
+        final shown = magus\cmd("session", args: ["show", id, "-o", "json"], opts: magus\CommandOptions{ quiet = true, allowFailure = true });
         if (shown.ok) {
             shows.append(shown.stdout);
         }

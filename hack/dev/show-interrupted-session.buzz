@@ -203,7 +203,7 @@ export fun readTranscript(host: str, file: str) > Transcript !> any {
 
 fun git(dir: str, args: [str]) > [str] !> any {
     final kept = mut [<str>];
-    foreach (line in vcs\cmd(args, opts: {"dir": dir, "quiet": true}).stdout.split("\n")) {
+    foreach (line in vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true }).stdout.split("\n")) {
         if (line.trim() != "") {
             kept.append(line);
         }
@@ -257,7 +257,7 @@ export fun show(host: str, id: str) > Report !> any {
             trees.append(line.sub(9));
         }
     }
-    final listing = magus\cmd("session", args: ["ls", "-o", "json"], opts: {"quiet": true}).stdout;
+    final listing = magus\cmd("session", args: ["ls", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
     final s = pick(listing, trees: trees, here: vcs\root(), host: host, id: id);
     if (s == null) {
         throw "show-interrupted-session: no recorded session matches; `magus session ls` lists them, and a host is recorded only where its hooks are wired (`magus describe harness`)";

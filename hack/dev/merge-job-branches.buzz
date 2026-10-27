@@ -204,11 +204,11 @@ export fun candidatesFromBranches(branches: [str], rows: [JobRow], checkedOut: f
 }
 
 fun git(dir: str, args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": dir}).stdout.trim();
+    return vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = dir }).stdout.trim();
 }
 
 fun gitOK(dir: str, args: [str]) > bool !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": dir, "allow_failure": true}).code == 0;
+    return vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = dir, allowFailure = true }).code == 0;
 }
 
 fun lines(text: str) > [str] {
@@ -222,7 +222,7 @@ fun lines(text: str) > [str] {
 // requireBranch accepts any ref that resolves to a commit, a remote-tracking one included,
 // and returns the line naming what it resolved to.
 fun requireBranch(root: str, branch: str) > str !> any {
-    final found = vcs\cmd(["rev-parse", "--verify", "--quiet", "{branch}^\{commit\}"], opts: {"quiet": true, "dir": root, "allow_failure": true});
+    final found = vcs\cmd(["rev-parse", "--verify", "--quiet", "{branch}^\{commit\}"], opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
     if (found.code != 0) {
         throw "merge-job-branches: unknown branch {branch}: it resolves to no commit";
     }
@@ -285,7 +285,7 @@ fun storeRows() > [JobRow] !> any {
     foreach (j in magus\job.list().jobs) {
         final goals = mut [<stack\CheckGoal>];
         foreach (g in j.goals) {
-            if (g.kind == "check") {
+            if (g.kind == magus\GoalKind.check) {
                 goals.append(stack\CheckGoal{ id = g.id, target = g.check.target, project = g.check.project, args = g.check.args });
             }
         }
@@ -296,7 +296,7 @@ fun storeRows() > [JobRow] !> any {
 
 fun checkedOutIn(row: JobRow) > str !> any {
     if (row.checkoutRoot == "" or !fs\isDir(row.checkoutRoot)) { return ""; }
-    final res = vcs\cmd(["branch", "--show-current"], opts: {"quiet": true, "dir": row.checkoutRoot, "allow_failure": true});
+    final res = vcs\cmd(["branch", "--show-current"], opts: vcs\CommandOptions{ quiet = true, dir = row.checkoutRoot, allowFailure = true });
     if (res.code != 0) { return ""; }
     return res.stdout.trim();
 }
@@ -355,7 +355,7 @@ fun settleWithMagus(dir: str, branch: str) > [str] !> any {
     // from the tree either way, and the layer stops there, so its settles do not matter.
     var said = "";
     try {
-        said = magus\cmd("vcs", args: ["resolve", "--against", branch], opts: {"dir": dir, "root": dir, "quiet": true}).stdout;
+        said = magus\cmd("vcs", args: ["resolve", "--against", branch], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true }).stdout;
     } catch (e) {
         if (!gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"])) {
             throw "merge-job-branches: merging {branch} did not start: {e}; the tree holds {lines(git(dir, args: ["status", "--porcelain"])).join(", ")}";
@@ -436,14 +436,14 @@ fun regenerateWithMagus(base: str, ready: fun (dir: str) > [str] !> any) > fun (
             throw keptTree(dir, target: readyFailure("{e}"), text: "{e}");
         }
         final ran = proc\exec(fs\join(dir, name: "magus"), args: ["affected", "generate:rw", "--vcs-base-ref", base], dir: dir,
-            opts: {"quiet": true, "allow_failure": true});
+            opts: proc\ExecOptions{ quiet = true, allowFailure = true });
         if (ran.code != 0) {
             throw keptTree(dir, target: "affected generate:rw", text: "{ran.stderr}\n{ran.stdout}");
         }
         final changed = unstaged(dir);
         if (changed.len() == 0) { return; }
         final undeclared = mut [<str>];
-        foreach (f in magus\describe.file(changed, opts: {"dir": dir, "root": dir}).files) {
+        foreach (f in magus\describe.file(changed, opts: magus\CommandOptions{ dir = dir, root = dir }).files) {
             if (f.role != "output" and f.role != "maintained") { undeclared.append(f.path); }
         }
         if (undeclared.len() > 0) {
@@ -548,7 +548,7 @@ fun withTree(root: str, rev: str, dir: str, body: fun (dir: str) > void !> any) 
         body(dir);
     } catch (e) {
         if ("{e}".startsWith(KEPT)) { throw e; }
-        vcs\cmd(["worktree", "remove", "--force", dir], opts: {"quiet": true, "dir": root, "allow_failure": true});
+        vcs\cmd(["worktree", "remove", "--force", dir], opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
         fs\removeAll(dir);
         throw e;
     }
@@ -564,7 +564,7 @@ fun requireTrusted(dir: str, checkouts: str) > void !> any {
     } catch {
         return;
     }
-    final shown = proc\exec("mise", args: ["trust", "--show"], dir: dir, opts: {"quiet": true, "allow_failure": true});
+    final shown = proc\exec("mise", args: ["trust", "--show"], dir: dir, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if ("{shown.stdout}{shown.stderr}".indexOf(": untrusted") != null) {
         throw "merge-job-branches: mise does not trust {dir}; run `mise settings add trusted_config_paths {checkouts}` once";
     }
@@ -594,14 +594,14 @@ export object Verdict {
 // runCheck runs one check through the status --wait pipe in dir, returning its output ref
 // and whether it passed.
 fun runCheck(dir: str, g: stack\CheckGoal) > [str] !> any {
-    final wait = magus\cmd("status", args: ["--wait"], opts: {"dir": dir, "root": dir, "quiet": true});
+    final wait = magus\cmd("status", args: ["--wait"], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true });
     final args = mut [g.target, g.project, "--concurrency", "1"];
     if (g.args.len() > 0) {
         args.append("--");
         foreach (a in g.args) { args.append(a); }
     }
     try {
-        final res = magus\run(args, opts: {"dir": dir, "root": dir, "quiet": true, "stdin": wait.stdout});
+        final res = magus\run(args, opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true, stdin = wait.stdout });
         return ["pass", refIn(res.stdout + " " + res.stderr)];
     } catch (e) {
         return ["fail", refIn("{e}")];
@@ -635,7 +635,7 @@ export fun verifyLayers(dir: str, s: stack\BranchStack) > [Verdict] !> any {
         final rep = serialize\jsonEncode(serialize\Boxed.init({"schema_version": 2, "job": l.job, "changed_paths": [<str>],
             "validation": {"command": l.check, "output_ref": primary}, "gate_evidence": evidence, "unresolved_risks": [<str>]}));
         try {
-            magus\cmd("job", args: ["wait", l.job, "--integration", "--stdin"], opts: {"dir": dir, "root": dir, "quiet": true, "stdin": rep});
+            magus\cmd("job", args: ["wait", l.job, "--integration", "--stdin"], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true, stdin = rep });
             said.append("recorded: job wait --integration passed");
         } catch (e) {
             pass = false;
@@ -1005,7 +1005,7 @@ fun fixtureRepo() > str !> any {
     put(root, path: "gen/list.txt", content: "a.txt\n");
     // Loading the workspace writes the merge driver's .gitattributes, which the base has to
     // carry, or every merge would find the tree dirty.
-    magus\cmd("ls", args: [<str>], opts: {"dir": root, "root": root, "quiet": true});
+    magus\cmd("ls", args: [<str>], opts: magus\CommandOptions{ dir = root, root = root, quiet = true });
     commitAll(root, subject: "base");
     branchFrom(root, name: "gen-b", start: "main", files: {"src/b.txt": "b\n", "gen/list.txt": "a.txt\nb.txt\n"}, subject: "add b");
     branchFrom(root, name: "gen-c", start: "main", files: {"src/c.txt": "c\n", "gen/list.txt": "a.txt\nc.txt\n"}, subject: "add c");
@@ -1155,7 +1155,7 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
     assert\equal(said.indexOf("output ref: out123abc (") != null, want: true, message: "the ref: {said}");
     assert\equal(said.indexOf("cause: MGS8001 digest failed, output: out123abc\n") != null, want: true, message: "the cause: {said}");
     assert\equal(said.indexOf("findings") == null, want: true, message: "no JSON dump: {said}");
-    vcs\cmd(["worktree", "remove", "--force", kept], opts: {"quiet": true, "dir": root});
+    vcs\cmd(["worktree", "remove", "--force", kept], opts: vcs\CommandOptions{ quiet = true, dir = root });
     fs\removeAll(root);
 }
 

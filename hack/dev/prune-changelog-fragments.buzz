@@ -538,7 +538,7 @@ fun apply(verdicts: [Verdict]) > void !> any {
             if (vcs\name() == "jj") {
                 fs\remove(v.fragment);
             } else {
-                vcs\cmd(["rm", "--", v.fragment], opts: {"quiet": true, "dir": root});
+                vcs\cmd(["rm", "--", v.fragment], opts: vcs\CommandOptions{ quiet = true, dir = root });
             }
         } else if (v.action == "rewrite") {
             fs\writeFile(v.fragment, content: v.merged);
@@ -560,7 +560,7 @@ fun liveProbe() > Probe !> any {
                 args.append(rev);
                 args.append("--");
                 args.append(path);
-                final res = vcs\cmd(args, opts: {"quiet": true, "dir": root, "allow_failure": true});
+                final res = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
                 if (res.code != 0) {
                     blames[key] = null;
                 } else {
@@ -570,7 +570,7 @@ fun liveProbe() > Probe !> any {
             return blames[key];
         },
         symbols = fun (commit: str, lines: {str: [Line]}) > [str]? !> any {
-            final d = magus\diff({"patch": symbolPatch(lines)});
+            final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(lines) });
             final found = mut [<str>];
             var covered = false;
             foreach (f in d.files) {
@@ -588,7 +588,7 @@ fun liveProbe() > Probe !> any {
         indexed = fun (paths: [str]) > {str: bool} !> any {
             final probeLines = mut {<str: [Line]>};
             foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
-            final d = magus\diff({"patch": symbolPatch(probeLines)});
+            final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(probeLines) });
             final covered = mut {<str: bool>};
             foreach (f in d.files) { covered[f.path] = f.visibility != "unknown"; }
             return covered;
@@ -624,7 +624,7 @@ fun readFragments() > [Fragment] !> any {
 
 fun readHistory() > [Commit] !> any {
     final found = mut [<Commit>];
-    foreach (c in vcs\history(limit: 0, first_parent: true)) {
+    foreach (c in vcs\history(limit: 0, firstParent: true)) {
         found.append(Commit{ id = c.id, subject = c.subject, files = c.files });
     }
     return found;

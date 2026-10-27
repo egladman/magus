@@ -139,7 +139,7 @@ fun settledLast(groups: [Group], section: str, latest: {str: TrailMark}) > [Grou
     final settled = mut [<Group>];
     foreach (g in groups) {
         final m = latest[rowID(section, key: g.key)];
-        if (m != null and m!.verdict == "fine") {
+        if (m != null and m!.verdict == magus\TrailVerdict.fine) {
             settled.append(g);
         } else {
             open.append(g);
@@ -207,7 +207,7 @@ export fun rows(t: Trail, marks: [TrailMark]) > [Row] {
             labelled.append(Row{
                 label = if (once) "" else "{LETTERS[s]}{n}", id = id, section = SECTIONS[s], key = g.key, rule = g.rule, shape = g.shape,
                 count = g.count, agents = g.agents.size(), followed = g.followed, offered = g.offered, examples = g.examples,
-                mark = if (m != null) m!.verdict else "", note = if (m != null) m!.note else "",
+                mark = if (m != null) m!.verdict.value else "", note = if (m != null) m!.note else "",
             });
         }
     }
@@ -243,7 +243,7 @@ export fun fold(t: Trail, marks: [TrailMark]) > Report {
 }
 
 fun stamp(ms: int) > str {
-    return time\format(time\TimeLayout.rfc3339, unix_millis: std\toDouble(ms));
+    return time\format(time\TimeLayout.rfc3339, unixMillis: std\toDouble(ms));
 }
 
 // window is the flags that reproduce r exactly: the session and the absolute window, so a
@@ -408,8 +408,8 @@ final FIXTURE = "hack/testdata/feedback-trail.json";
 
 fun fixtureReport() > Report !> any {
     return fold(trailFromJSON(fs\readFile(FIXTURE)), marks: [
-        TrailMark{ id = rowID("unguarded", key: "grep -rn <arg>"), section = "unguarded", key = "grep -rn <arg>",
-            verdict = "should-deny", note = "use magus refs", session = "s-old", at = 1 },
+        TrailMark{ id = rowID("unguarded", key: "grep -rn <arg>"), section = magus\TrailSection.unguarded, key = "grep -rn <arg>",
+            verdict = magus\TrailVerdict.shouldDeny, note = "use magus refs", session = "s-old", at = 1 },
     ]);
 }
 

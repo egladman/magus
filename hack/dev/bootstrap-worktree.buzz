@@ -217,7 +217,7 @@ fun checkRepository(root: str) > str !> any {
     if (!gomod.startsWith(MODULE + "\n")) {
         throw "bootstrap-worktree: {root} is not a checkout of magus ({MODULE}); this script places magus's own binary";
     }
-    final main = mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: {"dir": root, "quiet": true}).stdout);
+    final main = mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
     if (path\clean(main) == path\clean(root)) {
         throw "bootstrap-worktree: {root} is the main checkout; a worker gets its own worktree, and placing here replaces "
             + "the ./magus every other session in this checkout runs";
@@ -226,7 +226,7 @@ fun checkRepository(root: str) > str !> any {
 }
 
 fun magusAt(bin: str, root: str, args: [str]) > str !> any {
-    final r = proc\exec(bin, args: args, dir: root, opts: {"quiet": true, "allow_failure": true});
+    final r = proc\exec(bin, args: args, dir: root, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (r.code != 0) {
         throw "bootstrap-worktree: `{bin} {args.join(" ")}` failed: {failureCause(r.code, stdout: r.stdout, stderr: r.stderr)}";
     }
@@ -246,7 +246,7 @@ export fun failureCause(code: int, stdout: str, stderr: str) > str {
 }
 
 fun readHead(dir: str) > str !> any {
-    return vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
+    return vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = dir, quiet = true }).stdout.trim();
 }
 
 // scopesOf asks the Go toolchain which packages under root ./cmd/magus compiles. go list
@@ -254,7 +254,7 @@ fun readHead(dir: str) > str !> any {
 fun scopesOf(root: str) > [str] !> any {
     final listed = proc\exec("env", args: ["GOEXPERIMENT=jsonv2", "go", "list", "-deps", "-f",
         `{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus"],
-        dir: root, opts: {"quiet": true, "allow_failure": true});
+        dir: root, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (listed.code != 0) {
         throw "bootstrap-worktree: `go list -deps ./cmd/magus` in {root} exited {listed.code}:\n{listed.stderr.trim()}";
     }
@@ -265,8 +265,8 @@ fun scopesOf(root: str) > [str] !> any {
 // committed since, edited in the tree, or untracked and not ignored.
 fun changedSince(root: str, rev: str) > [str] !> any {
     final paths = mut [<str>];
-    final diffed = vcs\cmd(["-c", "core.quotepath=false", "diff", "--name-only", rev], opts: {"dir": root, "quiet": true}).stdout;
-    final fresh = vcs\cmd(["-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"], opts: {"dir": root, "quiet": true}).stdout;
+    final diffed = vcs\cmd(["-c", "core.quotepath=false", "diff", "--name-only", rev], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
+    final fresh = vcs\cmd(["-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
     foreach (line in (diffed + "\n" + fresh).split("\n")) {
         if (line.trim() != "") {
             paths.append(line.trim());
@@ -384,9 +384,9 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
         root: root,
         job: job,
         main: main,
-        trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0,
+        trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true, allowFailure = true }).code) == 0,
         detach: fun (checkpoint: str) > void !> any {
-            vcs\cmd(["switch", "--detach", checkpoint], opts: {"dir": root, "quiet": true});
+            vcs\cmd(["switch", "--detach", checkpoint], opts: vcs\CommandOptions{ dir = root, quiet = true });
         },
     );
 }

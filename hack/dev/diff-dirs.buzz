@@ -113,7 +113,7 @@ export fun main(args: [str]) > void !> any {
         std\print(render(c));
         if (parsed.values["--unified"] != null and c.side == "both") {
             std\print(diff\unified(fs\readFile("{a}/{c.path}"), b: fs\readFile("{b}/{c.path}"),
-                from_label: "a/{c.path}", to_label: "b/{c.path}"));
+                fromLabel: "a/{c.path}", toLabel: "b/{c.path}"));
         }
     }
     std\print("{report.changes.len()} of {report.compared} files differ; {report.outputs} declared outputs left out");

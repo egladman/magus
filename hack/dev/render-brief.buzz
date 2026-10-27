@@ -390,12 +390,12 @@ export fun brief(t: Terms, extra: str) > str !> str {
 
 // fetchTerms reads job's terms and neighbours through the magus module.
 export fun fetchTerms(job: str) > Terms !> any {
-    final described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: {"quiet": true}).stdout;
+    final described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
     final terms = parseDescribed(described);
     if (terms.id != job) {
         throw "render-brief: `magus describe job {job}` returned no row for it";
     }
-    final listed = json\parse(magus\cmd("ls", args: ["jobs", "-o", "json"], opts: {"quiet": true}).stdout);
+    final listed = json\parse(magus\cmd("ls", args: ["jobs", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout);
     return withNeighbours(terms, states: jobStates(listed), overlaps: parseOverlaps(job, listed: listed));
 }
 

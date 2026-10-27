@@ -319,11 +319,11 @@ export fun render(items: [Item]) > [str] {
 }
 
 fun git(dir: str, args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"dir": dir, "quiet": true}).stdout;
+    return vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true }).stdout;
 }
 
 fun gitOk(dir: str, args: [str]) > bool !> any {
-    return vcs\cmd(args, opts: {"dir": dir, "quiet": true, "allow_failure": true}).code == 0;
+    return vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true, allowFailure = true }).code == 0;
 }
 
 // readGitDir is a linked worktree's administrative directory, from the gitdir line of its
@@ -357,7 +357,7 @@ fun readLock(gitdir: str) > str? !> any {
 
 fun duKiB(path: str) > int !> any {
     // du exits 1 when one entry is unreadable and still prints the total of the rest.
-    final res = proc\exec("du", args: ["-sk", path], opts: {"quiet": true, "allow_failure": true});
+    final res = proc\exec("du", args: ["-sk", path], opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     return std\parseInt(res.stdout.trim().split("\t")[0]) ?? -1;
 }
 
@@ -391,14 +391,14 @@ fun processCwds() > [Cwd] !> any {
         throw "prune-worktrees: lsof is not on PATH, so which processes work inside a worktree cannot be read; install it rather than plan blind";
     }
     // lsof exits 1 when it cannot read some process, and still lists every one it can.
-    return parseCwds(proc\exec("lsof", args: ["-d", "cwd", "-Fpn", "-w"], opts: {"quiet": true, "allow_failure": true}).stdout);
+    return parseCwds(proc\exec("lsof", args: ["-d", "cwd", "-Fpn", "-w"], opts: proc\ExecOptions{ quiet = true, allowFailure = true }).stdout);
 }
 
 fun jobLeases() > [Lease] !> any {
     final list: magus\JobList = magus\job.list();
     final found = mut [<Lease>];
     foreach (j in list.jobs) {
-        found.append(Lease{ id = j.id, state = j.state, checkoutRoot = j.checkoutRoot });
+        found.append(Lease{ id = j.id, state = j.state.value, checkoutRoot = j.checkoutRoot });
     }
     return found;
 }
@@ -429,7 +429,7 @@ fun agentBranches(root: str, base: str, baseOk: bool) > {str: {str: str}} !> any
 }
 
 fun goCacheDir() > str !> any {
-    final res = proc\exec("go", args: ["env", "GOCACHE"], opts: {"quiet": true, "allow_failure": true});
+    final res = proc\exec("go", args: ["env", "GOCACHE"], opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (res.code != 0) { return "the Go build cache"; }
     return res.stdout.trim();
 }
@@ -518,12 +518,12 @@ fun removeWorktree(it: Item, root: str) > str {
     final line = guardLine(root, path: it.path);
     if (line == null) { return "skipped: its path needs shell quoting, which the guard check does not cover"; }
     try {
-        magus\cmd("shell", args: [line!], opts: {"quiet": true, "dir": root});
+        magus\cmd("shell", args: [line!], opts: magus\CommandOptions{ quiet = true, dir = root });
     } catch (e) {
         return "refused by the guard: {e}";
     }
     try {
-        vcs\cmd(["worktree", "remove", it.path], opts: {"dir": root, "quiet": true});
+        vcs\cmd(["worktree", "remove", it.path], opts: vcs\CommandOptions{ dir = root, quiet = true });
     } catch (e) {
         return "failed: {e}";
     }
@@ -551,7 +551,7 @@ fun apply(items: [Item], root: str, goCache: bool) > [Item] {
                 result = "skipped: its worktree was not removed";
             } else {
                 try {
-                    vcs\cmd(["update-ref", "-d", "refs/heads/{it.branch}", it.tip], opts: {"dir": root, "quiet": true});
+                    vcs\cmd(["update-ref", "-d", "refs/heads/{it.branch}", it.tip], opts: vcs\CommandOptions{ dir = root, quiet = true });
                 } catch (e) {
                     result = "failed: {e}";
                 }
@@ -560,7 +560,7 @@ fun apply(items: [Item], root: str, goCache: bool) > [Item] {
         } else if (it.kind == "go-cache" and goCache) {
             var result = "emptied";
             try {
-                magus\run(GO_CLEAN, opts: {"quiet": true, "dir": root});
+                magus\run(GO_CLEAN, opts: magus\CommandOptions{ quiet = true, dir = root });
             } catch (e) {
                 result = "failed: {e}";
             }

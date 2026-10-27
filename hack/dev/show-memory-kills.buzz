@@ -226,7 +226,7 @@ fun readMac(w: Window) > str !> any {
         args.append("--end");
         args.append(w.stop);
     }
-    return proc\exec("log", args: args, opts: {"quiet": true}).stdout;
+    return proc\exec("log", args: args, opts: proc\ExecOptions{ quiet = true }).stdout;
 }
 
 // readLinux returns the kernel log and which command it came from.
@@ -238,11 +238,11 @@ fun readLinux(w: Window) > obj{ output: str, source: str } !> any {
         args.append("--until");
         args.append(w.stop);
     }
-    final journal = proc\exec("journalctl", args: args, opts: {"quiet": true, "allow_failure": true});
+    final journal = proc\exec("journalctl", args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (journal.ok) {
         return .{ output = journal.stdout, source = "journalctl -k" };
     }
-    final ring = proc\exec("dmesg", args: ["--time-format", "iso"], opts: {"quiet": true, "allow_failure": true});
+    final ring = proc\exec("dmesg", args: ["--time-format", "iso"], opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (!ring.ok) {
         throw "show-memory-kills: neither journalctl -k nor dmesg is readable here; run it as a user in the systemd-journal group, or with sudo";
     }

@@ -90,7 +90,7 @@ export fun plan(l: Landing) > [str] {
 }
 
 fun git(args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"quiet": true}).stdout;
+    return vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true }).stdout;
 }
 
 fun commitsOf(source: str) > [str] !> any {
@@ -113,7 +113,7 @@ fun commitsOf(source: str) > [str] !> any {
 fun land(l: Landing) > void !> any {
     git(["fetch", "origin", "main"]);
     git(["switch", "-c", l.branch, "origin/main"]);
-    final picked = vcs\cmd(["cherry-pick"] + l.commits, opts: {"quiet": true, "allow_failure": true});
+    final picked = vcs\cmd(["cherry-pick"] + l.commits, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
     if (!picked.ok) {
         throw "land-commits: the cherry-pick of {l.commits.join(" ")} conflicted on {l.branch}: settle it with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>`, then `git cherry-pick --continue`";
     }
@@ -121,13 +121,13 @@ fun land(l: Landing) > void !> any {
         std\print("gate-ready: {line}");
     }
     foreach (argv in checkArgvs(l.title, body: l.body)) {
-        final check = magus\cmd(argv[0], args: argv.sub(1), opts: {"quiet": true, "allow_failure": true});
+        final check = magus\cmd(argv[0], args: argv.sub(1), opts: magus\CommandOptions{ quiet = true, allowFailure = true });
         if (!check.ok) {
             throw "land-commits: `magus {argv[1]}` failed on {l.branch}: fix it and amend before pushing; nothing was pushed\n{check.stdout}{check.stderr}";
         }
     }
     git(pushArgv(l.branch));
-    std\print(proc\exec("gh", args: createArgv(l.branch, title: l.title, bodyFile: l.bodyFile), opts: {"quiet": true}).stdout.trim());
+    std\print(proc\exec("gh", args: createArgv(l.branch, title: l.title, bodyFile: l.bodyFile), opts: proc\ExecOptions{ quiet = true }).stdout.trim());
 }
 
 export fun main(args: [str]) > void !> any {
