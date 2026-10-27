@@ -2,33 +2,32 @@ package textbuf
 
 import "math"
 
-// Bias says which side of an insertion at an anchor's exact position the anchor keeps
-// to, as in Zed: Left stays before the inserted text, Right moves past it.
-type Bias uint8
+// bias says which side of an insertion at an anchor's exact position the anchor keeps
+// to, as in Zed: left stays before the inserted text, right moves past it.
+type bias uint8
 
 const (
-	Left Bias = iota
-	Right
+	left bias = iota
+	right
 )
 
-// Anchor is a stable handle to a position that moves with edits. Text deleted around an
-// anchor collapses it to the deletion's edge. The zero Anchor is Start, the beginning of
-// the text, which needs no Release.
-type Anchor uint32
+// anchor is a stable handle to a position that moves with edits. Text deleted around an
+// anchor collapses it to the deletion's edge. The zero anchor is startAnchor, the
+// beginning of the text, which needs no Release.
+type anchor uint32
 
-// Start is the anchor at offset 0.
-const Start Anchor = 0
+const startAnchor anchor = 0
 
-const rightBit Anchor = 1 << 31
+const rightBit anchor = 1 << 31
 
-func (a Anchor) bias() Bias {
+func (a anchor) side() bias {
 	if a&rightBit != 0 {
-		return Right
+		return right
 	}
-	return Left
+	return left
 }
 
-func (a Anchor) slot() uint32 { return uint32(a&^rightBit) - 1 }
+func (a anchor) slot() uint32 { return uint32(a&^rightBit) - 1 }
 
 // anchorEntry is one anchor in text order. gap is the distance from the previous
 // anchor, so an edit shifts every later anchor by changing one gap. key is dense and

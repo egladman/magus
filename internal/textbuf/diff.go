@@ -14,12 +14,12 @@ const maxDiffEdits = 4096
 // ApplyDiff replaces the text with text as a line diff, each hunk trimmed to the bytes
 // that differ, so anchors outside the changed bytes keep their places. It is how
 // formatter output and file reloads come in.
-func (b *Buffer) ApplyDiff(text []byte) {
+func (b *buffer) ApplyDiff(text []byte) {
 	old := b.Bytes()
-	var edits []Edit
+	var edits []edit
 	for _, h := range lineDiff(old, text) {
 		a, n := trim(old[h.a0:h.a1], text[h.b0:h.b1])
-		edits = append(edits, Edit{Offset: h.a0 + a.start, Delete: a.end - a.start, Text: string(n)})
+		edits = append(edits, edit{Offset: h.a0 + a.start, Delete: a.end - a.start, Text: string(n)})
 	}
 	if err := b.Apply(edits...); err != nil {
 		panic("textbuf: diff produced invalid edits: " + err.Error())

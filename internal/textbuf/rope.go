@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// ErrRange reports an offset or point outside the text.
-var ErrRange = errors.New("position out of range")
+// errRange reports an offset or point outside the text.
+var errRange = errors.New("position out of range")
 
 const (
 	chunkCap = 128
@@ -63,14 +63,14 @@ func (textSum) measure(c *chunk) textSum {
 	return textSum{int(c.n), int(c.rows), int(c.col)}
 }
 
-// Point is a zero-based line and a byte column within it.
-type Point struct {
+// point is a zero-based line and a byte column within it.
+type point struct {
 	Line   int
 	Column int
 }
 
 // rope is the text, a sum tree of chunks after Zed's crates/rope (GPL-3.0-or-later, see
-// NOTICE). Its exported methods read; Buffer and Snapshot promote them.
+// NOTICE). Its exported methods read; buffer and snapshot promote them.
 type rope struct {
 	t tree[chunk, textSum]
 }
@@ -122,7 +122,7 @@ func (r *rope) String() string {
 // Slice returns a copy of bytes [start, end).
 func (r *rope) Slice(start, end int) ([]byte, error) {
 	if start < 0 || start > end || end > r.Len() {
-		return nil, fmt.Errorf("%w: [%d, %d) in [0, %d]", ErrRange, start, end, r.Len())
+		return nil, fmt.Errorf("%w: [%d, %d) in [0, %d]", errRange, start, end, r.Len())
 	}
 	return r.appendRange(make([]byte, 0, end-start), start, end), nil
 }
@@ -145,37 +145,18 @@ func (r *rope) appendRange(dst []byte, start, end int) []byte {
 // locate returns the index and start offset of the chunk holding off. An offset on a
 // chunk boundary belongs to the chunk it ends, so appends extend that chunk.
 func (r *rope) locate(off int) (idx, start int) {
-	n := r.t.root
-	for n.height > 0 {
-		last := len(n.kids) - 1
-		for k := range n.kids {
-			c := &n.kids[k]
-			if off <= start+c.sum.bytes || k == last {
-				n = c.node
-				break
-			}
-			start += c.sum.bytes
-			idx += c.count
-		}
-	}
-	last := len(n.items) - 1
-	for k := range n.items {
-		m := int(n.items[k].n)
-		if off <= start+m || k == last {
-			return idx + k, start
-		}
-		start += m
-	}
-	return idx, start
+	var p chunkPath
+	r.pathTo(off, &p)
+	return p.index, p.start
 }
 
 // Point returns the line and column of byte offset off.
-func (r *rope) Point(off int) (Point, error) {
+func (r *rope) Point(off int) (point, error) {
 	if off < 0 || off > r.Len() {
-		return Point{}, fmt.Errorf("%w: offset %d in [0, %d]", ErrRange, off, r.Len())
+		return point{}, fmt.Errorf("%w: offset %d in [0, %d]", errRange, off, r.Len())
 	}
 	if r.t.root == nil {
-		return Point{}, nil
+		return point{}, nil
 	}
 	var acc textSum
 	n := r.t.root
@@ -196,35 +177,26 @@ func (r *rope) Point(off int) (Point, error) {
 		if off <= acc.bytes+int(c.n) || k == last {
 			part := c.b[:off-acc.bytes]
 			if i := bytes.LastIndexByte(part, '\n'); i >= 0 {
-				return Point{acc.rows + bytes.Count(part, nl), len(part) - i - 1}, nil
+				return point{acc.rows + bytes.Count(part, nl), len(part) - i - 1}, nil
 			}
-			return Point{acc.rows, acc.col + len(part)}, nil
+			return point{acc.rows, acc.col + len(part)}, nil
 		}
 		acc = acc.add(textSum{int(c.n), int(c.rows), int(c.col)})
 	}
-	return Point{}, nil
+	return point{}, nil
 }
 
 // Offset returns the byte offset of p. The column may equal the line's length but not
 // pass it.
-func (r *rope) Offset(p Point) (int, error) {
-	bad := func() (int, error) {
-		return 0, fmt.Errorf("%w: point %d:%d", ErrRange, p.Line, p.Column)
-	}
-	if p.Line < 0 || p.Column < 0 {
-		return bad()
-	}
-	if r.t.root == nil {
-		if p == (Point{}) {
-			return 0, nil
-		}
-		return bad()
-	}
+func (r *rope) Offset(p point) (int, error) {
 	reaches := func(end textSum) bool {
 		return end.rows > p.Line || end.rows == p.Line && end.col >= p.Column
 	}
-	if !reaches(r.t.sum) {
-		return bad()
+	if p.Line < 0 || p.Column < 0 || !reaches(r.t.sum) {
+		return 0, fmt.Errorf("%w: point %d:%d", errRange, p.Line, p.Column)
+	}
+	if r.t.root == nil {
+		return 0, nil
 	}
 	var acc textSum
 	n := r.t.root
@@ -242,24 +214,28 @@ func (r *rope) Offset(p Point) (int, error) {
 	for k := range n.items {
 		c := &n.items[k]
 		end := acc.add(textSum{int(c.n), int(c.rows), int(c.col)})
-		if !reaches(end) {
-			acc = end
-			continue
+		if reaches(end) {
+			if off, ok := c.offset(acc, p); ok {
+				return acc.bytes + off, nil
+			}
+			break
 		}
-		b := c.bytes()
-		i := 0
-		col := acc.col
-		for row := acc.rows; row < p.Line; row++ {
-			i += bytes.IndexByte(b[i:], '\n') + 1
-			col = 0
-		}
-		want := i + p.Column - col
-		if want > len(b) || bytes.IndexByte(b[i:want], '\n') >= 0 {
-			return bad()
-		}
-		return acc.bytes + want, nil
+		acc = end
 	}
-	return bad()
+	return 0, fmt.Errorf("%w: point %d:%d", errRange, p.Line, p.Column)
+}
+
+// offset returns the offset of p within the chunk, which starts at point acc, and false
+// when p's column runs past the end of its line.
+func (c *chunk) offset(acc textSum, p point) (int, bool) {
+	b := c.bytes()
+	i, col := 0, acc.col
+	for row := acc.rows; row < p.Line; row++ {
+		i += bytes.IndexByte(b[i:], '\n') + 1
+		col = 0
+	}
+	want := i + p.Column - col
+	return want, want <= len(b) && bytes.IndexByte(b[i:want], '\n') < 0
 }
 
 // replace swaps bytes [s, e) for text. The caller has checked the range.
@@ -295,7 +271,7 @@ func (r *rope) replace(s, e int, text string) {
 }
 
 // maxHeight bounds a tree's height: minItems^maxHeight items is past any text.
-const maxHeight = 24
+const maxHeight = 12
 
 // replaceInChunk edits the chunk holding [s, e) in place, splitting it in two inside
 // its leaf when it outgrows chunkCap; otherwise it reports false and changes nothing.
@@ -303,51 +279,30 @@ const maxHeight = 24
 // measured: BenchmarkInsert/64KiB -78% sec/op, 14 to 0 allocs/op, split -73% B/op (n=10).
 // trade-off: a second edit path beside splice; chunks may shrink to chunkMin/2.
 func (r *rope) replaceInChunk(s, e int, text string) bool {
-	n := r.t.root
-	if n == nil {
+	if r.t.root == nil {
 		return false
 	}
-	var path [maxHeight]int
-	depth, start := 0, 0
-	for n.height > 0 {
-		last := len(n.kids) - 1
-		for k := range n.kids {
-			c := &n.kids[k]
-			if s <= start+c.sum.bytes || k == last {
-				path[depth] = k
-				depth++
-				n = c.node
-				break
-			}
-			start += c.sum.bytes
-		}
-	}
-	k, last := 0, len(n.items)-1
-	for ; k < last && s > start+int(n.items[k].n); k++ {
-		start += int(n.items[k].n)
-	}
-	c := &n.items[k]
-	lo, hi := s-start, e-start
+	var p chunkPath
+	r.pathTo(s, &p)
+	leaf := p.nodes[p.depth]
+	c := &leaf.items[p.slots[p.depth]]
+	lo, hi := s-p.start, e-p.start
 	m := int(c.n) - (hi - lo) + len(text)
-	split := m > chunkCap && m <= 2*chunkCap && len(n.items) < maxItems
+	split := m > chunkCap && m <= 2*chunkCap && len(leaf.items) < maxItems
 	if hi > int(c.n) || m > chunkCap && !split || m == 0 || m < chunkMin/2 && r.t.count > 1 {
 		return false
 	}
-	var parents [maxHeight]*node[chunk, textSum]
-	n = r.t.mutRoot()
-	for d := range depth {
-		parents[d] = n
-		n = r.t.mutKid(n, path[d])
-	}
-	c = &n.items[k]
+	leaf = r.own(&p)
+	k := p.slots[p.depth]
+	c = &leaf.items[k]
 	grow := 0
 	if split {
 		var tmp [2 * chunkCap]byte
 		w := copy(tmp[:], c.b[:lo])
 		w += copy(tmp[w:], text)
 		w += copy(tmp[w:], c.b[hi:c.n])
-		n.items = slices.Insert(n.items, k+1, newChunk(tmp[w/2:w]))
-		c = &n.items[k]
+		leaf.items = slices.Insert(leaf.items, k+1, newChunk(tmp[w/2:w]))
+		c = &leaf.items[k]
 		copy(c.b[:], tmp[:w/2])
 		c.set(w / 2)
 		grow = 1
@@ -356,16 +311,67 @@ func (r *rope) replaceInChunk(s, e int, text string) bool {
 		copy(c.b[lo:], text)
 		c.set(m)
 	}
-	sum := sumChunks(n.items)
-	for d := depth - 1; d >= 0; d-- {
-		p := parents[d]
-		p.kids[path[d]].sum = sum
-		p.kids[path[d]].count += grow
-		sum = sumKids(p.kids)
+	r.resum(&p, grow)
+	return true
+}
+
+// chunkPath is the descent to one chunk: nodes[d] and its slot slots[d] at each depth
+// down to the leaf at nodes[depth]. The chunk is item index of the rope and starts at
+// byte offset start.
+type chunkPath struct {
+	nodes               [maxHeight + 1]*node[chunk, textSum]
+	slots               [maxHeight + 1]int
+	depth, index, start int
+}
+
+// pathTo fills p with the descent to the chunk holding off.
+func (r *rope) pathTo(off int, p *chunkPath) {
+	n := r.t.root
+	for n.height > 0 {
+		last := len(n.kids) - 1
+		for k := range n.kids {
+			c := &n.kids[k]
+			if off <= p.start+c.sum.bytes || k == last {
+				p.nodes[p.depth], p.slots[p.depth] = n, k
+				p.depth++
+				n = c.node
+				break
+			}
+			p.start += c.sum.bytes
+			p.index += c.count
+		}
+	}
+	k, last := 0, len(n.items)-1
+	for ; k < last && off > p.start+int(n.items[k].n); k++ {
+		p.start += int(n.items[k].n)
+	}
+	p.nodes[p.depth], p.slots[p.depth] = n, k
+	p.index += k
+}
+
+// own makes every node on the path the writer's, cloning shared ones, and returns the leaf.
+func (r *rope) own(p *chunkPath) *node[chunk, textSum] {
+	n := r.t.mutRoot()
+	for d := range p.depth {
+		p.nodes[d] = n
+		n = r.t.mutKid(n, p.slots[d])
+	}
+	p.nodes[p.depth] = n
+	return n
+}
+
+// resum recomputes the summaries on an owned path after its leaf changed and gained
+// grow chunks.
+func (r *rope) resum(p *chunkPath, grow int) {
+	sum := sumChunks(p.nodes[p.depth].items)
+	for d := p.depth - 1; d >= 0; d-- {
+		k := &p.nodes[d].kids[p.slots[d]]
+		k.sum = sum
+		k.count += grow
+		sum = sumKids(p.nodes[d].kids)
 	}
 	r.t.sum = sum
 	r.t.count += grow
-	return true
 }
 
 // sumChunks and sumKids are node.child for ropes, minus the generic dispatch.

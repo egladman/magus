@@ -41,12 +41,12 @@ func reformat(src []byte) []byte {
 	return bytes.Join(lines, nil)
 }
 
-func benchBuffer(b *testing.B, size, anchors int) (*Buffer, *rand.Rand) {
+func benchBuffer(b *testing.B, size, anchors int) (*buffer, *rand.Rand) {
 	b.Helper()
-	buf := New(goSource(size))
+	buf := newBuffer(goSource(size))
 	r := rand.New(rand.NewPCG(1, 2))
 	for range anchors {
-		if _, err := buf.Anchor(r.IntN(buf.Len()+1), Bias(r.IntN(2))); err != nil {
+		if _, err := buf.Anchor(r.IntN(buf.Len()+1), bias(r.IntN(2))); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -59,7 +59,7 @@ func BenchmarkInsert(b *testing.B) {
 			buf, r := benchBuffer(b, size, benchAnchors)
 			b.ReportAllocs()
 			for b.Loop() {
-				if err := buf.Apply(Edit{Offset: r.IntN(buf.Len() + 1), Text: "x"}); err != nil {
+				if err := buf.Apply(edit{Offset: r.IntN(buf.Len() + 1), Text: "x"}); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -78,7 +78,7 @@ func BenchmarkDelete(b *testing.B) {
 					buf, _ = benchBuffer(b, size, benchAnchors)
 					b.StartTimer()
 				}
-				if err := buf.Apply(Edit{Offset: r.IntN(buf.Len() - 7), Delete: 8}); err != nil {
+				if err := buf.Apply(edit{Offset: r.IntN(buf.Len() - 7), Delete: 8}); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -93,7 +93,7 @@ func BenchmarkInsertSnapshot(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = buf.Snapshot()
-		if err := buf.Apply(Edit{Offset: r.IntN(buf.Len() + 1), Text: "x"}); err != nil {
+		if err := buf.Apply(edit{Offset: r.IntN(buf.Len() + 1), Text: "x"}); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -102,11 +102,11 @@ func BenchmarkInsertSnapshot(b *testing.B) {
 func BenchmarkResolve(b *testing.B) {
 	for _, n := range []int{256, 16384} {
 		b.Run(fmt.Sprint(n), func(b *testing.B) {
-			buf := New(goSource(1 << 20))
+			buf := newBuffer(goSource(1 << 20))
 			r := rand.New(rand.NewPCG(1, 2))
-			as := make([]Anchor, n)
+			as := make([]anchor, n)
 			for i := range as {
-				as[i], _ = buf.Anchor(r.IntN(buf.Len()+1), Bias(r.IntN(2)))
+				as[i], _ = buf.Anchor(r.IntN(buf.Len()+1), bias(r.IntN(2)))
 			}
 			b.ReportAllocs()
 			i := 0

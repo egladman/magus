@@ -6,50 +6,50 @@ import (
 	"slices"
 )
 
-// Buffer is a text with anchors. It has one writer: a Buffer is not safe for concurrent
-// use, and readers on other goroutines take a Snapshot.
-type Buffer struct {
+// buffer is a text with anchors. It has one writer: a buffer is not safe for concurrent
+// use, and readers on other goroutines take a snapshot.
+type buffer struct {
 	rope
-	anchors [2]anchorTree // by Bias
+	anchors [2]anchorTree // by bias
 	version uint64
 }
 
-// Snapshot is an immutable view of a Buffer's text at one version, safe for concurrent
-// use. Taking one costs O(1); the Buffer copies the nodes it later changes.
-type Snapshot struct {
+// snapshot is an immutable view of a buffer's text at one version, safe for concurrent
+// use. Taking one costs O(1); the buffer copies the nodes it later changes.
+type snapshot struct {
 	rope
 	version uint64
 }
 
-// New returns a Buffer holding a copy of text, at version 0.
-func New(text []byte) *Buffer {
-	return &Buffer{
+// newBuffer returns a buffer holding a copy of text, at version 0.
+func newBuffer(text []byte) *buffer {
+	return &buffer{
 		rope:    newRope(text),
 		anchors: [2]anchorTree{newAnchorTree(), newAnchorTree()},
 	}
 }
 
-// Version counts the calls to Apply and ApplyDiff that changed the text.
-func (b *Buffer) Version() uint64 { return b.version }
+// Version counts applied changes: each Apply or ApplyDiff with at least one edit adds one.
+func (b *buffer) Version() uint64 { return b.version }
 
 // Snapshot returns the current text.
-func (b *Buffer) Snapshot() Snapshot {
-	return Snapshot{rope{b.t.freeze()}, b.version}
+func (b *buffer) Snapshot() snapshot {
+	return snapshot{rope{b.t.freeze()}, b.version}
 }
 
-// Version is the Buffer version the snapshot was taken at.
-func (s *Snapshot) Version() uint64 { return s.version }
+// Version is the buffer version the snapshot was taken at.
+func (s *snapshot) Version() uint64 { return s.version }
 
 // Anchor creates an anchor at byte offset off. Release it once unused.
-func (b *Buffer) Anchor(off int, bias Bias) (Anchor, error) {
+func (b *buffer) Anchor(off int, side bias) (anchor, error) {
 	if off < 0 || off > b.Len() {
-		return 0, fmt.Errorf("%w: offset %d in [0, %d]", ErrRange, off, b.Len())
+		return 0, fmt.Errorf("%w: offset %d in [0, %d]", errRange, off, b.Len())
 	}
-	if bias != Left && bias != Right {
-		return 0, fmt.Errorf("invalid bias %d", bias)
+	if side != left && side != right {
+		return 0, fmt.Errorf("invalid bias %d", side)
 	}
-	a := Anchor(b.anchors[bias].add(off) + 1)
-	if bias == Right {
+	a := anchor(b.anchors[side].add(off) + 1)
+	if side == right {
 		a |= rightBit
 	}
 	return a, nil
@@ -57,24 +57,24 @@ func (b *Buffer) Anchor(off int, bias Bias) (Anchor, error) {
 
 // Resolve returns the anchor's current byte offset in O(log n). It panics when a was
 // released.
-func (b *Buffer) Resolve(a Anchor) int {
-	if a == Start {
+func (b *buffer) Resolve(a anchor) int {
+	if a == startAnchor {
 		return 0
 	}
-	return b.anchors[a.bias()].resolve(a.slot())
+	return b.anchors[a.side()].resolve(a.slot())
 }
 
 // Release frees the anchor; its handle may be reused by a later Anchor call. Releasing
-// Start does nothing.
-func (b *Buffer) Release(a Anchor) {
-	if a != Start {
-		b.anchors[a.bias()].remove(a.slot())
+// startAnchor does nothing.
+func (b *buffer) Release(a anchor) {
+	if a != startAnchor {
+		b.anchors[a.side()].remove(a.slot())
 	}
 }
 
-// Edit replaces Delete bytes at Offset bytes past Anchor's position with Text.
-type Edit struct {
-	Anchor Anchor
+// edit replaces Delete bytes at Offset bytes past Anchor's position with Text.
+type edit struct {
+	Anchor anchor
 	Offset int
 	Delete int
 	Text   string
@@ -88,13 +88,13 @@ type span struct {
 // Apply resolves every edit against the current text, then applies them as one change.
 // Ranges must not overlap; inserts at one position land in argument order. On error
 // nothing is applied.
-func (b *Buffer) Apply(edits ...Edit) error {
+func (b *buffer) Apply(edits ...edit) error {
 	var small [4]span
 	spans := small[:0]
 	for i, e := range edits {
 		s := b.Resolve(e.Anchor) + e.Offset
 		if e.Delete < 0 || s < 0 || s+e.Delete > b.Len() {
-			return fmt.Errorf("edit %d: %w: [%d, %d) in [0, %d]", i, ErrRange, s, s+e.Delete, b.Len())
+			return fmt.Errorf("edit %d: %w: [%d, %d) in [0, %d]", i, errRange, s, s+e.Delete, b.Len())
 		}
 		spans = append(spans, span{s, s + e.Delete, i})
 	}
@@ -114,18 +114,18 @@ func (b *Buffer) Apply(edits ...Edit) error {
 	return nil
 }
 
-func (b *Buffer) replace(s, e int, text string) {
+func (b *buffer) replace(s, e int, text string) {
 	if s == e && text == "" {
 		return
 	}
 	b.rope.replace(s, e, text)
-	for bias := range b.anchors {
-		a := &b.anchors[bias]
+	for side := range b.anchors {
+		a := &b.anchors[side]
 		if e > s {
 			a.collapse(s, e)
 		}
 		if text != "" {
-			a.shift(s, Bias(bias) == Right, len(text))
+			a.shift(s, bias(side) == right, len(text))
 		}
 	}
 }

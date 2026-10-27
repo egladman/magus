@@ -14,15 +14,15 @@ import (
 // model is the naive reference: the text as a byte slice and each anchor's offset.
 type model struct {
 	text    []byte
-	anchors map[Anchor]int
+	anchors map[anchor]int
 }
 
 func (m *model) replace(s, e int, text string) {
 	m.text = slices.Concat(m.text[:s], []byte(text), m.text[e:])
 	for a, p := range m.anchors {
 		switch {
-		case p < s || p == s && a.bias() == Left:
-		case p <= e && a.bias() == Left:
+		case p < s || p == s && a.side() == left:
+		case p <= e && a.side() == left:
 			p = s
 		case p <= e:
 			p = s + len(text)
@@ -33,10 +33,10 @@ func (m *model) replace(s, e int, text string) {
 	}
 }
 
-func (m *model) point(off int) Point {
+func (m *model) point(off int) point {
 	before := m.text[:off]
 	line := bytes.Count(before, nl)
-	return Point{line, off - (bytes.LastIndexByte(before, '\n') + 1)}
+	return point{line, off - (bytes.LastIndexByte(before, '\n') + 1)}
 }
 
 const alphabet = "ab\nc\xc3\xa9de\n\nfgh"
@@ -99,11 +99,11 @@ func validate[T any, S interface {
 	}
 }
 
-func check(t *testing.T, b *Buffer, m *model) {
+func check(t *testing.T, b *buffer, m *model) {
 	t.Helper()
 	validate(t, &b.t)
-	validate(t, &b.anchors[Left].t)
-	validate(t, &b.anchors[Right].t)
+	validate(t, &b.anchors[left].t)
+	validate(t, &b.anchors[right].t)
 	if got := b.Bytes(); !bytes.Equal(got, m.text) {
 		t.Fatalf("text mismatch:\n got %q\nwant %q", got, m.text)
 	}
@@ -115,12 +115,12 @@ func check(t *testing.T, b *Buffer, m *model) {
 	}
 	for a, want := range m.anchors {
 		if got := b.Resolve(a); got != want {
-			t.Fatalf("anchor %#x (bias %d) at %d, want %d", uint32(a), a.bias(), got, want)
+			t.Fatalf("anchor %#x (bias %d) at %d, want %d", uint32(a), a.side(), got, want)
 		}
 	}
 }
 
-func checkPoints(t *testing.T, r *rand.Rand, b *Buffer, m *model) {
+func checkPoints(t *testing.T, r *rand.Rand, b *buffer, m *model) {
 	t.Helper()
 	for range 8 {
 		off := r.IntN(len(m.text) + 1)
@@ -140,10 +140,10 @@ func checkPoints(t *testing.T, r *rand.Rand, b *Buffer, m *model) {
 		}
 	}
 	end := m.point(len(m.text))
-	if _, err := b.Offset(Point{end.Line, end.Column + 1}); !errors.Is(err, ErrRange) {
+	if _, err := b.Offset(point{end.Line, end.Column + 1}); !errors.Is(err, errRange) {
 		t.Fatalf("Offset past the end: %v", err)
 	}
-	if _, err := b.Offset(Point{end.Line + 1, 0}); !errors.Is(err, ErrRange) {
+	if _, err := b.Offset(point{end.Line + 1, 0}); !errors.Is(err, errRange) {
 		t.Fatalf("Offset past the last line: %v", err)
 	}
 }
@@ -157,10 +157,10 @@ func TestBufferMatchesModel(t *testing.T) {
 				size = 100 << 10 // deep enough for three levels of chunks
 			}
 			init := randText(r, size)
-			b := New([]byte(init))
-			m := &model{text: []byte(init), anchors: map[Anchor]int{}}
+			b := newBuffer([]byte(init))
+			m := &model{text: []byte(init), anchors: map[anchor]int{}}
 			type frozen struct {
-				s    Snapshot
+				s    snapshot
 				text string
 			}
 			var snaps []frozen
@@ -171,7 +171,7 @@ func TestBufferMatchesModel(t *testing.T) {
 				case op < 7:
 					for range 1 + r.IntN(24) {
 						off := r.IntN(len(m.text) + 1)
-						a, err := b.Anchor(off, Bias(r.IntN(2)))
+						a, err := b.Anchor(off, bias(r.IntN(2)))
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -203,7 +203,7 @@ func TestBufferMatchesModel(t *testing.T) {
 }
 
 // applyRandom applies one to four disjoint edits, each relative to a random anchor.
-func applyRandom(t *testing.T, r *rand.Rand, b *Buffer, m *model) {
+func applyRandom(t *testing.T, r *rand.Rand, b *buffer, m *model) {
 	t.Helper()
 	n := 1 + r.IntN(4)
 	cuts := make([]int, 2*n)
@@ -211,11 +211,11 @@ func applyRandom(t *testing.T, r *rand.Rand, b *Buffer, m *model) {
 		cuts[i] = r.IntN(len(m.text) + 1)
 	}
 	slices.Sort(cuts)
-	handles := []Anchor{Start}
+	handles := []anchor{startAnchor}
 	for a := range m.anchors {
 		handles = append(handles, a)
 	}
-	var edits []Edit
+	var edits []edit
 	type ranged struct {
 		s, e int
 		text string
@@ -226,10 +226,10 @@ func applyRandom(t *testing.T, r *rand.Rand, b *Buffer, m *model) {
 		text := randText(r, randLen(r))
 		a := handles[r.IntN(len(handles))]
 		base := 0
-		if a != Start {
+		if a != startAnchor {
 			base = m.anchors[a]
 		}
-		edits = append(edits, Edit{Anchor: a, Offset: s - base, Delete: e - s, Text: text})
+		edits = append(edits, edit{Anchor: a, Offset: s - base, Delete: e - s, Text: text})
 		want = append(want, ranged{s, e, text})
 	}
 	r.Shuffle(len(edits), func(i, j int) {
@@ -251,9 +251,9 @@ func applyRandom(t *testing.T, r *rand.Rand, b *Buffer, m *model) {
 }
 
 func TestApplyRejects(t *testing.T) {
-	b := New([]byte("hello world"))
+	b := newBuffer([]byte("hello world"))
 	v := b.Version()
-	cases := map[string][]Edit{
+	cases := map[string][]edit{
 		"past the end":    {{Offset: 9, Delete: 5}},
 		"before 0":        {{Offset: -1}},
 		"negative delete": {{Offset: 3, Delete: -1}},
@@ -270,8 +270,8 @@ func TestApplyRejects(t *testing.T) {
 }
 
 func TestInsertsAtOnePositionKeepArgumentOrder(t *testing.T) {
-	b := New([]byte("ab"))
-	if err := b.Apply(Edit{Offset: 1, Text: "1"}, Edit{Offset: 1, Text: "2"}, Edit{Offset: 1, Text: "3"}); err != nil {
+	b := newBuffer([]byte("ab"))
+	if err := b.Apply(edit{Offset: 1, Text: "1"}, edit{Offset: 1, Text: "2"}, edit{Offset: 1, Text: "3"}); err != nil {
 		t.Fatal(err)
 	}
 	if b.String() != "a123b" {
@@ -280,8 +280,8 @@ func TestInsertsAtOnePositionKeepArgumentOrder(t *testing.T) {
 }
 
 func TestReleasedAnchorPanics(t *testing.T) {
-	b := New([]byte("abc"))
-	a, _ := b.Anchor(1, Right)
+	b := newBuffer([]byte("abc"))
+	a, _ := b.Anchor(1, right)
 	b.Release(a)
 	defer func() {
 		if recover() == nil {
@@ -292,16 +292,16 @@ func TestReleasedAnchorPanics(t *testing.T) {
 }
 
 func TestAnchorKeysRelabel(t *testing.T) {
-	b := New([]byte("x"))
-	var as []Anchor
+	b := newBuffer([]byte("x"))
+	var as []anchor
 	for range 200 {
-		a, err := b.Anchor(0, Left)
+		a, err := b.Anchor(0, left)
 		if err != nil {
 			t.Fatal(err)
 		}
 		as = append(as, a)
 	}
-	if err := b.Apply(Edit{Text: "abc"}); err != nil {
+	if err := b.Apply(edit{Text: "abc"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range as {
@@ -330,7 +330,7 @@ func TestApplyDiffMatchesModel(t *testing.T) {
 			}
 		}
 		next := strings.Join(lines, "")
-		b := New([]byte(old))
+		b := newBuffer([]byte(old))
 		// Lines wholly before the first differing byte, or wholly after the last,
 		// lie outside every hunk.
 		pre := commonPrefix([]byte(old), []byte(next))
@@ -340,10 +340,10 @@ func TestApplyDiffMatchesModel(t *testing.T) {
 		if i := strings.IndexByte(old[len(old)-suf:], '\n'); i >= 0 {
 			lastLine = len(old) - suf + i + 1
 		}
-		var before, after []Anchor
+		var before, after []anchor
 		for range 20 {
 			off := r.IntN(len(old) + 1)
-			bias := Bias(r.IntN(2))
+			bias := bias(r.IntN(2))
 			a, _ := b.Anchor(off, bias)
 			switch {
 			case off < firstLine:
@@ -353,7 +353,7 @@ func TestApplyDiffMatchesModel(t *testing.T) {
 			}
 		}
 		snap := b.Snapshot()
-		want := make(map[Anchor]int)
+		want := make(map[anchor]int)
 		for _, a := range before {
 			want[a] = b.Resolve(a)
 		}
@@ -378,10 +378,10 @@ func TestApplyDiffMatchesModel(t *testing.T) {
 func TestApplyDiffKeepsAnchorsBetweenHunks(t *testing.T) {
 	old := "func a() {\nreturn 1\n}\n\nfunc keep() {}\n\nfunc b() {\nreturn 2\n}\n"
 	next := "func a() {\n\treturn 1\n}\n\nfunc keep() {}\n\nfunc b() {\n\treturn 2\n}\n"
-	b := New([]byte(old))
+	b := newBuffer([]byte(old))
 	at := strings.Index(old, "keep")
-	a, _ := b.Anchor(at, Left)
-	inner, _ := b.Anchor(strings.Index(old, "1\n"), Right)
+	a, _ := b.Anchor(at, left)
+	inner, _ := b.Anchor(strings.Index(old, "1\n"), right)
 	b.ApplyDiff([]byte(next))
 	if got, want := b.Resolve(a), strings.Index(next, "keep"); got != want {
 		t.Fatalf("anchor between hunks at %d, want %d", got, want)
