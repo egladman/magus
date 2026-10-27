@@ -304,7 +304,7 @@ test "a comment marker and a picture are replaced, an unrelated picture is not" 
 fun unknownMarkers(figures: [figure\Figure]) > [str] !> any {
     final known: mut {str: bool} = mut {<str: bool>};
     foreach (f in figures) { known[f.id] = true; }
-    final result: QueryResult = magus\query("kind=marker family=diagram", opts: {"limit": 10000});
+    final result: QueryResult = magus\query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
     final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
     foreach (n in result.nodes) {
         marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });
