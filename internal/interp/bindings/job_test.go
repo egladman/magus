@@ -34,6 +34,7 @@ func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
+	DeclareMagusTypes(sess)
 
 	require.NoError(t, sess.Exec(ctx, `
 import "magus";
@@ -41,7 +42,7 @@ import "magus";
 export fun abandon() > str !> any {
     magus\job.put("optional-exit", opts: {"criteria": "exercise omitted result", "read_only": true});
     final row = magus\job.exit("optional-exit");
-    return row.state;
+    return row.state.value;
 }
 
 export fun waitOnNoReturn() > void !> any {
@@ -61,9 +62,8 @@ export fun waitOnNoReturn() > void !> any {
 	require.ErrorContains(t, err, "has filed no result")
 }
 
-// The Go doors take typed options, so the map contract a Buzz caller writes against is
-// decoded at the binding: an unknown key or a value of the wrong type still raises there,
-// and a put's mistakes come back joined in one raise.
+// trail.read and job.put still take maps, decoded at the binding: an unknown key or a
+// value of the wrong type raises there, and a put's mistakes come back joined in one raise.
 func TestOptionMapsStayStrictThroughBuzzScript(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
@@ -72,20 +72,15 @@ func TestOptionMapsStayStrictThroughBuzzScript(t *testing.T) {
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
+	DeclareMagusTypes(sess)
 	require.NoError(t, sess.Exec(ctx, `
 import "magus";
 
-export fun queryTypo() > void !> any { magus\query("kind=target", opts: {"limt": 5}); }
-export fun queryText() > void !> any { magus\query("kind=target", opts: {"budget": "10"}); }
-export fun refsTypo() > void !> any { magus\refs("Foo", opts: {"ofset": 1}); }
 export fun trailTypo() > void !> any { magus\trail.read({"sinse": "6h"}); }
 export fun trailNumber() > void !> any { magus\trail.read({"session": 3}); }
 export fun putMistakes() > void !> any { magus\job.put("w", opts: {"passsed": true, "state": "passed"}); }
 `))
 	for name, want := range map[string][]string{
-		"queryTypo":   {`magus\query: unknown option "limt" (want budget, limit, offset)`},
-		"queryText":   {`magus\query: budget must be a number, got string`},
-		"refsTypo":    {`magus\refs: unknown option "ofset" (want limit, offset)`},
 		"trailTypo":   {`trail.read: unknown option "sinse"`},
 		"trailNumber": {`trail.read: opts.session is int64, want a string`},
 		"putMistakes": {"no field of a job row is named passsed", "state must be one of"},
@@ -139,6 +134,7 @@ func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
+	DeclareMagusTypes(sess)
 	require.NoError(t, sess.Exec(ctx, `
 import "magus";
 

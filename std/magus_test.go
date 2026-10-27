@@ -82,16 +82,15 @@ func TestResolveRunDir(t *testing.T) {
 	cases := []struct {
 		name string
 		cwd  string
-		opts map[string]any
+		opts types.MagusCommandOptions
 		want string
 	}{
-		{"no opts keeps the contextual dir", "/ws/api", nil, "/ws/api"},
-		{"empty dir keeps the contextual dir", "/ws/api", map[string]any{"dir": ""}, "/ws/api"},
-		{"relative dir joins onto it", "/ws/api", map[string]any{"dir": "scripts"}, "/ws/api/scripts"},
-		{"parent-relative dir joins too", "/ws/api", map[string]any{"dir": "../web"}, "/ws/web"},
-		{"absolute dir wins outright", "/ws/api", map[string]any{"dir": "/elsewhere"}, "/elsewhere"},
-		{"no contextual dir uses opts.dir as given", "", map[string]any{"dir": "scripts"}, "scripts"},
-		{"a non-string dir is ignored", "/ws/api", map[string]any{"dir": 7}, "/ws/api"},
+		{"no opts keeps the contextual dir", "/ws/api", types.MagusCommandOptions{}, "/ws/api"},
+		{"empty dir keeps the contextual dir", "/ws/api", types.MagusCommandOptions{Dir: ""}, "/ws/api"},
+		{"relative dir joins onto it", "/ws/api", types.MagusCommandOptions{Dir: "scripts"}, "/ws/api/scripts"},
+		{"parent-relative dir joins too", "/ws/api", types.MagusCommandOptions{Dir: "../web"}, "/ws/web"},
+		{"absolute dir wins outright", "/ws/api", types.MagusCommandOptions{Dir: "/elsewhere"}, "/elsewhere"},
+		{"no contextual dir uses opts.dir as given", "", types.MagusCommandOptions{Dir: "scripts"}, "scripts"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -110,15 +109,12 @@ func TestResolveRunDir(t *testing.T) {
 func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 	ctx := WithCurrentWorkingDirectory(context.Background(), "/ws/api")
 
-	fed := nestedExecOptions(ctx, map[string]any{"stdin": "ghp_token", "quiet": true}, nil)
+	fed := nestedExecOptions(ctx, types.MagusCommandOptions{Stdin: "ghp_token", Quiet: true}, nil)
 	// A nested magus is always captured; the caller reads its output.
 	assert.Equal(t, spawn.ExecOptions{Dir: "/ws/api", Capture: true, Quiet: true, Stdin: "ghp_token"}, fed)
 
-	bare := nestedExecOptions(ctx, nil, nil)
+	bare := nestedExecOptions(ctx, types.MagusCommandOptions{}, nil)
 	assert.Empty(t, bare.Stdin, "no opt means the child inherits nothing on stdin")
-
-	wrong := nestedExecOptions(ctx, map[string]any{"stdin": 7}, nil)
-	assert.Empty(t, wrong.Stdin, "a non-string stdin is ignored rather than rendered")
 }
 
 // TestNestedResultHonorsAllowFailure pins magus.cmd/run/describe to proc.exec's
@@ -127,26 +123,26 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	full := []string{"status"}
 	failed := spawn.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
 
-	_, err := nestedResult("cmd", full, failed, nil, nil)
+	_, err := nestedResult("cmd", full, failed, nil, types.MagusCommandOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus.cmd: status exited with code 3")
 
-	got, err := nestedResult("cmd", full, failed, nil, map[string]any{"allow_failure": true})
+	got, err := nestedResult("cmd", full, failed, nil, types.MagusCommandOptions{AllowFailure: true})
 	require.NoError(t, err)
 	assert.Equal(t, types.ExecResult{Stdout: "partial", Stderr: "boom", Code: 3, OK: false}, got)
 
 	notStarted := spawn.ExecResult{Code: -1}
-	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), nil)
+	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), types.MagusCommandOptions{})
 	require.ErrorContains(t, err, "no such file")
-	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), map[string]any{"allow_failure": true})
+	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), types.MagusCommandOptions{AllowFailure: true})
 	require.NoError(t, err)
 	assert.Equal(t, -1, got.Code)
 	assert.False(t, got.OK)
 
-	_, err = nestedResult("cmd", full, spawn.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
+	_, err = nestedResult("cmd", full, spawn.ExecResult{Code: -1}, types.ExecDenied, types.MagusCommandOptions{AllowFailure: true})
 	assert.ErrorIs(t, err, types.ExecDenied, "a sandbox denial is never swallowed")
 
-	ok, err := nestedResult("cmd", full, spawn.ExecResult{Stdout: "fine", Started: true}, nil, nil)
+	ok, err := nestedResult("cmd", full, spawn.ExecResult{Stdout: "fine", Started: true}, nil, types.MagusCommandOptions{})
 	require.NoError(t, err)
 	assert.True(t, ok.OK)
 }
@@ -180,7 +176,7 @@ func TestMagusRaise(t *testing.T) {
 	// own, because explain and the docs URL map resolve MGS against a closed catalog.
 	for _, code := range []string{"MGS9999", "mgs1001", "Mgs0001"} {
 		t.Run("refuses the magus namespace: "+code, func(t *testing.T) {
-			err := MagusRaise(context.Background(), code, "impersonating magus", nil)
+			err := MagusRaise(context.Background(), code, "impersonating magus", types.RaiseOptions{})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "MGS namespace")
 			var de *diagnostics.Error
@@ -222,20 +218,9 @@ func TestMagusRaiseCause(t *testing.T) {
 	})
 }
 
-// raiseOptions builds the opts map the way a magusfile would, keeping the tests readable
-// now that cause and url are keys rather than positions.
-func raiseOptions(cause any, url string) map[string]any {
-	o := map[string]any{}
-	if cause != nil {
-		o["cause"] = cause
-	}
-	if url != "" {
-		o["url"] = url
-	}
-	if len(o) == 0 {
-		return nil
-	}
-	return o
+// raiseOptions builds the RaiseOptions record a magusfile would pass.
+func raiseOptions(cause any, url string) types.RaiseOptions {
+	return types.RaiseOptions{Cause: cause, URL: url}
 }
 
 // recordingAnalyzer is a workspace that can answer the insight lenses, recording the
@@ -294,7 +279,7 @@ func TestInsightIsServedInProcess(t *testing.T) {
 	a := &recordingAnalyzer{groupingLens: types.GroupingOutput{Definition: types.GroupingDefinition}}
 	ctx := types.WithWorkspace(t.Context(), a)
 
-	report, err := MagusInsight(ctx, nil)
+	report, err := MagusInsight(ctx, types.InsightOptions{})
 	require.NoError(t, err, "a workspace that analyses answers here, with no subprocess")
 	assert.Equal(t, "hot", report.Hotspots.Definition)
 	assert.Equal(t, types.GroupingDefinition, report.Grouping.Definition, "the report carries the grouping lens")
@@ -333,47 +318,23 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 func TestInsightNeedsAWorkspace(t *testing.T) {
 	t.Parallel()
 
-	_, err := MagusInsight(t.Context(), nil)
+	_, err := MagusInsight(t.Context(), types.InsightOptions{})
 	require.Error(t, err, "no workspace on the context is an error, not a fork")
 }
 
-// TestInsightRejectsAnUnknownOption keeps a mistyped key from being ignored:
-// silently dropping `comits` would quietly answer the 500-commit question instead.
-// Asserted through the exported entry point, which is the only way a caller reaches
-// the decoder: an earlier version tested a flag parser production could not reach.
-func TestInsightRejectsAnUnknownOption(t *testing.T) {
-	t.Parallel()
-
-	ctx := types.WithWorkspace(t.Context(), &recordingAnalyzer{})
-	for _, opts := range []map[string]any{
-		{"comits": 50.0},
-		{"layoutStyle": "safe"},
-		{"workspace": true},
-		{"commits": "not a number"},
-		{"since": 90.0},
-	} {
-		_, err := MagusInsight(ctx, opts)
-		assert.Error(t, err, "opts %v must be reported, not ignored", opts)
-	}
-}
-
 // TestInsightMapsTheOptionsItTakes proves the window reaches the analyzer, rather
-// than only checking the struct the decoder returned.
+// than only checking the record the caller passed.
 func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 	t.Parallel()
 
 	a := &recordingAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
-	// A Buzz number arrives as float64; an int is what a Go caller would pass.
-	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
+	_, err := MagusInsight(ctx, types.InsightOptions{Commits: 42, Since: "90d"})
 	require.NoError(t, err)
 	assert.Equal(t, types.InsightOptions{Commits: 42, Since: "90d", Files: true}, a.got) // Files defaults on, as the CLI did
 
-	// int64 is what a Buzz integer literal actually arrives as; float64 above covers
-	// a Buzz float. A decoder handling only float64 rejects `{commits = 50}` outright.
-	_, err = MagusInsight(ctx, map[string]any{"commits": int64(50)})
-	require.NoError(t, err, "a Buzz integer arrives as int64")
-	assert.Equal(t, 50, a.got.Commits)
+	_, err = MagusInsight(ctx, types.InsightOptions{Commits: -1})
+	require.ErrorContains(t, err, "commits must not be negative")
 }
 
 // TestInsightReportKeepsTheBestEffortSections pins the rule the CLI kept: a lens
@@ -709,11 +670,11 @@ func TestGraphMembersAreServedInProcess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "target:pkg/a:build", x.Node.ID)
 
-	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test", nil)
+	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test", types.KnowledgePathOptions{})
 	require.NoError(t, err)
 	assert.True(t, p.Found)
 
-	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b", nil)
+	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b", types.KnowledgePathOptions{})
 	require.NoError(t, err, "a resolved pair with no connection is an answer")
 	assert.False(t, unlinked.Found)
 
@@ -728,7 +689,7 @@ func TestGraphMembersRaiseOnWhatDoesNotResolve(t *testing.T) {
 
 	_, err := MagusExplain(ctx, "target:pkg/z:nope")
 	require.Error(t, err)
-	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope", nil)
+	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope", types.KnowledgePathOptions{})
 	require.Error(t, err)
 	_, err = MagusQuery(ctx, " ", types.KnowledgeQueryOptions{})
 	require.Error(t, err)
@@ -804,14 +765,14 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 	calls := map[string]func() error{
 		"query":          func() error { _, err := MagusQuery(ctx, "x", types.KnowledgeQueryOptions{}); return err },
 		"explain":        func() error { _, err := MagusExplain(ctx, "x"); return err },
-		"path":           func() error { _, err := MagusPath(ctx, "x", "y", nil); return err },
+		"path":           func() error { _, err := MagusPath(ctx, "x", "y", types.KnowledgePathOptions{}); return err },
 		"refs":           func() error { _, err := MagusRefs(ctx, "x", types.KnowledgeRefsOptions{}); return err },
 		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
 		"importGraph":    func() error { _, err := MagusImportGraph(ctx); return err },
 		"dir":            func() error { _, err := MagusDir(ctx, "x"); return err },
-		"dirs":           func() error { _, err := MagusDirs(ctx, "**", nil); return err },
+		"dirs":           func() error { _, err := MagusDirs(ctx, "**", types.DirsOptions{}); return err },
 		"layer":          func() error { _, err := MagusLayer(ctx, "x"); return err },
-		"neighborhood":   func() error { _, err := MagusNeighborhood(ctx, "x", nil); return err },
+		"neighborhood":   func() error { _, err := MagusNeighborhood(ctx, "x", types.KnowledgeNeighborhoodOptions{}); return err },
 		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
 		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
 	}

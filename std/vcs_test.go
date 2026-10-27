@@ -477,11 +477,11 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 		return refusal
 	})
 
-	_, err = VCSCommand(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, map[string]any{"quiet": true})
+	_, err = VCSCommand(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, types.VCSCommandOptions{Quiet: true})
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"worker git push origin main " + dir}, asked)
 
-	res, err := VCSCommand(ws, []string{"status", "--porcelain"}, map[string]any{"quiet": true})
+	res, err := VCSCommand(ws, []string{"status", "--porcelain"}, types.VCSCommandOptions{Quiet: true})
 	require.NoError(t, err, "no acting lease, so the gate is not asked")
 	assert.True(t, res.OK)
 	assert.Len(t, asked, 1)
@@ -490,7 +490,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	t.Setenv("GIT_INDEX_FILE", "/from/the/process")
 	err = OsWithEnv(types.WithJobLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
 		cbFunc(func(ctx context.Context) error {
-			_, err := VCSCommand(ctx, []string{"commit", "-m", "x"}, map[string]any{"quiet": true})
+			_, err := VCSCommand(ctx, []string{"commit", "-m", "x"}, types.VCSCommandOptions{Quiet: true})
 			return err
 		}))
 	require.ErrorIs(t, err, refusal)

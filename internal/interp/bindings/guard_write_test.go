@@ -21,7 +21,7 @@ func TestWriteRuleSeesTheRequestAfterTheLoadCloses(t *testing.T) {
 import "magus";
 
 magus\guard.write(fun (req: WriteRequest) > GuardVerdict {
-    return magus\guard.deny("{req.path}|{req.workspace}|{req.oldText}|{req.newText}|{req.content}|{req.role}");
+    return magus\guard.deny("{req.path}|{req.workspace}|{req.oldText}|{req.newText}|{req.content}|{req.role.value}");
 });
 `))
 	_ = sess.Close()

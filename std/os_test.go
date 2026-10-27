@@ -33,7 +33,7 @@ import (
 func TestOsExecTeesToOutputWriters(t *testing.T) {
 	var tee bytes.Buffer
 	ctx := spawn.WithOutputWriters(context.Background(), &tee, &tee)
-	res, err := ProcExec(ctx, "printf", []string{"hello"}, "", nil)
+	res, err := ProcExec(ctx, "printf", []string{"hello"}, "", types.ExecOptions{})
 	require.NoError(t, err)
 	got := res.Stdout
 	assert.Equal(t, "hello", got)
@@ -43,7 +43,7 @@ func TestOsExecTeesToOutputWriters(t *testing.T) {
 // TestOsExecStdin verifies opts.stdin is fed to the process: the plumbing under
 // pipe-style chaining (a prior call's stdout becomes the next call's stdin).
 func TestOsExecStdin(t *testing.T) {
-	res, err := ProcExec(context.Background(), "cat", nil, "", map[string]any{"stdin": "piped-input"})
+	res, err := ProcExec(context.Background(), "cat", nil, "", types.ExecOptions{Stdin: "piped-input"})
 	require.NoError(t, err)
 	got := res.Stdout
 	assert.Equal(t, "piped-input", got, "stdin not delivered")
@@ -110,7 +110,7 @@ func TestOsExecResolvesCwd(t *testing.T) {
 
 	runPwd := func(ctxCwd, dirArg, wantDir string) {
 		ctx := WithCurrentWorkingDirectory(context.Background(), ctxCwd)
-		res, err := ProcExec(ctx, "pwd", nil, dirArg, nil)
+		res, err := ProcExec(ctx, "pwd", nil, dirArg, types.ExecOptions{})
 		require.NoError(t, err)
 		require.Equal(t, 0, res.Code, "pwd exit code")
 		// exec trims stdout, so res.Stdout is the bare path.
@@ -518,7 +518,7 @@ func TestExecCancelledReportsCancellation(t *testing.T) {
 		cancel()
 	}()
 
-	_, err := ProcExec(ctx, "sleep", []string{"30"}, ".", nil)
+	_, err := ProcExec(ctx, "sleep", []string{"30"}, ".", types.ExecOptions{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled, "a cancelled run must say so")
 	assert.NotContains(t, err.Error(), "exit -1",
@@ -549,7 +549,7 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	}()
 
 	// The rename publishes the pid whole, and the exec keeps it for sleep.
-	_, err := ProcExec(context.Background(), "sh", []string{"-c", `echo $$ > "$0.new" && mv "$0.new" "$0" && exec sleep 31`, pidFile}, ".", nil)
+	_, err := ProcExec(context.Background(), "sh", []string{"-c", `echo $$ > "$0.new" && mv "$0.new" "$0" && exec sleep 31`, pidFile}, ".", types.ExecOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signal: killed", "the signal is the whole diagnosis")
 	assert.Contains(t, err.Error(), "OOM killer", "say what usually does this on CI")
@@ -559,7 +559,7 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 // allow_failure hands back the result instead of raising, and a signal leaves no status
 // and no stderr, so the signal goes in Stderr or the caller reads a bare -1.
 func TestExecAllowFailureNamesTheSignal(t *testing.T) {
-	res, err := ProcExec(context.Background(), "sh", []string{"-c", "kill -9 $$"}, ".", map[string]any{"allow_failure": true})
+	res, err := ProcExec(context.Background(), "sh", []string{"-c", "kill -9 $$"}, ".", types.ExecOptions{AllowFailure: true})
 	require.NoError(t, err)
 	assert.Equal(t, -1, res.Code)
 	assert.Contains(t, res.Stderr, "signal: killed")
@@ -570,7 +570,7 @@ func TestExecAllowFailureNamesTheSignal(t *testing.T) {
 // regardless: a quiet call is still consuming the value, just not echoing it.
 func TestOsExecQuietStillCaptures(t *testing.T) {
 	res, err := ProcExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
-		map[string]any{"quiet": true})
+		types.ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	assert.Equal(t, types.ExecResult{Stdout: "captured", Code: 0, OK: true}, res, "proc.exec trims captured output")
 }
@@ -578,7 +578,7 @@ func TestOsExecQuietStillCaptures(t *testing.T) {
 func TestProcShellQuietStillCaptures(t *testing.T) {
 	c, err := ProcShell(context.Background(), "echo captured", "")
 	require.NoError(t, err)
-	res, err := ProcExec(context.Background(), c.Bin, c.Args, "", map[string]any{"quiet": true})
+	res, err := ProcExec(context.Background(), c.Bin, c.Args, "", types.ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
 }
@@ -587,7 +587,7 @@ func TestProcShellQuietStillCaptures(t *testing.T) {
 // log that silently stopped showing command output would be a worse regression than
 // any noise it removed.
 func TestOsExecDefaultsToNotQuiet(t *testing.T) {
-	res, err := ProcExec(context.Background(), "sh", []string{"-c", "echo shown"}, "", nil)
+	res, err := ProcExec(context.Background(), "sh", []string{"-c", "echo shown"}, "", types.ExecOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "shown", res.Stdout)
 }
@@ -605,11 +605,11 @@ func failThenAnswer(t *testing.T, failures int, ret ...any) *stdtest.MockCallbac
 
 // covFastRetry keeps the backoff below a millisecond so exercising the retry loop
 // costs no wall clock.
-var covFastRetry = map[string]any{"backoff_ms": 0.1, "max_backoff_ms": 1.0}
+var covFastRetry = types.RetryOptions{BackoffMs: new(0.1), MaxBackoffMs: new(1.0)}
 
 func TestOsRetryReturnsTheFirstSuccess(t *testing.T) {
 	// Once: a success must not be retried.
-	got, err := OsRetry(context.Background(), 3, failThenAnswer(t, 0, "answer"), nil)
+	got, err := OsRetry(context.Background(), 3, failThenAnswer(t, 0, "answer"), types.RetryOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "answer", got)
 }
@@ -623,7 +623,7 @@ func TestOsRetryRetriesUntilItSucceeds(t *testing.T) {
 // TestOsRetryWithNoReturnValue: a callback that returns nothing succeeded, so the
 // result is the no-value result rather than an error.
 func TestOsRetryWithNoReturnValue(t *testing.T) {
-	got, err := OsRetry(context.Background(), 2, failThenAnswer(t, 0), nil)
+	got, err := OsRetry(context.Background(), 2, failThenAnswer(t, 0), types.RetryOptions{})
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
@@ -640,43 +640,22 @@ func TestOsRetryExhaustsAndReportsTheLastError(t *testing.T) {
 }
 
 func TestOsRetryRejectsANilCallback(t *testing.T) {
-	_, err := OsRetry(context.Background(), 3, nil, nil)
+	_, err := OsRetry(context.Background(), 3, nil, types.RetryOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fn must not be nil")
 }
 
-// TestOsRetryReadsIntegerBackoffOptions: the VM hands numbers over as float64,
-// but a Go caller (and a hand-built map) may pass int or int64, so all three are
-// accepted.
-func TestOsRetryReadsIntegerBackoffOptions(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		opts map[string]any
-	}{
-		{"int", map[string]any{"backoff_ms": 1, "max_backoff_ms": 2}},
-		{"int64", map[string]any{"backoff_ms": int64(1), "max_backoff_ms": int64(2)}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := OsRetry(context.Background(), 2, failThenAnswer(t, 1, "ok"), tc.opts)
-			require.NoError(t, err)
-			assert.Equal(t, "ok", got)
-		})
-	}
-}
-
-// TestOsRetryRefusesAMisconfiguredBackoff: a wrongly typed or negative option is an
-// error naming the key, raised before fn runs, never a silent fall back to the default.
+// TestOsRetryRefusesAMisconfiguredBackoff: a negative or NaN option is an error naming
+// the field, raised before fn runs, never a silent fall back to the default.
 func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		opts map[string]any
+		opts types.RetryOptions
 		key  string
 	}{
-		{"string backoff", map[string]any{"backoff_ms": "not a number"}, "backoff_ms"},
-		{"null cap", map[string]any{"max_backoff_ms": nil}, "max_backoff_ms"},
-		{"negative backoff", map[string]any{"backoff_ms": -1.0}, "backoff_ms"},
-		{"negative cap", map[string]any{"max_backoff_ms": -5}, "max_backoff_ms"},
-		{"NaN backoff", map[string]any{"backoff_ms": math.NaN()}, "backoff_ms"},
+		{"negative backoff", types.RetryOptions{BackoffMs: new(-1.0)}, "backoffMs"},
+		{"negative cap", types.RetryOptions{MaxBackoffMs: new(-5.0)}, "maxBackoffMs"},
+		{"NaN backoff", types.RetryOptions{BackoffMs: new(math.NaN())}, "backoffMs"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// A mock with no expectations fails the test if fn is called.
@@ -709,7 +688,7 @@ func TestOsRetryHonorsCancellationDuringBackoff(t *testing.T) {
 	// Once: the cancellation must land in the first backoff.
 	cb := stdtest.NewMockCallback(t)
 	cb.EXPECT().Call(mock.Anything).Return(nil, errors.New("attempt failed")).Once()
-	_, err := OsRetry(ctx, 3, cb, map[string]any{"backoff_ms": 60000.0})
+	_, err := OsRetry(ctx, 3, cb, types.RetryOptions{BackoffMs: new(60000.0)})
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
