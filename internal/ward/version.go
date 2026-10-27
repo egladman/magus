@@ -171,9 +171,15 @@ func PinnedRelease(constraint string) string {
 	if strings.Contains(constraint, "||") {
 		return ""
 	}
+	clauses := strings.Split(constraint, ",")
+	if len(clauses) == 1 {
+		if m := constraintClause.FindStringSubmatch(strings.TrimSpace(clauses[0])); m != nil && strings.Trim(m[1], "=") == "" {
+			return "v" + m[2]
+		}
+	}
 	var lower string
 	bounded := false
-	for _, clause := range strings.Split(constraint, ",") {
+	for _, clause := range clauses {
 		m := constraintClause.FindStringSubmatch(strings.TrimSpace(clause))
 		if m == nil {
 			return ""
