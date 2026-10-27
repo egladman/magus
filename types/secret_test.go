@@ -91,7 +91,7 @@ func TestSecretMasksEveryRenderingPath(t *testing.T) {
 		t.Run(handler.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			slog.New(handler.new(&buf)).InfoContext(t.Context(), "using credential",
-				"token", v, slog.Any("holder", struct{ Token Secret }{v}))
+				slog.Any("token", v), slog.Any("holder", struct{ Token Secret }{v}))
 			assert.NotContains(t, buf.String(), probePlaintext)
 			assert.Contains(t, buf.String(), secretMask)
 		})

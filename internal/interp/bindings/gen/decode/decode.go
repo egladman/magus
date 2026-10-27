@@ -1789,11 +1789,11 @@ func decodeQueueApp(v vm.Value, path string) (queuetypes.App, error) {
 			}
 			out.Variable = sVariable
 		case "secret":
-			sSecret, err := decodeString(item, path+".secret")
+			sSecretName, err := decodeString(item, path+".secret")
 			if err != nil {
 				return out, err
 			}
-			out.Secret = sSecret
+			out.SecretName = sSecretName
 		default:
 			return out, unknownMember(path, "QueueApp", key)
 		}

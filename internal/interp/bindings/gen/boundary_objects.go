@@ -4901,7 +4901,7 @@ func ObjectQueueApp(v queuetypes.App) vm.Value {
 	out.MapSet("installURL", vm.StringValue(v.InstallURL))
 	out.MapSet("environment", vm.StringValue(v.Environment))
 	out.MapSet("variable", vm.StringValue(v.Variable))
-	out.MapSet("secret", vm.StringValue(v.Secret))
+	out.MapSet("secret", vm.StringValue(v.SecretName))
 	return out
 }
 

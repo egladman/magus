@@ -1,6 +1,7 @@
 package token
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -33,7 +34,7 @@ func TestSecretProtoFieldsAreDebugRedacted(t *testing.T) {
 	var walk func(prefix string, msgs []*descriptorpb.DescriptorProto)
 	walk = func(prefix string, msgs []*descriptorpb.DescriptorProto) {
 		for _, m := range msgs {
-			name := prefix + "." + m.GetName()
+			name := fmt.Sprintf("%s.%s", prefix, m.GetName())
 			for _, f := range m.GetField() {
 				kind := f.GetType()
 				if kind != descriptorpb.FieldDescriptorProto_TYPE_STRING && kind != descriptorpb.FieldDescriptorProto_TYPE_BYTES {
@@ -44,7 +45,7 @@ func TestSecretProtoFieldsAreDebugRedacted(t *testing.T) {
 				}
 				checked++
 				if !f.GetOptions().GetDebugRedact() {
-					missing = append(missing, name+"."+f.GetName())
+					missing = append(missing, fmt.Sprintf("%s.%s", name, f.GetName()))
 				}
 			}
 			walk(name, m.GetNestedType())
