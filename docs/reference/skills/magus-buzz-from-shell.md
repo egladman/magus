@@ -3,8 +3,8 @@ title: magus-buzz-from-shell
 generated_from: internal/agent/skills/magus-buzz-from-shell/SKILL.md
 description: "Rewrite a shell script as idiomatic Buzz instead of porting it line by line."
 tags: [agents, skills, magus-buzz-from-shell]
-skill_full_bytes: 15468
-skill_short_bytes: 13132
+skill_full_bytes: 15467
+skill_short_bytes: 13138
 ---
 
 # magus-buzz-from-shell
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `149` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `68c273bf5921` |
+| `skill-content` | `8c351a565d48` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -339,7 +339,7 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-`proc\exec("git", ...)` refused: VCS binaries run through `vcs\cmd` (lease rules). Prefer typed members (also hg, sl, jj); `vcs\cmd` only when no member answers.
+`proc\exec("git", ...)` refused: VCS binaries run through `vcs\cmd` (held to the lease). Prefer typed members (also hg, sl, jj); `vcs\cmd` only when no member answers.
 
 Real tool, pipes between tools, asking magus, whole rewrite: [reference.md](reference.md).
 
@@ -787,11 +787,11 @@ fun main(args: [str]) > void !> any {
 ```
 
 `proc\exec("git", ...)` is refused: version-control binaries run through `vcs\cmd`,
-which holds them to the lease rules. Prefer the typed members; they also work for hg, sl
+which holds them to the lease. Prefer the typed members; they also work for hg, sl
 and jj. Reach for `vcs\cmd` only when no member answers.
 
-Running the real tool a script exists for, piping between two tools, asking magus for a
-typed record, and one whole rewrite are in [reference.md](reference.md).
+[reference.md](reference.md) has four cases: running the real tool a script exists for;
+piping between two tools; asking magus for a typed record; one whole rewrite.
 
 ## Anti-patterns
 
