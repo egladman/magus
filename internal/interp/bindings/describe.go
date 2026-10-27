@@ -21,7 +21,7 @@ import (
 // the result with the generated boundary encoder, so the record a script reads is the
 // one the CLI's -o json prints. withheld is the top-level magus members the client
 // does not offer, which describe.module("magus") must not list either.
-func buildDescribe(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, withheld []string) vm.Value {
+func buildDescribe(sess *buzz.Session, obs buzz.DirectObserver, withheld []string) vm.Value {
 	d := vm.NewMap()
 	bind := func(member string, fn func(ctx context.Context, args []vm.Value) (vm.Value, error)) {
 		d.MapSet(member, directVal(obs, "magus.describe."+member, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -80,7 +80,9 @@ func buildDescribe(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 			return vm.Null, err
 		}
 		out, err := std.MagusDescribeEvaluatedTarget(ctx, ffi.String(args, 0), opts)
-		return ffi.ObjectSlice(out, func(v types.EvaluatedTarget) vm.Value { return bindgen.ObjectEvaluatedTarget(v, ffi.SessionEnums(ctx, sess, "magus")) }), err
+		return ffi.ObjectSlice(out, func(v types.EvaluatedTarget) vm.Value {
+			return bindgen.ObjectEvaluatedTarget(v, ffi.SessionEnums(ctx, sess, "magus"))
+		}), err
 	})
 	bind("project", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		out, err := std.MagusDescribeProject(ctx)
@@ -92,7 +94,9 @@ func buildDescribe(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 			return vm.Null, err
 		}
 		out, err := std.MagusDescribeEvaluatedProject(ctx, ffi.String(args, 0), opts)
-		return ffi.ObjectSlice(out, func(v types.EvaluatedProject) vm.Value { return bindgen.ObjectEvaluatedProject(v, ffi.SessionEnums(ctx, sess, "magus")) }), err
+		return ffi.ObjectSlice(out, func(v types.EvaluatedProject) vm.Value {
+			return bindgen.ObjectEvaluatedProject(v, ffi.SessionEnums(ctx, sess, "magus"))
+		}), err
 	})
 	bind("graph", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		opts, err := describeOptions("graph", args, 0)

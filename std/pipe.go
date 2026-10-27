@@ -90,7 +90,7 @@ var Pipe = Module{
 			},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
-			Impl:    PipeExportTo,
+			Impl:    PipeExport,
 		},
 		{
 			Name: "history",
@@ -259,8 +259,8 @@ func parseArtifact(member string, artifact map[string]any) (types.TargetArtifact
 	return a, nil
 }
 
-// PipeExportTo implements pipe.export_to.
-func PipeExportTo(ctx context.Context, artifact map[string]any, dest string) (string, error) {
+// PipeExport implements pipe.export_to.
+func PipeExport(ctx context.Context, artifact map[string]any, dest string) (string, error) {
 	a, err := parseArtifact("export_to", artifact)
 	if err != nil {
 		return "", err

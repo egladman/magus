@@ -312,7 +312,7 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
 	case o.hasBinary && (o.bootstrap || o.link):
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with `%s`. To recover another checkout, name its absolute directory with `go -C <checkout>` in the bootstrap.", o.root, o.rebuild)
+		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with `%s`, or name another checkout with `go -C <dir>`.", o.root, o.rebuild)
 		v.Next, v.Lead = nil, ""
 		return v
 	case o.hasBinary:

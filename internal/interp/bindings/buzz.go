@@ -177,7 +177,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("job", jobMap)
 	magus.MapSet("service", buildService(obs))
 	magus.MapSet("vcs", buildVCS(obs))
-	magus.MapSet("trail", buildTrail(ctx, sess, obs))
+	magus.MapSet("trail", buildTrail(sess, obs))
 	magus.MapSet("skills", buildSkills(obs))
 	guard := buildGuard(ctx, sess, obs)
 	harness := buildHarness(ctx, obs)
@@ -185,7 +185,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("harness", harness)
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
-	magus.MapSet("describe", buildDescribe(ctx, sess, obs, withheld))
+	magus.MapSet("describe", buildDescribe(sess, obs, withheld))
 
 	// magus.normalize(name): the canonical form of any magus entity name (a target, a
 	// charm, or a spell op). Exposed because the rule is only knowable by running it:

@@ -48,7 +48,7 @@ func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
 	root, exe := sourceCheckout(t, ownModule)
 	escape := ownBuildEscape(exe, moduleBuildInfo(ownModule, "cmd/magus"), root)
 
-	assert.Contains(t, escape, "GOEXPERIMENT=jsonv2 go -C "+root+" run -trimpath ./cmd/magus run go-build --no-cache .")
+	assert.Contains(t, escape, fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", root))
 	assert.NotContains(t, escape, "magus.old")
 	assert.Contains(t, escape, "regenerate them, one command at a time, with what the *_generate targets run: "+
 		"`go generate ./cmd/magus-utils`, then `go generate ./internal/spell/...`, then "+
@@ -60,7 +60,7 @@ func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
 func TestOwnBuildEscapeNamesTheCheckoutBootstrap(t *testing.T) {
 	root, exe := sourceCheckout(t, ownModule)
 	escape := ownBuildEscape(exe, moduleBuildInfo(ownModule, "cmd/magus"), root)
-	assert.Contains(t, escape, "GOEXPERIMENT=jsonv2 go -C "+root+" run -trimpath ./cmd/magus run go-build --no-cache .")
+	assert.Contains(t, escape, fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", root))
 	assert.Contains(t, escape, "hack/dev/bootstrap-checkout.buzz -- --checkout "+root)
 }
 

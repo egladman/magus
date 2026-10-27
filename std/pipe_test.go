@@ -89,7 +89,7 @@ func TestPipeArtifactMembersRefuseWhatTheyCannotUse(t *testing.T) {
 	assert.ErrorContains(t, err, "names no target")
 	_, err = PipeOutputs(t.Context(), map[string]any{"project": "api", "target": "build"})
 	assert.ErrorContains(t, err, "no workspace is attached")
-	_, err = PipeExportTo(t.Context(), map[string]any{"glob": "dist/*"}, "out")
+	_, err = PipeExport(t.Context(), map[string]any{"glob": "dist/*"}, "out")
 	assert.ErrorContains(t, err, "names no path")
 	_, err = PipeHistory(t.Context(), map[string]any{"path": "dist/a"})
 	assert.ErrorContains(t, err, "no workspace is attached")

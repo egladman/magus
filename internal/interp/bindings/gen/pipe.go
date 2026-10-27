@@ -58,7 +58,7 @@ func RegisterPipe(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("exportTo", vm.DirectValue("pipe.exportTo", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		artifact := ffi.AnyMap(bzArgs, 0)
 		dest := ffi.String(bzArgs, 1)
-		ret0, err := std.PipeExportTo(ctx, artifact, dest)
+		ret0, err := std.PipeExport(ctx, artifact, dest)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

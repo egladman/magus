@@ -64,7 +64,7 @@ func ownBuildEscape(exe string, info *debug.BuildInfo, root string) string {
 		if err != nil {
 			return ""
 		}
-		bootstrap := strings.Replace(ward.BootstrapCommand, "go run ", "go -C "+quoted[0]+" run ", 1)
+		bootstrap := strings.Replace(ward.BootstrapCommand, "go run ", fmt.Sprintf("go -C %s run ", quoted[0]), 1)
 		return fmt.Sprintf("This binary was built from this checkout's own sources and predates them. Rebuild this checkout with `%s`, alone on its line; the explicit -C keeps the build and guard on the same checkout even when the host starts elsewhere. From a functioning magus checkout, the existing recovery script is `%s`; it builds from the target checkout's own sources and checks its HEAD. If compilation fails with `undefined:` in generated code, %s, then retry the bootstrap. Never move ./magus aside or disable the guard.", bootstrap, job.CheckoutBootstrap(quoted[0]), regenerate(info.Main.Path))
 	}
 	return fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot rebuild itself: every command it runs loads the same tree. Link a new one from source, one command at a time: `go build -o %s ./%s`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in generated code, the checkout's committed generated files are behind its sources (a merge kept one side), and restoring either side's copy brings back the mismatch: %s, then link again.", name, pkg, regenerate(info.Main.Path))
