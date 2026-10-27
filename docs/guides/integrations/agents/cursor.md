@@ -62,11 +62,18 @@ same belt-and-braces every host gets, not a substitute for it.
 Cursor's always-on prose is `AGENTS.md`, so magus writes no `.cursor/rules/*.mdc`
 for its own behavior. Cursor's built-in Grep, Glob and Read never reach
 `beforeShellExecution`, and a rules file would only ask the model to search
-differently. The hook restates those tools as the shell shapes the guard's search
-rules already judge, and the advice reaches the model on `postToolUse`. A rules
+differently. The hook sends Grep's native input to the shared guard, retaining its
+path, file filters, output mode and context options. Glob and Read are restated as
+the shell shapes the guard already judges. Advice reaches the model on `postToolUse`. A rules
 file beside that is host glue that `magus agent harness verify` cannot see and
 `magus describe harness` does not print, and it vanishes the next time someone
 treats `.cursor/` as disposable host state.
+
+Grep follows the same rules as a shell search: an indexed symbol search across
+the tree is refused with `magus refs`; a declaration lookup with context lines
+is refused with a command that reads that declaration. Known graph entities are
+routed to their equivalent queries. Literal prose and regex searches the graph
+cannot answer still run. A native tool name alone is no reason to refuse a search.
 
 ## MCP
 
@@ -148,9 +155,9 @@ and points every event at that copy, name included:
   "version": 1,
   "hooks": {
     "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
-    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "failClosed": true, "timeout": 10 }],
     "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "failClosed": true, "timeout": 10 }],
-    "preToolUse": [{ "matcher": "*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "preToolUse": [{ "matcher": "*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "failClosed": true, "timeout": 10 }],
     "postToolUse": [
       { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }
     ],
@@ -467,14 +474,6 @@ fun canonical(value: any?) > str {
     return json\stringify(value) catch "null";
 }
 
-fun grepLine(input: any?) > str {
-    final pattern = hook\field(input, dotPath: "pattern");
-    if (pattern == "") { return ""; }
-    final file = firstField(input, keys: ["path", "file_path"]);
-    if (file != "" and file != ".") { return argv("rg", args: [pattern, file]); }
-    return argv("rg", args: [pattern]);
-}
-
 fun globLine(input: any?) > str {
     final pattern = firstField(input, keys: ["glob_pattern", "glob"]);
     if (pattern == "") { return ""; }
@@ -494,15 +493,15 @@ fun readLine(input: any?) > str {
     return argv("sed", args: ["-n", range, file]);
 }
 
-// searchCommand is the shell line a Grep, Glob, or Read would have been, or ""
-// for every other tool. A scoped Grep names its file. A Glob names the directory
+// searchPayload preserves Grep's native options for the shared guard. Glob and Read
+// are the shell lines they would have been. A Glob names the directory
 // it is rooted at, so a search of a directory the policy refuses is visible.
 // A Read with no limit, or a limit past 300 lines, is cat; any other limit is a sed
 // range, matching the Claude Code and Codex hook.
-fun searchCommand(event: any?) > str {
+fun searchPayload(scope: Scope, event: any?) > str {
     final tool = hook\field(event, dotPath: "tool_name");
     final input = hook\dig(event, dotPath: "tool_input");
-    if (tool == "Grep") { return grepLine(input); }
+    if (tool == "Grep") { return envelope(scope, event: event, tool: tool, input: input ?? {<str: any>}); }
     if (tool == "Glob") { return globLine(input); }
     if (tool == "Read") { return readLine(input); }
     return "";
@@ -822,7 +821,7 @@ fun afterCall(scope: Scope, event: any?) > str {
     }
     final command = hook\field(event, dotPath: "tool_input.command");
     if (command != "") { return advice(scope, payload: command, asPath: false, family: "failed-command"); }
-    final search = searchCommand(event);
+    final search = searchPayload(scope, event: event);
     if (search != "") { return advice(scope, payload: search, asPath: false, family: "failed-search"); }
     final terms = linkTerms(event);
     if (terms != "") { return linkBias(scope.bin, terms: terms); }
@@ -949,7 +948,7 @@ fun gateTool(scope: Scope, event: any?) > str {
         final load = envelope(scope, event: event, tool: "Read", input: {"file_path": path});
         return gateCall(scope, event: event, payload: load, asPath: false, family: "failed-skill");
     }
-    final search = searchCommand(event);
+    final search = searchPayload(scope, event: event);
     if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false, family: "failed-search"); }
     if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path"); }
     // beforeMCPExecution judges an MCP call, with the server name this event lacks.

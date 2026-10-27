@@ -1042,6 +1042,53 @@ func glueSchemaPropertyNames(t *testing.T, rel string) map[string]any {
 	return schema.Properties
 }
 
+func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
+	for _, event := range []string{"preToolUse", "postToolUse"} {
+		t.Run(event, func(t *testing.T) {
+			input := map[string]any{
+				"pattern": "func HandleRequest", "path": "internal/api/handler.go",
+				"glob": "*.go", "type": "go", "output_mode": "content",
+				"-A": 20, "-B": 2, "-C": 3, "-i": true, "multiline": true,
+			}
+			raw, err := json.Marshal(map[string]any{
+				"hook_event_name": event, "conversation_id": "grep-session",
+				"tool_name": "Grep", "tool_input": input, "cwd": ".",
+			})
+			require.NoError(t, err)
+			record := filepath.Join(t.TempDir(), "guard-input")
+			out, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{
+				label: event, host: "cursor", event: string(raw),
+				stub: "#!/bin/sh\ncat > \"$GREP_INPUT_RECORD\"\nprintf no > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n",
+				env: map[string]string{
+					"GREP_INPUT_RECORD": record,
+					"GLUE_VERDICT": `{"decision":"advise","context":"use magus refs HandleRequest --definition --source"}`,
+					"CURSOR_HOOK_STATE_DIR": t.TempDir(),
+				},
+			})
+			judged, err := os.ReadFile(record)
+			require.NoError(t, err)
+			var payload struct {
+				ToolName  string          `json:"tool_name"`
+				Input     json.RawMessage `json:"tool_input"`
+				SessionID string          `json:"session_id"`
+				Cwd       string          `json:"cwd"`
+			}
+			require.NoError(t, json.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
+			assert.Equal(t, "Grep", payload.ToolName)
+			assert.Equal(t, "grep-session", payload.SessionID)
+			assert.Equal(t, ".", payload.Cwd)
+			want, err := json.Marshal(input)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(want), string(payload.Input), "context and scope must survive the Cursor adapter")
+			if event == "preToolUse" {
+				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
+			} else {
+				assert.Contains(t, out, "use magus refs HandleRequest --definition --source")
+			}
+		})
+	}
+}
+
 // TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem grades what cursor-hook.buzz
 // answers, per event.
 //

@@ -1,4 +1,4 @@
-<!-- feat: -->
+### Changed
 
 - **Consistent guard details and console notices.** Guard denials and advice use
   `details:` for stored explanations. Console notices state whether the console
