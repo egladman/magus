@@ -335,7 +335,7 @@ document them; do not add `image\withSSHMount`.
 Guide: [Assemble an OCI image with magus](../guides/setup/assemble-oci-image.md).
 Examples: [`std/examples/image/`](../../std/examples/image/), mapped from Docker
 Official Image Dockerfiles (hello-world scratch; busybox rootfs tarball; golang multi-stage
-*shape*; multi-arch Index; digest-pinned base + config overlay; nginx/redis/python
+_shape_; multi-arch Index; digest-pinned base + config overlay; nginx/redis/python
 package-install non-goals).
 
 #### Debugging and outputs (open: D6)
