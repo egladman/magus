@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: magus-dev
+resources:
+  - ../../base
+  - namespace.yaml
+  - networkpolicy-allow-https.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/instance: magus-dev
+    includeSelectors: false
+    includeTemplates: true
+commonAnnotations:
+  magus.egladman.dev/overlay: dev
+images:
+  - name: ghcr.io/egladman/magus
+    newTag: v0.4.3
+patches:
+  # Development pulls the newest image on every restart and gets a smaller state volume.
+  - target:
+      kind: Deployment
+      name: magus
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: PersistentVolumeClaim
+      name: magus-state
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 2Gi

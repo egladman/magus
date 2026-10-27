@@ -1,0 +1,8 @@
+mcp:
+  # Loopback only: the listener serves bearer tokens over plaintext HTTP. Reach it with
+  # `kubectl port-forward`, which connects inside the pod's network namespace.
+  address: 127.0.0.1:7391
+sandbox:
+  mode: best-effort
+# Under the pod's terminationGracePeriodSeconds, so adopted runs unwind before SIGKILL.
+shutdown_grace: 45s
