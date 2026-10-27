@@ -141,7 +141,11 @@ type StaleBuild struct {
 // binary that may be unable to load the tree it would rebuild itself from. An unknown
 // running version is not a dev build, so it never earns the bootstrap line.
 func (b StaleBuild) Advice() string {
-	lines := []string{b.gap(), "Fix it:", "  - released binary: magus self update"}
+	update := "  - released binary: magus self update"
+	if pin := PinnedRelease(b.Floor); pin != "" {
+		update += " --version " + pin
+	}
+	lines := []string{b.gap(), "Fix it:", update}
 	dev := b.Running != "" && types.IsDevMagusVersion(b.Running)
 	switch {
 	case b.SourceTree:
@@ -153,6 +157,47 @@ func (b StaleBuild) Advice() string {
 		lines = append(lines, "  - built from source, in the checkout it came from: "+BootstrapCommand)
 	}
 	return strings.Join(lines, "\n")
+}
+
+var constraintClause = regexp.MustCompile(`^(==?|>=|<=|<|>|~|\^)?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$`)
+
+// PinnedRelease is the release, "vX.Y.Z", that `magus self update --version` installs for
+// a workspace requiring constraint, and "" when the newest release is the one to take.
+// self update reads no magus.yaml, so where constraint bounds releases from above the
+// newest may be one the workspace refuses: an exact pin names itself, and a range with
+// an upper bound names its inclusive lower bound. A range with no inclusive lower bound,
+// a union, or a constraint that does not parse names none.
+func PinnedRelease(constraint string) string {
+	if strings.Contains(constraint, "||") {
+		return ""
+	}
+	var lower string
+	bounded := false
+	for _, clause := range strings.Split(constraint, ",") {
+		m := constraintClause.FindStringSubmatch(strings.TrimSpace(clause))
+		if m == nil {
+			return ""
+		}
+		switch m[1] {
+		case "", "=", "==", "~", "^":
+			lower, bounded = m[2], true
+		case ">=":
+			lower = m[2]
+		case "<", "<=":
+			bounded = true
+		}
+	}
+	if !bounded || lower == "" {
+		return ""
+	}
+	c, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return ""
+	}
+	if v, err := semver.NewVersion(lower); err != nil || !c.Check(v) {
+		return ""
+	}
+	return "v" + lower
 }
 
 // gap is the one sentence comparing the build with the floor, naming whichever of the
