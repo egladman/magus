@@ -45,7 +45,7 @@ dot-prefixed names are accepted; having both in the same directory is an error.`
 		group("Projects and targets", listCommand, describeCommand, whereCommand, runCommand,
 			affectedCommand, xCommand, cleanCommand, shellCommand),
 		group("Knowledge graph", queryCommand, refsCommand, explainCommand, pathCommand, graphCommand),
-		group("Changes and history", diffCommand, vcsCommand, sessionCommand, jobCommand, notesCommand, queueCommand, gateCommand),
+		group("Changes and history", diffCommand, vcsCommand, sessionCommand, jobCommand, notesCommand, queueCommand),
 		group("Integrations and services", watchCommand, eventsCommand, serverCommand, brokerCommand,
 			mcpCommand, statusCommand, buzzCommand, spellCommand, agentCommand),
 		group("Setup and maintenance", initCommand, doctorCommand, configCommand, completionCommand,

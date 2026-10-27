@@ -2450,12 +2450,16 @@ shows what it is doing.`,
 				"job's calls alone, until --for passes or the job ends, and the advice names who granted it and until when. " +
 				"--revoke ends a grant early. Only a grantable rule is accepted (hooks-off); any other is refused, naming " +
 				"the grantable ones. The guard refuses this verb to every agent and the job store refuses it from a process " +
-				"carrying a lease, so it is typed at a person's own terminal.",
+				"carrying a lease, so it is typed at a person's own terminal. With --commit the one positional is push-ungated: " +
+				"the waiver lets a push or `gh pr create` of that commit through and names who waived it, when and why; any other " +
+				"commit is still refused, and --revoke removes the waiver.",
 			Flags: []cmdline.Flag{
 				{Name: "for", Kind: cmdline.Duration, Doc: "End the grant after this long (e.g. 2h); unset, it lasts until the job ends"},
 				{Name: "revoke", Kind: cmdline.Bool, Doc: "End the job's grant of the rule"},
+				{Name: "commit", Kind: cmdline.String, Doc: "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated"},
+				{Name: "reason", Kind: cmdline.String, Doc: "Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke"},
 			},
-			Usage: "magus job grant [--for <duration>] [--revoke] <job> <rule> [flags]",
+			Usage: "magus job grant [--for <duration>] [--revoke] <job> <rule> | magus job grant --commit <commit> (--reason <text> | --revoke) push-ungated [flags]",
 		},
 	},
 	Examples: []cmdline.Example{
@@ -2472,33 +2476,8 @@ shows what it is doing.`,
 		{Comment: "Grade a job's checks in a merged tree", Command: "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{Comment: "See which jobs a prune would end", Command: "magus job prune --dry-run"},
 		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core"},
-	},
-}
-
-var gateCommand = cmdline.Command{
-	Name:        "gate",
-	Short:       "A person's decisions about the local gate",
-	Description: "Record a person's waiver of the push gate for one commit, or revoke it.",
-	Tags:        []string{"cli", "magus gate", "gate", "push", "waiver"},
-	Usage:       "magus gate <waive> [flags]",
-	Children: []cmdline.Command{
-		{
-			Name:  "waive",
-			Short: "Let one commit be pushed with no passing gate, typed by a person",
-			Description: "Record a person's waiver for exactly one commit: push-ungated lets a push or `gh pr create` " +
-				"of that commit through and names who waived it, when and why; any other commit is still refused. " +
-				"--revoke removes the waiver. The guard refuses this verb to every agent and the store refuses it " +
-				"from a process carrying a lease, so it is typed at a person's own terminal.",
-			Flags: []cmdline.Flag{
-				{Name: "reason", Kind: cmdline.String, Doc: "Why the gate was skipped, recorded with the waiver; required unless --revoke"},
-				{Name: "revoke", Kind: cmdline.Bool, Doc: "Remove the commit's waiver"},
-			},
-			Usage: "magus gate waive <commit> (--reason <text> | --revoke) [flags]",
-		},
-	},
-	Examples: []cmdline.Example{
-		{Comment: "Push HEAD without the local gate, saying why", Command: `magus gate waive HEAD --reason "CI gates this release branch"`},
-		{Comment: "Take the waiver back", Command: "magus gate waive --revoke HEAD"},
+		{Comment: "Push HEAD without the local gate, saying why", Command: `magus job grant --commit HEAD push-ungated --reason "CI gates this release branch"`},
+		{Comment: "Take that waiver back", Command: "magus job grant --commit HEAD push-ungated --revoke"},
 	},
 }
 

@@ -64,7 +64,6 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocPushUngated},
 	{doc: ruleDocHumanOnly},
 	{doc: ruleDocGrantIsAPersons},
-	{doc: ruleDocWaiverIsAPersons},
 	{doc: ruleDocInlineAlias},
 	{doc: ruleDocMagusTimeout},
 	{doc: ruleDocMergeSideCheckout},
@@ -347,7 +346,7 @@ var ruleDocPushUngated = types.RuleDoc{
 		"A session no job lease binds is the orchestrator. It used to be asked, and two pull requests went out with no local gate because the rule only asked, so it is now refused with the gate named: `magus status --wait`, then `magus affected ci`. Opening a pull request with `gh pr create` meets the same gate at the head commit. " +
 		"A session bound to a lease is a worker, and workers do not publish: its refusal also sends the commit to the orchestrator. " +
 		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD. " +
-		"A person who skips the gate on purpose types `magus gate waive <commit> --reason \"...\"`: a push or `gh pr create` of that commit, and of no other, then passes, and the verdict names who waived it, when and why. A revoked waiver covers nothing.",
+		"A person who skips the gate on purpose types `magus job grant --commit <commit> push-ungated --reason \"...\"`: a push or `gh pr create` of that commit, and of no other, then passes, and the verdict names who waived it, when and why. A revoked waiver covers nothing.",
 }
 
 var ruleDocHumanOnly = types.RuleDoc{
@@ -638,15 +637,10 @@ var ruleDocGrantIsAPersons = types.RuleDoc{
 	Catches: "an agent running `magus job grant`, in any spelling and any role",
 	Why: "A grant is a person's one-time approval: `magus job grant <job> <rule> [--for <duration>]` lowers one rule to advice for one job's calls until the duration passes or the job ends, and `--revoke` ends it early. " +
 		"Every call the hook judges is an agent's, so a grant reaching it is not a person's, and it is refused whoever runs it, the root included. The job store also refuses a grant from a process carrying a lease, and no MCP tool exposes one. " +
-		"Only hooks-off is grantable; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when.",
+		"Only hooks-off is grantable to a job; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when. " +
+		"`magus job grant --commit <commit> push-ungated --reason \"...\"` is the one commit-scoped form: a person's waiver of the push gate for that commit alone, ended by `--revoke`. The store refuses it from a process carrying a lease, as it does a grant.",
 }
 
-var ruleDocWaiverIsAPersons = types.RuleDoc{
-	Name:    string(denyRuleWaiverIsAPersons),
-	Catches: "an agent running `magus gate waive`, in any spelling and any role",
-	Why: "A waiver is a person's say-so that one commit may go out with no passing local gate: `magus gate waive <commit> --reason \"...\"` records who typed it, when, the commit and the reason, and push-ungated then lets a push or `gh pr create` of that commit through, naming the waiver. `--revoke` ends it. " +
-		"Every call the hook judges is an agent's, so a waiver reaching it is not a person's, and it is refused whoever runs it, the root included. The waivers store also refuses a waiver from a process carrying a lease.",
-}
 
 var ruleDocLeaseRowUnknown = types.RuleDoc{
 	Name:    string(denyRuleLeaseRowUnknown),

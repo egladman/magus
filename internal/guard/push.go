@@ -61,7 +61,7 @@ const (
 	// gatePassed is a gate run at this commit that finished with every target passing.
 	gatePassed
 	// gateWaived is no passing gate at this commit, and a person's waiver of this commit
-	// alone (`magus gate waive`).
+	// alone (`magus job grant --commit`).
 	gateWaived
 )
 

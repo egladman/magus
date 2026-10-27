@@ -1173,11 +1173,6 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				refuseWith(denyRuleGrantIsAPersons, d)
 			}
 		}
-		if verdict.Decision != decisionDeny {
-			if d := denyAgentWaive(input, shellD); d.refused() {
-				refuseWith(denyRuleWaiverIsAPersons, d)
-			}
-		}
 		// The job store's half of the shell-command rules, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the

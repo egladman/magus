@@ -13,7 +13,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 126)
+	assert.Len(t, got, 125)
 	assert.NotContains(t, got, "stdin-closed")
 	assert.NotContains(t, got, "spawn-principal-for-economy")
 	want := map[string]decision{
@@ -26,7 +26,6 @@ func TestDefaults(t *testing.T) {
 		"lease-claim":          Deny,
 		"lease-checkout":       Deny,
 		"push-ungated":         Deny,
-		"waiver-is-a-persons":  Deny,
 		"human-only":           Deny,
 		"lease-state":          Advise,
 		"leased-path":          Advise,
@@ -236,8 +235,6 @@ func TestFixedRulesAreCompiledRules(t *testing.T) {
 	}
 	assert.False(t, Fixed("stage-all"))
 	assert.Equal(t, Deny, defaults["grant-is-a-persons"])
-	assert.Equal(t, Deny, defaults["waiver-is-a-persons"])
-	assert.True(t, Fixed("waiver-is-a-persons"))
 
 	got, err := Resolve(nil)
 	require.NoError(t, err)
