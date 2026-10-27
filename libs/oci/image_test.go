@@ -343,8 +343,11 @@ func TestImageResolveReadsATagAndReturnsItsDigest(t *testing.T) {
 
 	got, err := reg.client().Resolve(t.Context(), reg.ref("team/image", "v1"))
 	require.NoError(t, err)
-	assert.Equal(t, want, got.Digest)
-	assert.Equal(t, body, got.Body)
+	assert.Equal(t, RawManifest{Descriptor: ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Digest:    want,
+		Size:      int64(len(body)),
+	}, Body: body}, got)
 }
 
 func TestReferenceTextRoundTrips(t *testing.T) {

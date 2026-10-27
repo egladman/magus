@@ -26,7 +26,7 @@ func AssembleIndex(ctx context.Context, layouts []string, dest string) (Layout, 
 			return Layout{}, fmt.Errorf("image.index: %w", err)
 		}
 		if opened.Descriptor.MediaType != ocispec.MediaTypeImageManifest {
-			return Layout{}, fmt.Errorf("image.index: %s holds an index; each input is one platform's manifest", p)
+			return Layout{}, fmt.Errorf("image.index: %s holds an index, but each input is one platform's manifest", p)
 		}
 		m, err := opened.manifest(ctx, opened.Descriptor)
 		if err != nil {
@@ -74,7 +74,7 @@ func indexInto(ctx context.Context, st *staging, inputs []ManifestLayout) (ocisp
 			cmp.Compare(a.Platform.Variant, b.Platform.Variant),
 		)
 	})
-	root, _, err := st.putJSON(ocispec.MediaTypeImageIndex, ocispec.Index{
+	root, err := st.putJSON(ocispec.MediaTypeImageIndex, ocispec.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ocispec.MediaTypeImageIndex,
 		Manifests: manifests,

@@ -55,11 +55,11 @@ func ParsePlatforms(specs ...string) ([]Platform, error) {
 
 // String renders p as ParsePlatform reads it.
 func (p Platform) String() string {
-	s := p.OS + "/" + p.Architecture
+	parts := []string{p.OS, p.Architecture}
 	if p.Variant != "" {
-		s += "/" + p.Variant
+		parts = append(parts, p.Variant)
 	}
-	return s
+	return strings.Join(parts, "/")
 }
 
 // MarshalText renders p as String does; an invalid platform is an error.
@@ -124,7 +124,7 @@ func (p Platform) oci() *ocispec.Platform {
 	return &ocispec.Platform{OS: p.OS, Architecture: p.Architecture, Variant: p.Variant}
 }
 
-func platformOf(p *ocispec.Platform) Platform {
+func platformFromOCI(p *ocispec.Platform) Platform {
 	if p == nil {
 		return Platform{}
 	}

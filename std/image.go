@@ -421,7 +421,7 @@ func imageMode(bits int) (image.Mode, error) {
 	}
 	m := image.Mode(bits)
 	if err := m.Validate(); err != nil {
-		return 0, fmt.Errorf("%w (fs\\mode(\"0644\") spells one)", err)
+		return 0, fmt.Errorf("fs\\mode(\"0644\") spells one: %w", err)
 	}
 	return m, nil
 }
@@ -434,7 +434,7 @@ func platformToTypes(p image.Platform) types.ImagePlatform {
 	return types.ImagePlatform{OS: types.ImageOS(p.OS), Architecture: types.ImageArchitecture(p.Architecture), Variant: types.ImageVariant(p.Variant)}
 }
 
-func platformOf(p *ocispec.Platform) image.Platform {
+func platformFromOCI(p *ocispec.Platform) image.Platform {
 	if p == nil {
 		return image.Platform{}
 	}
@@ -461,7 +461,7 @@ func descriptorToTypes(d ocispec.Descriptor) types.ImageDescriptor {
 		Annotations:  d.Annotations,
 	}
 	if d.Platform != nil {
-		p := platformToTypes(platformOf(d.Platform))
+		p := platformToTypes(platformFromOCI(d.Platform))
 		out.Platform = &p
 	}
 	return out

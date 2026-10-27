@@ -91,13 +91,12 @@ func (s *staging) put(mediaType string, data []byte) (ocispec.Descriptor, error)
 }
 
 // putJSON marshals v and puts it.
-func (s *staging) putJSON(mediaType string, v any) (ocispec.Descriptor, []byte, error) {
+func (s *staging) putJSON(mediaType string, v any) (ocispec.Descriptor, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		return ocispec.Descriptor{}, nil, err
+		return ocispec.Descriptor{}, err
 	}
-	desc, err := s.put(mediaType, data)
-	return desc, data, err
+	return s.put(mediaType, data)
 }
 
 // write streams a blob whose digest is known only at the end: fill writes it through

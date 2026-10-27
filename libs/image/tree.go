@@ -111,7 +111,7 @@ func (t Tree) symlink(root, p, rel, dest string) (entry, error) {
 			return entry{}, err
 		}
 		if path.IsAbs(target) {
-			return entry{}, fmt.Errorf("symlink to %q: an absolute target names a host path; use symlinks=follow or a Symlink placement", target)
+			return entry{}, fmt.Errorf("symlink to %q: an absolute target names a host path, so use symlinks=follow or a Symlink placement", target)
 		}
 		if resolved := path.Join(path.Dir(rel), target); resolved == ".." || strings.HasPrefix(resolved, "../") {
 			return entry{}, fmt.Errorf("symlink to %q leaves the tree", target)

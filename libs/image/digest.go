@@ -16,7 +16,7 @@ import (
 func ParseDigest(s string) (digest.Digest, error) {
 	d := digest.Digest(s)
 	if err := checkDigest(d); err != nil {
-		return "", fmt.Errorf("image: digest %q: %w", s, err)
+		return "", fmt.Errorf("digest %q: %w", s, err)
 	}
 	return d, nil
 }

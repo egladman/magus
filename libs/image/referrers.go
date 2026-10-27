@@ -36,7 +36,7 @@ func AttachReferrers(ctx context.Context, subject string, docs []Document, dest 
 		return Layout{}, fmt.Errorf("image.attachReferrers: %w", err)
 	}
 	if filepath.Clean(subject) == filepath.Clean(dest) {
-		return Layout{}, fmt.Errorf("image.attachReferrers: dest %s is the subject; write the referrers to a new layout", dest)
+		return Layout{}, fmt.Errorf("image.attachReferrers: dest %s is the subject: write the referrers to a new layout", dest)
 	}
 	st, err := newStaging(dest)
 	if err != nil {
@@ -121,7 +121,7 @@ func attachDocument(ctx context.Context, st *staging, subject ocispec.Descriptor
 		return ocispec.Descriptor{}, err
 	}
 	layer.Annotations = map[string]string{ocispec.AnnotationTitle: filepath.Base(doc.Path)}
-	desc, _, err := st.putJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
+	desc, err := st.putJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
 		Versioned:    specs.Versioned{SchemaVersion: 2},
 		MediaType:    ocispec.MediaTypeImageManifest,
 		ArtifactType: doc.Descriptor.MediaType,

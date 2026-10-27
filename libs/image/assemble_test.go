@@ -78,8 +78,9 @@ func TestAssembleIsDeterministic(t *testing.T) {
 	b, err := Assemble(t.Context(), spec, filepath.Join(root, "b"))
 	require.NoError(t, err)
 	assert.Equal(t, a.Descriptor.Digest, b.Descriptor.Digest)
-	assert.Equal(t, 1, a.Added.Files)
-	assert.Equal(t, 2, a.Added.Directories, "scratch gets /usr and /usr/bin")
+	want := Added{Layer: b.Added.Layer, DiffID: b.Added.DiffID, Files: 1, Directories: 2}
+	require.NotNil(t, a.Added)
+	assert.Equal(t, want, *a.Added, "scratch gets /usr and /usr/bin")
 }
 
 func TestAssembleRefusesAPlacementBelowAFileAcrossASortedSibling(t *testing.T) {
@@ -144,9 +145,12 @@ func TestAssembleOverABaseReportsTheNewConfigAndAnnotatesTheBase(t *testing.T) {
 	baseLayout, err := OpenLayout(t.Context(), base)
 	require.NoError(t, err)
 	assert.Equal(t, baseLayout.Descriptor.Digest.String(), man.Annotations[ocispec.AnnotationBaseImageDigest])
-	cfg := readConfig(t, m)
-	assert.Equal(t, []string{"/app"}, cfg.Config.Entrypoint, "a nil Entrypoint inherits")
-	assert.Equal(t, []string{"serve"}, cfg.Config.Cmd)
+	baseManifest, err := baseLayout.Manifest(t.Context())
+	require.NoError(t, err)
+	want := readConfig(t, baseManifest).Config
+	require.Equal(t, []string{"/app"}, want.Entrypoint)
+	want.Cmd = []string{"serve"}
+	assert.Equal(t, want, readConfig(t, m).Config, "a nil Entrypoint inherits; Cmd replaces the base's")
 	assert.Len(t, m.Layers, 2)
 }
 
@@ -216,7 +220,7 @@ func TestConfigEmptyClearsAndExposedPortsLand(t *testing.T) {
 	root := t.TempDir()
 	base := assembleOne(t, root, amd64)
 	m, err := Assemble(t.Context(), Spec{Base: base, Platform: amd64, Config: Config{
-		Entrypoint: &[]string{}, ExposedPorts: &[]string{"8080/tcp"}, StopSignal: ptr("SIGQUIT"),
+		Entrypoint: &[]string{}, ExposedPorts: &[]string{"8080/tcp"}, StopSignal: pointer("SIGQUIT"),
 	}}, filepath.Join(root, "over"))
 	require.NoError(t, err)
 	cfg := readConfig(t, m)
@@ -225,7 +229,7 @@ func TestConfigEmptyClearsAndExposedPortsLand(t *testing.T) {
 	assert.Equal(t, "SIGQUIT", cfg.Config.StopSignal)
 }
 
-func ptr[T any](v T) *T { return &v }
+func pointer[T any](v T) *T { return &v }
 
 func TestAttachReferrersWritesANewLayoutAndKeepsEveryBlob(t *testing.T) {
 	root := t.TempDir()

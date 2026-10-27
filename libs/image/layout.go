@@ -106,7 +106,7 @@ func (l Layout) Manifests(ctx context.Context) ([]ocispec.Descriptor, error) {
 // ResolvePlatform.
 func (l Layout) Manifest(ctx context.Context) (ManifestLayout, error) {
 	if l.Descriptor.MediaType != ocispec.MediaTypeImageManifest {
-		return ManifestLayout{}, fmt.Errorf("%s holds an image index; pick a platform with ResolvePlatform", l.Path)
+		return ManifestLayout{}, fmt.Errorf("%s holds an image index: pick a platform with ResolvePlatform", l.Path)
 	}
 	return l.manifest(ctx, l.Descriptor)
 }
@@ -130,7 +130,7 @@ func (l Layout) ResolvePlatform(ctx context.Context, p Platform) (ManifestLayout
 		return m, nil
 	}
 	for _, d := range manifests {
-		if platformOf(d.Platform).Normalize() == p.Normalize() {
+		if platformFromOCI(d.Platform).Normalize() == p.Normalize() {
 			return l.manifest(ctx, d)
 		}
 	}

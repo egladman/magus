@@ -150,13 +150,13 @@ func writeManifest(st *staging, spec Spec, baseConfig *ocispec.Image, diffID dig
 	}
 	cfgData, err := configJSON(cfg)
 	if err != nil {
-		return ManifestLayout{}, fmt.Errorf("config: %w", err)
+		return ManifestLayout{}, fmt.Errorf("encode the image config: %w", err)
 	}
 	cfgDesc, err := st.put(ocispec.MediaTypeImageConfig, cfgData)
 	if err != nil {
 		return ManifestLayout{}, err
 	}
-	manifestDesc, _, err := st.putJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
+	manifestDesc, err := st.putJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
 		Versioned:   specs.Versioned{SchemaVersion: 2},
 		MediaType:   ocispec.MediaTypeImageManifest,
 		Config:      cfgDesc,

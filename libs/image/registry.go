@@ -36,7 +36,7 @@ func Pull(ctx context.Context, ref oci.Reference, dest string, opts PullOptions)
 		return ManifestLayout{}, fmt.Errorf("image.pull: %w", err)
 	}
 	if ref.Digest == "" && !opts.AllowTag {
-		return ManifestLayout{}, fmt.Errorf("image.pull: %s names a tag, which can move; pin it as name@sha256:<hex>", ref)
+		return ManifestLayout{}, fmt.Errorf("image.pull: %s names a tag, which can move: pin it as name@sha256:<hex>", ref)
 	}
 	client := opts.Client
 	if client == nil {
@@ -92,7 +92,7 @@ func resolveManifest(ctx context.Context, client *oci.Client, ref oci.Reference,
 		}
 	case ocispec.MediaTypeImageManifest:
 	default:
-		return pinned, raw, man, fmt.Errorf("%s is %q; only OCI image manifests and indexes are pulled", pinned, raw.MediaType)
+		return pinned, raw, man, fmt.Errorf("%s is %q, but only OCI image manifests and indexes are pulled", pinned, raw.MediaType)
 	}
 	if raw.MediaType != ocispec.MediaTypeImageManifest {
 		return pinned, raw, man, fmt.Errorf("%s: platform entry is %q, want an OCI image manifest", pinned, raw.MediaType)
@@ -143,7 +143,7 @@ func pullInto(ctx context.Context, st *staging, client *oci.Client, ref oci.Refe
 
 func pickPlatform(manifests []ocispec.Descriptor, want Platform) (ocispec.Descriptor, error) {
 	for _, m := range manifests {
-		if m.Platform != nil && platformOf(m.Platform).Normalize() == want.Normalize() {
+		if m.Platform != nil && platformFromOCI(m.Platform).Normalize() == want.Normalize() {
 			return m, nil
 		}
 	}

@@ -170,7 +170,7 @@ func renderRecordDecls(mod std.Module) (string, error) {
 			if closing < 0 {
 				return "", fmt.Errorf("mirror %s: no closing brace to declare its methods before", name)
 			}
-			out = slices.Concat(out[:closing], []byte("\n    "+entry.Methods+"\n"), out[closing:])
+			out = slices.Concat(out[:closing], fmt.Appendf(nil, "\n    %s\n", entry.Methods), out[closing:])
 		}
 		b.Write(out)
 		b.WriteByte('\n')

@@ -1,6 +1,10 @@
 package types
 
-import "github.com/egladman/magus/spells"
+import (
+	"fmt"
+
+	"github.com/egladman/magus/spells"
+)
 
 // The image module's records at the Buzz boundary. The module namespaces them, so the
 // registry drops the Image prefix from each Buzz name (image\Spec, image\Platform).
@@ -76,7 +80,7 @@ func (d ImageDigest) String() string {
 	if d.Algorithm == "" && d.Encoded == "" {
 		return ""
 	}
-	return d.Algorithm + ":" + d.Encoded
+	return fmt.Sprintf("%s:%s", d.Algorithm, d.Encoded)
 }
 
 // ImageFile places one host file in the image.

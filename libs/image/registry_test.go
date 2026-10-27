@@ -56,7 +56,7 @@ func (r *registry) uploadCount() int {
 	return r.uploads
 }
 
-func (r *registry) repo() oci.Reference {
+func (r *registry) repository() oci.Reference {
 	return oci.Reference{Registry: strings.TrimPrefix(r.srv.URL, "https://"), Repository: "team/app"}
 }
 
@@ -144,7 +144,7 @@ func (r *registry) putJSON(mediaType string, v any, tags ...string) ocispec.Desc
 
 // publish stores a one-layer image for p and returns its manifest descriptor.
 func (r *registry) publish(p Platform, content string) ocispec.Descriptor {
-	layer := r.put(ocispec.MediaTypeImageLayerGzip, tarOf(r.t, map[string]string{"etc/os-release": content}))
+	layer := r.put(ocispec.MediaTypeImageLayerGzip, tarArchive(r.t, map[string]string{"etc/os-release": content}))
 	cfg := r.putJSON(ocispec.MediaTypeImageConfig, ocispec.Image{
 		Platform: ocispec.Platform{OS: p.OS, Architecture: p.Architecture, Variant: p.Variant},
 		RootFS:   ocispec.RootFS{Type: "layers", DiffIDs: []digest.Digest{layer.Digest}},
@@ -175,13 +175,13 @@ func TestPullMatchesAnArm64IndexEntryListedAsV8(t *testing.T) {
 	})
 
 	dest := filepath.Join(t.TempDir(), "base")
-	got, err := Pull(t.Context(), pinned(reg.repo(), idx.Digest), dest, PullOptions{
+	got, err := Pull(t.Context(), pinned(reg.repository(), idx.Digest), dest, PullOptions{
 		Client: reg.client(), Platform: Platform{OS: "linux", Architecture: "arm64"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, arm.Digest, got.Descriptor.Digest)
 	assert.Equal(t, "v8", got.Platform.Variant)
-	assert.Equal(t, pinned(reg.repo(), idx.Digest).String(), got.Descriptor.Annotations[ocispec.AnnotationRefName])
+	assert.Equal(t, pinned(reg.repository(), idx.Digest).String(), got.Descriptor.Annotations[ocispec.AnnotationRefName])
 }
 
 func TestPullRefusesADockerManifestAndLeavesDestAlone(t *testing.T) {
@@ -192,7 +192,7 @@ func TestPullRefusesADockerManifestAndLeavesDestAlone(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dest, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dest, "keep"), []byte("x"), 0o644))
 
-	_, err := Pull(t.Context(), pinned(reg.repo(), d.Digest), dest, PullOptions{
+	_, err := Pull(t.Context(), pinned(reg.repository(), d.Digest), dest, PullOptions{
 		Client: reg.client(), Platform: Platform{OS: "linux", Architecture: "amd64"},
 	})
 	require.ErrorContains(t, err, "only OCI image manifests and indexes")
@@ -203,7 +203,7 @@ func TestPullRefusesATagUnlessAllowed(t *testing.T) {
 	reg := newRegistry(t)
 	m := reg.publish(Platform{OS: "linux", Architecture: "amd64"}, "x")
 	reg.put(m.MediaType, mustManifest(t, reg, m), "v1")
-	ref := reg.repo()
+	ref := reg.repository()
 	ref.Tag = "v1"
 	opts := PullOptions{Client: reg.client(), Platform: Platform{OS: "linux", Architecture: "amd64"}}
 
@@ -234,13 +234,13 @@ func TestPushThenPullRoundTripsAnAttachedIndex(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Setenv("MAGUS_OFFLINE", "0")
-	pushed, err := Push(t.Context(), attached.Path, reg.repo(), PushOptions{Client: reg.client(), Tags: []string{"v1"}})
+	pushed, err := Push(t.Context(), attached.Path, reg.repository(), PushOptions{Client: reg.client(), Tags: []string{"v1"}})
 	require.NoError(t, err, "MAGUS_OFFLINE=0 means online, as libs/oci reads it")
 	assert.Equal(t, attached.Descriptor.Digest, pushed.Digest)
-	assert.Equal(t, pinned(reg.repo(), pushed.Digest), pushed.Reference())
+	assert.Equal(t, pinned(reg.repository(), pushed.Digest), pushed.Reference())
 
 	for _, p := range []Platform{{OS: "linux", Architecture: "amd64"}, {OS: "linux", Architecture: "arm64"}} {
-		_, err := Pull(t.Context(), pinned(reg.repo(), pushed.Digest), filepath.Join(root, "pulled-"+p.Architecture),
+		_, err := Pull(t.Context(), pinned(reg.repository(), pushed.Digest), filepath.Join(root, "pulled-"+p.Architecture),
 			PullOptions{Client: reg.client(), Platform: p})
 		require.NoError(t, err, "every platform manifest the index names reached the registry")
 	}
@@ -254,12 +254,12 @@ func TestPushSkipsBlobsTheRegistryHolds(t *testing.T) {
 	reg := newRegistry(t)
 	root := t.TempDir()
 	l := assembleOne(t, root, Platform{OS: "linux", Architecture: "amd64"})
-	_, err := Push(t.Context(), l, reg.repo(), PushOptions{Client: reg.client()})
+	_, err := Push(t.Context(), l, reg.repository(), PushOptions{Client: reg.client()})
 	require.NoError(t, err)
 	first := reg.uploadCount()
 	assert.Positive(t, first)
 
-	_, err = Push(t.Context(), l, reg.repo(), PushOptions{Client: reg.client()})
+	_, err = Push(t.Context(), l, reg.repository(), PushOptions{Client: reg.client()})
 	require.NoError(t, err)
 	assert.Equal(t, first, reg.uploadCount(), "a second push uploads nothing")
 }
@@ -268,11 +268,11 @@ func TestPushRefusesAnOfflineClient(t *testing.T) {
 	reg := newRegistry(t)
 	l := assembleOne(t, t.TempDir(), Platform{OS: "linux", Architecture: "amd64"})
 	t.Setenv("MAGUS_OFFLINE", "1")
-	_, err := Push(context.Background(), l, reg.repo(), PushOptions{Client: reg.client()})
+	_, err := Push(context.Background(), l, reg.repository(), PushOptions{Client: reg.client()})
 	require.True(t, errors.Is(err, oci.ErrOffline), "%v", err)
 }
 
-func tarOf(t *testing.T, files map[string]string) []byte {
+func tarArchive(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 	var entries []entry
 	dir := t.TempDir()

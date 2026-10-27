@@ -119,9 +119,9 @@ func (m ModePolicy) validate() error {
 	case ModeFixed, ModeExecutableBit:
 		return nil
 	case "":
-		return fmt.Errorf("modes is unset; accepted: %s, %s", ModeFixed, ModeExecutableBit)
+		return fmt.Errorf("modes is unset, want %s or %s", ModeFixed, ModeExecutableBit)
 	}
-	return fmt.Errorf("modes %q; accepted: %s, %s", string(m), ModeFixed, ModeExecutableBit)
+	return fmt.Errorf("modes %q, want %s or %s", string(m), ModeFixed, ModeExecutableBit)
 }
 
 func (s SymlinkPolicy) validate() error {
@@ -129,9 +129,9 @@ func (s SymlinkPolicy) validate() error {
 	case SymlinkRefuse, SymlinkKeep, SymlinkFollow:
 		return nil
 	case "":
-		return fmt.Errorf("symlinks is unset; accepted: %s, %s, %s", SymlinkRefuse, SymlinkKeep, SymlinkFollow)
+		return fmt.Errorf("symlinks is unset, want %s, %s or %s", SymlinkRefuse, SymlinkKeep, SymlinkFollow)
 	}
-	return fmt.Errorf("symlinks %q; accepted: %s, %s, %s", string(s), SymlinkRefuse, SymlinkKeep, SymlinkFollow)
+	return fmt.Errorf("symlinks %q, want %s, %s or %s", string(s), SymlinkRefuse, SymlinkKeep, SymlinkFollow)
 }
 
 // Validate checks the spec's own shape without touching the host or the base.

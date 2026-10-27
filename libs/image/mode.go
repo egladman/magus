@@ -42,7 +42,7 @@ func ParseMode(s string) (Mode, error) {
 		m = Mode(n)
 	}
 	if err := m.Validate(); err != nil {
-		return 0, fmt.Errorf("image: mode %q: %w", s, err)
+		return 0, fmt.Errorf("mode %q: %w", s, err)
 	}
 	return m, nil
 }
@@ -107,7 +107,7 @@ func (m *Mode) UnmarshalText(text []byte) error {
 // Validate refuses zero and any bit past setuid, setgid and sticky.
 func (m Mode) Validate() error {
 	if m == 0 {
-		return fmt.Errorf("mode is 0; write the bits, e.g. %s or %s", ModeFile, ModeExecutable)
+		return fmt.Errorf("mode is 0: write the bits, such as %s or %s", ModeFile, ModeExecutable)
 	}
 	if m&^modeBits != 0 {
 		return fmt.Errorf("mode %#o: only permission, setuid, setgid and sticky bits are allowed", uint32(m))
