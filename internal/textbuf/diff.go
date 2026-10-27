@@ -95,7 +95,7 @@ func matchLines(a, b []int32, ids int) [][2]int {
 			unique = append(unique, [2]int{i, int(posB[id])})
 		}
 	}
-	var out [][2]int
+	out := make([][2]int, 0, min(len(a), len(b)))
 	x, y := 0, 0
 	for _, p := range append(increasing(unique), [2]int{len(a), len(b)}) {
 		out = fillGap(out, a[:p[0]], b[:p[1]], x, y)
@@ -147,7 +147,19 @@ func fillGap(out [][2]int, a, b []int32, x, y int) [][2]int {
 	for x < len(a)-s && y < len(b)-s && a[len(a)-1-s] == b[len(b)-1-s] {
 		s++
 	}
-	if mid, ok := myers(a[x:len(a)-s], b[y:len(b)-s]); ok {
+	am, bm := a[x:len(a)-s], b[y:len(b)-s]
+	switch {
+	case len(am) == 0 || len(bm) == 0:
+	case len(am) == 1:
+		if j := slices.Index(bm, am[0]); j >= 0 {
+			out = append(out, [2]int{x, y + j})
+		}
+	case len(bm) == 1:
+		if i := slices.Index(am, bm[0]); i >= 0 {
+			out = append(out, [2]int{x + i, y})
+		}
+	default:
+		mid, _ := myers(am, bm)
 		for _, m := range mid {
 			out = append(out, [2]int{x + m[0], y + m[1]})
 		}
@@ -177,7 +189,7 @@ func commonSuffix(a, b []byte) int {
 }
 
 func splitLines(b []byte) [][]byte {
-	var lines [][]byte
+	lines := make([][]byte, 0, bytes.Count(b, nl)+1)
 	for len(b) > 0 {
 		i := bytes.IndexByte(b, '\n') + 1
 		if i == 0 {
@@ -203,8 +215,8 @@ func intern(a, b [][]byte) (ai, bi []int32, ids int) {
 		size <<= 1
 	}
 	table := make([]int32, size) // id+1, 0 when empty
-	var reps [][]byte
-	var hashes []uint64
+	reps := make([][]byte, 0, len(a))
+	hashes := make([]uint64, 0, len(a))
 	number := func(lines [][]byte) []int32 {
 		out := make([]int32, len(lines))
 		for i, l := range lines {
