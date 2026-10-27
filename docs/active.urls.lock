@@ -208,6 +208,7 @@ design/principles/no-news-is-good-news/
 design/principles/one-source-every-door/
 design/principles/optimize-the-loop-that-verifies/
 design/principles/sit-next-to-the-tools/
+design/principles/the-checker-catches-it/
 design/principles/the-go-proverbs/
 design/principles/the-harness-sits-on-the-tool-layer/
 design/principles/the-orchestrator-plans/
@@ -1040,6 +1041,7 @@ reference/skills/
 reference/skills/magus-adapt/
 reference/skills/magus-architecture-review/
 reference/skills/magus-architecture/
+reference/skills/magus-buzz-from-shell/
 reference/skills/magus-buzz-lang/
 reference/skills/magus-buzz-review/
 reference/skills/magus-buzz-write/
@@ -1482,6 +1484,7 @@ tags/tools/
 tags/troubleshooting/
 tags/tty/
 tags/tui/
+tags/types/
 tags/typescript/
 tags/typo/
 tags/unix/
