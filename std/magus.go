@@ -1701,7 +1701,9 @@ func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer,
 
 // insightWindow fills the defaults of the window a Buzz caller asked for: a zero Commits
 // is the 500 the CLI scans. A negative count is an error rather than a silent default.
+// The report always carries the per-file ranking, as the CLI's did.
 func insightWindow(opts types.InsightOptions) (types.InsightOptions, error) {
+	opts.Files = true
 	switch {
 	case opts.Commits < 0:
 		return opts, fmt.Errorf("commits must not be negative, got %d", opts.Commits)
