@@ -115,9 +115,9 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    final integrator = req.role == "integrator";
+    final integrator = req.role == magus\AgentRole.integrator;
     final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
-        worker: !integrator and (req.role == "worker" or req.parent != "" or req.agent != ""));
+        worker: !integrator and (req.role == magus\AgentRole.worker or req.parent != "" or req.agent != ""));
     if (denial != "") {
         return magus\guard.deny(denial);
     }
