@@ -3,8 +3,8 @@ title: magus-buzz-from-shell
 generated_from: internal/agent/skills/magus-buzz-from-shell/SKILL.md
 description: "Rewrite a shell script as idiomatic Buzz instead of porting it line by line."
 tags: [agents, skills, magus-buzz-from-shell]
-skill_full_bytes: 15467
-skill_short_bytes: 13138
+skill_full_bytes: 15507
+skill_short_bytes: 13139
 ---
 
 # magus-buzz-from-shell
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `149` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `8c351a565d48` |
+| `skill-content` | `bbc27471fe1c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -97,6 +97,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 ## Idiom table
 
 Signatures: `magus describe module <name>`. Check before assuming arguments.
+
 shell: Buzz
 `set -euo pipefail`, `|| exit 1`: nothing; host call raises; declare `!> any`
 `echo "msg" >&2; exit 1`: `throw "msg";`
@@ -458,11 +459,12 @@ magus agent install --tar | tar -xO -f - magus-buzz-from-shell-full/SKILL.md
 ````markdown
 # Rewriting shell as Buzz
 
-A shell script ported line by line into Buzz is worse than the shell it replaced: every
-`curl`, `jq` and `sed` becomes a `proc\exec` call with a hand-built argument list, the
-temp files and traps survive only to feed those tools, and the result still parses text.
-Port what the script DOES instead. Name its inputs and outputs, decide whether it should
-be a script at all, then write each step with the host module that already does it.
+A shell script ported line by line into Buzz is worse than the shell it replaced.
+Every `curl`, `jq` and `sed` becomes a `proc\exec` call with a hand-built argument list.
+The temp files and traps survive only to feed those tools, and the result still parses text.
+
+Port what the script DOES instead. Name its inputs and outputs, and decide whether it
+should be a script at all. Then write each step with the host module that already does it.
 `proc\exec` is left for the one real external program the script exists to run.
 
 This skill teaches the rewrite. magus-buzz-lang teaches the syntax; load it first
@@ -484,9 +486,9 @@ if you have not written Buzz in this session.
    The next section decides it.
 3. Map each external tool to its module with the idiom table below. A tool with no row is
    usually a list or string method.
-4. Delete the scaffolding the tools needed: temp files that passed data between them,
-   traps that cleaned those files, `[ -f ]` guards before a read that raises anyway,
-   `die` helpers, `set -euo pipefail`.
+4. Delete the scaffolding the tools needed. That means temp files that passed data
+   between them and the traps that cleaned those files. It also means `[ -f ]` guards
+   before a read that raises anyway, `die` helpers and `set -euo pipefail`.
 5. Parse arguments with `flags\parse`, and put each step in a named function.
 6. Add a `test` block for each pure function, then `magus buzz --check`,
    `magus buzz -t`, and a real run.

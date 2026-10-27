@@ -1,10 +1,11 @@
 # Rewriting shell as Buzz
 
-{{if .Full}}A shell script ported line by line into Buzz is worse than the shell it replaced: every
-`curl`, `jq` and `sed` becomes a `proc\exec` call with a hand-built argument list, the
-temp files and traps survive only to feed those tools, and the result still parses text.
-Port what the script DOES instead. Name its inputs and outputs, decide whether it should
-be a script at all, then write each step with the host module that already does it.
+{{if .Full}}A shell script ported line by line into Buzz is worse than the shell it replaced.
+Every `curl`, `jq` and `sed` becomes a `proc\exec` call with a hand-built argument list.
+The temp files and traps survive only to feed those tools, and the result still parses text.
+
+Port what the script DOES instead. Name its inputs and outputs, and decide whether it
+should be a script at all. Then write each step with the host module that already does it.
 `proc\exec` is left for the one real external program the script exists to run.
 
 This skill teaches the rewrite. {{skill "buzz-lang"}} teaches the syntax; load it first
@@ -20,9 +21,9 @@ Syntax: {{skill "buzz-lang"}}; load it first.{{end}}
    The next section decides it.
 3. Map each external tool to its module with the idiom table below. A tool with no row is
    usually a list or string method.
-4. Delete the scaffolding the tools needed: temp files that passed data between them,
-   traps that cleaned those files, `[ -f ]` guards before a read that raises anyway,
-   `die` helpers, `set -euo pipefail`.
+4. Delete the scaffolding the tools needed. That means temp files that passed data
+   between them and the traps that cleaned those files. It also means `[ -f ]` guards
+   before a read that raises anyway, `die` helpers and `set -euo pipefail`.
 5. Parse arguments with `flags\parse`, and put each step in a named function.
 6. Add a `test` block for each pure function, then `{{cmd "buzz"}} --check`,
    `{{cmd "buzz"}} -t`, and a real run.
@@ -108,35 +109,36 @@ assuming a row's call takes the arguments you expect.
 | `a \| b` across two real tools | `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })` |
 | `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records |
 | `{{cmd "run"}} t p` | `ctx.needs(t)` inside a target; `magus\run([...])` in a script |{{else}}Signatures: `{{cmd "describe"}} module <name>`. Check before assuming arguments.
+
 shell: Buzz
-`set -euo pipefail`, `|| exit 1`: nothing; host call raises; declare `!> any`
-`echo "msg" >&2; exit 1`: `throw "msg";`
-`trap 'rm -rf "$TMP"' EXIT`: usually nothing; keep data in memory
-`curl -fsSL --retry 5 URL`: `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })`
-`curl -o file URL`: `http\download(url, dest: file)`
-`jq`, `yq`: `json\parse`, `yaml\parse`, then index; `json\stringify`
-`grep PAT file`, `grep -c`: `fs\readLines(file).filter(...)`, `.len()`
-`sed 's/a/b/g'`: `text.replace("a", with: "b")`
-`cut -d: -f2`, `awk '{print $2}'`: `line.split(":")[1]`, `strings\fields(line)[1]`
-`wc -l`, `sort`, `uniq`, `head -n`: `.len()`, `.sort(fn)`, map as set, `.sub(0, len: n)`
-`KEY=value` file: `env\parseDotenv(fs\readFile(file))`
-`sha256sum`, `shasum -a 256`: `crypto\sha256File(path)`
-`tar xzf a.tgz --strip-components=1 -C d`: `archive\uncompress(src, dest: d, opts: archive\Options{ strip = 1 })`
-`tar czf`, `zip`: `archive\compress(src, dest: "a.tar.gz")`
-`find . -name '*.md'`, `dir/*/`: `fs\glob("**/*.md")`; `fs\walk` to prune while walking
-`[ -f ]`, `[ -d ]`, `[ -e ]`: `fs\isFile`, `fs\isDir`, `fs\exists`; often not needed
-`command -v tool`: `proc\which(tool)`, raises when absent
-`mkdir -p`, `rm -rf`, `cp -R`, `mv`: `fs\mkdirAll`, `fs\removeAll`, `fs\copyDir`, `fs\rename`
-`cat > f <<EOF`: `fs\writeFile`, or `template\render` for generated file
-`${VAR:?}`, `${VAR:-x}`: `env\require("VAR")`, `env\getOr("VAR", def: "x")`
-`VAR=x cmd`: `os\withEnv({"VAR": "x"}, callback: ...)`
-`"${1:?usage}"`, `getopts`: `flags\parse(args, switches: [...], valued: [...])`
-`until cmd; do sleep 2; done`: `os\retry(5, fn: ...)`, or `http\Retry` for HTTP
-`git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
-`( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
-`a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
-`magus ... -o json | jq`: `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records
-`{{cmd "run"}} t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script{{end}}
+- `set -euo pipefail`, `|| exit 1`: nothing; host call raises; declare `!> any`
+- `echo "msg" >&2; exit 1`: `throw "msg";`
+- `trap 'rm -rf "$TMP"' EXIT`: usually nothing; keep data in memory
+- `curl -fsSL --retry 5 URL`: `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })`
+- `curl -o file URL`: `http\download(url, dest: file)`
+- `jq`, `yq`: `json\parse`, `yaml\parse`, then index; `json\stringify`
+- `grep PAT file`, `grep -c`: `fs\readLines(file).filter(...)`, `.len()`
+- `sed 's/a/b/g'`: `text.replace("a", with: "b")`
+- `cut -d: -f2`, `awk '{print $2}'`: `line.split(":")[1]`, `strings\fields(line)[1]`
+- `wc -l`, `sort`, `uniq`, `head -n`: `.len()`, `.sort(fn)`, map as set, `.sub(0, len: n)`
+- `KEY=value` file: `env\parseDotenv(fs\readFile(file))`
+- `sha256sum`, `shasum -a 256`: `crypto\sha256File(path)`
+- `tar xzf a.tgz --strip-components=1 -C d`: `archive\uncompress(src, dest: d, opts: archive\Options{ strip = 1 })`
+- `tar czf`, `zip`: `archive\compress(src, dest: "a.tar.gz")`
+- `find . -name '*.md'`, `dir/*/`: `fs\glob("**/*.md")`; `fs\walk` to prune while walking
+- `[ -f ]`, `[ -d ]`, `[ -e ]`: `fs\isFile`, `fs\isDir`, `fs\exists`; often not needed
+- `command -v tool`: `proc\which(tool)`, raises when absent
+- `mkdir -p`, `rm -rf`, `cp -R`, `mv`: `fs\mkdirAll`, `fs\removeAll`, `fs\copyDir`, `fs\rename`
+- `cat > f <<EOF`: `fs\writeFile`, or `template\render` for generated file
+- `${VAR:?}`, `${VAR:-x}`: `env\require("VAR")`, `env\getOr("VAR", def: "x")`
+- `VAR=x cmd`: `os\withEnv({"VAR": "x"}, callback: ...)`
+- `"${1:?usage}"`, `getopts`: `flags\parse(args, switches: [...], valued: [...])`
+- `until cmd; do sleep 2; done`: `os\retry(5, fn: ...)`, or `http\Retry` for HTTP
+- `git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
+- `( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
+- `a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
+- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records
+- `{{cmd "run"}} t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script{{end}}
 
 ## Pairs
 
