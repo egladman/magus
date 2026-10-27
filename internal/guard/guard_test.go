@@ -801,7 +801,7 @@ func (driftWorkspace) ClassifyFiles(context.Context, []string) ([]types.FileEntr
 }
 
 // verdictRefLine opens the line a stored deny cites its grd ref on.
-const verdictRefLine = "\nfull verdict: "
+const verdictRefLine = "\ndetails: "
 
 // verdictRef matches the grd ref a deny cites.
 var verdictRef = regexp.MustCompile(verdictRefPrefix + `[0-9a-f]+`)
@@ -818,7 +818,7 @@ func storedVerdict(t *testing.T, cacheDir, reason string) string {
 }
 
 // adviceRefLine opens the line a stored advisory cites its grd ref on.
-const adviceRefLine = "\nfull advice: "
+const adviceRefLine = "\ndetails: "
 
 // withoutVerdictRef is v as a dry run renders it: the call stores its verdict or advice
 // and cites the ref, and a dry run stores nothing, so it has no ref to cite.

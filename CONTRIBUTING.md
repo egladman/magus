@@ -514,6 +514,26 @@ hint pointing at a command that no longer exists. That has already happened once
 a failing target printed `magus query <ref>` long after the command became
 `magus query output <ref>`.
 
+### Notices use one vocabulary
+
+Use lowercase labels and plain ASCII. State the current fact in the present tense;
+use an imperative for an action. Short status lines have no trailing period.
+Keep names and quoted output intact rather than changing their case at render time.
+
+- `note:` adds context; `hint:` suggests an action; `warning:` names a degraded
+  condition. A warning must remain distinguishable from a note without color.
+- A subsystem such as `console` belongs in the sentence when reporting its state.
+  A `console:` field is for a console address, not a second kind of warning.
+- `next:` holds commands that act on the condition. `details:` holds a command
+  that opens the stored explanation, for both guard denials and advice.
+- The same fact has the same wording for a person and an agent. Do not invent an
+  `Agent note:` category. Host-specific envelopes carry decisions, not another
+  prose style.
+
+The guard's `shapeDeny` and `shapeAdvice` tests pin the shared `details:` layout;
+the `job_people_solo` CLI fixture pins the console notice and its `next:` command.
+Structured decision, severity and reference fields keep their own meanings.
+
 ## Generated files in this repository
 
 The general rules are in [Generated files and your toolchain](https://egladman.github.io/magus/concepts/generated-files/): linters never

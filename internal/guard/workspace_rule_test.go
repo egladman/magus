@@ -522,7 +522,7 @@ func TestNamedWorkspaceDenyIsShortenedOnRepeat(t *testing.T) {
 		return Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 	}
 	ref := func(reason string) string {
-		_, run, ok := strings.Cut(reason, "\nfull verdict: ")
+		_, run, ok := strings.Cut(reason, "\ndetails: ")
 		require.True(t, ok, reason)
 		fields := strings.Fields(run)
 		return fields[len(fields)-1]

@@ -890,7 +890,7 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	require.Len(t, lines, 2, "the advice and the ref: %q", first)
 	assert.Contains(t, lines[0], "magus refs", "the advice names the command to run")
 	assert.NotContains(t, first, "SCIP symbol indexes", "the rationale is behind the ref")
-	ref := regexp.MustCompile(`^full advice: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[1])
+	ref := regexp.MustCompile(`^details: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[1])
 	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[1])
 	stored, err := trail.ReadBlob(base, ref[1])
 	require.NoError(t, err)
@@ -901,11 +901,11 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	assert.Equal(t, "advice-verdict", served[len(served)-1].ID, "the ref line is counted as a hint")
 
 	repeat := run("session-1")
-	assert.NotContains(t, repeat, "full advice:", "the brief has no rationale to store")
+	assert.NotContains(t, repeat, "details:", "the brief has no rationale to store")
 	assert.Contains(t, repeat, "magus refs", "the repeat still names the command, which is what converts")
 	assert.Less(t, len(repeat), len(first), "a repeat nobody has to read around")
 
-	assert.Contains(t, run("session-2"), "full advice:", "a fresh session is owed the fact once")
+	assert.Contains(t, run("session-2"), "details:", "a fresh session is owed the fact once")
 }
 
 // TestHookCmdShortensARepeatedDenial pins both forms of a deny. A refusal names its problem
@@ -941,7 +941,7 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "deny [whole-tree]: denied again [whole-tree]: "+doc.Catches, lines[0])
 	assert.Equal(t, "nothing ran (2 commands)", lines[1], "the repeat still says how much of the line was refused")
-	ref := regexp.MustCompile(`^full verdict: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[2])
+	ref := regexp.MustCompile(`^details: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[2])
 	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[2])
 
 	stored, err := trail.ReadBlob(base, ref[1])

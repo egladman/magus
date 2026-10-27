@@ -46,7 +46,7 @@ func shortDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRu
 	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
 	ref := verdictRef.FindString(v.Reason)
 	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", v.Reason)
-	shown, cited, ok := strings.Cut(v.Reason, "\nfull verdict: ")
+	shown, cited, ok := strings.Cut(v.Reason, "\ndetails: ")
 	require.True(t, ok, v.Reason)
 	assert.Equal(t, hint.NextForDenial(ref).Run, cited)
 	verdict, note, _ := strings.Cut(shown, "\n")
@@ -65,7 +65,7 @@ func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyR
 	assert.Equal(t, next, v.Next[0])
 	v.Next = nil
 	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
-	shown, cited, ok := strings.Cut(v.Reason, "\nfull verdict: ")
+	shown, cited, ok := strings.Cut(v.Reason, "\ndetails: ")
 	require.True(t, ok, v.Reason)
 	ref := verdictRef.FindString(cited)
 	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", v.Reason)

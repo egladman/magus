@@ -164,7 +164,7 @@ magusfile import names a file that is not there (BZZ2001), putting that file bac
 with an advisory instead of a deny: `git mv` onto it, `git restore` or `git checkout --`
 of it, or a write to it; the bootstrap runs for that failure too. The deny is filed under the
 `stale-binary` rule: it prints the cause and the one likeliest command, and the fallbacks
-sit behind its `full verdict:` ref.
+sit behind its `details:` ref.
 
 The remedy depends on who is asking:
 

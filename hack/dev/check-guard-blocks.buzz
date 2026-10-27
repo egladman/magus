@@ -256,7 +256,7 @@ fun ruleOf(text: str) > str {
     return citedRule(stored!.stdout);
 }
 
-// verdictRef is the grd ref a reply's `full verdict:` line names, "" when it names none.
+// verdictRef is the grd ref a reply's `details:` line names, "" when it names none.
 export fun verdictRef(text: str) > str {
     foreach (word in text.replace("\n", with: " ").split(" ")) {
         if (word.startsWith("grd")) {
@@ -266,8 +266,8 @@ export fun verdictRef(text: str) > str {
     return "";
 }
 
-test "verdictRef reads the ref off the full verdict line" {
-    std\assert(verdictRef("lease x is not declared.\nfull verdict: ./magus query output grd12ab") == "grd12ab", message: "the ref");
+test "verdictRef reads the ref off the details line" {
+    std\assert(verdictRef("lease x is not declared.\ndetails: ./magus query output grd12ab") == "grd12ab", message: "the ref");
     std\assert(verdictRef("nothing here") == "", message: "no ref");
 }
 

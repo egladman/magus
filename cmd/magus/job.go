@@ -121,16 +121,16 @@ func jobUsage() {
 
 // pointAtConsole names where to WATCH a job (the Jobs view for an empty id), the one way
 // to see how a worker is doing that leaves it alone. With no server it names no link: a
-// page that never loads cannot say whether nothing is listening or the console is broken,
-// and the record carries no next command, so a quiet display has nothing to print.
+// page that never loads cannot say whether nothing is listening or the console is broken.
+// The notice names that state and a next command rather than handing out a dead link.
 func pointAtConsole(ctx context.Context, id string) {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return
 	}
 	serving, serverVersion := probeConsoleServer()
 	if !serving {
-		slog.InfoContext(ctx, fmt.Sprintf("nothing is serving it; `%s` to watch this job without interrupting its holder", hint.ServerStart),
-			attr.Notice("console"))
+		slog.InfoContext(ctx, "the console is not running; start it to watch this job",
+			attr.Notice("note"), attr.Next(hint.ServerStart.String()))
 		return
 	}
 	host := mcpAddrString()
@@ -140,7 +140,8 @@ func pointAtConsole(ctx context.Context, id string) {
 	}
 	slog.LogAttrs(ctx, slog.LevelInfo, link, attr.Notice("console"), attr.Next(console.OpenCommand(link)))
 	if skew := consoleSkew(serverVersion, version); skew != "" {
-		slog.WarnContext(ctx, skew, attr.Notice("console"))
+		slog.WarnContext(ctx, skew, attr.Notice("warning"),
+			attr.Next(fmt.Sprintf("%s && %s", hint.ServerStop, hint.ServerStart)))
 	}
 }
 
@@ -151,8 +152,8 @@ func consoleSkew(serverVersion, cliVersion string) string {
 	if serverVersion == "" || cliVersion == "" || serverVersion == cliVersion {
 		return ""
 	}
-	return fmt.Sprintf("that console is from server %s, this binary is %s; `%s && %s` serves this build",
-		serverVersion, cliVersion, hint.ServerStop, hint.ServerStart)
+	return fmt.Sprintf("the console serves build %s; this command uses build %s",
+		serverVersion, cliVersion)
 }
 
 // probeConsoleServer reports whether the server is up, and its version. A per-process

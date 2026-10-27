@@ -670,7 +670,7 @@ rationale, every remedy and the rule's page live behind that ref:
 
 ```text
 lease harness/typo is not declared; `magus ls jobs` lists the ids.
-full verdict: magus query output grd1a2b3c4d5e6f7a8b
+details: magus query output grd1a2b3c4d5e6f7a8b
 ```
 
 Each later deny from that rule in the session swaps the verdict for one line
@@ -679,7 +679,7 @@ naming the rule and what it catches:
 ```text
 denied again [whole-tree]: a whole-tree VCS reset, checkout, restore or clean, which cannot be undone
 nothing ran (2 commands)
-full verdict: magus query output grd1a2b3c4d5e6f7a8b
+details: magus query output grd1a2b3c4d5e6f7a8b
 ```
 
 The ref is stored in the activity trail under the `grd` prefix, and the line is
@@ -692,10 +692,12 @@ the rationale and the rule's page.
 
 ```text
 magus workspace: run `magus affected ci` before publishing if you have not since your last change.
-full advice: magus query output grd2b3c4d5e6f7a8b9c
+details: magus query output grd2b3c4d5e6f7a8b9c
 ```
 
-That line is a breadcrumb with the id `advice-verdict`. A brief repeat has no
+Both forms call the explanation `details:`; `next:` is reserved for commands
+that act on the condition. The advisory's line is a breadcrumb with the id
+`advice-verdict`. A brief repeat has no
 rationale to store, so it prints alone. An advisory whose text is the answer
 it exists to deliver, such as the commands a search routes to or the files a
 new one is named against, keeps that answer inline.

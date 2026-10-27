@@ -174,7 +174,7 @@ func TestSpawnDenyIsTheVerdictAndARef(t *testing.T) {
 	repeat := Judge(ctx, deps, req)
 	doc, ok := Rule(string(denySpawnUnbriefed))
 	require.True(t, ok)
-	assert.True(t, strings.HasPrefix(repeat.Reason, fmt.Sprintf("denied again [spawn-unbriefed]: %s\nfull verdict: ", doc.Catches)), repeat.Reason)
+	assert.True(t, strings.HasPrefix(repeat.Reason, fmt.Sprintf("denied again [spawn-unbriefed]: %s\ndetails: ", doc.Catches)), repeat.Reason)
 }
 
 // The trail row of a denied spawn names the ref the deny cited, as a command's row does, so a
