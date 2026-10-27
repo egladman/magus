@@ -812,7 +812,7 @@ linters:
       # checks (gosec, gocritic, prealloc, bodyclose, misspell) that are noise in
       # test fixtures (synthetic responses, deliberate typo fixtures).
       - path: _test\.go
-        linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc, bodyclose, misspell, gochecknoinits, fieldwise, namewords]
+        linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc, bodyclose, misspell, gochecknoinits]
 
       # protoc-gen-go emits an init() into every .pb.go and the file is never hand-edited.
       - path: ^proto/gen/

@@ -37,7 +37,7 @@ func AssembleLayout(ctx context.Context, spec Spec, dest string) (Layout, error)
 	if spec.Base != "" {
 		input, err := readPlatformLayout(ctx, spec.Base)
 		if err != nil {
-			return Layout{}, fmt.Errorf("image.assemble: base %q: %w (local layout only, refresh with image.pullLayout under the update charm)", spec.Base, err)
+			return Layout{}, fmt.Errorf("image.assemble: base %q (local layout only, refresh with image.pullLayout under the update charm): %w", spec.Base, err)
 		}
 		cfg := input.config
 		if cfg.OS != spec.Platform.OS || cfg.Architecture != spec.Platform.Architecture || cfg.Variant != spec.Platform.Variant {
