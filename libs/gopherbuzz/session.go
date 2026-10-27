@@ -2474,6 +2474,14 @@ func (s *Session) findIncludeFile(importPath string) string {
 			return p
 		}
 	}
+	// A path spelled ./ or ../ names a place beside the entry file, which a host puts
+	// first in includeDirs; upstream never reads it against the working directory, so
+	// the cwd-relative search paths must not answer it first.
+	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") {
+		if p := s.findInIncludeDirs(importPath); p != "" {
+			return p
+		}
+	}
 	for _, tmpl := range s.searchPaths {
 		p := expandSearchPath(tmpl, importPath)
 		if p == "" {
@@ -2483,6 +2491,10 @@ func (s *Session) findIncludeFile(importPath string) string {
 			return p
 		}
 	}
+	return s.findInIncludeDirs(importPath)
+}
+
+func (s *Session) findInIncludeDirs(importPath string) string {
 	for _, dir := range s.includeDirs {
 		if p := filepath.Join(dir, importPath+".buzz"); bzzExists(p) {
 			return p

@@ -2900,3 +2900,23 @@ fun words() > [str] { return ["a", "b"]; }`))
 	_, err = s.CallMethod(ctx, boom, "go", nil)
 	require.Error(t, err, "an uncaught throw surfaces to the caller")
 }
+
+// An entry's ../ import resolves beside the entry file, never against the working
+// directory: checked from a parent directory, ../../x once escaped the checkout and
+// typed another tree's copy of a module.
+func TestSession_RelativeImportResolvesBesideTheEntry(t *testing.T) {
+	root := t.TempDir()
+	work := filepath.Join(root, "work")
+	entryDir := filepath.Join(work, "a", "b")
+	require.NoError(t, os.MkdirAll(entryDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "lib.buzz"), []byte("export final which = \"cwd\";\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(work, "a", "lib.buzz"), []byte("export final which = \"entry\";\n"), 0o644))
+	t.Chdir(work)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	sess.SetIncludeDirs([]string{entryDir})
+	require.NoError(t, sess.Exec(ctx, "import \"../lib\";\nfinal got = which;\n"))
+	assert.Equal(t, "entry", sess.GetGlobal("got").String())
+}
