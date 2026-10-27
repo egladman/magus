@@ -5621,12 +5621,12 @@ func ObjectHTTPServerOptions(v types.HTTPServerOptions) vm.Value {
 func ObjectHTTPRetry(v types.HTTPRetry) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("attempts", vm.IntValue(int64(v.Attempts)))
-	out.MapSet("delay_ms", vm.FloatValue(float64(v.DelayMs)))
-	out.MapSet("max_delay_ms", vm.FloatValue(float64(v.MaxDelayMs)))
-	out.MapSet("max_elapsed_ms", vm.FloatValue(float64(v.MaxElapsedMs)))
+	out.MapSet("delayMs", vm.FloatValue(float64(v.DelayMs)))
+	out.MapSet("maxDelayMs", vm.FloatValue(float64(v.MaxDelayMs)))
+	out.MapSet("maxElapsedMs", vm.FloatValue(float64(v.MaxElapsedMs)))
 	out.MapSet("fixed", vm.BoolValue(v.Fixed))
-	out.MapSet("all_errors", vm.BoolValue(v.AllErrors))
-	out.MapSet("conn_refused", vm.BoolValue(v.ConnRefused))
+	out.MapSet("allErrors", vm.BoolValue(v.AllErrors))
+	out.MapSet("connRefused", vm.BoolValue(v.ConnRefused))
 	return out
 }
 

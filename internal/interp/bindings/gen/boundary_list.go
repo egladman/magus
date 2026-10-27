@@ -145,7 +145,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "HarnessPlan", Zero: types.HarnessPlan{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessPlan(v.(types.HarnessPlan), enums) }},
 	{Name: "HarnessWired", Zero: types.HarnessWired{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessWired(v.(types.HarnessWired)) }},
 	{Name: "Hotspots", Zero: types.HotspotOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspotOutput(v.(types.HotspotOutput)) }},
-	{Name: "HttpResponse", Zero: types.HTTPResponse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},
 	{Name: "Impact", Zero: types.ImpactResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactResult(v.(types.ImpactResult)) }},
 	{Name: "ImpactCoverage", Zero: types.ImpactCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactCoverage(v.(types.ImpactCoverage)) }},
 	{Name: "ImpactFileCoverage", Zero: types.ImpactFileCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -313,6 +312,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ReplyReviewRequest", Zero: types.ReplyReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectReplyReviewRequest(v.(types.ReplyReviewRequest))
 	}},
+	{Name: "Response", Zero: types.HTTPResponse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},
 	{Name: "RetryVerdict", Zero: types.RetryVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRetryVerdict(v.(types.RetryVerdict), enums) }},
 	{Name: "ReviewDraft", Zero: types.ReviewDraft{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewDraft(v.(types.ReviewDraft)) }},
 	{Name: "ReviewRef", Zero: types.ReviewRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewRef(v.(types.ReviewRef)) }},
