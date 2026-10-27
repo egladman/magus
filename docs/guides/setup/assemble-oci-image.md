@@ -1,6 +1,6 @@
 ---
 title: Assemble an OCI image with magus
-description: Goals, non-goals, seams, and Specs for assembling OCI Image Layouts from files magus targets already built, without Dockerfile vocabulary or BuildKit mount theatre.
+description: Goals, non-goals, seams, and Specs for assembling OCI Image Layouts from files magus targets already built, without Dockerfile vocabulary or BuildKit mount theater.
 tags:
   [
     oci,

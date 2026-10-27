@@ -230,7 +230,7 @@ artifacts). Digests are `Digest` / `DiffID` (Buzz: `ImageDigest{algorithm,encode
 bare strings. Multi-arch is an explicit loop of `assembleLayout` then `assembleIndex`, not
 a batch helper.
 
-#### DevX: OCI packaging, not dockerfile theatre
+#### DevX: OCI packaging, not dockerfile theater
 
 The packaging standard is OCI (Layout, Layer, Manifest, Index, Digest). That does **not**
 mean the API speaks Dockerfile. Mapping `FROM`/`COPY`/`RUN` into a typed language recreates
@@ -243,7 +243,7 @@ refuses `RUN` and container execution; the API must not invite that vocabulary b
 | `Layer` / `NewLayer` (Digest + DiffID)        | Dockerfile "layer" as a build-cache metaphor |
 | `WithBase` (layout path, digest-pinned)       | `From`, tag-based bases, build stages        |
 | `WithFile` / `WithDir` / `Place`              | `Copy`, `Add`, build-context semantics       |
-| config fields: Env, Entrypoint, Command, User | `Run`, `Shell`, exec-form theatre            |
+| config fields: Env, Entrypoint, Command, User | `Run`, `Shell`, exec-form theater            |
 | `assembleLayout` / `assembleIndex`            | multi-stage Dockerfile, `buildx` flags       |
 
 Go callers use ordinary idioms already in this repo: `NewSpec` / `NewMode` / `NewSecret` /
