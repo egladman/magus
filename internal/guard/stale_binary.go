@@ -420,6 +420,9 @@ func outsideAnyWorkspace(path string, at location) bool {
 	if !placed {
 		return false
 	}
+	if rel, err := filepath.Rel(at.workspace, target); at.workspace == "" || err == nil && filepath.IsLocal(rel) {
+		return false
+	}
 	for dir := filepath.Dir(target); ; dir = filepath.Dir(dir) {
 		for _, marker := range []string{config.Filename, config.DottedFilename, "magusfile.buzz"} {
 			if _, err := os.Lstat(filepath.Join(dir, marker)); err == nil {

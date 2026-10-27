@@ -179,6 +179,10 @@ type Dependencies struct {
 	// them on every hook row, so a verdict can be tied to the build that reached it.
 	Binary        string
 	BinaryVersion string
+	// BinaryCommit is the commit the running magus was built at, "" when unstamped, and
+	// BinaryDirty whether uncommitted changes went into it.
+	BinaryCommit string
+	BinaryDirty  bool
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -1513,6 +1517,8 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
 	v = deps.rankGraded(v, denyRuleUnreadCommand, denyUnreadCommand(line, d), rankUnreadCommand)
 	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
+	v = deps.rankGraded(v, denyRuleStaleBinary, denyContractPick(ctx, deps, at, line, d), rankContractPick)
+	v = deps.rankGraded(v, denyRuleStaleBinary, denyContractSkew(ctx, deps, at, line, d), rankContractPick)
 	return deps.rankGraded(v, denyRuleTokenState, denyTokenStateCommand(at, line, d), rankTokenState)
 }
 

@@ -339,7 +339,9 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 
 			change := Judge(ctx, deps, Request{Input: "touch NOTES.md", Host: "claude-code", Session: "change"})
 			if c.say == "" {
-				assert.NotEqual(t, decisionDeny, change.Decision)
+				// No newer binary fixes a typo, so the change waits on the error, named.
+				assert.Equal(t, decisionDeny, change.Decision)
+				assert.Equal(t, string(denyRulePolicyUnloaded), change.Rule)
 			} else {
 				shortDeny(t, cacheDir, change, denyRuleStaleBinary, c.say)
 			}

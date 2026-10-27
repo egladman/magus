@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -1280,7 +1281,11 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		DefaultCharms:   w.Config.DefaultCharms,
 		BinaryVersion:   w.BinaryVersion,
 		Binary:          w.Binary,
+		BinaryDirty:     buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
 		RuleLoad:        loaded,
+	}
+	if commit, _ := buildinfo.Commit(); commit != "unknown" {
+		deps.BinaryCommit = commit
 	}
 	// LoadAgents, not w.Config: only the workspace tier sets the brief format. A load that
 	// fails is reported by the builtins, which read the same section.
