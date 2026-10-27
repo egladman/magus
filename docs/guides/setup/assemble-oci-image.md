@@ -1,6 +1,6 @@
 ---
 title: Assemble an OCI image with magus
-description: Goals, non-goals, seams, and Specs for assembling OCI Image Layouts from files magus targets already built, without Dockerfile vocabulary or BuildKit mount theater.
+description: Build OCI images as magus targets. Each stage, layer, platform, index and push is a target; the image module places files those targets wrote into an OCI Image Layout, and pulls and pushes layouts.
 tags:
   [
     oci,
@@ -9,9 +9,10 @@ tags:
     layout,
     layer,
     container image,
-    dockerfile,
     scratch,
     multi-arch,
+    index,
+    referrers,
     sbom,
     provenance,
   ]
@@ -20,119 +21,117 @@ aliases: [setup/assemble-oci-image]
 
 # Assemble an OCI image with magus
 
-magus packages **files a target already built** into an [OCI Image Layout](https://github.com/opencontainers/image-spec/blob/main/image-layout.md).
-It does not run a container to build those files. The stack of cards is layers of
-filesystem diffs; invalidate a lower card and everything above must be reassembled.
+The `image` module writes [OCI Image Layouts](https://github.com/opencontainers/image-spec/blob/main/image-layout.md):
+a directory holding one Image Manifest or Image Index, its config and its layers. It
+places files a target already wrote; it never runs a program inside an image.
 
-This page is the stance and the seams. The Buzz module is [`image`](../../reference/buzz/image.md).
-The decision record is [ADR 0018](../../decisions/0018-magus-assembles-oci-images.md).
-Worked examples live under [`std/examples/image/`](https://github.com/egladman/magus/tree/main/std/examples/image/).
+The Buzz reference is [`image`](../../reference/buzz/image.md), the decision record
+[ADR 0018](../../decisions/0018-magus-assembles-oci-images.md), and the worked examples
+[`std/examples/image/`](https://github.com/egladman/magus/tree/main/std/examples/image/).
 
-## Goals
-
-- Teach containers by naming OCI things: Layout, Layer, Manifest, Index, Digest, DiffID.
-- Keep Specs programmatic and typed in Buzz/Go (`NewSpec` / `With*`, placements), not a
-  stringly Dockerfile DSL.
-- Make tiny images the easy path: scratch (or a digest-pinned base) plus explicit file
-  placements, with digests and sizes you can assert on.
-- Equal explicit inputs produce byte-identical layouts (sorted entries, Unix 0 mtimes).
-- Bad destinations, platform mismatch, and escapes from the work root error with a named
-  cause, not a silent empty path.
-
-## Non-goals
-
-| Not trying to                                                     | Why                                                                                                                  |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Parse or execute Dockerfiles                                      | Recreates Docker footguns inside a typed language (Dagger's failure mode).                                           |
-| `RUN` / package install / `ldconfig` inside the image             | Build-time execution stays with a container engine or a magus **target** on the host.                                |
-| BuildKit `RUN --mount=type=cache` / `type=ssh` verbs on `image.*` | Mounts exist to feed **in-image** build steps. magus has no such steps; caches and SSH agents belong to **targets**. |
-| Silent `$HOME` / `$VAR` expansion inside Spec source paths        | Call sites resolve paths with `env\home`, `path\expandUser`, `env\require`, then pass a concrete host path.          |
-| Scaffolding generators that invent a Spec for you                 | Explicit Specs beat generated Dockerfile cosplay.                                                                    |
-| Windows container images (yet)                                    | Hosts may be Windows/macOS/Linux; **image** platforms are typically `linux/*`.                                       |
-| Auto-pull of a missing base                                       | Assemble is local-only; refresh is `image\pullLayout` under the **`update`** charm.                                  |
-
-## Seams (where work happens)
+## The shape: everything is a target
 
 ```text
-┌─────────────────────────┐
-│ magus targets           │  compile, test, fetch, use Secret / SSH agent /
-│ (host, sandboxed)       │  tool caches; ordinary procs, not image mounts
-└───────────┬─────────────┘
-            │ files on disk (work root)
-            ▼
-┌─────────────────────────┐
-│ image\assembleLayout    │  ≤1 new Layer over an optional **local** base Layout
-│ image\assembleIndex     │  multi-arch: loop layouts → Index
-│ image\attachArtifacts   │  SBOM / provenance as referrers (not layers)
-└───────────┬─────────────┘
-            │ OCI Layout directory
-            ▼
-┌─────────────────────────┐
-│ image\publishLayout     │  registry push; auth is Secret, never a bare password
-│ image\pullLayout        │  registry fetch, only when a target runs with `:update`
-└─────────────────────────┘
+  build_amd64 ──> image_amd64 ─┐
+                               ├─> image_index ──> image_push   (skip_cache)
+  build_arm64 ──> image_arm64 ─┘
 ```
 
-| Seam                              | Owns                                                                                     | Does not own                                   |
-| --------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **Target**                        | Producing bytes (binaries, static assets), private git, caches; gating pull on `:update` | OCI config, layers, manifests                  |
-| **`libs/image` / `image` module** | Placements, config argv (`command` / `entrypoint`), digests, layout I/O                  | Shells, apt, BuildKit mounts, implicit network |
-| **`libs/oci`**                    | Pull/push transport                                                                      | Specs / assemble                               |
-| **Sandbox**                       | Host path confinement (`filesystem.Under`, allowlists)                                   | Image-destination POSIX rules                  |
+- **A stage is a target.** A compile, a codegen, an asset bundle: a target with literal
+  `readsFiles` and `writesFiles` that runs the tool on the host.
+- **A layer is a target.** `image\assemble` adds at most one layer. Several layers are
+  several targets, each taking the previous target's layout as its `base`, so each
+  caches on its own inputs: a source edit reruns the top layer, never the dependency
+  layer below it.
+- **A platform is a target**, and an **index** is a target that `ctx.needs` every
+  platform target and calls `image\assembleIndex`. The platform targets run in
+  parallel; fibers would not, since a host call blocks its fiber's thread.
+- **A push is a `skip_cache` target**: it reads a credential and writes to a registry.
 
-Assemble and index never phone the registry. `pullLayout` and `publishLayout` are the only
-registry verbs. A missing base fails naming the local path and `:update` / `pullLayout`;
-there is no magus `--pull` flag. The ask is the **`update`** charm (same grant as
-`go mod tidy` / `trivy-image`). See [`pull-base.buzz`](https://github.com/egladman/magus/blob/main/std/examples/image/pull-base.buzz).
+A tool that would edit the image filesystem (`useradd`, `update-ca-certificates`) is
+replaced by a target that writes its output: `/etc/passwd` is a file Buzz writes. A
+package manager inside the image (`apt`) is out of scope; keep a container engine for
+that.
 
-Use `env\home()`, `path\expandUser`, `env\require` / `env\expand` at the call site, then
-pass the resolved path into a placement. Spec fields are paths and argv, not env-name
-types. See [env](../../reference/buzz/env.md) and [path](../../reference/buzz/path.md).
+## Multi-stage
 
-Document SSH and cache mounts as target patterns (example under
-[`std/examples/image/`](https://github.com/egladman/magus/tree/main/std/examples/image/)), never as `image\withSSHMount`.
+Two shapes, both without core changes:
 
-## Stack of cards
+- **Stages in one project.** The image target `ctx.needs` the stage and lists the stage's
+  **sources** in `readsFiles`, never the stage's output. In one project, listing another
+  target's output trips [MGS4010](../../reference/codes/race/MGS4010.md) and the target
+  never caches; listing nothing replays a stale image after a source edit. The run test
+  `TestStageInOneProjectCachesAndRekeysOnItsSource` pins both halves.
+- **Stages in other projects.** A stage owned by another team or toolchain lives in its
+  own project. A cross-project `ctx.needs(server.build)` finishes before the image
+  target starts, so the stage's declared output is a plain input of the image target.
 
-```text
-base layers  →  Layer(files…)  →  config + manifest
-     ↑ invalidate here              ↑ reassemble above
+## Specs
+
+```buzz
+image\assemble(image\Spec{
+    scratch = true,                       // or base = "<layout dir>"; exactly one
+    platform = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 },
+    files = [image\File{ source = "out/app", path = "/app", mode = fs\mode("0755") }],
+    trees = [image\Tree{ source = "out/rootfs", path = "/",
+        modes = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse }],
+    directories = [image\Directory{ path = "/tmp", mode = fs\mode("1777") }],
+    config = image\Config{ user = "65532:65532", entrypoint = ["/app"] },
+}, layout: "out/image/linux-amd64");
 ```
 
-Today one `assembleLayout` adds **at most one** new Layer over a base. Multi-layer stacks are
-multiple assemble steps (or a fatter base); the receipt/trace records which Layer was added.
+- Every closed set is an enum, and every enum starts with an unset case that is
+  refused: an omitted platform is an error, never linux/amd64.
+- `fs\mode` takes octal (`"0755"`) or ls notation (`"rwxr-xr-x"`); mode 0 is refused.
+- A `Tree` places the **contents** of `source` at `path`. Include and exclude filter
+  files only; a bad pattern is refused up front. `modes` is `fixed` (0644) or
+  `executableBit` (0755 when the host owner-execute bit is set); there is no
+  "keep host mode", which depends on the umask.
+- `Config` follows the image-spec config field for field. A null field inherits the
+  base's value and an empty list clears it; `env` and `labels` merge by key.
+- On scratch, parents no entry places are written as root 0755. Over a base none are:
+  an upper directory entry would replace the base's mode and owner.
+- Over a base, the manifest carries `org.opencontainers.image.base.digest`, and
+  `base.name` when the base came from `image\pull`.
+- Every path resolves against the magusfile's directory and goes through the sandbox.
 
-## Debugging (direction)
+## Registries
 
-Not all of this is shipped as CLI flags yet. The intent is debugger-like inspectability, not a
-second Docker CLI. A debugger does not invent a parallel language for your program; it stops on
-the artifact and lets you inspect it. Assemble should do the same: produce a Layout + receipt you
-can open, not a special "debug Dockerfile" dialect.
+- `image\pull(reference, platform:, layout:, auth:)` with a `name@sha256:<hex>`
+  reference is content-addressed, so a target that pulls caches like any other. A
+  tag-only reference is refused outside the `update` charm: a tag can name new bytes
+  tomorrow. Docker media types are refused before anything is written.
+- `image\push(layout, repository:, tags:, auth:)` uploads only blobs the registry
+  lacks, eight at a time, hashing each once while it uploads, and returns `reference`,
+  the `repository@digest` a signer or a deploy consumes.
+- `auth` is an `image\RegistryAuth` whose password is a `Secret`, never a bare string.
 
-| Need                  | Direction                                                                                                                                                                                                                                                      |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| What did assemble do? | Fields on every Layout: op, digests, file counts, layer, **`created`** (RFC 3339 from config, empty when omitted). Callers compute age from `created`; Layout is not a log. Strip is on `DirPlacement`: assert destinations, not prose                         |
-| Why is this fat?      | Inventory: top paths by size (raise via IMG diagnostics when over budget / empty `User`)                                                                                                                                                                       |
-| Assert in CI          | Stable digests on Layout/Published; compare two layout dirs by digest without a daemon                                                                                                                                                                         |
-| "Output a file"       | The **primary output is an OCI Layout directory** (and optional pushed digest). SBOM/provenance are files you `write*` then `attach`. Layout to `oci-archive` tar is optional and only if Layout dirs prove insufficient; `skopeo`/`oras` already speak Layout |
-| Step through          | Candidate: dump receipt as JSON Lines (`-o receipt` / template), pause-on-diagnostic for IMG codes, not a global `--debug` soup that reprints the Spec                                                                                                         |
-| External inspect      | `skopeo inspect oci:<layout>`, `oras`, `dive` on an exported form; document these before inventing `magus image inspect`                                                                                                                                       |
+## SBOM, provenance and referrers
 
-Open design (ADR 0018 D6): whether magus grows first-class `image inspect` / compare /
-layout-to-tar verbs, or stays receipt + Layout + external tools. Reopen only with evidence the
-directory form is not enough.
+`image\writeSbom` and `image\writeProvenance` write deterministic documents (SPDX 2.3;
+in-toto Statement v1 with SLSA v1 provenance) naming the image by digest. Provenance adds
+each base digest to its resolved dependencies. `image\attachReferrers` writes a **new**
+layout with the image and one OCI 1.1 referrer per document, `subject` set and the empty
+config descriptor; the subject layout is never edited. `image\push` pushes the referrers
+after the image.
 
-## Official-image examples
+## Reading a layout back
 
-Examples are mapped from real [Docker Official Images](https://github.com/docker-library/official-images)
-Dockerfiles (hello-world, busybox rootfs, nginx/httpd config overlay, redis/python
-non-goals); not invented toys. Each example quotes what the upstream Dockerfile does,
-what `image\assemble*` expresses, and what stays on a target or a container engine.
+`image\open(layout)` returns the layout's descriptor, its referrers, and for a
+single-platform image its platform, config and layers. Each descriptor's
+`digest.string()` is the OCI form, `sha256:<hex>`. In Go, `image.OpenLayout`,
+`Layout.Manifests` and `Layout.ResolvePlatform` do the same.
 
-See [`std/examples/image/README.md`](https://github.com/egladman/magus/blob/main/std/examples/image/README.md).
+## What this cannot express
+
+| Not here                                    | Instead                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Running a program inside the image          | A target runs the tool on the host, or on a Linux runner for cgo and native addons.          |
+| A package manager inside the image          | A container engine, or a pinned base that already holds the packages.                        |
+| Cache or SSH mounts for in-image steps      | There are no in-image steps. Caches and SSH agents belong to targets.                        |
+| Windows images                              | Not yet: platforms are linux/amd64 and linux/arm64.                                           |
 
 ## Related
 
-- [Run magus from a container image](container-image.md): consuming published magus images
+- [Run magus from a container image](container-image.md)
 - [ADR 0018](../../decisions/0018-magus-assembles-oci-images.md)
-- [image module reference](../../reference/buzz/image.md)

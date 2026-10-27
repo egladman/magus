@@ -1,7 +1,6 @@
 ### Changed
 
-- **OCI layout install is O(1) on the same filesystem for known blobs.**
-  Assemble, pull and publish hard-link or reflink staged and base layers
-  instead of streaming and re-hashing multi-gigabyte blobs; registry
-  layer fetch and publish run concurrently; layer gzip uses default
-  compression.
+- **Image layouts hash each blob once.** Pull fetches straight into the new layout and
+  verifies while it streams; push asks the registry before reading a blob and hashes
+  only what it uploads, eight transfers at a time; assemble links a base's layers
+  instead of copying them, and never changes the mode of a blob another layout owns.

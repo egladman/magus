@@ -1,6 +1,6 @@
 ### Added
 
-- **Layout carries Created; registry pull stays behind `:update`.**
-  `ImageLayout.created` is the config timestamp (RFC 3339), empty when omitted.
-  Callers judge age; Layout is not a notes log. Assemble never pulls: a missing
-  base fails naming `pullLayout` under the update charm.
+- **A digest-pinned `image\pull` caches like any input; a tag waits for `:update`.**
+  `name@sha256:<hex>` is content-addressed, so a target that pulls it replays offline.
+  A tag-only reference is refused outside the update charm. `Layout.created` is the
+  config's created time exactly as the config writes it.
