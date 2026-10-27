@@ -512,9 +512,21 @@ try {
 }
 ```
 
+### mode
+
+Permission bits from octal ("0755", "1777") or ls notation ("rwxr-xr-x"), for chmod, mkdirAll and image placements. Zero and bits beyond setuid, setgid and sticky raise.
+
+**Signature:** `fs\mode(notation) -> int` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
+
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `notation` | `string` |          |             |
+
+**Returns:** int
+
 ### chmod
 
-Change the permission bits of path to mode (octal integer, e.g. 0755).
+Change the permission bits of path to mode (an integer; fs\mode("0755") spells one).
 
 **Signature:** `fs\chmod(path, mode)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
 

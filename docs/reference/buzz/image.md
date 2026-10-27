@@ -2,64 +2,64 @@
 title: image module
 generated_from: reference/buzz/
 aliases: [modules/image]
-description: Assemble and publish OCI images.
+description: Assemble OCI images from files, and pull and push them.
 tags: [image, module, stdlib, magusfile]
 ---
 
 # image
 
-Assemble and publish OCI images. An Image is the artifact; a Container is a running instance. Layouts hold one Image Manifest or Image Index.
+Assemble OCI images from files, and pull and push them. Each layout is an OCI Image Layout holding one Image Manifest or Image Index; a stage, layer, platform, index and push is each its own target.
 
 > **Naming convention:** import the module under its bare name (`import "image"`), reach members with a backslash, and call methods in `camelCase`: `image\someMethod`.
 
 ## Methods
 
-### pullLayout
+### assemble
 
-Fetch the image at reference (name@sha256:<hex>) for platform into dest as an OCI Image Layout. Optional auth: {username, password:{value}}.
+Write the Image Manifest spec describes as a layout at layout: the base's layers, at most one new layer, the config and the manifest. Never touches the network.
 
-**Signature:** `image\pullLayout(reference, platform, dest, [auth]) -> ImageLayout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
-
-| Parameter   | Type             | Optional | Description |
-| ----------- | ---------------- | -------- | ----------- |
-| `reference` | `string`         |          |             |
-| `platform`  | `map[string]any` |          |             |
-| `dest`      | `string`         |          |             |
-| `auth`      | `map[string]any` | yes      |             |
-
-**Returns:** map[string]any
-
-### assembleLayout
-
-Assemble an OCI Image Layout from spec into dest: optional base, at most one new Layer for files/symlinks, then config and Image Manifest.
-
-**Signature:** `image\assembleLayout(spec, dest) -> ImageLayout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\assemble(spec, layout) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
 | `spec`    | `map[string]any` |          |             |
-| `dest`    | `string`         |          |             |
+| `layout`  | `string`         |          |             |
 
 **Returns:** map[string]any
 
 ### assembleIndex
 
-Combine single-platform layouts into an Image Index at dest.
+Write one Image Index over single-platform layouts as a layout at layout. Never touches the network.
 
-**Signature:** `image\assembleIndex(layouts, dest) -> ImageLayout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\assembleIndex(layouts, layout) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter | Type       | Optional | Description |
 | --------- | ---------- | -------- | ----------- |
 | `layouts` | `[]string` |          |             |
-| `dest`    | `string`   |          |             |
+| `layout`  | `string`   |          |             |
 
 **Returns:** map[string]any
 
-### publishLayout
+### pull
 
-Push the layout to repository under tags; empty tags means digest only. Optional auth: {username, password:{value}}.
+Fetch reference for platform into a layout at layout. A name@sha256:<hex> reference is content-addressed and caches like any input; a tag-only reference is refused outside the update charm.
 
-**Signature:** `image\publishLayout(layout, repository, tags, [auth]) -> ImagePublished` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\pull(reference, platform, layout, [auth]) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+
+| Parameter   | Type             | Optional | Description |
+| ----------- | ---------------- | -------- | ----------- |
+| `reference` | `string`         |          |             |
+| `platform`  | `map[string]any` |          |             |
+| `layout`    | `string`         |          |             |
+| `auth`      | `map[string]any` | yes      |             |
+
+**Returns:** map[string]any
+
+### push
+
+Push the layout's image, its blobs and its referrers to repository, then tag it with each of tags; empty tags pushes by digest only.
+
+**Signature:** `image\push(layout, repository, tags, [auth]) -> Pushed` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter    | Type             | Optional | Description |
 | ------------ | ---------------- | -------- | ----------- |
@@ -72,42 +72,90 @@ Push the layout to repository under tags; empty tags means digest only. Optional
 
 ### writeSbom
 
-Write an SPDX SBOM for layout to dest and return the document descriptor.
+Write an SPDX 2.3 document naming the layout's image by digest to path.
 
-**Signature:** `image\writeSbom(layout, dest) -> ImageSBOM` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\writeSbom(layout, path) -> Document` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `layout`  | `string` |          |             |
-| `dest`    | `string` |          |             |
+| `path`    | `string` |          |             |
 
 **Returns:** map[string]any
 
 ### writeProvenance
 
-Write an in-toto provenance statement for layout using spec to dest.
+Write an in-toto Statement v1 with SLSA v1 provenance for the layout's image to path. The digest of each base it was assembled over joins the materials.
 
-**Signature:** `image\writeProvenance(layout, spec, dest) -> ImageProvenance` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\writeProvenance(layout, provenance, path) -> Document` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
-| Parameter | Type             | Optional | Description |
-| --------- | ---------------- | -------- | ----------- |
-| `layout`  | `string`         |          |             |
-| `spec`    | `map[string]any` |          |             |
-| `dest`    | `string`         |          |             |
+| Parameter    | Type             | Optional | Description |
+| ------------ | ---------------- | -------- | ----------- |
+| `layout`     | `string`         |          |             |
+| `provenance` | `map[string]any` |          |             |
+| `path`       | `string`         |          |             |
+
+**Returns:** map[string]any
+
+### attachReferrers
+
+Write a new layout at layout holding subject's image and one OCI 1.1 referrer per document. subject is never edited.
+
+**Signature:** `image\attachReferrers(subject, documents, layout) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+
+| Parameter   | Type     | Optional | Description |
+| ----------- | -------- | -------- | ----------- |
+| `subject`   | `string` |          |             |
+| `documents` | `any`    |          |             |
+| `layout`    | `string` |          |             |
 
 **Returns:** map[string]any
 
-### attachArtifacts
+### open
 
-Attach optional sbomPath and provenancePath documents onto the Image Index at layout.
+Read the layout at layout back: its image, its referrers, and for a single-platform image its platform, config and layers.
 
-**Signature:** `image\attachArtifacts(layout, [sbomPath], [provenancePath]) -> ImageLayout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\open(layout) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
-| Parameter        | Type     | Optional | Description |
-| ---------------- | -------- | -------- | ----------- |
-| `layout`         | `string` |          |             |
-| `sbomPath`       | `string` | yes      |             |
-| `provenancePath` | `string` | yes      |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `layout`  | `string` |          |             |
 
 **Returns:** map[string]any
+
+### platform
+
+Parse "linux/amd64" or "linux/arm64/v8" into a Platform.
+
+**Signature:** `image\platform(spec) -> Platform` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `spec`    | `string` |          |             |
+
+**Returns:** map[string]any
+
+### platforms
+
+Parse each of specs into a Platform, refusing two that name the same platform: the set a multi-arch build fans out over.
+
+**Signature:** `image\platforms(specs) -> [Platform]` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `specs`   | `[]string` |          |             |
+
+**Returns:** any
+
+### goEnv
+
+The GOOS and GOARCH that make go build target platform, for a build target's ctx.withEnv.
+
+**Signature:** `image\goEnv(platform) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+
+| Parameter  | Type             | Optional | Description |
+| ---------- | ---------------- | -------- | ----------- |
+| `platform` | `map[string]any` |          |             |
+
+**Returns:** map[string]string
 

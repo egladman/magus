@@ -16,13 +16,13 @@ type ImageArchitecture string
 type ImageVariant string
 
 const (
-	ImageOSNone             ImageOS           = ""
-	ImageOSLinux            ImageOS           = "linux"
-	ImageArchitectureNone   ImageArchitecture = ""
-	ImageArchitectureAMD64  ImageArchitecture = "amd64"
-	ImageArchitectureARM64  ImageArchitecture = "arm64"
-	ImageVariantNone        ImageVariant      = ""
-	ImageVariantV8          ImageVariant      = "v8"
+	ImageOSNone            ImageOS           = ""
+	ImageOSLinux           ImageOS           = "linux"
+	ImageArchitectureNone  ImageArchitecture = ""
+	ImageArchitectureAMD64 ImageArchitecture = "amd64"
+	ImageArchitectureARM64 ImageArchitecture = "arm64"
+	ImageVariantNone       ImageVariant      = ""
+	ImageVariantV8         ImageVariant      = "v8"
 )
 
 // ImageMediaType is the media type of a descriptor magus reads or writes.
