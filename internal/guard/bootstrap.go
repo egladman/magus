@@ -261,9 +261,10 @@ const ownRebuild = "`./magus run go-build .`"
 // when the bootstrap stands alone in a root with none.
 type ownBuildOutcome struct {
 	root string
-	// bootstrapArgv is the bootstrap as the call's directory runs it: with -C when root
-	// lies elsewhere.
+	// Remedies carry their root even when the call starts there: a host may report
+	// its session directory instead of the native shell tool's workdir on a retry.
 	bootstrapArgv []string
+	rebuild       string
 	bootstrap     bool
 	prefixed      bool
 	link          bool
@@ -304,18 +305,18 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return o.recoveryAdvisory
 	case o.staleBootstrap:
 		return o.staleBootstrapAdvisory
-	case o.hasBinary && (o.bootstrap || o.link):
-		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with %s.", o.root, ownRebuild)
-		v.Next, v.Lead = nil, ""
-		return v
-	case o.hasBinary:
-		return v
 	case o.bootstrap && o.multipleCmds:
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
 		v.Deny = fmt.Sprintf("magus workspace: the bootstrap runs only alone on its line; drop %s.", dropList(o.others))
 		v.Next, v.Lead = nil, ""
 		return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
+	case o.hasBinary && (o.bootstrap || o.link):
+		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
+		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with `%s`. To recover another checkout, name its absolute directory with `go -C <checkout>` in the bootstrap.", o.root, o.rebuild)
+		v.Next, v.Lead = nil, ""
+		return v
+	case o.hasBinary:
+		return v
 	case o.bootstrap && o.prefixed:
 		return o.advisory
 	}
@@ -392,11 +393,12 @@ func besideGoCall(command string, d Dialect) []string {
 func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
 	where := "this checkout"
 	argv := bootstrapArgv()
+	if env, goArgv, ok := bootstrapParts(); ok {
+		argv = slices.Concat([]string{env, "go", "-C", root}, goArgv[1:])
+	}
+	rebuild := hint.NextForDenyRemedy(string(denyRuleRawTool), []string{filepath.Join(root, "magus"), "--root", root, "run", "go-build", "."}, "").Run
 	if root != filepath.Clean(cwd) {
 		where = root
-		if env, goArgv, ok := bootstrapParts(); ok {
-			argv = slices.Concat([]string{env, "go", "-C", root}, goArgv[1:])
-		}
 	}
 	rule := denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)}
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
@@ -411,6 +413,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		lease:         lease,
 		root:          root,
 		bootstrapArgv: argv,
+		rebuild:       rebuild,
 		bootstrap:     call.bootstrapsMagus(),
 		prefixed:      bootstrapLine(command, d),
 		link:          call.linksMagus(),
