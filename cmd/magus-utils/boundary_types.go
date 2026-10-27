@@ -1006,26 +1006,32 @@ var openStringTypes = map[reflect.Type]string{
 func checkNamedStrings(rt reflect.Type) error {
 	var unregistered []string
 	for _, f := range boundaryFields(rt) {
-		t := f.Type
-		for t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Pointer || t.Kind() == reflect.Map {
-			t = t.Elem()
+		if t, found := unregisteredString(f.Type); found {
+			unregistered = append(unregistered, fmt.Sprintf("%s (%s)", f.Name, t))
 		}
-		if t.Kind() != reflect.String || t.PkgPath() == "" {
-			continue
-		}
-		if _, ok := buzzEnum(t); ok {
-			continue
-		}
-		if _, ok := openStringTypes[t]; ok {
-			continue
-		}
-		unregistered = append(unregistered, fmt.Sprintf("%s (%s)", f.Name, t))
 	}
 	if len(unregistered) > 0 {
 		return fmt.Errorf("%s: field %s is a named string type: register it in boundaryEnums, or list it in openStringTypes with the reason its values are open (cmd/magus-utils/boundary_types.go)",
 			rt, strings.Join(unregistered, ", "))
 	}
 	return nil
+}
+
+// unregisteredString is the named string type a field of type ft holds, looking through
+// slices, arrays, pointers and maps, when that type is in neither boundaryEnums nor
+// openStringTypes.
+func unregisteredString(ft reflect.Type) (reflect.Type, bool) {
+	for ft.Kind() == reflect.Slice || ft.Kind() == reflect.Array || ft.Kind() == reflect.Pointer || ft.Kind() == reflect.Map {
+		ft = ft.Elem()
+	}
+	if ft.Kind() != reflect.String || ft.PkgPath() == "" {
+		return ft, false
+	}
+	if _, ok := buzzEnum(ft); ok {
+		return ft, false
+	}
+	_, listed := openStringTypes[ft]
+	return ft, !listed
 }
 
 type boundaryEnum struct {
