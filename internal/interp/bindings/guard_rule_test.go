@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"context"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -51,7 +52,7 @@ func TestVerdictRuleOpt(t *testing.T) {
 // guard through deny's opts or a GuardVerdict the rule built itself.
 func TestGuardVerdictRuleNameIsValidated(t *testing.T) {
 	guardMap := vm.NewMap()
-	registerVerdictMembers(nil, guardMap)
+	registerVerdictMembers(context.Background(), nil, nil, guardMap)
 	deny := requireDirect(t, guardMap, "deny")
 	opts := func(key string, v vm.Value) vm.Value {
 		m := vm.NewMap()

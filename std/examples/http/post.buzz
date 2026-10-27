@@ -10,7 +10,7 @@ try {
         "\{\"target\":\"build\"\}",
         {"Content-Type": "application/json"},
         http\Options{timeoutSeconds = 10},
-        http\Retry{ attempts = 3, delay_ms = 500.0 },
+        http\Retry{ attempts = 3, delayMs = 500.0 },
     );
     std\print(r.status);
 } catch (e) {

@@ -73,9 +73,9 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 
 // registerVerdictMembers binds the members every function rule builds its answer with:
 // allow/advise/deny, and once/count for state that lasts the calling session.
-func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
+func registerVerdictMembers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
 	guardMap.MapSet("allow", directVal(obs, "magus.guard.allow", func(context.Context, []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectGuardVerdict(types.GuardVerdict{Decision: types.GuardAllow}), nil
+		return bindgen.ObjectGuardVerdict(types.GuardVerdict{Decision: types.GuardAllow}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	for _, decision := range []types.GuardDecision{types.GuardAdvise, types.GuardDeny} {
 		member := string(decision)
@@ -91,7 +91,7 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 				}
 				verdict.Rule = rule
 			}
-			return bindgen.ObjectGuardVerdict(verdict), nil
+			return bindgen.ObjectGuardVerdict(verdict, ffi.SessionEnums(ctx, sess, "magus")), nil
 		}))
 	}
 	guardMap.MapSet("once", directVal(obs, "magus.guard.once", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {

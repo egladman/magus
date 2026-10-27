@@ -26,23 +26,23 @@ type HTTPRetry struct {
 	// DelayMs is the pause before the second attempt, in milliseconds. It doubles
 	// per attempt unless Fixed is set. Zero uses a 500ms default whenever
 	// Attempts is greater than 1.
-	DelayMs float64 `buzz:"delay_ms"`
+	DelayMs float64
 	// MaxDelayMs caps the exponential growth, so a long backoff cannot stretch a
 	// single request past anything useful. Zero means uncapped.
-	MaxDelayMs float64 `buzz:"max_delay_ms"`
+	MaxDelayMs float64
 	// MaxElapsedMs is a wall-clock ceiling across all attempts including the
 	// waits. It is the honest way to bound retrying: a count alone says nothing
 	// about how long a build will sit there. Zero means no ceiling beyond the
 	// per-request timeout.
-	MaxElapsedMs float64 `buzz:"max_elapsed_ms"`
+	MaxElapsedMs float64
 	// Fixed keeps the delay constant instead of doubling it, matching curl's
 	// --retry-delay. Use it when an endpoint documents a fixed cooldown.
 	Fixed bool
 	// AllErrors retries every failure, including 4xx statuses that normally mean
 	// the request itself is wrong. Off by default because retrying a 401 or a 404
 	// cannot succeed and only delays the report.
-	AllErrors bool `buzz:"all_errors"`
+	AllErrors bool
 	// ConnRefused treats a refused connection as retryable, which it is not by
 	// default. Set it when waiting for a service that is still coming up.
-	ConnRefused bool `buzz:"conn_refused"`
+	ConnRefused bool
 }

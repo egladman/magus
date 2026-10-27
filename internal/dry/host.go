@@ -568,8 +568,8 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	trail.MapSet("marks", function("magus.trail.marks", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
-	trail.MapSet("mark", function("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectTrailMark(types.TrailMark{}), nil
+	trail.MapSet("mark", function("magus.trail.mark", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectTrailMark(types.TrailMark{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("trail", trail)
 

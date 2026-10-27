@@ -145,7 +145,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "UncompressResult", Type: reflect.TypeFor[types.UncompressResult](), RuntimeObject: true},
 	{Name: "ArchiveEntry", Type: reflect.TypeFor[types.ArchiveEntry](), RuntimeObject: true},
 	{Name: "CompressResult", Type: reflect.TypeFor[types.CompressResult](), RuntimeObject: true},
-	{Name: "HttpResponse", Type: reflect.TypeFor[types.HTTPResponse](), RuntimeObject: true},
+	{Name: "Response", Module: "http", Type: reflect.TypeFor[types.HTTPResponse](), RuntimeObject: true},
 	{Name: "TermSize", Type: reflect.TypeFor[types.TermSize](), RuntimeObject: true},
 	{Name: "SemverVersion", Type: reflect.TypeFor[types.SemverVersion](), RuntimeObject: true},
 	{Name: "SemverNext", Type: reflect.TypeFor[types.SemverNext](), RuntimeObject: true},

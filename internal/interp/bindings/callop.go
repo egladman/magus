@@ -39,7 +39,7 @@ func CallOp[Req, Resp any](ctx context.Context, drv spells.Driver, op bindgen.Pr
 		return resp, true, fmt.Errorf("spell %q: %s is exported but is not a function", drv.Name(), op.Name)
 	}
 	rv, err := interp.TimeCall(ctx, interp.ModeSpell, func() (vm.Value, error) {
-		return sess.CallValue(ctx, fn, []vm.Value{bindgen.ObjectTarget(target), op.Encode(req)})
+		return sess.CallValue(ctx, fn, []vm.Value{bindgen.ObjectTarget(target, ffi.SessionEnums(ctx, sess, "magus/spell")), op.Encode(req)})
 	})
 	if err != nil {
 		return resp, true, fmt.Errorf("spell %q: %s: %w", drv.Name(), op.Name, err)

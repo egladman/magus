@@ -32,7 +32,7 @@ var FileInfoSource string
 // HTTPResponseSource is the generated Buzz mirror of an http.* response. Ships
 // with "http".
 //
-//go:generate go run ../../cmd/magus-utils types -type HttpResponse -out gen/types/httpresponse.buzz
+//go:generate go run ../../cmd/magus-utils types -type "http\\Response" -out gen/types/httpresponse.buzz
 //go:embed gen/types/httpresponse.buzz
 var HTTPResponseSource string
 

@@ -45,7 +45,7 @@ func runTypes(args []string) error {
 		return fmt.Errorf("unknown boundary type %q: declare it in boundaryTypes first", *typeName)
 	}
 
-	out, err := renderBuzzMirror(*typeName, entry.Type)
+	out, err := renderBuzzMirror(entry.Name, entry.Type)
 	if err != nil {
 		return err
 	}
