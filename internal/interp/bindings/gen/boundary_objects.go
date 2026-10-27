@@ -3773,6 +3773,7 @@ func ObjectJobWorktree(v types.JobWorktree) vm.Value {
 	out.MapSet("binary", vm.StringValue(v.Binary))
 	out.MapSet("removed", vm.IntValue(int64(v.Removed)))
 	out.MapSet("kept", vm.StringValue(v.Kept))
+	out.MapSet("made", vm.BoolValue(v.Made))
 	return out
 }
 

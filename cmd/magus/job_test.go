@@ -2032,18 +2032,23 @@ func TestJobForkDryRunEmitsTheValidationForAStructuredFormat(t *testing.T) {
 	assert.Equal(t, types.JobCheckUnrunnable, v.Problems[0].Code)
 }
 
-// A fork made at a commit the forker's ./magus was not built at places no binary and names
-// the one build its checkout needs.
-func TestPrintJobWorktreeNamesTheCheckoutBootstrap(t *testing.T) {
-	row := types.Job{ID: "w", Worktree: &types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef"}}
-	var out bytes.Buffer
-	printJobWorktree(&out, row, job.CheckoutBootstrap("/w/c"))
-	assert.Contains(t, out.String(), "placed no magus: the forking checkout's was built at another commit")
-	assert.Contains(t, out.String(), "next: `./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w/c` builds one at 0123456789ab")
-
-	out.Reset()
-	printJobWorktree(&out, row, "")
-	assert.Contains(t, out.String(), "runs magus from PATH", "a forker on PATH needs no build")
+// The fork says which magus its checkout got, and that an adopted checkout is never removed.
+func TestPrintJobWorktreeSaysWhichMagusTheCheckoutGot(t *testing.T) {
+	made := types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef", Made: true, Binary: "/w/c/magus"}
+	for name, tc := range map[string]struct {
+		wt    types.JobWorktree
+		built bool
+		want  string
+	}{
+		"built from its own sources": {wt: made, built: true, want: "built /w/c/magus from the checkout's own sources"},
+		"a copy":                     {wt: made, want: "placed /w/c/magus, the magus the forking checkout runs"},
+		"a forker on PATH":           {wt: types.JobWorktree{Root: "/w/c", Made: true}, want: "runs magus from PATH"},
+		"adopted":                    {wt: types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef"}, want: "adopted for job w at 0123456789ab; its holder takes it there with `"},
+	} {
+		var out bytes.Buffer
+		printJobWorktree(&out, types.Job{ID: "w", Worktree: &tc.wt}, tc.built)
+		assert.Contains(t, out.String(), tc.want, name)
+	}
 }
 
 func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {

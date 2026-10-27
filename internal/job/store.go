@@ -1369,7 +1369,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 				" delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
 		}
-		if dropped.Worktree.Standing() {
+		if dropped.Worktree.Standing() && dropped.Worktree.Made {
 			here, _ := filepath.Abs(s.root)
 			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row types.Job) bool { return row.ID == id })
 			if kept := endCheckout(ctx, others, here, dropped, *dropped.Worktree, nil); kept != "" {

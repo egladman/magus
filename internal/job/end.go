@@ -336,16 +336,11 @@ func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restat
 	return s.confirmEnd(ctx, restated, holding)
 }
 
-// EndCheckouts removes the checkout each ended job owns once removing it loses nothing, as
-// [Store.EndWorktrees] does, and does the same for the linked checkout of this repository
-// that each job named in ended was taken in, when no other live job is held there and
-// this call does not run in it. With
-// written, the paths in a checkout that magus wrote, and Go files whose only change is
-// gofmt's, are restored first, so they neither keep the checkout nor count as work.
-//
-// A fork's checkout records what became of it on its row, and the rows whose record
-// changed are returned. A linked checkout no row records comes back on a copy of its row
-// whose Worktree says what became of it; the store is not written for it.
+// EndCheckouts removes the checkout each ended job's fork made once removing it loses
+// nothing, as [Store.EndWorktrees] does. A checkout the fork adopted, or one a job was only
+// taken in, is never removed: its row records [adoptedKept]. With written, the paths in a
+// checkout that magus wrote, and Go files whose only change is gofmt's, are restored first,
+// so they neither keep the checkout nor count as work. It returns the rows whose record changed.
 func (s *Store) EndCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]types.Job, error) {
 	return s.endCheckouts(ctx, written, ended, false)
 }
@@ -367,27 +362,14 @@ func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []
 		if !row.State.Terminal() || (onlyNamed && !slices.Contains(ended, row.ID)) {
 			continue
 		}
-		if !row.Worktree.Standing() {
-			if row.Worktree != nil || !slices.Contains(ended, row.ID) {
-				continue
-			}
-			// Ended from inside it, as a holder abandoning its own row is, nothing records
-			// it for a later call to retry, so it is left as the person who made it left it.
-			wt, ok := s.linkedCheckout(ctx, row)
-			if !ok || (here != "" && within(here, wt.Root)) {
-				continue
-			}
-			wt.Kept = endCheckout(ctx, rows, here, row, wt, written)
-			if wt.Kept == "" {
-				wt.Removed = time.Now().Unix()
-			}
-			copied := row.Clone()
-			copied.Worktree = &wt
-			changed = append(changed, copied)
+		wt := row.Worktree
+		if !wt.Standing() {
 			continue
 		}
-		wt := row.Worktree
-		kept := endCheckout(ctx, rows, here, row, *wt, written)
+		kept := adoptedKept
+		if wt.Made {
+			kept = endCheckout(ctx, rows, here, row, *wt, written)
+		}
 		if kept != "" && kept == wt.Kept {
 			continue
 		}
@@ -420,30 +402,9 @@ func endCheckout(ctx context.Context, rows []types.Job, here string, row types.J
 	return removeWorktree(ctx, row.ID, wt, written)
 }
 
-// linkedCheckout is the checkout row was taken in as one to remove, when it is a separate
-// linked checkout of this store's repository: registered by it and not its primary.
-func (s *Store) linkedCheckout(ctx context.Context, row types.Job) (types.JobWorktree, bool) {
-	if row.CheckoutRoot == "" {
-		return types.JobWorktree{}, false
-	}
-	source, err := filepath.Abs(s.root)
-	if err != nil {
-		return types.JobWorktree{}, false
-	}
-	drv, _ := resolveDriver(ctx, source)
-	if drv == nil {
-		return types.JobWorktree{}, false
-	}
-	registered, err := drv.RegisteredCheckouts(ctx, source)
-	if err != nil {
-		return types.JobWorktree{}, false
-	}
-	i := slices.IndexFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, row.CheckoutRoot) })
-	if i < 0 {
-		return types.JobWorktree{}, false
-	}
-	return types.JobWorktree{Root: row.CheckoutRoot, Source: source, Base: checkpointRevision(row.Checkpoint)}, true
-}
+// adoptedKept is why a checkout the fork adopted stands after its job ends: whoever made
+// it removes it.
+const adoptedKept = "the fork adopted it rather than making it, so magus never removes it"
 
 // restoreWritten returns each of dirty, paths in the checkout at root, that magus wrote to
 // what the checkout's revision holds, deleting one the revision does not track, and

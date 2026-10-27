@@ -3047,6 +3047,7 @@ github.com/egladman/magus/types.JobWorktree.Base field string "json:\"base\" yam
 github.com/egladman/magus/types.JobWorktree.Binary field string "json:\"binary,omitempty\" yaml:\"binary,omitempty\""
 github.com/egladman/magus/types.JobWorktree.Created field int64 "json:\"created\" yaml:\"created\""
 github.com/egladman/magus/types.JobWorktree.Kept field string "json:\"kept,omitempty\" yaml:\"kept,omitempty\""
+github.com/egladman/magus/types.JobWorktree.Made field bool "json:\"made,omitempty\" yaml:\"made,omitempty\""
 github.com/egladman/magus/types.JobWorktree.Removed field int64 "json:\"removed,omitempty\" yaml:\"removed,omitempty\""
 github.com/egladman/magus/types.JobWorktree.Root field string "json:\"root\" yaml:\"root\""
 github.com/egladman/magus/types.JobWorktree.Source field string "json:\"source\" yaml:\"source\""

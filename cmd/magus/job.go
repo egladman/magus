@@ -933,7 +933,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
-		printJobWorktree(os.Stdout, row, "")
+		printJobWorktree(os.Stdout, row, false)
 		job.RenderGates(os.Stdout, status)
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
@@ -1128,7 +1128,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&declared.model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 		fs.StringVar(&declared.briefFormat, "brief-format", "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
-		fs.StringVar(&declared.checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
+		fs.StringVar(&declared.checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace, which magus removes once the job ends unless it holds work; a linked checkout already there is adopted and never removed")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job fork <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus job fork --stdin < job.json")
@@ -1171,10 +1171,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--checkout <dir> makes a new checkout of this repository at dir (a git worktree,")
 			fmt.Fprintln(os.Stderr, "an hg share, a jj workspace) at the job's checkpoint, or at this checkout's")
-			fmt.Fprintln(os.Stderr, "revision when it names none. A ./magus this checkout runs is copied into it when it was built at that revision or no Go build input differs; otherwise the output names the bootstrap that builds one. The")
-			fmt.Fprintln(os.Stderr, "job is taken there and nowhere else, and once it ends magus removes the checkout")
-			fmt.Fprintln(os.Stderr, "if it is clean and every commit in it is on a branch, bookmark, remote or its")
-			fmt.Fprintln(os.Stderr, "base; otherwise it keeps it and records why. It is the one job flag --stdin")
+			fmt.Fprintf(os.Stderr, "revision when it names none. When this checkout runs its own ./magus, a checkout\n")
+			fmt.Fprintf(os.Stderr, "holding %s builds its own from its own sources\n", job.CheckoutBootstrapScript)
+			fmt.Fprintln(os.Stderr, "before the fork lands, and any other gets a copy. The job is taken there and")
+			fmt.Fprintln(os.Stderr, "nowhere else, and once it ends magus removes the checkout if it is clean and")
+			fmt.Fprintln(os.Stderr, "every commit in it is on a branch, bookmark, remote or its base; otherwise it")
+			fmt.Fprintln(os.Stderr, "keeps it and records why. A dir that already stands as a linked checkout is")
+			fmt.Fprintln(os.Stderr, "adopted instead, and magus never removes it. It is the one job flag --stdin")
 			fmt.Fprintln(os.Stderr, "takes, for a record that names no checkout; the record holds the rest.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "There is no --state: this declares a NEW job, and one nobody has taken is")
@@ -1330,18 +1333,18 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 	}
 	var worktree types.JobWorktree
-	made := false
-	// bootstrap is the build the job's checkout needs when the forker's ./magus was built at
-	// another commit and so was not placed there.
-	bootstrap := ""
+	made, built := false, false
 	if row.Checkout != "" {
 		exe, _ := os.Executable()
 		mirrored := job.MirroredBinary(exe, root)
 		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, mirrored); err != nil {
 			return err
 		}
-		if mirrored != "" && worktree.Binary == "" {
-			bootstrap = job.CheckoutBootstrap(worktree.Root)
+		if made && mirrored != "" && worktree.Binary == "" && job.BuildsItsOwnMagus(worktree.Root) {
+			if err := bootstrapCheckout(ctx, mirrored, root, worktree.Root); err != nil {
+				return errors.Join(err, store.DiscardWorktree(ctx, worktree))
+			}
+			worktree.Binary, built = filepath.Join(worktree.Root, "magus"), true
 		}
 		declare := merge
 		merge = func(u *types.Job) {
@@ -1404,7 +1407,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.ModelTier != nil {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
-		printJobWorktree(os.Stdout, stored, bootstrap)
+		printJobWorktree(os.Stdout, stored, built)
 		if stored.Worktree == nil {
 			printLandingBootstrap(ctx, os.Stdout, store, stored)
 		}
@@ -1983,7 +1986,7 @@ func endCheckouts(ctx context.Context, out io.Writer, store *job.Store, ended []
 	}
 	changed, err := end(ctx, written, ended...)
 	for _, row := range changed {
-		printJobWorktree(out, row, "")
+		printJobWorktree(out, row, false)
 	}
 	if err != nil {
 		return fmt.Errorf("magus job: recording what became of a job's checkout: %w", err)
@@ -2001,9 +2004,10 @@ func unloadableMagusfile(err error) error {
 	return errors.New(first)
 }
 
-// printJobWorktree says where the checkout a job owns stands: made for it, removed, or kept
-// and why. bootstrap, when not "", is the build a checkout made with no binary needs next.
-func printJobWorktree(out io.Writer, row types.Job, bootstrap string) {
+// printJobWorktree says where the checkout a job is bound to stands: made or adopted for it,
+// removed, or kept and why. built is true when the fork just built its ./magus from its own
+// sources.
+func printJobWorktree(out io.Writer, row types.Job, built bool) {
 	wt := row.Worktree
 	switch {
 	case wt == nil:
@@ -2011,18 +2015,34 @@ func printJobWorktree(out io.Writer, row types.Job, bootstrap string) {
 		fmt.Fprintf(out, "checkout %s: removed once job %s ended\n", wt.Root, row.ID)
 	case wt.Kept != "":
 		fmt.Fprintf(out, "checkout %s: kept after job %s ended: %s\n", wt.Root, row.ID, wt.Kept)
+	case !wt.Made:
+		fmt.Fprintf(out, "checkout %s: adopted for job %s at %.12s; its holder takes it there with `%s`, and magus never removes it\n",
+			wt.Root, row.ID, wt.Base, hint.JobExec.With(row.ID))
 	default:
 		fmt.Fprintf(out, "checkout %s: made for job %s at %.12s; its holder takes it there with `%s`, and magus removes it once the job ends unless it holds work\n",
 			wt.Root, row.ID, wt.Base, hint.JobExec.With(row.ID))
 		switch {
+		case built:
+			fmt.Fprintf(out, "  built %s from the checkout's own sources\n", wt.Binary)
 		case wt.Binary != "":
 			fmt.Fprintf(out, "  placed %s, the magus the forking checkout runs\n", wt.Binary)
-		case bootstrap != "":
-			fmt.Fprintf(out, "  placed no magus: the forking checkout's was built at another commit, so its guard could not load this one\n  next: `%s` builds one at %.12s\n", bootstrap, wt.Base)
 		default:
 			fmt.Fprintln(out, "  placed no magus: the forking checkout runs magus from PATH, and so does the job")
 		}
 	}
+}
+
+// bootstrapCheckout builds ./magus in dir, a checkout the fork just made, from dir's own
+// sources: exe runs the forker's copy of [job.CheckoutBootstrapScript] from forker, and the
+// script's progress goes to stderr, since the fork's stdout is its record.
+func bootstrapCheckout(ctx context.Context, exe, forker, dir string) error {
+	cmd := exec.CommandContext(ctx, exe, "buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir)
+	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, os.Stderr, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("magus job fork: building ./magus in %s from its own sources failed, so the checkout is removed: `%s` from %s says why: %w",
+			dir, job.CheckoutBootstrap(dir), forker, err)
+	}
+	return nil
 }
 
 // printLandingBootstrap names the build a fork with no checkout of its own needs when the

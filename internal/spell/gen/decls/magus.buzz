@@ -1459,6 +1459,7 @@ export object JobWorktree {
     binary: str = "",
     removed: int = 0,
     kept: str = "",
+    made: bool = false,
 }
 
 export object JobResultValidation {
