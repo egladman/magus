@@ -143,21 +143,21 @@ Resolve a revision (a VCS-native rev expression; omit for the current revision) 
 
 ### history
 
-Up to limit commits reachable from the current revision, newest first, in one VCS call however many there are; each is the object vcs\commit returns, with files set to the repository-relative paths it changed against its first parent (a rename is both paths). limit defaults to 10; 0 means every commit. paths keeps only the commits that changed one of those literal repository-relative paths (a directory keeps what is under it) and narrows each commit's files to them. first_parent follows only the first parent of a merge, the line a branch landed on. An empty list when no VCS is resolved.
+Up to limit commits reachable from the current revision, newest first, in one VCS call however many there are; each is the object vcs\commit returns, with files set to the repository-relative paths it changed against its first parent (a rename is both paths). limit defaults to 10; 0 means every commit. paths keeps only the commits that changed one of those literal repository-relative paths (a directory keeps what is under it) and narrows each commit's files to them. firstParent follows only the first parent of a merge, the line a branch landed on. An empty list when no VCS is resolved.
 
-**Signature:** `vcs\history([limit], [paths], [first_parent]) -> [Commit]` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go)
+**Signature:** `vcs\history([limit], [paths], [firstParent]) -> [Commit]` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go)
 
-| Parameter      | Type       | Optional | Description |
-| -------------- | ---------- | -------- | ----------- |
-| `limit`        | `int`      | yes      |             |
-| `paths`        | `[]string` | yes      |             |
-| `first_parent` | `bool`     | yes      |             |
+| Parameter     | Type       | Optional | Description |
+| ------------- | ---------- | -------- | ----------- |
+| `limit`       | `int`      | yes      |             |
+| `paths`       | `[]string` | yes      |             |
+| `firstParent` | `bool`     | yes      |             |
 
 **Returns:** any
 
 ### cmd
 
-Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus\cmd and proc\exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc\exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs\name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.
+Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus\cmd and proc\exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allowFailure. opts is a CommandOptions: dir runs it elsewhere (relative to the target's cwd, unlike proc\exec's positional dir); quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs\name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.
 
 **Signature:** `vcs\cmd(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go)
 

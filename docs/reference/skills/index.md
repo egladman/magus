@@ -15,6 +15,7 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 <div class="grid landing-cards">
   <a class="landing-card" href="magus-architecture-review/"><span class="landing-card-title">magus-architecture-review</span><span class="landing-card-body">Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files.</span><span class="landing-card-body"><small>9.0 KB short, 12.2 KB full - 25% shorter</small></span></a>
+  <a class="landing-card" href="magus-buzz-from-shell/"><span class="landing-card-title">magus-buzz-from-shell</span><span class="landing-card-body">Rewrite a shell script as idiomatic Buzz instead of porting it line by line.</span><span class="landing-card-body"><small>12.8 KB short, 15.1 KB full - 15% shorter</small></span></a>
   <a class="landing-card" href="magus-buzz-lang/"><span class="landing-card-title">magus-buzz-lang</span><span class="landing-card-body">Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts.</span><span class="landing-card-body"><small>9.7 KB short, 12.6 KB full - 23% shorter</small></span></a>
   <a class="landing-card" href="magus-buzz-review/"><span class="landing-card-title">magus-buzz-review</span><span class="landing-card-body">Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance.</span><span class="landing-card-body"><small>11.3 KB short, 18.7 KB full - 39% shorter</small></span></a>
   <a class="landing-card" href="magus-change-summary/"><span class="landing-card-title">magus-change-summary</span><span class="landing-card-body">Summarize what changed in a magus workspace, write it up, or answer a granular diff question.</span><span class="landing-card-body"><small>3.5 KB short, 6.4 KB full - 45% shorter</small></span></a>
@@ -32,4 +33,4 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
   <a class="landing-card" href="magus-workspace-rules/"><span class="landing-card-title">magus-workspace-rules</span><span class="landing-card-body">Adapt magus's installed agent integration to THIS workspace without breaking it.</span><span class="landing-card-body"><small>8.3 KB short, 12.3 KB full - 32% shorter</small></span></a>
 </div>
 
-All 16 together are 119.3 KB installed as the short form, against 182.2 KB for the full twins: 34% less always-loaded text.
+All 17 together are 132.1 KB installed as the short form, against 197.3 KB for the full twins: 33% less always-loaded text.

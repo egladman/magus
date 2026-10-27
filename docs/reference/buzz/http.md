@@ -21,9 +21,9 @@ HTTP client. Requests run ONCE unless given a retry policy.
 
 ### get
 
-Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
+Send a GET request; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\get(url, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
+**Signature:** `http\get(url, [headers], [opts], [retry]) -> Response` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
 | Parameter | Type                | Optional | Description |
 | --------- | ------------------- | -------- | ----------- |
@@ -53,7 +53,7 @@ try {
 
 ### download
 
-GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
+GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
 **Signature:** `http\download(url, dest, [headers], [opts], [retry]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
@@ -69,9 +69,9 @@ GET url and stream the response body straight to dest, returning the HTTP status
 
 ### post
 
-Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
+Send a POST request with body; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\post(url, body, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
+**Signature:** `http\post(url, body, [headers], [opts], [retry]) -> Response` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
 | Parameter | Type                | Optional | Description |
 | --------- | ------------------- | -------- | ----------- |
@@ -90,15 +90,15 @@ import "std";
 import "http";
 
 // Post JSON. opts carries the curl-style settings; retrying is a separate,
-// typed HttpRetry argument, and without one the request runs exactly once.
+// typed Retry argument, and without one the request runs exactly once.
 // Escape { and } as \{ \} so Buzz does not try to interpolate them.
 try {
     final r = http\post(
         "https://httpbin.org/post",
         "\{\"target\":\"build\"\}",
         {"Content-Type": "application/json"},
-        {"timeout": 10},
-        http\HttpRetry{ attempts = 3, delay_ms = 500.0 },
+        http\Options{timeoutSeconds = 10.0},
+        http\Retry{ attempts = 3, delayMs = 500.0 },
     );
     std\print(r.status);
 } catch (e) {
@@ -108,9 +108,9 @@ try {
 
 ### request
 
-Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
+Send an HTTP request; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
+**Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) -> Response` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
 | Parameter | Type                | Optional | Description |
 | --------- | ------------------- | -------- | ----------- |
@@ -136,7 +136,7 @@ try {
         "https://httpbin.org/put",
         "hello",
         { "Content-Type": "text/plain" },
-        { "timeout": 10 },
+        http\Options{ timeoutSeconds = 10.0 },
     );
     std\print(r.status);
 } catch (e) {
@@ -165,7 +165,7 @@ import "http";
 // Serve the current build output over http on port 8080 for quick sharing.
 // Blocks until the process exits; raises when the port is already taken.
 try {
-    http\server({"dir": "dist/", "port": 8080});
+    http\server(http\ServerOptions{dir = "dist/", port = 8080});
 } catch (e) {
     std\print("port 8080 is not available");
 }
@@ -185,17 +185,17 @@ Byte length of the file at path. The companion to uploadChunked: the size a Cont
 
 ### upload_chunked
 
-Send the file at src as the request body. chunk_size > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunk_size <= 0 sends it in one request. Returns the final [status, body].
+Send the file at src as the request body. chunkSize > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunkSize <= 0 sends it in one request. Returns the final [status, body].
 
-**Signature:** `http\upload_chunked(method, url, src, chunk_size, [headers]) -> any`
+**Signature:** `http\upload_chunked(method, url, src, chunkSize, [headers]) -> any`
 
-| Parameter    | Type                | Optional | Description |
-| ------------ | ------------------- | -------- | ----------- |
-| `method`     | `string`            |          |             |
-| `url`        | `string`            |          |             |
-| `src`        | `string`            |          |             |
-| `chunk_size` | `int`               |          |             |
-| `headers`    | `map[string]string` | yes      |             |
+| Parameter   | Type                | Optional | Description |
+| ----------- | ------------------- | -------- | ----------- |
+| `method`    | `string`            |          |             |
+| `url`       | `string`            |          |             |
+| `src`       | `string`            |          |             |
+| `chunkSize` | `int`               |          |             |
+| `headers`   | `map[string]string` | yes      |             |
 
 **Returns:** any
 
