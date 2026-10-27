@@ -510,7 +510,7 @@ var ruleDocSiblingCheckout = types.RuleDoc{
 
 var ruleDocStaleBinary = types.RuleDoc{
 	Name:    string(denyRuleStaleBinary),
-	Catches: "a call that changes state while the magus judging it cannot load this tree's guard policy, or will not after a load-contract change",
+	Catches: "a state-changing call while the judging magus cannot load the tree, or predates its load contract",
 	Why: "A magus older than the tree, or one answering for a checkout with no ./magus, cannot load the magusfile, so none of the workspace's rules run and a fresh worktree has no record of them to fall back on. The magusfile visibly registering a guard rule is enough to refuse. " +
 		"Edits, spawns, pushes, writing MCP tools and every command that changes state wait until a magus loads the tree. A line passes only when it proves read-only (every program reads, no redirect writes a file, nothing is computed by a substitution), is the fix (`./magus run go-build .`, the relink, the bootstrap over a ./magus that cannot load the tree, each alone on its line), or is a read-only scout recording its work (`magus job exec`, `magus job exit`, `magus buzz --record`). " +
 		"A call that puts back a file the load error names as an unresolved import (`git mv` onto it, `git restore` or `git checkout --` of it, or a write to it) also runs, with an advisory that says so; the bootstrap runs for that failure too. " +

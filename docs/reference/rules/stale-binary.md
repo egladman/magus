@@ -1,16 +1,16 @@
 ---
-title: "stale-binary: a call that changes state while the magus judging it cannot load this tree's guard policy, or will not after a load-contract change"
-description: "A deny rule by default: it refuses a call that changes state while the magus judging it cannot load this tree's guard policy, or will not after a load-contract change, and names what to run instead."
+title: "stale-binary: a state-changing call while the judging magus cannot load the tree, or predates its load contract"
+description: "A deny rule by default: it refuses a state-changing call while the judging magus cannot load the tree, or predates its load contract, and names what to run instead."
 tags: [guard, rules, stale-binary, deny]
 ---
 
 # stale-binary
 
-A deny rule by default: it refuses a call that changes state while the magus judging it cannot load this tree's guard policy, or will not after a load-contract change, and names what to run instead.
+A deny rule by default: it refuses a state-changing call while the judging magus cannot load the tree, or predates its load contract, and names what to run instead.
 
 ## What it catches
 
-A call that changes state while the magus judging it cannot load this tree's guard policy, or will not after a load-contract change.
+A state-changing call while the judging magus cannot load the tree, or predates its load contract.
 
 ## Why
 
