@@ -16,7 +16,7 @@ import (
 )
 
 // RegisterOs builds the "os" module map and returns it.
-// The machine and this process: CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module.
+// The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module.
 func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -28,6 +28,13 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
+	}))
+	m.MapSet("platform", vm.DirectValue("os.platform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, ret1, ret2, err := std.OsPlatform(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return vm.ListValue([]vm.Value{ffi.StringVal(ret0), ffi.StringVal(ret1), ffi.StringVal(ret2)}), nil
 	}))
 	m.MapSet("exit", vm.DirectValue("os.exit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		code := ffi.Int(bzArgs, 0, 0)

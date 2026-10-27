@@ -5308,20 +5308,20 @@ func decodeHTTPRetry(v vm.Value, path string) (types.HTTPRetry, error) {
 				return out, err
 			}
 			out.Attempts = int(nAttempts)
-		case "delay_ms":
-			nDelayMs, err := decodeFloat(item, path+".delay_ms")
+		case "delayMs":
+			nDelayMs, err := decodeFloat(item, path+".delayMs")
 			if err != nil {
 				return out, err
 			}
 			out.DelayMs = nDelayMs
-		case "max_delay_ms":
-			nMaxDelayMs, err := decodeFloat(item, path+".max_delay_ms")
+		case "maxDelayMs":
+			nMaxDelayMs, err := decodeFloat(item, path+".maxDelayMs")
 			if err != nil {
 				return out, err
 			}
 			out.MaxDelayMs = nMaxDelayMs
-		case "max_elapsed_ms":
-			nMaxElapsedMs, err := decodeFloat(item, path+".max_elapsed_ms")
+		case "maxElapsedMs":
+			nMaxElapsedMs, err := decodeFloat(item, path+".maxElapsedMs")
 			if err != nil {
 				return out, err
 			}
@@ -5332,14 +5332,14 @@ func decodeHTTPRetry(v vm.Value, path string) (types.HTTPRetry, error) {
 				return out, err
 			}
 			out.Fixed = bFixed
-		case "all_errors":
-			bAllErrors, err := decodeBool(item, path+".all_errors")
+		case "allErrors":
+			bAllErrors, err := decodeBool(item, path+".allErrors")
 			if err != nil {
 				return out, err
 			}
 			out.AllErrors = bAllErrors
-		case "conn_refused":
-			bConnRefused, err := decodeBool(item, path+".conn_refused")
+		case "connRefused":
+			bConnRefused, err := decodeBool(item, path+".connRefused")
 			if err != nil {
 				return out, err
 			}
