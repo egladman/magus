@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/libs/xdg"
 )
 
-func manCmd(args []string) error {
+func manCommand(args []string) error {
 	if len(args) == 0 {
 		manUsage()
 		return exit.Usagef("magus man: subcommand required (want install)")

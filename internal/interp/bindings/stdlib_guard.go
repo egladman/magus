@@ -157,14 +157,14 @@ func (c *upstreamCaller) call(ctx context.Context, fn vm.Value, args []vm.Value)
 // upstreamEnv is os.env read through the sandbox's env allowlist: a stripped name reads
 // as unset, the answer env.lookup gives.
 func upstreamEnv(ctx context.Context, args []vm.Value, orig func() (vm.Value, error)) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return orig() // upstream words the usage error
 	}
 	v, found, err := std.EnvLookup(ctx, args[0].AsString())
 	if err != nil || !found {
 		return vm.Null, err
 	}
-	return vm.StrValue(v), nil
+	return vm.StringValue(v), nil
 }
 
 // upstreamExecute is os.execute forked through spawn.Exec, so the child gets the exec check,
@@ -179,7 +179,7 @@ func upstreamExecute(ctx context.Context, args []vm.Value, orig func() (vm.Value
 	if err := std.RefuseVCS("os.execute", argv, ""); err != nil {
 		return vm.Null, err
 	}
-	cwd, _ := std.CwdFromContext(ctx)
+	cwd, _ := std.CurrentWorkingDirectoryFromContext(ctx)
 	res, err := spawn.Exec(ctx, argv[0], argv[1:], spawn.ExecOptions{Dir: cwd})
 	if res.Started {
 		return vm.IntValue(int64(res.Code)), nil
@@ -193,7 +193,7 @@ func upstreamExecute(ctx context.Context, args []vm.Value, orig func() (vm.Value
 // upstreamFileOpen checks File.open's path for the access its mode takes: read reads,
 // write creates or truncates, update does both.
 func upstreamFileOpen(ctx context.Context, args []vm.Value, orig func() (vm.Value, error)) (vm.Value, error) {
-	if len(args) >= 2 && args[0].IsStr() {
+	if len(args) >= 2 && args[0].IsString() {
 		check := upstreamCheck{writes: []int{0}}
 		switch mode := args[1].String(); {
 		case strings.HasSuffix(mode, "read"):
@@ -212,14 +212,14 @@ func upstreamFileOpen(ctx context.Context, args []vm.Value, orig func() (vm.Valu
 // that is not a string is left for the function itself to reject.
 func checkUpstreamPaths(ctx context.Context, what string, c upstreamCheck, args []vm.Value) error {
 	for _, i := range c.reads {
-		if i < len(args) && args[i].IsStr() {
+		if i < len(args) && args[i].IsString() {
 			if err := std.CheckRead(ctx, args[i].AsString()); err != nil {
 				return fmt.Errorf("%s: %w", what, err)
 			}
 		}
 	}
 	for _, i := range c.writes {
-		if i < len(args) && args[i].IsStr() {
+		if i < len(args) && args[i].IsString() {
 			if err := std.CheckWrite(ctx, args[i].AsString()); err != nil {
 				return fmt.Errorf("%s: %w", what, err)
 			}
@@ -240,7 +240,7 @@ func executeArgv(args []vm.Value) ([]string, bool) {
 	}
 	argv := make([]string, len(items))
 	for i, it := range items {
-		if !it.IsStr() {
+		if !it.IsString() {
 			return nil, false
 		}
 		argv[i] = it.AsString()

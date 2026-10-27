@@ -41,7 +41,7 @@ import (
 //go:embed starter/magusfile.tmpl.buzz
 var starterMagusfileBuzz string
 
-// initCmd implements `magus init`: bootstrap a magus workspace in the
+// initCommand implements `magus init`: bootstrap a magus workspace in the
 // current directory. It writes a magus.yaml to $XDG_CONFIG_HOME/magus/
 // by default (use --local to write into the repo instead), stubs a
 // magusfile.buzz when the directory has none, and wires the VCS merge driver
@@ -54,11 +54,11 @@ var starterMagusfileBuzz string
 // The magusfile stub and merge driver are always scoped to root; the default
 // (non-local) config path is not, so --root without --local or --global is
 // refused rather than silently writing the real global config.
-func initCmd(ctx context.Context, root string, args []string) error {
+func initCommand(ctx context.Context, root string, args []string) error {
 	// `magus init spell <name>` is a noun subcommand: scaffold a spell rather than
 	// bootstrap the workspace. Consistent with the describe/config noun grammar.
 	if len(args) > 0 && args[0] == "spell" {
-		return initSpellCmd(ctx, args[1:])
+		return initSpellCommand(ctx, args[1:])
 	}
 
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)

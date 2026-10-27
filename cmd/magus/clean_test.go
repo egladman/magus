@@ -23,7 +23,7 @@ func TestCleanCmdReportsEmptyListsWhenNothingIsRemoved(t *testing.T) {
 	global.output = "json"
 
 	out := captureStdout(t, func() {
-		require.NoError(t, cleanCmd(context.Background(), root, nil))
+		require.NoError(t, cleanCommand(context.Background(), root, nil))
 	})
 
 	var got types.CleanReport

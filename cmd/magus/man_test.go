@@ -13,7 +13,7 @@ import (
 
 func TestManInstall(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "man1")
-	require.NoError(t, manCmd([]string{"install", "--dir", dir}))
+	require.NoError(t, manCommand([]string{"install", "--dir", dir}))
 	for _, name := range []string{"magus.1", "magus-man.1", "magus-run.1"} {
 		content, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)
@@ -22,8 +22,8 @@ func TestManInstall(t *testing.T) {
 }
 
 func TestManInstallRejectsUnknownInput(t *testing.T) {
-	assert.ErrorContains(t, manCmd([]string{"remove"}), `unknown subcommand "remove"`)
-	assert.ErrorContains(t, manCmd([]string{"install", "extra"}), `unexpected argument "extra"`)
+	assert.ErrorContains(t, manCommand([]string{"remove"}), `unknown subcommand "remove"`)
+	assert.ErrorContains(t, manCommand([]string{"install", "extra"}), `unexpected argument "extra"`)
 }
 
 func TestDefaultManDir(t *testing.T) {
@@ -41,12 +41,12 @@ func TestManInstallFailsWithNoHome(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "")
 	_, err := defaultManDir()
 	require.Error(t, err)
-	assert.ErrorContains(t, manCmd([]string{"install"}), "pass --dir")
+	assert.ErrorContains(t, manCommand([]string{"install"}), "pass --dir")
 }
 
 func TestManUsage(t *testing.T) {
 	var cmdErr error
-	content := testkit.CaptureStderr(t, func() { cmdErr = manCmd(nil) })
+	content := testkit.CaptureStderr(t, func() { cmdErr = manCommand(nil) })
 
 	assert.Error(t, cmdErr)
 	assert.Contains(t, content, "Usage: magus man install")

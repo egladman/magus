@@ -112,7 +112,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	// one Impl package under one qualifier. That was always true when every
 	// Impl lived in std; std/encoding's leaf packages don't change it, they
 	// just mean the qualifier is no longer always "std".
-	implPath, implPkg, err := resolveImplPackage(m)
+	implPath, implPkg, err := resolveImplementationPackage(m)
 	if err != nil {
 		return nil, err
 	}
@@ -228,13 +228,13 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	return out, nil
 }
 
-// resolveImplPackage returns the Go import path and local package identifier every
+// resolveImplementationPackage returns the Go import path and local package identifier every
 // one of m's Method.Impl and Field.Resolver funcs share; "share" because one
 // generated file makes one Register<Module> call under one import, so a
 // module whose Impls span two packages cannot be emitted as written. Errors
 // if m declares no Impl/Resolver at all (nothing to import) or if they
 // disagree on package.
-func resolveImplPackage(m std.Module) (importPath, pkgIdent string, err error) {
+func resolveImplementationPackage(m std.Module) (importPath, pkgIdent string, err error) {
 	check := func(path, pkg, where string) error {
 		if importPath == "" && pkgIdent == "" {
 			importPath, pkgIdent = path, pkg
@@ -258,7 +258,7 @@ func resolveImplPackage(m std.Module) (importPath, pkgIdent string, err error) {
 		if meth.Extern {
 			continue // no Impl, so no package to import
 		}
-		path, pkg := std.MethodImplPackage(meth)
+		path, pkg := std.MethodImplementationPackage(meth)
 		if path == "" {
 			return "", "", fmt.Errorf("method %q: Impl is nil or not a function", meth.Name)
 		}
@@ -273,7 +273,7 @@ func resolveImplPackage(m std.Module) (importPath, pkgIdent string, err error) {
 // The key is camelCased (Buzz convention) though the std descriptor is snake_case.
 func emitBuzzField(w *bytes.Buffer, f std.Field, implPkg string) {
 	callArgs := ""
-	if std.FieldResolverTakesCtx(f) {
+	if std.FieldResolverTakesContext(f) {
 		callArgs = "ctx"
 	}
 	fmt.Fprintf(w, "\tif v, err := %s.%s(%s); err == nil {\n", implPkg, std.FieldFuncName(f), callArgs)
@@ -287,7 +287,7 @@ func emitBuzzField(w *bytes.Buffer, f std.Field, implPkg string) {
 // stays the runtime label so errors still read e.g. "fs.readFile"). implPkg is
 // the local identifier meth.Impl's package is imported under: "std" for a
 // module still living in std's flat root, or e.g. "json" for one implemented
-// in a std/encoding leaf package (see resolveImplPackage).
+// in a std/encoding leaf package (see resolveImplementationPackage).
 func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter, decoders *optionDecoders, implPkg string) error {
 	name := std.CamelCase(meth.Name)
 	if meth.BuzzName != "" {
@@ -367,12 +367,12 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 	if a.Variadic {
 		// Only TypeString variadic is used in practice.
-		fmt.Fprintf(w, "\t\t%s := ffi.VariadicStr(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.VariadicString(bzArgs, %d)\n", a.Name, idx)
 		return
 	}
 	switch a.Type {
 	case std.TypeString:
-		fmt.Fprintf(w, "\t\t%s := ffi.Str(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.String(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeInt:
 		def := "0"
 		if a.Optional && a.Default != nil {
@@ -395,17 +395,17 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 		}
 		fmt.Fprintf(w, "\t\t%s := ffi.Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeStringSlice:
-		fmt.Fprintf(w, "\t\t%s := ffi.StrSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StringSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeFloatSlice:
 		fmt.Fprintf(w, "\t\t%s := ffi.FloatSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeByteSlice:
 		fmt.Fprintf(w, "\t\t%s := ffi.ByteSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringSliceSlice:
-		fmt.Fprintf(w, "\t\t%s := ffi.StrSliceSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StringSliceSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringMapMap:
-		fmt.Fprintf(w, "\t\t%s := ffi.StrMapMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StringMapMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringMap:
-		fmt.Fprintf(w, "\t\t%s := ffi.StrMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := ffi.StringMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
 		fmt.Fprintf(w, "\t\t%s := ffi.AnyMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeFunc:
@@ -536,7 +536,7 @@ func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValue
 		if ret.Type != std.TypeString || ret.Object != "" || goType != reflect.TypeFor[*string]() {
 			return "", fmt.Errorf("a nullable return is a str? whose Impl returns *string, not %s returning %s", ret.Type.GoType(), goType)
 		}
-		return fmt.Sprintf("ffi.OptStrVal(%s)", src), nil
+		return fmt.Sprintf("ffi.OptStringVal(%s)", src), nil
 	}
 	if ret.Object != "" {
 		return objects.valueFunc(goType, src)
@@ -644,7 +644,7 @@ func checkObjectDecls(mods []std.Module) error {
 func buzzValConv(t std.TypeTag, src string) string {
 	switch t {
 	case std.TypeString:
-		return fmt.Sprintf("ffi.StrVal(%s)", src)
+		return fmt.Sprintf("ffi.StringVal(%s)", src)
 	case std.TypeInt, std.TypeIndex:
 		return fmt.Sprintf("ffi.IntVal(%s)", src)
 	case std.TypeBool:
@@ -652,17 +652,17 @@ func buzzValConv(t std.TypeTag, src string) string {
 	case std.TypeFloat:
 		return fmt.Sprintf("ffi.FloatVal(%s)", src)
 	case std.TypeStringSlice:
-		return fmt.Sprintf("ffi.StrSliceVal(%s)", src)
+		return fmt.Sprintf("ffi.StringSliceVal(%s)", src)
 	case std.TypeFloatSlice:
 		return fmt.Sprintf("ffi.FloatSliceVal(%s)", src)
 	case std.TypeByteSlice:
 		return fmt.Sprintf("ffi.ByteSliceVal(%s)", src)
 	case std.TypeStringSliceSlice:
-		return fmt.Sprintf("ffi.StrSliceSliceVal(%s)", src)
+		return fmt.Sprintf("ffi.StringSliceSliceVal(%s)", src)
 	case std.TypeStringMapMap:
-		return fmt.Sprintf("ffi.StrMapMapVal(%s)", src)
+		return fmt.Sprintf("ffi.StringMapMapVal(%s)", src)
 	case std.TypeStringMap:
-		return fmt.Sprintf("ffi.StrMapVal(%s)", src)
+		return fmt.Sprintf("ffi.StringMapVal(%s)", src)
 	case std.TypeAnyMap:
 		return fmt.Sprintf("ffi.AnyMapVal(%s)", src)
 	case std.TypeAny:
@@ -838,7 +838,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		fmt.Fprintf(w, "%sif !%s.IsZero() {\n", indent, value)
 		fmt.Fprintf(w, "%s\t%s = %s.Format(time.RFC3339Nano)\n", indent, formatted, value)
 		fmt.Fprintf(w, "%s}\n", indent)
-		return fmt.Sprintf("vm.StrValue(%s)", formatted), nil
+		return fmt.Sprintf("vm.StringValue(%s)", formatted), nil
 	}
 
 	if en, ok := buzzEnum(t); ok {
@@ -852,9 +852,9 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 		// string is emitted bare rather than as string(s), which is redundant and what
 		// the unconvert linter exists to catch.
 		if t != reflect.TypeOf("") {
-			return fmt.Sprintf("vm.StrValue(string(%s))", value), nil
+			return fmt.Sprintf("vm.StringValue(string(%s))", value), nil
 		}
-		return fmt.Sprintf("vm.StrValue(%s)", value), nil
+		return fmt.Sprintf("vm.StringValue(%s)", value), nil
 	case reflect.Bool:
 		return fmt.Sprintf("vm.BoolValue(%s)", value), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

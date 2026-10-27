@@ -15,14 +15,14 @@ import (
 // of the shorthand a user still has to set up by hand.
 const shorthandName = "mgs"
 
-// installShorthandCmd implements `magus self install-shorthand`: symlink mgs to
+// installShorthandCommand implements `magus self install-shorthand`: symlink mgs to
 // the running binary.
 //
 // A symlink beats a shell alias because it also resolves in scripts, Makefiles,
 // and anything else that is not an interactive shell. It survives an update:
 // selfupdate resolves symlinks before it swaps, so the real binary is replaced
 // underneath a link that keeps pointing at it.
-func installShorthandCmd(args []string) error {
+func installShorthandCommand(args []string) error {
 	fs := flag.NewFlagSet("self install-shorthand", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)

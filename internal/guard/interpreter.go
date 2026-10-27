@@ -256,7 +256,7 @@ func buzzProgramSpawnVerdict(deps Dependencies, held *heldAdvice, program string
 		if v.Deny == "" {
 			continue
 		}
-		return judgedFrom(v, line, "\nJudged as the command the Buzz program starts through proc: a command a script spawns gets the verdict it would get typed."), true
+		return judged(v, line, "\nJudged as the command the Buzz program starts through proc: a command a script spawns gets the verdict it would get typed."), true
 	}
 	return ShellVerdict{}, false
 }

@@ -45,7 +45,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 		return types.Check{Name: name, Status: types.CheckFail,
 			Message: "the registered merge driver names no executable: " + registered}
 	}
-	missing, err := vcs.MissingDiffDrivers(r.runCtx(), r.ws.Root())
+	missing, err := vcs.MissingDiffDrivers(r.runContext(), r.ws.Root())
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
@@ -84,11 +84,11 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 // none is registered or the backend registers none. It is the effective registration, so a
 // worktree override, which is the whole point of install-dogfood, is the one reported.
 func (r *runner) registeredMergeDriver() string {
-	res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions())
+	res, err := vcs.Resolve(r.runContext(), r.ws.Root(), "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return ""
 	}
-	cmd, err := res.VCS.MergeDriverCommand(r.runCtx(), r.ws.Root())
+	cmd, err := res.VCS.MergeDriverCommand(r.runContext(), r.ws.Root())
 	if err != nil {
 		return ""
 	}
@@ -98,7 +98,7 @@ func (r *runner) registeredMergeDriver() string {
 // installRemedy names the init command that installs the diff drivers; when no VCS
 // resolves it says so rather than guessing a backend.
 func (r *runner) installRemedy() string {
-	res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions())
+	res, err := vcs.Resolve(r.runContext(), r.ws.Root(), "", r.ws.VCSOptions())
 	if err != nil {
 		return "no VCS resolved for this workspace, so there is no backend to install them for: " + err.Error()
 	}
@@ -128,7 +128,7 @@ func driverExecutable(registered string) string {
 // or was bypassed with --no-verify, and this is where that becomes visible.
 func (r *runner) checkOwedRegeneration() types.Check {
 	const name = "owed-regeneration"
-	ctx := r.runCtx()
+	ctx := r.runContext()
 	owed, err := vcs.OwedRegenerations(ctx, r.ws.Root())
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}

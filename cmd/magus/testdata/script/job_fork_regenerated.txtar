@@ -20,8 +20,8 @@ exec git commit -q -m 'registry and its generated pages'
 ! stdout .
 stderr '^\[error\] 1 problem:$'
 stderr '^  1\. \[MGS3044\] write_paths: \.:man-generate regenerates cli/testdata/api\.lock from cli/\*\*/\*\.go'
-stderr '^permitted 1:$'
-stderr 'docs/manpage/\*\.md sits outside them \(permitted: the integrator regenerates it\)'
+stderr '^permitted 1 \(recorded deviations; -o json includes the details\)$'
+! stderr 'permitted: the integrator regenerates it'
 stderr '^note: 1 regenerated output\(s\) outside the write paths are permitted'
 exec magus ls jobs -o name
 ! stdout .

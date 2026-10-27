@@ -11,7 +11,7 @@ import (
 
 // aliasUser is a function the change touches in an importer file of aliasFixture.
 func aliasUser(file string) types.KnowledgeSymbol {
-	return couplingFn("/internal/use", "Use"+file[len("internal/use/"):len(file)-len(".go")], file, 5, 9, "func Use()", nil)
+	return couplingFunction("/internal/use", "Use"+file[len("internal/use/"):len(file)-len(".go")], file, 5, 9, "func Use()", nil)
 }
 
 func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
@@ -77,7 +77,7 @@ func TestAliasCheckSkipsKnownPackages(t *testing.T) {
 // A new package is the cheapest one to rename: one taking an existing package's clause is
 // named the moment it lands.
 func TestAliasCheckReportsANewPackageTakingAName(t *testing.T) {
-	fresh := couplingFn("/internal/newq", "Enqueue", "internal/newq/newq.go", 5, 9, "func Enqueue()", nil)
+	fresh := couplingFunction("/internal/newq", "Enqueue", "internal/newq/newq.go", 5, 9, "func Enqueue()", nil)
 	pkg := aliasPkg("/internal/newq", "types", []string{"internal/newq/newq.go"}, nil)
 	g := aliasGraph(pkg, fresh)
 

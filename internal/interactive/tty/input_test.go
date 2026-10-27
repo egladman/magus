@@ -439,8 +439,8 @@ func TestInputDecodesABareEscapeWithoutWaiting(t *testing.T) {
 	in := &Input{r: bufio.NewReader(r), in: r, now: time.Now}
 	done := make(chan Event, 1)
 	go func() {
-		ev, readErr := in.Read(t.Context())
-		if readErr == nil {
+		ev, readError := in.Read(t.Context())
+		if readError == nil {
 			done <- ev
 		}
 	}()

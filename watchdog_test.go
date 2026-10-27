@@ -177,8 +177,8 @@ func deadPID(t *testing.T) int {
 	return cmd.Process.Pid
 }
 
-// requestYieldFrom writes the request a later gate on the same tree would leave.
-func requestYieldFrom(t *testing.T, hold *projectHold, project string) {
+// requestYield writes the request a later gate on the same tree would leave.
+func requestYield(t *testing.T, hold *projectHold, project string) {
 	t.Helper()
 	later := newProjectLocker("", testWorkspaceRoot, asGate())
 	require.NoError(t, record.Write(hold.locker.yieldPath(project), later.selfRecord(t.Context(), time.Now())))
@@ -195,7 +195,7 @@ func TestSupersedeWatchCancelsAndKeepsTheLocks(t *testing.T) {
 
 	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
 	defer watch.close()
-	requestYieldFrom(t, hold, "app")
+	requestYield(t, hold, "app")
 
 	select {
 	case <-ctx.Done():
@@ -221,7 +221,7 @@ func TestSupersedeWatchIgnoresANonGate(t *testing.T) {
 
 	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
 	defer watch.close()
-	requestYieldFrom(t, hold, "app")
+	requestYield(t, hold, "app")
 	time.Sleep(100 * time.Millisecond)
 
 	require.NoError(t, ctx.Err(), "a non-gate holder is never aborted by a marker")
@@ -259,7 +259,7 @@ func TestSupersedeWatchDoesNotCancelAfterClose(t *testing.T) {
 
 	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
 	watch.close()
-	requestYieldFrom(t, hold, "app")
+	requestYield(t, hold, "app")
 	time.Sleep(80 * time.Millisecond)
 
 	require.NoError(t, watch.verdict(nil), "a stopped watch must never trip")

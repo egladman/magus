@@ -31,7 +31,7 @@ func TestGateWaiveTakesReasonOrRevoke(t *testing.T) {
 }
 
 func TestGateRequiresASubcommand(t *testing.T) {
-	err := gateCmd(t.Context(), t.TempDir(), nil)
+	err := gateCommand(t.Context(), t.TempDir(), nil)
 	require.Error(t, err)
 	assert.Equal(t, "magus gate: requires a subcommand (waive)", err.Error())
 }

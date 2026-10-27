@@ -6,12 +6,12 @@ import "github.com/egladman/magus/libs/gopherbuzz/vm"
 //
 // Every magus.* / extra.* host function receives []buzz.Value and must pull
 // typed Go values out of positional arguments. Done inline, that is the same
-// `if len(args) > i && args[i].IsStr() { x = args[i].AsString() }` dance repeated
+// `if len(args) > i && args[i].IsString() { x = args[i].AsString() }` dance repeated
 // across dozens of call sites. These accessors centralize that boundary — the
 // same move magus/gopherbuzz's FFI layer makes with buzzToReflectArg /
 // reflectRetToValue, where one typed conversion site replaces per-call
 // hand-marshaling (see gopherbuzz/doc/ffi.md). The Go→Buzz direction
-// already has its counterparts here (strSliceToBuzzList, execRecordToBuzz, …).
+// already has its counterparts here (stringSliceToBuzzList, execRecordToBuzz, …).
 //
 // All accessors are deliberately lenient: an out-of-range index or wrong-typed
 // argument yields the zero value, which is exactly how the bindings already
@@ -19,17 +19,17 @@ import "github.com/egladman/magus/libs/gopherbuzz/vm"
 // nothing). A binding that must *reject* bad input keeps validating explicitly
 // rather than reaching for these.
 
-// argStr reads positional argument i as a string, or "" if absent or not a str.
-func argStr(args []vm.Value, i int) string {
-	if i >= 0 && i < len(args) && args[i].IsStr() {
+// argString reads positional argument i as a string, or "" if absent or not a str.
+func argString(args []vm.Value, i int) string {
+	if i >= 0 && i < len(args) && args[i].IsString() {
 		return args[i].AsString()
 	}
 	return ""
 }
 
-// argStrMap reads positional argument i as a map[string]string, or nil if absent
+// argStringMap reads positional argument i as a map[string]string, or nil if absent
 // or not a map. Map values are taken via AsString (matching existing call sites).
-func argStrMap(args []vm.Value, i int) map[string]string {
+func argStringMap(args []vm.Value, i int) map[string]string {
 	if i < 0 || i >= len(args) || !args[i].IsMap() {
 		return nil
 	}
@@ -47,11 +47,11 @@ func argStrMap(args []vm.Value, i int) map[string]string {
 // to the spell handles they build; these two are the generic primitives shared
 // across every namespace.
 
-// strSliceToBuzzList wraps a []string as a Buzz list of strs.
-func strSliceToBuzzList(ss []string) vm.Value {
+// stringSliceToBuzzList wraps a []string as a Buzz list of strs.
+func stringSliceToBuzzList(ss []string) vm.Value {
 	items := make([]vm.Value, len(ss))
 	for i, s := range ss {
-		items[i] = vm.StrValue(s)
+		items[i] = vm.StringValue(s)
 	}
 	return vm.ListValue(items)
 }
@@ -61,12 +61,12 @@ func strSliceToBuzzList(ss []string) vm.Value {
 // yield nil.
 func buzzValToStringSlice(v vm.Value) []string {
 	switch {
-	case v.IsStr():
+	case v.IsString():
 		return []string{v.AsString()}
 	case v.IsList():
 		var out []string
 		for _, item := range v.ListItems() {
-			if item.IsStr() {
+			if item.IsString() {
 				out = append(out, item.AsString())
 			}
 		}

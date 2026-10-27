@@ -127,11 +127,11 @@ func TestPipeStageWithoutAPipe(t *testing.T) {
 
 // TestAdoptedRunGetsNoProcessStdio: the server's stdin is nobody's pipe.
 func TestAdoptedRunGetsNoProcessStdio(t *testing.T) {
-	if _, ok := pipe.StdioFrom(processStdioContext(context.Background())); !ok {
+	if _, ok := pipe.StdioFromContext(processStdioContext(context.Background())); !ok {
 		t.Fatalf("local run: no streams on its context")
 	}
 	adopted := context.WithValue(context.Background(), magusCtxKey{}, (*magus.Magus)(nil))
-	if _, ok := pipe.StdioFrom(processStdioContext(adopted)); ok {
+	if _, ok := pipe.StdioFromContext(processStdioContext(adopted)); ok {
 		t.Fatalf("adopted run: the process's streams are on its context")
 	}
 }

@@ -125,3 +125,6 @@ saying it, delete it here.
   run, `-- -run 'TestName'` does. magus flags go before `--`.
 - The daemon has no hot reload: after a rebuild, `./magus server stop` then
   `start`. Two builds at one commit share a version, so no skew shows.
+- `actionlint` and `trivy fs` are cantrips. Do not author them as spells, and
+  do not author a mise spell or a `code/edit` spell.
+  [Cantrip](docs/glossary/cantrip.md).

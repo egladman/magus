@@ -129,7 +129,7 @@ func (l *Limiter) acquireWatched(ctx context.Context, n int, label string) (*slo
 // Under an admitted step, a wait message names the work as "<step> > <label>", so label
 // need only say what the work is within the step that started it.
 func (l *Limiter) Admit(ctx context.Context, label string) (context.Context, func(), error) {
-	if parent := admissionFrom(ctx).hold; parent != nil {
+	if parent := admissionFromContext(ctx).hold; parent != nil {
 		label = fmt.Sprintf("%s > %s", parent.label, label)
 	}
 	hold, err := l.acquireWatched(ctx, 1, label)
@@ -331,5 +331,5 @@ func (w *slotWatch) refusalLocked() error {
 // A no-op outside an admitted step, which is what lets a wait site call it unconditionally
 // rather than branching on whether it holds a seat.
 func BlockedOn(ctx context.Context, what string) func() {
-	return admissionFrom(ctx).hold.block(what)
+	return admissionFromContext(ctx).hold.block(what)
 }

@@ -16,7 +16,7 @@ import (
 func TestRefuseUngradableClaims(t *testing.T) {
 	t.Parallel()
 
-	root := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n", "run.go": "package run\n", "notes/a#b.md": "# A\n"}).Root()
+	root := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n", "run.go": "package run\n", "notes/a#b.md": "# A\n"}).Root()
 	for _, tc := range []struct {
 		name  string
 		paths []string
@@ -104,8 +104,8 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n", "notes.txt": "hi\n", "docs/x.md": "# X\n"}
-	bRoot := testkit.NewRepo(t, files).Root()
-	aRepo := testkit.NewRepo(t, files)
+	bRoot := testkit.NewRepository(t, files).Root()
+	aRepo := testkit.NewRepository(t, files)
 	aRoot := aRepo.Root()
 	aRev := aRepo.Head()
 
@@ -144,7 +144,7 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 			require.NoError(t, err)
 
 			candidate := types.Job{ID: "B", WritePaths: tc.bWrite, Parent: tc.bParent, DependsOn: tc.bDependsOn}
-			refErr := unorderedFileShareProblems(context.Background(), s, rows, candidate).Err()
+			refErr := unorderedFileShareProblems(context.Background(), s, rows, candidate).Error()
 			if !tc.wantRefused {
 				require.NoError(t, refErr)
 				return
@@ -165,8 +165,8 @@ func TestValidateMergeRefusesAContendedForkBeforeTheWorkspaceChecks(t *testing.T
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := testkit.NewRepo(t, files).Root()
-	aRepo := testkit.NewRepo(t, files)
+	bRoot := testkit.NewRepository(t, files).Root()
+	aRepo := testkit.NewRepository(t, files)
 	s := NewStore(tempLocation(t, bRoot))
 	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRepo.Head(), CheckoutRoot: aRepo.Root()})
 	rows, err := s.List()
@@ -191,8 +191,8 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := testkit.NewRepo(t, files).Root()
-	aRepo := testkit.NewRepo(t, files)
+	bRoot := testkit.NewRepository(t, files).Root()
+	aRepo := testkit.NewRepository(t, files)
 	aRoot := aRepo.Root()
 	aRev := aRepo.Head()
 
@@ -202,7 +202,7 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 		rows, err := s.List()
 		require.NoError(t, err)
 
-		err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}}).Err()
+		err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}}).Error()
 		if refused {
 			require.ErrorIs(t, err, types.WritePathFileShared, state)
 			continue
@@ -217,8 +217,8 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo, "notes.md": "# N\n"}
-	bRoot := testkit.NewRepo(t, files).Root()
-	aRepo := testkit.NewRepo(t, files)
+	bRoot := testkit.NewRepository(t, files).Root()
+	aRepo := testkit.NewRepository(t, files)
 	aRev := aRepo.Head()
 	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
 
@@ -259,8 +259,8 @@ func TestSoftPathsHardenAtTheFirstWrite(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{".gitattributes": "*.go diff=golang\n", "run_test.go": claimGo}
-	bRoot := testkit.NewRepo(t, files).Root()
-	aRepo := testkit.NewRepo(t, files)
+	bRoot := testkit.NewRepository(t, files).Root()
+	aRepo := testkit.NewRepository(t, files)
 	aRev := aRepo.Head()
 
 	s := NewStore(tempLocation(t, bRoot))
@@ -301,8 +301,8 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := testkit.NewRepo(t, files).Root()
-	aRepo := testkit.NewRepo(t, files)
+	bRoot := testkit.NewRepository(t, files).Root()
+	aRepo := testkit.NewRepository(t, files)
 	aRoot := aRepo.Root()
 	aRev := aRepo.Head()
 
@@ -315,7 +315,7 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	replacement := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"A"}}
 	assert.Empty(t, unorderedFileShareProblems(context.Background(), s, rows, replacement))
 	replacement.DependsOn = nil
-	require.ErrorIs(t, unorderedFileShareProblems(context.Background(), s, rows, replacement).Err(), types.WritePathFileShared)
+	require.ErrorIs(t, unorderedFileShareProblems(context.Background(), s, rows, replacement).Error(), types.WritePathFileShared)
 }
 
 const claimGo = `package run
@@ -341,8 +341,8 @@ var claimFiles = map[string]string{".gitattributes": "*.go diff=golang\n", "run.
 func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 	t.Parallel()
 
-	bRoot := testkit.NewRepo(t, claimFiles).Root()
-	aRepo := testkit.NewRepo(t, claimFiles)
+	bRoot := testkit.NewRepository(t, claimFiles).Root()
+	aRepo := testkit.NewRepository(t, claimFiles)
 	aRev := aRepo.Head()
 	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
 
@@ -364,7 +364,7 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 			rows, err := s.List()
 			require.NoError(t, err)
 
-			err = unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{tc.write}}).Err()
+			err = unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{tc.write}}).Error()
 			if !tc.refused {
 				require.NoError(t, err)
 				return
@@ -379,7 +379,7 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
 		rows, err := s.List()
 		require.NoError(t, err)
-		err = unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go#C"}}).Err()
+		err = unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go#C"}}).Error()
 		require.ErrorIs(t, err, types.WritePathFileShared)
 	})
 }
@@ -390,7 +390,7 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 	t.Parallel()
 
-	root := testkit.NewRepo(t, claimFiles).Root()
+	root := testkit.NewRepository(t, claimFiles).Root()
 	for _, tc := range []struct {
 		name  string
 		paths []string
@@ -406,7 +406,7 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tempLocation(t, root))
-			err := ungradableClaimProblems(context.Background(), s, types.Job{ID: "wave/job", WritePaths: tc.paths}).Err()
+			err := ungradableClaimProblems(context.Background(), s, types.Job{ID: "wave/job", WritePaths: tc.paths}).Error()
 			if tc.want == "" {
 				require.NoError(t, err)
 				return
@@ -418,7 +418,7 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 
 	t.Run("a deny path is held to it", func(t *testing.T) {
 		t.Parallel()
-		err := ungradableClaimProblems(context.Background(), NewStore(tempLocation(t, root)), types.Job{ID: "wave/job", DenyPaths: []string{"run.go#ctx"}}).Err()
+		err := ungradableClaimProblems(context.Background(), NewStore(tempLocation(t, root)), types.Job{ID: "wave/job", DenyPaths: []string{"run.go#ctx"}}).Error()
 		require.ErrorIs(t, err, types.WritePathClaimUngradable)
 		assert.Contains(t, err.Error(), `deny path "run.go#ctx" names 2 declarations of run.go`)
 	})
@@ -429,8 +429,8 @@ func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
 func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 	t.Parallel()
 
-	bRoot := testkit.NewRepo(t, claimFiles).Root()
-	aRepo := testkit.NewRepo(t, claimFiles)
+	bRoot := testkit.NewRepository(t, claimFiles).Root()
+	aRepo := testkit.NewRepository(t, claimFiles)
 	aRev := aRepo.Head()
 	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
 
@@ -464,7 +464,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 			rows, err := s.List()
 			require.NoError(t, err)
 
-			err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}, Goals: tc.goals}).Err()
+			err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}, Goals: tc.goals}).Error()
 			require.ErrorIs(t, err, types.WritePathFileShared)
 			for _, want := range tc.want {
 				assert.Contains(t, err.Error(), want)
@@ -474,13 +474,13 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 
 	t.Run("a holder that has touched nothing, and a job with no symbol goals, get the generic advice", func(t *testing.T) {
 		t.Parallel()
-		quiet := testkit.NewRepo(t, claimFiles)
+		quiet := testkit.NewRepository(t, claimFiles)
 		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: quiet.Head(), CheckoutRoot: quiet.Root()})
 		rows, err := s.List()
 		require.NoError(t, err)
 
-		err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}}).Err()
+		err = unorderedFileShareProblems(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}}).Error()
 		require.ErrorIs(t, err, types.WritePathFileShared)
 		assert.Contains(t, err.Error(), "Claim `run.go#<declaration>` on both rows, add `--depends-on A` to B, or fold B into A")
 	})
@@ -489,7 +489,7 @@ func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
 func TestForkNotes(t *testing.T) {
 	t.Parallel()
 
-	root := testkit.NewRepo(t, claimFiles).Root()
+	root := testkit.NewRepository(t, claimFiles).Root()
 	s := NewStore(tempLocation(t, root))
 	ctx := context.Background()
 
@@ -571,7 +571,7 @@ func TestForkNotes(t *testing.T) {
 func TestForkNotesListEveryConfigDeclarationTheChangeTouches(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, configFiles)
+	repo := testkit.NewRepository(t, configFiles)
 	rev := repo.Head()
 	repo.WriteTree(map[string]string{"magusfile.buzz": strings.NewReplacer(
 		`"demo"`, `"demo2"`,
@@ -599,8 +599,8 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := testkit.NewRepo(t, files).Root()
-	aRepo := testkit.NewRepo(t, files)
+	bRoot := testkit.NewRepository(t, files).Root()
+	aRepo := testkit.NewRepository(t, files)
 	aRoot := aRepo.Root()
 	aRev := aRepo.Head()
 

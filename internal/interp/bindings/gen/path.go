@@ -18,32 +18,32 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("abs", vm.DirectValue("path.abs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.PathAbs(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("rel", vm.DirectValue("path.rel", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := ffi.Str(bzArgs, 0)
-		target := ffi.Str(bzArgs, 1)
+		base := ffi.String(bzArgs, 0)
+		target := ffi.String(bzArgs, 1)
 		ret0, err := std.PathRel(ctx, base, target)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("clean", vm.DirectValue("path.clean", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.PathClean(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("isAbs", vm.DirectValue("path.isAbs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.PathIsAbs(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -51,8 +51,8 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("matches", vm.DirectValue("path.matches", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		pattern := ffi.Str(bzArgs, 0)
-		path := ffi.Str(bzArgs, 1)
+		pattern := ffi.String(bzArgs, 0)
+		path := ffi.String(bzArgs, 1)
 		ret0, err := std.PathMatch(ctx, pattern, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -60,8 +60,8 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("matchesAny", vm.DirectValue("path.matchesAny", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		patterns := ffi.StrSlice(bzArgs, 0)
-		path := ffi.Str(bzArgs, 1)
+		patterns := ffi.StringSlice(bzArgs, 0)
+		path := ffi.String(bzArgs, 1)
 		ret0, err := std.PathMatchAny(ctx, patterns, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -69,12 +69,12 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("expandUser", vm.DirectValue("path.expandUser", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.Str(bzArgs, 0)
+		path := ffi.String(bzArgs, 0)
 		ret0, err := std.PathExpandUser(ctx, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

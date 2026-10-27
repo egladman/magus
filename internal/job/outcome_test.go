@@ -22,7 +22,7 @@ import (
 // exactly what the store recorded.
 func outcomeStore(t *testing.T, set *types.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error), dryRun bool) (*Store, string) {
 	t.Helper()
-	root := execRepo(t).Root()
+	root := execRepository(t).Root()
 	history := filepath.Join(t.TempDir(), "history.json")
 	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte(fmt.Sprintf("history_path: %s\n", strconv.Quote(history))), 0o644))
 	loc := tempLocation(t, root)

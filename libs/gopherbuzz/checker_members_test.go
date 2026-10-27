@@ -88,7 +88,7 @@ func TestCheck_NamespaceDotAcceptedOnResolverValue(t *testing.T) {
 	sess := NewSession(context.Background(), WithEmbedded())
 	t.Cleanup(func() { sess.Close() })
 	spell := vmpackage.NewMap()
-	spell.MapSet("name", vmpackage.StrValue("lint"))
+	spell.MapSet("name", vmpackage.StringValue("lint"))
 	sess.SetModuleResolver(func(path string) (vmpackage.Value, bool) {
 		return spell, path == "ghcr.io/team/spells/lint"
 	})
@@ -152,8 +152,8 @@ func TestCheck_ReturnNullFromNonOptionalRejected(t *testing.T) {
 	assert.Equal(t, TypeMismatch, errs[0].Code)
 	assert.Equal(t, "return value is null but this function declares a non-optional > int; declare > int? to allow null", errs[0].Msg)
 
-	checkErr(t, "fun f(b: bool) > str {\n    return if (b) \"x\" else null;\n}\n", "return value is null")
-	checkErr(t, "final g = fun () > int {\n    return null;\n};\n", "return value is null")
+	checkError(t, "fun f(b: bool) > str {\n    return if (b) \"x\" else null;\n}\n", "return value is null")
+	checkError(t, "final g = fun () > int {\n    return null;\n};\n", "return value is null")
 }
 
 func TestCheck_ReturnNullFromOptionalAccepted(t *testing.T) {

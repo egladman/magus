@@ -73,7 +73,7 @@ func (r *runner) checkBoundLease() types.Check {
 	if err != nil {
 		return unknownWiring("bound-lease", err)
 	}
-	return checkBoundLease(r.runCtx(), r.jobPlace(), wired...)
+	return checkBoundLease(r.runContext(), r.jobPlace(), wired...)
 }
 
 // checkBoundLease grades the lease this checkout is bound to: an unknown id, a

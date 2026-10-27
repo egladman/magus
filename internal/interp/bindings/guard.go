@@ -115,7 +115,7 @@ func registerProfile(ctx context.Context, obs buzz.DirectObserver, guardMap vm.V
 	registered := false
 	guardMap.MapSet("profile", directVal(obs, "magus.guard.profile", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		levels := strings.Join(types.GuardProfile("").Values(), ", ")
-		if len(args) != 1 || !args[0].IsStr() {
+		if len(args) != 1 || !args[0].IsString() {
 			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 				`magus\guard.profile: expected one level, %s`, levels)
 		}
@@ -161,7 +161,7 @@ func parseBuiltins(m vm.Value) (map[string]builtin.Setting, error) {
 }
 
 func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
-	if v.IsStr() {
+	if v.IsString() {
 		var s builtin.Setting
 		err := s.Decision.UnmarshalText([]byte(v.AsString()))
 		return s, err
@@ -174,7 +174,7 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 		field, _ := v.MapGet(k)
 		switch k {
 		case "decision":
-			if !field.IsStr() {
+			if !field.IsString() {
 				return s, errors.New(`"decision" must be "off", "advise" or "deny"`)
 			}
 			if err := s.Decision.UnmarshalText([]byte(field.AsString())); err != nil {
@@ -187,7 +187,7 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 				return s, errors.New(`"markers" must be a list of one or more strings`)
 			}
 			for i, item := range field.ListItems() {
-				if !item.IsStr() {
+				if !item.IsString() {
 					return s, fmt.Errorf(`"markers"[%d] must be a string`, i)
 				}
 				s.Markers = append(s.Markers, item.AsString())
@@ -219,27 +219,27 @@ func parseShellRule(m vm.Value, apiName string) (workspace.ShellRule, error) {
 		v, _ := m.MapGet(k)
 		switch k {
 		case "name":
-			if !v.IsStr() || v.AsString() == "" {
+			if !v.IsString() || v.AsString() == "" {
 				return rule, fmt.Errorf(`magus\guard.%s: "name" must be a non-empty string`, apiName)
 			}
 			rule.Name = v.AsString()
 		case "decision":
-			if !v.IsStr() {
+			if !v.IsString() {
 				return rule, fmt.Errorf(`magus\guard.%s: "decision" must be "deny" or "advise"`, apiName)
 			}
 			rule.Decision = v.AsString()
 		case "program":
-			if !v.IsStr() || v.AsString() == "" {
+			if !v.IsString() || v.AsString() == "" {
 				return rule, fmt.Errorf(`magus\guard.%s: "program" must be a non-empty string`, apiName)
 			}
 			rule.Program = v.AsString()
 		case "reason":
-			if !v.IsStr() || v.AsString() == "" {
+			if !v.IsString() || v.AsString() == "" {
 				return rule, fmt.Errorf(`magus\guard.%s: "reason" must be a non-empty string`, apiName)
 			}
 			rule.Reason = v.AsString()
 		case "dialect":
-			if !v.IsStr() || strings.TrimSpace(v.AsString()) == "" {
+			if !v.IsString() || strings.TrimSpace(v.AsString()) == "" {
 				return rule, fmt.Errorf(`magus\guard.%s: "dialect" must be a non-empty string`, apiName)
 			}
 			if _, err := parseShellDialect(v.AsString()); err != nil {
@@ -251,7 +251,7 @@ func parseShellRule(m vm.Value, apiName string) (workspace.ShellRule, error) {
 				return rule, fmt.Errorf(`magus\guard.%s: "args" must be a list of strings`, apiName)
 			}
 			for i, item := range v.ListItems() {
-				if !item.IsStr() {
+				if !item.IsString() {
 					return rule, fmt.Errorf(`magus\guard.%s: "args"[%d] must be a string`, apiName, i)
 				}
 				rule.Args = append(rule.Args, item.AsString())

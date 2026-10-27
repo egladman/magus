@@ -40,7 +40,7 @@ func configsNamingOwnBinary(ctx context.Context, root string, wired ...string) [
 	return out
 }
 
-// hookBinaryFrom is the magus the hook glue resolves for a call made in dir: the ./magus
+// hookBinary is the magus the hook glue resolves for a call made in dir: the ./magus
 // beside the nearest magus.yaml above it (the nearest magusfile.buzz only where no magus.yaml
 // exists), else the first magus on PATH, and "" when neither runs.
 //
@@ -48,7 +48,7 @@ func configsNamingOwnBinary(ctx context.Context, root string, wired ...string) [
 // glue is Buzz run by the host and doctor cannot call it. The root is not the project
 // directory: console/, docs/ and libs/* each carry a magusfile.buzz and no binary, and the
 // binary a call from one of them runs is the question this exists to answer.
-func hookBinaryFrom(dir string) string {
+func hookBinary(dir string) string {
 	if root := nearestDirWith(dir, "magus.yaml"); root != "" {
 		return runnableOrPath(root)
 	}
@@ -98,7 +98,7 @@ func (r *runner) checkGuardBinaryEverywhere(projects []*types.Project) types.Che
 	if got.Status == types.CheckFail {
 		return got
 	}
-	if skew, ok := projectBinarySkew(r.runCtx(), root, projects, r.ownVersion()); ok {
+	if skew, ok := projectBinarySkew(r.runContext(), root, projects, r.ownVersion()); ok {
 		return skew
 	}
 	return got
@@ -165,7 +165,7 @@ func projectBinarySkew(ctx context.Context, root string, projects []*types.Proje
 		if p == nil || p.Dir == "" {
 			continue
 		}
-		bin := hookBinaryFrom(p.Dir)
+		bin := hookBinary(p.Dir)
 		if bin == "" {
 			return types.Check{
 				Name:    guardBinaryCheck,

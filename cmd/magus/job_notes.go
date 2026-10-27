@@ -33,7 +33,7 @@ type rowNotes struct {
 func refuseFork(v types.JobValidation) error {
 	var list strings.Builder
 	job.RenderValidation(&list, v, false)
-	return listedProblems{list: list.String(), err: v.Err()}
+	return listedProblems{list: list.String(), err: v.Error()}
 }
 
 // judgedMerge is row's merge as validation reads it. A job that works in its own checkout

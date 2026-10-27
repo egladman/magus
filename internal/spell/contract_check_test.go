@@ -105,7 +105,13 @@ func TestCheckContractHarnessFunctions(t *testing.T) {
 			name: "a harness function takes the arguments the harness contract names",
 			src: `export fun mgs_getName() > str { return "x"; }
 export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{path = ".x/hooks.json"}; }
-export fun mgs_renderAgents(shipped: [ShippedAgent]) > [AgentFile] { return []; }`,
+export fun mgs_renderAgents(shipped: [ShippedAgent]) > [AgentFile] { return []; }
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }`,
+		},
+		{
+			name: "a harness omits the prompts function",
+			src:  `export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }`,
+			want: "mgs_renderPrompts is required on a harness spell",
 		},
 		{
 			name: "a harness function with the wrong argument",

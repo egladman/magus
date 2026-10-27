@@ -54,9 +54,9 @@ func writeDoctorHarness(t *testing.T, w *testkit.Workspace) {
 	}
 }
 
-// harnessProbeCtx gives the harness probe VerifyHarness runs the same headroom
+// harnessProbeContext gives the harness probe VerifyHarness runs the same headroom
 // testProbeBudget gives the guard probe, for the same reason.
-func harnessProbeCtx() context.Context {
+func harnessProbeContext() context.Context {
 	return agent.ContextWithProbeTimeout(context.Background(), testProbeBudget)
 }
 
@@ -76,7 +76,7 @@ func TestCheckpointWiringAdvisesAGuardedHostThatRecordsNothing(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	writeCheckpointHarness(t, w, guardedHarnessConfig())
 
-	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
+	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
@@ -87,7 +87,7 @@ func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
 	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
 	writeCheckpointHarness(t, w, body)
 
-	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
+	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "1 of 1")
@@ -100,7 +100,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
 	writeCheckpointHarness(t, w, body)
 
-	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
+	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckOK, got.Status)
 }
@@ -108,7 +108,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 // Nothing wired at all is guard-wiring's finding. Repeating it here would be a second
 // advisory about one absence, which is how a report trains people to skim it.
 func TestCheckpointWiringStaysQuietWithNoHostAtAll(t *testing.T) {
-	got := checkCheckpointWiring(harnessProbeCtx(), t.TempDir())
+	got := checkCheckpointWiring(harnessProbeContext(), t.TempDir())
 
 	assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceUnknown}, withoutWording(got))
 	assert.Contains(t, got.Message, "skipped")
@@ -119,7 +119,7 @@ func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T
 	writeDoctorHarness(t, w)
 	w.Write("host/hooks.json", guardedHarnessConfig())
 
-	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
+	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
@@ -135,7 +135,7 @@ func TestCheckpointWiringFollowsNamedGuardScripts(t *testing.T) {
 	// "session checkpoint" side by side.
 	w.Write("docs/agents/cursor-hook.buzz", `proc\exec(bin, args: ["session", "checkpoint", "--agent-name", agent], opts: {"quiet": true});`+"\n")
 
-	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
+	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	assert.Contains(t, got.Message, "1 of 1")
@@ -146,7 +146,7 @@ func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
 	writeDoctorHarness(t, w)
 	w.Write("host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./scripts/lint.sh"}]}]}}`)
 
-	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
+	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
 	require.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "skipped")

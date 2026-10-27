@@ -68,10 +68,10 @@ func heapValue[T heapVal](tag valueTag, ptr T) Value {
 	return Value{t: tag, obj: ptr}
 }
 
-// internedStrValue wraps an interned *strObj. This build carries the pointer in
+// internedStringValue wraps an interned *strObj. This build carries the pointer in
 // the Value, so equal strings already share a representation; only the NaN-box
-// build needs the index-caching override. See StrValue.
-func internedStrValue(o *strObj) Value { return heapValue(tagStr, o) }
+// build needs the index-caching override. See StringValue.
+func internedStringValue(o *strObj) Value { return heapValue(tagStr, o) }
 
 // sameObj reports payload identity (reference equality for lists/maps/objects).
 // Interface comparison compares (type, data); since the tags already matched at
@@ -91,7 +91,7 @@ func objAs[T heapVal](v Value, kind string) T {
 	return o
 }
 
-func (v Value) asStr() *strObj             { return objAs[*strObj](v, "str") }
+func (v Value) asString() *strObj          { return objAs[*strObj](v, "str") }
 func (v Value) asUD() *udObj               { return objAs[*udObj](v, "ud") }
 func (v Value) asList() *listObj           { return objAs[*listObj](v, "list") }
 func (v Value) asMap() *mapObj             { return objAs[*mapObj](v, "map") }
@@ -114,7 +114,7 @@ func (v Value) asObjDecl() *ast.ObjectDecl { return objAs[*objDeclPayload](v, "o
 // VM-context accessors — zero-cost wrappers in M2 (vm is ignored; the type
 // assertion is identical to the value-local form). In M3 (buzz_nanbox) they
 // resolve the per-VM heap-table index instead.
-func (vm *VM) asStr(v Value) *strObj             { return v.asStr() }
+func (vm *VM) asString(v Value) *strObj          { return v.asString() }
 func (vm *VM) asList(v Value) *listObj           { return v.asList() }
 func (vm *VM) asMap(v Value) *mapObj             { return v.asMap() }
 func (vm *VM) asFun(v Value) *funObj             { return v.asFun() }

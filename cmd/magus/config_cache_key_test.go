@@ -29,7 +29,7 @@ func TestCacheKeyGenerateTemplateEmitsOnlyTheSeed(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		_ = noticesFrom(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
+		_ = notices(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
 	})
 	require.NoError(t, err)
 
@@ -47,7 +47,7 @@ func TestCacheKeyGenerateTemplateKeepsPublicHalfOnStderr(t *testing.T) {
 	withOutputFlags(t, "template={{.keyid}}", "")
 
 	var err error
-	errOut := noticesFrom(t, func() {
+	errOut := notices(t, func() {
 		_ = captureStdout(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
 	})
 	require.NoError(t, err)

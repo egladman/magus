@@ -10,6 +10,7 @@
     "beforeShellExecution": [
       {
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "failClosed": true,
         "timeout": 10
       }
     ],
@@ -47,6 +48,7 @@
     "preToolUse": [
       {
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "failClosed": true,
         "matcher": "*",
         "timeout": 10
       }

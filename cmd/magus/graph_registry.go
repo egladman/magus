@@ -67,7 +67,7 @@ const (
 // and no pull is ever the thing that must succeed.
 const graphRegistryTimeout = 2 * time.Minute
 
-// errNoGraphDestination is what a push or pull says when nobody named a destination.
+// errorNoGraphDestination is what a push or pull says when nobody named a destination.
 //
 // NOTHING here derives a registry from the origin remote. A published artifact is a
 // decision about where this workspace's knowledge goes, and deriving it would mean a
@@ -75,7 +75,7 @@ const graphRegistryTimeout = 2 * time.Minute
 // reading whatever happens to sit at a host nobody chose. The magusfile is where a
 // registry is declared, beside the ones the images already use, so adding one stays a
 // one-line change in one file.
-func errNoGraphDestination(verb string) error {
+func errorNoGraphDestination(verb string) error {
 	return fmt.Errorf("graph %s: no destination, pass --ref <registry>/<repository>:<tag> "+
 		"or declare it in the magusfile beside the image registries and run the target that supplies it", verb)
 }
@@ -100,7 +100,7 @@ func readToken() (string, error) {
 func graphPush(ctx context.Context, root string, args []string) error {
 	var ref, user string
 	var refresh, table bool
-	_, err := cmdParse("graph push", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("graph push", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&ref, "ref", "", "the artifact to push to, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
 		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
 		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
@@ -144,7 +144,7 @@ func graphPush(ctx context.Context, root string, args []string) error {
 // pushGraph publishes the knowledge graph to ref, rebuilding it first under refresh.
 func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error {
 	if ref == "" {
-		return errNoGraphDestination("push")
+		return errorNoGraphDestination("push")
 	}
 	// The tag --ref carries is the tag written. Recomputing a tag set here would mean two
 	// implementations of tag policy, and the caller's would lose; the magusfile already
@@ -265,7 +265,7 @@ func seedFromPublishedGraph(ctx context.Context, ws types.Inspector) {
 func graphPull(ctx context.Context, root string, args []string) error {
 	var ref, out string
 	var table bool
-	_, err := cmdParse("graph pull", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("graph pull", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
 		fs.StringVar(&out, "out", "", "write the graph here instead of stdout")
 		fs.BoolVar(&table, "table", false, "fetch the embedding table the binary pins into the cache instead of the graph")
@@ -293,7 +293,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		return tablePull(ctx, ref)
 	}
 	if ref == "" {
-		return errNoGraphDestination("pull")
+		return errorNoGraphDestination("pull")
 	}
 	src, err := graphReference(ref, graphFloatingTag)
 	if err != nil {

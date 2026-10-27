@@ -50,7 +50,7 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 
 	seed, filesBySeed, undeclaredBySeed := attribute(newProjectIndex(ctx, w), changed)
 
-	g, err := dependency.Build(w, graphObserverOpts(ctx)...)
+	g, err := dependency.Build(w, graphObserverOptions(ctx)...)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func AffectedFromPaths(ctx context.Context, w *types.Workspace, paths []string) 
 	}
 	seed, filesBySeed, undeclaredBySeed := attribute(newProjectIndex(ctx, w), rel)
 
-	g, err := dependency.Build(w, graphObserverOpts(ctx)...)
+	g, err := dependency.Build(w, graphObserverOptions(ctx)...)
 	if err != nil {
 		return nil, err
 	}
@@ -352,8 +352,8 @@ func dirContains(projectPath, file string) bool {
 	return projectPath == "." || file == projectPath || strings.HasPrefix(file, projectPath+"/")
 }
 
-// graphObserverOpts extracts the request-scoped graph observer from ctx, if set.
-func graphObserverOpts(ctx context.Context) []types.GraphOption {
+// graphObserverOptions extracts the request-scoped graph observer from ctx, if set.
+func graphObserverOptions(ctx context.Context) []types.GraphOption {
 	if o := types.GraphObserverFromContext(ctx); o != nil {
 		return []types.GraphOption{types.WithGraphObserver(o)}
 	}

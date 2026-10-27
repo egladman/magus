@@ -37,8 +37,8 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Conformance: o.Conformance})
 	m := precedentMiner{g: g, x: x, conformance: o.Conformance, fileNS: g.fileNamespaces()}
 	pk := m.packages()
-	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errSentinelName(), m.testPackageName(pk),
-		m.paramNameByType(), m.paramOrder(), m.ctxFirst(), m.errorLast())
+	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errorSentinelName(), m.testPackageName(pk),
+		m.paramNameByType(), m.paramOrder(), m.contextFirst(), m.errorLast())
 	for i := range rows {
 		r := &rows[i]
 		if r.Cohort > 0 {
@@ -237,10 +237,10 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 	return out
 }
 
-// errSentinelName counts the values a language's reader types as error, by whether the
+// errorSentinelName counts the values a language's reader types as error, by whether the
 // name's first word starts with err. A value declared with no initializer is state a function
 // assigns, a memo slot beside a sync.Once, not a sentinel, and is not counted.
-func (m precedentMiner) errSentinelName() []types.Precedent {
+func (m precedentMiner) errorSentinelName() []types.Precedent {
 	byLang := map[string]*types.Precedent{}
 	lines := map[string]fileRefLines{}
 	for _, id := range slices.Sorted(maps.Keys(m.x.byID)) {

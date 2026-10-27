@@ -20,18 +20,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// agentHarnessCmd is the generic, descriptor-driven harness command. It does
+// agentHarnessCommand is the generic, descriptor-driven harness command. It does
 // not know a provider name, host config path, matcher, or response format.
-func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) error {
+func agentHarnessCommand(ctx context.Context, rootOverride string, args []string) error {
 	if len(args) == 0 {
 		agentHarnessUsage(os.Stderr)
 		return exit.Usagef("magus agent harness: a subcommand is required")
 	}
 	switch args[0] {
 	case "install":
-		return agentHarnessInstallCmd(ctx, rootOverride, args[1:])
+		return agentHarnessInstallCommand(ctx, rootOverride, args[1:])
 	case "verify":
-		return agentHarnessVerifyCmd(ctx, rootOverride, args[1:])
+		return agentHarnessVerifyCommand(ctx, rootOverride, args[1:])
 	case "-h", "--help", "help":
 		agentHarnessUsage(os.Stdout)
 		return nil
@@ -40,7 +40,7 @@ func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) er
 	}
 }
 
-func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []string) error {
+func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args []string) error {
 	fset := flag.NewFlagSet("agent harness install", flag.ContinueOnError)
 	id := fset.String("id", "", "harness descriptor ID; omit to install every magusfile-wired provider")
 	bindDisplayFlags(fset)
@@ -155,7 +155,7 @@ func checkoutLease(ctx context.Context, root string) (string, types.LeaseSource,
 // need, and the one command a person runs to merge it. It reads and prints; the host files
 // are the person's, so nothing here writes one.
 func describeHarness(ctx context.Context, rootOverride string, args []string) error {
-	pos, err := cmdParse("describe harness", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe harness", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe harness [<id>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -272,7 +272,7 @@ func writeHarnessPlan(w io.Writer, plan types.HarnessPlan) error {
 	return err
 }
 
-func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []string) error {
+func agentHarnessVerifyCommand(ctx context.Context, rootOverride string, args []string) error {
 	fset := flag.NewFlagSet("agent harness verify", flag.ContinueOnError)
 	id := fset.String("id", "", "harness descriptor ID; omit to verify every magusfile-wired provider")
 	bindDisplayFlags(fset)

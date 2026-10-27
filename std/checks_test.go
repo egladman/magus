@@ -17,7 +17,7 @@ import (
 // project dir on ctx, not the process cwd.
 func TestCheckReadWriteResolveAgainstTheCwd(t *testing.T) {
 	ws := filesystem.ResolveRulePath(t.TempDir())
-	ctx := WithCwd(sandbox.WithPolicy(context.Background(), &sandbox.Policy{
+	ctx := WithCurrentWorkingDirectory(sandbox.WithPolicy(context.Background(), &sandbox.Policy{
 		FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: ws, Read: true}}},
 	}), ws)
 

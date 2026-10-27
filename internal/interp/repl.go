@@ -628,17 +628,17 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		// would hide the editor from the rest of the loop.
 		src := pending.String()
 		var vals []engine.Value
-		var evalErr error
+		var evalError error
 		// Cooked mode for the call: a Ctrl-C during a long magus\run reaches it as
 		// a real SIGINT only while ISIG is on, which raw mode turns off.
 		input.suspendRaw(func() {
-			vals, evalErr = currentDriver.EvalLine(src)
+			vals, evalError = currentDriver.EvalLine(src)
 		})
-		if evalErr != nil {
-			if currentDriver.IsIncomplete(evalErr) {
+		if evalError != nil {
+			if currentDriver.IsIncomplete(evalError) {
 				continue
 			}
-			fmt.Fprintf(stderr, "error: %v\n", evalErr)
+			fmt.Fprintf(stderr, "error: %v\n", evalError)
 			pending.Reset()
 		} else {
 			for _, v := range vals {

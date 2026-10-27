@@ -33,15 +33,15 @@ func TestParityDiffStatCountsEachKindOfChange(t *testing.T) {
 		})
 		base := initialCommitID(t, b, dir)
 
-		writeRepoFile(t, dir, "mod.txt", "a\nB\nc\nd\n")
+		writeRepositoryFile(t, dir, "mod.txt", "a\nB\nc\nd\n")
 		removePath(t, b, dir, "del.txt")
 		vcsMove(t, b, dir, "old.txt", "new.txt")
-		writeRepoFile(t, dir, "bin.dat", "\x00\x01\x02\x03binary2")
-		writeRepoFile(t, dir, "add.txt", "n1\nn2\n")
+		writeRepositoryFile(t, dir, "bin.dat", "\x00\x01\x02\x03binary2")
+		writeRepositoryFile(t, dir, "add.txt", "n1\nn2\n")
 		addPath(t, b, dir, "add.txt")
-		writeRepoFile(t, dir, "pkg/inner.txt", "i\n")
+		writeRepositoryFile(t, dir, "pkg/inner.txt", "i\n")
 		addPath(t, b, dir, "pkg/inner.txt")
-		writeRepoFile(t, dir, "sp ace.go", "one\ntwo")
+		writeRepositoryFile(t, dir, "sp ace.go", "one\ntwo")
 		commitAll(t, b, dir, "head")
 
 		want := []types.FileStat{
@@ -110,7 +110,7 @@ func TestParityDiffStatLeavesTheWorkingCopyUnread(t *testing.T) {
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "a\n"})
 		base := initialCommitID(t, b, dir)
-		writeRepoFile(t, dir, "a.txt", "a\nmore\nlines\n")
+		writeRepositoryFile(t, dir, "a.txt", "a\nmore\nlines\n")
 
 		got, err := diffStater(t, b).DiffStat(t.Context(), dir, base)
 		require.NoErrorf(t, err, "%s DiffStat", b.name)

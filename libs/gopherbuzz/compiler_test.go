@@ -314,8 +314,8 @@ func evalString(t *testing.T, src string) string {
 	return runProg(t, src, CompileOptions{}).String()
 }
 
-// evalErr runs src expecting a runtime error, and returns it.
-func evalErr(t *testing.T, src string) error {
+// evalError runs src expecting a runtime error, and returns it.
+func evalError(t *testing.T, src string) error {
 	t.Helper()
 	prog, err := ParseEmbedded(src)
 	require.NoError(t, err, "parse")
@@ -399,7 +399,7 @@ func TestStringMethodSemantics(t *testing.T) {
 	}
 	for _, c := range errCases {
 		t.Run(c.name, func(t *testing.T) {
-			require.ErrorContains(t, evalErr(t, c.src), c.wantSub)
+			require.ErrorContains(t, evalError(t, c.src), c.wantSub)
 		})
 	}
 }
@@ -454,7 +454,7 @@ func TestListMethodSemantics(t *testing.T) {
 	}
 	for _, c := range errCases {
 		t.Run(c.name, func(t *testing.T) {
-			require.ErrorContains(t, evalErr(t, c.src), c.wantSub)
+			require.ErrorContains(t, evalError(t, c.src), c.wantSub)
 		})
 	}
 }
@@ -495,7 +495,7 @@ func TestMapMethodSemantics(t *testing.T) {
 	}
 	for _, c := range errCases {
 		t.Run(c.name, func(t *testing.T) {
-			require.ErrorContains(t, evalErr(t, c.src), c.wantSub)
+			require.ErrorContains(t, evalError(t, c.src), c.wantSub)
 		})
 	}
 }
@@ -577,7 +577,7 @@ func TestArithmeticSemantics(t *testing.T) {
 	}
 	for _, c := range errCases {
 		t.Run(c.name, func(t *testing.T) {
-			require.ErrorContains(t, evalErr(t, c.src), c.wantSub)
+			require.ErrorContains(t, evalError(t, c.src), c.wantSub)
 		})
 	}
 }
@@ -654,7 +654,7 @@ func TestIndexingSemantics(t *testing.T) {
 	}
 	for _, c := range errCases {
 		t.Run(c.name, func(t *testing.T) {
-			require.ErrorContains(t, evalErr(t, c.src), c.wantSub)
+			require.ErrorContains(t, evalError(t, c.src), c.wantSub)
 		})
 	}
 }

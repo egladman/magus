@@ -90,13 +90,13 @@ file: gone.txt (record type "C", state "u", hash 0ce54e727589f3f743f5063e0d17c60
 // leave it green. A test that cannot fail for the thing it names is worse than no test,
 // because it reads as coverage.
 
-// slInitRepo initializes a Sapling repository in dir with one commit holding files. It is
-// the sl counterpart of gitInitRepo, and vcs_test.go's cross-backend tables call it too.
+// slInitRepository initializes a Sapling repository in dir with one commit holding files. It is
+// the sl counterpart of gitInitRepository, and vcs_test.go's cross-backend tables call it too.
 //
 // ui.username is written into the REPO's config rather than the user's: sl refuses to
 // commit without one, and a test must neither depend on nor touch the developer's global
 // Sapling config.
-func slInitRepo(t *testing.T, dir string, files map[string]string) {
+func slInitRepository(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	vcsTestRun(t, dir, "sl", "init", ".")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".sl", "config"),
@@ -110,14 +110,14 @@ func slInitRepo(t *testing.T, dir string, files map[string]string) {
 	vcsTestRun(t, dir, "sl", "commit", "-m", "init")
 }
 
-// slRepo is slInitRepo in a fresh temp dir, skipping the test when sl is absent.
-func slRepo(t *testing.T, files map[string]string) string {
+// slRepository is slInitRepository in a fresh temp dir, skipping the test when sl is absent.
+func slRepository(t *testing.T, files map[string]string) string {
 	t.Helper()
 	if _, err := exec.LookPath("sl"); err != nil {
 		t.Skip("sl not available")
 	}
 	dir := t.TempDir()
-	slInitRepo(t, dir, files)
+	slInitRepository(t, dir, files)
 	return dir
 }
 
@@ -126,7 +126,7 @@ func slRepo(t *testing.T, files map[string]string) string {
 // does would surface a hard error on a routine call, and Describe would fail every release
 // banner. Both must report "nothing" without consulting the CLI at all.
 func TestSaplingReportsNoTags(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.txt": "one\n"})
+	dir := slRepository(t, map[string]string{"a.txt": "one\n"})
 
 	tags, err := saplingVCS{}.Tags(t.Context(), dir, "")
 	require.NoError(t, err, "Tags must answer, not fail, on a backend without the concept")
@@ -159,7 +159,7 @@ func TestSaplingDirtyFilesIgnoresTheMergeBanner(t *testing.T) {
 // one modify/delete (gone.txt), returning the repo root.
 func slMergeConflict(t *testing.T) string {
 	t.Helper()
-	dir := slRepo(t, map[string]string{"f.txt": "base\n", "gone.txt": "gone\n"})
+	dir := slRepository(t, map[string]string{"f.txt": "base\n", "gone.txt": "gone\n"})
 	base := slRev(t, dir, ".")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("side-a\n"), 0o644))
@@ -230,7 +230,7 @@ func TestSaplingConflictRoundTrip(t *testing.T) {
 // implementation uses, against hg's different phrasing) reports every path as ignored, and
 // resolution would delete generated files that are still tracked.
 func TestSaplingIgnoredPathsDistinguishesNotIgnored(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.txt": "one\n", ".gitignore": "*.log\n"})
+	dir := slRepository(t, map[string]string{"a.txt": "one\n", ".gitignore": "*.log\n"})
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "build.log"), []byte("x\n"), 0o644))
 
 	got, err := saplingVCS{}.IgnoredPaths(t.Context(), dir, []string{"build.log", "a.txt"})
@@ -245,7 +245,7 @@ func TestSaplingIgnoredPathsDistinguishesNotIgnored(t *testing.T) {
 // forever. Nothing else in the driver depends on revset ordering, so nothing else would
 // catch it.
 func TestSaplingChangesByCommitIsNewestFirst(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.txt": "1\n"})
+	dir := slRepository(t, map[string]string{"a.txt": "1\n"})
 	for _, body := range []string{"2\n", "3\n", "4\n"} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte(body), 0o644))
 		vcsTestRun(t, dir, "sl", "commit", "-m", "edit "+body)
@@ -281,7 +281,7 @@ func TestSaplingChangesByCommitIsNewestFirst(t *testing.T) {
 // archive re-roots them, so a workspace nested below the repository root would export into
 // a subdirectory of dstDir and read as an empty tree.
 func TestSaplingExportRevision(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
+	dir := slRepository(t, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
 	dst := t.TempDir()
 
 	require.NoError(t, saplingVCS{}.ExportRevision(t.Context(), dir, ".", dst), "ExportRevision")
@@ -305,7 +305,7 @@ func TestSaplingExportRevision(t *testing.T) {
 // TrackedFiles must separate a tracked path from one that merely exists, which is the
 // distinction a caller uses to tell a committed artifact from a build product.
 func TestSaplingTrackedFiles(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.txt": "one\n"})
+	dir := slRepository(t, map[string]string{"a.txt": "one\n"})
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("x\n"), 0o644))
 
 	got, err := saplingVCS{}.TrackedFiles(t.Context(), dir, []string{"a.txt", "untracked.txt"})
@@ -318,7 +318,7 @@ func TestSaplingTrackedFiles(t *testing.T) {
 // carved hand file keeps the built-in merge, the output goes to magus, and a source file
 // never reaches magus.
 func TestSaplingMergeToolRoutesOnlyWhatOutputsClaim(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.txt": "one\n", "gen/x.go": "x\n", "gen/runtime.go": "hand\n"})
+	dir := slRepository(t, map[string]string{"a.txt": "one\n", "gen/x.go": "x\n", "gen/runtime.go": "hand\n"})
 	changed, err := saplingVCS{}.EnsureMergeDriver(t.Context(), dir,
 		types.MergeDriverGlobs{Outputs: []string{"gen/*.go"}, Carved: []string{"gen/runtime.go"}})
 	require.NoError(t, err)
@@ -410,11 +410,11 @@ func TestSaplingStartMergeRefusesWhenOneIsUnderway(t *testing.T) {
 }
 
 func TestSaplingHistoryFollowsPathsAndFirstParent(t *testing.T) {
-	assertHistoryScenario(t, saplingVCS{}, hgHistoryRepo(t, "sl"))
+	assertHistoryScenario(t, saplingVCS{}, hgHistoryRepository(t, "sl"))
 }
 
 func TestSlCheckoutIDIsTheParentAndStatusLeavesIt(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.buzz": "one\n"})
+	dir := slRepository(t, map[string]string{"a.buzz": "one\n"})
 	node, err := vcsOutput(t.Context(), dir, "sl", "log", "-r", ".", "-T", "{node}")
 	require.NoError(t, err)
 	id, ok := saplingVCS{}.CheckoutID(dir)
@@ -434,7 +434,7 @@ func TestSlCheckoutIDIsTheParentAndStatusLeavesIt(t *testing.T) {
 }
 
 func TestSlObjectBatchReadsCommittedFiles(t *testing.T) {
-	dir := slRepo(t, map[string]string{"a.buzz": "one\n", "dir/b.buzz": "two\n"})
+	dir := slRepository(t, map[string]string{"a.buzz": "one\n", "dir/b.buzz": "two\n"})
 	batch, err := saplingVCS{}.OpenObjectBatch(t.Context(), dir, "")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, batch.Close()) }()

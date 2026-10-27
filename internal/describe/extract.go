@@ -138,7 +138,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// collected as a cross edge by the MemberExpr case below. A computed
 					// handle (a variable holding the function) is invisible to this
 					// static read, the same way any non-literal argument is.
-					if ctxCall(e, "needs") {
+					if contextCall(e, "needs") {
 						// Chain is built HERE, argument by argument, rather than folded
 						// from Dependencies and CrossDependencies afterwards: those are two
 						// sets split by locality, and merging them back cannot recover which
@@ -169,7 +169,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// same way the runtime matcher does. A project-import member
 								// (<alias>.<target>) is a MemberExpr arg, collected as a cross
 								// edge by the MemberExpr walk case below.
-								if ctxCall(arg, "glob") {
+								if contextCall(arg, "glob") {
 									// Collected before matching: "!" negation subtracts from
 									// the union of the other patterns, so the whole list has
 									// to be read together or an exclusion is simply lost.
@@ -211,10 +211,10 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// parameter named something other than ctx) is invisible to this static read
 					// in exactly the same way, and is flagged the same way.
 					if me, isMember := e.Callee.(*ast.MemberExpr); isMember && !me.Namespaced &&
-						ctxDeclNames[me.Name] && !ctxRooted(me.Object) {
+						ctxDeclNames[me.Name] && !contextRooted(me.Object) {
 						flagDynamic(&node, me.Name)
 					}
-					if ctxCall(e, "modifiesExistingFiles") && node.FootprintErr == nil {
+					if contextCall(e, "modifiesExistingFiles") && node.FootprintErr == nil {
 						node.FootprintErr = errors.New("ctx.modifiesExistingFiles was removed: write ctx.writesFiles([...], editsExistingSource: true)")
 					}
 					if kind, globs, ok := ioCall(e); ok {
@@ -428,7 +428,7 @@ func RemovedContextMethods(source string) []RemovedContextMethod {
 	for _, stmt := range prog.Stmts {
 		ast.Inspect(stmt, func(n ast.Node) bool {
 			me, ok := n.(*ast.MemberExpr)
-			if !ok || !ctxRooted(me.Object) {
+			if !ok || !contextRooted(me.Object) {
 				return true
 			}
 			replacement, ok := removedContextMethods[me.Name]
@@ -603,10 +603,10 @@ type spellHit struct {
 	spell, op string
 }
 
-// ctxCall reports whether e is a ctx.<name>(...) call, a target declaring through the
+// contextCall reports whether e is a ctx.<name>(...) call, a target declaring through the
 // magus.Context it received (ctx.needs, ctx.glob). The declaration API lives only on
 // the context, read here statically off the source text so the graph never runs a body.
-func ctxCall(e *ast.CallExpr, name string) bool {
+func contextCall(e *ast.CallExpr, name string) bool {
 	me, ok := e.Callee.(*ast.MemberExpr)
 	if !ok || me.Name != name {
 		return false
@@ -622,11 +622,11 @@ var ctxDeclNames = map[string]bool{
 	"readsFiles": true, "writesFiles": true, "envInputs": true, "observes": true, "withEnv": true, "withCwd": true,
 }
 
-// CtxDeclNames returns the declaration members this static reader recognizes. Exported
+// ContextDeclNames returns the declaration members this static reader recognizes. Exported
 // for the drift test that holds it against the members the runtime actually binds: a
 // name here that no ctx offers would be collected from source and then fail at run time,
 // and one the runtime binds but this map omits is a declaration that never reaches a key.
-func CtxDeclNames() []string {
+func ContextDeclNames() []string {
 	names := make([]string, 0, len(ctxDeclNames))
 	for n := range ctxDeclNames {
 		names = append(names, n)
@@ -665,12 +665,12 @@ func flagDynamic(node *types.TargetGraphNode, kind string) {
 	node.DynamicIO = true
 }
 
-// ctxRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED
+// contextRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED
 // derivation (ctx.withEnv({...}).withCwd("..")) is recognized as well as a direct
 // call. Without walking the spine only the first link is seen, and the rest of the
 // chain silently under-declares the cache key: the precise stale-hit risk these
 // overrides exist to close.
-func ctxRooted(n ast.Node) bool {
+func contextRooted(n ast.Node) bool {
 	for {
 		switch v := n.(type) {
 		case *ast.IdentExpr:
@@ -698,7 +698,7 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 	if !ctxDeclNames[me.Name] {
 		return "", nil, false
 	}
-	if !ctxRooted(me.Object) {
+	if !contextRooted(me.Object) {
 		return "", nil, false
 	}
 	for _, a := range e.Args {

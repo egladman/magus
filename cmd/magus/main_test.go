@@ -284,7 +284,7 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 // load a real workspace through loadMagus/inspectWorkspace, both memoized behind a
 // process-wide sync.Once that panics if invoked twice with a different root, not
 // something a unit test can safely drive. Instead this exercises the exact mechanism
-// dispatchAdopted's callees use to set the field (cmdParse -> flaggen.BindFlags) and proves
+// dispatchAdopted's callees use to set the field (commandParse -> flaggen.BindFlags) and proves
 // snapshotGlobals's restore undoes it, which is the narrowest reachable seam for the fix.
 func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	savedCfg, savedGlobal := globalCfg, global
@@ -293,7 +293,7 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 
 	// First adopted dispatch: a client passes --dry-run.
 	restore := snapshotGlobals()
-	if _, err := cmdParse("run", []string{"--dry-run"}, nil); err != nil {
+	if _, err := commandParse("run", []string{"--dry-run"}, nil); err != nil {
 		t.Fatalf("cmdParse: %v", err)
 	}
 	if !globalCfg.DryRun {
@@ -308,7 +308,7 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	// flaggen.BindFlags binds the flag's default to the CURRENT (bled) field value, so
 	// an unset flag here would silently inherit true from the first dispatch.
 	restore = snapshotGlobals()
-	if _, err := cmdParse("run", nil, nil); err != nil {
+	if _, err := commandParse("run", nil, nil); err != nil {
 		t.Fatalf("cmdParse: %v", err)
 	}
 	if globalCfg.DryRun {
@@ -534,7 +534,7 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		},
 		{
 			name:  "self",
-			print: selfCmdUsage,
+			print: selfCommandUsage,
 			want:  []string{"Usage: magus self", "update", "install-shorthand", "place", "magus init"},
 		},
 		{
@@ -1295,9 +1295,9 @@ func useTextLogger(t *testing.T) {
 	})
 }
 
-// noticesFrom returns what the pretty display prints for the records fn logs through
+// notices returns what the pretty display prints for the records fn logs through
 // the default logger, the way a notice reaches a person now that it is a record.
-func noticesFrom(t *testing.T, fn func()) string {
+func notices(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()

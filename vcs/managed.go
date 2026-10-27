@@ -214,7 +214,7 @@ func nextLineStart(text string, pos int) int {
 
 // removeManagedSection deletes every m section from path, keeping the rest, and reports
 // whether path changed. A missing file, or one holding no section, is left alone. The
-// caller holds withRepoLock. A section a magus newer than j.Self wrote is refused.
+// caller holds withRepositoryLock. A section a magus newer than j.Self wrote is refused.
 func removeManagedSection(path string, m managedMarkers, j stamp.Judge) (bool, error) {
 	target := path
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
@@ -315,13 +315,13 @@ func ConfinedToGeneratedSection(committed, current string) (bool, error) {
 // managedLockName is the repository's managed-section lock file, in its metadata dir.
 const managedLockName = "magus-managed.lock"
 
-// withRepoLock runs fn holding the managed-section lock of the repository whose metadata
+// withRepositoryLock runs fn holding the managed-section lock of the repository whose metadata
 // directory is metaDir (git's common dir, .hg, or .sl), so concurrent installs from any
 // worktree or process cannot drop each other's section. One lock covers every managed
 // file of the repository, and it lives in the metadata dir so it never shows as untracked.
 // A managed write is a small file rewrite, so the wait is file.LockWait. The lock is not
-// reentrant: fn must not call withRepoLock.
-func withRepoLock(ctx context.Context, metaDir string, fn func() error) error {
+// reentrant: fn must not call withRepositoryLock.
+func withRepositoryLock(ctx context.Context, metaDir string, fn func() error) error {
 	// One key per repository, however the caller spelled the path to it.
 	dir, err := filepath.EvalSymlinks(metaDir)
 	if err != nil {
@@ -330,9 +330,9 @@ func withRepoLock(ctx context.Context, metaDir string, fn func() error) error {
 	return file.WithLock(ctx, filepath.Join(dir, managedLockName), file.LockWait, fn)
 }
 
-// lockedWrite runs write under withRepoLock and returns what it reported.
+// lockedWrite runs write under withRepositoryLock and returns what it reported.
 func lockedWrite(ctx context.Context, metaDir string, write func() (bool, error)) (changed bool, err error) {
-	err = withRepoLock(ctx, metaDir, func() error {
+	err = withRepositoryLock(ctx, metaDir, func() error {
 		var werr error
 		changed, werr = write()
 		return werr
@@ -342,7 +342,7 @@ func lockedWrite(ctx context.Context, metaDir string, write func() (bool, error)
 
 // writeManagedSection brings the m section of path to body, creating path when absent,
 // and reports whether path changed. It is the one writer for every managed section:
-// .gitattributes, .hg/hgrc, .sl/config and shell hooks. The caller holds withRepoLock.
+// .gitattributes, .hg/hgrc, .sl/config and shell hooks. The caller holds withRepositoryLock.
 // A config file that is a symlink is written only when it resolves inside root, the
 // repository it configures.
 //

@@ -423,7 +423,7 @@ func writeCommit(t *testing.T, repo *testkit.Repo, file, content string) {
 // through the VCS abstraction): per-file commit counts, most-recent-commit, and, locking
 // in the core.quotePath fix, a non-ASCII filename that must come through raw to match.
 func TestLoadKnowledgeVCSHistory(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	writeCommit(t, repo, "a.buzz", "one\n")  // a: commit 1
 	writeCommit(t, repo, "b.buzz", "one\n")  // b: commit 1
@@ -454,7 +454,7 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 
 func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 	// Disabled: no scan, nil result, even in a git repo.
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	writeCommit(t, repo, "a.buzz", "x\n")
 	entries, couplings := loadKnowledgeVCS(context.Background(), config.Config{}, repo.Root(), slog.Default())
 	assert.Nil(t, entries)
@@ -478,7 +478,7 @@ func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 // first rather than merely asserting the first is right.
 func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	ctx := context.Background()
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	repo.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
@@ -516,7 +516,7 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 // higher than the 0.41s walk it saves.
 func TestLoadKnowledgeVCSCached(t *testing.T) {
 	ctx := context.Background()
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	// The cache dir sits OUTSIDE the fixture repo: this test commits between calls, and a
 	// cache written under root would be swept into the very history it is caching.
@@ -564,7 +564,7 @@ func TestLoadKnowledgeVCSCached(t *testing.T) {
 // history must not persist "no history" as a fact about it.
 func TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly(t *testing.T) {
 	ctx := context.Background()
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	cacheDir := t.TempDir()
 	writeCommit(t, repo, "a.buzz", "x\n")
@@ -592,7 +592,7 @@ func TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly(t *testing.T) {
 // is a subdir of the git root, ChangesByCommit's VCS-root-relative paths are re-rooted to
 // workspace-relative so they line up with file-node Sources.
 func TestLoadKnowledgeVCSNestedWorkspace(t *testing.T) {
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	writeCommit(t, repo, "other.buzz", "root\n") // outside the sub-workspace
 	sub := repo.Path("sub", "proj")
 	writeCommit(t, repo, "sub/proj/app.buzz", "nested\n")
@@ -702,7 +702,7 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 // through the cache's own front door.
 func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 	ctx := context.Background()
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root, cacheDir := repo.Root(), t.TempDir()
 	writeCommit(t, repo, "a.buzz", "x\n")
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
@@ -883,7 +883,7 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 	// this process wrote would move it under the assertions below.
 	testkit.Isolate(t)
 	ctx := context.Background()
-	repo := testkit.NewRepo(t, nil)
+	repo := testkit.NewRepository(t, nil)
 	root := repo.Root()
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	// Every write is backdated past the racy window, so a stamp computed a moment later

@@ -59,7 +59,7 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
 			t.Cleanup(func() { slog.SetDefault(prev) })
 
-			// Test the pure decision half directly — calling MagusCmd would exec the
+			// Test the pure decision half directly — calling MagusCommand would exec the
 			// test binary (a fork-bomb risk), and the warning is what we care about.
 			warnIfTypedSubcommand(context.Background(), tc.sub, tc.args)
 
@@ -97,7 +97,7 @@ func TestResolveRunDir(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			if tc.cwd != "" {
-				ctx = WithCwd(ctx, tc.cwd)
+				ctx = WithCurrentWorkingDirectory(ctx, tc.cwd)
 			}
 			assert.Equal(t, tc.want, resolveRunDir(ctx, tc.opts))
 		})
@@ -108,7 +108,7 @@ func TestResolveRunDir(t *testing.T) {
 // piping a registry token to `graph push` had it discarded, so every cd publish failed with
 // "no token on stdin" against a magusfile that passed one.
 func TestNestedExecOptionsCarriesStdin(t *testing.T) {
-	ctx := WithCwd(context.Background(), "/ws/api")
+	ctx := WithCurrentWorkingDirectory(context.Background(), "/ws/api")
 
 	fed := nestedExecOptions(ctx, map[string]any{"stdin": "ghp_token", "quiet": true}, nil)
 	// A nested magus is always captured; the caller reads its output.
@@ -155,7 +155,7 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 // survive onto the caught value as fields, and the MGS namespace is closed to them.
 func TestMagusRaise(t *testing.T) {
 	t.Run("carries code, message and url onto the caught value", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1001", "registry rejected the manifest", raiseOpts(nil, "https://acme.dev/codes/ACME1001"))
+		err := MagusRaise(context.Background(), "ACME1001", "registry rejected the manifest", raiseOptions(nil, "https://acme.dev/codes/ACME1001"))
 		require.Error(t, err)
 
 		var de *diagnostics.Error
@@ -169,7 +169,7 @@ func TestMagusRaise(t *testing.T) {
 	})
 
 	t.Run("omits url when none was supplied", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1002", "no url", raiseOpts(nil, ""))
+		err := MagusRaise(context.Background(), "ACME1002", "no url", raiseOptions(nil, ""))
 		var de *diagnostics.Error
 		require.ErrorAs(t, err, &de)
 		assert.Equal(t, map[string]string{"code": "ACME1002", "message": "no url"}, de.BuzzError(),
@@ -190,8 +190,8 @@ func TestMagusRaise(t *testing.T) {
 	}
 
 	t.Run("requires a code and a message", func(t *testing.T) {
-		assert.ErrorContains(t, MagusRaise(context.Background(), "", "msg", raiseOpts(nil, "")), "needs a code")
-		assert.ErrorContains(t, MagusRaise(context.Background(), "ACME1001", "", raiseOpts(nil, "")), "needs a message")
+		assert.ErrorContains(t, MagusRaise(context.Background(), "", "msg", raiseOptions(nil, "")), "needs a code")
+		assert.ErrorContains(t, MagusRaise(context.Background(), "ACME1001", "", raiseOptions(nil, "")), "needs a message")
 	})
 }
 
@@ -199,7 +199,7 @@ func TestMagusRaise(t *testing.T) {
 // stay VISIBLE in the rendered message, which Wrapf alone does not do.
 func TestMagusRaiseCause(t *testing.T) {
 	t.Run("splices a string cause and unwraps to it", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1001", "push failed", raiseOpts("exec docker: exit 1", ""))
+		err := MagusRaise(context.Background(), "ACME1001", "push failed", raiseOptions("exec docker: exit 1", ""))
 		assert.EqualError(t, err, "[ACME1001] push failed: exec docker: exit 1")
 		assert.ErrorContains(t, errors.Unwrap(err), "exec docker: exit 1")
 	})
@@ -208,7 +208,7 @@ func TestMagusRaiseCause(t *testing.T) {
 	// inner code must keep matching once the outer one wraps it.
 	t.Run("keeps a coded cause matchable underneath the new code", func(t *testing.T) {
 		inner := map[string]any{"code": "MGS2001", "message": "spell not found", "url": "https://x/MGS2001"}
-		err := MagusRaise(context.Background(), "ACME1001", "build failed", raiseOpts(inner, ""))
+		err := MagusRaise(context.Background(), "ACME1001", "build failed", raiseOptions(inner, ""))
 		assert.EqualError(t, err, "[ACME1001] build failed: [MGS2001] spell not found")
 		assert.ErrorIs(t, err, diagnostics.Code("MGS2001"),
 			"the inner code must still match after wrapping, which is the point of a cause")
@@ -216,15 +216,15 @@ func TestMagusRaiseCause(t *testing.T) {
 
 	t.Run("an absent cause changes nothing", func(t *testing.T) {
 		for _, empty := range []any{nil, "", map[string]any{}} {
-			err := MagusRaise(context.Background(), "ACME1001", "plain", raiseOpts(empty, ""))
+			err := MagusRaise(context.Background(), "ACME1001", "plain", raiseOptions(empty, ""))
 			assert.EqualError(t, err, "[ACME1001] plain")
 		}
 	})
 }
 
-// raiseOpts builds the opts map the way a magusfile would, keeping the tests readable
+// raiseOptions builds the opts map the way a magusfile would, keeping the tests readable
 // now that cause and url are keys rather than positions.
-func raiseOpts(cause any, url string) map[string]any {
+func raiseOptions(cause any, url string) map[string]any {
 	o := map[string]any{}
 	if cause != nil {
 		o["cause"] = cause
@@ -498,7 +498,7 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	testkit.Isolate(t)
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		".gitattributes": "*.go diff=golang\n",
 		"api/x.go":       "package api\n\nfunc X() {\n\treturn\n}\n",
 	})

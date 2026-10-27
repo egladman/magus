@@ -32,7 +32,7 @@ import (
 func graphDiff(ctx context.Context, root string, args []string) error {
 	var refresh, globalScope bool
 	var rev string
-	pos, err := cmdParse("graph diff", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("graph diff", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild of the current graph before diffing")
 		fs.BoolVar(&globalScope, "global", false, "diff the global (all-workspaces) graph; match this to how the baseline was exported")
 		fs.StringVar(&rev, "rev", "", "diff against a git revision (e.g. HEAD~1, main) instead of an export file")

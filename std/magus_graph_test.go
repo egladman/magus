@@ -282,7 +282,7 @@ func TestPrecedentsAreJudgedByTheWorkspacesConformance(t *testing.T) {
 	t.Parallel()
 	g := knowledge.NewGraph()
 	for i, name := range []string{"ErrA", "ErrB", "ErrC", "ErrD", "ErrE", "ErrF"} {
-		errValue(g, fmt.Sprintf("internal/a/e%d.go", i), 3, name)
+		errorValue(g, fmt.Sprintf("internal/a/e%d.go", i), 3, name)
 	}
 	raised := config.Defaults().Knowledge.Conformance.Options()
 	raised.Gates.MinCohort = 7
@@ -323,9 +323,9 @@ func (p *precedentGraphs) ClassifyFiles(_ context.Context, paths []string) ([]ty
 	return out, nil
 }
 
-// errValue declares `var name = errors.New(...)` on line of file in package internal/a, as
+// errorValue declares `var name = errors.New(...)` on line of file in package internal/a, as
 // scip-go indexes it.
-func errValue(g *knowledge.Graph, file string, line int, name string) string {
+func errorValue(g *knowledge.Graph, file string, line int, name string) string {
 	ns := "symbol:gomod example.com/m `example.com/m/internal/a`/"
 	id := fmt.Sprintf("%s%s.", ns, name)
 	g.AddNode(types.KnowledgeNode{ID: ns, Kind: types.KindSymbol, Label: "a", Source: "internal/a/a.go:1",
@@ -343,13 +343,13 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 	g := knowledge.NewGraph()
 	var cited []types.Case
 	for i, name := range []string{"ErrA", "ErrB", "ErrC", "ErrD", "ErrE"} {
-		id := errValue(g, fmt.Sprintf("internal/a/e%d.go", i), 3, name)
+		id := errorValue(g, fmt.Sprintf("internal/a/e%d.go", i), 3, name)
 		if i < 3 {
 			cited = append(cited, types.Case{Node: id, Source: fmt.Sprintf("internal/a/e%d.go:3", i)})
 		}
 	}
-	bad := errValue(g, "internal/a/z.go", 4, "badInput")
-	errValue(g, "internal/a/gen.go", 2, "generatedFailure")
+	bad := errorValue(g, "internal/a/z.go", 4, "badInput")
+	errorValue(g, "internal/a/gen.go", 2, "generatedFailure")
 	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "libs/x"}, Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}
 	ws := &precedentGraphs{
 		builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()},
@@ -476,7 +476,7 @@ func decodeConformanceReport(t *testing.T, got map[string]any) conformanceReport
 func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 	t.Parallel()
 	g := knowledge.NewGraph()
-	errValue(g, "internal/a/e0.go", 3, "ErrA")
+	errorValue(g, "internal/a/e0.go", 3, "ErrA")
 	sizedGoFile(g, "internal/a/big.go", 300)
 	sizedGoFile(g, "internal/a/small.go", 10)
 	sizedGoFile(g, "internal/a/gen.go", 900)
@@ -522,7 +522,7 @@ func TestConformanceWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
 func TestConformanceMisconfigurationIsAnError(t *testing.T) {
 	t.Parallel()
 	g := knowledge.NewGraph()
-	errValue(g, "internal/a/e0.go", 3, "ErrA")
+	errorValue(g, "internal/a/e0.go", 3, "ErrA")
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}}
 
 	ws.conformanceErr = errors.New("conformance.json: line 1: schema 2: want 1")

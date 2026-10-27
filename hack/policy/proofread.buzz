@@ -21,6 +21,18 @@ final RULES: {str: str} = {
     "ascii": "deny",
     // A commit, a pull request and a page in this repository credit no tool and no session.
     "attribution": "deny",
+    // A subject is lowercase. An acronym may lead. A capital after a conventional
+    // prefix is the base-branch grammar's check, not this one.
+    "subject-case": "deny",
+    // Clauses join with a semicolon. Parentheses and a bang in a conventional
+    // prefix are not the subject, and neither is a trailing " (#123)": of the
+    // 1765 commits measured 2026-10-25, 502 subjects end in that trailer. A colon
+    // stays in the commit rule, which knows the branch.
+    "subject-punct": "deny",
+    // A commit is one subject line. A trailer block is not a body, and neither is
+    // the "* " list a squash merge writes: 318 of the 354 bodies in those 1765
+    // commits opened with it.
+    "no-body": "deny",
     // The doc-comment budgets the symbol-docs lint held every Go and TypeScript doc to.
     "comment-block": "deny",
     "comment-sentence": "deny",
@@ -95,6 +107,10 @@ final MINIMUMS: {str: int} = {
     "reference": 82,
     // 49 pages under docs/guides; the lowest, docs/guides/migrating/from-nx.md, grades 92.4.
     "guide": 92,
+    // 43 design pages. The lowest, docs/design/judgment/manual-on-purpose.md, grades
+    // 80.4 on its participles. Measured 2026-10-25. The markdown lint classified
+    // these pages and did not judge them until this floor.
+    "principle": 80,
     // The 6 skills and AGENTS.md files an agent loads; every one grades 100.
     "agent-brief": 100,
     // The 16 shipped skill bodies; every one grades 100.

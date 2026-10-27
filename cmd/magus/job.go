@@ -44,7 +44,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// jobCmd implements `magus job`, the POSIX child lifecycle over delegated work: fork
+// jobCommand implements `magus job`, the POSIX child lifecycle over delegated work: fork
 // declares a job, exec takes the lease on it in this checkout, exit returns it with its
 // result, and wait verifies that result. Listing is `magus ls jobs` and the terms are
 // `magus describe job`, because enumerating and defining are those verbs' work everywhere
@@ -54,7 +54,7 @@ import (
 // tool (magus\job) is the agent's channel and this verb is the person's; they reach the same store and
 // the same rules, so a job still has one author (internal/job.authorizeRow enforces it)
 // without a capability existing for agents that a person does not have.
-func jobCmd(ctx context.Context, root string, args []string) error {
+func jobCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
 		return exit.Usagef("magus job: requires a subcommand (fork, apply, exec, exit, wait, run, rm or prune)")
@@ -121,16 +121,16 @@ func jobUsage() {
 
 // pointAtConsole names where to WATCH a job (the Jobs view for an empty id), the one way
 // to see how a worker is doing that leaves it alone. With no server it names no link: a
-// page that never loads cannot say whether nothing is listening or the console is broken,
-// and the record carries no next command, so a quiet display has nothing to print.
+// page that never loads cannot say whether nothing is listening or the console is broken.
+// The notice names that state and a next command rather than handing out a dead link.
 func pointAtConsole(ctx context.Context, id string) {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return
 	}
 	serving, serverVersion := probeConsoleServer()
 	if !serving {
-		slog.InfoContext(ctx, fmt.Sprintf("nothing is serving it; `%s` to watch this job without interrupting its holder", hint.ServerStart),
-			attr.Notice("console"))
+		slog.InfoContext(ctx, "the console is not running; start it to watch this job",
+			attr.Notice("note"), attr.Next(hint.ServerStart.String()))
 		return
 	}
 	host := mcpAddrString()
@@ -140,7 +140,8 @@ func pointAtConsole(ctx context.Context, id string) {
 	}
 	slog.LogAttrs(ctx, slog.LevelInfo, link, attr.Notice("console"), attr.Next(console.OpenCommand(link)))
 	if skew := consoleSkew(serverVersion, version); skew != "" {
-		slog.WarnContext(ctx, skew, attr.Notice("console"))
+		slog.WarnContext(ctx, skew, attr.Notice("warning"),
+			attr.Next(fmt.Sprintf("%s && %s", hint.ServerStop, hint.ServerStart)))
 	}
 }
 
@@ -151,8 +152,8 @@ func consoleSkew(serverVersion, cliVersion string) string {
 	if serverVersion == "" || cliVersion == "" || serverVersion == cliVersion {
 		return ""
 	}
-	return fmt.Sprintf("that console is from server %s, this binary is %s; `%s && %s` serves this build",
-		serverVersion, cliVersion, hint.ServerStop, hint.ServerStart)
+	return fmt.Sprintf("the console serves build %s; this command uses build %s",
+		serverVersion, cliVersion)
 }
 
 // probeConsoleServer reports whether the server is up, and its version. A per-process
@@ -390,7 +391,7 @@ func attemptIn(cacheDir, ref string) (types.JobAttempt, error) {
 // lsJobs is `magus ls jobs`: every live job this repository carries, whoever holds it.
 func lsJobs(root string, args []string) error {
 	var all bool
-	rest, err := cmdParse("ls jobs", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("ls jobs", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&all, "all", false, "List the jobs that ended and every in-flight change, not only the live jobs and yours")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [--all] [flags]")
@@ -862,7 +863,7 @@ func jobTreeOrder(leases []types.Job) []jobTreeLine {
 // holds now. It prints no procedure: taking the job is `magus job exec`'s work to DO,
 // not a paragraph for somebody to follow by hand.
 func describeJob(ctx context.Context, root string, args []string) error {
-	pos, err := cmdParse("describe job", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("describe job", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe job <job> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1110,7 +1111,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		schema, stdin, fix bool
 		flags              *flag.FlagSet
 	)
-	pos, err := cmdParse("job fork", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job fork", args, func(fs *flag.FlagSet) {
 		flags = fs
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a job must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read one job as JSON on stdin instead of taking it from flags")
@@ -1587,7 +1588,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if sep >= 0 {
 		args, command = args[:sep], args[sep+1:]
 	}
-	pos, err := cmdParse("job exec", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job exec", args, func(fs *flag.FlagSet) {
 		fs.DurationVar(&timeout, "timeout", 0, "Run the command after -- and stop its whole process group once this long has passed (exit 124)")
 		fs.IntVar(&slots, "slots", 1, "The machine budget slots the command after -- takes while it runs")
 		fs.Usage = func() {
@@ -1799,7 +1800,7 @@ func stopGroup(pgid int, exited <-chan error) {
 // one that was decoded and rejected (the work is not accepted).
 func jobExit(ctx context.Context, root string, args []string) error {
 	var schema, stdin bool
-	pos, err := cmdParse("job exit", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job exit", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read this job's result from stdin; without it the job ends with no result filed")
 		fs.Usage = func() {
@@ -2058,7 +2059,7 @@ func printLandingBootstrap(ctx context.Context, out io.Writer, store *job.Store,
 func jobWait(ctx context.Context, root string, args []string) error {
 	var schema, stdin, integration bool
 	evidence := evidenceFlag{}
-	pos, err := cmdParse("job wait", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job wait", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read the result from stdin instead of from the job, for one that was never filed")
 		fs.BoolVar(&integration, "integration", false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
@@ -2251,7 +2252,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 // answer "what is that worker doing" would put the question out of reach exactly when
 // somebody is at a terminal wondering.
 func jobWatch(ctx context.Context, root string, args []string) error {
-	pos, err := cmdParse("job watch", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job watch", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job watch <job>")
 			fmt.Fprintln(os.Stderr, "")
@@ -2517,7 +2518,7 @@ func jobPause(ctx context.Context, root, verb string, args []string) error {
 	spec := jobCommandSpec()
 	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == verb })]
 	var reason, until string
-	ids, err := cmdParse("job "+verb, args, func(fs *flag.FlagSet) {
+	ids, err := commandParse("job "+verb, args, func(fs *flag.FlagSet) {
 		if verb == "pause" {
 			fs.StringVar(&reason, "reason", "", "")
 			fs.StringVar(&until, "until", "", "")
@@ -2591,7 +2592,7 @@ func jobPause(ctx context.Context, root, verb string, args []string) error {
 // reason: deleting the record of work that ran destroys the only account of it.
 func jobDelete(ctx context.Context, root string, args []string) error {
 	var force bool
-	pos, err := cmdParse("job rm", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job rm", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&force, "force", false, "Remove a row that already ended, destroying the record of what happened")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job rm <job> [flags]")
@@ -2654,7 +2655,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		file string
 		fix  bool
 	)
-	pos, err := cmdParse("job apply", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job apply", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "f", "", "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line")
 		fs.BoolVar(&fix, "fix", false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
 		fs.Usage = func() {
@@ -2905,7 +2906,7 @@ func goalIDs(goals []types.Goal) []string {
 // --all is `docker system prune -a`'s knob and `ls jobs --all`'s word: the wider set.
 func jobPrune(ctx context.Context, root string, args []string) error {
 	var all bool
-	pos, err := cmdParse("job prune", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("job prune", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&all, "all", false, "Also end a job a holder took and nobody touched within jobs.stale_after")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job prune [--all] [<job>...] [flags]")

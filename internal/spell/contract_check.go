@@ -38,11 +38,13 @@ func checkContract(src string) error {
 	}
 
 	var problems []string
+	exported := map[string]int{}
 	for _, stmt := range prog.Stmts {
 		fd, ok := stmt.(*ast.FunDecl)
 		if !ok || !fd.IsExported {
 			continue
 		}
+		exported[fd.Name] = fd.Line
 		if op, ok := ops[fd.Name]; ok {
 			problems = append(problems, checkSignature(fd, op)...)
 			continue
@@ -57,11 +59,29 @@ func checkContract(src string) error {
 		}
 		problems = append(problems, checkSignature(fd, fn)...)
 	}
+	problems = append(problems, checkHarnessExports(exported)...)
 	if len(problems) == 0 {
 		return nil
 	}
 	return types.DiagnosticErrorf(types.SpellContractViolated,
 		"spell does not match the spell contract (docs/reference/spell-contract.md):\n  %s", strings.Join(problems, "\n  "))
+}
+
+// A spell that exports the config is a harness, so it owes every required harness
+// function. An omitted mgs_renderPrompts used to decode as an empty list, the same
+// bytes a host returns when its hook is the prompt.
+func checkHarnessExports(exported map[string]int) []string {
+	line, harness := exported["mgs_getHarnessConfig"]
+	if !harness {
+		return nil
+	}
+	var problems []string
+	for _, fn := range decode.HarnessFuncs {
+		if _, present := exported[fn.Name]; fn.Required && !present {
+			problems = append(problems, fmt.Sprintf("line %d: %s is required on a harness spell", line, fn.Name))
+		}
+	}
+	return problems
 }
 
 // checkSignature holds an export to fn's parameter types and return type. Parameter names

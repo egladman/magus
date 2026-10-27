@@ -146,7 +146,7 @@ see: %s%s/`, ruleDocsBase, rule), doc.Catches
 		lead = fmt.Sprintf("denied again [%s]: %s", rule, catches)
 	}
 	return fmt.Sprintf(`%s%s%s
-full verdict: %s`, lead, note, command, next.Run), ref, remedy
+details: %s`, lead, note, command, next.Run), ref, remedy
 }
 
 // storeVerdict stores a full verdict under cacheDir, and the primary checkout's cache dir
@@ -275,5 +275,5 @@ see: %s%s/`, ruleDocsBase, rule)
 	next.ID, next.Why = adviceVerdictID, "the ref holds this advisory's rationale, which the inline text leaves out."
 	hint.AppendServedNext(markers.CacheDir(), []types.NextStep{next})
 	return fmt.Sprintf(`%s
-full advice: %s`, text, next.Run), ref
+details: %s`, text, next.Run), ref
 }

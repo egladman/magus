@@ -296,14 +296,14 @@ func TestSkipFlag(t *testing.T) {
 // so an adopted run scopes and journals against where the client ran, not the server.
 func TestClientCwd(t *testing.T) {
 	t.Run("ctx cwd wins", func(t *testing.T) {
-		ctx := proc.WithCwd(context.Background(), "/client/here")
-		assert.Equal(t, "/client/here", clientCwd(ctx))
+		ctx := proc.WithCurrentWorkingDirectory(context.Background(), "/client/here")
+		assert.Equal(t, "/client/here", clientCurrentWorkingDirectory(ctx))
 	})
 
 	t.Run("no ctx cwd falls back to os.Getwd", func(t *testing.T) {
 		dir := t.TempDir()
 		t.Chdir(dir)
-		got := clientCwd(context.Background())
+		got := clientCurrentWorkingDirectory(context.Background())
 		// t.TempDir may hand back a /var symlink that Getwd resolves; compare suffix.
 		require.NotEmpty(t, got)
 		assert.True(t, strings.HasSuffix(got, dir) || strings.HasSuffix(dir, got) || got == dir,

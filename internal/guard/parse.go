@@ -939,6 +939,9 @@ func processPollFires(cmds []hint.Invocation) bool {
 		case "pgrep", "pidof", "ps":
 			return true
 		}
+		if processProbe(c) {
+			return true
+		}
 	}
 	return false
 }

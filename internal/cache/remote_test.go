@@ -548,7 +548,7 @@ func buildWithStats(t *testing.T, root string, c *Cache) (Result, bool, *remoteS
 	t.Helper()
 	ctx := ContextWithRemoteStats(t.Context())
 	r, ran := buildIn(t, ctx, root, c)
-	return r, ran, remoteStatsFrom(ctx)
+	return r, ran, remoteStatsFromContext(ctx)
 }
 
 // buildIn runs the canonical step under ctx, writing "built" on a miss.

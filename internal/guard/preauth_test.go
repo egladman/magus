@@ -234,6 +234,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A", "magus vcs ls-files --include-untracked --include-generated -o name | git add --pathspec-from-file=-")},
 		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A -- cmd/magus/main.go", "magus vcs ls-files --include-untracked --include-generated cmd/magus/main.go -o name | git add --pathspec-from-file=-")},
 		{"denyRuleProcessPoll", denyRuleProcessPoll, fixed("pgrep -fl magus", "magus status")},
+		{"denyRuleProcessSignal", denyRuleProcessSignal, fixed("pkill -f 'magus job fork'", "magus status")},
 		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run lint . && magus run lint docs", "magus run lint . | magus run lint docs")},
 		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run generate:rw . && magus run test .", "magus run generate:rw . | magus run test .")},
 		{"denyRuleSymbolSearch", denyRuleSymbolSearch, fixed("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011")},
@@ -270,7 +271,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 				fmt.Sprintf("%s --root %s job exec harness/worker", filepath.Join(wt, "magus"), wt)
 		}},
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
-			r := newWorktreeRepo(t)
+			r := newWorktreeRepository(t)
 			wt, row := r.workerWorktree(types.StatePass)
 			row.ID = "remedy-lock"
 			seedRemedyJob(t, at, row)
@@ -278,7 +279,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 			return Request{Input: "git worktree remove " + wt, Dir: r.main, Host: "claude", Session: "remedy"}, "git worktree remove -f -f " + wt
 		}},
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
-			r := newWorktreeRepo(t)
+			r := newWorktreeRepository(t)
 			wt, row := r.workerWorktree(types.StateExited)
 			row.ID, row.Result = "remedy-wait", &types.JobResult{}
 			seedRemedyJob(t, at, row)

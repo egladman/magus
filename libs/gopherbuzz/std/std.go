@@ -126,7 +126,7 @@ func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), Out: out}, Modules...)
 }
 
-func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
+func function(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
 	return vm.DirectValue(name, f)
 }
 

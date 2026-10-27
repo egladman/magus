@@ -125,7 +125,7 @@ func TestAbandonUnderADryRunWritesNothing(t *testing.T) {
 func TestEndNamedCheckoutsLeavesOtherEndedRowsCheckouts(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	s, _ := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	s, _ := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	first := endedFork(t, s, "w1")
 	second := endedFork(t, s, "w2")
 
@@ -164,7 +164,7 @@ func TestExitWithAResultRefusesADescendantStillWorking(t *testing.T) {
 // refusal files; every attempt lands on that one request.
 func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 	t.Parallel()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
@@ -199,7 +199,7 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 
 func TestAbandonNeedsNoPersonForADescendantHoldingNoWork(t *testing.T) {
 	t.Parallel()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	s := NewStore(tempLocation(t, repo.Root()))
 	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
 	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, WritePaths: []string{"a.txt"}, CheckoutRoot: repo.Root()})
@@ -223,10 +223,10 @@ func TestAbandonWaitsOnAPersonWhenADescendantsCheckIsRunning(t *testing.T) {
 	assert.Contains(t, refused[0].Error(), "its check is still running as invocation inv-1")
 }
 
-// gitRepo is a git checkout holding files, for a job store to fork checkouts of.
-func gitRepo(t *testing.T, files map[string]string) (*Store, *testkit.Repo) {
+// gitRepository is a git checkout holding files, for a job store to fork checkouts of.
+func gitRepository(t *testing.T, files map[string]string) (*Store, *testkit.Repo) {
 	t.Helper()
-	repo := testkit.NewRepo(t, files)
+	repo := testkit.NewRepository(t, files)
 	return NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()}), repo
 }
 
@@ -242,7 +242,7 @@ func endedFork(t *testing.T, s *Store, id string) types.Job {
 func TestEndCheckoutsRestoresWhatMagusWroteAndKeepsTheRest(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	s, _ := gitRepo(t, map[string]string{"a.txt": "a\n", "MAGUS.md": "routing\n"})
+	s, _ := gitRepository(t, map[string]string{"a.txt": "a\n", "MAGUS.md": "routing\n"})
 	row := endedFork(t, s, "w1")
 	root := row.Worktree.Root
 	write := func(rel, body string) {
@@ -284,7 +284,7 @@ func TestEndCheckoutsRestoresAGoFileOnlyGofmtChanged(t *testing.T) {
 	require.NoError(t, err)
 	none := func(context.Context, string, []string) ([]string, error) { return nil, nil }
 
-	s, _ := gitRepo(t, map[string]string{"a.txt": "a\n", "x.go": committed})
+	s, _ := gitRepository(t, map[string]string{"a.txt": "a\n", "x.go": committed})
 	edited := endedFork(t, s, "edited")
 	require.NoError(t, os.WriteFile(filepath.Join(edited.Worktree.Root, "x.go"), []byte("package x\n\nvar y = 2\n"), 0o644))
 	gofmt := endedFork(t, s, "gofmt")
@@ -305,7 +305,7 @@ func TestEndCheckoutsRestoresAGoFileOnlyGofmtChanged(t *testing.T) {
 func TestEndCheckoutsKeepsACheckoutALiveJobIsHeldIn(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	s, _ := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	s, _ := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	row := endedFork(t, s, "w1")
 	seed(t, s, types.Job{ID: "w2", State: types.StateRunning, ReadOnly: true, CheckoutRoot: row.Worktree.Root})
 
@@ -322,7 +322,7 @@ func TestEndCheckoutsKeepsACheckoutALiveJobIsHeldIn(t *testing.T) {
 func TestEndCheckoutsTriesTheLinkedCheckoutAnEndedJobWasTakenIn(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	s, repo := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	s, repo := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	linked := filepath.Join(t.TempDir(), "linked")
 	repo.Git("worktree", "add", "-q", "--detach", linked)
 	linked, err := filepath.EvalSymlinks(linked)
@@ -356,7 +356,7 @@ func TestEndCheckoutsTriesTheLinkedCheckoutAnEndedJobWasTakenIn(t *testing.T) {
 func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	t.Parallel()
 	const now = int64(100_000)
-	repo := execRepo(t)
+	repo := execRepository(t)
 	s := tempStore(t, repo.Root())
 	staleAfter := 2 * time.Hour
 	s.clock = func() time.Time { return time.Unix(now, 0) }

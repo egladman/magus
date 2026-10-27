@@ -547,14 +547,14 @@ func Inspect(dir string) ([]Note, []Issue, error) {
 		}
 		name := strings.TrimSuffix(filepath.ToSlash(rel), ".md")
 
-		n, isNote, readErr := readNoteFile(path, name)
+		n, isNote, readError := readNoteFile(path, name)
 		switch {
 		case !isNote:
 			return nil // not addressed to magus; leave it alone
-		case readErr != nil:
+		case readError != nil:
 			issues = append(issues, Issue{
 				Severity: SeverityError, Code: CodeInvalidEntry, Path: path, Note: name,
-				Message: readErr.Error(),
+				Message: readError.Error(),
 				Hint:    "This file carries a `magus:` frontmatter block, so magus reads it as a note. Repair it, or remove that block to keep the file out of the store.",
 			})
 		default:

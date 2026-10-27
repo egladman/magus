@@ -18,23 +18,23 @@ func RegisterTemplate(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("render", vm.DirectValue("template.render", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		template := ffi.Str(bzArgs, 0)
+		template := ffi.String(bzArgs, 0)
 		data := ffi.Any(bzArgs, 1)
 		ret0, err := std.TemplateRender(ctx, template, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("renderPartials", vm.DirectValue("template.renderPartials", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		template := ffi.Str(bzArgs, 0)
+		template := ffi.String(bzArgs, 0)
 		data := ffi.Any(bzArgs, 1)
-		partials := ffi.StrMap(bzArgs, 2)
+		partials := ffi.StringMap(bzArgs, 2)
 		ret0, err := std.TemplateRenderPartials(ctx, template, data, partials)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

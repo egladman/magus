@@ -192,16 +192,16 @@ func wantUpstreamFailed(t *testing.T, err error, status int, upstream int) {
 	}
 }
 
-// WithStdio hands a run the streams StdioFrom reads back, and a ctx without them has
+// WithStdio hands a run the streams StdioFromContext reads back, and a ctx without them has
 // none.
 func TestStdioRidesTheContext(t *testing.T) {
-	if _, ok := StdioFrom(context.Background()); ok {
-		t.Fatalf("StdioFrom found streams on a bare context")
+	if _, ok := StdioFromContext(context.Background()); ok {
+		t.Fatalf("StdioFromContext found streams on a bare context")
 	}
 	r, w := shellPipe(t)
-	got, ok := StdioFrom(WithStdio(context.Background(), Stdio{Stdin: r, Stdout: w}))
+	got, ok := StdioFromContext(WithStdio(context.Background(), Stdio{Stdin: r, Stdout: w}))
 	if !ok || got.Stdin != r || got.Stdout != w {
-		t.Fatalf("StdioFrom = %+v, %v; want the streams WithStdio set", got, ok)
+		t.Fatalf("StdioFromContext = %+v, %v; want the streams WithStdio set", got, ok)
 	}
 }
 

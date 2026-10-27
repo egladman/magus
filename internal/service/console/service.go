@@ -73,25 +73,25 @@ func WithServerSocket(addr string) Option {
 	return func(s *Service) { s.serverSocket = addr }
 }
 
-// WithStatusSnapshotFn replaces the server query used to assemble StatusSnapshot. Tests
+// WithStatusSnapshotFunction replaces the server query used to assemble StatusSnapshot. Tests
 // pass this to drive status paths without a running server.
-func WithStatusSnapshotFn(fn func(ctx context.Context) types.StatusSnapshot) Option {
+func WithStatusSnapshotFunction(fn func(ctx context.Context) types.StatusSnapshot) Option {
 	return func(s *Service) { s.statusSnapshotFn = fn }
 }
 
-// WithKnowledgeGraphFn replaces the workspace knowledge graph. Tests pass an in-memory graph.
-func WithKnowledgeGraphFn(fn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)) Option {
+// WithKnowledgeGraphFunction replaces the workspace knowledge graph. Tests pass an in-memory graph.
+func WithKnowledgeGraphFunction(fn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)) Option {
 	return func(s *Service) { s.knowledgeGraphFn = fn }
 }
 
-// WithDescribeGraphFn replaces Magus.TargetGraph. Tests pass a canned target graph.
-func WithDescribeGraphFn(fn func() types.TargetGraphOutput) Option {
+// WithDescribeGraphFunction replaces Magus.TargetGraph. Tests pass a canned target graph.
+func WithDescribeGraphFunction(fn func() types.TargetGraphOutput) Option {
 	return func(s *Service) { s.describeGraphFn = fn }
 }
 
-// WithInsightFn replaces the workspace lens computation behind Insight. Tests pass this to
+// WithInsightFunction replaces the workspace lens computation behind Insight. Tests pass this to
 // drive the cache without a real workspace or git history.
-func WithInsightFn(fn func(ctx context.Context) (types.InsightView, error)) Option {
+func WithInsightFunction(fn func(ctx context.Context) (types.InsightView, error)) Option {
 	return func(s *Service) { s.insightFn = fn }
 }
 

@@ -35,8 +35,8 @@ func WithObserver(ctx context.Context, obs TargetObserver) context.Context {
 	return context.WithValue(ctx, observerKey{}, obs)
 }
 
-// observerFrom returns the observer attached to ctx, or nil.
-func observerFrom(ctx context.Context) TargetObserver {
+// observerFromContext returns the observer attached to ctx, or nil.
+func observerFromContext(ctx context.Context) TargetObserver {
 	obs, _ := ctx.Value(observerKey{}).(TargetObserver)
 	return obs
 }
@@ -84,8 +84,8 @@ func WithPoolObserver(ctx context.Context, obs PoolObserver) context.Context {
 	return context.WithValue(ctx, poolObserverKey{}, obs)
 }
 
-// poolObserverFrom returns the pool observer attached to ctx, or nil.
-func poolObserverFrom(ctx context.Context) PoolObserver {
+// poolObserverFromContext returns the pool observer attached to ctx, or nil.
+func poolObserverFromContext(ctx context.Context) PoolObserver {
 	obs, _ := ctx.Value(poolObserverKey{}).(PoolObserver)
 	return obs
 }

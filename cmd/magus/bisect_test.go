@@ -17,7 +17,7 @@ import (
 func TestParseBisectCulprit(t *testing.T) {
 	t.Run("standard culprit line", func(t *testing.T) {
 		// Skips without git, as the parser's real caller needs it.
-		testkit.NewRepo(t, nil)
+		testkit.NewRepository(t, nil)
 
 		log := `git bisect start
 # good: [abc123] fix typo
@@ -34,7 +34,7 @@ git bisect bad def456
 	})
 
 	t.Run("no culprit", func(t *testing.T) {
-		testkit.NewRepo(t, nil)
+		testkit.NewRepository(t, nil)
 
 		_, err := parseBisectLog([]byte("git bisect start\n# good: [abc123] blah\n"))
 		assert.Error(t, err)
@@ -59,19 +59,19 @@ func parseBisectLog(out []byte) (string, error) {
 
 // TestSelfUpdateCmdSignatureCompat is a compile-time check: self_update.go
 // (!noselfupdate) and self_update_stub.go (noselfupdate) must expose the same
-// `func selfUpdateCmd(context.Context, []string) error`, because self.go calls it
+// `func selfUpdateCommand(context.Context, []string) error`, because self.go calls it
 // untagged. If the signatures differ the package simply won't compile under one of
 // the two build tags, which `go build` catches. This test documents the intent so a
 // future reader understands why the stub imports "context".
 //
-// It used to assert this about selfCmd, back when the whole dispatcher was written
+// It used to assert this about selfCommand, back when the whole dispatcher was written
 // twice. Only the updater is tagged now, so the dispatcher is not the pair that can
 // drift; this one is.
 func TestSelfUpdateCmdSignatureCompat(t *testing.T) {
-	// Compile-time signature assertion: selfUpdateCmd must have exactly this type
+	// Compile-time signature assertion: selfUpdateCommand must have exactly this type
 	// or this file fails to compile. That guarantee is the entire test — there
 	// is nothing to assert at runtime (a package func is never nil).
-	var _ func(context.Context, []string) error = selfUpdateCmd //nolint:staticcheck // QF1011: the explicit type is the compile-time signature assertion this test exists for
+	var _ func(context.Context, []string) error = selfUpdateCommand //nolint:staticcheck // QF1011: the explicit type is the compile-time signature assertion this test exists for
 }
 
 // TestSelfNounSurvivesNoSelfUpdate is the property narrowing the tag bought: a

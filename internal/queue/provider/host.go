@@ -116,19 +116,19 @@ var hostModule = buzz.Module{
 // literal binds render, which shows untrusted text literally in Markdown, as a native.
 func literal(name string, render func(string) string) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) != 1 || !args[0].IsStr() {
+		if len(args) != 1 || !args[0].IsString() {
 			return vm.Null, fmt.Errorf("mergequeue.%s: want (text: str)", name)
 		}
-		return vm.StrValue(render(args[0].AsString())), nil
+		return vm.StringValue(render(args[0].AsString())), nil
 	}
 }
 
 func request(ctx context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 2 || !args[0].IsStr() || !args[1].IsStr() {
+	if len(args) < 2 || !args[0].IsString() || !args[1].IsString() {
 		return vm.Null, fmt.Errorf("mergequeue.request: want (method: str, url: str, body: str, headers: {str: str})")
 	}
 	var body io.Reader
-	if len(args) > 2 && args[2].IsStr() && args[2].AsString() != "" {
+	if len(args) > 2 && args[2].IsString() && args[2].AsString() != "" {
 		body = strings.NewReader(args[2].AsString())
 	}
 	req, err := http.NewRequestWithContext(ctx, args[0].AsString(), args[1].AsString(), body)
@@ -137,7 +137,7 @@ func request(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	}
 	if len(args) > 3 && args[3].IsMap() {
 		for _, k := range args[3].MapKeys() {
-			if v, ok := args[3].MapGet(k); ok && v.IsStr() {
+			if v, ok := args[3].MapGet(k); ok && v.IsString() {
 				req.Header.Set(k, v.AsString())
 			}
 		}
@@ -157,6 +157,6 @@ func request(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	}
 	out := vm.NewMap()
 	out.MapSet("status", vm.IntValue(int64(res.StatusCode)))
-	out.MapSet("body", vm.StrValue(string(data)))
+	out.MapSet("body", vm.StringValue(string(data)))
 	return out, nil
 }

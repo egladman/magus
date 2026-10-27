@@ -327,8 +327,8 @@ func TestUpstreamFuzzInputsDoNotPanic(t *testing.T) {
 					panicked = append(panicked, fmt.Sprintf("%s: %v", filepath.Base(path), r))
 				}
 			}()
-			src, readErr := os.ReadFile(path)
-			if readErr != nil {
+			src, readError := os.ReadFile(path)
+			if readError != nil {
 				return
 			}
 			ctx := context.Background()

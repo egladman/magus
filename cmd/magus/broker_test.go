@@ -143,7 +143,7 @@ func TestServerRowsNameEveryListener(t *testing.T) {
 
 func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
 	privateSockDir(t)
-	err := brokerCmd(t.Context(), []string{"--idle-exit", "-1s"})
+	err := brokerCommand(t.Context(), []string{"--idle-exit", "-1s"})
 	require.Equal(t, exit.Usage, exit.Code(err))
 	assert.False(t, broker.Live(t.Context(), broker.DefaultAddr()), "nothing was bound")
 }

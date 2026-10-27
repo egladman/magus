@@ -231,15 +231,15 @@ func (e *enc) boolean(b bool) {
 	}
 }
 
-func (e *enc) str(s string) {
+func (e *enc) string(s string) {
 	e.u32(uint32(len(s)))
 	e.raw([]byte(s))
 }
 
-func (e *enc) strs(ss []string) {
+func (e *enc) strings(ss []string) {
 	e.u32(uint32(len(ss)))
 	for _, s := range ss {
-		e.str(s)
+		e.string(s)
 	}
 }
 
@@ -249,8 +249,8 @@ func (e *enc) pos(p ast.Pos) {
 }
 
 func (e *enc) chunk(c *Chunk) error {
-	e.str(c.Name)
-	e.strs(c.Params)
+	e.string(c.Name)
+	e.strings(c.Params)
 	e.i32(int32(c.LocalCount))
 	e.u32(uint32(len(c.UpvalInfos)))
 	for _, u := range c.UpvalInfos {
@@ -279,7 +279,7 @@ func (e *enc) chunk(c *Chunk) error {
 	// Exports: the names a SharedGlobals module declared `export`. ExecChunk
 	// reads these to repopulate the session's exported set; empty for nested and
 	// non-shared chunks.
-	e.strs(c.Exports)
+	e.strings(c.Exports)
 	return nil
 }
 
@@ -293,8 +293,8 @@ func (e *enc) debugChunk(c *Chunk) {
 		for _, l := range c.Lines {
 			e.i32(l)
 		}
-		e.strs(c.LocalNames)
-		e.strs(c.UpvalNames)
+		e.strings(c.LocalNames)
+		e.strings(c.UpvalNames)
 	}
 	for _, f := range c.Funs {
 		e.debugChunk(f)
@@ -329,12 +329,12 @@ func (e *enc) constVal(v Value) error {
 		e.u64(v.num())
 	case tagStr:
 		e.u8(constTagStr)
-		e.str(v.asStr().V)
+		e.string(v.asString().V)
 	case tagEnumDef:
 		ed := v.asEnumDef()
 		e.u8(constTagEnumDef)
-		e.str(ed.Name)
-		e.strs(ed.Cases)
+		e.string(ed.Name)
+		e.strings(ed.Cases)
 		e.u32(uint32(len(ed.Values)))
 		for _, cv := range ed.Values {
 			if err := e.constVal(cv); err != nil {
@@ -346,14 +346,14 @@ func (e *enc) constVal(v Value) error {
 		return e.node(v.asObjDecl())
 	case tagPat:
 		e.u8(constTagPat)
-		e.str(v.asPat().src)
+		e.string(v.asPat().src)
 	case tagType:
 		// A type VALUE is fully described by its canonical spelling (see typeval.go),
 		// so it serializes as that one string. Without this, any program using `<T>` or
 		// `typeof` could not be marshalled at all -- which also barred it from being a
 		// built-in spell, since those ship as prebuilt .bo bytecode.
 		e.u8(constTagType)
-		e.str(v.TypeName())
+		e.string(v.TypeName())
 	default:
 		return fmt.Errorf("buzz: marshal: cannot serialize constant of kind %s", v.buzzKind())
 	}
@@ -436,15 +436,15 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.StringLit:
 		e.u8(nodeStringLit)
 		e.pos(p)
-		e.str(v.Val)
+		e.string(v.Val)
 	case *ast.IdentExpr:
 		e.u8(nodeIdentExpr)
 		e.pos(p)
-		e.str(v.Name)
+		e.string(v.Name)
 	case *ast.BinaryExpr:
 		e.u8(nodeBinaryExpr)
 		e.pos(p)
-		e.str(v.Op)
+		e.string(v.Op)
 		if err := e.node(v.Left); err != nil {
 			return err
 		}
@@ -452,7 +452,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.UnaryExpr:
 		e.u8(nodeUnaryExpr)
 		e.pos(p)
-		e.str(v.Op)
+		e.string(v.Op)
 		return e.node(v.Operand)
 	case *ast.CallExpr:
 		e.u8(nodeCallExpr)
@@ -469,7 +469,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.MemberExpr:
 		e.u8(nodeMemberExpr)
 		e.pos(p)
-		e.str(v.Name)
+		e.string(v.Name)
 		e.boolean(v.OptionalRecv)
 		return e.node(v.Object)
 	case *ast.IndexExpr:
@@ -484,16 +484,16 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.FunExpr:
 		e.u8(nodeFunExpr)
 		e.pos(p)
-		e.strs(v.Params)
-		e.strs(v.ParamAnnots)
-		e.str(v.RetAnnot)
-		e.str(v.YieldAnnot)
+		e.strings(v.Params)
+		e.strings(v.ParamAnnots)
+		e.string(v.RetAnnot)
+		e.string(v.YieldAnnot)
 		return e.node(v.Body)
 	case *ast.MapExpr:
 		e.u8(nodeMapExpr)
 		e.pos(p)
 		e.boolean(v.Anon)
-		e.str(v.ObjectName)
+		e.string(v.ObjectName)
 		e.u32(uint32(len(v.Keys)))
 		for i := range v.Keys {
 			if err := e.node(v.Keys[i]); err != nil {
@@ -515,8 +515,8 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ObjectLit:
 		e.u8(nodeObjectLit)
 		e.pos(p)
-		e.str(v.TypeName)
-		e.strs(v.Keys)
+		e.string(v.TypeName)
+		e.strings(v.Keys)
 		e.u32(uint32(len(v.Values)))
 		for _, val := range v.Values {
 			if err := e.node(val); err != nil {
@@ -528,7 +528,7 @@ func (e *enc) node(n ast.Node) error {
 		e.pos(p)
 		e.u32(uint32(len(v.Parts)))
 		for _, part := range v.Parts {
-			e.str(part.Lit)
+			e.string(part.Lit)
 			if err := e.node(part.Expr); err != nil {
 				return err
 			}
@@ -543,12 +543,12 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.IsExpr:
 		e.u8(nodeIsExpr)
 		e.pos(p)
-		e.str(v.TypeName)
+		e.string(v.TypeName)
 		return e.node(v.Expr)
 	case *ast.AsExpr:
 		e.u8(nodeAsExpr)
 		e.pos(p)
-		e.str(v.TypeName)
+		e.string(v.TypeName)
 		return e.node(v.Expr)
 	case *ast.BlockStmt:
 		e.u8(nodeBlockStmt)
@@ -562,13 +562,13 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ImportStmt:
 		e.u8(nodeImportStmt)
 		e.pos(p)
-		e.str(v.Path)
+		e.string(v.Path)
 	case *ast.DeclStmt:
 		e.u8(nodeDeclStmt)
 		e.pos(p)
 		e.boolean(v.IsConst)
-		e.str(v.Name)
-		e.str(v.TypeAnnot)
+		e.string(v.Name)
+		e.string(v.TypeAnnot)
 		return e.node(v.Value)
 	case *ast.AssignStmt:
 		e.u8(nodeAssignStmt)
@@ -598,7 +598,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.WhileStmt:
 		e.u8(nodeWhileStmt)
 		e.pos(p)
-		e.str(v.Label)
+		e.string(v.Label)
 		if err := e.node(v.Cond); err != nil {
 			return err
 		}
@@ -606,7 +606,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ForStmt:
 		e.u8(nodeForStmt)
 		e.pos(p)
-		e.str(v.Label)
+		e.string(v.Label)
 		e.u32(uint32(len(v.Init)))
 		for _, n := range v.Init {
 			if err := e.node(n); err != nil {
@@ -626,9 +626,9 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ForEachStmt:
 		e.u8(nodeForEachStmt)
 		e.pos(p)
-		e.str(v.Label)
-		e.str(v.KeyName)
-		e.str(v.ValName)
+		e.string(v.Label)
+		e.string(v.KeyName)
+		e.string(v.ValName)
 		if err := e.node(v.Iter); err != nil {
 			return err
 		}
@@ -636,19 +636,19 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.BreakStmt:
 		e.u8(nodeBreakStmt)
 		e.pos(p)
-		e.str(v.Label)
+		e.string(v.Label)
 	case *ast.ContinueStmt:
 		e.u8(nodeContinueStmt)
 		e.pos(p)
-		e.str(v.Label)
+		e.string(v.Label)
 	case *ast.FunDecl:
 		e.u8(nodeFunDecl)
 		e.pos(p)
-		e.str(v.Name)
-		e.strs(v.Params)
-		e.strs(v.ParamAnnots)
-		e.str(v.RetAnnot)
-		e.str(v.YieldAnnot)
+		e.string(v.Name)
+		e.strings(v.Params)
+		e.strings(v.ParamAnnots)
+		e.string(v.RetAnnot)
+		e.string(v.YieldAnnot)
 		e.boolean(v.IsStatic)
 		e.boolean(v.IsExtern)
 		if v.IsExtern {
@@ -659,19 +659,19 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ObjectDecl:
 		e.u8(nodeObjectDecl)
 		e.pos(p)
-		e.str(v.Name)
+		e.string(v.Name)
 		e.u32(uint32(len(v.Fields)))
 		for _, f := range v.Fields {
-			e.str(f.Name)
-			e.str(f.TypeAnnot)
+			e.string(f.Name)
+			e.string(f.TypeAnnot)
 			if err := e.node(f.Default); err != nil {
 				return err
 			}
 		}
 		e.u32(uint32(len(v.StaticFields)))
 		for _, f := range v.StaticFields {
-			e.str(f.Name)
-			e.str(f.TypeAnnot)
+			e.string(f.Name)
+			e.string(f.TypeAnnot)
 			if err := e.node(f.Default); err != nil {
 				return err
 			}
@@ -685,9 +685,9 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.EnumDecl:
 		e.u8(nodeEnumDecl)
 		e.pos(p)
-		e.str(v.Name)
-		e.strs(v.Cases)
-		e.str(v.Backing)
+		e.string(v.Name)
+		e.strings(v.Cases)
+		e.string(v.Backing)
 		e.u32(uint32(len(v.Values)))
 		for _, cv := range v.Values {
 			if err := e.node(cv); err != nil {
@@ -710,8 +710,8 @@ func (e *enc) node(n ast.Node) error {
 		e.u32(uint32(len(v.Catches)))
 		for _, cl := range v.Catches {
 			e.pos(cl.Pos)
-			e.str(cl.ErrName)
-			e.str(cl.TypeName)
+			e.string(cl.ErrName)
+			e.string(cl.TypeName)
 			if err := e.node(cl.Body); err != nil {
 				return err
 			}
@@ -876,7 +876,7 @@ func (d *dec) boolean() (bool, error) {
 	return b != 0, err
 }
 
-func (d *dec) str() (string, error) {
+func (d *dec) string() (string, error) {
 	n, err := d.u32()
 	if err != nil {
 		return "", err
@@ -888,7 +888,7 @@ func (d *dec) str() (string, error) {
 	return string(b), nil
 }
 
-func (d *dec) strs() ([]string, error) {
+func (d *dec) strings() ([]string, error) {
 	n, err := d.u32()
 	if err != nil {
 		return nil, err
@@ -898,7 +898,7 @@ func (d *dec) strs() ([]string, error) {
 	}
 	ss := make([]string, int(n))
 	for i := range ss {
-		ss[i], err = d.str()
+		ss[i], err = d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -940,10 +940,10 @@ func (d *dec) objFields() ([]ast.ObjField, error) {
 	}
 	fields := make([]ast.ObjField, int(n))
 	for i := range fields {
-		if fields[i].Name, err = d.str(); err != nil {
+		if fields[i].Name, err = d.string(); err != nil {
 			return nil, err
 		}
-		if fields[i].TypeAnnot, err = d.str(); err != nil {
+		if fields[i].TypeAnnot, err = d.string(); err != nil {
 			return nil, err
 		}
 		if fields[i].Default, err = d.node(); err != nil {
@@ -956,10 +956,10 @@ func (d *dec) objFields() ([]ast.ObjField, error) {
 func (d *dec) chunk() (*Chunk, error) {
 	c := &Chunk{}
 	var err error
-	if c.Name, err = d.str(); err != nil {
+	if c.Name, err = d.string(); err != nil {
 		return nil, err
 	}
-	if c.Params, err = d.strs(); err != nil {
+	if c.Params, err = d.strings(); err != nil {
 		return nil, err
 	}
 	lc, err := d.i32()
@@ -1048,7 +1048,7 @@ func (d *dec) chunk() (*Chunk, error) {
 			}
 		}
 	}
-	if c.Exports, err = d.strs(); err != nil {
+	if c.Exports, err = d.strings(); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -1075,10 +1075,10 @@ func (d *dec) attachDebug(c *Chunk) error {
 				return err
 			}
 		}
-		if c.LocalNames, err = d.strs(); err != nil {
+		if c.LocalNames, err = d.strings(); err != nil {
 			return err
 		}
-		if c.UpvalNames, err = d.strs(); err != nil {
+		if c.UpvalNames, err = d.strings(); err != nil {
 			return err
 		}
 	}
@@ -1117,17 +1117,17 @@ func (d *dec) constVal() (Value, error) {
 		}
 		return FloatValue(math.Float64frombits(n)), nil
 	case constTagStr:
-		s, err := d.str()
+		s, err := d.string()
 		if err != nil {
 			return Null, err
 		}
-		return StrValue(s), nil
+		return StringValue(s), nil
 	case constTagEnumDef:
-		name, err := d.str()
+		name, err := d.string()
 		if err != nil {
 			return Null, err
 		}
-		cases, err := d.strs()
+		cases, err := d.strings()
 		if err != nil {
 			return Null, err
 		}
@@ -1156,13 +1156,13 @@ func (d *dec) constVal() (Value, error) {
 		}
 		return heapValue(tagObjDecl, &objDeclPayload{decl}), nil
 	case constTagPat:
-		s, err := d.str()
+		s, err := d.string()
 		if err != nil {
 			return Null, err
 		}
 		return PatValue(s)
 	case constTagType:
-		s, err := d.str()
+		s, err := d.string()
 		if err != nil {
 			return Null, err
 		}
@@ -1218,19 +1218,19 @@ func (d *dec) node() (ast.Node, error) {
 	case nodeNullLit:
 		return &ast.NullLit{Pos: p}, nil
 	case nodeStringLit:
-		s, err := d.str()
+		s, err := d.string()
 		if err != nil {
 			return nil, err
 		}
 		return &ast.StringLit{Pos: p, Val: s}, nil
 	case nodeIdentExpr:
-		name, err := d.str()
+		name, err := d.string()
 		if err != nil {
 			return nil, err
 		}
 		return &ast.IdentExpr{Pos: p, Name: name}, nil
 	case nodeBinaryExpr:
-		op, err := d.str()
+		op, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1244,7 +1244,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.BinaryExpr{Pos: p, Op: op, Left: left, Right: right}, nil
 	case nodeUnaryExpr:
-		op, err := d.str()
+		op, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1273,7 +1273,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.CallExpr{Pos: p, Callee: callee, Args: args}, nil
 	case nodeMemberExpr:
-		name, err := d.str()
+		name, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1305,19 +1305,19 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.IndexExpr{Pos: p, Object: obj, Index: idx, Optional: optional, OptionalRecv: optionalRecv}, nil
 	case nodeFunExpr:
-		params, err := d.strs()
+		params, err := d.strings()
 		if err != nil {
 			return nil, err
 		}
-		paramAnnots, err := d.strs()
+		paramAnnots, err := d.strings()
 		if err != nil {
 			return nil, err
 		}
-		retAnnot, err := d.str()
+		retAnnot, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		yieldAnnot, err := d.str()
+		yieldAnnot, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1374,7 +1374,7 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		objectName, err := d.str()
+		objectName, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1412,11 +1412,11 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.ListExpr{Pos: p, Items: items}, nil
 	case nodeObjectLit:
-		typeName, err := d.str()
+		typeName, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		keys, err := d.strs()
+		keys, err := d.strings()
 		if err != nil {
 			return nil, err
 		}
@@ -1444,7 +1444,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		parts := make([]ast.InterpPart, int(n))
 		for i := range parts {
-			if parts[i].Lit, err = d.str(); err != nil {
+			if parts[i].Lit, err = d.string(); err != nil {
 				return nil, err
 			}
 			if parts[i].Expr, err = d.node(); err != nil {
@@ -1463,7 +1463,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.RangeExpr{Pos: p, Lo: lo, Hi: hi}, nil
 	case nodeIsExpr:
-		typeName, err := d.str()
+		typeName, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1473,7 +1473,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.IsExpr{Pos: p, TypeName: typeName, Expr: expr}, nil
 	case nodeAsExpr:
-		typeName, err := d.str()
+		typeName, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1498,7 +1498,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.BlockStmt{Pos: p, Stmts: stmts}, nil
 	case nodeImportStmt:
-		path, err := d.str()
+		path, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1508,11 +1508,11 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		name, err := d.str()
+		name, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		typeAnnot, err := d.str()
+		typeAnnot, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1562,7 +1562,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.IfStmt{Pos: p, Cond: cond, Then: blockThen, Else: els}, nil
 	case nodeWhileStmt:
-		label, err := d.str()
+		label, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1580,7 +1580,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.WhileStmt{Pos: p, Cond: cond, Body: blockBody, Label: label}, nil
 	case nodeForStmt:
-		label, err := d.str()
+		label, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1606,15 +1606,15 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.ForStmt{Pos: p, Init: init, Cond: cond, Post: post, Body: blockBody, Label: label}, nil
 	case nodeForEachStmt:
-		label, err := d.str()
+		label, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		keyName, err := d.str()
+		keyName, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		valName, err := d.str()
+		valName, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1632,35 +1632,35 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.ForEachStmt{Pos: p, KeyName: keyName, ValName: valName, Iter: iter, Body: blockBody, Label: label}, nil
 	case nodeBreakStmt:
-		label, err := d.str()
+		label, err := d.string()
 		if err != nil {
 			return nil, err
 		}
 		return &ast.BreakStmt{Pos: p, Label: label}, nil
 	case nodeContinueStmt:
-		label, err := d.str()
+		label, err := d.string()
 		if err != nil {
 			return nil, err
 		}
 		return &ast.ContinueStmt{Pos: p, Label: label}, nil
 	case nodeFunDecl:
-		name, err := d.str()
+		name, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		params, err := d.strs()
+		params, err := d.strings()
 		if err != nil {
 			return nil, err
 		}
-		paramAnnots, err := d.strs()
+		paramAnnots, err := d.strings()
 		if err != nil {
 			return nil, err
 		}
-		retAnnot, err := d.str()
+		retAnnot, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		yieldAnnot, err := d.str()
+		yieldAnnot, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1689,7 +1689,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.FunDecl{Pos: p, Name: name, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, IsStatic: isStatic, IsExtern: isExtern, Body: blockBody}, nil
 	case nodeObjectDecl:
-		name, err := d.str()
+		name, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1722,15 +1722,15 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.ObjectDecl{Pos: p, Name: name, Fields: fields, StaticFields: statics, Methods: methods}, nil
 	case nodeEnumDecl:
-		name, err := d.str()
+		name, err := d.string()
 		if err != nil {
 			return nil, err
 		}
-		cases, err := d.strs()
+		cases, err := d.strings()
 		if err != nil {
 			return nil, err
 		}
-		backing, err := d.str()
+		backing, err := d.string()
 		if err != nil {
 			return nil, err
 		}
@@ -1775,11 +1775,11 @@ func (d *dec) node() (ast.Node, error) {
 			if err != nil {
 				return nil, err
 			}
-			errName, err := d.str()
+			errName, err := d.string()
 			if err != nil {
 				return nil, err
 			}
-			typeName, err := d.str()
+			typeName, err := d.string()
 			if err != nil {
 				return nil, err
 			}

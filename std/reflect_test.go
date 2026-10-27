@@ -10,18 +10,18 @@ import (
 )
 
 func TestImplName(t *testing.T) {
-	topName := implName(Method{Impl: FsGlob})
+	topName := implementationName(Method{Impl: FsGlob})
 	assert.Equal(t, "std.FsGlob", topName)
 
 	var recv methodReceiver
-	mvName := implName(Method{Impl: recv.Method})
+	mvName := implementationName(Method{Impl: recv.Method})
 	assert.Contains(t, mvName, "methodReceiver")
 	assert.True(t, strings.HasSuffix(mvName, "-fm"), "method value name %q should end in -fm", mvName)
 
-	assert.Contains(t, implName(Method{Impl: makeClosure()}), ".func")
-	assert.Contains(t, implName(Method{Impl: genericFunc[int]}), "[...]")
-	assert.Equal(t, "", implName(Method{Impl: nil}))
-	assert.Equal(t, "", implName(Method{Impl: 42}))
+	assert.Contains(t, implementationName(Method{Impl: makeClosure()}), ".func")
+	assert.Contains(t, implementationName(Method{Impl: genericFunc[int]}), "[...]")
+	assert.Equal(t, "", implementationName(Method{Impl: nil}))
+	assert.Equal(t, "", implementationName(Method{Impl: 42}))
 }
 
 func TestBareName(t *testing.T) {
@@ -80,30 +80,30 @@ func TestMethodSource(t *testing.T) {
 }
 
 func TestFieldFuncName(t *testing.T) {
-	assert.Equal(t, "covResolverCtx", FieldFuncName(Field{Resolver: covResolverCtx}))
+	assert.Equal(t, "covResolverContext", FieldFuncName(Field{Resolver: covResolverContext}))
 	assert.Empty(t, FieldFuncName(Field{}))
 }
 
 func TestFieldResolverTakesCtx(t *testing.T) {
-	assert.True(t, FieldResolverTakesCtx(Field{Resolver: covResolverCtx}))
-	assert.False(t, FieldResolverTakesCtx(Field{Resolver: covResolverBare}))
-	assert.False(t, FieldResolverTakesCtx(Field{}))
+	assert.True(t, FieldResolverTakesContext(Field{Resolver: covResolverContext}))
+	assert.False(t, FieldResolverTakesContext(Field{Resolver: covResolverBare}))
+	assert.False(t, FieldResolverTakesContext(Field{}))
 }
 
 // TestImplPackage covers the qualifier codegen writes at the call site. It stops
 // assuming every Impl lives in package std, so the assertion is on the pair rather
 // than on the identifier alone.
 func TestImplPackage(t *testing.T) {
-	path, ident := MethodImplPackage(Method{Impl: FsGlob})
+	path, ident := MethodImplementationPackage(Method{Impl: FsGlob})
 	assert.True(t, strings.HasSuffix(path, "/std"), "import path %q should end at the std package", path)
 	assert.Equal(t, "std", ident)
 
-	path, ident = FieldResolverPackage(Field{Resolver: covResolverCtx})
+	path, ident = FieldResolverPackage(Field{Resolver: covResolverContext})
 	assert.True(t, strings.HasSuffix(path, "/std"), "import path %q should end at the std package", path)
 	assert.Equal(t, "std", ident)
 
 	for _, impl := range []any{nil, 42} {
-		p, i := MethodImplPackage(Method{Impl: impl})
+		p, i := MethodImplementationPackage(Method{Impl: impl})
 		assert.Emptyf(t, p, "MethodImplPackage(Impl=%v) path", impl)
 		assert.Emptyf(t, i, "MethodImplPackage(Impl=%v) ident", impl)
 	}

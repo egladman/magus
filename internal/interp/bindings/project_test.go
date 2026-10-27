@@ -30,19 +30,19 @@ func TestContributesNothing(t *testing.T) {
 	}
 }
 
-// applyOpts runs the parsed project options against a fresh root project so tests can
+// applyOptions runs the parsed project options against a fresh root project so tests can
 // assert the resulting policy fields.
-func applyOpts(t *testing.T, opts vm.Value) *types.Project {
+func applyOptions(t *testing.T, opts vm.Value) *types.Project {
 	t.Helper()
-	return applyOptsAt(t, ".", opts)
+	return applyOptionsAt(t, ".", opts)
 }
 
-// applyOptsAt is applyOpts against a project at projectPath. Sources are the one option
+// applyOptionsAt is applyOptions against a project at projectPath. Sources are the one option
 // whose stored value depends on where the project sits, because a glob may reach out of
 // it; every other case reads the same from the root.
-func applyOptsAt(t *testing.T, projectPath string, opts vm.Value) *types.Project {
+func applyOptionsAt(t *testing.T, projectPath string, opts vm.Value) *types.Project {
 	t.Helper()
-	got, err := parseBuzzProjectOpts(context.Background(), opts)
+	got, err := parseBuzzProjectOptions(context.Background(), opts)
 	require.NoError(t, err)
 	p := &types.Project{Path: projectPath}
 	for _, o := range got {
@@ -51,8 +51,8 @@ func applyOptsAt(t *testing.T, projectPath string, opts vm.Value) *types.Project
 	return p
 }
 
-// targetsOpts builds a `{"targets": {name: policy}}` options map.
-func targetsOpts(name string, policy vm.Value) vm.Value {
+// targetsOptions builds a `{"targets": {name: policy}}` options map.
+func targetsOptions(name string, policy vm.Value) vm.Value {
 	targets := vm.NewMap()
 	targets.MapSet(name, policy)
 	opts := vm.NewMap()
@@ -77,8 +77,8 @@ func TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted(t *testing.T) {
 	for _, key := range types.TargetPolicyKeys() {
 		t.Run(key, func(t *testing.T) {
 			pol := vm.NewMap()
-			pol.MapSet(key, vm.StrValue("x"))
-			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+			pol.MapSet(key, vm.StringValue("x"))
+			_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("lint", pol))
 			if err != nil {
 				assert.NotContains(t, err.Error(), "unknown option",
 					"the engine rejects %q, which types.TargetPolicyKeys declares recognized", key)
@@ -90,14 +90,14 @@ func TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted(t *testing.T) {
 func TestParseBuzzProjectOpts_TargetSlots(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.IntValue(4))
-	p := applyOpts(t, targetsOpts("lint", pol))
+	p := applyOptions(t, targetsOptions("lint", pol))
 	assert.Equal(t, 4, p.TargetPolicies["lint"].Slots)
 }
 
 func TestParseBuzzProjectOpts_TargetSlotsNonPositiveErrors(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.IntValue(0))
-	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("lint", pol))
 	assert.ErrorContains(t, err, `targets["lint"].slots must be >= 1`)
 }
 
@@ -107,14 +107,14 @@ func TestParseBuzzProjectOpts_TargetSlotsNonPositiveErrors(t *testing.T) {
 func TestParseBuzzProjectOpts_TargetSlotsNonIntErrors(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.FloatValue(2.5))
-	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("lint", pol))
 	assert.ErrorContains(t, err, `targets["lint"].slots must be a whole number`)
 }
 
 func TestParseBuzzProjectOpts_TargetTimeout(t *testing.T) {
 	pol := vm.NewMap()
-	pol.MapSet("timeout", vm.StrValue("15m"))
-	p := applyOpts(t, targetsOpts("security", pol))
+	pol.MapSet("timeout", vm.StringValue("15m"))
+	p := applyOptions(t, targetsOptions("security", pol))
 	assert.Equal(t, "15m", p.TargetPolicies["security"].Timeout)
 	assert.Equal(t, 15*time.Minute, p.TargetPolicies["security"].TimeoutDuration())
 }
@@ -125,7 +125,7 @@ func TestParseBuzzProjectOpts_TargetTimeout(t *testing.T) {
 func TestParseBuzzProjectOpts_TargetTimeoutAbsentIsUnbounded(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.IntValue(2))
-	p := applyOpts(t, targetsOpts("security", pol))
+	p := applyOptions(t, targetsOptions("security", pol))
 	assert.Empty(t, p.TargetPolicies["security"].Timeout)
 	assert.Zero(t, p.TargetPolicies["security"].TimeoutDuration())
 }
@@ -136,15 +136,15 @@ func TestParseBuzzProjectOpts_TargetTimeoutMalformedErrors(t *testing.T) {
 		value vm.Value
 		want  string
 	}{
-		{"not a duration", vm.StrValue("15 minutes"), `targets["security"].timeout: "15 minutes" is not a duration`},
-		{"zero", vm.StrValue("0s"), `targets["security"].timeout: "0s" is not positive`},
-		{"negative", vm.StrValue("-1m"), `targets["security"].timeout: "-1m" is not positive`},
+		{"not a duration", vm.StringValue("15 minutes"), `targets["security"].timeout: "15 minutes" is not a duration`},
+		{"zero", vm.StringValue("0s"), `targets["security"].timeout: "0s" is not positive`},
+		{"negative", vm.StringValue("-1m"), `targets["security"].timeout: "-1m" is not positive`},
 		{"an integer of unstated unit", vm.IntValue(900), `targets["security"].timeout must be a duration string`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pol := vm.NewMap()
 			pol.MapSet("timeout", tc.value)
-			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("security", pol))
+			_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("security", pol))
 			assert.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -154,19 +154,19 @@ func TestParseBuzzProjectOpts_TargetTimeoutMalformedErrors(t *testing.T) {
 // as a map, and becomes the target layer.
 func TestParseBuzzProjectOpts_TargetSandbox(t *testing.T) {
 	entry := vm.NewMap()
-	entry.MapSet("env", vm.StrValue("FIXTURES"))
-	entry.MapSet("base", vm.StrValue("xdgData"))
-	entry.MapSet("path", vm.StrValue("fixtures"))
-	entry.MapSet("mode", vm.StrValue("rw"))
+	entry.MapSet("env", vm.StringValue("FIXTURES"))
+	entry.MapSet("base", vm.StringValue("xdgData"))
+	entry.MapSet("path", vm.StringValue("fixtures"))
+	entry.MapSet("mode", vm.StringValue("rw"))
 	envMap := vm.NewMap()
-	envMap.MapSet("passthrough", vm.ListValue([]vm.Value{vm.StrValue("FIXTURES")}))
+	envMap.MapSet("passthrough", vm.ListValue([]vm.Value{vm.StringValue("FIXTURES")}))
 	sb := vm.NewMap()
 	sb.MapSet("allow", vm.ListValue([]vm.Value{entry}))
 	sb.MapSet("env", envMap)
 	pol := vm.NewMap()
 	pol.MapSet("sandbox", sb)
 
-	p := applyOpts(t, targetsOpts("test", pol))
+	p := applyOptions(t, targetsOptions("test", pol))
 	assert.Equal(t, &spells.Sandbox{
 		Allow: []spells.SandboxAllow{{Env: "FIXTURES", Base: "xdgData", Path: "fixtures", Mode: spells.SandboxAccessRW}},
 		Env:   spells.SandboxEnv{Passthrough: []string{"FIXTURES"}},
@@ -186,14 +186,14 @@ func TestParseBuzzProjectOpts_TargetSandboxMalformedErrors(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			entry := vm.NewMap()
-			entry.MapSet("base", vm.StrValue("xdgData"))
-			entry.MapSet("path", vm.StrValue("x"))
-			entry.MapSet(tc.key, vm.StrValue(tc.value))
+			entry.MapSet("base", vm.StringValue("xdgData"))
+			entry.MapSet("path", vm.StringValue("x"))
+			entry.MapSet(tc.key, vm.StringValue(tc.value))
 			sb := vm.NewMap()
 			sb.MapSet("allow", vm.ListValue([]vm.Value{entry}))
 			pol := vm.NewMap()
 			pol.MapSet("sandbox", sb)
-			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("test", pol))
+			_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("test", pol))
 			require.ErrorIs(t, err, types.AllowlistUnresolved)
 			assert.ErrorContains(t, err, `targets["test"].sandbox`)
 			assert.ErrorContains(t, err, tc.want)
@@ -205,16 +205,16 @@ func TestParseBuzzProjectOpts_TargetSandboxMalformedErrors(t *testing.T) {
 // target has none, so a target that names one is refused rather than left uncarried.
 func TestParseBuzzProjectOpts_TargetSandboxRefusesACache(t *testing.T) {
 	entry := vm.NewMap()
-	entry.MapSet("env", vm.StrValue("FIXTURES"))
-	entry.MapSet("mode", vm.StrValue("rw"))
+	entry.MapSet("env", vm.StringValue("FIXTURES"))
+	entry.MapSet("mode", vm.StringValue("rw"))
 	cache := vm.NewMap()
-	cache.MapSet("env", vm.StrValue("FIXTURES"))
+	cache.MapSet("env", vm.StringValue("FIXTURES"))
 	sb := vm.NewMap()
 	sb.MapSet("allow", vm.ListValue([]vm.Value{entry}))
 	sb.MapSet("caches", vm.ListValue([]vm.Value{cache}))
 	pol := vm.NewMap()
 	pol.MapSet("sandbox", sb)
-	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("test", pol))
+	_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("test", pol))
 	require.ErrorIs(t, err, types.AllowlistUnresolved)
 	assert.ErrorContains(t, err, `targets["test"].sandbox: caches are a spell's declaration`)
 }
@@ -227,8 +227,8 @@ func TestParseBuzzProjectOpts_TargetSandboxRefusesACache(t *testing.T) {
 // produces, so the declaration reads as supported and keys nothing.
 func TestParseBuzzProjectOpts_Sources(t *testing.T) {
 	opts := vm.NewMap()
-	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("./guides/**"), vm.StrValue("../proto/**/*.proto")}))
-	p := applyOptsAt(t, "docs", opts)
+	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StringValue("./guides/**"), vm.StringValue("../proto/**/*.proto")}))
+	p := applyOptionsAt(t, "docs", opts)
 	assert.Equal(t, []types.Glob{{Pattern: "guides/**"}, {Pattern: "../proto/**/*.proto"}}, p.Sources)
 	assert.Equal(t, []types.Glob{{Pattern: "docs/guides/**"}, {Pattern: "proto/**/*.proto"}}, p.DeclaredGlobs(),
 		"both globs root at the workspace; only the reaching one moves")
@@ -240,8 +240,8 @@ func TestParseBuzzProjectOpts_Sources(t *testing.T) {
 // affordance was fixed to stop producing.
 func TestParseBuzzProjectOpts_SourcesRejectsAWorkspaceEscape(t *testing.T) {
 	opts := vm.NewMap()
-	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("../../elsewhere/**")}))
-	got, err := parseBuzzProjectOpts(context.Background(), opts)
+	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StringValue("../../elsewhere/**")}))
+	got, err := parseBuzzProjectOptions(context.Background(), opts)
 	require.NoError(t, err, "parsing builds the option; the project it anchors against decides")
 	require.Len(t, got, 1)
 
@@ -255,8 +255,8 @@ func TestParseBuzzProjectOpts_SourcesRejectsAWorkspaceEscape(t *testing.T) {
 func TestParseBuzzProjectOpts_NoLanguage(t *testing.T) {
 	t.Run("a reason is recorded", func(t *testing.T) {
 		opts := vm.NewMap()
-		opts.MapSet("no_language", vm.StrValue("polyglot harness; no single pack describes it"))
-		p := applyOpts(t, opts)
+		opts.MapSet("no_language", vm.StringValue("polyglot harness; no single pack describes it"))
+		p := applyOptions(t, opts)
 		assert.Equal(t, "polyglot harness; no single pack describes it", p.NoLanguage)
 	})
 
@@ -265,13 +265,13 @@ func TestParseBuzzProjectOpts_NoLanguage(t *testing.T) {
 		val  vm.Value
 	}{
 		{"a bare true is not a reason", vm.BoolValue(true)},
-		{"empty is not a reason", vm.StrValue("")},
-		{"whitespace is not a reason", vm.StrValue("   ")},
+		{"empty is not a reason", vm.StringValue("")},
+		{"whitespace is not a reason", vm.StringValue("   ")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := vm.NewMap()
 			opts.MapSet("no_language", tc.val)
-			_, err := parseBuzzProjectOpts(context.Background(), opts)
+			_, err := parseBuzzProjectOptions(context.Background(), opts)
 			assert.ErrorContains(t, err, `"no_language" needs a reason string`)
 		})
 	}
@@ -284,8 +284,8 @@ func TestParseBuzzProjectOpts_NoLanguage(t *testing.T) {
 func TestParseBuzzProjectOpts_SkipCacheReason(t *testing.T) {
 	t.Run("a reason is recorded", func(t *testing.T) {
 		pol := vm.NewMap()
-		pol.MapSet("skip_cache", vm.StrValue("signs a fresh artifact per invocation"))
-		p := applyOpts(t, targetsOpts("release-sign", pol))
+		pol.MapSet("skip_cache", vm.StringValue("signs a fresh artifact per invocation"))
+		p := applyOptions(t, targetsOptions("release-sign", pol))
 		got := p.TargetPolicies["release-sign"]
 		assert.True(t, got.SkipCache)
 		assert.Equal(t, "signs a fresh artifact per invocation", got.SkipCacheReason)
@@ -296,13 +296,13 @@ func TestParseBuzzProjectOpts_SkipCacheReason(t *testing.T) {
 		val  vm.Value
 	}{
 		{"a bare true is not a reason", vm.BoolValue(true)},
-		{"empty is not a reason", vm.StrValue("")},
-		{"whitespace is not a reason", vm.StrValue("  ")},
+		{"empty is not a reason", vm.StringValue("")},
+		{"whitespace is not a reason", vm.StringValue("  ")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pol := vm.NewMap()
 			pol.MapSet("skip_cache", tc.val)
-			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+			_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("lint", pol))
 			assert.ErrorContains(t, err, "needs a reason string")
 			assert.ErrorContains(t, err, "--no-cache", "the error must point at the weaker control")
 		})
@@ -316,8 +316,8 @@ func TestParseBuzzProjectOpts_SkipCacheReason(t *testing.T) {
 func TestParseBuzzProjectOpts_RetryOnVolatileReason(t *testing.T) {
 	t.Run("a reason is recorded", func(t *testing.T) {
 		pol := vm.NewMap()
-		pol.MapSet("retry_on_volatile", vm.StrValue("talks to a shared broker that drops a connection under load"))
-		p := applyOpts(t, targetsOpts("integration", pol))
+		pol.MapSet("retry_on_volatile", vm.StringValue("talks to a shared broker that drops a connection under load"))
+		p := applyOptions(t, targetsOptions("integration", pol))
 		got := p.TargetPolicies["integration"]
 		assert.True(t, got.RetryOnVolatile)
 		assert.Equal(t, "talks to a shared broker that drops a connection under load", got.RetryOnVolatileReason)
@@ -326,7 +326,7 @@ func TestParseBuzzProjectOpts_RetryOnVolatileReason(t *testing.T) {
 	t.Run("an undeclared target is not retryable", func(t *testing.T) {
 		pol := vm.NewMap()
 		pol.MapSet("slots", vm.IntValue(4))
-		p := applyOpts(t, targetsOpts("lint", pol))
+		p := applyOptions(t, targetsOptions("lint", pol))
 		assert.False(t, p.TargetPolicies["lint"].RetryOnVolatile)
 	})
 
@@ -335,13 +335,13 @@ func TestParseBuzzProjectOpts_RetryOnVolatileReason(t *testing.T) {
 		val  vm.Value
 	}{
 		{"a bare true is not a reason", vm.BoolValue(true)},
-		{"empty is not a reason", vm.StrValue("")},
-		{"whitespace is not a reason", vm.StrValue("  ")},
+		{"empty is not a reason", vm.StringValue("")},
+		{"whitespace is not a reason", vm.StringValue("  ")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pol := vm.NewMap()
 			pol.MapSet("retry_on_volatile", tc.val)
-			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("test", pol))
+			_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("test", pol))
 			assert.ErrorContains(t, err, "needs a reason string")
 			assert.ErrorContains(t, err, "leave the policy off",
 				"the error must say what to do when a failure means the code IS wrong")
@@ -355,8 +355,8 @@ func TestParseBuzzProjectOpts_RetryOnVolatileReason(t *testing.T) {
 func TestParseBuzzProjectOpts_AdvisoryReason(t *testing.T) {
 	t.Run("a reason is recorded", func(t *testing.T) {
 		pol := vm.NewMap()
-		pol.MapSet("advisory", vm.StrValue("renders from a hand-refreshed record"))
-		p := applyOpts(t, targetsOpts("coverage-badge", pol))
+		pol.MapSet("advisory", vm.StringValue("renders from a hand-refreshed record"))
+		p := applyOptions(t, targetsOptions("coverage-badge", pol))
 		got := p.TargetPolicies["coverage-badge"]
 		assert.True(t, got.Advisory)
 		assert.Equal(t, "renders from a hand-refreshed record", got.AdvisoryReason)
@@ -365,7 +365,7 @@ func TestParseBuzzProjectOpts_AdvisoryReason(t *testing.T) {
 	t.Run("an undeclared target gates", func(t *testing.T) {
 		pol := vm.NewMap()
 		pol.MapSet("slots", vm.IntValue(4))
-		p := applyOpts(t, targetsOpts("lint", pol))
+		p := applyOptions(t, targetsOptions("lint", pol))
 		assert.False(t, p.TargetPolicies["lint"].Advisory)
 	})
 
@@ -374,13 +374,13 @@ func TestParseBuzzProjectOpts_AdvisoryReason(t *testing.T) {
 		val  vm.Value
 	}{
 		{"a bare true is not a reason", vm.BoolValue(true)},
-		{"empty is not a reason", vm.StrValue("")},
-		{"whitespace is not a reason", vm.StrValue("  ")},
+		{"empty is not a reason", vm.StringValue("")},
+		{"whitespace is not a reason", vm.StringValue("  ")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pol := vm.NewMap()
 			pol.MapSet("advisory", tc.val)
-			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("coverage-badge", pol))
+			_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("coverage-badge", pol))
 			assert.ErrorContains(t, err, "needs a reason string")
 			assert.ErrorContains(t, err, "leave the policy off",
 				"the error must say what to do when a failure should stop the gate")
@@ -393,8 +393,8 @@ func TestParseBuzzProjectOpts_AdvisoryReason(t *testing.T) {
 func TestParseBuzzProjectOpts_HumanOnlyReason(t *testing.T) {
 	t.Run("a reason is recorded", func(t *testing.T) {
 		pol := vm.NewMap()
-		pol.MapSet("human_only", vm.StrValue("  launches paid model sessions  "))
-		p := applyOpts(t, targetsOpts("agent-bench-run", pol))
+		pol.MapSet("human_only", vm.StringValue("  launches paid model sessions  "))
+		p := applyOptions(t, targetsOptions("agent-bench-run", pol))
 		got := p.TargetPolicies["agent-bench-run"]
 		assert.True(t, got.HumanOnly)
 		assert.Equal(t, "launches paid model sessions", got.HumanOnlyReason)
@@ -403,7 +403,7 @@ func TestParseBuzzProjectOpts_HumanOnlyReason(t *testing.T) {
 	t.Run("an undeclared target is not human-only", func(t *testing.T) {
 		pol := vm.NewMap()
 		pol.MapSet("slots", vm.IntValue(4))
-		p := applyOpts(t, targetsOpts("lint", pol))
+		p := applyOptions(t, targetsOptions("lint", pol))
 		assert.False(t, p.TargetPolicies["lint"].HumanOnly)
 	})
 
@@ -412,14 +412,14 @@ func TestParseBuzzProjectOpts_HumanOnlyReason(t *testing.T) {
 		val  vm.Value
 	}{
 		{"a bare true is not a reason", vm.BoolValue(true)},
-		{"empty is not a reason", vm.StrValue("")},
-		{"whitespace is not a reason", vm.StrValue("  ")},
+		{"empty is not a reason", vm.StringValue("")},
+		{"whitespace is not a reason", vm.StringValue("  ")},
 		{"a number is not a reason", vm.IntValue(4)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pol := vm.NewMap()
 			pol.MapSet("human_only", tc.val)
-			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("agent-bench-run", pol))
+			_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("agent-bench-run", pol))
 			assert.ErrorContains(t, err, `targets["agent-bench-run"].human_only needs a reason string saying what running this target costs`)
 		})
 	}
@@ -427,8 +427,8 @@ func TestParseBuzzProjectOpts_HumanOnlyReason(t *testing.T) {
 
 func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
 	opts := vm.NewMap()
-	opts.MapSet("depend_on", vm.ListValue([]vm.Value{vm.StrValue("api")}))
-	_, err := parseBuzzProjectOpts(context.Background(), opts)
+	opts.MapSet("depend_on", vm.ListValue([]vm.Value{vm.StringValue("api")}))
+	_, err := parseBuzzProjectOptions(context.Background(), opts)
 	assert.ErrorContains(t, err, `unknown option "depend_on"`)
 	assert.ErrorContains(t, err, `did you mean "depends_on"`)
 }
@@ -438,7 +438,7 @@ func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
 func TestParseBuzzProjectOpts_UnknownTargetPolicyKeyErrors(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("skipCache", vm.BoolValue(true))
-	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("lint", pol))
 	assert.ErrorContains(t, err, `unknown option "skipCache"`)
 	assert.ErrorContains(t, err, `did you mean "skip_cache"`)
 }
@@ -453,14 +453,14 @@ func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
 	t.Run("top level", func(t *testing.T) {
 		opts := vm.NewMap()
 		opts.MapSet("quantum_flux", vm.BoolValue(true))
-		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		_, err := parseBuzzProjectOptions(context.Background(), opts)
 		require.NoError(t, err)
 	})
 
 	t.Run("per-target policy", func(t *testing.T) {
 		pol := vm.NewMap()
-		pol.MapSet("quantum_flux", vm.StrValue("9m"))
-		_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+		pol.MapSet("quantum_flux", vm.StringValue("9m"))
+		_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("lint", pol))
 		require.NoError(t, err)
 	})
 
@@ -469,12 +469,12 @@ func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
 	// typo; see the tools subtest below.
 	t.Run("tool bounds stay strict", func(t *testing.T) {
 		bound := vm.NewMap()
-		bound.MapSet("quantum_flux", vm.StrValue("1"))
+		bound.MapSet("quantum_flux", vm.StringValue("1"))
 		tools := vm.NewMap()
 		tools.MapSet("go", bound)
 		opts := vm.NewMap()
 		opts.MapSet("tools", tools)
-		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		_, err := parseBuzzProjectOptions(context.Background(), opts)
 		assert.ErrorContains(t, err, `tools["go"]: unknown option "quantum_flux"`)
 	})
 }
@@ -484,9 +484,9 @@ func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
 // one bad member.
 func TestParseBuzzProjectOpts_AFutureKeyDoesNotDiscardItsNeighbors(t *testing.T) {
 	pol := vm.NewMap()
-	pol.MapSet("quantum_flux", vm.StrValue("9m"))
+	pol.MapSet("quantum_flux", vm.StringValue("9m"))
 	pol.MapSet("slots", vm.IntValue(2))
-	opts, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	opts, err := parseBuzzProjectOptions(context.Background(), targetsOptions("lint", pol))
 	require.NoError(t, err)
 	assert.NotEmpty(t, opts, "the slots policy beside the unknown key still lands")
 }
@@ -507,7 +507,7 @@ func includePolicy(axis string, on bool) vm.Value {
 // The nested form mirrors magus.yaml's cache.include.*.enabled, so one decision reads
 // the same way wherever it is written.
 func TestTargetCacheIncludeOverride(t *testing.T) {
-	p := applyOpts(t, targetsOpts("image", includePolicy("arch", false)))
+	p := applyOptions(t, targetsOptions("image", includePolicy("arch", false)))
 	pol := p.TargetPolicies["image"]
 
 	require.NotNil(t, pol.IncludeArch, "arch override not decoded")
@@ -522,7 +522,7 @@ func TestTargetCacheIncludeRejectsWrongShape(t *testing.T) {
 	cache := vm.NewMap()
 	cache.MapSet("includes", vm.NewMap()) // plural typo
 	bad.MapSet("cache", cache)
-	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("image", bad))
+	_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("image", bad))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "include")
 
@@ -532,16 +532,16 @@ func TestTargetCacheIncludeRejectsWrongShape(t *testing.T) {
 	inc.MapSet("os", vm.NewMap()) // present but empty
 	c2.MapSet("include", inc)
 	noEnabled.MapSet("cache", c2)
-	_, err = parseBuzzProjectOpts(context.Background(), targetsOpts("image", noEnabled))
+	_, err = parseBuzzProjectOptions(context.Background(), targetsOptions("image", noEnabled))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "enabled")
 }
 
-// toolsOpts builds a `{"tools": {bin: {min, below}}}` options map.
-func toolsOpts(bin string, kv map[string]string) vm.Value {
+// toolsOptions builds a `{"tools": {bin: {min, below}}}` options map.
+func toolsOptions(bin string, kv map[string]string) vm.Value {
 	bounds := vm.NewMap()
 	for k, v := range kv {
-		bounds.MapSet(k, vm.StrValue(v))
+		bounds.MapSet(k, vm.StringValue(v))
 	}
 	tools := vm.NewMap()
 	tools.MapSet(bin, bounds)
@@ -558,7 +558,7 @@ func TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted(t *testing.T) {
 	require.NotEmpty(t, types.ToolBoundKeys)
 	for _, key := range types.ToolBoundKeys {
 		t.Run(key, func(t *testing.T) {
-			_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{key: "22"}))
+			_, err := parseBuzzProjectOptions(context.Background(), toolsOptions("node", map[string]string{key: "22"}))
 			require.NoError(t, err, "the engine rejects %q, which types.ToolBoundKeys declares recognized", key)
 		})
 	}
@@ -566,12 +566,12 @@ func TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted(t *testing.T) {
 
 func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	t.Run("both bounds decode", func(t *testing.T) {
-		p := applyOpts(t, toolsOpts("node", map[string]string{"min": "22", "below": "25"}))
+		p := applyOptions(t, toolsOptions("node", map[string]string{"min": "22", "below": "25"}))
 		assert.Equal(t, spells.VersionBounds{Min: "22", Below: "25"}, p.ToolBounds["node"])
 	})
 
 	t.Run("a ceiling alone is enough", func(t *testing.T) {
-		p := applyOpts(t, toolsOpts("node", map[string]string{"below": "25"}))
+		p := applyOptions(t, toolsOptions("node", map[string]string{"below": "25"}))
 		assert.Equal(t, spells.VersionBounds{Below: "25"}, p.ToolBounds["node"])
 	})
 
@@ -579,7 +579,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	// VersionBounds.Check return unknown, which never fails a build, so a typo would
 	// silently widen the window to everything, the exact opposite of declaring one.
 	t.Run("a non-version bound is a load error", func(t *testing.T) {
-		got, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"min": "latest"}))
+		got, err := parseBuzzProjectOptions(context.Background(), toolsOptions("node", map[string]string{"min": "latest"}))
 		require.NoError(t, err, "decode succeeds; the option itself rejects")
 		p := &types.Project{Path: "."}
 		var applyErr error
@@ -594,7 +594,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	// A misspelling the suggester can reach is still a load error naming the two valid
 	// keys.
 	t.Run("a near-miss bound key is a load error", func(t *testing.T) {
-		_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"minn": "22"}))
+		_, err := parseBuzzProjectOptions(context.Background(), toolsOptions("node", map[string]string{"minn": "22"}))
 		assert.ErrorContains(t, err, `tools["node"]: unknown option "minn"`)
 		assert.ErrorContains(t, err, `did you mean "min"`)
 		assert.ErrorContains(t, err, "known options: below, min")
@@ -611,7 +611,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	// no key from the future to tolerate here, and tolerating one turned a declared
 	// version window into no window at all, silently.
 	t.Run("a bound key too far to suggest is still refused", func(t *testing.T) {
-		_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"minimum": "22"}))
+		_, err := parseBuzzProjectOptions(context.Background(), toolsOptions("node", map[string]string{"minimum": "22"}))
 		assert.ErrorContains(t, err, `tools["node"]: unknown option "minimum"`)
 		assert.ErrorContains(t, err, "known options: below, min")
 	})
@@ -619,7 +619,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	// An empty entry contributes nothing, so a project that writes one is not treated as
 	// having declared a window (which would make the run-start check compare nothing).
 	t.Run("an empty entry is dropped", func(t *testing.T) {
-		p := applyOpts(t, toolsOpts("node", map[string]string{}))
+		p := applyOptions(t, toolsOptions("node", map[string]string{}))
 		assert.Empty(t, p.ToolBounds)
 	})
 
@@ -633,7 +633,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 		tools.MapSet("go", bounds)
 		opts := vm.NewMap()
 		opts.MapSet("tools", tools)
-		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		_, err := parseBuzzProjectOptions(context.Background(), opts)
 		assert.ErrorContains(t, err, `tools["go"].min must be a string version`)
 	})
 
@@ -644,7 +644,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 		tools.MapSet("go", bounds)
 		opts := vm.NewMap()
 		opts.MapSet("tools", tools)
-		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		_, err := parseBuzzProjectOptions(context.Background(), opts)
 		assert.ErrorContains(t, err, `tools["go"].below must be a string version`)
 	})
 }
@@ -661,15 +661,15 @@ func TestParseBuzzProjectOpts_ReviewRequired(t *testing.T) {
 	t.Run("globs are recorded in order", func(t *testing.T) {
 		opts := vm.NewMap()
 		opts.MapSet("review_required", vm.ListValue([]vm.Value{
-			vm.StrValue("internal/secret/**"), vm.StrValue("internal/cache/key.go"),
+			vm.StringValue("internal/secret/**"), vm.StringValue("internal/cache/key.go"),
 		}))
 
-		p := applyOpts(t, opts)
+		p := applyOptions(t, opts)
 		assert.Equal(t, []string{"internal/secret/**", "internal/cache/key.go"}, p.ReviewRequired)
 	})
 
 	t.Run("undeclared leaves it empty", func(t *testing.T) {
-		assert.Empty(t, applyOpts(t, vm.NewMap()).ReviewRequired)
+		assert.Empty(t, applyOptions(t, vm.NewMap()).ReviewRequired)
 	})
 
 	// An empty list is a declaration that says nothing, and accepting it would leave the
@@ -684,12 +684,12 @@ func TestParseBuzzProjectOpts_ReviewRequired(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			items := make([]vm.Value, 0, len(tc.vals))
 			for _, v := range tc.vals {
-				items = append(items, vm.StrValue(v))
+				items = append(items, vm.StringValue(v))
 			}
 			opts := vm.NewMap()
 			opts.MapSet("review_required", vm.ListValue(items))
 
-			_, err := parseBuzzProjectOpts(context.Background(), opts)
+			_, err := parseBuzzProjectOptions(context.Background(), opts)
 			assert.ErrorContains(t, err, `"review_required" needs at least one glob`)
 		})
 	}
@@ -703,10 +703,10 @@ func TestParseBuzzProjectOpts_GateLowRisk(t *testing.T) {
 	t.Run("globs are recorded and the declaration is marked", func(t *testing.T) {
 		opts := vm.NewMap()
 		opts.MapSet("gate_low_risk", vm.ListValue([]vm.Value{
-			vm.StrValue("**/*.md"), vm.StrValue("notes/**"),
+			vm.StringValue("**/*.md"), vm.StringValue("notes/**"),
 		}))
 
-		p := applyOpts(t, opts)
+		p := applyOptions(t, opts)
 		assert.Equal(t, []string{"**/*.md", "notes/**"}, p.GateLowRisk)
 		assert.True(t, p.GateLowRiskDeclared)
 	})
@@ -715,28 +715,28 @@ func TestParseBuzzProjectOpts_GateLowRisk(t *testing.T) {
 		opts := vm.NewMap()
 		opts.MapSet("gate_low_risk", vm.ListValue(nil))
 
-		p := applyOpts(t, opts)
+		p := applyOptions(t, opts)
 		assert.Empty(t, p.GateLowRisk)
 		assert.True(t, p.GateLowRiskDeclared)
 	})
 
 	t.Run("undeclared leaves the built-in defaults in force", func(t *testing.T) {
-		p := applyOpts(t, vm.NewMap())
+		p := applyOptions(t, vm.NewMap())
 		assert.Empty(t, p.GateLowRisk)
 		assert.False(t, p.GateLowRiskDeclared)
 	})
 
 	t.Run("a non-list is a load error", func(t *testing.T) {
 		opts := vm.NewMap()
-		opts.MapSet("gate_low_risk", vm.StrValue("**/*.md"))
-		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		opts.MapSet("gate_low_risk", vm.StringValue("**/*.md"))
+		_, err := parseBuzzProjectOptions(context.Background(), opts)
 		assert.ErrorContains(t, err, `"gate_low_risk" takes a list of globs`)
 	})
 
 	t.Run("a blank entry is a load error", func(t *testing.T) {
 		opts := vm.NewMap()
-		opts.MapSet("gate_low_risk", vm.ListValue([]vm.Value{vm.StrValue("  ")}))
-		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		opts.MapSet("gate_low_risk", vm.ListValue([]vm.Value{vm.StringValue("  ")}))
+		_, err := parseBuzzProjectOptions(context.Background(), opts)
 		assert.ErrorContains(t, err, `"gate_low_risk" entries must be non-empty glob strings`)
 	})
 }
@@ -748,28 +748,28 @@ func TestParseBuzzProjectOpts_GateInherit(t *testing.T) {
 	t.Run("false turns inheritance off", func(t *testing.T) {
 		opts := vm.NewMap()
 		opts.MapSet("gate_inherit", vm.False)
-		assert.True(t, applyOpts(t, opts).GateInheritOff)
+		assert.True(t, applyOptions(t, opts).GateInheritOff)
 	})
 
 	t.Run("true is the default spelled out", func(t *testing.T) {
 		opts := vm.NewMap()
 		opts.MapSet("gate_inherit", vm.True)
-		assert.False(t, applyOpts(t, opts).GateInheritOff)
+		assert.False(t, applyOptions(t, opts).GateInheritOff)
 	})
 
 	t.Run("undeclared leaves inheritance on", func(t *testing.T) {
-		assert.False(t, applyOpts(t, vm.NewMap()).GateInheritOff)
+		assert.False(t, applyOptions(t, vm.NewMap()).GateInheritOff)
 	})
 
 	t.Run("a non-bool is a load error", func(t *testing.T) {
 		opts := vm.NewMap()
-		opts.MapSet("gate_inherit", vm.StrValue("false"))
-		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		opts.MapSet("gate_inherit", vm.StringValue("false"))
+		_, err := parseBuzzProjectOptions(context.Background(), opts)
 		assert.ErrorContains(t, err, `"gate_inherit" takes a bool`)
 	})
 }
 
-func layersOpts(kv map[string]vm.Value) vm.Value {
+func layersOptions(kv map[string]vm.Value) vm.Value {
 	layers := vm.NewMap()
 	for k, v := range kv {
 		layers.MapSet(k, v)
@@ -789,7 +789,7 @@ func TestParseBuzzProjectOpts_Layers(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "file.go"), nil, 0o644))
 
 	apply := func(projectPath string, opts vm.Value) (*types.Project, error) {
-		got, err := parseBuzzProjectOpts(context.Background(), opts)
+		got, err := parseBuzzProjectOptions(context.Background(), opts)
 		if err != nil {
 			return nil, err
 		}
@@ -803,16 +803,16 @@ func TestParseBuzzProjectOpts_Layers(t *testing.T) {
 	}
 
 	t.Run("existing directories and globs are recorded", func(t *testing.T) {
-		p, err := apply(".", layersOpts(map[string]vm.Value{
-			"internal/handler": vm.StrValue("transport"),
-			"cmd/*":            vm.StrValue("cli"),
+		p, err := apply(".", layersOptions(map[string]vm.Value{
+			"internal/handler": vm.StringValue("transport"),
+			"cmd/*":            vm.StringValue("cli"),
 		}))
 		require.NoError(t, err)
 		assert.Equal(t, map[string]string{"internal/handler": "transport", "cmd/*": "cli"}, p.Layers)
 	})
 
 	t.Run("paths are workspace-relative from a nested project", func(t *testing.T) {
-		p, err := apply("docs", layersOpts(map[string]vm.Value{"internal/handler/**": vm.StrValue("handler")}))
+		p, err := apply("docs", layersOptions(map[string]vm.Value{"internal/handler/**": vm.StringValue("handler")}))
 		require.NoError(t, err)
 		assert.Equal(t, map[string]string{"internal/handler/**": "handler"}, p.Layers)
 	})
@@ -822,12 +822,12 @@ func TestParseBuzzProjectOpts_Layers(t *testing.T) {
 		opts vm.Value
 		want string
 	}{
-		{"a missing directory", layersOpts(map[string]vm.Value{"internal/nope": vm.StrValue("x")}), "no directory under the workspace root matches it"},
-		{"a file, not a directory", layersOpts(map[string]vm.Value{"internal/file.go": vm.StrValue("x")}), "no directory under the workspace root matches it"},
-		{"a glob matching no directory", layersOpts(map[string]vm.Value{"cmd/*/deep": vm.StrValue("x")}), "no directory under the workspace root matches it"},
-		{"a non-string name", layersOpts(map[string]vm.Value{"cmd": vm.IntValue(1)}), "must be a string"},
-		{"an empty map", layersOpts(nil), `"layers" takes a map`},
-		{"a malformed name", layersOpts(map[string]vm.Value{"cmd": vm.StrValue("CLI")}), "lowercase slug"},
+		{"a missing directory", layersOptions(map[string]vm.Value{"internal/nope": vm.StringValue("x")}), "no directory under the workspace root matches it"},
+		{"a file, not a directory", layersOptions(map[string]vm.Value{"internal/file.go": vm.StringValue("x")}), "no directory under the workspace root matches it"},
+		{"a glob matching no directory", layersOptions(map[string]vm.Value{"cmd/*/deep": vm.StringValue("x")}), "no directory under the workspace root matches it"},
+		{"a non-string name", layersOptions(map[string]vm.Value{"cmd": vm.IntValue(1)}), "must be a string"},
+		{"an empty map", layersOptions(nil), `"layers" takes a map`},
+		{"a malformed name", layersOptions(map[string]vm.Value{"cmd": vm.StringValue("CLI")}), "lowercase slug"},
 	} {
 		t.Run(tc.name+" is refused", func(t *testing.T) {
 			_, err := apply(".", tc.opts)
@@ -838,9 +838,9 @@ func TestParseBuzzProjectOpts_Layers(t *testing.T) {
 	}
 
 	t.Run("one directory declared under two names is refused", func(t *testing.T) {
-		got, err := parseBuzzProjectOpts(context.Background(), layersOpts(map[string]vm.Value{"cmd": vm.StrValue("cli")}))
+		got, err := parseBuzzProjectOptions(context.Background(), layersOptions(map[string]vm.Value{"cmd": vm.StringValue("cli")}))
 		require.NoError(t, err)
-		again, err := parseBuzzProjectOpts(context.Background(), layersOpts(map[string]vm.Value{"cmd": vm.StrValue("tool")}))
+		again, err := parseBuzzProjectOptions(context.Background(), layersOptions(map[string]vm.Value{"cmd": vm.StringValue("tool")}))
 		require.NoError(t, err)
 		p := &types.Project{Path: ".", Dir: root}
 		require.NoError(t, got[0](p))

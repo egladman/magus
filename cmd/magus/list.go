@@ -39,7 +39,7 @@ type listOutput struct {
 }
 
 // lsNouns is the noun ls actually routes on, in both spellings: the dispatcher's
-// own accept-list, the way graphSubs is graphCmd's, so a drift test can read the
+// own accept-list, the way graphSubs is graphCommand's, so a drift test can read the
 // router's data instead of the registry's mirror of it. The project noun is absent
 // because it names the DEFAULT view: anything ls does not route here lists projects.
 var lsNouns = []string{"target", "targets", "job", "jobs"}
@@ -57,7 +57,7 @@ func ls(ctx context.Context, root string, args []string) error {
 	if len(args) > 0 && (args[0] == "job" || args[0] == "jobs") {
 		return lsJobs(resolveRootOrEmpty(root), args[1:])
 	}
-	pos, err := cmdParse("ls", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("ls", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls [<noun>] [project] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -224,7 +224,7 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 		return err
 	}
 
-	selection, _, err := resolveTargets(ctx, ws, types.Target{Name: "ls"}, runSelection{projects: projectArgs, cwd: clientCwd(ctx)})
+	selection, _, err := resolveTargets(ctx, ws, types.Target{Name: "ls"}, runSelection{projects: projectArgs, cwd: clientCurrentWorkingDirectory(ctx)})
 	if err != nil {
 		return err
 	}

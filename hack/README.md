@@ -162,6 +162,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
 | `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
+| `hack/magusfile/model-tiers.buzz` | the model IDs each wired harness spawns for a job tier; pure lookup |
 | `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |
 | `hack/magusfile/ruledocs.buzz` | the guard-rule reference: one page per rule the running binary enforces, plus the index |
 | `hack/magusfile/run-golangci.buzz` | the custom golangci-lint build run with the workspace config, and the lib-module lint that shares it |

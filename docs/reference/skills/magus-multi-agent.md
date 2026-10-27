@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 29107
-skill_short_bytes: 22216
+skill_full_bytes: 30696
+skill_short_bytes: 23760
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `ee25be4f0a30` |
+| `skill-content` | `9035dd1fee96` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -120,6 +120,34 @@ The loop: define, partition, hand out, observe, evaluate, course-correct, integr
   never a worker's prose.
 - A worker is not complete until its criteria and assigned check pass.
 - The root agent decides whether the top-level goal is complete.
+
+## Keep worker records out of the user update
+
+Read a worker's structured result, not its whole event stream. Keep its job id,
+outcome, changed paths, validation refs and unresolved risks; reopen the relevant
+evidence when verification needs it. Persist the complete JSON or JSONL in the
+host capture or result file. Do not echo it into another tool call or the reply.
+
+For a job validation, project `problems`, `unchecked` and a count of `permitted`
+from `-o json` before it reaches your context. Keep the producer's failure status
+when piping. Inspect individual permitted deviations only when they affect a
+decision; `--dry-run` text intentionally previews the full record. Prepare the
+spec once in a scratch file (`job_spec` below); do not retype its full exception
+list on every retry:
+
+```sh
+set -o pipefail
+magus job fork --stdin --dry-run -o json < "$job_spec" |
+  jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
+```
+
+Tell the person what changed, what passed, what remains unverified, and any
+decision they need to make. A routine claim, handled denial, or already-recorded
+deviation is not a progress update. Collapse repeated events into the current
+blocker and next action. When a waiver skips validation or accepts a material
+risk, explain that consequence once in plain language and link the evidence;
+do not paste waiver objects, claim lists or guard transcripts. A detailed audit
+requested by the person can open those records.
 
 ## Declare the interface before any job forks
 
@@ -524,6 +552,7 @@ The guard enforces this by role, and the role is the live lease: the root may ta
 
 - Coalesce what the write sets allow
 - Run the graph-engineering loop
+- Keep worker records out of the user update
 - Declare the interface before any job forks
 - Set one topology boundary
 - Seed the partition with magus
@@ -573,6 +602,34 @@ transcript cannot tell you which happened.
 An agent may report that its edits are done, but no job is complete until its
 acceptance criteria and assigned check pass. The root agent, not a worker,
 decides whether the top-level goal is complete.
+
+## Keep worker records out of the user update
+
+Read a worker's structured result, not its whole event stream. Keep its job id,
+outcome, changed paths, validation refs and unresolved risks; reopen the relevant
+evidence when verification needs it. Persist the complete JSON or JSONL in the
+host capture or result file. Do not echo it into another tool call or the reply.
+
+For a job validation, project `problems`, `unchecked` and a count of `permitted`
+from `-o json` before it reaches your context. Keep the producer's failure status
+when piping. Inspect individual permitted deviations only when they affect a
+decision; `--dry-run` text intentionally previews the full record. Prepare the
+spec once in a scratch file (`job_spec` below); do not retype its full exception
+list on every retry:
+
+```sh
+set -o pipefail
+magus job fork --stdin --dry-run -o json < "$job_spec" |
+  jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
+```
+
+Tell the person what changed, what passed, what remains unverified, and any
+decision they need to make. A routine claim, handled denial, or already-recorded
+deviation is not a progress update. Collapse repeated events into the current
+blocker and next action. When a waiver skips validation or accepts a material
+risk, explain that consequence once in plain language and link the evidence;
+do not paste waiver objects, claim lists or guard transcripts. A detailed audit
+requested by the person can open those records.
 
 ## Declare the interface before any job forks
 

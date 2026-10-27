@@ -1210,7 +1210,7 @@ func integrating(p string, at location) bool {
 		if !ok {
 			return false
 		}
-		gitDir = resolveFrom(root, strings.TrimSpace(dir))
+		gitDir = resolvePath(root, strings.TrimSpace(dir))
 	}
 	for _, head := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD"} {
 		if _, err := os.Stat(filepath.Join(gitDir, head)); err == nil {

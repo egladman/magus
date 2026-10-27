@@ -29,7 +29,7 @@ func configHistoryUsage() {
 	fmt.Fprintln(os.Stderr, "  dedup    measure cross-shard redundant builds from per-shard JSONL report files")
 }
 
-func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []string) error {
+func configHistoryCommand(ctx context.Context, _ string, cfg config.Config, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		configHistoryUsage()
 		return flag.ErrHelp

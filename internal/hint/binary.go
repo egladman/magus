@@ -36,9 +36,9 @@ var invokedAs atomic.Value // string
 // so they render during that package's variable initialization, which runs before any
 // function main could call. A setter called from main would come too late for exactly
 // the texts this rule exists for.
-var resolveOwn = sync.OnceFunc(func() { ResolveBinaryNameFrom(os.Args[0]) })
+var resolveOwn = sync.OnceFunc(func() { ResolveBinaryName(os.Args[0]) })
 
-// ResolveBinaryNameFrom derives the spelling from how this process was invoked. It
+// ResolveBinaryName derives the spelling from how this process was invoked. It
 // assigns nothing when it cannot: exported for the tests that pin the rule, and
 // ordinary callers get it from BinaryName.
 //
@@ -46,7 +46,7 @@ var resolveOwn = sync.OnceFunc(func() { ResolveBinaryNameFrom(os.Args[0]) })
 // existing rendering steady under `go test` (the test binary is magus.test) and in the
 // codegen tools that render these same commands into docs, where the reader's own
 // invocation is not this process's at all.
-func ResolveBinaryNameFrom(argv0 string) {
+func ResolveBinaryName(argv0 string) {
 	argv0 = strings.TrimSpace(argv0)
 	base := filepath.Base(argv0)
 	if base != DefaultBinaryName {

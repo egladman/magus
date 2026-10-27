@@ -13,7 +13,7 @@ import (
 func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestTrackedFilter_AllowsTrackedRejectsUntracked(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	root := r.Root()
 
 	tracked := r.Write("tracked.txt", "x")

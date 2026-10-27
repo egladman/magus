@@ -79,6 +79,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [output-redirect](output-redirect.md)                 | magus output sent to a file or discarded, which the run log already holds                            |
 | [policy-unloaded](policy-unloaded.md)                 | a push, merge, spawn or state-writing magus verb while the guard policy that judges it does not load |
 | [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                             |
+| [process-signal](process-signal.md)                   | kill, pkill or killall used to signal a process identified only by PID or name                       |
 | [push-ungated](push-ungated.md)                       | a push or `gh pr create` at a commit with no green gate; refused for every session                   |
 | [raw-tool](raw-tool.md)                               | a toolchain command a spell already wraps, run outside the cache                                     |
 | [read-navigation](read-navigation.md)                 | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                          |
@@ -139,15 +140,15 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease            |
 | [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                       |
 | [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                  |
-| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                      |
-| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                        |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it             |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it        |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                          |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                    |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                     |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                   |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at            |
 | [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                          |
+| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                      |
+| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                        |
 | [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it           |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it             |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it        |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                   |

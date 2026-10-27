@@ -860,7 +860,7 @@ func TestClassifyFiles_DeclaredGitattributesByChange(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := testkit.NewRepo(t, map[string]string{".gitattributes": committed, "magusfile.buzz": ""})
+			repo := testkit.NewRepository(t, map[string]string{".gitattributes": committed, "magusfile.buzz": ""})
 			repo.Write(".gitattributes", tt.working)
 
 			reg := NewWorkspaceRegistry()

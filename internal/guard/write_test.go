@@ -1524,7 +1524,7 @@ func TestASoftPathItsHolderWroteIsOwned(t *testing.T) {
 	const rel = "run_test.go"
 	files := map[string]string{".gitattributes": "*.go diff=golang\n", rel: "package run\n\nfunc a() {}\n"}
 	_, cacheDir := fixture.SeedLeases(t)
-	holder := testkit.NewRepo(t, files)
+	holder := testkit.NewRepository(t, files)
 	root := holder.Root()
 	row := types.Job{ID: "holder", State: types.StateRunning, WritePaths: []string{rel}, SoftPaths: []string{rel},
 		Checkpoint: holder.Head(), CheckoutRoot: root, Registered: 1, Validated: 1}

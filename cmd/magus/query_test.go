@@ -94,7 +94,7 @@ func TestQueryHelpPrintsUsage(t *testing.T) {
 		t.Run(arg, func(t *testing.T) {
 			t.Cleanup(snapshotGlobals())
 			var err error
-			out := captureStderr(t, func() { err = queryCmd(context.Background(), t.TempDir(), []string{arg}) })
+			out := captureStderr(t, func() { err = queryCommand(context.Background(), t.TempDir(), []string{arg}) })
 			require.ErrorIs(t, err, flag.ErrHelp)
 			assert.Contains(t, out, "Usage: magus query <terms> [flags]")
 		})
@@ -181,7 +181,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	require.NotEmpty(t, ref)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, queryCmd(ctx, "", []string{"output", ref}))
+		require.NoError(t, queryCommand(ctx, "", []string{"output", ref}))
 	})
 	assert.Equal(t, "the full verdict\n", out)
 
@@ -190,7 +190,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	})
 	assert.JSONEq(t, fmt.Sprintf("{\"ref\":\"%s\",\"output\":\"the full verdict\"}", ref), out)
 
-	assert.Error(t, queryCmd(ctx, "", []string{"--attempts", "output", ref}), "run flags are refused on a payload")
+	assert.Error(t, queryCommand(ctx, "", []string{"--attempts", "output", ref}), "run flags are refused on a payload")
 
 	missing := "grd" + strings.Repeat("0", 16)
 	stderr := captureStderr(t, func() {
@@ -206,7 +206,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 // silently when it still matches HEAD, and with a "recorded at X, you are on Y" line
 // once a later commit moves HEAD away from it.
 func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": ""})
+	repo := testkit.NewRepository(t, map[string]string{"magusfile.buzz": ""})
 	firstRev := repo.Head()
 
 	spellName := register.Spell(t, "zzz-query-meta-revision-spell", spells.WithTargets("build"),
@@ -536,10 +536,10 @@ func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
 		input string
 		cmd   func(context.Context, string, []string) error
 	}{
-		{readQuery, "guide", queryCmd},
-		{readQuery, "SearchVerdict kind=symbol", queryCmd},
-		{readQuery, "zzzunmatched", queryCmd},
-		{readExplain, "docs", explainCmd},
+		{readQuery, "guide", queryCommand},
+		{readQuery, "SearchVerdict kind=symbol", queryCommand},
+		{readQuery, "zzzunmatched", queryCommand},
+		{readExplain, "docs", explainCommand},
 	} {
 		t.Run(fmt.Sprintf("%s %s", tc.verb, tc.input), func(t *testing.T) {
 			var cmdErr error

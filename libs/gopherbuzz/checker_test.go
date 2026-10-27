@@ -33,8 +33,8 @@ func checkOK(t *testing.T, src string) {
 	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 
-// checkErr asserts that Check reports at least one error containing substr.
-func checkErr(t *testing.T, src, substr string) {
+// checkError asserts that Check reports at least one error containing substr.
+func checkError(t *testing.T, src, substr string) {
 	t.Helper()
 	errs := checkSource(src)
 	if !assert.NotEmptyf(t, errs, "expected error containing %q, got none", substr) {
@@ -67,11 +67,11 @@ final w = null;
 }
 
 func TestCheck_UndefinedVar(t *testing.T) {
-	checkErr(t, `final x = undeclared;`, "undefined: undeclared")
+	checkError(t, `final x = undeclared;`, "undefined: undeclared")
 }
 
 func TestCheck_ConstReassign(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 final x = 1;
 x = 2;
 `, "cannot assign to final")
@@ -85,7 +85,7 @@ x = 2;
 }
 
 func TestCheck_TypeAnnotMismatch(t *testing.T) {
-	checkErr(t, `final x: int = "hello";`, "cannot assign str to int")
+	checkError(t, `final x: int = "hello";`, "cannot assign str to int")
 }
 
 func TestCheck_TypeAnnotOK(t *testing.T) {
@@ -108,7 +108,7 @@ fun list() > {str: fun({str: str}) bool} { return {"op": op}; }
 }
 
 func TestCheck_FunctionArity(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 fun add(a: int, b: int) > int { return a + b; }
 final r = add(1);
 `, "wrong argument count: got 1, want 2")
@@ -122,7 +122,7 @@ final r = add(1, 2);
 }
 
 func TestCheck_ReturnTypeMismatch(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 fun greet() > int {
     return "hello";
 }
@@ -151,7 +151,7 @@ fun build() > [str] {
 }
 
 func TestCheck_TypedEmptyListElemMismatch(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 fun build() > [str] {
     var res = [<int>];
     return res;
@@ -166,7 +166,7 @@ func TestCheck_ArithmeticTypes(t *testing.T) {
 }
 
 func TestCheck_ArithmeticInvalidType(t *testing.T) {
-	checkErr(t, `final r = true + 1;`, "invalid type bool in arithmetic")
+	checkError(t, `final r = true + 1;`, "invalid type bool in arithmetic")
 }
 
 func TestCheck_IfCondition(t *testing.T) {
@@ -175,11 +175,11 @@ func TestCheck_IfCondition(t *testing.T) {
 }
 
 func TestCheck_IfConditionInvalid(t *testing.T) {
-	checkErr(t, `if (42) { }`, "if condition must be bool")
+	checkError(t, `if (42) { }`, "if condition must be bool")
 }
 
 func TestCheck_WhileConditionInvalid(t *testing.T) {
-	checkErr(t, `while ("yes") { }`, "while condition must be bool")
+	checkError(t, `while ("yes") { }`, "while condition must be bool")
 }
 
 // TestCheck_UnhandledRaise covers BZZ1006's propagate-or-catch rule: a call to
@@ -188,7 +188,7 @@ func TestCheck_WhileConditionInvalid(t *testing.T) {
 // both as an error and as its fixed-up, passing counterpart, so the test also
 // pins that the fix actually works rather than just that the bare case fails.
 func TestCheck_UnhandledRaise(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 fun risky() > int !> str { return 1; }
 fun caller() > int {
     return risky();
@@ -222,7 +222,7 @@ fun caller() > int {
 
 	// A call inside a catch clause's OWN body is not shielded by the try it sits
 	// beside; it needs its own handling.
-	checkErr(t, `
+	checkError(t, `
 fun risky() > int !> str { return 1; }
 fun caller() > int {
     try {
@@ -235,7 +235,7 @@ fun caller() > int {
 
 	// Top-level code has no enclosing function to propagate through, so it must
 	// catch.
-	checkErr(t, `
+	checkError(t, `
 fun risky() > int !> str { return 1; }
 final x = risky();
 `, "call may raise but is neither declared with !> nor caught")
@@ -256,7 +256,7 @@ try {
 // inline body-checking loop (it does not call checkFunDecl), which is exactly
 // the kind of second code path that silently misses a state save/restore.
 func TestCheck_UnhandledRaise_ObjectMethod(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 fun risky() > int !> str { return 1; }
 object Foo {
     fun bar() > int {
@@ -288,7 +288,7 @@ object Point {
 }
 
 func TestCheck_ObjectLitUnknownField(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 object Point {
     x: int = 0,
     y: int = 0,
@@ -320,7 +320,7 @@ final s = p.sum();
 }
 
 func TestCheck_ObjectUnknownMember(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 object Point { x: int = 0 }
 final p = Point{ x = 1 };
 final z = p.z;
@@ -345,7 +345,7 @@ fun stamp(layout: Layout) > str { return layout.value; }
 final _a = stamp(Layout.rfc3339);
 final _b = stamp("02 Jan 06");
 `)
-	checkErr(t, `
+	checkError(t, `
 enum<str> Layout { rfc3339 = "2006-01-02T15:04:05Z07:00" }
 fun stamp(layout: Layout) > str { return layout.value; }
 final _c = stamp(42);
@@ -355,7 +355,7 @@ final _c = stamp(42);
 // A fiber wraps an ordinary call, so its arguments are checked against the callee's
 // parameters the way a direct call's are.
 func TestCheck_FiberArgumentsAreTyped(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 fun greet(name: str) > str { return name; }
 final _f = &greet(1);
 `, `cannot pass int as argument "name" of type str`)
@@ -377,7 +377,7 @@ f(b: 2);
 }
 
 func TestCheck_EnumUnknownCase(t *testing.T) {
-	checkErr(t, `
+	checkError(t, `
 enum Color { Red, Green, Blue }
 final c = Color.Yellow;
 `, `has no case "Yellow"`)
@@ -418,7 +418,7 @@ func TestCheck_AnonymousObjectTypeMismatch(t *testing.T) {
 		"missing optional":      {`fun pick() > obj{ a: int, b: int? } { return .{ a = 1 }; }`, `missing field "b"`},
 		"unknown case":          {`fun pick() > obj{ tier: Tier } { return .{ tier = .mid }; }`, `has no case "mid"`},
 	} {
-		t.Run(name, func(t *testing.T) { checkErr(t, tier+tc.src, tc.want) })
+		t.Run(name, func(t *testing.T) { checkError(t, tier+tc.src, tc.want) })
 	}
 }
 
@@ -602,9 +602,9 @@ func TestCheckTypeNoFalsePositives(t *testing.T) {
 // tests below). checkSource runs embedded (see TestCheck_RedundantImportAliasIsMagusDialectOnly
 // for the strict side of this rule).
 func TestCheck_RedundantImportAlias(t *testing.T) {
-	checkErr(t, `import "spells/harness/codex" as codex;`, `import alias "codex" is redundant, drop `+"`as codex`")
+	checkError(t, `import "spells/harness/codex" as codex;`, `import alias "codex" is redundant, drop `+"`as codex`")
 	// The buzz: stdlib scheme is stripped before comparing, matching resolveImport.
-	checkErr(t, `import "buzz:std" as std;`, `import alias "std" is redundant`)
+	checkError(t, `import "buzz:std" as std;`, `import alias "std" is redundant`)
 }
 
 // TestCheck_RedundantImportAliasIsMagusDialectOnly verifies BZZ1008 fires only in
@@ -752,7 +752,7 @@ export final tname = pick().name;
 	require.NoError(t, sess.Exec(ctx, src), "exec with module declarations")
 	v, ok := sess.Exports()["tname"]
 	require.True(t, ok, "tname not exported")
-	require.True(t, v.IsStr(), "tname = %v, want \"build\"", v.String())
+	require.True(t, v.IsString(), "tname = %v, want \"build\"", v.String())
 	assert.Equal(t, "build", v.AsString(), "tname")
 }
 
@@ -808,7 +808,7 @@ export final got = renderer\run(Proj{ nodes = [Node{ name = "build" }] });
 	require.NoError(t, sess.Exec(ctx, src), "exec with module declarations used inside an aliased import")
 	v, ok := sess.Exports()["got"]
 	require.True(t, ok, "got not exported")
-	require.True(t, v.IsStr(), "got = %v, want \"build\"", v.String())
+	require.True(t, v.IsString(), "got = %v, want \"build\"", v.String())
 	assert.Equal(t, "build", v.AsString(), "got")
 }
 
@@ -838,19 +838,19 @@ final r = f(b: 1, a: 2);
 fun f(a: int, b: int) > int { return a - b; }
 final r = f(2, b: 1);
 `)
-	checkErr(t, `
+	checkError(t, `
 fun f(a: int, b: int) > int { return a - b; }
 final r = f(a: 2, c: 1);
 `, `unknown argument name "c"`)
-	checkErr(t, `
+	checkError(t, `
 fun f(a: int, b: int) > int { return a - b; }
 final r = f(a: 2, a: 1);
 `, `given more than once`)
-	checkErr(t, `
+	checkError(t, `
 fun f(a: int, b: int) > int { return a - b; }
 final r = f(b: 1, 2);
 `, "positional argument after named argument")
-	checkErr(t, `
+	checkError(t, `
 fun f(a: int, b: int) > int { return a - b; }
 final r = f(a: 2);
 `, `missing argument "b"`)
@@ -1243,10 +1243,10 @@ func TestExternObjectMethod(t *testing.T) {
 }
 `
 	checkOK(t, decl+`fun main() > void { cache.remote(null); }`)
-	checkErr(t, decl+`fun main() > void { cache.nosuch(null); }`, `has no field or method "nosuch"`)
+	checkError(t, decl+`fun main() > void { cache.nosuch(null); }`, `has no field or method "nosuch"`)
 
 	// The signature is real, not a formality: arity is enforced like any other call.
-	checkErr(t, decl+`fun main() > void { cache.remote(); }`, "argument")
+	checkError(t, decl+`fun main() > void { cache.remote(); }`, "argument")
 
 	// An extern INSTANCE method (no `static`) is accepted too: the modifier is
 	// orthogonal to where the implementation comes from.
@@ -1431,11 +1431,11 @@ func TestRedundantUnwrapStaysQuiet(t *testing.T) {
 // away, so a declaration bought existence and arity and nothing else.
 func TestCheck_ArgumentType(t *testing.T) {
 	t.Run("int for str", func(t *testing.T) {
-		checkErr(t, `fun f(name: str) > bool { return name == "x"; } final _b = f(name: 42);`,
+		checkError(t, `fun f(name: str) > bool { return name == "x"; } final _b = f(name: 42);`,
 			`cannot pass int as argument "name" of type str`)
 	})
 	t.Run("positional too", func(t *testing.T) {
-		checkErr(t, `fun f(name: str) > bool { return name == "x"; } final _b = f(42);`,
+		checkError(t, `fun f(name: str) > bool { return name == "x"; } final _b = f(42);`,
 			`cannot pass int as argument "name" of type str`)
 	})
 	t.Run("mut list satisfies a plain list", func(t *testing.T) {

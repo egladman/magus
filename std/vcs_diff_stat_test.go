@@ -44,7 +44,7 @@ func TestDiffStatRaisesWhenTheBackendFails(t *testing.T) {
 }
 
 func TestVcsDiffStatRaisesOutsideACheckout(t *testing.T) {
-	chdirOutsideAnyRepo(t)
+	chdirOutsideAnyRepository(t)
 
 	got, err := VcsDiffStat(t.Context(), "", "")
 	require.Error(t, err)
@@ -93,17 +93,17 @@ func TestVcsDiffStatCountsTheBranchPastItsMergeBase(t *testing.T) {
 	git("switch", "-q", "feature")
 	write("edit.txt", "uncommitted\n")
 
-	got, err := VcsDiffStat(WithCwd(t.Context(), dir), "main", "")
+	got, err := VcsDiffStat(WithCurrentWorkingDirectory(t.Context(), dir), "main", "")
 	require.NoError(t, err)
 	assert.Equal(t, []types.FileStat{
 		{Path: "docs/new.md", Added: 1},
 		{Path: "edit.txt", Added: 1},
 	}, got)
 
-	again, err := VcsDiffStat(WithCwd(t.Context(), dir), "main", dir)
+	again, err := VcsDiffStat(WithCurrentWorkingDirectory(t.Context(), dir), "main", dir)
 	require.NoError(t, err)
 	assert.Equal(t, got, again, "dir names the repository the same way the cwd does")
 
-	_, err = VcsDiffStat(WithCwd(t.Context(), dir), "no-such-branch", "")
+	_, err = VcsDiffStat(WithCurrentWorkingDirectory(t.Context(), dir), "no-such-branch", "")
 	assert.Error(t, err)
 }

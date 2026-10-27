@@ -288,7 +288,7 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 		}
 		introduced[id] = true
 		subjects = append(subjects, id)
-		if old := knowledge.RenamedFrom(text, label, pf.removed[def.path]); old != "" {
+		if old := knowledge.PreviousName(text, label, pf.removed[def.path]); old != "" {
 			renamed[id] = old
 		}
 	}

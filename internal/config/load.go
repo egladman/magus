@@ -351,7 +351,7 @@ func unknownKeyError(path string, data []byte, err error) error {
 	// user-global file belongs to no workspace at all.
 	root := ""
 	if abs, err := filepath.Abs(path); err == nil {
-		root = workspaceRootFrom(filepath.Dir(abs))
+		root = workspaceRoot(filepath.Dir(abs))
 	}
 	ue := &UnknownKeysError{File: relToRoot(root, path)}
 	var doc yaml.Node
@@ -578,11 +578,11 @@ func findWorkspaceRoot() string {
 	if err != nil {
 		return ""
 	}
-	return workspaceRootFrom(cwd)
+	return workspaceRoot(cwd)
 }
 
-// workspaceRootFrom is [findWorkspaceRoot] walking up from dir instead of cwd.
-func workspaceRootFrom(dir string) string {
+// workspaceRoot is [findWorkspaceRoot] walking up from dir instead of cwd.
+func workspaceRoot(dir string) string {
 	cur := dir
 	for {
 		if _, err := os.Stat(filepath.Join(cur, "go.mod")); err == nil {

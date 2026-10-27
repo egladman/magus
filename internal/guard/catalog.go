@@ -74,6 +74,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocOutputPipe},
 	{doc: ruleDocOutputRedirect},
 	{doc: ruleDocProcessPoll},
+	{doc: ruleDocProcessSignal},
 	{doc: ruleDocPolicyUnloaded},
 	{doc: ruleDocRawTool},
 	{doc: ruleDocAgentSignOff},
@@ -437,7 +438,15 @@ var ruleDocProcessPoll = types.RuleDoc{
 	Name:    string(denyRuleProcessPoll),
 	Catches: "a process table inspected to wait on magus work the lock already reports",
 	Why: "A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age. " +
-		"`pgrep`, `pidof` and `ps` invent a poll with no bound of its own that answers a question the lock message already answered.",
+		"`pgrep`, `pidof`, `ps` and `kill -0` invent a poll with no bound of its own that answers a question the lock message already answered.",
+}
+
+var ruleDocProcessSignal = types.RuleDoc{
+	Name:    string(denyRuleProcessSignal),
+	Catches: "kill, pkill or killall used to signal a process identified only by PID or name",
+	Why: "A PID or process-name pattern cannot establish ownership: a pkill of a slow fork or MCP process can stop another session's work or the host's connection. " +
+		"Cancel the shell task through the host that started it, or have the person stop it. `magus status` inspects the tracked work without signaling it. " +
+		"Signal-list requests pass; `kill -0` is a process-poll instead.",
 }
 
 var ruleDocPolicyUnloaded = types.RuleDoc{

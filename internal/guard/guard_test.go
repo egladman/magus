@@ -510,25 +510,30 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			assert.NotEqual(t, decisionDeny, v.Decision, fmt.Sprintf("%s: %s", line, v.Reason))
 		}
 		for _, line := range []string{
-			`git -C . commit -m "Fix the port."`,
-			`hg -q commit -m "Fix the port."`,
-			`sl commit -m "Fix the port."`,
-			`jj --color=never commit -m "Fix the port."`,
-			`jj -R . describe -m "Fix the port."`,
+			`git -C . commit -m "fix(cache): keep the key"`,
+			`hg -q commit -m "fix(cache): keep the key"`,
+			`sl commit -m "fix(cache): keep the key"`,
+			`jj --color=never commit -m "fix(cache): keep the key"`,
+			`jj -R . describe -m "fix(cache): keep the key"`,
 		} {
 			v := run(line)
 			assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), line)
-			assert.Contains(t, v.Reason, "a capitalized first word", line)
+			assert.Contains(t, v.Reason, "a colon", line)
 			assert.Contains(t, v.Reason, "Write one subject line, lowercase and imperative", line)
 			assert.NotContains(t, v.Reason, "Skill(", line)
 		}
 
-		v := run("git add a.go && git commit -m \"$(cat <<'EOF'\nFix the port.\n\nCo-Authored-By: a <b@c>\nEOF\n)\"")
+		v := run("git add a.go && git commit -m \"$(cat <<'EOF'\nfix(cache): keep the key\n\nCo-Authored-By: a <b@c>\nEOF\n)\"")
 		assert.Equal(t, decisionDeny, v.Decision, v.Reason)
-		for _, want := range []string{"a capitalized first word", "an attribution", "a line break"} {
+		for _, want := range []string{"an attribution"} {
 			assert.Contains(t, v.Reason, want)
 		}
 		assert.Contains(t, run(`git commit -m "fix(cache): keep the key"`).Reason, "a colon", "off the base branch a prefix is denied")
+		for _, body := range []string{"why it matters", "* why it matters"} {
+			v := run(fmt.Sprintf("git commit -m 'trim a fragment\n\n%s'", body))
+			assert.Equal(t, decisionDeny, v.Decision, body)
+			assert.Contains(t, v.Reason, "a line break", body)
+		}
 	})
 
 	t.Run("commit-subject on the base branch", func(t *testing.T) {
@@ -562,7 +567,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		// a repository whose branch adds a shipped file and the changelog fragment its fix
 		// title owes. The judge's link is untracked and stays out of the diff.
 		branchRepo := func() (string, string) {
-			repo := testkit.NewRepo(t, map[string]string{"README.md": "# key\n"})
+			repo := testkit.NewRepository(t, map[string]string{"README.md": "# key\n"})
 			repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 			repo.Git("switch", "-q", "-c", "trim-key")
 			head := repo.Commit("sort the key", map[string]string{
@@ -796,7 +801,7 @@ func (driftWorkspace) ClassifyFiles(context.Context, []string) ([]types.FileEntr
 }
 
 // verdictRefLine opens the line a stored deny cites its grd ref on.
-const verdictRefLine = "\nfull verdict: "
+const verdictRefLine = "\ndetails: "
 
 // verdictRef matches the grd ref a deny cites.
 var verdictRef = regexp.MustCompile(verdictRefPrefix + `[0-9a-f]+`)
@@ -813,7 +818,7 @@ func storedVerdict(t *testing.T, cacheDir, reason string) string {
 }
 
 // adviceRefLine opens the line a stored advisory cites its grd ref on.
-const adviceRefLine = "\nfull advice: "
+const adviceRefLine = "\ndetails: "
 
 // withoutVerdictRef is v as a dry run renders it: the call stores its verdict or advice
 // and cites the ref, and a dry run stores nothing, so it has no ref to cite.
@@ -1480,7 +1485,7 @@ func TestPendingTouchesLoad(t *testing.T) {
 // sentinel is dropped and git answers again.
 func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", "")
-	repo := testkit.NewRepo(t, map[string]string{"policy.buzz": "fun judge() > void {}\n"})
+	repo := testkit.NewRepository(t, map[string]string{"policy.buzz": "fun judge() > void {}\n"})
 	root := repo.Root()
 	git := func(args ...string) { repo.Git(args...) }
 	file := repo.Path("policy.buzz")
@@ -1535,7 +1540,7 @@ func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 // it. git runs a command in the repository.
 func gitPolicy(t *testing.T, files map[string]string) (root string, h headPolicy, git func(...string)) {
 	t.Helper()
-	repo := testkit.NewRepo(t, files)
+	repo := testkit.NewRepository(t, files)
 	root = repo.Root()
 	git = func(args ...string) { repo.Git(args...) }
 	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
@@ -1966,7 +1971,7 @@ func TestLoadApprovedBuiltinsWithoutAnAuthority(t *testing.T) {
 // branch checkout names its branch, a detached one names none, and a directory under no
 // version control is unknown.
 func TestCheckoutStateAt(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"README": "x\n"})
+	repo := testkit.NewRepository(t, map[string]string{"README": "x\n"})
 	root := repo.Root()
 	repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 

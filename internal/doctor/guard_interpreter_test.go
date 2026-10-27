@@ -122,9 +122,9 @@ func TestHookBinaryFromANestedProjectIsTheRootsBinary(t *testing.T) {
 	w.Write("console/magusfile.buzz", "\n")
 	withoutPathMagus(t)
 
-	assert.Equal(t, bin, hookBinaryFrom(nested))
-	assert.Equal(t, bin, hookBinaryFrom(filepath.Join(root, "console")))
-	assert.Equal(t, bin, hookBinaryFrom(root))
+	assert.Equal(t, bin, hookBinary(nested))
+	assert.Equal(t, bin, hookBinary(filepath.Join(root, "console")))
+	assert.Equal(t, bin, hookBinary(root))
 }
 
 // A worktree nested under another checkout never resolves the parent's binary: its own
@@ -138,11 +138,11 @@ func TestHookBinaryFromAWorktreeNeverClimbsIntoTheParent(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(worktree, "console"), 0o755))
 	withoutPathMagus(t)
 
-	assert.Equal(t, "", hookBinaryFrom(filepath.Join(worktree, "console")))
+	assert.Equal(t, "", hookBinary(filepath.Join(worktree, "console")))
 
 	pathBin := versionedMagus(testkit.NewWorkspace(t), "v0.4.3")
 	t.Setenv("PATH", filepath.Dir(pathBin))
-	assert.Equal(t, pathBin, hookBinaryFrom(filepath.Join(worktree, "console")), "falls to PATH, not to the parent's binary")
+	assert.Equal(t, pathBin, hookBinary(filepath.Join(worktree, "console")), "falls to PATH, not to the parent's binary")
 }
 
 // A linked worktree (.git is a file) with no ./magus is an error, whatever PATH holds.

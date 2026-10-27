@@ -602,10 +602,10 @@ func IndexIdentifier(text, name string) int {
 	}
 }
 
-// RenamedFrom returns the name one of removed spells where the added line spells name, with the
+// PreviousName returns the name one of removed spells where the added line spells name, with the
 // rest of the line unchanged: the declaration on that line was renamed in place. It returns ""
 // when no removed line fits, or when two fit with different names.
-func RenamedFrom(added, name string, removed []string) string {
+func PreviousName(added, name string, removed []string) string {
 	at := IndexIdentifier(added, name)
 	if at < 0 {
 		return ""

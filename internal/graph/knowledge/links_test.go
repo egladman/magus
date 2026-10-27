@@ -229,7 +229,7 @@ func TestCitedRankLiftsOnlyCitedProse(t *testing.T) {
 // the committed graph held a file node on one machine and a link node on the other. A
 // path the VCS ignores is a build product, and the citation is an upstream link.
 func TestCitedPathTheVCSIgnoresIsALink(t *testing.T) {
-	r := testkit.NewRepo(t, nil)
+	r := testkit.NewRepository(t, nil)
 	root := r.Root()
 	r.Write(".gitignore", "/magus\n")
 	r.Write("magus", "binary")

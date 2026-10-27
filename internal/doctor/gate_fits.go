@@ -32,7 +32,7 @@ const gateFitsCheck = "gate-fits"
 // checkGateFits is MGS3009 ahead of the run: a ci step whose claim exceeds this
 // machine's whole budget is refused every time, so the gate can never pass here.
 func (r *runner) checkGateFits(projects []*types.Project) types.Check {
-	sizing, ok := r.runCtx().Value(gateClaimsKey{}).(gateSizing)
+	sizing, ok := r.runContext().Value(gateClaimsKey{}).(gateSizing)
 	if !ok {
 		return types.Check{Name: gateFitsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no admission sizer supplied; skipped"}
 	}
@@ -45,7 +45,7 @@ func (r *runner) checkGateFits(projects []*types.Project) types.Check {
 	if len(targets) == 0 {
 		return types.Check{Name: gateFitsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no project composes a ci target; skipped"}
 	}
-	claims, err := sizing.claims(r.runCtx(), targets)
+	claims, err := sizing.claims(r.runContext(), targets)
 	if err != nil {
 		return types.Check{Name: gateFitsCheck, Status: types.CheckFail, Message: fmt.Sprintf("could not size the ci gate's claims: %v", err)}
 	}

@@ -299,10 +299,10 @@ fun indentOf(line: str) > int {
     return n;
 }
 
-// Every `case "name":` of the list, map and str dispatch switches against its body.
+// Every `case "name":` of the list, map and string dispatch switches against its body.
 fun builtins(m: Miner) > void !> any {
     final path = "libs/gopherbuzz/vm/operators.go";
-    final dispatch = {"listMethod": true, "mapMethod": true, "strMethod": true};
+    final dispatch = {"listMethod": true, "mapMethod": true, "stringMethod": true};
     foreach (s in m.c.symbolsByFile[path] ?? []) {
         if (dispatch[s.label] == null or s.attrs["symbol_kind"] != "Function") {
             continue;

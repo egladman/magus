@@ -52,11 +52,11 @@ func mcpAddrString() string {
 	return mcpAddress(globalCfg.MCP)
 }
 
-// mcpCmd serves MCP over stdin and stdout for the agent host that launched it, against the
+// mcpCommand serves MCP over stdin and stdout for the agent host that launched it, against the
 // workspace it was launched in. It serves whoever runs it, a person at a terminal included:
 // the notice serveMCPStdio logs is what tells that person what they started.
-func mcpCmd(ctx context.Context, root string, args []string) error {
-	rest, err := cmdParse("mcp", args, func(fs *flag.FlagSet) {
+func mcpCommand(ctx context.Context, root string, args []string) error {
+	rest, err := commandParse("mcp", args, func(fs *flag.FlagSet) {
 		fs.Usage = mcpUsage
 	})
 	if err != nil {

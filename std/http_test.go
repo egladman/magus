@@ -24,7 +24,7 @@ import (
 // to the typed HttpRetry policy, and a stray "retry" key in this map is now inert.
 func TestParseHTTPOpts(t *testing.T) {
 	t.Parallel()
-	o := parseHTTPOpts(map[string]any{
+	o := parseHTTPOptions(map[string]any{
 		"fail":           true,
 		"fail_with_body": true,
 		"fail_early":     true,
@@ -37,10 +37,10 @@ func TestParseHTTPOpts(t *testing.T) {
 	assert.True(t, o.custom(), "an explicit timeout needs a client of its own")
 
 	// An empty/nil map is the default (non-custom) request.
-	assert.False(t, parseHTTPOpts(nil).custom(), "nil opts should not be custom")
+	assert.False(t, parseHTTPOptions(nil).custom(), "nil opts should not be custom")
 	assert.False(t, httpOpts{}.custom(), "zero opts should not be custom")
 	// fail/fail_with_body are applied after the response, so they need no client.
-	assert.False(t, parseHTTPOpts(map[string]any{"fail": true}).custom())
+	assert.False(t, parseHTTPOptions(map[string]any{"fail": true}).custom())
 }
 
 // TestHTTPOptsShouldRetry exercises the decider directly. It answers "is this
@@ -110,11 +110,11 @@ func TestHTTPClientTimeout(t *testing.T) {
 	assert.Equal(t, defaultHTTPTimeout, defaultHTTPClient.Timeout, "default client timeout")
 
 	// A client built for a retry policy still carries the default timeout.
-	o := parseHTTPOpts(nil)
+	o := parseHTTPOptions(nil)
 	assert.Equal(t, defaultHTTPTimeout, o.client(httpRetry{attempts: 2}).Timeout, "policy client default timeout")
 
 	// An explicit timeout opt overrides the default.
-	o = parseHTTPOpts(map[string]any{"timeout": float64(0.25)})
+	o = parseHTTPOptions(map[string]any{"timeout": float64(0.25)})
 	assert.True(t, o.custom(), "timeout opt should make the request custom")
 	assert.Equal(t, 250*time.Millisecond, o.client(httpRetry{}).Timeout, "explicit timeout opt")
 }
@@ -376,14 +376,14 @@ func TestParseServerOpts(t *testing.T) {
 	t.Parallel()
 
 	t.Run("dir only", func(t *testing.T) {
-		dir, mounts, port, err := parseServerOpts(map[string]any{"dir": "site"})
+		dir, mounts, port, err := parseServerOptions(map[string]any{"dir": "site"})
 		require.NoError(t, err)
 		assert.Equal(t, "site", dir)
 		assert.Nil(t, mounts)
 		assert.Equal(t, 0, port)
 	})
 	t.Run("mounts with port", func(t *testing.T) {
-		dir, mounts, port, err := parseServerOpts(map[string]any{
+		dir, mounts, port, err := parseServerOptions(map[string]any{
 			"mounts": map[string]any{"/": "docs/gen", "/console/": "console/gen"},
 			"port":   int64(9001),
 		})
@@ -393,65 +393,65 @@ func TestParseServerOpts(t *testing.T) {
 		assert.Equal(t, 9001, port)
 	})
 	t.Run("plain int port", func(t *testing.T) {
-		_, _, port, err := parseServerOpts(map[string]any{"dir": "site", "port": 8080})
+		_, _, port, err := parseServerOptions(map[string]any{"dir": "site", "port": 8080})
 		require.NoError(t, err)
 		assert.Equal(t, 8080, port)
 	})
 
 	t.Run("unknown key", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"mport": 8080})
+		_, _, _, err := parseServerOptions(map[string]any{"mport": 8080})
 		require.Error(t, err)
 		assert.Equal(t, `http.server: unknown option "mport" (known: dir, mounts, port)`, err.Error())
 	})
 	t.Run("unknown keys sorted", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"dir": "x", "zed": 1, "abc": 2})
+		_, _, _, err := parseServerOptions(map[string]any{"dir": "x", "zed": 1, "abc": 2})
 		require.Error(t, err)
 		assert.Equal(t, `http.server: unknown options "abc", "zed" (known: dir, mounts, port)`, err.Error())
 	})
 	t.Run("neither dir nor mounts", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{})
+		_, _, _, err := parseServerOptions(map[string]any{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "one of")
 	})
 	t.Run("both dir and mounts", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"dir": "x", "mounts": map[string]any{"/": "y"}})
+		_, _, _, err := parseServerOptions(map[string]any{"dir": "x", "mounts": map[string]any{"/": "y"}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not both")
 	})
 	t.Run("dir wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"dir": 42})
+		_, _, _, err := parseServerOptions(map[string]any{"dir": 42})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"dir" must be a string`)
 	})
 	t.Run("empty dir", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"dir": ""})
+		_, _, _, err := parseServerOptions(map[string]any{"dir": ""})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"dir" must not be empty`)
 	})
 	t.Run("mounts wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"mounts": "not-a-map"})
+		_, _, _, err := parseServerOptions(map[string]any{"mounts": "not-a-map"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"mounts" must be a map`)
 	})
 	t.Run("empty mounts", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"mounts": map[string]any{}})
+		_, _, _, err := parseServerOptions(map[string]any{"mounts": map[string]any{}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"mounts" must not be empty`)
 	})
 	t.Run("mount value wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"mounts": map[string]any{"/": 7}})
+		_, _, _, err := parseServerOptions(map[string]any{"mounts": map[string]any{"/": 7}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must map to a string dir")
 	})
 	t.Run("port wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOpts(map[string]any{"dir": "x", "port": "8080"})
+		_, _, _, err := parseServerOptions(map[string]any{"dir": "x", "port": "8080"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"port" must be an int`)
 	})
 }
 
 // TestHTTPServeRejectsBadOpts checks the top-level HTTPServe surfaces a validation
-// error (from parseServerOpts) rather than binding a server.
+// error (from parseServerOptions) rather than binding a server.
 func TestHTTPServeRejectsBadOpts(t *testing.T) {
 	t.Parallel()
 	_, err := HTTPServe(context.Background(), map[string]any{"mport": 8080})

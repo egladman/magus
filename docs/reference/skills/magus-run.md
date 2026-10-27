@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 14551
-skill_short_bytes: 7924
+skill_full_bytes: 15519
+skill_short_bytes: 8892
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `aa637217b358` |
+| `skill-content` | `d02272877e67` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -117,6 +117,22 @@ Right: `magus run ci <project>` while working; `magus affected ci` once done.
 - `-s` / `--silent`: default for every CLI run. Pass: one `ref` line; failure adds bounded tail. DROP it when question is what RAN versus replayed: per-target timings and `(cached, 320ms)` / `(ran, 5m28s)` verdict print only without it.
 - `-q` / `--quiet`: looser; drops progress, keeps errors and failing project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.
+
+### Read worker streams as records
+
+JSONL is a record stream, not a progress message. Keep the complete capture with
+the host or `-o jsonl --tee <file>`; parse its contract before selecting fields.
+Project the terminal outcome, validation refs, unresolved risks and requests for
+input before returning data to the orchestrator. Fetch tool transcripts only to
+investigate a specific failure. Handled tool errors and denials stay in the
+capture. A filter must preserve terminal failures, unresolved blockers, unchecked work,
+missing or malformed terminal records, and the producer's exit status; an empty
+projection is not success. Never select failures by searching prose for words
+such as `deny`, or truncate a stream with head or tail.
+
+For magus records, use `-o template` or `-o json` with a JSON projection. Full
+records stay available for audit; replaying every claim, permitted deviation and
+routine guard event spends context without changing the next action.
 
 ### Never pipe or redirect magus
 
@@ -352,6 +368,22 @@ truncating it after the fact:
   shape you want. `json`/`yaml` to parse, `jsonl` to stream records, `name` for
   bare identifiers one per line, `template=` to project exactly the fields you
   need and nothing else.
+
+### Read worker streams as records
+
+JSONL is a record stream, not a progress message. Keep the complete capture with
+the host or `-o jsonl --tee <file>`; parse its contract before selecting fields.
+Project the terminal outcome, validation refs, unresolved risks and requests for
+input before returning data to the orchestrator. Fetch tool transcripts only to
+investigate a specific failure. Handled tool errors and denials stay in the
+capture. A filter must preserve terminal failures, unresolved blockers, unchecked work,
+missing or malformed terminal records, and the producer's exit status; an empty
+projection is not success. Never select failures by searching prose for words
+such as `deny`, or truncate a stream with head or tail.
+
+For magus records, use `-o template` or `-o json` with a JSON projection. Full
+records stay available for audit; replaying every claim, permitted deviation and
+routine guard event spends context without changing the next action.
 
 ### Never pipe or redirect a magus command
 

@@ -114,7 +114,7 @@ func TestALandingSweepIsBoundedAndRecordsItsProbesFirst(t *testing.T) {
 // alone: no ancestry joins either branch to the squash. A job whose commit is not on the
 // base, and one whose change was never committed, both stay exited.
 func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n", "c.go": "package c\n", "d.go": "package d\n"})
+	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n", "c.go": "package c\n", "d.go": "package d\n"})
 	root := repo.Root()
 	seedRev := repo.Head()
 	worktree := func(name, file, body string, commit bool) *testkit.Repo {
@@ -168,7 +168,7 @@ func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
 // A result naming only the part of the work the base took does not end the job: the
 // landing is judged on the checkout's own diff, and the rest of it is still unlanded.
 func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
 	seedRev := repo.Head()
 	wt := repo.AddWorktree("job")
 	wt.Write("a.go", "package a // landed\n")
@@ -190,7 +190,7 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 // the work: the integration row's checkout reads the worker's paths as the worker does. A
 // worker no live integration row names stays exited.
 func TestAWorkerMergedIntoALiveIntegrationCheckoutEnds(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
 	seedRev := repo.Head()
 	wa := repo.AddWorktree("job-a")
 	wa.Write("a.go", "package a // merged\n")

@@ -138,9 +138,9 @@ func TestServeMCPStdioWatchesTheGraphWhileItServes(t *testing.T) {
 }
 
 func TestMCPCmdRefusesArguments(t *testing.T) {
-	err := mcpCmd(context.Background(), "", []string{"--stdio"})
+	err := mcpCommand(context.Background(), "", []string{"--stdio"})
 	assert.ErrorContains(t, err, "flag provided but not defined: -stdio")
 
-	err = mcpCmd(context.Background(), "", []string{"serve"})
+	err = mcpCommand(context.Background(), "", []string{"serve"})
 	assert.ErrorContains(t, err, `magus mcp: takes no arguments (got "serve")`)
 }

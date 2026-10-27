@@ -664,7 +664,7 @@ func TestListSweepIsIdempotent(t *testing.T) {
 
 // Exec records where the job was taken, so removing that worktree ends the job.
 func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
-	checkout := execRepo(t).Root()
+	checkout := execRepository(t).Root()
 	s := tempStore(t, checkout)
 	var notices strings.Builder
 	s.notices = &notices
@@ -834,7 +834,7 @@ func (g goalGraph) SignatureMatches(id, declared string) (string, bool, bool) {
 func TestWaitGradesEveryGoal(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"api.go": "package a\n\nfunc Api() {}\n", "keep.go": "package a\n\nfunc Keep() {}\n",
 		"legacy.go": "package a\n\nfunc Legacy() {}\n",
 	})
@@ -1486,7 +1486,7 @@ func TestSameContentComparesLinksWithoutFollowingThem(t *testing.T) {
 func TestSameContentComparesASubmoduleByItsHead(t *testing.T) {
 	t.Parallel()
 
-	origin := testkit.NewRepo(t, map[string]string{"x.go": "package x\n"})
+	origin := testkit.NewRepository(t, map[string]string{"x.go": "package x\n"})
 	first := origin.Head()
 	second := origin.Commit("same tree, another commit", nil)
 	checkout := func(rev string) string {
@@ -1640,7 +1640,7 @@ func TestWaitEvidenceHoldsACleanRunToItsRevision(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			repo := testkit.NewRepo(t, map[string]string{"tools.go": "package a\n"})
+			repo := testkit.NewRepository(t, map[string]string{"tools.go": "package a\n"})
 			j := exitedWithRunsIn(t, repo.Root(), acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": failedRun})
 			require.NoError(t, os.WriteFile(filepath.Join(j.holder, "tools.go"), []byte("package a\n"), 0o644))
 			clean := passedHere

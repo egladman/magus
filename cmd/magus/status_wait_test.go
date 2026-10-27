@@ -26,7 +26,7 @@ func totalSlots(claims []types.MachineClaim) int {
 func waitClaimWorkspace(t *testing.T) {
 	t.Helper()
 	testkit.Isolate(t)
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":       "{}\n",
 		"magusfile.buzz":   waitClaimCI,
 		"a/magusfile.buzz": waitClaimCI,

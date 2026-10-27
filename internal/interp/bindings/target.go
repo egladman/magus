@@ -78,7 +78,7 @@ func buildCache(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 			return vm.Null, fmt.Errorf(`magus\cache.remote: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
-		if !ok || !nv.IsStr() || nv.AsString() == "" {
+		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\cache.remote: argument is not a spell handle (no name)`)
 		}
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
@@ -107,7 +107,7 @@ func buildCI(_ context.Context, obs buzz.DirectObserver) vm.Value {
 			return vm.Null, fmt.Errorf(`magus\ci.provider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
-		if !ok || !nv.IsStr() || nv.AsString() == "" {
+		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\ci.provider: argument is not a spell handle (no name)`)
 		}
 		SetCIProvider(nv.AsString())
@@ -135,7 +135,7 @@ func buildReview(_ context.Context, obs buzz.DirectObserver) vm.Value {
 			return vm.Null, fmt.Errorf(`magus\review.provider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
-		if !ok || !nv.IsStr() || nv.AsString() == "" {
+		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\review.provider: argument is not a spell handle (no name)`)
 		}
 		SetReviewProvider(nv.AsString())
@@ -162,7 +162,7 @@ func buildLifecycle(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 			return vm.Null, fmt.Errorf(`magus\lifecycle.provider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
-		if !ok || !nv.IsStr() || nv.AsString() == "" {
+		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\lifecycle.provider: argument is not a spell handle (no name)`)
 		}
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
@@ -198,7 +198,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
-		if !ok || !nv.IsStr() || nv.AsString() == "" {
+		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: argument is not a spell handle (no name)`)
 		}
 		// Records onto the resolver captured at construction, the same way buildCache
@@ -217,7 +217,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		return vm.Null, nil
 	}))
 	secretObj.MapSet("read", directVal(obs, "magus.secret.read", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() || args[0].AsString() == "" {
+		if len(args) == 0 || !args[0].IsString() || args[0].AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.read: expected a non-empty reference string`)
 		}
 		// Resolver from the RUN context captured at construction (runCtx); cancellation
@@ -260,7 +260,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// Reveal where the credential crosses into a magusfile string. From here it is an
 		// ordinary Buzz str with only redact-at-write behind it, which is the documented
 		// seam: magus\secret.grant is the call that avoids this crossing entirely.
-		return vm.StrValue(v.Reveal()), nil
+		return vm.StringValue(v.Reveal()), nil
 	}))
 	// endpoint() is what a grant is FOR. It returns a loopback base URL a CHILD can
 	// be pointed at, so a tool magus shells out to gets the credential attached without
@@ -295,7 +295,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 			})
 		}
 		recordCredentialGrant(ctx, g, "secret.endpoint")
-		return vm.StrValue(url), nil
+		return vm.StringValue(url), nil
 	}))
 	return secretObj
 }
@@ -370,7 +370,7 @@ func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 		if !ok {
 			return ""
 		}
-		if !v.IsStr() {
+		if !v.IsString() {
 			if bad == nil {
 				bad = fmt.Errorf(`magus\secret.%s: field %q must be a str`, method, name)
 			}
@@ -642,7 +642,7 @@ func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) 
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		var patterns []string
 		for _, arg := range args {
-			if !arg.IsStr() {
+			if !arg.IsString() {
 				return vm.Null, fmt.Errorf("ctx.glob: each argument must be a glob pattern string")
 			}
 			patterns = append(patterns, arg.AsString())
@@ -853,7 +853,7 @@ const ctxMarker = "__magus_context"
 // than a no-op, so ctx.withEnv({...}).readsFiles("x") fails loudly instead of
 // declaring nothing. Named rather than written inline at its one use because it is
 // one of three places that enumerate this context's members independently (the other
-// two being buildTargetContext itself and the dry host's buildCtx), and a name is
+// two being buildTargetContext itself and the dry host's buildContext), and a name is
 // what lets a test hold them against each other.
 //
 // MEMBERS, not decls: `uses` runs a body rather than declaring anything, and it is
@@ -880,7 +880,7 @@ func TargetContextKeys() []string { return buildTargetContext(nil, nil, nil, nil
 // ExecRefusedKeys returns the ctx members a magus\Exec derivation refuses. It carries the
 // same caveat as [TargetContextKeys]: execRefusedMembers is one of three independent
 // enumerations of this context's members, and nothing but a test holds them against each
-// other, so a declaration added to buildTargetContext or the dry host's buildCtx and
+// other, so a declaration added to buildTargetContext or the dry host's buildContext and
 // forgotten here is silent until an Exec quietly accepts what it should refuse.
 func ExecRefusedKeys() []string { return slices.Clone(execRefusedMembers) }
 
@@ -935,7 +935,7 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 			return execCtx(args[0], cwd), nil
 		})
 		withCwd = directVal(obs, "ctx.withCwd", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-			if len(args) == 0 || !args[0].IsStr() {
+			if len(args) == 0 || !args[0].IsString() {
 				return vm.Null, fmt.Errorf("ctx.withCwd: requires a directory string")
 			}
 			return execCtx(env, args[0]), nil
@@ -999,7 +999,7 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 	// runs, so a computed value could not reach it and is rejected at load.
 	c.MapSet("observes", directVal(obs, "ctx.observes", footprintDecl))
 	c.MapSet("hasCharm", directVal(obs, "ctx.hasCharm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		return vm.BoolValue(types.HasCharm(ctx, argStr(args, 0))), nil
+		return vm.BoolValue(types.HasCharm(ctx, argString(args, 0))), nil
 	}))
 	// ctx.narrowed(): true while a sized gate runs this target with an op narrowed (Go
 	// tests to the packages a change reaches), so a check over the whole suite, such as

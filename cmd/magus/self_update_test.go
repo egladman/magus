@@ -33,7 +33,7 @@ import (
 const testIndexExpiry = "2999-01-01T00:00:00Z"
 
 // testFixture holds everything needed to stand up a local index server and
-// artifact server for integration tests of selfUpdateCmd.
+// artifact server for integration tests of selfUpdateCommand.
 type testFixture struct {
 	pub     ed25519.PublicKey
 	priv    ed25519.PrivateKey
@@ -49,7 +49,7 @@ type testFixture struct {
 // newTestFixture stands up a local index+artifact pair advertising tag. The
 // optional manifestVersion argument lets a test make the signed SHA256SUMS
 // "version:" header diverge from the index's Version, to exercise the
-// mismatch guard in selfUpdateCmd; when omitted it defaults to tag.
+// mismatch guard in selfUpdateCommand; when omitted it defaults to tag.
 func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFixture {
 	t.Helper()
 	return newIndexFixture(t, tag, func(served selfupdate.IndexRelease) selfupdate.ReleaseIndex {
@@ -229,7 +229,7 @@ func TestSelfUpdate_NewerVersion(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"}))
+	require.NoError(t, selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"}))
 }
 
 func TestSelfUpdate_AlreadyUpToDate(t *testing.T) {
@@ -237,7 +237,7 @@ func TestSelfUpdate_AlreadyUpToDate(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected error for same version")
 	assert.Contains(t, err.Error(), "already running")
 	// The remedy must hand back a flag that actually exists: --force, not --uf.Force
@@ -254,7 +254,7 @@ func TestSelfUpdate_DowngradeRefused(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected error for downgrade")
 	// Must not silently install the older version.
 	assert.Contains(t, err.Error(), "refusing downgrade")
@@ -270,7 +270,7 @@ func TestSelfUpdate_DowngradeWithExplicitVersion(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.2.0"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.2.0"})
 	require.Error(t, err, "expected error for explicit-version downgrade without --force")
 	assert.Contains(t, err.Error(), "older than current")
 	assert.Contains(t, err.Error(), "--force")
@@ -282,7 +282,7 @@ func TestSelfUpdate_DowngradeForce(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
+	require.NoError(t, selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes", "--force"}),
 		"expected forced downgrade to succeed in dry-run")
 }
 
@@ -311,7 +311,7 @@ func TestSelfUpdate_AutoSelectSkipsPrerelease(t *testing.T) {
 			newCandidateFixture(t, underReleases).activate(t)
 			setVersion(t, "v0.4.3")
 
-			err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+			err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 			require.EqualError(t, err, "magus self update: already running v0.4.3 (use --force to reinstall)")
 		})
 	}
@@ -321,14 +321,14 @@ func TestSelfUpdate_ExplicitPrereleaseInstalls(t *testing.T) {
 	newCandidateFixture(t, false).activate(t)
 	setVersion(t, "v0.4.3")
 
-	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.5.0-rc.1"}))
+	require.NoError(t, selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.5.0-rc.1"}))
 }
 
 func TestSelfUpdate_RunningPrereleaseRefusalNamesTheChannel(t *testing.T) {
 	newCandidateFixture(t, false).activate(t)
 	setVersion(t, "v0.5.0-rc.1")
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 	require.EqualError(t, err, "you are running prerelease v0.5.0-rc.1 and automatic updates follow stable releases only, "+
 		"the newest stable release is v0.4.3, "+
 		"name a later prerelease with --version, or use --version v0.4.3 --force to return to stable")
@@ -343,7 +343,7 @@ func TestSelfUpdate_UnknownVersionRefusesAutoSelect(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "unknown")
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected refusal for unversioned dev build without --version or --force")
 	assert.Contains(t, err.Error(), "unversioned")
 	assert.Contains(t, err.Error(), "--version")
@@ -358,7 +358,7 @@ func TestSelfUpdate_UnknownVersionWithExplicitVersionSucceeds(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "unknown")
 
-	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.4.0"}),
+	require.NoError(t, selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.4.0"}),
 		"expected explicit --version to bypass the unversioned-build guard")
 }
 
@@ -369,7 +369,7 @@ func TestSelfUpdate_UnknownVersionWithForceSucceeds(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "unknown")
 
-	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
+	require.NoError(t, selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes", "--force"}),
 		"expected --force to bypass the unversioned-build guard")
 }
 
@@ -383,7 +383,7 @@ func TestSelfUpdate_ManifestVersionMismatch(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected refusal on index/manifest version mismatch")
 	assert.Contains(t, err.Error(), "advertises")
 }
@@ -396,7 +396,7 @@ func TestSelfUpdate_BadSignature(t *testing.T) {
 	badPub, _, _ := ed25519.GenerateKey(rand.Reader)
 	overrideKeys = selfupdate.Keyring{{ID: selfupdate.KeyID(badPub), State: selfupdate.KeyActive, Pub: badPub}}
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected signature verification to fail")
 	// The bad key will fail on the index.json.sig check.
 	assert.Contains(t, err.Error(), "signature check failed")
@@ -431,7 +431,7 @@ func TestSelfUpdate_IndexUnreachable(t *testing.T) {
 	overrideDiscoveryURL = srv.URL + "/index.json"
 	setVersion(t, "v0.3.0")
 
-	err = selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	err = selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "unreachable index must fail, not silently succeed")
 	// Must mention the index fetch, not some other error.
 	assert.Contains(t, err.Error(), "release index")
@@ -443,7 +443,7 @@ func TestSelfUpdate_BinDir(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	dir := t.TempDir()
-	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", dir}),
+	require.NoError(t, selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", dir}),
 		"expected success with --bin-dir")
 }
 
@@ -452,7 +452,7 @@ func TestSelfUpdate_BinDirNotExist(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", "/nonexistent/path/xyz"})
+	err := selfUpdateCommand(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", "/nonexistent/path/xyz"})
 	assert.Error(t, err, "expected error for non-existent --bin-dir")
 }
 
@@ -461,7 +461,7 @@ func TestSelfUpdate_CheckOnly(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--check"}),
+	require.NoError(t, selfUpdateCommand(context.Background(), []string{"--check"}),
 		"--check should succeed even without --yes")
 }
 
@@ -644,7 +644,7 @@ func TestSelfUpdate_ConfirmPromptNamesHostBeforeAsking(t *testing.T) {
 }
 
 // TestSelfUpdate_ConfirmDeclinedExitsNonzero proves a declined prompt is a non-nil
-// error, not the old "print aborted, return nil" behavior. selfUpdateCmd forwards
+// error, not the old "print aborted, return nil" behavior. selfUpdateCommand forwards
 // this error straight to its caller, and any non-nil, non-usage error maps to a
 // nonzero process exit (mapExitCode in main.go), so a script driving `magus self
 // update` sees failure whenever nothing was installed.

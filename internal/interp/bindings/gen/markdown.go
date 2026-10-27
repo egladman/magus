@@ -18,28 +18,28 @@ func RegisterMarkdown(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("toHtml", vm.DirectValue("markdown.toHtml", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := ffi.Str(bzArgs, 0)
+		source := ffi.String(bzArgs, 0)
 		ret0, err := std.MarkdownToHTML(ctx, source)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("frontmatter", vm.DirectValue("markdown.frontmatter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := ffi.Str(bzArgs, 0)
+		source := ffi.String(bzArgs, 0)
 		ret0, err := std.MarkdownFrontmatter(ctx, source)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("stripFrontmatter", vm.DirectValue("markdown.stripFrontmatter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		source := ffi.Str(bzArgs, 0)
+		source := ffi.String(bzArgs, 0)
 		ret0, err := std.MarkdownStripFrontmatter(ctx, source)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

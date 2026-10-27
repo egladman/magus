@@ -35,8 +35,8 @@ func testService(opts ...Option) *Service {
 	g := minimalGraph()
 	tg := minimalTargetGraph()
 	base := append([]Option{
-		WithKnowledgeGraphFn(func(context.Context, bool) (*knowledge.Graph, error) { return g, nil }),
-		WithDescribeGraphFn(func() types.TargetGraphOutput { return tg }),
+		WithKnowledgeGraphFunction(func(context.Context, bool) (*knowledge.Graph, error) { return g, nil }),
+		WithDescribeGraphFunction(func() types.TargetGraphOutput { return tg }),
 	}, opts...)
 	return NewService(nil, config.Config{}, types.StatusBase{}, "1.2.3", base...)
 }
@@ -90,7 +90,7 @@ func TestServiceTargetGraph(t *testing.T) {
 func TestServiceStatusSnapshotSeam(t *testing.T) {
 	want := types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 1}}
 	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.2.3",
-		WithStatusSnapshotFn(func(context.Context) types.StatusSnapshot { return want }))
+		WithStatusSnapshotFunction(func(context.Context) types.StatusSnapshot { return want }))
 	assert.Equal(t, want, svc.StatusSnapshot(context.Background()))
 }
 

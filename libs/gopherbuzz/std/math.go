@@ -39,45 +39,45 @@ const buzzPi = 3.1415926535898
 func mathModule() vm.Value {
 	m := mod()
 	m.MapSet("pi", vm.FloatValue(buzzPi))
-	m.MapSet("abs", fn("math.abs", mathAbs))
-	m.MapSet("acos", fn("math.acos", mathUnary("math.acos", math.Acos)))
-	m.MapSet("asin", fn("math.asin", mathUnary("math.asin", math.Asin)))
-	m.MapSet("atan", fn("math.atan", mathUnary("math.atan", math.Atan)))
-	m.MapSet("ceil", fn("math.ceil", mathCeil))
-	m.MapSet("cos", fn("math.cos", mathUnary("math.cos", math.Cos)))
-	m.MapSet("deg", fn("math.deg", mathUnary("math.deg", func(r float64) float64 { return r * 180 / buzzPi })))
-	m.MapSet("exp", fn("math.exp", mathUnary("math.exp", math.Exp)))
-	m.MapSet("floor", fn("math.floor", mathFloor))
-	m.MapSet("log", fn("math.log", mathLog))
-	m.MapSet("maxDouble", fn("math.maxDouble", mathBinaryFloat("math.maxDouble", func(a, b float64) float64 {
+	m.MapSet("abs", function("math.abs", mathAbs))
+	m.MapSet("acos", function("math.acos", mathUnary("math.acos", math.Acos)))
+	m.MapSet("asin", function("math.asin", mathUnary("math.asin", math.Asin)))
+	m.MapSet("atan", function("math.atan", mathUnary("math.atan", math.Atan)))
+	m.MapSet("ceil", function("math.ceil", mathCeil))
+	m.MapSet("cos", function("math.cos", mathUnary("math.cos", math.Cos)))
+	m.MapSet("deg", function("math.deg", mathUnary("math.deg", func(r float64) float64 { return r * 180 / buzzPi })))
+	m.MapSet("exp", function("math.exp", mathUnary("math.exp", math.Exp)))
+	m.MapSet("floor", function("math.floor", mathFloor))
+	m.MapSet("log", function("math.log", mathLog))
+	m.MapSet("maxDouble", function("math.maxDouble", mathBinaryFloat("math.maxDouble", func(a, b float64) float64 {
 		if a > b {
 			return a
 		}
 		return b
 	})))
-	m.MapSet("minDouble", fn("math.minDouble", mathBinaryFloat("math.minDouble", func(a, b float64) float64 {
+	m.MapSet("minDouble", function("math.minDouble", mathBinaryFloat("math.minDouble", func(a, b float64) float64 {
 		if a < b {
 			return a
 		}
 		return b
 	})))
-	m.MapSet("maxInt", fn("math.maxInt", mathBinaryInt("math.maxInt", func(a, b int64) int64 {
+	m.MapSet("maxInt", function("math.maxInt", mathBinaryInt("math.maxInt", func(a, b int64) int64 {
 		if a > b {
 			return a
 		}
 		return b
 	})))
-	m.MapSet("minInt", fn("math.minInt", mathBinaryInt("math.minInt", func(a, b int64) int64 {
+	m.MapSet("minInt", function("math.minInt", mathBinaryInt("math.minInt", func(a, b int64) int64 {
 		if a < b {
 			return a
 		}
 		return b
 	})))
-	m.MapSet("rad", fn("math.rad", mathUnary("math.rad", func(d float64) float64 { return d * buzzPi / 180 })))
-	m.MapSet("sin", fn("math.sin", mathUnary("math.sin", math.Sin)))
-	m.MapSet("sqrt", fn("math.sqrt", mathUnary("math.sqrt", math.Sqrt)))
-	m.MapSet("tan", fn("math.tan", mathUnary("math.tan", math.Tan)))
-	m.MapSet("pow", fn("math.pow", mathPow))
+	m.MapSet("rad", function("math.rad", mathUnary("math.rad", func(d float64) float64 { return d * buzzPi / 180 })))
+	m.MapSet("sin", function("math.sin", mathUnary("math.sin", math.Sin)))
+	m.MapSet("sqrt", function("math.sqrt", mathUnary("math.sqrt", math.Sqrt)))
+	m.MapSet("tan", function("math.tan", mathUnary("math.tan", math.Tan)))
+	m.MapSet("pow", function("math.pow", mathPow))
 	return m
 }
 

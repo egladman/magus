@@ -61,6 +61,14 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 	assert.Equal(t, grepShape, unworded(grep))
 	assert.Contains(t, grep.Reason, "refs HandleRequest --occurrences")
 
+	body := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{
+		"pattern": "func HandleRequest", "path": "internal/api/handler.go",
+		"output_mode": "content", "-A": 20,
+	})})
+	assert.Equal(t, "deny", body.Decision, body.Reason)
+	assert.Equal(t, string(denyRuleGrepReader), body.Rule)
+	assert.Contains(t, body.Reason, "refs HandleRequest --definition --source")
+
 	glob := Judge(ctx, deps, Request{Input: envelope("Glob", map[string]any{"pattern": "**/handler.go", "path": "internal/api"})})
 	globShape := verdictWithRule("deny", string(denyRuleSearchTranslation))
 	globShape.Next = glob.Next
@@ -71,4 +79,10 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 
 	text := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{"pattern": "serves one request", "path": "internal"})})
 	assert.NotEqual(t, "deny", text.Decision, text.Reason)
+
+	textContext := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{
+		"pattern": "serves one request", "path": "internal/api/handler.go",
+		"output_mode": "content", "-C": 3,
+	})})
+	assert.NotEqual(t, "deny", textContext.Decision, textContext.Reason)
 }

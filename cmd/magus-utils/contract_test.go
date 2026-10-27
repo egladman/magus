@@ -18,7 +18,7 @@ func TestReadHarnessContract(t *testing.T) {
 	signatures := map[string]string{}
 	for _, fn := range funcs {
 		signatures[fn.Name] = fmt.Sprintf("(%s) > %s", fn.Params, fn.Returns)
-		assert.Equal(t, fn.Name == "mgs_getHarnessConfig", fn.Required, "%s: only the config is required", fn.Name)
+		assert.Equal(t, fn.Name == "mgs_getHarnessConfig" || fn.Name == "mgs_renderPrompts", fn.Required, "%s: required on every harness", fn.Name)
 	}
 	assert.Equal(t, map[string]string{
 		"mgs_getHarnessConfig": "() > HarnessConfig",

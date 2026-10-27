@@ -147,11 +147,11 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 		case ']':
 			moved = m.nextHunk()
 		case '[':
-			moved = m.prevHunk()
+			moved = m.previousHunk()
 		case '}':
 			moved = m.nextFile()
 		case '{':
-			moved = m.prevFile()
+			moved = m.previousFile()
 		case 'v':
 			if change, ok := m.toggleViewed(); ok && sync != nil {
 				sync.SetViewed(change.Digest, change.On)

@@ -69,10 +69,10 @@ final thrown = fun() > void !> any { tick(); throw "flaky"; };
 }
 
 func TestOptStrValCrossesNilAsNull(t *testing.T) {
-	assert.True(t, OptStrVal(nil).IsNull())
+	assert.True(t, OptStringVal(nil).IsNull())
 	empty := ""
-	got := OptStrVal(&empty)
-	require.True(t, got.IsStr(), "an empty string is a value, not an absence")
+	got := OptStringVal(&empty)
+	require.True(t, got.IsString(), "an empty string is a value, not an absence")
 	assert.Equal(t, "", got.AsString())
 }
 
@@ -118,7 +118,7 @@ func TestAnyMapReadsAnObjectInstance(t *testing.T) {
 	`))
 	assert.Equal(t, map[string]any{"attempts": int64(3), "note": ""}, AnyMap([]vm.Value{sess.GetGlobal("built")}, 0))
 	assert.Equal(t, map[string]any{"attempts": int64(2)}, AnyMap([]vm.Value{sess.GetGlobal("literal")}, 0))
-	assert.Nil(t, AnyMap([]vm.Value{vm.StrValue("x")}, 0))
+	assert.Nil(t, AnyMap([]vm.Value{vm.StringValue("x")}, 0))
 	assert.Nil(t, AnyMap(nil, 0))
 }
 
@@ -153,15 +153,15 @@ func TestStrUnwrapsAnEnumCase(t *testing.T) {
 		final picked = SignAlgorithm.Ed25519;
 	`))
 	picked := sess.GetGlobal("picked")
-	require.False(t, picked.IsStr(), "an enum case is not a str; that is the whole trap")
+	require.False(t, picked.IsString(), "an enum case is not a str; that is the whole trap")
 
-	assert.Equal(t, "ed25519", Str([]vm.Value{picked}, 0),
+	assert.Equal(t, "ed25519", String([]vm.Value{picked}, 0),
 		"a str-backed enum case must cross as its VALUE")
 
 	// The ordinary cases still behave.
-	assert.Equal(t, "plain", Str([]vm.Value{vm.StrValue("plain")}, 0))
-	assert.Equal(t, "", Str([]vm.Value{vm.IntValue(7)}, 0), "a non-str, non-enum is still empty")
-	assert.Equal(t, "", Str(nil, 0), "a missing arg is still empty")
+	assert.Equal(t, "plain", String([]vm.Value{vm.StringValue("plain")}, 0))
+	assert.Equal(t, "", String([]vm.Value{vm.IntValue(7)}, 0), "a non-str, non-enum is still empty")
+	assert.Equal(t, "", String(nil, 0), "a missing arg is still empty")
 }
 
 // TestStrUnwrapsOnlyStrBackedEnums: an int-backed enum has no string to give, so it
@@ -175,7 +175,7 @@ func TestStrUnwrapsOnlyStrBackedEnums(t *testing.T) {
 		enum Level { low, high }
 		final picked = Level.high;
 	`))
-	assert.Equal(t, "", Str([]vm.Value{sess.GetGlobal("picked")}, 0))
+	assert.Equal(t, "", String([]vm.Value{sess.GetGlobal("picked")}, 0))
 }
 
 // BenchmarkStr guards the hot path. Str runs for EVERY string argument of every
@@ -183,7 +183,7 @@ func TestStrUnwrapsOnlyStrBackedEnums(t *testing.T) {
 // could cost something measurable.
 //
 // The str case is what to watch: it is the overwhelmingly common one, and it now
-// runs a tag check before the IsStr it always ran. The enum case is rarer and pays
+// runs a tag check before the IsString it always ran. The enum case is rarer and pays
 // one extra branch plus the unwrap by definition.
 func BenchmarkStr(b *testing.B) {
 	ctx := context.Background()
@@ -200,7 +200,7 @@ func BenchmarkStr(b *testing.B) {
 		name string
 		args []vm.Value
 	}{
-		{"str", []vm.Value{vm.StrValue("ed25519")}},
+		{"str", []vm.Value{vm.StringValue("ed25519")}},
 		{"enum", []vm.Value{sess.GetGlobal("picked")}},
 		{"absent", nil},
 	}
@@ -209,7 +209,7 @@ func BenchmarkStr(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				sink = Str(c.args, 0)
+				sink = String(c.args, 0)
 			}
 		})
 	}
@@ -225,7 +225,7 @@ var sink string
 func TestAnyValNamedStringType(t *testing.T) {
 	got, ok := AnyVal(map[string]any{"status": types.CheckOK}).MapGet("status")
 	require.True(t, ok, "status key missing")
-	require.True(t, got.IsStr(), "a named string crossed as %s, not a string", got.Kind())
+	require.True(t, got.IsString(), "a named string crossed as %s, not a string", got.Kind())
 	assert.Equal(t, "ok", got.AsString())
 }
 
@@ -233,7 +233,7 @@ func TestAnyValNamedStringType(t *testing.T) {
 func TestAnyValNamedStringOnTargetRun(t *testing.T) {
 	got, ok := AnyVal(map[string]any{"state": types.TargetRunPassed}).MapGet("state")
 	require.True(t, ok)
-	require.True(t, got.IsStr(), "a named string crossed as %s", got.Kind())
+	require.True(t, got.IsString(), "a named string crossed as %s", got.Kind())
 	assert.Equal(t, "passed", got.AsString())
 }
 

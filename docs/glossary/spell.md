@@ -41,4 +41,5 @@ In the code (`magus refs <name>` lists every site):
 ## See also
 
 - [Spells](../concepts/spells.md)
+- [Cantrip](cantrip.md)
 - [Op](op.md)

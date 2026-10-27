@@ -211,7 +211,7 @@ func BenchmarkWriteReplace(b *testing.B) {
 	}
 }
 
-// BenchmarkRead is the other half of the hot path: reentrantErr reads the owner record on
+// BenchmarkRead is the other half of the hot path: reentrantError reads the owner record on
 // every contended acquire.
 func BenchmarkRead(b *testing.B) {
 	dir := b.TempDir()

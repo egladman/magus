@@ -564,7 +564,7 @@ func TestAHookRunsGitWithItsBoxsHome(t *testing.T) {
 // writes none of it; its checkout's own git directory, where the index lives, stays its
 // to write. Where the kernel has landlock, a write into the store fails.
 func TestAHookCannotWriteTheSharedObjectStore(t *testing.T) {
-	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	root, commit := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	drv := gitDriver(t, root)
 	cand, err := checkout(t.Context(), drv, root, t.TempDir(), "candidate-1", commit)
 	require.NoError(t, err)
@@ -921,7 +921,7 @@ func boxedRun(t *testing.T, out string) []string {
 // commit under the same HookEnv starts in the same checkout layout, with the same
 // environment, whichever of them runs it.
 func TestGateCommitGatesInTheBoxAndEnvironmentValidationGivesACandidate(t *testing.T) {
-	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	root, commit := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	drv := gitDriver(t, root)
 	t.Setenv("PASSED", "p")
 	t.Setenv("MISE_DATA_DIR", "/runner/mise")
@@ -962,7 +962,7 @@ func TestTheBoxReadsNoConfigIncludedFromOutsideIt(t *testing.T) {
 	if abi, err := sandbox.ABI(); err != nil || abi < sandbox.RequiredABI {
 		t.Skip("only the kernel sandbox confines git itself")
 	}
-	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	root, commit := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	drv := gitDriver(t, root)
 	env := HookEnv{Sandbox: config.SandboxConfig{Mode: magustypes.SandboxModeRequired}}
 	status := script(`git status --porcelain`)
@@ -985,7 +985,7 @@ func TestTheBoxReadsNoConfigIncludedFromOutsideIt(t *testing.T) {
 // A caller carrying its cache tier between runs gets it written where it keeps it, and
 // GateCommit reports a red gate as HookFailed with the status the command exited with.
 func TestGateCommitKeepsTheCallersCacheAndReportsTheExitStatus(t *testing.T) {
-	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	root, commit := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	drv := gitDriver(t, root)
 	cache := t.TempDir()
 	env := HookEnv{Cache: cache}
@@ -1018,7 +1018,7 @@ func goCachingDecl(goroot string) map[string]spells.Sandbox {
 // A caller keeping the local tier outside the box gets the spells' caches kept beside
 // it: the gate's go builds into the directories the next box's restore and save reach.
 func TestGateCommitBuildsWithTheSpellsCachesUnderTheCallersCache(t *testing.T) {
-	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	root, commit := gitRepository(t, map[string]string{"a.txt": "a\n"})
 	drv := gitDriver(t, root)
 	dir := t.TempDir()
 	env := HookEnv{Cache: dir, Spells: map[string]spells.Sandbox{"go": {

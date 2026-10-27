@@ -206,7 +206,7 @@ func LendMachineClaim(ctx context.Context, fn func(context.Context) error) error
 	}
 	lent := func(ctx context.Context) error {
 		h.lend()
-		held := admissionFrom(ctx)
+		held := admissionFromContext(ctx)
 		held.machineClaim = false
 		err := fn(withMachineHold(held.on(ctx), nil))
 		return errors.Join(err, h.reclaim(ctx))

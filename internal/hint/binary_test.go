@@ -33,19 +33,19 @@ func keepBinaryName(t *testing.T) {
 func TestBinaryNameFollowsHowTheProcessWasInvoked(t *testing.T) {
 	keepBinaryName(t)
 
-	ResolveBinaryNameFrom("magus")
+	ResolveBinaryName("magus")
 	assert.Equal(t, "magus", BinaryName(), "resolved through PATH, so PATH is what a reader would type")
 	assert.Equal(t, "magus run build .", Run.With("build", "."))
 
-	ResolveBinaryNameFrom("./magus")
+	ResolveBinaryName("./magus")
 	assert.Equal(t, "./magus", BinaryName())
 	assert.Equal(t, "./magus run build .", Run.With("build", "."),
 		"a worktree's own binary is what printed the hint and what has to run it")
 
-	ResolveBinaryNameFrom("../magus")
+	ResolveBinaryName("../magus")
 	assert.Equal(t, "../magus", BinaryName(), "a relative spelling is the one the reader already used")
 
-	ResolveBinaryNameFrom("/opt/homebrew/bin/magus")
+	ResolveBinaryName("/opt/homebrew/bin/magus")
 	assert.Equal(t, "magus", BinaryName(),
 		"an absolute path from outside the working directory is an installed magus: a full path in every hint costs more than it buys")
 }
@@ -61,7 +61,7 @@ func TestBinaryNameCollapsesTheWorkspaceBinary(t *testing.T) {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 
-	ResolveBinaryNameFrom(filepath.Join(wd, "magus"))
+	ResolveBinaryName(filepath.Join(wd, "magus"))
 	assert.Equal(t, "./magus", BinaryName())
 }
 
@@ -70,10 +70,10 @@ func TestBinaryNameCollapsesTheWorkspaceBinary(t *testing.T) {
 // invocation is not this process's at all.
 func TestBinaryNameIgnoresEveryOtherProgram(t *testing.T) {
 	keepBinaryName(t)
-	ResolveBinaryNameFrom("magus")
+	ResolveBinaryName("magus")
 
 	for _, argv0 := range []string{"", "   ", "/tmp/go-build/cmd/magus.test", "./magus-docs", "magus.exe"} {
-		ResolveBinaryNameFrom(argv0)
+		ResolveBinaryName(argv0)
 		assert.Equal(t, "magus", BinaryName(), "argv0 %q is not a magus invocation", argv0)
 	}
 }
@@ -82,7 +82,7 @@ func TestBinaryNameIgnoresEveryOtherProgram(t *testing.T) {
 // startup, and a client rooted elsewhere cannot run the `./magus` that answered it.
 func TestOnPathRespellsForAReaderElsewhere(t *testing.T) {
 	keepBinaryName(t)
-	ResolveBinaryNameFrom("./magus")
+	ResolveBinaryName("./magus")
 
 	served := OnPath([]types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")})
 	require.Len(t, served, 1)
@@ -93,6 +93,6 @@ func TestOnPathRespellsForAReaderElsewhere(t *testing.T) {
 		Why:  "why",
 	}, served[0])
 
-	ResolveBinaryNameFrom("magus")
+	ResolveBinaryName("magus")
 	assert.Equal(t, "magus explain spell:go", OnPath([]types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")})[0].Run)
 }

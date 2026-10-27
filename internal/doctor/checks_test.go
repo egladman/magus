@@ -120,12 +120,12 @@ func TestCacheYieldAdviceNamesBothCauses(t *testing.T) {
 	assert.Contains(t, advice, "volatile state", "the version-stamp cause")
 }
 
-// deadOutputRepo builds the shape that broke CI: a project declaring two generated trees as
+// deadOutputRepository builds the shape that broke CI: a project declaring two generated trees as
 // outputs, one COMMITTED (src/gen, written by buf-generate) and one untracked (gen/, written by
 // the build). built controls whether the build has run.
-func deadOutputRepo(t *testing.T, built bool) string {
+func deadOutputRepository(t *testing.T, built bool) string {
 	t.Helper()
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		// Anchored, as the real one is (`console/gen/`). A bare `gen/` matches at any
 		// depth and would swallow src/gen too, collapsing the two cases this fixture exists
 		// to keep apart.
@@ -150,7 +150,7 @@ func deadOutputProject(dir string) *types.Project {
 // that as "the project was built, so gen/** is dead" failed `magus doctor` on every CI runner
 // while passing on every developer machine, where gen/ had already been built.
 func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
-	repo := deadOutputRepo(t, false)
+	repo := deadOutputRepository(t, false)
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
@@ -166,7 +166,7 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 // project really has been built, so a sibling glob still matching nothing is the genuine
 // finding the check exists for: a target inheriting it fails its snapshot on a cold cache.
 func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
-	repo := deadOutputRepo(t, true)
+	repo := deadOutputRepository(t, true)
 	p := deadOutputProject(repo)
 	p.Outputs = types.MustParseGlobs("gen/**", "src/gen/**", "dist/**")
 	r := &runner{root: repo, ws: detectingWorkspace{}}
@@ -311,7 +311,7 @@ func TestCheckGuardWiring(t *testing.T) {
 	t.Run("no binary resolves at all -> fail", func(t *testing.T) {
 		root := t.TempDir()
 		t.Setenv("PATH", t.TempDir()) // empty: no magus anywhere
-		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget)
+		c := checkGuardWiring(harnessProbeContext(), root, testProbeBudget)
 		require.Equal(t, types.CheckFail, c.Status)
 		assert.Contains(t, c.Message, "no ./magus and no magus on PATH")
 	})
@@ -320,7 +320,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 
-		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget)
+		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget)
 		require.Equal(t, types.CheckFail, c.Status)
 		assert.Contains(t, c.Message, "did not return a deny")
 		joined := strings.Join(c.Details, "\n")
@@ -331,7 +331,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		w.WriteExecutable("magus", denyingProbeScript)
 
-		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget)
+		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget)
 		require.Equal(t, types.CheckAdvice, c.Status)
 		assert.Contains(t, c.Message, "no harness descriptor found")
 		assert.Contains(t, strings.Join(c.Details, "\n"), "magus\\harness.provider")
@@ -342,7 +342,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		w.WriteExecutable("magus", denyingProbeScript)
 		writeCheckpointHarness(t, w, guardedHarnessConfig())
 
-		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
+		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "test-host")
 		require.Equal(t, types.CheckOK, c.Status)
 		assert.Contains(t, c.Details, w.Path("host", "hooks.json"))
 	})
@@ -352,7 +352,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		w.WriteExecutable("magus", denyingProbeScript)
 		writeCheckpointHarness(t, w, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
-		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
+		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "test-host")
 		require.Equal(t, types.CheckFail, c.Status)
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, c.Message, "harness wiring is incomplete")
@@ -394,7 +394,7 @@ func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T
 		w.WriteExecutable("magus", denyingProbeScript)
 		writeModHarness(t, w, true, "")
 
-		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "mod-host")
+		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
 		// Personal plugin installs cannot be fixed in CI; doctor advises, verify still fails.
 		require.Equal(t, types.CheckAdvice, c.Status)
 		assert.Contains(t, strings.Join(c.Details, "\n"), "/plugin install magus --marketplace egladman/magus")
@@ -405,7 +405,7 @@ func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T
 		w.WriteExecutable("magus", denyingProbeScript)
 		writeModHarness(t, w, true, `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`)
 
-		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "mod-host")
+		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
 		assert.NotEqual(t, types.CheckFail, c.Status)
 		assert.NotContains(t, strings.Join(c.Details, "\n"), "plugin")
 	})
@@ -415,7 +415,7 @@ func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T
 		w.WriteExecutable("magus", denyingProbeScript)
 		writeModHarness(t, w, false, "")
 
-		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "mod-host")
+		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
 		assert.NotEqual(t, types.CheckFail, c.Status)
 		assert.NotContains(t, strings.Join(c.Details, "\n"), "plugin")
 	})
@@ -581,13 +581,13 @@ type detectingWorkspace struct{ types.WorkspaceReader }
 
 func (detectingWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
-// seedingRepo commits one declared source, one config nothing declares, and one
+// seedingRepository commits one declared source, one config nothing declares, and one
 // untracked build product. The third is the case the check must NOT report: a fresh
 // clone does not have it, so reporting it would make doctor's answer depend on
 // whether somebody had built the tree.
-func seedingRepo(t *testing.T) string {
+func seedingRepository(t *testing.T) string {
 	t.Helper()
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"main.go":       "package main\n",
 		".golangci.yml": "linters:\n",
 	})
@@ -604,7 +604,7 @@ func seedingProject() *types.Project {
 // somebody happened to touch, so the declaration that is missing surfaces one pull
 // request at a time; this answers it in one pass.
 func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
-	repo := seedingRepo(t)
+	repo := seedingRepository(t)
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
@@ -621,7 +621,7 @@ func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 // key reads is CORRECTLY undeclared, and a check that failed on it would be dictating
 // a layout rather than reporting a cost.
 func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
-	repo := seedingRepo(t)
+	repo := seedingRepository(t)
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
@@ -633,7 +633,7 @@ func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 // declaring the file is what makes the check go quiet, so the advice can honestly say
 // so.
 func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
-	repo := seedingRepo(t)
+	repo := seedingRepository(t)
 	p := seedingProject()
 	p.Sources = types.MustParseGlobs("**/*.go", ".golangci.yml")
 	r := &runner{root: repo, ws: detectingWorkspace{}}
@@ -879,13 +879,13 @@ func TestHookConfigsCoversTheCheckoutOnly(t *testing.T) {
 	writeCheckpointHarness(t, w, guardedHarnessConfig())
 	wired := w.Path("host", "hooks.json")
 
-	assert.Equal(t, []string{wired}, HookConfigs(harnessProbeCtx(), w.Root(), "test-host"))
+	assert.Equal(t, []string{wired}, HookConfigs(harnessProbeContext(), w.Root(), "test-host"))
 
 	// A config that names magus without running a hook of its own is not wiring: the
 	// same two markers the guard-wiring check reads, so neither can count a file the
 	// other would not.
 	w.Write("host/hooks.json", `{"note":"magus lives here"}`)
-	assert.Empty(t, HookConfigs(harnessProbeCtx(), w.Root(), "test-host"))
+	assert.Empty(t, HookConfigs(harnessProbeContext(), w.Root(), "test-host"))
 }
 
 // sameStepFixture is the 2026-09-10 gate stall as a workspace declares it: `ci` composes a

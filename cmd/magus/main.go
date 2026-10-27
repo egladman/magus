@@ -125,7 +125,7 @@ func runCLI() int {
 	if err := config.MisconfiguredEnv(os.Environ()); err != nil {
 		switch sub, subArgs := peekSub(args); sub {
 		case "shell":
-			return mapExitCode(shellCmd(withEnvRefusal(context.Background(), err), subArgs))
+			return mapExitCode(shellCommand(withEnvRefusal(context.Background(), err), subArgs))
 		case "buzz":
 		default:
 			// No display yet: the logger is built after this check.
@@ -349,7 +349,7 @@ func hasDetachFlag(args []string) bool {
 }
 
 // hasBriefFlag reports whether a session invocation selected --brief. The profile
-// decision runs before cmdParse, so the flag is peeked the same way --detach is.
+// decision runs before commandParse, so the flag is peeked the same way --detach is.
 func hasBriefFlag(args []string) bool {
 	for _, a := range args {
 		if a == "--" {
@@ -407,7 +407,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server), so
 		// it needs no workspace RESOLUTION and is never forwarded to a server. It does
 		// need the config: a script run inside a workspace gets that workspace on its
-		// context (see buzzCmd), and opening one reads magus.yaml and the MAGUS_* env,
+		// context (see buzzCommand), and opening one reads magus.yaml and the MAGUS_* env,
 		// the remote cache's trust set among them. Listed as config-free while it opened
 		// a workspace anyway, it opened it against DEFAULTS, so a wired remote backend
 		// came up with no trust set and the load failed with a message naming the very
@@ -910,7 +910,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// The parse above stops at the subcommand, so a global config flag written AFTER it
 	// - which the usage text promises works, and which is where people naturally put it
 	// - had not been read yet when the workspace preload below snapshots globalCfg into
-	// the loadMagus singleton. The subcommand's own cmdParse does read it, but that runs
+	// the loadMagus singleton. The subcommand's own commandParse does read it, but that runs
 	// after the snapshot, so the value landed in a config nothing consulted again:
 	// `magus run build --concurrency 4` silently ran at the default width, and every
 	// other generated config flag was dead in that position too.
@@ -1090,7 +1090,7 @@ func usage() {
 }
 
 // snapshotGlobals captures globalCfg and global, returning a restore func that puts them
-// back. runTarget/affected write flags straight into these package globals via cmdParse
+// back. runTarget/affected write flags straight into these package globals via commandParse
 // (flaggen.BindFlags binds the CURRENT field as each flag's default, so an unset flag keeps
 // whatever a previous dispatch left there); dispatchAdopted defers the returned restore
 // so one adopted client's flags cannot bleed into the next one dispatched on this process.
@@ -1194,7 +1194,7 @@ func adoptedSandbox(ctx context.Context, root string, subArgs []string) error {
 	floor := proc.SandboxFloorFromContext(ctx)
 	flag, set := sandboxFlag(subArgs)
 	if set && flag.WeakerThan(floor) {
-		return errSandboxWeakened("a forwarded run", flag, floor)
+		return errorSandboxWeakened("a forwarded run", flag, floor)
 	}
 	want := floor
 	if set && want.WeakerThan(flag) {
@@ -1208,7 +1208,7 @@ func adoptedSandbox(ctx context.Context, root string, subArgs []string) error {
 		return err
 	}
 	if set && flag.WeakerThan(have) {
-		return errSandboxWeakened("a forwarded run", flag, have)
+		return errorSandboxWeakened("a forwarded run", flag, have)
 	}
 	if have.WeakerThan(want) {
 		return fmt.Errorf("%w: the client runs under sandbox mode %s and this workspace's server runs it under %s",
@@ -1273,11 +1273,11 @@ func refuseInheritedSandboxWeakened(mode types.SandboxMode) error {
 	if !inherited.Valid() || !mode.WeakerThan(inherited) {
 		return nil
 	}
-	return errSandboxWeakened("this magus, started inside a sandboxed run,", mode, inherited)
+	return errorSandboxWeakened("this magus, started inside a sandboxed run,", mode, inherited)
 }
 
-// errSandboxWeakened is the MGS2010 refusal of who asking for mode under floor.
-func errSandboxWeakened(who string, mode, floor types.SandboxMode) error {
+// errorSandboxWeakened is the MGS2010 refusal of who asking for mode under floor.
+func errorSandboxWeakened(who string, mode, floor types.SandboxMode) error {
 	return types.DiagnosticErrorf(types.SandboxWeakened,
 		"%s asked for sandbox mode %s, weaker than the %s it runs under; a nested or forwarded run may only strengthen the sandbox", who, mode, floor)
 }

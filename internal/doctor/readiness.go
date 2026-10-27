@@ -78,7 +78,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.Check {
 		// --probe was asked for, so the gate is actually exercised. A tool that is
 		// down is a FAIL rather than advice: the caller asked whether their
 		// environment is ready, and the honest answer is no.
-		if err := exec.CommandContext(r.runCtx(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
+		if err := exec.CommandContext(r.runContext(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
 			down++
 			status = types.CheckFail
 			details = append(details, fmt.Sprintf("%s: %s NOT ready: `%s` failed", g.spell, g.tool, g.cmd))

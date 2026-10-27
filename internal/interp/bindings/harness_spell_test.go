@@ -35,6 +35,9 @@ func loadShippedHarness(t *testing.T, id string) agent.HarnessDescriptor {
 // contract functions in body, beside the config every harness exports.
 func harnessSource(t *testing.T, name, body string) string {
 	t.Helper()
+	if !strings.Contains(body, "fun mgs_renderPrompts") {
+		body += "\nexport fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n"
+	}
 	return register.Spell(t, name, spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\n"+
 		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }\n%s", body)))
 }
@@ -196,8 +199,9 @@ func TestHarnessSpellsOfferTheCheapestTierModel(t *testing.T) {
 	}
 }
 
-// A spell that exports only the config loads as a harness whose host lacks every other
-// capability: no agents, no MCP, no tools, no prompts, no models.
+// A spell that exports the config and the required prompts function, and nothing else,
+// loads as a harness whose host lacks every other capability: no agents, no MCP, no
+// tools, no prompt files, no models.
 func TestHarnessSpellWithOnlyItsConfigLacksEveryOtherCapability(t *testing.T) {
 	d := loadShippedHarness(t, harnessSource(t, "bare-test", ""))
 	assert.Empty(t, d.Agents)
@@ -206,6 +210,17 @@ func TestHarnessSpellWithOnlyItsConfigLacksEveryOtherCapability(t *testing.T) {
 	assert.Nil(t, d.MCP)
 	assert.Nil(t, d.Tools)
 	assert.Zero(t, d.Limits)
+}
+
+// A harness that omits mgs_renderPrompts is refused. The empty list is a declared answer
+// for a host whose hook prompts; an omission used to decode as that same list.
+func TestAHarnessThatOmitsRenderPromptsIsRefused(t *testing.T) {
+	id := register.Spell(t, "no-prompts-test", spells.WithFuncSource(`import "magus/spell";
+export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }`))
+	_, _, ok, err := loadHarnessFromSpell(context.Background(), id)
+	require.Error(t, err)
+	assert.False(t, ok)
+	assert.Contains(t, err.Error(), "mgs_renderPrompts")
 }
 
 // A spell that does not export mgs_getHarnessConfig is not a harness, and the loader says
@@ -264,6 +279,14 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 	bare, _, _, err := loadHarnessFromSpell(context.Background(), "codex")
 	require.NoError(t, err)
 	assert.NotContains(t, bare.Prompts[0].Content, `"run"`, "no workspace on the context, no run prompt")
+
+	for _, id := range []string{"cursor", "claude-code", "claude-code-mod"} {
+		loadShippedHarness(t, id)
+		d, _, ok, err := loadHarnessFromSpell(ctx, id)
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.Empty(t, d.Prompts, id)
+	}
 }
 
 // TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a

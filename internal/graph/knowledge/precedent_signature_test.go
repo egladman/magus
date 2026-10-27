@@ -11,9 +11,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fn declares a function in dir's first file, its signature rendered as lang's indexer renders
+// function declares a function in dir's first file, its signature rendered as lang's indexer renders
 // one: scip-go's `func name(...)` or scip-buzz's `fun name(...)`.
-func (f *precedentFixture) fn(dir, lang, name, sig string) types.Case {
+func (f *precedentFixture) function(dir, lang, name, sig string) types.Case {
 	f.line++
 	ns, file := precedentNamespace(dir, "go"), dir+"/f0.go"
 	if lang == "buzz" {
@@ -54,19 +54,19 @@ func TestPrecedentsNameAParameterByItsType(t *testing.T) {
 	t.Parallel()
 
 	f := newPrecedentFixture()
-	f.fn("internal/a", "go", "ignore", "func ignore(_ context.Context) error")
-	f.fn("internal/a", "go", "merge", "func merge(ctx, other context.Context) error")
+	f.function("internal/a", "go", "ignore", "func ignore(_ context.Context) error")
+	f.function("internal/a", "go", "merge", "func merge(ctx, other context.Context) error")
 	var runs []types.Case
 	for i := range 5 {
-		runs = append(runs, f.fn("internal/a", "go", fmt.Sprintf("run%d", i), fmt.Sprintf("func run%d(ctx context.Context, root string) error", i)))
+		runs = append(runs, f.function("internal/a", "go", fmt.Sprintf("run%d", i), fmt.Sprintf("func run%d(ctx context.Context, root string) error", i)))
 	}
-	watch := f.fn("internal/a", "go", "watch", "func watch(c context.Context) error")
-	f.fn("internal/gen", "go", "generated", "func generated(cx context.Context) error")
+	watch := f.function("internal/a", "go", "watch", "func watch(c context.Context) error")
+	f.function("internal/gen", "go", "generated", "func generated(cx context.Context) error")
 	var loads []types.Case
 	for i := range 5 {
-		loads = append(loads, f.fn("hack/lib", "buzz", fmt.Sprintf("load%d", i), fmt.Sprintf("fun load%d(path: str) > str", i)))
+		loads = append(loads, f.function("hack/lib", "buzz", fmt.Sprintf("load%d", i), fmt.Sprintf("fun load%d(path: str) > str", i)))
 	}
-	read := f.fn("hack/lib", "buzz", "read", "fun read(file: str) > str")
+	read := f.function("hack/lib", "buzz", "read", "fun read(file: str) > str")
 
 	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance(), Generated: map[string]bool{"internal/gen/f0.go": true}})
 
@@ -89,12 +89,12 @@ func TestPrecedentsOrderAParameterPair(t *testing.T) {
 	t.Parallel()
 
 	f := newPrecedentFixture()
-	back := f.fn("internal/a", "go", "back", "func back(dir, root string) error")
+	back := f.function("internal/a", "go", "back", "func back(dir, root string) error")
 	var copies []types.Case
 	for i := range 5 {
-		copies = append(copies, f.fn("internal/a", "go", fmt.Sprintf("copy%d", i), fmt.Sprintf("func copy%d(root, dir string) error", i)))
+		copies = append(copies, f.function("internal/a", "go", fmt.Sprintf("copy%d", i), fmt.Sprintf("func copy%d(root, dir string) error", i)))
 	}
-	f.fn("internal/a", "go", "lone", "func lone(dir, base string) error")
+	f.function("internal/a", "go", "lone", "func lone(dir, base string) error")
 
 	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance()})
 
@@ -114,12 +114,12 @@ func TestPrecedentsPlaceTheContextFirstAndTheErrorLast(t *testing.T) {
 	f := newPrecedentFixture()
 	var cited []types.Case
 	for i := range 4 {
-		cited = append(cited, f.fn("internal/a", "go", fmt.Sprintf("fetch%d", i), fmt.Sprintf("func fetch%d(ctx context.Context) error", i)))
+		cited = append(cited, f.function("internal/a", "go", fmt.Sprintf("fetch%d", i), fmt.Sprintf("func fetch%d(ctx context.Context) error", i)))
 	}
-	f.fn("internal/a", "go", "split", "func split(ctx context.Context, p string) (string, string, error)")
-	late := f.fn("internal/a", "go", "late", "func late(name string, ctx context.Context) (error, int)")
-	f.fn("internal/a", "go", "pure", "func pure(name string) string")
-	lint := f.fn("hack/lib", "buzz", "lint", `fun lint(ctx: magus\Context) > void !> any`)
+	f.function("internal/a", "go", "split", "func split(ctx context.Context, p string) (string, string, error)")
+	late := f.function("internal/a", "go", "late", "func late(name string, ctx context.Context) (error, int)")
+	f.function("internal/a", "go", "pure", "func pure(name string) string")
+	lint := f.function("hack/lib", "buzz", "lint", `fun lint(ctx: magus\Context) > void !> any`)
 
 	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance()})
 

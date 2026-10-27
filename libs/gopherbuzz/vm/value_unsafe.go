@@ -23,7 +23,7 @@ import (
 // reference kinds (str/list/map/fun/object/…). The obvious Go encoding stores
 // that pointer as an interface (heapVal), which is what value_safe.go does. But
 // an interface is *two* words — a type pointer (itab) and a data pointer — so it
-// makes Value 32 bytes, and every read of the payload (asStr, asList, …) pays a
+// makes Value 32 bytes, and every read of the payload (asString, asList, …) pays a
 // runtime type assertion that compares the itab.
 //
 // We already carry a discriminant: the tag. It tells us the concrete type of
@@ -35,7 +35,7 @@ import (
 //   - Value shrinks from 32 to 24 bytes. The operand stack and every frame's
 //     `this` field are Values, so this is less memory to copy on every push,
 //     pop, replaceTop2, and call, and more Values per cache line.
-//   - asStr/asList/… become a single pointer cast — `(*strObj)(v.obj)` — with no
+//   - asString/asList/… become a single pointer cast — `(*strObj)(v.obj)` — with no
 //     itab compare. The compiler turns the cast into a no-op; the load is just
 //     the field read.
 //
@@ -95,7 +95,7 @@ func (v Value) tag() valueTag { return v.t }
 func (v Value) num() uint64   { return v.n }
 
 // Immediate constructors live in the representation file because they set the
-// concrete encoding. The heap constructors (StrValue, ListValue, …) go through
+// concrete encoding. The heap constructors (StringValue, ListValue, …) go through
 // heapValue and stay shared in value.go.
 var (
 	Null  = Value{t: tagNull}
@@ -146,10 +146,10 @@ func heapValue[T heapVal](tag valueTag, ptr T) Value {
 	return Value{t: tag, obj: *(*unsafe.Pointer)(unsafe.Pointer(&ptr))}
 }
 
-// internedStrValue wraps an interned *strObj. This build carries the pointer in
+// internedStringValue wraps an interned *strObj. This build carries the pointer in
 // the Value, so equal strings already share a representation; only the NaN-box
-// build needs the index-caching override. See StrValue.
-func internedStrValue(o *strObj) Value { return heapValue(tagStr, o) }
+// build needs the index-caching override. See StringValue.
+func internedStringValue(o *strObj) Value { return heapValue(tagStr, o) }
 
 // sameObj reports pointer identity of two heap Values' payloads (used for
 // reference equality of lists/maps/objects). Comparing the raw pointers is
@@ -160,7 +160,7 @@ func sameObj(a, b Value) bool { return a.obj == b.obj }
 // no-op the compiler erases, so the asX wrappers below are free.
 func pointerAs[T any](v Value) *T { return (*T)(v.obj) }
 
-func (v Value) asStr() *strObj             { return pointerAs[strObj](v) }
+func (v Value) asString() *strObj          { return pointerAs[strObj](v) }
 func (v Value) asUD() *udObj               { return pointerAs[udObj](v) }
 func (v Value) asList() *listObj           { return pointerAs[listObj](v) }
 func (v Value) asMap() *mapObj             { return pointerAs[mapObj](v) }
@@ -183,7 +183,7 @@ func (v Value) asObjDecl() *ast.ObjectDecl { return pointerAs[objDeclPayload](v)
 // VM-context accessors — zero-cost wrappers in M2 (vm is ignored; the pointer
 // cast is identical to the value-local form). In M3 (buzz_nanbox) they resolve
 // the per-VM heap-table index rather than casting a raw pointer.
-func (vm *VM) asStr(v Value) *strObj             { return v.asStr() }
+func (vm *VM) asString(v Value) *strObj          { return v.asString() }
 func (vm *VM) asList(v Value) *listObj           { return v.asList() }
 func (vm *VM) asMap(v Value) *mapObj             { return v.asMap() }
 func (vm *VM) asFun(v Value) *funObj             { return v.asFun() }

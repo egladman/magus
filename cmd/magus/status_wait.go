@@ -197,7 +197,7 @@ func runPipedTargets(ctx context.Context, m *magus.Magus, t types.Target, presca
 	bindDisplayFlags(fs)
 	prescan(fs)
 	_, projects := partitionFlags(fs, flagArgs)
-	targets, _, err := resolveTargets(ctx, m, t, runSelection{projects: projects, cwd: clientCwd(ctx)})
+	targets, _, err := resolveTargets(ctx, m, t, runSelection{projects: projects, cwd: clientCurrentWorkingDirectory(ctx)})
 	if err == nil && len(targets) > 0 {
 		targets, err = filterServedTargets(ctx, m, targets, t.Name)
 	}

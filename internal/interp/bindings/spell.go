@@ -436,7 +436,7 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 	dir := opts.cwd
 	if !filepath.IsAbs(dir) {
-		base, err := std.EffectiveCwd(ctx)
+		base, err := std.EffectiveCurrentWorkingDirectory(ctx)
 		if err != nil {
 			return err
 		}
@@ -657,7 +657,7 @@ func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, error) 
 	}
 	abs := projectDir
 	if !filepath.IsAbs(abs) {
-		cwd, err := std.EffectiveCwd(ctx)
+		cwd, err := std.EffectiveCurrentWorkingDirectory(ctx)
 		if err != nil {
 			return "", fmt.Errorf("resolve symbol index dir: %w", err)
 		}
@@ -713,7 +713,7 @@ func commandTargetNames(targets map[string]spells.Op) []string {
 // raised: discovery paths cannot route an error back to a caller.
 func loadLocalSpell(ctx context.Context, path string) (spells.Descriptor, bool) {
 	if !filepath.IsAbs(path) {
-		cwd, err := std.EffectiveCwd(ctx)
+		cwd, err := std.EffectiveCurrentWorkingDirectory(ctx)
 		if err != nil {
 			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not resolve a relative local spell path", slog.String("path", path), attr.Error(err))
 			return spells.Descriptor{}, false
@@ -828,7 +828,7 @@ func checkSpellImports(handles []string) error {
 		// check below would happily accept this import even though the handle it
 		// binds is now unusable. Rejected explicitly, with the migration.
 		if h == magusfileSpellName {
-			return magusfileNotASpellErr("importing it")
+			return magusfileNotASpellError("importing it")
 		}
 		if isRegisteredSpell(h) {
 			continue

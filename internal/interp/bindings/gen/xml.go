@@ -23,11 +23,11 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("element", vm.DirectValue("xml.element", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		tag := ffi.Str(bzArgs, 0)
-		attrs := ffi.StrSlice(bzArgs, 1)
+		tag := ffi.String(bzArgs, 0)
+		attrs := ffi.StringSlice(bzArgs, 1)
 		children := ffi.Any(bzArgs, 2)
 		ret0, err := xml.XMLElement(ctx, tag, attrs, children)
 		if err != nil {
@@ -36,7 +36,7 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("parse", vm.DirectValue("xml.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := xml.XMLParse(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

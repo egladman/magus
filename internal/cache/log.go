@@ -730,10 +730,10 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	h.err = nil
 
 	colorize := h.WantsColor()
-	project := recordStr(r, "project") // real path; used for the runnable repro command
-	label := displayProjectLabel(recordStr(r, "label"), project)
+	project := recordString(r, "project") // real path; used for the runnable repro command
+	label := displayProjectLabel(recordString(r, "label"), project)
 	dur := recordDur(r, "duration")
-	ref := recordStr(r, "ref") // target-output reference id (see internal/cache/output_store.go)
+	ref := recordString(r, "ref") // target-output reference id (see internal/cache/output_store.go)
 	// Time this step spent waiting on magus's own remote I/O. Rendered INSIDE the parens
 	// beside the duration, because it qualifies that number rather than adding a fact:
 	// "6.1s" and "6.1s, 4.2s remote" describe different problems with opposite fixes.
@@ -745,17 +745,17 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// low-signal next to work that actually ran. Cache state lives in the parens,
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
 		from := ""
-		if tier := recordStr(r, "remote"); tier != "" {
+		if tier := recordString(r, "remote"); tier != "" {
 			from = fmt.Sprintf(" from %s, %s", tier, FormatBytes(recordInt(r, "bytes")))
 		}
 		h.printf("%s %s (cached%s, %s%s)\n", Glyph(colorize, "pass", colDimGreen), label, from, FormatDuration(dur), remote)
-		h.printRepro(project, recordStr(r, "target"))
+		h.printRepro(project, recordString(r, "target"))
 		h.printRef(ref)
 		h.status.cached++
 		h.paintStatus()
 	case "cache.miss":
 		h.printf("%s %s (ran, %s%s)\n", Glyph(colorize, "pass", colGreen), label, FormatDuration(dur), remote)
-		h.printRepro(project, recordStr(r, "target"))
+		h.printRepro(project, recordString(r, "target"))
 		h.printRef(ref)
 		h.status.passed++
 		h.paintStatus()
@@ -763,18 +763,18 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.printFailure(colorize, failureReport{
 			label:   label,
 			project: project,
-			target:  recordStr(r, "target"),
+			target:  recordString(r, "target"),
 			dur:     dur,
-			cause:   recordStr(r, "error"),
-			why:     recordStr(r, attr.WhyKey),
+			cause:   recordString(r, "error"),
+			why:     recordString(r, attr.WhyKey),
 			ref:     ref,
-			logPath: recordStr(r, "log"),
+			logPath: recordString(r, "log"),
 			refused: recordBool(r, "refused"),
 		})
 		h.status.failed++
 		h.paintStatus()
 	case "cache.warn":
-		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
+		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordString(r, "msg"))
 	case "cache.memory":
 		// The sentence as the body, like cache.warn above. Without this arm the
 		// record fell through to handleGeneric and rendered as
@@ -787,7 +787,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// LogMemoryPressure builds msg with every figure it also attaches as an
 		// attribute, plus the running targets, so a trailer would print the same
 		// numbers twice.
-		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
+		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordString(r, "msg"))
 	case "cache.pool":
 		// A live occupancy sample, folded into the row pinned at the top of
 		// the sticky region. Deliberately not printed on a non-TTY: this
@@ -804,11 +804,11 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		if recordBool(r, "active") {
 			state = "active"
 		}
-		h.printf("remote: %s (%s, verify %s, sign %s)\n", recordStr(r, "backend"), state,
+		h.printf("remote: %s (%s, verify %s, sign %s)\n", recordString(r, "backend"), state,
 			onOff(recordBool(r, "verify")), onOff(recordBool(r, "sign")))
 	case "cache.remote.miss":
 		h.printf("  %s not in the remote cache (%s)\n",
-			displayProjectLabel(label, project), recordStr(r, "ref"))
+			displayProjectLabel(label, project), recordString(r, "ref"))
 	case "cache.remote.store":
 		h.printf("  stored %s in the remote cache (%s)\n",
 			displayProjectLabel(label, project), FormatBytes(recordInt(r, "bytes")))
@@ -817,8 +817,8 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// in spawn.Exec. Rendered as a shell-style echo, indented under the owning
 		// project/stage. At debug level it surfaces with -v during a real run; in a dry
 		// run spawn.Exec logs it at info so the planned commands always show.
-		cmd := recordStr(r, "cmd")
-		if args := recordStrs(r, "args"); len(args) > 0 {
+		cmd := recordString(r, "cmd")
+		if args := recordStrings(r, "args"); len(args) > 0 {
 			cmd += " " + strings.Join(args, " ")
 		}
 		if colorize {
@@ -933,7 +933,7 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	case r.Level >= slog.LevelInfo:
 		label, color = "info", colDim
 	}
-	component := recordStr(r, attr.ComponentKey)
+	component := recordString(r, attr.ComponentKey)
 	notice, isNotice := recordAttr(r, attr.NoticeKey)
 	var attrs string
 	if isNotice {
@@ -946,9 +946,9 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	}
 	if isNotice {
 		label := cmp.Or(notice.String(), component)
-		h.printNotice(colorize, color, label, noticeText(label, r.Message, recordStr(r, attr.ErrorKey)), attrs)
-		h.printWhy(colorize, "  ", recordStr(r, attr.WhyKey))
-		h.printNext(recordStr(r, attr.NextKey))
+		h.printNotice(colorize, color, label, noticeText(label, r.Message, recordString(r, attr.ErrorKey)), attrs)
+		h.printWhy(colorize, "  ", recordString(r, attr.WhyKey))
+		h.printNext(recordString(r, attr.NextKey))
 		return
 	}
 	msg := r.Message
@@ -957,8 +957,8 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	}
 	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
 	// Under the message, past the glyph and its space.
-	h.printWhy(colorize, strings.Repeat(" ", len(label)+3), recordStr(r, attr.WhyKey))
-	h.printNext(recordStr(r, attr.NextKey))
+	h.printWhy(colorize, strings.Repeat(" ", len(label)+3), recordString(r, attr.WhyKey))
+	h.printNext(recordString(r, attr.NextKey))
 }
 
 // noticeText joins a notice's message and its [attr.Error]. An error that originated in
@@ -1545,7 +1545,7 @@ func (h *PrettyHandler) printRefLegend(colorize bool) {
 	h.printf("%s\n", line)
 }
 
-func recordStr(r slog.Record, key string) string {
+func recordString(r slog.Record, key string) string {
 	v, ok := recordAttr(r, key)
 	if !ok {
 		return ""
@@ -1568,8 +1568,8 @@ func recordAttr(r slog.Record, key string) (slog.Value, bool) {
 	return v, found
 }
 
-// recordStrs extracts a []string attr (e.g. a command's args) from a record.
-func recordStrs(r slog.Record, key string) []string {
+// recordStrings extracts a []string attr (e.g. a command's args) from a record.
+func recordStrings(r slog.Record, key string) []string {
 	var out []string
 	r.Attrs(func(a slog.Attr) bool {
 		if a.Key == key {

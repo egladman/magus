@@ -18,20 +18,20 @@ func RegisterDiff(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("unified", vm.DirectValue("diff.unified", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := ffi.Str(bzArgs, 0)
-		b := ffi.Str(bzArgs, 1)
-		from_label := ffi.Str(bzArgs, 2)
-		to_label := ffi.Str(bzArgs, 3)
+		a := ffi.String(bzArgs, 0)
+		b := ffi.String(bzArgs, 1)
+		from_label := ffi.String(bzArgs, 2)
+		to_label := ffi.String(bzArgs, 3)
 		context := ffi.Int(bzArgs, 4, 0)
 		ret0, err := std.DiffUnified(ctx, a, b, from_label, to_label, context)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("equal", vm.DirectValue("diff.equal", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := ffi.Str(bzArgs, 0)
-		b := ffi.Str(bzArgs, 1)
+		a := ffi.String(bzArgs, 0)
+		b := ffi.String(bzArgs, 1)
 		ret0, err := std.DiffEqual(ctx, a, b)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -39,13 +39,13 @@ func RegisterDiff(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("stat", vm.DirectValue("diff.stat", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		a := ffi.Str(bzArgs, 0)
-		b := ffi.Str(bzArgs, 1)
+		a := ffi.String(bzArgs, 0)
+		b := ffi.String(bzArgs, 1)
 		ret0, err := std.DiffStat(ctx, a, b)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

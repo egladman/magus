@@ -88,14 +88,14 @@ type spellAnnotator struct {
 // annotation", never to a hung build.
 const opTimeout = 5 * time.Second
 
-// spellCtx is the context a spell op runs under.
+// spellContext is the context a spell op runs under.
 //
 // The Annotator methods take no context: the annotator is reached from a
 // deferred failure dump that genuinely has none to thread. Rather than
 // run unbounded, each op gets its own deadline, so a spell that blocks
 // costs one timeout instead of the whole run. Cancel is returned so the
 // caller releases the timer.
-func spellCtx() (context.Context, context.CancelFunc) {
+func spellContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), opTimeout)
 }
 
@@ -109,7 +109,7 @@ func (a *spellAnnotator) Active() bool {
 	if a.activeKnown {
 		return a.active
 	}
-	ctx, cancel := spellCtx()
+	ctx, cancel := spellContext()
 	defer cancel()
 	op := providerops.CIEnabled
 	ack, exported, err := CallOp(ctx, a.drv, op, providerTarget(ctx, op.Name, ""), types.Empty{})
@@ -182,7 +182,7 @@ func (a *spellAnnotator) quotePrefixes() []string {
 	if a.prefixKnown {
 		return a.prefixes
 	}
-	ctx, cancel := spellCtx()
+	ctx, cancel := spellContext()
 	defer cancel()
 	op := providerops.QuotePrefixes
 	got, _, err := CallOp(ctx, a.drv, op, providerTarget(ctx, op.Name, ""), types.Empty{})
@@ -202,7 +202,7 @@ func (a *spellAnnotator) quotePrefixes() []string {
 // not load, an op that timed out) and is reported; swallowing it made a broken provider
 // report success for the life of the build. What the op answers is not read.
 func callCI[Req any](drv spells.Driver, op bindgen.ProviderOp[Req, types.Ack], req Req) error {
-	ctx, cancel := spellCtx()
+	ctx, cancel := spellContext()
 	defer cancel()
 	if _, _, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, ""), req); err != nil {
 		return fmt.Errorf("ci provider op %q: %w", op.Name, err)

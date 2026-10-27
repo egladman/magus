@@ -89,7 +89,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 	// Set after the target loop so it reserves the name even if a target is called file.
 	m.MapSet(types.CrossFileMember, vm.DirectValue(fmt.Sprintf("%s.%s", raw, types.CrossFileMember), func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 		var rel string
-		if len(args) > 0 && args[0].IsStr() {
+		if len(args) > 0 && args[0].IsString() {
 			rel = args[0].AsString()
 		}
 		joined := path.Join(raw, filepath.ToSlash(rel))
@@ -97,19 +97,19 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 		// relative path rather than error. The real run path always carries the workspace.
 		ws := types.WorkspaceFromContext(callCtx)
 		if ws == nil {
-			return vm.StrValue(path.Clean(joined)), nil
+			return vm.StringValue(path.Clean(joined)), nil
 		}
 		callerRel, err := filepath.Rel(ws.Root(), src.Dir)
 		if err != nil {
-			return vm.StrValue(path.Clean(joined)), nil //nolint:nilerr // best-effort: degrade to the cleaned path rather than aborting the target
+			return vm.StringValue(path.Clean(joined)), nil //nolint:nilerr // best-effort: degrade to the cleaned path rather than aborting the target
 		}
 		resolved, err := file.ResolveImport(joined, filepath.ToSlash(callerRel))
 		if err != nil {
 			// Match the static extractor's best-effort drop and the branches above:
 			// degrade to the cleaned path rather than aborting the target at runtime.
-			return vm.StrValue(path.Clean(joined)), nil //nolint:nilerr // deliberate best-effort degradation, see comment above
+			return vm.StringValue(path.Clean(joined)), nil //nolint:nilerr // deliberate best-effort degradation, see comment above
 		}
-		return vm.StrValue(resolved), nil
+		return vm.StringValue(resolved), nil
 	}))
 	return m, true
 }

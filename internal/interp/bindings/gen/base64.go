@@ -18,36 +18,36 @@ func RegisterBase64(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("encode", vm.DirectValue("base64.encode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		data := ffi.Str(bzArgs, 0)
+		data := ffi.String(bzArgs, 0)
 		ret0, err := base64.Base64Encode(ctx, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("decode", vm.DirectValue("base64.decode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := base64.Base64Decode(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("urlEncode", vm.DirectValue("base64.urlEncode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		data := ffi.Str(bzArgs, 0)
+		data := ffi.String(bzArgs, 0)
 		ret0, err := base64.Base64URLEncode(ctx, data)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("urlDecode", vm.DirectValue("base64.urlDecode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := base64.Base64URLDecode(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

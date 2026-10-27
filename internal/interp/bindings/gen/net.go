@@ -20,7 +20,7 @@ func RegisterNet(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("waitForPort", vm.DirectValue("net.waitForPort", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		host := ffi.Str(bzArgs, 0)
+		host := ffi.String(bzArgs, 0)
 		port := ffi.Int(bzArgs, 1, 0)
 		timeout_ms := ffi.Int(bzArgs, 2, 0)
 		ret0, err := std.NetWaitForPort(ctx, host, port, timeout_ms)
@@ -30,7 +30,7 @@ func RegisterNet(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("isPortOpen", vm.DirectValue("net.isPortOpen", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		host := ffi.Str(bzArgs, 0)
+		host := ffi.String(bzArgs, 0)
 		port := ffi.Int(bzArgs, 1, 0)
 		ret0, err := std.NetIsPortOpen(ctx, host, port)
 		if err != nil {

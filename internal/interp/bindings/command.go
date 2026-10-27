@@ -75,12 +75,12 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 		dir = "."
 	}
 	// Resolve a relative dir against the context working directory (the project dir
-	// the magusfile runner set via std.WithCwd), matching proc.exec's resolvePath. Without
+	// the magusfile runner set via std.WithCurrentWorkingDirectory), matching proc.exec's resolvePath. Without
 	// this, a spell op invoked from a subproject target (e.g. go["go-run"] from docs/)
 	// would run in the process cwd, not the project dir, so its relative paths would
 	// miss. Absolute dirs pass through unchanged (the scip op passes one).
 	if !filepath.IsAbs(dir) {
-		base, err := std.EffectiveCwd(ctx)
+		base, err := std.EffectiveCurrentWorkingDirectory(ctx)
 		if err != nil {
 			return spawn.ExecResult{}, err
 		}

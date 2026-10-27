@@ -283,7 +283,7 @@ func phraseIn(text string, patterns []*regexp.Regexp) (int, string) {
 
 	for _, re := range patterns {
 		for _, m := range re.FindAllStringIndex(masked, -1) {
-			if strings.EqualFold(masked[m[0]:m[1]], "used to") && purposeLead[prevWord(masked, m[0])] {
+			if strings.EqualFold(masked[m[0]:m[1]], "used to") && purposeLead[previousWord(masked, m[0])] {
 				continue
 			}
 
@@ -298,7 +298,7 @@ func phraseIn(text string, patterns []*regexp.Regexp) (int, string) {
 	return best, phrase
 }
 
-func prevWord(s string, at int) string {
+func previousWord(s string, at int) string {
 	end := at
 	for end > 0 && s[end-1] == ' ' {
 		end--

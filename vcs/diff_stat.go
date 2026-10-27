@@ -130,7 +130,7 @@ func (v jjVCS) DiffStat(ctx context.Context, dir, base string) ([]types.FileStat
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
-	root, _, err := repoPathPrefix(ctx, v, dir)
+	root, _, err := repositoryPathPrefix(ctx, v, dir)
 	if err != nil {
 		return nil, err
 	}

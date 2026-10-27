@@ -49,7 +49,7 @@ func buildWorkspace(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 			return vm.Null, fmt.Errorf(`magus\workspace.provider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
-		if !ok || !nv.IsStr() || nv.AsString() == "" {
+		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\workspace.provider: argument is not a spell handle (no name)`)
 		}
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {

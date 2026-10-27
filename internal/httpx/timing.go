@@ -59,10 +59,10 @@ func WithRecorder(ctx context.Context, rec *Recorder) context.Context {
 	return context.WithValue(ctx, recorderKey{}, rec)
 }
 
-// RecorderFrom returns the Recorder on ctx, or nil when none is installed. A nil
+// RecorderFromContext returns the Recorder on ctx, or nil when none is installed. A nil
 // Recorder is usable: every method tolerates it, so uninstrumented paths cost nothing
 // and need no guard.
-func RecorderFrom(ctx context.Context) *Recorder {
+func RecorderFromContext(ctx context.Context) *Recorder {
 	rec, _ := ctx.Value(recorderKey{}).(*Recorder)
 	return rec
 }

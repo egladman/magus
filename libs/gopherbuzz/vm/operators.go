@@ -27,7 +27,7 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 	// String concatenation (OpAdd only)
 	if op == OpAdd {
 		if left.tag() == tagStr {
-			return StrValue(vm.asStr(left).V + right.String()), nil
+			return StringValue(vm.asString(left).V + right.String()), nil
 		}
 		if left.tag() == tagList && right.tag() == tagList {
 			leftList, rightList := vm.asList(left), vm.asList(right)
@@ -205,7 +205,7 @@ func compare(vm *VM, op OpCode, left, right Value) (Value, error) {
 
 	// String comparison
 	if left.tag() == tagStr && right.tag() == tagStr {
-		order := strings.Compare(vm.asStr(left).V, vm.asStr(right).V)
+		order := strings.Compare(vm.asString(left).V, vm.asString(right).V)
 		return BoolValue(cmpResult(op, order)), nil
 	}
 
@@ -260,10 +260,10 @@ func asInt(v Value) (int64, bool) {
 	}
 }
 
-// errOutOfBound words a bad subscript as upstream's vm.zig does: "Out of bound list
+// errorOutOfBound words a bad subscript as upstream's vm.zig does: "Out of bound list
 // access." for a list either way, but for a str "string" when the index is negative
 // and "str" when it is past the end.
-func errOutOfBound(kind string, i int64, n int) error {
+func errorOutOfBound(kind string, i int64, n int) error {
 	return fmt.Errorf("buzz: Out of bound %s access (index %d, len %d)", kind, i, n)
 }
 
@@ -282,13 +282,13 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 			if optional {
 				return Null, nil
 			}
-			return Null, errOutOfBound("list", i, len(list.Items))
+			return Null, errorOutOfBound("list", i, len(list.Items))
 		}
 		return list.Items[i], nil
 	case tagStr:
 		// Yields a one-BYTE string, as upstream does, so s[i] agrees with len(), sub()
 		// and foreach: a multibyte character spans several indexes.
-		s := vm.asStr(obj).V
+		s := vm.asString(obj).V
 		i, ok := asInt(idx)
 		if !ok {
 			return Null, fmt.Errorf("buzz: str index must be an int, got %s", idx.buzzKind())
@@ -298,11 +298,11 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 				return Null, nil
 			}
 			if i < 0 {
-				return Null, errOutOfBound("string", i, len(s))
+				return Null, errorOutOfBound("string", i, len(s))
 			}
-			return Null, errOutOfBound("str", i, len(s))
+			return Null, errorOutOfBound("str", i, len(s))
 		}
-		return StrValue(s[i : i+1]), nil
+		return StringValue(s[i : i+1]), nil
 	case tagMap:
 		m := vm.asMap(obj)
 		if v, ok := m.getVal(idx); ok {
@@ -314,9 +314,9 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 	}
 }
 
-// errImmutable reports an in-place mutation of an immutable value. Buzz
+// errorImmutable reports an in-place mutation of an immutable value. Buzz
 // collections and objects are immutable unless built with `mut`.
-func errImmutable(kind string) error {
+func errorImmutable(kind string) error {
 	return fmt.Errorf("buzz: cannot mutate immutable %s (declare it with `mut`)", kind)
 }
 
@@ -326,21 +326,21 @@ func setIndex(vm *VM, obj, idx, val Value) error {
 	case tagList:
 		list := vm.asList(obj)
 		if !list.Mut {
-			return errImmutable("list")
+			return errorImmutable("list")
 		}
 		i, ok := asInt(idx)
 		if !ok {
 			return fmt.Errorf("buzz: list index must be an int, got %s", idx.buzzKind())
 		}
 		if i < 0 || int(i) >= len(list.Items) {
-			return errOutOfBound("list", i, len(list.Items))
+			return errorOutOfBound("list", i, len(list.Items))
 		}
 		list.Items[i] = val
 		return nil
 	case tagMap:
 		m := vm.asMap(obj)
 		if !m.Mut {
-			return errImmutable("map")
+			return errorImmutable("map")
 		}
 		m.setVal(idx, val)
 		return nil
@@ -355,14 +355,14 @@ func setMember(vm *VM, obj Value, name string, val Value) error {
 	case tagMap:
 		m := vm.asMap(obj)
 		if !m.Mut {
-			return errImmutable("map")
+			return errorImmutable("map")
 		}
 		m.set(name, val)
 		return nil
 	case tagObject:
 		inst := vm.asObject(obj)
 		if !inst.Mut {
-			return errImmutable("object")
+			return errorImmutable("object")
 		}
 		if i := inst.Def.fieldIndex(name); i >= 0 {
 			inst.Fields[i] = val
@@ -399,7 +399,7 @@ func builtinMethod(vm *VM, obj Value, name string) *directObj {
 	case tagList:
 		return listMethod(vm, obj, name)
 	case tagStr:
-		return strMethod(vm, obj, name)
+		return stringMethod(vm, obj, name)
 	case tagFib:
 		return fibMethod(vm, obj, name)
 	case tagPat:
@@ -469,7 +469,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 	case tagEnumVal:
 		switch name {
 		case "name":
-			return StrValue(vm.asEnumVal(obj).Case), nil
+			return StringValue(vm.asEnumVal(obj).Case), nil
 		case "value":
 			return vm.asEnumVal(obj).Val, nil
 		}
@@ -489,7 +489,7 @@ const (
 	StrReceiver
 )
 
-// builtinMethodNames is every name listMethod, mapMethod and strMethod resolve,
+// builtinMethodNames is every name listMethod, mapMethod and stringMethod resolve,
 // sorted. TestBuiltinMethodNamesMatchDispatch reads those switches and fails when
 // a case and this table disagree in either direction.
 var builtinMethodNames = [...][]string{
@@ -534,7 +534,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 	case "append", "insert", "remove", "pop", "fill":
 		if !lo.Mut {
 			return newDirect("list."+name, func(context.Context, []Value) (Value, error) {
-				return Null, errImmutable("list")
+				return Null, errorImmutable("list")
 			})
 		}
 	}
@@ -632,14 +632,14 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 	case "join":
 		return newDirect("list.join", func(_ context.Context, args []Value) (Value, error) {
 			sep := ""
-			if len(args) >= 1 && args[0].IsStr() {
+			if len(args) >= 1 && args[0].IsString() {
 				sep = args[0].AsString()
 			}
 			parts := make([]string, len(lo.Items))
 			for i, it := range lo.Items {
 				parts[i] = it.String()
 			}
-			return StrValue(strings.Join(parts, sep)), nil
+			return StringValue(strings.Join(parts, sep)), nil
 		})
 	case "forEach":
 		return newDirect("list.forEach", func(ctx context.Context, args []Value) (Value, error) {
@@ -715,7 +715,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			// the comparison callback and returns the list"), so its own tests discard the
 			// result and inspect the receiver. Sorting a copy left the receiver untouched.
 			if !lo.Mut {
-				return Null, errImmutable("list")
+				return Null, errorImmutable("list")
 			}
 			// Sort a SNAPSHOT and write the result back, rather than sorting lo.Items in
 			// place: the comparator re-enters the VM, so it can append to or truncate the
@@ -806,7 +806,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 	// In-place mutators require a mutable map (immutable by default).
 	if name == "remove" && !mp.Mut {
 		return newDirect("map.remove", func(context.Context, []Value) (Value, error) {
-			return Null, errImmutable("map")
+			return Null, errorImmutable("map")
 		})
 	}
 	switch name {
@@ -982,7 +982,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			// Reorders the receiver, so it needs the same mutability gate list.sort has.
 			if !mp.Mut {
-				return Null, errImmutable("map")
+				return Null, errorImmutable("map")
 			}
 			cb := args[0]
 			type pair struct {
@@ -1025,7 +1025,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 	return nil
 }
 
-// strMethod returns the callable for the named built-in String method, or nil if
+// stringMethod returns the callable for the named built-in String method, or nil if
 // name is not a known string method.
 // enumCase returns the interned Value for one case of def. See enumDefObj.vals for
 // why sharing is safe.
@@ -1051,8 +1051,8 @@ func (vm *VM) enumCases(def Value) []Value {
 	return d.vals
 }
 
-func strMethod(vm *VM, s Value, name string) *directObj {
-	sobj := vm.asStr(s)
+func stringMethod(vm *VM, s Value, name string) *directObj {
+	sobj := vm.asString(s)
 	str := sobj.V
 	switch name {
 	case "len":
@@ -1065,15 +1065,15 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 		})
 	case "upper":
 		return newDirect("str.upper", func(_ context.Context, _ []Value) (Value, error) {
-			return StrValue(strings.ToUpper(str)), nil
+			return StringValue(strings.ToUpper(str)), nil
 		})
 	case "lower":
 		return newDirect("str.lower", func(_ context.Context, _ []Value) (Value, error) {
-			return StrValue(strings.ToLower(str)), nil
+			return StringValue(strings.ToLower(str)), nil
 		})
 	case "trim":
 		return newDirect("str.trim", func(_ context.Context, _ []Value) (Value, error) {
-			return StrValue(strings.TrimSpace(str)), nil
+			return StringValue(strings.TrimSpace(str)), nil
 		})
 	case "byte":
 		return newDirect("str.byte", func(_ context.Context, args []Value) (Value, error) {
@@ -1093,7 +1093,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 		})
 	case "indexOf":
 		return newDirect("str.indexOf", func(_ context.Context, args []Value) (Value, error) {
-			if len(args) < 1 || !args[0].IsStr() {
+			if len(args) < 1 || !args[0].IsString() {
 				return Null, fmt.Errorf("str.indexOf: requires a str needle argument")
 			}
 			// Optional `from:` start position, in BYTES like every other index this
@@ -1126,21 +1126,21 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 		})
 	case "startsWith":
 		return newDirect("str.startsWith", func(_ context.Context, args []Value) (Value, error) {
-			if len(args) < 1 || !args[0].IsStr() {
+			if len(args) < 1 || !args[0].IsString() {
 				return Null, fmt.Errorf("str.startsWith: requires a str argument")
 			}
 			return BoolValue(strings.HasPrefix(str, args[0].AsString())), nil
 		})
 	case "endsWith":
 		return newDirect("str.endsWith", func(_ context.Context, args []Value) (Value, error) {
-			if len(args) < 1 || !args[0].IsStr() {
+			if len(args) < 1 || !args[0].IsString() {
 				return Null, fmt.Errorf("str.endsWith: requires a str argument")
 			}
 			return BoolValue(strings.HasSuffix(str, args[0].AsString())), nil
 		})
 	case "replace":
 		return newDirect("str.replace", func(_ context.Context, args []Value) (Value, error) {
-			if len(args) < 2 || !args[0].IsStr() || !args[1].IsStr() {
+			if len(args) < 2 || !args[0].IsString() || !args[1].IsString() {
 				return Null, fmt.Errorf("str.replace: requires (str needle, str with)")
 			}
 			// EVERY occurrence, matching upstream: src/builtin/str.zig's replace calls
@@ -1154,12 +1154,12 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			// wrong. .github/actions/advice/version-floor.buzz still carries the
 			// workaround it forced: .replace("\"", ...) written twice to strip two quotes,
 			// now a harmless no-op on the second call.
-			return StrValue(strings.ReplaceAll(str, args[0].AsString(), args[1].AsString())), nil
+			return StringValue(strings.ReplaceAll(str, args[0].AsString(), args[1].AsString())), nil
 		})
 	case "split":
 		return newDirect("str.split", func(_ context.Context, args []Value) (Value, error) {
 			sep := ""
-			if len(args) >= 1 && args[0].IsStr() {
+			if len(args) >= 1 && args[0].IsString() {
 				sep = args[0].AsString()
 			}
 			var parts []string
@@ -1170,7 +1170,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			}
 			out := make([]Value, len(parts))
 			for i, p := range parts {
-				out[i] = StrValue(p)
+				out[i] = StringValue(p)
 			}
 			return ListValue(out), nil
 		})
@@ -1189,7 +1189,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			// character. Dropping that branch also removes a whole-string []rune copy
 			// per call.
 			if start >= len(str) {
-				return StrValue(""), nil
+				return StringValue(""), nil
 			}
 			end := len(str)
 			if len(args) >= 2 && args[1].IsInt() {
@@ -1201,7 +1201,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 					end = start + length
 				}
 			}
-			return StrValue(str[start:end]), nil
+			return StringValue(str[start:end]), nil
 		})
 	case "repeat":
 		return newDirect("str.repeat", func(_ context.Context, args []Value) (Value, error) {
@@ -1212,11 +1212,11 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if n < 0 {
 				n = 0
 			}
-			return StrValue(strings.Repeat(str, n)), nil
+			return StringValue(strings.Repeat(str, n)), nil
 		})
 	case "encodeBase64":
 		return newDirect("str.encodeBase64", func(_ context.Context, _ []Value) (Value, error) {
-			return StrValue(base64.StdEncoding.EncodeToString([]byte(str))), nil
+			return StringValue(base64.StdEncoding.EncodeToString([]byte(str))), nil
 		})
 	case "decodeBase64":
 		return newDirect("str.decodeBase64", func(_ context.Context, _ []Value) (Value, error) {
@@ -1224,11 +1224,11 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if err != nil {
 				return Null, fmt.Errorf("str.decodeBase64: %w", err)
 			}
-			return StrValue(string(b)), nil
+			return StringValue(string(b)), nil
 		})
 	case "hex":
 		return newDirect("str.hex", func(_ context.Context, _ []Value) (Value, error) {
-			return StrValue(hex.EncodeToString([]byte(str))), nil
+			return StringValue(hex.EncodeToString([]byte(str))), nil
 		})
 	case "bin":
 		return newDirect("str.bin", func(_ context.Context, _ []Value) (Value, error) {
@@ -1236,7 +1236,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if err != nil {
 				return Null, fmt.Errorf("str.bin: %w", err)
 			}
-			return StrValue(string(b)), nil
+			return StringValue(string(b)), nil
 		})
 	case "utf8Len":
 		return newDirect("str.utf8Len", func(_ context.Context, _ []Value) (Value, error) {
@@ -1252,7 +1252,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			out := make([]Value, 0, len(runes))
 			for _, r := range runes {
 				if unicode.IsGraphic(r) || r == '\n' || r == '\t' {
-					out = append(out, StrValue(string(r)))
+					out = append(out, StringValue(string(r)))
 				}
 			}
 			return ListValue(out), nil
@@ -1413,7 +1413,7 @@ func (vm *VM) execCold(op OpCode) error {
 	case OpBNot:
 		v := vm.pop()
 		if v.tag() != tagInt {
-			return errCannotBitwise(op, v)
+			return errorCannotBitwise(op, v)
 		}
 		vm.push(IntValue(^int64(v.num())))
 		return nil
@@ -1424,15 +1424,15 @@ func (vm *VM) execCold(op OpCode) error {
 		// declared over int alone, so a float operand is an error rather than a
 		// value to truncate.
 		if left.tag() != tagInt {
-			return errCannotBitwise(op, left)
+			return errorCannotBitwise(op, left)
 		}
 		if right.tag() != tagInt {
-			return errCannotBitwise(op, right)
+			return errorCannotBitwise(op, right)
 		}
 		vm.replaceTop2(IntValue(bitwise(op, int64(left.num()), int64(right.num()))))
 		return nil
 	}
-	return errUnknownOpcode(op)
+	return errorUnknownOpcode(op)
 }
 
 func bitwise(op OpCode, a, b int64) int64 {

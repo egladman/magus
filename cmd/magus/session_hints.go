@@ -67,7 +67,7 @@ func sessionHintsUsage(fs *flag.FlagSet) func() {
 
 // sessionHints implements `magus session hints`.
 func sessionHints(root string, args []string) error {
-	rest, err := cmdParse("session hints", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("session hints", args, func(fs *flag.FlagSet) {
 		fs.Usage = sessionHintsUsage(fs)
 	})
 	if err != nil {

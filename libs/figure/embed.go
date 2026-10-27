@@ -323,7 +323,7 @@ func Draw(ctx context.Context, sess *buzz.Session, fig Figure, anchorHref string
 	if !ok {
 		return "", errors.New("figure: the draw entry exported no draw")
 	}
-	v, err := sess.CallValue(ctx, fn, []vm.Value{fig.value(), vm.StrValue(anchorHref)})
+	v, err := sess.CallValue(ctx, fn, []vm.Value{fig.value(), vm.StringValue(anchorHref)})
 	if err != nil {
 		return "", fmt.Errorf("figure: draw %s: %w", fig.ID, err)
 	}
@@ -354,12 +354,12 @@ func record(fields []field) vm.Value {
 
 func (f Figure) value() vm.Value {
 	return record([]field{
-		{"id", vm.StrValue(f.ID)},
-		{"title", vm.StrValue(f.Title)},
-		{"eyebrow", vm.StrValue(f.Eyebrow)},
-		{"desc", vm.StrValue(f.Desc)},
-		{"direction", vm.StrValue(string(f.Direction))},
-		{"unscopedWhy", vm.StrValue(f.UnscopedWhy)},
+		{"id", vm.StringValue(f.ID)},
+		{"title", vm.StringValue(f.Title)},
+		{"eyebrow", vm.StringValue(f.Eyebrow)},
+		{"desc", vm.StringValue(f.Desc)},
+		{"direction", vm.StringValue(string(f.Direction))},
+		{"unscopedWhy", vm.StringValue(f.UnscopedWhy)},
 		{"graphEdges", vm.BoolValue(f.GraphEdges)},
 		{"boxes", list(f.Boxes, Box.value)},
 		{"scopes", list(f.Scopes, dirs)},
@@ -378,9 +378,9 @@ func (b Box) value() vm.Value {
 		{"dir", optional(b.Dir, Dir.value)},
 		{"group", optional(b.Group, dirs)},
 		{"actor", optional(b.Actor, Actor.value)},
-		{"label", vm.StrValue(b.Label)},
-		{"sub", vm.StrValue(b.Sub)},
-		{"tag", vm.StrValue(b.Tag)},
+		{"label", vm.StringValue(b.Label)},
+		{"sub", vm.StringValue(b.Sub)},
+		{"tag", vm.StringValue(b.Tag)},
 		{"focal", vm.BoolValue(b.Focal)},
 		{"look", optional(b.Look, caseValue[Look])},
 		{"symbol", vm.Null},
@@ -391,27 +391,27 @@ func dirs(ds []Dir) vm.Value { return list(ds, Dir.value) }
 
 func (a Actor) value() vm.Value {
 	return record([]field{
-		{"name", vm.StrValue(a.Name)},
-		{"sub", vm.StrValue(a.Sub)},
-		{"tag", vm.StrValue(a.Tag)},
-		{"link", vm.StrValue(a.Link)},
+		{"name", vm.StringValue(a.Name)},
+		{"sub", vm.StringValue(a.Sub)},
+		{"tag", vm.StringValue(a.Tag)},
+		{"link", vm.StringValue(a.Link)},
 		{"look", optional(a.Look, caseValue[Look])},
 	})
 }
 
 func (e Exclusion) value() vm.Value {
-	return record([]field{{"dirs", dirs(e.Dirs)}, {"why", vm.StrValue(e.Why)}})
+	return record([]field{{"dirs", dirs(e.Dirs)}, {"why", vm.StringValue(e.Why)}})
 }
 
 func (h HiddenEdges) value() vm.Value {
-	return record([]field{{"src", dirs(h.Src)}, {"dst", dirs(h.Dst)}, {"why", vm.StrValue(h.Why)}})
+	return record([]field{{"src", dirs(h.Src)}, {"dst", dirs(h.Dst)}, {"why", vm.StringValue(h.Why)}})
 }
 
 func (m EdgeMark) value() vm.Value {
 	return record([]field{
 		{"src", m.Src.value()},
 		{"dst", m.Dst.value()},
-		{"label", vm.StrValue(m.Label)},
+		{"label", vm.StringValue(m.Label)},
 		{"stroke", optional(m.Stroke, caseValue[Stroke])},
 	})
 }
@@ -424,14 +424,14 @@ func (f Flow) value() vm.Value {
 	return record([]field{
 		{"src", f.Src.value()},
 		{"dst", f.Dst.value()},
-		{"label", vm.StrValue(f.Label)},
+		{"label", vm.StringValue(f.Label)},
 		{"stroke", optional(f.Stroke, caseValue[Stroke])},
 	})
 }
 
 func (z Zone) value() vm.Value {
 	return record([]field{
-		{"label", vm.StrValue(z.Label)},
+		{"label", vm.StringValue(z.Label)},
 		{"dirs", dirs(z.Dirs)},
 		{"actors", list(z.Actors, Actor.value)},
 		{"boundary", vm.BoolValue(z.Boundary)},
@@ -440,43 +440,43 @@ func (z Zone) value() vm.Value {
 
 func (a Alignment) value() vm.Value {
 	return record([]field{
-		{"axis", vm.StrValue(string(a.Axis))},
+		{"axis", vm.StringValue(string(a.Axis))},
 		{"dirs", dirs(a.Dirs)},
 		{"actors", list(a.Actors, Actor.value)},
 	})
 }
 
 func (l Legend) value() vm.Value {
-	return record([]field{{"look", vm.StrValue(string(l.Look))}, {"label", vm.StrValue(l.Label)}})
+	return record([]field{{"look", vm.StringValue(string(l.Look))}, {"label", vm.StringValue(l.Label)}})
 }
 
 func (d Dir) value() vm.Value {
 	return record([]field{
-		{"path", vm.StrValue(d.Path)},
-		{"id", vm.StrValue(d.ID)},
-		{"layer", vm.StrValue(d.Layer)},
-		{"language", vm.StrValue(d.Language)},
-		{"imports", list(d.Imports, vm.StrValue)},
-		{"importedBy", list(d.ImportedBy, vm.StrValue)},
+		{"path", vm.StringValue(d.Path)},
+		{"id", vm.StringValue(d.ID)},
+		{"layer", vm.StringValue(d.Layer)},
+		{"language", vm.StringValue(d.Language)},
+		{"imports", list(d.Imports, vm.StringValue)},
+		{"importedBy", list(d.ImportedBy, vm.StringValue)},
 		{"importsIndexed", vm.BoolValue(d.ImportsIndexed)},
 		{"calls", list(d.Calls, DirCall.value)},
 		{"calledBy", list(d.CalledBy, DirCall.value)},
-		{"children", list(d.Children, vm.StrValue)},
+		{"children", list(d.Children, vm.StringValue)},
 		{"files", vm.IntValue(int64(d.Files))},
 	})
 }
 
 func (c DirCall) value() vm.Value {
 	return record([]field{
-		{"dir", vm.StrValue(c.Dir)},
-		{"transport", vm.StrValue(c.Transport)},
-		{"marker", vm.StrValue(c.Marker)},
-		{"source", vm.StrValue(c.Source)},
+		{"dir", vm.StringValue(c.Dir)},
+		{"transport", vm.StringValue(c.Transport)},
+		{"marker", vm.StringValue(c.Marker)},
+		{"source", vm.StringValue(c.Source)},
 	})
 }
 
 // caseValue is an enum case's name as the str the entry decodes.
-func caseValue[T ~string](c T) vm.Value { return vm.StrValue(string(c)) }
+func caseValue[T ~string](c T) vm.Value { return vm.StringValue(string(c)) }
 
 // list is never null: figure iterates every list field a host hands it.
 func list[T any](items []T, value func(T) vm.Value) vm.Value {

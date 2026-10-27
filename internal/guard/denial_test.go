@@ -131,7 +131,7 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 	got, ref, _ = shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "verdict."+note, "", note, nil, false)
 	require.NotEmpty(t, ref)
 	assert.Equal(t, fmt.Sprintf(`verdict.%s
-full verdict: %s`, note, hint.NextForDenial(ref).Run), got, "a reason already carrying the note does not repeat it")
+details: %s`, note, hint.NextForDenial(ref).Run), got, "a reason already carrying the note does not repeat it")
 }
 
 // TestShapeDenyKeepsTheRationaleInTheStoredVerdict pins the inline contract: the verdict,
@@ -156,7 +156,7 @@ func TestShapeDenyKeepsTheRationaleInTheStoredVerdict(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf(`verdict.%s
 next:
   %s
-full verdict: %s`, note, remedy[0].Run, hint.NextForDenial(ref).Run), got, tc.name)
+details: %s`, note, remedy[0].Run, hint.NextForDenial(ref).Run), got, tc.name)
 		stored, err := trail.ReadBlob(cacheDir, ref)
 		require.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf(`verdict.%s
@@ -179,7 +179,7 @@ func TestShapeDenyShowsEveryLineOfAVerdictWithAWhy(t *testing.T) {
 	got, ref, _ := shapeDeny(t.Context(), hint.NewGate(cacheDir, "s1"), string(denyRuleSymbolSearch),
 		"verdict.\nIts answer (1 result):\n  a.go", "the reason.", "", nil, false)
 	require.NotEmpty(t, ref)
-	assert.Equal(t, "verdict.\nIts answer (1 result):\n  a.go\nfull verdict: "+hint.NextForDenial(ref).Run, got)
+	assert.Equal(t, "verdict.\nIts answer (1 result):\n  a.go\ndetails: "+hint.NextForDenial(ref).Run, got)
 }
 
 // TestShapeDenyServesTheRemedyOnEveryFiring pins the layout a remedy adds and that it is
@@ -195,7 +195,7 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	full := "one line.\nnext:\n  ./magus run go-build . -s\n      -s stays quiet until something fails."
 	got, ref, served := shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
 	require.NotEmpty(t, ref, "the first firing stores its verdict too")
-	assert.Equal(t, "one line.\nnext:\n  ./magus run go-build . -s\nfull verdict: "+hint.NextForDenial(ref).Run, got)
+	assert.Equal(t, "one line.\nnext:\n  ./magus run go-build . -s\ndetails: "+hint.NextForDenial(ref).Run, got)
 	stored, err := trail.ReadBlob(cacheDir, ref)
 	require.NoError(t, err)
 	assert.Equal(t, full+see, string(stored))
@@ -208,7 +208,7 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf(`denied again [output-pipe]: %s
 next:
   ./magus run go-build . -s
-full verdict: %s`, doc.Catches, hint.NextForDenial(ref).Run), got)
+details: %s`, doc.Catches, hint.NextForDenial(ref).Run), got)
 	assert.Equal(t, remedy, served)
 	assert.Equal(t, "deny-verdict", servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
 }
@@ -264,7 +264,7 @@ func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
 
 	got, ref := shapeAdvice(t.Context(), gate, string(advisoryPushGate), "run the gate.\n\nan aside.", whys, false)
 	require.NotEmpty(t, ref)
-	assert.Equal(t, "run the gate.\n\nan aside.\nfull advice: "+hint.NextForDenial(ref).Run, got)
+	assert.Equal(t, "run the gate.\n\nan aside.\ndetails: "+hint.NextForDenial(ref).Run, got)
 	stored, err := trail.ReadBlob(cacheDir, ref)
 	require.NoError(t, err)
 	assert.Equal(t, "run the gate.\nit reaches every project.\n\nan aside."+see, string(stored))
@@ -286,7 +286,7 @@ func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
 // A verdict a hook stores from a linked worktree is stored in the primary checkout too,
 // which `magus query output` searches from every checkout of the repository.
 func TestStoreVerdictReachesThePrimaryCheckout(t *testing.T) {
-	r := newWorktreeRepo(t)
+	r := newWorktreeRepository(t)
 	session := r.add("session")
 	cacheDir := filepath.Join(session, ".magus")
 

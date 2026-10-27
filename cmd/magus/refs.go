@@ -29,17 +29,17 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// refsCmd implements `magus refs <symbol>`: list where an ingested code symbol is
+// refsCommand implements `magus refs <symbol>`: list where an ingested code symbol is
 // defined and every file that references it. refs is always symbol-seeded, so it
 // loads the lazily-loaded @symbols shards. Its output is occurrence-shaped (file:line
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
-func refsCmd(ctx context.Context, root string, args []string) error {
+func refsCommand(ctx context.Context, root string, args []string) error {
 	var rf *flaggen.RefsFlags
 	// --no-generated stays hand-bound, like watch's --ignore: it is declared in
 	// internal/commands/registry.go (Kind: cmdline.Custom) for the man page, but bound here
 	// directly rather than through flaggen.RefsFlags.
 	var noGenerated bool
-	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("refs", args, func(fs *flag.FlagSet) {
 		rf = flaggen.BindRefs(fs)
 		fs.BoolVar(&noGenerated, "no-generated", false,
 			"Exclude declared-output files from the fallback text search entirely, instead of searching them and marking the ones that match")
@@ -80,7 +80,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
 			classify = ws.ClassifyFiles
 		}
-		return refsTextCmd(ctx, root, pos[0], pos[1:], noGenerated, rf.Limit, classify)
+		return refsTextCommand(ctx, root, pos[0], pos[1:], noGenerated, rf.Limit, classify)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -105,7 +105,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		if rf.Rename != "" {
-			return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
+			return refsRenameCommand(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
 		}
 		res = lookupRefs(ctx, ws, globalCfg, g, read, measuredCoverage(ctx, ws, globalCfg))
 	}
@@ -379,7 +379,7 @@ func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Co
 	return res
 }
 
-// refsTextCmd implements `magus refs <pattern> --text`: a raw substring search that
+// refsTextCommand implements `magus refs <pattern> --text`: a raw substring search that
 // PRINTS matching lines, the shape a guard pipe deny routes a recursive grep to (see
 // internal/guard's trimmableMagus). It runs textScan directly (no symbol index, no
 // knowledge graph) so it answers on a cold worktree with no index built, which is the
@@ -393,7 +393,7 @@ func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Co
 // command. refs' own -o name format already carves out its own exit meaning per mode
 // for the same reason (see emitOccurrences); this is that same move made explicit
 // for --text rather than left to collide silently with the verdict path.
-func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, noGenerated bool, limit int, classify classifyFunc) error {
+func refsTextCommand(ctx context.Context, root, pattern string, scopeArgs []string, noGenerated bool, limit int, classify classifyFunc) error {
 	searchRoot := resolveRootOrEmpty(root)
 	if searchRoot == "" {
 		slog.ErrorContext(ctx, "cannot resolve a workspace root to search", attr.Notice("magus refs --text"))
@@ -845,9 +845,9 @@ func linesSuffix(lines []int) string {
 	return "  lines " + strings.Join(parts, ",")
 }
 
-// refsRenameCmd is `magus refs <symbol> --rename <new>`: glue between the graph, the
+// refsRenameCommand is `magus refs <symbol> --rename <new>`: glue between the graph, the
 // occurrence read, the guard and internal/edit, which owns what a write may do.
-func refsRenameCmd(ctx context.Context, root string, opts output.Options, g *knowledge.Graph, ref, to string, dryRun bool) error {
+func refsRenameCommand(ctx context.Context, root string, opts output.Options, g *knowledge.Graph, ref, to string, dryRun bool) error {
 	out := types.KnowledgeRenameOutput{
 		Definition:    types.KnowledgeRenameDefinition,
 		SchemaVersion: types.KnowledgeSchemaVersion,

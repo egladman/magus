@@ -43,7 +43,7 @@ func TestDeepEqualValue(t *testing.T) {
 	}{
 		{"equal ints", vm.IntValue(1), vm.IntValue(1), true},
 		{"int vs double cross-type", vm.IntValue(1), vm.FloatValue(1), true},
-		{"unequal strings", vm.StrValue("a"), vm.StrValue("b"), false},
+		{"unequal strings", vm.StringValue("a"), vm.StringValue("b"), false},
 		{"null equals null", vm.Null, vm.Null, true},
 		{"null vs value", vm.Null, vm.IntValue(0), false},
 		{
@@ -66,8 +66,8 @@ func TestDeepEqualValue(t *testing.T) {
 		},
 		{
 			"nested list of maps equal",
-			vm.ListValue([]vm.Value{mapVal(map[string]vm.Value{"k": vm.StrValue("v")})}),
-			vm.ListValue([]vm.Value{mapVal(map[string]vm.Value{"k": vm.StrValue("v")})}),
+			vm.ListValue([]vm.Value{mapVal(map[string]vm.Value{"k": vm.StringValue("v")})}),
+			vm.ListValue([]vm.Value{mapVal(map[string]vm.Value{"k": vm.StringValue("v")})}),
 			true,
 		},
 		{
@@ -122,21 +122,21 @@ func TestLengthValue(t *testing.T) {
 			assert.Equal(t, wantN, n)
 		}
 	}
-	check(vm.StrValue("héllo"), 5, true) // codepoints, not bytes
+	check(vm.StringValue("héllo"), 5, true) // codepoints, not bytes
 	check(vm.ListValue([]vm.Value{vm.IntValue(1), vm.IntValue(2)}), 2, true)
 	check(mapVal(map[string]vm.Value{"a": vm.IntValue(1)}), 1, true)
 	check(vm.IntValue(3), 0, false) // a number has no length
 }
 
 func TestContainsValue(t *testing.T) {
-	assert.True(t, containsValue(vm.StrValue("hello world"), vm.StrValue("world")))
-	assert.False(t, containsValue(vm.StrValue("hello"), vm.StrValue("z")))
-	list := vm.ListValue([]vm.Value{vm.IntValue(1), mapVal(map[string]vm.Value{"k": vm.StrValue("v")})})
-	assert.True(t, containsValue(list, mapVal(map[string]vm.Value{"k": vm.StrValue("v")}))) // deep element match
+	assert.True(t, containsValue(vm.StringValue("hello world"), vm.StringValue("world")))
+	assert.False(t, containsValue(vm.StringValue("hello"), vm.StringValue("z")))
+	list := vm.ListValue([]vm.Value{vm.IntValue(1), mapVal(map[string]vm.Value{"k": vm.StringValue("v")})})
+	assert.True(t, containsValue(list, mapVal(map[string]vm.Value{"k": vm.StringValue("v")}))) // deep element match
 	assert.False(t, containsValue(list, vm.IntValue(9)))
 	m := mapVal(map[string]vm.Value{"key": vm.IntValue(1)})
-	assert.True(t, containsValue(m, vm.StrValue("key")))
-	assert.False(t, containsValue(m, vm.StrValue("nope")))
+	assert.True(t, containsValue(m, vm.StringValue("key")))
+	assert.False(t, containsValue(m, vm.StringValue("nope")))
 }
 
 func TestCompareValue(t *testing.T) {
@@ -150,8 +150,8 @@ func TestCompareValue(t *testing.T) {
 	check(vm.IntValue(5), vm.IntValue(3), 1, true)
 	check(vm.IntValue(3), vm.FloatValue(3), 0, true) // cross-type
 	check(vm.FloatValue(1), vm.IntValue(2), -1, true)
-	check(vm.StrValue("a"), vm.StrValue("b"), -1, true)
-	check(vm.IntValue(1), vm.StrValue("a"), 0, false) // not comparable
+	check(vm.StringValue("a"), vm.StringValue("b"), -1, true)
+	check(vm.IntValue(1), vm.StringValue("a"), 0, false) // not comparable
 }
 
 // TestTesterModule drives the ported `testing` module (gopherbuzz's rendition of

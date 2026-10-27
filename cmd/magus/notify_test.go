@@ -94,7 +94,7 @@ func TestNotifyCmd(t *testing.T) {
 	run := func(stdin string, args ...string) (string, error) {
 		var out bytes.Buffer
 		global = globalFlags{}
-		err := notifyCmd(context.Background(), root, strings.NewReader(stdin), &out, args)
+		err := notifyCommand(context.Background(), root, strings.NewReader(stdin), &out, args)
 		return out.String(), err
 	}
 
@@ -150,7 +150,7 @@ func TestNotifyCmdToastsABlockWithNoQueueRow(t *testing.T) {
 	run := func(root string) {
 		t.Helper()
 		global = globalFlags{}
-		require.NoError(t, notifyCmd(context.Background(), root, strings.NewReader("needs approval"), io.Discard,
+		require.NoError(t, notifyCommand(context.Background(), root, strings.NewReader("needs approval"), io.Discard,
 			[]string{"--outcome", "permission", "--desktop"}))
 	}
 
@@ -172,7 +172,7 @@ func TestNotifyCmdDoesNotToastARefiredPermission(t *testing.T) {
 	run := func(stdin string, args ...string) {
 		t.Helper()
 		global = globalFlags{}
-		require.NoError(t, notifyCmd(context.Background(), root, strings.NewReader(stdin), io.Discard, args))
+		require.NoError(t, notifyCommand(context.Background(), root, strings.NewReader(stdin), io.Discard, args))
 	}
 	run(ev, "--desktop", "-o", "name")
 	run(ev, "--desktop", "-o", "name")

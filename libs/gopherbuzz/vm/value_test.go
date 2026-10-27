@@ -33,8 +33,8 @@ func TestValueConstructorsAndPredicates(t *testing.T) {
 		assert.Equal(t, "bool", v.Kind())
 	})
 	t.Run("StrValue", func(t *testing.T) {
-		v := StrValue("hello")
-		assert.True(t, v.IsStr())
+		v := StringValue("hello")
+		assert.True(t, v.IsString())
 		assert.Equal(t, "str", v.Kind())
 	})
 	t.Run("ListValue", func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestValueAsBool(t *testing.T) {
 }
 
 func TestValueAsString(t *testing.T) {
-	assert.Equal(t, "world", StrValue("world").AsString())
+	assert.Equal(t, "world", StringValue("world").AsString())
 }
 
 func TestValueListItems(t *testing.T) {
@@ -99,7 +99,7 @@ func TestValueString(t *testing.T) {
 	assert.Equal(t, "true", BoolValue(true).String())
 	assert.Equal(t, "false", BoolValue(false).String())
 	assert.Equal(t, "42", IntValue(42).String())
-	assert.Equal(t, "hi", StrValue("hi").String())
+	assert.Equal(t, "hi", StringValue("hi").String())
 	assert.Equal(t, "[1, 2]", ListValue([]Value{IntValue(1), IntValue(2)}).String())
 }
 
@@ -150,9 +150,9 @@ func TestValueEqual(t *testing.T) {
 	// String content equality, including a string built at runtime (not a
 	// compile-time literal) versus a literal of the same content.
 	built := string([]byte{'b'})
-	assert.True(t, StrValue(built).Equal(StrValue("b")))
-	assert.True(t, StrValue("hello").Equal(StrValue("hello")))
-	assert.False(t, StrValue("a").Equal(StrValue("b")))
+	assert.True(t, StringValue(built).Equal(StringValue("b")))
+	assert.True(t, StringValue("hello").Equal(StringValue("hello")))
+	assert.False(t, StringValue("a").Equal(StringValue("b")))
 
 	// int/float numeric coercion, matching the == operator.
 	assert.True(t, IntValue(1).Equal(FloatValue(1.0)))
@@ -212,7 +212,7 @@ func TestValueEnumDef(t *testing.T) {
 	assert.Equal(t, "low", again[0], "the returned cases are a copy, not the definition's own")
 
 	high := NewVM(context.Background()).enumCase(def, 1)
-	for _, v := range []Value{high, NewMap(), StrValue("Tier"), NullValue()} {
+	for _, v := range []Value{high, NewMap(), StringValue("Tier"), NullValue()} {
 		name, cases, ok := v.EnumDef()
 		assert.False(t, ok, "%s is not an enum definition", v.Kind())
 		assert.Empty(t, name)
@@ -230,7 +230,7 @@ func TestValueEnumCase(t *testing.T) {
 
 	// An enum<str> case may assign a value other than its name: EnumCase still
 	// names the case, and EnumValue reads the assigned value.
-	mode := EnumDefValue("Mode", []string{"fast"}, []Value{StrValue("f")})
+	mode := EnumDefValue("Mode", []string{"fast"}, []Value{StringValue("f")})
 	fast := vm.enumCase(mode, 0)
 	_, name, ok = fast.EnumCase()
 	require.True(t, ok)
@@ -238,7 +238,7 @@ func TestValueEnumCase(t *testing.T) {
 	backing, _ := fast.EnumValue()
 	assert.Equal(t, "f", backing.AsString())
 
-	for _, v := range []Value{tier, IntValue(1), StrValue("high"), NullValue()} {
+	for _, v := range []Value{tier, IntValue(1), StringValue("high"), NullValue()} {
 		enum, name, ok := v.EnumCase()
 		assert.False(t, ok, "%s is not an enum case", v.Kind())
 		assert.Empty(t, enum)
@@ -252,9 +252,9 @@ func TestValueMapKeyValues(t *testing.T) {
 	tier := EnumDefValue("Tier", []string{"low", "high"}, nil)
 	high := NewVM(context.Background()).enumCase(tier, 1)
 	m := NewMap()
-	m.asMap().setVal(high, StrValue("by case"))
-	m.asMap().setVal(IntValue(1), StrValue("by int"))
-	m.asMap().setVal(StrValue("1"), StrValue("by str"))
+	m.asMap().setVal(high, StringValue("by case"))
+	m.asMap().setVal(IntValue(1), StringValue("by int"))
+	m.asMap().setVal(StringValue("1"), StringValue("by str"))
 
 	keys := m.MapKeyValues()
 	require.Len(t, keys, 3)
@@ -268,11 +268,11 @@ func TestValueMapKeyValues(t *testing.T) {
 
 	assert.True(t, keys[1].IsInt())
 	assert.Equal(t, int64(1), keys[1].AsInt())
-	assert.True(t, keys[2].IsStr())
+	assert.True(t, keys[2].IsString())
 	assert.Equal(t, "1", keys[2].AsString())
 	assert.Equal(t, m.MapKeys()[1], m.MapKeys()[2], "MapKeys is lossy where MapKeyValues is not")
 
-	for _, v := range []Value{StrValue("m"), ListValue(nil), NullValue(), high} {
+	for _, v := range []Value{StringValue("m"), ListValue(nil), NullValue(), high} {
 		assert.Nil(t, v.MapKeyValues(), "%s is not a map", v.Kind())
 	}
 }

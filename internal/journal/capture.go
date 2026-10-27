@@ -13,7 +13,7 @@ import (
 )
 
 // eventAttr is the slog attribute key that carries the whole [Event] value through a
-// slog.Record. Capture handlers pull it back out with [eventFrom]. Carrying the typed event
+// slog.Record. Capture handlers pull it back out with [capturedEvent]. Carrying the typed event
 // as one attribute keeps the hot output path allocation-light (no field-by-field re-encode);
 // the JSON shape a handler writes is still json.Marshal(Event), so the on-disk schema is
 // unchanged. A future OpenTelemetry bridge can expand it into per-field attributes there.
@@ -97,10 +97,10 @@ func Emit(ctx context.Context, e Event) {
 // EventFromRecord extracts the [Event] a capture record carries, and whether it was present.
 // It lets a slog.Handler outside this package (e.g. the server's live-run registry) fold the
 // same typed events the file and broadcaster handlers consume, without re-parsing JSON.
-func EventFromRecord(r slog.Record) (Event, bool) { return eventFrom(r) }
+func EventFromRecord(r slog.Record) (Event, bool) { return capturedEvent(r) }
 
-// eventFrom extracts the [Event] a capture record carries, and whether it was present.
-func eventFrom(r slog.Record) (Event, bool) {
+// capturedEvent extracts the [Event] a capture record carries, and whether it was present.
+func capturedEvent(r slog.Record) (Event, bool) {
 	var (
 		e  Event
 		ok bool
@@ -181,7 +181,7 @@ func NewFileHandler(w io.Writer) *FileHandler {
 func (h *FileHandler) Enabled(context.Context, slog.Level) bool { return true }
 
 func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
-	e, ok := eventFrom(r)
+	e, ok := capturedEvent(r)
 	if !ok {
 		return nil
 	}

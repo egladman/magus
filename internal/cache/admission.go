@@ -31,7 +31,7 @@ type admission struct {
 
 type admissionKey struct{}
 
-func admissionFrom(ctx context.Context) admission {
+func admissionFromContext(ctx context.Context) admission {
 	held, _ := ctx.Value(admissionKey{}).(admission)
 	return held
 }
@@ -43,7 +43,7 @@ func (a admission) on(ctx context.Context) context.Context {
 
 // WithSlotsHeld marks ctx as holding n limiter slots.
 func WithSlotsHeld(ctx context.Context, n int) context.Context {
-	held := admissionFrom(ctx)
+	held := admissionFromContext(ctx)
 	held.slots = n
 	return held.on(ctx)
 }
@@ -60,7 +60,7 @@ func WithoutSlotHeld(ctx context.Context) context.Context {
 
 // SlotsHeld reports how many limiter slots ctx is marked as holding (0 if none).
 func SlotsHeld(ctx context.Context) int {
-	return admissionFrom(ctx).slots
+	return admissionFromContext(ctx).slots
 }
 
 // SlotHeld reports whether ctx is marked as holding at least one limiter slot.
@@ -70,7 +70,7 @@ func SlotHeld(ctx context.Context) bool {
 
 // withSlotHold returns ctx carrying the step's slot-watch record.
 func withSlotHold(ctx context.Context, h *slotHold) context.Context {
-	held := admissionFrom(ctx)
+	held := admissionFromContext(ctx)
 	held.hold = h
 	return held.on(ctx)
 }

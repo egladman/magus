@@ -20,12 +20,12 @@ import (
 // typed as `import "spells/<name>/spell.buzz"` is always a legal identifier.
 var spellHandleRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 
-// initSpellCmd implements `magus init spell <name>`: scaffold a new spell at
+// initSpellCommand implements `magus init spell <name>`: scaffold a new spell at
 // spells/<name>/spell.buzz with the mgs_ contract stubbed, every function
 // documented inline, and a runnable test block. It is the authoring on-ramp the
 // bundled spells never provided: a new spell starts from a working, tested
 // example instead of a blank file and a hunt through docs/spells.md.
-func initSpellCmd(ctx context.Context, args []string) error {
+func initSpellCommand(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("init spell", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	force := fs.Bool("force", false, "Overwrite an existing spell.buzz")

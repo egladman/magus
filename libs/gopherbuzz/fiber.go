@@ -69,7 +69,7 @@ func (s *Session) ThrowIntoFiber(ctx context.Context, fiber vmpackage.Value, err
 	}
 	if !fib.VM().RaiseAtSuspension(err) {
 		fib.SetStatus(vmpackage.FiberDone)
-		fib.SetErr(err)
+		fib.SetError(err)
 		return vmpackage.Null, err
 	}
 	return s.builtinResume(ctx, []vmpackage.Value{fiber})

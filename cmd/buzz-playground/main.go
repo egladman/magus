@@ -360,7 +360,7 @@ func (u *ui) onTerminalKey(_ js.Value, args []js.Value) any {
 		}
 	case "ArrowUp":
 		e.Call("preventDefault")
-		if v, ok := u.shell.HistPrev(); ok {
+		if v, ok := u.shell.HistPrevious(); ok {
 			u.in.Set("value", v)
 		}
 	case "ArrowDown":

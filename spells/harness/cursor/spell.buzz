@@ -95,14 +95,16 @@ export fun mgs_listHooks() > [HookCommand] {
     return cursor_hooks();
 }
 
-// cursor_entry is one hooks.json command entry. The MCP gate fails closed: a call the guard
-// could not judge does not run.
+// A timed-out gating hook must block the call: otherwise retrying a slow guard
+// becomes a way to run a command it would refuse.
 fun cursor_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
     entry["command"] = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
     entry["timeout"] = hook.timeoutS;
-    if (hook.event == "beforeMCPExecution") { entry["failClosed"] = true; }
+    if (hook.event == "beforeMCPExecution" or hook.event == "beforeShellExecution" or hook.event == "preToolUse") {
+        entry["failClosed"] = true;
+    }
     return entry;
 }
 
@@ -189,6 +191,12 @@ export fun mgs_renderAgents(agents: [ShippedAgent]) > [AgentFile] {
     return agents.map(fun (index: int, agent: ShippedAgent) > AgentFile => cursor_agent(agent));
 }
 
+// Cursor's hook reply is the approval prompt, so there is no rules file to write.
+// humanOnly is the same map every harness receives; the hook quotes each reason.
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
+    return [<Prompt>];
+}
+
 fun cursor_scout_fixture(readOnly: bool) > ShippedAgent {
     return ShippedAgent{
         name = "magus-scout",
@@ -206,6 +214,10 @@ test "mgs_renderAgents renders a read-only agent that inherits the model" {
         "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmodel: inherit\nreadonly: true\n---\n\nFirst line.\n\nSecond line.\n",
         "frontmatter then the instructions",
     );
+}
+
+test "mgs_renderPrompts writes no file because the hook prompts" {
+    assert\equal(mgs_renderPrompts({"agent-bench-run": "launches paid sessions"}).len(), 0, "an ask is Cursor's own dialog");
 }
 
 test "mgs_renderAgents omits readonly for a writable agent, and renders none for none" {
@@ -250,7 +262,8 @@ test "the entries cover every Cursor event magus uses, one guard entry each" {
         final guard = block.entries[0];
         assert\equal("{guard["command"]}", cursor_guard_command(), "every event names the guard script");
         assert\equal(guard["timeout"] as? int, HOOK_TIMEOUT_S, "every entry bounds how long magus may run");
-        assert\equal((guard["failClosed"] as? bool) ?? false, names[i] == "beforeMCPExecution", "only the MCP gate fails closed");
+        final gating = names[i] == "beforeMCPExecution" or names[i] == "beforeShellExecution" or names[i] == "preToolUse";
+        assert\equal((guard["failClosed"] as? bool) ?? false, gating, "a failed gating hook must not let the call through");
         assert\equal((guard["matcher"] as? str) ?? "", cursor_matcher(names[i]), "the matcher the event takes");
     }
     final post = entries[names.indexOf("postToolUse")!];

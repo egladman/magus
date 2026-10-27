@@ -22,19 +22,19 @@ import (
 // ModuleEnv.OutFunc.
 func coreModule(out func(context.Context) io.Writer) vm.Value {
 	m := mod()
-	m.MapSet("assert", fn("std.assert", stdAssert))
-	m.MapSet("print", fn("std.print", makeStdPrint(out)))
-	m.MapSet("parseInt", fn("std.parseInt", stdParseInt))
-	m.MapSet("parseDouble", fn("std.parseDouble", stdParseDouble))
-	m.MapSet("toInt", fn("std.toInt", stdToInt))
-	m.MapSet("toDouble", fn("std.toDouble", stdToDouble))
-	m.MapSet("char", fn("std.char", stdChar))
-	m.MapSet("random", fn("std.random", stdRandom))
-	m.MapSet("pattern", fn("std.pattern", stdPattern))
-	m.MapSet("currentFiber", fn("std.currentFiber", stdCurrentFiber))
-	m.MapSet("panic", fn("std.panic", stdPanic))
-	m.MapSet("toUd", fn("std.toUd", stdToUd))
-	m.MapSet("parseUd", fn("std.parseUd", stdParseUd))
+	m.MapSet("assert", function("std.assert", stdAssert))
+	m.MapSet("print", function("std.print", makeStdPrint(out)))
+	m.MapSet("parseInt", function("std.parseInt", stdParseInt))
+	m.MapSet("parseDouble", function("std.parseDouble", stdParseDouble))
+	m.MapSet("toInt", function("std.toInt", stdToInt))
+	m.MapSet("toDouble", function("std.toDouble", stdToDouble))
+	m.MapSet("char", function("std.char", stdChar))
+	m.MapSet("random", function("std.random", stdRandom))
+	m.MapSet("pattern", function("std.pattern", stdPattern))
+	m.MapSet("currentFiber", function("std.currentFiber", stdCurrentFiber))
+	m.MapSet("panic", function("std.panic", stdPanic))
+	m.MapSet("toUd", function("std.toUd", stdToUd))
+	m.MapSet("parseUd", function("std.parseUd", stdParseUd))
 	return m
 }
 
@@ -51,7 +51,7 @@ func stdAssert(_ context.Context, args []vm.Value) (vm.Value, error) {
 	}
 	if !args[0].Bool() {
 		msg := "assertion failed"
-		if len(args) >= 2 && args[1].IsStr() {
+		if len(args) >= 2 && args[1].IsString() {
 			msg = args[1].AsString()
 		}
 		return vm.Null, fmt.Errorf("std.assert: %s", msg)
@@ -75,7 +75,7 @@ func makeStdPrint(out func(context.Context) io.Writer) func(context.Context, []v
 }
 
 func stdParseInt(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("std.parseInt: requires a str argument")
 	}
 	n, err := strconv.ParseInt(args[0].AsString(), 10, 64)
@@ -86,7 +86,7 @@ func stdParseInt(_ context.Context, args []vm.Value) (vm.Value, error) {
 }
 
 func stdParseDouble(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("std.parseDouble: requires a str argument")
 	}
 	f, err := strconv.ParseFloat(args[0].AsString(), 64)
@@ -132,7 +132,7 @@ func stdChar(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if !utf8.ValidRune(r) {
 		return vm.Null, fmt.Errorf("std.char: invalid Unicode code point %d", args[0].AsInt())
 	}
-	return vm.StrValue(string(r)), nil
+	return vm.StringValue(string(r)), nil
 }
 
 func stdRandom(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -176,7 +176,7 @@ func stdCurrentFiber(_ context.Context, _ []vm.Value) (vm.Value, error) {
 
 func stdPanic(_ context.Context, args []vm.Value) (vm.Value, error) {
 	msg := "panic"
-	if len(args) >= 1 && args[0].IsStr() {
+	if len(args) >= 1 && args[0].IsString() {
 		msg = args[0].AsString()
 	}
 	return vm.Null, fmt.Errorf("std.panic: %s", msg)
@@ -189,7 +189,7 @@ func stdPanic(_ context.Context, args []vm.Value) (vm.Value, error) {
 // string literal must escape braces — \{2\} — since ordinary strings
 // interpolate; $"..." literals don't have this problem.)
 func stdPattern(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("std.pattern: requires a str argument")
 	}
 	return vm.PatValue(args[0].AsString())
@@ -221,7 +221,7 @@ func stdToUd(_ context.Context, args []vm.Value) (vm.Value, error) {
 // stdParseUd parses a decimal string into userdata. Null on a malformed input,
 // matching how std's other parse* functions report a miss rather than raising.
 func stdParseUd(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsStr() {
+	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("std.parseUd: requires a str argument")
 	}
 	n, err := strconv.ParseUint(strings.TrimSpace(args[0].AsString()), 10, 64)

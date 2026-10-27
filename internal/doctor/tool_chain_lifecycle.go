@@ -40,7 +40,7 @@ func (r *runner) checkToolchainLifecycle(projects []*types.Project) types.Check 
 	if len(keys) == 0 {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no spell names a lifecycle product"}
 	}
-	answer, stored := workspace.CachedLifecycles(r.runCtx(), p.CacheDir(), r.ws.Root(), wired, keys)
+	answer, stored := workspace.CachedLifecycles(r.runContext(), p.CacheDir(), r.ws.Root(), wired, keys)
 	if !stored {
 		return types.Check{
 			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,

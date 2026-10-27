@@ -295,7 +295,7 @@ func TestChangedSinceDoesNotAskForRegionsWhenNothingChanged(t *testing.T) {
 // checkpoint's own commits are not read as the holder deleting them, and the result names
 // the base it used beside the checkpoint. A holder on its checkpoint is diffed from it.
 func TestCheckpointObserverDiffsFromTheHoldersBase(t *testing.T) {
-	repo := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"})
 	root := repo.Root()
 	base := repo.Head()
 	commit := func(name string) string { return repo.Commit(name, map[string]string{name: name + "\n"}) }
@@ -573,7 +573,7 @@ func TestOverlapFootprintsWithNoVCS(t *testing.T) {
 func TestMeasureOverlaps(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
+	repo := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
 	root := repo.Root()
 	rev := repo.Head()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
@@ -601,7 +601,7 @@ func TestMeasureOverlaps(t *testing.T) {
 func TestReportSkipsFootprintsOfStaleRows(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
+	repo := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
 	root := repo.Root()
 	rev := repo.Head()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
@@ -708,7 +708,7 @@ const twoFuncs = "package api\n\nfunc X() {\n\treturn\n}\n\nfunc Y() {\n\treturn
 // the first and b in the second, both writing api/x.go.
 func overlapCheckouts(t testing.TB) (a, b *testkit.Repo, rows []types.Job, overlaps []types.JobOverlap) {
 	t.Helper()
-	a = testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": twoFuncs})
+	a = testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": twoFuncs})
 	b = a.AddWorktree("b")
 	rev := a.Head()
 	rows = []types.Job{
@@ -840,7 +840,7 @@ func BenchmarkFootprintKeyHash(b *testing.B) {
 func TestFootprintCacheKeysOnTheBuild(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{"a.go": twoFuncs})
+	repo := testkit.NewRepository(t, map[string]string{"a.go": twoFuncs})
 	driver := gitDriver(t, repo.Root())
 	row := types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
 	files := []types.FileChange{{Path: "a.go"}}
@@ -869,7 +869,7 @@ func TestFootprintCacheKeysOnTheBuild(t *testing.T) {
 func TestFootprintCacheKeysNothingForABackendThatHidesItsConfig(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{"a.go": twoFuncs})
+	repo := testkit.NewRepository(t, map[string]string{"a.go": twoFuncs})
 	hidden := struct{ types.VCSDriver }{gitDriver(t, repo.Root()).VCSDriver}
 	cache := footprintCache{dir: t.TempDir(), build: testBuild}.forRow(types.Job{Checkpoint: repo.Head()})
 	_, keyed := cache.regionsKey(t.Context(), hidden, repo.Root(), repo.Head(), []types.FileChange{{Path: "a.go"}})
@@ -883,7 +883,7 @@ func TestFootprintCacheKeysNothingForABackendThatHidesItsConfig(t *testing.T) {
 func TestFootprintCacheMissesOnAnEditedAttributeFileOutsideTheTree(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{"a.go": twoFuncs})
+	repo := testkit.NewRepository(t, map[string]string{"a.go": twoFuncs})
 	global := filepath.Join(t.TempDir(), "attributes")
 	repo.Git("config", "core.attributesFile", global)
 	driver := gitDriver(t, repo.Root())
@@ -915,7 +915,7 @@ func TestFootprintCacheMissesOnAnEditedAttributeFileOutsideTheTree(t *testing.T)
 func TestRegionsSinceReuseUnchangedFiles(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": twoFuncs})
+	repo := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": twoFuncs})
 	root, rev := repo.Root(), repo.Head()
 	repo.Write("api/x.go", strings.Replace(twoFuncs, "func X() {\n\treturn", "func X() {\n\tpanic(1)", 1))
 	driver := gitDriver(t, root)

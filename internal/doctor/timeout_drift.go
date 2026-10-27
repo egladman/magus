@@ -48,7 +48,7 @@ func (r *runner) checkTimeoutDeclarations(projects []*types.Project) types.Check
 	const name = "timeout-declarations"
 
 	var h forecast.History
-	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
+	if err := h.Load(r.runContext(), r.opts.cfg.HistoryPath); err != nil {
 		return historyUnreadableCheck(name, err)
 	}
 

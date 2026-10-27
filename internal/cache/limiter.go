@@ -139,7 +139,7 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 	}
 	// The hold record has to say so too: a step whose slots are back in the pool occupies
 	// nothing, and a watch that still counted them would read a pool with room as full.
-	hold := admissionFrom(ctx).hold
+	hold := admissionFromContext(ctx).hold
 	defer hold.yield()()
 	l.ReleaseN(n)
 	defer l.reacquireYielded(ctx, n)
@@ -154,7 +154,7 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 // release.
 func (l *Limiter) reacquireYielded(ctx context.Context, n int) {
 	if w := l.watch; w != nil {
-		waiter := w.beginWait(fmt.Sprintf("%s (taking back yielded slots)", admissionFrom(ctx).hold.name()), n, func() {})
+		waiter := w.beginWait(fmt.Sprintf("%s (taking back yielded slots)", admissionFromContext(ctx).hold.name()), n, func() {})
 		// The refusal it may carry is for the waiters the verdict could end; this one it
 		// could not, and the caller returns holding its slots either way.
 		defer func() { _ = w.endWait(waiter) }()

@@ -88,9 +88,9 @@ func gradeSplitRun(facts hint.Gate, command string) (advice, bool) {
 		// The same call again: nothing to combine.
 		return advice{}, false
 	}
-	cmdA := renderMagusCmd(prev.verb, prev.raw, prev.projects)
-	cmdB := renderMagusCmd(verb, raw, projects)
-	combined := renderMagusCmd(verb, raw, mergeProjects(prev.projects, projects))
+	cmdA := renderMagusCommand(prev.verb, prev.raw, prev.projects)
+	cmdB := renderMagusCommand(verb, raw, projects)
+	combined := renderMagusCommand(verb, raw, mergeProjects(prev.projects, projects))
 	return splitRunAdvice(cmdA, cmdB, combined), true
 }
 
@@ -148,9 +148,9 @@ func splitRunLineAdvice(cmds []hint.Invocation) (advice, bool) {
 		}
 		merged = mergeProjects(merged, c.projects)
 	}
-	cmdA := renderMagusCmd(first.verb, first.raw, first.projects)
-	cmdB := renderMagusCmd(calls[1].verb, calls[1].raw, calls[1].projects)
-	combined := renderMagusCmd(first.verb, first.raw, merged)
+	cmdA := renderMagusCommand(first.verb, first.raw, first.projects)
+	cmdB := renderMagusCommand(calls[1].verb, calls[1].raw, calls[1].projects)
+	combined := renderMagusCommand(first.verb, first.raw, merged)
 	return splitRunAdvice(cmdA, cmdB, combined), true
 }
 
@@ -165,9 +165,9 @@ func splitRunAdvice(cmdA, cmdB, combined string) advice {
 	}
 }
 
-// renderMagusCmd renders one magus run/affected invocation as the reader would type it,
+// renderMagusCommand renders one magus run/affected invocation as the reader would type it,
 // target and charms exactly as given.
-func renderMagusCmd(verb, target string, projects []string) string {
+func renderMagusCommand(verb, target string, projects []string) string {
 	args := append([]string{target}, projects...)
 	if verb == "affected" {
 		return hint.Affected.With(args...)

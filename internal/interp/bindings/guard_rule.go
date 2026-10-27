@@ -80,7 +80,7 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 	for _, decision := range []types.GuardDecision{types.GuardAdvise, types.GuardDeny} {
 		member := string(decision)
 		guardMap.MapSet(member, directVal(obs, "magus.guard."+member, func(_ context.Context, args []vm.Value) (vm.Value, error) {
-			if len(args) < 1 || len(args) > 2 || !args[0].IsStr() || strings.TrimSpace(args[0].AsString()) == "" {
+			if len(args) < 1 || len(args) > 2 || !args[0].IsString() || strings.TrimSpace(args[0].AsString()) == "" {
 				return vm.Null, fmt.Errorf(`magus\guard.%s: expected the text the agent is shown, a non-empty string, and an optional {rule: str}`, member)
 			}
 			verdict := types.GuardVerdict{Decision: decision, Reason: args[0].AsString()}
@@ -138,7 +138,7 @@ func verdictRuleOpt(member string, arg vm.Value) (string, error) {
 		v, _ := opts.MapGet(k)
 		switch k {
 		case "rule":
-			if !v.IsStr() {
+			if !v.IsString() {
 				return "", fmt.Errorf(`magus\guard.%s: "rule" must be a string`, member)
 			}
 			rule = v.AsString()
@@ -179,7 +179,7 @@ func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gat
 	if !ok {
 		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: only callable inside a magus\guard.spawn, command or write rule while the guard runs it, since it counts per agent session`, member)
 	}
-	if len(args) != 1 || !args[0].IsStr() || args[0].AsString() == "" {
+	if len(args) != 1 || !args[0].IsString() || args[0].AsString() == "" {
 		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: expected one non-empty key string`, member)
 	}
 	sum := sha256.Sum256([]byte(args[0].AsString()))
@@ -218,7 +218,7 @@ func decodeGuardVerdict(name string, v vm.Value) (types.GuardVerdict, error) {
 	}
 	var out types.GuardVerdict
 	if d, ok := fields.MapGet("decision"); ok && !d.IsNull() {
-		if !d.IsStr() {
+		if !d.IsString() {
 			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's decision is %s, not a str`, name, d.Kind())
 		}
 		if err := out.Decision.UnmarshalText([]byte(d.AsString())); err != nil {
@@ -226,13 +226,13 @@ func decodeGuardVerdict(name string, v vm.Value) (types.GuardVerdict, error) {
 		}
 	}
 	if r, ok := fields.MapGet("reason"); ok && !r.IsNull() {
-		if !r.IsStr() {
+		if !r.IsString() {
 			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's reason is %s, not a str`, name, r.Kind())
 		}
 		out.Reason = strings.TrimSpace(r.AsString())
 	}
 	if r, ok := fields.MapGet("rule"); ok && !r.IsNull() {
-		if !r.IsStr() {
+		if !r.IsString() {
 			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's rule is %s, not a str`, name, r.Kind())
 		}
 		// A literal GuardVerdict skips deny's check, and an empty rule is the unnamed default.

@@ -29,7 +29,7 @@ import (
 //
 // Every failure goes back through ffi.Error, which is what a generated
 // trampoline does and what makes a caught value a MAP rather than a str: the VM turns a
-// bare error into StrValue(err.Error()) and only a StructuredError into an indexable map
+// bare error into StringValue(err.Error()) and only a StructuredError into an indexable map
 // (see vm.caughtValue). Every method here is Raises, so BZZ1006 forces callers to catch
 // one; handing them a differently-typed value than every other magus\* method does is a
 // difference they would only find at run time.
@@ -47,7 +47,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		row, err := std.MagusPutJob(ctx, ffi.Str(args, 0), put)
+		row, err := std.MagusPutJob(ctx, ffi.String(args, 0), put)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -58,13 +58,13 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 	// (see job.BaseAdvice), so folding it in beside the row's own keys would put a
 	// rendering where a caller reads facts; "job" and "advice" keep the two apart.
 	ns.MapSet("register", directVal(obs, "magus.job.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		row, advice, err := std.MagusRegisterJob(ctx, ffi.Str(args, 0))
+		row, advice, err := std.MagusRegisterJob(ctx, ffi.String(args, 0))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		out := vm.NewMap()
 		out.MapSet("job", bindgen.ObjectJob(row, ffi.SessionEnums(ctx, sess, "magus")))
-		out.MapSet("advice", ffi.StrVal(advice))
+		out.MapSet("advice", ffi.StringVal(advice))
 		return out, nil
 	}))
 	ns.MapSet("exit", directVal(obs, "magus.job.exit", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -73,11 +73,11 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 			err error
 		)
 		if omittedOptionalMap(args, 1) {
-			row, err = std.MagusAbandonJob(ctx, ffi.Str(args, 0))
+			row, err = std.MagusAbandonJob(ctx, ffi.String(args, 0))
 		} else {
 			var result types.JobResult
 			if result, err = decodeJobResult(ffi.AnyMap(args, 1)); err == nil {
-				row, err = std.MagusExitJob(ctx, ffi.Str(args, 0), result)
+				row, err = std.MagusExitJob(ctx, ffi.String(args, 0), result)
 			}
 		}
 		if err != nil {
@@ -94,7 +94,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 			}
 			result = &decoded
 		}
-		status, err := std.MagusWaitJob(ctx, ffi.Str(args, 0), result)
+		status, err := std.MagusWaitJob(ctx, ffi.String(args, 0), result)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

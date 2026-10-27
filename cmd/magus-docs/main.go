@@ -29,12 +29,12 @@ var callbackURL = docs.SourceURL("std/module.go")
 // main() so the docs the tests generate via renderModule match the ones `go run`
 // writes: `go test` runs from the package directory and never calls main(), so
 // anything resolved there would silently differ under test and trip the drift gate.
-var repoRoot = findRepoRoot()
+var repoRoot = findRepositoryRoot()
 
-// findRepoRoot walks up from the working directory to the directory holding go.mod
+// findRepositoryRoot walks up from the working directory to the directory holding go.mod
 // (the module root), so source paths resolve whether the process runs from the
 // repo root (go run) or a package directory (go test).
-func findRepoRoot() string {
+func findRepositoryRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "."
@@ -137,7 +137,7 @@ func prune(outDir string, modules []std.Module) error {
 			return err
 		}
 		frontmatter, ok := docs.ParseFrontmatter(string(body))
-		if !ok || !modulePageGeneratedFrom(frontmatter.GeneratedFrom) {
+		if !ok || !modulePageGenerated(frontmatter.GeneratedFrom) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(outDir, name)); err != nil {
@@ -147,7 +147,7 @@ func prune(outDir string, modules []std.Module) error {
 	return nil
 }
 
-func modulePageGeneratedFrom(source string) bool {
+func modulePageGenerated(source string) bool {
 	return source == "reference/buzz/" || source == "std/**/*.go, internal/hostmodules/**/*.go"
 }
 

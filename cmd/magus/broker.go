@@ -31,7 +31,7 @@ import (
 // socket. The broker loads nothing, so this is generous.
 const brokerReadyTimeout = 10 * time.Second
 
-func brokerCmd(ctx context.Context, args []string) error {
+func brokerCommand(ctx context.Context, args []string) error {
 	if brokerServes(args) {
 		return brokerServe(ctx, args)
 	}
@@ -96,7 +96,7 @@ func brokerUsage() {
 // binding one.
 func brokerServe(ctx context.Context, args []string) error {
 	var f *flaggen.BrokerFlags
-	rest, err := cmdParse("broker", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("broker", args, func(fs *flag.FlagSet) {
 		f = flaggen.BindBroker(fs)
 		fs.Usage = brokerUsage
 	})
@@ -203,7 +203,7 @@ func reopenBrokerLog(ctx context.Context, path string) {
 }
 
 func brokerStatus(ctx context.Context, args []string) error {
-	rest, err := cmdParse("broker status", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("broker status", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus broker status [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -242,7 +242,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 
 func brokerStop(ctx context.Context, args []string) error {
 	var f *flaggen.BrokerStopFlags
-	if _, err := cmdParse("broker stop", args, func(fs *flag.FlagSet) {
+	if _, err := commandParse("broker stop", args, func(fs *flag.FlagSet) {
 		f = flaggen.BindBrokerStop(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus broker stop [--services]")
@@ -425,7 +425,7 @@ func processBrokerClient() *broker.Client {
 // needs to run the broker, for the person to install. The default is launchd on macOS
 // and systemd elsewhere.
 func brokerUnits(ctx context.Context, args []string) error {
-	rest, err := cmdParse("broker units", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("broker units", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus broker units [systemd|launchd] [flags]")
 			fmt.Fprintln(os.Stderr, "")

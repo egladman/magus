@@ -27,9 +27,9 @@ func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM;
 const harnessSchemaVersion = 2
 
 // loadHarnessFromSpell builds a HarnessDescriptor from the harness contract's functions on
-// the spell registered under id. A spell not registered under id, or one that does not
-// export mgs_getHarnessConfig, is a miss (ok=false); every other function the spell leaves
-// out is a capability its host lacks, and leaves its field empty.
+// the spell registered under id. Missing mgs_getHarnessConfig is a miss (ok=false).
+// Missing mgs_renderPrompts is an error: it used to decode as the empty list a
+// hook-prompting host returns. Any other omission is a capability the host lacks.
 func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
 	drv, ok := project.DefaultSpellRegistry().Lookup(id)
 	if !ok {
@@ -72,8 +72,12 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	if d.Settings, _, err = callHarness[[]types.Setting](ctx, drv, "mgs_listSettings"); err != nil {
 		return fail(err)
 	}
-	if d.Prompts, _, err = callHarness[[]types.Prompt](ctx, drv, "mgs_renderPrompts", ffi.StrMapVal(humanOnlyReasons(ctx))); err != nil {
+	var exported bool
+	if d.Prompts, exported, err = callHarness[[]types.Prompt](ctx, drv, "mgs_renderPrompts", ffi.StringMapVal(humanOnlyReasons(ctx))); err != nil {
 		return fail(err)
+	}
+	if !exported {
+		return fail(fmt.Errorf("does not export mgs_renderPrompts: return the native approval files, or an empty list when the hook itself prompts"))
 	}
 	// The model rows come first: the agents magus ships run on the one a row names for the
 	// cheapest tier.

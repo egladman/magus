@@ -22,10 +22,10 @@ const (
 	baseB      = "b0000000000000000000000000000000000000000"
 )
 
-// execRepo is a git checkout for a store to exec in: Exec reads its base from the tree.
-func execRepo(t *testing.T) *testkit.Repo {
+// execRepository is a git checkout for a store to exec in: Exec reads its base from the tree.
+func execRepository(t *testing.T) *testkit.Repo {
 	t.Helper()
-	return testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	return testkit.NewRepository(t, map[string]string{"a.txt": "a\n"})
 }
 
 // checkoutToken is the token `magus vcs checkpoint -o name` prints for the checkout at
@@ -98,7 +98,7 @@ func TestStoreExec(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			repo := execRepo(t)
+			repo := execRepository(t)
 			checkpoint := tt.checkpoint(repo)
 			if tt.work != nil {
 				tt.work(repo)
@@ -150,7 +150,7 @@ func TestExecReadsTheBaseFromTheCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	clean := repo.Head()
 	repo.WriteTree(map[string]string{"a.txt": "a edited\n"})
 	s := tempStore(t, repo.Root())
@@ -173,7 +173,7 @@ func TestStoreExecReopensAnExitedRowInItsOwnCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	s := tempStore(t, repo.Root())
 	seed(t, s, types.Job{ID: "u1", Checkpoint: repo.Head(), State: types.StateDeclared})
 	taken, err := s.Exec(ctx, "u1")
@@ -194,7 +194,7 @@ func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	s := tempStore(t, repo.Root())
 	seed(t, s, types.Job{ID: "declared", Checkpoint: repo.Head()})
 
@@ -237,7 +237,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	handed := repo.Head()
 	repo.Commit("elsewhere", map[string]string{"b.txt": "b\n"})
 	s := tempStore(t, repo.Root())
@@ -283,7 +283,7 @@ func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			repo := execRepo(t)
+			repo := execRepository(t)
 			checkpoint := baseB
 			if tt.short {
 				checkpoint = repo.Head()[:9]
@@ -305,7 +305,7 @@ func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
 func TestStoreExecRefusesAnEndedJob(t *testing.T) {
 	t.Parallel()
 
-	repo := execRepo(t)
+	repo := execRepository(t)
 	for _, state := range []types.JobState{types.StatePass, types.StateFail, types.StateNoReturn} {
 		s := tempStore(t, repo.Root())
 		seed(t, s, types.Job{ID: "u1", Checkpoint: repo.Head(), State: state})
@@ -336,7 +336,7 @@ func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
-			repo := execRepo(t)
+			repo := execRepository(t)
 			root := repo.Root()
 			rev := repo.Head()
 			for name, body := range tt.edits {
@@ -458,7 +458,7 @@ func TestStoreExecTakesAJobForkedInAnotherCheckout(t *testing.T) {
 // returns the revision both are on.
 func twoCheckouts(t *testing.T) (main, worktree Location, head string) {
 	t.Helper()
-	repo := execRepo(t)
+	repo := execRepository(t)
 	main = tempLocation(t, repo.Root())
 	worktree = main
 	worktree.Root = repo.AddWorktree("w").Root()
@@ -470,7 +470,7 @@ func twoCheckouts(t *testing.T) (main, worktree Location, head string) {
 func TestStoreExecByItsBoundHolderStartsTheJob(t *testing.T) {
 	t.Parallel()
 
-	repo := execRepo(t)
+	repo := execRepository(t)
 	loc := tempLocation(t, repo.Root())
 	seed(t, NewStore(loc), types.Job{ID: "u1", Checkpoint: repo.Head(), State: types.StateDeclared})
 

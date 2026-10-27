@@ -36,13 +36,13 @@ func RegisterMerge(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("json", vm.DirectValue("merge.json", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := ffi.Str(bzArgs, 0)
-		overlay := ffi.Str(bzArgs, 1)
+		base := ffi.String(bzArgs, 0)
+		overlay := ffi.String(bzArgs, 1)
 		ret0, err := std.MergeJSON(ctx, base, overlay)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

@@ -16,7 +16,7 @@ func files(contents map[string]string) func(string) (string, bool) {
 	}
 }
 
-func referencedFrom(s types.KnowledgeSymbol, paths ...string) types.KnowledgeSymbol {
+func referencedSymbol(s types.KnowledgeSymbol, paths ...string) types.KnowledgeSymbol {
 	for _, p := range paths {
 		s.Refs = append(s.Refs, types.KnowledgeSymbolRef{Path: p, Count: 1})
 	}
@@ -26,7 +26,7 @@ func referencedFrom(s types.KnowledgeSymbol, paths ...string) types.KnowledgeSym
 // The miss TestCommentsNameSymbolsThatExist found on its first run: TrackDependencyWait became
 // WithDependencyWait, and comments in files the rename had otherwise touched kept the old name.
 func TestConformanceFindsARenameLeftover(t *testing.T) {
-	subj := referencedFrom(goSym("types", "WithDependencyWait().", "WithDependencyWait", "Function",
+	subj := referencedSymbol(goSym("types", "WithDependencyWait().", "WithDependencyWait", "Function",
 		"func WithDependencyWait(ctx context.Context, d time.Duration) context.Context", "types/target.go"),
 		"internal/run/wait.go", "internal/run/wait_test.go")
 	g := namingGraph(t, []types.KnowledgeSymbol{subj})
@@ -49,7 +49,7 @@ func TestConformanceFindsARenameLeftover(t *testing.T) {
 }
 
 func TestConformanceFindsARenameLeftoverInTypeScript(t *testing.T) {
-	subj := referencedFrom(tsSym("plan.ts", "applyPlan", "function applyPlan(p: Plan): void"), "web/src/queue.ts")
+	subj := referencedSymbol(tsSym("plan.ts", "applyPlan", "function applyPlan(p: Plan): void"), "web/src/queue.ts")
 	g := namingGraph(t, []types.KnowledgeSymbol{subj})
 	read := files(map[string]string{
 		"web/src/plan.ts":  "export function applyPlan(p: Plan): void {}\n",
@@ -68,9 +68,9 @@ func TestConformanceFindsARenameLeftoverInTypeScript(t *testing.T) {
 }
 
 func TestConformanceSilentOnRenamesItCannotTellApart(t *testing.T) {
-	longer := referencedFrom(ctxReader("internal/trail", "EntryPointFromContext"), "internal/cmd/run.go")
-	oneWord := referencedFrom(goFunc("internal/queue", "Apply", "func Apply(p Plan) error"), "internal/cmd/run.go")
-	shared := referencedFrom(goFunc("internal/vcs", "ReadFileAt", "func ReadFileAt(path string) string"), "internal/cmd/run.go")
+	longer := referencedSymbol(contextReader("internal/trail", "EntryPointFromContext"), "internal/cmd/run.go")
+	oneWord := referencedSymbol(goFunc("internal/queue", "Apply", "func Apply(p Plan) error"), "internal/cmd/run.go")
+	shared := referencedSymbol(goFunc("internal/vcs", "ReadFileAt", "func ReadFileAt(path string) string"), "internal/cmd/run.go")
 	// Another casing of the old name is still a live symbol, which a mention may mean.
 	survivor := goFunc("internal/other", "openFileAt", "func openFileAt(path string) string")
 	g := namingGraph(t, []types.KnowledgeSymbol{longer, oneWord, shared, survivor})

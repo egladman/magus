@@ -18,23 +18,23 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("encode", vm.DirectValue("url.encode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := url.URLEncode(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("decode", vm.DirectValue("url.decode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
+		s := ffi.String(bzArgs, 0)
 		ret0, err := url.URLDecode(ctx, s)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("parse", vm.DirectValue("url.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		raw_url := ffi.Str(bzArgs, 0)
+		raw_url := ffi.String(bzArgs, 0)
 		ret0, err := url.URLParse(ctx, raw_url)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -47,7 +47,7 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

@@ -208,7 +208,8 @@ func TestNewKindsMeetTheRulesThatFitThem(t *testing.T) {
 		{
 			KindCommitMessage,
 			[]Rule{RuleFiller, RuleHedge, RuleWordy, RuleBuzzword, RuleBlame, RuleAbsolute, RuleClaim, RuleVerdict,
-				RuleIntent, RuleSubjectMood, RuleSubjectLength, RuleSubjectPeriod, RuleBodySeparator},
+				RuleIntent, RuleSubjectMood, RuleSubjectLength, RuleSubjectPeriod, RuleBodySeparator,
+				RuleSubjectCase, RuleSubjectPunct, RuleNoBody},
 			[]Rule{RuleLeadContext, RuleCredit, RuleStaccato, RuleHeadingCase, RuleChangelogGroup, RuleHelpSentence},
 		},
 		{

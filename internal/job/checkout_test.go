@@ -76,11 +76,11 @@ func loadableRoot(t *testing.T) string {
 	return w.Root()
 }
 
-// loadableRepo is loadableRoot committed to a git repository, for a fixture that execs:
+// loadableRepository is loadableRoot committed to a git repository, for a fixture that execs:
 // Exec reads its base from the checkout.
-func loadableRepo(t *testing.T) string {
+func loadableRepository(t *testing.T) string {
 	t.Helper()
-	return testkit.NewRepo(t, loadableFiles).Root()
+	return testkit.NewRepository(t, loadableFiles).Root()
 }
 
 var loadableFiles = map[string]string{
@@ -106,7 +106,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRepo(t)
+	root := loadableRepository(t)
 	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	limits := config.Jobs{}
@@ -149,7 +149,7 @@ func TestForkIntoItsOwnCheckoutJudgesThatCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRepo(t)
+	root := loadableRepository(t)
 	s := NewStore(tempLocation(t, root))
 	limits := config.Jobs{}
 
@@ -188,7 +188,7 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRepo(t)
+	root := loadableRepository(t)
 	loc := tempLocation(t, root)
 	s := NewStore(loc)
 
@@ -317,7 +317,7 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			root := loadableRepo(t)
+			root := loadableRepository(t)
 			s := NewStore(tempLocation(t, root))
 
 			done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
@@ -344,7 +344,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRepo(t)
+	root := loadableRepository(t)
 	s := NewStore(tempLocation(t, root))
 	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
@@ -357,7 +357,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 
 	ps := sharedCheckoutProblems(s, rows, types.Job{ID: "wave/worker-two", WritePaths: []string{"magusfile.buzz"}})
 	require.Len(t, ps, 1)
-	require.ErrorIs(t, ps.Err(), types.CheckoutConfigHeld)
+	require.ErrorIs(t, ps.Error(), types.CheckoutConfigHeld)
 	assert.Contains(t, ps[0].Message, "wave/worker-one is live in this checkout (")
 	assert.Contains(t, ps[0].Message, "; running, updated")
 	assert.Contains(t, ps[0].Message, "wave/worker-one has changed nothing under internal/job/store.go")
@@ -376,7 +376,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 
 	t.Run("a dry run files no request", func(t *testing.T) {
 		t.Parallel()
-		root := loadableRepo(t)
+		root := loadableRepository(t)
 		s := NewStore(tempLocation(t, root))
 		held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
@@ -778,7 +778,7 @@ func TestIntegrationAdviceCountsOnlyTheForkersOwnTree(t *testing.T) {
 	t.Parallel()
 	s, loc, repo := worktreeStore(t)
 	main := repo.Git("symbolic-ref", "--short", "HEAD")
-	peerRoot := execRepo(t).Root()
+	peerRoot := execRepository(t).Root()
 	peer := NewStore(Location{StateBase: loc.StateBase, CacheDir: loc.CacheDir, Root: peerRoot})
 	for _, name := range []string{"mine-a", "mine-b", "peer-a"} {
 		repo.Git("switch", "-q", "-c", name, main)

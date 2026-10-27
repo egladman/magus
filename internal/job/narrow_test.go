@@ -42,7 +42,7 @@ var configFiles = map[string]string{
 func TestRefuseWholeFileConfigClaims(t *testing.T) {
 	t.Parallel()
 
-	root := testkit.NewRepo(t, configFiles).Root()
+	root := testkit.NewRepository(t, configFiles).Root()
 	for _, tc := range []struct {
 		name  string
 		paths []string
@@ -94,13 +94,13 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 
 	t.Run("a checkout that places no line of either", func(t *testing.T) {
 		t.Parallel()
-		bare := testkit.NewRepo(t, map[string]string{"magusfile.buzz": configMagusfile, "magus.yaml": "jobs:\n  stale_after: 2h\n"}).Root()
+		bare := testkit.NewRepository(t, map[string]string{"magusfile.buzz": configMagusfile, "magus.yaml": "jobs:\n  stale_after: 2h\n"}).Root()
 		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, bare)), types.Job{ID: "wave/job", WritePaths: []string{"magusfile.buzz", "magus.yaml"}}))
 	})
 
 	t.Run("a magus.yaml that declares nothing yet", func(t *testing.T) {
 		t.Parallel()
-		empty := testkit.NewRepo(t, map[string]string{".gitattributes": "*.yaml diff=yaml\n", "magus.yaml": "{}\n"}).Root()
+		empty := testkit.NewRepository(t, map[string]string{".gitattributes": "*.yaml diff=yaml\n", "magus.yaml": "{}\n"}).Root()
 		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, empty)), types.Job{ID: "wave/job", WritePaths: []string{"magus.yaml"}}))
 	})
 }
@@ -108,7 +108,7 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 func TestNarrowConfigHold(t *testing.T) {
 	t.Parallel()
 
-	root := testkit.NewRepo(t, configFiles).Root()
+	root := testkit.NewRepository(t, configFiles).Root()
 	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
@@ -159,8 +159,8 @@ func TestNarrowConfigHold(t *testing.T) {
 func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	t.Parallel()
 
-	root := testkit.NewRepo(t, configFiles).Root()
-	elsewhere := testkit.NewRepo(t, configFiles)
+	root := testkit.NewRepository(t, configFiles).Root()
+	elsewhere := testkit.NewRepository(t, configFiles)
 	s := NewStore(tempLocation(t, root))
 	seed(t, s, types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Checkpoint: elsewhere.Head(), CheckoutRoot: elsewhere.Root()})
 	fork := func(id string, paths ...string) error {

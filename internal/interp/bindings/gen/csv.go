@@ -18,23 +18,23 @@ func RegisterCsv(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("csv.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		s := ffi.Str(bzArgs, 0)
-		delimiter := ffi.Str(bzArgs, 1)
-		comment := ffi.Str(bzArgs, 2)
+		s := ffi.String(bzArgs, 0)
+		delimiter := ffi.String(bzArgs, 1)
+		comment := ffi.String(bzArgs, 2)
 		ret0, err := csv.CSVParse(ctx, s, delimiter, comment)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrSliceSliceVal(ret0), nil
+		return ffi.StringSliceSliceVal(ret0), nil
 	}))
 	m.MapSet("stringify", vm.DirectValue("csv.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		rows := ffi.StrSliceSlice(bzArgs, 0)
-		delimiter := ffi.Str(bzArgs, 1)
+		rows := ffi.StringSliceSlice(bzArgs, 0)
+		delimiter := ffi.String(bzArgs, 1)
 		ret0, err := csv.CSVStringify(ctx, rows, delimiter)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StrVal(ret0), nil
+		return ffi.StringVal(ret0), nil
 	}))
 	return m
 }

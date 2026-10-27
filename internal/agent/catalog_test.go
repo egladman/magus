@@ -555,8 +555,8 @@ func TestApplyVariantResolvesCommandsThroughTheRegistry(t *testing.T) {
 // this process's argv0. A skill is read in another checkout, where ./magus is a path
 // to something else or to nothing.
 func TestApplyVariantRendersCommandsForTheReadersPath(t *testing.T) {
-	hint.ResolveBinaryNameFrom("./magus")
-	t.Cleanup(func() { hint.ResolveBinaryNameFrom(hint.DefaultBinaryName) })
+	hint.ResolveBinaryName("./magus")
+	t.Cleanup(func() { hint.ResolveBinaryName(hint.DefaultBinaryName) })
 	require.Equal(t, "./magus", hint.BinaryName(), "the test needs the argv0 spelling actually set")
 
 	got, err := applyVariant("s", `{{cmd "doctor"}}`, types.SkillVariantShort)
@@ -804,8 +804,8 @@ func TestGradeDestNamesALeftoverDirectoryAndItsFix(t *testing.T) {
 	require.NoError(t, os.WriteFile(lockedSkill, []byte("mine\n"), 0o644))
 	require.NoError(t, os.Chmod(lockedSkill, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(lockedSkill, 0o644) })
-	_, readErr := os.ReadFile(lockedSkill)
-	require.Error(t, readErr)
+	_, readError := os.ReadFile(lockedSkill)
+	require.Error(t, readError)
 
 	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: types.SkillFormBoth})
 
@@ -813,7 +813,7 @@ func TestGradeDestNamesALeftoverDirectoryAndItsFix(t *testing.T) {
 		Location:      dest,
 		Installed:     true,
 		Stale:         true,
-		Detail:        fmt.Sprintf("magus-empty: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir %s; magus-locked: cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", filepath.Join(dest, "magus-empty"), readErr, filepath.Join(dest, "magus-locked")),
+		Detail:        fmt.Sprintf("magus-empty: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir %s; magus-locked: cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", filepath.Join(dest, "magus-empty"), readError, filepath.Join(dest, "magus-locked")),
 		Leftovers:     []string{filepath.Join(dest, "magus-empty"), filepath.Join(dest, "magus-locked")},
 		OnlyLeftovers: true,
 	}, got)

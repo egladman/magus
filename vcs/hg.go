@@ -454,8 +454,8 @@ func (v hgVCS) start(ctx context.Context, dir, bad, good string) error {
 	return run("bisect", "--good", good)
 }
 
-func (v hgVCS) run(ctx context.Context, dir, shellCmd string) error {
-	cmd := vcsExec(ctx, "hg", "bisect", "--command", shellCmd)
+func (v hgVCS) run(ctx context.Context, dir, shellCommand string) error {
+	cmd := vcsExec(ctx, "hg", "bisect", "--command", shellCommand)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr

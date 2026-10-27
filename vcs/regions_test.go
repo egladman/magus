@@ -156,11 +156,11 @@ func TestRegions(t *testing.T) {
 		{
 			name: "new, untracked, deleted and binary files",
 			edit: func(t *testing.T, dir string) {
-				writeRepoFile(t, dir, "added.go", "package a\n\nfunc D() {}\n")
+				writeRepositoryFile(t, dir, "added.go", "package a\n\nfunc D() {}\n")
 				gitRun(t, dir, "add", "--", "added.go")
-				writeRepoFile(t, dir, "untracked.go", "package a\n\nfunc E() {\n}\n")
+				writeRepositoryFile(t, dir, "untracked.go", "package a\n\nfunc E() {\n}\n")
 				require.NoError(t, os.Remove(filepath.Join(dir, "doc.md")))
-				writeRepoFile(t, dir, "blob.bin", "\x00\x01\x02changed")
+				writeRepositoryFile(t, dir, "blob.bin", "\x00\x01\x02changed")
 			},
 			want: []types.RegionChange{
 				region("added.go", now, 1, 2, "", "golang"),
@@ -177,8 +177,8 @@ func TestRegions(t *testing.T) {
 			edit: func(t *testing.T, dir string) {
 				replaceIn(t, dir, "a.go", "return 1", "return 10")
 				replaceIn(t, dir, "sub/s.txt", "s", "S")
-				writeRepoFile(t, dir, "sub/new.txt", "n\n")
-				writeRepoFile(t, dir, "elsewhere.txt", "e\n")
+				writeRepositoryFile(t, dir, "sub/new.txt", "n\n")
+				writeRepositoryFile(t, dir, "elsewhere.txt", "e\n")
 			},
 			files: []types.FileChange{{Path: "sub/new.txt"}, {Path: "sub/s.txt"}, {Path: "plain.txt"}},
 			want: []types.RegionChange{
@@ -190,7 +190,7 @@ func TestRegions(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := testkit.NewRepo(t, map[string]string{
+			dir := testkit.NewRepository(t, map[string]string{
 				".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.spell diff=spell\n",
 				"a.go":           regionsGo,
 				"plain.txt":      regionsGo,
@@ -217,8 +217,8 @@ func TestRegions(t *testing.T) {
 
 // Regions refine files, so no files is nothing to refine, never the whole tree.
 func TestRegionsOfNoFilesIsNothing(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
-	writeRepoFile(t, dir, "a.txt", "b\n")
+	dir := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"}).Root()
+	writeRepositoryFile(t, dir, "a.txt", "b\n")
 
 	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", nil)
 	require.NoError(t, err)
@@ -226,8 +226,8 @@ func TestRegionsOfNoFilesIsNothing(t *testing.T) {
 }
 
 func TestRegionsRefusesABaseItCannotResolve(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
-	writeRepoFile(t, dir, "a.txt", "b\n")
+	dir := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"}).Root()
+	writeRepositoryFile(t, dir, "a.txt", "b\n")
 	files := []types.FileChange{{Path: "a.txt"}}
 
 	_, err := gitVCS{}.Regions(t.Context(), dir, "no-such-rev", files)
@@ -243,14 +243,14 @@ func TestRegionsRefusesABaseItCannotResolve(t *testing.T) {
 // still yields nothing, where diffing against base itself would report base's own commit
 // reversed.
 func TestRegionsStayInsideTheFilesGiven(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{"mine.txt": "a\n", "theirs.txt": "a\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{"mine.txt": "a\n", "theirs.txt": "a\n"}).Root()
 	gitRun(t, dir, "switch", "-q", "-c", "work")
 	gitRun(t, dir, "switch", "-q", "main")
-	writeRepoFile(t, dir, "theirs.txt", "b\n")
+	writeRepositoryFile(t, dir, "theirs.txt", "b\n")
 	gitRun(t, dir, "commit", "-q", "-am", "main moves on")
 	gitRun(t, dir, "switch", "-q", "work")
-	writeRepoFile(t, dir, "mine.txt", "b\n")
-	writeRepoFile(t, dir, "new.txt", "c\n")
+	writeRepositoryFile(t, dir, "mine.txt", "b\n")
+	writeRepositoryFile(t, dir, "new.txt", "c\n")
 
 	changed := changedFileChanges(t, dir, "main")
 	require.ElementsMatch(t, []types.FileChange{{Path: "mine.txt"}, {Path: "new.txt"}}, changed)
@@ -269,7 +269,7 @@ func TestRegionsStayInsideTheFilesGiven(t *testing.T) {
 }
 
 func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "a.go": regionsGo}).Root()
+	dir := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "a.go": regionsGo}).Root()
 	for k, v := range map[string]string{
 		"diff.noprefix": "true", "diff.relative": "true", "diff.interHunkContext": "10",
 		"diff.algorithm": "myers", "diff.indentHeuristic": "false", "color.ui": "always",
@@ -294,7 +294,7 @@ func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
 // Regions places a checkout's, from the attributes of the repository it is handed; the
 // checkout's own copy of the file is never read.
 func TestRegionsBetween(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.buzz diff=buzz\n", "a.go": "package gone\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.buzz diff=buzz\n", "a.go": "package gone\n"}).Root()
 	edited := strings.Replace(regionsGo, "return 2", "return 20", 1)
 	added := regionsGo + "\nfunc D() {\n}\n"
 	was, now := types.RegionOld, types.RegionNew
@@ -392,7 +392,7 @@ func TestRegionsBetween(t *testing.T) {
 }
 
 func TestDrivers(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.txt -diff\n*.md diff\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n*.txt -diff\n*.md diff\n"}).Root()
 
 	got, err := gitVCS{}.Drivers(t.Context(), dir, []string{"a.go", "sub/b.go", "c.txt", "d.md", "e.rs"})
 	require.NoError(t, err)
@@ -421,7 +421,7 @@ func replaceIn(t *testing.T, dir, name, from, to string) {
 	body, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(string(body), from), "%q in %s", from, name)
-	writeRepoFile(t, dir, name, strings.Replace(string(body), from, to, 1))
+	writeRepositoryFile(t, dir, name, strings.Replace(string(body), from, to, 1))
 }
 
 // git's funcname matching sees `var i = 0;` at column 0 inside a raw string and names it a
@@ -443,7 +443,7 @@ func TestPlacementSkipsGoStringsAndComments(t *testing.T) {
 // Regions name declarations in a test file, in a file under a build tag in a nested
 // module, and in a Go file whose raw string holds Buzz, by the Go declaration around it.
 func TestRegionsOfTestsTaggedFilesAndEmbeddedBuzz(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{
+	dir := testkit.NewRepository(t, map[string]string{
 		".gitattributes":         "*.go diff=golang\n",
 		"go.mod":                 "module example.com/m\n",
 		"a_test.go":              "package a\n\nfunc TestA(t *testing.T) {\n\tcheck(1)\n}\n",
@@ -575,7 +575,7 @@ func TestPlaceProjectKeys(t *testing.T) {
 // A footprint names an edit inside one target's settings by its key path, which is what a
 // `magusfile.buzz#project.targets.test` claim names.
 func TestRegionsBetweenNamesProjectKeys(t *testing.T) {
-	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.buzz diff=buzz\n"}).Root()
+	dir := testkit.NewRepository(t, map[string]string{".gitattributes": "*.buzz diff=buzz\n"}).Root()
 	after := []byte(strings.Replace(projectMagusfile, `"timeout": "25m"`, `"timeout": "30m"`, 1))
 	got, err := gitVCS{}.RegionsBetween(t.Context(), dir, "magusfile.buzz", []byte(projectMagusfile), after)
 	require.NoError(t, err)

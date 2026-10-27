@@ -18,11 +18,11 @@ func RegisterFlags(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("flags.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		argv := ffi.StrSlice(bzArgs, 0)
-		switches := ffi.StrSlice(bzArgs, 1)
-		valued := ffi.StrSlice(bzArgs, 2)
-		required := ffi.StrSlice(bzArgs, 3)
-		repeated := ffi.StrSlice(bzArgs, 4)
+		argv := ffi.StringSlice(bzArgs, 0)
+		switches := ffi.StringSlice(bzArgs, 1)
+		valued := ffi.StringSlice(bzArgs, 2)
+		required := ffi.StringSlice(bzArgs, 3)
+		repeated := ffi.StringSlice(bzArgs, 4)
 		command := ffi.Bool(bzArgs, 5, false)
 		ret0, err := std.FlagsParse(ctx, argv, switches, valued, required, repeated, command)
 		if err != nil {

@@ -422,8 +422,8 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 			}
 			got, err := regenerateIn(t.Context(), d.vcs, s, b, regenerate, []string{"gen"})
 			if restored {
-				content, readErr := os.ReadFile(filepath.Join(dir, ".gitattributes"))
-				require.NoError(t, readErr)
+				content, readError := os.ReadFile(filepath.Join(dir, ".gitattributes"))
+				require.NoError(t, readError)
 				assert.Equal(t, "the change's\n", string(content))
 			}
 			if tc.wantErr != "" {
@@ -564,10 +564,10 @@ func TestFetchHeadFallsBackToTheCommitWhenTheRefMoved(t *testing.T) {
 	require.EqualError(t, fetchHead(t.Context(), d.vcs, clone, c), "not found")
 }
 
-// gitRepo commits files into a new git repository and returns it and the commit.
-func gitRepo(t *testing.T, files map[string]string) (string, string) {
+// gitRepository commits files into a new git repository and returns it and the commit.
+func gitRepository(t *testing.T, files map[string]string) (string, string) {
 	t.Helper()
-	r := testkit.NewRepo(t, files)
+	r := testkit.NewRepository(t, files)
 	return r.Root(), r.Head()
 }
 
@@ -584,7 +584,7 @@ func gitDriver(t *testing.T, root string) types.BuildVCS {
 // checkout's .git at a repository whose config runs a program under any git that
 // discovers it. The queue's own git never does: the change is refused, and nothing ran.
 func TestARegenerationThatRewritesTheGitfileIsRefused(t *testing.T) {
-	root, commit := gitRepo(t, map[string]string{"gen/a.go": "stale\n"})
+	root, commit := gitRepository(t, map[string]string{"gen/a.go": "stale\n"})
 	drv := gitDriver(t, root)
 	cand, err := checkout(t.Context(), drv, root, t.TempDir(), "candidate-1", commit)
 	require.NoError(t, err)

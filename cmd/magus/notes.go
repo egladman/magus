@@ -35,7 +35,7 @@ import (
 // it, now or in a year. That is exactly why the write path is a human in an editor and not
 // an API. `put` is the affordance an agent reaches for first, so its absence is the design,
 // not an omission: `edit` opens $EDITOR and gets out of the way.
-func notesCmd(ctx context.Context, root string, args []string) error {
+func notesCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		notesUsage()
 		return nil
@@ -265,7 +265,7 @@ type notesListOutput struct {
 func notesList(ctx context.Context, root string, args []string) error {
 	var onlyShared, onlyPrivate, reproducible *bool
 	var tags tagList
-	_, err := cmdParse("notes ls", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("notes ls", args, func(fs *flag.FlagSet) {
 		onlyShared, onlyPrivate = notesScopeFlags(fs)
 		reproducible = fs.Bool("reproducible", false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
 		fs.Var(&tags, "tag", "Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)")
@@ -361,7 +361,7 @@ func notesList(ctx context.Context, root string, args []string) error {
 
 func notesGet(ctx context.Context, root string, args []string) error {
 	var getShared, getPrivate *bool
-	pos, err := cmdParse("notes get", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("notes get", args, func(fs *flag.FlagSet) {
 		getShared, getPrivate = notesScopeFlags(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus notes get <name> [flags]")
@@ -419,7 +419,7 @@ func notesGet(ctx context.Context, root string, args []string) error {
 func notesEdit(ctx context.Context, root string, args []string) error {
 	var editShared, editPrivate *bool
 	var anchors stringList
-	pos, err := cmdParse("notes edit", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("notes edit", args, func(fs *flag.FlagSet) {
 		editShared, editPrivate = notesScopeFlags(fs)
 		fs.Var(&anchors, "anchor", "Anchor as kind:target (repeatable), e.g. --anchor symbol:'m pkg/Type#Method().' - required when writing a NEW note from stdin")
 		fs.Usage = func() {
@@ -553,7 +553,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 func notesVerify(ctx context.Context, root string, args []string) error {
 	var vShared, vPrivate *bool
 	var strict bool
-	_, err := cmdParse("notes verify", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("notes verify", args, func(fs *flag.FlagSet) {
 		vShared, vPrivate = notesScopeFlags(fs)
 		// Dangling only, and never drift. A dangling anchor is unambiguous, always fixable,
 		// and its cause is in the diff that broke it: the properties a gate needs. Drift is
@@ -840,7 +840,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	var anchors stringList
 	var gap bool
 	var shared, private *bool
-	pos, err := cmdParse("notes capture", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("notes capture", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&title, "title", "", "Title for the note (defaults to naming the reviewed base)")
 		fs.StringVar(&name, "name", "", "Note name (defaults to review-<patch digest>)")
 		fs.Var(&tags, "tag", "Tag to set on the note; repeatable")

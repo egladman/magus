@@ -105,7 +105,7 @@ func TestServiceInsightCacheHit(t *testing.T) {
 	view := types.InsightView{Hotspots: types.HotspotOutput{Commits: 7}}
 	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0",
 		WithInsightTTL(time.Minute),
-		WithInsightFn(func(context.Context) (types.InsightView, error) {
+		WithInsightFunction(func(context.Context) (types.InsightView, error) {
 			calls.Add(1)
 			return view, nil
 		}),
@@ -131,7 +131,7 @@ func TestServiceInsightCacheExpires(t *testing.T) {
 	var calls atomic.Int64
 	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0",
 		WithInsightTTL(time.Millisecond),
-		WithInsightFn(func(context.Context) (types.InsightView, error) {
+		WithInsightFunction(func(context.Context) (types.InsightView, error) {
 			calls.Add(1)
 			return types.InsightView{}, nil
 		}),
@@ -150,7 +150,7 @@ func TestServiceInsightCacheDisabled(t *testing.T) {
 	var calls atomic.Int64
 	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0",
 		WithInsightTTL(0),
-		WithInsightFn(func(context.Context) (types.InsightView, error) {
+		WithInsightFunction(func(context.Context) (types.InsightView, error) {
 			calls.Add(1)
 			return types.InsightView{}, nil
 		}),

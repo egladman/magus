@@ -40,11 +40,11 @@ func move(t *testing.T, m *Model, key rune) bool {
 	case ']':
 		return m.nextHunk()
 	case '[':
-		return m.prevHunk()
+		return m.previousHunk()
 	case '}':
 		return m.nextFile()
 	case '{':
-		return m.prevFile()
+		return m.previousFile()
 	}
 	t.Fatalf("unknown move %q", key)
 	return false
@@ -257,7 +257,7 @@ func TestShortViewportKeepsTheCursorInView(t *testing.T) {
 	}
 	// And back, which is the direction a follow-forward-only implementation gets wrong.
 	for range 4 {
-		m.prevHunk()
+		m.previousHunk()
 		require.GreaterOrEqual(t, m.CursorRow(), m.Top())
 		require.Less(t, m.CursorRow(), m.Top()+m.Height())
 	}
@@ -343,9 +343,9 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	assert.Equal(t, -1, m.CursorRow())
 	assert.Equal(t, types.DiffCursor{Hunk: -1}, m.cursor())
 	assert.False(t, m.nextHunk())
-	assert.False(t, m.prevHunk())
+	assert.False(t, m.previousHunk())
 	assert.False(t, m.nextFile())
-	assert.False(t, m.prevFile())
+	assert.False(t, m.previousFile())
 	_, ok := m.toggleViewed()
 	assert.False(t, ok)
 	m.toggleOverview()

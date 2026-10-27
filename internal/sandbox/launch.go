@@ -109,16 +109,16 @@ func (p *Policy) KernelConfines() (bool, error) {
 	}
 	switch {
 	case err != nil:
-		return false, ErrRequired(p.Workspace, "the kernel cannot confine its children: "+err.Error())
+		return false, ErrorRequired(p.Workspace, "the kernel cannot confine its children: "+err.Error())
 	case abi < RequiredABI:
-		return false, ErrRequired(p.Workspace, fmt.Sprintf("the kernel's landlock ABI is %d, below the %d it needs", abi, RequiredABI))
+		return false, ErrorRequired(p.Workspace, fmt.Sprintf("the kernel's landlock ABI is %d, below the %d it needs", abi, RequiredABI))
 	}
 	return true, nil
 }
 
-// ErrRequired returns the MGS2012 refusal of a required sandbox for the workspace at
+// ErrorRequired returns the MGS2012 refusal of a required sandbox for the workspace at
 // root, why saying what stands in the way. root may be empty.
-func ErrRequired(root, why string) error {
+func ErrorRequired(root, why string) error {
 	subject := "sandbox mode is required"
 	if root != "" {
 		subject += " for " + root

@@ -291,6 +291,26 @@ Everything else is additive. A host missing a file-write hook still gets every
 command rule, and adding one later changes no magus code, because the rules and
 the verdict already exist and only the wrapper is host-shaped.
 
+### Contract functions that stay on the host that has them
+
+The four host spells do not export the same optional functions. Each absence
+below was checked against the contract. Each one is the host.
+
+`mgs_listModels` is Claude Code's, written by hand from its price page. A
+harness that publishes none contributes no facts about a model, and that is
+not an error. `claude-opus-5-5-high` is one id cursor sends and no Claude
+row names. Copying the Claude rows onto the other hosts would map ids those
+hosts do not send. A row for another host waits on a cited price page, the
+way Claude Code's did. `agents.models` in `magus.yaml` is the fill the Claude
+spell already names for a model released after the rows.
+
+`mgs_getLimits` is Claude Code's and Cursor's. Zero means the host does not
+declare that limit, so Codex and OpenCode omit the function.
+
+Tool rows name each host's own tools. Parity is the same rules, not the same
+tool names. `claude-code-mod` is the plugin's settings spell. It is not a
+fifth copy of the host contract.
+
 ## Project references
 
 A project reference is a workspace-relative path, written bare: `pkg/api`. That

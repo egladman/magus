@@ -17,7 +17,7 @@ import (
 // switch` to that revision: neither discards anything there. A dirty tree, a live job, a
 // reset with no revision or one relocated with -C stays whole-tree's.
 func TestHardResetOnACleanUnboundTreeIsJudgedAsASwitch(t *testing.T) {
-	r := newWorktreeRepo(t)
+	r := newWorktreeRepository(t)
 	judge := func(command string, rows ...types.Job) ShellVerdict {
 		ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows})
 		at := location{cacheDir: t.TempDir(), workspace: r.main, dir: r.main}

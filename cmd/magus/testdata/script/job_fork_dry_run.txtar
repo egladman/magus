@@ -2,7 +2,7 @@
 # once, each with its code and fix, then the record as it would be stored. It exits 1 while
 # any problem remains and writes no row. A real fork with the same problems prints the
 # same list and writes nothing either. A deviation accepts a broad write path, and the dry run
-# names it.
+# counts it; JSON keeps its details.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus init -local -vcs git
@@ -46,8 +46,15 @@ exec magus ls jobs -o name
 stdin $WORK/broad.json
 exec magus job fork --stdin --dry-run
 stdout '^no problems$'
-stdout '^permitted 1:$'
-stdout 'permitted: the job tunes every Go file'
+stdout '^permitted 1 \(recorded deviations; -o json includes the details\)$'
+exec magus ls jobs -o name
+! stdout .
+
+stdin $WORK/broad.json
+exec magus job fork --stdin --dry-run -o json
+stdout '"permitted"'
+stdout '"code": "MGS3043"'
+stdout '"reason": "the job tunes every Go file"'
 exec magus ls jobs -o name
 ! stdout .
 

@@ -88,7 +88,7 @@ export final agree = lib.firstcell == lib.storage;
 	assert.True(t, ratio.IsFloat(), "ratio IsFloat")
 	assert.Equal(t, 0.5, ratio.AsFloat(), "ratio")
 	greeting := exp["greeting"]
-	assert.True(t, greeting.IsStr(), "greeting IsStr")
+	assert.True(t, greeting.IsString(), "greeting IsStr")
 	assert.Equal(t, "hello", greeting.AsString(), "greeting")
 	agree := exp["agree"]
 	assert.True(t, agree.IsBool(), "agree IsBool")
@@ -204,7 +204,7 @@ export final answer = lib.answer;
 	assert.True(t, half.IsFloat(), "half IsFloat")
 	assert.Equal(t, 4.5, half.AsFloat(), "half")
 	hello := exp["hello"]
-	assert.True(t, hello.IsStr(), "hello IsStr")
+	assert.True(t, hello.IsString(), "hello IsStr")
 	// "hey\x00", not "hey": a C string carries its terminator on the way back, the
 	// same way ffi\cstr adds one on the way in, so a value that round-trips through C
 	// compares equal to the one that went in. Upstream's ffi.buzz asserts exactly that

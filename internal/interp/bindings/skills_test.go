@@ -73,7 +73,7 @@ func callSkills(t *testing.T, ctx context.Context, sess *buzz.Session, name stri
 	if err != nil {
 		return "", err
 	}
-	if got.IsStr() {
+	if got.IsString() {
 		return got.AsString(), nil
 	}
 	return "", nil

@@ -46,7 +46,7 @@ import (
 
 var graphSubs = []string{"build", "push", "pull", "deps", "export", "stats", "diff"}
 
-func graphCmd(ctx context.Context, root string, args []string) error {
+func graphCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		graphUsage()
 		return flag.ErrHelp
@@ -119,7 +119,7 @@ func graphUsage() {
 // budget is full (MGS3009), fails the build once the rest is done.
 func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	var skipSymbols, skipSessions bool
-	_, err = cmdParse("graph build", args, func(fs *flag.FlagSet) {
+	_, err = commandParse("graph build", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
 		fs.BoolVar(&skipSessions, "no-sessions", false, "do not run the declared agent-session adapters first")
 		fs.Usage = func() {
@@ -348,7 +348,7 @@ func ingestSessions(ctx context.Context, root string) {
 // run (those flags remain as scoped passthroughs).
 func graphDeps(ctx context.Context, root string, args []string) error {
 	var gf *flaggen.GraphDepsFlags
-	pos, err := cmdParse("graph deps", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("graph deps", args, func(fs *flag.FlagSet) {
 		gf = flaggen.BindGraphDeps(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph deps [flags] [project...]")
@@ -385,7 +385,7 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 // makes building implicit: there is no separate build subcommand.
 func graphExport(ctx context.Context, root string, args []string) error {
 	var ef *flaggen.GraphExportFlags
-	pos, err := cmdParse("graph export", args, func(fs *flag.FlagSet) {
+	pos, err := commandParse("graph export", args, func(fs *flag.FlagSet) {
 		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
@@ -562,7 +562,7 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
 	var sf *flaggen.GraphStatsFlags
-	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
+	_, err := commandParse("graph stats", args, func(fs *flag.FlagSet) {
 		sf = flaggen.BindGraphStats(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)

@@ -17,7 +17,7 @@ func TestBuildHarness(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
 		harness := buildHarness(workspace.ContextWithRegistry(context.Background(), reg), nil)
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("cursor"))
+		handle.MapSet("name", vm.StringValue("cursor"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, harness, "provider"), handle))
 		assert.Equal(t, []string{"cursor"}, reg.Harnesses())
 	})
@@ -36,7 +36,7 @@ func TestBuildHarness(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
 		harness := buildHarness(workspace.ContextWithRegistry(context.Background(), reg), nil)
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("cursor"))
+		handle.MapSet("name", vm.StringValue("cursor"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, harness, "provider"), handle))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, harness, "provider"), handle))
 		assert.Equal(t, []string{"cursor"}, reg.Harnesses())
@@ -47,7 +47,7 @@ func TestBuildHarness(t *testing.T) {
 		harness := buildHarness(workspace.ContextWithRegistry(context.Background(), reg), nil)
 		for _, name := range []string{"cursor", "claude-code", "codex"} {
 			handle := vm.NewMap()
-			handle.MapSet("name", vm.StrValue(name))
+			handle.MapSet("name", vm.StringValue(name))
 			require.NoError(t, callVoidDirect(t, requireDirect(t, harness, "provider"), handle))
 		}
 		assert.Equal(t, []string{"cursor", "claude-code", "codex"}, reg.Harnesses())

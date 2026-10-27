@@ -89,7 +89,7 @@ func TestMagusAPIMatchesBindings(t *testing.T) {
 // TestCtxDeclarationsMatchAcrossHosts is TestMagusAPIMatchesBindings one level
 // down, over the ctx a target receives. Three places enumerate its members
 // independently (buildTargetContext, the magus\Exec refusal list beside it, and this
-// package's buildCtx), and each omission fails differently and quietly: an Exec that
+// package's buildContext), and each omission fails differently and quietly: an Exec that
 // does not know a member answers "no such member" instead of naming where to declare
 // it, and a dry host that does not bind one cannot trace a body that calls it. A
 // declaration that reaches the cache key while one of the two copies has never heard
@@ -103,7 +103,7 @@ func TestCtxDeclarationsMatchAcrossHosts(t *testing.T) {
 	// listing them is what keeps the rest of the members gated instead of the whole
 	// check being deleted the first time it goes red.
 	//
-	// TODO: bind envInputs/withEnv/withCwd in buildCtx; a body calling one of them is
+	// TODO: bind envInputs/withEnv/withCwd in buildContext; a body calling one of them is
 	// untraceable in the playground today.
 	knownAbsentFromDry := []string{"envInputs", "withEnv", "withCwd"}
 	knownAbsentFromExec := []string{}
@@ -111,7 +111,7 @@ func TestCtxDeclarationsMatchAcrossHosts(t *testing.T) {
 	realCtx := bindings.TargetContextKeys()
 	require.NotEmpty(t, realCtx, "bindings.TargetContextKeys returned no members")
 
-	inDry := keySet(buildCtx(newTracer()))
+	inDry := keySet(buildContext(newTracer()))
 	inExec := map[string]bool{}
 	for _, k := range bindings.ExecRefusedKeys() {
 		inExec[k] = true
@@ -135,7 +135,7 @@ func TestCtxDeclarationsMatchAcrossHosts(t *testing.T) {
 	// And the fourth enumeration, from the other end: every name the static reader will
 	// collect off a magusfile has to be a member the runtime actually binds, or the
 	// magusfile declares something no ctx can answer.
-	for _, decl := range describe.CtxDeclNames() {
+	for _, decl := range describe.ContextDeclNames() {
 		assert.Contains(t, realCtx, decl, "describe collects ctx.%s statically but the real ctx does not bind it", decl)
 	}
 
@@ -479,7 +479,7 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
 	}
 }
 
-// TestRun_logMissingArg drives strArg's fallback: magus.log.info() with no argument
+// TestRun_logMissingArg drives stringArg's fallback: magus.log.info() with no argument
 // traces an empty-detail log op rather than panicking.
 func TestRun_logMissingArg(t *testing.T) {
 	const src = `
@@ -501,7 +501,7 @@ func TestLoadMagusfile_topLevelLog(t *testing.T) {
 	require.True(t, g.OK, "a top-level log must not fail the load: %+v", g.Diag)
 }
 
-// TestRun_magusRunEmptyAndNonList covers firstListStr's guard branches: an empty
+// TestRun_magusRunEmptyAndNonList covers firstListString's guard branches: an empty
 // argv and a non-list argument both trace no run op.
 func TestRun_magusRunEmptyArgv(t *testing.T) {
 	const src = `
@@ -528,7 +528,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any { magus\run(["
 	assert.Equal(t, Op{Target: "release", Kind: "run", Name: "image-build:cd,fast"}, r.Trace[0])
 }
 
-// TestRun_spellListTargets drives buildSpell's listTargets member (and strsToList)
+// TestRun_spellListTargets drives buildSpell's listTargets member (and stringsToList)
 // from a target body: calling it must not blow up and traces nothing itself.
 func TestRun_spellListTargets(t *testing.T) {
 	const src = `

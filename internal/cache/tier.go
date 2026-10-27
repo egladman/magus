@@ -138,7 +138,7 @@ var errRemoteDegraded = errors.New("magus/cache: the remote tier failed earlier 
 // usable reports whether this run may talk to the backend at all, logging the posture
 // once per run. A run the remote tier already failed stays local-only.
 func (t *remoteTier) usable(ctx context.Context) bool {
-	stats := remoteStatsFrom(ctx)
+	stats := remoteStatsFromContext(ctx)
 	if stats.isDegraded() {
 		return false
 	}
@@ -158,7 +158,7 @@ func (t *remoteTier) usable(ctx context.Context) bool {
 // fail counts and reports one failed remote operation. A transport failure degrades
 // the run to the local tier; a rejected artifact does not, since the store answered.
 func (t *remoteTier) fail(ctx context.Context, op string, s *Step, hash string, downloaded int64, degrade bool, err error) {
-	stats := remoteStatsFrom(ctx)
+	stats := remoteStatsFromContext(ctx)
 	stats.failed(downloaded)
 	if degrade {
 		stats.degrade()
@@ -175,11 +175,11 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 	// Timed around the whole fetch, import included: GetArtifact returns a stream, so
 	// the bytes move while importArtifact reads it.
 	start := time.Now()
-	defer func() { httpx.RecorderFrom(ctx).Add(time.Since(start)) }()
+	defer func() { httpx.RecorderFromContext(ctx).Add(time.Since(start)) }()
 
 	r, err := t.backend.GetArtifact(ctx, s.ProjectPath, hash)
 	if errors.Is(err, types.ErrCacheMiss) {
-		remoteStatsFrom(ctx).miss()
+		remoteStatsFromContext(ctx).miss()
 		t.c.logRemoteMiss(ctx, s, hash)
 		return nil, errTierMiss
 	}
@@ -223,7 +223,7 @@ func (t *remoteTier) store(ctx context.Context, s *Step, snap *Manifest) error {
 	if len(s.Stamps) > 0 {
 		return nil
 	}
-	if remoteStatsFrom(ctx).isDegraded() {
+	if remoteStatsFromContext(ctx).isDegraded() {
 		if t.required {
 			return errRemoteDegraded
 		}
@@ -253,7 +253,7 @@ func (t *remoteTier) put(ctx context.Context, s *Step, hash string) error {
 	// upload for a transfer that died mid-stream.
 	counted := &CountingReader{Reader: pr}
 	putErr := t.backend.PutArtifact(ctx, s.ProjectPath, hash, counted)
-	httpx.RecorderFrom(ctx).Add(time.Since(start))
+	httpx.RecorderFromContext(ctx).Add(time.Since(start))
 	_ = pr.CloseWithError(putErr)
 	exportErr := <-errCh
 	switch {
@@ -270,7 +270,7 @@ func (t *remoteTier) put(ctx context.Context, s *Step, hash string) error {
 		t.fail(ctx, "store", s, hash, 0, true, putErr)
 		return putErr
 	}
-	remoteStatsFrom(ctx).stored(counted.N)
+	remoteStatsFromContext(ctx).stored(counted.N)
 	t.c.log.InfoContext(ctx, "cache.remote.store",
 		slog.String("project", s.ProjectPath),
 		slog.String("label", s.Label),
@@ -286,7 +286,7 @@ func (t *remoteTier) put(ctx context.Context, s *Step, hash string) error {
 // cannot answer is not backfilled, since uploading every hit to learn the answer costs
 // more than the miss it would save.
 func (t *remoteTier) backfill(ctx context.Context, s Step, hash string) {
-	stats := remoteStatsFrom(ctx)
+	stats := remoteStatsFromContext(ctx)
 	if stats == nil || stats.isDegraded() || len(s.Stamps) > 0 {
 		return
 	}

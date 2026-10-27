@@ -328,7 +328,7 @@ func TestModelTierMatrixMisdeclarationIsCoded(t *testing.T) {
 	}
 
 	t.Run("not a function", func(t *testing.T) {
-		err := callVoidDirect(t, register(t.Context()), vm.StrValue("matrix"))
+		err := callVoidDirect(t, register(t.Context()), vm.StringValue("matrix"))
 		require.ErrorContains(t, err, string(types.ModelTierDeclarationUnusable))
 		assert.ErrorContains(t, err, "expected one function")
 	})

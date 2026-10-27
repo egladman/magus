@@ -49,8 +49,8 @@ func newGuardFixture(t *testing.T, rules ...filesystem.Rule) guardFixture {
 	}
 	return guardFixture{
 		sess: sess, ws: ws, outside: outside,
-		confined:     std.WithCwd(sandbox.WithPolicy(t.Context(), p), ws),
-		unrestricted: std.WithCwd(t.Context(), ws),
+		confined:     std.WithCurrentWorkingDirectory(sandbox.WithPolicy(t.Context(), p), ws),
+		unrestricted: std.WithCurrentWorkingDirectory(t.Context(), ws),
 	}
 }
 
@@ -73,11 +73,11 @@ func TestUpstreamOsEnvHonorsTheAllowlist(t *testing.T) {
 	f := newGuardFixture(t)
 	t.Setenv("MAGUS_GUARD_SECRET", "hunter2")
 
-	got, err := f.call(t, f.confined, "os", "env", vm.StrValue("MAGUS_GUARD_SECRET"))
+	got, err := f.call(t, f.confined, "os", "env", vm.StringValue("MAGUS_GUARD_SECRET"))
 	require.NoError(t, err)
 	assert.True(t, got.IsNull(), "a stripped name reads as unset")
 
-	got, err = f.call(t, f.unrestricted, "os", "env", vm.StrValue("MAGUS_GUARD_SECRET"))
+	got, err = f.call(t, f.unrestricted, "os", "env", vm.StringValue("MAGUS_GUARD_SECRET"))
 	require.NoError(t, err)
 	assert.Equal(t, "hunter2", got.AsString(), "with no policy os.env is upstream's")
 }
@@ -94,19 +94,19 @@ func TestUpstreamFsIsChecked(t *testing.T) {
 		args []vm.Value
 		want types.DiagnosticCode
 	}{
-		{"delete", []vm.Value{vm.StrValue(victim)}, types.PathWriteDenied},
-		{"deleteFile", []vm.Value{vm.StrValue(victim)}, types.PathWriteDenied},
-		{"makeDirectory", []vm.Value{vm.StrValue(filepath.Join(f.outside, "d"))}, types.PathWriteDenied},
-		{"move", []vm.Value{vm.StrValue("in.txt"), vm.StrValue(filepath.Join(f.outside, "moved"))}, types.PathWriteDenied},
-		{"list", []vm.Value{vm.StrValue(f.outside)}, types.PathReadDenied},
-		{"modified", []vm.Value{vm.StrValue(victim)}, types.PathReadDenied},
+		{"delete", []vm.Value{vm.StringValue(victim)}, types.PathWriteDenied},
+		{"deleteFile", []vm.Value{vm.StringValue(victim)}, types.PathWriteDenied},
+		{"makeDirectory", []vm.Value{vm.StringValue(filepath.Join(f.outside, "d"))}, types.PathWriteDenied},
+		{"move", []vm.Value{vm.StringValue("in.txt"), vm.StringValue(filepath.Join(f.outside, "moved"))}, types.PathWriteDenied},
+		{"list", []vm.Value{vm.StringValue(f.outside)}, types.PathReadDenied},
+		{"modified", []vm.Value{vm.StringValue(victim)}, types.PathReadDenied},
 	} {
 		_, err := f.call(t, f.confined, "fs", c.name, c.args...)
 		require.ErrorIs(t, err, c.want, "fs.%s", c.name)
 	}
 	assert.FileExists(t, victim)
 
-	_, err := f.call(t, f.confined, "fs", "makeDirectory", vm.StrValue("inside"))
+	_, err := f.call(t, f.confined, "fs", "makeDirectory", vm.StringValue("inside"))
 	require.NoError(t, err, "a path the policy grants still works")
 	assert.DirExists(t, filepath.Join(f.ws, "inside"))
 }
@@ -158,7 +158,7 @@ func TestUpstreamOsExecuteRefusesVCS(t *testing.T) {
 	for _, tc := range cases {
 		items := make([]vm.Value, len(tc.argv))
 		for i, w := range tc.argv {
-			items[i] = vm.StrValue(w)
+			items[i] = vm.StringValue(w)
 		}
 		_, err := f.call(t, f.confined, "os", "execute", vm.ListValue(items))
 		require.EqualError(t, err, tc.want, tc.argv)
@@ -175,8 +175,8 @@ func TestUpstreamOsExecuteGoesThroughRunExec(t *testing.T) {
 	t.Setenv("MAGUS_PROC_SOCKET", "unix:///tmp/parent.sock")
 	t.Setenv("MAGUS_GUARD_SECRET", "hunter2")
 	cmd := vm.ListValue([]vm.Value{
-		vm.StrValue("sh"), vm.StrValue("-c"),
-		vm.StrValue(`printf '%s|%s' "$MAGUS_PROC_SOCKET" "$MAGUS_GUARD_SECRET" > out.txt`),
+		vm.StringValue("sh"), vm.StringValue("-c"),
+		vm.StringValue(`printf '%s|%s' "$MAGUS_PROC_SOCKET" "$MAGUS_GUARD_SECRET" > out.txt`),
 	})
 
 	denied := newGuardFixture(t)

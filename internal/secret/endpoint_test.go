@@ -37,10 +37,10 @@ func upstream(t *testing.T, h http.HandlerFunc) (*httptest.Server, *Resolver, ty
 	}
 }
 
-// runCtx is a context shaped like a real run: cancellable, and carrying an invocation
+// runContext is a context shaped like a real run: cancellable, and carrying an invocation
 // id. An endpoint requires one, because that id is what scopes the token to a run and
 // what proves the listener has something to shut down with.
-func runCtx(t *testing.T) context.Context {
+func runContext(t *testing.T) context.Context {
 	t.Helper()
 	return ContextWithInvocationID(t.Context(), "inv-"+t.Name())
 }
@@ -56,7 +56,7 @@ func TestEndpointAttachesCredential(t *testing.T) {
 	})
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(base, "http://127.0.0.1:"), "endpoint must be loopback plaintext, got %q", base)
 
@@ -82,7 +82,7 @@ func TestEndpointRejectsMissingToken(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) { reached.Store(true) })
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 
 	// Same port, no token: what another process on the machine can reach unaided.
@@ -103,7 +103,7 @@ func TestEndpointWrongTokenRejected(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) { reached.Store(true) })
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	u, err := url.Parse(base)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestEndpointWrongTokenRejected(t *testing.T) {
 func TestEndpointIsLazy(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err, "Origin resolved the credential instead of deferring it")
 	assert.Zero(t, res.resolvedCount(), "a provider was invoked before any request was made")
 
@@ -140,15 +140,15 @@ func TestEndpointIsLazy(t *testing.T) {
 func TestEndpointMemoizesPerGrant(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 
-	first, err := res.OpenEndpoint(runCtx(t), g)
+	first, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
-	second, err := res.OpenEndpoint(runCtx(t), g)
+	second, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	assert.Equal(t, first, second, "the same grant bound two endpoints")
 
 	other := g
 	other.Header = "X-Api-Key"
-	third, err := res.OpenEndpoint(runCtx(t), other)
+	third, err := res.OpenEndpoint(runContext(t), other)
 	require.NoError(t, err)
 	assert.NotEqual(t, first, third, "two different grants shared one endpoint")
 }
@@ -188,7 +188,7 @@ func TestEndpointClosesWithRun(t *testing.T) {
 func TestEndpointURLIsRedactable(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 
 	line := "OPENAI_BASE_URL=" + base
@@ -201,7 +201,7 @@ func TestEndpointURLIsRedactable(t *testing.T) {
 // its cause.
 func TestEndpointRejectsInvalidGrant(t *testing.T) {
 	res := New()
-	_, err := res.OpenEndpoint(runCtx(t), types.SecretGrant{Host: "api.example.com", Header: "Authorization"})
+	_, err := res.OpenEndpoint(runContext(t), types.SecretGrant{Host: "api.example.com", Header: "Authorization"})
 	require.ErrorContains(t, err, "ref is required")
 }
 
@@ -213,7 +213,7 @@ func TestEndpointUpstreamFailureIsNotSilent(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) { reached.Store(true) })
 	// UPSTREAM_KEY deliberately unset: the built-in provider errors.
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	resp, err := http.Get(base + "/v1/models")
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestEndpointPreservesMethodAndBody(t *testing.T) {
 	})
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	resp, err := http.Post(base+"/v1/chat", "application/json", strings.NewReader(`{"q":1}`))
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestEndpointRootPath(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) { gotPath = r.URL.Path })
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	resp, err := http.Get(base)
 	require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestEndpointTokenMustBeAWholeSegment(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) { reached.Store(true) })
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 
 	resp, err := http.Get(base + "extra/v1/models")
@@ -324,7 +324,7 @@ func TestEndpointPreservesEncodedPath(t *testing.T) {
 	})
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	resp, err := http.Get(base + "/v1/a%2Fb")
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestEndpointIgnoresConnectionHeader(t *testing.T) {
 	})
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, base+"/v1/models", nil)
@@ -373,7 +373,7 @@ func TestEndpointOverwritesCallerSetHeader(t *testing.T) {
 	})
 	t.Setenv("UPSTREAM_KEY", "sk-the-real-key")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, base+"/v1/models", nil)
@@ -407,7 +407,7 @@ func TestEndpointStreamsWithoutBuffering(t *testing.T) {
 	})
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	resp, err := http.Get(base + "/v1/chat")
 	require.NoError(t, err)
@@ -437,7 +437,7 @@ func TestEndpointStreamsWithoutBuffering(t *testing.T) {
 func TestEndpointTokenAloneIsRedactable(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	u, err := url.Parse(base)
 	require.NoError(t, err)
@@ -455,7 +455,7 @@ func TestEndpointRejectsNonLoopbackHost(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) { reached.Store(true) })
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	u, err := url.Parse(base)
 	require.NoError(t, err)
@@ -512,7 +512,7 @@ func TestEndpointDoesNotForwardTokenUpstream(t *testing.T) {
 	})
 	t.Setenv("UPSTREAM_KEY", "sk-upstream-value")
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, base+"/v1/models", nil)
@@ -535,7 +535,7 @@ func TestEndpointResolveFailureDoesNotEchoProviderError(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 	// UPSTREAM_KEY unset: the built-in provider errors, naming the variable.
 
-	base, err := res.OpenEndpoint(runCtx(t), g)
+	base, err := res.OpenEndpoint(runContext(t), g)
 	require.NoError(t, err)
 	resp, err := http.Get(base + "/v1/models")
 	require.NoError(t, err)

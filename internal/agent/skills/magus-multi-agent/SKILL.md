@@ -90,6 +90,34 @@ decides whether the top-level goal is complete.{{else}}The loop: define, partiti
 - A worker is not complete until its criteria and assigned check pass.
 - The root agent decides whether the top-level goal is complete.{{end}}
 
+## Keep worker records out of the user update
+
+Read a worker's structured result, not its whole event stream. Keep its job id,
+outcome, changed paths, validation refs and unresolved risks; reopen the relevant
+evidence when verification needs it. Persist the complete JSON or JSONL in the
+host capture or result file. Do not echo it into another tool call or the reply.
+
+For a job validation, project `problems`, `unchecked` and a count of `permitted`
+from `-o json` before it reaches your context. Keep the producer's failure status
+when piping. Inspect individual permitted deviations only when they affect a
+decision; `--dry-run` text intentionally previews the full record. Prepare the
+spec once in a scratch file (`job_spec` below); do not retype its full exception
+list on every retry:
+
+```sh
+set -o pipefail
+{{cmd "job fork"}} --stdin --dry-run -o json < "$job_spec" |
+  jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
+```
+
+Tell the person what changed, what passed, what remains unverified, and any
+decision they need to make. A routine claim, handled denial, or already-recorded
+deviation is not a progress update. Collapse repeated events into the current
+blocker and next action. When a waiver skips validation or accepts a material
+risk, explain that consequence once in plain language and link the evidence;
+do not paste waiver objects, claim lists or guard transcripts. A detailed audit
+requested by the person can open those records.
+
 ## Declare the interface before any job forks
 
 When a change adds a shared API, the ROOT names it before any edit. A shared

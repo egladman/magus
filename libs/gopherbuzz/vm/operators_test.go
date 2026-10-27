@@ -17,7 +17,7 @@ func TestBuiltinMethodNamesMatchDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dispatchers := map[string]ReceiverKind{"listMethod": ListReceiver, "mapMethod": MapReceiver, "strMethod": StrReceiver}
+	dispatchers := map[string]ReceiverKind{"listMethod": ListReceiver, "mapMethod": MapReceiver, "stringMethod": StrReceiver}
 	seen := map[string]bool{}
 	for _, d := range f.Decls {
 		fd, ok := d.(*ast.FuncDecl)

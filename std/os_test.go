@@ -94,7 +94,7 @@ func TestShellExe(t *testing.T) {
 }
 
 // TestOsExecResolvesCwd is the load-bearing test for the unified exec
-// primitives: the working directory comes from the context (WithCwd) when no
+// primitives: the working directory comes from the context (WithCurrentWorkingDirectory) when no
 // explicit dir is passed, and an explicit dir nests relative to that context
 // cwd. It runs `pwd` (whose output is the resolved working directory) and
 // checks where the subprocess actually ran.
@@ -109,7 +109,7 @@ func TestOsExecResolvesCwd(t *testing.T) {
 	subReal := filepath.Join(baseReal, "nested")
 
 	runPwd := func(ctxCwd, dirArg, wantDir string) {
-		ctx := WithCwd(context.Background(), ctxCwd)
+		ctx := WithCurrentWorkingDirectory(context.Background(), ctxCwd)
 		res, err := OsExec(ctx, "pwd", nil, dirArg, nil)
 		require.NoError(t, err)
 		require.Equal(t, 0, res.Code, "pwd exit code")
@@ -470,7 +470,7 @@ func TestCallbackTruthy(t *testing.T) {
 func TestRelToCwd(t *testing.T) {
 	t.Parallel()
 	base := filepath.FromSlash("/a/b")
-	got := relToCwd(base, []string{
+	got := relToCurrentWorkingDirectory(base, []string{
 		filepath.FromSlash("/a/b/sub/x.go"),
 		filepath.FromSlash("/a/b/y.go"),
 	})
@@ -478,29 +478,29 @@ func TestRelToCwd(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// TestWithCwdPropagatesToBuzzStdlib verifies WithCwd sets the run cwd for BOTH
+// TestWithCwdPropagatesToBuzzStdlib verifies WithCurrentWorkingDirectory sets the run cwd for BOTH
 // magus's exec primitives and Buzz's own stdlib (gopherbuzz io/fs/os), so a
 // magusfile using the language built-ins (io.File, fs.list, os.execute) resolves
-// relative paths against the project dir. Dropping the buzzstd.WithCwd bridge would
+// relative paths against the project dir. Dropping the buzzstd.WithCurrentWorkingDirectory bridge would
 // silently regress that (e.g. `magus run serve docs` reading ../README.md).
 func TestWithCwdPropagatesToBuzzStdlib(t *testing.T) {
 	dir := t.TempDir()
-	ctx := WithCwd(context.Background(), dir)
+	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
-	got, ok := CwdFromContext(ctx)
+	got, ok := CurrentWorkingDirectoryFromContext(ctx)
 	require.True(t, ok)
 	assert.Equal(t, dir, got, "magus cwd")
 
-	buzzCwd, ok := buzzstd.CwdFromContext(ctx)
+	buzzCwd, ok := buzzstd.CurrentWorkingDirectoryFromContext(ctx)
 	require.True(t, ok, "WithCwd must propagate to Buzz's stdlib (bridge dropped?)")
 	assert.Equal(t, dir, buzzCwd, "buzz stdlib cwd")
 
 	// An empty dir is a no-op for both the magus and Buzz cwd.
 	base := context.Background()
-	if _, ok := CwdFromContext(WithCwd(base, "")); ok {
+	if _, ok := CurrentWorkingDirectoryFromContext(WithCurrentWorkingDirectory(base, "")); ok {
 		t.Fatal(`WithCwd("") set a magus cwd, want none`)
 	}
-	if _, ok := buzzstd.CwdFromContext(WithCwd(base, "")); ok {
+	if _, ok := buzzstd.CurrentWorkingDirectoryFromContext(WithCurrentWorkingDirectory(base, "")); ok {
 		t.Fatal(`WithCwd("") set a buzz cwd, want none`)
 	}
 }

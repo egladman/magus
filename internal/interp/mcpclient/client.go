@@ -164,7 +164,7 @@ func Run(ctx context.Context, req Request) (Result, error) {
 		return Result{}, fmt.Errorf("%s: install modules: %w", tool, err)
 	}
 	if err := sess.Exec(ctx, renameEntry(req.Script)); err != nil {
-		return Result{}, wrapScriptErr(err, "")
+		return Result{}, wrapScriptError(err, "")
 	}
 	entry := sess.GetGlobal(entryName)
 	if !entry.IsFun() {
@@ -172,11 +172,11 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	}
 	args := make([]vm.Value, len(req.Args))
 	for i, arg := range req.Args {
-		args[i] = vm.StrValue(arg)
+		args[i] = vm.StringValue(arg)
 	}
 	value, err := sess.CallValue(ctx, entry, []vm.Value{vm.ListValue(args)})
 	if err != nil {
-		return Result{}, wrapScriptErr(err, "main")
+		return Result{}, wrapScriptError(err, "main")
 	}
 	if printed.exceeded {
 		return Result{}, fmt.Errorf("%s: printed output exceeds %d bytes", tool, MaxOutputBytes)
@@ -191,9 +191,9 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	return Result{Stdout: printed.String(), JSON: json.RawMessage(encoded)}, nil
 }
 
-// wrapScriptErr returns a coded diagnostic from err's chain as itself and
+// wrapScriptError returns a coded diagnostic from err's chain as itself and
 // prefixes anything else with the tool name.
-func wrapScriptErr(err error, stage string) error {
+func wrapScriptError(err error, stage string) error {
 	var diag *types.DiagnosticError
 	if errors.As(err, &diag) {
 		return diag

@@ -29,7 +29,7 @@ type cacheDirer interface {
 func MagusTrailRead(ctx context.Context, opts types.TrailReadOptions) (types.Trail, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.Trail{}, errNoWorkspace("trail.read")
+		return types.Trail{}, errorNoWorkspace("trail.read")
 	}
 	w, err := feedbackWindow(opts, time.Now())
 	if err != nil {
@@ -118,7 +118,7 @@ func MagusTrailMark(ctx context.Context, mark map[string]any) (types.TrailMark, 
 func feedbackMarksDir(ctx context.Context, member string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return "", errNoWorkspace(member)
+		return "", errorNoWorkspace(member)
 	}
 	return trail.FeedbackMarksDir(ws.Root())
 }

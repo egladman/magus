@@ -30,10 +30,10 @@ func buildTrail(obs buzz.DirectObserver) vm.Value {
 		return bindgen.ObjectTrail(got), nil
 	}))
 	t.MapSet("shape", directVal(obs, "magus.trail.shape", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		return ffi.StrVal(trail.CommandShape(ffi.Str(args, 0))), nil
+		return ffi.StringVal(trail.CommandShape(ffi.String(args, 0))), nil
 	}))
 	t.MapSet("shapes", directVal(obs, "magus.trail.shapes", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		return ffi.StrSliceVal(trail.CommandShapes(ffi.Str(args, 0))), nil
+		return ffi.StringSliceVal(trail.CommandShapes(ffi.String(args, 0))), nil
 	}))
 	t.MapSet("marks", directVal(obs, "magus.trail.marks", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		marks, err := std.MagusTrailMarks(ctx)

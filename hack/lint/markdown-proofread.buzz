@@ -92,13 +92,14 @@ final ALLOW_PHRASES = ["Azure Pipelines", "Claude Code", "GitHub Actions", "GitH
 final JUDGE = "{proofread\home}/{proofread\command}";
 
 // KINDS are proofread's kinds this rule runs, one judge run each.
-final KINDS = ["reference", "guide", "agent-brief", "skill-template", "changelog"];
+final KINDS = ["reference", "guide", "principle", "agent-brief", "skill-template", "changelog"];
 
 // GUIDES are the procedural pages; concepts, reference, design and the decision records
 // explain and keep the general Markdown rules.
 final GUIDES = ["docs/guides/**"];
 
-// PRINCIPLES are the design pages, each one rule argued in the author's voice; the
+// PRINCIPLES are the design pages, each one rule argued in the author's voice. The
+// lint judges them as principle, at the floor in hack/policy/proofread.buzz. The
 // index, the standard and the refusals table beside them stay reference pages.
 final PRINCIPLES = ["docs/design/principles/*.md", "docs/design/judgment/*.md"];
 

@@ -22,7 +22,9 @@ exec git commit -q -m 'shop before the refactor'
 
 exec magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 cmp stdout $WORK/fork.out
-stderr '^console: nothing is serving it; `magus server start` to watch this job'
+stderr '^note: the console is not running; start it to watch this job$'
+stderr '^next:$'
+stderr '^  magus server start$'
 exec magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
 exec git worktree add -q ../shop-pricing
 exec git worktree add -q ../shop-tax

@@ -199,7 +199,7 @@ func (m *Model) UnmarshalBinary(data []byte) error {
 
 	out.classes = make([]pair, nClasses)
 	for i := range out.classes {
-		penn, name := r.str(), r.str()
+		penn, name := r.string(), r.string()
 
 		c, ok := parseClass(name)
 		if r.err == nil && !ok {
@@ -216,7 +216,7 @@ func (m *Model) UnmarshalBinary(data []byte) error {
 
 	out.dict = make(map[string]uint16, nWords)
 	for range nWords {
-		word := r.str()
+		word := r.string()
 		out.dict[word] = r.class(len(out.classes))
 	}
 
@@ -314,7 +314,7 @@ func (r *modelReader) count() int {
 	return int(n)
 }
 
-func (r *modelReader) str() string {
+func (r *modelReader) string() string {
 	n := r.uvarint()
 	if r.err != nil {
 		return ""

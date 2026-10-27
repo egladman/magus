@@ -126,8 +126,8 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.
 			"that checkout's own binary is the one its guard rules and spell bytecode were built from.")}
 }
 
-// resolveFrom reads p as the shell would after starting in dir.
-func resolveFrom(dir, p string) string {
+// resolvePath reads p as the shell would after starting in dir.
+func resolvePath(dir, p string) string {
 	if filepath.IsAbs(p) {
 		return p
 	}

@@ -13,7 +13,7 @@ import (
 // noun still is - see self.go.
 const selfUpdateCompiled = false
 
-func selfUpdateCmd(_ context.Context, args []string) error {
+func selfUpdateCommand(_ context.Context, args []string) error {
 	fs := flag.NewFlagSet("self update", flag.ContinueOnError)
 	// Bound even though this build errors out regardless: a caller passing -s
 	// should get the real "compiled without self-update support" message, not a

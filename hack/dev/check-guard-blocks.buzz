@@ -256,7 +256,7 @@ fun ruleOf(text: str) > str {
     return citedRule(stored!.stdout);
 }
 
-// verdictRef is the grd ref a reply's `full verdict:` line names, "" when it names none.
+// verdictRef is the grd ref a reply's `details:` line names, "" when it names none.
 export fun verdictRef(text: str) > str {
     foreach (word in text.replace("\n", with: " ").split(" ")) {
         if (word.startsWith("grd")) {
@@ -266,8 +266,8 @@ export fun verdictRef(text: str) > str {
     return "";
 }
 
-test "verdictRef reads the ref off the full verdict line" {
-    std\assert(verdictRef("lease x is not declared.\nfull verdict: ./magus query output grd12ab") == "grd12ab", message: "the ref");
+test "verdictRef reads the ref off the details line" {
+    std\assert(verdictRef("lease x is not declared.\ndetails: ./magus query output grd12ab") == "grd12ab", message: "the ref");
     std\assert(verdictRef("nothing here") == "", message: "no ref");
 }
 
@@ -456,6 +456,10 @@ export fun cases(root: str, lease: Lease) > [Case] {
         bash("magus output redirect", command: "magus run lint . > lint.txt"),
         bash("magus exit status echo", command: "magus run lint .; echo exit=$?"),
         bash("stage everything", command: "git add -A"),
+        bash("process pattern signal", command: "pkill -f 'magus job fork'"),
+        bash("MCP process signal", command: "pkill -f './magus mcp'"),
+        bash("PID signal", command: "kill 30940"),
+        bash("PID probe", command: "kill -0 30940"),
         Case{ name = "push from a subagent", tool = "Bash", input = {"command": "git push origin HEAD"}, expect = "deny", agent = true, bind = "", skip = "" },
         Case{ name = "edit outside the lease", tool = "Edit", input = {"file_path": "{root}/{target}", "old_string": "package", "new_string": "package "},
             expect = "deny", agent = true, bind = lease.job, skip = editSkip },

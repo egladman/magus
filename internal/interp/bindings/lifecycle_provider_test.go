@@ -126,7 +126,7 @@ func TestRunLifecycleProviderUnregisteredSpell(t *testing.T) {
 func TestBuildLifecycle(t *testing.T) {
 	handle := func(name string) vm.Value {
 		h := vm.NewMap()
-		h.MapSet("name", vm.StrValue(name))
+		h.MapSet("name", vm.StringValue(name))
 		return h
 	}
 
@@ -150,7 +150,7 @@ func TestBuildLifecycle(t *testing.T) {
 
 	t.Run("a non-handle is rejected", func(t *testing.T) {
 		provider := requireDirect(t, buildLifecycle(t.Context(), nil), "provider")
-		err := callVoidDirect(t, provider, vm.StrValue("endoflife-date"))
+		err := callVoidDirect(t, provider, vm.StringValue("endoflife-date"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imported spell handle")
 		err = callVoidDirect(t, provider, vm.NewMap())

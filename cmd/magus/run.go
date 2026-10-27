@@ -41,7 +41,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	// Find the target even if global flags precede it (`magus run --dry-run build`);
 	// stdlib flag would otherwise treat the flag as the target. rest carries the hoisted
-	// flags + any project args for cmdParse below. The prescan binds run's own flags too,
+	// flags + any project args for commandParse below. The prescan binds run's own flags too,
 	// throwing the values away: it needs to know which of them consume the next token.
 	var skips skipFlag
 	prescanRun := func(fs *flag.FlagSet) { bindRunFlags(fs, nil) }
@@ -90,7 +90,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// property of THIS process rather than of the documented flag.
 	var rf *flaggen.RunFlags
 	var shardEnvErr error
-	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
+	projectArgs, err := commandParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
 		rf = bindRunFlags(fs, &skips)
 		// The shard pair defaults from the environment CI sets, so a matrix job
 		// need not repeat itself on every magus call. Applied by seeding the bound
@@ -228,7 +228,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return err
 		}
 		listTarget := types.Target{Path: parsedTarget.Path, Name: "ls"}
-		targets, source, err := resolveTargets(ctx, ws, listTarget, runSelection{projects: projectArgs, skips: skips.refs, cwd: clientCwd(ctx)})
+		targets, source, err := resolveTargets(ctx, ws, listTarget, runSelection{projects: projectArgs, skips: skips.refs, cwd: clientCurrentWorkingDirectory(ctx)})
 		if err != nil {
 			return err
 		}
@@ -260,7 +260,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
 	// ctx, not the server's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
-	cwd := clientCwd(ctx)
+	cwd := clientCurrentWorkingDirectory(ctx)
 	sel := runSelection{projects: projectArgs, skips: skips.refs, cwd: cwd}
 	if saved != nil {
 		// A plan's paths are workspace-relative; anchored at the caller's cwd, "." in a
@@ -414,7 +414,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.Shard != "" && rf.NShards > 0 {
 		sink.EmitShardTotal(ctx, rf.Shard, rf.NShards, time.Since(startedAt))
 	}
-	if reportedRunErr(err) {
+	if reportedRunError(err) {
 		return exit.Reported(exit.Failure)
 	}
 	if err != nil {
@@ -506,7 +506,7 @@ type runSelection struct {
 	// skips are the --skip refs, subtracted after the selection resolves.
 	skips []string
 	// cwd is the caller's working directory (the client's, for an adopted run; see
-	// clientCwd); it anchors relative project args and the cwd-scope lookup. Resolving
+	// clientCurrentWorkingDirectory); it anchors relative project args and the cwd-scope lookup. Resolving
 	// cwd-scope against the server's own os.Getwd() is exactly the mix-up that let a
 	// server adopt a run for an unrelated workspace and pass it vacuously, so the cwd is
 	// threaded in rather than read here.
@@ -519,7 +519,7 @@ type runSelection struct {
 // The subtraction happens here, at the one place the selection is finalized, so the run
 // header, --dry-run and the fan-out all describe the same set.
 func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, sel runSelection) ([]types.Target, string, error) {
-	anchor := cwdAnchor(ws.Root(), sel.cwd)
+	anchor := currentWorkingDirectoryAnchor(ws.Root(), sel.cwd)
 
 	// The four ways a selection is named, in precedence order.
 	var (
@@ -900,7 +900,7 @@ func projectLabel(m *magus.Magus, path string) string {
 	return types.ProjectLabel(path, "")
 }
 
-// cwdAnchor returns cwd as a slash path relative to root, the anchor for
+// currentWorkingDirectoryAnchor returns cwd as a slash path relative to root, the anchor for
 // resolving relative project args. It falls back to "." (the workspace root)
 // when cwd is empty, cannot be made relative to root, or lies OUTSIDE it.
 //
@@ -911,7 +911,7 @@ func projectLabel(m *magus.Magus, path string) string {
 // root from "../<dir>"` for exactly that reason. A relative ref is measured from
 // the workspace the caller NAMED, so an outside cwd contributes nothing to it.
 // A cwd inside the workspace is untouched, which is every invocation without --root.
-func cwdAnchor(root, cwd string) string {
+func currentWorkingDirectoryAnchor(root, cwd string) string {
 	if cwd == "" {
 		return "."
 	}
@@ -929,13 +929,13 @@ func cwdAnchor(root, cwd string) string {
 	return rel
 }
 
-// clientCwd returns the working directory that scopes this invocation. An adopted
+// clientCurrentWorkingDirectory returns the working directory that scopes this invocation. An adopted
 // run is dispatched inside the long-lived server, whose own os.Getwd() is unrelated
 // to (and in a stale server may be a deleted) directory; the server carries the
-// client's cwd on ctx (proc.CwdFromContext), so prefer it. A plain local run has no
+// client's cwd on ctx (proc.CurrentWorkingDirectoryFromContext), so prefer it. A plain local run has no
 // ctx cwd and falls back to os.Getwd(). Empty only when neither is available.
-func clientCwd(ctx context.Context) string {
-	if c := proc.CwdFromContext(ctx); c != "" {
+func clientCurrentWorkingDirectory(ctx context.Context) string {
+	if c := proc.CurrentWorkingDirectoryFromContext(ctx); c != "" {
 		return c
 	}
 	cwd, err := os.Getwd()

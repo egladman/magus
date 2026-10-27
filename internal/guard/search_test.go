@@ -400,7 +400,7 @@ var staleGraphCommands = []struct {
 // real tree to an index describing another one, so each advises that the graph is stale
 // and names the rebuild for after the rebase instead.
 func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
-	r := testkit.NewRepo(t, staleGraphFiles)
+	r := testkit.NewRepository(t, staleGraphFiles)
 	root, deps := r.Root(), staleGraphDeps(r.Root())
 	for _, side := range []string{"topic", "main"} {
 		if side == "topic" {

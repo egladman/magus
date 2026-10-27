@@ -48,7 +48,7 @@ func writeFixture(t *testing.T) (ctx context.Context, root, cacheDir string) {
 func committedPolicyFixture(t *testing.T) (*testkit.Repo, context.Context) {
 	t.Helper()
 	testkit.Isolate(t)
-	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "import \"magus\";\n"})
+	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "import \"magus\";\n"})
 	return repo, WithLocation(t.Context(), t.TempDir(), repo.Root(), repo.Root())
 }
 

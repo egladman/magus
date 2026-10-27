@@ -13,7 +13,7 @@ import (
 // This file translates the gopherbuzz instrumentation hooks (CompileObserver,
 // PoolObserver, FaultHook, WrapDirect's DirectObserver) into the observability
 // spine's magus.buzz.* Record calls. Every attachment is nil-gated on an active
-// provider: a non-server one-shot run reaches providerFrom == nil, no observer is
+// provider: a non-server one-shot run reaches providerFromContext == nil, no observer is
 // set, and the interpreter runs byte-for-byte unobserved with no timing on the hot
 // path. The terminology (mode, host.call, phase, kind) is fixed by the spine.
 
@@ -32,10 +32,10 @@ func callOutcome(err error) observability.Outcome {
 	return observability.OutcomeOK
 }
 
-// providerFrom returns ctx's telemetry provider only when it is enabled. A nil
+// providerFromContext returns ctx's telemetry provider only when it is enabled. A nil
 // return is the signal to attach nothing, keeping the hot path free of observer
 // cost on ordinary one-shot runs.
-func providerFrom(ctx context.Context) observability.Provider {
+func providerFromContext(ctx context.Context) observability.Provider {
 	p := observability.FromContext(ctx)
 	if p == nil || !p.Enabled() {
 		return nil
@@ -64,7 +64,7 @@ func recordJITDelta(ctx context.Context, p observability.Provider) {
 // outcome, and the JIT-run delta when telemetry is active on ctx. With none it
 // runs fn directly, adding no timing to the hot path.
 func TimeExec(ctx context.Context, mode string, fn func() error) error {
-	p := providerFrom(ctx)
+	p := providerFromContext(ctx)
 	if p == nil {
 		return fn()
 	}
@@ -78,7 +78,7 @@ func TimeExec(ctx context.Context, mode string, fn func() error) error {
 // TimeCall is TimeExec for a value-returning call (Session.CallValue), the target
 // and spell-handler dispatch boundary.
 func TimeCall(ctx context.Context, mode string, fn func() (vm.Value, error)) (vm.Value, error) {
-	p := providerFrom(ctx)
+	p := providerFromContext(ctx)
 	if p == nil {
 		return fn()
 	}
@@ -93,7 +93,7 @@ func TimeCall(ctx context.Context, mode string, fn func() (vm.Value, error)) (vm
 // hook so sess's parse/check/compile phases, resolved imports, and faults feed the
 // spine under mode. A no-op when telemetry is disabled, leaving sess unobserved.
 func AttachSessionObservers(ctx context.Context, sess *buzz.Session, mode string) {
-	p := providerFrom(ctx)
+	p := providerFromContext(ctx)
 	if p == nil {
 		return
 	}
@@ -122,7 +122,7 @@ func (o compileObserver) Import(_ string, outcome buzz.ImportOutcome, elapsed ti
 // the pool runs unobserved. Thread the result onto the dispatch ctx with
 // buzz.WithPoolObserver.
 func NewPoolObserver(ctx context.Context) buzz.PoolObserver {
-	p := providerFrom(ctx)
+	p := providerFromContext(ctx)
 	if p == nil {
 		return nil
 	}
@@ -160,7 +160,7 @@ func (o poolObserver) SessionRelease(ctx context.Context, kind buzz.SessionRelea
 // buzz.WrapDirect returns the callable unchanged and the VM's hot native-dispatch
 // arm is untouched.
 func NewHostCallObserver(ctx context.Context) buzz.DirectObserver {
-	p := providerFrom(ctx)
+	p := providerFromContext(ctx)
 	if p == nil {
 		return nil
 	}

@@ -201,16 +201,16 @@ func keyPath(path, key string) string {
 
 func (w Weights) validate() error {
 	if w.BM25F.K1 < 0 {
-		return errNegative("bm25f.k1", w.BM25F.K1)
+		return errorNegative("bm25f.k1", w.BM25F.K1)
 	}
 	for _, name := range slices.Sorted(maps.Keys(w.BM25F.Fields)) {
 		field := w.BM25F.Fields[name]
 		path := "bm25f.fields." + name
 		if field.Weight < 0 {
-			return errNegative(path+".weight", field.Weight)
+			return errorNegative(path+".weight", field.Weight)
 		}
 		if field.B < 0 {
-			return errNegative(path+".b", field.B)
+			return errorNegative(path+".b", field.B)
 		}
 		if field.B > 1 {
 			return fmt.Errorf("%s.b: must be at most 1, got %v", path, field.B)
@@ -236,13 +236,13 @@ func (w Weights) validate() error {
 		return err
 	}
 	if w.Fusion.K < 0 {
-		return errNegative("fusion.k", w.Fusion.K)
+		return errorNegative("fusion.k", w.Fusion.K)
 	}
 	if err := checkNonNegative("fusion.lists", w.Fusion.Lists); err != nil {
 		return err
 	}
 	if w.Context.Floor < 0 {
-		return errNegative("context.floor", w.Context.Floor)
+		return errorNegative("context.floor", w.Context.Floor)
 	}
 	if w.Context.TaskLimit < 1 {
 		return fmt.Errorf("context.task_limit: must be at least 1, got %d", w.Context.TaskLimit)
@@ -253,12 +253,12 @@ func (w Weights) validate() error {
 func checkNonNegative(path string, values map[string]float64) error {
 	for _, key := range slices.Sorted(maps.Keys(values)) {
 		if values[key] < 0 {
-			return errNegative(keyPath(path, key), values[key])
+			return errorNegative(keyPath(path, key), values[key])
 		}
 	}
 	return nil
 }
 
-func errNegative(path string, value float64) error {
+func errorNegative(path string, value float64) error {
 	return fmt.Errorf("%s: must not be negative, got %v", path, value)
 }

@@ -19,11 +19,11 @@ import (
 // repository a test builds holds it.
 const madeUpRevision = "34b41fd546ba8fa9c71a6a64e4ea0f3e93d5a7bc"
 
-// committedRepo is a git repository holding loadableRoot's files in one commit, and that
+// committedRepository is a git repository holding loadableRoot's files in one commit, and that
 // commit's full revision.
-func committedRepo(t *testing.T) (root, head string) {
+func committedRepository(t *testing.T) (root, head string) {
 	t.Helper()
-	repo := testkit.NewRepo(t, loadableFiles)
+	repo := testkit.NewRepository(t, loadableFiles)
 	return repo.Root(), repo.Head()
 }
 
@@ -42,7 +42,7 @@ func checkpointRecord(id, token string) types.Declaration {
 func TestAMadeUpCheckpointIsRefusedAtForkAndAtApply(t *testing.T) {
 	t.Parallel()
 
-	root, _ := committedRepo(t)
+	root, _ := committedRepository(t)
 	s := NewStore(tempLocation(t, root))
 
 	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(madeUpRevision), config.Jobs{}, nil)
@@ -66,7 +66,7 @@ func TestAMadeUpCheckpointIsRefusedAtForkAndAtApply(t *testing.T) {
 func TestARealAbbreviatedCheckpointIsStoredExpanded(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, loadableFiles)
+	repo := testkit.NewRepository(t, loadableFiles)
 	older := repo.Head()
 	repo.Commit("later", map[string]string{"later.txt": "later\n"})
 	head := repo.Head()
@@ -88,7 +88,7 @@ func TestARealAbbreviatedCheckpointIsStoredExpanded(t *testing.T) {
 func TestACheckpointOffTheCheckoutsHistoryIsRefused(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, loadableFiles)
+	repo := testkit.NewRepository(t, loadableFiles)
 	repo.Git("switch", "-q", "-c", "elsewhere")
 	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
 	repo.Git("switch", "-q", "main")
@@ -113,7 +113,7 @@ func TestACheckpointOffTheCheckoutsHistoryIsRefused(t *testing.T) {
 func TestACheckpointOnASiblingBranchIsPlaceableForItsOwnCheckout(t *testing.T) {
 	t.Parallel()
 
-	repo := testkit.NewRepo(t, loadableFiles)
+	repo := testkit.NewRepository(t, loadableFiles)
 	repo.Git("switch", "-q", "-c", "elsewhere")
 	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
 	repo.Git("switch", "-q", "main")
@@ -133,7 +133,7 @@ func TestACheckpointOnASiblingBranchIsPlaceableForItsOwnCheckout(t *testing.T) {
 	v, err = ValidateFork(t.Context(), s, "made-up", own(madeUpRevision), config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Contains(t, codes(v.Problems), types.JobCheckpointUnplaceable)
-	assert.ErrorContains(t, v.Problems.Err(), "names no revision this repository holds")
+	assert.ErrorContains(t, v.Problems.Error(), "names no revision this repository holds")
 }
 
 // At HEAD magus reproduces the digest, so a digest the tree does not hold is refused; the
@@ -141,7 +141,7 @@ func TestACheckpointOnASiblingBranchIsPlaceableForItsOwnCheckout(t *testing.T) {
 func TestACheckpointDigestAtHeadIsCheckedAgainstTheTree(t *testing.T) {
 	t.Parallel()
 
-	root, head := committedRepo(t)
+	root, head := committedRepository(t)
 	s := NewStore(tempLocation(t, root))
 	madeUp := fmt.Sprintf("%s+%s", head, strings.Repeat("0123456789abcdef", 2))
 
@@ -160,7 +160,7 @@ func TestACheckpointDigestAtHeadIsCheckedAgainstTheTree(t *testing.T) {
 func TestAForkByMergeNamingNoCheckpointRecordsTheCheckouts(t *testing.T) {
 	t.Parallel()
 
-	root, _ := committedRepo(t)
+	root, _ := committedRepository(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "new.go"), []byte("package new\n"), 0o644))
 	s := NewStore(tempLocation(t, root))
 
@@ -179,7 +179,7 @@ func TestAForkByMergeNamingNoCheckpointRecordsTheCheckouts(t *testing.T) {
 func TestACheckpointDigestOfTheWrongShapeIsRefused(t *testing.T) {
 	t.Parallel()
 
-	root, head := committedRepo(t)
+	root, head := committedRepository(t)
 	s := NewStore(tempLocation(t, root))
 	for _, digest := range []string{"xyz", strings.Repeat("ab", 8), strings.Repeat("AB", 16), ""} {
 		token := fmt.Sprintf("%s+%s", head, digest)
@@ -208,7 +208,7 @@ func TestACheckpointIsRefusedWhereNoVersionControlAnswers(t *testing.T) {
 func TestADirtyCheckpointTokenFromTheTreeIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	root, head := committedRepo(t)
+	root, head := committedRepository(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "job", "store.go"), []byte("package job\n\n// edited\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "new.go"), []byte("package new\n"), 0o644))
 	s := NewStore(tempLocation(t, root))

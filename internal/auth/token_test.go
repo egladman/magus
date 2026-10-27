@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -130,14 +131,14 @@ func (s *TokenSuite) TestGuardHotReload() {
 	h, err := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
 	require.NoError(t, err)
 
-	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+a))
+	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+a))
 	b, _ := GenerateOperator()
 	_, err = SaveOperator(b)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, reqStatus(h, "Bearer "+a), "old token after rotate")
-	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+b))
+	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+a), "old token after rotate")
+	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+b))
 	require.NoError(t, RevokeOperator())
-	assert.Equal(t, http.StatusUnauthorized, reqStatus(h, "Bearer "+b), "after revoke")
+	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+b), "after revoke")
 }
 
 // EnsureOperator persists a token on first use and never writes the secret to the log.
@@ -176,9 +177,9 @@ func TestTokenIDStable(t *testing.T) {
 	assert.Len(t, TokenID("abc"), 8)
 }
 
-// reqStatus drives one request from a loopback peer through h with the given Authorization
+// requestStatus drives one request from a loopback peer through h with the given Authorization
 // header (empty = none).
-func reqStatus(h http.Handler, authHeader string) int {
+func requestStatus(h http.Handler, authHeader string) int {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.RemoteAddr = "127.0.0.1:40000"
 	if authHeader != "" {
@@ -187,4 +188,43 @@ func reqStatus(h http.Handler, authHeader string) int {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	return rr.Code
+}
+
+// Replacing a token in one coarse tick can leave every stat unchanged. The next
+// verification must still reject the revoked credential and accept its replacement.
+func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
+	testkit.Isolate(t)
+	previous := revalidateEvery
+	revalidateEvery = time.Hour
+	t.Cleanup(func() { revalidateEvery = previous })
+	dir, err := StoreDir()
+	require.NoError(t, err)
+	store, err := LoadStore(dir)
+	require.NoError(t, err)
+	prior, priorToken, err := store.Mint(types.GrantOperator, MintRequest{Name: "prior", Grant: types.GrantConnector, TTL: time.Hour})
+	require.NoError(t, err)
+	credential, ok := Verify(prior)
+	require.True(t, ok)
+	assert.Equal(t, priorToken.Credential(), credential)
+	state, err := StateDir()
+	require.NoError(t, err)
+	before, err := os.Stat(dir)
+	require.NoError(t, err)
+	signature := statSignature(state)
+
+	_, err = store.Revoke(types.GrantOperator, "prior")
+	require.NoError(t, err)
+	fresh, freshToken, err := store.Mint(types.GrantOperator, MintRequest{Name: "fresh", Grant: types.GrantConnector, TTL: time.Hour})
+	require.NoError(t, err)
+	require.NoError(t, os.Chtimes(dir, before.ModTime(), before.ModTime()))
+	after, err := os.Stat(dir)
+	require.NoError(t, err)
+	require.Equal(t, []any{before.Size(), before.ModTime(), before.Mode()}, []any{after.Size(), after.ModTime(), after.Mode()}, "the stat fingerprint must stay unchanged")
+	assert.NotEqual(t, signature, statSignature(state), "entry names must invalidate the view")
+	credential, ok = Verify(fresh)
+	require.True(t, ok)
+	assert.Equal(t, freshToken.Credential(), credential)
+	credential, ok = Verify(prior)
+	assert.False(t, ok)
+	assert.Equal(t, types.Credential{}, credential)
 }

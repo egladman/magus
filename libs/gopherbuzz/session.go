@@ -35,6 +35,11 @@ type Session struct {
 	// VISIBILITY: a name a flat import made private stays visible if another module
 	// exported it.
 	exportedNames map[string]bool
+	// chunkDefined is the names the chunk runChunk last ran defined: its exports
+	// and its private globals. An aliased import keeps these in its map even when
+	// the parent already bound the name. The host-global snapshot copied into the
+	// sub-session would otherwise hide that export and the alias would answer null.
+	chunkDefined []string
 	// rootExportedNames is the subset from chunks run outside an import. Exports()
 	// answers with this, because its callers ask what a file OWNS: conflated, an
 	// `import "lcov"` turned lcov's exports into the importer's targets (MGS1008).
@@ -446,7 +451,7 @@ type TestEntry struct {
 // registerTest is the session-bound implementation of the test-block registrar.
 // The compiler calls it once per test block with (name, bodyClosure).
 func (s *Session) registerTest(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
-	if len(args) != 2 || !args[0].IsStr() {
+	if len(args) != 2 || !args[0].IsString() {
 		return vmpackage.Null, fmt.Errorf("buzz: internal: malformed test registration")
 	}
 	s.tests = append(s.tests, TestEntry{Name: args[0].AsString(), Fn: args[1]})
@@ -477,12 +482,12 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 		// upstream: resume on a completed fiber returns null. If the fiber ended
 		// in an error, re-surface it rather than swallowing it (Err is nil for a
 		// clean completion, so this returns null, nil in that case).
-		return vmpackage.Null, fib.Err()
+		return vmpackage.Null, fib.Error()
 	case vmpackage.FiberRunning:
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resume a running fiber (recursive resume)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetCtx(ctx)
+	fibVM.SetContext(ctx)
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	result, err := fibVM.Exec()
@@ -493,7 +498,7 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 			return vmpackage.YieldValue(ys), nil
 		}
 		fib.SetStatus(vmpackage.FiberDone)
-		fib.SetErr(err) // cache so a later resume/resolve re-surfaces it
+		fib.SetError(err) // cache so a later resume/resolve re-surfaces it
 		return vmpackage.Null, err
 	}
 	fib.SetStatus(vmpackage.FiberDone)
@@ -517,12 +522,12 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 	case vmpackage.FiberDone:
 		// idempotent: return the cached return value, re-surfacing a cached error
 		// (Err is nil for a clean completion).
-		return fib.Return(), fib.Err()
+		return fib.Return(), fib.Error()
 	case vmpackage.FiberRunning:
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resolve a running fiber (recursive resolve)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetCtx(ctx)
+	fibVM.SetContext(ctx)
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	for {
@@ -531,7 +536,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 		// reach between suspends, leaving cancellation latency otherwise unbounded.
 		if err := ctx.Err(); err != nil {
 			fib.SetStatus(vmpackage.FiberDone)
-			fib.SetErr(err)
+			fib.SetError(err)
 			return vmpackage.Null, err
 		}
 		result, err := fibVM.Exec()
@@ -546,7 +551,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 			continue
 		}
 		fib.SetStatus(vmpackage.FiberDone)
-		fib.SetErr(err)
+		fib.SetError(err)
 		return vmpackage.Null, err
 	}
 }
@@ -774,6 +779,10 @@ func (s *Session) runChunk(ctx context.Context, chunk *vmpackage.Chunk) ([]strin
 	if _, err := vm.Run(chunk, s.env); err != nil {
 		return nil, err
 	}
+	// The names this chunk defined, kept for the aliased-import map. An export
+	// whose name the parent already bound still belongs to the module. Reading
+	// the list here is what loadImportAsAlias uses after Exec returns.
+	s.chunkDefined = append(append([]string{}, chunk.Exports...), chunk.Private...)
 	for _, name := range chunk.Exports {
 		s.exportedNames[name] = true
 		// collectImportPrivate is on for exactly the duration of an import.
@@ -1099,7 +1108,7 @@ func (s *Session) noteEntryQualified(chunk *vmpackage.Chunk) {
 func entryQualifiedIn(chunk *vmpackage.Chunk) map[string]bool {
 	var out map[string]bool
 	for _, c := range chunk.Consts {
-		if !c.IsStr() {
+		if !c.IsString() {
 			continue
 		}
 		if name, ok := strings.CutPrefix(c.AsString(), entryKeyPrefix); ok {
@@ -2384,28 +2393,35 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 		s.lastClosure = append([]bytecodeFile(nil), sub.lastClosure...)
 	}
 
-	// Collect new globals: anything in sub-session not in the host snapshot.
+	// A name this module defines belongs in its alias map even when the parent
+	// already bound it. Skipping every host snapshot name dropped that export,
+	// and the qualified call then resolved to null.
+	defined := make(map[string]bool, len(sub.chunkDefined))
+	for _, name := range sub.chunkDefined {
+		defined[name] = true
+	}
 	m := vmpackage.NewMap()
 	for name, slot := range sub.env.Names() {
-		if _, wasHost := hostNames[name]; !wasHost {
-			v := sub.env.Slots()[slot]
-			m.MapSet(name, v)
-			// An object TYPE also gets bound in the parent under its bare name.
-			//
-			// `ns\Name{...}` compiles to a construction of the BARE name (the parser
-			// resolves it that way on purpose, "to the same object def upstream reaches
-			// as ns\Name"), and the VM then looks the def up in the env. Leaving it only
-			// inside the alias map made `testing\PrefixMe{}` fail at RUN time with
-			// "unknown object type", after type-checking cleanly.
-			//
-			// Values are NOT bound this way: isolation is the point of an aliased
-			// import, and a type declaration is a compile-time fact rather than state.
-			// An existing binding wins, so a local type still shadows an imported one,
-			// matching how the compiler seeds its typeDecls.
-			if v.IsObjectDef() {
-				if _, exists := s.env.Get(name); !exists {
-					s.env.Define(name, v)
-				}
+		if _, wasHost := hostNames[name]; wasHost && !defined[name] {
+			continue
+		}
+		v := sub.env.Slots()[slot]
+		m.MapSet(name, v)
+		// An object TYPE also gets bound in the parent under its bare name.
+		//
+		// `ns\Name{...}` compiles to a construction of the BARE name (the parser
+		// resolves it that way on purpose, "to the same object def upstream reaches
+		// as ns\Name"), and the VM then looks the def up in the env. Leaving it only
+		// inside the alias map made `testing\PrefixMe{}` fail at RUN time with
+		// "unknown object type", after type-checking cleanly.
+		//
+		// Values are NOT bound this way: isolation is the point of an aliased
+		// import, and a type declaration is a compile-time fact rather than state.
+		// An existing binding wins, so a local type still shadows an imported one,
+		// matching how the compiler seeds its typeDecls.
+		if v.IsObjectDef() {
+			if _, exists := s.env.Get(name); !exists {
+				s.env.Define(name, v)
 			}
 		}
 	}

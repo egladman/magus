@@ -15,9 +15,9 @@ package vm
 // them, which is why a session whose values every other session reads must not
 // close.
 //
-// Strings are never owned: StrValue interns them process-wide and caches the
+// Strings are never owned: StringValue interns them process-wide and caches the
 // slot on the interned object, so a freed string slot would be handed out again
-// by the very next StrValue of that content.
+// by the very next StringValue of that content.
 //
 // Only the default representation has a table to release from; the safe and
 // unsafe builds carry each object as a Go pointer the collector reclaims, so

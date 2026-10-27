@@ -257,7 +257,7 @@ func declareTierHosts(ctx context.Context, sess *buzz.Session, enum string, case
 			if err != nil {
 				return nil, modelTierUnusable(modelTiersMember, "hosts for %s raised for %s.%s: %v", key, enum, cases[j], err)
 			}
-			if !rv.IsStr() {
+			if !rv.IsString() {
 				return nil, modelTierUnusable(modelTiersMember,
 					"hosts for %s answered %s for %s.%s, and a model alias is a str", key, rv.Kind(), enum, cases[j])
 			}
@@ -270,7 +270,7 @@ func declareTierHosts(ctx context.Context, sess *buzz.Session, enum string, case
 
 // decodeHarnessID reads a hosts key: the harness id magus\harness.provider returns.
 func decodeHarnessID(v vm.Value) (string, error) {
-	if !v.IsStr() {
+	if !v.IsString() {
 		return "", modelTierUnusable(modelTiersMember,
 			"a hosts key must be the harness id magus\\harness.provider returns, got %s", describeValue(v))
 	}
@@ -443,7 +443,7 @@ func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string) (*t
 		return nil, fmt.Errorf("%s: the matrix's skills: %w", modelTierMember, err)
 	}
 	reasonValue, present := fields.MapGet("reason")
-	if !present || !reasonValue.IsStr() || strings.TrimSpace(reasonValue.AsString()) == "" {
+	if !present || !reasonValue.IsString() || strings.TrimSpace(reasonValue.AsString()) == "" {
 		return nil, fmt.Errorf("%s: the matrix's answer has no reason, and every assignment records why", modelTierMember)
 	}
 	return &types.JobModelTier{

@@ -75,7 +75,7 @@ func withBootstrapLimiter(ctx context.Context, lim *cache.Limiter) context.Conte
 	return context.WithValue(ctx, bootstrapLimiterKey{}, lim)
 }
 
-func bootstrapLimiterFrom(ctx context.Context) *cache.Limiter {
+func bootstrapLimiterFromContext(ctx context.Context) *cache.Limiter {
 	lim, _ := ctx.Value(bootstrapLimiterKey{}).(*cache.Limiter)
 	return lim
 }
@@ -153,7 +153,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		stop := t.phase("magus.open")
 		defer relaxGC()()
 		opts := append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
-		if lim := bootstrapLimiterFrom(ctx); lim != nil {
+		if lim := bootstrapLimiterFromContext(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
 		if globalCfg.Broker.Resolved() != types.BrokerOff {
@@ -290,11 +290,11 @@ func listTargets(scope string, targets []types.Target, source string) {
 	}
 }
 
-// reportedRunErr reports whether err was already surfaced to the user, per project,
+// reportedRunError reports whether err was already surfaced to the user, per project,
 // by the cache's pretty handler as a "[xx] <project> (error): ..." line — i.e. a
 // spell/run failure during a fan-out. When true the top-level handler should exit
 // non-zero via exit.Reported rather than reprinting the same text as a "[error] ..." line.
-func reportedRunErr(err error) bool {
+func reportedRunError(err error) bool {
 	var se *types.SpellErrors
 	var logged cache.ReportedError
 	return errors.As(err, &se) || errors.As(err, &logged)

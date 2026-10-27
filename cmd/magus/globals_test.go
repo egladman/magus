@@ -33,7 +33,7 @@ func TestGuardKnowsEveryGlobalFlag(t *testing.T) {
 }
 
 func TestReorderFlagsFirst(t *testing.T) {
-	// A flag set mirroring the shapes cmdParse sees: a value flag, a bool flag.
+	// A flag set mirroring the shapes commandParse sees: a value flag, a bool flag.
 	newFS := func() *flag.FlagSet {
 		fs := flag.NewFlagSet("t", flag.ContinueOnError)
 		fs.String("output", "", "value flag")
@@ -172,7 +172,7 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 // against itself, so nothing else reports either direction.
 //
 // The comparison runs against the CLI as built, not against its source. Each documented
-// command is invoked with -h, which makes cmdParse bind every flag and then stop at
+// command is invoked with -h, which makes commandParse bind every flag and then stop at
 // flag.ErrHelp before the command does any work; recordFlagSet captures the fully bound
 // set on the way through. A source scan cannot do this: it sees neither the config flags
 // generated from the schema nor the display flags, so it reports --dry-run as
@@ -193,7 +193,7 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 
 				bound, ok := recordedFlagsUnder(probe.name)
 				if !ok {
-					// The command never reached cmdParse under -h. Not a drift finding:
+					// The command never reached commandParse under -h. Not a drift finding:
 					// it means this probe cannot see the command's flags, and a check
 					// that cannot look must say so rather than report "no drift".
 					t.Skipf("%q did not reach flag parsing under -h; its man page flags are unverified", probe.name)
@@ -430,7 +430,7 @@ func TestOutputRefusalIgnoresAmbientGlobal(t *testing.T) {
 	require.NoError(t, checkOutputSupported("buzz", fs))
 }
 
-// The check rides cmdParse, so it fires on the real parse path for every spelling of the
+// The check rides commandParse, so it fires on the real parse path for every spelling of the
 // flag, including one written AFTER the positional, which reorderFlagsFirst hoists.
 func TestCmdParseRefusesUnsupportedOutput(t *testing.T) {
 	prev := global.output
@@ -442,7 +442,7 @@ func TestCmdParseRefusesUnsupportedOutput(t *testing.T) {
 		{"./web", "-o", "json"},
 	} {
 		global.output = ""
-		_, err := cmdParse("buzz", args, nil)
+		_, err := commandParse("buzz", args, nil)
 		require.Error(t, err, "args %v", args)
 		assert.Contains(t, err.Error(), "-o is not supported by this command")
 	}

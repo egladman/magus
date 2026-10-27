@@ -426,7 +426,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // the workspace's rules loaded, as the CLI loads them inside the hook's bound, then judged.
 func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	testkit.Isolate(b)
-	repo := testkit.NewRepo(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": inertBenchRules})
+	repo := testkit.NewRepository(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": inertBenchRules})
 	root := repo.Root()
 	for _, f := range testToolFiles() {
 		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f.Path)), 0o755); err != nil {
@@ -478,7 +478,7 @@ func BenchmarkPlainWriteWithAPendingPolicy(b *testing.B) {
 	b.Setenv("XDG_CACHE_HOME", b.TempDir())
 	b.Setenv("XDG_STATE_HOME", b.TempDir())
 	const policy = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
-	repo := testkit.NewRepo(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": policy})
+	repo := testkit.NewRepository(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": policy})
 	root := repo.Root()
 	repo.Magusfile(policy + "\nfun unused() > void {}\n")
 	cacheDir := b.TempDir()

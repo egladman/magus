@@ -487,7 +487,7 @@ func TestColdApprovedCompileLapsesOnlyOnce(t *testing.T) {
 	testkit.Isolate(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":     "{}\n",
 		"magusfile.buzz": "import \"magus\";\n\nmagus\\guard.command(fun (req: CommandRequest) > GuardVerdict {\n    return magus\\guard.deny(\"committed\");\n});\n",
 	})
@@ -543,7 +543,7 @@ func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	const rule = "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.%s;\n}\n"
-	repo := testkit.NewRepo(t, map[string]string{
+	repo := testkit.NewRepository(t, map[string]string{
 		"magus.yaml":      "{}\n",
 		"magusfile.buzz":  "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n",
 		"lib/policy.buzz": fmt.Sprintf(rule, `deny("committed")`),
@@ -621,7 +621,7 @@ func TestOneJudgmentResolvesTheApprovedSourcesOnce(t *testing.T) {
 			testkit.Isolate(t)
 			t.Setenv("XDG_CACHE_HOME", t.TempDir())
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
-			repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": committedRules})
+			repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": committedRules})
 			repo.Magusfile(worktree)
 
 			judge := func() []int32 {
@@ -660,7 +660,7 @@ func TestApprovedResolveUnderAnExpiredDeadlineIsNotKept(t *testing.T) {
 	testkit.Isolate(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": committedRules})
+	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": committedRules})
 	repo.Magusfile("import \"magus\";\n")
 	rules, err := LoadWorkspaceRules(t.Context(), repo.Root(), types.VCSOptions{})
 	require.NoError(t, err)

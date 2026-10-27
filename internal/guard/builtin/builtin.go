@@ -331,6 +331,7 @@ var defaults = map[string]decision{
 	"notes-author":          Deny,
 	"policy-unloaded":       Deny,
 	"process-poll":          Deny,
+	"process-signal":        Deny,
 	"push-ungated":          Deny,
 	"shared-stash":          Deny,
 	"sleep-poll":            Deny,
