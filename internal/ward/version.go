@@ -142,7 +142,7 @@ type StaleBuild struct {
 // running version is not a dev build, so it never earns the bootstrap line.
 func (b StaleBuild) Advice() string {
 	update := "  - released binary: magus self update"
-	if pin := PinnedRelease(b.Floor); pin != "" {
+	if pin := pinnedRelease(b.Floor); pin != "" {
 		update += " --version " + pin
 	}
 	lines := []string{b.gap(), "Fix it:", update}
@@ -161,13 +161,13 @@ func (b StaleBuild) Advice() string {
 
 var constraintClause = regexp.MustCompile(`^(==?|>=|<=|<|>|~|\^)?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$`)
 
-// PinnedRelease is the release, "vX.Y.Z", that `magus self update --version` installs for
+// pinnedRelease is the release, "vX.Y.Z", that `magus self update --version` installs for
 // a workspace requiring constraint, and "" when the newest release is the one to take.
 // self update reads no magus.yaml, so where constraint bounds releases from above the
 // newest may be one the workspace refuses: an exact pin names itself, and a range with
 // an upper bound names its inclusive lower bound. A range with no inclusive lower bound,
 // a union, or a constraint that does not parse names none.
-func PinnedRelease(constraint string) string {
+func pinnedRelease(constraint string) string {
 	if strings.Contains(constraint, "||") {
 		return ""
 	}
