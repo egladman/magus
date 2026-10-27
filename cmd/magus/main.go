@@ -393,6 +393,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	//
 	// The config tier stays: usage text reads it (server.address in `server -h`),
 	// and reading magus.yaml writes nothing.
+	if sub == "self" {
+		// self update is the stale binary's remedy, so it runs where that binary cannot
+		// decode magus.yaml (MGS1040), help included.
+		return dispatchProfile{}
+	}
 	if wantsUsage(subArgs) {
 		return dispatchProfile{needsConfig: true}
 	}
@@ -414,7 +419,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// setting the environment had set. That was invisible locally, where the trust
 		// set is not what the yaml is consulted for, and fatal in CI.
 		return dispatchProfile{needsConfig: true}
-	case "completion", "self", "man":
+	case "completion", "man":
 		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no

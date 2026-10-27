@@ -399,6 +399,16 @@ func TestShellProfileSkipsTheWorkspacePreload(t *testing.T) {
 	}
 }
 
+// self update is what a stale binary tells its reader to run, and that binary may not
+// decode the workspace's magus.yaml.
+func TestSelfSkipsTheWorkspaceConfig(t *testing.T) {
+	for _, args := range [][]string{nil, {"update"}, {"update", "--help"}, {"update", "--version", "v1.2.3"}} {
+		if got := resolveProfile("self", args); got != (dispatchProfile{}) {
+			t.Errorf("resolveProfile(self, %q) = %+v, want no config", args, got)
+		}
+	}
+}
+
 func TestWantsUsage(t *testing.T) {
 	for _, tc := range []struct {
 		name string
