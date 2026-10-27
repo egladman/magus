@@ -223,15 +223,15 @@ fun judged(programs: [helpers\Program], caller: Caller, checkout: Checkout?) > G
 
 // person is an unattributed caller: no lease binds it and no spawn titled it.
 fun person() > Caller {
-    return Caller{ role = "root", title = "" };
+    return Caller{ role = magus\AgentRole.root, title = "" };
 }
 
 test "a worker whose role is not integrate may not run the gate" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
     foreach (caller in [
-        Caller{ role = "worker", title = "orchestrator/feat guard-command" },
-        Caller{ role = "root", title = "v050-prep/fix naming-advisory" },
-        Caller{ role = "worker", title = "" },
+        Caller{ role = magus\AgentRole.worker, title = "orchestrator/feat guard-command" },
+        Caller{ role = magus\AgentRole.root, title = "v050-prep/fix naming-advisory" },
+        Caller{ role = magus\AgentRole.worker, title = "" },
     ]) {
         final v = judged(gate, caller: caller, checkout: null);
         std\assert(v.decision == magus\GuardDecision.deny, message: "{caller.role} {caller.title}");
@@ -239,7 +239,7 @@ test "a worker whose role is not integrate may not run the gate" {
         std\assert(v.reason.indexOf("`magus job exit <job> --stdin`") != null and v.reason.indexOf("`magus describe job <job>`") != null,
             message: "names commands the refused role can run");
     }
-    final worker = Caller{ role = "worker", title = "orchestrator/review guard-command" };
+    final worker = Caller{ role = magus\AgentRole.worker, title = "orchestrator/review guard-command" };
     foreach (argv in [
         ["magus", "run", "ci", "."],
         ["magus", "affected", "ci:rw"],
@@ -250,7 +250,7 @@ test "a worker whose role is not integrate may not run the gate" {
 }
 
 test "the gate behind a status wait is judged as the gate" {
-    final worker = Caller{ role = "worker", title = "orchestrator/review guard-command" };
+    final worker = Caller{ role = magus\AgentRole.worker, title = "orchestrator/review guard-command" };
     foreach (argv in [
         ["magus", "affected", "ci"],
         ["magus", "-j", "4", "affected", "ci"],
@@ -259,7 +259,7 @@ test "the gate behind a status wait is judged as the gate" {
         std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
     }
-    final person = Caller{ role = "person", title = "" };
+    final person = Caller{ role = magus\AgentRole.none, title = "" };
     std\assert(judged(helpers\request([["magus", "status", "--wait"], ["magus", "affected", "ci"]]), caller: person, checkout: null).decision != magus\GuardDecision.deny, message: "a person may run it");
     std\assert(judged(helpers\request([["magus", "buzz", "hack/dev/ls-test-failures.buzz"]]), caller: worker, checkout: null).decision != magus\GuardDecision.deny, message: "other scripts are not the gate");
 }
@@ -267,11 +267,11 @@ test "the gate behind a status wait is judged as the gate" {
 test "the orchestrator, a person, an integrate worker and the plan form may gate" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
     std\assert(judged(gate, caller: person(), checkout: null).decision == magus\GuardDecision.allow, message: "an unattributed caller");
-    final integrator = Caller{ role = "integrator", title = "orchestrator/integrate local-command-policy" };
+    final integrator = Caller{ role = magus\AgentRole.integrator, title = "orchestrator/integrate local-command-policy" };
     std\assert(judged(gate, caller: integrator, checkout: null).decision == magus\GuardDecision.allow, message: "the checkout's integrator");
-    final elsewhere = Caller{ role = "worker", title = "orchestrator/integrate local-command-policy" };
+    final elsewhere = Caller{ role = magus\AgentRole.worker, title = "orchestrator/integrate local-command-policy" };
     std\assert(judged(gate, caller: elsewhere, checkout: null).decision == magus\GuardDecision.deny, message: "an integrate title outside the checkout its row was taken in");
-    final worker = Caller{ role = "worker", title = "orchestrator/feat guard-command" };
+    final worker = Caller{ role = magus\AgentRole.worker, title = "orchestrator/feat guard-command" };
     final plan = helpers\request([["magus", "affected", "ci", "--plan", "--no-default-charms"]]);
     std\assert(judged(plan, caller: worker, checkout: null).decision == magus\GuardDecision.allow, message: "the plan runs nothing");
     final narrow = helpers\request([["magus", "run", "go-test", ".", "--", "-run", "Guard"]]);
@@ -280,23 +280,23 @@ test "the orchestrator, a person, an integrate worker and the plan form may gate
 
 test "the holder of a checkout row may gate whatever its title" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
-    final holder = Caller{ role = "worker", title = "orchestrator/feat guard-command", holdsCheckout = true };
+    final holder = Caller{ role = magus\AgentRole.worker, title = "orchestrator/feat guard-command", holdsCheckout = true };
     std\assert(judged(gate, caller: holder, checkout: null).decision == magus\GuardDecision.allow, message: "a --checkout holder");
 }
 
 test "a row is held in its checkout only when live, with a worktree, and run from its root" {
     final worktree = magus\JobWorktree{ root = "/w/a" };
-    final row = magus\Job{ id = "a", state = "running", checkoutRoot = "/w/a", worktree = worktree };
+    final row = magus\Job{ id = "a", state = magus\JobState.running, checkoutRoot = "/w/a", worktree = worktree };
     std\assert(holdsCheckout(row, workspace: "/w/a"), message: "the holder's own checkout");
     std\assert(!holdsCheckout(row, workspace: "/w/b"), message: "another checkout");
-    std\assert(!holdsCheckout(magus\Job{ id = "a", state = "running", checkoutRoot = "/w/a" }, workspace: "/w/a"), message: "no worktree");
-    std\assert(!holdsCheckout(magus\Job{ id = "a", state = "failed", checkoutRoot = "/w/a", worktree = worktree }, workspace: "/w/a"), message: "not live");
+    std\assert(!holdsCheckout(magus\Job{ id = "a", state = magus\JobState.running, checkoutRoot = "/w/a" }, workspace: "/w/a"), message: "no worktree");
+    std\assert(!holdsCheckout(magus\Job{ id = "a", state = magus\JobState.fail, checkoutRoot = "/w/a", worktree = worktree }, workspace: "/w/a"), message: "not live");
     std\assert(!holdsCheckout(null, workspace: "/w/a"), message: "no lease");
 }
 
 test "a holder's gate is judged where the call runs, not where the host started" {
     final worktree = magus\JobWorktree{ root = "/w/a" };
-    final row = magus\Job{ id = "a", state = "running", checkoutRoot = "/w/a", worktree = worktree };
+    final row = magus\Job{ id = "a", state = magus\JobState.running, checkoutRoot = "/w/a", worktree = worktree };
     final held = fun (argvs: [[str]], dir: str) > bool {
         return gatesInHeldCheckout(row, programs: helpers\request(argvs), dir: dir, workspace: dir);
     };

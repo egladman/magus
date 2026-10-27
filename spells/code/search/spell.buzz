@@ -600,7 +600,7 @@ fun position(n: magus\KnowledgeNode?) > str {
 // calls reads one neighborhood: callers and callees from the calls edges, with callers in
 // test files listed apart as tests.
 fun calls(h: Hit, opts: Options) > [mut Section] !> any {
-    final hood: magus\NeighborhoodResult = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = ["calls"] });
+    final hood: magus\NeighborhoodResult = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = [magus\RelationID.calls] });
     final nodes = mut {<str: magus\KnowledgeNode>};
     foreach (n in hood.nodes) {
         nodes[n.id] = n;

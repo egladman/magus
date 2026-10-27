@@ -952,12 +952,12 @@ test "only the main session may publish" {
         helpers\vcsRequest([["jj", "git", "push", "-b", "guard-search"]]),
         helpers\request([["gh", "pr", "create", "--fill"]]),
     ];
-    final root = Pusher{ role = "root", title = "", session = "s1" };
+    final root = Pusher{ role = magus\AgentRole.root, title = "", session = "s1" };
     final denied = [
-        Pusher{ role = "worker", title = "", session = "s1", lease = "branch-names" },
-        Pusher{ role = "root", title = "main/feat branch-names", session = "s1" },
-        Pusher{ role = "root", title = "", session = "s1", agent = "a534fcfe" },
-        Pusher{ role = "root", title = "", session = "" },
+        Pusher{ role = magus\AgentRole.worker, title = "", session = "s1", lease = "branch-names" },
+        Pusher{ role = magus\AgentRole.root, title = "main/feat branch-names", session = "s1" },
+        Pusher{ role = magus\AgentRole.root, title = "", session = "s1", agent = "a534fcfe" },
+        Pusher{ role = magus\AgentRole.root, title = "", session = "" },
     ];
     final why = ["lease branch-names", "spawned as", "subagent `a534fcfe`", "no session"];
     foreach (line in lines) {

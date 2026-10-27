@@ -848,6 +848,50 @@ final h = http\Options{};
 	}
 }
 
+// An enum against a str is refused wherever it would be silently false: as a list's
+// indexOf needle and as an object field's value. Upstream rejects both as type mismatches.
+func TestSession_EnumAgainstAStrIsACheckError(t *testing.T) {
+	for name, tc := range map[string]struct{ src, want string }{
+		"indexOf needle": {`enum<str> E { a = "a" }
+final found = ["a"].indexOf(E.a);
+`, "indexOf between an enum and `str` is always false"},
+		"field value": {`enum<str> E { a = "a" }
+object O { k: E }
+final o = O{ k = "a" };
+`, "wrong property type: field O.k is E, got str"},
+		"list field value": {`enum<str> E { a = "a" }
+object O { ks: [E] }
+final o = O{ ks = ["a"] };
+`, "wrong property type: field O.ks is [E], got [str]"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer func() { _ = sess.Close() }()
+			require.ErrorContains(t, sess.Exec(ctx, tc.src), tc.want)
+		})
+	}
+}
+
+// `ns\E(v)` answers the case of a module's enum whose value is v, or null, as `E(v)` does
+// for a local one; calling it through the module used to raise "enumdef is not callable".
+func TestSession_QualifiedEnumFromValue(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	sess.SetNativeModule("states", vm.NewMap())
+	sess.SetModuleDecls("states", "export enum<str> State { declared = \"declared\", ended = \"ended\" }\n")
+	require.NoError(t, sess.Exec(ctx, `import "states";
+
+final found = states\State("declared");
+final missing = states\State("gone");
+`))
+	got, ok := sess.GetGlobal("found").EnumValue()
+	require.True(t, ok, "found is an enum case")
+	assert.Equal(t, "declared", got.AsString())
+	assert.True(t, sess.GetGlobal("missing").IsNull())
+}
+
 // hostShapedDecls is declaration source shaped like magus's generated bundles:
 // objects whose fields name one another, then one extern per host method.
 func hostShapedDecls(prefix string, objects, funcs int) string {

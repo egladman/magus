@@ -319,14 +319,14 @@ fun jobRows(jobs: [Job]) > [helpers\JobRow] {
 
 test "an integrate spawn for a row bound to another checkout is refused end to end and a matching checkout passes" {
     final rows = jobRows([
-        Job{ id = "land", state = "declared", checkoutRoot = "/w/other" },
-        Job{ id = "here", state = "declared", checkoutRoot = "/w/main" },
+        Job{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        Job{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
     ]);
     final facts = fun (title: str) > spawn\Spawn {
-        return spawnFacts(SpawnRequest{ kind = "spawn", description = title, checkout = "/w/main" });
+        return spawnFacts(SpawnRequest{ kind = magus\SpawnKind.spawn, description = title, checkout = "/w/main" });
     };
     final denied = spawn\decideSpawn(facts("orchestrator/integrate land"), rows: rows, unreadable: "");
-    std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("`/w/other`") != null, message: denied.decision + " " + denied.reason);
+    std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("`/w/other`") != null, message: denied.decision.value + " " + denied.reason);
     final allowed = spawn\decideSpawn(facts("orchestrator/integrate here"), rows: rows, unreadable: "");
     std\assert(allowed.decision == magus\GuardDecision.allow, message: allowed.reason);
 }
@@ -468,15 +468,15 @@ test "a write into a run log is denied with the verdict a command's read gets" {
 test "a push is refused to a subagent the host names, under no lease and unseen spawning" {
     final push = CommandInvocation{ program = "git", args = ["push", "origin", "HEAD:x"],
         vcs = VCSInvocation{ tool = "git", subcommand = "push", args = ["origin", "HEAD:x"] } };
-    final main = CommandRequest{ session = "s1", role = "root", commands = [push] };
+    final main = CommandRequest{ session = "s1", role = magus\AgentRole.root, commands = [push] };
     std\assert(branches\decideAuthority(parsePrograms(main), caller: requestPusher(main)).decision == magus\GuardDecision.allow, message: "the main session");
 
-    final unseen = CommandRequest{ session = "s1", role = "root", agent = "a534fcfe", commands = [push] };
+    final unseen = CommandRequest{ session = "s1", role = magus\AgentRole.root, agent = "a534fcfe", commands = [push] };
     final refused = branches\decideAuthority(parsePrograms(unseen), caller: requestPusher(unseen));
     std\assert(refused.decision == magus\GuardDecision.deny, message: "a subagent magus never saw spawned");
     std\assert(refused.reason.indexOf("subagent `a534fcfe`") != null, message: refused.reason);
 
-    final worker = CommandRequest{ session = "s1", role = "worker", lease = Job{ id = "guard-caller-identity" }, commands = [push] };
+    final worker = CommandRequest{ session = "s1", role = magus\AgentRole.worker, lease = Job{ id = "guard-caller-identity" }, commands = [push] };
     final leased = branches\decideAuthority(parsePrograms(worker), caller: requestPusher(worker));
     std\assert(leased.decision == magus\GuardDecision.deny, message: "a leased worker");
     std\assert(leased.reason.indexOf("lease guard-caller-identity") != null, message: leased.reason);
@@ -504,7 +504,7 @@ test "the main session's cat of a task capture outside the workspace is denied n
     final capture = "{host}/claude-501/project/session/tasks/bi3m8xyic.output";
     fs\writeFile(capture, content: "[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n");
     final cat = CommandInvocation{ program = "cat", args = [capture] };
-    final req = CommandRequest{ session = "s1", role = "root", dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
+    final req = CommandRequest{ session = "s1", role = magus\AgentRole.root, dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
 
     fs\writeFile("{ws}/magus", content: "");
     final denied = judge(req);

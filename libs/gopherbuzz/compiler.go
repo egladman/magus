@@ -660,6 +660,24 @@ func (c *compiler) qualifiedType(ns, name string) (*ast.ObjectDecl, bool, string
 	return decl, ok, name
 }
 
+// moduleEnum reports whether m names an enum an import bound as m's object exports.
+func (c *compiler) moduleEnum(m *ast.MemberExpr) bool {
+	id, ok := m.Object.(*ast.IdentExpr)
+	if !ok {
+		return false
+	}
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
+	for _, n := range root.moduleTypes[id.Name] {
+		if ed, isEnum := n.(*ast.EnumDecl); isEnum && ed.Name == m.Name {
+			return true
+		}
+	}
+	return false
+}
+
 // importedType finds the object type an import exports as name, skipping any
 // declaration of this module's own: what a qualified `ns\name` names.
 func (c *compiler) importedType(name string) (*ast.ObjectDecl, bool) {
@@ -2347,7 +2365,9 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 	// without allocating a bound method value (the bound-funObj copy getMember
 	// would make). The receiver is pushed once and reused as the call's base; the
 	// VM handler reads the method name from the const pool (A) and arg count (B).
-	if m, ok := v.Callee.(*ast.MemberExpr); ok {
+	// `ns\E(v)` reads the enum off its module and calls it, as `E(v)` does: OpInvoke
+	// resolves methods, and an enum is a value that answers its case for v.
+	if m, ok := v.Callee.(*ast.MemberExpr); ok && !c.moduleEnum(m) {
 		emitInvoke := func() error {
 			for _, arg := range v.Args {
 				if err := c.compileExpr(arg); err != nil {

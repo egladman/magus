@@ -1869,6 +1869,18 @@ func (c *checker) checkEnumEquality(p ast.Pos, op string, left, right types.Type
 		other.TypeName(), enum.Name, op, other.TypeName(), op == "!=", fix)
 }
 
+// inferEnumFromValue types `E(v)`, the case of E whose value is v, or null when none
+// is. Upstream takes one argument of any type: a value of another type matches nothing.
+func (c *checker) inferEnumFromValue(v *ast.CallExpr, enum *types.EnumType) types.Type {
+	for _, a := range v.Args {
+		c.infer(a)
+	}
+	if len(v.Args) != 1 {
+		c.errorfc(v.Pos, ArgumentError, "%s(value) takes exactly one value, got %d", enum.Name, len(v.Args))
+	}
+	return enum
+}
+
 func enumAndOther(left, right types.Type) (*types.EnumType, types.Type) {
 	le, lok := left.(*types.EnumType)
 	re, rok := right.(*types.EnumType)
@@ -1946,6 +1958,9 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		}
 	}
 	calleeTyp := c.infer(v.Callee)
+	if enum, isEnum := c.resolveType(calleeTyp).(*types.EnumType); isEnum && len(enum.Cases) > 0 {
+		return c.inferEnumFromValue(v, enum)
+	}
 	ft, ok := calleeTyp.(*types.FuncType)
 	argsResolved := true
 	if ok {
@@ -2023,7 +2038,14 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			}
 			continue
 		}
-		c.infer(a)
+		got := c.infer(a)
+		// A list's indexOf matches by ==, so an enum needle in a [str] (or the reverse)
+		// is never found, under the same rule BZZ1005 holds == to.
+		if m, isMember := v.Callee.(*ast.MemberExpr); isMember && m.Name == "indexOf" && i == 0 {
+			if lt, isList := c.builtinRecv[m].(*types.ListType); isList {
+				c.checkEnumEquality(v.Pos, "indexOf", c.resolveType(lt.Elem), got)
+			}
+		}
 	}
 	// An explicit generic type argument (`buf.readZAt::<double>(...)`) names the
 	// call's result type. gopherbuzz doesn't model generic signatures, so without
@@ -2653,11 +2675,30 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		if _, unresolved := want.(*types.NamedType); unresolved {
 			continue
 		}
-		if !types.Compat(got, want) {
+		if !types.Compat(got, want) || c.enumGotPrimitive(want, got) {
 			c.errorfc(ast.NodePos(v.Values[i]), TypeMismatch, "wrong property type: field %s.%s is %s, got %s", v.TypeName, key, want.TypeName(), got.TypeName())
 		}
 	}
 	return ot
+}
+
+// enumGotPrimitive reports a str, int, double or bool where an enum is wanted, or a list
+// of them where a list of an enum is. Compat lets them pass, but the field then holds a
+// value no case equals.
+func (c *checker) enumGotPrimitive(want, got types.Type) bool {
+	if wl, isList := want.(*types.ListType); isList {
+		gl, gotList := got.(*types.ListType)
+		return gotList && c.enumGotPrimitive(c.resolveType(wl.Elem), gl.Elem)
+	}
+	enum, isEnum := want.(*types.EnumType)
+	if !isEnum || len(enum.Cases) == 0 {
+		return false
+	}
+	switch got {
+	case types.Str, types.Int, types.Double, types.Bool:
+		return true
+	}
+	return false
 }
 
 // canonicalTypeName is the SINGLE source of the spelling a type value carries.
