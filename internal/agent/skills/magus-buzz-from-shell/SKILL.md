@@ -365,11 +365,11 @@ fun main(args: [str]) > void !> any {
 ```
 
 {{if .Full}}`proc\exec("git", ...)` is refused: version-control binaries run through `vcs\cmd`,
-which holds them to the lease rules. Prefer the typed members; they also work for hg, sl
-and jj. Reach for `vcs\cmd` only when no member answers.{{else}}`proc\exec("git", ...)` refused: VCS binaries run through `vcs\cmd` (lease rules). Prefer typed members (also hg, sl, jj); `vcs\cmd` only when no member answers.{{end}}
+which holds them to the lease. Prefer the typed members; they also work for hg, sl
+and jj. Reach for `vcs\cmd` only when no member answers.{{else}}`proc\exec("git", ...)` refused: VCS binaries run through `vcs\cmd` (held to the lease). Prefer typed members (also hg, sl, jj); `vcs\cmd` only when no member answers.{{end}}
 
-{{if .Full}}Running the real tool a script exists for, piping between two tools, asking magus for a
-typed record, and one whole rewrite are in [reference.md](reference.md).{{else}}Real tool, pipes between tools, asking magus, whole rewrite: [reference.md](reference.md).{{end}}
+{{if .Full}}[reference.md](reference.md) has four cases: running the real tool a script exists for;
+piping between two tools; asking magus for a typed record; one whole rewrite.{{else}}Real tool, pipes between tools, asking magus, whole rewrite: [reference.md](reference.md).{{end}}
 
 ## Anti-patterns
 
