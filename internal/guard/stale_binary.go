@@ -524,7 +524,7 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 		lease = ""
 	}
 	hasBinary := hasMagusBinary(root)
-	bootstrap := config.SourceRemedy(root, "", "", true).Lines()[0]
+	bootstrap := config.SourceCommand(root, "", "", true)
 	switch {
 	case lease != "" && own && hasBinary:
 		return binaryFix{
@@ -552,7 +552,7 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 		return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
 	}
 	return binaryFix{
-		say: fmt.Sprintf("install a magus that loads this workspace with `%s`", config.ReleaseRemedy(config.RequiredVersionAt(root)).Lines()[0]),
+		say: fmt.Sprintf("install a magus that loads this workspace with `%s`", config.ReleaseCommand(config.RequiredVersionAt(root))),
 		why: "If the error names a magusfile line instead, fix that line; `magus doctor` names the failure.",
 	}
 }

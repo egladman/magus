@@ -12,49 +12,28 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/ward"
-	"github.com/egladman/magus/types"
 )
 
-// staleCase is why a magus cannot load the workspace it runs in, as far as it decides the fix.
-type staleCase int
-
-const (
-	// staleRelease is an installed release older than the workspace: install another.
-	staleRelease staleCase = iota + 1
-	// staleOwnSource is a binary built from the checkout it sits in, older than its sources:
-	// rebuild it from them, without loading the tree it cannot load.
-	staleOwnSource
-)
-
-// staleRemedy is the fix for a binary that cannot load its workspace, as data. Every report
-// of a stale binary computes one and renders it where it prints, so the guard, MGS1021 and
-// doctor cannot word the same fix three ways.
-type staleRemedy struct {
-	kind staleCase
-	// Version is the release a staleRelease installs, "" for the newest: ward.PinnedRelease,
-	// so the guard names the same release as MGS1021. A required_version bounded from above
-	// may refuse the newest, and self update does not read magus.yaml.
-	Version string
-	// Checkout, Package and Output are a staleOwnSource's link: `go -C Checkout build -o
-	// Output ./Package`. Bootstrap replaces the link with ward.BootstrapCommand, the
-	// module's own build, for a checkout of magus itself.
-	Checkout, Package, Output string
-	Bootstrap                 bool
-	// Scripts are what the workspace declares for the situation, served after the fix
-	// because each runs on the binary the fix produces.
-	Scripts []types.NextStep
+// ReleaseCommand is the shell line that installs a release for a workspace declaring
+// constraint as its required_version, "" for none. It names ward.PinnedRelease, so the
+// guard and MGS1021 name the same release: a range bounded from above may refuse the
+// newest, and self update does not read magus.yaml.
+func ReleaseCommand(constraint string) string {
+	argv := []string{"magus", "self", "update"}
+	if pin := ward.PinnedRelease(constraint); pin != "" {
+		argv = append(argv, "--version", pin)
+	}
+	return ShellLine(argv)
 }
 
-// ReleaseRemedy is the release fix for a workspace declaring constraint as its
-// required_version, "" for none.
-func ReleaseRemedy(constraint string) staleRemedy {
-	return staleRemedy{kind: staleRelease, Version: ward.PinnedRelease(constraint)}
-}
-
-// SourceRemedy is the fix for a binary built from checkout's own sources and older than
-// them: link pkg into output, or run the module's own bootstrap when bootstrap is set.
-func SourceRemedy(checkout, pkg, output string, bootstrap bool) staleRemedy {
-	return staleRemedy{kind: staleOwnSource, Checkout: checkout, Package: pkg, Output: output, Bootstrap: bootstrap}
+// SourceCommand is the shell line that rebuilds a binary built from checkout's own
+// sources and older than them: link pkg into output, or, when bootstrap is set, run
+// ward.BootstrapCommand in checkout, the module's own build for a checkout of magus.
+func SourceCommand(checkout, pkg, output string, bootstrap bool) string {
+	if bootstrap {
+		return ShellLine(bootstrapIn(checkout))
+	}
+	return ShellLine([]string{"go", "-C", checkout, "build", "-o", output, "./" + pkg})
 }
 
 // RequiredVersionAt is the required_version root's magus.yaml declares, read leniently: a
@@ -78,23 +57,6 @@ func requiredVersion(data []byte) string {
 	return head.RequiredVersion
 }
 
-// Steps are the fix's commands as argv, in the order they run.
-func (r staleRemedy) Steps() [][]string {
-	switch r.kind {
-	case staleRelease:
-		if r.Version != "" {
-			return [][]string{{"magus", "self", "update", "--version", r.Version}}
-		}
-		return [][]string{{"magus", "self", "update"}}
-	case staleOwnSource:
-		if r.Bootstrap {
-			return [][]string{bootstrapIn(r.Checkout)}
-		}
-		return [][]string{{"go", "-C", r.Checkout, "build", "-o", r.Output, "./" + r.Package}}
-	}
-	return nil
-}
-
 // bootstrapIn is ward.BootstrapCommand with -C naming dir, so it builds that checkout from
 // whatever directory the host runs it in.
 func bootstrapIn(dir string) []string {
@@ -104,16 +66,6 @@ func bootstrapIn(dir string) []string {
 		return words
 	}
 	return slices.Concat(words[:at+1], []string{"-C", dir}, words[at+1:])
-}
-
-// Lines are Steps quoted for a POSIX shell, one command per line.
-func (r staleRemedy) Lines() []string {
-	steps := r.Steps()
-	lines := make([]string, len(steps))
-	for i, argv := range steps {
-		lines[i] = ShellLine(argv)
-	}
-	return lines
 }
 
 // ShellLine joins argv into one line a POSIX shell splits back into argv. A leading
