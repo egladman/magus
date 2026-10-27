@@ -59,9 +59,9 @@ func ownBuildEscape(exe string, info *debug.BuildInfo, root string) string {
 	}
 	name := filepath.Base(exe)
 	pkg := strings.TrimPrefix(info.Path, info.Main.Path+"/")
-	remedy := config.StaleRemedy{Case: config.StaleOwnSource, Checkout: root, Package: pkg, Output: name}
-	if info.Main.Path == ownModule && name == "magus" && pkg == "cmd/magus" {
-		remedy.Bootstrap = true
+	ownsMagus := info.Main.Path == ownModule && name == "magus" && pkg == "cmd/magus"
+	remedy := config.SourceRemedy(root, pkg, name, ownsMagus)
+	if ownsMagus {
 		return fmt.Sprintf("This binary was built from this checkout's own sources and predates them. Rebuild this checkout with `%s`, alone on its line; the explicit -C keeps the build and guard on the same checkout even when the host starts elsewhere. From a functioning magus checkout, the existing recovery script is `%s`; it builds from the target checkout's own sources and checks its HEAD. If compilation fails with `undefined:` in generated code, %s, then retry the bootstrap. Never move ./magus aside or disable the guard.", remedy.Lines()[0], job.CheckoutBootstrap(config.ShellLine([]string{root})), regenerate(info.Main.Path))
 	}
 	return fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot rebuild itself: every command it runs loads the same tree. Link a new one from source, one command at a time: `%s`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in generated code, the checkout's committed generated files are behind its sources (a merge kept one side), and restoring either side's copy brings back the mismatch: %s, then link again.", remedy.Lines()[0], regenerate(info.Main.Path))

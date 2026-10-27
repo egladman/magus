@@ -132,7 +132,7 @@ func denyContractPick(ctx context.Context, deps Dependencies, at location, line 
 		return ""
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: this changes the load contract (%s), so it lands through a dry run that builds and loads the result first, never straight into this checkout.", firstOf(touched)),
+		Say: fmt.Sprintf("magus workspace: this changes the load contract (%s), so it lands through a dry run that builds and loads the result first, never straight into this checkout.", leadPath(touched)),
 		Why: "A change to the host declarations, the API locks, the generated bindings or the Buzz checker can leave ./magus unable to load the tree, and a prefix of a series can leave a tree no binary builds from. " +
 			"Then every write waits for a binary nothing can build. The dry run applies the whole change in a scratch worktree, compiles ./cmd/magus, checks generator drift and loads the guard policy with the result, and lands nothing unless all of it passes.",
 	}.full()
@@ -146,8 +146,8 @@ func rankContractPick(v ShellVerdict, reason string) ShellVerdict {
 	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleStaleBinary}}
 }
 
-// firstOf names the first of paths and how many more there are.
-func firstOf(paths []string) string {
+// leadPath names the first of paths and how many more there are.
+func leadPath(paths []string) string {
 	if len(paths) == 1 {
 		return paths[0]
 	}
@@ -166,6 +166,12 @@ type binarySkew struct {
 
 const binarySkewFile = "binary-skew.jsonl"
 
+// key is what a kept answer is looked up by: the HEAD it judged and the commit the binary
+// was built at.
+func (s binarySkew) key() string {
+	return fmt.Sprintf("%s %s", s.Head, s.Built)
+}
+
 // checkoutSkew is binarySkew for the binary judging at, when it is the checkout's own
 // ./magus and says which commit it was built at; ok is false otherwise. The answer is kept
 // in the cache keyed by HEAD and that commit, so a call pays one git diff per HEAD.
@@ -178,8 +184,8 @@ func checkoutSkew(ctx context.Context, deps Dependencies, at location) (binarySk
 	if head == "" {
 		return binarySkew{}, false
 	}
-	store := file.JSONL[binarySkew]{Path: filepath.Join(at.cacheDir, binarySkewFile), Key: func(s binarySkew) string { return s.Head + " " + s.Built }}
-	key := head + " " + deps.BinaryCommit
+	store := file.JSONL[binarySkew]{Path: filepath.Join(at.cacheDir, binarySkewFile), Key: binarySkew.key}
+	key := binarySkew{Head: head, Built: deps.BinaryCommit}.key()
 	if at.cacheDir != "" {
 		if kept, err := store.Load(); err == nil {
 			if i := slices.IndexFunc(kept, func(s binarySkew) bool { return store.Key(s) == key }); i >= 0 {
@@ -225,7 +231,7 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	}
 	fix := binaryRemedy(true, at.workspace, deps.lease, deps.lease == "")
 	return denial{
-		Say: fmt.Sprintf("magus workspace: ./magus was built at %s, before %s changed the load contract; %s first.", built, firstOf(skew.Contract), fix.say),
+		Say: fmt.Sprintf("magus workspace: ./magus was built at %s, before %s changed the load contract; %s first.", built, leadPath(skew.Contract), fix.say),
 		Why: "A binary built before a change to the host declarations, the API locks, the generated bindings or the Buzz checker may not load the tree after it, and anything run now is judged by a policy it may not read. " +
 			"Reads, `git status`, VCS recovery and the rebuild still run.",
 	}.full()

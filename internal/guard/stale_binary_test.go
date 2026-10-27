@@ -720,7 +720,7 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), nil, 0o755))
 			}
 			fix := binaryRemedy(true, root, tc.lease, tc.builds)
-			named := []string{ward.BootstrapCommand, config.StaleRemedy{Case: config.StaleOwnSource, Checkout: root, Bootstrap: true}.Lines()[0]}
+			named := []string{ward.BootstrapCommand, config.SourceRemedy(root, "", "", true).Lines()[0]}
 			if tc.builds && hasBinary {
 				named = append(named, strings.Trim(ownRebuild, "`"))
 			}

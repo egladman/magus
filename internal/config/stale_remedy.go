@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,29 +16,27 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// StaleCase is why a magus cannot load the workspace it runs in, as far as it decides the fix.
-type StaleCase int
+// staleCase is why a magus cannot load the workspace it runs in, as far as it decides the fix.
+type staleCase int
 
 const (
-	// StaleRelease is an installed release older than the workspace: install another.
-	StaleRelease StaleCase = iota + 1
-	// StaleSkew is a daemon or hook binary that differs from the checkout's own: restart it.
-	StaleSkew
-	// StaleOwnSource is a binary built from the checkout it sits in, older than its sources:
+	// staleRelease is an installed release older than the workspace: install another.
+	staleRelease staleCase = iota + 1
+	// staleOwnSource is a binary built from the checkout it sits in, older than its sources:
 	// rebuild it from them, without loading the tree it cannot load.
-	StaleOwnSource
+	staleOwnSource
 )
 
 // StaleRemedy is the fix for a binary that cannot load its workspace, as data. Every report
 // of a stale binary computes one and renders it where it prints, so the guard, MGS1021 and
 // doctor cannot word the same fix three ways.
 type StaleRemedy struct {
-	Case StaleCase
-	// Version is the release a StaleRelease installs, "" for the newest. A workspace whose
+	kind staleCase
+	// Version is the release a staleRelease installs, "" for the newest. A workspace whose
 	// required_version pins one names it: the newest may be one it refuses, and self update
 	// does not read magus.yaml.
 	Version string
-	// Checkout, Package and Output are a StaleOwnSource's link: `go -C Checkout build -o
+	// Checkout, Package and Output are a staleOwnSource's link: `go -C Checkout build -o
 	// Output ./Package`. Bootstrap replaces the link with ward.BootstrapCommand, the
 	// module's own build, for a checkout of magus itself.
 	Checkout, Package, Output string
@@ -47,10 +46,16 @@ type StaleRemedy struct {
 	Scripts []types.NextStep
 }
 
-// ReleaseRemedy is the StaleRelease fix for a workspace declaring constraint as its
+// ReleaseRemedy is the release fix for a workspace declaring constraint as its
 // required_version, "" for none.
 func ReleaseRemedy(constraint string) StaleRemedy {
-	return StaleRemedy{Case: StaleRelease, Version: PinnedVersion(constraint)}
+	return StaleRemedy{kind: staleRelease, Version: pinnedVersion(constraint)}
+}
+
+// SourceRemedy is the fix for a binary built from checkout's own sources and older than
+// them: link pkg into output, or run the module's own bootstrap when bootstrap is set.
+func SourceRemedy(checkout, pkg, output string, bootstrap bool) StaleRemedy {
+	return StaleRemedy{kind: staleOwnSource, Checkout: checkout, Package: pkg, Output: output, Bootstrap: bootstrap}
 }
 
 // RequiredVersionAt is the required_version root's magus.yaml declares, read leniently: a
@@ -76,9 +81,9 @@ func requiredVersion(data []byte) string {
 
 var exactPin = regexp.MustCompile(`^\s*=?=?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\s*$`)
 
-// PinnedVersion is the one release constraint admits, "vX.Y.Z", or "" when it admits a
+// pinnedVersion is the one release constraint admits, "vX.Y.Z", or "" when it admits a
 // range or is empty.
-func PinnedVersion(constraint string) string {
+func pinnedVersion(constraint string) string {
 	m := exactPin.FindStringSubmatch(constraint)
 	if m == nil {
 		return ""
@@ -88,15 +93,13 @@ func PinnedVersion(constraint string) string {
 
 // Steps are the fix's commands as argv, in the order they run.
 func (r StaleRemedy) Steps() [][]string {
-	switch r.Case {
-	case StaleRelease:
+	switch r.kind {
+	case staleRelease:
 		if r.Version != "" {
 			return [][]string{{"magus", "self", "update", "--version", r.Version}}
 		}
 		return [][]string{{"magus", "self", "update"}}
-	case StaleSkew:
-		return [][]string{{"magus", "server", "stop"}, {"magus", "server", "start"}}
-	case StaleOwnSource:
+	case staleOwnSource:
 		if r.Bootstrap {
 			return [][]string{bootstrapIn(r.Checkout)}
 		}
@@ -133,7 +136,7 @@ func ShellLine(argv []string) string {
 	for i, a := range argv {
 		name, value, assigns := strings.Cut(a, "=")
 		if i == 0 && assigns && syntax.ValidName(name) {
-			quoted[i] = name + "=" + shellWord(value)
+			quoted[i] = fmt.Sprintf("%s=%s", name, shellWord(value))
 			continue
 		}
 		quoted[i] = shellWord(a)
