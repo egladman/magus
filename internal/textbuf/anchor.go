@@ -199,21 +199,43 @@ func (a *anchorTree) remove(slot uint32) {
 }
 
 // shift adds delta to the gap of the first entry past at, which moves it and every
-// entry after it.
+// entry after it. It writes the gap and the summaries above it in place.
 func (a *anchorTree) shift(at int, inclusive bool, delta int) {
-	idx, _, _, found := a.seek(at, inclusive)
-	if !found {
+	passes := func(p int) bool { return p > at || inclusive && p == at }
+	if a.t.root == nil || !passes(a.t.sum.pos) {
 		return
 	}
-	e := *a.t.at(idx)
-	e.gap += delta
-	a.t.splice(idx, idx+1, []anchorEntry{e})
+	n := a.t.mutRoot()
+	pos := 0
+	for n.height > 0 {
+		for k := range n.kids {
+			c := &n.kids[k]
+			if passes(pos + c.sum.pos) {
+				c.sum.pos += delta
+				n = a.t.mutKid(n, k)
+				break
+			}
+			pos += c.sum.pos
+		}
+	}
+	for k := range n.items {
+		if e := &n.items[k]; passes(pos + e.gap) {
+			e.gap += delta
+			break
+		}
+		pos += n.items[k].gap
+	}
+	a.t.sum.pos += delta
 }
 
 // collapse moves the entries in (s, e] to s and shifts the ones after e back by e-s.
 func (a *anchorTree) collapse(s, e int) {
 	idx, prevPos, _, found := a.seek(s, false)
 	if !found {
+		return
+	}
+	if prevPos+a.t.at(idx).gap > e {
+		a.shift(s, false, s-e)
 		return
 	}
 	var moved []anchorEntry

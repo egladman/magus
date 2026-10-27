@@ -89,13 +89,14 @@ type span struct {
 // Ranges must not overlap; inserts at one position land in argument order. On error
 // nothing is applied.
 func (b *Buffer) Apply(edits ...Edit) error {
-	spans := make([]span, len(edits))
+	var small [4]span
+	spans := small[:0]
 	for i, e := range edits {
 		s := b.Resolve(e.Anchor) + e.Offset
 		if e.Delete < 0 || s < 0 || s+e.Delete > b.Len() {
 			return fmt.Errorf("edit %d: %w: [%d, %d) in [0, %d]", i, ErrRange, s, s+e.Delete, b.Len())
 		}
-		spans[i] = span{s, s + e.Delete, i}
+		spans = append(spans, span{s, s + e.Delete, i})
 	}
 	slices.SortStableFunc(spans, func(x, y span) int { return cmp.Or(x.start-y.start, x.end-y.end) })
 	for i := 1; i < len(spans); i++ {
