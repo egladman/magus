@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-buzz-from-shell/SKILL.md
 description: "Rewrite a shell script as idiomatic Buzz instead of porting it line by line."
 tags: [agents, skills, magus-buzz-from-shell]
 skill_full_bytes: 15507
-skill_short_bytes: 13139
+skill_short_bytes: 13195
 ---
 
 # magus-buzz-from-shell
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `149` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `bbc27471fe1c` |
+| `skill-content` | `1cbc2b9a8179` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -99,34 +99,34 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 Signatures: `magus describe module <name>`. Check before assuming arguments.
 
 shell: Buzz
-`set -euo pipefail`, `|| exit 1`: nothing; host call raises; declare `!> any`
-`echo "msg" >&2; exit 1`: `throw "msg";`
-`trap 'rm -rf "$TMP"' EXIT`: usually nothing; keep data in memory
-`curl -fsSL --retry 5 URL`: `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })`
-`curl -o file URL`: `http\download(url, dest: file)`
-`jq`, `yq`: `json\parse`, `yaml\parse`, then index; `json\stringify`
-`grep PAT file`, `grep -c`: `fs\readLines(file).filter(...)`, `.len()`
-`sed 's/a/b/g'`: `text.replace("a", with: "b")`
-`cut -d: -f2`, `awk '{print $2}'`: `line.split(":")[1]`, `strings\fields(line)[1]`
-`wc -l`, `sort`, `uniq`, `head -n`: `.len()`, `.sort(fn)`, map as set, `.sub(0, len: n)`
-`KEY=value` file: `env\parseDotenv(fs\readFile(file))`
-`sha256sum`, `shasum -a 256`: `crypto\sha256File(path)`
-`tar xzf a.tgz --strip-components=1 -C d`: `archive\uncompress(src, dest: d, opts: archive\Options{ strip = 1 })`
-`tar czf`, `zip`: `archive\compress(src, dest: "a.tar.gz")`
-`find . -name '*.md'`, `dir/*/`: `fs\glob("**/*.md")`; `fs\walk` to prune while walking
-`[ -f ]`, `[ -d ]`, `[ -e ]`: `fs\isFile`, `fs\isDir`, `fs\exists`; often not needed
-`command -v tool`: `proc\which(tool)`, raises when absent
-`mkdir -p`, `rm -rf`, `cp -R`, `mv`: `fs\mkdirAll`, `fs\removeAll`, `fs\copyDir`, `fs\rename`
-`cat > f <<EOF`: `fs\writeFile`, or `template\render` for generated file
-`${VAR:?}`, `${VAR:-x}`: `env\require("VAR")`, `env\getOr("VAR", def: "x")`
-`VAR=x cmd`: `os\withEnv({"VAR": "x"}, callback: ...)`
-`"${1:?usage}"`, `getopts`: `flags\parse(args, switches: [...], valued: [...])`
-`until cmd; do sleep 2; done`: `os\retry(5, fn: ...)`, or `http\Retry` for HTTP
-`git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
-`( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
-`a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
-`magus ... -o json | jq`: `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records
-`magus run t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script
+- `set -euo pipefail`, `|| exit 1`: nothing; host call raises; declare `!> any`
+- `echo "msg" >&2; exit 1`: `throw "msg";`
+- `trap 'rm -rf "$TMP"' EXIT`: usually nothing; keep data in memory
+- `curl -fsSL --retry 5 URL`: `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })`
+- `curl -o file URL`: `http\download(url, dest: file)`
+- `jq`, `yq`: `json\parse`, `yaml\parse`, then index; `json\stringify`
+- `grep PAT file`, `grep -c`: `fs\readLines(file).filter(...)`, `.len()`
+- `sed 's/a/b/g'`: `text.replace("a", with: "b")`
+- `cut -d: -f2`, `awk '{print $2}'`: `line.split(":")[1]`, `strings\fields(line)[1]`
+- `wc -l`, `sort`, `uniq`, `head -n`: `.len()`, `.sort(fn)`, map as set, `.sub(0, len: n)`
+- `KEY=value` file: `env\parseDotenv(fs\readFile(file))`
+- `sha256sum`, `shasum -a 256`: `crypto\sha256File(path)`
+- `tar xzf a.tgz --strip-components=1 -C d`: `archive\uncompress(src, dest: d, opts: archive\Options{ strip = 1 })`
+- `tar czf`, `zip`: `archive\compress(src, dest: "a.tar.gz")`
+- `find . -name '*.md'`, `dir/*/`: `fs\glob("**/*.md")`; `fs\walk` to prune while walking
+- `[ -f ]`, `[ -d ]`, `[ -e ]`: `fs\isFile`, `fs\isDir`, `fs\exists`; often not needed
+- `command -v tool`: `proc\which(tool)`, raises when absent
+- `mkdir -p`, `rm -rf`, `cp -R`, `mv`: `fs\mkdirAll`, `fs\removeAll`, `fs\copyDir`, `fs\rename`
+- `cat > f <<EOF`: `fs\writeFile`, or `template\render` for generated file
+- `${VAR:?}`, `${VAR:-x}`: `env\require("VAR")`, `env\getOr("VAR", def: "x")`
+- `VAR=x cmd`: `os\withEnv({"VAR": "x"}, callback: ...)`
+- `"${1:?usage}"`, `getopts`: `flags\parse(args, switches: [...], valued: [...])`
+- `until cmd; do sleep 2; done`: `os\retry(5, fn: ...)`, or `http\Retry` for HTTP
+- `git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
+- `( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
+- `a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
+- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records
+- `magus run t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script
 
 ## Pairs
 
