@@ -18,7 +18,7 @@ import "magus";
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.command == "named") {
-        return GuardVerdict{decision = "deny", reason = "Lead with the outcome.", rule = "pull-request-text"};
+        return GuardVerdict{decision = magus\GuardDecision.deny, reason = "Lead with the outcome.", rule = "pull-request-text"};
     }
     return magus\guard.deny("unnamed");
 });
@@ -34,6 +34,30 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 		require.NoError(t, err, command)
 		assert.Equal(t, want, got, command)
 	}
+}
+
+// A rule's deny reaches the guard as a deny: the decision crosses as an enum case.
+func TestCommandRuleDenyDenies(t *testing.T) {
+	rule, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.command == "git push") {
+        return magus\guard.deny("Ask before pushing.");
+    }
+    return magus\guard.allow();
+});
+`)
+	require.NoError(t, err)
+	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
+
+	got, err := rule(t.Context(), types.CommandRequest{Command: "git push"}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Ask before pushing."}, got)
+
+	got, err = rule(t.Context(), types.CommandRequest{Command: "ls"}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
 }
 
 // deny's and advise's opts name the rule.

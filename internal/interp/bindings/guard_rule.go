@@ -219,8 +219,11 @@ func decodeGuardVerdict(name string, v vm.Value) (types.GuardVerdict, error) {
 	}
 	var out types.GuardVerdict
 	if d, ok := fields.MapGet("decision"); ok && !d.IsNull() {
+		if backing, isEnum := d.EnumValue(); isEnum {
+			d = backing
+		}
 		if !d.IsString() {
-			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's decision is %s, not a str`, name, d.Kind())
+			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's decision is %s, not a GuardDecision`, name, d.Kind())
 		}
 		if err := out.Decision.UnmarshalText([]byte(d.AsString())); err != nil {
 			return types.GuardVerdict{}, fmt.Errorf(`%s: %w`, name, err)
