@@ -1,7 +1,7 @@
 ---
 title: magus-buzz-from-shell
 generated_from: internal/agent/skills/magus-buzz-from-shell/SKILL.md
-description: "Rewrite a shell script as idiomatic Buzz instead of porting it line by line."
+description: "Rewrite a shell script as idiomatic Buzz, not a line-by-line port."
 tags: [agents, skills, magus-buzz-from-shell]
 skill_full_bytes: 15507
 skill_short_bytes: 13195
@@ -9,7 +9,7 @@ skill_short_bytes: 13195
 
 # magus-buzz-from-shell
 
-Rewrite a shell script as idiomatic Buzz instead of porting it line by line. Use BEFORE porting a .sh file or shell snippet to a .buzz script, target or spell, and when Buzz calls proc\exec on curl, jq, grep, sed, tar, find, sha256sum or git. Maps each shell idiom to a host module, gives good/bad pairs and anti-patterns, and decides whether a script becomes a target, stays a script, or stays shell. Do NOT use for Buzz syntax alone (magus-buzz-lang) or to review Buzz (magus-buzz-review).
+Rewrite a shell script as idiomatic Buzz, not a line-by-line port. Use BEFORE porting a .sh file to Buzz, and when Buzz runs curl, jq, grep, sed, tar, find, sha256sum or git through proc\exec. Maps shell idioms to host modules, and decides target, script or shell. Do NOT use for Buzz syntax (magus-buzz-lang) or review (magus-buzz-review).
 
 Install it, rather than copying from this page:
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `149` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `1cbc2b9a8179` |
+| `skill-content` | `95cddc78005e` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
