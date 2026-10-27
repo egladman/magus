@@ -1021,17 +1021,18 @@ func checkNamedStrings(rt reflect.Type) error {
 // slices, arrays, pointers and maps, when that type is in neither boundaryEnums nor
 // openStringTypes.
 func unregisteredString(ft reflect.Type) (reflect.Type, bool) {
+	ft = innermost(ft)
+	_, enum := buzzEnum(ft)
+	_, listed := openStringTypes[ft]
+	return ft, ft.Kind() == reflect.String && ft.PkgPath() != "" && !enum && !listed
+}
+
+// innermost is the type ft holds through any slices, arrays, pointers and maps.
+func innermost(ft reflect.Type) reflect.Type {
 	for ft.Kind() == reflect.Slice || ft.Kind() == reflect.Array || ft.Kind() == reflect.Pointer || ft.Kind() == reflect.Map {
 		ft = ft.Elem()
 	}
-	if ft.Kind() != reflect.String || ft.PkgPath() == "" {
-		return ft, false
-	}
-	if _, ok := buzzEnum(ft); ok {
-		return ft, false
-	}
-	_, listed := openStringTypes[ft]
-	return ft, !listed
+	return ft
 }
 
 type boundaryEnum struct {
