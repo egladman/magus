@@ -411,3 +411,7 @@ reference/rules/scripted-rewrite/
 # The waivers tag became deviations when JobWaiver was renamed to Deviation. A tag page is
 # generated per tag, so the old page retires rather than aliases.
 tags/waivers/
+# magus gate folded into `magus job grant --commit <rev> push-ungated`, and the
+# waiver-is-a-persons rule into grant-is-a-persons. Both pages are generated, so they retire.
+reference/manpage/magus-gate/
+reference/rules/waiver-is-a-persons/

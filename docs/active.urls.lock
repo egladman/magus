@@ -9,6 +9,7 @@ benchmarks/build-tools/
 blog/
 blog/2026/07/01/hello-blog/
 blog/2026/08/18/i-think-our-tools-are-the-problem/
+blog/2026/09/14/i-didnt-set-out-to-build-a-harness/
 breaking-changes/
 browser-bridge/
 buzz/modules/
@@ -277,6 +278,7 @@ glossary/backfill/
 glossary/broker/
 glossary/buzz/
 glossary/cache/
+glossary/cantrip/
 glossary/charm/
 glossary/chord/
 glossary/ci/
@@ -397,6 +399,7 @@ guides/releasing/
 guides/reviewing-changes/
 guides/security-scanning/
 guides/setup/
+guides/setup/assemble-oci-image/
 guides/setup/build-from-source/
 guides/setup/container-image/
 guides/setup/linux/
@@ -852,6 +855,7 @@ reference/proofread/message-length/
 reference/proofread/message-rationale/
 reference/proofread/message-tag/
 reference/proofread/nit-label/
+reference/proofread/no-body/
 reference/proofread/no-reason/
 reference/proofread/nominalizations/
 reference/proofread/nonspecific/
@@ -873,9 +877,11 @@ reference/proofread/staccato/
 reference/proofread/stacked-colon/
 reference/proofread/stacked-hedge/
 reference/proofread/step-verb/
+reference/proofread/subject-case/
 reference/proofread/subject-length/
 reference/proofread/subject-mood/
 reference/proofread/subject-period/
+reference/proofread/subject-punct/
 reference/proofread/suppression-unused/
 reference/proofread/template/
 reference/proofread/tense/
@@ -972,6 +978,7 @@ reference/rules/person-only/
 reference/rules/policy-unloaded/
 reference/rules/precedent-search/
 reference/rules/process-poll/
+reference/rules/process-signal/
 reference/rules/push-gate/
 reference/rules/push-ungated/
 reference/rules/raw-tool/
@@ -1157,6 +1164,7 @@ tags/conflicts/
 tags/connect/
 tags/connector/
 tags/console/
+tags/container-image/
 tags/container/
 tags/containers/
 tags/context/
@@ -1255,6 +1263,7 @@ tags/image/
 tags/impact/
 tags/import/
 tags/imports/
+tags/index/
 tags/inferred/
 tags/inputs/
 tags/insight-and-knowledge/
@@ -1406,6 +1415,7 @@ tags/run/
 tags/runaway/
 tags/rust/
 tags/sandbox/
+tags/sbom/
 tags/scanners/
 tags/scheduler/
 tags/scheduling/
