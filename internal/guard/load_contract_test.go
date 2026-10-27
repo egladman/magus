@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,9 +35,9 @@ func TestLoadContractNamesTheTriggerPaths(t *testing.T) {
 	}
 }
 
-// contractRepo is a checkout of magus with a base commit, then one commit changing the
+// contractCheckout is a checkout of magus with a base commit, then one commit changing the
 // host declarations and one changing a doc, returning the three commits.
-func contractRepo(t *testing.T) (root string, base, decls, doc string) {
+func contractCheckout(t *testing.T) (root string, base, decls, doc string) {
 	t.Helper()
 	root = t.TempDir()
 	git := func(args ...string) string {
@@ -51,7 +52,7 @@ func contractRepo(t *testing.T) (root string, base, decls, doc string) {
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 	}
 	git("init", "-q", "-b", "main")
-	write("go.mod", "module "+ownModule+"\n\ngo 1.26\n")
+	write("go.mod", fmt.Sprintf("module %s\n\ngo 1.26\n", ownModule))
 	write("magus.yaml", "{}\n")
 	git("add", "-A")
 	git("commit", "-q", "-m", "base")
@@ -71,13 +72,13 @@ func contractRepo(t *testing.T) (root string, base, decls, doc string) {
 // A pick that changes the load contract is refused while the tree loads, served the dry
 // run instead; the rest of a pick and an ordinary one run.
 func TestContractPickIsRefusedOnlyForTheLoadContract(t *testing.T) {
-	root, base, decls, doc := contractRepo(t)
+	root, base, decls, doc := contractCheckout(t)
 	at := location{workspace: root, dir: root}
 	ctx := context.Background()
 	deny := func(line string) string { return denyContractPick(ctx, Dependencies{}, at, line, DialectBash) }
 
 	assert.Contains(t, deny("git cherry-pick "+decls), "changes the load contract (internal/spell/gen/decls/magus.buzz)")
-	assert.Contains(t, deny("git cherry-pick -x "+base+".."+doc), "load contract")
+	assert.Contains(t, deny(fmt.Sprintf("git cherry-pick -x %s..%s", base, doc)), "load contract")
 	assert.Contains(t, deny("git merge "+decls), "load contract")
 	assert.Empty(t, deny("git cherry-pick "+doc), "an ordinary pick")
 	assert.Empty(t, deny("git cherry-pick --continue"))
@@ -90,7 +91,7 @@ func TestContractPickIsRefusedOnlyForTheLoadContract(t *testing.T) {
 // per HEAD from the cache, and lets reads and the rebuild through. A dirty build may hold
 // the change already, so it is not refused.
 func TestContractSkewRefusesChangesUntilTheRebuild(t *testing.T) {
-	root, base, decls, _ := contractRepo(t)
+	root, base, decls, _ := contractCheckout(t)
 	out, err := exec.Command("git", "-C", root, "reset", "-q", "--hard", decls).CombinedOutput()
 	require.NoError(t, err, string(out))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\n"), 0o755))
@@ -103,7 +104,7 @@ func TestContractSkewRefusesChangesUntilTheRebuild(t *testing.T) {
 	ctx := context.Background()
 
 	deny := denyContractSkew(ctx, deps, at, "touch notes.txt", DialectBash)
-	assert.Contains(t, deny, "./magus was built at "+base[:12]+", before internal/spell/gen/decls/magus.buzz changed the load contract; rebuild ./magus with `./magus run go-build .` first.")
+	assert.Contains(t, deny, fmt.Sprintf("./magus was built at %s, before internal/spell/gen/decls/magus.buzz changed the load contract; rebuild ./magus with `./magus run go-build .` first.", base[:12]))
 	assert.Empty(t, denyContractSkew(ctx, deps, at, "git status", DialectBash))
 	assert.Empty(t, denyContractSkew(ctx, deps, at, "./magus run go-build .", DialectBash))
 

@@ -476,7 +476,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, root, call.lease, call.builds)
-	problem :="the magus judging this is older than this workspace and cannot load its guard policy"
+	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:
 		problem = fmt.Sprintf("./magus was built from another commit than this tree: it ships no spell %q, which the tree carries, so it cannot load its guard policy", reason.Spell)

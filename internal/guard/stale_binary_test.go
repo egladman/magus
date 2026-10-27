@@ -84,14 +84,14 @@ func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyR
 // The verdicts a stale-binary deny opens with, by cause and caller.
 const (
 	staleOwnSay    = "./magus is older than this workspace and cannot load its guard policy; rebuild ./magus with `./magus run go-build .`."
-	staleWorkerSay ="./magus is older than this workspace and cannot load its guard policy; ask the main session to place a ./magus that loads this workspace."
+	staleWorkerSay = "./magus is older than this workspace and cannot load its guard policy; ask the main session to place a ./magus that loads this workspace."
 	// workerPlacementRun is the one command a leased worker is served in place of a build.
 	workerPlacementRun = `"<main checkout>/magus" buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from "<main checkout>"`
 )
 
 // noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
 func noBinaryOwnSay(root string) string {
-	return "this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C " + config.ShellLine([]string{root}) + " run -trimpath ./cmd/magus run go-build --no-cache .`."
+	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`.", config.ShellLine([]string{root}))
 }
 
 // A fresh worktree has no ./magus and no recorded policy: the magusfile showing a guard
@@ -157,7 +157,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay)
-		assert.Contains(t, stored, "bootstrap over it, alone on its line: `GOEXPERIMENT=jsonv2 go -C "+config.ShellLine([]string{root})+" run -trimpath ./cmd/magus run go-build --no-cache .`", line)
+		assert.Contains(t, stored, fmt.Sprintf("bootstrap over it, alone on its line: `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`", config.ShellLine([]string{root})), line)
 		assert.NotContains(t, stored, "magus.old", line)
 	}
 

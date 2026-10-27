@@ -74,7 +74,7 @@ func requiredVersion(data []byte) string {
 	return head.RequiredVersion
 }
 
-var exactPin =regexp.MustCompile(`^\s*=?=?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\s*$`)
+var exactPin = regexp.MustCompile(`^\s*=?=?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\s*$`)
 
 // PinnedVersion is the one release constraint admits, "vX.Y.Z", or "" when it admits a
 // range or is empty.

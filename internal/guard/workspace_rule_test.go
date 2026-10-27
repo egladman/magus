@@ -260,7 +260,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 
 		bootstrap := config.StaleRemedy{Case: config.StaleOwnSource, Checkout: root, Bootstrap: true}.Lines()[0]
-		assert.Contains(t, v.Context, "Judged by /usr/local/bin/magus ("+version+"); this checkout has no ./magus. Fix: bootstrap ./magus with `"+bootstrap+"`.")
+		assert.Contains(t, v.Context, fmt.Sprintf("Judged by /usr/local/bin/magus (%s); this checkout has no ./magus. Fix: bootstrap ./magus with `%s`.", version, bootstrap))
 	})
 	t.Run("a failure that is not the binary being old names no fix", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
@@ -340,8 +340,7 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 			change := Judge(ctx, deps, Request{Input: "touch NOTES.md", Host: "claude-code", Session: "change"})
 			if c.say == "" {
 				// No newer binary fixes a typo, so the change waits on the error, named.
-				assert.Equal(t, decisionDeny, change.Decision)
-				assert.Equal(t, string(denyRulePolicyUnloaded), change.Rule)
+				assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePolicyUnloaded)), unworded(change))
 			} else {
 				shortDeny(t, cacheDir, change, denyRuleStaleBinary, c.say)
 			}
