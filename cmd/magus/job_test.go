@@ -559,6 +559,35 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].DenyPaths})
 }
 
+// A retry names the id alone and forks the job again as it was declared; a spec flag
+// declares the job anew.
+func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
+	resetWorkspaceMemo(t)
+	repo, cacheDir := execRepositoryFixture(t)
+	root := repo.Root()
+	repo.WriteTree(map[string]string{"run.go": "package run\n"})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--check", "test .", "--write-paths", "run.go", "--criteria", "run"}))
+	_, err := job.Exit(t.Context(), store, "w", nil, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, jobFork(t.Context(), root, []string{"w"}))
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []string{"run.go"}, rows[0].WritePaths)
+	assert.Equal(t, "run", rows[0].Criteria)
+	assert.Contains(t, rows[0].Validation, "test .")
+	assert.Equal(t, types.StateDeclared, rows[0].State, "the retry is a new attempt")
+
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--criteria", "anew"}))
+	rows, err = store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Empty(t, rows[0].WritePaths, "a spec flag declares the job anew")
+	assert.Equal(t, "anew", rows[0].Criteria)
+}
+
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
 // refuses it even with a check, and the refusal teaches the script check a scout passes by.
 func TestJobForkRefusesARowScopedByNothing(t *testing.T) {

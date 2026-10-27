@@ -60,7 +60,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 			held.Kept = ""
 			return held, false, nil
 		case held.Made:
-			return types.JobWorktree{}, false, fmt.Errorf("job: %s owns the checkout %s, which its fork made and magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
+			return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which its fork made and magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
 				id, held.Root, held.Root)
 		}
 	}
@@ -157,6 +157,26 @@ func (s *Store) OwnedCheckout(dir string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// ParentCheckout is the checkout job parent works in when it is not here: the one its fork
+// made or adopted (bound true, so a child inherits it), else the one it was taken in (bound
+// false). It is "" when parent is unknown, works here, or has not been taken.
+func (s *Store) ParentCheckout(here, parent string) (dir string, bound bool, err error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", false, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == parent })
+	if i < 0 {
+		return "", false, nil
+	}
+	bound = rows[i].Worktree.Standing()
+	dir = heldCheckout(rows[i])
+	if dir == "" || samePath(dir, here) {
+		return "", false, nil
+	}
+	return dir, bound, nil
 }
 
 // LinkedCheckout reports whether dir is the top of a linked checkout of this store's
@@ -398,14 +418,18 @@ func WorkingCheckout(root string, row types.Job) string {
 	return root
 }
 
-// WrongCheckout refuses taking row anywhere but the checkout it owns, nil when it owns
-// none or here is that checkout.
+// WrongCheckout refuses taking row anywhere but the checkout it is bound to, nil when it is
+// bound to none or here is that checkout.
 func WrongCheckout(row types.Job, here string) error {
 	if !row.Worktree.Standing() || samePath(row.Worktree.Root, here) {
 		return nil
 	}
-	return heldError{fmt.Sprintf("job: %s owns the checkout %s, which its fork made for it, and is taken there and nowhere else: run `%s` in %s",
-		row.ID, row.Worktree.Root, hint.JobExec.With(row.ID), row.Worktree.Root)}
+	bound := fmt.Sprintf("owns the checkout %s, which its fork made for it", row.Worktree.Root)
+	if !row.Worktree.Made {
+		bound = fmt.Sprintf("is bound to the checkout %s, which its fork adopted for it", row.Worktree.Root)
+	}
+	return heldError{fmt.Sprintf("job: %s %s, and is taken there and nowhere else: run `%s` in %s",
+		row.ID, bound, hint.JobExec.With(row.ID), row.Worktree.Root)}
 }
 
 // EndWorktrees removes the checkout each ended job owns, once removing it loses nothing,

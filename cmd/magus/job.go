@@ -1109,7 +1109,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		row                types.Declaration
 		declared           forkFlags
 		schema, stdin, fix bool
-		flags              *flag.FlagSet
+		// retry is a fork naming an id and no spec flag, which forks a stored job again as declared.
+		retry bool
+		flags *flag.FlagSet
 	)
 	pos, err := commandParse("job fork", args, func(fs *flag.FlagSet) {
 		flags = fs
@@ -1128,13 +1130,14 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&declared.model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 		fs.StringVar(&declared.briefFormat, "brief-format", "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
-		fs.StringVar(&declared.checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace, which magus removes once the job ends unless it holds work; a linked checkout already there is adopted and never removed")
+		fs.StringVar(&declared.checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job fork <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus job fork --stdin < job.json")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Declare one job: what its holder is handed, where it may write, and the one")
-			fmt.Fprintln(os.Stderr, "check it runs. It replaces any job with the same id.")
+			fmt.Fprintln(os.Stderr, "check it runs. It replaces any job with the same id; an id with no spec flag")
+			fmt.Fprintln(os.Stderr, "forks that job again with the spec it was declared with.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Goals are data: the record's `goals` declares what done means (a check that")
 			fmt.Fprintln(os.Stderr, "passed; paths or symbols changed, present, absent or unreferenced), and")
@@ -1210,7 +1213,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		var dropped []string
 		flags.Visit(func(f *flag.Flag) {
-			if slices.Contains([]string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "read-only"}, f.Name) {
+			if slices.Contains(forkSpecFlags, f.Name) {
 				dropped = append(dropped, "--"+f.Name)
 			}
 		})
@@ -1239,6 +1242,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if err := row.Validate(); err != nil {
 			return exit.Usagef("magus job fork: %s", err)
 		}
+		retry = true
+		flags.Visit(func(f *flag.Flag) { retry = retry && !slices.Contains(forkSpecFlags, f.Name) })
 	}
 
 	root = resolveRootOrEmpty(root)
@@ -1255,6 +1260,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS)
+	if retry {
+		if row, err = retriedDeclaration(ctx, store, row); err != nil {
+			return err
+		}
+	}
 	switch {
 	case len(row.Integrates) > 0:
 		if len(row.WritePaths) > 0 {
@@ -1446,6 +1456,48 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 }
 
+// forkSpecFlags are the job fork flags that declare the spec, which a --stdin record carries
+// instead and a fork by id alone takes from the stored job.
+var forkSpecFlags = []string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "read-only"}
+
+// retriedDeclaration is the stored spec of the job row names, for a fork naming its id and no
+// spec flag, with row's checkout when --checkout gave one; row as it is when no job has that id.
+func retriedDeclaration(ctx context.Context, store *job.Store, row types.Declaration) (types.Declaration, error) {
+	rows, err := store.List()
+	if err != nil {
+		return row, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
+	if i < 0 {
+		return row, nil
+	}
+	retried := job.RetryDeclaration(rows[i])
+	retried.Checkout = row.Checkout
+	slog.InfoContext(ctx, fmt.Sprintf("the fork names %s and no spec flag, so it forks %s again with the spec it was declared with", row.ID, row.ID), attr.Notice("note"))
+	return retried, nil
+}
+
+// parentCheckout binds a child row forked from outside its parent's checkout to that
+// checkout, when the parent's fork made or adopted it, and refuses one whose parent was only
+// taken there, naming it. inherited is false when the row has no parent, or the parent works
+// here or nowhere yet.
+func parentCheckout(ctx context.Context, store *job.Store, here string, row types.Declaration) (types.Declaration, bool, error) {
+	if row.Parent == "" {
+		return row, false, nil
+	}
+	there, bound, err := store.ParentCheckout(here, row.Parent)
+	switch {
+	case err != nil || there == "":
+		return row, false, err
+	case !bound:
+		return row, false, exit.Usagef("magus job fork: %s's parent %s is held in %s, not here in %s, so its holder could not reach the parent's tree: fork %s from %s, or pass --checkout <dir>",
+			row.ID, row.Parent, there, here, row.ID, there)
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("%s's parent %s is bound to %s, so %s is taken there too", row.ID, row.Parent, there, row.ID), attr.Notice("note"))
+	row.Checkout = there
+	return row, true, nil
+}
+
 // forkCheckout settles the checkout row is taken in when it names none. A fork run inside a
 // checkout a job's fork made adopts that checkout, so the new row's holder is bound there and
 // not refused as a sibling. An integration row forked from any other linked checkout is
@@ -1457,6 +1509,9 @@ func forkCheckout(ctx context.Context, store *job.Store, root string, row types.
 	here, err := filepath.Abs(root)
 	if err != nil {
 		return row, err
+	}
+	if child, inherited, err := parentCheckout(ctx, store, here, row); inherited || err != nil {
+		return child, err
 	}
 	owned, err := store.OwnedCheckout(here)
 	if err != nil {
@@ -1930,9 +1985,8 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 	return removed
 }
 
-// endWorktrees removes the checkouts that jobs which ended own, and the linked checkout each
-// job in ended was taken in, restoring what magus wrote in them first, and prints what
-// became of each one: removed, or kept and why. What magus wrote includes the tool rows a
+// endWorktrees removes the checkouts the forks of jobs which ended made, restoring what magus
+// wrote in them first, and prints what became of each one: removed, or kept and why. What magus wrote includes the tool rows a
 // wired harness's install puts in a checkout, which describe file leaves unclaimed.
 func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
 	return endCheckouts(ctx, out, store, ended, false)

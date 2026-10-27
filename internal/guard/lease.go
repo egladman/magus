@@ -2385,6 +2385,11 @@ func denyLeaseCheckout(ctx context.Context, deps Dependencies, actingLease, comm
 	if !ok || me.Worktree == nil || me.Worktree.Root == "" || workerRole(me, deps.caller) == "" {
 		return denial{}
 	}
+	// Nobody took a row bound to a checkout its fork adopted, so its worker's exec binds it
+	// where the worker runs (see job.Store.Exec): no tree is its own yet.
+	if !me.Worktree.Made && me.CheckoutRoot == "" {
+		return denial{}
+	}
 	root := me.Worktree.Root
 	envelope := hookLocation(ctx, deps).workspace
 	for _, c := range calls {

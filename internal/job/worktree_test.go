@@ -55,7 +55,7 @@ func TestForkWorktreeMakesTheJobsCheckoutAtTheForkersRevision(t *testing.T) {
 	assert.Equal(t, wt, again)
 
 	_, _, err = s.ForkWorktree(ctx, "w1", filepath.Join(t.TempDir(), "elsewhere"), "", "")
-	require.ErrorContains(t, err, "owns the checkout "+wt.Root+", which its fork made")
+	require.ErrorContains(t, err, "already owns the checkout "+wt.Root+", which its fork made")
 }
 
 func TestForkWorktreeRefusesACheckpointWithUncommittedChanges(t *testing.T) {
@@ -111,6 +111,33 @@ func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
 	assert.True(t, made)
 	assert.Equal(t, moved, again.Root)
 	assert.DirExists(t, dir, "the adopted checkout stands")
+}
+
+// A child forked from outside its parent's checkout inherits the checkout the parent's fork
+// recorded; one the parent was only taken in is named, not inherited.
+func TestParentCheckoutIsWhereTheParentWorksWhenNotHere(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	parent := forkInto(t, s, "parent", "")
+	elsewhere := t.TempDir()
+	seed(t, s, types.Job{ID: "taken", State: types.StateRunning, ReadOnly: true, CheckoutRoot: elsewhere})
+	seed(t, s, types.Job{ID: "untaken", State: types.StateDeclared, ReadOnly: true})
+
+	for name, tc := range map[string]struct {
+		here, parent, dir string
+		bound             bool
+	}{
+		"a parent's fork-made checkout":    {here: repo.Root(), parent: "parent", dir: parent.Worktree.Root, bound: true},
+		"forked inside the parent's":       {here: parent.Worktree.Root, parent: "parent"},
+		"a parent taken in another":        {here: repo.Root(), parent: "taken", dir: elsewhere},
+		"a parent nobody took":             {here: repo.Root(), parent: "untaken"},
+		"a parent the store does not know": {here: repo.Root(), parent: "nobody"},
+	} {
+		dir, bound, err := s.ParentCheckout(tc.here, tc.parent)
+		require.NoError(t, err, name)
+		assert.Equal(t, tc.dir, dir, name)
+		assert.Equal(t, tc.bound, bound, name)
+	}
 }
 
 func TestMirroredBinaryIsOnlyTheForkingCheckoutsOwnMagus(t *testing.T) {
@@ -199,6 +226,52 @@ func TestExecTakesAJobInItsOwnCheckoutAndNowhereElse(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, row.Worktree.Root, taken.CheckoutRoot)
 	assert.Equal(t, types.StateRunning, taken.State)
+}
+
+// A worker the host isolated in a fresh linked checkout takes a job nobody took, whose fork
+// adopted another checkout, where it runs: the job is bound there, at its checkpoint.
+func TestExecBindsAnUntakenAdoptedJobToAFreshCheckoutAtItsCheckpoint(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, loc, repo := worktreeStore(t)
+	older := repo.Head()
+	checkpoint := repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	linked := func(name, rev string) string {
+		dir := filepath.Join(t.TempDir(), name)
+		repo.Git("worktree", "add", "-q", "--detach", dir, rev)
+		resolved, err := filepath.EvalSymlinks(dir)
+		require.NoError(t, err)
+		return resolved
+	}
+	landing := linked("landing", checkpoint)
+	for _, id := range []string{"w1", "w2"} {
+		seed(t, s, types.Job{ID: id, State: types.StateDeclared, Checkpoint: checkpoint, WritePaths: []string{"a.txt"}})
+		wt, made, err := s.ForkWorktree(ctx, id, landing, "", "")
+		require.NoError(t, err)
+		require.False(t, made)
+		_, err = s.RecordWorktree(ctx, id, wt)
+		require.NoError(t, err)
+	}
+	at := func(dir string) *Store {
+		return NewStore(Location{StateBase: loc.StateBase, CacheDir: loc.CacheDir, Root: dir})
+	}
+
+	stale := linked("stale", older)
+	_, err := at(stale).Exec(ctx, "w1")
+	require.ErrorIs(t, err, ErrHeldElsewhere)
+	assert.ErrorContains(t, err, "once this checkout is at its checkpoint "+checkpoint)
+
+	fresh := linked("fresh", checkpoint)
+	taken, err := at(fresh).Exec(ctx, "w1")
+	require.NoError(t, err)
+	assert.Equal(t, fresh, taken.CheckoutRoot)
+	assert.Equal(t, fresh, taken.Worktree.Root)
+	assert.False(t, taken.Worktree.Made, "the host made it, so magus never removes it")
+
+	_, err = at(landing).Exec(ctx, "w2")
+	require.NoError(t, err)
+	_, err = at(fresh).Exec(ctx, "w2")
+	require.ErrorIs(t, err, ErrHeldElsewhere, "a job somebody took stays where it was taken")
 }
 
 func TestEndWorktreesRemovesACleanCheckoutOnceItsJobEnds(t *testing.T) {

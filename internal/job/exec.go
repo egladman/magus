@@ -63,9 +63,11 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 	}
 	// Resolved before the lock, since resolving runs the VCS; the row is read again under it.
 	var checkpoint string
+	var moved *types.JobWorktree
 	if f, err := s.read(); err == nil {
 		if i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id }); i >= 0 {
 			checkpoint = f.Jobs[i].Checkpoint
+			moved = s.untakenElsewhere(ctx, f.Jobs[i])
 		}
 	}
 	full := s.fullRevisions(ctx, checkpoint, base)
@@ -88,6 +90,15 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 		if cur.State.Terminal() && !resumed {
 			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
 				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
+		}
+		if moved != nil && cur.CheckoutRoot == "" && cur.Worktree.Standing() && !cur.Worktree.Made {
+			switch compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full)) {
+			case types.BaseMatch, types.BaseRevisionMatch, types.BaseUnknown:
+				cur.Worktree = moved
+			default:
+				return heldError{fmt.Sprintf("job: %s is bound to %s, a checkout its fork adopted, and nobody took it there, so it may be taken here in %s instead, once this checkout is at its checkpoint %s: it is at %s",
+					id, cur.Worktree.Root, here, checkpointRevision(cur.Checkpoint), checkpointRevision(base))}
+			}
 		}
 		if err := WrongCheckout(*cur, here); err != nil {
 			return err
@@ -116,6 +127,31 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 		}
 		return nil
 	})
+}
+
+// rebindsAdopted reports whether row moves prev, which nobody took, from one checkout its
+// fork adopted to another adopted one.
+func rebindsAdopted(prev, row types.Job) bool {
+	return prev.CheckoutRoot == "" && prev.Worktree.Standing() && !prev.Worktree.Made &&
+		row.Worktree.Standing() && !row.Worktree.Made && !samePath(prev.Worktree.Root, row.Worktree.Root)
+}
+
+// untakenElsewhere is this checkout adopted for row, when nobody has taken row and its fork
+// adopted a checkout other than this one: a worker the host isolated in a fresh linked
+// checkout binds the job here instead. nil when row is any other, or this is no linked checkout.
+func (s *Store) untakenElsewhere(ctx context.Context, row types.Job) *types.JobWorktree {
+	if s.root == "" || row.CheckoutRoot != "" || !row.Worktree.Standing() || row.Worktree.Made {
+		return nil
+	}
+	here, err := filepath.Abs(s.root)
+	if err != nil || samePath(here, row.Worktree.Root) {
+		return nil
+	}
+	wt, err := s.adoptCheckout(ctx, row.ID, here)
+	if err != nil {
+		return nil
+	}
+	return &wt
 }
 
 // fullRevisions maps the revision half of each token to the full revision this checkout's

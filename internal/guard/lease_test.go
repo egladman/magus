@@ -580,6 +580,34 @@ func TestDenyLeaseCheckoutStaysQuiet(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, "./magus run go-test ."))
 	})
+	t.Run("an untaken row its fork adopted a checkout for", func(t *testing.T) {
+		ctx, deps, row := untakenRowFixture(t, types.JobWorktree{Root: held})
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, "./magus job exec "+row.ID), "exec binds it where the worker runs")
+	})
+	t.Run("an untaken row its fork made a checkout for", func(t *testing.T) {
+		ctx, deps, row := untakenRowFixture(t, types.JobWorktree{Root: held, Made: true})
+		assert.True(t, denyLeaseCheckout(ctx, deps, row.ID, "./magus job exec "+row.ID).refused(), "a made checkout is the one place it is taken")
+	})
+}
+
+// untakenRowFixture seeds a worker row nobody took, bound to wt, and returns its context.
+func untakenRowFixture(t *testing.T, wt types.JobWorktree) (context.Context, Dependencies, types.Job) {
+	t.Helper()
+	ctx, root := fleetFixture(t)
+	at, ok := ctx.Value(locationKey{}).(location)
+	require.True(t, ok)
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: root})
+	_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
+	_, err = store.RecordWorktree(t.Context(), row.ID, wt)
+	require.NoError(t, err)
+	caller := job.Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	facts := hint.NewGate(at.cacheDir, FactsKey(caller.Host, caller.Session))
+	writeSpawnedAgent(facts, caller.Agent, spawnedAgent{Description: "root/feat " + row.ID})
+	return ctx, Dependencies{caller: caller, facts: facts}, row
 }
 
 func TestAnIntegratorIsJudgedWhereItsLineRuns(t *testing.T) {
