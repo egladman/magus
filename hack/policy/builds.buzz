@@ -10,6 +10,7 @@ import "fs";
 import "path";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
+import "./hack/policy/stale" as stale;
 
 // The go verbs that compile a package into something runnable.
 final goVerbs = ["run", "build", "install"];
@@ -57,7 +58,6 @@ fun isMagusPackage(arg: str) > bool {
 }
 
 // The script that places a worker's ./magus. binaries.buzz lets it through.
-export final placementScript = "hack/dev/bootstrap-worktree.buzz";
 
 // workerPlacement is the denial every worker gets for building magus, leased or not: the
 // same verdict and the same command, with built naming what it ran when that is known. The
@@ -73,13 +73,13 @@ export fun workerPlacement(built: str, lease: str) > str {
         cause = cause + ". ";
     }
     return "a worker does not build magus; ask the main session to place ./magus\n"
-        + "once placed, run `<main checkout>/magus buzz {placementScript} -- --job <id> --from <main checkout>`.\n"
+        + "once placed, run `<main checkout>/magus buzz {stale\placementScript} -- --job <id> --from <main checkout>`.\n"
         + cause + "There is one binary per base commit: the checkout's integrator builds ./magus once, in the landing checkout, "
-        + "and {placementScript} copies it into a worker checkout whenever no Go build input differs. "
+        + "and {stale\placementScript} copies it into a worker checkout whenever no Go build input differs. "
         + "A build per worker is two Go compiles each, and a fan-out runs a dozen at once. Use the ./magus "
         + "placed in this checkout; if it cannot load this tree, ask the main session to place a newer one, "
         + "which it builds and places in one step with "
-        + "`<main checkout>/magus buzz {placementScript} -- --job <id> --build-from <main checkout>`. "
+        + "`<main checkout>/magus buzz {stale\placementScript} -- --job <id> --build-from <main checkout>`. "
         + "A worker runs `./magus run go-build .` itself only in a checkout its job owns, and only when the "
         + "job's write paths cover a build input of ./cmd/magus.";
 }
@@ -166,23 +166,22 @@ export fun buildInputsAmong(writePaths: [str], scopes: [str]) > [str] {
 }
 
 final rootScope = "./";
-final moduleFiles = ["go.mod", "go.sum", "go.work", "go.work.sum"];
 
-// packageScopes reads `go list -deps -f '{{.Dir}}|<embed files>'` output, one package per
-// line: "dir/" for a package below root, rootScope and its embedded files for the root
-// package. A directory outside root (stdlib, module cache) drops out.
-export fun packageScopes(listed: str, root: str) > [str] {
+// inputScopes turns the build inputs stale\goInputs lists into what isBuildInput matches a
+// path against: "dir/" for the directory of each Go source, which also admits a file not
+// written yet, rootScope for the root package, and every other input as itself.
+export fun inputScopes(inputs: [str]) > [str] {
     final scopes = mut [<str>];
-    final base = path\clean(root);
-    foreach (line in listed.split("\n")) {
-        if (line.trim() == "") { continue; }
-        final fields = line.trim().split("|");
-        final dir = path\clean(fields[0]);
-        if (dir == base) {
-            scopes.append(rootScope);
-            foreach (embedded in fields.sub(1)) { scopes.append(embedded); }
-        } else if (dir.startsWith(base + "/")) {
-            scopes.append(dir.sub(base.len() + 1) + "/");
+    final seen = mut {<str: bool>};
+    foreach (input in inputs) {
+        var scope = input;
+        if (input.endsWith(".go")) {
+            final dir = fs\dirname(input);
+            scope = if (dir == ".") rootScope else dir + "/";
+        }
+        if (!(seen[scope] ?? false)) {
+            seen[scope] = true;
+            scopes.append(scope);
         }
     }
     return scopes;
@@ -192,7 +191,7 @@ fun isBuildInput(p: str, scopes: [str]) > bool {
     final name = fs\basename(p);
     final dir = fs\dirname(p);
     if (dir == ".") {
-        if (moduleFiles.indexOf(name) != null) { return true; }
+        if (stale\moduleFiles.indexOf(name) != null) { return true; }
     }
     if (name.endsWith(".go")) {
         if (name.endsWith("_test.go")) { return false; }
@@ -244,7 +243,7 @@ export fun briefDenial(brief: str, ownBuild: bool = false) > str {
                 return "the brief tells the worker to build magus; drop the step\n"
                     + "the line reads: {line}\n"
                     + "There is one binary per base commit: the checkout's integrator builds ./magus once, in the "
-                    + "landing checkout, and {placementScript} copies it into each worker checkout. A worker that compiles "
+                    + "landing checkout, and {stale\placementScript} copies it into each worker checkout. A worker that compiles "
                     + "it adds two Go builds per worker, and a fan-out runs a dozen at once. The worker uses the "
                     + "./magus already placed, and asks the main session for a newer one if it cannot load the "
                     + "tree. A line that names the command to forbid it (\"never ...\") is not graded.";
@@ -435,8 +434,8 @@ test "go-build is the one build a worker may own, run directly or through the bo
 }
 
 test "the build inputs among write paths follow the go list scopes" {
-    final listed = "/w/a|VERSION\n/w/a/cmd/magus\n/w/a/internal/job\n\n/usr/local/go/src/fmt\n";
-    final scopes = packageScopes(listed, root: "/w/a");
+    final listed = "/w/a|main.go|VERSION\n/w/a/cmd/magus|main.go\n/w/a/internal/job|claim.go\n\n/usr/local/go/src/fmt\n";
+    final scopes = inputScopes(stale\goInputs(listed, root: "/w/a"));
     std\assert(scopes.join(",") == "./,VERSION,cmd/magus/,internal/job/", message: scopes.join(","));
     final found = buildInputsAmong([
         "internal/job/worktree.go",

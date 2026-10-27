@@ -10,8 +10,17 @@ import "crypto";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
-import "./hack/policy/binaries" as binaries;
-import "./hack/policy/builds" as builds;
+
+// The script that places a built ./magus in a worker's checkout.
+export final placementScript = "hack/dev/bootstrap-worktree.buzz";
+
+// sameFile: a and b name one file, however each is spelled.
+export fun sameFile(a: str, b: str) > bool {
+    final x = fs\stat(a) catch null;
+    final y = fs\stat(b) catch null;
+    if (x == null or y == null) { return false; }
+    return x!.size == y!.size and x!.mtime == y!.mtime and x!.mode == y!.mode;
+}
 
 // The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
 // the skills it serves, and the host declarations and spell sources it embeds, which are
@@ -82,11 +91,11 @@ export fun stampedInputs(stamp: str) > str {
 }
 
 // The files that decide the module graph a Go build resolves, at the root.
-final moduleFiles = ["go.mod", "go.sum", "go.work", "go.work.sum"];
+export final moduleFiles =["go.mod", "go.sum", "go.work", "go.work.sum"];
 
 // goListFormat prints a linked package as its directory, then each file it compiles or
 // embeds after a "|". Test files are not among them; a standard-library package prints "".
-final goListFormat = `{{if not .Standard}}{{.Dir}}{{range .GoFiles}}|{{.}}{{end}}{{range .CgoFiles}}|{{.}}{{end}}`
+export final goListFormat =`{{if not .Standard}}{{.Dir}}{{range .GoFiles}}|{{.}}{{end}}{{range .CgoFiles}}|{{.}}{{end}}`
     + `{{range .CFiles}}|{{.}}{{end}}{{range .HFiles}}|{{.}}{{end}}{{range .SFiles}}|{{.}}{{end}}`
     + `{{range .SysoFiles}}|{{.}}{{end}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`;
 
@@ -212,7 +221,6 @@ export fun hookBinary(workspace: str) > HookBinary {
     if (workspace == "") { return none; }
     final bin = magus\guard.binary();
     final own = "{workspace}/magus";
-    final sameFile = binaries\onDisk().sameFile;
     if (bin.path == "" or (bin.path != own and !sameFile(own, b: bin.path))) { return none; }
     if (bin.stamp == "") {
         return HookBinary{ ours = true, stamped = false, moved = [<str>], path = bin.path, workspace = workspace };
@@ -356,7 +364,7 @@ fun sameStampedInputs(commit: str, base: str, workspace: str) > bool {
 fun rebuildRemedy(binary: str, workspace: str) > str {
     return "rebuild with `{binary} --root {workspace} run go-build .` (the main session, holding no lease); "
         + "a worker under a lease asks the main session to place one with "
-        + "`<main checkout>/magus buzz {builds\placementScript} -- --job <id> --build-from <main checkout>`";
+        + "`<main checkout>/magus buzz {placementScript} -- --job <id> --build-from <main checkout>`";
 }
 
 // decideStateWrite denies a state-writing magus verb that a stale ./magus would run

@@ -8,6 +8,7 @@ import "path";
 import "proc";
 import "std";
 import "vcs";
+import "./hack/policy/stale" as stale;
 
 import "assert";
 
@@ -76,15 +77,9 @@ export fun checkReusable(stamped: str, digest: str) > void !> str {
     }
 }
 
-// digestProbe prints two lines: the Go input digest stamped into the magus running it, then
-// root's. It runs in the binary's own checkout, so the digest it computes is the definition
-// that stamped the binary. hack/policy/stale.buzz holds both, and this script cannot import
-// it: the policy parses under the --embedded rules and a script under the strict ones.
-export fun digestProbe(root: str) > str {
-    return `import "std"; import "magus"; import "./hack/policy/stale" as stale; `
-        + `fun main(args: [str]) > void !> any \{ std\print(stale\stampedInputs(magus\guard.binary().stamp)); `
-        + "std\\print(stale\\goInputsDigest(`" + root + "`)); }";
-}
+// stampProbe prints the build stamp of the magus running it, from which hack/policy/stale.buzz
+// reads the Go input digest the binary was built with.
+final stampProbe = `import "std"; import "magus"; std\print(magus\guard.binary().stamp);`;
 
 // mainWorktree is the first stanza of `git worktree list --porcelain`, the checkout every
 // other worktree hangs off.
@@ -172,15 +167,14 @@ fun reusable(root: str, source: str) > obj{ bin: str, digest: str } !> any {
     if (!fs\isFile(bin)) {
         throw "bootstrap-worktree: {source} holds no ./magus to place";
     }
-    var probed = "";
+    var stamp = "";
     try {
-        probed = magusAt(bin, root: source, args: ["buzz", "-e", digestProbe(root)]);
+        stamp = magusAt(bin, root: source, args: ["buzz", "-e", stampProbe]);
     } catch (e: str) {
-        throw "{bin} is not this worktree's build:\n  {source} cannot compute a Go input digest, so it predates go-build stamping one: {e}";
+        throw "{bin} is not this worktree's build:\n  {source} cannot print its build stamp, so it predates go-build stamping one: {e}";
     }
-    final said = probed.trim().split("\n");
-    final stamped = if (said.len() == 2) said[0].trim() else "";
-    final digest = said[said.len() - 1].trim();
+    final stamped = stale\stampedInputs(stamp.trim());
+    final digest = stale\goInputsDigest(root);
     try {
         checkReusable(stamped, digest: digest);
     } catch (e: str) {
