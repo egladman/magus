@@ -55,7 +55,7 @@ func layerHeader(name string, typeflag byte, mode int64, uid, gid int, linkname 
 // Entries are keyed by destination, so the sort keeps a parent ahead of its
 // children: the parent's path is a prefix of theirs.
 func layerEntries(spec Spec) ([]layerEntry, error) {
-	byDest := make(map[string]layerEntry, len(spec.Files)+len(spec.Symlinks))
+	byDest := make(map[string]layerEntry, len(spec.Files)+len(spec.Symlinks)+len(spec.emptyDirs))
 	for _, f := range spec.Files {
 		if f.UID < 0 || f.GID < 0 {
 			return nil, fmt.Errorf("image.layer: file %q: uid and gid must not be negative", f.Destination)
@@ -73,6 +73,22 @@ func layerEntries(spec Spec) ([]layerEntry, error) {
 		name := strings.TrimPrefix(l.Destination, "/")
 		byDest[l.Destination] = layerEntry{
 			header: layerHeader(name, tar.TypeSymlink, 0o777, l.UID, l.GID, l.Target),
+		}
+	}
+	for _, dir := range spec.emptyDirs {
+		if _, ok := byDest[dir.Destination]; ok {
+			continue
+		}
+		if dir.UID < 0 || dir.GID < 0 {
+			return nil, fmt.Errorf("image.layer: dir %q: uid and gid must not be negative", dir.Destination)
+		}
+		name := strings.TrimPrefix(dir.Destination, "/") + "/"
+		mode := int64(dir.Mode)
+		if mode == 0 {
+			mode = 0o755
+		}
+		byDest[dir.Destination] = layerEntry{
+			header: layerHeader(name, tar.TypeDir, mode, dir.UID, dir.GID, ""),
 		}
 	}
 	for dest := range byDest {

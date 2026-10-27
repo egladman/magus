@@ -77,13 +77,15 @@ func PullLayout(ctx context.Context, reference string, platform Platform, dest s
 		Base:       reference,
 		BaseDigest: MustDigest(ref.Digest),
 	}
-	if input, err := readPlatformLayout(ctx, dest); err == nil {
-		setCreated(out, input.config.Created)
-		for _, b := range input.blobs {
-			if b.desc.MediaType == ocispec.MediaTypeImageConfig {
-				out.ConfigDigest = MustDigest(b.desc.Digest)
-				break
-			}
+	input, err := readPlatformLayout(ctx, dest)
+	if err != nil {
+		return Layout{}, fmt.Errorf("image.pull: verify layout: %w", err)
+	}
+	setCreated(out, input.config.Created)
+	for _, b := range input.blobs {
+		if b.desc.MediaType == ocispec.MediaTypeImageConfig {
+			out.ConfigDigest = MustDigest(b.desc.Digest)
+			break
 		}
 	}
 	return *out, nil

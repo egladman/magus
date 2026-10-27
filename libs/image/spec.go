@@ -46,18 +46,27 @@ type Spec struct {
 	ResetCommand    bool
 	Labels          map[string]string
 	Annotations     map[string]string
-	Created         string
+	Created string
+	// emptyDirs are image directories from DirPlacement.EmptyDirs (mode/owner from the placement).
+	emptyDirs []emptyDir
 }
 
-// expandDirs folds DirPlacements into Files/Symlinks.
+type emptyDir struct {
+	Destination string
+	Mode        fs.FileMode
+	UID, GID    int
+}
+
+// expandDirs folds DirPlacements into Files/Symlinks and empty directory destinations.
 func (s *Spec) expandDirs(ctx context.Context) error {
 	for i, d := range s.Dirs {
-		files, symlinks, _, err := d.expand(ctx)
+		files, symlinks, dirs, err := d.expand(ctx)
 		if err != nil {
 			return fmt.Errorf("image.assemble: dirs[%d]: %w", i, err)
 		}
 		s.Files = append(s.Files, files...)
 		s.Symlinks = append(s.Symlinks, symlinks...)
+		s.emptyDirs = append(s.emptyDirs, dirs...)
 	}
 	s.Dirs = nil
 	return nil
@@ -346,6 +355,25 @@ func (d *decoder) integer(m map[string]any, key string) int {
 	return 0
 }
 
+func (d *decoder) int64(m map[string]any, key string) int64 {
+	raw, ok := m[key]
+	if !ok {
+		return 0
+	}
+	switch v := raw.(type) {
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	case float64:
+		if v == math.Trunc(v) && math.Abs(v) <= float64(math.MaxInt64) {
+			return int64(v)
+		}
+	}
+	d.fail(key, "an int64", raw)
+	return 0
+}
+
 func (d *decoder) list(m map[string]any, key string) []any {
 	raw, ok := m[key]
 	if !ok {
@@ -438,7 +466,7 @@ func (d *decoder) dir(i int, m map[string]any) DirPlacement {
 		Symlinks:    SymlinkPolicy(sub.str(m, "symlinks")),
 		EmptyDirs:   sub.boolean(m, "emptyDirs"),
 		MaxFiles:    sub.integer(m, "maxFiles"),
-		MaxBytes:    int64(sub.integer(m, "maxBytes")),
+		MaxBytes:    sub.int64(m, "maxBytes"),
 	}
 	d.err = sub.err
 	return placement

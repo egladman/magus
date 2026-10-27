@@ -45,6 +45,7 @@ func AssembleLayout(ctx context.Context, spec Spec, dest string) (Layout, error)
 		}
 		base = &cfg
 		baseLayers, blobs = input.layers, input.blobs
+		out.BaseDigest = MustDigest(input.descriptor.Digest)
 		setCreated(out, cfg.Created)
 	}
 
@@ -79,10 +80,12 @@ func AssembleLayout(ctx context.Context, spec Spec, dest string) (Layout, error)
 	out.FileCount = len(spec.Files)
 	out.SymlinkCount = len(spec.Symlinks)
 	out.Layer = added
-	if spec.Base == "" && spec.Created != "" {
-		if t, err := time.Parse(time.RFC3339, spec.Created); err == nil {
-			setCreated(out, &t)
+	if spec.Created != "" {
+		t, err := time.Parse(time.RFC3339, spec.Created)
+		if err != nil {
+			return Layout{}, fmt.Errorf("image.assemble: created %q: want RFC 3339: %w", spec.Created, err)
 		}
+		setCreated(out, &t)
 	}
 	for _, b := range blobs {
 		if b.desc.MediaType == ocispec.MediaTypeImageConfig {

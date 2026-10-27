@@ -64,8 +64,8 @@ func (d DirPlacement) defaults() DirPlacement {
 	return d
 }
 
-// expand turns d into files, symlinks and explicit directory destinations.
-func (d DirPlacement) expand(ctx context.Context) (files []File, symlinks []Symlink, dirs []string, err error) {
+// expand turns d into files, symlinks and explicit empty directory destinations.
+func (d DirPlacement) expand(ctx context.Context) (files []File, symlinks []Symlink, dirs []emptyDir, err error) {
 	d = d.defaults()
 	if d.Strip < 0 {
 		return nil, nil, nil, fmt.Errorf("image.assemble: strip %d (want >= 0)", d.Strip)
@@ -138,7 +138,11 @@ func (d DirPlacement) expand(ctx context.Context) (files []File, symlinks []Syml
 			files = append(files, File{Source: p, Destination: dest, Mode: fm, UID: d.UID, GID: d.GID})
 		case mode.IsDir():
 			if d.EmptyDirs {
-				dirs = append(dirs, dest)
+				dm := d.DirMode.FileMode()
+				if d.ModePolicy == ModePreserve {
+					dm = mode.Perm()
+				}
+				dirs = append(dirs, emptyDir{Destination: dest, Mode: dm, UID: d.UID, GID: d.GID})
 			}
 		case mode&fs.ModeSymlink != 0:
 			switch d.Symlinks {
@@ -152,6 +156,8 @@ func (d DirPlacement) expand(ctx context.Context) (files []File, symlinks []Syml
 				symlinks = append(symlinks, Symlink{Destination: dest, Target: target, UID: d.UID, GID: d.GID})
 			case SymlinkFollow:
 				return fmt.Errorf("image.assemble: dir %q: symlink follow not implemented for %q", root, rel)
+			default:
+				return fmt.Errorf("image.assemble: dir %q: unknown symlinks policy %q", root, d.Symlinks)
 			}
 		default:
 			return fmt.Errorf("image.assemble: dir %q: unsupported source type %s at %q", root, mode.Type(), rel)
