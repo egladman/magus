@@ -159,6 +159,22 @@ truncating it after the fact:
   bare identifiers one per line, `template=` to project exactly the fields you
   need and nothing else.{{else}}- `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.{{end}}
 
+### Read worker streams as records
+
+JSONL is a record stream, not a progress message. Keep the complete capture with
+the host or `-o jsonl --tee <file>`; parse its contract before selecting fields.
+Project the terminal outcome, validation refs, unresolved risks and requests for
+input before returning data to the orchestrator. Fetch tool transcripts only to
+investigate a specific failure. Handled tool errors and denials stay in the
+capture. A filter must preserve terminal failures, unresolved blockers, unchecked work,
+missing or malformed terminal records, and the producer's exit status; an empty
+projection is not success. Never select failures by searching prose for words
+such as `deny`, or truncate a stream with head or tail.
+
+For magus records, use `-o template` or `-o json` with a JSON projection. Full
+records stay available for audit; replaying every claim, permitted deviation and
+routine guard event spends context without changing the next action.
+
 {{if .Full}}### Never pipe or redirect a magus command{{else}}### Never pipe or redirect magus{{end}}
 
 {{if .Full}}**Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`, or

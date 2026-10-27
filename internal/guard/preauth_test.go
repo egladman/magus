@@ -234,6 +234,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A", "magus vcs ls-files --include-untracked --include-generated -o name | git add --pathspec-from-file=-")},
 		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A -- cmd/magus/main.go", "magus vcs ls-files --include-untracked --include-generated cmd/magus/main.go -o name | git add --pathspec-from-file=-")},
 		{"denyRuleProcessPoll", denyRuleProcessPoll, fixed("pgrep -fl magus", "magus status")},
+		{"denyRuleProcessSignal", denyRuleProcessSignal, fixed("pkill -f 'magus job fork'", "magus status")},
 		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run lint . && magus run lint docs", "magus run lint . | magus run lint docs")},
 		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run generate:rw . && magus run test .", "magus run generate:rw . | magus run test .")},
 		{"denyRuleSymbolSearch", denyRuleSymbolSearch, fixed("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011")},

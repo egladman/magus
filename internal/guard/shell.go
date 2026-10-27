@@ -2652,6 +2652,11 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 			return v
 		}
 	}
+	if parsed && processSignalFires(work) {
+		if v, ok := held.ends(deps, processSignalVerdict); ok {
+			return v
+		}
+	}
 	if busyWaitFires(command, d) {
 		wait := ShellVerdict{Deny: denyBusyWait, Why: denyBusyWaitWhy, Rule: denyRule{Name: denyRuleBusyWait}}
 		if foreignWaitFires(command, d) {
@@ -2667,7 +2672,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 		// The one-shot read, not --watch: a watch never exits, and a served command that
 		// holds the caller's tool slot until it times out is the poll again.
 		poll := ShellVerdict{Deny: denyProcessPoll, Why: denyProcessPollWhy, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
-			"`pgrep`, `pidof` and `ps` answer what the project lock already records.",
+			"process-table reads and `kill -0` answer what the project lock already records.",
 			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
 				"status reads the live pool once and exits, where the process table only guesses at it."))
 		if v, ok := held.ends(deps, poll); ok {

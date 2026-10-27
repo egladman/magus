@@ -300,7 +300,7 @@ export fun brief(t: Terms, extra: str) > str !> str {
     text.append("    magus buzz hack/dev/bootstrap-worktree.buzz -- --job {t.id}");
     text.append("");
     text.append("It places the orchestrator's `./magus` (it never builds one), builds the graph, takes the lease and refuses unless the row names this worktree and its base. "
-        + "If it refuses, stop and report what it printed; do not take the lease by hand somewhere else.");
+        + "If it refuses, stop and report the blocking reason and evidence ref; do not paste the full verdict or take the lease by hand somewhere else.");
     text.append("");
     text.append("The guard grades your writes under the lease only once it has bound your session: at a spawn titled for this job, "
         + "or when it sees you run `./magus job exec {t.id}` yourself. Not spawned under it? Run that once after the script.");
@@ -358,11 +358,12 @@ export fun brief(t: Terms, extra: str) > str !> str {
     text.append("");
     text.append("## Check");
     text.append("");
-    text.append("Your one check, run exactly like this; the pipe waits out a busy checkout (MGS3009), and sleeps or retry loops are refused:");
+    text.append("Your one check, run exactly like this:");
     text.append("");
-    text.append("    ./magus status --wait | {t.check}");
+    text.append("    {t.check}");
     text.append("");
     text.append("Run nothing else that validates: no `magus affected ci`, no other target, no raw tool. The root runs everything else, serially.");
+    text.append("If the build budget refuses your check, set validation.owed to `no seat` and leave output_ref empty; mark any gate_evidence the same way. Do not wait or retry; the root runs the owed check.");
     text.append("");
     text.append("## Finish");
     text.append("");
@@ -376,6 +377,8 @@ export fun brief(t: Terms, extra: str) > str !> str {
     text.append("Then, as your last step:");
     text.append("");
     text.append("    ./magus job exit {t.id} --stdin < <scratchpad>/{t.id}-result.json");
+    text.append("");
+    text.append("After filing the result, reply with the job id, outcome, validation ref and unresolved risks. Keep the JSON result, claims, deviations and guard transcript in their records; do not paste them into the reply.");
     if (extra.trim() != "") {
         text.append("");
         text.append("## Task notes");

@@ -31,7 +31,6 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 	}{
 		{"sleep 30; ./magus status", true},
 		{"sleep 60 && gh pr checks 12", true},
-		{"sleep 1m; kill -0 4242", true},
 		{"sleep 45 && gh run view 99", true},
 		// A settle, not a wait.
 		{"sleep 5; ./magus status", false},
@@ -523,11 +522,14 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 		"caffeinate -i -w 4242",
 		"wait 4242",
 		"lsof -p 4242",
-		"kill -0 4242 && ./magus run go-test .",
 	} {
 		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(v), line)
 	}
+	probe := Judge(ctx, Dependencies{}, Request{Input: "kill -0 4242 && ./magus run go-test .", Lease: worker.ID})
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleProcessPoll)}, judgedAs(probe))
+	require.Len(t, probe.Next, 1)
+	assert.Equal(t, hint.Status.String(), probe.Next[0].Run)
 	for _, line := range []string{
 		"caffeinate -w 9999",
 		"wait 9999",

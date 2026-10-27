@@ -63,7 +63,7 @@ func TestRenderValidationDryRunPrintsTheRecordItWouldStore(t *testing.T) {
 	assert.Empty(t, buf.String(), "a real run with nothing to say prints nothing")
 }
 
-func TestRenderValidationNamesTheDeviationAndWhatWasNotChecked(t *testing.T) {
+func TestRenderValidationSummarizesDeviationsAndKeepsUnchecked(t *testing.T) {
 	t.Parallel()
 
 	v := types.JobValidation{
@@ -76,10 +76,23 @@ func TestRenderValidationNamesTheDeviationAndWhatWasNotChecked(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	RenderValidation(&buf, v, false)
-	assert.Equal(t, "permitted 1:\n"+
-		"  [MGS3044] write_paths: x regenerates docs/x.md (permitted: the root regenerates it)\n"+
+	assert.Equal(t, "permitted 1 (recorded deviations; -o json includes the details)\n"+
 		"not checked:\n"+
 		"  write path breadth: the workspace did not load\n", buf.String())
+}
+
+func TestRenderValidationKeepsLargeDeviationListsOutOfText(t *testing.T) {
+	t.Parallel()
+
+	v := types.JobValidation{Job: types.Job{ID: "j"}}
+	for range 64 {
+		v.Permitted = append(v.Permitted, types.JobProblem{
+			Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Message: "generated output is integrated by the root",
+		})
+	}
+	var buf bytes.Buffer
+	RenderValidation(&buf, v, false)
+	assert.Equal(t, "permitted 64 (recorded deviations; -o json includes the details)\n", buf.String())
 }
 
 func TestRenderValidationCountsWhatFixWouldApply(t *testing.T) {
