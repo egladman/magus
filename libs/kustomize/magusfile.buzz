@@ -1,0 +1,75 @@
+// No build target: kustomize.buzz is imported as source by docs/site/diagrams.
+import "magus";
+import "fs";
+import "proc";
+import "../../hack/magusfile/index" as index;
+
+magus\project({
+    // No spell claims .buzz, YAML or JSON, so this line declares them sources.
+    "sources": ["*.buzz", "testdata/*.yaml", "schemas/*.json"],
+    // MAGUS.md is declared on index_generate, not here.
+    "targets": {
+        "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
+    },
+});
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md, this project's target catalog.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                    "../../internal/render/md/md.go", "../../internal/hint/cli_command.go"]);
+    index\render("libs/kustomize");
+}
+
+// The manifests each check builds, relative to this project.
+final KUSTOMIZATIONS = ["../../deploy/kustomize/base", "../../deploy/kustomize/overlays/dev"];
+
+// Strict schemas for Kubernetes v1.35.0, vendored from yannh/kubernetes-json-schema
+// (v1.35.0-standalone-strict), so validation runs offline. Raw string: {{ }} is kubeconform's.
+final SCHEMAS = `schemas/{{ .ResourceKind }}{{ .KindSuffix }}.json`;
+
+// lint type-checks the library upstream-strict, then validates what each kustomization
+// builds against the vendored schemas. --check exits 0 on a warning, so lint grades the
+// output itself.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["*.buzz", "schemas/*.json", "../../deploy/kustomize/**/*.yaml"]);
+    final res = magus\cmd("buzz", args: ["--check", "kustomize.buzz", "manifests.buzz"], opts: magus\CommandOptions{quiet = true});
+    final found = mut [<str>];
+    foreach (line in res.stderr.split("\n")) {
+        if (line.indexOf("[BZZ") != null) {
+            found.append(line);
+        }
+    }
+    if (found.len() > 0) {
+        foreach (line in found) {
+            magus\log.error(line);
+        }
+        throw "lint: buzz --check reported {found.len()} diagnostic(s)";
+    }
+    final scratch = fs\tempDir("kubeconform-");
+    foreach (i, dir in KUSTOMIZATIONS) {
+        final manifest = fs\join(scratch, name: "build-{i}.yaml");
+        magus\cmd("buzz", args: ["manifests.buzz", dir, manifest], opts: magus\CommandOptions{quiet = true});
+        proc\exec("kubeconform", args: ["-strict", "-summary", "-schema-location", SCHEMAS, manifest]);
+    }
+    fs\removeAll(scratch);
+}
+
+// test runs the in-file test blocks, which build the dev overlay and lay out its figure.
+// lint runs first, so the figure never draws a manifest kubeconform rejects.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(lint);
+    ctx.readsFiles(["kustomize.buzz", "testdata/*.yaml", "../../deploy/kustomize/**/*.yaml"]);
+    magus\cmd("buzz", args: ["-t", "kustomize.buzz"]);
+}
+
+// ci regenerates MAGUS.md, then runs lint and test.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    ctx.needs(lint, test);
+}

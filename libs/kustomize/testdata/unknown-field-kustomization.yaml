@@ -1,0 +1,5 @@
+resources:
+  - app.yaml
+replicas:
+  - name: app
+    count: 2

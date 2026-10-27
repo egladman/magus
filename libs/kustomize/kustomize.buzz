@@ -1,0 +1,1311 @@
+// kustomize: read a kustomization the way `kustomize build` does, without the binary, and
+// draw the Kubernetes objects it builds as a magus/figure.
+//
+//     import "../libs/kustomize/kustomize" as kustomize;
+//
+//     final objects = kustomize\build("../deploy/kustomize/overlays/dev");
+//     final f = kustomize\figureOf(objects, id: "k8s", title: "The dev overlay");
+//
+// The build covers what a figure needs and refuses the rest by name: resources and bases
+// (recursively), namespace, namePrefix, nameSuffix, labels, commonLabels,
+// commonAnnotations, configMap and secret generators, images, JSON6902 patches, and
+// strategic-merge patches that touch no drawn field. A generated object keeps its plain
+// name: kustomize appends a content hash, which would move the figure on every edit.
+namespace kustomize;
+
+import "std";
+import "fs";
+import "env";
+import "encoding/yaml";
+import "magus/figure";
+
+// Resource is one object the build emits.
+export object Resource {
+    doc: {str: any},
+    // The file or generator that made it, for error messages.
+    origin: str,
+    // Every name it has had, oldest first: a patch target may name any of them.
+    names: [str] = [<str>],
+
+    fun kind() > str {
+        return text(this.doc["kind"]);
+    }
+
+    fun name() > str {
+        return text(dig(this.doc, path: ["metadata", "name"]));
+    }
+
+    fun ns() > str {
+        return text(dig(this.doc, path: ["metadata", "namespace"]));
+    }
+
+    fun id() > str {
+        return "{this.kind()} {this.ns()}/{this.name()}";
+    }
+}
+
+final KUSTOMIZATION_FILES = ["kustomization.yaml", "kustomization.yml", "Kustomization"];
+
+final KNOWN_FIELDS = [
+    "apiVersion", "kind", "metadata", "resources", "bases", "namespace", "namePrefix",
+    "nameSuffix", "labels", "commonLabels", "commonAnnotations", "configMapGenerator",
+    "secretGenerator", "generatorOptions", "images", "patches", "patchesJson6902",
+    "patchesStrategicMerge",
+];
+
+// Kinds whose pod template the build and the figure read, by the path to that template.
+final POD_TEMPLATES: {str: [str]} = {
+    "Deployment": ["spec", "template"],
+    "StatefulSet": ["spec", "template"],
+    "DaemonSet": ["spec", "template"],
+    "ReplicaSet": ["spec", "template"],
+    "Job": ["spec", "template"],
+    "CronJob": ["spec", "jobTemplate", "spec", "template"],
+};
+
+// build reads the kustomization in dir and returns the objects `kustomize build dir` would
+// emit, in the same order of transformers. A field, directive or source it does not read
+// raises naming it, never builds something kustomize would not.
+export fun build(dir: str) > [Resource] !> any {
+    final file = kustomizationFile(dir);
+    final k = (yaml\parse(fs\readFile(file)) as? {str: any}) ?? {<str: any>};
+    foreach (key, value in k) {
+        if (KNOWN_FIELDS.indexOf(key) == null) {
+            throw "{file}: field \"{key}\" is not read by libs/kustomize; drop it or teach the reader";
+        }
+    }
+    var objects = mut [<Resource>];
+    foreach (entry in strings(k["resources"]) + strings(k["bases"])) {
+        foreach (r in load(dir, entry: entry, file: file)) {
+            objects.append(r);
+        }
+    }
+    final genOptions = (k["generatorOptions"] as? {str: any}) ?? {<str: any>};
+    foreach (g in maps(k["configMapGenerator"])) {
+        objects.append(generate(dir, entry: g, kind: "ConfigMap", options: genOptions, file: file));
+    }
+    foreach (g in maps(k["secretGenerator"])) {
+        objects.append(generate(dir, entry: g, kind: "Secret", options: genOptions, file: file));
+    }
+    unique(objects);
+
+    var built: [Resource] = objects;
+    foreach (i, p in patchList(dir, k: k, field: "patchesStrategicMerge", file: file)) {
+        built = applyPatch(built, patch: p);
+    }
+    foreach (p in patchList(dir, k: k, field: "patches", file: file)) {
+        built = applyPatch(built, patch: p);
+    }
+    final ns = text(k["namespace"]);
+    if (ns != "") {
+        built = built.map(fun (i: int, r: Resource) > Resource => withNamespace(r, ns: ns));
+    }
+    built = renamed(built, prefix: text(k["namePrefix"]), suffix: text(k["nameSuffix"]));
+    foreach (set in maps(k["labels"])) {
+        final pairs = (set["pairs"] as? {str: any}) ?? {<str: any>};
+        final selectors = (set["includeSelectors"] as? bool) ?? false;
+        final templates = (set["includeTemplates"] as? bool) ?? false;
+        if (set.hasKey("fields")) {
+            throw "{file}: labels[].fields is not read by libs/kustomize";
+        }
+        built = built.map(fun (i: int, r: Resource) > Resource => labeled(r, pairs: pairs, selectors: selectors, templates: selectors or templates));
+    }
+    if (k["commonLabels"] as? {str: any} -> common) {
+        built = built.map(fun (i: int, r: Resource) > Resource => labeled(r, pairs: common, selectors: true, templates: true));
+    }
+    if (k["commonAnnotations"] as? {str: any} -> notes) {
+        built = built.map(fun (i: int, r: Resource) > Resource => annotated(r, pairs: notes));
+    }
+    foreach (p in patchList(dir, k: k, field: "patchesJson6902", file: file)) {
+        built = applyPatch(built, patch: p);
+    }
+    foreach (image in maps(k["images"])) {
+        built = built.map(fun (i: int, r: Resource) > Resource !> any => retagged(r, image: image));
+    }
+    return built;
+}
+
+// manifests is the build as one multi-document YAML stream, for kubeconform.
+export fun manifests(objects: [Resource]) > str !> any {
+    final docs = mut [<str>];
+    foreach (r in objects) {
+        docs.append(yaml\stringify(r.doc));
+    }
+    return docs.join("---\n");
+}
+
+fun kustomizationFile(dir: str) > str !> any {
+    foreach (name in KUSTOMIZATION_FILES) {
+        final candidate = fs\join(dir, name);
+        if (fs\isFile(candidate)) {
+            return candidate;
+        }
+    }
+    throw "{dir}: no kustomization.yaml";
+}
+
+// load reads one resources entry: a directory is a nested kustomization, a file holds one
+// or more objects.
+fun load(dir: str, entry: str, file: str) > [Resource] !> any {
+    if (entry.indexOf("://") != null or entry.startsWith("github.com/")) {
+        throw "{file}: remote resource \"{entry}\" is not read by libs/kustomize";
+    }
+    final path = fs\join(dir, entry);
+    if (fs\isDir(path)) {
+        return build(path);
+    }
+    final objects = mut [<Resource>];
+    foreach (doc in documents(fs\readFile(path), origin: path)) {
+        final m = doc as? {str: any};
+        if (m == null) {
+            throw "{path}: a document is not a mapping";
+        }
+        final r = Resource{ doc = m!, origin = path };
+        if (r.kind() == "" or r.name() == "") {
+            throw "{path}: an object without kind or metadata.name";
+        }
+        objects.append(Resource{ doc = m!, origin = path, names = [r.name()] });
+    }
+    return objects;
+}
+
+// documents splits a YAML stream on its `---` lines; yaml\parse reads one document.
+fun documents(source: str, origin: str) > [any] !> any {
+    final docs = mut [<any>];
+    final chunk = mut [<str>];
+    foreach (line in source.split("\n") + ["---"]) {
+        if (line.trim() == "---" or line.startsWith("--- ")) {
+            final body = chunk.join("\n");
+            if (body.trim() != "") {
+                final doc = yaml\parse(body);
+                if (doc != null) {
+                    docs.append(doc);
+                }
+            }
+            while (chunk.len() > 0) {
+                chunk.pop();
+            }
+            continue;
+        }
+        chunk.append(line);
+    }
+    return docs;
+}
+
+test "documents splits a stream and skips empty ones" {
+    final docs = documents("---\na: 1\n---\n\n---\nb: 2\n", origin: "t") catch [<any>];
+    std\assert(docs.len() == 2, message: "two documents, got {docs.len()}");
+}
+
+fun unique(objects: [Resource]) > void !> any {
+    final seen = mut {<str: str>};
+    foreach (r in objects) {
+        if (seen[r.id()] -> first) {
+            throw "{r.origin}: {r.id()} is also defined in {first}";
+        }
+        seen[r.id()] = r.origin;
+    }
+}
+
+// generate builds a ConfigMap or Secret from a generator entry. The name carries no hash.
+fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: str) > Resource !> any {
+    final name = text(entry["name"]);
+    if (name == "") {
+        throw "{file}: a {kind} generator has no name";
+    }
+    final behavior = text(entry["behavior"]);
+    if (behavior != "" and behavior != "create") {
+        throw "{file}: generator {name}: behavior \"{behavior}\" is not read by libs/kustomize";
+    }
+    final data = mut {<str: any>};
+    foreach (literal in strings(entry["literals"])) {
+        final eq = literal.indexOf("=");
+        if (eq == null) {
+            throw "{file}: generator {name}: literal \"{literal}\" has no =";
+        }
+        data[literal.sub(0, len: eq!)] = literal.sub(eq! + 1);
+    }
+    foreach (source in strings(entry["files"])) {
+        final eq = source.indexOf("=");
+        final key = if (eq != null) source.sub(0, len: eq!) else fs\basename(source);
+        final rel = if (eq != null) source.sub(eq! + 1) else source;
+        data[key] = fs\readFile(fs\join(dir, rel));
+    }
+    foreach (envFile in strings(entry["envs"]) + strings(entry["env"])) {
+        foreach (key, value in env\parseDotenv(fs\readFile(fs\join(dir, envFile)))) {
+            data[key] = value;
+        }
+    }
+    final encoded = mut {<str: any>};
+    foreach (key, value in data) {
+        encoded[key] = if (kind == "Secret") text(value).encodeBase64() else value;
+    }
+    final meta = mut {<str: any>};
+    meta["name"] = name;
+    if (text(entry["namespace"]) != "") {
+        meta["namespace"] = text(entry["namespace"]);
+    }
+    final own = (entry["options"] as? {str: any}) ?? {<str: any>};
+    final labels = merged((options["labels"] as? {str: any}) ?? {<str: any>}, more: (own["labels"] as? {str: any}) ?? {<str: any>});
+    final notes = merged((options["annotations"] as? {str: any}) ?? {<str: any>}, more: (own["annotations"] as? {str: any}) ?? {<str: any>});
+    if (labels.len() > 0) {
+        meta["labels"] = labels;
+    }
+    if (notes.len() > 0) {
+        meta["annotations"] = notes;
+    }
+    final doc = mut {<str: any>};
+    doc["apiVersion"] = "v1";
+    doc["kind"] = kind;
+    doc["metadata"] = meta;
+    doc["data"] = encoded;
+    if (kind == "Secret") {
+        doc["type"] = if (text(entry["type"]) != "") text(entry["type"]) else "Opaque";
+    }
+    return Resource{ doc = doc, origin = "{file}: {kind} generator {name}", names = [name] };
+}
+
+// Patch is one patch to apply: ops for JSON6902, or a mapping to merge.
+object Patch {
+    origin: str,
+    target: {str: any}? = null,
+    ops: [any]? = null,
+    merge: {str: any}? = null,
+}
+
+fun patchList(dir: str, k: {str: any}, field: str, file: str) > [Patch] !> any {
+    final built = mut [<Patch>];
+    foreach (i, entry in lists(k[field])) {
+        final origin = "{file}: {field}[{i}]";
+        var source = "";
+        var target: {str: any}? = null;
+        if (entry as? str -> pathOrInline) {
+            source = if (pathOrInline.indexOf("\n") != null) pathOrInline else fs\readFile(fs\join(dir, pathOrInline));
+        } else if (entry as? {str: any} -> m) {
+            target = m["target"] as? {str: any};
+            if (m["path"] as? str -> path) {
+                source = fs\readFile(fs\join(dir, path));
+            } else {
+                source = text(m["patch"]);
+            }
+            if (m.hasKey("options")) {
+                throw "{origin}: patch options are not read by libs/kustomize";
+            }
+        }
+        if (source.trim() == "") {
+            throw "{origin}: an empty patch";
+        }
+        foreach (doc in documents(source, origin: origin)) {
+            if (doc as? [any] -> ops) {
+                if (target == null) {
+                    throw "{origin}: a JSON6902 patch needs a target";
+                }
+                built.append(Patch{ origin = origin, target = target, ops = ops });
+            } else if (doc as? {str: any} -> m) {
+                built.append(Patch{ origin = origin, target = target, merge = m });
+            } else {
+                throw "{origin}: a patch is neither a list of operations nor a mapping";
+            }
+        }
+    }
+    return built;
+}
+
+// applyPatch applies p to every object its target selects; a patch selecting nothing raises.
+fun applyPatch(objects: [Resource], patch: Patch) > [Resource] !> any {
+    var target = patch.target;
+    if (target == null) {
+        final m = patch.merge!;
+        target = {"kind": m["kind"] ?? "", "name": dig(m, path: ["metadata", "name"]) ?? ""};
+    }
+    foreach (key, value in target!) {
+        if (["group", "version", "kind", "name", "namespace"].indexOf(key) == null) {
+            throw "{patch.origin}: target.{key} is not read by libs/kustomize";
+        }
+    }
+    var hits = 0;
+    final built = mut [<Resource>];
+    foreach (r in objects) {
+        if (!selects(target!, r: r)) {
+            built.append(r);
+            continue;
+        }
+        hits = hits + 1;
+        var doc: {str: any} = r.doc;
+        if (patch.ops -> ops) {
+            foreach (op in ops) {
+                doc = applyOp(doc, op: op, origin: patch.origin);
+            }
+        } else {
+            refuseDrawn(r.kind(), patch: patch.merge!, origin: patch.origin);
+            doc = (mergeValue(doc, patch: patch.merge!, origin: patch.origin) as? {str: any})!;
+        }
+        built.append(Resource{ doc = doc, origin = r.origin, names = r.names });
+    }
+    if (hits == 0) {
+        throw "{patch.origin}: the target selects no object in the build";
+    }
+    return built;
+}
+
+fun selects(target: {str: any}, r: Resource) > bool {
+    final apiVersion = text(r.doc["apiVersion"]);
+    final slash = apiVersion.indexOf("/");
+    final group = if (slash != null) apiVersion.sub(0, len: slash!) else "";
+    final version = if (slash != null) apiVersion.sub(slash! + 1) else apiVersion;
+    final want = fun (key: str, have: str) > bool => text(target[key]) == "" or text(target[key]) == have;
+    if (!want("kind", have: r.kind()) or !want("group", have: group) or !want("version", have: version) or !want("namespace", have: r.ns())) {
+        return false;
+    }
+    final name = text(target["name"]);
+    return name == "" or name == r.name() or r.names.indexOf(name) != null;
+}
+
+// DRAWN is what the figure reads, per kind, as paths where * matches any element. A
+// strategic-merge patch reaching one raises: its list semantics are kustomize's, and a
+// guess there would draw something `kustomize build` does not emit.
+final DRAWN_ANY = [["metadata", "name"], ["metadata", "namespace"]];
+final DRAWN_TEMPLATE = [
+    ["metadata", "labels"],
+    ["spec", "volumes"],
+    ["spec", "serviceAccountName"],
+    ["spec", "serviceAccount"],
+    ["spec", "containers", "*", "env"],
+    ["spec", "containers", "*", "envFrom"],
+    ["spec", "initContainers", "*", "env"],
+    ["spec", "initContainers", "*", "envFrom"],
+];
+final DRAWN_KIND: {str: [[str]]} = {
+    "Service": [["spec", "selector"], ["spec", "ports"]],
+    "NetworkPolicy": [["spec"]],
+};
+
+fun drawnPaths(kind: str) > [[str]] {
+    final paths = mut [<[str]>];
+    foreach (p in DRAWN_ANY) {
+        paths.append(p);
+    }
+    foreach (p in DRAWN_KIND[kind] ?? [<[str]>]) {
+        paths.append(p);
+    }
+    if (POD_TEMPLATES[kind] -> template) {
+        paths.append(["spec", "selector"]);
+        foreach (p in DRAWN_TEMPLATE) {
+            paths.append(template + p);
+        }
+    }
+    return paths;
+}
+
+fun refuseDrawn(kind: str, patch: {str: any}, origin: str) > void !> any {
+    final leaves = mut [<[str]>];
+    collectLeaves(patch, at: [<str>], into: leaves);
+    foreach (leaf in leaves) {
+        // The patch's own identity, which selects its target rather than changing it.
+        if (["kind", "apiVersion", "metadata/name"].indexOf(leaf.join("/")) != null) {
+            continue;
+        }
+        foreach (drawn in drawnPaths(kind)) {
+            if (overlaps(leaf, drawn: drawn)) {
+                throw "{origin}: a strategic-merge patch sets {leaf.join("/")} on a {kind}, which the figure draws; write it as a JSON6902 patch";
+            }
+        }
+    }
+}
+
+fun collectLeaves(value: any, at: [str], into: mut [[str]]) > void {
+    if (value as? {str: any} -> m) {
+        if (m.len() == 0) {
+            into.append(at);
+        }
+        foreach (key, child in m) {
+            collectLeaves(child, at: at + [key], into: into);
+        }
+        return;
+    }
+    if (value as? [any] -> items) {
+        if (items.len() == 0) {
+            into.append(at);
+        }
+        foreach (child in items) {
+            collectLeaves(child, at: at + ["*"], into: into);
+        }
+        return;
+    }
+    into.append(at);
+}
+
+// overlaps says whether a patch leaf and a drawn path meet: one is a prefix of the other.
+fun overlaps(leaf: [str], drawn: [str]) > bool {
+    final n = if (leaf.len() < drawn.len()) leaf.len() else drawn.len();
+    for (var i = 0; i < n; i = i + 1) {
+        if (leaf[i] != drawn[i] and leaf[i] != "*" and drawn[i] != "*") {
+            return false;
+        }
+    }
+    return true;
+}
+
+fun refusal(kind: str, patch: {str: any}) > str {
+    try {
+        refuseDrawn(kind, patch: patch, origin: "p");
+    } catch (e: str) {
+        return e;
+    }
+    return "";
+}
+
+test "a strategic-merge patch on a drawn field is refused, a resources patch is not" {
+    final limits = refusal("Deployment", patch: {"spec": {"template": {"spec": {"containers": [{"name": "a", "resources": {"limits": {"cpu": "1"}}}]}}}});
+    std\assert(limits == "", message: "a container name and its resources are not drawn: {limits}");
+    final account = refusal("Deployment", patch: {"spec": {"template": {"spec": {"serviceAccountName": "x"}}}});
+    std\assert(account.indexOf("serviceAccountName") != null, message: "serviceAccountName is drawn: {account}");
+}
+
+// mergeValue is a strategic merge narrowed to what plain data can say: mappings merge
+// recursively, null deletes a key, a list of named mappings merges by name, any other list
+// is replaced. A $patch or $setElementOrder directive raises.
+fun mergeValue(base: any, patch: any, origin: str) > any !> any {
+    if (patch as? {str: any} -> p) {
+        final b = (base as? {str: any}) ?? {<str: any>};
+        final next: mut {str: any} = b.cloneMutable();
+        foreach (key, value in p) {
+            if (key.startsWith("$")) {
+                throw "{origin}: the {key} directive is not read by libs/kustomize";
+            }
+            if (value == null) {
+                next.remove(key);
+            } else {
+                next[key] = mergeValue(b[key], patch: value, origin: origin);
+            }
+        }
+        return next;
+    }
+    if (patch as? [any] -> items) {
+        if (base as? [any] -> existing) {
+            if (allNamed(items) and allNamed(existing)) {
+                final next: mut [any] = existing.cloneMutable();
+                foreach (item in items) {
+                    final name = text((item as? {str: any})!["name"]);
+                    var found = false;
+                    foreach (i, have in next) {
+                        if (text((have as? {str: any})!["name"]) == name) {
+                            next[i] = mergeValue(have, patch: item, origin: origin);
+                            found = true;
+                        }
+                    }
+                    if (!found) {
+                        next.append(item);
+                    }
+                }
+                return next;
+            }
+        }
+    }
+    return patch;
+}
+
+fun allNamed(items: [any]) > bool {
+    foreach (item in items) {
+        final m = item as? {str: any};
+        if (m == null or text(m!["name"]) == "") {
+            return false;
+        }
+    }
+    return true;
+}
+
+test "a merge keeps siblings and merges named list items" {
+    final base = {"a": 1, "list": [{"name": "x", "v": 1}, {"name": "y", "v": 2}]};
+    final built = mergeValue(base, patch: {"list": [{"name": "y", "v": 3}], "b": 2}, origin: "t") catch null;
+    std\assert(yaml\stringify(built) catch "" == yaml\stringify({"a": 1, "b": 2, "list": [{"name": "x", "v": 1}, {"name": "y", "v": 3}]}) catch "-", message: "merged: {built}");
+}
+
+// applyOp applies one RFC 6902 operation.
+fun applyOp(doc: {str: any}, op: any, origin: str) > {str: any} !> any {
+    final m = op as? {str: any};
+    if (m == null) {
+        throw "{origin}: an operation is not a mapping";
+    }
+    final kind = text(m!["op"]);
+    final path = pointer(text(m!["path"]), origin: origin);
+    var built: any = doc;
+    if (kind == "add" or kind == "replace") {
+        if (!m!.hasKey("value")) {
+            throw "{origin}: {kind} {m!["path"]} has no value";
+        }
+        built = edit(doc, segs: path, op: kind, value: m!["value"], origin: origin);
+    } else if (kind == "remove") {
+        built = edit(doc, segs: path, op: kind, value: null, origin: origin);
+    } else if (kind == "copy" or kind == "move") {
+        final source = pointer(text(m!["from"]), origin: origin);
+        final value = valueAt(doc, segs: source, origin: origin);
+        if (kind == "move") {
+            built = edit(built, segs: source, op: "remove", value: null, origin: origin);
+        }
+        built = edit(built, segs: path, op: "add", value: value, origin: origin);
+    } else if (kind == "test") {
+        if (yaml\stringify(valueAt(doc, segs: path, origin: origin)) != yaml\stringify(m!["value"])) {
+            throw "{origin}: test {m!["path"]} failed";
+        }
+    } else {
+        throw "{origin}: unknown operation \"{kind}\"";
+    }
+    final result = built as? {str: any};
+    if (result == null) {
+        throw "{origin}: an operation replaced the whole object";
+    }
+    return result!;
+}
+
+fun pointer(path: str, origin: str) > [str] !> any {
+    if (!path.startsWith("/")) {
+        throw "{origin}: \"{path}\" is not a JSON pointer";
+    }
+    final segs = mut [<str>];
+    foreach (raw in path.sub(1).split("/")) {
+        segs.append(raw.replace("~1", with: "/").replace("~0", with: "~"));
+    }
+    return segs;
+}
+
+fun valueAt(doc: any, segs: [str], origin: str) > any !> any {
+    var cur = doc;
+    foreach (seg in segs) {
+        if (cur as? {str: any} -> m) {
+            if (!m.hasKey(seg)) {
+                throw "{origin}: no value at {segs.join("/")}";
+            }
+            cur = m[seg];
+        } else if (cur as? [any] -> items) {
+            cur = items[index(seg, len: items.len(), origin: origin)];
+        } else {
+            throw "{origin}: no value at {segs.join("/")}";
+        }
+    }
+    return cur;
+}
+
+fun index(seg: str, len: int, origin: str) > int !> any {
+    final i = std\parseInt(seg);
+    if (i == null or i! < 0 or i! >= len) {
+        throw "{origin}: index {seg} is out of range";
+    }
+    return i!;
+}
+
+// edit returns doc with op applied at segs, copying each container on the way down.
+fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > any !> any {
+    if (segs.len() == 0) {
+        throw "{origin}: an operation on the whole object";
+    }
+    final seg = segs[0];
+    final last = segs.len() == 1;
+    if (doc as? {str: any} -> m) {
+        final next: mut {str: any} = m.cloneMutable();
+        if (!last) {
+            if (!m.hasKey(seg)) {
+                throw "{origin}: no value at {seg}";
+            }
+            next[seg] = edit(m[seg], segs: segs.sub(1), op: op, value: value, origin: origin);
+        } else if (op == "add") {
+            next[seg] = value;
+        } else if (!m.hasKey(seg)) {
+            throw "{origin}: {op} of {seg}, which is not there";
+        } else if (op == "replace") {
+            next[seg] = value;
+        } else {
+            next.remove(seg);
+        }
+        return next;
+    }
+    if (doc as? [any] -> items) {
+        final next: mut [any] = items.cloneMutable();
+        if (!last) {
+            final i = index(seg, len: items.len(), origin: origin);
+            next[i] = edit(items[i], segs: segs.sub(1), op: op, value: value, origin: origin);
+        } else if (op == "add" and seg == "-") {
+            next.append(value);
+        } else if (op == "add") {
+            next.insert(index(seg, len: items.len() + 1, origin: origin), value: value);
+        } else if (op == "replace") {
+            next[index(seg, len: items.len(), origin: origin)] = value;
+        } else {
+            next.remove(index(seg, len: items.len(), origin: origin));
+        }
+        return next;
+    }
+    throw "{origin}: {seg} is inside a scalar";
+}
+
+test "JSON6902 add, replace, remove, move and test" {
+    final doc = {"spec": {"replicas": 1, "list": ["a", "b"]}};
+    final ops = [
+        {"op": "replace", "path": "/spec/replicas", "value": 2},
+        {"op": "add", "path": "/spec/list/1", "value": "x"},
+        {"op": "add", "path": "/spec/list/-", "value": "z"},
+        {"op": "remove", "path": "/spec/list/0"},
+        {"op": "move", "from": "/spec/replicas", "path": "/spec/count"},
+        {"op": "test", "path": "/spec/count", "value": 2},
+    ];
+    var built: {str: any} = doc;
+    foreach (op in ops) {
+        built = applyOp(built, op: op, origin: "t") catch {<str: any>};
+    }
+    final want = {"spec": {"list": ["x", "b", "z"], "count": 2}};
+    std\assert(yaml\stringify(built) catch "" == yaml\stringify(want) catch "-", message: "got {built}");
+    final missing = applyOp(doc, op: {"op": "replace", "path": "/spec/nope", "value": 1}, origin: "t") catch {"failed": true};
+    std\assert(missing["failed"] != null, message: "replace of a missing key raises");
+}
+
+// withNamespace sets metadata.namespace; a Namespace object takes the namespace as its name,
+// as kustomize does.
+fun withNamespace(r: Resource, ns: str) > Resource {
+    if (r.kind() == "Namespace") {
+        return Resource{ doc = setPath(r.doc, path: ["metadata", "name"], value: ns), origin = r.origin, names = r.names + [ns] };
+    }
+    return Resource{ doc = setPath(r.doc, path: ["metadata", "namespace"], value: ns), origin = r.origin, names = r.names };
+}
+
+// renamed applies namePrefix and nameSuffix, then points each pod template's references at
+// the new names. A Namespace keeps its name.
+fun renamed(objects: [Resource], prefix: str, suffix: str) > [Resource] !> any {
+    if (prefix == "" and suffix == "") {
+        return objects;
+    }
+    final names = mut {<str: str>};
+    final built = mut [<Resource>];
+    foreach (r in objects) {
+        if (r.kind() == "Namespace") {
+            built.append(r);
+            continue;
+        }
+        final next = prefix + r.name() + suffix;
+        names["{r.kind()}/{r.name()}"] = next;
+        built.append(Resource{ doc = setPath(r.doc, path: ["metadata", "name"], value: next), origin = r.origin, names = r.names + [next] });
+    }
+    return built.map(fun (i: int, r: Resource) > Resource => repointed(r, names: names));
+}
+
+// REFERENCES are the name fields a pod template carries, by the kind each one names.
+final VOLUME_REFS: {str: [str]} = {
+    "ConfigMap": ["configMap", "name"],
+    "Secret": ["secret", "secretName"],
+    "PersistentVolumeClaim": ["persistentVolumeClaim", "claimName"],
+};
+
+fun repointed(r: Resource, names: {str: str}) > Resource {
+    final template = POD_TEMPLATES[r.kind()];
+    if (template == null) {
+        return r;
+    }
+    final spec = (dig(r.doc, path: template! + ["spec"]) as? {str: any}) ?? {<str: any>};
+    final next: mut {str: any} = spec.cloneMutable();
+    final sa = text(spec["serviceAccountName"]);
+    if (names["ServiceAccount/{sa}"] -> renamedSa) {
+        next["serviceAccountName"] = renamedSa;
+    }
+    final volumes = mut [<any>];
+    foreach (v in lists(spec["volumes"])) {
+        var vol: {str: any} = (v as? {str: any}) ?? {<str: any>};
+        foreach (kind, path in VOLUME_REFS) {
+            final have = text(dig(vol, path: path));
+            if (names["{kind}/{have}"] -> to) {
+                vol = setPath(vol, path: path, value: to);
+            }
+        }
+        volumes.append(vol);
+    }
+    if (spec.hasKey("volumes")) {
+        next["volumes"] = volumes;
+    }
+    foreach (field in ["containers", "initContainers"]) {
+        if (spec.hasKey(field)) {
+            next[field] = lists(spec[field]).map(fun (i: int, c: any) > any => repointedContainer(c, names: names));
+        }
+    }
+    return Resource{ doc = setPath(r.doc, path: template! + ["spec"], value: next), origin = r.origin, names = r.names };
+}
+
+fun repointedContainer(c: any, names: {str: str}) > any {
+    var container: {str: any} = (c as? {str: any}) ?? {<str: any>};
+    final envFrom = mut [<any>];
+    foreach (e in lists(container["envFrom"])) {
+        var entry: {str: any} = (e as? {str: any}) ?? {<str: any>};
+        foreach (kind, field in {"ConfigMap": "configMapRef", "Secret": "secretRef"}) {
+            if (names["{kind}/{text(dig(entry, path: [field, "name"]))}"] -> to) {
+                entry = setPath(entry, path: [field, "name"], value: to);
+            }
+        }
+        envFrom.append(entry);
+    }
+    final envs = mut [<any>];
+    foreach (e in lists(container["env"])) {
+        var entry: {str: any} = (e as? {str: any}) ?? {<str: any>};
+        foreach (kind, field in {"ConfigMap": "configMapKeyRef", "Secret": "secretKeyRef"}) {
+            if (names["{kind}/{text(dig(entry, path: ["valueFrom", field, "name"]))}"] -> to) {
+                entry = setPath(entry, path: ["valueFrom", field, "name"], value: to);
+            }
+        }
+        envs.append(entry);
+    }
+    if (container.hasKey("envFrom")) {
+        container = setPath(container, path: ["envFrom"], value: envFrom);
+    }
+    if (container.hasKey("env")) {
+        container = setPath(container, path: ["env"], value: envs);
+    }
+    return container;
+}
+
+// labeled adds pairs to metadata.labels and, as kustomize's label field specs say, to pod
+// templates and to selectors. A NetworkPolicy selector gains them only where it already
+// has matchLabels, peers included.
+fun labeled(r: Resource, pairs: {str: any}, selectors: bool, templates: bool) > Resource {
+    var doc = addPairs(r.doc, path: ["metadata", "labels"], pairs: pairs, create: true);
+    final template = POD_TEMPLATES[r.kind()];
+    if (template != null and templates) {
+        doc = addPairs(doc, path: template! + ["metadata", "labels"], pairs: pairs, create: true);
+    }
+    if (selectors) {
+        if (template != null and r.kind() != "Job" and r.kind() != "CronJob") {
+            doc = addPairs(doc, path: ["spec", "selector", "matchLabels"], pairs: pairs, create: true);
+        }
+        if (r.kind() == "Service") {
+            doc = addPairs(doc, path: ["spec", "selector"], pairs: pairs, create: true);
+        }
+        if (r.kind() == "NetworkPolicy") {
+            doc = addPairs(doc, path: ["spec", "podSelector", "matchLabels"], pairs: pairs, create: false);
+            foreach (way, peers in {"ingress": "from", "egress": "to"}) {
+                final rules = mut [<any>];
+                foreach (rule in lists(dig(doc, path: ["spec", way]))) {
+                    var m: {str: any} = (rule as? {str: any}) ?? {<str: any>};
+                    if (m.hasKey(peers)) {
+                        m = setPath(m, path: [peers], value: lists(m[peers]).map(
+                            fun (i: int, peer: any) > any => addPairs((peer as? {str: any}) ?? {<str: any>}, path: ["podSelector", "matchLabels"], pairs: pairs, create: false)));
+                    }
+                    rules.append(m);
+                }
+                if (dig(doc, path: ["spec", way]) != null) {
+                    doc = setPath(doc, path: ["spec", way], value: rules);
+                }
+            }
+        }
+    }
+    return Resource{ doc = doc, origin = r.origin, names = r.names };
+}
+
+fun annotated(r: Resource, pairs: {str: any}) > Resource {
+    var doc = addPairs(r.doc, path: ["metadata", "annotations"], pairs: pairs, create: true);
+    if (POD_TEMPLATES[r.kind()] -> template) {
+        doc = addPairs(doc, path: template + ["metadata", "annotations"], pairs: pairs, create: true);
+    }
+    return Resource{ doc = doc, origin = r.origin, names = r.names };
+}
+
+fun addPairs(doc: {str: any}, path: [str], pairs: {str: any}, create: bool) > {str: any} {
+    final have = dig(doc, path: path) as? {str: any};
+    if (have == null and !create) {
+        return doc;
+    }
+    return setPath(doc, path: path, value: merged(have ?? {<str: any>}, more: pairs));
+}
+
+// retagged applies one images entry to every container whose image names it.
+fun retagged(r: Resource, image: {str: any}) > Resource !> any {
+    final template = POD_TEMPLATES[r.kind()];
+    if (template == null) {
+        return r;
+    }
+    final want = text(image["name"]);
+    var doc = r.doc;
+    foreach (field in ["containers", "initContainers"]) {
+        final path = template! + ["spec", field];
+        if (dig(doc, path: path) == null) {
+            continue;
+        }
+        final next = mut [<any>];
+        foreach (c in lists(dig(doc, path: path))) {
+            final container = (c as? {str: any}) ?? {<str: any>};
+            final ref = text(container["image"]);
+            final at = ref.indexOf("@");
+            final withoutDigest = if (at != null) ref.sub(0, len: at!) else ref;
+            final slash = lastIndex(withoutDigest, of: "/");
+            final colon = lastIndex(withoutDigest, of: ":");
+            final hasTag = colon > slash;
+            final repo = if (hasTag) withoutDigest.sub(0, len: colon) else withoutDigest;
+            if (repo != want) {
+                next.append(container);
+                continue;
+            }
+            var tag = if (hasTag) ":" + withoutDigest.sub(colon + 1) else "";
+            var digest = if (at != null) ref.sub(at!) else "";
+            if (text(image["newTag"]) != "") {
+                tag = ":" + text(image["newTag"]);
+                digest = "";
+            }
+            if (text(image["digest"]) != "") {
+                tag = "";
+                digest = "@" + text(image["digest"]);
+            }
+            final name = if (text(image["newName"]) != "") text(image["newName"]) else repo;
+            next.append(setPath(container, path: ["image"], value: name + tag + digest));
+        }
+        doc = setPath(doc, path: path, value: next);
+    }
+    return Resource{ doc = doc, origin = r.origin, names = r.names };
+}
+
+fun lastIndex(s: str, of: str) > int {
+    var found = -1;
+    var start = 0;
+    while (start < s.len()) {
+        final i = s.sub(start).indexOf(of);
+        if (i == null) {
+            break;
+        }
+        found = start + i!;
+        start = found + 1;
+    }
+    return found;
+}
+
+test "an images entry retags a matching container" {
+    final r = Resource{ doc = {"kind": "Deployment", "metadata": {"name": "a"}, "spec": {"template": {"spec": {"containers": [
+        {"name": "a", "image": "localhost:5000/app:v1"}, {"name": "b", "image": "other:v1"}]}}}}, origin = "t" };
+    final built = retagged(r, image: {"name": "localhost:5000/app", "newTag": "v2"}) catch r;
+    final containers = lists(dig(built.doc, path: ["spec", "template", "spec", "containers"]));
+    std\assert(text((containers[0] as? {str: any})!["image"]) == "localhost:5000/app:v2", message: "{containers[0]}");
+    std\assert(text((containers[1] as? {str: any})!["image"]) == "other:v1", message: "{containers[1]}");
+}
+
+// ---- the figure ----
+
+final SHORT: {str: str} = {
+    "Deployment": "deploy", "StatefulSet": "sts", "DaemonSet": "ds", "ReplicaSet": "rs",
+    "Job": "job", "CronJob": "cronjob", "Service": "svc", "ServiceAccount": "sa",
+    "PersistentVolumeClaim": "pvc", "ConfigMap": "cm", "Secret": "secret", "NetworkPolicy": "netpol",
+};
+
+// Drawing is the actors and edges a figure takes from a build, before it is laid built.
+object Drawing {
+    actors: mut {str: figure\Actor},
+    order: mut [str],
+    edges: mut [str],
+    looks: mut {str: bool},
+}
+
+// figureOf draws objects as actors joined by flowAcross: a Service to the workloads its
+// selector picks, a workload to its ServiceAccount, claims, ConfigMaps and Secrets, and
+// each NetworkPolicy's allow rules between workloads and their peers. A policy type with
+// no rules draws as the policy denying the workloads it selects. An object a pod names that
+// the build does not hold is drawn as outside it. Nothing here is a directory, so the
+// figure is unscoped.
+export fun figureOf(objects: [Resource], id: str, title: str, eyebrow: str = "", desc: str = "") > figure\Figure !> any {
+    final d = Drawing{ actors = mut {<str: figure\Actor>}, order = mut [<str>], edges = mut [<str>], looks = mut {<str: bool>} };
+    final f = figure\of(id, title: title, eyebrow: eyebrow, desc: desc)
+        .unscoped(why: "Kubernetes objects read from kustomize YAML, not directories: no package in the tree holds them");
+    final held = mut {<str: bool>};
+    foreach (r in objects) {
+        held["{r.kind()}/{r.ns()}/{r.name()}"] = true;
+    }
+    final workloads = objects.filter(fun (i: int, r: Resource) > bool => POD_TEMPLATES[r.kind()] != null);
+    foreach (w in workloads) {
+        actor(d, f: f, r: w, look: figure\Look.focal);
+    }
+    foreach (svc in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "Service")) {
+        final selector = (dig(svc.doc, path: ["spec", "selector"]) as? {str: any}) ?? {<str: any>};
+        final picked = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == svc.ns() and selector.len() > 0 and matches(selector, labels: templateLabels(w)));
+        final src = actor(d, f: f, r: svc, look: figure\Look.plain);
+        foreach (w in picked) {
+            flow(d, f: f, src: src, dst: actorNamed(d, r: w), label: "selects");
+        }
+    }
+    foreach (w in workloads) {
+        final spec = (dig(w.doc, path: POD_TEMPLATES[w.kind()]! + ["spec"]) as? {str: any}) ?? {<str: any>};
+        final src = actorNamed(d, r: w);
+        final sa = text(spec["serviceAccountName"]);
+        if (sa != "") {
+            flow(d, f: f, src: src, dst: referenced(d, f: f, kind: "ServiceAccount", name: sa, ns: w.ns(), held: held, look: figure\Look.plain), label: "runs as");
+        }
+        foreach (v in lists(spec["volumes"])) {
+            final vol = (v as? {str: any}) ?? {<str: any>};
+            foreach (kind, path in VOLUME_REFS) {
+                final name = text(dig(vol, path: path));
+                if (name != "") {
+                    final look = if (kind == "PersistentVolumeClaim") figure\Look.store else figure\Look.input;
+                    flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: look), label: "mounts");
+                }
+            }
+        }
+        foreach (c in lists(spec["containers"]) + lists(spec["initContainers"])) {
+            final container = (c as? {str: any}) ?? {<str: any>};
+            foreach (e in lists(container["envFrom"])) {
+                foreach (kind, field in {"ConfigMap": "configMapRef", "Secret": "secretRef"}) {
+                    final name = text(dig(e, path: [field, "name"]));
+                    if (name != "") {
+                        flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: figure\Look.input), label: "reads env");
+                    }
+                }
+            }
+            foreach (e in lists(container["env"])) {
+                foreach (kind, field in {"ConfigMap": "configMapKeyRef", "Secret": "secretKeyRef"}) {
+                    final name = text(dig(e, path: ["valueFrom", field, "name"]));
+                    if (name != "") {
+                        flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: figure\Look.input), label: "reads env");
+                    }
+                }
+            }
+        }
+    }
+    foreach (np in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "NetworkPolicy")) {
+        policy(d, f: f, np: np, workloads: workloads);
+    }
+    final legend: {str: str} = {
+        "focal": "workload", "plain": "object", "store": "claim", "input": "config or secret",
+        "external": "outside the build", "optional": "named, not built",
+    };
+    foreach (look in [figure\Look.focal, figure\Look.plain, figure\Look.store, figure\Look.input, figure\Look.optional, figure\Look.external]) {
+        if (d.looks[look.value] ?? false) {
+            f.legend(look, label: legend[look.value]!);
+        }
+    }
+    return f;
+}
+
+fun policy(d: Drawing, f: mut figure\Figure, np: Resource, workloads: [Resource]) > void !> any {
+    final selector = (dig(np.doc, path: ["spec", "podSelector"]) as? {str: any}) ?? {<str: any>};
+    if (selector.hasKey("matchExpressions")) {
+        throw "{np.origin}: podSelector.matchExpressions is not read by libs/kustomize";
+    }
+    final want = (selector["matchLabels"] as? {str: any}) ?? {<str: any>};
+    final selected = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == np.ns() and matches(want, labels: templateLabels(w)));
+    if (selected.len() == 0) {
+        return;
+    }
+    final types = strings(dig(np.doc, path: ["spec", "policyTypes"]));
+    final ways = if (types.len() > 0) types else ["Ingress"];
+    final denied = mut [<str>];
+    foreach (way in ways) {
+        final key = way.lower();
+        final rules = lists(dig(np.doc, path: ["spec", key]));
+        if (rules.len() == 0) {
+            denied.append(key);
+            continue;
+        }
+        foreach (rule in rules) {
+            final m = (rule as? {str: any}) ?? {<str: any>};
+            final label = allowLabel(lists(m["ports"]));
+            final peers = lists(m[if (key == "ingress") "from" else "to"]);
+            final ends = mut [<figure\Actor>];
+            if (peers.len() == 0) {
+                ends.append(external(d, name: "anywhere", sub: "", look: figure\Look.external));
+            }
+            foreach (peer in peers) {
+                foreach (a in peerActors(d, f: f, peer: (peer as? {str: any}) ?? {<str: any>}, np: np, workloads: workloads)) {
+                    ends.append(a);
+                }
+            }
+            foreach (w in selected) {
+                foreach (end in ends) {
+                    if (key == "ingress") {
+                        flow(d, f: f, src: end, dst: actorNamed(d, r: w), label: label);
+                    } else {
+                        flow(d, f: f, src: actorNamed(d, r: w), dst: end, label: label);
+                    }
+                }
+            }
+        }
+    }
+    if (denied.len() > 0) {
+        final src = actor(d, f: f, r: np, look: figure\Look.plain);
+        final label = if (denied.len() == 2) "deny all" else "deny {denied[0]}";
+        foreach (w in selected) {
+            flow(d, f: f, src: src, dst: actorNamed(d, r: w), label: label);
+        }
+    }
+}
+
+fun peerActors(d: Drawing, f: mut figure\Figure, peer: {str: any}, np: Resource, workloads: [Resource]) > [figure\Actor] !> any {
+    if (dig(peer, path: ["ipBlock", "cidr"]) as? str -> cidr) {
+        final except = lists(dig(peer, path: ["ipBlock", "except"]));
+        final sub = if (except.len() > 0) "except " + strings(except).join(", ") else "";
+        return [external(d, name: cidr, sub: sub, look: figure\Look.external)];
+    }
+    foreach (sel in ["podSelector", "namespaceSelector"]) {
+        if (dig(peer, path: [sel, "matchExpressions"]) != null) {
+            throw "{np.origin}: {sel}.matchExpressions is not read by libs/kustomize";
+        }
+    }
+    final pods = (dig(peer, path: ["podSelector", "matchLabels"]) as? {str: any}) ?? {<str: any>};
+    if (!peer.hasKey("namespaceSelector")) {
+        final local = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == np.ns() and matches(pods, labels: templateLabels(w)));
+        if (local.len() > 0) {
+            return local.map(fun (i: int, w: Resource) > figure\Actor => actorNamed(d, r: w));
+        }
+    }
+    final nsLabels = (dig(peer, path: ["namespaceSelector", "matchLabels"]) as? {str: any}) ?? {<str: any>};
+    final named = text(nsLabels["kubernetes.io/metadata.name"]);
+    final ns = if (!peer.hasKey("namespaceSelector")) np.ns()
+        else if (named != "") named
+        else if (nsLabels.len() == 0) "any namespace"
+        else pairsText(nsLabels);
+    final who = if (pods.len() == 0) "all pods" else pods.values().map(fun (i: int, v: any) > str => text(v)).join(",");
+    return [external(d, name: "{ns}/{who}", sub: pairsText(pods), look: figure\Look.external)];
+}
+
+fun allowLabel(ports: [any]) > str {
+    if (ports.len() == 0) {
+        return "allow all";
+    }
+    final seen = mut [<str>];
+    foreach (p in ports) {
+        final port = text(dig(p, path: ["port"]));
+        final value = if (port != "") port else "{(p as? {str: any})!["port"]}";
+        if (seen.indexOf(value) == null) {
+            seen.append(value);
+        }
+    }
+    final label = "allow {seen.join(",")}";
+    return if (label.len() <= 14) label else "allow {seen.len()} ports";
+}
+
+fun matches(selector: {str: any}, labels: {str: any}) > bool {
+    foreach (key, value in selector) {
+        if (text(labels[key]) != text(value)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fun templateLabels(w: Resource) > {str: any} {
+    return (dig(w.doc, path: POD_TEMPLATES[w.kind()]! + ["metadata", "labels"]) as? {str: any}) ?? {<str: any>};
+}
+
+fun actorName(kind: str, name: str) > str {
+    return "{SHORT[kind] ?? kind.lower()}/{name}";
+}
+
+fun actor(d: Drawing, f: mut figure\Figure, r: Resource, look: figure\Look) > figure\Actor {
+    final name = actorName(r.kind(), name: r.name());
+    if (d.actors[name] -> have) {
+        return have;
+    }
+    final a = figure\external(name, sub: r.kind(), look: look);
+    d.actors[name] = a;
+    d.order.append(name);
+    d.looks[look.value] = true;
+    f.actor(a);
+    return a;
+}
+
+fun actorNamed(d: Drawing, r: Resource) > figure\Actor {
+    return d.actors[actorName(r.kind(), name: r.name())]!;
+}
+
+fun external(d: Drawing, name: str, sub: str, look: figure\Look) > figure\Actor {
+    if (d.actors[name] -> have) {
+        return have;
+    }
+    final a = figure\external(name, sub: sub, look: look);
+    d.actors[name] = a;
+    d.order.append(name);
+    d.looks[look.value] = true;
+    return a;
+}
+
+// referenced is the actor for an object a pod names: drawn as itself when the build holds
+// it, as named-but-not-built when it does not, such as a Secret made out of band.
+fun referenced(d: Drawing, f: mut figure\Figure, kind: str, name: str, ns: str, held: {str: bool}, look: figure\Look) > figure\Actor {
+    final built = held["{kind}/{ns}/{name}"] ?? false;
+    final drawnLook = if (built) look else figure\Look.optional;
+    final sub = if (built) kind else "{kind}, not in the build";
+    return external(d, name: actorName(kind, name: name), sub: sub, look: drawnLook);
+}
+
+fun flow(d: Drawing, f: mut figure\Figure, src: figure\Actor, dst: figure\Actor, label: str) > void {
+    final key = "{src.name} {dst.name} {label}";
+    if (d.edges.indexOf(key) != null) {
+        return;
+    }
+    d.edges.append(key);
+    f.flowAcross(src, dst: dst, label: label);
+}
+
+// ---- plain-data helpers ----
+
+fun dig(value: any, path: [str]) > any {
+    var cur = value;
+    foreach (seg in path) {
+        final m = cur as? {str: any};
+        if (m == null) {
+            return null;
+        }
+        cur = m![seg];
+    }
+    return cur;
+}
+
+fun setPath(doc: {str: any}, path: [str], value: any) > {str: any} {
+    return (setIn(doc, path: path, value: value) as? {str: any})!;
+}
+
+fun setIn(doc: any, path: [str], value: any) > any {
+    if (path.len() == 0) {
+        return value;
+    }
+    final m = (doc as? {str: any}) ?? {<str: any>};
+    final next: mut {str: any} = m.cloneMutable();
+    next[path[0]] = setIn(m[path[0]], path: path.sub(1), value: value);
+    return next;
+}
+
+fun merged(base: {str: any}, more: {str: any}) > {str: any} {
+    final next: mut {str: any} = base.cloneMutable();
+    foreach (key, value in more) {
+        next[key] = value;
+    }
+    return next;
+}
+
+fun text(value: any) > str {
+    if (value == null) {
+        return "";
+    }
+    if (value as? str -> s) {
+        return s;
+    }
+    return "{value}";
+}
+
+fun pairsText(pairs: {str: any}) > str {
+    final parts = mut [<str>];
+    foreach (key, value in pairs) {
+        parts.append("{key}={text(value)}");
+    }
+    return parts.join(",");
+}
+
+fun lists(value: any) > [any] {
+    return (value as? [any]) ?? [<any>];
+}
+
+fun strings(value: any) > [str] {
+    return lists(value).map(fun (i: int, v: any) > str => text(v));
+}
+
+fun maps(value: any) > [{str: any}] {
+    return lists(value).map(fun (i: int, v: any) > {str: any} => (v as? {str: any}) ?? {<str: any>});
+}
+
+// ---- tests over testdata and the committed overlay; run from libs/kustomize ----
+
+// staged copies testdata files into a fresh directory, kustomization first.
+fun staged(kustomization: str, files: [str]) > str !> any {
+    final dir = fs\tempDir("kustomize-test-");
+    fs\copyFile(fs\join("testdata", name: kustomization), dst: fs\join(dir, name: "kustomization.yaml"));
+    foreach (name in files) {
+        fs\copyFile(fs\join("testdata", name: name), dst: fs\join(dir, name: name));
+    }
+    return dir;
+}
+
+fun named(objects: [Resource], kind: str) > Resource !> any {
+    foreach (r in objects) {
+        if (r.kind() == kind) {
+            return r;
+        }
+    }
+    throw "no {kind} in the build";
+}
+
+fun buildError(kustomization: str) > str {
+    try {
+        build(staged(kustomization, files: ["app.yaml"]));
+    } catch (e: str) {
+        return e;
+    }
+    return "";
+}
+
+test "namespace, prefix, suffix and commonLabels match kustomize build" {
+    final objects = build(staged("prefix-kustomization.yaml", files: ["app.yaml", "namespace.yaml"])) catch [<Resource>];
+    std\assert(objects.len() == 8, message: "eight objects, got {objects.len()}");
+    final deploy = named(objects, kind: "Deployment") catch Resource{ doc = {<str: any>}, origin = "" };
+    std\assert(deploy.name() == "x-app-v1" and deploy.ns() == "team", message: deploy.id());
+    final spec = dig(deploy.doc, path: ["spec", "template", "spec"]);
+    std\assert(text(dig(spec, path: ["serviceAccountName"])) == "x-app-v1", message: "service account repointed");
+    final volumes = lists(dig(spec, path: ["volumes"]));
+    std\assert(text(dig(volumes[0], path: ["persistentVolumeClaim", "claimName"])) == "x-data-v1", message: "claim repointed");
+    std\assert(text(dig(volumes[1], path: ["secret", "secretName"])) == "creds", message: "a secret outside the build keeps its name");
+    std\assert(text(dig(deploy.doc, path: ["spec", "replicas"])) == "3", message: "the JSON6902 patch matched the pre-prefix name");
+    std\assert(text(dig(deploy.doc, path: ["spec", "selector", "matchLabels", "tier"])) == "back", message: "commonLabels reach selectors");
+    final ns = named(objects, kind: "Namespace") catch deploy;
+    std\assert(ns.name() == "team", message: "a Namespace takes the namespace as its name: {ns.name()}");
+    final policy = objects.filter(fun (i: int, r: Resource) > bool => r.name() == "x-allow-web-v1");
+    final peer = dig(lists(dig(lists(dig(policy[0].doc, path: ["spec", "ingress"]))[0], path: ["from"]))[0], path: ["podSelector", "matchLabels"]);
+    std\assert(text(dig(peer, path: ["tier"])) == "back", message: "kustomize labels a peer podSelector too");
+}
+
+test "a strategic-merge patch on a drawn field raises naming the patch" {
+    final e = buildError("drawn-patch-kustomization.yaml");
+    std\assert(e.indexOf("patches[0]") != null and e.indexOf("serviceAccountName") != null, message: "got: {e}");
+}
+
+test "a field the reader does not know raises naming it" {
+    final e = buildError("unknown-field-kustomization.yaml");
+    std\assert(e.indexOf("\"replicas\"") != null, message: "got: {e}");
+}
+
+test "the dev overlay builds the paranoid base into magus-dev" {
+    final objects = build("../../deploy/kustomize/overlays/dev") catch [<Resource>];
+    std\assert(objects.len() == 9, message: "nine objects, got {objects.len()}");
+    foreach (r in objects) {
+        std\assert(r.kind() == "Namespace" or r.ns() == "magus-dev", message: "{r.id()} outside magus-dev");
+    }
+    final deploy = named(objects, kind: "Deployment") catch objects[0];
+    final pod = dig(deploy.doc, path: ["spec", "template", "spec"]);
+    std\assert(dig(pod, path: ["automountServiceAccountToken"]) == false, message: "no token automount");
+    std\assert(text(dig(pod, path: ["securityContext", "seccompProfile", "type"])) == "RuntimeDefault", message: "seccomp");
+    final container = lists(dig(pod, path: ["containers"]))[0];
+    std\assert(dig(container, path: ["securityContext", "readOnlyRootFilesystem"]) == true, message: "read-only root");
+    std\assert(text(lists(dig(container, path: ["securityContext", "capabilities", "drop"]))[0]) == "ALL", message: "drop ALL");
+    std\assert(text(dig(container, path: ["imagePullPolicy"])) == "Always", message: "the overlay's JSON6902 patch");
+    final claim = named(objects, kind: "PersistentVolumeClaim") catch objects[0];
+    std\assert(text(dig(claim.doc, path: ["spec", "resources", "requests", "storage"])) == "2Gi", message: "dev claim size");
+}
+
+fun edgeLabels(f: figure\Figure) > [str] !> any {
+    final labels = mut [<str>];
+    foreach (e in f.diagram().edges) {
+        labels.append(e.label);
+    }
+    labels.sort(fun (a: str, b: str) > bool => a < b);
+    return labels;
+}
+
+test "the dev overlay draws one edge per relation" {
+    final f = figureOf(build("../../deploy/kustomize/overlays/dev") catch [<Resource>], id: "t", title: "dev") catch figure\of("empty");
+    final labels = edgeLabels(f) catch [<str>];
+    std\assert(labels.join("|") == "allow 443|allow 53|deny all|mounts|mounts|runs as|selects", message: "{labels}");
+    std\assert(f.unscopedWhy != "", message: "the figure says why it draws no directory");
+}
+
+test "a secret outside the build and a peer outside the namespace draw as actors" {
+    final f = figureOf(build(staged("prefix-kustomization.yaml", files: ["app.yaml", "namespace.yaml"])) catch [<Resource>], id: "t", title: "app") catch figure\of("empty");
+    final names = mut [<str>];
+    foreach (b in f.boxes) {
+        if (b.actor -> a) {
+            var look = "-";
+            if (a.look -> l) {
+                look = l.value;
+            }
+            names.append("{a.name} ({look})");
+        }
+    }
+    std\assert(names.indexOf("secret/creds (optional)") != null, message: "{names}");
+    std\assert(names.indexOf("team/web,back (external)") != null, message: "{names}");
+    final labels = edgeLabels(f) catch [<str>];
+    std\assert(labels.indexOf("allow 8080") != null and labels.indexOf("deny ingress") != null and labels.indexOf("reads env") != null, message: "{labels}");
+}
