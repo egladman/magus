@@ -102,7 +102,7 @@ export object Tag {
 
 export extern fun base(dir: str = "") > str !> any;
 export extern fun changedFiles(base: str = "", dir: str = "") > [Path] !> any;
-export extern fun cmd(args: [str], opts: CommandOptions = CommandOptions{}) > ExecResult !> any;
+export extern fun cmd(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
 export extern fun commit(rev: str = "") > Commit !> any;
 export extern fun describe() > str !> any;
 export extern fun diffStat(base: str = "", dir: str = "") > [FileStat] !> any;

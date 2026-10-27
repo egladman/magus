@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -617,7 +618,7 @@ import "crypto";
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
     final joined = fs\join("a", "b", "c");
     final sc = proc\shell("printf hello");
-    final res = proc\exec(sc.bin, sc.args, "", {}).stdout;
+    final res = proc\exec(sc.bin, sc.args, "", null).stdout;
     final digest = crypto\hash(crypto\HashAlgorithm.Sha256, "").hex();
     fs\writeFile("ran", joined + "|" + res + "|" + digest);
 }
@@ -881,7 +882,7 @@ import "proc";
 
 export fun viash(ctx: magus\Context, _a: [str]) > void !> any {
     final c = proc\shell("true", "sh");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", null);
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "viash"))
@@ -1060,7 +1061,7 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 		{"ExecResult", `proc\exec("echo", ["hi"])`, "stdout", "stduot", `import "proc";`},
 		{"Commit", `vcs\commit()`, "author", "auther", `import "vcs";`},
 		{"FileInfo", `fs\stat(".")`, "size", "sizes", `import "fs";`},
-		{"HttpResponse", `http\get("http://x")`, "status", "staus", `import "http";`},
+		{"Response", `http\get("http://x")`, "status", "staus", `import "http";`},
 		{"SemverVersion", `semver\parse("1.2.3")`, "major", "majr", `import "semver";`},
 		{"URL", `url\parse("http://x")`, "scheme", "sceme", `import "encoding/url";`},
 	}
@@ -1127,12 +1128,12 @@ import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     final ok = proc\shell("true");
-    final rc = proc\exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
+    final rc = proc\exec(ok.bin, ok.args, "", proc\ExecOptions{allowFailure = true}).code;
     if (rc != 0) {
         throw "proc.shell('true') exited {rc}";
     }
     final bad = proc\shell("false");
-    final rc2 = proc\exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
+    final rc2 = proc\exec(bad.bin, bad.args, "", proc\ExecOptions{allowFailure = true}).code;
     if (rc2 == 0) {
         throw "proc.shell('false') exited 0, expected non-zero";
     }
@@ -1153,7 +1154,7 @@ import "proc";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     os\withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void !> any {
         final ec = proc\shell("echo $MY_BUZZ_VAR");
-        final captured = proc\exec(ec.bin, ec.args, "", {}).stdout;
+        final captured = proc\exec(ec.bin, ec.args, "", null).stdout;
         if (captured != "hello") {
             throw "expected 'hello', got: [" + captured + "]";
         }
@@ -1469,7 +1470,7 @@ func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
 		{"CommitRecord", "Commit"},
 		{"CommitAuthor", "CommitAuthor"},
 		{"FileInfo", "FileInfo"},
-		{"HTTPResponse", "HttpResponse"},
+		{"HTTPResponse", "Response"},
 		{"SemverVersion", "SemverVersion"},
 		{"URL", "URL"},
 		{"Tag", "Tag"},
@@ -1644,9 +1645,9 @@ import "std";
 import "http";
 
 test "construct a declared boundary object" {
-    final p = HttpRetry{ attempts = 3, delay_ms = 250.0 };
+    final p = http\Retry{ attempts = 3, delayMs = 250.0 };
     std\assert(p.attempts == 3, message: "field set");
-    std\assert(p.all_errors == false, message: "field default");
+    std\assert(!p.allErrors, message: "field default");
 }
 `)
 	require.NoError(t, err)
@@ -1660,8 +1661,8 @@ func TestDeclaringObjectsKeepsNativeMethods(t *testing.T) {
 	err := sess.Exec(context.Background(), `
 import "std";
 import "http";
-final _p = HttpRetry{ attempts = 2 };
-final port = http\server({"dir": "."}) catch -1;
+final _p = http\Retry{ attempts = 2 };
+final port = http\server(http\ServerOptions{ dir = "." }) catch -1;
 std\assert(port > 0, message: "native http.server still bound a port");
 `)
 	require.NoError(t, err)
@@ -1758,7 +1759,7 @@ func TestTermNotifyEnumResolvesThroughItsOwnNamespace(t *testing.T) {
 import "term";
 import "log";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    term\notify("built", level: term\LogLevel.warn, ttl_ms: 10);
+    term\notify("built", level: term\LogLevel.warn, ttlMs: 10);
     term\notify("plain");
     log\info("also logged");
 }`)
@@ -1788,11 +1789,11 @@ import "proc";
 
 export fun compound(ctx: magus\Context, _a: [str]) > void !> any {
     final c = proc\shell("cd . && git commit -m x");
-    proc\exec(c.bin, args: c.args, dir: "", opts: {});
+    proc\exec(c.bin, args: c.args, dir: "");
 }
 
 export fun wrapped(ctx: magus\Context, _a: [str]) > void !> any {
-    proc\exec("env", args: ["GIT_DIR=elsewhere", "hg", "status"], dir: "", opts: {});
+    proc\exec("env", args: ["GIT_DIR=elsewhere", "hg", "status"], dir: "");
 }
 `)
 	err := runTargetIn(t, dir, "compound")
@@ -1812,11 +1813,33 @@ import "fs";
 import "vcs";
 
 export fun inside(ctx: magus\Context, _a: [str]) > void !> any {
-    fs\writeFile("inside", content: vcs\cmd(["rev-parse", "--is-inside-work-tree"], opts: {"quiet": true}).stdout);
+    fs\writeFile("inside", content: vcs\cmd(["rev-parse", "--is-inside-work-tree"], opts: vcs\CommandOptions{quiet = true}).stdout);
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "inside"))
 	got, err := os.ReadFile(filepath.Join(dir, "inside"))
 	require.NoError(t, err)
 	assert.Equal(t, "true", string(got))
+}
+
+// magus and vcs both export CommandOptions. A qualified literal builds its own module's
+// record whatever else the script imports, so magus\cmd never decodes vcs's tty.
+func TestQualifiedCommandOptionsBuildTheirOwnModulesRecord(t *testing.T) {
+	ctx := t.Context()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	require.NoError(t, sess.Exec(ctx, `
+import "vcs";
+import "magus";
+
+final m = magus\CommandOptions{ quiet = true };
+final v = vcs\CommandOptions{ tty = true };
+`))
+	m, err := decode.DecodeMagusCommandOptions(sess.GetGlobal("m"))
+	require.NoError(t, err)
+	assert.Equal(t, types.MagusCommandOptions{Quiet: true}, m)
+	v, err := decode.DecodeVCSCommandOptions(sess.GetGlobal("v"))
+	require.NoError(t, err)
+	assert.Equal(t, types.VCSCommandOptions{TTY: true}, v)
 }

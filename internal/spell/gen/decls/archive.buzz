@@ -38,7 +38,7 @@ export object UncompressResult {
     bytes: int = 0,
 }
 
-export extern fun compress(src: str, dest: str, opts: Options = Options{}) > CompressResult !> any;
-export extern fun list(src: str, opts: Options = Options{}) > [ArchiveEntry] !> any;
-export extern fun readFile(src: str, name: str, opts: Options = Options{}) > str !> any;
-export extern fun uncompress(src: str, dest: str, opts: Options = Options{}) > UncompressResult !> any;
+export extern fun compress(src: str, dest: str, opts: Options? = null) > CompressResult !> any;
+export extern fun list(src: str, opts: Options? = null) > [ArchiveEntry] !> any;
+export extern fun readFile(src: str, name: str, opts: Options? = null) > str !> any;
+export extern fun uncompress(src: str, dest: str, opts: Options? = null) > UncompressResult !> any;

@@ -287,33 +287,28 @@ func externDecl(m std.Method) (string, error) {
 	return fmt.Sprintf("export extern fun %s(%s) > %s%s;\n", name, strings.Join(params, ", "), ret, raises), nil
 }
 
-// takesPointer reports whether argument i is an optional object m's Impl takes as *T.
-// An omitted one is then null, not an empty map that would decode as a zero T.
-func takesPointer(m std.Method, i int) bool {
-	impl := reflect.TypeOf(m.Impl)
+// optionalRecord reports whether argument i is an optional object, not a list of them.
+// It defaults to null rather than `T{}`: a default is evaluated at the call site, where a
+// bare T can name another module's record of the same name (magus and vcs both export
+// CommandOptions). The trampoline decodes a null as the zero record.
+func optionalRecord(m std.Method, i int) bool {
 	a := m.Args[i]
-	return a.Optional && a.Object != "" && impl != nil && impl.Kind() == reflect.Func &&
-		i+1 < impl.NumIn() && impl.In(i+1).Kind() == reflect.Pointer
+	return a.Optional && a.Object != "" && !strings.HasPrefix(a.Object, "[")
 }
 
 func nullable(m std.Method, i int) string {
-	if takesPointer(m, i) {
+	if optionalRecord(m, i) {
 		return "?"
 	}
 	return ""
 }
 
 func optionalDefault(m std.Method, i int) (string, error) {
-	if takesPointer(m, i) {
+	if optionalRecord(m, i) {
 		return "null", nil
 	}
-	// An omitted record is the record with every field at its default, spelled as the
-	// mirror constructs it rather than as a map the checker has to coerce.
 	if obj := m.Args[i].Object; obj != "" {
-		if strings.HasPrefix(obj, "[") {
-			return fmt.Sprintf("[<%s>]", strings.Trim(obj, "[]")), nil
-		}
-		return obj + "{}", nil
+		return fmt.Sprintf("[<%s>]", strings.Trim(obj, "[]")), nil
 	}
 	return buzzDefault(m.Args[i])
 }

@@ -1055,7 +1055,8 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 			v, ok := s.env.Get(key)
 			return ok && v.IsObjectDef()
 		},
-		SourceFile: s.sourceFile,
+		ModuleTypes: s.importedModuleTypes,
+		SourceFile:  s.sourceFile,
 	})
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseCompile, time.Since(compileStart), err)
@@ -1727,7 +1728,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				// defines its objects and enums and redefines none of the native
 				// methods. The module value in hand is untouched, verified by calling
 				// a native method after this runs.
-				s.declareObjectTypes(src, prog)
+				s.declareObjectTypes(boundName, src, prog)
 			}
 		}
 		if len(imp.Only) > 0 {
@@ -1774,7 +1775,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			return ImportBound, nil
 		}
 		s.loadedPaths[key] = true
-		s.collectImportedModule(boundName, src)
+		prog := s.collectImportedModule(boundName, src)
 		exports, err := s.execImport(ctx, src)
 		if err != nil {
 			// Forget the attempt, so a later import in a long-lived session retries it
@@ -1782,6 +1783,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			delete(s.loadedPaths, key)
 			return ImportDecls, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
+		s.bindQualifiedTypes(boundName, prog)
 		s.importCache[key] = s.cacheBindings(src, exports)
 		s.bindNamespaceObject(boundName, exports)
 		if ns := s.declaredNamespace(src); ns != nil {
@@ -2019,7 +2021,7 @@ func (s *Session) declareEnumValues(mod vmpackage.Value, prog *ast.Program) {
 //
 // prog is src as collectImportedModule parsed it. Nothing is emitted for a source
 // with no exported object, which is most of them, so the common import runs nothing.
-func (s *Session) declareObjectTypes(src string, prog *ast.Program) {
+func (s *Session) declareObjectTypes(boundName, src string, prog *ast.Program) {
 	// Only a source that is PURELY declarations may run. An exported function with
 	// a body is real code, and executing it flat-merges the name into the importing
 	// scope, which for a magusfile means magus reads it as a TARGET. Buzz's own
@@ -2058,7 +2060,27 @@ func (s *Session) declareObjectTypes(src string, prog *ast.Program) {
 	// as it was before this existed: collected, checkable, and with its objects
 	// annotate-only. Returning the error instead would take a working import down
 	// over a capability it never had.
-	_, _ = s.execImport(s.ctx, src)
+	if _, err := s.execImport(s.ctx, src); err == nil {
+		s.bindQualifiedTypes(boundName, prog)
+	}
+}
+
+// bindQualifiedTypes binds each object prog exports under QualifiedTypeKey too: two
+// modules may export one name (magus and vcs both export CommandOptions), and the bare
+// binding holds whichever ran last. Call it right after the module's source ran.
+func (s *Session) bindQualifiedTypes(boundName string, prog *ast.Program) {
+	if prog == nil {
+		return
+	}
+	for _, stmt := range prog.Stmts {
+		d, ok := stmt.(*ast.ObjectDecl)
+		if !ok || !d.IsExported {
+			continue
+		}
+		if v, bound := s.env.Get(d.Name); bound && v.IsObjectDef() {
+			s.env.Define(QualifiedTypeKey(boundName, d.Name), v)
+		}
+	}
 }
 
 // bindNamespaceObject binds, under name, a map of the names a flat import just
@@ -2124,10 +2146,14 @@ func (s *Session) bindCachedFlat(boundName, importPath string, c *cachedImport, 
 	for _, n := range c.names {
 		// An export, as if the module had run here; importExportedNames reads it.
 		s.exportedNames[n] = true
+		v, ok := c.values.MapGet(n)
+		if ok && v.IsObjectDef() {
+			s.env.Define(QualifiedTypeKey(boundName, n), v)
+		}
 		if _, bound := s.env.Get(n); bound {
 			continue
 		}
-		if v, ok := c.values.MapGet(n); ok {
+		if ok {
 			s.env.Define(n, v)
 		}
 	}

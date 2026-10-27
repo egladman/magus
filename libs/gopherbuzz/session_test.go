@@ -798,6 +798,56 @@ func TestSession_NestedRedeclarationStaysInItsCheck(t *testing.T) {
 	assert.Contains(t, err.Error(), "extra")
 }
 
+// Two modules may export objects of one name: magus and vcs both export
+// CommandOptions, archive and http both export Options. A qualified literal builds
+// its own module's record, whichever import ran last, and a bare one is still the
+// last import's.
+func TestSession_QualifiedObjectBuildsItsOwnModulesRecord(t *testing.T) {
+	const src = `import "%s";
+import "%s";
+import "archive";
+import "http";
+
+final m = magus\CommandOptions{};
+final v = vcs\CommandOptions{ tty = true };
+final a = archive\Options{ strip = 1 };
+final h = http\Options{};
+`
+	fields := func(t *testing.T, sess *Session, name string) map[string]string {
+		t.Helper()
+		view, ok := sess.GetGlobal(name).MapView()
+		require.True(t, ok, name)
+		got := map[string]string{}
+		for _, k := range view.MapKeys() {
+			v, _ := view.MapGet(k)
+			got[k] = v.String()
+		}
+		return got
+	}
+	decls := map[string]string{
+		"magus":   "export object CommandOptions { root: str = \"/\", quiet: bool = true }\nexport extern fun cmd(opts: CommandOptions? = null) > void;\n",
+		"vcs":     "export object CommandOptions { quiet: bool = false, tty: bool = false }\nexport extern fun cmd(opts: CommandOptions? = null) > void;\n",
+		"archive": "export object Options { strip: int = 0 }\n",
+		"http":    "export object Options { fail: bool = true }\n",
+	}
+	for _, order := range [][2]string{{"magus", "vcs"}, {"vcs", "magus"}} {
+		t.Run(order[0]+" first", func(t *testing.T) {
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer func() { _ = sess.Close() }()
+			for name, d := range decls {
+				sess.SetNativeModule(name, vm.NewMap())
+				sess.SetModuleDecls(name, d)
+			}
+			require.NoError(t, sess.Exec(ctx, fmt.Sprintf(src, order[0], order[1])))
+			assert.Equal(t, map[string]string{"root": "/", "quiet": "true"}, fields(t, sess, "m"))
+			assert.Equal(t, map[string]string{"quiet": "false", "tty": "true"}, fields(t, sess, "v"))
+			assert.Equal(t, map[string]string{"strip": "1"}, fields(t, sess, "a"))
+			assert.Equal(t, map[string]string{"fail": "true"}, fields(t, sess, "h"))
+		})
+	}
+}
+
 // hostShapedDecls is declaration source shaped like magus's generated bundles:
 // objects whose fields name one another, then one extern per host method.
 func hostShapedDecls(prefix string, objects, funcs int) string {

@@ -36,9 +36,9 @@ export object ServerOptions {
 }
 
 export extern fun byteSize(path: str) > int !> any;
-export extern fun download(url: str, dest: str, headers: {str: str} = {<str: str>}, opts: Options = Options{}, retry: Retry = Retry{}) > int !> any;
-export extern fun get(url: str, headers: {str: str} = {<str: str>}, opts: Options = Options{}, retry: Retry = Retry{}) > Response !> any;
-export extern fun post(url: str, body: str, headers: {str: str} = {<str: str>}, opts: Options = Options{}, retry: Retry = Retry{}) > Response !> any;
-export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}, opts: Options = Options{}, retry: Retry = Retry{}) > Response !> any;
+export extern fun download(url: str, dest: str, headers: {str: str} = {<str: str>}, opts: Options? = null, retry: Retry? = null) > int !> any;
+export extern fun get(url: str, headers: {str: str} = {<str: str>}, opts: Options? = null, retry: Retry? = null) > Response !> any;
+export extern fun post(url: str, body: str, headers: {str: str} = {<str: str>}, opts: Options? = null, retry: Retry? = null) > Response !> any;
+export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}, opts: Options? = null, retry: Retry? = null) > Response !> any;
 export extern fun server(opts: ServerOptions) > int !> any;
 export extern fun upload_chunked(method: str, url: str, src: str, chunkSize: int, headers: {str: str} = {<str: str>}) > any !> any;

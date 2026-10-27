@@ -2295,35 +2295,35 @@ export object Trail {
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
-export extern fun attention(args: [str], opts: CommandOptions = CommandOptions{}) > {str: any} !> any;
+export extern fun attention(args: [str], opts: CommandOptions? = null) > {str: any} !> any;
 export extern fun bustCache(projectPath: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
-export extern fun clean(args: [str], opts: CommandOptions = CommandOptions{}) > CleanReport !> any;
-export extern fun cmd(sub: str, args: [str], opts: CommandOptions = CommandOptions{}) > ExecResult !> any;
+export extern fun clean(args: [str], opts: CommandOptions? = null) > CleanReport !> any;
+export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > ExecResult !> any;
 export extern fun conformance() > {str: any} !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
-export extern fun diff(opts: DiffOptions = DiffOptions{}) > Diff !> any;
+export extern fun diff(opts: DiffOptions? = null) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;
-export extern fun dirs(glob: str, opts: DirsOptions = DirsOptions{}) > [Dir] !> any;
-export extern fun doctor(args: [str], opts: CommandOptions = CommandOptions{}) > DoctorReport !> any;
+export extern fun dirs(glob: str, opts: DirsOptions? = null) > [Dir] !> any;
+export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
 export extern fun explain(node: str) > ExplainResult !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
-export extern fun impact(base: str = "", opts: CommandOptions = CommandOptions{}) > Impact !> any;
+export extern fun impact(base: str = "", opts: CommandOptions? = null) > Impact !> any;
 export extern fun importGraph() > ImportGraph !> any;
-export extern fun insight(opts: InsightOptions = InsightOptions{}) > InsightReport !> any;
+export extern fun insight(opts: InsightOptions? = null) > InsightReport !> any;
 export extern fun layer(name: str) > Layer !> any;
-export extern fun neighborhood(focus: str, opts: NeighborhoodOptions = NeighborhoodOptions{}) > NeighborhoodResult !> any;
+export extern fun neighborhood(focus: str, opts: NeighborhoodOptions? = null) > NeighborhoodResult !> any;
 export extern fun output(ref: str) > OutputRecord !> any;
-export extern fun path(node: str, to: str, opts: PathOptions = PathOptions{}) > PathResult !> any;
+export extern fun path(node: str, to: str, opts: PathOptions? = null) > PathResult !> any;
 export extern fun precedents() > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
-export extern fun query(query: str, opts: QueryOptions = QueryOptions{}) > QueryResult !> any;
-export extern fun raise(code: str, message: str, opts: RaiseOptions = RaiseOptions{}) > void !> any;
-export extern fun refs(symbol: str, opts: RefsOptions = RefsOptions{}) > RefsResult !> any;
-export extern fun run(args: [str], opts: CommandOptions = CommandOptions{}) > ExecResult !> any;
+export extern fun query(query: str, opts: QueryOptions? = null) > QueryResult !> any;
+export extern fun raise(code: str, message: str, opts: RaiseOptions? = null) > void !> any;
+export extern fun refs(symbol: str, opts: RefsOptions? = null) > RefsResult !> any;
+export extern fun run(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
@@ -2405,21 +2405,21 @@ export object job {
 
 // Typed reads of what `magus describe <noun>` prints, one method per noun: `magus\describe.spell("go")` returns the Spell records `magus describe spell go -o json` carries. A method whose noun takes a name takes it as an optional SELECTOR and returns a collection either way, so detailing one reads `[0]`. A report that carries more than its collection (a file classification's overlaps, the tools' lifecycle state) comes back whole. The methods that fork a nested magus work from a `magus buzz` script with no workspace loaded; opts.root and opts.dir are as for magus\run. Bound by hand in internal/interp/bindings (buildDescribe): a Namespace's methods are Extern by construction. A noun with no method here is reached through magus\cmd("describe", [...]).
 export object describe {
-    static extern fun charm(name: str = "", opts: CommandOptions = CommandOptions{}) > [CharmEntry] !> any;
-    static extern fun evaluatedProject(path: str = "", opts: CommandOptions = CommandOptions{}) > [EvaluatedProject] !> any;
-    static extern fun evaluatedTarget(ref: str, opts: CommandOptions = CommandOptions{}) > [EvaluatedTarget] !> any;
-    static extern fun file(paths: [str], opts: CommandOptions = CommandOptions{}) > FileReport !> any;
-    static extern fun graph(opts: CommandOptions = CommandOptions{}) > TargetGraph !> any;
-    static extern fun graphMarkdown(projects: [str] = [<str>], opts: CommandOptions = CommandOptions{}) > str !> any;
+    static extern fun charm(name: str = "", opts: CommandOptions? = null) > [CharmEntry] !> any;
+    static extern fun evaluatedProject(path: str = "", opts: CommandOptions? = null) > [EvaluatedProject] !> any;
+    static extern fun evaluatedTarget(ref: str, opts: CommandOptions? = null) > [EvaluatedTarget] !> any;
+    static extern fun file(paths: [str], opts: CommandOptions? = null) > FileReport !> any;
+    static extern fun graph(opts: CommandOptions? = null) > TargetGraph !> any;
+    static extern fun graphMarkdown(projects: [str] = [<str>], opts: CommandOptions? = null) > str !> any;
     static extern fun harness(id: str) > HarnessPlan !> any;
-    static extern fun mcpTool(name: str = "", opts: CommandOptions = CommandOptions{}) > [MCPTool] !> any;
+    static extern fun mcpTool(name: str = "", opts: CommandOptions? = null) > [MCPTool] !> any;
     static extern fun module(name: str = "") > [Module] !> any;
     static extern fun project() > Projects !> any;
-    static extern fun rule(name: str = "", opts: CommandOptions = CommandOptions{}) > [Rule] !> any;
-    static extern fun spell(name: str = "", opts: CommandOptions = CommandOptions{}) > [Spell] !> any;
-    static extern fun target(opts: CommandOptions = CommandOptions{}) > [TargetEntry] !> any;
+    static extern fun rule(name: str = "", opts: CommandOptions? = null) > [Rule] !> any;
+    static extern fun spell(name: str = "", opts: CommandOptions? = null) > [Spell] !> any;
+    static extern fun target(opts: CommandOptions? = null) > [TargetEntry] !> any;
     static extern fun tool() > ToolReport !> any;
-    static extern fun workspace(opts: CommandOptions = CommandOptions{}) > [WorkspaceEntry] !> any;
+    static extern fun workspace(opts: CommandOptions? = null) > [WorkspaceEntry] !> any;
 }
 
 // Shared services a `magus buzz` script holds, the way a target holds one through ctx.needs: routed to the broker when one is up, so the service stays warm past the script, and hosted in-process otherwise. Every lease a script still holds is released when it ends, however it ends. Raises MGS1022 outside a workspace, and from a magusfile, where ctx.needs is the way to hold one. Bound by hand in internal/interp/bindings (buildService), for the reason magus\job is.
