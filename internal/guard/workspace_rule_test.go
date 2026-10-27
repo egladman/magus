@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
@@ -116,11 +117,13 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"Edits, spawns, pushes and commands that change state wait until a magus loads the tree. "+
 		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. "+
 		"So does getting the tree back to one a binary can be built from, each alone on its line: "+
-		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`. "+
+		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort`, `--continue` or `--skip`, "+
+		"`git cherry-pick <commit>...` to finish a series, and `git worktree add`. "+
+		"So do writes outside any workspace, such as memory or a scratchpad. "+
 		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.\n"+
 		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
-		"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
-		"see: %[3]sstale-binary/", staleOwnSay, errStaleLoad.Error(), ruleDocsBase), stored)
+		"`GOEXPERIMENT=jsonv2 go -C %[4]s run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
+		"see: %[3]sstale-binary/", staleOwnSay, errStaleLoad.Error(), ruleDocsBase, config.ShellLine([]string{root})), stored)
 	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, unloadReason{Cause: unloadStale}, failureLines(staleFailures), true, root)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %sstale-binary/", d.full(), ruleDocsBase), stored)
 }
@@ -129,10 +132,10 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 func TestLoadFailureDenyNamesTheBootstrapWhereThereIsNoBinary(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	recordLoadedPolicy(t, cacheDir)
-	ownCheckout(t, ctx, false)
+	root := ownCheckout(t, ctx, false)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay)
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay(root))
 	assert.NotContains(t, stored, "mv magus magus.old")
 }
 
@@ -149,8 +152,9 @@ func TestLoadFailureDenyNamesTheMainSessionForALeasedWorker(t *testing.T) {
 }
 
 // An error in the magusfile that no newer binary would fix, in a checkout that has its
-// own ./magus, stays the gated verbs' deny and leaves every other call open.
-func TestLoadFailureOfATypoDeniesOnlyGatedVerbs(t *testing.T) {
+// own ./magus, keeps the gated verbs' deny, and refuses every other change by naming the
+// error rather than letting it run on the built-in rules alone. Reads still run.
+func TestLoadFailureOfATypoRefusesChangesNamingTheError(t *testing.T) {
 	typo := errors.New("magusfile.buzz:3:1: expected expression")
 	failures := []trail.RuleFailure{
 		{Side: decidedByWorktree, Error: "the magusfile failed to load: " + typo.Error()},
@@ -164,14 +168,15 @@ func TestLoadFailureOfATypoDeniesOnlyGatedVerbs(t *testing.T) {
 	push := Judge(ctx, deps, Request{Input: "git push", Host: "claude-code", Session: "s1"})
 	stored := shortDeny(t, cacheDir, push, denyRulePolicyUnloaded,
 		"`git push` waits for this workspace's guard policy to load; rebuild ./magus with `./magus run go-build .`.")
-	d := unloadedDenial(judgedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true)
+	d := unloadedDenial(judgedCall{seam: seamCommand, verb: "`git push`"}, failures, true, hookLocation(ctx, deps).workspace)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %spolicy-unloaded/", d.full(), ruleDocsBase), stored)
 	assert.Contains(t, stored, "\nThe likeliest cause is a ./magus older than the tree.\n")
 
 	other := Judge(ctx, deps, Request{Input: "ls -la", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(other))
 	change := Judge(ctx, deps, Request{Input: "touch NOTES.md", Host: "claude-code", Session: "s1"})
-	assert.NotEqual(t, decisionDeny, change.Decision, "a typo leaves state-changing commands on the built-in rules")
+	assert.Equal(t, decisionDeny, change.Decision)
+	assert.Contains(t, change.Reason, "this workspace's guard policy does not load, so this command waits until it does; fix the error it names: worktree: the magusfile failed to load: magusfile.buzz:3:1: expected expression")
 }
 
 // Every other command, the fix included, passes with the note that the policy judged
@@ -248,13 +253,14 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 	t.Run("no ./magus in the checkout", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
-		ownCheckout(t, ctx, false)
+		root := ownCheckout(t, ctx, false)
 		deps := unloadedDependencies(staleMsg)
 		deps.Binary, deps.BinaryVersion = "/usr/local/bin/magus", version
 
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 
-		assert.Contains(t, v.Context, "Judged by /usr/local/bin/magus ("+version+"); this checkout has no ./magus. Fix: bootstrap ./magus with `"+ward.BootstrapCommand+"`.")
+		bootstrap := config.StaleRemedy{Case: config.StaleOwnSource, Checkout: root, Bootstrap: true}.Lines()[0]
+		assert.Contains(t, v.Context, "Judged by /usr/local/bin/magus ("+version+"); this checkout has no ./magus. Fix: bootstrap ./magus with `"+bootstrap+"`.")
 	})
 	t.Run("a failure that is not the binary being old names no fix", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
@@ -443,14 +449,24 @@ func TestLoadFailureDeniesAWrite(t *testing.T) {
 	assert.Contains(t, shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay), "\nthis file write changes state")
 }
 
-// A load failure no newer binary fixes leaves the write on the built-in rules, with the note.
-func TestLoadFailureOfATypoPassesAWriteWithTheNote(t *testing.T) {
+// A load failure no newer binary fixes refuses a write by naming the error, and lets
+// through the edit of the policy source that fixes it, with the note, and a write that
+// lands under no workspace.
+func TestLoadFailureOfATypoRefusesAWriteButThePolicyFix(t *testing.T) {
 	ctx, root, cacheDir := writeFixture(t)
 	recordLoadedPolicy(t, cacheDir)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\n"), 0o755))
-	v := Judge(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryWriteRuleFailed)), unworded(v))
-	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
+	deps := unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression"))
+	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code", Session: "s1"})
+	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Contains(t, v.Reason, "this file write waits until it does; fix the error it names: worktree: the magusfile failed to load: magusfile.buzz:3:1: expected expression")
+
+	fix := Judge(ctx, deps, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
+	assert.NotEqual(t, decisionDeny, fix.Decision)
+	assert.Contains(t, fix.Context, "Only the built-in rules applied to this write.")
+
+	memory := Judge(ctx, deps, Request{Input: filepath.Join(t.TempDir(), "memory.md"), IsPath: true, Host: "claude-code", Session: "s1"})
+	assert.NotEqual(t, decisionDeny, memory.Decision)
 }
 
 // A deny or an ask reached with a rule missing carries the note, so neither reads as

@@ -277,13 +277,16 @@ type judgedCall struct {
 	dialect Dialect
 	// path is a write call's target, for loadRestore.
 	path string
+	// guardSource is a write to a file the policy load reads, the fix for a policy that
+	// fails on its own error.
+	guardSource bool
 }
 
 // denyUnloaded turns asked into a deny when no side of the policy loaded, and reports
 // whether it denied.
 //
-// Misconfiguration is an error: the rules that judge these calls are not running. Two
-// cases deny, and every other call still passes on the built-ins, so the fix stays runnable.
+// Misconfiguration is an error: the rules that judge these calls are not running. Three
+// cases deny; reads and the fix still pass on the built-ins, so the fix stays runnable.
 //
 // The binary judging the call cannot read the tree (older than it, or the checkout has no
 // ./magus): every call that changes state is denied, and it needs no record of an earlier
@@ -292,7 +295,9 @@ type judgedCall struct {
 // (loadRestore) is advised instead, since the load cannot recover otherwise.
 //
 // Otherwise a gated verb is denied when the last policy that did load registered seam's
-// rule. No record means no rule was ever seen to protect, and the call passes.
+// rule, and any other call that changes state is denied while the policy fails on its own
+// error, naming it (brokenPolicyDenial); an edit of a policy source passes, as that is the
+// fix. With no rule recorded or declared, nothing was ever seen to protect, and the call passes.
 func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	if !asked.unloaded || asked.answer.Decision == types.GuardDeny {
 		return false
@@ -300,8 +305,10 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	own := ownSourceRoot(at.workspace)
 	recorded := recordedRule(at.cacheDir, call.seam)
 	reason := unloadCause(asked.loadFailure, at.workspace)
-	holds := call.changes && reason.Cause != unloadNone && (recorded || declaresGuardRule(at.workspace))
-	if holds {
+	guarded := call.changes && (recorded || declaresGuardRule(at.workspace))
+	holds := guarded && reason.Cause != unloadNone
+	broken := guarded && reason.Cause == unloadNone && !call.guardSource
+	if holds || broken {
 		if why := loadRestore(call, asked.loadFailure, at); why != "" {
 			asked.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: why}
 			asked.rule, asked.by = denyRuleStaleBinary, decidedByBuiltin
@@ -313,15 +320,39 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	case holds:
 		d, asked.rule = staleBinaryDenial(call, reason, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && recorded:
-		d, asked.rule = unloadedDenial(call, asked.failures, own, hasMagusBinary(at.workspace)), denyRulePolicyUnloaded
+		broken = false
+		d, asked.rule = unloadedDenial(call, asked.failures, own, at.workspace), denyRulePolicyUnloaded
+	case broken:
+		d, asked.rule = brokenPolicyDenial(call, failureLines(asked.failures)), denyRulePolicyUnloaded
 	default:
 		return false
 	}
 	// One string, verdict first: verdictParts splits it again when the deny is worded.
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
-	asked.next = binaryRemedy(own, hasMagusBinary(at.workspace), call.lease, call.builds).next(asked.rule)
+	if !broken {
+		asked.next = binaryRemedy(own, at.workspace, call.lease, call.builds).next(asked.rule)
+	}
 	asked.by = decidedByBuiltin
 	return true
+}
+
+// brokenPolicyDenial is the deny for a call that changes state while the workspace's guard
+// policy fails on an error of its own, which no other binary fixes: a typo, or a rule a
+// stricter checker now refuses. The built-in rules alone would pass the call unjudged.
+func brokenPolicyDenial(call judgedCall, failures []string) denial {
+	say := fmt.Sprintf("this workspace's guard policy does not load, so %s waits until it does; fix the error it names", call.what)
+	if len(failures) > 0 {
+		say += ": " + failures[0]
+	}
+	var why strings.Builder
+	why.WriteString("The guard policy that judges this call failed to load:")
+	for _, f := range failures {
+		why.WriteString("\n  " + f)
+	}
+	why.WriteString("\nThe built-in rules alone are not the policy this workspace declared, so state-changing calls wait for it. " +
+		"Reads, `git status`, edits to the policy's own sources, writes outside any workspace, " +
+		"VCS recovery (`--abort` or `--continue`) and a rebuild of ./magus still run.")
+	return denial{Say: say, Why: why.String()}
 }
 
 // unknownSpellImport is the refusal of an import naming a spell this build does not ship,
@@ -362,8 +393,9 @@ func failureLines(failures []trail.RuleFailure) []string {
 
 // unloadedDenial is the deny for a gated verb while the policy that registered seam's rule
 // does not load. own is a checkout of magus itself, where the fix is a rebuild of ./magus.
-func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own, hasBinary bool) denial {
-	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
+func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own bool, root string) denial {
+	hasBinary := hasMagusBinary(root)
+	fix := binaryRemedy(own, root, call.lease, call.builds)
 	var why strings.Builder
 	fmt.Fprintf(&why, "This workspace registered a %s rule the last time it loaded, and now neither the working tree nor its approved copy loads:", call.seam.member())
 	for _, f := range failures {
@@ -542,9 +574,9 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 		}
 		switch j.unload.Cause {
 		case unloadStale:
-			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease, false).say
+			j.fix = binaryRemedy(ownSourceRoot(j.root), j.root, lease, false).say
 		case unloadSkewedSpell:
-			j.fix = binaryRemedy(true, j.hasBinary, lease, false).say
+			j.fix = binaryRemedy(true, j.root, lease, false).say
 		}
 	}
 	return j.String()

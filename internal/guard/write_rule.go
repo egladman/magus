@@ -95,7 +95,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 	spared := asked.lapse != nil && isGuardSource(deps, at, path) &&
 		(asked.approvedAnswered() || asked.approvedRuleless || !policyPending(ctx, deps, at))
 	denied := !spared && asked.denyShort(func() judgedCall {
-		return judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease, path: path}
+		return judgedCall{seam: seamWrite, changes: !outsideAnyWorkspace(path, at), what: "this file write", lease: lease, path: path, guardSource: isGuardSource(deps, at, path)}
 	}, at)
 	decided := ""
 	if verdict.Decision != decisionPass {

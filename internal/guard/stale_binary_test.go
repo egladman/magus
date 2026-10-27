@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
@@ -83,11 +84,15 @@ func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyR
 // The verdicts a stale-binary deny opens with, by cause and caller.
 const (
 	staleOwnSay    = "./magus is older than this workspace and cannot load its guard policy; rebuild ./magus with `./magus run go-build .`."
-	noBinaryOwnSay = "this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`."
-	staleWorkerSay = "./magus is older than this workspace and cannot load its guard policy; ask the main session to place a ./magus that loads this workspace."
+	staleWorkerSay ="./magus is older than this workspace and cannot load its guard policy; ask the main session to place a ./magus that loads this workspace."
 	// workerPlacementRun is the one command a leased worker is served in place of a build.
 	workerPlacementRun = `"<main checkout>/magus" buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from "<main checkout>"`
 )
+
+// noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
+func noBinaryOwnSay(root string) string {
+	return "this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C " + config.ShellLine([]string{root}) + " run -trimpath ./cmd/magus run go-build --no-cache .`."
+}
 
 // A fresh worktree has no ./magus and no recorded policy: the magusfile showing a guard
 // rule is the only evidence there is, and the judge is a PATH magus that cannot load it.
@@ -99,7 +104,7 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 	deps := unloadedDependencies(errMissingMember)
 
 	for _, line := range []string{"touch notes.txt", "git commit -m x", "./magus agent install", "git push origin HEAD:topic"} {
-		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, noBinaryOwnSay)
+		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, noBinaryOwnSay(root))
 		assert.Contains(t, stored, "changes state, and the guard policy that would judge it is not running:", line)
 		assert.Contains(t, stored, "\n  worktree: the magusfile failed to load: "+errMissingMember.Error(), line)
 		assert.Contains(t, stored, "see: "+ruleDocsBase+"stale-binary/", line)
@@ -117,8 +122,8 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 	}
 
 	edit := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s1"})
-	stored := shortDeny(t, cacheDir, edit, denyRuleStaleBinary, noBinaryOwnSay)
-	assert.True(t, strings.HasPrefix(stored, noBinaryOwnSay+"\nthis file write changes state"), stored)
+	stored := shortDeny(t, cacheDir, edit, denyRuleStaleBinary, noBinaryOwnSay(root))
+	assert.True(t, strings.HasPrefix(stored, noBinaryOwnSay(root)+"\nthis file write changes state"), stored)
 }
 
 // A failure that is not stale-shaped still denies in a checkout with no ./magus, and says
@@ -129,7 +134,7 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	declareGuardRule(t, root)
 
 	v := judgeUnloaded(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay)
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay(root))
 	assert.NotContains(t, stored, "older than")
 }
 
@@ -625,6 +630,18 @@ func TestEveryMCPToolIsClassifiedForAStaleBinary(t *testing.T) {
 	assert.Len(t, mcpReadOnlyTools, len(hint.AllToolNames), "an entry names no tool")
 }
 
+// Memory and a scratchpad sit under no workspace, so no unloaded policy holds them back.
+func TestOutsideAnyWorkspace(t *testing.T) {
+	ws := testkit.NewWorkspace(t)
+	ws.Write("magus.yaml", "{}\n")
+	at := location{workspace: ws.Root(), dir: ws.Root()}
+	scratch := t.TempDir()
+	assert.True(t, outsideAnyWorkspace(filepath.Join(scratch, "notes", "memory.md"), at))
+	assert.False(t, outsideAnyWorkspace(filepath.Join(ws.Root(), "internal", "x.go"), at))
+	assert.False(t, outsideAnyWorkspace("relative.go", at), "relative to the workspace")
+	assert.False(t, outsideAnyWorkspace("$HOME/x", at), "a place the line does not determine")
+}
+
 func TestRecoveryLine(t *testing.T) {
 	for _, tc := range []struct {
 		line, lease string
@@ -637,7 +654,10 @@ func TestRecoveryLine(t *testing.T) {
 		{"git rebase --continue", "lease-a", false, true},
 		{"git revert --abort", "lease-a", false, true},
 		{"git worktree add ../scratch HEAD", "lease-a", false, true},
-		{"git cherry-pick abc123", "lease-a", false, false},
+		{"git cherry-pick abc123", "lease-a", false, true},
+		{"git cherry-pick -x abc123 def456", "lease-a", false, true},
+		{"git cherry-pick --skip", "lease-a", false, true},
+		{"git cherry-pick --strategy=ours abc123", "lease-a", false, false},
 		{"git cherry-pick --abort && git push", "lease-a", false, false},
 		{"FOO=1 git cherry-pick --continue", "lease-a", false, false},
 		{"git worktree remove ../scratch", "lease-a", false, false},
@@ -695,8 +715,12 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 		builds      bool
 	}{{"root", "", true}, {"integrator", "lease-a", true}, {"worker", "lease-a", false}} {
 		for _, hasBinary := range []bool{true, false} {
-			fix := binaryRemedy(true, hasBinary, tc.lease, tc.builds)
-			named := []string{ward.BootstrapCommand}
+			root := t.TempDir()
+			if hasBinary {
+				require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), nil, 0o755))
+			}
+			fix := binaryRemedy(true, root, tc.lease, tc.builds)
+			named := []string{ward.BootstrapCommand, config.StaleRemedy{Case: config.StaleOwnSource, Checkout: root, Bootstrap: true}.Lines()[0]}
 			if tc.builds && hasBinary {
 				named = append(named, strings.Trim(ownRebuild, "`"))
 			}
