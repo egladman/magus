@@ -444,7 +444,10 @@ import (
 // wrote the code, and `follows` and `fresh_reason` on a job record.
 //
 // 147: magus-multi-agent says a prose scout that files a result passes, ending "returned".
-const SkillVersion = 147
+//
+// 148: magus-multi-agent moves its integrate checklist into reference.md so the full
+// form fits the 500-line guidance again.
+const SkillVersion = 148
 
 const skillLicense = "GPL-3.0-or-later"
 

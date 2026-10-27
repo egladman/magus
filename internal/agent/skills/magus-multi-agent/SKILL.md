@@ -488,41 +488,12 @@ Never message a worker to ask how it is going, only to CHANGE what it was handed
 ## Integrate and verify
 
 The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
-<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits. As jobs finish:
+<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits.
 
-1. Compare the store against the ACTUAL diff since each job's checkpoint, not the
-   paths it reported (`{{cmd "graph diff"}} --rev <revision>` for the domain). A differing
-   dirty digest means it saw a tree you are not diffing.
-2. Run `{{cmd "job wait"}} <job>` on each returned job BEFORE you read its result. It
-   checks what is mechanical:
-   - every changed path inside the declared write paths and outside the denied ones;
-   - a change set that is not empty on a row that writes;
-   - the descendants the store carries;
-   - the output ref, bound to a run of THAT JOB'S OWN CHECK which the store recorded
-     as PASSING{{if .Full}}. There is no `passed` field on the result: wait reads the
-     ref's own recorded attempt from the output store and derives the outcome from
-     it, never from what the worker claims{{end}}.
-
-   A job that verifies is recorded `pass`. A rejection exits 1 naming every violation;
-   a result that will not decode exits 2. A holder does not verify its own job, or a
-   sibling's.
-
-   Then reopen the evidence yourself (`{{cmd "query output"}} <ref>`).{{if .Full}} Wait proves the ref
-   names a passing run of this job's own check, never that the work meets the job's
-   GOAL.{{end}} A worker's prose about its criteria is not that evidence.
-3. Resolve cross-job API changes centrally; never assign the same seam twice.
-4. Regenerate declared outputs once, after source work converges and before the full
-   test run, or a drift test fails for nothing.
-5. Re-run `{{cmd "affected"}} <target> --plan` over the actual diff. If its shape
-   invalidates the original partition, stop parallel integration and reconcile.
-6. Read the integrated changeset with `{{cmd "diff"}} --impact` before landing it.
-   {{if .Full}}It shows reach, other recent editors, a rebuild estimate from recorded run times,
-   advisors and anchored notes. {{end}}It is context, never a verdict: nothing gates on it.{{if .Full}} An
-   empty section means nobody could measure it, not that nothing was found.{{end}}
-7. Validate once per wave, not once per fix:
-   - After a failed full run, read it (`{{cmd "query output"}} <ref>`). Rerun only the
-     failing tests, with the runner's filter after `--`, until green; `{{skill "run"}}`
-     lists one per runner. Then run the full suite once.
-   - Name a test that fails for an outside reason once, and do not rerun it.
-   - A failing set that repeats unchanged stops the wave and goes to the person.
-8. Run `{{cmd "affected"}} ci` once, at the end, and evaluate the top-level acceptance criteria.
+As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
+`{{cmd "job wait"}} <job>` before reading each result; reopen evidence with
+`{{cmd "query output"}} <ref>`; resolve shared seams once; regenerate declared outputs
+once; re-plan with `{{cmd "affected"}} <target> --plan` if the partition broke; read
+`{{cmd "diff"}} --impact` for context only; validate once per wave; finish with
+`{{cmd "affected"}} ci`. [reference.md](reference.md#integrate-and-verify) has the
+mechanical wait checks and the wave loop.

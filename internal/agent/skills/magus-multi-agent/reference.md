@@ -454,3 +454,32 @@ services change. Update the jobs before resuming affected work, and never act on
 guessed or stale PID.{{end}} A running worker keeps the constraints it was handed.
 Tightening them means cancel and respawn, not a message sent mid-flight.
 
+## Integrate and verify
+
+`{{cmd "job wait"}} <job>` checks what is mechanical before you read a result:
+
+- every changed path inside the declared write paths and outside the denied ones;
+- a change set that is not empty on a row that writes;
+- the descendants the store carries;
+- the output ref, bound to a run of THAT JOB'S OWN CHECK which the store recorded
+  as PASSING{{if .Full}}. There is no `passed` field on the result: wait reads the
+  ref's own recorded attempt from the output store and derives the outcome from
+  it, never from what the worker claims{{end}}.
+
+A job that verifies is recorded `pass`. A rejection exits 1 naming every violation;
+a result that will not decode exits 2. A holder does not verify its own job, or a
+sibling's. Then reopen the evidence yourself (`{{cmd "query output"}} <ref>`).{{if .Full}}
+Wait proves the ref names a passing run of this job's own check, never that the
+work meets the job's GOAL.{{end}} A worker's prose about its criteria is not that evidence.
+
+Also: resolve cross-job API changes centrally; regenerate declared outputs once
+after source converges; re-run `{{cmd "affected"}} <target> --plan` over the actual
+diff and stop parallel integration if the partition broke; read
+`{{cmd "diff"}} --impact` as context never a verdict{{if .Full}} (empty section means
+nobody could measure it, not that nothing was found){{end}}.
+
+Validate once per wave, not once per fix: after a failed full run, reopen it and
+rerun only the failing tests (runner filter after `--`) until green, then the full
+suite once; name an outside-reason failure once and do not rerun it; a failing set
+that repeats unchanged stops the wave. Finish with `{{cmd "affected"}} ci`.
+
