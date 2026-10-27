@@ -28,6 +28,9 @@ func TestSecretMasksEveryRenderingPath(t *testing.T) {
 		token Secret
 	}
 	h := holder{Name: "registry", token: v}
+	type doc struct {
+		Token Secret `json:"token" yaml:"token" toml:"token"`
+	}
 
 	rendered := []struct {
 		name string
@@ -47,6 +50,11 @@ func TestSecretMasksEveryRenderingPath(t *testing.T) {
 		{"wrapped with %w", fmt.Errorf("push: %w", fmt.Errorf("token %s rejected", v)).Error()},
 		{"errors.Join", errors.Join(errors.New("first"), fmt.Errorf("token %v", v)).Error()},
 		{"recovered panic", recoverPanic(v)},
+		{"json", encoded(t, json.Marshal, doc{Token: v})},
+		{"yaml.v3", encoded(t, yaml.Marshal, doc{Token: v})},
+		{"toml", encoded(t, toml.Marshal, doc{Token: v})},
+		{"slog json", logged(t, func(b *bytes.Buffer) slog.Handler { return slog.NewJSONHandler(b, nil) }, v)},
+		{"slog text", logged(t, func(b *bytes.Buffer) slog.Handler { return slog.NewTextHandler(b, nil) }, v)},
 	}
 	for _, tc := range rendered {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,43 +69,21 @@ func TestSecretMasksEveryRenderingPath(t *testing.T) {
 		assert.Contains(t, got, "registry", "unexported field under %s", verb)
 	}
 
-	type doc struct {
-		Token Secret `json:"token" yaml:"token" toml:"token"`
-	}
-	encoders := []struct {
-		name    string
-		marshal func(any) ([]byte, error)
-	}{
-		{"json", json.Marshal},
-		{"yaml.v3", yaml.Marshal},
-		{"toml", toml.Marshal},
-	}
-	for _, enc := range encoders {
-		t.Run(enc.name, func(t *testing.T) {
-			b, err := enc.marshal(doc{Token: v})
-			require.NoError(t, err)
-			assert.NotContains(t, string(b), probePlaintext)
-			assert.Contains(t, string(b), secretMask)
-		})
-	}
-
-	for _, handler := range []struct {
-		name string
-		new  func(*bytes.Buffer) slog.Handler
-	}{
-		{"slog json", func(b *bytes.Buffer) slog.Handler { return slog.NewJSONHandler(b, nil) }},
-		{"slog text", func(b *bytes.Buffer) slog.Handler { return slog.NewTextHandler(b, nil) }},
-	} {
-		t.Run(handler.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			slog.New(handler.new(&buf)).InfoContext(t.Context(), "using credential",
-				slog.Any("token", v), slog.Any("holder", struct{ Token Secret }{v}))
-			assert.NotContains(t, buf.String(), probePlaintext)
-			assert.Contains(t, buf.String(), secretMask)
-		})
-	}
-
 	assert.Equal(t, probePlaintext, v.Reveal())
+}
+
+func encoded(t *testing.T, marshal func(any) ([]byte, error), v any) string {
+	t.Helper()
+	b, err := marshal(v)
+	require.NoError(t, err)
+	return string(b)
+}
+
+func logged(t *testing.T, handler func(*bytes.Buffer) slog.Handler, v Secret) string {
+	var buf bytes.Buffer
+	slog.New(handler(&buf)).InfoContext(t.Context(), "using credential",
+		slog.Any("token", v), slog.Any("holder", struct{ Token Secret }{v}))
+	return buf.String()
 }
 
 func recoverPanic(v Secret) (got string) {
