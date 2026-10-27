@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -100,17 +102,28 @@ func delegateToCheckout(ctx context.Context, input string, out, errOut io.Writer
 	}
 	running, err := runningBinaryPath()
 	if err != nil {
+		slog.WarnContext(ctx, "this binary's own path is unknown, so it judges the call instead of handing it on",
+			attr.Error(err), attr.Component("magus shell"))
 		return false, nil
 	}
 	own := checkoutBinary(callDir(input), running)
 	if own == "" {
 		return false, nil
 	}
-	cmd := exec.CommandContext(ctx, own, os.Args[1:]...)
-	cmd.Stdin = strings.NewReader(input)
-	cmd.Stdout, cmd.Stderr = out, errOut
-	cmd.Env = append(os.Environ(), delegatedEnv+"="+running)
-	err = cmd.Run()
+	cmd := &exec.Cmd{
+		Path:   own,
+		Args:   slices.Concat([]string{own}, os.Args[1:]),
+		Env:    append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running)),
+		Stdin:  strings.NewReader(input),
+		Stdout: out,
+		Stderr: errOut,
+	}
+	err = cmd.Start()
+	if err == nil {
+		stop := context.AfterFunc(ctx, func() { _ = cmd.Process.Kill() })
+		err = cmd.Wait()
+		stop()
+	}
 	var exited *exec.ExitError
 	switch {
 	case err == nil:

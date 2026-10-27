@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,7 +27,7 @@ func checkout(t *testing.T, say string, code int) string {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	script := "#!/bin/sh\ncat >/dev/null\nprintf '%s' '" + say + "'\nexit " + string(rune('0'+code)) + "\n"
+	script := fmt.Sprintf("#!/bin/sh\ncat >/dev/null\nprintf '%%s' '%s'\nexit %d\n", say, code)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(script), 0o755))
 	return root
 }
@@ -43,7 +44,7 @@ func TestCheckoutBinaryIsAnotherBinaryOnly(t *testing.T) {
 // and exit status are this call's; a call it already judged is not handed on again.
 func TestDelegateToCheckoutHandsTheCallToItsOwnBinary(t *testing.T) {
 	root := checkout(t, `{"decision":"deny"}`, 2)
-	input := `{"cwd":"/elsewhere","tool_input":{"file_path":"` + filepath.Join(root, "x.go") + `"}}`
+	input := fmt.Sprintf(`{"cwd":"/elsewhere","tool_input":{"file_path":%q}}`, filepath.Join(root, "x.go"))
 	var out, errOut bytes.Buffer
 	handled, err := delegateToCheckout(context.Background(), input, &out, &errOut)
 	assert.True(t, handled)
