@@ -463,6 +463,49 @@ fun unstaged(dir: str) > [str] !> any {
     return acc;
 }
 
+// CONTRACT_DIRS and loadContract are the load contract: what a magus built before a change
+// needs to load the tree after it. A copy of loadContract in internal/guard/load_contract.go,
+// since neither can read the other.
+final CONTRACT_DIRS = ["internal/spell/gen/decls/", "internal/interp/bindings/gen/"];
+
+export fun loadContract(p: str) > bool {
+    if (p.endsWith("_test.go")) { return false; }
+    if (p.endsWith("api.lock") or p.endsWith("api-go.lock")) { return true; }
+    foreach (d in CONTRACT_DIRS) {
+        if (p.startsWith(d)) { return true; }
+    }
+    if (!p.startsWith("libs/gopherbuzz/") or !p.endsWith(".go")) { return false; }
+    final name = p.sub("libs/gopherbuzz/".len(), len: p.len() - "libs/gopherbuzz/".len());
+    return name.indexOf("/") == null and (name.startsWith("checker") or name.startsWith("compiler"));
+}
+
+export fun contractPaths(changed: [str]) > [str] {
+    return changed.filter(fun (index: int, p: str) > bool => loadContract(p));
+}
+
+// policyFailure reads the verdict the merged ./magus gave a state-changing line, as a hook
+// would ask it, and says why the guard policy does not load, "" when it does.
+export fun policyFailure(verdictJSON: str) > str !> any {
+    final v = serialize\jsonDecode(verdictJSON);
+    final rule = v.q("rule").stringValue();
+    final said = v.q("reason").stringValue() + v.q("context").stringValue();
+    if (rule == "policy-unloaded" or rule == "stale-binary" or said.indexOf("judged nothing") != null) {
+        return "{rule}: {said}";
+    }
+    return "";
+}
+
+// requirePolicyLoads asks the ./magus built at dir to judge a write there and fails, keeping
+// the tree, when the guard policy does not load: landing it would leave every write waiting.
+fun requirePolicyLoads(dir: str) > void !> any {
+    final judged = proc\exec(fs\join(dir, name: "magus"), args: ["shell", "-o", "json", "touch .merge-job-branches-probe"], dir: dir,
+        opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+    final why = policyFailure(judged.stdout) catch "it printed no verdict: {judged.stderr}";
+    if (why != "") {
+        throw keptTree(dir, target: "the guard policy under the merged ./magus", text: why);
+    }
+}
+
 // mergeLayers merges each layer of s, in order, into the detached tree at dir. It stops at
 // the first source conflict, aborting that merge so the tree holds only the layers before
 // it; the conflicting layer says why and every later one stays planned. It returns the
@@ -775,6 +818,21 @@ test "requireBranch resolves a remote-tracking ref and refuses a name that is no
     fs\removeAll(root);
 }
 
+test "the load contract is the decls, the API locks, the bindings and the Buzz checker" {
+    assert\equal(contractPaths(["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
+        "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go",
+        "libs/gopherbuzz/checker_test.go", "libs/gopherbuzz/vm.go", "libs/gopherbuzz/docs/checker.go", "run.go", "docs/a.md"]),
+        want: ["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
+            "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go"],
+        message: "only the paths a binary built before them cannot load past");
+}
+
+test "policyFailure names a policy the merged binary cannot load" {
+    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"workspace:command\",\"context\":\"fine\"}"), want: "", message: "a loaded policy");
+    assert\equal(policyFailure("\{\"decision\":\"deny\",\"rule\":\"policy-unloaded\",\"reason\":\"line 3: bad\"}"), want: "policy-unloaded: line 3: bad", message: "a broken policy");
+    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"command-rule-failed\",\"context\":\"the rule judged nothing\"}").startsWith("command-rule-failed"), want: true, message: "a rule that judged nothing");
+}
+
 fun printVerdicts(verdicts: [Verdict]) > bool {
     var all = true;
     foreach (v in verdicts) {
@@ -823,6 +881,10 @@ export fun main(args: [str]) > void !> any {
             result = mergeLayers(dir, s: plan, into: into, settle: settleWithMagus);
             if (!allMerged(result)) { return; }
             regenerated = commitRegenerated(dir, s: result, regenerate: regenerateWithMagus(plan.base, ready: readyAt));
+            // About one merge in five changes the load contract; only those pay for the probe.
+            if (contractPaths(lines(git(dir, args: ["diff", "--name-only", plan.base, "HEAD"]))).len() > 0) {
+                requirePolicyLoads(dir);
+            }
             git(root, args: ["branch", into, git(dir, args: ["rev-parse", "HEAD"])]);
             // A file settled by job claims is a merge no job's check has seen, so every
             // merged job's checks run on it whether or not --verify asked.
