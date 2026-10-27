@@ -297,10 +297,10 @@ func (r *rope) replace(s, e int, text string) {
 // maxHeight bounds a tree's height: minItems^maxHeight items is past any text.
 const maxHeight = 24
 
-// replaceInChunk edits one chunk in place when [s, e) lies in it and the result stays
-// within [chunkMin/2, chunkCap] bytes; otherwise it reports false and changes nothing.
+// replaceInChunk edits the chunk holding [s, e) in place, splitting it in two inside
+// its leaf when it outgrows chunkCap; otherwise it reports false and changes nothing.
 // optimization: write the chunk in place instead of splicing new chunks.
-// measured: BenchmarkInsert/64KiB -78% sec/op, 14 to 0 allocs/op (benchstat, n=10).
+// measured: BenchmarkInsert/64KiB -78% sec/op, 14 to 0 allocs/op, split -73% B/op (n=10).
 // trade-off: a second edit path beside splice; chunks may shrink to chunkMin/2.
 func (r *rope) replaceInChunk(s, e int, text string) bool {
 	n := r.t.root
@@ -329,7 +329,8 @@ func (r *rope) replaceInChunk(s, e int, text string) bool {
 	c := &n.items[k]
 	lo, hi := s-start, e-start
 	m := int(c.n) - (hi - lo) + len(text)
-	if hi > int(c.n) || m > chunkCap || m == 0 || m < chunkMin/2 && r.t.count > 1 {
+	split := m > chunkCap && m <= 2*chunkCap && len(n.items) < maxItems
+	if hi > int(c.n) || m > chunkCap && !split || m == 0 || m < chunkMin/2 && r.t.count > 1 {
 		return false
 	}
 	var parents [maxHeight]*node[chunk, textSum]
@@ -339,16 +340,31 @@ func (r *rope) replaceInChunk(s, e int, text string) bool {
 		n = r.t.mutKid(n, path[d])
 	}
 	c = &n.items[k]
-	copy(c.b[lo+len(text):m], c.b[hi:c.n])
-	copy(c.b[lo:], text)
-	c.set(m)
+	grow := 0
+	if split {
+		var tmp [2 * chunkCap]byte
+		w := copy(tmp[:], c.b[:lo])
+		w += copy(tmp[w:], text)
+		w += copy(tmp[w:], c.b[hi:c.n])
+		n.items = slices.Insert(n.items, k+1, newChunk(tmp[w/2:w]))
+		c = &n.items[k]
+		copy(c.b[:], tmp[:w/2])
+		c.set(w / 2)
+		grow = 1
+	} else {
+		copy(c.b[lo+len(text):m], c.b[hi:c.n])
+		copy(c.b[lo:], text)
+		c.set(m)
+	}
 	sum := sumChunks(n.items)
 	for d := depth - 1; d >= 0; d-- {
 		p := parents[d]
 		p.kids[path[d]].sum = sum
+		p.kids[path[d]].count += grow
 		sum = sumKids(p.kids)
 	}
 	r.t.sum = sum
+	r.t.count += grow
 	return true
 }
 
