@@ -67,7 +67,7 @@ func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
 	assert.Contains(t, msg, "matches it exactly", "names the identical-fingerprint finding")
 	assert.Contains(t, msg, "machine pool: saturated: 8 of 8 slots held, 2 runs queued", "prints the pool state it saw")
 	assert.Contains(t, msg, "--no-redundancy-check", "names the override")
-	assert.Contains(t, msg, "pull request runs the identical check", "names the alternative")
+	assert.Contains(t, msg, "codes/sandbox/MGS3010/", "links the code page, which names pushing as the alternative")
 }
 
 // TestGateRefusalRecordsDeferral: the refusal persists as a deferred gate

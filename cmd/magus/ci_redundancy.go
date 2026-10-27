@@ -153,8 +153,8 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 	case internalci.GateRefuse:
 		g.recordDeferral(ctx, finding.rec)
 		return gateRefusal{types.DiagnosticErrorf(types.RedundantGateDeferred,
-			"not running the %s gate for branch %s: it re-verifies a gate that already passed.\n%s\n  machine pool: %s\n  override: pass --no-redundancy-check to run it here anyway\n  alternative: push; the pull request runs the identical check",
-			g.target, g.ref, g.renderFinding(finding), pool)}
+			"not running the %s gate on %s: it re-verifies a gate that already passed; pass --no-redundancy-check to run it anyway\n%s",
+			g.target, g.ref, fmt.Sprintf("%s\n  machine pool: %s", g.renderFinding(finding), pool))}
 	case internalci.GateAdvise:
 		slog.InfoContext(ctx, fmt.Sprintf("this %s gate re-verifies one that already passed; running anyway.\n%s\n  machine pool: %s",
 			g.target, g.renderFinding(finding), pool), attr.Notice(""), attr.Component("magus"))
