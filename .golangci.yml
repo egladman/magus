@@ -129,6 +129,7 @@ linters:
     - diagmsg
     - errmsg
     - stderrprint
+    - secretfields
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -336,6 +337,17 @@ linters:
             - {file: symbol.go, reason: staged}
             - {file: types/secret.go, reason: staged}
             - {file: watchdog.go, reason: staged}
+
+      secretfields:
+        type: module
+        description: reports a struct field or named result that holds a credential as a plain string
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          # A name is a credential when its last camel-case words spell one of these.
+          # A field that only refers to a secret says so in its name (PasswordRef).
+          words: [Password, Passwd, Secret, Token, Tokens, Credential, APIKey, Bearer, SigningKey,
+                  PrivateKey, HMAC]
+          hint: hold it as types.Secret, which masks every rendering and reveals only by name
 
       # Results go to stdout through the output emitters, help to stderr when asked,
       # and every other stderr line is a slog record, so -q, -s, why folding, -o jsonl
