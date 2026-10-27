@@ -1818,7 +1818,10 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 		return types.Int
 	case "&", "|", "^", "<<", ">>":
 		return c.integerResult(v.Pos, v.Op, left, right)
-	case "<", ">", "<=", ">=", "==", "!=":
+	case "==", "!=":
+		c.checkEnumEquality(v.Pos, v.Op, left, right)
+		return types.Bool
+	case "<", ">", "<=", ">=":
 		// Deliberately UNTYPED. Checking it was tried on 2026-08-11 and reverted: the
 		// rule is only as good as the inference under it, and two of its false
 		// positives are not fixable here. `extractList::<int>(...) == list` compares a
@@ -1835,6 +1838,45 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 		return right
 	}
 	return types.Any
+}
+
+// checkEnumEquality rejects == and != between an enum and a str, int, double or
+// bool. A case never equals its backing value at runtime, so `decision == "deny"`
+// is always false. Upstream rejects every mismatched comparison; this types only
+// the enum one, for the reason the ordering arm in inferBinary gives. null passes
+// because `E?` erases to E here, and any or an inference gap passes unjudged.
+func (c *checker) checkEnumEquality(p ast.Pos, op string, left, right types.Type) {
+	enum, other := enumAndOther(left, right)
+	if enum == nil || len(enum.Cases) == 0 {
+		return
+	}
+	switch other {
+	case types.Str, types.Int, types.Double, types.Bool:
+	default:
+		return
+	}
+	fix := fmt.Sprintf("compare to a case (%s.%s)", enum.Name, enum.Cases[0])
+	backing := types.Int
+	if enum.Backing == "str" {
+		backing = types.Str
+	}
+	if backing == other {
+		fix += fmt.Sprintf(", convert the %s with %s(s), or compare the enum's .value", other.TypeName(), enum.Name)
+	}
+	c.errorfc(p, TypeMismatch, "Type mismatch: got type `%s`, expected `%s`: %s between an enum and `%s` is always %t; %s",
+		other.TypeName(), enum.Name, op, other.TypeName(), op == "!=", fix)
+}
+
+func enumAndOther(left, right types.Type) (*types.EnumType, types.Type) {
+	le, lok := left.(*types.EnumType)
+	re, rok := right.(*types.EnumType)
+	switch {
+	case lok && !rok:
+		return le, right
+	case rok && !lok:
+		return re, left
+	}
+	return nil, nil
 }
 
 // integerResult types a bitwise operator. Unlike numericResult there is no

@@ -1,0 +1,4 @@
+// @error: Type mismatch: got type `bool`, expected `Decision`: == between an enum and `bool` is always false; compare to a case (Decision.allow)
+// No conversion fits a bool, so the fix names only the case.
+enum<str> Decision { allow, deny }
+final __r = Decision.allow == true;

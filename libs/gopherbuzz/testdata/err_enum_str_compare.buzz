@@ -1,0 +1,6 @@
+// @error: Type mismatch: got type `str`, expected `Decision`: == between an enum and `str` is always false; compare to a case (Decision.allow), convert the str with Decision(s), or compare the enum's .value
+// A case never equals its backing value at runtime. Upstream rejects it as
+// "Type mismatch: got type `str`, expected `Decision`" (comparison_operand_type).
+enum<str> Decision { allow, deny }
+final decision = Decision.deny;
+final __r = decision == "deny";
