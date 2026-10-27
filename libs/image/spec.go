@@ -236,18 +236,18 @@ func DecodeSpec(m map[string]any) (Spec, error) {
 
 func decodeSpecScalars(d *decoder, m map[string]any) Spec {
 	return Spec{
-		Base:            d.str(m, "base"),
-		User:            d.str(m, "user"),
-		WorkingDir:      d.str(m, "workingDir"),
-		Created:         d.str(m, "created"),
+		Base:            d.stringValue(m, "base"),
+		User:            d.stringValue(m, "user"),
+		WorkingDir:      d.stringValue(m, "workingDir"),
+		Created:         d.stringValue(m, "created"),
 		ResetEntrypoint: d.boolean(m, "resetEntrypoint"),
 		ResetCommand:    d.boolean(m, "resetCommand"),
-		Entrypoint:      d.strs(m, "entrypoint"),
-		Command:         d.strs(m, "command"),
-		UnsetEnv:        d.strs(m, "unsetEnv"),
-		Env:             d.strMap(m, "env"),
-		Labels:          d.strMap(m, "labels"),
-		Annotations:     d.strMap(m, "annotations"),
+		Entrypoint:      d.stringList(m, "entrypoint"),
+		Command:         d.stringList(m, "command"),
+		UnsetEnv:        d.stringList(m, "unsetEnv"),
+		Env:             d.stringMap(m, "env"),
+		Labels:          d.stringMap(m, "labels"),
+		Annotations:     d.stringMap(m, "annotations"),
 	}
 }
 
@@ -287,7 +287,7 @@ func DecodePlatform(m map[string]any) (Platform, error) {
 func decodePlatform(m map[string]any, prior error) (Platform, error) {
 	d := decoder{what: "spec.platform", err: prior}
 	d.only(m, "os", "architecture", "variant")
-	p := Platform{OS: d.str(m, "os"), Architecture: d.str(m, "architecture"), Variant: d.str(m, "variant")}
+	p := Platform{OS: d.stringValue(m, "os"), Architecture: d.stringValue(m, "architecture"), Variant: d.stringValue(m, "variant")}
 	return p, d.err
 }
 
@@ -312,7 +312,7 @@ func (d *decoder) only(m map[string]any, keys ...string) {
 	}
 }
 
-func (d *decoder) str(m map[string]any, key string) string {
+func (d *decoder) stringValue(m map[string]any, key string) string {
 	raw, ok := m[key]
 	if !ok {
 		return ""
@@ -386,7 +386,7 @@ func (d *decoder) list(m map[string]any, key string) []any {
 	return v
 }
 
-func (d *decoder) strs(m map[string]any, key string) []string {
+func (d *decoder) stringList(m map[string]any, key string) []string {
 	var out []string
 	for i, raw := range d.list(m, key) {
 		v, ok := raw.(string)
@@ -399,7 +399,7 @@ func (d *decoder) strs(m map[string]any, key string) []string {
 	return out
 }
 
-func (d *decoder) strMap(m map[string]any, key string) map[string]string {
+func (d *decoder) stringMap(m map[string]any, key string) map[string]string {
 	raw, ok := m[key]
 	if !ok {
 		return nil
@@ -429,7 +429,7 @@ func (d *decoder) file(i int, m map[string]any) File {
 		sub.fail("mode", "a permission value", mode)
 	}
 	f := File{
-		Source: sub.str(m, "source"), Destination: sub.str(m, "destination"),
+		Source: sub.stringValue(m, "source"), Destination: sub.stringValue(m, "destination"),
 		Mode: fs.FileMode(mode), UID: sub.integer(m, "uid"), GID: sub.integer(m, "gid"),
 	}
 	d.err = sub.err
@@ -440,7 +440,7 @@ func (d *decoder) symlink(i int, m map[string]any) Symlink {
 	sub := decoder{what: fmt.Sprintf("spec.symlinks[%d]", i), err: d.err}
 	sub.only(m, "destination", "target", "uid", "gid")
 	l := Symlink{
-		Destination: sub.str(m, "destination"), Target: sub.str(m, "target"),
+		Destination: sub.stringValue(m, "destination"), Target: sub.stringValue(m, "target"),
 		UID: sub.integer(m, "uid"), GID: sub.integer(m, "gid"),
 	}
 	d.err = sub.err
@@ -452,18 +452,18 @@ func (d *decoder) dir(i int, m map[string]any) DirPlacement {
 	sub.only(m, "source", "destination", "strip", "include", "exclude", "maxDepth",
 		"modePolicy", "fileMode", "dirMode", "uid", "gid", "symlinks", "emptyDirs", "maxFiles", "maxBytes")
 	placement := DirPlacement{
-		Source:      HostDir{Value: sub.str(m, "source")},
-		Destination: DestDir{Value: sub.str(m, "destination")},
+		Source:      HostDir{Value: sub.stringValue(m, "source")},
+		Destination: DestDir{Value: sub.stringValue(m, "destination")},
 		Strip:       sub.integer(m, "strip"),
-		Include:     sub.strs(m, "include"),
-		Exclude:     sub.strs(m, "exclude"),
+		Include:     sub.stringList(m, "include"),
+		Exclude:     sub.stringList(m, "exclude"),
 		MaxDepth:    sub.integer(m, "maxDepth"),
-		ModePolicy:  ModePolicy(sub.str(m, "modePolicy")),
+		ModePolicy:  ModePolicy(sub.stringValue(m, "modePolicy")),
 		FileMode:    Mode(sub.integer(m, "fileMode")),
 		DirMode:     Mode(sub.integer(m, "dirMode")),
 		UID:         sub.integer(m, "uid"),
 		GID:         sub.integer(m, "gid"),
-		Symlinks:    SymlinkPolicy(sub.str(m, "symlinks")),
+		Symlinks:    SymlinkPolicy(sub.stringValue(m, "symlinks")),
 		EmptyDirs:   sub.boolean(m, "emptyDirs"),
 		MaxFiles:    sub.integer(m, "maxFiles"),
 		MaxBytes:    sub.int64(m, "maxBytes"),

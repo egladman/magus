@@ -112,7 +112,7 @@ func (d DirPlacement) expand(ctx context.Context) (files []File, symlinks []Syml
 			}
 			return nil
 		}
-		_, dest, err := d.destFor(rel)
+		_, dest, err := d.relPaths(rel)
 		if err != nil {
 			return err
 		}
@@ -170,8 +170,8 @@ func (d DirPlacement) expand(ctx context.Context) (files []File, symlinks []Syml
 	return files, symlinks, dirs, nil
 }
 
-// destFor maps rel under Source through Strip onto Destination; member is the pre-strip path.
-func (d DirPlacement) destFor(rel string) (member, dest string, err error) {
+// relPaths maps rel under Source through Strip onto Destination; member is the pre-strip path.
+func (d DirPlacement) relPaths(rel string) (member, dest string, err error) {
 	base := path.Base(d.Source.Resolve())
 	if rel == "" || rel == "." {
 		member = base

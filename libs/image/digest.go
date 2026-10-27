@@ -27,11 +27,11 @@ func ParseDigest(s string) (Digest, error) {
 	if err != nil {
 		return Digest{}, fmt.Errorf("image.digest: %w", err)
 	}
-	return DigestFrom(d)
+	return WrapDigest(d)
 }
 
-// DigestFrom wraps an OCI digest after checking it is sha256.
-func DigestFrom(d digest.Digest) (Digest, error) {
+// WrapDigest wraps an OCI digest after checking it is sha256.
+func WrapDigest(d digest.Digest) (Digest, error) {
 	if d == "" {
 		return Digest{}, nil
 	}
@@ -44,10 +44,10 @@ func DigestFrom(d digest.Digest) (Digest, error) {
 	return Digest{d: d}, nil
 }
 
-// MustDigest is DigestFrom for values already known to be valid sha256 digests
+// MustDigest is WrapDigest for values already known to be valid sha256 digests
 // (descriptors produced inside this package). Panics on a bad digest.
 func MustDigest(d digest.Digest) Digest {
-	out, err := DigestFrom(d)
+	out, err := WrapDigest(d)
 	if err != nil {
 		panic(err)
 	}
@@ -89,9 +89,9 @@ func ParseDiffID(s string) (DiffID, error) {
 	return DiffID{d: d}, nil
 }
 
-// DiffIDFrom wraps a validated sha256 digest as a DiffID.
-func DiffIDFrom(d digest.Digest) (DiffID, error) {
-	out, err := DigestFrom(d)
+// WrapDiffID wraps a validated sha256 digest as a DiffID.
+func WrapDiffID(d digest.Digest) (DiffID, error) {
+	out, err := WrapDigest(d)
 	if err != nil {
 		return DiffID{}, fmt.Errorf("image.diffid: %w", err)
 	}
@@ -99,7 +99,7 @@ func DiffIDFrom(d digest.Digest) (DiffID, error) {
 }
 
 func MustDiffID(d digest.Digest) DiffID {
-	out, err := DiffIDFrom(d)
+	out, err := WrapDiffID(d)
 	if err != nil {
 		panic(err)
 	}

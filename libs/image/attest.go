@@ -11,7 +11,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// Attach adds SBOM and/or provenance documents as artifact manifests on an
+// AttachArtifacts adds SBOM and/or provenance documents as artifact manifests on an
 // Image Index layout. A single-platform layout is wrapped into an index first.
 func AttachArtifacts(ctx context.Context, layout Layout, sbom *SBOMDoc, provenance *ProvenanceDoc) (Layout, error) {
 	if err := ctx.Err(); err != nil {

@@ -148,7 +148,7 @@ func layerToTypes(l image.Layer) types.ImageLayer {
 
 func decodeAuth(m map[string]any) (*image.RegistryAuth, error) {
 	if m == nil {
-		return nil, nil
+		return &image.RegistryAuth{}, nil
 	}
 	auth := &image.RegistryAuth{}
 	if u, ok := m["username"].(string); ok {
@@ -157,12 +157,12 @@ func decodeAuth(m map[string]any) (*image.RegistryAuth, error) {
 	switch p := m["password"].(type) {
 	case nil:
 	case string:
-		return nil, fmt.Errorf("image: auth.password: want Secret object {value}, got string")
+		return nil, fmt.Errorf("image.auth: password: want Secret object {value}, got string")
 	case map[string]any:
 		v, _ := p["value"].(string)
 		auth.Password = image.NewSecret(v)
 	default:
-		return nil, fmt.Errorf("image: auth.password: want Secret object, got %T", p)
+		return nil, fmt.Errorf("image.auth: password: want Secret object, got %T", p)
 	}
 	return auth, nil
 }

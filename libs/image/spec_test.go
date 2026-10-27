@@ -30,7 +30,7 @@ func TestImageSpecPlatform(t *testing.T) {
 		{"arm64 v7", Platform{"linux", "arm64", "v7"}, "v8"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) { wantErr(t, tt.p.Validate(), tt.wantErr) })
+		t.Run(tt.name, func(t *testing.T) { requireErrorContains(t, tt.p.Validate(), tt.wantErr) })
 	}
 }
 
@@ -53,7 +53,7 @@ func TestImageSpecDestination(t *testing.T) {
 		t.Run(tt.dest, func(t *testing.T) {
 			s := validSpec()
 			s.Files = []File{{Source: "a", Destination: tt.dest, Mode: 0o755}}
-			wantErr(t, s.Validate(), tt.wantErr)
+			requireErrorContains(t, s.Validate(), tt.wantErr)
 		})
 	}
 }
@@ -76,7 +76,7 @@ func TestImageSpecOverlap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := validSpec()
 			s.Files, s.Symlinks = tt.files, tt.links
-			wantErr(t, s.Validate(), tt.wantErr)
+			requireErrorContains(t, s.Validate(), tt.wantErr)
 		})
 	}
 }
@@ -97,7 +97,7 @@ func TestImageSpecMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := validSpec()
 			s.Files = []File{{Destination: "/a", Mode: fs.FileMode(tt.mode)}}
-			wantErr(t, s.Validate(), tt.wantErr)
+			requireErrorContains(t, s.Validate(), tt.wantErr)
 		})
 	}
 }
@@ -117,7 +117,7 @@ func TestImageSpecSymlinkTarget(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := validSpec()
 			s.Symlinks = []Symlink{{Destination: "/l", Target: tt.target}}
-			wantErr(t, s.Validate(), tt.wantErr)
+			requireErrorContains(t, s.Validate(), tt.wantErr)
 		})
 	}
 }
@@ -140,13 +140,13 @@ func TestImageSpecEnvKeys(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := validSpec()
 			s.Env, s.UnsetEnv = tt.env, tt.unset
-			wantErr(t, s.Validate(), tt.wantErr)
+			requireErrorContains(t, s.Validate(), tt.wantErr)
 		})
 	}
 }
 
 func TestImageSpecValidatePlatform(t *testing.T) {
-	wantErr(t, Spec{}.Validate(), "image.assemble: image: platform os")
+	requireErrorContains(t, Spec{}.Validate(), "image.assemble: image: platform os")
 }
 
 func TestImageSpecDecode(t *testing.T) {
@@ -223,7 +223,7 @@ func TestImageSpecDecodeErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := DecodeSpec(tt.in)
-			wantErr(t, err, tt.wantErr)
+			requireErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -238,7 +238,7 @@ func TestImageSpecDecodeFloatMode(t *testing.T) {
 	}
 }
 
-func wantErr(t *testing.T, err error, want string) {
+func requireErrorContains(t *testing.T, err error, want string) {
 	t.Helper()
 	switch {
 	case want == "" && err != nil:

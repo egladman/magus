@@ -43,7 +43,7 @@ func (h HostDir) Resolve() string {
 // Child returns a DestFile under d.
 func (d DestDir) Child(rel string) (DestFile, error) {
 	if rel == "" || strings.HasPrefix(rel, "/") || strings.Contains(rel, "..") {
-		return DestFile{}, fmt.Errorf("image: dest dir child %q: must be a relative path without ..", rel)
+		return DestFile{}, fmt.Errorf("image: dest dir child %q: want a relative path with no parent segments", rel)
 	}
 	return DestFile{Value: path.Join(d.Value, rel)}, nil
 }
