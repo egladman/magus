@@ -68,7 +68,7 @@ fun main() > void !> any {
 
     advice\fetchBase(base, refspec: false);
     final diff = vcs\cmd(["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
-        opts: {"dir": ".", "quiet": true, "allow_failure": true}).stdout;
+        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true }).stdout;
     final names = advice\addedTargets(diff);
     if (names.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");

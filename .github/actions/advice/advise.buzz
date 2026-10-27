@@ -97,7 +97,7 @@ fun main() > void !> any {
     if (dir == "") { throw "advice: GITHUB_ACTION_PATH is not set; run this as the advice action's step"; }
 
     final message = failure(runEach(advisors, run: fun(script: str) > void !> any {
-        magus\cmd("buzz", args: [dir + "/" + script], opts: {});
+        magus\cmd("buzz", args: [dir + "/" + script], opts: magus\CommandOptions{});
     }));
     if (message != "") { throw message; }
 }

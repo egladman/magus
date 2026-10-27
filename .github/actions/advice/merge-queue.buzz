@@ -83,9 +83,9 @@ fun main() > void !> any {
     }
     final viewed = proc\exec("gh", args: ["pr", "view", pr, "--repo", repo, "--json",
         "state,reviewDecision,baseRefName,labels,isCrossRepository,autoMergeRequest"],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
+        dir: ".", opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     final described = magus\cmd("queue", args: ["describe", "-o", "json", "--status-context", "", "--provider", provider, "--base", queueBase],
-        opts: {"quiet": true, "allow_failure": true});
+        opts: magus\CommandOptions{ quiet = true, allowFailure = true });
     if (!viewed.ok or !described.ok) {
         // Unknown is not queueable: retract rather than leave an answer nobody checked.
         advice\publish(repo, pr: pr, name: section, title: "", body: "");
@@ -110,7 +110,7 @@ fun main() > void !> any {
     }
     // Read only: the queue-apply reviews job dismisses, on main's code and the app's token.
     final reviewed = magus\cmd("queue", args: ["reviews", "-o", "json", "--provider", provider, "--base", queueBase, "--change", pr],
-        opts: {"quiet": true, "allow_failure": true});
+        opts: magus\CommandOptions{ quiet = true, allowFailure = true });
     if (reviewed.ok) {
         final notes = carryNotes(reviewed.stdout);
         if (notes != "" and body != "") {
