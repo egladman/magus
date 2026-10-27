@@ -581,6 +581,7 @@ github.com/egladman/magus/std.Module.Methods field []Method
 github.com/egladman/magus/std.Module.Name field string
 github.com/egladman/magus/std.Module.Namespaces field []Namespace
 github.com/egladman/magus/std.Module.Path field string
+github.com/egladman/magus/std.Module.Protocols field []Protocol
 github.com/egladman/magus/std.Module.WASM field bool
 github.com/egladman/magus/std.Namespace type struct
 github.com/egladman/magus/std.Namespace.Doc field string
@@ -629,6 +630,10 @@ github.com/egladman/magus/std.PlatformCPUs func(_ context.Context) (int, error)
 github.com/egladman/magus/std.PlatformMemory func(ctx context.Context) (int, error)
 github.com/egladman/magus/std.PlatformOS func(_ context.Context, name string, style string) (string, error)
 github.com/egladman/magus/std.Proc var Module
+github.com/egladman/magus/std.Protocol type struct
+github.com/egladman/magus/std.Protocol.Doc field string
+github.com/egladman/magus/std.Protocol.Methods field []Method
+github.com/egladman/magus/std.Protocol.Name field string
 github.com/egladman/magus/std.RefuseVCS func(label string, argv []string, dir string) error
 github.com/egladman/magus/std.RegisterVCSLeaseGate func(gate VCSLeaseGate) (previous VCSLeaseGate)
 github.com/egladman/magus/std.Ret type struct
