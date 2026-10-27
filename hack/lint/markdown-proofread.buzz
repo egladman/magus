@@ -193,7 +193,7 @@ fun judge(files: [str], base: str, module: str, kind: str) > [Finding] !> any {
     }
     final fix = "Run `{proofread\build}`, then {module}/{proofread\binary} {kind} <file>, and read why it stopped.";
     final run = proc\exec(bin, args: args, dir: if (base == "") "." else base,
-        opts: {"quiet": true, "allow_failure": true}) catch null;
+        opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
     fs\remove(table) catch void;
     // Exit 1 is a deny finding, written to stdout like any other.
     if (run == null or (run!.code != 0 and run!.code != 1)) {

@@ -1380,7 +1380,7 @@ export fun parseSelector(step: str, argv: [str]) > Selector !> any {
 
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
 fun capture(cmd: str, args: [str]) > str !> any {
-    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (!res.ok) {
         throw "pull-requests: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
     }
@@ -1406,7 +1406,7 @@ fun findSquashed(pulls: [Pull]) > {int: rebaseonto\Squashed} !> any {
     }
     final merged = rebaseonto\parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--limit", "200", "--json", "number,headRefOid"]));
     foreach (p in pulls) {
-        final listed = vcs\cmd(["rev-list", "origin/{p.base}..{p.oid}"], opts: {"quiet": true});
+        final listed = vcs\cmd(["rev-list", "origin/{p.base}..{p.oid}"], opts: vcs\CommandOptions{ quiet = true });
         if (rebaseonto\squashedBase(listed.stdout.split("\n"), merged: merged) -> s) {
             acc[p.number] = s;
         }
@@ -1434,7 +1434,7 @@ fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
     foreach (r in refspecs) {
         fetch.append(r);
     }
-    final fetched = vcs\cmd(fetch, opts: {"quiet": true, "allow_failure": true});
+    final fetched = vcs\cmd(fetch, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
     if (!fetched.ok) {
         throw "pull-requests: git {fetch.join(" ")}: exit {fetched.code}: {fetched.stderr}";
     }
@@ -1443,7 +1443,7 @@ fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
     final contents = mut {<str: str>};
     foreach (p in pulls) {
         final res = vcs\cmd(["merge-tree", "--write-tree", "--name-only", "origin/{p.base}", p.oid],
-            opts: {"quiet": true, "allow_failure": true});
+            opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
         // Exit 1 is a merge with conflicts; anything else is git failing.
         if (res.code != 0 and res.code != 1) {
             throw "pull-requests: git merge-tree for #{p.number}: exit {res.code}: {res.stderr}";
@@ -1455,7 +1455,7 @@ fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
             if (all.indexOf(path) == null) {
                 all.append(path);
             }
-            final blob = vcs\cmd(["cat-file", "-p", "{tree}:{path}"], opts: {"quiet": true, "allow_failure": true});
+            final blob = vcs\cmd(["cat-file", "-p", "{tree}:{path}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
             contents["{p.number}:{path}"] = blob.stdout;
         }
     }
@@ -2750,7 +2750,7 @@ fun fetchBoard(sel: Selector) > Board !> any {
     final open = openPulls();
     var requests = 1;
     final pulls = selectPulls(sel, open: open);
-    final listed = magus\cmd("queue", args: ["ls", "--provider", "github", "--base", sel.base], opts: {"quiet": true, "allow_failure": true});
+    final listed = magus\cmd("queue", args: ["ls", "--provider", "github", "--base", sel.base], opts: magus\CommandOptions{ quiet = true, allowFailure = true });
     if (!listed.ok) {
         throw "pull-requests: magus queue ls: {listed.stderr.trim()}";
     }
@@ -2887,7 +2887,7 @@ fun act(o: BoxFlags) > void !> any {
     final failed = mut [<str>];
     foreach (x in boxesFromPlan(fs\readFile(o.plan))) {
         foreach (cmd in boxCommands(x)) {
-            final res = proc\exec(cmd[0], args: cmd.sub(1), opts: {"quiet": true, "allow_failure": true});
+            final res = proc\exec(cmd[0], args: cmd.sub(1), opts: proc\ExecOptions{ quiet = true, allowFailure = true });
             std\print(encode({"pr": x.pr, "action": x.action, "command": cmd, "ok": res.ok}));
             if (!res.ok) {
                 failed.append("{cmd.join(" ")}: exit {res.code}: {res.stderr.trim()}");

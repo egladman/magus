@@ -105,7 +105,7 @@ fun note(line: str) > void {
 }
 
 fun capture(cmd: str, args: [str]) > str !> any {
-    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (!res.ok) {
         throw "failures: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
     }
@@ -118,7 +118,7 @@ export fun main(args: [str]) > void !> any {
     final want = parseFilter(args);
     var run = want.run;
     if (run == "") {
-        final parsed = vcs\cmd(["rev-parse", "--verify", "{want.commit}^\{commit}"], opts: {"quiet": true, "allow_failure": true});
+        final parsed = vcs\cmd(["rev-parse", "--verify", "{want.commit}^\{commit}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
         if (!parsed.ok) {
             throw "failures: git rev-parse --verify {want.commit}: exit {parsed.code}: {parsed.stderr}";
         }

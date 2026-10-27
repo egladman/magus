@@ -317,7 +317,7 @@ export fun effect(p: Plan, podman: str, kernel: str, digest: str, tree: str, mac
 // buildMagus cross-compiles this tree through the root's release-build target and writes
 // the binary from its static archive into the store, returning "" or why it could not.
 fun buildMagus(p: Plan) > str !> any {
-    final res = magus\run(["release-build", ".", "--", "linux", p.arch], opts: {"root": p.root, "quiet": true, "allow_failure": true});
+    final res = magus\run(["release-build", ".", "--", "linux", p.arch], opts: magus\CommandOptions{ root = p.root, quiet = true, allowFailure = true });
     if (!res.ok) { return "release-build failed: {res.stderr}"; }
     // dist/ keeps every version's archive, so the one just written is the newest.
     var newest = "";
@@ -348,7 +348,7 @@ fun refuse(code: int, message: str) > int {
 }
 
 fun podman(args: [str]) > ExecResult !> any {
-    return proc\exec("podman", args: args, opts: {"quiet": true, "allow_failure": true});
+    return proc\exec("podman", args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
 }
 
 // reach returns "" when podman can be asked to run containers, else the refusal carrying the
@@ -404,7 +404,7 @@ fun delete(id: str) > int !> any {
     final res = podman(["container", "inspect", "--format", "\{\{index .Config.Labels \"{USE_LABEL}\"}}", id]);
     if (!res.ok) { return refuse(REFUSED, message: "there is no container {id}"); }
     if (res.stdout != USE) { return refuse(REFUSED, message: "{id} was not created by on-linux, so it is not this script's to remove"); }
-    return proc\exec("podman", args: ["rm", id], opts: {"allow_failure": true}).code;
+    return proc\exec("podman", args: ["rm", id], opts: proc\ExecOptions{ allowFailure = true }).code;
 }
 
 // run builds this tree's magus for the container unless binary names one already built.
@@ -416,7 +416,7 @@ fun run(o: Options, hostOS: str, hostArch: str, binary: str = "") > int !> any {
     }
     var gitCommon = "";
     if (vcs\name() == "git") {
-        final common = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-common-dir"], opts: {"quiet": true}).stdout;
+        final common = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-common-dir"], opts: vcs\CommandOptions{ quiet = true }).stdout;
         if (!under(common, dir: root)) { gitCommon = common; }
     }
     final mise = fs\readFile("{root}/mise.toml");
@@ -482,7 +482,7 @@ fun run(o: Options, hostOS: str, hostArch: str, binary: str = "") > int !> any {
         log\warn("on-linux: not passing {left.join(", ")}; add --env NAME for each one the command needs");
     }
 
-    final res = proc\exec("podman", args: runArgv(p), opts: {"allow_failure": true});
+    final res = proc\exec("podman", args: runArgv(p), opts: proc\ExecOptions{ allowFailure = true });
     final marker = markers(p)[0];
     final started = fs\exists(marker);
     if (started) { fs\remove(marker); }

@@ -49,7 +49,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final bin = "{proofread\home}/{proofread\binary}";
     final table = decisions\writeDecisions([<str>]);
     final run = proc\exec(bin, args: ["doc-comment", "--stdin", "--decisions", table],
-        opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
+        opts: proc\ExecOptions{ stdin = json\stringify(symbols), quiet = true, allowFailure = true });
     fs\remove(table) catch void;
     // Exit 1 is a deny finding, written to stdout like any other.
     if (run.code != 0 and run.code != 1) {

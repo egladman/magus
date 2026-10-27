@@ -129,7 +129,7 @@ export fun parse(args: [str]) > Options? !> any {
 export fun build(dir: str) > str !> any {
     final bin = dir + "/magus";
     os\withEnv({"CGO_ENABLED": "0", "GOEXPERIMENT": "jsonv2"}, callback: fun () > void !> any {
-        proc\exec("go", args: ["build", "-trimpath", "-tags", "noffi", "-ldflags", "-w -s", "-o", bin, "./cmd/magus"], opts: {"quiet": true});
+        proc\exec("go", args: ["build", "-trimpath", "-tags", "noffi", "-ldflags", "-w -s", "-o", bin, "./cmd/magus"], opts: proc\ExecOptions{ quiet = true });
     });
     return bin;
 }
@@ -148,7 +148,7 @@ fun workspace(dir: str) > str !> any {
 fun sample(bin: str, c: Case, ws: str, runs: int) > Sample !> any {
     final began = os\time();
     for (var i = 0; i < runs; i = i + 1) {
-        proc\exec(bin, args: c.argv, dir: ws, opts: {"quiet": true});
+        proc\exec(bin, args: c.argv, dir: ws, opts: proc\ExecOptions{ quiet = true });
     }
     final elapsedMs = os\time() - began;
     return Sample{ name = c.name, runs = runs, nsPerOp = std\toInt(elapsedMs * 1000000.0 / std\toDouble(runs)) };
@@ -162,10 +162,10 @@ fun measure(o: Options, scratch: str) > Timing !> any {
     // A server would answer `ls` from its warm graph, and a proc socket inherited from this
     // script would hand each run to the magus running it: neither is a cold start.
     os\withEnv({"MAGUS_SERVER_ENABLED": "false", "MAGUS_PROC_SOCKET": ""}, callback: fun () > void !> any {
-        version = proc\exec(bin, args: ["version"], dir: ws, opts: {"quiet": true}).stdout.split("\n")[0].trim();
+        version = proc\exec(bin, args: ["version"], dir: ws, opts: proc\ExecOptions{ quiet = true }).stdout.split("\n")[0].trim();
         foreach (c in o.cases) {
             for (var i = 0; i < WARMUP; i = i + 1) {
-                proc\exec(bin, args: c.argv, dir: ws, opts: {"quiet": true});
+                proc\exec(bin, args: c.argv, dir: ws, opts: proc\ExecOptions{ quiet = true });
             }
             for (var n = 0; n < o.count; n = n + 1) {
                 samples.append(sample(bin, c: c, ws: ws, runs: o.runs));

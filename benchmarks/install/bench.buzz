@@ -264,7 +264,7 @@ fun timeRuns(runs: int, prepare: fun () > void !> any, contender: fun () > void 
 // and parses its three numbers. allow_failure: a host with no `uptime` on PATH should
 // not fail the whole benchmark over one line of the report.
 fun loadAverage() > [double] !> any {
-    final res = proc\exec("uptime", args: [], opts: {"quiet": true, "allow_failure": true});
+    final res = proc\exec("uptime", args: [], opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     return parseLoadAverage(res.stdout);
 }
 
@@ -281,8 +281,8 @@ fun run(root: str, scratch: str, runs: int) > {str: any} !> any {
     final magusArgs = magusInstallArgs(PROJECTS);
     final scratchLock = joinPath([scratch, "console", "pnpm-lock.yaml"]);
 
-    final pnpm = fun () > void !> any { proc\exec("pnpm", args: pnpmArgs, opts: {"quiet": true}); };
-    final magusInstall = fun () > void !> any { magus\run(magusArgs, opts: {"quiet": true}); };
+    final pnpm = fun () > void !> any { proc\exec("pnpm", args: pnpmArgs, opts: proc\ExecOptions{ quiet = true }); };
+    final magusInstall = fun () > void !> any { magus\run(magusArgs, opts: magus\CommandOptions{ quiet = true }); };
 
     // Warm the pnpm store, the scratch trees, and magus's own install entries, so the
     // measured runs are not paying for a cold store on top of what each case tests.
@@ -317,7 +317,7 @@ fun cleanup(root: str, scratch: str, lockOriginal: str) > void !> any {
     fs\writeFile(LOCK, content: lockOriginal);
     fs\removeAll(scratch);
     cleanTrees(root, projects: PROJECTS);
-    magus\run(magusInstallArgs(PROJECTS), opts: {"quiet": true});
+    magus\run(magusInstallArgs(PROJECTS), opts: magus\CommandOptions{ quiet = true });
 }
 
 fun main() > void !> any {

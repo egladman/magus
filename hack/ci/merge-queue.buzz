@@ -172,7 +172,7 @@ export fun jobRan(view: str, job: str) > bool? !> any {
 
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
 fun capture(cmd: str, args: [str]) > str !> any {
-    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (!res.ok) {
         throw "queue: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
     }
@@ -189,14 +189,14 @@ fun plan(depth: str) > void !> any {
     final dir = queueDir();
     final changes = capture("magus", args: ["queue", "ls", "--provider", "github", "--base", "main"]);
     fs\writeFile(dir + "/changes.json", content: changes + "\n");
-    proc\exec("magus", args: planArgs(dir, depth: depth), opts: {});
+    proc\exec("magus", args: planArgs(dir, depth: depth), opts: proc\ExecOptions{});
     final ids = validatedIDs(fs\readFile(dir + "/plan.json"));
     fs\appendFile(need("GITHUB_OUTPUT"), content: outputs(ids));
 }
 
 fun validate(change: str) > void !> any {
     final dir = queueDir();
-    proc\exec("magus", args: validateArgs(dir, change: change), opts: {"stdin": fs\readFile(dir + "/plan.json")});
+    proc\exec("magus", args: validateArgs(dir, change: change), opts: proc\ExecOptions{ stdin = fs\readFile(dir + "/plan.json") });
 }
 
 // awaitJob polls every 10s, one API request each, until run says whether job runs; a
@@ -345,7 +345,7 @@ fun start(base: str, intentAt: str) > void !> any {
     final d = decide(runs, intentAt: intentAt);
     std\print("::notice title={d.notice}::{d.message}");
     if (d.start) {
-        proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: {});
+        proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: proc\ExecOptions{});
     }
 }
 
@@ -407,7 +407,7 @@ fun ciQueued(run: str, base: str) > void !> any {
 
 fun apply(run: str, base: str, app: str, committer: str) > void !> any {
     final args = applyArgs(run, repo: need("GITHUB_REPOSITORY"), base: base, committer: committer, app: app);
-    proc\exec("magus", args: args, opts: {});
+    proc\exec("magus", args: args, opts: proc\ExecOptions{});
 }
 
 // reviewsArgs classifies with main's own workspace, as plan does, so the approvals a
@@ -457,7 +457,7 @@ fun reviews(pr: str, head: str, base: str, owner: str, branch: str) > void !> an
         }
     }
     foreach (n in prs) {
-        proc\exec("magus", args: reviewsArgs(n, head: head, base: base), opts: {});
+        proc\exec("magus", args: reviewsArgs(n, head: head, base: base), opts: proc\ExecOptions{});
     }
 }
 
