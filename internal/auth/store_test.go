@@ -242,7 +242,7 @@ func TestRemoveExactNeverDeletesALiveTokenThatReusedTheName(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.ErrorIs(t, store.removeExact(old), errReplaced)
-	got, ok := reopen(t).Lookup(secret)
+	got, ok := reopen(t).Lookup(secret.Reveal())
 	require.True(t, ok, "the live token that reused the name survives")
 	assert.Equal(t, live.ID, got.ID)
 }
@@ -275,12 +275,12 @@ func TestMintedTokenLooksUpAsItsCredential(t *testing.T) {
 	store := isolatedStore(t)
 	secret, rec, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConnector, TTL: time.Hour})
 	require.NoError(t, err)
-	kind, ok := credentialKind(secret)
+	kind, ok := credentialKind(secret.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, types.KindStored, kind)
-	assert.Len(t, secret, tokenLen)
+	assert.Len(t, secret.Reveal(), tokenLen)
 
-	got, ok := reopen(t).Lookup(secret)
+	got, ok := reopen(t).Lookup(secret.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, rec, got)
 	assert.Equal(t, types.Credential{Kind: types.KindStored, ID: rec.ID, Name: "laptop", Grant: types.GrantConnector}, got.Credential())
@@ -295,7 +295,7 @@ func TestLookupRefusesAnExpiredToken(t *testing.T) {
 	secret, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "brief", Grant: types.GrantViewer, TTL: time.Hour})
 	require.NoError(t, err)
 	expireOnDisk(t, store.dir, "brief")
-	_, ok := store.Lookup(secret)
+	_, ok := store.Lookup(secret.Reveal())
 	assert.False(t, ok)
 }
 
@@ -317,9 +317,9 @@ func TestReusedNameIsANewIdentity(t *testing.T) {
 
 	assert.NotEqual(t, a.ID, b.ID)
 	assert.NotEqual(t, first, second)
-	_, ok := store.Lookup(first)
+	_, ok := store.Lookup(first.Reveal())
 	assert.False(t, ok, "the revoked secret must not verify as the new token")
-	got, ok := store.Lookup(second)
+	got, ok := store.Lookup(second.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, b.ID, got.ID)
 }
@@ -472,18 +472,18 @@ func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 	store := isolatedStore(t)
 	code, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantConsole, TTL: 12 * time.Hour})
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(code, prefixExchange))
+	assert.True(t, strings.HasPrefix(code.Reveal(), prefixExchange))
 	assert.Equal(t, types.KindExchange, rec.Kind)
 	assert.WithinDuration(t, time.Now().Add(ExchangeCodeTTL), rec.Expires, time.Second)
-	_, ok := store.Lookup(code)
+	_, ok := store.Lookup(code.Reveal())
 	assert.False(t, ok, "a code is no bearer")
-	_, ok = Verify(code)
+	_, ok = Verify(code.Reveal())
 	assert.False(t, ok)
 
-	secret, tok, err := store.Redeem(code)
+	secret, tok, err := store.Redeem(code.Reveal())
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(12*time.Hour), tok.Expires, time.Second)
-	sum := digest(secret)
+	sum := digest(secret.Reveal())
 	assert.Equal(t, Token{
 		ID:      sum[:8],
 		Name:    rec.Name,
@@ -493,11 +493,11 @@ func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 		Created: tok.Created, // the clock at redemption
 		Expires: tok.Expires, // within a second of 12 hours, above
 	}, tok)
-	got, ok := store.Lookup(secret)
+	got, ok := store.Lookup(secret.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, tok.ID, got.ID)
 
-	_, _, err = store.Redeem(code)
+	_, _, err = store.Redeem(code.Reveal())
 	assert.ErrorIs(t, err, ErrTokenNotFound, "a code is spent on first use")
 	assert.Equal(t, []string{tok.Name}, names(list(t, store)), "the code's record is gone")
 }
@@ -510,7 +510,7 @@ func TestAnExchangeCodeDiesAfterAMinute(t *testing.T) {
 		r.Created = time.Now().Add(-2 * time.Minute).UTC()
 		r.Expires = r.Created.Add(ExchangeCodeTTL)
 	})
-	_, _, err = store.Redeem(code)
+	_, _, err = store.Redeem(code.Reveal())
 	assert.ErrorIs(t, err, ErrTokenNotFound)
 	for _, bad := range []string{"", "mgx_", "not a code", prefixStored + strings.Repeat("0", 49)} {
 		_, _, err = store.Redeem(bad)
@@ -528,7 +528,7 @@ func TestAnExchangeCodeRedeemsOnceUnderARace(t *testing.T) {
 	for range 8 {
 		handle := reopen(t)
 		wg.Go(func() {
-			if _, _, err := handle.Redeem(code); err == nil {
+			if _, _, err := handle.Redeem(code.Reveal()); err == nil {
 				wins.Add(1)
 			}
 		})
@@ -554,16 +554,16 @@ func TestStoreHandlesShareOneCacheThatSeesChanges(t *testing.T) {
 	require.NoError(t, err)
 	other := reopen(t)
 	assert.Same(t, store.state(), other.state())
-	_, ok := other.Lookup(secret)
+	_, ok := other.Lookup(secret.Reveal())
 	require.True(t, ok)
 
 	sig := store.state().sig
-	_, ok = other.Lookup(secret)
+	_, ok = other.Lookup(secret.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, sig, store.state().sig, "an unchanged directory is not re-read")
 
 	require.NoError(t, os.Remove(filepath.Join(store.dir, rec.Name+".json")))
-	_, ok = other.Lookup(secret)
+	_, ok = other.Lookup(secret.Reveal())
 	assert.False(t, ok, "`rm tokens.d/<name>.json` revokes at once")
 }
 
@@ -612,7 +612,7 @@ func TestOperatorVerifiesBesideARetiredStore(t *testing.T) {
 	_, err = SaveNewOperator(op)
 	require.NoError(t, err)
 
-	cred, ok := Verify(op)
+	cred, ok := Verify(op.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, types.KindOperator, cred.Kind)
 	dir, err := StoreDir()
@@ -632,5 +632,5 @@ func TestStoreNeverHoldsTheSecret(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(store.dir, "x.json"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), secret)
-	assert.NotContains(t, string(raw), strings.TrimPrefix(secret, prefixStored))
+	assert.NotContains(t, string(raw), strings.TrimPrefix(secret.Reveal(), prefixStored))
 }

@@ -146,7 +146,7 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	require.NoError(t, err)
 	console, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "c", Grant: types.GrantConsole, TTL: time.Hour})
 	require.NoError(t, err)
-	for name, tok := range map[string]string{"operator": op, "console token": console} {
+	for name, tok := range map[string]string{"operator": op.Reveal(), "console token": console.Reveal()} {
 		assert.Equal(t, http.StatusUnauthorized, get(t, base+"/api/v1/status", tok), name)
 	}
 	secret := tokenFromURL(t, link.URL)
@@ -464,7 +464,7 @@ func TestManagerTTLClosesListener(t *testing.T) {
 	// A token that dies in 150ms exercises the timeout teardown path; the listener's lifetime is
 	// the token's, not a second clock.
 	m := newTestManager(t, ctx)
-	m.mint = func(minter types.Grant, ttl time.Duration) (string, auth.ShareToken, error) {
+	m.mint = func(minter types.Grant, ttl time.Duration) (types.Secret, auth.ShareToken, error) {
 		secret, tok, err := auth.MintShare(minter, ttl)
 		tok.Expires = time.Now().Add(150 * time.Millisecond)
 		return secret, tok, err

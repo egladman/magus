@@ -148,7 +148,7 @@ type Manager struct {
 	selectAddr func() (netip.Addr, error)
 	// mint is auth.MintShare; a test swaps in one whose token expires sooner than the
 	// minimum, to exercise the timeout teardown without waiting a minute.
-	mint func(minter types.Grant, ttl time.Duration) (string, auth.ShareToken, error)
+	mint func(minter types.Grant, ttl time.Duration) (types.Secret, auth.ShareToken, error)
 
 	// grace is shutdownGrace; a test shortens it.
 	grace time.Duration
@@ -249,7 +249,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	// The token rides the fragment (#token=), never the path or query, so it is
 	// not sent to the server on the initial document GET and does not land in an
 	// access log; the console reads it client-side and replays it as a bearer.
-	url := fmt.Sprintf("http://%s:%d/console/#token=%s", addr, port, secret)
+	url := fmt.Sprintf("http://%s:%d/console/#token=%s", addr, port, secret.Reveal())
 
 	// The verifier is bound to THIS link's token only. A new link builds a
 	// new closure over a new token, so an old link cannot authenticate here, and it

@@ -641,7 +641,7 @@ func (s *heldDiffSession) unblock() { s.releaseOnce.Do(func() { close(s.release)
 // bridge is a diffBridge pointed at the held session, skipping the attach round trip the queue has no
 // part in.
 func (s *heldDiffSession) bridge() *diffBridge {
-	b := &diffBridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: "held"}
+	b := &diffBridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: types.NewSecret("held")}
 	b.start()
 	return b
 }

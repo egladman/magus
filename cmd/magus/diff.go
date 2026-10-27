@@ -1112,7 +1112,7 @@ func (diffStoreSync) close() {}
 // waited on, and drained in full at close.
 type diffBridge struct {
 	addr    string
-	token   string
+	token   types.Secret
 	session *types.DiffReview
 
 	cursors chan diffSessionOp
@@ -1123,6 +1123,11 @@ type diffBridge struct {
 	done chan struct{}
 	// cancel aborts the post on the wire once close has spent its budget.
 	cancel context.CancelFunc
+}
+
+// setBearer is where the operator token leaves this process for the server's API.
+func setBearer(req *http.Request, token types.Secret) {
+	req.Header.Set("Authorization", "Bearer "+token.Reveal())
 }
 
 // diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route
@@ -1184,7 +1189,7 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	setBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		if !errors.Is(err, syscall.ECONNREFUSED) {
@@ -1398,7 +1403,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+b.token)
+	setBearer(req, b.token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

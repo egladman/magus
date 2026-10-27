@@ -142,14 +142,14 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	// gets past auth is never 401, whatever the MCP handler then makes of a GET).
 	assert.Equal(t, http.StatusUnauthorized, status("/mcp", ""), "no token")
 	assert.Equal(t, http.StatusUnauthorized, status("/mcp", "not-the-token"), "wrong token")
-	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", cli), "cli token should pass the guard")
-	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", connectorTok), "connector token should pass the guard")
+	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", cli.Reveal()), "cli token should pass the guard")
+	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", connectorTok.Reveal()), "connector token should pass the guard")
 
 	// /api bridge uses the same header-only guard as /mcp: the explorer sends the
 	// token in an Authorization header (its SSE reader is fetch()-based, not an
 	// EventSource), so no query-param carrier is offered.
 	assert.Equal(t, http.StatusUnauthorized, status("/api/v1/graph", ""), "no token on bridge")
-	assert.NotEqual(t, http.StatusUnauthorized, status("/api/v1/graph", cli), "cli token on bridge")
+	assert.NotEqual(t, http.StatusUnauthorized, status("/api/v1/graph", cli.Reveal()), "cli token on bridge")
 
 	// queryStatus presents the token ONLY as a `?token=` query param, never a header.
 	queryStatus := func(path, token string) int {
@@ -165,8 +165,8 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 
 	// The hardening invariant: both /mcp and the /api bridge are header-only, so a
 	// valid token in the URL is rejected on each: the token never rides in a URL.
-	assert.Equal(t, http.StatusUnauthorized, queryStatus("/mcp", cli), "/mcp must reject a query-param token")
-	assert.Equal(t, http.StatusUnauthorized, queryStatus("/api/v1/graph", cli), "/api must reject a query-param token")
+	assert.Equal(t, http.StatusUnauthorized, queryStatus("/mcp", cli.Reveal()), "/mcp must reject a query-param token")
+	assert.Equal(t, http.StatusUnauthorized, queryStatus("/api/v1/graph", cli.Reveal()), "/api must reject a query-param token")
 
 	cancel()
 	select {
@@ -228,7 +228,7 @@ func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 
 	code, _ := get("")
 	assert.Equal(t, http.StatusUnauthorized, code, "no token")
-	code, body := get(operator)
+	code, body := get(operator.Reveal())
 	assert.Equal(t, http.StatusBadRequest, code, "the thread handler answers, not the /api/ fallback")
 	assert.Contains(t, body, "thread requires an id parameter")
 
@@ -389,7 +389,7 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/graph", nil)
 	require.NoError(t, err)
 	req.Header.Set("Origin", siteOrigin)
-	req.Header.Set("Authorization", "Bearer "+cli)
+	req.Header.Set("Authorization", "Bearer "+cli.Reveal())
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
@@ -756,7 +756,7 @@ func TestMCPHTTPOff(t *testing.T) {
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPost, base+"/mcp", strings.NewReader("{}"))
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+op)
+	req.Header.Set("Authorization", "Bearer "+op.Reveal())
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
@@ -947,7 +947,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 	code, _ := call(http.MethodPost, graph, "", "application/json", "{}")
 	assert.Equal(t, http.StatusUnauthorized, code, "the guard still comes first")
 
-	code, body := call(http.MethodPost, graph, cli, "application/json", "{}")
+	code, body := call(http.MethodPost, graph, cli.Reveal(), "application/json", "{}")
 	assert.Equal(t, http.StatusBadRequest, code)
 	var connectErr struct {
 		Code    string `json:"code"`
@@ -965,7 +965,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 	}
 	assert.Equal(t, []string{"google.rpc.ErrorInfo", "google.rpc.PreconditionFailure", "google.rpc.ResourceInfo", "google.rpc.Help"}, kinds)
 
-	code, body = call(http.MethodGet, "/api/v1/graph", cli, "", "")
+	code, body = call(http.MethodGet, "/api/v1/graph", cli.Reveal(), "", "")
 	assert.Equal(t, http.StatusBadRequest, code)
 	type violation struct {
 		Type    string `json:"type"`
@@ -988,7 +988,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 	assert.Equal(t, []violation{{Type: "BZZ1005", Subject: "magusfile.buzz:3:3"}}, aip.Error.Details[1].Violations)
 
 	// StatusService needs no workspace, so it answers even now.
-	code, body = call(http.MethodPost, "/magus.status.v1alpha1.StatusService/GetStatus", cli, "application/json", "{}")
+	code, body = call(http.MethodPost, "/magus.status.v1alpha1.StatusService/GetStatus", cli.Reveal(), "application/json", "{}")
 	assert.Equal(t, http.StatusOK, code, "%s", body)
 
 	cancel()
@@ -1055,7 +1055,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	for _, name := range services {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/%s/Probe", unloadedBase, name), strings.NewReader("{}"))
 		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+cli)
+		req.Header.Set("Authorization", "Bearer "+cli.Reveal())
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)

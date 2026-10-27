@@ -30,8 +30,9 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	code, _, err := store.MintCode(types.GrantOperator, auth.MintRequest{Grant: types.GrantConsole, TTL: 12 * time.Hour})
+	minted, _, err := store.MintCode(types.GrantOperator, auth.MintRequest{Grant: types.GrantConsole, TTL: 12 * time.Hour})
 	require.NoError(t, err)
+	code := minted.Reveal()
 	h := newExchangeHandler(trailDir, slog.New(slog.DiscardHandler))
 
 	post := func(body string) *httptest.ResponseRecorder {
@@ -42,7 +43,10 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	rr := post(fmt.Sprintf(`{"code":"%s"}`, code))
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	assert.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
-	var got exchangeResponse
+	var got struct {
+		Token     string `json:"token"`
+		ExpiresAt string `json:"expires_at"`
+	}
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
 	cred, ok := auth.Verify(got.Token)
 	require.True(t, ok)

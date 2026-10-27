@@ -277,7 +277,8 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 	}
 	operator := types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}
 	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
-	return secret, rec, nil
+	// Revealed here because every caller prints it to stdout: that is the hand-out.
+	return secret.Reveal(), rec, nil
 }
 
 // auditMint records a CLI mint to the activity trail of the workspace the command runs in, and

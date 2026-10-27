@@ -47,11 +47,14 @@ func OperatorPath() (string, error) {
 
 // GenerateOperator returns a fresh mgo_ operator token without persisting it; pass it to
 // SaveOperator or SaveNewOperator.
-func GenerateOperator() (string, error) { return mintSecret(types.KindOperator) }
+func GenerateOperator() (types.Secret, error) {
+	tok, err := mintSecret(types.KindOperator)
+	return types.NewSecret(tok), err
+}
 
 // SaveOperator writes token as the operator token, replacing any existing one atomically, at
 // 0600. It returns the path written.
-func SaveOperator(token string) (string, error) {
+func SaveOperator(token types.Secret) (string, error) {
 	path, err := OperatorPath()
 	if err != nil {
 		return "", err
@@ -63,7 +66,7 @@ func SaveOperator(token string) (string, error) {
 	}
 	// Synced: a crash that left the file empty would stop the server starting until the
 	// token is reissued.
-	if err := file.WriteFileAtomic(path, []byte(token+"\n"), 0o600); err != nil {
+	if err := file.WriteFileAtomic(path, []byte(token.Reveal()+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("auth: install token: %w", err)
 	}
 	return path, nil
@@ -72,7 +75,7 @@ func SaveOperator(token string) (string, error) {
 // SaveNewOperator writes token only if no operator token file exists yet. The O_EXCL create is
 // the whole decision, so a CLI `generate` racing the server's first start cannot clobber the
 // token the other is serving; the loser gets an error satisfying errors.Is(err, os.ErrExist).
-func SaveNewOperator(token string) (string, error) {
+func SaveNewOperator(token types.Secret) (string, error) {
 	path, err := OperatorPath()
 	if err != nil {
 		return "", err
@@ -85,7 +88,7 @@ func SaveNewOperator(token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := f.WriteString(token + "\n"); err != nil {
+	if _, err := f.WriteString(token.Reveal() + "\n"); err != nil {
 		_ = f.Close()
 		_ = os.Remove(path)
 		return "", fmt.Errorf("auth: write token: %w", err)
@@ -101,31 +104,31 @@ func SaveNewOperator(token string) (string, error) {
 // error for a file that does not hold a well-formed mgo_ token, which is what a file written
 // before the kind prefix holds. There is no migration: the error names the command that
 // re-issues it.
-func LoadOperator() (string, error) {
+func LoadOperator() (types.Secret, error) {
 	path, err := OperatorPath()
 	if err != nil {
-		return "", err
+		return types.Secret{}, err
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", ErrNoToken
+			return types.Secret{}, ErrNoToken
 		}
-		return "", fmt.Errorf("auth: stat token: %w", err)
+		return types.Secret{}, fmt.Errorf("auth: stat token: %w", err)
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		return "", types.DiagnosticErrorf(types.InsecureTokenPermissions, "auth: token file %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
+		return types.Secret{}, types.DiagnosticErrorf(types.InsecureTokenPermissions, "auth: token file %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("auth: read token: %w", err)
+		return types.Secret{}, fmt.Errorf("auth: read token: %w", err)
 	}
 	tok := strings.TrimSpace(string(raw))
 	if kind, ok := credentialKind(tok); !ok || kind != types.KindOperator {
-		return "", types.DiagnosticErrorf(types.OperatorTokenFormat,
+		return types.Secret{}, types.DiagnosticErrorf(types.OperatorTokenFormat,
 			"auth: the operator token at %s is not an mgo_ token (it predates the kind prefix); re-issue it with `%s`", path, hint.MCPTokenGenerate.With("--force"))
 	}
-	return tok, nil
+	return types.NewSecret(tok), nil
 }
 
 // RevokeOperator deletes the operator token file. It is not an error if none exists.
@@ -140,9 +143,12 @@ func RevokeOperator() error {
 	return nil
 }
 
-func operatorCredential(token string) types.Credential {
-	return types.Credential{Kind: types.KindOperator, ID: TokenID(token), Grant: types.GrantOperator}
+func operatorCredential(token types.Secret) types.Credential {
+	return types.Credential{Kind: types.KindOperator, ID: SecretID(token), Grant: types.GrantOperator}
 }
+
+// SecretID is [TokenID] of a token magus holds, so a caller can name it without revealing it.
+func SecretID(token types.Secret) string { return TokenID(token.Reveal()) }
 
 // EnsureOperator loads the operator token, minting and persisting one when none exists. The
 // server calls it before serving and fails closed on its error, so an old-format file stops
@@ -150,17 +156,17 @@ func operatorCredential(token string) types.Credential {
 //
 // The secret is never logged: the server log lands in journald and nohup.out. Only the path
 // is.
-func EnsureOperator(ctx context.Context, log *slog.Logger) (string, error) {
+func EnsureOperator(ctx context.Context, log *slog.Logger) (types.Secret, error) {
 	tok, err := LoadOperator()
 	if err == nil {
 		return tok, nil
 	}
 	if !errors.Is(err, ErrNoToken) {
-		return "", err
+		return types.Secret{}, err
 	}
 	tok, err = GenerateOperator()
 	if err != nil {
-		return "", err
+		return types.Secret{}, err
 	}
 	path, err := SaveNewOperator(tok)
 	if err != nil {
@@ -168,7 +174,7 @@ func EnsureOperator(ctx context.Context, log *slog.Logger) (string, error) {
 		if errors.Is(err, os.ErrExist) {
 			return LoadOperator()
 		}
-		return "", err
+		return types.Secret{}, err
 	}
 	if log == nil {
 		log = slog.Default()

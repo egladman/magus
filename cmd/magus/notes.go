@@ -1153,7 +1153,7 @@ func serverDiffReview(ctx context.Context) *types.DiffReview {
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	setBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil
@@ -1201,7 +1201,7 @@ func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, 
 	if err != nil {
 		return nil, "", false
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	setBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, "", false

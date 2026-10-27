@@ -93,7 +93,7 @@ func mint(t *testing.T, name string, grant types.Grant) (string, auth.Token) {
 	t.Helper()
 	secret, rec, err := store(t).Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: grant, TTL: time.Hour})
 	require.NoError(t, err)
-	return secret, rec
+	return secret.Reveal(), rec
 }
 
 func wire(levels ...tokenv1.Level) *tokenv1.Grant {
@@ -249,7 +249,7 @@ func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 	require.Len(t, list.Msg.GetTokens(), 1)
 	assert.Equal(t, rec.ID, list.Msg.GetTokens()[0].GetId())
 
-	_, err = s.RevokeToken(operator(), request(&tokenv1.RevokeTokenRequest{Name: auth.TokenID(op)}))
+	_, err = s.RevokeToken(operator(), request(&tokenv1.RevokeTokenRequest{Name: auth.TokenID(op.Reveal())}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	loaded, err := auth.LoadOperator()
 	require.NoError(t, err)
@@ -375,7 +375,7 @@ func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 	}
 	assert.Len(t, stored(t), 3, "no refused call minted or revoked anything")
 
-	opClient := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(bearer(op)))
+	opClient := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(bearer(op.Reveal())))
 	resp, err := opClient.CreateToken(context.Background(), request(&tokenv1.CreateTokenRequest{Grant: wire(none, none, write), ExpireTime: timestamppb.New(time.Now().Add(time.Hour))}))
 	require.NoError(t, err)
 	got, err := fromWireGrant(resp.Msg.GetToken().GetGrant())

@@ -589,7 +589,7 @@ func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
 	}
 	sum := sha256.Sum256([]byte(abs))
 	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
-	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secret, scope: dir}
+	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: types.NewSecret(string(secret)), scope: dir}
 }
 
 // sealedBytecodeStore prefixes each chunk with an HMAC over the directory it is
@@ -597,7 +597,7 @@ func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
 // or compiler fails exactly as a forged one does.
 type sealedBytecodeStore struct {
 	inner  buzz.BytecodeStore
-	secret []byte
+	secret types.Secret
 	scope  string
 }
 
@@ -619,7 +619,7 @@ func (s sealedBytecodeStore) Store(key string, blob []byte) error {
 }
 
 func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
-	m := hmac.New(sha256.New, s.secret)
+	m := hmac.New(sha256.New, []byte(s.secret.Reveal()))
 	for _, part := range []string{s.scope, key} {
 		_, _ = m.Write([]byte(part))
 		_, _ = m.Write([]byte{0})

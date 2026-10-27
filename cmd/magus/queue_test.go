@@ -235,7 +235,7 @@ func TestQueueCacheReadHandsHooksTheProxyAndPinsTheTrustSet(t *testing.T) {
 	t.Cleanup(func() { _ = proxy.Close() })
 	assert.Equal(t, []string{
 		"ACTIONS_RESULTS_URL=" + proxy.URL,
-		"ACTIONS_RUNTIME_TOKEN=" + proxy.Token,
+		"ACTIONS_RUNTIME_TOKEN=" + proxy.Token.Reveal(),
 		"MAGUS_CACHE_REMOTE_TRUSTED_KEYS=k1,k2",
 		"MAGUS_CACHE_REMOTE_INSECURE=false",
 		"MAGUS_CACHE_REMOTE_WRITE_ENABLED=false",
