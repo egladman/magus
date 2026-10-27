@@ -129,7 +129,7 @@ Dockerfiles (hello-world, busybox rootfs, nginx/httpd config overlay, redis/pyth
 non-goals); not invented toys. Each example quotes what the upstream Dockerfile does,
 what `image\assemble*` expresses, and what stays on a target or a container engine.
 
-See [`std/examples/image/README.md`](../../../std/examples/image/README.md).
+See [`std/examples/image/README.md`](https://github.com/egladman/magus/blob/main/std/examples/image/README.md).
 
 ## Related
 

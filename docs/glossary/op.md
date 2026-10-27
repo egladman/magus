@@ -34,6 +34,7 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `dry.Op` (Go)
+- `image.Op` (Go)
 - `spells.Op` (Go)
 - `fsnotify.Op` (Go)
 

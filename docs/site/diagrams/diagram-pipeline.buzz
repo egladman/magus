@@ -62,6 +62,10 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             why: "the user config, state and cache directories; no figure passes through them")
         .except([magus\dir("libs/embed")],
             why: "the static embedding table and retrieval eval behind knowledge search; no figure passes through it")
+        .except([magus\dir("libs/image")],
+            why: "OCI layout assembly; no figure passes through it")
+        .except([magus\dir("libs/oci")],
+            why: "the registry client; no figure passes through it")
         .except([magus\dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")
