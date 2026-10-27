@@ -406,6 +406,10 @@ func buzzToGo(v vm.Value, path []vm.Value) (any, error) {
 		}
 		return out, nil
 	default:
+		// An enum case serializes as its value, as upstream's does.
+		if backing, ok := v.EnumValue(); ok {
+			return buzzToGo(backing, path)
+		}
 		return nil, fmt.Errorf("value of kind %q is not serializable", v.Kind())
 	}
 }
