@@ -639,7 +639,7 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
     if (hood.answer.verdict.value == UNKNOWN) {
         foreach (s in sections) {
             s.verdict = UNKNOWN;
-            s.note = "unknown: {hood.answer.reason}";
+            s.note = "unknown: {hood.answer.reason.value}";
         }
     }
     return sections;
@@ -664,7 +664,7 @@ fun references(h: Hit, opts: Options) > Section !> any {
     s.note = "{plural(refs.refCount, word: "use")} in {plural(refs.fileCount, word: "file")}, {plural(testFiles, word: "test file")}";
     if (refs.answer.verdict.value == UNKNOWN) {
         s.verdict = UNKNOWN;
-        s.note = "unknown: {refs.answer.reason}";
+        s.note = "unknown: {refs.answer.reason.value}";
     }
     return s;
 }
