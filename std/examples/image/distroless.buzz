@@ -1,0 +1,73 @@
+// distroless: a minimal root filesystem with no package manager. What useradd and
+// update-ca-certificates would have written inside an image, targets write as files.
+// Two layers, two targets: image_rootfs (accounts and directories) changes almost
+// never, so an edit to the app reruns only build and image_layout.
+import "magus";
+import "std";
+import "fs";
+import "proc";
+import "image";
+
+final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+final NONROOT = 65532;
+
+// The accounts useradd would have created.
+export fun rootfs(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["out/rootfs/**"]);
+    fs\mkdirAll("out/rootfs/etc");
+    fs\writeFile("out/rootfs/etc/passwd",
+        content: "root:x:0:0:root:/root:/sbin/nologin\nnonroot:x:{NONROOT}:{NONROOT}:nonroot:/home/nonroot:/sbin/nologin\n");
+    fs\writeFile("out/rootfs/etc/group", content: "root:x:0:\nnonroot:x:{NONROOT}:\n");
+    fs\writeFile("out/rootfs/etc/nsswitch.conf", content: "hosts: files dns\n");
+}
+
+// Scratch plus the accounts, a sticky /tmp and a home the user owns. On scratch the
+// directories a tree implies are added as root 0755; a Directory sets its own.
+export fun image_rootfs(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(rootfs);
+    ctx.writesFiles(["out/image/rootfs/**"]);
+    final layout = image\assemble(image\Spec{
+        scratch = true,
+        platform = PLATFORM,
+        trees = [image\Tree{
+            source = "out/rootfs",
+            path = "/",
+            modes = image\ModePolicy.fixed,
+            symlinks = image\SymlinkPolicy.refuse,
+        }],
+        directories = [
+            image\Directory{ path = "/tmp", mode = fs\mode("1777") },
+            image\Directory{ path = "/home/nonroot", mode = fs\mode("rwx------"), uid = NONROOT, gid = NONROOT },
+        ],
+        config = image\Config{ user = "nonroot", workingDir = "/home/nonroot" },
+    }, layout: "out/image/rootfs");
+    std\print("rootfs {layout.descriptor.digest.string()} files={layout.added!.files}");
+}
+
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/linux-amd64/app"]);
+    final argv: mut [str] = mut [];
+    foreach (key, value in image\goEnv(PLATFORM)) {
+        argv.append("{key}={value}");
+    }
+    foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-o", "out/linux-amd64/app", "./cmd/app"]) {
+        argv.append(arg);
+    }
+    _ = proc\exec("env", args: argv);
+}
+
+// Over the rootfs layout: no directory entry is written for /usr/local/bin's parents,
+// so the base's own directories keep their mode and owner.
+export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(image_rootfs, build);
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/image/linux-amd64/**"]);
+    final layout = image\assemble(image\Spec{
+        base = "out/image/rootfs",
+        platform = PLATFORM,
+        files = [image\File{ source = "out/linux-amd64/app", path = "/usr/local/bin/app", mode = fs\mode("0755") }],
+        config = image\Config{ entrypoint = ["/usr/local/bin/app"] },
+    }, layout: "out/image/linux-amd64");
+    std\print("{layout.descriptor.digest.string()} on {layout.layers.len()} layers");
+}

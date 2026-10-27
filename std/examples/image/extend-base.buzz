@@ -1,0 +1,47 @@
+// extend-base: a pinned runtime base (CA certificates, tzdata, a nonroot user) plus
+// one binary. The base's user and environment are inherited; the layer adds a file,
+// the config an entrypoint, and cmd = [] clears whatever Cmd the base carried.
+//
+// A digest-pinned pull is content-addressed, so image_base caches like any target. To
+// follow a tag instead, name it and run image_base:update: outside the update charm a
+// tag-only reference is refused, since a tag can name new bytes tomorrow.
+import "magus";
+import "std";
+import "fs";
+import "proc";
+import "image";
+
+final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Architecture.arm64 };
+final BASE = "gcr.io/distroless/static-debian12@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+export fun image_base(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["out/image/base/**"]);
+    image\pull(BASE, platform: PLATFORM, layout: "out/image/base");
+}
+
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/linux-arm64/app"]);
+    final argv: mut [str] = mut [];
+    foreach (key, value in image\goEnv(PLATFORM)) {
+        argv.append("{key}={value}");
+    }
+    foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-o", "out/linux-arm64/app", "./cmd/app"]) {
+        argv.append(arg);
+    }
+    _ = proc\exec("env", args: argv);
+}
+
+export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(image_base, build);
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/image/linux-arm64/**"]);
+    final layout = image\assemble(image\Spec{
+        base = "out/image/base",
+        platform = PLATFORM,
+        files = [image\File{ source = "out/linux-arm64/app", path = "/usr/local/bin/app", mode = fs\mode("0755") }],
+        config = image\Config{ entrypoint = ["/usr/local/bin/app"], cmd = [<str>] },
+        annotations = {"org.opencontainers.image.source": "https://github.com/acme/app"},
+    }, layout: "out/image/linux-arm64");
+    std\print("{layout.descriptor.digest.string()} {layout.path}");
+}

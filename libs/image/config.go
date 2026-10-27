@@ -5,7 +5,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -13,12 +12,12 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-const historyCreatedBy = "magus image write"
+const historyCreatedBy = "magus image.assemble"
 
-// buildConfig applies spec over base (R16). A nil base is scratch: an empty
-// config carrying only the spec's platform. diffID is the new layer's DiffID,
-// empty when the write adds no layer (R9); the history entry then records an
-// empty layer so history and diff_ids stay aligned.
+// buildConfig applies spec over base. A nil base is scratch: an empty config carrying
+// only the spec's platform. diffID is the new layer's DiffID, empty when the assemble
+// adds no layer; the history entry then records an empty layer so history and diff_ids
+// stay aligned.
 func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.Image, error) {
 	var cfg ocispec.Image
 	if base == nil {
@@ -29,34 +28,29 @@ func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.
 	} else {
 		cfg = cloneConfig(*base)
 	}
-
-	if spec.Created != "" {
-		t, err := time.Parse(time.RFC3339, spec.Created)
-		if err != nil {
-			return ocispec.Image{}, fmt.Errorf("image.assemble: created %q: want RFC 3339: %w", spec.Created, err)
-		}
-		cfg.Created = &t
-	}
-
-	env, err := mergeEnv(cfg.Config.Env, spec.Env, spec.UnsetEnv)
+	created, ok, err := spec.created()
 	if err != nil {
 		return ocispec.Image{}, err
 	}
-	cfg.Config.Env = env
-	if spec.User != "" {
-		cfg.Config.User = spec.User
+	if ok {
+		cfg.Created = &created
 	}
-	if spec.WorkingDir != "" {
-		cfg.Config.WorkingDir = spec.WorkingDir
-	}
-	cfg.Config.Entrypoint = resolveList(cfg.Config.Entrypoint, spec.Entrypoint, spec.ResetEntrypoint)
-	cfg.Config.Cmd = resolveList(cfg.Config.Cmd, spec.Command, spec.ResetCommand)
-	if len(spec.Labels) > 0 {
+
+	c := spec.Config
+	cfg.Config.Env = mergeEnv(cfg.Config.Env, c.Env, c.UnsetEnv)
+	setString(&cfg.Config.User, c.User)
+	setString(&cfg.Config.WorkingDir, c.WorkingDir)
+	setString(&cfg.Config.StopSignal, c.StopSignal)
+	setList(&cfg.Config.Entrypoint, c.Entrypoint)
+	setList(&cfg.Config.Cmd, c.Cmd)
+	setSet(&cfg.Config.ExposedPorts, c.ExposedPorts)
+	setSet(&cfg.Config.Volumes, c.Volumes)
+	if len(c.Labels) > 0 {
 		labels := maps.Clone(cfg.Config.Labels)
 		if labels == nil {
-			labels = make(map[string]string, len(spec.Labels))
+			labels = make(map[string]string, len(c.Labels))
 		}
-		maps.Copy(labels, spec.Labels)
+		maps.Copy(labels, c.Labels)
 		cfg.Config.Labels = labels
 	}
 
@@ -70,30 +64,52 @@ func buildConfig(base *ocispec.Image, spec Spec, diffID digest.Digest) (ocispec.
 	return cfg, nil
 }
 
-// cloneConfig copies the slices buildConfig appends to or edits so the
-// caller's base is never aliased.
+func setString(dst *string, v *string) {
+	if v != nil {
+		*dst = *v
+	}
+}
+
+// setList applies OCI's inherit-or-replace: nil keeps the base's list, empty clears it.
+func setList(dst *[]string, v *[]string) {
+	switch {
+	case v == nil:
+	case len(*v) == 0:
+		*dst = nil
+	default:
+		*dst = slices.Clone(*v)
+	}
+}
+
+func setSet(dst *map[string]struct{}, v *[]string) {
+	switch {
+	case v == nil:
+	case len(*v) == 0:
+		*dst = nil
+	default:
+		set := make(map[string]struct{}, len(*v))
+		for _, k := range *v {
+			set[k] = struct{}{}
+		}
+		*dst = set
+	}
+}
+
+// cloneConfig copies what buildConfig appends to or edits so the base is never aliased.
 func cloneConfig(c ocispec.Image) ocispec.Image {
 	c.Config.Env = slices.Clone(c.Config.Env)
 	c.Config.Entrypoint = slices.Clone(c.Config.Entrypoint)
 	c.Config.Cmd = slices.Clone(c.Config.Cmd)
+	c.Config.ExposedPorts = maps.Clone(c.Config.ExposedPorts)
+	c.Config.Volumes = maps.Clone(c.Config.Volumes)
 	c.RootFS.DiffIDs = slices.Clone(c.RootFS.DiffIDs)
 	c.History = slices.Clone(c.History)
 	return c
 }
 
-// mergeEnv replaces or appends set's keys (appends in key order), then drops
-// every unset key. Base entries that are not K=V pass through untouched.
-func mergeEnv(base []string, set map[string]string, unset []string) ([]string, error) {
-	for k := range set {
-		if err := validateEnvKey(k); err != nil {
-			return nil, err
-		}
-	}
-	for _, k := range unset {
-		if err := validateEnvKey(k); err != nil {
-			return nil, err
-		}
-	}
+// mergeEnv replaces or appends set's keys (appends in key order), then drops every
+// unset key. Base entries that are not K=V pass through untouched.
+func mergeEnv(base []string, set map[string]string, unset []string) []string {
 	out := slices.Clone(base)
 	for _, k := range slices.Sorted(maps.Keys(set)) {
 		entry := fmt.Sprintf("%s=%s", k, set[k])
@@ -108,33 +124,13 @@ func mergeEnv(base []string, set map[string]string, unset []string) ([]string, e
 		out = slices.DeleteFunc(out, func(e string) bool { return strings.HasPrefix(e, k+"=") })
 	}
 	if len(out) == 0 {
-		return nil, nil
+		return nil
 	}
-	return out, nil
+	return out
 }
 
-// resolveList applies R18: reset clears the base, then a non-empty list replaces.
-func resolveList(base, spec []string, reset bool) []string {
-	if reset {
-		base = nil
-	}
-	if len(spec) > 0 {
-		return slices.Clone(spec)
-	}
-	return base
-}
-
-// configBlob marshals cfg (R19) and describes the bytes.
-func configBlob(cfg ocispec.Image) ([]byte, ocispec.Descriptor, error) {
-	data, err := configJSON(cfg)
-	if err != nil {
-		return nil, ocispec.Descriptor{}, fmt.Errorf("image.assemble: config: %w", err)
-	}
-	return data, blobDescriptor(ocispec.MediaTypeImageConfig, data), nil
-}
-
-// The image-spec structs use v1 omitempty on two bools. Adapt only those fields
-// to the shared v2 codec, keeping every other encoded member intact.
+// configJSON adapts the two image-spec bools that use v1 omitempty to the shared v2
+// codec, keeping every other encoded member intact.
 func configJSON(cfg ocispec.Image) ([]byte, error) {
 	data, err := json.Marshal(cfg)
 	if err != nil {

@@ -8,85 +8,149 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // RegisterImage builds the "image" module map and returns it.
-// Assemble and publish OCI images. An Image is the artifact; a Container is a running instance. Layouts hold one Image Manifest or Image Index.
+// Assemble OCI images from files, and pull and push them. Each layout is an OCI Image Layout holding one Image Manifest or Image Index; a stage, layer, platform, index and push is each its own target.
 func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
-	m.MapSet("pullLayout", vm.DirectValue("image.pullLayout", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		reference := ffi.String(bzArgs, 0)
-		platform := ffi.AnyMap(bzArgs, 1)
-		dest := ffi.String(bzArgs, 2)
-		auth := ffi.AnyMap(bzArgs, 3)
-		ret0, err := std.ImagePullLayout(ctx, reference, platform, dest, auth)
+	enums := ffi.SessionEnums(ctx, sess, "image")
+	m.MapSet("assemble", vm.DirectValue("image.assemble", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		spec, err := ffi.Object("image\\assemble", "spec", bzArgs, 0, decode.DecodeImageSpec)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectImageLayout(ret0), nil
-	}))
-	m.MapSet("assembleLayout", vm.DirectValue("image.assembleLayout", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		spec := ffi.AnyMap(bzArgs, 0)
-		dest := ffi.String(bzArgs, 1)
-		ret0, err := std.ImageAssembleLayout(ctx, spec, dest)
+		layout := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageAssemble(ctx, spec, layout)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectImageLayout(ret0), nil
+		return ObjectImageLayout(ret0, enums), nil
 	}))
 	m.MapSet("assembleIndex", vm.DirectValue("image.assembleIndex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		layouts := ffi.StringSlice(bzArgs, 0)
-		dest := ffi.String(bzArgs, 1)
-		ret0, err := std.ImageAssembleIndex(ctx, layouts, dest)
+		layout := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageAssembleIndex(ctx, layouts, layout)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectImageLayout(ret0), nil
+		return ObjectImageLayout(ret0, enums), nil
 	}))
-	m.MapSet("publishLayout", vm.DirectValue("image.publishLayout", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("pull", vm.DirectValue("image.pull", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		reference := ffi.String(bzArgs, 0)
+		platform, err := ffi.Object("image\\pull", "platform", bzArgs, 1, decode.DecodeImagePlatform)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		layout := ffi.String(bzArgs, 2)
+		var auth *types.ImageRegistryAuth
+		if ffi.Present(bzArgs, 3) {
+			x, err := ffi.Object("image\\pull", "auth", bzArgs, 3, decode.DecodeImageRegistryAuth)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			auth = &x
+		}
+		ret0, err := std.ImagePull(ctx, reference, platform, layout, auth)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageLayout(ret0, enums), nil
+	}))
+	m.MapSet("push", vm.DirectValue("image.push", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		layout := ffi.String(bzArgs, 0)
 		repository := ffi.String(bzArgs, 1)
 		tags := ffi.StringSlice(bzArgs, 2)
-		auth := ffi.AnyMap(bzArgs, 3)
-		ret0, err := std.ImagePublishLayout(ctx, layout, repository, tags, auth)
+		var auth *types.ImageRegistryAuth
+		if ffi.Present(bzArgs, 3) {
+			x, err := ffi.Object("image\\push", "auth", bzArgs, 3, decode.DecodeImageRegistryAuth)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			auth = &x
+		}
+		ret0, err := std.ImagePush(ctx, layout, repository, tags, auth)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectImagePublished(ret0), nil
+		return ObjectImagePushed(ret0, enums), nil
 	}))
 	m.MapSet("writeSbom", vm.DirectValue("image.writeSbom", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		layout := ffi.String(bzArgs, 0)
-		dest := ffi.String(bzArgs, 1)
-		ret0, err := std.ImageWriteSbom(ctx, layout, dest)
+		path := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageWriteSBOM(ctx, layout, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectImageSBOM(ret0), nil
+		return ObjectImageDocument(ret0, enums), nil
 	}))
 	m.MapSet("writeProvenance", vm.DirectValue("image.writeProvenance", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		layout := ffi.String(bzArgs, 0)
-		spec := ffi.AnyMap(bzArgs, 1)
-		dest := ffi.String(bzArgs, 2)
-		ret0, err := std.ImageWriteProvenance(ctx, layout, spec, dest)
+		provenance, err := ffi.Object("image\\writeProvenance", "provenance", bzArgs, 1, decode.DecodeImageProvenance)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectImageProvenance(ret0), nil
+		path := ffi.String(bzArgs, 2)
+		ret0, err := std.ImageWriteProvenance(ctx, layout, provenance, path)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageDocument(ret0, enums), nil
 	}))
-	m.MapSet("attachArtifacts", vm.DirectValue("image.attachArtifacts", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		layout := ffi.String(bzArgs, 0)
-		sbomPath := ffi.String(bzArgs, 1)
-		provenancePath := ffi.String(bzArgs, 2)
-		ret0, err := std.ImageAttachArtifacts(ctx, layout, sbomPath, provenancePath)
+	m.MapSet("attachReferrers", vm.DirectValue("image.attachReferrers", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		subject := ffi.String(bzArgs, 0)
+		documents, err := ffi.Objects("image\\attachReferrers", "documents", bzArgs, 1, decode.DecodeImageDocument)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectImageLayout(ret0), nil
+		layout := ffi.String(bzArgs, 2)
+		ret0, err := std.ImageAttachReferrers(ctx, subject, documents, layout)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageLayout(ret0, enums), nil
+	}))
+	m.MapSet("open", vm.DirectValue("image.open", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		layout := ffi.String(bzArgs, 0)
+		ret0, err := std.ImageOpen(ctx, layout)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageLayout(ret0, enums), nil
+	}))
+	m.MapSet("platform", vm.DirectValue("image.platform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		spec := ffi.String(bzArgs, 0)
+		ret0, err := std.ImageParsePlatform(ctx, spec)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImagePlatform(ret0, enums), nil
+	}))
+	m.MapSet("platforms", vm.DirectValue("image.platforms", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		specs := ffi.StringSlice(bzArgs, 0)
+		ret0, err := std.ImageParsePlatforms(ctx, specs)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, func(v types.ImagePlatform) vm.Value { return ObjectImagePlatform(v, enums) }), nil
+	}))
+	m.MapSet("goEnv", vm.DirectValue("image.goEnv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		platform, err := ffi.Object("image\\goEnv", "platform", bzArgs, 0, decode.DecodeImagePlatform)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.ImageGoEnv(ctx, platform)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringMapVal(ret0), nil
 	}))
 	return m
 }

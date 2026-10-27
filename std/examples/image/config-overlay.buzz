@@ -1,43 +1,37 @@
-// Shape taken from official nginx / httpd Dockerfiles *after* the package install:
-// they COPY entrypoint scripts and config onto an already-built runtime. magus will not
-// re-run apt/apk (see nginx-non-goal.buzz, redis-non-goal.buzz). The assemble path is:
-// pull a digest-pinned base Layout, then add only your files as one Layer.
-//
-// nginx (excerpt of what stays on the engine vs what we place):
-//   RUN apt-get install nginx …     ← not assembleLayout
-//   COPY docker-entrypoint.sh /     ← ImageFile
-//   COPY conf.d/ /etc/nginx/conf.d/ ← DirPlacement
-//   CMD ["nginx", "-g", "daemon off;"]
-//
-// Upstream references:
-//   https://github.com/nginxinc/docker-nginx (stable/debian/Dockerfile)
-//   https://github.com/docker-library/httpd (2.4/alpine/Dockerfile) — same seam
-//
+// config-overlay: a pinned base keeps what its package manager installed; this
+// project adds configuration files and config. A null Config field inherits the base's
+// value, so the base's entrypoint script stays; an empty list would clear it.
+import "magus";
+import "std";
 import "image";
 
-// assembleConfigOverlay places app config onto a digest-pinned base Layout. baseLayout
-// must already be an OCI Layout directory (pullLayout or a prior assemble). confDir is
-// a host directory of nginx/httpd-style conf fragments.
-export fun assembleConfigOverlay(
-    baseLayout: str,
-    confDir: str,
-    entrypointScript: str,
-    dest: str,
-) > image\ImageLayout !> any {
-    return image\assembleLayout(image\ImageSpec{
-        base = baseLayout,
-        platform = image\ImagePlatform{ os = "linux", architecture = "amd64" },
-        files = [image\ImageFile{
-            source = entrypointScript,
-            destination = "/docker-entrypoint.sh",
-            mode = 493, // 0o755
-        }],
-        dirs = [image\ImageDirPlacement{
-            source = confDir,
-            destination = "/etc/nginx/conf.d",
-            strip = 1, // drop confDir's basename; fragments land directly under conf.d
-        }],
-        entrypoint = ["/docker-entrypoint.sh"],
-        command = ["nginx", "-g", "daemon off;"],
-    }, dest);
+final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+final NGINX = "docker.io/nginxinc/nginx-unprivileged@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+export fun image_base(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["out/image/base/**"]);
+    image\pull(NGINX, platform: PLATFORM, layout: "out/image/base");
+}
+
+// The manifest carries org.opencontainers.image.base.name and base.digest, read from
+// the pulled layout.
+export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(image_base);
+    ctx.readsFiles(["conf.d/**", "entrypoint.d/**"]);
+    ctx.writesFiles(["out/image/site/**"]);
+    final layout = image\assemble(image\Spec{
+        base = "out/image/base",
+        platform = PLATFORM,
+        trees = [
+            image\Tree{ source = "conf.d", path = "/etc/nginx/conf.d", include = ["*.conf"], modes = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse },
+            image\Tree{ source = "entrypoint.d", path = "/docker-entrypoint.d", modes = image\ModePolicy.executableBit, symlinks = image\SymlinkPolicy.refuse },
+        ],
+        config = image\Config{
+            exposedPorts = ["8080/tcp"],
+            stopSignal = "SIGQUIT",
+            cmd = ["nginx", "-g", "daemon off;"],
+            labels = {"org.opencontainers.image.title": "site"},
+        },
+    }, layout: "out/image/site");
+    std\print("{layout.descriptor.digest.string()} over {layout.layers.len() - 1} base layers");
 }

@@ -171,6 +171,10 @@ func (namingEnums) Case(enum, value string) vm.Value {
 	return vm.StringValue(fmt.Sprintf("%s.%s", enum, value))
 }
 
+func (namingEnums) Instance(object string, names []string, fields []vm.Value) vm.Value {
+	return ffi.EnumBacking.Instance(object, names, fields)
+}
+
 func objectMap(t *testing.T, v vm.Value) map[string]any {
 	t.Helper()
 	m, ok := ffi.ValueToAny(v).(map[string]any)

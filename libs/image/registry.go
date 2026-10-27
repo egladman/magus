@@ -3,339 +3,289 @@ package image
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
-	"runtime"
-	"strings"
 
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/libs/oci"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/oci"
 )
 
-// PullLayout fetches a digest-pinned image for platform into dest as an OCI layout.
-// An Image Index reference selects the matching platform manifest; the layout
-// holds that single Image Manifest.
-func PullLayout(ctx context.Context, reference string, platform Platform, dest string, auth *RegistryAuth) (Layout, error) {
-	if err := platform.Validate(); err != nil {
-		return Layout{}, fmt.Errorf("image.pull: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
-		return Layout{}, fmt.Errorf("image.pull: %w", err)
-	}
-	ref, err := oci.ParseReference(reference)
-	if err != nil {
-		return Layout{}, fmt.Errorf("image.pull: %w", err)
-	}
-	if ref.Digest == "" {
-		return Layout{}, fmt.Errorf("image.pull: reference %q: want name@sha256:<hex>, not a tag", reference)
-	}
-	client := registryClient(auth)
-	repo := fmt.Sprintf("%s/%s", ref.Registry, ref.Repository)
+// PullOptions configures Pull. Platform is required.
+type PullOptions struct {
+	// Client talks to the registry; nil pulls anonymously with a fresh oci.Client.
+	Client *oci.Client
+	// Platform selects the manifest when the reference names an Image Index.
+	Platform Platform
+	// AllowTag accepts a reference with a tag and no digest. A tag can name different
+	// bytes tomorrow, so a caller that caches the result turns this on only when it
+	// means to refresh.
+	AllowTag bool
+}
 
-	raw, err := client.Manifest(ctx, ref)
-	if err != nil {
-		return Layout{}, fmt.Errorf("image.pull: %w", err)
+// Pull fetches ref for opts.Platform into dest as an OCI Image Layout holding that one
+// Image Manifest. Every blob is fetched straight into the new layout and hashed once
+// while it streams. Docker media types are refused before anything is written, and
+// dest is left as it was on any error. index.json records ref (with its resolved
+// digest) as org.opencontainers.image.ref.name, which Assemble writes as the base.name
+// annotation of an image built over it.
+func Pull(ctx context.Context, ref oci.Reference, dest string, opts PullOptions) (ManifestLayout, error) {
+	if err := opts.Platform.Validate(); err != nil {
+		return ManifestLayout{}, fmt.Errorf("image.pull: %w", err)
 	}
+	if ref.Digest == "" && !opts.AllowTag {
+		return ManifestLayout{}, fmt.Errorf("image.pull: %s names a tag, which can move; pin it as name@sha256:<hex>", ref)
+	}
+	client := opts.Client
+	if client == nil {
+		client = &oci.Client{}
+	}
+	pinned, raw, man, err := resolveManifest(ctx, client, ref, opts.Platform)
+	if err != nil {
+		return ManifestLayout{}, fmt.Errorf("image.pull: %w", err)
+	}
+	st, err := newStaging(dest)
+	if err != nil {
+		return ManifestLayout{}, fmt.Errorf("image.pull: %w", err)
+	}
+	root, err := pullInto(ctx, st, client, pinned, raw, man, opts.Platform)
+	if err == nil {
+		err = st.commit(root)
+	}
+	if err != nil {
+		st.discard()
+		return ManifestLayout{}, fmt.Errorf("image.pull: %w", err)
+	}
+	opened, err := OpenLayout(ctx, dest)
+	if err != nil {
+		return ManifestLayout{}, fmt.Errorf("image.pull: %w", err)
+	}
+	return opened.Manifest(ctx)
+}
 
-	switch mediaTypeKind(raw.MediaType) {
-	case "index":
+// resolveManifest fetches ref's image manifest for p, choosing from an index, and
+// refuses anything but OCI media types before a byte is written. pinned is ref with the
+// digest the registry served.
+func resolveManifest(ctx context.Context, client *oci.Client, ref oci.Reference, p Platform) (pinned oci.Reference, raw oci.RawManifest, man ocispec.Manifest, err error) {
+	raw, err = client.Resolve(ctx, ref)
+	if err != nil {
+		return ref, raw, man, err
+	}
+	pinned = ref
+	pinned.Digest = raw.Digest
+	switch raw.MediaType {
+	case ocispec.MediaTypeImageIndex:
 		var idx ocispec.Index
 		if err := json.Unmarshal(raw.Body, &idx); err != nil {
-			return Layout{}, fmt.Errorf("image.pull: decode index: %w", err)
+			return pinned, raw, man, fmt.Errorf("%s: index: %w", pinned, err)
 		}
-		chosen, err := pickPlatform(idx.Manifests, platform)
+		chosen, err := pickPlatform(idx.Manifests, p)
 		if err != nil {
-			return Layout{}, fmt.Errorf("image.pull: %w", err)
+			return pinned, raw, man, fmt.Errorf("%s: %w", pinned, err)
 		}
-		manRef := ref
-		manRef.Digest = chosen.Digest
-		manRef.Tag = ""
-		raw, err = client.Manifest(ctx, manRef)
-		if err != nil {
-			return Layout{}, fmt.Errorf("image.pull: platform manifest: %w", err)
+		at := pinned
+		at.Tag, at.Digest = "", chosen.Digest
+		if raw, err = client.Manifest(ctx, at); err != nil {
+			return pinned, raw, man, err
 		}
-	case "manifest":
+	case ocispec.MediaTypeImageManifest:
 	default:
-		return Layout{}, fmt.Errorf("image.pull: unsupported media type %q", raw.MediaType)
+		return pinned, raw, man, fmt.Errorf("%s is %q; only OCI image manifests and indexes are pulled", pinned, raw.MediaType)
 	}
-
-	blobs, err := materializeManifest(ctx, client, repo, raw)
-	if err != nil {
-		return Layout{}, err
+	if raw.MediaType != ocispec.MediaTypeImageManifest {
+		return pinned, raw, man, fmt.Errorf("%s: platform entry is %q, want an OCI image manifest", pinned, raw.MediaType)
 	}
-	defer removeBlobTemps(blobs)
-	root := raw.Descriptor
-	if err := writeLayout(ctx, dest, root, blobs); err != nil {
-		return Layout{}, fmt.Errorf("image.pull: %w", err)
+	if err := json.Unmarshal(raw.Body, &man); err != nil {
+		return pinned, raw, man, fmt.Errorf("%s: manifest: %w", pinned, err)
 	}
-	out := &Layout{
-		Path:       dest,
-		Descriptor: root,
-		Platform:   platform,
-		Op:         OpPullLayout,
-		Base:       reference,
-		BaseDigest: MustDigest(ref.Digest),
+	if man.Config.MediaType != ocispec.MediaTypeImageConfig {
+		return pinned, raw, man, fmt.Errorf("%s: config is %q, want %s", pinned, man.Config.MediaType, ocispec.MediaTypeImageConfig)
 	}
-	input, err := readPlatformLayout(ctx, dest)
-	if err != nil {
-		return Layout{}, fmt.Errorf("image.pull: verify layout: %w", err)
-	}
-	setCreated(out, input.config.Created)
-	for _, b := range input.blobs {
-		if b.desc.MediaType == ocispec.MediaTypeImageConfig {
-			out.ConfigDigest = MustDigest(b.desc.Digest)
-			break
+	for _, l := range man.Layers {
+		if err := checkLayerMediaType(l.MediaType); err != nil {
+			return pinned, raw, man, fmt.Errorf("%s: %w", pinned, err)
 		}
 	}
-	return *out, nil
+	return pinned, raw, man, nil
 }
 
-// PublishLayout pushes a layout to repository under tags. Empty tags means digest-only.
-func PublishLayout(ctx context.Context, layoutPath, repository string, tags []string, auth *RegistryAuth) (Published, error) {
-	if err := ctx.Err(); err != nil {
-		return Published{}, fmt.Errorf("image.publish: %w", err)
-	}
-	if os.Getenv("MAGUS_OFFLINE") != "" {
-		return Published{}, fmt.Errorf("image.publish: MAGUS_OFFLINE is set")
-	}
-	layout, err := OpenLayout(layoutPath)
+func pullInto(ctx context.Context, st *staging, client *oci.Client, ref oci.Reference, raw oci.RawManifest, man ocispec.Manifest, want Platform) (ocispec.Descriptor, error) {
+	root, err := st.put(raw.MediaType, raw.Body)
 	if err != nil {
-		return Published{}, fmt.Errorf("image.publish: %w", err)
-	}
-	if _, err := oci.ParseRepository(repository); err != nil {
-		return Published{}, fmt.Errorf("image.publish: %w", err)
-	}
-	client := registryClient(auth)
-	blobs, err := collectLayoutBlobs(ctx, layout)
-	if err != nil {
-		return Published{}, fmt.Errorf("image.publish: %w", err)
-	}
-	seen := map[digest.Digest]bool{}
-	var manifests []blob
-	var layers []blob
-	for _, b := range blobs {
-		if seen[b.desc.Digest] {
-			continue
-		}
-		seen[b.desc.Digest] = true
-		kind := mediaTypeKind(b.desc.MediaType)
-		if kind == "index" || kind == "manifest" {
-			if b.desc.Digest != layout.Descriptor.Digest {
-				manifests = append(manifests, b)
-			}
-			continue
-		}
-		layers = append(layers, b)
+		return ocispec.Descriptor{}, err
 	}
 	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(max(4, runtime.GOMAXPROCS(0)))
-	for _, b := range layers {
-		g.Go(func() error {
-			r, err := b.open()
-			if err != nil {
-				return fmt.Errorf("image.publish: open %s: %w", b.desc.Digest, err)
-			}
-			err = client.PushBlob(gctx, repository, b.desc, r)
-			_ = r.Close()
-			if err != nil {
-				return fmt.Errorf("image.publish: blob %s: %w", b.desc.Digest, err)
-			}
-			return nil
-		})
+	g.SetLimit(transferConcurrency)
+	for _, d := range append([]ocispec.Descriptor{man.Config}, man.Layers...) {
+		g.Go(func() error { return st.fetch(gctx, client, ref, d) })
 	}
 	if err := g.Wait(); err != nil {
-		return Published{}, err
+		return ocispec.Descriptor{}, err
 	}
-	for _, m := range manifests {
-		body, err := readAllBlob(m)
-		if err != nil {
-			return Published{}, fmt.Errorf("image.publish: nested manifest %s: %w", m.desc.Digest, err)
-		}
-		if _, err := client.PutManifest(ctx, repository, m.desc.MediaType, body); err != nil {
-			return Published{}, fmt.Errorf("image.publish: nested manifest %s: %w", m.desc.Digest, err)
-		}
-	}
-	rootBody, err := readBlob(layout.Path, layout.Descriptor)
+	root.Annotations = map[string]string{ocispec.AnnotationRefName: ref.String()}
+	data, err := os.ReadFile(st.path(man.Config.Digest))
 	if err != nil {
-		return Published{}, fmt.Errorf("image.publish: root: %w", err)
+		return ocispec.Descriptor{}, err
 	}
-	confirmed, err := client.PutManifest(ctx, repository, layout.Descriptor.MediaType, rootBody, tags...)
-	if err != nil {
-		return Published{}, fmt.Errorf("image.publish: %w", err)
+	var cfg ocispec.Image
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("config %s: %w", man.Config.Digest, err)
 	}
-	return Published{
-		Repository: repository,
-		Digest:     MustDigest(confirmed),
-		Tags:       append([]string(nil), tags...),
-		Op:         OpPublishLayout,
-	}, nil
-}
-
-func readAllBlob(b blob) ([]byte, error) {
-	r, err := b.open()
-	if err != nil {
-		return nil, err
+	got := Platform{OS: cfg.OS, Architecture: cfg.Architecture, Variant: cfg.Variant}
+	if got.Normalize() != want.Normalize() {
+		return ocispec.Descriptor{}, fmt.Errorf("%s: config says %s, not %s", ref, got, want)
 	}
-	defer r.Close()
-	return io.ReadAll(r)
-}
-
-func registryClient(auth *RegistryAuth) *oci.Client {
-	client := &oci.Client{}
-	if auth != nil && (auth.Username != "" || auth.Password.Value != "") {
-		client.Credentials = oci.Credentials{
-			Username: auth.Username,
-			Password: secret.NewValue(auth.Password.Value),
-		}
-	}
-	return client
+	root.Platform = got.oci()
+	return root, nil
 }
 
 func pickPlatform(manifests []ocispec.Descriptor, want Platform) (ocispec.Descriptor, error) {
 	for _, m := range manifests {
-		p := m.Platform
-		if p == nil {
-			continue
-		}
-		if p.OS == want.OS && p.Architecture == want.Architecture && p.Variant == want.Variant {
+		if m.Platform != nil && platformOf(m.Platform).Normalize() == want.Normalize() {
 			return m, nil
 		}
 	}
-	return ocispec.Descriptor{}, fmt.Errorf("no manifest for %s/%s", want.OS, want.Architecture)
+	return ocispec.Descriptor{}, fmt.Errorf("no manifest for %s", want)
 }
 
-func materializeManifest(ctx context.Context, client *oci.Client, repo string, raw oci.RawManifest) ([]blob, error) {
-	var man ocispec.Manifest
-	if err := json.Unmarshal(raw.Body, &man); err != nil {
-		return nil, fmt.Errorf("image.pull: decode manifest: %w", err)
-	}
-	descs := append([]ocispec.Descriptor{man.Config}, man.Layers...)
-	out := make([]blob, len(descs)+1)
-	out[0] = bytesBlob(raw.MediaType, raw.Body)
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(max(4, runtime.GOMAXPROCS(0)))
-	for i, d := range descs {
-		g.Go(func() error {
-			b, err := fetchRegistryBlob(gctx, client, repo, d)
-			if err != nil {
-				return err
-			}
-			out[i+1] = b
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		removeBlobTemps(out)
-		return nil, err
-	}
-	return out, nil
+// PushOptions configures Push.
+type PushOptions struct {
+	// Client talks to the registry; nil pushes anonymously with a fresh oci.Client.
+	Client *oci.Client
+	// Tags the image is written under after its digest. Empty pushes by digest only.
+	Tags []string
 }
 
-func removeBlobTemps(blobs []blob) {
-	for _, b := range blobs {
-		if b.removeAfter && b.path != "" {
-			_ = os.Remove(b.path)
+// Pushed is what a registry holds after Push.
+type Pushed struct {
+	Repository oci.Reference
+	Digest     digest.Digest
+	Tags       []string
+}
+
+// Reference is Repository pinned at Digest: what a signer or a deploy consumes.
+func (p Pushed) Reference() oci.Reference {
+	r := p.Repository
+	r.Tag, r.Digest = "", p.Digest
+	return r
+}
+
+// Push uploads the layout at path to repo's repository: every blob the registry lacks,
+// each child manifest, the image under its digest and each tag, then each referrer.
+// A blob the registry holds costs one HEAD; one it lacks is hashed once, while it
+// uploads, and a local blob that does not match its descriptor aborts the upload.
+func Push(ctx context.Context, path string, repo oci.Reference, opts PushOptions) (Pushed, error) {
+	for _, t := range opts.Tags {
+		if err := oci.ValidateTag(t); err != nil {
+			return Pushed{}, fmt.Errorf("image.push: %w", err)
 		}
 	}
-}
-
-func fetchRegistryBlob(ctx context.Context, client *oci.Client, repo string, d ocispec.Descriptor) (blob, error) {
-	if err := ctx.Err(); err != nil {
-		return blob{}, fmt.Errorf("image.pull: %w", err)
-	}
-	f, err := os.CreateTemp("", "magus-image-blob-*")
+	l, err := OpenLayout(ctx, path)
 	if err != nil {
-		return blob{}, fmt.Errorf("image.pull: temp blob: %w", err)
+		return Pushed{}, fmt.Errorf("image.push: %w", err)
 	}
-	tmp := f.Name()
-	if err := client.FetchBlob(ctx, repo, d, f); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return blob{}, fmt.Errorf("image.pull: blob %s: %w", d.Digest, err)
+	client := opts.Client
+	if client == nil {
+		client = &oci.Client{}
 	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return blob{}, fmt.Errorf("image.pull: blob %s: %w", d.Digest, err)
+	repo.Tag, repo.Digest = "", ""
+	if err := pushLayout(ctx, client, l, repo, opts.Tags); err != nil {
+		return Pushed{}, fmt.Errorf("image.push: %w", err)
 	}
-	return blob{
-		desc:        d,
-		path:        tmp,
-		removeAfter: true,
-		open:        func() (io.ReadCloser, error) { return os.Open(tmp) },
-	}, nil
+	return Pushed{Repository: repo, Digest: l.Descriptor.Digest, Tags: append([]string(nil), opts.Tags...)}, nil
 }
 
-func collectLayoutBlobs(ctx context.Context, layout Layout) ([]blob, error) {
-	rootData, err := readBlob(layout.Path, layout.Descriptor)
+// layoutBlobs lists the config and layers of every manifest l reaches, and every
+// manifest but the image itself, without reading a blob it does not have to.
+func layoutBlobs(ctx context.Context, l Layout) (blobs, manifests []ocispec.Descriptor, err error) {
+	platforms, err := l.Manifests(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	blobs := []blob{bytesBlob(layout.Descriptor.MediaType, rootData)}
-	switch mediaTypeKind(layout.Descriptor.MediaType) {
-	case "index":
-		var idx ocispec.Index
-		if err := json.Unmarshal(rootData, &idx); err != nil {
-			return nil, fmt.Errorf("decode index: %w", err)
-		}
-		for _, m := range idx.Manifests {
-			manData, err := readBlob(layout.Path, m)
-			if err != nil {
-				return nil, fmt.Errorf("manifest %s: %w", m.Digest, err)
-			}
-			blobs = append(blobs, bytesBlob(m.MediaType, manData))
-			more, err := blobsFromManifest(ctx, layout.Path, manData)
-			if err != nil {
-				return nil, err
-			}
-			blobs = append(blobs, more...)
-		}
-	case "manifest":
-		more, err := blobsFromManifest(ctx, layout.Path, rootData)
+	for _, m := range append(platforms, l.Referrers...) {
+		data, err := l.readBlob(ctx, m)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		blobs = append(blobs, more...)
-	default:
-		return nil, fmt.Errorf("unsupported media type %q", layout.Descriptor.MediaType)
+		var man ocispec.Manifest
+		if err := json.Unmarshal(data, &man); err != nil {
+			return nil, nil, fmt.Errorf("manifest %s: %w", m.Digest, err)
+		}
+		blobs = append(append(blobs, man.Config), man.Layers...)
+		if m.Digest != l.Descriptor.Digest {
+			manifests = append(manifests, m)
+		}
 	}
-	return blobs, nil
+	return blobs, manifests, nil
 }
 
-func blobsFromManifest(ctx context.Context, path string, manData []byte) ([]blob, error) {
-	var man ocispec.Manifest
-	if err := json.Unmarshal(manData, &man); err != nil {
-		return nil, fmt.Errorf("decode manifest: %w", err)
+func pushLayout(ctx context.Context, client *oci.Client, l Layout, repo oci.Reference, tags []string) error {
+	blobs, bodies, err := layoutBlobs(ctx, l)
+	if err != nil {
+		return err
 	}
-	descs := append([]ocispec.Descriptor{man.Config}, man.Layers...)
-	out := make([]blob, len(descs))
 	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(max(4, runtime.GOMAXPROCS(0)))
-	for i, d := range descs {
-		g.Go(func() error {
-			if err := verifyLayoutBlob(gctx, path, d); err != nil {
-				return err
-			}
-			out[i] = layoutBlob(path, d)
-			return nil
-		})
+	g.SetLimit(transferConcurrency)
+	seen := map[digest.Digest]bool{}
+	for _, b := range blobs {
+		if seen[b.Digest] {
+			continue
+		}
+		seen[b.Digest] = true
+		g.Go(func() error { return pushBlob(gctx, client, repo, l.Path, b) })
 	}
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return err
 	}
-	return out, nil
+	referrers := map[digest.Digest]bool{}
+	for _, r := range l.Referrers {
+		referrers[r.Digest] = true
+	}
+	var after []ocispec.Descriptor
+	for _, m := range bodies {
+		if referrers[m.Digest] {
+			after = append(after, m)
+			continue
+		}
+		if err := putManifest(ctx, client, repo, l, m); err != nil {
+			return err
+		}
+	}
+	if err := putManifest(ctx, client, repo, l, l.Descriptor, tags...); err != nil {
+		return err
+	}
+	for _, m := range after {
+		if err := putManifest(ctx, client, repo, l, m); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func mediaTypeKind(mt string) string {
-	switch {
-	case mt == ocispec.MediaTypeImageIndex || strings.Contains(mt, "manifest.list"):
-		return "index"
-	case mt == ocispec.MediaTypeImageManifest || strings.Contains(mt, "manifest.v2"):
-		return "manifest"
-	default:
-		return mt
+func pushBlob(ctx context.Context, client *oci.Client, repo oci.Reference, layout string, d ocispec.Descriptor) error {
+	if err := checkDigest(d.Digest); err != nil {
+		return fmt.Errorf("blob %q: %w", d.Digest, err)
 	}
+	f, err := os.Open(blobPath(layout, d.Digest))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := client.PushBlob(ctx, repo, d, f); err != nil {
+		return fmt.Errorf("blob %s: %w", d.Digest, err)
+	}
+	return nil
+}
+
+func putManifest(ctx context.Context, client *oci.Client, repo oci.Reference, l Layout, m ocispec.Descriptor, tags ...string) error {
+	body, err := l.readBlob(ctx, m)
+	if err != nil {
+		return err
+	}
+	if _, err := client.PutManifest(ctx, repo, m.MediaType, body, tags...); err != nil {
+		return fmt.Errorf("manifest %s: %w", m.Digest, err)
+	}
+	return nil
 }

@@ -13,6 +13,7 @@ import (
 	"path"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -208,6 +209,9 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	if bytes.Contains(body.Bytes(), []byte("ffi.")) {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
 	}
+	if bytes.Contains(body.Bytes(), []byte("decode.Decode")) {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/gen/decode"`)
+	}
 	if implPath != "" {
 		fmt.Fprintf(&b, "\t%q\n", implPath)
 	}
@@ -297,19 +301,11 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 		name, fmt.Sprintf("%s.%s", m.Name, name))
 
 	impl := reflect.TypeOf(meth.Impl)
+	member := fmt.Sprintf("%s\\%s", m.Name, name)
 	for i, a := range meth.Args {
-		if a.Type == std.TypeAnyMap && !a.Variadic && impl.In(i+1).Kind() == reflect.Struct {
-			fn, err := decoders.add(impl.In(i + 1))
-			if err != nil {
-				return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
-			}
-			fmt.Fprintf(w, "\t\t%s, err := %s(%q, ffi.AnyMap(bzArgs, %d))\n", a.Name, fn, fmt.Sprintf("%s\\%s", m.Name, name), i)
-			fmt.Fprintln(w, "\t\tif err != nil {")
-			fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
-			fmt.Fprintln(w, "\t\t}")
-			continue
+		if err := emitArgDecode(w, decoders, member, a, i, impl.In(i+1)); err != nil {
+			return fmt.Errorf("%s: %w", member, err)
 		}
-		emitBuzzArgDecode(w, a, i)
 	}
 
 	callArgs := make([]string, 0, 1+len(meth.Args))
@@ -361,6 +357,70 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 	}
 	fmt.Fprintln(w, "\t}))")
 	return nil
+}
+
+// emitArgDecode emits the decode of one argument: an inbound Object through its
+// generated decoder, a flat option struct through an opts decoder, anything else
+// through the ffi primitive for its type tag.
+func emitArgDecode(w *bytes.Buffer, decoders *optionDecoders, member string, a std.Arg, idx int, param reflect.Type) error {
+	handled, err := emitObjectArgDecode(w, decoders, member, a, idx, param)
+	if err != nil || handled {
+		return err
+	}
+	if a.Type == std.TypeAnyMap && !a.Variadic && param.Kind() == reflect.Struct {
+		fn, err := decoders.add(param)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "\t\t%s, err := %s(%q, ffi.AnyMap(bzArgs, %d))\n", a.Name, fn, member, idx)
+		fmt.Fprintln(w, "\t\tif err != nil {")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
+		fmt.Fprintln(w, "\t\t}")
+		return nil
+	}
+	emitBuzzArgDecode(w, a, idx)
+	return nil
+}
+
+// emitObjectArgDecode decodes an argument whose Object names an inbound boundary type
+// with its generated strict decoder, when the Impl takes T, *T (optional) or []T
+// ("[T]"): an unknown or wrong-typed member raises instead of reading as absent. It
+// reports false, emitting nothing, for any other argument.
+func emitObjectArgDecode(w *bytes.Buffer, decoders *optionDecoders, member string, a std.Arg, idx int, param reflect.Type) (bool, error) {
+	name := strings.Trim(a.Object, "[]")
+	entry, ok := boundaryTypeNamed(name)
+	if a.Object == "" || !ok || !slices.Contains(inboundTypes, name) {
+		return false, nil
+	}
+	list := strings.HasPrefix(a.Object, "[")
+	decoder := "decode.Decode" + typeIdent(entry.Type)
+	switch {
+	case list && param == reflect.SliceOf(entry.Type):
+		fmt.Fprintf(w, "\t\t%s, err := ffi.Objects(%q, %q, bzArgs, %d, %s)\n", a.Name, member, a.Name, idx, decoder)
+	case !list && param == entry.Type && !a.Optional:
+		fmt.Fprintf(w, "\t\t%s, err := ffi.Object(%q, %q, bzArgs, %d, %s)\n", a.Name, member, a.Name, idx, decoder)
+	case !list && param == reflect.PointerTo(entry.Type) && a.Optional:
+		if !slices.Contains(decoders.spelled, entry.Type.PkgPath()) {
+			decoders.spelled = append(decoders.spelled, entry.Type.PkgPath())
+		}
+		fmt.Fprintf(w, "\t\tvar %s *%s\n", a.Name, qualifyType(entry.Type))
+		fmt.Fprintf(w, "\t\tif ffi.Present(bzArgs, %d) {\n", idx)
+		fmt.Fprintf(w, "\t\t\tx, err := ffi.Object(%q, %q, bzArgs, %d, %s)\n", member, a.Name, idx, decoder)
+		fmt.Fprintln(w, "\t\t\tif err != nil {")
+		fmt.Fprintln(w, "\t\t\t\treturn vm.Null, ffi.Error(err)")
+		fmt.Fprintln(w, "\t\t\t}")
+		fmt.Fprintf(w, "\t\t\t%s = &x\n", a.Name)
+		fmt.Fprintln(w, "\t\t}")
+		return true, nil
+	case param.Kind() == reflect.Map, !list && param == entry.Type && a.Optional:
+		return false, nil
+	default:
+		return false, fmt.Errorf("arg %s: Object %s is inbound, so the Impl takes %s (or *%[3]s when optional, []%[3]s for a list), not %s", a.Name, a.Object, qualifyType(entry.Type), param)
+	}
+	fmt.Fprintln(w, "\t\tif err != nil {")
+	fmt.Fprintln(w, "\t\t\treturn vm.Null, ffi.Error(err)")
+	fmt.Fprintln(w, "\t\t}")
+	return true, nil
 }
 
 // emitBuzzArgDecode emits the decode statement for arg a at positional index idx.
@@ -424,6 +484,9 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 // the trampoline reads the map into the struct strictly, by the struct's json tags.
 type optionDecoders struct {
 	types []reflect.Type
+	// spelled are packages a trampoline names a type from (an optional object
+	// argument's *T) without decoding through an option struct.
+	spelled []string
 }
 
 // add records t and returns the name of the function that decodes it.
@@ -439,7 +502,7 @@ func (d *optionDecoders) add(t reflect.Type) (string, error) {
 
 // packages are the import paths of the recorded structs, sorted.
 func (d *optionDecoders) packages() []string {
-	var out []string
+	out := slices.Clone(d.spelled)
 	for _, t := range d.types {
 		if !slices.Contains(out, t.PkgPath()) {
 			out = append(out, t.PkgPath())
@@ -742,16 +805,31 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	} else {
 		fmt.Fprintf(&body, "func %s(v %s) vm.Value {\n", e.funcName(t), e.qualify(t))
 	}
-	fmt.Fprintln(&body, "\tout := vm.NewMap()")
-	for _, bf := range boundaryFields(t) {
-		f := bf.StructField
-		value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
-		if err != nil {
-			return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
+	if hasMethods(t) {
+		var names, values []string
+		for _, bf := range boundaryFields(t) {
+			f := bf.StructField
+			value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
+			if err != nil {
+				return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
+			}
+			names = append(names, strconv.Quote(buzzVMFieldName(f)))
+			values = append(values, value)
 		}
-		fmt.Fprintf(&body, "\tout.MapSet(%q, %s)\n", buzzVMFieldName(f), value)
+		fmt.Fprintf(&body, "\treturn enums.Instance(%q, []string{%s}, []vm.Value{%s})\n",
+			buzzName(t), strings.Join(names, ", "), strings.Join(values, ", "))
+	} else {
+		fmt.Fprintln(&body, "\tout := vm.NewMap()")
+		for _, bf := range boundaryFields(t) {
+			f := bf.StructField
+			value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
+			if err != nil {
+				return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
+			}
+			fmt.Fprintf(&body, "\tout.MapSet(%q, %s)\n", buzzVMFieldName(f), value)
+		}
+		fmt.Fprintln(&body, "\treturn out")
 	}
-	fmt.Fprintln(&body, "\treturn out")
 	fmt.Fprintln(&body, "}")
 	fmt.Fprintln(&body)
 
@@ -974,7 +1052,13 @@ func (e *buzzValueEmitter) walkEnums(t reflect.Type, visiting map[reflect.Type]b
 	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
 		reach = e.walkEnums(t.Elem(), visiting)
 	case reflect.Struct:
+		// A mirror with methods is an instance the session's definition makes, as an
+		// enum case is, so its encoder needs the same resolver.
+		reach = hasMethods(t)
 		for _, bf := range boundaryFields(t) {
+			if reach {
+				break
+			}
 			if e.walkEnums(bf.Type, visiting) {
 				reach = true
 				break

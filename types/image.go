@@ -1,136 +1,212 @@
 package types
 
-// ImagePlatform is an image's target platform as OCI spells it.
+import "github.com/egladman/magus/spells"
+
+// The image module's records at the Buzz boundary. The module namespaces them, so the
+// registry drops the Image prefix from each Buzz name (image\Spec, image\Platform).
+
+// ImageOS is an OCI platform os; ImageOSNone is unset and refused.
+type ImageOS string
+
+// ImageArchitecture is an OCI platform architecture; ImageArchitectureNone is unset and
+// refused.
+type ImageArchitecture string
+
+// ImageVariant is an OCI platform variant; ImageVariantNone is no variant.
+type ImageVariant string
+
+const (
+	ImageOSNone             ImageOS           = ""
+	ImageOSLinux            ImageOS           = "linux"
+	ImageArchitectureNone   ImageArchitecture = ""
+	ImageArchitectureAMD64  ImageArchitecture = "amd64"
+	ImageArchitectureARM64  ImageArchitecture = "arm64"
+	ImageVariantNone        ImageVariant      = ""
+	ImageVariantV8          ImageVariant      = "v8"
+)
+
+// ImageMediaType is the media type of a descriptor magus reads or writes.
+type ImageMediaType string
+
+const (
+	ImageMediaTypeNone      ImageMediaType = ""
+	ImageMediaTypeManifest  ImageMediaType = "application/vnd.oci.image.manifest.v1+json"
+	ImageMediaTypeIndex     ImageMediaType = "application/vnd.oci.image.index.v1+json"
+	ImageMediaTypeConfig    ImageMediaType = "application/vnd.oci.image.config.v1+json"
+	ImageMediaTypeLayer     ImageMediaType = "application/vnd.oci.image.layer.v1.tar"
+	ImageMediaTypeLayerGzip ImageMediaType = "application/vnd.oci.image.layer.v1.tar+gzip"
+	ImageMediaTypeLayerZstd ImageMediaType = "application/vnd.oci.image.layer.v1.tar+zstd"
+	ImageMediaTypeEmpty     ImageMediaType = "application/vnd.oci.empty.v1+json"
+	ImageMediaTypeSPDX      ImageMediaType = "application/spdx+json"
+	ImageMediaTypeInToto    ImageMediaType = "application/vnd.in-toto+json"
+)
+
+// ImageModePolicy is how a Tree sets each file's mode; unset is refused.
+type ImageModePolicy string
+
+// ImageSymlinkPolicy is what a Tree does with a host symlink; unset is refused.
+type ImageSymlinkPolicy string
+
+const (
+	ImageModePolicyNone          ImageModePolicy    = ""
+	ImageModePolicyFixed         ImageModePolicy    = "fixed"
+	ImageModePolicyExecutableBit ImageModePolicy    = "executable-bit"
+	ImageSymlinkPolicyNone       ImageSymlinkPolicy = ""
+	ImageSymlinkPolicyRefuse     ImageSymlinkPolicy = "refuse"
+	ImageSymlinkPolicyKeep       ImageSymlinkPolicy = "keep"
+	ImageSymlinkPolicyFollow     ImageSymlinkPolicy = "follow"
+)
+
+// ImagePlatform is an OCI platform. Its values are Go's GOOS and GOARCH.
 type ImagePlatform struct {
-	OS           string
-	Architecture string
-	Variant      string
+	OS           ImageOS
+	Architecture ImageArchitecture
+	Variant      ImageVariant
 }
 
-// ImageFile places one host file in the image.
-type ImageFile struct {
-	Source      string // host path, resolved against the magusfile's cwd
-	Destination string // absolute POSIX path inside the image
-	Mode        int    // permission bits, e.g. 0o755; type bits are rejected
-	UID         int
-	GID         int
-}
-
-// ImageSymlink places one symbolic link in the image.
-type ImageSymlink struct {
-	Destination string
-	Target      string
-	UID         int
-	GID         int
-}
-
-// ImageDirPlacement expands a host directory into layer entries.
-type ImageDirPlacement struct {
-	Source      string
-	Destination string
-	Strip       int
-	Include     []string
-	Exclude     []string
-	MaxDepth    int
-	ModePolicy  string
-	FileMode    int
-	DirMode     int
-	UID         int
-	GID         int
-	Symlinks    string
-	EmptyDirs   bool
-	MaxFiles    int
-	MaxBytes    int
-}
-
-// ImageSpec is everything one write needs. Empty fields inherit from Base.
-type ImageSpec struct {
-	Base            string // OCI layout dir holding exactly one manifest; "" is scratch
-	Platform        ImagePlatform
-	Files           []ImageFile
-	Dirs            []ImageDirPlacement
-	Symlinks        []ImageSymlink
-	Env             map[string]string // merged over the base's by key
-	UnsetEnv        []string
-	User            string
-	WorkingDir      string
-	Entrypoint      []string
-	ResetEntrypoint bool     // true clears the base's entrypoint before Entrypoint applies
-	Command         []string // OCI config Cmd (argv); spelled out so it is not confused with magus.cmd
-	ResetCommand    bool
-	Labels          map[string]string // config labels, merged over the base's
-	Annotations     map[string]string // manifest annotations
-	Created         string            // RFC 3339; "" keeps the base's
-}
-
-// ImageDigest is an OCI content digest at the Buzz boundary: algorithm + encoded.
-// Empty Algorithm and Encoded mean unset. Only sha256 is produced today.
+// ImageDigest is an OCI content digest. Empty fields mean unset.
 type ImageDigest struct {
 	Algorithm string
 	Encoded   string
 }
 
-// ImageLayout is an OCI image layout on disk and the facts of the operation that
-// wrote it. It is not a log.
-type ImageLayout struct {
-	Path         string
+// String is the digest as OCI writes it, "sha256:<hex>", and "" when unset. The Buzz
+// mirror's string() method returns the same.
+func (d ImageDigest) String() string {
+	if d.Algorithm == "" && d.Encoded == "" {
+		return ""
+	}
+	return d.Algorithm + ":" + d.Encoded
+}
+
+// ImageFile places one host file in the image.
+type ImageFile struct {
+	Source string // host path, resolved against the magusfile's directory
+	Path   string // absolute path in the image
+	Mode   int    // permission bits from fs\mode("0755"); 0 is refused
+	UID    int    `buzz:"uid"` // 0 is root
+	GID    int    `buzz:"gid"`
+}
+
+// ImageTree places the contents of a host directory at an image path.
+type ImageTree struct {
+	Source   string
+	Path     string
+	Include  []string
+	Exclude  []string
+	Modes    ImageModePolicy
+	Symlinks ImageSymlinkPolicy
+	UID      int `buzz:"uid"`
+	GID      int `buzz:"gid"`
+}
+
+// ImageSymlink places one symbolic link in the image.
+type ImageSymlink struct {
+	Path   string
+	Target string
+	UID    int `buzz:"uid"`
+	GID    int `buzz:"gid"`
+}
+
+// ImageDirectory places a directory entry with its own mode and owner.
+type ImageDirectory struct {
+	Path string
+	Mode int
+	UID  int `buzz:"uid"`
+	GID  int `buzz:"gid"`
+}
+
+// ImageConfig is the OCI image config's config object. null inherits the base's value;
+// an empty list or string clears it.
+type ImageConfig struct {
+	User         *string
+	WorkingDir   *string
+	StopSignal   *string
+	Entrypoint   *[]string
+	Cmd          *[]string
+	ExposedPorts *[]string
+	Volumes      *[]string
+	Env          map[string]string
+	UnsetEnv     []string
+	Labels       map[string]string
+}
+
+// ImageSpec is one image manifest to assemble: exactly one of base and scratch.
+type ImageSpec struct {
+	Base        string
+	Scratch     bool
+	Platform    ImagePlatform
+	Files       []ImageFile
+	Trees       []ImageTree
+	Symlinks    []ImageSymlink
+	Directories []ImageDirectory
+	Config      ImageConfig
+	Annotations map[string]string
+	Created     string
+}
+
+// ImageDescriptor is an OCI descriptor.
+type ImageDescriptor struct {
+	MediaType    ImageMediaType
+	ArtifactType ImageMediaType
 	Digest       ImageDigest
-	MediaType    string
 	Size         int
-	Platform     ImagePlatform // zero for an index
-	Op           string
-	Base         string
-	BaseDigest   ImageDigest
-	FileCount    int
-	SymlinkCount int
-	Layer        ImageLayer // zero when assemble added none
-	ConfigDigest ImageDigest
-	Created      string // RFC 3339 from image config; empty when omitted
+	Platform     *ImagePlatform
+	Annotations  map[string]string
 }
 
-// ImageLayer is one OCI image layer at the Buzz boundary.
-type ImageLayer struct {
-	Digest    ImageDigest // compressed blob
-	DiffID    ImageDigest // uncompressed tar (rootfs.diff_id)
-	Size      int
-	MediaType string
+// ImageAdded is the receipt of the layer an assemble wrote.
+type ImageAdded struct {
+	Layer       ImageDescriptor
+	DiffID      ImageDigest
+	Files       int
+	Symlinks    int
+	Directories int
 }
 
-// ImagePublished is what a registry now holds.
-type ImagePublished struct {
+// ImageLayout is an OCI Image Layout on disk. Platform, Config, Layers and Created are
+// set when the image is one manifest; Added only by assemble.
+type ImageLayout struct {
+	Path       string
+	Descriptor ImageDescriptor
+	Referrers  []ImageDescriptor
+	Platform   *ImagePlatform
+	Config     *ImageDescriptor
+	Layers     []ImageDescriptor
+	Added      *ImageAdded
+	Created    string
+}
+
+// ImageRegistryAuth authenticates a pull or a push. The password is the Secret a
+// provider resolved, never a bare string.
+type ImageRegistryAuth struct {
+	Username string
+	Password spells.Secret
+}
+
+// ImagePushed is what a registry holds after a push.
+type ImagePushed struct {
 	Repository string
 	Digest     ImageDigest
 	Tags       []string
-	Op         string
+	Reference  string // "<repository>@<digest>", what a signer or a deploy consumes
 }
 
-// ImageSecret is a credential at the Buzz boundary for registry auth.
-type ImageSecret struct {
-	Value string
+// ImageMaterial is one content-addressed input to a provenance statement.
+type ImageMaterial struct {
+	URI    string `buzz:"uri"`
+	Digest ImageDigest
 }
 
-// ImageRegistryAuth authenticates pull and publish.
-type ImageRegistryAuth struct {
-	Username string
-	Password ImageSecret
-}
-
-// ImageSBOM is a written SPDX document.
-type ImageSBOM struct {
-	Path      string
-	MediaType string
-	Digest    ImageDigest
-}
-
-// ImageProvenanceSpec is the explicit material for an in-toto statement.
-type ImageProvenanceSpec struct {
-	SourceRevision string
-	BuilderID      string
-}
-
-// ImageProvenance is a written in-toto statement.
+// ImageProvenance is what a provenance statement says built the image.
 type ImageProvenance struct {
-	Path      string
-	MediaType string
-	Digest    ImageDigest
+	BuilderID      string `buzz:"builderId"`
+	SourceRevision string
+	Materials      []ImageMaterial
+}
+
+// ImageDocument is a written SBOM or provenance file and the descriptor of its bytes.
+type ImageDocument struct {
+	Path       string
+	Descriptor ImageDescriptor
 }

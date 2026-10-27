@@ -3,266 +3,47 @@ package image
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/egladman/magus/internal/cache/reflink"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 )
 
-const (
-	layoutMarker  = `{"imageLayoutVersion":"1.0.0"}`
-	layoutVersion = "1.0.0"
-)
-
-// blob is one content-addressed file for blobs/sha256. When path is set the
-// bytes already match desc; writeLayout hard-links or reflinks (O(1) same-fs)
-// and falls back to open when both fail.
-type blob struct {
-	desc        ocispec.Descriptor
-	open        func() (io.ReadCloser, error)
-	path        string
-	removeAfter bool // delete path after a successful install (pull temps)
+// Layout is an OCI Image Layout on disk. index.json's first descriptor is the image, an
+// Image Manifest or an Image Index; any after it are referrers, artifact manifests whose
+// subject is that image (AttachReferrers writes them).
+type Layout struct {
+	Path       string
+	Descriptor ocispec.Descriptor
+	Referrers  []ocispec.Descriptor
 }
 
-func bytesBlob(mediaType string, data []byte) blob {
-	return blob{
-		desc: ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))},
-		open: func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil },
-	}
+// ManifestLayout is a Layout whose image is one Image Manifest, with the facts of that
+// manifest and its config.
+type ManifestLayout struct {
+	Layout
+	Platform Platform
+	Config   ocispec.Descriptor
+	Layers   []ocispec.Descriptor
+	// Added is the layer Assemble wrote, nil when it wrote none or the layout was not
+	// assembled.
+	Added *Added
+	// Created is the config's created time as RFC 3339, empty when the config omits it.
+	Created string
 }
 
-// layoutBlob installs desc from an existing layout by path (link, not re-hash).
-func layoutBlob(layout string, desc ocispec.Descriptor) blob {
-	p := blobPath(layout, desc.Digest)
-	return blob{
-		desc: desc,
-		path: p,
-		open: func() (io.ReadCloser, error) { return os.Open(p) },
+// OpenLayout reads the layout at path and verifies the image's root blob against its
+// descriptor. A missing layout wraps fs.ErrNotExist.
+func OpenLayout(ctx context.Context, path string) (Layout, error) {
+	if err := ctx.Err(); err != nil {
+		return Layout{}, err
 	}
-}
-
-func blobPath(layout string, d digest.Digest) string {
-	return filepath.Join(layout, "blobs", d.Algorithm().String(), d.Encoded())
-}
-
-func checkSHA256(d digest.Digest) bool {
-	return d.Validate() == nil && d.Algorithm() == digest.SHA256
-}
-
-// layoutIndex checks root against blobs and returns the encoded index.json.
-func layoutIndex(root ocispec.Descriptor, blobs []blob) ([]byte, error) {
-	if !checkSHA256(root.Digest) {
-		return nil, fmt.Errorf("image.layout: root digest %q is not a sha256 digest", root.Digest)
-	}
-	rootHeld := false
-	for _, b := range blobs {
-		if b.desc.Digest == root.Digest {
-			rootHeld = true
-		}
-	}
-	if !rootHeld {
-		return nil, fmt.Errorf("image.layout: root %s is not among the blobs", root.Digest)
-	}
-	index, err := json.Marshal(ocispec.Index{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		Manifests: []ocispec.Descriptor{root},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("image.layout: index.json: %w", err)
-	}
-	return index, nil
-}
-
-// makeLayoutDirs creates staging, its blobs directory and blobDir. MkdirTemp
-// makes 0700 and MkdirAll honors the umask, so chmod spells the mode (R31).
-func makeLayoutDirs(staging, blobDir string) error {
-	for _, dir := range []string{staging, filepath.Join(staging, "blobs"), blobDir} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("image.layout: %w", err)
-		}
-		if err := os.Chmod(dir, 0o755); err != nil {
-			return fmt.Errorf("image.layout: %w", err)
-		}
-	}
-	return nil
-}
-
-// writeLayout lays out blobs plus an index.json naming root at dest (R21, R22).
-// root's blob must be among blobs. Nothing is visible at dest until every blob
-// is written and verified, and on any error dest is left as it was. The sandbox
-// check on dest and on its parent, where staging lives, belongs to the caller.
-func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blobs []blob) (err error) {
-	index, err := layoutIndex(root, blobs)
-	if err != nil {
-		return err
-	}
-
-	dest = filepath.Clean(dest)
-	staging, err := os.MkdirTemp(filepath.Dir(dest), fmt.Sprintf(".%s.staging-*", filepath.Base(dest)))
-	if err != nil {
-		return fmt.Errorf("image.layout: staging directory: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = os.RemoveAll(staging)
-		}
-	}()
-
-	blobDir := filepath.Join(staging, "blobs", digest.SHA256.String())
-	if err := makeLayoutDirs(staging, blobDir); err != nil {
-		return err
-	}
-	if err := file.WriteFileAtomic(filepath.Join(staging, "oci-layout"), []byte(layoutMarker), 0o644); err != nil {
-		return fmt.Errorf("image.layout: oci-layout: %w", err)
-	}
-	if err := file.WriteFileAtomic(filepath.Join(staging, "index.json"), index, 0o644); err != nil {
-		return fmt.Errorf("image.layout: index.json: %w", err)
-	}
-	written := map[digest.Digest]bool{}
-	for _, b := range blobs {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("image.layout: %w", err)
-		}
-		if !checkSHA256(b.desc.Digest) {
-			return fmt.Errorf("image.layout: blob digest %q is not a sha256 digest", b.desc.Digest)
-		}
-		if written[b.desc.Digest] {
-			continue
-		}
-		if err := writeBlob(filepath.Join(blobDir, b.desc.Digest.Encoded()), b); err != nil {
-			return err
-		}
-		written[b.desc.Digest] = true
-	}
-	if err := syncDir(blobDir); err != nil {
-		return fmt.Errorf("image.layout: %w", err)
-	}
-	return replaceDir(staging, dest)
-}
-
-func writeBlob(target string, b blob) error {
-	if b.path != "" {
-		if err := installDiskBlob(b.path, target, b.desc); err == nil {
-			if b.removeAfter {
-				_ = os.Remove(b.path)
-			}
-			return nil
-		}
-	}
-	if b.removeAfter && b.path != "" {
-		defer os.Remove(b.path)
-	}
-	src, err := b.open()
-	if err != nil {
-		return fmt.Errorf("image.layout: blob %s: %w", b.desc.Digest, err)
-	}
-	defer src.Close()
-	v := &verifier{want: b.desc, digester: digest.SHA256.Digester()}
-	if err := file.WriteReader(target, io.TeeReader(src, v), 0o644); err != nil {
-		return fmt.Errorf("image.layout: blob %s: %w", b.desc.Digest, err)
-	}
-	if err := v.check(); err != nil {
-		return fmt.Errorf("image.layout: blob %s: %w", b.desc.Digest, err)
-	}
-	return nil
-}
-
-// installDiskBlob hardlinks then reflinks src to dst (O(1) same-fs); size only.
-// optimization: ~100× ns/op vs stream+rehash (BenchmarkWriteBlobDiskLink, 4 MiB).
-func installDiskBlob(src, dst string, desc ocispec.Descriptor) error {
-	info, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	if info.Size() != desc.Size {
-		return fmt.Errorf("size is %d bytes, descriptor says %d", info.Size(), desc.Size)
-	}
-	if err := os.Link(src, dst); err == nil {
-		// Shared inode: only chmod when the source was not already 0644
-		// (CreateTemp is 0600); skip when linking an existing layout blob.
-		if info.Mode().Perm() == 0o644 {
-			return nil
-		}
-		return os.Chmod(dst, 0o644)
-	}
-	if err := reflink.Clone(src, dst); err != nil {
-		return err
-	}
-	return os.Chmod(dst, 0o644)
-}
-
-// verifier counts and hashes what is written through it.
-type verifier struct {
-	want     ocispec.Descriptor
-	digester digest.Digester
-	n        int64
-}
-
-func (v *verifier) Write(p []byte) (int, error) {
-	v.n += int64(len(p))
-	return v.digester.Hash().Write(p)
-}
-
-func (v *verifier) check() error {
-	if v.n != v.want.Size {
-		return fmt.Errorf("size is %d bytes, descriptor says %d", v.n, v.want.Size)
-	}
-	if got := v.digester.Digest(); got != v.want.Digest {
-		return fmt.Errorf("content hashes to %s, descriptor says %s", got, v.want.Digest)
-	}
-	return nil
-}
-
-// replaceDir swaps staging in for dest: dest moves aside, staging takes its
-// place, and the old tree is removed last. If installing fails the old tree
-// goes back.
-func replaceDir(staging, dest string) error {
-	aside := staging + ".old"
-	hadOld := true
-	if err := os.Rename(dest, aside); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("image.layout: move %s aside: %w", dest, err)
-		}
-		hadOld = false
-	}
-	if err := os.Rename(staging, dest); err != nil {
-		if hadOld {
-			_ = os.Rename(aside, dest)
-		}
-		return fmt.Errorf("image.layout: install %s: %w", dest, err)
-	}
-	if hadOld {
-		if err := os.RemoveAll(aside); err != nil {
-			return fmt.Errorf("image.layout: %s is installed but the old tree %s remains: %w", dest, aside, err)
-		}
-	}
-	return nil
-}
-
-func syncDir(dir string) error {
-	f, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return f.Sync()
-}
-
-// OpenLayout reads the layout at path. It refuses one that does not hold exactly one
-// descriptor and one whose root blob fails its digest or size (R23).
-func OpenLayout(path string) (Layout, error) {
 	marker, err := os.ReadFile(filepath.Join(path, "oci-layout"))
 	if err != nil {
-		return Layout{}, fmt.Errorf("image.open: %s: %w", path, err)
+		return Layout{}, fmt.Errorf("image.open: %w", err)
 	}
 	var m ocispec.ImageLayout
 	if err := json.Unmarshal(marker, &m); err != nil {
@@ -273,46 +54,176 @@ func OpenLayout(path string) (Layout, error) {
 	}
 	raw, err := os.ReadFile(filepath.Join(path, "index.json"))
 	if err != nil {
-		return Layout{}, fmt.Errorf("image.open: %s: %w", path, err)
+		return Layout{}, fmt.Errorf("image.open: %w", err)
 	}
 	var idx ocispec.Index
 	if err := json.Unmarshal(raw, &idx); err != nil {
 		return Layout{}, fmt.Errorf("image.open: %s: index.json: %w", path, err)
 	}
-	if len(idx.Manifests) != 1 {
-		return Layout{}, fmt.Errorf("image.open: %s: index.json holds %d descriptors, want exactly 1", path, len(idx.Manifests))
+	if len(idx.Manifests) == 0 {
+		return Layout{}, fmt.Errorf("image.open: %s: index.json names no image", path)
 	}
-	desc := idx.Manifests[0]
-	if _, err := readBlob(path, desc); err != nil {
-		return Layout{}, err
+	l := Layout{Path: path, Descriptor: idx.Manifests[0], Referrers: idx.Manifests[1:]}
+	switch l.Descriptor.MediaType {
+	case ocispec.MediaTypeImageManifest, ocispec.MediaTypeImageIndex:
+	default:
+		return Layout{}, fmt.Errorf("image.open: %s: the image is %q, want an OCI image manifest or index", path, l.Descriptor.MediaType)
 	}
-	l := Layout{Path: path, Descriptor: desc}
-	if p := desc.Platform; p != nil {
-		l.Platform = Platform{OS: p.OS, Architecture: p.Architecture, Variant: p.Variant}
+	if _, err := l.readBlob(ctx, l.Descriptor); err != nil {
+		return Layout{}, fmt.Errorf("image.open: %w", err)
+	}
+	for _, r := range l.Referrers {
+		if r.ArtifactType == "" {
+			return Layout{}, fmt.Errorf("image.open: %s: index.json entry %s after the image is not a referrer (no artifactType)", path, r.Digest)
+		}
 	}
 	return l, nil
 }
 
-// readBlob returns desc's content from the layout at path, verified against
-// its digest and size.
-func readBlob(path string, desc ocispec.Descriptor) ([]byte, error) {
-	if !checkSHA256(desc.Digest) {
-		return nil, fmt.Errorf("image.open: %s: blob digest %q is not a sha256 digest", path, desc.Digest)
+// Manifests lists the image's platform manifests: the image itself when it is a
+// manifest, or an index's entries, each carrying its platform.
+func (l Layout) Manifests(ctx context.Context) ([]ocispec.Descriptor, error) {
+	if l.Descriptor.MediaType == ocispec.MediaTypeImageManifest {
+		return []ocispec.Descriptor{l.Descriptor}, nil
 	}
-	f, err := os.Open(blobPath(path, desc.Digest))
+	data, err := l.readBlob(ctx, l.Descriptor)
 	if err != nil {
-		return nil, fmt.Errorf("image.open: %s: blob %s: %w", path, desc.Digest, err)
+		return nil, err
 	}
-	defer f.Close()
-	v := &verifier{want: desc, digester: digest.SHA256.Digester()}
-	// One byte past the descriptor's size shows a size mismatch without reading
-	// an arbitrarily large corrupted file.
-	data, err := io.ReadAll(io.TeeReader(io.LimitReader(f, desc.Size+1), v))
+	var idx ocispec.Index
+	if err := json.Unmarshal(data, &idx); err != nil {
+		return nil, fmt.Errorf("%s: index %s: %w", l.Path, l.Descriptor.Digest, err)
+	}
+	for _, m := range idx.Manifests {
+		if m.MediaType != ocispec.MediaTypeImageManifest {
+			return nil, fmt.Errorf("%s: index entry %s is %q, want an OCI image manifest", l.Path, m.Digest, m.MediaType)
+		}
+	}
+	return idx.Manifests, nil
+}
+
+// Manifest reads the image when it is one Image Manifest; an index is an error naming
+// ResolvePlatform.
+func (l Layout) Manifest(ctx context.Context) (ManifestLayout, error) {
+	if l.Descriptor.MediaType != ocispec.MediaTypeImageManifest {
+		return ManifestLayout{}, fmt.Errorf("%s holds an image index; pick a platform with ResolvePlatform", l.Path)
+	}
+	return l.manifest(ctx, l.Descriptor)
+}
+
+// ResolvePlatform returns the image manifest for p: the layout's own manifest when its
+// config's platform matches p, or the index entry that does. Platforms compare
+// normalized, so linux/arm64 finds linux/arm64/v8.
+func (l Layout) ResolvePlatform(ctx context.Context, p Platform) (ManifestLayout, error) {
+	manifests, err := l.Manifests(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("image.open: %s: blob %s: %w", path, desc.Digest, err)
+		return ManifestLayout{}, err
 	}
-	if err := v.check(); err != nil {
-		return nil, fmt.Errorf("image.open: %s: blob %s: %w", path, desc.Digest, err)
+	if l.Descriptor.MediaType == ocispec.MediaTypeImageManifest {
+		m, err := l.Manifest(ctx)
+		if err != nil {
+			return ManifestLayout{}, err
+		}
+		if m.Platform.Normalize() != p.Normalize() {
+			return ManifestLayout{}, fmt.Errorf("%s holds %s, not %s", l.Path, m.Platform, p)
+		}
+		return m, nil
+	}
+	for _, d := range manifests {
+		if platformOf(d.Platform).Normalize() == p.Normalize() {
+			return l.manifest(ctx, d)
+		}
+	}
+	return ManifestLayout{}, fmt.Errorf("%s: no manifest for %s", l.Path, p)
+}
+
+// manifest reads the manifest desc names and its config. Layers are checked for
+// presence and size only; see staging.link.
+func (l Layout) manifest(ctx context.Context, desc ocispec.Descriptor) (ManifestLayout, error) {
+	data, err := l.readBlob(ctx, desc)
+	if err != nil {
+		return ManifestLayout{}, err
+	}
+	var man ocispec.Manifest
+	if err := json.Unmarshal(data, &man); err != nil {
+		return ManifestLayout{}, fmt.Errorf("%s: manifest %s: %w", l.Path, desc.Digest, err)
+	}
+	if man.Config.MediaType != ocispec.MediaTypeImageConfig {
+		return ManifestLayout{}, fmt.Errorf("%s: manifest %s: config is %q, want %s", l.Path, desc.Digest, man.Config.MediaType, ocispec.MediaTypeImageConfig)
+	}
+	cfg, err := l.config(ctx, man.Config)
+	if err != nil {
+		return ManifestLayout{}, err
+	}
+	for _, layer := range man.Layers {
+		if err := checkLayerMediaType(layer.MediaType); err != nil {
+			return ManifestLayout{}, fmt.Errorf("%s: manifest %s: %w", l.Path, desc.Digest, err)
+		}
+		info, err := os.Stat(blobPath(l.Path, layer.Digest))
+		if err != nil {
+			return ManifestLayout{}, fmt.Errorf("%s: layer %s: %w", l.Path, layer.Digest, err)
+		}
+		if info.Size() != layer.Size {
+			return ManifestLayout{}, fmt.Errorf("%s: layer %s: size is %d bytes, descriptor says %d", l.Path, layer.Digest, info.Size(), layer.Size)
+		}
+	}
+	out := ManifestLayout{
+		Layout:   Layout{Path: l.Path, Descriptor: desc},
+		Platform: Platform{OS: cfg.OS, Architecture: cfg.Architecture, Variant: cfg.Variant},
+		Config:   man.Config,
+		Layers:   man.Layers,
+	}
+	if desc.Digest == l.Descriptor.Digest {
+		out.Layout = l
+	}
+	if cfg.Created != nil {
+		out.Created = cfg.Created.Format(timeLayout)
+	}
+	return out, nil
+}
+
+func (l Layout) config(ctx context.Context, desc ocispec.Descriptor) (ocispec.Image, error) {
+	data, err := l.readBlob(ctx, desc)
+	if err != nil {
+		return ocispec.Image{}, err
+	}
+	var cfg ocispec.Image
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return ocispec.Image{}, fmt.Errorf("%s: config %s: %w", l.Path, desc.Digest, err)
+	}
+	return cfg, nil
+}
+
+// readBlob returns desc's bytes, verified against its digest and size. It is for
+// manifests and configs, which fit in memory.
+func (l Layout) readBlob(ctx context.Context, desc ocispec.Descriptor) ([]byte, error) {
+	if err := checkDigest(desc.Digest); err != nil {
+		return nil, fmt.Errorf("%s: blob %q: %w", l.Path, desc.Digest, err)
+	}
+	if desc.Size > registryJSONLimit {
+		return nil, fmt.Errorf("%s: blob %s is %d bytes, over the %d a manifest or config may be", l.Path, desc.Digest, desc.Size, registryJSONLimit)
+	}
+	data, err := os.ReadFile(blobPath(l.Path, desc.Digest))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", l.Path, err)
+	}
+	if err := Verify(ctx, bytes.NewReader(data), desc); err != nil {
+		return nil, fmt.Errorf("%s: blob %s: %w", l.Path, desc.Digest, err)
 	}
 	return data, nil
+}
+
+// registryJSONLimit bounds a manifest or config read into memory, as libs/oci does.
+const registryJSONLimit = 4 << 20
+
+// timeLayout renders config.created. It keeps the offset the config holds, so the
+// receipt and the config bytes say the same instant the same way.
+const timeLayout = "2006-01-02T15:04:05.999999999Z07:00"
+
+func checkLayerMediaType(mt string) error {
+	switch mt {
+	case ocispec.MediaTypeImageLayer, ocispec.MediaTypeImageLayerGzip, ocispec.MediaTypeImageLayerZstd:
+		return nil
+	}
+	return fmt.Errorf("layer media type %q is not an OCI layer (tar, tar+gzip, tar+zstd)", mt)
 }

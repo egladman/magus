@@ -119,74 +119,97 @@ func ObjectHTTPResponse(v types.HTTPResponse) vm.Value {
 	return out
 }
 
-func ObjectImageDigest(v types.ImageDigest) vm.Value {
+func ObjectImageDigest(v types.ImageDigest, enums ffi.EnumCases) vm.Value {
+	return enums.Instance("Digest", []string{"algorithm", "encoded"}, []vm.Value{vm.StringValue(v.Algorithm), vm.StringValue(v.Encoded)})
+}
+
+func ObjectImagePlatform(v types.ImagePlatform, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("algorithm", vm.StringValue(v.Algorithm))
-	out.MapSet("encoded", vm.StringValue(v.Encoded))
+	out.MapSet("os", enums.Case("OS", string(v.OS)))
+	out.MapSet("architecture", enums.Case("Architecture", string(v.Architecture)))
+	out.MapSet("variant", enums.Case("Variant", string(v.Variant)))
 	return out
 }
 
-func ObjectImagePlatform(v types.ImagePlatform) vm.Value {
+func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("os", vm.StringValue(v.OS))
-	out.MapSet("architecture", vm.StringValue(v.Architecture))
-	out.MapSet("variant", vm.StringValue(v.Variant))
-	return out
-}
-
-func ObjectImageLayer(v types.ImageLayer) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("digest", ObjectImageDigest(v.Digest))
-	out.MapSet("diffID", ObjectImageDigest(v.DiffID))
+	out.MapSet("mediaType", enums.Case("MediaType", string(v.MediaType)))
+	out.MapSet("artifactType", enums.Case("MediaType", string(v.ArtifactType)))
+	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
 	out.MapSet("size", vm.IntValue(int64(v.Size)))
-	out.MapSet("mediaType", vm.StringValue(v.MediaType))
+	optPlatform := vm.Null
+	if v.Platform != nil {
+		optPlatform = ObjectImagePlatform((*v.Platform), enums)
+	}
+	out.MapSet("platform", optPlatform)
+	mappedAnnotations := vm.NewMap()
+	for keyAnnotations, itemAnnotations := range v.Annotations {
+		mappedAnnotations.MapSet(keyAnnotations, vm.StringValue(itemAnnotations))
+	}
+	out.MapSet("annotations", mappedAnnotations)
 	return out
 }
 
-func ObjectImageLayout(v types.ImageLayout) vm.Value {
+func ObjectImageAdded(v types.ImageAdded, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("layer", ObjectImageDescriptor(v.Layer, enums))
+	out.MapSet("diffID", ObjectImageDigest(v.DiffID, enums))
+	out.MapSet("files", vm.IntValue(int64(v.Files)))
+	out.MapSet("symlinks", vm.IntValue(int64(v.Symlinks)))
+	out.MapSet("directories", vm.IntValue(int64(v.Directories)))
+	return out
+}
+
+func ObjectImageLayout(v types.ImageLayout, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("digest", ObjectImageDigest(v.Digest))
-	out.MapSet("mediaType", vm.StringValue(v.MediaType))
-	out.MapSet("size", vm.IntValue(int64(v.Size)))
-	out.MapSet("platform", ObjectImagePlatform(v.Platform))
-	out.MapSet("op", vm.StringValue(v.Op))
-	out.MapSet("base", vm.StringValue(v.Base))
-	out.MapSet("baseDigest", ObjectImageDigest(v.BaseDigest))
-	out.MapSet("fileCount", vm.IntValue(int64(v.FileCount)))
-	out.MapSet("symlinkCount", vm.IntValue(int64(v.SymlinkCount)))
-	out.MapSet("layer", ObjectImageLayer(v.Layer))
-	out.MapSet("configDigest", ObjectImageDigest(v.ConfigDigest))
+	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
+	itemsReferrers := make([]vm.Value, len(v.Referrers))
+	for indexReferrers := range v.Referrers {
+		itemsReferrers[indexReferrers] = ObjectImageDescriptor(v.Referrers[indexReferrers], enums)
+	}
+	out.MapSet("referrers", vm.ListValue(itemsReferrers))
+	optPlatform := vm.Null
+	if v.Platform != nil {
+		optPlatform = ObjectImagePlatform((*v.Platform), enums)
+	}
+	out.MapSet("platform", optPlatform)
+	optConfig := vm.Null
+	if v.Config != nil {
+		optConfig = ObjectImageDescriptor((*v.Config), enums)
+	}
+	out.MapSet("config", optConfig)
+	itemsLayers := make([]vm.Value, len(v.Layers))
+	for indexLayers := range v.Layers {
+		itemsLayers[indexLayers] = ObjectImageDescriptor(v.Layers[indexLayers], enums)
+	}
+	out.MapSet("layers", vm.ListValue(itemsLayers))
+	optAdded := vm.Null
+	if v.Added != nil {
+		optAdded = ObjectImageAdded((*v.Added), enums)
+	}
+	out.MapSet("added", optAdded)
 	out.MapSet("created", vm.StringValue(v.Created))
 	return out
 }
 
-func ObjectImagePublished(v types.ImagePublished) vm.Value {
+func ObjectImagePushed(v types.ImagePushed, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("repository", vm.StringValue(v.Repository))
-	out.MapSet("digest", ObjectImageDigest(v.Digest))
+	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
 	itemsTags := make([]vm.Value, len(v.Tags))
 	for indexTags := range v.Tags {
 		itemsTags[indexTags] = vm.StringValue(v.Tags[indexTags])
 	}
 	out.MapSet("tags", vm.ListValue(itemsTags))
-	out.MapSet("op", vm.StringValue(v.Op))
+	out.MapSet("reference", vm.StringValue(v.Reference))
 	return out
 }
 
-func ObjectImageSBOM(v types.ImageSBOM) vm.Value {
+func ObjectImageDocument(v types.ImageDocument, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("mediaType", vm.StringValue(v.MediaType))
-	out.MapSet("digest", ObjectImageDigest(v.Digest))
-	return out
-}
-
-func ObjectImageProvenance(v types.ImageProvenance) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("mediaType", vm.StringValue(v.MediaType))
-	out.MapSet("digest", ObjectImageDigest(v.Digest))
+	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
 	return out
 }
 
@@ -5295,18 +5318,17 @@ func ObjectLimits(v types.Limits) vm.Value {
 func ObjectImageFile(v types.ImageFile) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("source", vm.StringValue(v.Source))
-	out.MapSet("destination", vm.StringValue(v.Destination))
+	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("mode", vm.IntValue(int64(v.Mode)))
 	out.MapSet("uid", vm.IntValue(int64(v.UID)))
 	out.MapSet("gid", vm.IntValue(int64(v.GID)))
 	return out
 }
 
-func ObjectImageDirPlacement(v types.ImageDirPlacement) vm.Value {
+func ObjectImageTree(v types.ImageTree, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("source", vm.StringValue(v.Source))
-	out.MapSet("destination", vm.StringValue(v.Destination))
-	out.MapSet("strip", vm.IntValue(int64(v.Strip)))
+	out.MapSet("path", vm.StringValue(v.Path))
 	itemsInclude := make([]vm.Value, len(v.Include))
 	for indexInclude := range v.Include {
 		itemsInclude[indexInclude] = vm.StringValue(v.Include[indexInclude])
@@ -5317,67 +5339,84 @@ func ObjectImageDirPlacement(v types.ImageDirPlacement) vm.Value {
 		itemsExclude[indexExclude] = vm.StringValue(v.Exclude[indexExclude])
 	}
 	out.MapSet("exclude", vm.ListValue(itemsExclude))
-	out.MapSet("maxDepth", vm.IntValue(int64(v.MaxDepth)))
-	out.MapSet("modePolicy", vm.StringValue(v.ModePolicy))
-	out.MapSet("fileMode", vm.IntValue(int64(v.FileMode)))
-	out.MapSet("dirMode", vm.IntValue(int64(v.DirMode)))
+	out.MapSet("modes", enums.Case("ModePolicy", string(v.Modes)))
+	out.MapSet("symlinks", enums.Case("SymlinkPolicy", string(v.Symlinks)))
 	out.MapSet("uid", vm.IntValue(int64(v.UID)))
 	out.MapSet("gid", vm.IntValue(int64(v.GID)))
-	out.MapSet("symlinks", vm.StringValue(v.Symlinks))
-	out.MapSet("emptyDirs", vm.BoolValue(v.EmptyDirs))
-	out.MapSet("maxFiles", vm.IntValue(int64(v.MaxFiles)))
-	out.MapSet("maxBytes", vm.IntValue(int64(v.MaxBytes)))
 	return out
 }
 
 func ObjectImageSymlink(v types.ImageSymlink) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("destination", vm.StringValue(v.Destination))
+	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("target", vm.StringValue(v.Target))
 	out.MapSet("uid", vm.IntValue(int64(v.UID)))
 	out.MapSet("gid", vm.IntValue(int64(v.GID)))
 	return out
 }
 
-func ObjectImageSecret(v types.ImageSecret) vm.Value {
+func ObjectImageDirectory(v types.ImageDirectory) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("value", vm.StringValue(v.Value))
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("mode", vm.IntValue(int64(v.Mode)))
+	out.MapSet("uid", vm.IntValue(int64(v.UID)))
+	out.MapSet("gid", vm.IntValue(int64(v.GID)))
 	return out
 }
 
-func ObjectImageRegistryAuth(v types.ImageRegistryAuth) vm.Value {
+func ObjectImageConfig(v types.ImageConfig) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("username", vm.StringValue(v.Username))
-	out.MapSet("password", ObjectImageSecret(v.Password))
-	return out
-}
-
-func ObjectImageProvenanceSpec(v types.ImageProvenanceSpec) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("sourceRevision", vm.StringValue(v.SourceRevision))
-	out.MapSet("builderID", vm.StringValue(v.BuilderID))
-	return out
-}
-
-func ObjectImageSpec(v types.ImageSpec) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("base", vm.StringValue(v.Base))
-	out.MapSet("platform", ObjectImagePlatform(v.Platform))
-	itemsFiles := make([]vm.Value, len(v.Files))
-	for indexFiles := range v.Files {
-		itemsFiles[indexFiles] = ObjectImageFile(v.Files[indexFiles])
+	optUser := vm.Null
+	if v.User != nil {
+		optUser = vm.StringValue((*v.User))
 	}
-	out.MapSet("files", vm.ListValue(itemsFiles))
-	itemsDirs := make([]vm.Value, len(v.Dirs))
-	for indexDirs := range v.Dirs {
-		itemsDirs[indexDirs] = ObjectImageDirPlacement(v.Dirs[indexDirs])
+	out.MapSet("user", optUser)
+	optWorkingDir := vm.Null
+	if v.WorkingDir != nil {
+		optWorkingDir = vm.StringValue((*v.WorkingDir))
 	}
-	out.MapSet("dirs", vm.ListValue(itemsDirs))
-	itemsSymlinks := make([]vm.Value, len(v.Symlinks))
-	for indexSymlinks := range v.Symlinks {
-		itemsSymlinks[indexSymlinks] = ObjectImageSymlink(v.Symlinks[indexSymlinks])
+	out.MapSet("workingDir", optWorkingDir)
+	optStopSignal := vm.Null
+	if v.StopSignal != nil {
+		optStopSignal = vm.StringValue((*v.StopSignal))
 	}
-	out.MapSet("symlinks", vm.ListValue(itemsSymlinks))
+	out.MapSet("stopSignal", optStopSignal)
+	optEntrypoint := vm.Null
+	if v.Entrypoint != nil {
+		itemsEntrypoint := make([]vm.Value, len((*v.Entrypoint)))
+		for indexEntrypoint := range *v.Entrypoint {
+			itemsEntrypoint[indexEntrypoint] = vm.StringValue((*v.Entrypoint)[indexEntrypoint])
+		}
+		optEntrypoint = vm.ListValue(itemsEntrypoint)
+	}
+	out.MapSet("entrypoint", optEntrypoint)
+	optCmd := vm.Null
+	if v.Cmd != nil {
+		itemsCmd := make([]vm.Value, len((*v.Cmd)))
+		for indexCmd := range *v.Cmd {
+			itemsCmd[indexCmd] = vm.StringValue((*v.Cmd)[indexCmd])
+		}
+		optCmd = vm.ListValue(itemsCmd)
+	}
+	out.MapSet("cmd", optCmd)
+	optExposedPorts := vm.Null
+	if v.ExposedPorts != nil {
+		itemsExposedPorts := make([]vm.Value, len((*v.ExposedPorts)))
+		for indexExposedPorts := range *v.ExposedPorts {
+			itemsExposedPorts[indexExposedPorts] = vm.StringValue((*v.ExposedPorts)[indexExposedPorts])
+		}
+		optExposedPorts = vm.ListValue(itemsExposedPorts)
+	}
+	out.MapSet("exposedPorts", optExposedPorts)
+	optVolumes := vm.Null
+	if v.Volumes != nil {
+		itemsVolumes := make([]vm.Value, len((*v.Volumes)))
+		for indexVolumes := range *v.Volumes {
+			itemsVolumes[indexVolumes] = vm.StringValue((*v.Volumes)[indexVolumes])
+		}
+		optVolumes = vm.ListValue(itemsVolumes)
+	}
+	out.MapSet("volumes", optVolumes)
 	mappedEnv := vm.NewMap()
 	for keyEnv, itemEnv := range v.Env {
 		mappedEnv.MapSet(keyEnv, vm.StringValue(itemEnv))
@@ -5388,30 +5427,71 @@ func ObjectImageSpec(v types.ImageSpec) vm.Value {
 		itemsUnsetEnv[indexUnsetEnv] = vm.StringValue(v.UnsetEnv[indexUnsetEnv])
 	}
 	out.MapSet("unsetEnv", vm.ListValue(itemsUnsetEnv))
-	out.MapSet("user", vm.StringValue(v.User))
-	out.MapSet("workingDir", vm.StringValue(v.WorkingDir))
-	itemsEntrypoint := make([]vm.Value, len(v.Entrypoint))
-	for indexEntrypoint := range v.Entrypoint {
-		itemsEntrypoint[indexEntrypoint] = vm.StringValue(v.Entrypoint[indexEntrypoint])
-	}
-	out.MapSet("entrypoint", vm.ListValue(itemsEntrypoint))
-	out.MapSet("resetEntrypoint", vm.BoolValue(v.ResetEntrypoint))
-	itemsCommand := make([]vm.Value, len(v.Command))
-	for indexCommand := range v.Command {
-		itemsCommand[indexCommand] = vm.StringValue(v.Command[indexCommand])
-	}
-	out.MapSet("command", vm.ListValue(itemsCommand))
-	out.MapSet("resetCommand", vm.BoolValue(v.ResetCommand))
 	mappedLabels := vm.NewMap()
 	for keyLabels, itemLabels := range v.Labels {
 		mappedLabels.MapSet(keyLabels, vm.StringValue(itemLabels))
 	}
 	out.MapSet("labels", mappedLabels)
+	return out
+}
+
+func ObjectImageSpec(v types.ImageSpec, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StringValue(v.Base))
+	out.MapSet("scratch", vm.BoolValue(v.Scratch))
+	out.MapSet("platform", ObjectImagePlatform(v.Platform, enums))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = ObjectImageFile(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsTrees := make([]vm.Value, len(v.Trees))
+	for indexTrees := range v.Trees {
+		itemsTrees[indexTrees] = ObjectImageTree(v.Trees[indexTrees], enums)
+	}
+	out.MapSet("trees", vm.ListValue(itemsTrees))
+	itemsSymlinks := make([]vm.Value, len(v.Symlinks))
+	for indexSymlinks := range v.Symlinks {
+		itemsSymlinks[indexSymlinks] = ObjectImageSymlink(v.Symlinks[indexSymlinks])
+	}
+	out.MapSet("symlinks", vm.ListValue(itemsSymlinks))
+	itemsDirectories := make([]vm.Value, len(v.Directories))
+	for indexDirectories := range v.Directories {
+		itemsDirectories[indexDirectories] = ObjectImageDirectory(v.Directories[indexDirectories])
+	}
+	out.MapSet("directories", vm.ListValue(itemsDirectories))
+	out.MapSet("config", ObjectImageConfig(v.Config))
 	mappedAnnotations := vm.NewMap()
 	for keyAnnotations, itemAnnotations := range v.Annotations {
 		mappedAnnotations.MapSet(keyAnnotations, vm.StringValue(itemAnnotations))
 	}
 	out.MapSet("annotations", mappedAnnotations)
 	out.MapSet("created", vm.StringValue(v.Created))
+	return out
+}
+
+func ObjectImageRegistryAuth(v types.ImageRegistryAuth) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("username", vm.StringValue(v.Username))
+	out.MapSet("password", ObjectSecret(v.Password))
+	return out
+}
+
+func ObjectImageMaterial(v types.ImageMaterial, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("uri", vm.StringValue(v.URI))
+	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
+	return out
+}
+
+func ObjectImageProvenance(v types.ImageProvenance, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("builderId", vm.StringValue(v.BuilderID))
+	out.MapSet("sourceRevision", vm.StringValue(v.SourceRevision))
+	itemsMaterials := make([]vm.Value, len(v.Materials))
+	for indexMaterials := range v.Materials {
+		itemsMaterials[indexMaterials] = ObjectImageMaterial(v.Materials[indexMaterials], enums)
+	}
+	out.MapSet("materials", vm.ListValue(itemsMaterials))
 	return out
 }

@@ -362,23 +362,26 @@ var boundaryTypes = []boundaryType{
 	{Name: "Prompt", Type: reflect.TypeFor[types.Prompt]()},
 	{Name: "Setting", Type: reflect.TypeFor[types.Setting]()},
 	{Name: "Limits", Type: reflect.TypeFor[types.Limits]()},
-	// The image module's records, leaf first: ImageSpec carries an ImagePlatform and lists of
-	// the file and symlink records, ImageLayout an ImagePlatform. The platform, layout and
-	// published records are RuntimeObject because image functions hand them back to Buzz.
-	{Name: "ImagePlatform", Type: reflect.TypeFor[types.ImagePlatform](), RuntimeObject: true},
-	{Name: "ImageDigest", Type: reflect.TypeFor[types.ImageDigest](), RuntimeObject: true},
-	{Name: "ImageLayer", Type: reflect.TypeFor[types.ImageLayer](), RuntimeObject: true},
-	{Name: "ImageFile", Type: reflect.TypeFor[types.ImageFile]()},
-	{Name: "ImageDirPlacement", Type: reflect.TypeFor[types.ImageDirPlacement]()},
-	{Name: "ImageSymlink", Type: reflect.TypeFor[types.ImageSymlink]()},
-	{Name: "ImageSecret", Type: reflect.TypeFor[types.ImageSecret]()},
-	{Name: "ImageRegistryAuth", Type: reflect.TypeFor[types.ImageRegistryAuth]()},
-	{Name: "ImageProvenanceSpec", Type: reflect.TypeFor[types.ImageProvenanceSpec]()},
-	{Name: "ImageSpec", Type: reflect.TypeFor[types.ImageSpec]()},
-	{Name: "ImageLayout", Type: reflect.TypeFor[types.ImageLayout](), RuntimeObject: true},
-	{Name: "ImagePublished", Type: reflect.TypeFor[types.ImagePublished](), RuntimeObject: true},
-	{Name: "ImageSBOM", Type: reflect.TypeFor[types.ImageSBOM](), RuntimeObject: true},
-	{Name: "ImageProvenance", Type: reflect.TypeFor[types.ImageProvenance](), RuntimeObject: true},
+	// The image module's records, leaf first. The module namespaces them, so the Buzz names
+	// drop the Image prefix. Digest carries a hand-written string() so Buzz reads the OCI
+	// form without rejoining the fields; its encoder builds an instance for that.
+	{Name: "Platform", Type: reflect.TypeFor[types.ImagePlatform](), RuntimeObject: true},
+	{Name: "Digest", Type: reflect.TypeFor[types.ImageDigest](), RuntimeObject: true,
+		Methods: "fun string() > str {\n        if (this.algorithm == \"\" and this.encoded == \"\") {\n            return \"\";\n        }\n        return \"{this.algorithm}:{this.encoded}\";\n    }"},
+	{Name: "Descriptor", Type: reflect.TypeFor[types.ImageDescriptor](), RuntimeObject: true},
+	{Name: "Added", Type: reflect.TypeFor[types.ImageAdded](), RuntimeObject: true},
+	{Name: "Layout", Type: reflect.TypeFor[types.ImageLayout](), RuntimeObject: true},
+	{Name: "File", Type: reflect.TypeFor[types.ImageFile]()},
+	{Name: "Tree", Type: reflect.TypeFor[types.ImageTree]()},
+	{Name: "Symlink", Type: reflect.TypeFor[types.ImageSymlink]()},
+	{Name: "Directory", Type: reflect.TypeFor[types.ImageDirectory]()},
+	{Name: "Config", Type: reflect.TypeFor[types.ImageConfig]()},
+	{Name: "Spec", Type: reflect.TypeFor[types.ImageSpec]()},
+	{Name: "RegistryAuth", Type: reflect.TypeFor[types.ImageRegistryAuth]()},
+	{Name: "Pushed", Type: reflect.TypeFor[types.ImagePushed](), RuntimeObject: true},
+	{Name: "Material", Type: reflect.TypeFor[types.ImageMaterial]()},
+	{Name: "Provenance", Type: reflect.TypeFor[types.ImageProvenance]()},
+	{Name: "Document", Type: reflect.TypeFor[types.ImageDocument](), RuntimeObject: true},
 	{Name: "ShippedAgent", Type: reflect.TypeFor[types.ShippedAgent](), RuntimeObject: true},
 	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
@@ -647,6 +650,36 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"refs", "refs"}, {"test", "test"}, {"output", "output"},
 			{"released", "released"}, {"dead", "dead"}},
 	},
+	// The image module's closed sets. Each starts with its unset case, so a Platform or
+	// Tree that omits the field reaches Go as "" and is refused rather than read as
+	// linux/amd64 or as some policy nobody chose.
+	{Name: "OS", Type: reflect.TypeFor[types.ImageOS](), Cases: []enumCase{{"none", ""}, {"linux", "linux"}}},
+	{
+		Name:  "Architecture",
+		Type:  reflect.TypeFor[types.ImageArchitecture](),
+		Cases: []enumCase{{"none", ""}, {"amd64", "amd64"}, {"arm64", "arm64"}},
+	},
+	{Name: "Variant", Type: reflect.TypeFor[types.ImageVariant](), Cases: []enumCase{{"none", ""}, {"v8", "v8"}}},
+	{
+		Name: "MediaType",
+		Type: reflect.TypeFor[types.ImageMediaType](),
+		Cases: []enumCase{{"none", ""},
+			{"manifest", string(types.ImageMediaTypeManifest)}, {"index", string(types.ImageMediaTypeIndex)},
+			{"config", string(types.ImageMediaTypeConfig)}, {"layer", string(types.ImageMediaTypeLayer)},
+			{"layerGzip", string(types.ImageMediaTypeLayerGzip)}, {"layerZstd", string(types.ImageMediaTypeLayerZstd)},
+			{"empty", string(types.ImageMediaTypeEmpty)}, {"spdx", string(types.ImageMediaTypeSPDX)},
+			{"inToto", string(types.ImageMediaTypeInToto)}},
+	},
+	{
+		Name:  "ModePolicy",
+		Type:  reflect.TypeFor[types.ImageModePolicy](),
+		Cases: []enumCase{{"none", ""}, {"fixed", "fixed"}, {"executableBit", "executable-bit"}},
+	},
+	{
+		Name:  "SymlinkPolicy",
+		Type:  reflect.TypeFor[types.ImageSymlinkPolicy](),
+		Cases: []enumCase{{"none", ""}, {"refuse", "refuse"}, {"keep", "keep"}, {"follow", "follow"}},
+	},
 	{
 		Name:  "GroupingVerdict",
 		Type:  reflect.TypeFor[types.GroupingVerdict](),
@@ -680,6 +713,10 @@ type boundaryType struct {
 	Name          string
 	Type          reflect.Type
 	RuntimeObject bool
+	// Methods is Buzz source for methods the mirror declares after its fields. A mirror
+	// with methods is encoded as an instance of the session's object, never a map: a map
+	// has no methods to dispatch.
+	Methods string
 }
 
 // buzzName returns the BUZZ name a Go type mirrors as, which is the registry key
@@ -694,6 +731,16 @@ func buzzName(rt reflect.Type) string {
 		}
 	}
 	return rt.Name()
+}
+
+// hasMethods reports whether rt's mirror declares hand-written methods.
+func hasMethods(rt reflect.Type) bool {
+	for _, entry := range boundaryTypes {
+		if entry.Type == rt {
+			return entry.Methods != ""
+		}
+	}
+	return false
 }
 
 func boundaryTypeNamed(name string) (boundaryType, bool) {

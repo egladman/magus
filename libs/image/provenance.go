@@ -3,103 +3,127 @@ package image
 import (
 	"context"
 	"fmt"
-	"os"
-	"time"
+
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/opencontainers/go-digest"
 )
 
-// ProvenanceMaterial is one content-addressed input to an image write.
-type ProvenanceMaterial struct {
+// Provenance is what an in-toto statement says built an image. Both strings are
+// required: a statement with no builder or no source attests nothing.
+type Provenance struct {
+	BuilderID      string // SLSA runDetails.builder.id, e.g. a CI workflow's URL
+	SourceRevision string // the commit the image was built from
+	// Materials are further inputs. The digest of every base the image was assembled
+	// over is added from the layout; a caller does not repeat them.
+	Materials []Material
+}
+
+// Material is one content-addressed input.
+type Material struct {
 	URI    string
-	Digest Digest
+	Digest digest.Digest
 }
 
-// ProvenanceSpec is the explicit material for an in-toto SLSA-ish statement.
-type ProvenanceSpec struct {
-	SourceRevision string
-	BuilderID      string
-	Materials      []ProvenanceMaterial
-}
+const buildType = "https://github.com/egladman/magus/image/assemble@v1"
 
-// ProvenanceDoc is a written in-toto statement.
-type ProvenanceDoc struct {
-	Path      string
-	MediaType string
-	Digest    Digest
-}
-
-// WriteProvenance writes a deterministic in-toto statement for layout to dest.
-func WriteProvenance(ctx context.Context, layout Layout, spec ProvenanceSpec, dest string) (ProvenanceDoc, error) {
-	if err := ctx.Err(); err != nil {
-		return ProvenanceDoc{}, fmt.Errorf("image.provenance: %w", err)
+// WriteProvenance writes a deterministic in-toto Statement v1 with a SLSA v1 provenance
+// predicate for the image at layout to path. The subject is named by its root digest,
+// never a host path, so two checkouts write the same bytes.
+func WriteProvenance(ctx context.Context, layout string, p Provenance, path string) (Document, error) {
+	if err := p.validate(); err != nil {
+		return Document{}, fmt.Errorf("image.provenance: %w", err)
 	}
-	layout, err := provenanceLayout(layout)
+	l, err := OpenLayout(ctx, layout)
 	if err != nil {
-		return ProvenanceDoc{}, err
+		return Document{}, fmt.Errorf("image.provenance: %w", err)
 	}
-	if spec.BuilderID == "" {
-		return ProvenanceDoc{}, fmt.Errorf("image.provenance: builderId is empty")
-	}
-	data, err := json.Marshal(provenanceStatement(layout, spec))
+	bases, err := baseMaterials(ctx, l)
 	if err != nil {
-		return ProvenanceDoc{}, fmt.Errorf("image.provenance: marshal: %w", err)
+		return Document{}, fmt.Errorf("image.provenance: %w", err)
 	}
-	if err := os.WriteFile(dest, append(data, '\n'), 0o644); err != nil {
-		return ProvenanceDoc{}, fmt.Errorf("image.provenance: write %q: %w", dest, err)
+	deps := make([]map[string]any, 0, len(p.Materials)+len(bases))
+	for _, m := range append(bases, p.Materials...) {
+		dep := map[string]any{"digest": map[string]string{m.Digest.Algorithm().String(): m.Digest.Encoded()}}
+		// A base assembled from a local layout has no name; SLSA takes a digest alone.
+		if m.URI != "" {
+			dep["uri"] = m.URI
+		}
+		deps = append(deps, dep)
 	}
-	return ProvenanceDoc{
-		Path:      dest,
-		MediaType: "application/vnd.in-toto+json",
-		Digest:    MustDigest(digest.FromBytes(data)),
-	}, nil
-}
-
-func provenanceLayout(layout Layout) (Layout, error) {
-	if layout.Path == "" {
-		return Layout{}, fmt.Errorf("image.provenance: layout path is empty")
-	}
-	if layout.Descriptor.Digest != "" {
-		return layout, nil
-	}
-	opened, err := OpenLayout(layout.Path)
-	if err != nil {
-		return Layout{}, fmt.Errorf("image.provenance: %w", err)
-	}
-	return opened, nil
-}
-
-func provenanceStatement(layout Layout, spec ProvenanceSpec) map[string]any {
-	materials := make([]map[string]any, 0, len(spec.Materials))
-	for _, m := range spec.Materials {
-		materials = append(materials, map[string]any{
-			"uri":    m.URI,
-			"digest": map[string]string{"sha256": m.Digest.Encoded()},
-		})
-	}
-	epoch := time.Unix(0, 0).UTC().Format(time.RFC3339)
-	return map[string]any{
-		"_type":         "https://in-toto.io/Statement/v0.1",
-		"predicateType": "https://slsa.dev/provenance/v0.2",
+	d := l.Descriptor.Digest
+	statement := map[string]any{
+		"_type": "https://in-toto.io/Statement/v1",
 		"subject": []map[string]any{{
-			"name":   layout.Path,
-			"digest": map[string]string{"sha256": layout.Descriptor.Digest.Encoded()},
+			"name":   d.String(),
+			"digest": map[string]string{d.Algorithm().String(): d.Encoded()},
 		}},
+		"predicateType": "https://slsa.dev/provenance/v1",
 		"predicate": map[string]any{
-			"builder": map[string]any{"id": spec.BuilderID},
-			"metadata": map[string]any{
-				"buildStartedOn":  epoch,
-				"buildFinishedOn": epoch,
+			"buildDefinition": map[string]any{
+				"buildType":            buildType,
+				"externalParameters":   map[string]any{"sourceRevision": p.SourceRevision},
+				"resolvedDependencies": deps,
 			},
-			"materials": materials,
-			"invocation": map[string]any{
-				"configSource": map[string]any{
-					"uri":        spec.SourceRevision,
-					"digest":     map[string]string{},
-					"entryPoint": "image.assemble",
-				},
+			"runDetails": map[string]any{
+				"builder": map[string]any{"id": p.BuilderID},
 			},
 		},
 	}
+	out, err := writeDocument(path, MediaTypeInToto, statement)
+	if err != nil {
+		return Document{}, fmt.Errorf("image.provenance: %w", err)
+	}
+	return out, nil
+}
+
+func (p Provenance) validate() error {
+	if p.BuilderID == "" || p.SourceRevision == "" {
+		return fmt.Errorf("builderID %q and sourceRevision %q are both required", p.BuilderID, p.SourceRevision)
+	}
+	for i, m := range p.Materials {
+		if m.URI == "" {
+			return fmt.Errorf("materials[%d]: uri is empty", i)
+		}
+		if err := checkDigest(m.Digest); err != nil {
+			return fmt.Errorf("materials[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// baseMaterials reads org.opencontainers.image.base.digest (and base.name) from each
+// platform manifest of l, in manifest order, once per digest.
+func baseMaterials(ctx context.Context, l Layout) ([]Material, error) {
+	manifests, err := l.Manifests(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []Material
+	seen := map[digest.Digest]bool{}
+	for _, m := range manifests {
+		data, err := l.readBlob(ctx, m)
+		if err != nil {
+			return nil, err
+		}
+		var man ocispec.Manifest
+		if err := json.Unmarshal(data, &man); err != nil {
+			return nil, fmt.Errorf("manifest %s: %w", m.Digest, err)
+		}
+		raw := man.Annotations[ocispec.AnnotationBaseImageDigest]
+		if raw == "" {
+			continue
+		}
+		d, err := ParseDigest(raw)
+		if err != nil {
+			return nil, fmt.Errorf("manifest %s: %w", m.Digest, err)
+		}
+		if seen[d] {
+			continue
+		}
+		seen[d] = true
+		out = append(out, Material{URI: man.Annotations[ocispec.AnnotationBaseImageName], Digest: d})
+	}
+	return out, nil
 }

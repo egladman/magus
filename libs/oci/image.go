@@ -40,7 +40,7 @@ type RawManifest struct {
 // Manifest fetches the manifest or index ref pins. ref must carry a digest: the body is
 // verified against it before it is returned, and a tag could name a different one
 // tomorrow. The media type is the Content-Type the registry sent, which must agree with
-// the body's own mediaType field when it has one.
+// the body's own mediaType field when it has one. Resolve reads a tag.
 func (c *Client) Manifest(ctx context.Context, ref Reference) (RawManifest, error) {
 	if ref.Digest == "" {
 		return RawManifest{}, fmt.Errorf("oci: fetch %s: name a digest, a tag can move", ref)
@@ -49,8 +49,26 @@ func (c *Client) Manifest(ctx context.Context, ref Reference) (RawManifest, erro
 	if err := ref.Digest.Validate(); err != nil {
 		return RawManifest{}, fmt.Errorf("oci: %s: %w", ref, err)
 	}
+	return c.fetchManifest(ctx, ref, ref.Digest.String())
+}
+
+// Resolve fetches the manifest or index ref's tag names today and returns it with the
+// digest its bytes hash to. A ref that also pins a digest is verified against it, as
+// Manifest does. The answer is only as stable as the tag, so a caller that needs the
+// same bytes tomorrow keeps the returned digest, not the tag.
+func (c *Client) Resolve(ctx context.Context, ref Reference) (RawManifest, error) {
+	if ref.Digest != "" {
+		return c.Manifest(ctx, ref)
+	}
+	if ref.Tag == "" {
+		return RawManifest{}, fmt.Errorf("oci: resolve %s: name a tag or a digest", ref)
+	}
+	return c.fetchManifest(ctx, ref, ref.Tag)
+}
+
+func (c *Client) fetchManifest(ctx context.Context, ref Reference, reference string) (RawManifest, error) {
 	resp, err := c.send(ctx, ref, "pull", func(auth string) (*http.Request, error) {
-		req, err := c.newGetRequest(ctx, ref, auth, "/manifests/"+ref.Digest.String())
+		req, err := c.newGetRequest(ctx, ref, auth, "/manifests/"+reference)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +80,7 @@ func (c *Client) Manifest(ctx context.Context, ref Reference) (RawManifest, erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return RawManifest{}, fmt.Errorf("oci: fetch %s: %s", ref, statusLine(resp))
+		return RawManifest{}, fmt.Errorf("oci: fetch %s: %w", ref, statusError(resp))
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit+1))
 	if err != nil {
@@ -71,15 +89,19 @@ func (c *Client) Manifest(ctx context.Context, ref Reference) (RawManifest, erro
 	if len(body) > registryReplyLimit {
 		return RawManifest{}, fmt.Errorf("oci: fetch %s: the manifest is over %d bytes", ref, registryReplyLimit)
 	}
-	if got := ref.Digest.Algorithm().FromBytes(body); got != ref.Digest {
-		return RawManifest{}, fmt.Errorf("%s served %s: %w", ref, got, ErrManifestDigest)
+	got := digest.FromBytes(body)
+	if ref.Digest != "" {
+		got = ref.Digest.Algorithm().FromBytes(body)
+		if got != ref.Digest {
+			return RawManifest{}, fmt.Errorf("%s served %s: %w", ref, got, ErrManifestDigest)
+		}
 	}
 	mediaType, err := manifestMediaType(resp.Header.Get("Content-Type"), body)
 	if err != nil {
 		return RawManifest{}, fmt.Errorf("fetch %s: %w", ref, err)
 	}
 	return RawManifest{
-		Descriptor: ocispec.Descriptor{MediaType: mediaType, Digest: ref.Digest, Size: int64(len(body))},
+		Descriptor: ocispec.Descriptor{MediaType: mediaType, Digest: got, Size: int64(len(body))},
 		Body:       body,
 	}, nil
 }
@@ -111,59 +133,40 @@ func manifestMediaType(contentType string, body []byte) (string, error) {
 	return header, nil
 }
 
-// FetchBlob streams the blob d names from repo ("<registry>/<repository>") into w. It
-// reads at most d.Size bytes and fails if the stream is shorter, longer, or does not hash
-// to d.Digest. w may already hold a prefix of the blob when it fails, so a caller writes
-// to a place it can discard.
-func (c *Client) FetchBlob(ctx context.Context, repo string, d ocispec.Descriptor, w io.Writer) error {
-	ref, err := ParseRepository(repo)
-	if err != nil {
-		return err
-	}
+// FetchBlob streams the blob d names from repo's repository into w; repo's tag and
+// digest are ignored. It reads at most d.Size bytes and fails if the stream is shorter,
+// longer, or does not hash to d.Digest (ErrBlobDigest). w may already hold a prefix of
+// the blob when it fails, so a caller writes to a place it can discard.
+func (c *Client) FetchBlob(ctx context.Context, repo Reference, d ocispec.Descriptor, w io.Writer) error {
+	repo = repo.repository()
 	vr, err := newVerifyReader(nil, d)
 	if err != nil {
-		return fmt.Errorf("fetch %s blob: %w", ref, err)
+		return fmt.Errorf("fetch %s blob: %w", repo, err)
 	}
-	resp, err := c.send(ctx, ref, "pull", func(auth string) (*http.Request, error) {
-		return c.newGetRequest(ctx, ref, auth, "/blobs/"+d.Digest.String())
+	resp, err := c.send(ctx, repo, "pull", func(auth string) (*http.Request, error) {
+		return c.newGetRequest(ctx, repo, auth, "/blobs/"+d.Digest.String())
 	})
 	if err != nil {
-		return fmt.Errorf("fetch %s blob: %w", ref, err)
+		return fmt.Errorf("fetch %s blob: %w", repo, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("oci: fetch %s blob: %s", ref, statusLine(resp))
+		return fmt.Errorf("oci: fetch %s blob: %w", repo, statusError(resp))
 	}
 	vr.r = resp.Body
 	if _, err := io.Copy(w, vr); err != nil {
-		return fmt.Errorf("oci: fetch %s blob %s: %w", ref, d.Digest, err)
+		return fmt.Errorf("oci: fetch %s blob %s: %w", repo, d.Digest, err)
 	}
 	return nil
 }
 
-// BlobExists reports whether repo ("<registry>/<repository>") holds the blob d. Any
-// answer but 200 and 404 is an error rather than "absent".
-func (c *Client) BlobExists(ctx context.Context, repo string, d digest.Digest) (bool, error) {
-	ref, err := ParseRepository(repo)
-	if err != nil {
-		return false, err
-	}
-	if err := d.Validate(); err != nil {
-		return false, fmt.Errorf("oci: probe %s: %w", ref, err)
-	}
-	return c.blobExists(ctx, ref, "pull", d)
-}
-
-// PushBlob uploads the blob d names, read from r, to repo ("<registry>/<repository>"),
-// and does nothing when the registry already holds it. r is read only when the upload
-// runs, and its end must be d.Size bytes hashing to d.Digest: otherwise the request is
-// aborted, so the registry never receives a complete blob that is not the one named.
-func (c *Client) PushBlob(ctx context.Context, repo string, d ocispec.Descriptor, r io.Reader) error {
-	ref, err := ParseRepository(repo)
-	if err != nil {
-		return err
-	}
-	return c.pushBlob(ctx, ref, d, r)
+// PushBlob uploads the blob d names, read from r, to repo's repository, and does nothing
+// when the registry already holds it: r is read only when the upload runs, so an unchanged
+// blob costs one HEAD and no hashing. The stream must be d.Size bytes hashing to d.Digest:
+// otherwise the request is aborted, so the registry never receives a complete blob that is
+// not the one named.
+func (c *Client) PushBlob(ctx context.Context, repo Reference, d ocispec.Descriptor, r io.Reader) error {
+	return c.pushBlob(ctx, repo.repository(), d, r)
 }
 
 // pushBlob is the two-step upload the v2 API defines: ask for a session, then PUT the
@@ -215,12 +218,12 @@ func (c *Client) startUpload(ctx context.Context, ref Reference, d ocispec.Descr
 	if err != nil {
 		return nil, fmt.Errorf("start upload to %s: %w", ref.Repository, err)
 	}
-	// Closed AFTER the status check, not before: statusLine reads the body for whatever
+	// Closed AFTER the status check, not before: statusError reads the body for whatever
 	// the registry said, and closing first discards the explanation of the very first
 	// error a misconfigured push hits.
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
-		return nil, fmt.Errorf("oci: start upload to %s: %s", ref.Repository, statusLine(resp))
+		return nil, fmt.Errorf("oci: start upload to %s: %w", ref.Repository, statusError(resp))
 	}
 	location := resp.Header.Get("Location")
 	if location == "" {
@@ -267,7 +270,7 @@ func (c *Client) sendBlob(ctx context.Context, ref Reference, upload *url.URL, d
 	}
 	defer done.Body.Close()
 	if done.StatusCode != http.StatusCreated {
-		return fmt.Errorf("oci: upload %s: %s", d.Digest, statusLine(done))
+		return fmt.Errorf("oci: upload %s: %w", d.Digest, statusError(done))
 	}
 	// The transport sends only ContentLength bytes, so a source with more has not been
 	// read to its end yet. The registry holds the declared prefix, which hashes to d.
@@ -277,24 +280,21 @@ func (c *Client) sendBlob(ctx context.Context, ref Reference, upload *url.URL, d
 	return nil
 }
 
-// PutManifest pushes body to repo ("<registry>/<repository>") by its digest, then under
-// each of tags, and returns the digest the registry confirmed. A registry that sends a
-// Docker-Content-Digest naming anything but the body's digest is an error. With no tags the
-// manifest is addressable by digest only.
-func (c *Client) PutManifest(ctx context.Context, repo, mediaType string, body []byte, tags ...string) (digest.Digest, error) {
-	ref, err := ParseRepository(repo)
-	if err != nil {
-		return "", err
-	}
+// PutManifest pushes body to repo's repository by its digest, then under each of tags,
+// and returns the digest the registry confirmed. A registry that sends a
+// Docker-Content-Digest naming anything but the body's digest is an error. With no tags
+// the manifest is addressable by digest only.
+func (c *Client) PutManifest(ctx context.Context, repo Reference, mediaType string, body []byte, tags ...string) (digest.Digest, error) {
+	repo = repo.repository()
 	if !slices.Contains(manifestMediaTypes, mediaType) {
-		return "", fmt.Errorf("oci: push to %s: media type %q is not a manifest or index", ref, mediaType)
+		return "", fmt.Errorf("oci: push to %s: media type %q is not a manifest or index", repo, mediaType)
 	}
 	for _, t := range tags {
 		if err := ValidateTag(t); err != nil {
-			return "", fmt.Errorf("push to %s: %w", ref, err)
+			return "", fmt.Errorf("push to %s: %w", repo, err)
 		}
 	}
-	confirmed, err := c.putManifest(ctx, ref, digest.FromBytes(body).String(), mediaType, body)
+	confirmed, err := c.putManifest(ctx, repo, digest.FromBytes(body).String(), mediaType, body)
 	if err != nil {
 		return "", err
 	}
@@ -302,12 +302,12 @@ func (c *Client) PutManifest(ctx context.Context, repo, mediaType string, body [
 		if slices.Contains(tags[:i], t) {
 			continue
 		}
-		got, err := c.putManifest(ctx, ref, t, mediaType, body)
+		got, err := c.putManifest(ctx, repo, t, mediaType, body)
 		if err != nil {
 			return "", err
 		}
 		if got != confirmed {
-			return "", fmt.Errorf("oci: tag %s:%s: the registry confirmed %s after confirming %s", ref, t, got, confirmed)
+			return "", fmt.Errorf("oci: tag %s:%s: the registry confirmed %s after confirming %s", repo, t, got, confirmed)
 		}
 	}
 	return confirmed, nil
@@ -336,7 +336,10 @@ func newVerifyReader(r io.Reader, d ocispec.Descriptor) (*verifyReader, error) {
 func (v *verifyReader) Read(p []byte) (int, error) {
 	// One byte past the declared size, so an overlong stream is caught here rather than
 	// read to its end.
-	n, err := io.LimitReader(v.r, v.want+1-v.read).Read(p)
+	if left := v.want + 1 - v.read; int64(len(p)) > left {
+		p = p[:left]
+	}
+	n, err := v.r.Read(p)
 	v.read += int64(n)
 	_, _ = v.verifier.Write(p[:n])
 	if v.read > v.want {

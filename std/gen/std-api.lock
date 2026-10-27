@@ -67,6 +67,7 @@ fs.isFile
 fs.join
 fs.listDir
 fs.mkdirAll
+fs.mode
 fs.readFile
 fs.readLines
 fs.readlink
@@ -91,11 +92,15 @@ http.post
 http.request
 http.server
 http.upload_chunked
+image.assemble
 image.assembleIndex
-image.assembleLayout
-image.attachArtifacts
-image.publishLayout
-image.pullLayout
+image.attachReferrers
+image.goEnv
+image.open
+image.platform
+image.platforms
+image.pull
+image.push
 image.writeProvenance
 image.writeSbom
 log.at

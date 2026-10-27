@@ -6,129 +6,193 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export object ImageDigest {
-    algorithm: str = "",
-    encoded: str = "",
+export enum<str> OS {
+    none = "",
+    linux = "linux",
 }
 
-export object ImagePlatform {
-    os: str = "",
-    architecture: str = "",
-    variant: str = "",
+export enum<str> Architecture {
+    none = "",
+    amd64 = "amd64",
+    arm64 = "arm64",
 }
 
-export object ImageLayer {
-    digest: ImageDigest = ImageDigest{},
-    diffID: ImageDigest = ImageDigest{},
-    size: int = 0,
-    mediaType: str = "",
+export enum<str> Variant {
+    none = "",
+    v8 = "v8",
 }
 
-export object ImageLayout {
-    path: str = "",
-    digest: ImageDigest = ImageDigest{},
-    mediaType: str = "",
-    size: int = 0,
-    platform: ImagePlatform = ImagePlatform{},
-    op: str = "",
-    base: str = "",
-    baseDigest: ImageDigest = ImageDigest{},
-    fileCount: int = 0,
-    symlinkCount: int = 0,
-    layer: ImageLayer = ImageLayer{},
-    configDigest: ImageDigest = ImageDigest{},
-    created: str = "",
+export enum<str> ModePolicy {
+    none = "",
+    fixed = "fixed",
+    executableBit = "executable-bit",
 }
 
-export object ImageFile {
+export enum<str> SymlinkPolicy {
+    none = "",
+    refuse = "refuse",
+    keep = "keep",
+    follow = "follow",
+}
+
+export enum<str> MediaType {
+    none = "",
+    manifest = "application/vnd.oci.image.manifest.v1+json",
+    index = "application/vnd.oci.image.index.v1+json",
+    config = "application/vnd.oci.image.config.v1+json",
+    layer = "application/vnd.oci.image.layer.v1.tar",
+    layerGzip = "application/vnd.oci.image.layer.v1.tar+gzip",
+    layerZstd = "application/vnd.oci.image.layer.v1.tar+zstd",
+    empty = "application/vnd.oci.empty.v1+json",
+    spdx = "application/spdx+json",
+    inToto = "application/vnd.in-toto+json",
+}
+
+export object Platform {
+    os: OS = OS.none,
+    architecture: Architecture = Architecture.none,
+    variant: Variant = Variant.none,
+}
+
+export object File {
     source: str = "",
-    destination: str = "",
+    path: str = "",
     mode: int = 0,
     uid: int = 0,
     gid: int = 0,
 }
 
-export object ImageDirPlacement {
+export object Tree {
     source: str = "",
-    destination: str = "",
-    strip: int = 0,
+    path: str = "",
     include: [str] = [],
     exclude: [str] = [],
-    maxDepth: int = 0,
-    modePolicy: str = "",
-    fileMode: int = 0,
-    dirMode: int = 0,
+    modes: ModePolicy = ModePolicy.none,
+    symlinks: SymlinkPolicy = SymlinkPolicy.none,
     uid: int = 0,
     gid: int = 0,
-    symlinks: str = "",
-    emptyDirs: bool = false,
-    maxFiles: int = 0,
-    maxBytes: int = 0,
 }
 
-export object ImageSymlink {
-    destination: str = "",
+export object Symlink {
+    path: str = "",
     target: str = "",
     uid: int = 0,
     gid: int = 0,
 }
 
-export object ImageSpec {
-    base: str = "",
-    platform: ImagePlatform = ImagePlatform{},
-    files: [ImageFile] = [],
-    dirs: [ImageDirPlacement] = [],
-    symlinks: [ImageSymlink] = [],
+export object Directory {
+    path: str = "",
+    mode: int = 0,
+    uid: int = 0,
+    gid: int = 0,
+}
+
+export object Config {
+    user: str? = null,
+    workingDir: str? = null,
+    stopSignal: str? = null,
+    entrypoint: [str]? = null,
+    cmd: [str]? = null,
+    exposedPorts: [str]? = null,
+    volumes: [str]? = null,
     env: {str: str} = {},
     unsetEnv: [str] = [],
-    user: str = "",
-    workingDir: str = "",
-    entrypoint: [str] = [],
-    resetEntrypoint: bool = false,
-    command: [str] = [],
-    resetCommand: bool = false,
     labels: {str: str} = {},
+}
+
+export object Spec {
+    base: str = "",
+    scratch: bool = false,
+    platform: Platform = Platform{},
+    files: [File] = [],
+    trees: [Tree] = [],
+    symlinks: [Symlink] = [],
+    directories: [Directory] = [],
+    config: Config = Config{},
     annotations: {str: str} = {},
     created: str = "",
 }
 
-export object ImageSecret {
+export object Digest {
+    algorithm: str = "",
+    encoded: str = "",
+
+    fun string() > str {
+        if (this.algorithm == "" and this.encoded == "") {
+            return "";
+        }
+        return "{this.algorithm}:{this.encoded}";
+    }
+}
+
+export object Descriptor {
+    mediaType: MediaType = MediaType.none,
+    artifactType: MediaType = MediaType.none,
+    digest: Digest = Digest{},
+    size: int = 0,
+    platform: Platform? = null,
+    annotations: {str: str} = {},
+}
+
+export object Added {
+    layer: Descriptor = Descriptor{},
+    diffID: Digest = Digest{},
+    files: int = 0,
+    symlinks: int = 0,
+    directories: int = 0,
+}
+
+export object Layout {
+    path: str = "",
+    descriptor: Descriptor = Descriptor{},
+    referrers: [Descriptor] = [],
+    platform: Platform? = null,
+    config: Descriptor? = null,
+    layers: [Descriptor] = [],
+    added: Added? = null,
+    created: str = "",
+}
+
+export object Document {
+    path: str = "",
+    descriptor: Descriptor = Descriptor{},
+}
+
+export object Secret {
     value: str = "",
 }
 
-export object ImageRegistryAuth {
+export object RegistryAuth {
     username: str = "",
-    password: ImageSecret = ImageSecret{},
+    password: Secret = Secret{},
 }
 
-export object ImagePublished {
+export object Pushed {
     repository: str = "",
-    digest: ImageDigest = ImageDigest{},
+    digest: Digest = Digest{},
     tags: [str] = [],
-    op: str = "",
+    reference: str = "",
 }
 
-export object ImageProvenanceSpec {
+export object Material {
+    uri: str = "",
+    digest: Digest = Digest{},
+}
+
+export object Provenance {
+    builderId: str = "",
     sourceRevision: str = "",
-    builderID: str = "",
+    materials: [Material] = [],
 }
 
-export object ImageProvenance {
-    path: str = "",
-    mediaType: str = "",
-    digest: ImageDigest = ImageDigest{},
-}
-
-export object ImageSBOM {
-    path: str = "",
-    mediaType: str = "",
-    digest: ImageDigest = ImageDigest{},
-}
-
-export extern fun assembleIndex(layouts: [str], dest: str) > ImageLayout !> any;
-export extern fun assembleLayout(spec: ImageSpec, dest: str) > ImageLayout !> any;
-export extern fun attachArtifacts(layout: str, sbomPath: str = "", provenancePath: str = "") > ImageLayout !> any;
-export extern fun publishLayout(layout: str, repository: str, tags: [str], auth: ImageRegistryAuth = {<str: any>}) > ImagePublished !> any;
-export extern fun pullLayout(reference: str, platform: ImagePlatform, dest: str, auth: ImageRegistryAuth = {<str: any>}) > ImageLayout !> any;
-export extern fun writeProvenance(layout: str, spec: ImageProvenanceSpec, dest: str) > ImageProvenance !> any;
-export extern fun writeSbom(layout: str, dest: str) > ImageSBOM !> any;
+export extern fun assemble(spec: Spec, layout: str) > Layout !> any;
+export extern fun assembleIndex(layouts: [str], layout: str) > Layout !> any;
+export extern fun attachReferrers(subject: str, documents: [Document], layout: str) > Layout !> any;
+export extern fun goEnv(platform: Platform) > {str: str} !> any;
+export extern fun open(layout: str) > Layout !> any;
+export extern fun platform(spec: str) > Platform !> any;
+export extern fun platforms(specs: [str]) > [Platform] !> any;
+export extern fun pull(reference: str, platform: Platform, layout: str, auth: RegistryAuth? = null) > Layout !> any;
+export extern fun push(layout: str, repository: str, tags: [str], auth: RegistryAuth? = null) > Pushed !> any;
+export extern fun writeProvenance(layout: str, provenance: Provenance, path: str) > Document !> any;
+export extern fun writeSbom(layout: str, path: str) > Document !> any;

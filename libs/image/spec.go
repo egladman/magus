@@ -1,600 +1,321 @@
 package image
 
 import (
-	"context"
 	"fmt"
-	"io/fs"
-	"maps"
-	"math"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
+	"time"
 
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/bmatcuk/doublestar/v4"
 )
 
-// Platform is an image's target platform as OCI spells it.
-type Platform struct{ OS, Architecture, Variant string }
-
-// File places one host file in the image.
-type File struct {
-	Source, Destination string
-	Mode                fs.FileMode
-	UID, GID            int
-}
-
-// Symlink places one symbolic link in the image.
-type Symlink struct {
-	Destination, Target string
-	UID, GID            int
-}
-
-// Spec is everything one assembleLayout needs. Prefer NewSpec and With* in Go.
+// Spec is one Image Manifest: a base, at most one new layer built from the
+// placements, and the image config. Build it as a struct literal; the zero value is
+// rejected (no base, no platform).
 type Spec struct {
-	Base            string
-	Platform        Platform
-	Files           []File
-	Dirs            []DirPlacement
-	Symlinks        []Symlink
-	Env             map[string]string
-	UnsetEnv        []string
-	User            string
-	WorkingDir      string
-	Entrypoint      []string
-	ResetEntrypoint bool
-	Command         []string // OCI config Cmd (argv); not magus.cmd / ShellCommand
-	ResetCommand    bool
-	Labels          map[string]string
-	Annotations     map[string]string
-	Created         string
-	// emptyDirs are image directories from DirPlacement.EmptyDirs (mode/owner from the placement).
-	emptyDirs []emptyDir
-}
+	// Base is an OCI Image Layout directory to build over: one image manifest, or an
+	// index holding Platform. Exactly one of Base and Scratch is set.
+	Base    string
+	Scratch bool
+	// Platform the image runs on. Over a base it must match the base's, normalized.
+	Platform Platform
 
-type emptyDir struct {
-	Destination string
-	Mode        fs.FileMode
-	UID, GID    int
-}
+	// The new layer's entries. An empty set adds no layer: a config-only change.
+	Files       []File
+	Trees       []Tree
+	Symlinks    []Symlink
+	Directories []Directory
 
-// expandDirs folds DirPlacements into Files/Symlinks and empty directory destinations.
-func (s *Spec) expandDirs(ctx context.Context) error {
-	for i, d := range s.Dirs {
-		files, symlinks, dirs, err := d.expand(ctx)
-		if err != nil {
-			return fmt.Errorf("image.assemble: dirs[%d]: %w", i, err)
-		}
-		s.Files = append(s.Files, files...)
-		s.Symlinks = append(s.Symlinks, symlinks...)
-		s.emptyDirs = append(s.emptyDirs, dirs...)
-	}
-	s.Dirs = nil
-	return nil
-}
-
-// Layout is an OCI image layout on disk and the facts of the operation that
-// wrote it. It is not a log: callers that want prose about the op print their own.
-type Layout struct {
-	Path         string
-	Descriptor   ocispec.Descriptor
-	Platform     Platform
-	Op           Op
-	Base         string // layout path or registry reference used as base; empty for scratch
-	BaseDigest   Digest
-	FileCount    int
-	SymlinkCount int
-	Layer        Layer  // new OCI Layer; zero when assemble added none
-	ConfigDigest Digest // ManifestDigest is Descriptor.Digest
-	// Created is the image config Created timestamp (RFC 3339), empty when the
-	// config omits it. Callers compare it to wall clock to decide whether to :update.
+	Config Config
+	// Annotations are the manifest's own. Over a base, org.opencontainers.image.base.digest
+	// and, when the base came from Pull, base.name are added.
+	Annotations map[string]string
+	// Created is RFC 3339. Empty keeps the base's; on scratch the config omits it, which
+	// keeps the image byte-identical across runs.
 	Created string
 }
 
-// Published is what a registry confirmed after a push.
-type Published struct {
-	Repository string
-	Digest     Digest
-	Tags       []string
-	Op         Op
+// File places one host file at Path.
+type File struct {
+	Source   string // host path
+	Path     string // absolute POSIX path in the image
+	Mode     Mode
+	UID, GID int // 0 is root
 }
 
-// Validate applies R1: linux on amd64, or on arm64 with no variant or v8.
-func (p Platform) Validate() error {
-	if p.OS != "linux" {
-		return fmt.Errorf("image: platform os %q: accepted: linux", p.OS)
-	}
-	switch p.Architecture {
-	case "amd64":
-		if p.Variant != "" {
-			return fmt.Errorf("image: platform variant %q for amd64: accepted: \"\"", p.Variant)
-		}
-	case "arm64":
-		if p.Variant != "" && p.Variant != "v8" {
-			return fmt.Errorf("image: platform variant %q for arm64: accepted: \"\", v8", p.Variant)
-		}
-	default:
-		return fmt.Errorf("image: platform architecture %q: accepted: amd64, arm64", p.Architecture)
-	}
-	return nil
+// Tree places the CONTENTS of the host directory Source at Path: Source/a/b lands at
+// Path/a/b. Only files and symlinks become entries; an empty host directory is not
+// placed, and a directory that must exist with its own mode is a Directory.
+type Tree struct {
+	Source string
+	Path   string // "/" places the contents at the root
+	// Include and Exclude are doublestar patterns over each file's path relative to
+	// Source. Empty Include takes every file; Exclude wins over Include.
+	Include, Exclude []string
+	Modes            ModePolicy
+	Symlinks         SymlinkPolicy
+	UID, GID         int
 }
 
-// Validate checks the spec's own shape (R1, R3, R4, R7, R8, R17 keys) without
-// touching the host or the base layout.
+// Symlink places one symbolic link at Path pointing at Target.
+type Symlink struct {
+	Path, Target string
+	UID, GID     int
+}
+
+// Directory places a directory entry with its own mode and owner, such as /tmp at
+// ModeSticky or a user's home owned by them.
+type Directory struct {
+	Path     string
+	Mode     Mode
+	UID, GID int
+}
+
+// Config is the image config's `config` object, field for field. A nil field inherits
+// the base's value and an empty one clears it. Env and Labels merge over the base's by
+// key; UnsetEnv then removes keys.
+type Config struct {
+	User         *string
+	WorkingDir   *string
+	StopSignal   *string
+	Entrypoint   *[]string
+	Cmd          *[]string
+	ExposedPorts *[]string // "8080/tcp", "53/udp"
+	Volumes      *[]string
+	Env          map[string]string
+	UnsetEnv     []string
+	Labels       map[string]string
+}
+
+// ModePolicy decides the mode of each file a Tree places. There is no "keep the host
+// mode": that depends on the umask of whoever checked the files out.
+type ModePolicy string
+
+const (
+	// ModeFixed places every file at ModeFile.
+	ModeFixed ModePolicy = "fixed"
+	// ModeExecutableBit places a file whose host owner-execute bit is set at
+	// ModeExecutable and any other at ModeFile; that bit is in the cache key already.
+	ModeExecutableBit ModePolicy = "executable-bit"
+)
+
+// SymlinkPolicy decides what a Tree does with a host symlink.
+type SymlinkPolicy string
+
+const (
+	// SymlinkRefuse fails the assemble.
+	SymlinkRefuse SymlinkPolicy = "refuse"
+	// SymlinkKeep places the link. Its target must be relative and stay inside the
+	// tree: an absolute target names a host path.
+	SymlinkKeep SymlinkPolicy = "keep"
+	// SymlinkFollow places the regular file the link resolves to.
+	SymlinkFollow SymlinkPolicy = "follow"
+)
+
+func (m ModePolicy) validate() error {
+	switch m {
+	case ModeFixed, ModeExecutableBit:
+		return nil
+	case "":
+		return fmt.Errorf("modes is unset; accepted: %s, %s", ModeFixed, ModeExecutableBit)
+	}
+	return fmt.Errorf("modes %q; accepted: %s, %s", string(m), ModeFixed, ModeExecutableBit)
+}
+
+func (s SymlinkPolicy) validate() error {
+	switch s {
+	case SymlinkRefuse, SymlinkKeep, SymlinkFollow:
+		return nil
+	case "":
+		return fmt.Errorf("symlinks is unset; accepted: %s, %s, %s", SymlinkRefuse, SymlinkKeep, SymlinkFollow)
+	}
+	return fmt.Errorf("symlinks %q; accepted: %s, %s, %s", string(s), SymlinkRefuse, SymlinkKeep, SymlinkFollow)
+}
+
+// Validate checks the spec's own shape without touching the host or the base.
 func (s Spec) Validate() error {
-	if err := s.Platform.Validate(); err != nil {
+	if err := s.validate(); err != nil {
 		return fmt.Errorf("image.assemble: %w", err)
 	}
-	var dests []string
-	for _, f := range s.Files {
-		if err := validateDestination(f.Destination); err != nil {
-			return err
-		}
-		if f.Mode&^0o7777 != 0 {
-			return fmt.Errorf("image.assemble: file %q: mode %#o: only permission, setuid, setgid and sticky bits are allowed", f.Destination, uint32(f.Mode))
-		}
-		dests = append(dests, f.Destination)
+	return nil
+}
+
+func (s Spec) validate() error {
+	switch {
+	case s.Base == "" && !s.Scratch:
+		return fmt.Errorf("set base to a layout or scratch to true")
+	case s.Base != "" && s.Scratch:
+		return fmt.Errorf("base %q and scratch are both set", s.Base)
 	}
-	for _, l := range s.Symlinks {
-		if err := validateDestination(l.Destination); err != nil {
-			return err
-		}
-		if l.Target == "" {
-			return fmt.Errorf("image.assemble: symlink %q: target is empty", l.Destination)
-		}
-		if strings.ContainsRune(l.Target, 0) {
-			return fmt.Errorf("image.assemble: symlink %q: target contains NUL", l.Destination)
-		}
-		dests = append(dests, l.Destination)
-	}
-	if err := checkOverlap(dests); err != nil {
+	if err := s.Platform.Validate(); err != nil {
 		return err
 	}
-	for k := range s.Env {
-		if err := validateEnvKey(k); err != nil {
-			return err
+	if _, _, err := s.created(); err != nil {
+		return err
+	}
+	if err := s.validatePlacements(); err != nil {
+		return err
+	}
+	return s.Config.validate()
+}
+
+func (s Spec) validatePlacements() error {
+	for i, f := range s.Files {
+		if f.Source == "" {
+			return fmt.Errorf("files[%d]: source is empty", i)
+		}
+		if err := checkImagePath(f.Path); err != nil {
+			return fmt.Errorf("files[%d]: %w", i, err)
+		}
+		if err := f.Mode.Validate(); err != nil {
+			return fmt.Errorf("files[%d] %s: %w", i, f.Path, err)
+		}
+		if err := checkOwner(f.UID, f.GID); err != nil {
+			return fmt.Errorf("files[%d] %s: %w", i, f.Path, err)
 		}
 	}
-	for _, k := range s.UnsetEnv {
-		if err := validateEnvKey(k); err != nil {
-			return err
+	for i, t := range s.Trees {
+		if err := t.validate(); err != nil {
+			return fmt.Errorf("trees[%d]: %w", i, err)
+		}
+	}
+	for i, l := range s.Symlinks {
+		if err := checkImagePath(l.Path); err != nil {
+			return fmt.Errorf("symlinks[%d]: %w", i, err)
+		}
+		if l.Target == "" || strings.ContainsRune(l.Target, 0) {
+			return fmt.Errorf("symlinks[%d] %s: target %q is empty or contains NUL", i, l.Path, l.Target)
+		}
+		if err := checkOwner(l.UID, l.GID); err != nil {
+			return fmt.Errorf("symlinks[%d] %s: %w", i, l.Path, err)
+		}
+	}
+	for i, d := range s.Directories {
+		if err := checkImagePath(d.Path); err != nil {
+			return fmt.Errorf("directories[%d]: %w", i, err)
+		}
+		if err := d.Mode.Validate(); err != nil {
+			return fmt.Errorf("directories[%d] %s: %w", i, d.Path, err)
+		}
+		if err := checkOwner(d.UID, d.GID); err != nil {
+			return fmt.Errorf("directories[%d] %s: %w", i, d.Path, err)
 		}
 	}
 	return nil
 }
 
-func validateDestination(d string) error {
+func (t Tree) validate() error {
+	if t.Source == "" {
+		return fmt.Errorf("source is empty")
+	}
+	if t.Path != "/" {
+		if err := checkImagePath(t.Path); err != nil {
+			return err
+		}
+	}
+	if err := t.Modes.validate(); err != nil {
+		return err
+	}
+	if err := t.Symlinks.validate(); err != nil {
+		return err
+	}
+	for _, p := range slices.Concat(t.Include, t.Exclude) {
+		if !doublestar.ValidatePattern(p) {
+			return fmt.Errorf("pattern %q is not a valid doublestar glob", p)
+		}
+	}
+	return checkOwner(t.UID, t.GID)
+}
+
+var portPattern = regexp.MustCompile(`^[0-9]{1,5}(/(tcp|udp|sctp))?$`)
+
+func (c Config) validate() error {
+	for k := range c.Env {
+		if err := checkEnvKey(k); err != nil {
+			return err
+		}
+	}
+	for _, k := range c.UnsetEnv {
+		if err := checkEnvKey(k); err != nil {
+			return err
+		}
+	}
+	if c.ExposedPorts != nil {
+		for _, p := range *c.ExposedPorts {
+			if !portPattern.MatchString(p) {
+				return fmt.Errorf("config.exposedPorts: %q: want <port>[/tcp|/udp|/sctp]", p)
+			}
+		}
+	}
+	if c.Volumes != nil {
+		for _, v := range *c.Volumes {
+			if !path.IsAbs(v) {
+				return fmt.Errorf("config.volumes: %q: want an absolute path", v)
+			}
+		}
+	}
+	return nil
+}
+
+// created parses Created; ok is false when it is empty.
+func (s Spec) created() (t time.Time, ok bool, err error) {
+	if s.Created == "" {
+		return time.Time{}, false, nil
+	}
+	t, err = time.Parse(time.RFC3339, s.Created)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("created %q: want RFC 3339: %w", s.Created, err)
+	}
+	return t, true, nil
+}
+
+func checkImagePath(p string) error {
 	switch {
-	case d == "" || d[0] != '/':
-		return fmt.Errorf("image.assemble: destination %q: must be absolute", d)
-	case d == "/":
-		return fmt.Errorf("image.assemble: destination %q: must not be the root", d)
-	case strings.ContainsRune(d, 0):
-		return fmt.Errorf("image.assemble: destination %q: contains NUL", d)
-	case strings.HasSuffix(d, "/"):
-		return fmt.Errorf("image.assemble: destination %q: trailing slash", d)
-	case slices.Contains(strings.Split(d, "/"), ".."):
-		return fmt.Errorf("image.assemble: destination %q: contains a .. element", d)
-	case path.Clean(d) != d:
-		return fmt.Errorf("image.assemble: destination %q: not clean, want %q", d, path.Clean(d))
+	case p == "" || p[0] != '/':
+		return fmt.Errorf("path %q: must be absolute", p)
+	case p == "/":
+		return fmt.Errorf("path %q: must not be the root", p)
+	case strings.ContainsRune(p, 0):
+		return fmt.Errorf("path %q: contains NUL", p)
+	case path.Clean(p) != p:
+		return fmt.Errorf("path %q: not clean, want %q", p, path.Clean(p))
 	}
 	return nil
 }
 
-// checkOverlap compares neighbors after sorting: a destination beneath another
-// entry sorts right after it, and a symlink counts as a non-directory like a file.
-func checkOverlap(dests []string) error {
-	sorted := slices.Sorted(slices.Values(dests))
-	for i := 1; i < len(sorted); i++ {
-		prev, cur := sorted[i-1], sorted[i]
-		if prev == cur {
-			return fmt.Errorf("image.assemble: destination %q: placed twice", cur)
-		}
-		if strings.HasPrefix(cur, prev+"/") {
-			return fmt.Errorf("image.assemble: destination %q: below %q, which is not a directory", cur, prev)
-		}
+func checkOwner(uid, gid int) error {
+	if uid < 0 || gid < 0 {
+		return fmt.Errorf("uid %d and gid %d must not be negative", uid, gid)
 	}
 	return nil
 }
 
-func validateEnvKey(k string) error {
+func checkEnvKey(k string) error {
 	if k == "" || strings.Contains(k, "=") {
-		return fmt.Errorf("image.assemble: env key %q: must be non-empty and contain no =", k)
+		return fmt.Errorf("config.env key %q: must be non-empty and contain no =", k)
 	}
 	return nil
 }
 
-var specKeys = []string{
-	"base", "platform", "files", "dirs", "symlinks", "env", "unsetEnv", "user", "workingDir",
-	"entrypoint", "resetEntrypoint", "command", "resetCommand", "labels", "annotations", "created",
-}
-
-// DecodeSpec reads the map a Buzz ImageSpec arrives as. Keys are the Buzz field
-// names; an unknown key or a value of the wrong type is an error, and an absent
-// key leaves the field zero.
-func DecodeSpec(m map[string]any) (Spec, error) {
-	for k := range m {
-		if !slices.Contains(specKeys, k) {
-			return Spec{}, fmt.Errorf("image.assemble: spec: unknown key %q", k)
+// checkPlacements refuses a path placed twice and an entry below a file or symlink.
+// It looks up each entry's ancestors in a set: comparing sorted neighbors misses
+// "/app" and "/app/x" when "/app-b" sorts between them.
+func checkPlacements(entries []entry) error {
+	kinds := make(map[string]entryKind, len(entries))
+	for _, e := range entries {
+		if _, dup := kinds[e.path]; dup {
+			return fmt.Errorf("image.assemble: %s is placed twice", e.path)
+		}
+		kinds[e.path] = e.kind
+	}
+	for _, e := range entries {
+		for dir := path.Dir(e.path); dir != "/"; dir = path.Dir(dir) {
+			if k, ok := kinds[dir]; ok && k != kindDirectory {
+				return fmt.Errorf("image.assemble: %s is below %s, which is not a directory", e.path, dir)
+			}
 		}
 	}
-	d := decoder{what: "spec"}
-	s := decodeSpecScalars(&d, m)
-	if raw, ok := m["platform"]; ok {
-		pm, isMap := raw.(map[string]any)
-		if !isMap {
-			d.fail("platform", "an object", raw)
-		} else {
-			s.Platform, d.err = decodePlatform(pm, d.err)
-		}
-	}
-	decodeSpecPlacements(&d, m, &s)
-	if d.err != nil {
-		return Spec{}, d.err
-	}
-	return s, nil
-}
-
-func decodeSpecScalars(d *decoder, m map[string]any) Spec {
-	return Spec{
-		Base:            d.stringValue(m, "base"),
-		User:            d.stringValue(m, "user"),
-		WorkingDir:      d.stringValue(m, "workingDir"),
-		Created:         d.stringValue(m, "created"),
-		ResetEntrypoint: d.boolean(m, "resetEntrypoint"),
-		ResetCommand:    d.boolean(m, "resetCommand"),
-		Entrypoint:      d.stringList(m, "entrypoint"),
-		Command:         d.stringList(m, "command"),
-		UnsetEnv:        d.stringList(m, "unsetEnv"),
-		Env:             d.stringMap(m, "env"),
-		Labels:          d.stringMap(m, "labels"),
-		Annotations:     d.stringMap(m, "annotations"),
-	}
-}
-
-func decodeSpecPlacements(d *decoder, m map[string]any, s *Spec) {
-	for i, raw := range d.list(m, "files") {
-		fm, ok := raw.(map[string]any)
-		if !ok {
-			d.fail(fmt.Sprintf("files[%d]", i), "an object", raw)
-			continue
-		}
-		s.Files = append(s.Files, d.file(i, fm))
-	}
-	for i, raw := range d.list(m, "dirs") {
-		dm, ok := raw.(map[string]any)
-		if !ok {
-			d.fail(fmt.Sprintf("dirs[%d]", i), "an object", raw)
-			continue
-		}
-		s.Dirs = append(s.Dirs, d.dir(i, dm))
-	}
-	for i, raw := range d.list(m, "symlinks") {
-		lm, ok := raw.(map[string]any)
-		if !ok {
-			d.fail(fmt.Sprintf("symlinks[%d]", i), "an object", raw)
-			continue
-		}
-		s.Symlinks = append(s.Symlinks, d.symlink(i, lm))
-	}
-}
-
-// DecodePlatform checks the keys of a platform object and reads it; it does not
-// validate the platform.
-func DecodePlatform(m map[string]any) (Platform, error) {
-	return decodePlatform(m, nil)
-}
-
-func decodePlatform(m map[string]any, prior error) (Platform, error) {
-	d := decoder{what: "spec.platform", err: prior}
-	d.only(m, "os", "architecture", "variant")
-	p := Platform{OS: d.stringValue(m, "os"), Architecture: d.stringValue(m, "architecture"), Variant: d.stringValue(m, "variant")}
-	return p, d.err
-}
-
-// decoder keeps the first error so a decode reads as a list of fields rather
-// than a check after each.
-type decoder struct {
-	what string
-	err  error
-}
-
-func (d *decoder) fail(key, want string, got any) {
-	if d.err == nil {
-		d.err = fmt.Errorf("image.assemble: %s: %s: want %s, got %T", d.what, key, want, got)
-	}
-}
-
-func (d *decoder) only(m map[string]any, keys ...string) {
-	for k := range m {
-		if !slices.Contains(keys, k) && d.err == nil {
-			d.err = fmt.Errorf("image.assemble: %s: unknown key %q", d.what, k)
-		}
-	}
-}
-
-func (d *decoder) stringValue(m map[string]any, key string) string {
-	raw, ok := m[key]
-	if !ok {
-		return ""
-	}
-	v, ok := raw.(string)
-	if !ok {
-		d.fail(key, "a string", raw)
-	}
-	return v
-}
-
-func (d *decoder) boolean(m map[string]any, key string) bool {
-	raw, ok := m[key]
-	if !ok {
-		return false
-	}
-	v, ok := raw.(bool)
-	if !ok {
-		d.fail(key, "a bool", raw)
-	}
-	return v
-}
-
-func (d *decoder) integer(m map[string]any, key string) int {
-	raw, ok := m[key]
-	if !ok {
-		return 0
-	}
-	switch v := raw.(type) {
-	case int:
-		return v
-	case int64:
-		return int(v)
-	case float64:
-		if v == math.Trunc(v) && math.Abs(v) < 1<<53 {
-			return int(v)
-		}
-	}
-	d.fail(key, "an int", raw)
-	return 0
-}
-
-func (d *decoder) int64(m map[string]any, key string) int64 {
-	raw, ok := m[key]
-	if !ok {
-		return 0
-	}
-	switch v := raw.(type) {
-	case int:
-		return int64(v)
-	case int64:
-		return v
-	case float64:
-		if v == math.Trunc(v) && math.Abs(v) <= float64(math.MaxInt64) {
-			return int64(v)
-		}
-	}
-	d.fail(key, "an int64", raw)
-	return 0
-}
-
-func (d *decoder) list(m map[string]any, key string) []any {
-	raw, ok := m[key]
-	if !ok {
-		return nil
-	}
-	v, ok := raw.([]any)
-	if !ok {
-		d.fail(key, "a list", raw)
-	}
-	return v
-}
-
-func (d *decoder) stringList(m map[string]any, key string) []string {
-	var out []string
-	for i, raw := range d.list(m, key) {
-		v, ok := raw.(string)
-		if !ok {
-			d.fail(fmt.Sprintf("%s[%d]", key, i), "a string", raw)
-			continue
-		}
-		out = append(out, v)
-	}
-	return out
-}
-
-func (d *decoder) stringMap(m map[string]any, key string) map[string]string {
-	raw, ok := m[key]
-	if !ok {
-		return nil
-	}
-	in, ok := raw.(map[string]any)
-	if !ok {
-		d.fail(key, "a map of strings", raw)
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		sv, ok := v.(string)
-		if !ok {
-			d.fail(fmt.Sprintf("%s.%s", key, k), "a string", v)
-			continue
-		}
-		out[k] = sv
-	}
-	return out
-}
-
-func (d *decoder) file(i int, m map[string]any) File {
-	sub := decoder{what: fmt.Sprintf("spec.files[%d]", i), err: d.err}
-	sub.only(m, "source", "destination", "mode", "uid", "gid")
-	mode := sub.integer(m, "mode")
-	if mode < 0 || mode > math.MaxUint32 {
-		sub.fail("mode", "a permission value", mode)
-	}
-	f := File{
-		Source: sub.stringValue(m, "source"), Destination: sub.stringValue(m, "destination"),
-		Mode: fs.FileMode(mode), UID: sub.integer(m, "uid"), GID: sub.integer(m, "gid"),
-	}
-	d.err = sub.err
-	return f
-}
-
-func (d *decoder) symlink(i int, m map[string]any) Symlink {
-	sub := decoder{what: fmt.Sprintf("spec.symlinks[%d]", i), err: d.err}
-	sub.only(m, "destination", "target", "uid", "gid")
-	l := Symlink{
-		Destination: sub.stringValue(m, "destination"), Target: sub.stringValue(m, "target"),
-		UID: sub.integer(m, "uid"), GID: sub.integer(m, "gid"),
-	}
-	d.err = sub.err
-	return l
-}
-
-func (d *decoder) dir(i int, m map[string]any) DirPlacement {
-	sub := decoder{what: fmt.Sprintf("spec.dirs[%d]", i), err: d.err}
-	sub.only(m, "source", "destination", "strip", "include", "exclude", "maxDepth",
-		"modePolicy", "fileMode", "dirMode", "uid", "gid", "symlinks", "emptyDirs", "maxFiles", "maxBytes")
-	placement := DirPlacement{
-		Source:      HostDir{Value: sub.stringValue(m, "source")},
-		Destination: DestDir{Value: sub.stringValue(m, "destination")},
-		Strip:       sub.integer(m, "strip"),
-		Include:     sub.stringList(m, "include"),
-		Exclude:     sub.stringList(m, "exclude"),
-		MaxDepth:    sub.integer(m, "maxDepth"),
-		ModePolicy:  ModePolicy(sub.stringValue(m, "modePolicy")),
-		FileMode:    Mode(sub.integer(m, "fileMode")),
-		DirMode:     Mode(sub.integer(m, "dirMode")),
-		UID:         sub.integer(m, "uid"),
-		GID:         sub.integer(m, "gid"),
-		Symlinks:    SymlinkPolicy(sub.stringValue(m, "symlinks")),
-		EmptyDirs:   sub.boolean(m, "emptyDirs"),
-		MaxFiles:    sub.integer(m, "maxFiles"),
-		MaxBytes:    sub.int64(m, "maxBytes"),
-	}
-	d.err = sub.err
-	return placement
-}
-
-// NewSpec starts a Spec for one platform. Chain With* methods, then
-// AssembleLayout. This is not a Dockerfile: there is no FROM, COPY, or RUN.
-func NewSpec(platform Platform) *Spec {
-	return &Spec{Platform: platform}
-}
-
-// AssembleLayout builds the OCI Image Layout described by s into dest.
-func (s *Spec) AssembleLayout(ctx context.Context, dest string) (Layout, error) {
-	if s == nil {
-		return Layout{}, fmt.Errorf("image.assemble: nil spec")
-	}
-	return AssembleLayout(ctx, *s, dest)
-}
-
-// WithBase sets the base Image Layout path (digest-pinned pull or prior assemble).
-// Empty clears to scratch. Not Dockerfile FROM: no tags, no build stages.
-func (s *Spec) WithBase(layoutPath string) *Spec {
-	s.Base = layoutPath
-	return s
-}
-
-// WithFile appends one host-to-image file placement (the Layer content unit).
-func (s *Spec) WithFile(f File) *Spec {
-	s.Files = append(s.Files, f)
-	return s
-}
-
-// WithDir appends one directory expansion into Layer entries.
-func (s *Spec) WithDir(d DirPlacement) *Spec {
-	s.Dirs = append(s.Dirs, d)
-	return s
-}
-
-// WithSymlink appends one symlink placement.
-func (s *Spec) WithSymlink(l Symlink) *Spec {
-	s.Symlinks = append(s.Symlinks, l)
-	return s
-}
-
-// WithEnv merges key into the image config Env (over base by key).
-func (s *Spec) WithEnv(key, value string) *Spec {
-	if s.Env == nil {
-		s.Env = map[string]string{}
-	}
-	s.Env[key] = value
-	return s
-}
-
-// WithEnvMap merges every entry into config Env.
-func (s *Spec) WithEnvMap(env map[string]string) *Spec {
-	if len(env) == 0 {
-		return s
-	}
-	if s.Env == nil {
-		s.Env = maps.Clone(env)
-		return s
-	}
-	maps.Copy(s.Env, env)
-	return s
-}
-
-// WithUnsetEnv removes keys inherited from the base config Env.
-func (s *Spec) WithUnsetEnv(keys ...string) *Spec {
-	s.UnsetEnv = append(s.UnsetEnv, keys...)
-	return s
-}
-
-// WithUser sets the image config User.
-func (s *Spec) WithUser(user string) *Spec {
-	s.User = user
-	return s
-}
-
-// WithWorkingDir sets the image config WorkingDir.
-func (s *Spec) WithWorkingDir(dir string) *Spec {
-	s.WorkingDir = dir
-	return s
-}
-
-// WithEntrypoint sets the image config Entrypoint (OCI Config, not a shell form).
-func (s *Spec) WithEntrypoint(args ...string) *Spec {
-	s.Entrypoint = append([]string(nil), args...)
-	return s
-}
-
-// WithResetEntrypoint clears the base Entrypoint before WithEntrypoint applies.
-func (s *Spec) WithResetEntrypoint() *Spec {
-	s.ResetEntrypoint = true
-	return s
-}
-
-// WithCommand sets the image config process argv (OCI Config.Cmd).
-func (s *Spec) WithCommand(args ...string) *Spec {
-	s.Command = append([]string(nil), args...)
-	return s
-}
-
-// WithResetCommand clears the base command before WithCommand applies.
-func (s *Spec) WithResetCommand() *Spec {
-	s.ResetCommand = true
-	return s
-}
-
-// WithLabel merges a config label.
-func (s *Spec) WithLabel(key, value string) *Spec {
-	if s.Labels == nil {
-		s.Labels = map[string]string{}
-	}
-	s.Labels[key] = value
-	return s
-}
-
-// WithAnnotation merges a manifest annotation.
-func (s *Spec) WithAnnotation(key, value string) *Spec {
-	if s.Annotations == nil {
-		s.Annotations = map[string]string{}
-	}
-	s.Annotations[key] = value
-	return s
-}
-
-// WithCreated sets the image config created timestamp (RFC 3339).
-func (s *Spec) WithCreated(rfc3339 string) *Spec {
-	s.Created = rfc3339
-	return s
+	return nil
 }

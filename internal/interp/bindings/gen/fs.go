@@ -209,6 +209,14 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return vm.Null, nil
 	}))
+	m.MapSet("mode", vm.DirectValue("fs.mode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		notation := ffi.String(bzArgs, 0)
+		ret0, err := std.FsMode(ctx, notation)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
 	m.MapSet("chmod", vm.DirectValue("fs.chmod", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := ffi.String(bzArgs, 0)
 		mode := ffi.Int(bzArgs, 1, 0)

@@ -30,8 +30,8 @@ func blobDescriptor(payload []byte) ocispec.Descriptor {
 	}
 }
 
-func (r *inMemoryRegistry) repository() string {
-	return r.ref("team/image", "").Registry + "/team/image"
+func (r *inMemoryRegistry) repository() Reference {
+	return r.ref("team/image", "")
 }
 
 func (r *inMemoryRegistry) pinned(d digest.Digest) Reference {
@@ -314,25 +314,49 @@ func TestImageFetchBlobRefusesARedirectToHTTP(t *testing.T) {
 	assert.Zero(t, hits, "the plain http server is never reached")
 }
 
-func TestImageBlobExistsDistinguishesAbsentFromAFailure(t *testing.T) {
+func TestImageErrorsAreBranchable(t *testing.T) {
 	reg := newInMemoryRegistry(t)
-	payload := []byte("probe me")
+	payload := []byte("absent")
 	desc := blobDescriptor(payload)
 
-	have, err := reg.client().BlobExists(t.Context(), reg.repository(), desc.Digest)
-	require.NoError(t, err)
-	assert.False(t, have)
-
-	require.NoError(t, reg.client().PushBlob(t.Context(), reg.repository(), desc, bytes.NewReader(payload)))
-	have, err = reg.client().BlobExists(t.Context(), reg.repository(), desc.Digest)
-	require.NoError(t, err)
-	assert.True(t, have)
+	err := reg.client().FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
+	require.ErrorIs(t, err, ErrNotFound)
+	var status *StatusError
+	require.ErrorAs(t, err, &status)
+	assert.Equal(t, 404, status.Code)
 
 	reg.mu.Lock()
 	reg.enforceAuth, reg.rejectTokens = true, true
 	reg.mu.Unlock()
-	_, err = reg.client().BlobExists(t.Context(), reg.repository(), desc.Digest)
-	require.ErrorContains(t, err, "401")
+	err = reg.client().PushBlob(t.Context(), reg.repository(), desc, bytes.NewReader(payload))
+	require.ErrorIs(t, err, ErrUnauthorized)
+
+	t.Setenv("MAGUS_OFFLINE", "1")
+	require.ErrorIs(t, reg.client().FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer)), ErrOffline)
+}
+
+func TestImageResolveReadsATagAndReturnsItsDigest(t *testing.T) {
+	reg := newInMemoryRegistry(t)
+	body := indexBody(t)
+	want, err := reg.client().PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, body, "v1")
+	require.NoError(t, err)
+
+	got, err := reg.client().Resolve(t.Context(), reg.ref("team/image", "v1"))
+	require.NoError(t, err)
+	assert.Equal(t, want, got.Digest)
+	assert.Equal(t, body, got.Body)
+}
+
+func TestReferenceTextRoundTrips(t *testing.T) {
+	ref, err := ParseReference("localhost:5000/team/app:v1")
+	require.NoError(t, err)
+	text, err := ref.MarshalText()
+	require.NoError(t, err)
+	var back Reference
+	require.NoError(t, back.UnmarshalText(text))
+	assert.Equal(t, ref, back)
+	_, err = Reference{}.MarshalText()
+	require.Error(t, err)
 }
 
 func TestImagePutManifestWritesTheDigestThenEachTag(t *testing.T) {
@@ -401,7 +425,6 @@ func TestImageRequestsRefuseWhenOffline(t *testing.T) {
 
 	_, manifestErr := c.Manifest(t.Context(), reg.pinned(desc.Digest))
 	fetchErr := c.FetchBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
-	_, existsErr := c.BlobExists(t.Context(), reg.repository(), desc.Digest)
 	pushErr := c.PushBlob(t.Context(), reg.repository(), desc, bytes.NewReader(payload))
 	_, putErr := c.PutManifest(t.Context(), reg.repository(), ocispec.MediaTypeImageIndex, indexBody(t), "v1")
 	_, artifactErr := c.Artifact(t.Context(), reg.ref("team/image", "v1"), "")
@@ -409,7 +432,7 @@ func TestImageRequestsRefuseWhenOffline(t *testing.T) {
 	_, legacyPushErr := c.Push(t.Context(), reg.ref("team/image", "v1"), testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
 
 	for name, err := range map[string]error{
-		"Manifest": manifestErr, "FetchBlob": fetchErr, "BlobExists": existsErr, "PushBlob": pushErr,
+		"Manifest": manifestErr, "FetchBlob": fetchErr, "PushBlob": pushErr,
 		"PutManifest": putErr, "Artifact": artifactErr, "Tags": tagsErr, "Push": legacyPushErr,
 	} {
 		require.ErrorContains(t, err, "MAGUS_OFFLINE is set, so no request is sent", name)

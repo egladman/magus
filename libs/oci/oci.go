@@ -131,6 +131,30 @@ func (r Reference) String() string {
 	return s
 }
 
+// MarshalText renders r as String does, so a Reference encodes as the string a person
+// writes.
+func (r Reference) MarshalText() ([]byte, error) {
+	if r.Registry == "" || r.Repository == "" {
+		return nil, errors.New("oci: marshal an empty reference")
+	}
+	return []byte(r.String()), nil
+}
+
+// UnmarshalText parses text with ParseReference, so a tag or a digest is required.
+func (r *Reference) UnmarshalText(text []byte) error {
+	parsed, err := ParseReference(string(text))
+	if err != nil {
+		return err
+	}
+	*r = parsed
+	return nil
+}
+
+// repository drops the tag and digest: the address blob and manifest PUTs share.
+func (r Reference) repository() Reference {
+	return Reference{Registry: r.Registry, Repository: r.Repository}
+}
+
 // manifestRef is the path segment a manifest GET addresses: the digest when there is one.
 func (r Reference) manifestRef() string {
 	if r.Digest != "" {
@@ -189,7 +213,7 @@ func offline() bool {
 // so the offline check precedes all of them.
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if offline() {
-		return nil, fmt.Errorf("oci %s %s: MAGUS_OFFLINE is set, so no request is sent", req.Method, req.URL.Redacted())
+		return nil, fmt.Errorf("oci %s %s: MAGUS_OFFLINE is set, so no request is sent: %w", req.Method, req.URL.Redacted(), ErrOffline)
 	}
 	return c.http().Do(req)
 }
@@ -328,7 +352,7 @@ func (c *Client) manifest(ctx context.Context, ref Reference) (ocispec.Manifest,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return ocispec.Manifest{}, nil, fmt.Errorf("oci: fetch %s: %s", ref, statusLine(resp))
+		return ocispec.Manifest{}, nil, fmt.Errorf("oci: fetch %s: %w", ref, statusError(resp))
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit))
 	if err != nil {
@@ -364,7 +388,7 @@ func (c *Client) blob(ctx context.Context, ref Reference, want ocispec.Descripto
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oci: fetch %s blob: %s", ref, statusLine(resp))
+		return nil, fmt.Errorf("oci: fetch %s blob: %w", ref, statusError(resp))
 	}
 	// One byte past the declared size, so an overlong body is caught rather than silently
 	// truncated into a digest mismatch that blames the wrong thing.
@@ -536,7 +560,7 @@ func (c *Client) tagPage(ctx context.Context, repo Reference, u *url.URL) ([]str
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("oci: list %s: %s", repo, statusLine(resp))
+		return nil, "", fmt.Errorf("oci: list %s: %w", repo, statusError(resp))
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit))
 	if err != nil {
@@ -599,7 +623,7 @@ func (c *Client) blobExists(ctx context.Context, ref Reference, actions string, 
 	case http.StatusNotFound:
 		return false, nil
 	}
-	return false, fmt.Errorf("oci: probe %s: %s", d, statusLine(resp))
+	return false, fmt.Errorf("oci: probe %s: %w", d, statusError(resp))
 }
 
 // putManifest PUTs body under reference (a tag or a digest) and returns the digest the
@@ -622,7 +646,7 @@ func (c *Client) putManifest(ctx context.Context, ref Reference, reference, medi
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("oci: tag %s: %s", dest, statusLine(resp))
+		return "", fmt.Errorf("oci: tag %s: %w", dest, statusError(resp))
 	}
 	want := digest.FromBytes(body)
 	if got := resp.Header.Get("Docker-Content-Digest"); got != "" && got != want.String() {
@@ -631,13 +655,44 @@ func (c *Client) putManifest(ctx context.Context, ref Reference, reference, medi
 	return want, nil
 }
 
-// statusLine renders a failed response for a human: the status plus whatever the registry
-// said about it, bounded, because an error body can be a whole HTML page.
-func statusLine(resp *http.Response) string {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	detail := strings.TrimSpace(string(body))
-	if detail == "" {
-		return resp.Status
+// ErrNotFound reports a registry answering 404: the repository, manifest or blob is not
+// there. A caller choosing between pushing and failing branches on it with errors.Is.
+var ErrNotFound = errors.New("oci: not found")
+
+// ErrUnauthorized reports a registry answering 401 or 403 after any token exchange:
+// the credentials are missing, wrong, or lack the scope.
+var ErrUnauthorized = errors.New("oci: unauthorized")
+
+// ErrOffline reports a request refused before it was sent because MAGUS_OFFLINE is set.
+var ErrOffline = errors.New("oci: offline")
+
+// StatusError is a registry's non-success answer: the status plus whatever the registry
+// said about it, bounded, because an error body can be a whole HTML page. It unwraps to
+// ErrNotFound or ErrUnauthorized when the code is one of theirs.
+type StatusError struct {
+	Code   int
+	Status string
+	Detail string
+}
+
+func (e *StatusError) Error() string {
+	if e.Detail == "" {
+		return e.Status
 	}
-	return fmt.Sprintf("%s: %s", resp.Status, detail)
+	return fmt.Sprintf("%s: %s", e.Status, e.Detail)
+}
+
+func (e *StatusError) Unwrap() error {
+	switch e.Code {
+	case http.StatusNotFound:
+		return ErrNotFound
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return ErrUnauthorized
+	}
+	return nil
+}
+
+func statusError(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	return &StatusError{Code: resp.StatusCode, Status: resp.Status, Detail: strings.TrimSpace(string(body))}
 }

@@ -165,6 +165,13 @@ func renderRecordDecls(mod std.Module) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if entry.Methods != "" {
+			closing := bytes.LastIndex(out, []byte("}"))
+			if closing < 0 {
+				return "", fmt.Errorf("mirror %s: no closing brace to declare its methods before", name)
+			}
+			out = slices.Concat(out[:closing], []byte("\n    "+entry.Methods+"\n"), out[closing:])
+		}
 		b.Write(out)
 		b.WriteByte('\n')
 	}
@@ -224,7 +231,7 @@ func externDecl(m std.Method) (string, error) {
 	}
 
 	params := make([]string, 0, len(m.Args))
-	for _, a := range m.Args {
+	for i, a := range m.Args {
 		typ, err := buzzArgType(a.Type)
 		if err != nil {
 			return "", fmt.Errorf("arg %s: %w", a.Name, err)
@@ -253,9 +260,9 @@ func externDecl(m std.Method) (string, error) {
 		if a.Type == std.TypeByteSlice {
 			typ = "any"
 		}
-		p := fmt.Sprintf("%s: %s", a.Name, typ)
+		p := fmt.Sprintf("%s: %s%s", a.Name, typ, nullable(m, i))
 		if a.Optional {
-			def, derr := buzzDefault(a)
+			def, derr := optionalDefault(m, i)
 			if derr != nil {
 				return "", fmt.Errorf("arg %s: %w", a.Name, derr)
 			}
@@ -278,6 +285,29 @@ func externDecl(m std.Method) (string, error) {
 		raises = " !> any"
 	}
 	return fmt.Sprintf("export extern fun %s(%s) > %s%s;\n", name, strings.Join(params, ", "), ret, raises), nil
+}
+
+// takesPointer reports whether argument i is an optional object m's Impl takes as *T.
+// An omitted one is then null, not an empty map that would decode as a zero T.
+func takesPointer(m std.Method, i int) bool {
+	impl := reflect.TypeOf(m.Impl)
+	a := m.Args[i]
+	return a.Optional && a.Object != "" && impl != nil && impl.Kind() == reflect.Func &&
+		i+1 < impl.NumIn() && impl.In(i+1).Kind() == reflect.Pointer
+}
+
+func nullable(m std.Method, i int) string {
+	if takesPointer(m, i) {
+		return "?"
+	}
+	return ""
+}
+
+func optionalDefault(m std.Method, i int) (string, error) {
+	if takesPointer(m, i) {
+		return "null", nil
+	}
+	return buzzDefault(m.Args[i])
 }
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.

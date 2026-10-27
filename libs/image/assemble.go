@@ -4,134 +4,178 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"time"
+	"maps"
+	"slices"
 
 	digest "github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// AssembleLayout builds one OCI Image Layout from a Spec: optional base layers,
-// at most one new Layer for files and symlinks, then config and Image Manifest.
-// Layer is the OCI filesystem-diff primitive; AssembleLayout is the layout verb.
-func AssembleLayout(ctx context.Context, spec Spec, dest string) (Layout, error) {
-	out := &Layout{Op: OpAssembleLayout, Base: spec.Base, Platform: spec.Platform}
-	if err := spec.expandDirs(ctx); err != nil {
-		return Layout{}, err
-	}
+// Assemble writes the Image Manifest spec describes as an OCI Image Layout at dest: the
+// base's layers, at most one new layer, then the config and the manifest. It never
+// touches the network, and dest is left as it was when it fails. Every path is used as
+// given; a caller that confines reads and writes checks them first.
+func Assemble(ctx context.Context, spec Spec, dest string) (ManifestLayout, error) {
 	if err := spec.Validate(); err != nil {
-		return Layout{}, err
+		return ManifestLayout{}, err
 	}
-	if err := ctx.Err(); err != nil {
-		return Layout{}, fmt.Errorf("image.assemble: %w", err)
-	}
-	// Layer and layout staging land beside dest; CreateTemp needs that parent.
-	if err := os.MkdirAll(filepath.Dir(filepath.Clean(dest)), 0o755); err != nil {
-		return Layout{}, fmt.Errorf("image.assemble: %w", err)
-	}
-
-	var base *ocispec.Image
-	var baseLayers []ocispec.Descriptor
-	var blobs []blob
+	var base *baseImage
 	if spec.Base != "" {
-		input, err := readPlatformLayout(ctx, spec.Base)
+		b, err := openBase(ctx, spec.Base, spec.Platform)
 		if err != nil {
-			return Layout{}, fmt.Errorf("image.assemble: base %q (local layout only, refresh with image.pullLayout under the update charm): %w", spec.Base, err)
+			return ManifestLayout{}, fmt.Errorf("image.assemble: base: %w", err)
 		}
-		cfg := input.config
-		if cfg.OS != spec.Platform.OS || cfg.Architecture != spec.Platform.Architecture || cfg.Variant != spec.Platform.Variant {
-			return Layout{}, fmt.Errorf("image.assemble: base config platform %s/%s/%s differs from requested %s/%s/%s", cfg.OS, cfg.Architecture, cfg.Variant, spec.Platform.OS, spec.Platform.Architecture, spec.Platform.Variant)
-		}
-		base = &cfg
-		baseLayers, blobs = input.layers, input.blobs
-		out.BaseDigest = MustDigest(input.descriptor.Digest)
-		setCreated(out, cfg.Created)
+		base = &b
 	}
-
-	var newLayer *ocispec.Descriptor
-	var diffID digest.Digest
-	var added Layer
-	if len(spec.Files)+len(spec.Symlinks)+len(spec.emptyDirs) > 0 {
-		layerPath, layer, err := stageLayer(ctx, spec, dest)
-		if err != nil {
-			return Layout{}, err
-		}
-		defer os.Remove(layerPath)
-		newLayer = &layer.descriptor
-		diffID = layer.diffID
-		added = layerFromBlob(layer)
-		blobs = append(blobs, blob{
-			desc: layer.descriptor,
-			path: layerPath,
-			open: func() (io.ReadCloser, error) { return os.Open(layerPath) },
-		})
-	}
-
-	manifestDesc, metadata, err := imageMetadata(base, spec, diffID, baseLayers, newLayer)
+	entries, err := layerEntries(ctx, spec)
 	if err != nil {
-		return Layout{}, err
+		return ManifestLayout{}, err
 	}
-	blobs = append(blobs, metadata...)
-	if err := writeLayout(ctx, dest, manifestDesc, blobs); err != nil {
-		return Layout{}, err
+
+	st, err := newStaging(dest)
+	if err != nil {
+		return ManifestLayout{}, fmt.Errorf("image.assemble: %w", err)
+	}
+	out, err := assembleInto(ctx, st, spec, base, entries)
+	if err != nil {
+		st.discard()
+		return ManifestLayout{}, fmt.Errorf("image.assemble: %w", err)
+	}
+	if err := st.commit(out.Descriptor); err != nil {
+		st.discard()
+		return ManifestLayout{}, fmt.Errorf("image.assemble: %w", err)
 	}
 	out.Path = dest
-	out.Descriptor = manifestDesc
-	out.FileCount = len(spec.Files)
-	out.SymlinkCount = len(spec.Symlinks)
-	out.Layer = added
-	if spec.Created != "" {
-		t, err := time.Parse(time.RFC3339, spec.Created)
-		if err != nil {
-			return Layout{}, fmt.Errorf("image.assemble: created %q: want RFC 3339: %w", spec.Created, err)
-		}
-		setCreated(out, &t)
-	}
-	for _, b := range blobs {
-		if b.desc.MediaType == ocispec.MediaTypeImageConfig {
-			out.ConfigDigest = MustDigest(b.desc.Digest)
-			break
-		}
-	}
-	return *out, nil
+	return out, nil
 }
 
-func imageMetadata(base *ocispec.Image, spec Spec, diffID digest.Digest, baseLayers []ocispec.Descriptor, layer *ocispec.Descriptor) (ocispec.Descriptor, []blob, error) {
-	cfg, err := buildConfig(base, spec, diffID)
-	if err != nil {
-		return ocispec.Descriptor{}, nil, err
-	}
-	configData, configDesc, err := configBlob(cfg)
-	if err != nil {
-		return ocispec.Descriptor{}, nil, err
-	}
-	manifest := buildManifest(configDesc, baseLayers, layer, spec.Annotations)
-	manifestData, manifestDesc, err := manifestBlob(manifest)
-	if err != nil {
-		return ocispec.Descriptor{}, nil, err
-	}
-	manifestDesc.Platform = &ocispec.Platform{OS: spec.Platform.OS, Architecture: spec.Platform.Architecture, Variant: spec.Platform.Variant}
-	return manifestDesc, []blob{bytesBlob(configDesc.MediaType, configData), bytesBlob(manifestDesc.MediaType, manifestData)}, nil
+// baseImage is the platform manifest an assemble builds over, its config, and the
+// reference Pull recorded for the layout, if any.
+type baseImage struct {
+	manifest ManifestLayout
+	config   ocispec.Image
+	name     string
 }
 
-func stageLayer(ctx context.Context, spec Spec, dest string) (path string, layer layerBlob, err error) {
-	f, err := os.CreateTemp(filepath.Dir(filepath.Clean(dest)), ".image-layer-*")
+func openBase(ctx context.Context, path string, p Platform) (baseImage, error) {
+	opened, err := OpenLayout(ctx, path)
 	if err != nil {
-		return "", layerBlob{}, fmt.Errorf("image.layer: temp: %w", err)
+		return baseImage{}, err
 	}
-	defer func() {
-		if err != nil {
-			_ = os.Remove(f.Name())
+	resolved, err := opened.ResolvePlatform(ctx, p)
+	if err != nil {
+		return baseImage{}, err
+	}
+	cfg, err := opened.config(ctx, resolved.Config)
+	if err != nil {
+		return baseImage{}, err
+	}
+	return baseImage{manifest: resolved, config: cfg, name: opened.Descriptor.Annotations[ocispec.AnnotationRefName]}, nil
+}
+
+func assembleInto(ctx context.Context, st *staging, spec Spec, base *baseImage, entries []entry) (ManifestLayout, error) {
+	var layers []ocispec.Descriptor
+	var baseConfig *ocispec.Image
+	annotations := maps.Clone(spec.Annotations)
+	if base != nil {
+		if err := linkBase(ctx, st, base); err != nil {
+			return ManifestLayout{}, err
 		}
-	}()
-	layer, writeErr := writeLayer(ctx, f, spec, maxLayerBytes)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return "", layerBlob{}, writeErr
+		layers, baseConfig = slices.Clone(base.manifest.Layers), &base.config
+		annotations = base.annotate(annotations)
 	}
-	if closeErr != nil {
-		return "", layerBlob{}, fmt.Errorf("image.layer: temp: %w", closeErr)
+	var added *Added
+	var diffID digest.Digest
+	if len(entries) > 0 {
+		a, err := addLayer(ctx, st, entries)
+		if err != nil {
+			return ManifestLayout{}, err
+		}
+		added, layers, diffID = &a, append(layers, a.Layer), a.DiffID
 	}
-	return f.Name(), layer, nil
+	return writeManifest(st, spec, baseConfig, diffID, layers, annotations, added)
+}
+
+func linkBase(ctx context.Context, st *staging, base *baseImage) error {
+	for _, l := range base.manifest.Layers {
+		if err := st.link(ctx, base.manifest.Path, l); err != nil {
+			return fmt.Errorf("base: %w", err)
+		}
+	}
+	return nil
+}
+
+// annotate adds the base.digest and, when known, base.name annotations to a.
+func (b *baseImage) annotate(a map[string]string) map[string]string {
+	if a == nil {
+		a = map[string]string{}
+	}
+	a[ocispec.AnnotationBaseImageDigest] = b.manifest.Descriptor.Digest.String()
+	if b.name != "" {
+		a[ocispec.AnnotationBaseImageName] = b.name
+	}
+	return a
+}
+
+// addLayer writes entries as the new layer.
+func addLayer(ctx context.Context, st *staging, entries []entry) (Added, error) {
+	var blob layerBlob
+	desc, err := st.write(func(w io.Writer) (ocispec.Descriptor, error) {
+		var err error
+		blob, err = writeLayer(ctx, w, entries, maxLayerBytes)
+		return blob.descriptor, err
+	})
+	if err != nil {
+		return Added{}, err
+	}
+	added := Added{Layer: desc, DiffID: blob.diffID}
+	for _, e := range entries {
+		switch e.kind {
+		case kindFile:
+			added.Files++
+		case kindSymlink:
+			added.Symlinks++
+		case kindDirectory:
+			added.Directories++
+		}
+	}
+	return added, nil
+}
+
+func writeManifest(st *staging, spec Spec, baseConfig *ocispec.Image, diffID digest.Digest, layers []ocispec.Descriptor, annotations map[string]string, added *Added) (ManifestLayout, error) {
+	cfg, err := buildConfig(baseConfig, spec, diffID)
+	if err != nil {
+		return ManifestLayout{}, err
+	}
+	cfgData, err := configJSON(cfg)
+	if err != nil {
+		return ManifestLayout{}, fmt.Errorf("config: %w", err)
+	}
+	cfgDesc, err := st.put(ocispec.MediaTypeImageConfig, cfgData)
+	if err != nil {
+		return ManifestLayout{}, err
+	}
+	manifestDesc, _, err := st.putJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
+		Versioned:   specs.Versioned{SchemaVersion: 2},
+		MediaType:   ocispec.MediaTypeImageManifest,
+		Config:      cfgDesc,
+		Layers:      layers,
+		Annotations: annotations,
+	})
+	if err != nil {
+		return ManifestLayout{}, err
+	}
+	manifestDesc.Platform = spec.Platform.oci()
+	out := ManifestLayout{
+		Layout:   Layout{Descriptor: manifestDesc},
+		Platform: spec.Platform,
+		Config:   cfgDesc,
+		Layers:   layers,
+		Added:    added,
+	}
+	if cfg.Created != nil {
+		out.Created = cfg.Created.Format(timeLayout)
+	}
+	return out, nil
 }

@@ -1,29 +1,46 @@
-// Shape of a golang multi-stage *application* Dockerfile without becoming the Official
-// golang toolchain image (docker-library/golang: apt + unpack a Go tarball into the
-// image — ADR 0018 "What this API cannot express").
-//
-// The app pattern people want from multi-stage is:
-//
-//   FROM golang:… AS build
-//   RUN go build -o /out/app …
-//   FROM scratch
-//   COPY --from=build /out/app /usr/local/bin/app
-//   ENTRYPOINT ["/usr/local/bin/app"]
-//
-// magus: a target is the build stage; assembleLayout is only the packaging stage.
-//
+// static-go: a build target compiles a static binary and an image target places it on
+// scratch. Nothing compiles inside an image. An edit to a .go file reruns build, then
+// image_layout; any other edit replays both from the cache.
+import "magus";
+import "std";
+import "fs";
+import "proc";
 import "image";
 
-export fun assembleStaticGoApp(binPath: str, dest: str) > image\ImageLayout !> any {
-    return image\assembleLayout(image\ImageSpec{
-        platform = image\ImagePlatform{ os = "linux", architecture = "amd64" },
-        files = [image\ImageFile{
-            source = binPath,
-            destination = "/usr/local/bin/app",
-            mode = 493, // 0o755
-        }],
-        user = "65532:65532",
-        entrypoint = ["/usr/local/bin/app"],
-        command = [<str>],
-    }, dest);
+// The OCI platform values are Go's GOOS and GOARCH, so one Platform drives the
+// compiler and the manifest.
+final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+
+// go build for p without cgo. A project with the go spell calls
+// go["go-build"](ctx.withEnv(image\goEnv(p)), ...) instead; see README.md.
+fun goBuild(p: image\Platform, output: str, pkg: str) > void !> any {
+    final argv: mut [str] = mut [];
+    foreach (key, value in image\goEnv(p)) {
+        argv.append("{key}={value}");
+    }
+    foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-ldflags=-s -w", "-o", output, pkg]) {
+        argv.append(arg);
+    }
+    _ = proc\exec("env", args: argv);
+}
+
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/linux-amd64/app"]);
+    goBuild(PLATFORM, output: "out/linux-amd64/app", pkg: "./cmd/app");
+}
+
+// The image keys on the sources that decide the binary, never on build's output:
+// listing another target's output of this project in readsFiles trips MGS4010.
+export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build);
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/image/linux-amd64/**"]);
+    final layout = image\assemble(image\Spec{
+        scratch = true,
+        platform = PLATFORM,
+        files = [image\File{ source = "out/linux-amd64/app", path = "/app", mode = fs\mode("0755") }],
+        config = image\Config{ user = "65532:65532", entrypoint = ["/app"] },
+    }, layout: "out/image/linux-amd64");
+    std\print("{layout.descriptor.digest.string()} {layout.path}");
 }

@@ -1,114 +1,66 @@
 package image
 
 import (
+	"context"
 	"fmt"
+	"io"
 
-	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/egladman/magus/libs/oci"
 )
 
-// Digest is an OCI content digest (algorithm:encoded). Only sha256 is accepted:
-// that is what the layout store and registry transport pin. Zero means unset.
-type Digest struct {
-	d digest.Digest
+// ParseDigest reads "sha256:<hex>" and refuses a tag, bare hex, or another algorithm:
+// sha256 is what a layout's blobs/ directory and a registry both pin.
+func ParseDigest(s string) (digest.Digest, error) {
+	d := digest.Digest(s)
+	if err := checkDigest(d); err != nil {
+		return "", fmt.Errorf("image: digest %q: %w", s, err)
+	}
+	return d, nil
 }
 
-// DiffID is the sha256 of an uncompressed layer tar (config.rootfs.diff_ids).
-// It is not the compressed blob digest on the layer Descriptor; that is Digest.
-type DiffID struct {
-	d Digest
-}
-
-// ParseDigest accepts "sha256:<hex>" and rejects tags, bare hex, and other algorithms.
-func ParseDigest(s string) (Digest, error) {
-	if s == "" {
-		return Digest{}, fmt.Errorf("image.digest: empty")
-	}
-	d, err := digest.Parse(s)
-	if err != nil {
-		return Digest{}, fmt.Errorf("image.digest: %w", err)
-	}
-	return WrapDigest(d)
-}
-
-// WrapDigest wraps an OCI digest after checking it is sha256.
-func WrapDigest(d digest.Digest) (Digest, error) {
-	if d == "" {
-		return Digest{}, nil
-	}
+func checkDigest(d digest.Digest) error {
 	if err := d.Validate(); err != nil {
-		return Digest{}, fmt.Errorf("image.digest: %w", err)
+		return err
 	}
 	if d.Algorithm() != digest.SHA256 {
-		return Digest{}, fmt.Errorf("image.digest: algorithm %q, want sha256", d.Algorithm())
+		return fmt.Errorf("algorithm %s, want sha256", d.Algorithm())
 	}
-	return Digest{d: d}, nil
+	return nil
 }
 
-// MustDigest is WrapDigest for values already known to be valid sha256 digests
-// (descriptors produced inside this package). Panics on a bad digest.
-func MustDigest(d digest.Digest) Digest {
-	out, err := WrapDigest(d)
+// Verify reads r to its end and reports whether it is exactly desc.Size bytes hashing
+// to desc.Digest. A mismatch wraps oci.ErrBlobDigest; a short or long stream says by how
+// much.
+func Verify(ctx context.Context, r io.Reader, desc ocispec.Descriptor) error {
+	if err := checkDigest(desc.Digest); err != nil {
+		return err
+	}
+	v := desc.Digest.Verifier()
+	// One byte past the size shows an overlong stream without reading all of it.
+	n, err := io.Copy(v, io.LimitReader(&ctxReader{ctx: ctx, r: r}, desc.Size+1))
 	if err != nil {
-		panic(err)
+		return err
 	}
-	return out
+	if n != desc.Size {
+		return fmt.Errorf("size is %d bytes, descriptor says %d", n, desc.Size)
+	}
+	if !v.Verified() {
+		return fmt.Errorf("%s: %w", desc.Digest, oci.ErrBlobDigest)
+	}
+	return nil
 }
 
-func (d Digest) IsZero() bool { return d.d == "" }
-
-func (d Digest) String() string {
-	if d.IsZero() {
-		return ""
-	}
-	return d.d.String()
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
 }
 
-func (d Digest) Algorithm() string {
-	if d.IsZero() {
-		return ""
+func (c *ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
 	}
-	return d.d.Algorithm().String()
+	return c.r.Read(p)
 }
-
-func (d Digest) Encoded() string {
-	if d.IsZero() {
-		return ""
-	}
-	return d.d.Encoded()
-}
-
-// OCI returns the underlying go-digest value for registry and layout calls.
-func (d Digest) OCI() digest.Digest { return d.d }
-
-// ParseDiffID accepts a sha256 digest of an uncompressed layer tar.
-func ParseDiffID(s string) (DiffID, error) {
-	d, err := ParseDigest(s)
-	if err != nil {
-		return DiffID{}, fmt.Errorf("image.diffid: %w", err)
-	}
-	return DiffID{d: d}, nil
-}
-
-// WrapDiffID wraps a validated sha256 digest as a DiffID.
-func WrapDiffID(d digest.Digest) (DiffID, error) {
-	out, err := WrapDigest(d)
-	if err != nil {
-		return DiffID{}, fmt.Errorf("image.diffid: %w", err)
-	}
-	return DiffID{d: out}, nil
-}
-
-func MustDiffID(d digest.Digest) DiffID {
-	out, err := WrapDiffID(d)
-	if err != nil {
-		panic(err)
-	}
-	return out
-}
-
-func (d DiffID) IsZero() bool       { return d.d.IsZero() }
-func (d DiffID) String() string     { return d.d.String() }
-func (d DiffID) Algorithm() string  { return d.d.Algorithm() }
-func (d DiffID) Encoded() string    { return d.d.Encoded() }
-func (d DiffID) Digest() Digest     { return d.d }
-func (d DiffID) OCI() digest.Digest { return d.d.OCI() }

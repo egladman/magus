@@ -13,6 +13,7 @@ import (
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
 // with its encoder. A test populates each and asserts the round trip loses nothing.
 var RuntimeBoundaryTypes = []ffi.BoundaryType{
+	{Name: "Added", Zero: types.ImageAdded{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageAdded(v.(types.ImageAdded), enums) }},
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.AffinityOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffinityOutput(v.(types.AffinityOutput)) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},
@@ -53,6 +54,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow)) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential)) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
+	{Name: "Descriptor", Zero: types.ImageDescriptor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectImageDescriptor(v.(types.ImageDescriptor), enums)
+	}},
 	{Name: "Deviation", Zero: types.Deviation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDeviation(v.(types.Deviation)) }},
 	{Name: "Diagnostic", Zero: types.Diagnostic{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiagnostic(v.(types.Diagnostic)) }},
 	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(types.Diff), enums) }},
@@ -74,10 +78,12 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "DiffUncovered", Zero: types.DiffUncovered{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUncovered(v.(types.DiffUncovered), enums) }},
 	{Name: "DiffUnread", Zero: types.DiffUnread{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUnread(v.(types.DiffUnread), enums) }},
 	{Name: "DiffWhy", Zero: types.DiffWhy{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffWhy(v.(types.DiffWhy), enums) }},
+	{Name: "Digest", Zero: types.ImageDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(types.ImageDigest), enums) }},
 	{Name: "Dir", Zero: types.Dir{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDir(v.(types.Dir)) }},
 	{Name: "DirCall", Zero: types.DirCall{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDirCall(v.(types.DirCall)) }},
 	{Name: "DoctorReport", Zero: types.DoctorReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorReport(v.(types.DoctorReport), enums) }},
 	{Name: "DoctorSummary", Zero: types.DoctorSummary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorSummary(v.(types.DoctorSummary)) }},
+	{Name: "Document", Zero: types.ImageDocument{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDocument(v.(types.ImageDocument), enums) }},
 	{Name: "DriftResult", Zero: types.DriftResultRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDriftResultRecord(v.(types.DriftResultRecord)) }},
 	{Name: "Duplication", Zero: types.DuplicationOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectDuplicationOutput(v.(types.DuplicationOutput), enums)
@@ -124,13 +130,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "HarnessWired", Zero: types.HarnessWired{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessWired(v.(types.HarnessWired)) }},
 	{Name: "Hotspots", Zero: types.HotspotOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspotOutput(v.(types.HotspotOutput)) }},
 	{Name: "HttpResponse", Zero: types.HTTPResponse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},
-	{Name: "ImageDigest", Zero: types.ImageDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(types.ImageDigest)) }},
-	{Name: "ImageLayer", Zero: types.ImageLayer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayer(v.(types.ImageLayer)) }},
-	{Name: "ImageLayout", Zero: types.ImageLayout{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayout(v.(types.ImageLayout)) }},
-	{Name: "ImagePlatform", Zero: types.ImagePlatform{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePlatform(v.(types.ImagePlatform)) }},
-	{Name: "ImageProvenance", Zero: types.ImageProvenance{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageProvenance(v.(types.ImageProvenance)) }},
-	{Name: "ImagePublished", Zero: types.ImagePublished{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePublished(v.(types.ImagePublished)) }},
-	{Name: "ImageSBOM", Zero: types.ImageSBOM{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageSBOM(v.(types.ImageSBOM)) }},
 	{Name: "Impact", Zero: types.ImpactResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactResult(v.(types.ImpactResult)) }},
 	{Name: "ImpactCoverage", Zero: types.ImpactCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactCoverage(v.(types.ImpactCoverage)) }},
 	{Name: "ImpactFileCoverage", Zero: types.ImpactFileCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -199,6 +198,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgeTextPresence(v.(types.KnowledgeTextPresence))
 	}},
 	{Name: "Layer", Zero: types.Layer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLayer(v.(types.Layer)) }},
+	{Name: "Layout", Zero: types.ImageLayout{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayout(v.(types.ImageLayout), enums) }},
 	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }},
 	{Name: "LifecycleQuery", Zero: types.LifecycleQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleQuery(v.(types.LifecycleQuery)) }},
 	{Name: "LifecycleStatus", Zero: types.LifecycleStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleStatus(v.(types.LifecycleStatus)) }},
@@ -231,6 +231,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "PathStep", Zero: types.KnowledgePathStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgePathStep(v.(types.KnowledgePathStep)) }},
 	{Name: "PipeRecord", Zero: types.PipeRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPipeRecord(v.(types.PipeRecord)) }},
+	{Name: "Platform", Zero: types.ImagePlatform{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePlatform(v.(types.ImagePlatform), enums) }},
 	{Name: "PriorAttempt", Zero: types.PriorAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPriorAttempt(v.(types.PriorAttempt)) }},
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
 	{Name: "ProjectQuery", Zero: types.ProjectQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectQuery(v.(types.ProjectQuery)) }},
@@ -241,6 +242,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "PublishReviewRequest", Zero: types.PublishReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectPublishReviewRequest(v.(types.PublishReviewRequest))
 	}},
+	{Name: "Pushed", Zero: types.ImagePushed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePushed(v.(types.ImagePushed), enums) }},
 	{Name: "QueryResult", Zero: types.KnowledgeQueryOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeQueryOutput(v.(types.KnowledgeQueryOutput), enums)
 	}},

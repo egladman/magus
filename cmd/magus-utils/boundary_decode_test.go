@@ -52,7 +52,7 @@ func TestRunBoundaryDecode(t *testing.T) {
 	assert.Contains(t, dec, `case "blockComments":`)
 	assert.Contains(t, dec, `case "ignoreEscape":`)
 	assert.NotContains(t, dec, "bindings/gen\"", "the decode package must stay light enough for internal/spell to import")
-	assert.Contains(t, list, "package decode\n")
+	assert.Contains(t, list, "package decode_test\n", "external: bindgen imports decode for typed host arguments")
 	assert.Contains(t, list, `{Name: "Language", Zero: spells.Language{}`)
 	assert.Contains(t, list, `bindgen "github.com/egladman/magus/internal/interp/bindings/gen"`)
 	assert.Contains(t, list, "return bindgen.ObjectLanguage(")

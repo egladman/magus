@@ -115,7 +115,7 @@ func (c *Client) challenge(ctx context.Context, host string) (challenge, error) 
 			return challenge{}, fmt.Errorf("%s: %w", host, err)
 		}
 	default:
-		return challenge{}, fmt.Errorf("oci: reach %s: %s", host, statusLine(resp))
+		return challenge{}, fmt.Errorf("oci: reach %s: %w", host, statusError(resp))
 	}
 	c.mu.Lock()
 	if c.challenges == nil {
@@ -211,7 +211,7 @@ func (c *Client) fetchToken(ctx context.Context, key tokenKey) (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New(statusLine(resp))
+		return "", statusError(resp)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit))
 	if err != nil {

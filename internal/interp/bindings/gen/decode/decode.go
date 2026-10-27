@@ -3780,72 +3780,195 @@ func decodeLimits(v vm.Value, path string) (types.Limits, error) {
 	return out, nil
 }
 
-// DecodeImagePlatform decodes a Buzz ImagePlatform, an object instance or a map, into a types.ImagePlatform.
+// DecodeImagePlatform decodes a Buzz Platform, an object instance or a map, into a types.ImagePlatform.
 func DecodeImagePlatform(v vm.Value) (types.ImagePlatform, error) {
-	return decodeImagePlatform(v, "imagePlatform")
+	return decodeImagePlatform(v, "platform")
 }
 
 func decodeImagePlatform(v vm.Value, path string) (types.ImagePlatform, error) {
 	var out types.ImagePlatform
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "ImagePlatform", v)
+		return out, mismatch(path, "Platform", v)
 	}
+	hasOs := false
+	hasArchitecture := false
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "os":
-			sOS, err := decodeString(item, path+".os")
+			hasOs = true
+			sOS, err := decodeEnum(item, path+".os", "OS", enumOSValues)
 			if err != nil {
 				return out, err
 			}
-			out.OS = sOS
+			out.OS = types.ImageOS(sOS)
 		case "architecture":
-			sArchitecture, err := decodeString(item, path+".architecture")
+			hasArchitecture = true
+			sArchitecture, err := decodeEnum(item, path+".architecture", "Architecture", enumArchitectureValues)
 			if err != nil {
 				return out, err
 			}
-			out.Architecture = sArchitecture
+			out.Architecture = types.ImageArchitecture(sArchitecture)
 		case "variant":
-			sVariant, err := decodeString(item, path+".variant")
+			sVariant, err := decodeEnum(item, path+".variant", "Variant", enumVariantValues)
 			if err != nil {
 				return out, err
 			}
-			out.Variant = sVariant
+			out.Variant = types.ImageVariant(sVariant)
 		default:
-			return out, unknownMember(path, "ImagePlatform", key)
+			return out, unknownMember(path, "Platform", key)
+		}
+	}
+	if !hasOs {
+		return out, missingMember(path, "Platform", "os")
+	}
+	if !hasArchitecture {
+		return out, missingMember(path, "Platform", "architecture")
+	}
+	return out, nil
+}
+
+// DecodeImageDigest decodes a Buzz Digest, an object instance or a map, into a types.ImageDigest.
+func DecodeImageDigest(v vm.Value) (types.ImageDigest, error) {
+	return decodeImageDigest(v, "digest")
+}
+
+func decodeImageDigest(v vm.Value, path string) (types.ImageDigest, error) {
+	var out types.ImageDigest
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Digest", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "algorithm":
+			sAlgorithm, err := decodeString(item, path+".algorithm")
+			if err != nil {
+				return out, err
+			}
+			out.Algorithm = sAlgorithm
+		case "encoded":
+			sEncoded, err := decodeString(item, path+".encoded")
+			if err != nil {
+				return out, err
+			}
+			out.Encoded = sEncoded
+		default:
+			return out, unknownMember(path, "Digest", key)
 		}
 	}
 	return out, nil
 }
 
-// DecodeImageFile decodes a Buzz ImageFile, an object instance or a map, into a types.ImageFile.
+// DecodeImageDescriptor decodes a Buzz Descriptor, an object instance or a map, into a types.ImageDescriptor.
+func DecodeImageDescriptor(v vm.Value) (types.ImageDescriptor, error) {
+	return decodeImageDescriptor(v, "descriptor")
+}
+
+func decodeImageDescriptor(v vm.Value, path string) (types.ImageDescriptor, error) {
+	var out types.ImageDescriptor
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Descriptor", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "mediaType":
+			sMediaType, err := decodeEnum(item, path+".mediaType", "MediaType", enumMediaTypeValues)
+			if err != nil {
+				return out, err
+			}
+			out.MediaType = types.ImageMediaType(sMediaType)
+		case "artifactType":
+			sArtifactType, err := decodeEnum(item, path+".artifactType", "MediaType", enumMediaTypeValues)
+			if err != nil {
+				return out, err
+			}
+			out.ArtifactType = types.ImageMediaType(sArtifactType)
+		case "digest":
+			xDigest, err := decodeImageDigest(item, path+".digest")
+			if err != nil {
+				return out, err
+			}
+			out.Digest = xDigest
+		case "size":
+			nSize, err := decodeInt(item, path+".size")
+			if err != nil {
+				return out, err
+			}
+			out.Size = int(nSize)
+		case "platform":
+			if !item.IsNull() {
+				var optPlatform types.ImagePlatform
+				xPlatform, err := decodeImagePlatform(item, path+".platform")
+				if err != nil {
+					return out, err
+				}
+				optPlatform = xPlatform
+				out.Platform = &optPlatform
+			}
+		case "annotations":
+			entriesAnnotations, err := decodeMap(item, path+".annotations", "{str: str}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesAnnotations.MapKeys(); len(keys) > 0 {
+				mappedAnnotations := make(map[string]string, len(keys))
+				for _, keyAnnotations := range keys {
+					elemAnnotations, _ := entriesAnnotations.MapGet(keyAnnotations)
+					var valueAnnotations string
+					sAnnotationsValue, err := decodeString(elemAnnotations, fmt.Sprintf("%s[%q]", path+".annotations", keyAnnotations))
+					if err != nil {
+						return out, err
+					}
+					valueAnnotations = sAnnotationsValue
+					mappedAnnotations[keyAnnotations] = valueAnnotations
+				}
+				out.Annotations = mappedAnnotations
+			}
+		default:
+			return out, unknownMember(path, "Descriptor", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeImageFile decodes a Buzz File, an object instance or a map, into a types.ImageFile.
 func DecodeImageFile(v vm.Value) (types.ImageFile, error) {
-	return decodeImageFile(v, "imageFile")
+	return decodeImageFile(v, "file")
 }
 
 func decodeImageFile(v vm.Value, path string) (types.ImageFile, error) {
 	var out types.ImageFile
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "ImageFile", v)
+		return out, mismatch(path, "File", v)
 	}
+	hasSource := false
+	hasPath := false
+	hasMode := false
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "source":
+			hasSource = true
 			sSource, err := decodeString(item, path+".source")
 			if err != nil {
 				return out, err
 			}
 			out.Source = sSource
-		case "destination":
-			sDestination, err := decodeString(item, path+".destination")
+		case "path":
+			hasPath = true
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
-			out.Destination = sDestination
+			out.Path = sPath
 		case "mode":
+			hasMode = true
 			nMode, err := decodeInt(item, path+".mode")
 			if err != nil {
 				return out, err
@@ -3864,44 +3987,53 @@ func decodeImageFile(v vm.Value, path string) (types.ImageFile, error) {
 			}
 			out.GID = int(nGID)
 		default:
-			return out, unknownMember(path, "ImageFile", key)
+			return out, unknownMember(path, "File", key)
 		}
+	}
+	if !hasSource {
+		return out, missingMember(path, "File", "source")
+	}
+	if !hasPath {
+		return out, missingMember(path, "File", "path")
+	}
+	if !hasMode {
+		return out, missingMember(path, "File", "mode")
 	}
 	return out, nil
 }
 
-// DecodeImageDirPlacement decodes a Buzz ImageDirPlacement, an object instance or a map, into a types.ImageDirPlacement.
-func DecodeImageDirPlacement(v vm.Value) (types.ImageDirPlacement, error) {
-	return decodeImageDirPlacement(v, "imageDirPlacement")
+// DecodeImageTree decodes a Buzz Tree, an object instance or a map, into a types.ImageTree.
+func DecodeImageTree(v vm.Value) (types.ImageTree, error) {
+	return decodeImageTree(v, "tree")
 }
 
-func decodeImageDirPlacement(v vm.Value, path string) (types.ImageDirPlacement, error) {
-	var out types.ImageDirPlacement
+func decodeImageTree(v vm.Value, path string) (types.ImageTree, error) {
+	var out types.ImageTree
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "ImageDirPlacement", v)
+		return out, mismatch(path, "Tree", v)
 	}
+	hasSource := false
+	hasPath := false
+	hasModes := false
+	hasSymlinks := false
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "source":
+			hasSource = true
 			sSource, err := decodeString(item, path+".source")
 			if err != nil {
 				return out, err
 			}
 			out.Source = sSource
-		case "destination":
-			sDestination, err := decodeString(item, path+".destination")
+		case "path":
+			hasPath = true
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
-			out.Destination = sDestination
-		case "strip":
-			nStrip, err := decodeInt(item, path+".strip")
-			if err != nil {
-				return out, err
-			}
-			out.Strip = int(nStrip)
+			out.Path = sPath
 		case "include":
 			strsInclude, err := decodeStringList(item, path+".include")
 			if err != nil {
@@ -3914,30 +4046,20 @@ func decodeImageDirPlacement(v vm.Value, path string) (types.ImageDirPlacement, 
 				return out, err
 			}
 			out.Exclude = strsExclude
-		case "maxDepth":
-			nMaxDepth, err := decodeInt(item, path+".maxDepth")
+		case "modes":
+			hasModes = true
+			sModes, err := decodeEnum(item, path+".modes", "ModePolicy", enumModePolicyValues)
 			if err != nil {
 				return out, err
 			}
-			out.MaxDepth = int(nMaxDepth)
-		case "modePolicy":
-			sModePolicy, err := decodeString(item, path+".modePolicy")
+			out.Modes = types.ImageModePolicy(sModes)
+		case "symlinks":
+			hasSymlinks = true
+			sSymlinks, err := decodeEnum(item, path+".symlinks", "SymlinkPolicy", enumSymlinkPolicyValues)
 			if err != nil {
 				return out, err
 			}
-			out.ModePolicy = sModePolicy
-		case "fileMode":
-			nFileMode, err := decodeInt(item, path+".fileMode")
-			if err != nil {
-				return out, err
-			}
-			out.FileMode = int(nFileMode)
-		case "dirMode":
-			nDirMode, err := decodeInt(item, path+".dirMode")
-			if err != nil {
-				return out, err
-			}
-			out.DirMode = int(nDirMode)
+			out.Symlinks = types.ImageSymlinkPolicy(sSymlinks)
 		case "uid":
 			nUID, err := decodeInt(item, path+".uid")
 			if err != nil {
@@ -3950,58 +4072,50 @@ func decodeImageDirPlacement(v vm.Value, path string) (types.ImageDirPlacement, 
 				return out, err
 			}
 			out.GID = int(nGID)
-		case "symlinks":
-			sSymlinks, err := decodeString(item, path+".symlinks")
-			if err != nil {
-				return out, err
-			}
-			out.Symlinks = sSymlinks
-		case "emptyDirs":
-			bEmptyDirs, err := decodeBool(item, path+".emptyDirs")
-			if err != nil {
-				return out, err
-			}
-			out.EmptyDirs = bEmptyDirs
-		case "maxFiles":
-			nMaxFiles, err := decodeInt(item, path+".maxFiles")
-			if err != nil {
-				return out, err
-			}
-			out.MaxFiles = int(nMaxFiles)
-		case "maxBytes":
-			nMaxBytes, err := decodeInt(item, path+".maxBytes")
-			if err != nil {
-				return out, err
-			}
-			out.MaxBytes = int(nMaxBytes)
 		default:
-			return out, unknownMember(path, "ImageDirPlacement", key)
+			return out, unknownMember(path, "Tree", key)
 		}
+	}
+	if !hasSource {
+		return out, missingMember(path, "Tree", "source")
+	}
+	if !hasPath {
+		return out, missingMember(path, "Tree", "path")
+	}
+	if !hasModes {
+		return out, missingMember(path, "Tree", "modes")
+	}
+	if !hasSymlinks {
+		return out, missingMember(path, "Tree", "symlinks")
 	}
 	return out, nil
 }
 
-// DecodeImageSymlink decodes a Buzz ImageSymlink, an object instance or a map, into a types.ImageSymlink.
+// DecodeImageSymlink decodes a Buzz Symlink, an object instance or a map, into a types.ImageSymlink.
 func DecodeImageSymlink(v vm.Value) (types.ImageSymlink, error) {
-	return decodeImageSymlink(v, "imageSymlink")
+	return decodeImageSymlink(v, "symlink")
 }
 
 func decodeImageSymlink(v vm.Value, path string) (types.ImageSymlink, error) {
 	var out types.ImageSymlink
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "ImageSymlink", v)
+		return out, mismatch(path, "Symlink", v)
 	}
+	hasPath := false
+	hasTarget := false
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
-		case "destination":
-			sDestination, err := decodeString(item, path+".destination")
+		case "path":
+			hasPath = true
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
-			out.Destination = sDestination
+			out.Path = sPath
 		case "target":
+			hasTarget = true
 			sTarget, err := decodeString(item, path+".target")
 			if err != nil {
 				return out, err
@@ -4020,178 +4134,156 @@ func decodeImageSymlink(v vm.Value, path string) (types.ImageSymlink, error) {
 			}
 			out.GID = int(nGID)
 		default:
-			return out, unknownMember(path, "ImageSymlink", key)
+			return out, unknownMember(path, "Symlink", key)
 		}
+	}
+	if !hasPath {
+		return out, missingMember(path, "Symlink", "path")
+	}
+	if !hasTarget {
+		return out, missingMember(path, "Symlink", "target")
 	}
 	return out, nil
 }
 
-// DecodeImageSecret decodes a Buzz ImageSecret, an object instance or a map, into a types.ImageSecret.
-func DecodeImageSecret(v vm.Value) (types.ImageSecret, error) {
-	return decodeImageSecret(v, "imageSecret")
+// DecodeImageDirectory decodes a Buzz Directory, an object instance or a map, into a types.ImageDirectory.
+func DecodeImageDirectory(v vm.Value) (types.ImageDirectory, error) {
+	return decodeImageDirectory(v, "directory")
 }
 
-func decodeImageSecret(v vm.Value, path string) (types.ImageSecret, error) {
-	var out types.ImageSecret
+func decodeImageDirectory(v vm.Value, path string) (types.ImageDirectory, error) {
+	var out types.ImageDirectory
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "ImageSecret", v)
+		return out, mismatch(path, "Directory", v)
 	}
+	hasPath := false
+	hasMode := false
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
-		case "value":
-			sValue, err := decodeString(item, path+".value")
+		case "path":
+			hasPath = true
+			sPath, err := decodeString(item, path+".path")
 			if err != nil {
 				return out, err
 			}
-			out.Value = sValue
+			out.Path = sPath
+		case "mode":
+			hasMode = true
+			nMode, err := decodeInt(item, path+".mode")
+			if err != nil {
+				return out, err
+			}
+			out.Mode = int(nMode)
+		case "uid":
+			nUID, err := decodeInt(item, path+".uid")
+			if err != nil {
+				return out, err
+			}
+			out.UID = int(nUID)
+		case "gid":
+			nGID, err := decodeInt(item, path+".gid")
+			if err != nil {
+				return out, err
+			}
+			out.GID = int(nGID)
 		default:
-			return out, unknownMember(path, "ImageSecret", key)
+			return out, unknownMember(path, "Directory", key)
 		}
+	}
+	if !hasPath {
+		return out, missingMember(path, "Directory", "path")
+	}
+	if !hasMode {
+		return out, missingMember(path, "Directory", "mode")
 	}
 	return out, nil
 }
 
-// DecodeImageRegistryAuth decodes a Buzz ImageRegistryAuth, an object instance or a map, into a types.ImageRegistryAuth.
-func DecodeImageRegistryAuth(v vm.Value) (types.ImageRegistryAuth, error) {
-	return decodeImageRegistryAuth(v, "imageRegistryAuth")
+// DecodeImageConfig decodes a Buzz Config, an object instance or a map, into a types.ImageConfig.
+func DecodeImageConfig(v vm.Value) (types.ImageConfig, error) {
+	return decodeImageConfig(v, "config")
 }
 
-func decodeImageRegistryAuth(v vm.Value, path string) (types.ImageRegistryAuth, error) {
-	var out types.ImageRegistryAuth
+func decodeImageConfig(v vm.Value, path string) (types.ImageConfig, error) {
+	var out types.ImageConfig
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "ImageRegistryAuth", v)
+		return out, mismatch(path, "Config", v)
 	}
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
-		case "username":
-			sUsername, err := decodeString(item, path+".username")
-			if err != nil {
-				return out, err
-			}
-			out.Username = sUsername
-		case "password":
-			xPassword, err := decodeImageSecret(item, path+".password")
-			if err != nil {
-				return out, err
-			}
-			out.Password = xPassword
-		default:
-			return out, unknownMember(path, "ImageRegistryAuth", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeImageProvenanceSpec decodes a Buzz ImageProvenanceSpec, an object instance or a map, into a types.ImageProvenanceSpec.
-func DecodeImageProvenanceSpec(v vm.Value) (types.ImageProvenanceSpec, error) {
-	return decodeImageProvenanceSpec(v, "imageProvenanceSpec")
-}
-
-func decodeImageProvenanceSpec(v vm.Value, path string) (types.ImageProvenanceSpec, error) {
-	var out types.ImageProvenanceSpec
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "ImageProvenanceSpec", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "sourceRevision":
-			sSourceRevision, err := decodeString(item, path+".sourceRevision")
-			if err != nil {
-				return out, err
-			}
-			out.SourceRevision = sSourceRevision
-		case "builderID":
-			sBuilderID, err := decodeString(item, path+".builderID")
-			if err != nil {
-				return out, err
-			}
-			out.BuilderID = sBuilderID
-		default:
-			return out, unknownMember(path, "ImageProvenanceSpec", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeImageSpec decodes a Buzz ImageSpec, an object instance or a map, into a types.ImageSpec.
-func DecodeImageSpec(v vm.Value) (types.ImageSpec, error) {
-	return decodeImageSpec(v, "imageSpec")
-}
-
-func decodeImageSpec(v vm.Value, path string) (types.ImageSpec, error) {
-	var out types.ImageSpec
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "ImageSpec", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "base":
-			sBase, err := decodeString(item, path+".base")
-			if err != nil {
-				return out, err
-			}
-			out.Base = sBase
-		case "platform":
-			xPlatform, err := decodeImagePlatform(item, path+".platform")
-			if err != nil {
-				return out, err
-			}
-			out.Platform = xPlatform
-		case "files":
-			listFiles, err := decodeList(item, path+".files", "[ImageFile]")
-			if err != nil {
-				return out, err
-			}
-			if len(listFiles) > 0 {
-				itemsFiles := make([]types.ImageFile, len(listFiles))
-				for indexFiles, itemFiles := range listFiles {
-					xFilesItem, err := decodeImageFile(itemFiles, fmt.Sprintf("%s[%d]", path+".files", indexFiles))
-					if err != nil {
-						return out, err
-					}
-					itemsFiles[indexFiles] = xFilesItem
+		case "user":
+			if !item.IsNull() {
+				var optUser string
+				sUser, err := decodeString(item, path+".user")
+				if err != nil {
+					return out, err
 				}
-				out.Files = itemsFiles
+				optUser = sUser
+				out.User = &optUser
 			}
-		case "dirs":
-			listDirs, err := decodeList(item, path+".dirs", "[ImageDirPlacement]")
-			if err != nil {
-				return out, err
-			}
-			if len(listDirs) > 0 {
-				itemsDirs := make([]types.ImageDirPlacement, len(listDirs))
-				for indexDirs, itemDirs := range listDirs {
-					xDirsItem, err := decodeImageDirPlacement(itemDirs, fmt.Sprintf("%s[%d]", path+".dirs", indexDirs))
-					if err != nil {
-						return out, err
-					}
-					itemsDirs[indexDirs] = xDirsItem
+		case "workingDir":
+			if !item.IsNull() {
+				var optWorkingDir string
+				sWorkingDir, err := decodeString(item, path+".workingDir")
+				if err != nil {
+					return out, err
 				}
-				out.Dirs = itemsDirs
+				optWorkingDir = sWorkingDir
+				out.WorkingDir = &optWorkingDir
 			}
-		case "symlinks":
-			listSymlinks, err := decodeList(item, path+".symlinks", "[ImageSymlink]")
-			if err != nil {
-				return out, err
-			}
-			if len(listSymlinks) > 0 {
-				itemsSymlinks := make([]types.ImageSymlink, len(listSymlinks))
-				for indexSymlinks, itemSymlinks := range listSymlinks {
-					xSymlinksItem, err := decodeImageSymlink(itemSymlinks, fmt.Sprintf("%s[%d]", path+".symlinks", indexSymlinks))
-					if err != nil {
-						return out, err
-					}
-					itemsSymlinks[indexSymlinks] = xSymlinksItem
+		case "stopSignal":
+			if !item.IsNull() {
+				var optStopSignal string
+				sStopSignal, err := decodeString(item, path+".stopSignal")
+				if err != nil {
+					return out, err
 				}
-				out.Symlinks = itemsSymlinks
+				optStopSignal = sStopSignal
+				out.StopSignal = &optStopSignal
+			}
+		case "entrypoint":
+			if !item.IsNull() {
+				var optEntrypoint []string
+				strsEntrypoint, err := decodeStringList(item, path+".entrypoint")
+				if err != nil {
+					return out, err
+				}
+				optEntrypoint = strsEntrypoint
+				out.Entrypoint = &optEntrypoint
+			}
+		case "cmd":
+			if !item.IsNull() {
+				var optCmd []string
+				strsCmd, err := decodeStringList(item, path+".cmd")
+				if err != nil {
+					return out, err
+				}
+				optCmd = strsCmd
+				out.Cmd = &optCmd
+			}
+		case "exposedPorts":
+			if !item.IsNull() {
+				var optExposedPorts []string
+				strsExposedPorts, err := decodeStringList(item, path+".exposedPorts")
+				if err != nil {
+					return out, err
+				}
+				optExposedPorts = strsExposedPorts
+				out.ExposedPorts = &optExposedPorts
+			}
+		case "volumes":
+			if !item.IsNull() {
+				var optVolumes []string
+				strsVolumes, err := decodeStringList(item, path+".volumes")
+				if err != nil {
+					return out, err
+				}
+				optVolumes = strsVolumes
+				out.Volumes = &optVolumes
 			}
 		case "env":
 			entriesEnv, err := decodeMap(item, path+".env", "{str: str}")
@@ -4218,42 +4310,6 @@ func decodeImageSpec(v vm.Value, path string) (types.ImageSpec, error) {
 				return out, err
 			}
 			out.UnsetEnv = strsUnsetEnv
-		case "user":
-			sUser, err := decodeString(item, path+".user")
-			if err != nil {
-				return out, err
-			}
-			out.User = sUser
-		case "workingDir":
-			sWorkingDir, err := decodeString(item, path+".workingDir")
-			if err != nil {
-				return out, err
-			}
-			out.WorkingDir = sWorkingDir
-		case "entrypoint":
-			strsEntrypoint, err := decodeStringList(item, path+".entrypoint")
-			if err != nil {
-				return out, err
-			}
-			out.Entrypoint = strsEntrypoint
-		case "resetEntrypoint":
-			bResetEntrypoint, err := decodeBool(item, path+".resetEntrypoint")
-			if err != nil {
-				return out, err
-			}
-			out.ResetEntrypoint = bResetEntrypoint
-		case "command":
-			strsCommand, err := decodeStringList(item, path+".command")
-			if err != nil {
-				return out, err
-			}
-			out.Command = strsCommand
-		case "resetCommand":
-			bResetCommand, err := decodeBool(item, path+".resetCommand")
-			if err != nil {
-				return out, err
-			}
-			out.ResetCommand = bResetCommand
 		case "labels":
 			entriesLabels, err := decodeMap(item, path+".labels", "{str: str}")
 			if err != nil {
@@ -4273,6 +4329,117 @@ func decodeImageSpec(v vm.Value, path string) (types.ImageSpec, error) {
 				}
 				out.Labels = mappedLabels
 			}
+		default:
+			return out, unknownMember(path, "Config", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeImageSpec decodes a Buzz Spec, an object instance or a map, into a types.ImageSpec.
+func DecodeImageSpec(v vm.Value) (types.ImageSpec, error) {
+	return decodeImageSpec(v, "spec")
+}
+
+func decodeImageSpec(v vm.Value, path string) (types.ImageSpec, error) {
+	var out types.ImageSpec
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Spec", v)
+	}
+	hasPlatform := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "base":
+			sBase, err := decodeString(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = sBase
+		case "scratch":
+			bScratch, err := decodeBool(item, path+".scratch")
+			if err != nil {
+				return out, err
+			}
+			out.Scratch = bScratch
+		case "platform":
+			hasPlatform = true
+			xPlatform, err := decodeImagePlatform(item, path+".platform")
+			if err != nil {
+				return out, err
+			}
+			out.Platform = xPlatform
+		case "files":
+			listFiles, err := decodeList(item, path+".files", "[File]")
+			if err != nil {
+				return out, err
+			}
+			if len(listFiles) > 0 {
+				itemsFiles := make([]types.ImageFile, len(listFiles))
+				for indexFiles, itemFiles := range listFiles {
+					xFilesItem, err := decodeImageFile(itemFiles, fmt.Sprintf("%s[%d]", path+".files", indexFiles))
+					if err != nil {
+						return out, err
+					}
+					itemsFiles[indexFiles] = xFilesItem
+				}
+				out.Files = itemsFiles
+			}
+		case "trees":
+			listTrees, err := decodeList(item, path+".trees", "[Tree]")
+			if err != nil {
+				return out, err
+			}
+			if len(listTrees) > 0 {
+				itemsTrees := make([]types.ImageTree, len(listTrees))
+				for indexTrees, itemTrees := range listTrees {
+					xTreesItem, err := decodeImageTree(itemTrees, fmt.Sprintf("%s[%d]", path+".trees", indexTrees))
+					if err != nil {
+						return out, err
+					}
+					itemsTrees[indexTrees] = xTreesItem
+				}
+				out.Trees = itemsTrees
+			}
+		case "symlinks":
+			listSymlinks, err := decodeList(item, path+".symlinks", "[Symlink]")
+			if err != nil {
+				return out, err
+			}
+			if len(listSymlinks) > 0 {
+				itemsSymlinks := make([]types.ImageSymlink, len(listSymlinks))
+				for indexSymlinks, itemSymlinks := range listSymlinks {
+					xSymlinksItem, err := decodeImageSymlink(itemSymlinks, fmt.Sprintf("%s[%d]", path+".symlinks", indexSymlinks))
+					if err != nil {
+						return out, err
+					}
+					itemsSymlinks[indexSymlinks] = xSymlinksItem
+				}
+				out.Symlinks = itemsSymlinks
+			}
+		case "directories":
+			listDirectories, err := decodeList(item, path+".directories", "[Directory]")
+			if err != nil {
+				return out, err
+			}
+			if len(listDirectories) > 0 {
+				itemsDirectories := make([]types.ImageDirectory, len(listDirectories))
+				for indexDirectories, itemDirectories := range listDirectories {
+					xDirectoriesItem, err := decodeImageDirectory(itemDirectories, fmt.Sprintf("%s[%d]", path+".directories", indexDirectories))
+					if err != nil {
+						return out, err
+					}
+					itemsDirectories[indexDirectories] = xDirectoriesItem
+				}
+				out.Directories = itemsDirectories
+			}
+		case "config":
+			xConfig, err := decodeImageConfig(item, path+".config")
+			if err != nil {
+				return out, err
+			}
+			out.Config = xConfig
 		case "annotations":
 			entriesAnnotations, err := decodeMap(item, path+".annotations", "{str: str}")
 			if err != nil {
@@ -4299,8 +4466,179 @@ func decodeImageSpec(v vm.Value, path string) (types.ImageSpec, error) {
 			}
 			out.Created = sCreated
 		default:
-			return out, unknownMember(path, "ImageSpec", key)
+			return out, unknownMember(path, "Spec", key)
 		}
+	}
+	if !hasPlatform {
+		return out, missingMember(path, "Spec", "platform")
+	}
+	return out, nil
+}
+
+// DecodeImageRegistryAuth decodes a Buzz RegistryAuth, an object instance or a map, into a types.ImageRegistryAuth.
+func DecodeImageRegistryAuth(v vm.Value) (types.ImageRegistryAuth, error) {
+	return decodeImageRegistryAuth(v, "registryAuth")
+}
+
+func decodeImageRegistryAuth(v vm.Value, path string) (types.ImageRegistryAuth, error) {
+	var out types.ImageRegistryAuth
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "RegistryAuth", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "username":
+			sUsername, err := decodeString(item, path+".username")
+			if err != nil {
+				return out, err
+			}
+			out.Username = sUsername
+		case "password":
+			xPassword, err := decodeSecret(item, path+".password")
+			if err != nil {
+				return out, err
+			}
+			out.Password = xPassword
+		default:
+			return out, unknownMember(path, "RegistryAuth", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeImageMaterial decodes a Buzz Material, an object instance or a map, into a types.ImageMaterial.
+func DecodeImageMaterial(v vm.Value) (types.ImageMaterial, error) {
+	return decodeImageMaterial(v, "material")
+}
+
+func decodeImageMaterial(v vm.Value, path string) (types.ImageMaterial, error) {
+	var out types.ImageMaterial
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Material", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "uri":
+			sURI, err := decodeString(item, path+".uri")
+			if err != nil {
+				return out, err
+			}
+			out.URI = sURI
+		case "digest":
+			xDigest, err := decodeImageDigest(item, path+".digest")
+			if err != nil {
+				return out, err
+			}
+			out.Digest = xDigest
+		default:
+			return out, unknownMember(path, "Material", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeImageProvenance decodes a Buzz Provenance, an object instance or a map, into a types.ImageProvenance.
+func DecodeImageProvenance(v vm.Value) (types.ImageProvenance, error) {
+	return decodeImageProvenance(v, "provenance")
+}
+
+func decodeImageProvenance(v vm.Value, path string) (types.ImageProvenance, error) {
+	var out types.ImageProvenance
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Provenance", v)
+	}
+	hasBuilderId := false
+	hasSourceRevision := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "builderId":
+			hasBuilderId = true
+			sBuilderID, err := decodeString(item, path+".builderId")
+			if err != nil {
+				return out, err
+			}
+			out.BuilderID = sBuilderID
+		case "sourceRevision":
+			hasSourceRevision = true
+			sSourceRevision, err := decodeString(item, path+".sourceRevision")
+			if err != nil {
+				return out, err
+			}
+			out.SourceRevision = sSourceRevision
+		case "materials":
+			listMaterials, err := decodeList(item, path+".materials", "[Material]")
+			if err != nil {
+				return out, err
+			}
+			if len(listMaterials) > 0 {
+				itemsMaterials := make([]types.ImageMaterial, len(listMaterials))
+				for indexMaterials, itemMaterials := range listMaterials {
+					xMaterialsItem, err := decodeImageMaterial(itemMaterials, fmt.Sprintf("%s[%d]", path+".materials", indexMaterials))
+					if err != nil {
+						return out, err
+					}
+					itemsMaterials[indexMaterials] = xMaterialsItem
+				}
+				out.Materials = itemsMaterials
+			}
+		default:
+			return out, unknownMember(path, "Provenance", key)
+		}
+	}
+	if !hasBuilderId {
+		return out, missingMember(path, "Provenance", "builderId")
+	}
+	if !hasSourceRevision {
+		return out, missingMember(path, "Provenance", "sourceRevision")
+	}
+	return out, nil
+}
+
+// DecodeImageDocument decodes a Buzz Document, an object instance or a map, into a types.ImageDocument.
+func DecodeImageDocument(v vm.Value) (types.ImageDocument, error) {
+	return decodeImageDocument(v, "document")
+}
+
+func decodeImageDocument(v vm.Value, path string) (types.ImageDocument, error) {
+	var out types.ImageDocument
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Document", v)
+	}
+	hasPath := false
+	hasDescriptor := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			hasPath = true
+			sPath, err := decodeString(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "descriptor":
+			hasDescriptor = true
+			xDescriptor, err := decodeImageDescriptor(item, path+".descriptor")
+			if err != nil {
+				return out, err
+			}
+			out.Descriptor = xDescriptor
+		default:
+			return out, unknownMember(path, "Document", key)
+		}
+	}
+	if !hasPath {
+		return out, missingMember(path, "Document", "path")
+	}
+	if !hasDescriptor {
+		return out, missingMember(path, "Document", "descriptor")
 	}
 	return out, nil
 }
@@ -4707,14 +5045,20 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 	return out, nil
 }
 
+var enumArchitectureValues = []string{"", "amd64", "arm64"}
 var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}
+var enumMediaTypeValues = []string{"", "application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.config.v1+json", "application/vnd.oci.image.layer.v1.tar", "application/vnd.oci.image.layer.v1.tar+gzip", "application/vnd.oci.image.layer.v1.tar+zstd", "application/vnd.oci.empty.v1+json", "application/spdx+json", "application/vnd.in-toto+json"}
+var enumModePolicyValues = []string{"", "fixed", "executable-bit"}
+var enumOSValues = []string{"", "linux"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
 var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
 var enumSkillFormValues = []string{"", "both", "short", "full"}
 var enumSymbolFormatValues = []string{"", "scip"}
+var enumSymlinkPolicyValues = []string{"", "refuse", "keep", "follow"}
 var enumToolCapabilityValues = []string{"", "runs", "reads", "writes", "spawns", "network", "inert"}
+var enumVariantValues = []string{"", "v8"}
 var enumVersionComponentValues = []string{"", "major", "minor", "patch"}
 
 // mismatch names an object by its type, which says more than "object".

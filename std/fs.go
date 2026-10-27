@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -238,8 +239,16 @@ var Fs = Module{
 			Impl:    FsAppendFile,
 		},
 		{
+			Name:    "mode",
+			Doc:     "Permission bits from octal (\"0755\", \"1777\") or ls notation (\"rwxr-xr-x\"), for chmod, mkdirAll and image placements. Zero and bits beyond setuid, setgid and sticky raise.",
+			Args:    []Arg{{Name: "notation", Type: TypeString}},
+			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
+			Impl:    FsMode,
+		},
+		{
 			Name:    "chmod",
-			Doc:     "Change the permission bits of path to mode (octal integer, e.g. 0755).",
+			Doc:     "Change the permission bits of path to mode (an integer; fs\\mode(\"0755\") spells one).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "mode", Type: TypeInt}},
 			Returns: nil,
 			Raises:  true,
@@ -917,6 +926,17 @@ func FsAppendFile(ctx context.Context, path, content string) error {
 		return fmt.Errorf("fs.append_file %q: %w", path, werr)
 	}
 	return nil
+}
+
+// FsMode parses a permission with image.ParseMode. It lives in fs because chmod,
+// mkdirAll and stat speak the same integer bits; the parser is libs/image's because a Go
+// caller assembling an image needs it without std.
+func FsMode(_ context.Context, notation string) (int, error) {
+	m, err := image.ParseMode(notation)
+	if err != nil {
+		return 0, fmt.Errorf("fs.mode: %w", err)
+	}
+	return int(m), nil
 }
 
 // FsChmod changes the permission bits of path, subject to the sandbox write policy.

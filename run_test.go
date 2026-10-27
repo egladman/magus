@@ -2750,3 +2750,76 @@ func TestLoadHistorySaysAnUnsupportedVersionOnce(t *testing.T) {
 	assert.Contains(t, logs.String(), "version 99")
 	assert.Contains(t, logs.String(), "left alone")
 }
+
+// The network-free targets of the distroless image example run as written: the
+// rootfs stage, then the image over it, then a replay from the cache.
+func TestImageExampleDistrolessRootfsRuns(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("std", "examples", "image", "distroless.buzz"))
+	require.NoError(t, err)
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(string(src))
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "image-rootfs"}}
+	require.NoError(t, m.Run(ctx, targets))
+	index, err := os.ReadFile(w.Path("out", "image", "rootfs", "index.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(index), "application/vnd.oci.image.manifest.v1+json")
+
+	require.NoError(t, m.Run(ctx, targets), "a second run replays from the cache")
+	again, err := os.ReadFile(w.Path("out", "image", "rootfs", "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, index, again, "the layout is byte-identical")
+}
+
+// The single-project multi-stage shape the image examples teach: image needs build and
+// keys on build's SOURCES, never build's output (that trips MGS4010); without the
+// sources an edit replays a stale image. uuid makes each real execution visible.
+func TestStageInOneProjectCachesAndRekeysOnItsSource(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("src/app.txt", "one")
+	w.Magusfile(`import "magus";
+import "fs";
+import "uuid";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["src/**"]);
+    ctx.writesFiles(["out/bin/app"]);
+    fs\mkdirAll("out/bin");
+    fs\writeFile("out/bin/app", content: "{fs\readFile("src/app.txt")}:{uuid\v4()}");
+}
+export fun image(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build);
+    ctx.readsFiles(["src/**"]);
+    ctx.writesFiles(["out/image/**"]);
+    fs\mkdirAll("out/image");
+    fs\writeFile("out/image/layer", content: "{fs\readFile("out/bin/app")}|{uuid\v4()}");
+}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "image"}}
+	read := func() string {
+		data, err := os.ReadFile(w.Path("out", "image", "layer"))
+		require.NoError(t, err)
+		return string(data)
+	}
+
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	first := read()
+	assert.True(t, strings.HasPrefix(first, "one:"), "the image placed what build wrote: %q", first)
+
+	require.NoError(t, m.Run(ctx, targets), "second run")
+	assert.Equal(t, first, read(), "an unchanged source replays the image from the cache")
+
+	w.Write("src/app.txt", "two")
+	require.NoError(t, m.Run(ctx, targets), "run after a source edit")
+	third := read()
+	assert.True(t, strings.HasPrefix(third, "two:"), "the edit reran build, then the image: %q", third)
+	assert.NotEqual(t, first, third)
+}
