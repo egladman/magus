@@ -316,7 +316,8 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     // The embedded spell type mirrors are an output, so the link must follow their
     // regeneration; ctx.readsFiles would replace the **/*.go footprint, not add to it.
     ctx.needs(spells_generate);
-    // Read after spells_generate so it records the declarations this link embeds.
+    // Read after spells_generate so it records the declarations this link embeds. Its Go
+    // input digest is what bootstrap-worktree compares before placing this binary elsewhere.
     final stamp = agentpolicy\buildStamp(".");
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",

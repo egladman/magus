@@ -5,6 +5,7 @@ import "std";
 import "magus";
 import "fs";
 import "path";
+import "proc";
 import "crypto";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
@@ -46,9 +47,18 @@ fun shortDigest(file: str) > str !> any {
 // starts with @, so movedSince never reads it as one.
 final commitKey = "@commit";
 
-// buildStamp is what go-build links into ./magus: `<path>=<digest>` for every stamped file
-// under root, then `@commit=<id>` for the checkout's commit, comma-separated.
+// inputsKey names the stamp entry holding goInputsDigest of the tree the build read.
+final inputsKey = "@inputs";
+
+// buildStamp is what go-build links into ./magus: stampEntries, then `@inputs=<digest>` for
+// the Go build inputs under root.
 export fun buildStamp(root: str) > str !> any {
+    return "{stampEntries(root)},{inputsKey}={goInputsDigest(root)}";
+}
+
+// stampEntries are `<path>=<digest>` for every stamped file under root, then
+// `@commit=<id>` for the checkout's commit, comma-separated.
+export fun stampEntries(root: str) > str !> any {
     final entries = mut [<str>];
     foreach (rel in stampFiles(root)) {
         final digest = shortDigest("{root}/{rel}");
@@ -59,6 +69,76 @@ export fun buildStamp(root: str) > str !> any {
         entries.append("{commitKey}={head!.id}");
     }
     return entries.join(",");
+}
+
+// stampedInputs is the Go input digest a stamp records, "" for a stamp from before it did.
+export fun stampedInputs(stamp: str) > str {
+    foreach (entry in stamp.split(",")) {
+        if (entry.startsWith(inputsKey + "=")) {
+            return entry.sub(inputsKey.len() + 1);
+        }
+    }
+    return "";
+}
+
+// The files that decide the module graph a Go build resolves, at the root.
+final moduleFiles = ["go.mod", "go.sum", "go.work", "go.work.sum"];
+
+// goListFormat prints a linked package as its directory, then each file it compiles or
+// embeds after a "|". Test files are not among them; a standard-library package prints "".
+final goListFormat = `{{if not .Standard}}{{.Dir}}{{range .GoFiles}}|{{.}}{{end}}{{range .CgoFiles}}|{{.}}{{end}}`
+    + `{{range .CFiles}}|{{.}}{{end}}{{range .HFiles}}|{{.}}{{end}}{{range .SFiles}}|{{.}}{{end}}`
+    + `{{range .SysoFiles}}|{{.}}{{end}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`;
+
+// goInputs are the files under root a build of ./cmd/magus reads, root-relative, from
+// listed, `go list -deps -f goListFormat` output. A module-cache package is not under root
+// and drops out: go.sum pins it.
+export fun goInputs(listed: str, root: str) > [str] {
+    final base = path\clean(root);
+    final files = mut [<str>];
+    foreach (line in listed.split("\n")) {
+        if (line.trim() == "") {
+            continue;
+        }
+        final fields = line.trim().split("|");
+        final dir = path\clean(fields[0]);
+        var prefix = "";
+        if (dir != base) {
+            if (!dir.startsWith(base + "/")) {
+                continue;
+            }
+            prefix = dir.sub(base.len() + 1) + "/";
+        }
+        foreach (name in fields.sub(1)) {
+            files.append(prefix + name);
+        }
+    }
+    return files;
+}
+
+// goInputsDigest hashes every Go build input of ./cmd/magus under root: each linked
+// package's non-test sources and embedded files, and the root's module files. Two trees
+// with one digest build one binary, whatever their commits. go list loads packages without
+// compiling any; magus refuses to load without jsonv2.
+export fun goInputsDigest(root: str) > str !> any {
+    final base = path\abs(root);
+    final listed = proc\exec("env", args: ["GOEXPERIMENT=jsonv2", "go", "list", "-deps", "-f", goListFormat, "./cmd/magus"],
+        dir: base, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+    if (listed.code != 0) {
+        throw "`go list -deps ./cmd/magus` in {base} exited {listed.code}:\n{listed.stderr.trim()}";
+    }
+    final files = goInputs(listed.stdout, root: base).cloneMutable();
+    foreach (name in moduleFiles) {
+        if (fs\isFile("{base}/{name}")) {
+            files.append(name);
+        }
+    }
+    files.sort(fun (left: str, right: str) > bool => left < right);
+    final lines = mut [<str>];
+    foreach (rel in files) {
+        lines.append("{rel} {crypto\sha256File("{base}/{rel}")}");
+    }
+    return crypto\sha256Hex(lines.join("\n")).sub(0, len: 16);
 }
 
 // stampedCommit is the commit a stamp records, "" for a stamp from before commits were.
@@ -133,7 +213,7 @@ export fun hookBinary(workspace: str) > HookBinary {
     final bin = magus\guard.binary();
     final own = "{workspace}/magus";
     final sameFile = binaries\onDisk().sameFile;
-    if (bin.path == "" or (bin.path != own and !sameFile(own, bin.path))) { return none; }
+    if (bin.path == "" or (bin.path != own and !sameFile(own, b: bin.path))) { return none; }
     if (bin.stamp == "") {
         return HookBinary{ ours = true, stamped = false, moved = [<str>], path = bin.path, workspace = workspace };
     }
@@ -417,7 +497,7 @@ test "the stamp records every stamped source, and movedSince names what changed"
     fs\writeFile("{root}/internal/guard/shell_test.go", content: "package guard\n") catch void;
     fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 1;\n") catch void;
 
-    final stamp = buildStamp(root) catch "";
+    final stamp = stampEntries(root) catch "";
     std\assert(stamp.indexOf("internal/guard/shell.go=") != null, message: "a rule source");
     std\assert(stamp.indexOf("internal/spell/gen/decls/magus.buzz=") != null, message: "a host declaration");
     std\assert(stamp.indexOf("shell_test.go") == null, message: "a test is not linked in");
@@ -429,6 +509,22 @@ test "the stamp records every stamped source, and movedSince names what changed"
     final moved = movedSince(root, stamp: stamp, builtAt: 0.0) catch [<str>];
     std\assert(moved.join(",") == "internal/guard/policy.go,internal/spell/gen/decls/magus.buzz,internal/guard/shell.go", message: moved.join(","));
     fs\removeAll(root) catch void;
+}
+
+test "the Go inputs are each linked package's files under the root" {
+    final listed = "/work/magus|run.go|assets/a.txt\n/work/magus/internal/guard|brief.go|rules/embedded.txt\n"
+        + "/home/me/go/pkg/mod/dario.cat/mergo@v1.0.2|merge.go\n/work/magus-other/x|x.go\n\n";
+    std\assert(goInputs(listed, root: "/work/magus").join(",") == "run.go,assets/a.txt,internal/guard/brief.go,internal/guard/rules/embedded.txt",
+        message: "module-cache and sibling directories drop out");
+    std\assert(stampedInputs("a.go=1,@commit=2,@inputs=0123456789abcdef") == "0123456789abcdef", message: "the digest");
+    std\assert(stampedInputs("a.go=1,@commit=2") == "", message: "a stamp from before the digest");
+}
+
+test "the Go input digest of one tree is stable" {
+    final root = vcs\root() catch "";
+    final digest = goInputsDigest(root) catch "";
+    std\assert(digest.len() == 16, message: "a digest: {digest}");
+    std\assert((goInputsDigest(root) catch "") == digest, message: "stable across calls");
 }
 
 test "the stamp names its commit, which movedSince never reads as a source" {
