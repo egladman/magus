@@ -46,7 +46,7 @@ type Spec struct {
 	ResetCommand    bool
 	Labels          map[string]string
 	Annotations     map[string]string
-	Created string
+	Created         string
 	// emptyDirs are image directories from DirPlacement.EmptyDirs (mode/owner from the placement).
 	emptyDirs []emptyDir
 }
@@ -453,7 +453,7 @@ func (d *decoder) dir(i int, m map[string]any) DirPlacement {
 		"modePolicy", "fileMode", "dirMode", "uid", "gid", "symlinks", "emptyDirs", "maxFiles", "maxBytes")
 	placement := DirPlacement{
 		Source:      HostDir{Value: sub.str(m, "source")},
-		Destination: ImageDir{Value: sub.str(m, "destination")},
+		Destination: DestDir{Value: sub.str(m, "destination")},
 		Strip:       sub.integer(m, "strip"),
 		Include:     sub.strs(m, "include"),
 		Exclude:     sub.strs(m, "exclude"),

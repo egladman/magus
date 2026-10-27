@@ -32,7 +32,7 @@ const (
 // DirPlacement expands a host directory into layer entries under destination.
 type DirPlacement struct {
 	Source      HostDir
-	Destination ImageDir
+	Destination DestDir
 	// Strip is tar --strip-components on basename(source)/rel (0 keeps the dir name).
 	Strip      int
 	Include    []string
@@ -176,7 +176,7 @@ func (d DirPlacement) destFor(rel string) (member, dest string, err error) {
 	if rel == "" || rel == "." {
 		member = base
 	} else {
-		member = path.Clean(base + "/" + rel)
+		member = path.Join(base, rel)
 	}
 	stripped, err := stripComponents(member, d.Strip)
 	if err != nil {
@@ -185,7 +185,7 @@ func (d DirPlacement) destFor(rel string) (member, dest string, err error) {
 	if stripped == "" || stripped == "." {
 		return member, "", fmt.Errorf("image.assemble: strip %d removes entire path %q", d.Strip, member)
 	}
-	return member, path.Clean(d.Destination.Value + "/" + stripped), nil
+	return member, path.Join(d.Destination.Value, stripped), nil
 }
 
 // stripComponents is tar --strip-components: drop the first n slash-separated parts of p.

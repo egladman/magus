@@ -572,12 +572,12 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 	for _, p := range sortedProtocols(mod) {
 		for _, m := range p.Methods {
 			for _, a := range m.Args {
-				if err := add(a.Enum, p.Name+"."+m.Name); err != nil {
+				if err := add(a.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
 					return nil, err
 				}
 			}
 			for _, r := range m.Returns {
-				if err := add(r.Enum, p.Name+"."+m.Name); err != nil {
+				if err := add(r.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
 					return nil, err
 				}
 			}

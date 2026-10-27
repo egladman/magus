@@ -18,11 +18,11 @@ type HostDir struct {
 	Base  string
 }
 
-// ImageFile is an absolute POSIX path of a file inside the image.
-type ImageFile struct{ Value string }
+// DestFile is an absolute POSIX path of a file inside the image.
+type DestFile struct{ Value string }
 
-// ImageDir is an absolute POSIX path of a directory inside the image.
-type ImageDir struct{ Value string }
+// DestDir is an absolute POSIX path of a directory inside the image.
+type DestDir struct{ Value string }
 
 // Resolve joins Base and Value when Value is relative.
 func (h HostFile) Resolve() string {
@@ -40,15 +40,15 @@ func (h HostDir) Resolve() string {
 	return path.Join(h.Base, h.Value)
 }
 
-// Child returns an ImageFile under d.
-func (d ImageDir) Child(rel string) (ImageFile, error) {
+// Child returns a DestFile under d.
+func (d DestDir) Child(rel string) (DestFile, error) {
 	if rel == "" || strings.HasPrefix(rel, "/") || strings.Contains(rel, "..") {
-		return ImageFile{}, fmt.Errorf("image: image dir child %q: must be a relative path without ..", rel)
+		return DestFile{}, fmt.Errorf("image: dest dir child %q: must be a relative path without ..", rel)
 	}
-	return ImageFile{Value: path.Clean(d.Value + "/" + rel)}, nil
+	return DestFile{Value: path.Join(d.Value, rel)}, nil
 }
 
 // Place builds a File placement from a host file into an image path.
-func (h HostFile) Place(dest ImageFile, mode Mode) File {
+func (h HostFile) Place(dest DestFile, mode Mode) File {
 	return File{Source: h.Resolve(), Destination: dest.Value, Mode: mode.FileMode()}
 }

@@ -272,7 +272,7 @@ func TestImageLayerSensitivity(t *testing.T) {
 func TestImageLayerEmptySpecIsRefused(t *testing.T) {
 	var buf bytes.Buffer
 	_, err := writeLayer(context.Background(), &buf, Spec{Env: map[string]string{"A": "b"}}, maxLayerBytes)
-	if err == nil || !strings.Contains(err.Error(), "no files or symlinks") {
+	if err == nil || !strings.Contains(err.Error(), "no files, symlinks or empty dirs") {
 		t.Fatalf("error: %v", err)
 	}
 	if buf.Len() != 0 {

@@ -3,6 +3,7 @@ package image
 import (
 	"context"
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestDirPlacementStrip(t *testing.T) {
 
 	files, _, _, err := (DirPlacement{
 		Source:      HostDir{Value: root},
-		Destination: ImageDir{Value: "/opt"},
+		Destination: DestDir{Value: "/opt"},
 		Strip:       1,
 	}).expand(context.Background())
 	require.NoError(t, err)
@@ -48,13 +49,13 @@ func TestDirPlacementStrip(t *testing.T) {
 
 	files, _, _, err = (DirPlacement{
 		Source:      HostDir{Value: root},
-		Destination: ImageDir{Value: "/opt"},
+		Destination: DestDir{Value: "/opt"},
 		Strip:       0,
 	}).expand(context.Background())
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	base := filepath.Base(root)
-	assert.Equal(t, "/opt/"+base+"/bin/hello", files[0].Destination)
+	assert.Equal(t, path.Join("/opt", base, "bin", "hello"), files[0].Destination)
 }
 
 func TestDirPlacementEmptyDirs(t *testing.T) {
@@ -65,7 +66,7 @@ func TestDirPlacementEmptyDirs(t *testing.T) {
 
 	files, _, dirs, err := (DirPlacement{
 		Source:      HostDir{Value: root},
-		Destination: ImageDir{Value: "/opt"},
+		Destination: DestDir{Value: "/opt"},
 		Strip:       1,
 		EmptyDirs:   true,
 	}).expand(context.Background())

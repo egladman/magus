@@ -260,7 +260,7 @@ func TestNewSpecWithChainAssemblesLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := HostFile{Value: src}.Place(ImageFile{Value: "/usr/bin/app"}, mode)
+	file := HostFile{Value: src}.Place(DestFile{Value: "/usr/bin/app"}, mode)
 	layout, err := NewSpec(NewLinuxAmd64()).
 		WithFile(file).
 		WithEnv("APP", "1").
