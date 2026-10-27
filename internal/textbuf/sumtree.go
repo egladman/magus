@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 )
 
+// maxItems 8 beat 16 only on BenchmarkInsertSnapshot (-18%), and lost on edits (+5-17%)
+// and on resolving 16k anchors (+31%).
 const (
 	maxItems = 16
 	minItems = maxItems / 2
