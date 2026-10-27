@@ -571,21 +571,27 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	_, err := job.Exit(t.Context(), store, "w", nil, nil)
 	require.NoError(t, err)
 
+	spec := func(r types.Job) types.Declaration {
+		d := job.RetryDeclaration(r)
+		d.Schema = types.Schema{}
+		return d
+	}
+	first, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
 	require.NoError(t, jobFork(t.Context(), root, []string{"w"}))
 	rows, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, []string{"run.go"}, rows[0].WritePaths)
-	assert.Equal(t, "run", rows[0].Criteria)
-	assert.Contains(t, rows[0].Validation, "test .")
+	assert.Equal(t, spec(first[0]), spec(rows[0]), "the retry keeps the declared spec")
 	assert.Equal(t, types.StateDeclared, rows[0].State, "the retry is a new attempt")
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--criteria", "anew"}))
 	rows, err = store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Empty(t, rows[0].WritePaths, "a spec flag declares the job anew")
-	assert.Equal(t, "anew", rows[0].Criteria)
+	assert.Equal(t, types.Declaration{ID: "w", Criteria: "anew", ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
 }
 
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork

@@ -744,7 +744,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// Only RecordWorktree and EndWorktrees write the worktree record, and Exec rebinding
 		// an untaken row from an adopted checkout to another. The next attempt keeps a
 		// checkout that still stands and forgets one magus removed.
-		if !(kind == asExec && rebindsAdopted(prev, row)) {
+		if kind != asExec || !rebindsAdopted(prev, row) {
 			row.Worktree = prev.Clone().Worktree
 		}
 		if refork && row.Worktree != nil {

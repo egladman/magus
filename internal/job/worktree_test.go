@@ -55,7 +55,7 @@ func TestForkWorktreeMakesTheJobsCheckoutAtTheForkersRevision(t *testing.T) {
 	assert.Equal(t, wt, again)
 
 	_, _, err = s.ForkWorktree(ctx, "w1", filepath.Join(t.TempDir(), "elsewhere"), "", "")
-	require.ErrorContains(t, err, "already owns the checkout "+wt.Root+", which its fork made")
+	require.ErrorContains(t, err, fmt.Sprintf("already owns the checkout %s, which its fork made", wt.Root))
 }
 
 func TestForkWorktreeRefusesACheckpointWithUncommittedChanges(t *testing.T) {
