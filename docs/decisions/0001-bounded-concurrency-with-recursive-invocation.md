@@ -206,7 +206,7 @@ a structural rule.
 
 | System           | Recursion              | What is bounded                                                         | Nested wait                                                                         |
 | ---------------- | ---------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **GNU make**     | yes                    | one token per _job_                                                     | the make rule's token becomes the sub-make's implicit token: direct hand-off           |
+| **GNU make**     | yes                    | one token per _job_                                                     | the make rule's token becomes the sub-make's implicit token: direct hand-off        |
 | **Shake**        | yes                    | `shakeThreads` over running rules; `Resource` around the expensive part | `need` captures a continuation; no thread blocks                                    |
 | **Buck2 / DICE** | yes                    | permits around _command execution_                                      | an awaiting computation holds no thread; identifier semaphores taken before permits |
 | **Bazel**        | no, actions are leaves | `--jobs` over actions                                                   | not evidence about recursion                                                        |

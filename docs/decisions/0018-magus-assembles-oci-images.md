@@ -44,13 +44,13 @@ adds at most one new layer holding the files and symlinks a Spec lists, rewrites
 image config, and writes a new OCI image layout. A separate, explicit step publishes a
 layout to a registry. `Index` joins single-platform layouts into one image index.
 
-| Item                                                                                           | State    |
-| ---------------------------------------------------------------------------------------------- | -------- |
-| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`    | proposed |
-| The std `image` module, trampolines generated like `archive`                                   | proposed |
+| Item                                                                                         | State    |
+| -------------------------------------------------------------------------------------------- | -------- |
+| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`  | proposed |
+| The std `image` module, trampolines generated like `archive`                                 | proposed |
 | Our own static image Spec, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | proposed |
-| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                     | proposed |
-| The release path publishes the layout instead of running `docker buildx`                       | proposed |
+| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                   | proposed |
+| The release path publishes the layout instead of running `docker buildx`                     | proposed |
 
 <!--diagram:oci-assembly-->
 
@@ -203,20 +203,20 @@ State stays _proposed_ until the code moves.
 
 #### Packaging and dual modules
 
-| Item | State |
-| --- | --- |
-| `libs/oci`: distribution client moved from `internal/oci` (artifacts and images) | done |
-| `libs/image`: one package (types, layout I/O, assembleLayout, assembleIndex, pull/publish, sbom, provenance, attach) | done |
-| Typed `Digest` / `DiffID` (sha256 only); digests on Layout are not bare strings | done |
-| Op, digests, counts, Created live on Layout / Published (facts only; no Notes log, no nested Report) | done |
-| Buzz module `image`: facade (`pullLayout`, `assembleLayout`, `assembleIndex`, `publishLayout`, `writeSbom`, `writeProvenance`, `attachArtifacts`) | done |
-| Public Go API is `libs/image` and `libs/oci`; the root magus SDK does not re-export them | done |
-| Nested `libs/image/{layout,assemble,index,…}` one-line reexports | rejected: thin layers |
-| `writeEach` multi-platform helper | rejected: call-site loop + `assembleLayout` + `assembleIndex` |
-| Exported `Layer` + `NewLayer` (OCI fs-diff; Digest + DiffID) | done: still at most one new Layer per `assembleLayout` |
-| Dockerfile vocabulary (`FROM`/`COPY`/`RUN`/…) in the Go or Buzz modules | rejected: see DevX below |
-| Go `NewSpec` + pointer `With*` chain ending in `AssembleLayout` | done |
-| Registry referrers `attest` after publish | open: `attachArtifacts` covers layout-local artifacts first |
+| Item                                                                                                                                              | State                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `libs/oci`: distribution client moved from `internal/oci` (artifacts and images)                                                                  | done                                                          |
+| `libs/image`: one package (types, layout I/O, assembleLayout, assembleIndex, pull/publish, sbom, provenance, attach)                              | done                                                          |
+| Typed `Digest` / `DiffID` (sha256 only); digests on Layout are not bare strings                                                                   | done                                                          |
+| Op, digests, counts, Created live on Layout / Published (facts only; no Notes log, no nested Report)                                              | done                                                          |
+| Buzz module `image`: facade (`pullLayout`, `assembleLayout`, `assembleIndex`, `publishLayout`, `writeSbom`, `writeProvenance`, `attachArtifacts`) | done                                                          |
+| Public Go API is `libs/image` and `libs/oci`; the root magus SDK does not re-export them                                                          | done                                                          |
+| Nested `libs/image/{layout,assemble,index,…}` one-line reexports                                                                                  | rejected: thin layers                                         |
+| `writeEach` multi-platform helper                                                                                                                 | rejected: call-site loop + `assembleLayout` + `assembleIndex` |
+| Exported `Layer` + `NewLayer` (OCI fs-diff; Digest + DiffID)                                                                                      | done: still at most one new Layer per `assembleLayout`        |
+| Dockerfile vocabulary (`FROM`/`COPY`/`RUN`/…) in the Go or Buzz modules                                                                           | rejected: see DevX below                                      |
+| Go `NewSpec` + pointer `With*` chain ending in `AssembleLayout`                                                                                   | done                                                          |
+| Registry referrers `attest` after publish                                                                                                         | open: `attachArtifacts` covers layout-local artifacts first   |
 
 `libs/oci` stays a sibling of `libs/image`: spell and graph publish import the registry
 client without assembly. Nesting registry under `image/` would force that dependency the
@@ -238,13 +238,13 @@ Dagger's failure mode: callers inherit Docker's footguns and mental model, then 
 strings into `RUN` because the abstraction never left the instruction set. magus already
 refuses `RUN` and container execution; the API must not invite that vocabulary back.
 
-| Keep (OCI / magus) | Refuse (Dockerfile / Docker-API cosplay) |
-| --- | --- |
-| `Layer` / `NewLayer` (Digest + DiffID) | Dockerfile "layer" as a build-cache metaphor |
-| `WithBase` (layout path, digest-pinned) | `From`, tag-based bases, build stages |
-| `WithFile` / `WithDir` / `Place` | `Copy`, `Add`, build-context semantics |
-| config fields: Env, Entrypoint, Command, User | `Run`, `Shell`, exec-form theatre |
-| `assembleLayout` / `assembleIndex` | multi-stage Dockerfile, `buildx` flags |
+| Keep (OCI / magus)                            | Refuse (Dockerfile / Docker-API cosplay)     |
+| --------------------------------------------- | -------------------------------------------- |
+| `Layer` / `NewLayer` (Digest + DiffID)        | Dockerfile "layer" as a build-cache metaphor |
+| `WithBase` (layout path, digest-pinned)       | `From`, tag-based bases, build stages        |
+| `WithFile` / `WithDir` / `Place`              | `Copy`, `Add`, build-context semantics       |
+| config fields: Env, Entrypoint, Command, User | `Run`, `Shell`, exec-form theatre            |
+| `assembleLayout` / `assembleIndex`            | multi-stage Dockerfile, `buildx` flags       |
 
 Go callers use ordinary idioms already in this repo: `NewSpec` / `NewMode` / `NewSecret` /
 `NewLinuxAmd64` constructors, and `With*` methods that mutate a `*Spec` and return it for
@@ -285,12 +285,12 @@ Anonymous pull remains valid for public registries.
 
 #### SBOM and provenance (closes D4)
 
-| Method | Role |
-| --- | --- |
-| `sbom(layout, …)` | SPDX document from the layout filesystem |
+| Method                                  | Role                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------- |
+| `sbom(layout, …)`                       | SPDX document from the layout filesystem                                              |
 | `provenance(layout, ProvenanceSpec, …)` | in-toto / SLSA statement from explicit materials (base digests, revision, builder id) |
-| `attach(layout, sbom?, provenance?)` | bind attestations onto the Image Index before publish |
-| `attest(published, …)` | optional post-publish referrers path |
+| `attach(layout, sbom?, provenance?)`    | bind attestations onto the Image Index before publish                                 |
+| `attest(published, …)`                  | optional post-publish referrers path                                                  |
 
 Cosign **sign** stays the existing cosign spell. Provenance materials are explicit: nothing
 guesses the GitHub run. Prefer `attach` before `publish` so one push carries image and
@@ -321,12 +321,12 @@ auto-pull of a missing base (refresh is `pullLayout` under the `update` charm on
 
 #### Seams
 
-| Seam | Owns | Does not own |
-| --- | --- | --- |
-| magus **target** | Compile, fetch, Secret, SSH agent, tool caches | OCI layers and config |
-| **`image` / `libs/image`** | Placements, argv (`command`/`entrypoint`), layout I/O, attach | Shells, apt, BuildKit mounts |
-| **`libs/oci`** | Registry transport | Specs / assemble |
-| **sandbox** | Host path confinement (`filesystem.Under`) | Image-destination POSIX rules |
+| Seam                       | Owns                                                          | Does not own                  |
+| -------------------------- | ------------------------------------------------------------- | ----------------------------- |
+| magus **target**           | Compile, fetch, Secret, SSH agent, tool caches                | OCI layers and config         |
+| **`image` / `libs/image`** | Placements, argv (`command`/`entrypoint`), layout I/O, attach | Shells, apt, BuildKit mounts  |
+| **`libs/oci`**             | Registry transport                                            | Specs / assemble              |
+| **sandbox**                | Host path confinement (`filesystem.Under`)                    | Image-destination POSIX rules |
 
 Home/env resolution stays at the call site (`env\home`, `path\expandUser`, `env\require`),
 then a concrete host path enters the Spec. Private git and caches are **target** patterns;

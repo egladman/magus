@@ -41,15 +41,15 @@ Worked examples live under [`std/examples/image/`](../../../std/examples/image/)
 
 ## Non-goals
 
-| Not trying to | Why |
-| --- | --- |
-| Parse or execute Dockerfiles | Recreates Docker footguns inside a typed language (Dagger's failure mode). |
-| `RUN` / package install / `ldconfig` inside the image | Build-time execution stays with a container engine or a magus **target** on the host. |
+| Not trying to                                                     | Why                                                                                                                  |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Parse or execute Dockerfiles                                      | Recreates Docker footguns inside a typed language (Dagger's failure mode).                                           |
+| `RUN` / package install / `ldconfig` inside the image             | Build-time execution stays with a container engine or a magus **target** on the host.                                |
 | BuildKit `RUN --mount=type=cache` / `type=ssh` verbs on `image.*` | Mounts exist to feed **in-image** build steps. magus has no such steps; caches and SSH agents belong to **targets**. |
-| Silent `$HOME` / `$VAR` expansion inside Spec source paths | Call sites resolve paths with `env\home`, `path\expandUser`, `env\require`, then pass a concrete host path. |
-| Scaffolding generators that invent a Spec for you | Explicit Specs beat generated Dockerfile cosplay. |
-| Windows container images (yet) | Hosts may be Windows/macOS/Linux; **image** platforms are typically `linux/*`. |
-| Auto-pull of a missing base | Assemble is local-only; refresh is `image\pullLayout` under the **`update`** charm. |
+| Silent `$HOME` / `$VAR` expansion inside Spec source paths        | Call sites resolve paths with `env\home`, `path\expandUser`, `env\require`, then pass a concrete host path.          |
+| Scaffolding generators that invent a Spec for you                 | Explicit Specs beat generated Dockerfile cosplay.                                                                    |
+| Windows container images (yet)                                    | Hosts may be Windows/macOS/Linux; **image** platforms are typically `linux/*`.                                       |
+| Auto-pull of a missing base                                       | Assemble is local-only; refresh is `image\pullLayout` under the **`update`** charm.                                  |
 
 ## Seams (where work happens)
 
@@ -73,12 +73,12 @@ Worked examples live under [`std/examples/image/`](../../../std/examples/image/)
 └─────────────────────────┘
 ```
 
-| Seam | Owns | Does not own |
-| --- | --- | --- |
-| **Target** | Producing bytes (binaries, static assets), private git, caches; gating pull on `:update` | OCI config, layers, manifests |
-| **`libs/image` / `image` module** | Placements, config argv (`command` / `entrypoint`), digests, layout I/O | Shells, apt, BuildKit mounts, implicit network |
-| **`libs/oci`** | Pull/push transport | Specs / assemble |
-| **Sandbox** | Host path confinement (`filesystem.Under`, allowlists) | Image-destination POSIX rules |
+| Seam                              | Owns                                                                                     | Does not own                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Target**                        | Producing bytes (binaries, static assets), private git, caches; gating pull on `:update` | OCI config, layers, manifests                  |
+| **`libs/image` / `image` module** | Placements, config argv (`command` / `entrypoint`), digests, layout I/O                  | Shells, apt, BuildKit mounts, implicit network |
+| **`libs/oci`**                    | Pull/push transport                                                                      | Specs / assemble                               |
+| **Sandbox**                       | Host path confinement (`filesystem.Under`, allowlists)                                   | Image-destination POSIX rules                  |
 
 Assemble and index never phone the registry. `pullLayout` and `publishLayout` are the only
 registry verbs. A missing base fails naming the local path and `:update` / `pullLayout`;
@@ -109,14 +109,14 @@ second Docker CLI. A debugger does not invent a parallel language for your progr
 the artifact and lets you inspect it. Assemble should do the same: produce a Layout + receipt you
 can open, not a special "debug Dockerfile" dialect.
 
-| Need | Direction |
-| --- | --- |
-| What did assemble do? | Fields on every Layout: op, digests, file counts, layer, **`created`** (RFC 3339 from config, empty when omitted). Callers compute age from `created`; Layout is not a log. Strip is on `DirPlacement`: assert destinations, not prose |
-| Why is this fat? | Inventory: top paths by size (raise via IMG diagnostics when over budget / empty `User`) |
-| Assert in CI | Stable digests on Layout/Published; compare two layout dirs by digest without a daemon |
-| "Output a file" | The **primary output is an OCI Layout directory** (and optional pushed digest). SBOM/provenance are files you `write*` then `attach`. Layout to `oci-archive` tar is optional and only if Layout dirs prove insufficient; `skopeo`/`oras` already speak Layout |
-| Step through | Candidate: dump receipt as JSON Lines (`-o receipt` / template), pause-on-diagnostic for IMG codes, not a global `--debug` soup that reprints the Spec |
-| External inspect | `skopeo inspect oci:<layout>`, `oras`, `dive` on an exported form; document these before inventing `magus image inspect` |
+| Need                  | Direction                                                                                                                                                                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What did assemble do? | Fields on every Layout: op, digests, file counts, layer, **`created`** (RFC 3339 from config, empty when omitted). Callers compute age from `created`; Layout is not a log. Strip is on `DirPlacement`: assert destinations, not prose                         |
+| Why is this fat?      | Inventory: top paths by size (raise via IMG diagnostics when over budget / empty `User`)                                                                                                                                                                       |
+| Assert in CI          | Stable digests on Layout/Published; compare two layout dirs by digest without a daemon                                                                                                                                                                         |
+| "Output a file"       | The **primary output is an OCI Layout directory** (and optional pushed digest). SBOM/provenance are files you `write*` then `attach`. Layout to `oci-archive` tar is optional and only if Layout dirs prove insufficient; `skopeo`/`oras` already speak Layout |
+| Step through          | Candidate: dump receipt as JSON Lines (`-o receipt` / template), pause-on-diagnostic for IMG codes, not a global `--debug` soup that reprints the Spec                                                                                                         |
+| External inspect      | `skopeo inspect oci:<layout>`, `oras`, `dive` on an exported form; document these before inventing `magus image inspect`                                                                                                                                       |
 
 Open design (ADR 0018 D6): whether magus grows first-class `image inspect` / compare /
 layout-to-tar verbs, or stays receipt + Layout + external tools. Reopen only with evidence the
