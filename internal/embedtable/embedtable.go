@@ -17,8 +17,8 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/xdg"
 )
 

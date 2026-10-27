@@ -348,3 +348,32 @@ func TestImageLayerCancellationDuringCopy(t *testing.T) {
 		t.Fatalf("read after cancel: %v", err)
 	}
 }
+
+func TestNewLayerReturnsOCIDigests(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(src, []byte("layer-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	layer, err := NewLayer(context.Background(), &buf, []File{{
+		Source: src, Destination: "/f", Mode: 0o644,
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layer.IsZero() {
+		t.Fatal("layer is zero")
+	}
+	if layer.Digest.Algorithm() != "sha256" || layer.DiffID.Algorithm() != "sha256" {
+		t.Fatalf("algorithms: digest=%s diffID=%s", layer.Digest.Algorithm(), layer.DiffID.Algorithm())
+	}
+	if layer.Digest.String() == layer.DiffID.String() {
+		t.Fatal("compressed digest must differ from DiffID")
+	}
+	if layer.MediaType != ocispec.MediaTypeImageLayerGzip {
+		t.Fatalf("media type: %s", layer.MediaType)
+	}
+	if layer.Size != int64(buf.Len()) {
+		t.Fatalf("size: got %d want %d", layer.Size, buf.Len())
+	}
+}

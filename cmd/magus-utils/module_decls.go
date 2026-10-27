@@ -96,11 +96,20 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		b.WriteString(decl)
 	}
 	for _, p := range sortedProtocols(mod) {
-		decl, err := protocolDecl(p)
-		if err != nil {
-			return "", fmt.Errorf("protocol %s: %w", p.Name, err)
+		if p.Doc != "" {
+			fmt.Fprintf(&b, "// %s\n", p.Doc)
 		}
-		b.WriteString(decl)
+		fmt.Fprintf(&b, "export protocol %s {\n", p.Name)
+		methods := slices.Clone(p.Methods)
+		slices.SortFunc(methods, func(a, c std.Method) int { return strings.Compare(a.Name, c.Name) })
+		for _, m := range methods {
+			sig, err := protocolMethodSig(m)
+			if err != nil {
+				return "", fmt.Errorf("protocol %s: %s: %w", p.Name, m.Name, err)
+			}
+			fmt.Fprintf(&b, "    %s\n", sig)
+		}
+		b.WriteString("}\n\n")
 	}
 	// A Namespace renders as an OBJECT whose members are static extern methods:
 	// `magus\cache.remote(...)` is member access on a value, not a nested namespace,
@@ -177,72 +186,17 @@ func sortedProtocols(mod std.Module) []std.Protocol {
 	return out
 }
 
-// protocolDecl renders `export protocol Name { fun ...; }` from a Protocol.
-func protocolDecl(p std.Protocol) (string, error) {
-	var b strings.Builder
-	if p.Doc != "" {
-		fmt.Fprintf(&b, "// %s\n", p.Doc)
-	}
-	fmt.Fprintf(&b, "export protocol %s {\n", p.Name)
-	methods := slices.Clone(p.Methods)
-	slices.SortFunc(methods, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
-	for _, m := range methods {
-		sig, err := protocolMethodSig(m)
-		if err != nil {
-			return "", fmt.Errorf("%s: %w", m.Name, err)
-		}
-		fmt.Fprintf(&b, "    %s\n", sig)
-	}
-	b.WriteString("}\n\n")
-	return b.String(), nil
-}
-
 // protocolMethodSig renders one protocol method as `fun name(params) > ret[!> any];`.
+// Same shape as externDecl's parameter list, without the export-extern wrapper.
 func protocolMethodSig(m std.Method) (string, error) {
-	name := std.CamelCase(m.Name)
-	if m.BuzzName != "" {
-		name = m.BuzzName
-	}
-	params := make([]string, 0, len(m.Args))
-	for _, a := range m.Args {
-		typ, err := buzzArgType(a.Type)
-		if err != nil {
-			return "", fmt.Errorf("arg %s: %w", a.Name, err)
-		}
-		if a.Object != "" {
-			typ = a.Object
-		}
-		if a.Enum != "" {
-			typ = a.Enum
-		}
-		if a.Func != "" {
-			if a.Type != std.TypeFunc {
-				return "", fmt.Errorf("arg %s: Func is set on a %v argument, it types only a TypeFunc", a.Name, a.Type)
-			}
-			typ = a.Func
-		}
-		if a.Type == std.TypeByteSlice {
-			typ = "any"
-		}
-		param := fmt.Sprintf("%s: %s", a.Name, typ)
-		if a.Optional {
-			def, derr := buzzDefault(a)
-			if derr != nil {
-				return "", fmt.Errorf("arg %s: %w", a.Name, derr)
-			}
-			param += " = " + def
-		}
-		params = append(params, param)
-	}
-	ret, err := buzzReturnType(m)
+	decl, err := externDecl(m)
 	if err != nil {
 		return "", err
 	}
-	raises := ""
-	if m.Raises {
-		raises = " !> any"
-	}
-	return fmt.Sprintf("fun %s(%s) > %s%s;", name, strings.Join(params, ", "), ret, raises), nil
+	// externDecl returns "export extern fun …;\n" or a variadic final — protocols
+	// only carry ordinary methods, so strip the wrapper.
+	line := strings.TrimPrefix(strings.TrimSpace(decl), "export extern ")
+	return line, nil
 }
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.

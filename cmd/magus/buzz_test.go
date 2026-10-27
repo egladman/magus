@@ -1060,8 +1060,8 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				label: event, host: "cursor", event: string(raw),
 				stub: "#!/bin/sh\ncat > \"$GREP_INPUT_RECORD\"\nprintf no > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n",
 				env: map[string]string{
-					"GREP_INPUT_RECORD": record,
-					"GLUE_VERDICT": `{"decision":"advise","context":"use magus refs HandleRequest --definition --source"}`,
+					"GREP_INPUT_RECORD":     record,
+					"GLUE_VERDICT":          `{"decision":"advise","context":"use magus refs HandleRequest --definition --source"}`,
 					"CURSOR_HOOK_STATE_DIR": t.TempDir(),
 				},
 			})

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/embedtable"
-	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/oci"
 )
 
 // tableCache points the XDG cache at a fresh directory and returns the path the

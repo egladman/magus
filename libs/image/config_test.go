@@ -112,13 +112,13 @@ func TestImageConfigInheritanceWithFilesOnly(t *testing.T) {
 
 func TestImageConfigAppliesSpec(t *testing.T) {
 	spec := Spec{
-		Env:        map[string]string{"A": "9", "N": "new"},
-		UnsetEnv:   []string{"B"},
-		User:       "65532:65532",
-		WorkingDir: "/app",
-		Entrypoint: []string{"/magus"},
+		Env:          map[string]string{"A": "9", "N": "new"},
+		UnsetEnv:     []string{"B"},
+		User:         "65532:65532",
+		WorkingDir:   "/app",
+		Entrypoint:   []string{"/magus"},
 		ResetCommand: true,
-		Labels:     map[string]string{"over": "new", "add": "y"},
+		Labels:       map[string]string{"over": "new", "add": "y"},
 	}
 	got, err := buildConfig(imageTestBase(), spec, imageTestDiffID)
 	require.NoError(t, err)

@@ -54,7 +54,7 @@ layout to a registry. `Index` joins single-platform layouts into one image index
 
 <!--diagram:oci-assembly-->
 
-### Go owns the rules, Buzz owns the Spec
+### Go owns the rules, Buzz owns the spec
 
 The rules, the bytes and the transfer live in Go. Buzz reaches them through the generated
 bindings: a new file under `std/` declares a `std.Module` named `image`, and `magus-utils` generates
@@ -63,7 +63,7 @@ to write. Go callers inside magus use `internal/image` with typed structs, throu
 exported `std.Image*` functions. The module is not added to the public Go SDK; that needs
 its own decision.
 
-### This is not `Dockerfile` support
+### This is not dockerfile support
 
 Nothing here parses, accepts, translates or emulates a Dockerfile or a Containerfile. There
 is no instruction mapping, no build context, no `RUN`, no `withExec`, no container
@@ -159,7 +159,7 @@ Lost for the release image: it adds a tool dependency and a non-reproducible ste
 deterministic transform is enough. A user may still write such an op in their own
 magusfile, as ADR 0003 says for containers.
 
-### D. Implement Spec assembly in Go only, with no Buzz module
+### D. Implement spec assembly in Go only, with no Buzz module
 
 Lost: Specs belong in magusfiles, where a target's declared outputs feed them, so the
 cache key covers the image's inputs. The module is the narrow seam that lets Buzz name
@@ -189,12 +189,12 @@ files and settings while Go owns the bytes.
    the static cutover, with download numbers. Not decided.
 3. **Assemble debugging and output verbs (D6).** Receipt/trace, size inventory, and Layout
    as the primary artifact are the stance (see the 2026-10-26 amendment). Open: whether a
-   first-class `magus image inspect` / layout-to-tar / Delve-style step flags are needed
+   first-class `magus image inspect` / layout-to-tar / debugger-style step flags are needed
    beyond coded diagnostics and external OCI tools. Not decided.
 
 ## Amendments
 
-### 2026-10-26: public libs nest, typed placements, auth Secret, SBOM and provenance
+### 2026-10-26: public libs nest, typed placements, auth secret, SBOM and provenance
 
 Eli locked the packaging and the API contract after refining the Go and Buzz modules
 together. The Decision above still describes the first cut (`internal/image`, string paths,
@@ -206,7 +206,7 @@ State stays _proposed_ until the code moves.
 | Item | State |
 | --- | --- |
 | `libs/oci`: distribution client moved from `internal/oci` (artifacts and images) | done |
-| `libs/image`: one package — types, layout I/O, assembleLayout, assembleIndex, pull/publish, sbom, provenance, attach | done |
+| `libs/image`: one package (types, layout I/O, assembleLayout, assembleIndex, pull/publish, sbom, provenance, attach) | done |
 | Typed `Digest` / `DiffID` (sha256 only); digests on Layout are not bare strings | done |
 | Op, digests, counts, Created live on Layout / Published (facts only; no Notes log, no nested Report) | done |
 | Buzz module `image`: facade (`pullLayout`, `assembleLayout`, `assembleIndex`, `publishLayout`, `writeSbom`, `writeProvenance`, `attachArtifacts`) | done |
@@ -230,7 +230,7 @@ artifacts). Digests are `Digest` / `DiffID` (Buzz: `ImageDigest{algorithm,encode
 bare strings. Multi-arch is an explicit loop of `assembleLayout` then `assembleIndex`, not
 a batch helper.
 
-#### DevX: OCI packaging, not Dockerfile theatre
+#### DevX: OCI packaging, not dockerfile theatre
 
 The packaging standard is OCI (Layout, Layer, Manifest, Index, Digest). That does **not**
 mean the API speaks Dockerfile. Mapping `FROM`/`COPY`/`RUN` into a typed language recreates
@@ -248,7 +248,7 @@ refuses `RUN` and container execution; the API must not invite that vocabulary b
 
 Go callers use ordinary idioms already in this repo: `NewSpec` / `NewMode` / `NewSecret` /
 `NewLinuxAmd64` constructors, and `With*` methods that mutate a `*Spec` and return it for
-chaining (the Dagger Go SDK pattern for options—not its Docker instruction map). Buzz still
+chaining (the Dagger Go SDK pattern for options, not its Docker instruction map). Buzz still
 passes a Spec map into `assembleLayout`; the chain is the Go call-site shape.
 
 #### Typed placements, modes, directories
@@ -268,7 +268,7 @@ hardlinks as sources remain errors. mtimes stay Unix 0. Overlap between placemen
 error. This replaces the Decision's "sources are regular files only" limit for directories
 that opt into `DirPlacement`; undeclared directory sources stay refused.
 
-#### Multi-architecture (not Dockerfile multi-stage)
+#### Multi-architecture (not dockerfile multi-stage)
 
 `assembleLayout` produces one platform's **Image Manifest** (and at most one new **Layer**).
 Multi-arch is a call-site loop of `assembleLayout` (one dest per platform) then
@@ -330,7 +330,7 @@ auto-pull of a missing base (refresh is `pullLayout` under the `update` charm on
 
 Home/env resolution stays at the call site (`env\home`, `path\expandUser`, `env\require`),
 then a concrete host path enters the Spec. Private git and caches are **target** patterns;
-document them—do not add `image\withSSHMount`.
+document them; do not add `image\withSSHMount`.
 
 Guide: [Assemble an OCI image with magus](../guides/setup/assemble-oci-image.md).
 Examples: [`std/examples/image/`](../../std/examples/image/), mapped from Docker
@@ -338,9 +338,9 @@ Official Image Dockerfiles (hello-world scratch; busybox rootfs tarball; golang 
 *shape*; multi-arch Index; digest-pinned base + config overlay; nginx/redis/python
 package-install non-goals).
 
-#### Debugging and outputs (open — D6)
+#### Debugging and outputs (open: D6)
 
-Direction—not all shipped as CLI flags yet:
+Direction: not all shipped as CLI flags yet:
 
 - Receipt facts on every Layout (op, digests, counts, layer size, **Created**).
   Age is derived by the caller from `Created`, not baked into the receipt as prose.
@@ -349,15 +349,15 @@ Direction—not all shipped as CLI flags yet:
   SBOM/provenance are files from `writeSbom` / `writeProvenance` then `attachArtifacts`.
 - Prefer coded diagnostics over a global debug soup; layout dirs are already inspectable
   with standard OCI tools (`skopeo`, `oras`, `dive` on exported forms).
-- **Offline-first registry I/O:** `assembleLayout` / `assembleIndex` never network;
+- Registry I/O is offline-first: `assembleLayout` / `assembleIndex` never network;
   `pullLayout` / `publishLayout` are explicit. A target that refreshes a cached base
   gates the pull on `:update` (no magus `--pull` flag). Empty `Created` means the
-  config omitted it — speak that at the call site, not as Layout.Notes.
+  config omitted it; speak that at the call site, not as Layout.Notes.
 
 Candidate verbs/flags (undecided): receipt dump (`-o receipt` / JSON Lines), inventory,
 compare two layouts by digest, optional layout→oci-archive only if Layout dirs prove
-insufficient. Analogy to Delve: inspect the produced Layout and receipt, not a parallel
-“debug assemble” dialect.
+insufficient. Analogy to a debugger: inspect the produced Layout and receipt, not a parallel
+"debug assemble" dialect.
 
 Reopens if someone needs a first-class `magus image inspect` / layout-to-tar verb with
 evidence the Layout directory is not enough.

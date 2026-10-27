@@ -17,12 +17,12 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"

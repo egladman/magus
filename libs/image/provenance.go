@@ -35,50 +35,14 @@ func WriteProvenance(ctx context.Context, layout Layout, spec ProvenanceSpec, de
 	if err := ctx.Err(); err != nil {
 		return ProvenanceDoc{}, fmt.Errorf("image.provenance: %w", err)
 	}
-	if layout.Path == "" {
-		return ProvenanceDoc{}, fmt.Errorf("image.provenance: layout path is empty")
+	layout, err := provenanceLayout(layout)
+	if err != nil {
+		return ProvenanceDoc{}, err
 	}
 	if spec.BuilderID == "" {
 		return ProvenanceDoc{}, fmt.Errorf("image.provenance: builderId is empty")
 	}
-	if layout.Descriptor.Digest == "" {
-		opened, err := OpenLayout(layout.Path)
-		if err != nil {
-			return ProvenanceDoc{}, fmt.Errorf("image.provenance: %w", err)
-		}
-		layout = opened
-	}
-	materials := make([]map[string]any, 0, len(spec.Materials))
-	for _, m := range spec.Materials {
-		materials = append(materials, map[string]any{
-			"uri":    m.URI,
-			"digest": map[string]string{"sha256": m.Digest.Encoded()},
-		})
-	}
-	stmt := map[string]any{
-		"_type":         "https://in-toto.io/Statement/v0.1",
-		"predicateType": "https://slsa.dev/provenance/v0.2",
-		"subject": []map[string]any{{
-			"name":   layout.Path,
-			"digest": map[string]string{"sha256": layout.Descriptor.Digest.Encoded()},
-		}},
-		"predicate": map[string]any{
-			"builder": map[string]any{"id": spec.BuilderID},
-			"metadata": map[string]any{
-				"buildStartedOn":  time.Unix(0, 0).UTC().Format(time.RFC3339),
-				"buildFinishedOn": time.Unix(0, 0).UTC().Format(time.RFC3339),
-			},
-			"materials": materials,
-			"invocation": map[string]any{
-				"configSource": map[string]any{
-					"uri":        spec.SourceRevision,
-					"digest":     map[string]string{},
-					"entryPoint": "image.assemble",
-				},
-			},
-		},
-	}
-	data, err := json.Marshal(stmt)
+	data, err := json.Marshal(provenanceStatement(layout, spec))
 	if err != nil {
 		return ProvenanceDoc{}, fmt.Errorf("image.provenance: marshal: %w", err)
 	}
@@ -90,4 +54,52 @@ func WriteProvenance(ctx context.Context, layout Layout, spec ProvenanceSpec, de
 		MediaType: "application/vnd.in-toto+json",
 		Digest:    MustDigest(digest.FromBytes(data)),
 	}, nil
+}
+
+func provenanceLayout(layout Layout) (Layout, error) {
+	if layout.Path == "" {
+		return Layout{}, fmt.Errorf("image.provenance: layout path is empty")
+	}
+	if layout.Descriptor.Digest != "" {
+		return layout, nil
+	}
+	opened, err := OpenLayout(layout.Path)
+	if err != nil {
+		return Layout{}, fmt.Errorf("image.provenance: %w", err)
+	}
+	return opened, nil
+}
+
+func provenanceStatement(layout Layout, spec ProvenanceSpec) map[string]any {
+	materials := make([]map[string]any, 0, len(spec.Materials))
+	for _, m := range spec.Materials {
+		materials = append(materials, map[string]any{
+			"uri":    m.URI,
+			"digest": map[string]string{"sha256": m.Digest.Encoded()},
+		})
+	}
+	epoch := time.Unix(0, 0).UTC().Format(time.RFC3339)
+	return map[string]any{
+		"_type":         "https://in-toto.io/Statement/v0.1",
+		"predicateType": "https://slsa.dev/provenance/v0.2",
+		"subject": []map[string]any{{
+			"name":   layout.Path,
+			"digest": map[string]string{"sha256": layout.Descriptor.Digest.Encoded()},
+		}},
+		"predicate": map[string]any{
+			"builder": map[string]any{"id": spec.BuilderID},
+			"metadata": map[string]any{
+				"buildStartedOn":  epoch,
+				"buildFinishedOn": epoch,
+			},
+			"materials": materials,
+			"invocation": map[string]any{
+				"configSource": map[string]any{
+					"uri":        spec.SourceRevision,
+					"digest":     map[string]string{},
+					"entryPoint": "image.assemble",
+				},
+			},
+		},
+	}
 }

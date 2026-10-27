@@ -55,7 +55,7 @@ type ImageSpec struct {
 	User            string
 	WorkingDir      string
 	Entrypoint      []string
-	ResetEntrypoint bool // true clears the base's entrypoint before Entrypoint applies
+	ResetEntrypoint bool     // true clears the base's entrypoint before Entrypoint applies
 	Command         []string // OCI config Cmd (argv); spelled out so it is not confused with magus.cmd
 	ResetCommand    bool
 	Labels          map[string]string // config labels, merged over the base's

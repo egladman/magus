@@ -1,7 +1,10 @@
 package image
 
 import (
+	"context"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -158,8 +161,8 @@ func TestImageSpecDecode(t *testing.T) {
 		"workingDir":      "/w",
 		"entrypoint":      []any{"/e"},
 		"resetEntrypoint": true,
-		"command":             []any{"c"},
-		"resetCommand":        true,
+		"command":         []any{"c"},
+		"resetCommand":    true,
 		"labels":          map[string]any{"l": "v"},
 		"annotations":     map[string]any{"a": "v"},
 		"created":         "2020-01-01T00:00:00Z",
@@ -179,8 +182,8 @@ func TestImageSpecDecode(t *testing.T) {
 		WorkingDir:      "/w",
 		Entrypoint:      []string{"/e"},
 		ResetEntrypoint: true,
-		Command:             []string{"c"},
-		ResetCommand:        true,
+		Command:         []string{"c"},
+		ResetCommand:    true,
 		Labels:          map[string]string{"l": "v"},
 		Annotations:     map[string]string{"a": "v"},
 		Created:         "2020-01-01T00:00:00Z",
@@ -244,5 +247,63 @@ func wantErr(t *testing.T, err error, want string) {
 		t.Fatalf("no error, want one containing %q", want)
 	case want != "" && !strings.Contains(err.Error(), want):
 		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestNewSpecWithChainAssemblesLayout(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "bin")
+	if err := os.WriteFile(src, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "layout")
+	mode, err := NewMode(0o755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := HostFile{Value: src}.Place(ImageFile{Value: "/usr/bin/app"}, mode)
+	layout, err := NewSpec(NewLinuxAmd64()).
+		WithFile(file).
+		WithEnv("APP", "1").
+		WithEntrypoint("/usr/bin/app").
+		WithUser("65532").
+		AssembleLayout(context.Background(), dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layout.Op != OpAssembleLayout {
+		t.Fatalf("op: %s", layout.Op)
+	}
+	if layout.Layer.IsZero() {
+		t.Fatal("expected a layer")
+	}
+	if layout.Path != dest {
+		t.Fatalf("path: %s", layout.Path)
+	}
+	_, manifest, cfg := imageTestReadManifest(t, dest)
+	if len(manifest.Layers) != 1 {
+		t.Fatalf("layers: %d", len(manifest.Layers))
+	}
+	if got := cfg.Config.Entrypoint; len(got) != 1 || got[0] != "/usr/bin/app" {
+		t.Fatalf("entrypoint: %v", got)
+	}
+	if cfg.Config.User != "65532" {
+		t.Fatalf("user: %s", cfg.Config.User)
+	}
+	found := false
+	for _, e := range cfg.Config.Env {
+		if e == "APP=1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("env missing APP=1: %v", cfg.Config.Env)
+	}
+}
+
+func TestNilSpecAssembleLayoutErrors(t *testing.T) {
+	var s *Spec
+	_, err := s.AssembleLayout(context.Background(), t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "nil spec") {
+		t.Fatalf("got %v", err)
 	}
 }
