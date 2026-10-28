@@ -108,6 +108,32 @@ func (s *symbolsSuite) TestUpdatePackIndexesOnlyTheUnitWhoseDigestMoved() {
 	s.Empty(res.Dependents)
 }
 
+func (s *symbolsSuite) TestUpdatePackNamesAKeptShardsGapAgain() {
+	path, ix := s.packPath(), threeUnits()
+	ix.shards["c"] = Shard{Unit: "c", Gaps: []string{"c/c.go:1:1: does not parse"}}
+	_, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+
+	ix.asked = nil
+	res, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+	s.Empty(ix.asked)
+	s.Equal([]string{"c/c.go:1:1: does not parse"}, res.Gaps)
+}
+
+func (s *symbolsSuite) TestUpdatePackDropsAGapOnceItsUnitIndexes() {
+	path, ix := s.packPath(), threeUnits()
+	ix.shards["c"] = Shard{Unit: "c", Gaps: []string{"c/c.go:1:1: does not parse"}}
+	_, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+
+	ix.units[2].Digest = "c2"
+	ix.shards["c"] = testShard("c", "c/c.go", []string{symC}, symA)
+	res, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+	s.Empty(res.Gaps)
+}
+
 // A body edit leaves the defined set alone, so no dependent is touched.
 func (s *symbolsSuite) TestUpdatePackStopsAtAnUnchangedDefinedSet() {
 	path, ix := s.packPath(), threeUnits()

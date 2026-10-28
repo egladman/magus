@@ -212,31 +212,7 @@ func scipShards(idx *scip.Index) ([]Unit, []Shard) {
 			s = &Shard{Unit: dir}
 			byDir[dir] = s
 		}
-		d := Document{Path: doc.RelativePath, Language: doc.Language}
-		for _, o := range doc.Occurrences {
-			occ := Occurrence{Symbol: o.Symbol, Roles: o.SymbolRoles}
-			if r, ok := o.SourceRange(); ok {
-				occ.Range = r.SCIPRange()
-			}
-			if r, ok := o.EnclosingSourceRange(); ok {
-				occ.Enclosing = r.SCIPRange()
-			}
-			d.Occurrences = append(d.Occurrences, occ)
-		}
-		for _, si := range doc.Symbols {
-			info := SymbolInfo{
-				Symbol: si.Symbol, DisplayName: si.DisplayName, Kind: int32(si.Kind),
-				Documentation: si.Documentation, Signature: si.GetSignatureDocumentation().GetText(),
-			}
-			for _, r := range si.Relationships {
-				info.Relationships = append(info.Relationships, Relationship{
-					Symbol: r.Symbol, Implementation: r.IsImplementation, Reference: r.IsReference,
-					TypeDefinition: r.IsTypeDefinition, Definition: r.IsDefinition,
-				})
-			}
-			d.Symbols = append(d.Symbols, info)
-		}
-		s.Documents = append(s.Documents, d)
+		s.Documents = append(s.Documents, DocumentFromSCIP(doc))
 	}
 	dirs := sortedKeys(byDir)
 	units := make([]Unit, 0, len(dirs))
@@ -246,6 +222,35 @@ func scipShards(idx *scip.Index) ([]Unit, []Shard) {
 		shards = append(shards, *byDir[dir])
 	}
 	return units, shards
+}
+
+// DocumentFromSCIP is doc as a pack stores it, for an indexer whose library speaks SCIP.
+func DocumentFromSCIP(doc *scip.Document) Document {
+	d := Document{Path: doc.RelativePath, Language: doc.Language}
+	for _, o := range doc.Occurrences {
+		occ := Occurrence{Symbol: o.Symbol, Roles: o.SymbolRoles}
+		if r, ok := o.SourceRange(); ok {
+			occ.Range = r.SCIPRange()
+		}
+		if r, ok := o.EnclosingSourceRange(); ok {
+			occ.Enclosing = r.SCIPRange()
+		}
+		d.Occurrences = append(d.Occurrences, occ)
+	}
+	for _, si := range doc.Symbols {
+		info := SymbolInfo{
+			Symbol: si.Symbol, DisplayName: si.DisplayName, Kind: int32(si.Kind),
+			Documentation: si.Documentation, Signature: si.GetSignatureDocumentation().GetText(),
+		}
+		for _, r := range si.Relationships {
+			info.Relationships = append(info.Relationships, Relationship{
+				Symbol: r.Symbol, Implementation: r.IsImplementation, Reference: r.IsReference,
+				TypeDefinition: r.IsTypeDefinition, Definition: r.IsDefinition,
+			})
+		}
+		d.Symbols = append(d.Symbols, info)
+	}
+	return d
 }
 
 // PackFromSCIP writes the SCIP index at src as a pack at dest, recorded as indexer's.

@@ -22,10 +22,14 @@ import (
 // directory for an indexer that has no finer unit. Ranges are SCIP's packed form
 // ([startLine, startChar, endChar] or [startLine, startChar, endLine, endChar], 0-based),
 // so a shard converts to SCIP without reshaping.
+//
+// Gaps names each file of the unit the indexer could not index, with why ("a.sh: line 3:
+// unclosed quote"): a file that does not parse is a gap, never a document with no symbols.
 type Shard struct {
 	Unit       string
 	Documents  []Document
 	MethodSets []MethodSet
+	Gaps       []string
 }
 
 // Document is one source file's occurrences and the symbols it defines. Path is relative
@@ -144,11 +148,13 @@ const (
 // or not SCIP protobuf.
 var ErrIndexFormat = errors.New("not a symbol index this binary reads")
 
-// packEntry is one unit's row in a pack's table of contents.
+// packEntry is one unit's row in a pack's table of contents. Gaps copies the shard's, so
+// listing every gap reads the table and no shard.
 type packEntry struct {
 	Unit   string
 	Digest string
 	Deps   []string
+	Gaps   []string
 	Offset int64
 	Length int64
 }
@@ -291,8 +297,8 @@ func (pw *packWriter) write(b []byte) error {
 	return err
 }
 
-func (pw *packWriter) add(unit Unit, encoded []byte) error {
-	pw.entries = append(pw.entries, packEntry{Unit: unit.ID, Digest: unit.Digest, Deps: unit.Deps, Offset: pw.off, Length: int64(len(encoded))})
+func (pw *packWriter) add(unit Unit, gaps []string, encoded []byte) error {
+	pw.entries = append(pw.entries, packEntry{Unit: unit.ID, Digest: unit.Digest, Deps: unit.Deps, Gaps: gaps, Offset: pw.off, Length: int64(len(encoded))})
 	return pw.write(encoded)
 }
 
@@ -359,7 +365,7 @@ func writePack(path, indexer string, units []Unit, shards []Shard) error {
 		if err != nil {
 			return errors.Join(err, pw.abort())
 		}
-		if err := pw.add(u, enc); err != nil {
+		if err := pw.add(u, s.Gaps, enc); err != nil {
 			return errors.Join(err, pw.abort())
 		}
 	}
@@ -368,13 +374,15 @@ func writePack(path, indexer string, units []Unit, shards []Shard) error {
 
 // UpdateResult says what UpdatePack did. Indexed holds the units whose digest moved,
 // Dependents the units re-indexed because a removed symbol was referenced from them, and
-// Kept the count of shards carried over unchanged.
+// Kept the count of shards carried over unchanged. Gaps is every gap the updated pack
+// holds, kept shards' included, so a file that still does not parse is named on every run.
 type UpdateResult struct {
 	Indexed    []string
 	Dependents []string
 	Dropped    []string
 	Kept       int
 	Rebuilt    bool
+	Gaps       []string
 }
 
 // UpdatePack brings the pack at path up to date with ix: it indexes each unit whose
@@ -532,15 +540,19 @@ func writeUpdated(path, version string, old *packFile, units []Unit, fresh map[s
 	}
 	for _, u := range units {
 		var enc []byte
+		var gaps []string
 		if s, ok := fresh[u.ID]; ok {
 			enc, err = encodeShard(s)
+			gaps = s.Gaps
 		} else {
 			e, _ := old.Entry(u.ID)
 			enc, err = old.raw(e)
+			gaps = e.Gaps
 			res.Kept++
 		}
+		res.Gaps = append(res.Gaps, gaps...)
 		if err == nil {
-			err = pw.add(u, enc)
+			err = pw.add(u, gaps, enc)
 		}
 		if err != nil {
 			return errors.Join(err, pw.abort())
