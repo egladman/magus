@@ -45,6 +45,11 @@ sandbox:
       - CI_PROVIDER
       - MAGUS_CACHE_REMOTE_TRUSTED_KEYS
 
+spells:
+  # scip-typescript is an external indexer, slower than magus's in-process ones, so it
+  # runs only when listed. console, docs and libs/textsearch need it for a symbol index.
+  symbol_indexers: [typescript]
+
 cache:
   remote:
     # Trust set for the shared remote cache (wired via magus.cache.remote in the
