@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
@@ -68,7 +69,13 @@ func TestOwnBuildEscapeNamesTheScriptTheWorkspaceServes(t *testing.T) {
 	}))
 	escape := ownBuildEscape(exe, moduleBuildInfo("example.com/tool", "cmd/tool"), root)
 	assert.Contains(t, escape, "This workspace's script for it: `")
-	assert.Contains(t, escape, "hack/relink.buzz -- --checkout "+config.ShellLine([]string{root}))
+	assert.Contains(t, escape, "hack/relink.buzz -- --checkout "+shellQuoted(root))
+}
+
+// shellQuoted is path as one POSIX shell word, the way a remedy line names a checkout.
+func shellQuoted(path string) string {
+	q, _ := syntax.Quote(path, syntax.LangPOSIX) // only a NUL byte fails, and no temp dir holds one
+	return q
 }
 
 // A checkout path the shell would split or expand is quoted once, so the line pasted builds
@@ -80,7 +87,7 @@ func TestOwnBuildEscapeQuotesTheCheckout(t *testing.T) {
 	escape := ownBuildEscape(filepath.Join(quoted, filepath.Base(exe)), moduleBuildInfo("example.com/tool", "cmd/tool"), quoted)
 	resolved, err := filepath.EvalSymlinks(quoted)
 	require.NoError(t, err)
-	words := config.ShellLine([]string{resolved})
+	words := shellQuoted(resolved)
 	assert.Contains(t, words, `\$cache`, "the $ stays literal")
 	assert.Contains(t, escape, fmt.Sprintf("go -C %s build -o magus ./cmd/tool", words))
 }

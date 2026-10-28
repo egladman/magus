@@ -125,7 +125,7 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.\n"+
 		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
 		"`GOEXPERIMENT=jsonv2 go -C %[4]s run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
-		"see: %[3]sstale-binary/", staleOwnSay, errStaleLoad.Error(), ruleDocsBase, config.ShellLine([]string{root})), stored)
+		"see: %[3]sstale-binary/", staleOwnSay, errStaleLoad.Error(), ruleDocsBase, shellQuoted(root)), stored)
 	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, unloadReason{Cause: unloadStale}, failureLines(staleFailures), true, root)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %sstale-binary/", d.full(), ruleDocsBase), stored)
 }

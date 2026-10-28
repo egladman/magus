@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
@@ -91,7 +92,13 @@ const (
 
 // noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
 func noBinaryOwnSay(root string) string {
-	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`.", config.ShellLine([]string{root}))
+	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`.", shellQuoted(root))
+}
+
+// shellQuoted is path as one POSIX shell word, the way a remedy line names a checkout.
+func shellQuoted(path string) string {
+	q, _ := syntax.Quote(path, syntax.LangPOSIX) // only a NUL byte fails, and no temp dir holds one
+	return q
 }
 
 // A fresh worktree has no ./magus and no recorded policy: the magusfile showing a guard
@@ -157,7 +164,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay)
-		assert.Contains(t, stored, fmt.Sprintf("bootstrap over it, alone on its line: `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`", config.ShellLine([]string{root})), line)
+		assert.Contains(t, stored, fmt.Sprintf("bootstrap over it, alone on its line: `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`", shellQuoted(root)), line)
 		assert.NotContains(t, stored, "magus.old", line)
 	}
 
