@@ -3,10 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -302,7 +304,18 @@ func recordFlagSet(name string, fs *flag.FlagSet) {
 // lifts a backquoted word out of the usage as the value's name.
 func printOwnDefaults(fs *flag.FlagSet) {
 	globals := globalFlagNames()
-	for _, h := range cmdline.FlagHelp(fs, func(name string) bool { return globals[name] }) {
+	printFlagHelp(fs.Output(), cmdline.FlagHelp(fs, func(name string) bool { return globals[name] }))
+}
+
+// printRootFlags prints the flags the command tree declares on the program itself.
+func printRootFlags(w io.Writer) {
+	fs := flag.NewFlagSet(commands.Root.Name, flag.ContinueOnError)
+	commands.Root.BindFlags(fs)
+	printFlagHelp(w, cmdline.FlagHelp(fs, nil))
+}
+
+func printFlagHelp(w io.Writer, flags []cmdline.Help) {
+	for _, h := range flags {
 		label := "  " + h.Name
 		if h.Value != "" {
 			label += " " + h.Value
@@ -310,7 +323,7 @@ func printOwnDefaults(fs *flag.FlagSet) {
 		if h.Default != "" {
 			label += " (default: " + h.Default + ")"
 		}
-		fmt.Fprintf(fs.Output(), "%s\n    \t%s\n", label, strings.ReplaceAll(h.Usage, "\n", "\n    \t"))
+		fmt.Fprintf(w, "%s\n    \t%s\n", label, strings.ReplaceAll(h.Usage, "\n", "\n    \t"))
 	}
 }
 

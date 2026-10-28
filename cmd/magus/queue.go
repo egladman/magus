@@ -191,7 +191,7 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 			bind(own)
 			fmt.Fprintln(e.stderr, "Usage: "+usage)
 			fmt.Fprintln(e.stderr, "\nFlags (magus's global flags apply too; see magus -h):")
-			own.PrintDefaults()
+			printOwnDefaults(own)
 			if verb == "apply" {
 				fmt.Fprint(e.stderr, "\n"+queueSourceUsage)
 			}

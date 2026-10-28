@@ -80,7 +80,8 @@ func cliCommand(name string) (cmdline.Command, bool) {
 }
 
 // cliFlagNames returns the flag spellings a subcommand declares, each with its
-// leading dashes, sorted. Children are included under "<cmd> <child>".
+// leading dashes, sorted. A bool that can be turned off also lists its --no- form,
+// which the generator adds and the registry does not declare.
 func cliFlagNames(name string) []string {
 	c, ok := cliCommand(name)
 	if !ok {
@@ -89,6 +90,9 @@ func cliFlagNames(name string) []string {
 	out := make([]string, 0, len(c.Flags))
 	for _, f := range c.Flags {
 		out = append(out, dashPrefix(f.Name)+f.Name)
+		if f.Kind == cmdline.Bool && f.AliasOf == "" && len(f.Name) > 1 {
+			out = append(out, "--"+cmdline.NegationPrefix+f.Name)
+		}
 	}
 	sort.Strings(out)
 	return out

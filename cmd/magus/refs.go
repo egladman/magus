@@ -35,14 +35,8 @@ import (
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCommand(ctx context.Context, root string, args []string) error {
 	var rf *flaggen.RefsFlags
-	// --no-generated stays hand-bound, like watch's --ignore: it is declared in
-	// internal/commands/registry.go (Kind: cmdline.Custom) for the man page, but bound here
-	// directly rather than through flaggen.RefsFlags.
-	var noGenerated bool
 	pos, err := commandParse("refs", args, func(fs *flag.FlagSet) {
 		rf = flaggen.BindRefs(fs)
-		fs.BoolVar(&noGenerated, "no-generated", false,
-			"Exclude declared-output files from the fallback text search entirely, instead of searching them and marking the ones that match")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus refs --text <pattern> [<path>...] [flags]")
@@ -58,6 +52,7 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	noGenerated := !rf.Generated
 	if len(pos) == 0 {
 		if rf.Text {
 			slog.ErrorContext(ctx, "requires a search pattern", attr.Notice("magus refs --text"))

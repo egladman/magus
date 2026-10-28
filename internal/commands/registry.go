@@ -1592,7 +1592,7 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Name: "text", Kind: cmdline.Bool, Default: false, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
 		// Custom, not Bool: bound by refsCommand itself alongside flaggen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
-		{Name: "no-generated", Kind: cmdline.Custom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
+		{Name: "generated", Kind: cmdline.Bool, Default: true, Doc: "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely"},
 		{Name: "limit", Kind: cmdline.Int, Doc: "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code"},
 		{Name: "rename", Kind: cmdline.String, Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
 	},

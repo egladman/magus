@@ -23,7 +23,6 @@ type Concept struct {
 // row in the same change as the flag.
 var Vocabulary = []Concept{
 	{Flag: "cache", GoField: "Cache"},
-	{Flag: "no-generated"},
 	{Flag: "default-charms", Config: "default_charms", GoField: "DefaultCharms"},
 	{Flag: "volatility-retry", GoField: "VolatilityRetry"},
 	{Flag: "redundancy-check", GoField: "RedundancyCheck"},
