@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 )
 
@@ -18,6 +19,12 @@ type configSuite struct {
 
 func TestConfigSuite(t *testing.T) {
 	suite.Run(t, new(configSuite))
+}
+
+// SetupSuite registers the MGS catalog as magus's startup does, so a workspace prefix has
+// a built-in one to collide with.
+func (s *configSuite) SetupSuite() {
+	s.Require().NoError(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()))
 }
 
 // diagnosticsFailure is the one failure Validate reports for d on a valid config.

@@ -60,8 +60,7 @@ type DiagnosticSink = diagnostics.Sink
 var ErrDiag = diagnostics.ErrSentinel
 
 // mgs is the magus diagnostic domain: it maps an MGS code to its docs page by prefix range. Every magus
-// coded error is minted through it so the docs URL is captured for rendering. Its catalog reserves the
-// MGS prefix, so no workspace can declare one that collides with it.
+// coded error is minted through it so the docs URL is captured for rendering.
 var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	switch {
 	// BEFORE the single-digit cases: MGS11## starts with "MGS1" too, so the magusfile family
@@ -90,7 +89,17 @@ var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	default:
 		return ""
 	}
-}).Catalog(allDiagnosticCodes...)
+})
+
+// The owners a prefix is registered under: magus's own catalog, and whichever workspace
+// declares a diagnostics.prefix.
+const (
+	DiagnosticOwnerMagus     = "magus"
+	DiagnosticOwnerWorkspace = "workspace"
+)
+
+// mgsPrefix is the MGS catalog's prefix, read off a code in it.
+var mgsPrefix = diagnostics.Prefix(NoCITarget)
 
 // DiagnosticOrigin says who minted a diagnostic code: a catalog compiled into magus, or the
 // workspace, under the prefix its magus.yaml declares.
@@ -101,20 +110,19 @@ const (
 	DiagnosticOriginWorkspace DiagnosticOrigin = "workspace"
 )
 
-// OriginOf derives c's origin from the prefixes the built-in catalogs reserve: a code under
-// one is builtin, any other is the workspace's. Nothing stores an origin beside a code, so a
-// workspace cannot claim builtin by saying so.
+// OriginOf derives c's origin from who registered its prefix: a code under a catalog the
+// binary registered is builtin, any other the workspace's. Nothing stores an origin beside
+// a code, so a workspace cannot claim builtin by saying so.
 func OriginOf(c DiagnosticCode) DiagnosticOrigin {
-	if _, ok := diagnostics.Owner(c); ok {
+	if owner, ok := diagnostics.Owner(c); ok && owner != DiagnosticOwnerWorkspace {
 		return DiagnosticOriginBuiltin
 	}
 	return DiagnosticOriginWorkspace
 }
 
-// DiagnosticDocs is the one docs resolver for a diagnostic code, keyed by prefix: a built-in
-// prefix resolves through the catalog that reserved it, the workspace's declared Prefix
-// through its Docs template, and any other prefix to "". The zero value resolves built-in
-// codes only.
+// DiagnosticDocs is the one docs resolver for a diagnostic code, keyed by prefix: MGS
+// resolves through magus's own pages, the workspace's declared Prefix through its Docs
+// template, and any other prefix to "". The zero value resolves MGS codes only.
 type DiagnosticDocs struct {
 	// Prefix is the workspace's declared code prefix (magus.yaml diagnostics.prefix).
 	Prefix string
@@ -123,30 +131,26 @@ type DiagnosticDocs struct {
 	Docs string
 }
 
-// URL is c's docs page, or "" when no catalog and no workspace declaration covers c.
+// URL is c's docs page, or "" when neither magus nor the workspace documents c.
 func (d DiagnosticDocs) URL(c DiagnosticCode) string {
-	if owner, ok := diagnostics.Owner(c); ok {
-		return owner.URL(c)
+	switch p := diagnostics.Prefix(c); {
+	case p == mgsPrefix:
+		return mgs.URL(c)
+	case p != "" && p == d.Prefix && d.Docs != "":
+		return strings.ReplaceAll(d.Docs, "{code}", string(c))
 	}
-	if d.Prefix == "" || d.Docs == "" || diagnostics.Prefix(c) != d.Prefix {
-		return ""
-	}
-	return strings.ReplaceAll(d.Docs, "{code}", string(c))
+	return ""
 }
 
-// CodeURL returns the documentation URL for a built-in code, and "" for a code no built-in
-// catalog reserves: a workspace code's page is DiagnosticDocs.URL's to resolve.
+// CodeURL returns the documentation URL for an MGS code, and "" for any other: a workspace
+// code's page is DiagnosticDocs.URL's to resolve.
 func CodeURL(c DiagnosticCode) string { return DiagnosticDocs{}.URL(c) }
 
-// ValidateDiagnosticPrefix refuses a workspace prefix that is not 2 to 8 capital letters, or
-// that equals, starts or is started by a prefix a built-in catalog reserves.
-func ValidateDiagnosticPrefix(prefix string) error {
-	if len(prefix) < 2 || len(prefix) > 8 || diagnostics.Prefix(DiagnosticCode(prefix)) != prefix {
-		return fmt.Errorf("diagnostics.prefix %q is not 2 to 8 capital letters", prefix)
-	}
-	if r, ok := diagnostics.Collides(prefix); ok {
-		return fmt.Errorf("diagnostics.prefix %q collides with %s, a prefix magus's own catalogs reserve (%s)",
-			prefix, r, strings.Join(diagnostics.ReservedPrefixes(), ", "))
+// RegisterDiagnosticPrefix reserves a workspace's declared prefix, refusing one that is
+// malformed or collides with a prefix a registered catalog holds.
+func RegisterDiagnosticPrefix(prefix string) error {
+	if err := diagnostics.Register(prefix, DiagnosticOwnerWorkspace); err != nil {
+		return fmt.Errorf("diagnostics.prefix: %w", err)
 	}
 	return nil
 }
@@ -161,7 +165,7 @@ func WorkspaceDiagnosticCode(prefix, text string) (DiagnosticCode, error) {
 	}
 	got := diagnostics.Prefix(c)
 	if OriginOf(c) == DiagnosticOriginBuiltin {
-		return "", fmt.Errorf("%q is in magus's own %s catalog, which only magus mints; use this workspace's prefix %s", text, got, prefix)
+		return "", fmt.Errorf("%q is in the %s catalog magus ships, which only magus mints; use this workspace's prefix %s", text, got, prefix)
 	}
 	if got != prefix {
 		return "", fmt.Errorf("%q is not under this workspace's prefix %s (diagnostics.prefix in magus.yaml)", text, prefix)

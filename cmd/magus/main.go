@@ -63,6 +63,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
@@ -95,6 +96,12 @@ func schedulesSteps(args []string) bool {
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	// First, so every worker and command below derives origins and refuses a colliding
+	// workspace prefix against the same registry.
+	if err := registerDiagnosticCatalogs(); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		return 1
+	}
 	// Before the worker branches: a client worker runs magus\job.put, which opens its own
 	// Store inside std and grades the check through this.
 	job.SetCheckGrader(newCheckGrader())
@@ -1460,6 +1467,15 @@ func startupTraceEnabled(args []string) bool {
 		return true
 	}
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
+}
+
+// registerDiagnosticCatalogs reserves the prefix of every code catalog this binary ships.
+// A clash between two of them is a build defect, so the caller exits on it.
+func registerDiagnosticCatalogs() error {
+	return errors.Join(
+		diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()),
+		diagnostics.RegisterCatalog("gopherbuzz", buzz.Codes()),
+	)
 }
 
 // diagnosticArgs returns err's rationale as an [attr.Why] log argument, and marks a code

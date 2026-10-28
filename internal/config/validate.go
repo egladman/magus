@@ -164,13 +164,13 @@ func spellImportFailures(imports map[string]SpellImport) []FieldFailure {
 	return out
 }
 
-// diagnosticsFailures refuses a prefix a code could not carry or that collides with a
-// built-in catalog's, and a docs template with no {code} in it, which would send every code
-// to one page.
+// diagnosticsFailures registers the workspace prefix, failing on one a code could not carry
+// or one colliding with a registered catalog's, and refuses a docs template with no {code}
+// in it, which would send every code to one page.
 func diagnosticsFailures(d Diagnostics) []FieldFailure {
 	var out []FieldFailure
 	if d.Prefix != "" {
-		if err := types.ValidateDiagnosticPrefix(d.Prefix); err != nil {
+		if err := types.RegisterDiagnosticPrefix(d.Prefix); err != nil {
 			out = append(out, FieldFailure{Field: "diagnostics.prefix", Tag: "diagnostic_prefix", Param: err.Error(), Value: d.Prefix})
 		}
 	}

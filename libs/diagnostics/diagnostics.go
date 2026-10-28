@@ -17,6 +17,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Code is a stable diagnostic identifier, e.g. "MGS1001" or "BZZ0003". Its prefix and numbering are a
@@ -133,22 +134,45 @@ func New(urlFn func(Code) string) *Domain {
 // URL returns the docs page for c under this domain.
 func (d *Domain) URL(c Code) string { return d.urlFn(c) }
 
-// catalogs maps each prefix a catalog declared to the domain that owns it. It is written
-// only while package variables initialize, through Catalog, so reads need no lock.
-var catalogs = map[string]*Domain{}
+// registry maps each registered prefix to the owner that registered it.
+var (
+	registryMu sync.RWMutex
+	registry   = map[string]string{}
+)
 
-// Catalog registers codes as d's closed catalog and returns d, so a consumer declares it
-// where it declares the domain: `var mgs = diagnostics.New(url).Catalog(all...)`. Each
-// prefix the codes carry becomes reserved for d in this process, which is what lets a
-// workspace prefix that would collide with a built-in one be refused. Call it only from a
-// package variable's initializer: the registry takes no lock.
-func (d *Domain) Catalog(codes ...Code) *Domain {
-	for _, c := range codes {
-		if p := Prefix(c); p != "" {
-			catalogs[p] = d
+// Register reserves prefix for owner in this process, so no two catalogs can mint codes
+// that clash or that a reader could take for each other's. It fails on a prefix that is
+// not 2 to 8 capital letters, and on one that equals, starts or is started by a prefix
+// another owner registered: WSX1001 beside WS1001 would make a reader work out which
+// catalog owns which. Registering a prefix again for the same owner changes nothing.
+// Safe for concurrent use; the caller decides what a failure ends.
+func Register(prefix, owner string) error {
+	if len(prefix) < 2 || len(prefix) > 8 || Prefix(Code(prefix)) != prefix {
+		return fmt.Errorf("diagnostics: prefix %q for %s is not 2 to 8 capital letters", prefix, owner)
+	}
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if registry[prefix] == owner {
+		return nil
+	}
+	for p, o := range registry {
+		if strings.HasPrefix(p, prefix) || strings.HasPrefix(prefix, p) {
+			return fmt.Errorf("diagnostics: prefix %s for %s collides with %s, which %s registered", prefix, owner, p, o)
 		}
 	}
-	return d
+	registry[prefix] = owner
+	return nil
+}
+
+// RegisterCatalog registers every prefix codes carry for owner, the catalog's package
+// handing over its own enumeration. It stops at the first prefix Register refuses.
+func RegisterCatalog(owner string, codes []Code) error {
+	for _, c := range codes {
+		if err := Register(Prefix(c), owner); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Prefix is the run of ASCII capital letters c starts with: MGS for MGS1021, "" for a code
@@ -162,32 +186,24 @@ func Prefix(c Code) string {
 	return s[:i]
 }
 
-// ReservedPrefixes lists, sorted, every prefix a catalog linked into this process declared.
+// ReservedPrefixes lists, sorted, every prefix registered in this process.
 func ReservedPrefixes() []string {
-	out := make([]string, 0, len(catalogs))
-	for p := range catalogs {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	out := make([]string, 0, len(registry))
+	for p := range registry {
 		out = append(out, p)
 	}
 	sort.Strings(out)
 	return out
 }
 
-// Owner returns the domain whose catalog reserved c's prefix, and false when none did.
-func Owner(c Code) (*Domain, bool) {
-	d, ok := catalogs[Prefix(c)]
-	return d, ok
-}
-
-// Collides returns the reserved prefix that prefix equals, starts or is started by, and
-// false when none does. Both directions count: WSX1001 beside WS1001 would make a reader
-// work out which catalog owns which.
-func Collides(prefix string) (string, bool) {
-	for _, r := range ReservedPrefixes() {
-		if strings.HasPrefix(r, prefix) || strings.HasPrefix(prefix, r) {
-			return r, true
-		}
-	}
-	return "", false
+// Owner returns who registered c's prefix, and false when nobody did.
+func Owner(c Code) (string, bool) {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	o, ok := registry[Prefix(c)]
+	return o, ok
 }
 
 // Errorf builds an *Error with c, a formatted message, and c's docs URL captured for rendering.

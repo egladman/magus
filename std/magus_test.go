@@ -27,6 +27,21 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+// stdSuite is the package's one testify suite: add tests here as methods.
+type stdSuite struct {
+	suite.Suite
+}
+
+func TestStdSuite(t *testing.T) {
+	suite.Run(t, new(stdSuite))
+}
+
+// SetupSuite registers the MGS catalog as magus's startup does, so a raise can tell a
+// built-in code from the workspace's.
+func (s *stdSuite) SetupSuite() {
+	s.Require().NoError(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()))
+}
+
 // TestMagusCmdWarnsForTypedSubcommands verifies the escape hatch nudges authors
 // toward the dedicated method when the subcommand has one, and stays quiet otherwise. The nested exec itself is allowed to fail — the warning is
 // emitted before exec, so we only assert on the captured log.
@@ -158,7 +173,7 @@ type diagnosticsWorkspace struct {
 func (w diagnosticsWorkspace) Root() string { return w.root }
 
 // raiseContext is a context whose workspace declares the WS prefix.
-func (s *ImageSuite) raiseContext() context.Context {
+func (s *stdSuite) raiseContext() context.Context {
 	root := s.T().TempDir()
 	yaml := "diagnostics:\n  prefix: WS\n  docs: https://ws.example/codes/{code}/\n"
 	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(yaml), 0o644))
@@ -170,28 +185,28 @@ func wsCode(text string) types.DiagnosticCodeRef {
 	return types.DiagnosticCodeRef{Code: text, Origin: types.DiagnosticOriginWorkspace}
 }
 
-func (s *ImageSuite) TestDiagnosticCodeMintsAWorkspaceCode() {
+func (s *stdSuite) TestDiagnosticCodeMintsAWorkspaceCode() {
 	got, err := MagusDiagnosticCode(s.raiseContext(), "WS1003")
 	s.Require().NoError(err)
 	s.Equal(wsCode("WS1003"), got)
 }
 
-func (s *ImageSuite) TestDiagnosticCodeRefusesAnMGSCode() {
+func (s *stdSuite) TestDiagnosticCodeRefusesAnMGSCode() {
 	_, err := MagusDiagnosticCode(s.raiseContext(), "MGS1021")
-	s.ErrorContains(err, "magus's own MGS catalog")
+	s.ErrorContains(err, "MGS catalog magus ships")
 }
 
-func (s *ImageSuite) TestDiagnosticCodeRefusesAForeignPrefix() {
+func (s *stdSuite) TestDiagnosticCodeRefusesAForeignPrefix() {
 	_, err := MagusDiagnosticCode(s.raiseContext(), "ACME1001")
 	s.ErrorContains(err, "not under this workspace's prefix WS")
 }
 
-func (s *ImageSuite) TestDiagnosticCodeOutsideAWorkspaceNamesTheKey() {
+func (s *stdSuite) TestDiagnosticCodeOutsideAWorkspaceNamesTheKey() {
 	_, err := MagusDiagnosticCode(s.T().Context(), "WS1003")
 	s.ErrorContains(err, "diagnostics.prefix in magus.yaml")
 }
 
-func (s *ImageSuite) TestRaiseCarriesCodeMessageAndTheWorkspacePage() {
+func (s *stdSuite) TestRaiseCarriesCodeMessageAndTheWorkspacePage() {
 	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "registry rejected the manifest", raiseOptions(nil, ""))
 	var de *diagnostics.Error
 	s.Require().ErrorAs(err, &de, "must be a diagnostics.Error so Buzz sees structured fields")
@@ -202,12 +217,12 @@ func (s *ImageSuite) TestRaiseCarriesCodeMessageAndTheWorkspacePage() {
 	}, de.BuzzError())
 }
 
-func (s *ImageSuite) TestRaiseURLOverridesTheWorkspacePage() {
+func (s *stdSuite) TestRaiseURLOverridesTheWorkspacePage() {
 	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "boom", raiseOptions(nil, "https://other.example/WS1001"))
 	s.Equal("[WS1001] boom\n  see: https://other.example/WS1001", err.Error())
 }
 
-func (s *ImageSuite) TestRaiseOmitsTheURLWhenNoPageIsDeclared() {
+func (s *stdSuite) TestRaiseOmitsTheURLWhenNoPageIsDeclared() {
 	root := s.T().TempDir()
 	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("diagnostics:\n  prefix: WS\n"), 0o644))
 	ctx := types.WithWorkspace(s.T().Context(), diagnosticsWorkspace{root: root})
@@ -217,24 +232,24 @@ func (s *ImageSuite) TestRaiseOmitsTheURLWhenNoPageIsDeclared() {
 		"an absent url must be absent, not an empty field a caller has to test for")
 }
 
-func (s *ImageSuite) TestRaiseRechecksAnMGSCodeInTheObject() {
+func (s *stdSuite) TestRaiseRechecksAnMGSCodeInTheObject() {
 	err := MagusRaise(s.raiseContext(), types.DiagnosticCodeRef{Code: "MGS9999"}, "impersonating magus", types.RaiseOptions{})
-	s.ErrorContains(err, "magus's own MGS catalog")
+	s.ErrorContains(err, "MGS catalog magus ships")
 	var de *diagnostics.Error
 	s.False(errors.As(err, &de), "refusing must not produce the very diagnostic it rejected")
 }
 
-func (s *ImageSuite) TestRaiseRequiresAMessage() {
+func (s *stdSuite) TestRaiseRequiresAMessage() {
 	s.ErrorContains(MagusRaise(s.raiseContext(), wsCode("WS1001"), "", raiseOptions(nil, "")), "needs a message")
 }
 
-func (s *ImageSuite) TestRaiseSplicesAStringCauseAndUnwrapsToIt() {
+func (s *stdSuite) TestRaiseSplicesAStringCauseAndUnwrapsToIt() {
 	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "push failed", raiseOptions("exec docker: exit 1", ""))
 	s.ErrorContains(err, "[WS1001] push failed: exec docker: exit 1")
 	s.ErrorContains(errors.Unwrap(err), "exec docker: exit 1")
 }
 
-func (s *ImageSuite) TestRaiseKeepsACodedCauseMatchable() {
+func (s *stdSuite) TestRaiseKeepsACodedCauseMatchable() {
 	inner := map[string]any{"code": "MGS2001", "message": "spell not found", "url": "https://x/MGS2001"}
 	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "build failed", raiseOptions(inner, ""))
 	s.ErrorIs(err, diagnostics.Code("MGS2001"), "the inner code must still match after wrapping")

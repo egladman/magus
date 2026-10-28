@@ -67,7 +67,10 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("raise", vm.DirectValue("magus.raise", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		code := ffi.String(bzArgs, 0)
+		code, err := ffi.Object("magus\\raise", "code", bzArgs, 0, decode.DecodeDiagnosticCodeRef)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		message := ffi.String(bzArgs, 1)
 		var opts types.RaiseOptions
 		if ffi.Present(bzArgs, 2) {
@@ -81,6 +84,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
+	}))
+	m.MapSet("diagnosticCode", vm.DirectValue("magus.diagnosticCode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		text := ffi.String(bzArgs, 0)
+		ret0, err := std.MagusDiagnosticCode(ctx, text)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDiagnosticCodeRef(ret0, enums), nil
 	}))
 	m.MapSet("run", vm.DirectValue("magus.run", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := ffi.StringSlice(bzArgs, 0)

@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/diagnostics"
 )
 
 // TestAllDiagnosticCodesEnumerated guards the hand-maintained allDiagnosticCodes
@@ -46,6 +48,12 @@ func TestSpellContractViolatedRoutesToMagusfileDocs(t *testing.T) {
 	assert.Equal(t, "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1051/", CodeURL(SpellContractViolated))
 }
 
+// SetupSuite registers the MGS catalog as magus's startup does, since origin and collisions
+// derive from the registry.
+func (s *typesSuite) SetupSuite() {
+	s.Require().NoError(diagnostics.RegisterCatalog(DiagnosticOwnerMagus, AllDiagnosticCodes()))
+}
+
 func (s *typesSuite) TestCodeURLRoutesAWorkspaceScopeCodeToSandboxDocs() {
 	s.Equal("https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3044/", CodeURL("MGS3044"))
 }
@@ -77,24 +85,24 @@ func (s *typesSuite) TestOriginOfAnUnreservedCodeIsWorkspace() {
 	s.Equal(DiagnosticOriginWorkspace, OriginOf("WS1001"))
 }
 
-func (s *typesSuite) TestValidateDiagnosticPrefixAcceptsWS() {
-	s.NoError(ValidateDiagnosticPrefix("WS"))
+func (s *typesSuite) TestRegisterDiagnosticPrefixAcceptsWS() {
+	s.NoError(RegisterDiagnosticPrefix("WS"))
 }
 
-func (s *typesSuite) TestValidateDiagnosticPrefixRefusesMGS() {
-	s.ErrorContains(ValidateDiagnosticPrefix("MGS"), "collides with MGS")
+func (s *typesSuite) TestRegisterDiagnosticPrefixRefusesMGS() {
+	s.ErrorContains(RegisterDiagnosticPrefix("MGS"), "collides with MGS")
 }
 
-func (s *typesSuite) TestValidateDiagnosticPrefixRefusesAPrefixOfMGS() {
-	s.ErrorContains(ValidateDiagnosticPrefix("MG"), "collides with MGS")
+func (s *typesSuite) TestRegisterDiagnosticPrefixRefusesAPrefixOfMGS() {
+	s.ErrorContains(RegisterDiagnosticPrefix("MG"), "collides with MGS")
 }
 
-func (s *typesSuite) TestValidateDiagnosticPrefixRefusesOneMGSStarts() {
-	s.ErrorContains(ValidateDiagnosticPrefix("MGSX"), "collides with MGS")
+func (s *typesSuite) TestRegisterDiagnosticPrefixRefusesOneMGSStarts() {
+	s.ErrorContains(RegisterDiagnosticPrefix("MGSX"), "collides with MGS")
 }
 
-func (s *typesSuite) TestValidateDiagnosticPrefixRefusesLowercase() {
-	s.ErrorContains(ValidateDiagnosticPrefix("ws"), "capital letters")
+func (s *typesSuite) TestRegisterDiagnosticPrefixRefusesLowercase() {
+	s.ErrorContains(RegisterDiagnosticPrefix("ws"), "capital letters")
 }
 
 func (s *typesSuite) TestWorkspaceDiagnosticCodeMintsUnderThePrefix() {
@@ -110,7 +118,7 @@ func (s *typesSuite) TestWorkspaceDiagnosticCodeRefusesWithNoPrefixDeclared() {
 
 func (s *typesSuite) TestWorkspaceDiagnosticCodeRefusesAnMGSCode() {
 	_, err := WorkspaceDiagnosticCode("WS", "MGS1021")
-	s.ErrorContains(err, "magus's own MGS catalog")
+	s.ErrorContains(err, "MGS catalog magus ships")
 }
 
 func (s *typesSuite) TestWorkspaceDiagnosticCodeRefusesAForeignPrefix() {

@@ -9,8 +9,13 @@ import (
 	"testing"
 )
 
-// catalogued registers the TST catalog the way a consumer's package variable does.
-var catalogued = New(testURL).Catalog("TST0001", "TST0002")
+// registerTST reserves the TST prefix for a fake catalog, as a composition point would.
+func registerTST(t *testing.T) {
+	t.Helper()
+	if err := RegisterCatalog("tst", []Code{"TST0001", "TST0002"}); err != nil {
+		t.Fatalf("RegisterCatalog(tst) = %v", err)
+	}
+}
 
 func TestPrefixIsTheLeadingCapitals(t *testing.T) {
 	if got := Prefix("ACME1001"); got != "ACME" {
@@ -24,40 +29,57 @@ func TestPrefixOfACodeWithNoCapitalsIsEmpty(t *testing.T) {
 	}
 }
 
-func TestCatalogReservesItsPrefix(t *testing.T) {
+func TestRegisterCatalogReservesItsPrefix(t *testing.T) {
+	registerTST(t)
 	if !slices.Contains(ReservedPrefixes(), "TST") {
 		t.Errorf("ReservedPrefixes() = %v, want TST among them", ReservedPrefixes())
 	}
 }
 
-func TestOwnerIsTheCataloguingDomain(t *testing.T) {
-	d, ok := Owner("TST0009")
-	if !ok || d != catalogued {
-		t.Errorf("Owner(TST0009) = %p, %v, want the TST domain", d, ok)
+func TestRegisterTheSamePrefixForItsOwnerAgainIsANoOp(t *testing.T) {
+	registerTST(t)
+	if err := Register("TST", "tst"); err != nil {
+		t.Errorf("Register(TST, tst) again = %v, want nil", err)
 	}
 }
 
-func TestOwnerOfAnUncataloguedPrefixIsNone(t *testing.T) {
+func TestOwnerIsWhoRegistered(t *testing.T) {
+	registerTST(t)
+	if o, ok := Owner("TST0009"); !ok || o != "tst" {
+		t.Errorf("Owner(TST0009) = %q, %v, want tst", o, ok)
+	}
+}
+
+func TestOwnerOfAnUnregisteredPrefixIsNone(t *testing.T) {
 	if _, ok := Owner("NOPE0001"); ok {
-		t.Error("Owner(NOPE0001) found a domain no catalog declared")
+		t.Error("Owner(NOPE0001) found an owner nobody registered")
 	}
 }
 
-func TestCollidesWithAReservedPrefixItStarts(t *testing.T) {
-	if r, ok := Collides("TS"); !ok || r != "TST" {
-		t.Errorf("Collides(TS) = %q, %v, want TST", r, ok)
+func TestRegisterRefusesAnotherOwnersPrefix(t *testing.T) {
+	registerTST(t)
+	if err := Register("TST", "other"); err == nil || !strings.Contains(err.Error(), "collides with TST") {
+		t.Errorf("Register(TST, other) = %v, want a collision with TST", err)
 	}
 }
 
-func TestCollidesWithAReservedPrefixThatStartsIt(t *testing.T) {
-	if r, ok := Collides("TSTX"); !ok || r != "TST" {
-		t.Errorf("Collides(TSTX) = %q, %v, want TST", r, ok)
+func TestRegisterRefusesAPrefixOfAReservedOne(t *testing.T) {
+	registerTST(t)
+	if err := Register("TS", "other"); err == nil || !strings.Contains(err.Error(), "collides with TST") {
+		t.Errorf("Register(TS, other) = %v, want a collision with TST", err)
 	}
 }
 
-func TestADistinctPrefixDoesNotCollide(t *testing.T) {
-	if r, ok := Collides("WS"); ok {
-		t.Errorf("Collides(WS) = %q, want no collision", r)
+func TestRegisterRefusesAPrefixAReservedOneStarts(t *testing.T) {
+	registerTST(t)
+	if err := Register("TSTX", "other"); err == nil || !strings.Contains(err.Error(), "collides with TST") {
+		t.Errorf("Register(TSTX, other) = %v, want a collision with TST", err)
+	}
+}
+
+func TestRegisterRefusesAMalformedPrefix(t *testing.T) {
+	if err := Register("ws", "other"); err == nil || !strings.Contains(err.Error(), "capital letters") {
+		t.Errorf("Register(ws, other) = %v, want a malformed-prefix error", err)
 	}
 }
 

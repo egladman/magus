@@ -276,6 +276,18 @@ func TestSession_Diagnostics_ReplSuppressesUnusedImportWarning(t *testing.T) {
 	assert.Empty(t, got, "a REPL session must not warn on an import that may be used by a later line")
 }
 
+// Codes hands a host a copy, so a caller writing to it cannot change the catalog.
+func TestCodesIsACopyOfTheCatalog(t *testing.T) {
+	codes := Codes()
+	if len(codes) != len(allBZZCodes) {
+		t.Fatalf("Codes() has %d entries, allBZZCodes %d", len(codes), len(allBZZCodes))
+	}
+	codes[0] = "BZZ9999"
+	if allBZZCodes[0] == "BZZ9999" {
+		t.Error("writing to Codes()'s result changed allBZZCodes")
+	}
+}
+
 // TestAllBZZCodesEnumerated guards allBZZCodes against the const block in diagnostics.go: every declared
 // BZZ code must be enumerated, and the counts must match, so a new code cannot silently escape the
 // doc-coverage check below.

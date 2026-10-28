@@ -62,6 +62,12 @@ var allBZZCodes = []diagnostics.Code{
 	UnusedImport, StringAccumulation, RedundantUnwrap,
 }
 
+// Codes returns every BZZ code in ascending order, for a host registering the catalog's
+// prefix with diagnostics.RegisterCatalog. The slice is a copy.
+func Codes() []diagnostics.Code {
+	return append([]diagnostics.Code(nil), allBZZCodes...)
+}
+
 // Severity classifies a BZZ diagnostic. The zero value is SeverityError, so every
 // diagnostic built before Severity existed (and every one the checker still builds
 // without setting it explicitly) keeps its current meaning: it fails Exec/Compile

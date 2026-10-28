@@ -27,12 +27,21 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// Every catalog the binary ships registers without a clash, so two built-in prefixes that
+// collide fail here rather than at a user's startup.
+func TestRegisterDiagnosticCatalogsReservesEveryShippedPrefix(t *testing.T) {
+	require.NoError(t, registerDiagnosticCatalogs())
+	require.NoError(t, registerDiagnosticCatalogs(), "registering again is a no-op")
+	assert.Subset(t, diagnostics.ReservedPrefixes(), []string{"BZZ", "MGS"})
+}
 
 // TestResolveProfileRunAffectedUsageSkipsForward pins the fix for the silent
 // `run -h` / `affected -h` / bare `affected` bug: a usage-only invocation of an

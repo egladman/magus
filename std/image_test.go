@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -67,15 +66,7 @@ func TestImageDigestString(t *testing.T) {
 	assert.Empty(t, types.ImageDigest{}.String())
 }
 
-type ImageSuite struct {
-	suite.Suite
-}
-
-func TestImageSuite(t *testing.T) {
-	suite.Run(t, new(ImageSuite))
-}
-
-func (s *ImageSuite) TestParsePlatformTakesAnAMD64VariantThatSetsGOAMD64() {
+func (s *stdSuite) TestParsePlatformTakesAnAMD64VariantThatSetsGOAMD64() {
 	p, err := ImageParsePlatform(s.T().Context(), "linux/amd64/v3")
 	s.Require().NoError(err)
 	s.Equal(types.ImagePlatform{OS: types.ImageOSLinux, Architecture: types.ImageArchitectureAMD64, Variant: types.ImageVariantV3}, p)
@@ -85,7 +76,7 @@ func (s *ImageSuite) TestParsePlatformTakesAnAMD64VariantThatSetsGOAMD64() {
 	s.Equal(map[string]string{"GOOS": "linux", "GOARCH": "amd64", "GOAMD64": "v3"}, env)
 }
 
-func (s *ImageSuite) TestOpenRefusesANameTheLayoutDoesNotHold() {
+func (s *stdSuite) TestOpenRefusesANameTheLayoutDoesNotHold() {
 	got, err := ImageAssemble(s.T().Context(), types.ImageSpec{Scratch: true, Platform: linuxAMD64}, filepath.Join(s.T().TempDir(), "out"))
 	s.Require().NoError(err)
 
