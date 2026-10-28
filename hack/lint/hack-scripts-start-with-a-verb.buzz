@@ -24,7 +24,7 @@ import "hack/lint/support" as support;
 
 final READ_VERBS = ["ls", "show", "count", "diff", "summarize", "example", "time", "render", "check"];
 final RUN_VERBS = ["run"];
-final WRITE_VERBS = ["rename", "split", "mark", "prune", "merge", "resolve", "land", "update", "rebase"];
+final WRITE_VERBS = ["rename", "split", "mark", "prune", "reclaim", "merge", "resolve", "land", "update", "rebase"];
 final SETUP_VERBS = ["bootstrap"];
 
 // NOUNS are the scripts named before the verb rule, and the workflow steps a person never
@@ -103,7 +103,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 test "a verb in a script directory, on- in hack/remote, a module or a listed noun passes" {
     foreach (p in ["hack/dev/ls-worktrees.buzz", "hack/dev/rename-symbol.buzz", "hack/dev/mark-feedback.buzz", "hack/dev/show-feedback.buzz",
                    "hack/dev/count-feedback.buzz", "hack/dev/show-session-figure.buzz", "hack/dev/render-brief.buzz",
-                   "hack/dev/bootstrap-worktree.buzz", "hack/dev/check-guard-blocks.buzz", "hack/dev/prune-worktrees.buzz",
+                   "hack/dev/bootstrap-worktree.buzz", "hack/dev/check-guard-blocks.buzz", "hack/dev/reclaim-disk-space.buzz",
                    "hack/dev/merge-job-branches.buzz", "hack/dev/resolve-conflicts.buzz", "hack/dev/run-gate.buzz",
                    "hack/dev/land-commits.buzz", "hack/dev/merge-base-into-branches.buzz", "hack/bench/time-startup.buzz",
                    "hack/remote/on-linux.buzz", "hack/magusfile/changelog.buzz", "hack/ci/merge-queue.buzz",
