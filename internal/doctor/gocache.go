@@ -37,9 +37,9 @@ type cacheSize struct {
 	Stopped string
 }
 
-// MeasureCache sums file sizes under dir until the total passes limit or maxEntries entries
+// measureCache sums file sizes under dir until the total passes limit or maxEntries entries
 // have been visited. A missing dir measures zero.
-func MeasureCache(ctx context.Context, dir string, limit int64, maxEntries int) (cacheSize, error) {
+func measureCache(ctx context.Context, dir string, limit int64, maxEntries int) (cacheSize, error) {
 	var out cacheSize
 	entries := 0
 	errStop := errors.New("walk stopped")
@@ -87,7 +87,7 @@ func goCacheBudget(ctx context.Context, caches []goCache, budgetMB, maxEntries i
 	limit := int64(budgetMB) << 20
 	var over, partial, unread []string
 	for _, c := range caches {
-		size, err := MeasureCache(ctx, c.dir, limit, maxEntries)
+		size, err := measureCache(ctx, c.dir, limit, maxEntries)
 		switch {
 		case err != nil:
 			unread = append(unread, fmt.Sprintf("%s %s: cannot measure: %v", c.label, c.dir, err))

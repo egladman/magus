@@ -85,10 +85,10 @@ func checkStaleWorktrees(root string) types.Check {
 	}
 }
 
-// DiskSamplesPath is the store the reclaim hook appends a types.DiskSample to, one JSON
-// object a line: $XDG_STATE_HOME/magus/disk/samples.jsonl, the path the magus/reclaimdisk
-// module builds with fs\stateDir("disk").
-func DiskSamplesPath() (string, error) {
+// diskSamplesPath is the store the reclaim hook appends a types.DiskSample to, one JSON
+// object a line: $XDG_STATE_HOME/magus/disk/samples.jsonl, the path the diskwatch module
+// builds with fs\stateDir("disk").
+func diskSamplesPath() (string, error) {
 	base, err := xdg.StateDir()
 	if err != nil {
 		return "", err
@@ -171,7 +171,7 @@ func defaulted(value, def int) string {
 // checkDiskTrend reads the reclaim hook's samples and grades them; a store that is not
 // there yet is a fact, and one that cannot be read is advice naming why.
 func (r *runner) checkDiskTrend() types.Check {
-	path, err := DiskSamplesPath()
+	path, err := diskSamplesPath()
 	if err != nil {
 		return types.Check{Name: "disk-trend", Status: types.CheckAdvice, Message: fmt.Sprintf("no state directory to read disk samples from: %v", err)}
 	}
