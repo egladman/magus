@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -169,16 +171,36 @@ func (c *Client) PushBlob(ctx context.Context, repo Reference, d ocispec.Descrip
 	return c.pushBlob(ctx, repo.repository(), d, r)
 }
 
-// pushBlob is the two-step upload the v2 API defines: ask for a session, then PUT the
-// bytes with the digest. A blob the registry already holds is skipped, which is what makes
-// re-publishing an unchanged artifact nearly free.
-func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descriptor, r io.Reader) error {
-	vr, err := newVerifyReader(r, d)
-	if err != nil {
-		return fmt.Errorf("upload to %s: %w", ref.Repository, err)
+// MountBlob makes the blob d names, which from's repository holds, part of repo's
+// repository without sending it, the distribution spec's cross-repository mount. A
+// registry that declines answers with an upload session, and the blob is uploaded from r
+// as PushBlob would; r is not read when the mount succeeds. repo and from must be on one
+// registry, and the credentials need pull on from as well as push on repo.
+func (c *Client) MountBlob(ctx context.Context, repo, from Reference, d ocispec.Descriptor, r io.Reader) error {
+	repo, from = repo.repository(), from.repository()
+	if repo.endpoint() != from.endpoint() {
+		return fmt.Errorf("oci: mount %s from %s: a mount stays on one registry", repo, from)
 	}
-	if n, ok := sourceLen(r); ok && n != d.Size {
-		return fmt.Errorf("oci: upload to %s: the source is %d bytes, %d declared", ref.Repository, n, d.Size)
+	vr, err := checkSource(repo, d, r)
+	if err != nil {
+		return err
+	}
+	scope := repo.scope("push,pull") + " " + from.scope("pull")
+	mount := url.Values{"mount": {d.Digest.String()}, "from": {from.Repository}}
+	upload, err := c.startUpload(ctx, repo, scope, mount)
+	if err != nil || upload == nil {
+		return err
+	}
+	return c.sendBlob(ctx, repo, scope, upload, d, vr)
+}
+
+// pushBlob is the upload the v2 API defines: ask for a session, then send the bytes and
+// close it with the digest. A blob the registry already holds is skipped, which is what
+// makes re-publishing an unchanged artifact nearly free.
+func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descriptor, r io.Reader) error {
+	vr, err := checkSource(ref, d, r)
+	if err != nil {
+		return err
 	}
 	have, err := c.blobExists(ctx, ref, "push,pull", d.Digest)
 	if err != nil {
@@ -187,11 +209,25 @@ func (c *Client) pushBlob(ctx context.Context, ref Reference, d ocispec.Descript
 	if have {
 		return nil
 	}
-	upload, err := c.startUpload(ctx, ref, d)
+	scope := ref.scope("push,pull")
+	upload, err := c.startUpload(ctx, ref, scope, nil)
 	if err != nil {
 		return err
 	}
-	return c.sendBlob(ctx, ref, upload, d, vr)
+	return c.sendBlob(ctx, ref, scope, upload, d, vr)
+}
+
+// checkSource wraps r to verify it against d, refusing up front a source that says it
+// holds another length.
+func checkSource(ref Reference, d ocispec.Descriptor, r io.Reader) (*verifyReader, error) {
+	vr, err := newVerifyReader(r, d)
+	if err != nil {
+		return nil, fmt.Errorf("upload to %s: %w", ref.Repository, err)
+	}
+	if n, ok := sourceLen(r); ok && n != d.Size {
+		return nil, fmt.Errorf("oci: upload to %s: the source is %d bytes, %d declared", ref.Repository, n, d.Size)
+	}
+	return vr, nil
 }
 
 // sourceLen reports how many unread bytes r holds, for the readers that know
@@ -204,11 +240,26 @@ func sourceLen(r io.Reader) (int64, bool) {
 	return int64(l.Len()), true
 }
 
-// startUpload opens an upload session and returns the URL to PUT the blob to, with the
-// digest query set.
-func (c *Client) startUpload(ctx context.Context, ref Reference, d ocispec.Descriptor) (*url.URL, error) {
-	resp, err := c.send(ctx, ref, "push,pull", func(auth string) (*http.Request, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base(ref)+"/blobs/uploads/", nil)
+// DefaultChunkSize is the ChunkSize a zero Client uses: under the 100 MB request body a
+// CDN in front of a registry commonly caps.
+const DefaultChunkSize = 64 << 20
+
+// uploadSession is an open blob upload: where to send the next request, and the smallest
+// chunk the registry takes (OCI-Chunk-Min-Length, 0 when it names none).
+type uploadSession struct {
+	location *url.URL
+	minChunk int64
+}
+
+// startUpload opens an upload session. With a mount query a registry may answer 201,
+// the blob mounted, and the session is nil.
+func (c *Client) startUpload(ctx context.Context, ref Reference, scope string, query url.Values) (*uploadSession, error) {
+	u := c.base(ref) + "/blobs/uploads/"
+	if query != nil {
+		u += "?" + query.Encode()
+	}
+	resp, err := c.sendScoped(ctx, ref, scope, func(auth string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -222,15 +273,32 @@ func (c *Client) startUpload(ctx context.Context, ref Reference, d ocispec.Descr
 	// the registry said, and closing first discards the explanation of the very first
 	// error a misconfigured push hits.
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
+	switch {
+	case resp.StatusCode == http.StatusCreated && query != nil:
+		return nil, nil
+	case resp.StatusCode != http.StatusAccepted:
 		return nil, fmt.Errorf("oci: start upload to %s: %w", ref.Repository, statusError(resp))
 	}
+	location, err := uploadLocation(ref, resp)
+	if err != nil {
+		return nil, err
+	}
+	session := &uploadSession{location: location}
+	if h := resp.Header.Get("OCI-Chunk-Min-Length"); h != "" {
+		if session.minChunk, err = strconv.ParseInt(h, 10, 64); err != nil || session.minChunk < 0 {
+			return nil, fmt.Errorf("oci: start upload to %s: unusable OCI-Chunk-Min-Length %q", ref.Repository, h)
+		}
+	}
+	return session, nil
+}
+
+// uploadLocation reads the Location of an upload response, which may be absolute or
+// registry-relative and may already carry a query.
+func uploadLocation(ref Reference, resp *http.Response) (*url.URL, error) {
 	location := resp.Header.Get("Location")
 	if location == "" {
-		return nil, fmt.Errorf("oci: start upload to %s: the registry returned no upload location", ref.Repository)
+		return nil, fmt.Errorf("oci: upload to %s: the registry returned no upload location", ref.Repository)
 	}
-
-	// The location may be absolute or registry-relative, and it may already carry a query.
 	upload, err := url.Parse(location)
 	if err != nil {
 		return nil, fmt.Errorf("oci: upload location %q: %w", location, err)
@@ -241,30 +309,21 @@ func (c *Client) startUpload(ctx context.Context, ref Reference, d ocispec.Descr
 	if upload.Scheme != "https" {
 		return nil, fmt.Errorf("oci: upload to %s: the registry named a %s upload location, which would send the blob unprotected", ref.Repository, upload.Scheme)
 	}
-	q := upload.Query()
-	q.Set("digest", d.Digest.String())
-	upload.RawQuery = q.Encode()
 	return upload, nil
 }
 
-// sendBlob sends the verified bytes to the upload URL startUpload returned.
-func (c *Client) sendBlob(ctx context.Context, ref Reference, upload *url.URL, d ocispec.Descriptor, vr *verifyReader) error {
-	put, err := http.NewRequestWithContext(ctx, http.MethodPut, upload.String(), vr)
-	if err != nil {
-		return err
+// sendBlob sends the verified bytes to the session startUpload opened: in one PUT when
+// they fit in a chunk, else in PATCH chunks closed by a PUT.
+func (c *Client) sendBlob(ctx context.Context, ref Reference, scope string, s *uploadSession, d ocispec.Descriptor, vr *verifyReader) error {
+	chunk := c.ChunkSize
+	if chunk <= 0 {
+		chunk = DefaultChunkSize
 	}
-	// Credentials go only to the registry itself; another host named by Location is
-	// holding the upload on its behalf and gets a signed URL, not a login.
-	if upload.Host == ref.endpoint() {
-		auth, err := c.authorize(ctx, ref, "push,pull")
-		if err != nil {
-			return err
-		}
-		setAuth(put, auth)
+	chunk = max(chunk, s.minChunk)
+	if d.Size > chunk {
+		return c.sendChunks(ctx, ref, scope, s.location, chunk, d, vr)
 	}
-	put.Header.Set("Content-Type", "application/octet-stream")
-	put.ContentLength = d.Size
-	done, err := c.do(put)
+	done, err := c.uploadRequest(ctx, ref, scope, http.MethodPut, withDigest(s.location, d.Digest), vr, d.Size, "")
 	if err != nil {
 		return fmt.Errorf("upload %s: %w", d.Digest, err)
 	}
@@ -278,6 +337,130 @@ func (c *Client) sendBlob(ctx context.Context, ref Reference, upload *url.URL, d
 		return fmt.Errorf("upload %s: %w", d.Digest, err)
 	}
 	return nil
+}
+
+// sendChunks is the distribution spec's chunked upload. The source is read through vr
+// one chunk at a time, and checked against d before the closing PUT, so the registry never
+// completes a blob that is not the one named.
+func (c *Client) sendChunks(ctx context.Context, ref Reference, scope string, location *url.URL, chunk int64, d ocispec.Descriptor, vr *verifyReader) error {
+	buf := make([]byte, chunk)
+	for offset := int64(0); offset < d.Size; {
+		n := min(chunk, d.Size-offset)
+		if _, err := io.ReadFull(vr, buf[:n]); err != nil {
+			return fmt.Errorf("upload %s: %w", d.Digest, err)
+		}
+		next, err := c.patchChunk(ctx, ref, scope, location, buf[:n], offset)
+		if err != nil {
+			return fmt.Errorf("upload %s: %w", d.Digest, err)
+		}
+		location, offset = next, offset+n
+	}
+	if _, err := vr.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("upload %s: %w", d.Digest, err)
+	}
+	done, err := c.uploadRequest(ctx, ref, scope, http.MethodPut, withDigest(location, d.Digest), http.NoBody, 0, "")
+	if err != nil {
+		return fmt.Errorf("upload %s: %w", d.Digest, err)
+	}
+	defer done.Body.Close()
+	if done.StatusCode != http.StatusCreated {
+		return fmt.Errorf("oci: upload %s: %w", d.Digest, statusError(done))
+	}
+	return nil
+}
+
+// patchChunk sends data as the bytes from offset and returns the location of the next
+// request. A 416 means the registry holds another length than offset: it is asked how
+// much, and the rest of this chunk is sent once more from there.
+func (c *Client) patchChunk(ctx context.Context, ref Reference, scope string, location *url.URL, data []byte, offset int64) (*url.URL, error) {
+	for resent := false; ; resent = true {
+		rng := fmt.Sprintf("%d-%d", offset, offset+int64(len(data))-1)
+		resp, err := c.uploadRequest(ctx, ref, scope, http.MethodPatch, location, bytes.NewReader(data), int64(len(data)), rng)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && !resent {
+			resp.Body.Close()
+			held, at, err := c.uploadProgress(ctx, ref, scope, location)
+			if err != nil {
+				return nil, err
+			}
+			if held < offset || held > offset+int64(len(data)) {
+				return nil, fmt.Errorf("oci: the registry holds %d bytes of the upload, and this chunk covers %s", held, rng)
+			}
+			data, offset, location = data[held-offset:], held, at
+			if len(data) == 0 {
+				return location, nil
+			}
+			continue
+		}
+		return chunkAccepted(ref, resp, rng)
+	}
+}
+
+func chunkAccepted(ref Reference, resp *http.Response, rng string) (*url.URL, error) {
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		return nil, fmt.Errorf("oci: chunk %s: %w", rng, statusError(resp))
+	}
+	return uploadLocation(ref, resp)
+}
+
+// uploadProgress asks how many bytes of the upload at location the registry holds, and
+// where to send the next chunk.
+func (c *Client) uploadProgress(ctx context.Context, ref Reference, scope string, location *url.URL) (int64, *url.URL, error) {
+	resp, err := c.uploadRequest(ctx, ref, scope, http.MethodGet, location, http.NoBody, 0, "")
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return 0, nil, fmt.Errorf("oci: upload status: %w", statusError(resp))
+	}
+	_, last, ok := strings.Cut(resp.Header.Get("Range"), "-")
+	end, err := strconv.ParseInt(last, 10, 64)
+	if !ok || err != nil {
+		return 0, nil, fmt.Errorf("oci: upload status: unusable Range %q", resp.Header.Get("Range"))
+	}
+	at, err := uploadLocation(ref, resp)
+	if err != nil {
+		return 0, nil, err
+	}
+	return end + 1, at, nil
+}
+
+// uploadRequest sends one request of an upload session. Credentials go only to the
+// registry itself; another host named by Location is holding the upload on its behalf
+// and gets a signed URL, not a login.
+func (c *Client) uploadRequest(ctx context.Context, ref Reference, scope, method string, u *url.URL, body io.Reader, length int64, contentRange string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
+	if err != nil {
+		return nil, err
+	}
+	if u.Host == ref.endpoint() {
+		auth, err := c.authorize(ctx, ref, scope)
+		if err != nil {
+			return nil, err
+		}
+		setAuth(req, auth)
+	}
+	if method != http.MethodGet {
+		req.Header.Set("Content-Type", "application/octet-stream")
+		req.ContentLength = length
+	}
+	if contentRange != "" {
+		req.Header.Set("Content-Range", contentRange)
+	}
+	return c.do(req)
+}
+
+// withDigest is location with the digest query that closes an upload.
+func withDigest(location *url.URL, d digest.Digest) *url.URL {
+	u := *location
+	q := u.Query()
+	q.Set("digest", d.String())
+	u.RawQuery = q.Encode()
+	return &u
 }
 
 // PushManifest pushes m.Body to repo's repository by its digest, then under each of

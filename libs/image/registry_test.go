@@ -19,13 +19,14 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/oci"
 )
 
-// registry is an in-memory OCI distribution registry for one repository, enough of the
-// v2 API for Pull and Push: blobs by digest, manifests by digest or tag.
+// registry is an in-memory OCI distribution registry, enough of the v2 API for Pull and
+// Push: blobs by digest, manifests by digest or tag, and cross-repository mounts.
 type registry struct {
 	t   *testing.T
 	srv *httptest.Server
@@ -34,6 +35,7 @@ type registry struct {
 	blobs     map[digest.Digest][]byte
 	manifests map[string]stored // by digest string and by tag
 	uploads   int
+	mounts    []string // the from repository of each mount asked
 }
 
 type stored struct {
@@ -67,13 +69,25 @@ func (r *registry) serve(w http.ResponseWriter, req *http.Request) {
 	if path == "/v2/" {
 		return
 	}
-	rest, ok := strings.CutPrefix(path, "/v2/team/app/")
-	if !ok {
+	// Every repository shares one store, so a blob one holds is one a mount can name.
+	_, rest, ok := strings.Cut(strings.TrimPrefix(path, "/v2/"), "/blobs/")
+	if ok {
+		rest = "blobs/" + rest
+	} else if _, rest, ok = strings.Cut(path, "/manifests/"); ok {
+		rest = "manifests/" + rest
+	} else {
 		http.NotFound(w, req)
 		return
 	}
 	switch {
 	case rest == "blobs/uploads/" && req.Method == http.MethodPost:
+		if mount := digest.Digest(req.URL.Query().Get("mount")); mount != "" {
+			r.mounts = append(r.mounts, req.URL.Query().Get("from"))
+			if _, held := r.blobs[mount]; held {
+				w.WriteHeader(http.StatusCreated)
+				return
+			}
+		}
 		w.Header().Set("Location", "/v2/team/app/blobs/uploads/one")
 		w.WriteHeader(http.StatusAccepted)
 	case strings.HasPrefix(rest, "blobs/uploads/") && req.Method == http.MethodPut:
@@ -439,4 +453,62 @@ func TestPushRefusesAnOfflineClient(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "1")
 	_, err := Push(context.Background(), reg.client(), l, reg.repository())
 	require.True(t, errors.Is(err, oci.ErrOffline), "%v", err)
+}
+
+// RegistrySuite covers what Push sends beyond the image itself: the referrers an index
+// keeps per platform, and blobs mounted from the base's repository.
+type RegistrySuite struct {
+	suite.Suite
+	reg  *registry
+	root string
+}
+
+func TestRegistrySuite(t *testing.T) {
+	suite.Run(t, new(RegistrySuite))
+}
+
+func (s *RegistrySuite) SetupTest() {
+	s.reg = newRegistry(s.T())
+	s.root = s.T().TempDir()
+}
+
+func (s *RegistrySuite) TestAssembleIndexKeepsAPlatformsReferrersAndPushSendsThem() {
+	t := s.T()
+	amd := assembleOne(t, s.root, amd64)
+	sbom, err := WriteSBOM(t.Context(), amd, filepath.Join(s.root, "sbom.spdx.json"))
+	s.Require().NoError(err)
+	attested, err := AttachReferrers(t.Context(), amd, []Document{sbom}, filepath.Join(s.root, "attested"))
+	s.Require().NoError(err)
+	arm := assembleOne(t, s.root, linuxARM64)
+
+	idx, err := AssembleIndex(t.Context(), []string{attested.Path, arm}, filepath.Join(s.root, "index"))
+	s.Require().NoError(err)
+	s.Equal(attested.Referrers, idx.Referrers, "the amd64 SBOM is kept beside the index")
+
+	_, err = Push(t.Context(), s.reg.client(), idx.Path, s.reg.repository(), "v1")
+	s.Require().NoError(err)
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	_, pushed := s.reg.manifests[attested.Referrers[0].Digest.String()]
+	s.True(pushed, "the platform's referrer reaches the registry")
+	_, listed := s.reg.manifests[oci.ReferrersTag(attested.Descriptor.Digest)]
+	s.True(listed, "and is listed under its subject's fallback tag")
+}
+
+func (s *RegistrySuite) TestPushMountsTheBaseLayersFromTheBaseRepository() {
+	t := s.T()
+	m := s.reg.publish(amd64, "base")
+	base := filepath.Join(s.root, "base")
+	_, err := Pull(t.Context(), s.reg.client(), pinned(s.reg.repository(), m.Digest), amd64, base)
+	s.Require().NoError(err)
+	over := assembleOver(t, s.root, base, amd64)
+	dest := oci.Reference{Registry: s.reg.repository().Registry, Repository: "team/derived"}
+
+	_, err = Push(t.Context(), s.reg.client(), over.Path, dest, "v1")
+	s.Require().NoError(err)
+
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	s.Equal([]string{"team/app", "team/app", "team/app"}, s.reg.mounts, "the config and both layers are asked of the base repository")
+	s.Equal(2, s.reg.uploads, "the new config and the added layer upload; the base layer mounts")
 }

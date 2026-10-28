@@ -23,14 +23,15 @@ type challenge struct {
 	service string
 }
 
-// tokenKey is one bearer token's identity. A token is scoped to one repository and
-// one set of actions, so a pull token is never replayed for a push.
+// tokenKey is one bearer token's identity. A token is scoped to its repositories and
+// their actions, so a pull token is never replayed for a push.
 type tokenKey struct {
 	realm, service, scope string
 }
 
-// authorize returns the Authorization value for actions ("pull" or "push,pull") on
-// ref's repository, or "" when the registry asks for none.
+// authorize returns the Authorization value for scope, one or more space-separated
+// "repository:<name>:<actions>" (Reference.scope), on ref's registry, or "" when the
+// registry asks for none.
 //
 // Anonymous pull of a PUBLIC repository still goes through the token flow: the
 // registry answers an unauthenticated /v2/ with 401 and expects the client to come
@@ -39,7 +40,7 @@ type tokenKey struct {
 // The challenge is cached per registry and each token per (realm, service, scope), so
 // a push that uploads several blobs asks once. An expired token is dropped by forget when
 // a request answers 401.
-func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (string, error) {
+func (c *Client) authorize(ctx context.Context, ref Reference, scope string) (string, error) {
 	ch, err := c.challenge(ctx, ref.endpoint())
 	if err != nil {
 		return "", err
@@ -53,7 +54,7 @@ func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (
 		}
 		return "Basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Credentials.Username, c.Credentials.Password.Reveal()))), nil
 	}
-	key := tokenKey{realm: ch.realm, service: ch.service, scope: fmt.Sprintf("repository:%s:%s", ref.Repository, actions)}
+	key := tokenKey{realm: ch.realm, service: ch.service, scope: scope}
 	c.mu.Lock()
 	tok, ok := c.tokens[key]
 	c.mu.Unlock()
@@ -75,7 +76,7 @@ func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (
 // forget drops the cached bearer token that auth names and reports whether a retry can
 // help: only a bearer token can be refreshed. A token already replaced by another request
 // is left in place.
-func (c *Client) forget(ref Reference, actions, auth string) bool {
+func (c *Client) forget(scope, auth string) bool {
 	bearer, ok := strings.CutPrefix(auth, "Bearer ")
 	if !ok {
 		return false
@@ -83,7 +84,7 @@ func (c *Client) forget(ref Reference, actions, auth string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, cached := range c.tokens {
-		if cached.Reveal() == bearer && key.scope == fmt.Sprintf("repository:%s:%s", ref.Repository, actions) {
+		if cached.Reveal() == bearer && key.scope == scope {
 			delete(c.tokens, key)
 		}
 	}
@@ -196,7 +197,7 @@ func (c *Client) fetchToken(ctx context.Context, key tokenKey) (types.Secret, er
 	if key.service != "" {
 		q.Set("service", key.service)
 	}
-	q.Set("scope", key.scope)
+	q["scope"] = strings.Fields(key.scope)
 	u.RawQuery = q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {

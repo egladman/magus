@@ -167,7 +167,7 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 	}
 	var size int
 	for _, l := range layers {
-		size += len(l.Payload)
+		size += len(l.Data)
 	}
 
 	pass, err := readToken(ctx)
@@ -181,7 +181,8 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
-	if _, err := client.Push(ctx, dest, oci.Content{ArtifactType: graphArtifactType, Layers: layers}); err != nil {
+	repo := oci.Reference{Registry: dest.Registry, Repository: dest.Repository}
+	if _, err := client.PushArtifact(ctx, repo, oci.Artifact{ArtifactType: graphArtifactType, Blobs: layers}, dest.Tag); err != nil {
 		return fmt.Errorf("graph push: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pushed %s (%d shards, %d bytes)", dest, len(layers)-1, size), attr.Notice(""))
@@ -200,7 +201,7 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 // The SCIP shards are the expensive half and are never committed, which is the whole
 // reason to publish; gen/knowledge-graph.json is a local build output that already
 // carries the domain graph, so republishing that alone would add nothing.
-func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, error) {
+func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Blob, error) {
 	if _, err := loadKnowledgeGraph(ctx, root, refresh, false, true /* includeSymbols */); err != nil {
 		return nil, err
 	}
@@ -219,10 +220,10 @@ func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, e
 	if err != nil {
 		return nil, fmt.Errorf("graph push: %w", err)
 	}
-	layers := make([]oci.Layer, 0, len(export.Shards)+1)
-	layers = append(layers, oci.Layer{Name: graphStoreLayer, MediaType: graphStoreMediaType, Payload: export.Manifest})
+	layers := make([]oci.Blob, 0, len(export.Shards)+1)
+	layers = append(layers, oci.Blob{Title: graphStoreLayer, MediaType: graphStoreMediaType, Data: export.Manifest})
 	for _, sh := range export.Shards {
-		layers = append(layers, oci.Layer{Name: sh.Key, MediaType: graphShardMediaType, Payload: sh.Bytes})
+		layers = append(layers, oci.Blob{Title: sh.Key, MediaType: graphShardMediaType, Data: sh.Bytes})
 	}
 	return layers, nil
 }
@@ -403,7 +404,7 @@ func tablePull(ctx context.Context, repo string) error {
 // the cheap half. So does the git history each shard carries (types.KnowledgeVCS per file),
 // which is what lets the pulled graph answer ownership and churn without the repository.
 func pullMergedGraph(ctx context.Context, client *oci.Client, src oci.Reference, root string) ([]byte, error) {
-	art, err := client.Artifact(ctx, src, graphArtifactType)
+	art, err := client.GetArtifact(ctx, src, graphArtifactType)
 	if err != nil {
 		return nil, err
 	}

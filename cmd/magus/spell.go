@@ -109,7 +109,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("spell build: %w", err)
 	}
 	if out != "" {
-		if err := os.WriteFile(out, content.Layers[0].Payload, 0o644); err != nil {
+		if err := os.WriteFile(out, content.Blobs[0].Data, 0o644); err != nil {
 			return fmt.Errorf("spell build: %w", err)
 		}
 	}
@@ -121,25 +121,25 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 
 // buildSpell packs dir with the provenance of the revision holding it. build and push
 // share it so the digest build prints is the one push writes.
-func buildSpell(ctx context.Context, root, dir, source string) (oci.Content, spellBuildResult, error) {
+func buildSpell(ctx context.Context, root, dir, source string) (oci.Artifact, spellBuildResult, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
-		return oci.Content{}, spellBuildResult{}, err
+		return oci.Artifact{}, spellBuildResult{}, err
 	}
 	driver, err := spellVCS(ctx, root, abs)
 	if err != nil {
-		return oci.Content{}, spellBuildResult{}, err
+		return oci.Artifact{}, spellBuildResult{}, err
 	}
 	prov, err := remotespell.ReadProvenance(ctx, driver, abs)
 	if err != nil {
-		return oci.Content{}, spellBuildResult{}, err
+		return oci.Artifact{}, spellBuildResult{}, err
 	}
 	if source != "" {
 		prov.Source = source
 	}
 	content, err := remotespell.Build(ctx, abs, driver, prov)
 	if err != nil {
-		return oci.Content{}, spellBuildResult{}, err
+		return oci.Artifact{}, spellBuildResult{}, err
 	}
 	res, err := describeSpellContent(content)
 	return content, res, err
@@ -147,27 +147,27 @@ func buildSpell(ctx context.Context, root, dir, source string) (oci.Content, spe
 
 // buildShippedSpell is the artifact a release publishes for the spell magus ships as
 // name, exactly as remotespell.Shipped packs it, so a push writes the digest eject stamps.
-func buildShippedSpell(name string) (oci.Content, spellBuildResult, error) {
+func buildShippedSpell(name string) (oci.Artifact, spellBuildResult, error) {
 	dir, err := shippedSpellDir(name)
 	if err != nil {
-		return oci.Content{}, spellBuildResult{}, err
+		return oci.Artifact{}, spellBuildResult{}, err
 	}
 	_, content, err := remotespell.Shipped(name, dir)
 	if err != nil {
-		return oci.Content{}, spellBuildResult{}, err
+		return oci.Artifact{}, spellBuildResult{}, err
 	}
 	res, err := describeSpellContent(content)
 	return content, res, err
 }
 
-func describeSpellContent(content oci.Content) (spellBuildResult, error) {
-	_, d, err := content.Manifest()
+func describeSpellContent(content oci.Artifact) (spellBuildResult, error) {
+	m, err := content.Manifest()
 	if err != nil {
 		return spellBuildResult{}, err
 	}
-	layer := content.Layers[0].Payload
+	layer := content.Blobs[0].Data
 	return spellBuildResult{
-		Digest:      d,
+		Digest:      m.Digest,
 		Layer:       digest.FromBytes(layer),
 		Size:        int64(len(layer)),
 		Annotations: content.Annotations,
@@ -231,7 +231,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	if dest.Tag == "" || dest.Digest != "" {
 		return exit.Usagef("magus spell push: %s must name a tag and no digest", pos[1])
 	}
-	var content oci.Content
+	var content oci.Artifact
 	var res spellBuildResult
 	if name, ok := strings.CutPrefix(pos[0], spells.ModulePrefix); ok {
 		if source != "" {
@@ -250,7 +250,8 @@ func spellPush(ctx context.Context, root string, args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
-	d, err := client.Push(ctx, dest, content, tags...)
+	repo := oci.Reference{Registry: dest.Registry, Repository: dest.Repository}
+	d, err := client.PushArtifact(ctx, repo, content, append([]string{dest.Tag}, tags...)...)
 	if err != nil {
 		return fmt.Errorf("spell push: %w", err)
 	}

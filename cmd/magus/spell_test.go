@@ -282,13 +282,13 @@ func TestSpellPullShippedMatchesBuild(t *testing.T) {
 	require.NoError(t, err)
 	built, err := remotespell.Build(t.Context(), dir, driver, remotespell.ShippedProvenance("golang"))
 	require.NoError(t, err)
-	_, d, err := built.Manifest()
+	m, err := built.Manifest()
 	require.NoError(t, err)
-	assert.Equal(t, d, ref.Digest, "the stamped digest is the manifest a build of the checkout makes")
+	assert.Equal(t, m.Digest, ref.Digest, "the stamped digest is the manifest a build of the checkout makes")
 
 	var res spellBuildResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "build", dir, "-o", "json")), &res))
-	assert.Equal(t, digest.FromBytes(built.Layers[0].Payload), res.Layer, "`spell build` packs the same layer")
+	assert.Equal(t, digest.FromBytes(built.Blobs[0].Data), res.Layer, "`spell build` packs the same layer")
 
 	spellBuzz, err := os.ReadFile(filepath.Join(dst, "spell.buzz"))
 	require.NoError(t, err)
@@ -339,14 +339,14 @@ func TestSpellPushShipped(t *testing.T) {
 	for name, dir := range map[string]string{"go": "golang", "harness/cursor": "harness/cursor"} {
 		want, content, err := remotespell.Shipped(name, dir)
 		require.NoError(t, err)
-		manifest, _, err := content.Manifest()
+		m, err := content.Manifest()
 		require.NoError(t, err)
 
 		dest := fmt.Sprintf("%s/team/spells/%s", reg.host(), name)
 		pushed := runSpell(t, repo, "push", "magus/spell/"+name, dest+":v1.2.3")
 		assert.Equal(t, fmt.Sprintf("%s@%s\n", dest, want.Digest.String()), pushed, name)
 		reg.mu.Lock()
-		assert.Equal(t, manifest, reg.manifests["v1.2.3"], name)
+		assert.Equal(t, m.Body, reg.manifests["v1.2.3"], name)
 		reg.mu.Unlock()
 	}
 

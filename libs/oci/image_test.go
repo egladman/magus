@@ -18,6 +18,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const imageTestPassword = "hunter2-plaintext-password"
@@ -434,13 +435,13 @@ func TestImageRequestsRefuseWhenOffline(t *testing.T) {
 	fetchErr := c.GetBlob(t.Context(), reg.repository(), desc, new(bytes.Buffer))
 	pushErr := c.PushBlob(t.Context(), reg.repository(), desc, bytes.NewReader(payload))
 	_, putErr := c.PushManifest(t.Context(), reg.repository(), raw(ocispec.MediaTypeImageIndex, indexBody(t)), "v1")
-	_, artifactErr := c.Artifact(t.Context(), reg.ref("team/image", "v1"), "")
+	_, artifactErr := c.GetArtifact(t.Context(), reg.ref("team/image", "v1"), "")
 	_, tagsErr := c.Tags(t.Context(), reg.ref("team/image", ""))
-	_, legacyPushErr := c.Push(t.Context(), reg.ref("team/image", "v1"), testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
+	_, artifactPushErr := c.PushArtifact(t.Context(), reg.repository(), testArtifact(Blob{Title: "only", MediaType: "application/json", Data: []byte(`{}`)}), "v1")
 
 	for name, err := range map[string]error{
 		"GetManifest": manifestErr, "GetBlob": fetchErr, "PushBlob": pushErr,
-		"PushManifest": putErr, "Artifact": artifactErr, "Tags": tagsErr, "Push": legacyPushErr,
+		"PushManifest": putErr, "GetArtifact": artifactErr, "Tags": tagsErr, "PushArtifact": artifactPushErr,
 	} {
 		require.ErrorContains(t, err, "MAGUS_OFFLINE is set, so no request is sent", name)
 	}
@@ -536,4 +537,116 @@ func TestImageDefaultClientGuardsRedirects(t *testing.T) {
 	own := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	custom := &Client{HTTP: &http.Client{CheckRedirect: own}}
 	assert.Equal(t, fmt.Sprintf("%p", own), fmt.Sprintf("%p", custom.http().CheckRedirect), "a caller's own policy is kept")
+}
+
+// UploadSuite covers how a blob reaches a registry: a cross-repository mount, and a
+// chunked upload for a blob over the client's ChunkSize.
+type UploadSuite struct {
+	suite.Suite
+	reg *inMemoryRegistry
+}
+
+func TestUploadSuite(t *testing.T) {
+	suite.Run(t, new(UploadSuite))
+}
+
+func (s *UploadSuite) SetupTest() {
+	s.reg = newInMemoryRegistry(s.T())
+}
+
+// failingReader fails any read, so a test proves a blob was not sent.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) {
+	return 0, errors.New("read a blob the registry already holds")
+}
+
+func (s *UploadSuite) TestMountBlobSendsNothingTheSourceRepositoryHolds() {
+	payload := []byte("base layer")
+	desc := blobDescriptor(payload)
+	c := s.reg.client()
+	s.Require().NoError(c.PushBlob(s.T().Context(), s.reg.ref("team/base", ""), desc, bytes.NewReader(payload)))
+
+	err := c.MountBlob(s.T().Context(), s.reg.ref("team/app", ""), s.reg.ref("team/base", "v1"), desc, failingReader{})
+	s.Require().NoError(err)
+
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	s.Equal([]string{"team/base@" + desc.Digest.String()}, s.reg.mounts)
+	s.Equal(1, s.reg.uploads, "only the first push uploaded")
+	s.Equal([]string{"repository:team/base:push,pull", "repository:team/app:push,pull repository:team/base:pull"}, s.reg.tokenScopes,
+		"a mount's token reads the source and writes the destination")
+}
+
+func (s *UploadSuite) TestMountBlobUploadsWhenTheRegistryDeclines() {
+	payload := []byte("base layer")
+	desc := blobDescriptor(payload)
+	s.reg.refuseMounts = true
+
+	err := s.reg.client().MountBlob(s.T().Context(), s.reg.ref("team/app", ""), s.reg.ref("team/base", ""), desc, bytes.NewReader(payload))
+	s.Require().NoError(err)
+
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	s.Equal(map[string][]byte{desc.Digest.String(): payload}, s.reg.blobs)
+	s.Equal(1, s.reg.uploads, "the session the mount answered with carries the upload")
+}
+
+func (s *UploadSuite) TestMountBlobRefusesASourceOnAnotherRegistry() {
+	from := Reference{Registry: "other.example", Repository: "team/base"}
+	err := s.reg.client().MountBlob(s.T().Context(), s.reg.ref("team/app", ""), from, blobDescriptor([]byte("x")), failingReader{})
+	s.Require().ErrorContains(err, "a mount stays on one registry")
+	s.Zero(s.reg.requestCount())
+}
+
+func (s *UploadSuite) TestPushBlobSendsABlobOverChunkSizeInChunks() {
+	payload := []byte("0123456789")
+	c := s.reg.client()
+	c.ChunkSize = 4
+
+	s.Require().NoError(c.PushBlob(s.T().Context(), s.reg.repository(), blobDescriptor(payload), bytes.NewReader(payload)))
+
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	s.Equal([]string{"0-3", "4-7", "8-9"}, s.reg.patches)
+	s.Equal(map[string][]byte{digest.FromBytes(payload).String(): payload}, s.reg.blobs)
+}
+
+func (s *UploadSuite) TestPushBlobResendsAChunkTheRegistryAnswered416() {
+	payload := []byte("0123456789")
+	c := s.reg.client()
+	c.ChunkSize = 4
+	s.reg.dropNextChunk = true
+
+	s.Require().NoError(c.PushBlob(s.T().Context(), s.reg.repository(), blobDescriptor(payload), bytes.NewReader(payload)))
+
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	s.Equal([]string{"0-3", "0-3", "4-7", "8-9"}, s.reg.patches, "the registry held none of the first chunk, so all of it went again")
+	s.Equal(map[string][]byte{digest.FromBytes(payload).String(): payload}, s.reg.blobs)
+}
+
+func (s *UploadSuite) TestPushBlobRaisesChunksToTheRegistrysMinimum() {
+	payload := []byte("0123456789")
+	c := s.reg.client()
+	c.ChunkSize = 2
+	s.reg.chunkMinLength = "5"
+
+	s.Require().NoError(c.PushBlob(s.T().Context(), s.reg.repository(), blobDescriptor(payload), bytes.NewReader(payload)))
+
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	s.Equal([]string{"0-4", "5-9"}, s.reg.patches)
+}
+
+func (s *UploadSuite) TestChunkedUploadNeverClosesOnBytesThatMissTheDigest() {
+	c := s.reg.client()
+	c.ChunkSize = 4
+
+	err := c.PushBlob(s.T().Context(), s.reg.repository(), blobDescriptor([]byte("0123456789")), bytes.NewReader([]byte("9876543210")))
+	s.Require().ErrorIs(err, ErrBlobDigest)
+
+	s.reg.mu.Lock()
+	defer s.reg.mu.Unlock()
+	s.Empty(s.reg.blobs, "the closing PUT was never sent")
 }

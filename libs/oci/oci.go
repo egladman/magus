@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -177,6 +176,11 @@ func (r Reference) repository() Reference {
 	return Reference{Registry: r.Registry, Repository: r.Repository}
 }
 
+// scope is the token scope for actions ("pull" or "push,pull") on r's repository.
+func (r Reference) scope(actions string) string {
+	return fmt.Sprintf("repository:%s:%s", r.Repository, actions)
+}
+
 // manifestRef is the path segment a manifest GET addresses: the digest when there is one.
 func (r Reference) manifestRef() string {
 	if r.Digest != "" {
@@ -195,6 +199,10 @@ type Client struct {
 	// reads the same way it is written. The zero value is the anonymous path, which is
 	// all a reader of a public repository needs.
 	Credentials Credentials
+	// ChunkSize is the largest request body a blob upload sends; 0 means
+	// DefaultChunkSize. A larger blob goes up in chunks, for a registry behind a proxy that
+	// caps the body. A registry's OCI-Chunk-Min-Length raises it.
+	ChunkSize int64
 
 	mu         sync.Mutex
 	challenges map[string]challenge      // by registry host
@@ -246,9 +254,14 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 // maxRetryAfter is sent again after that wait, up to maxRateLimitRetries times; any other
 // 429 is returned for statusError to report.
 func (c *Client) send(ctx context.Context, ref Reference, actions string, build func(auth string) (*http.Request, error)) (*http.Response, error) {
+	return c.sendScoped(ctx, ref, ref.scope(actions), build)
+}
+
+// sendScoped is send for a token scope of its own, such as a mount's two repositories.
+func (c *Client) sendScoped(ctx context.Context, ref Reference, scope string, build func(auth string) (*http.Request, error)) (*http.Response, error) {
 	refreshed, limited := false, 0
 	for {
-		auth, err := c.authorize(ctx, ref, actions)
+		auth, err := c.authorize(ctx, ref, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -261,7 +274,7 @@ func (c *Client) send(ctx context.Context, ref Reference, actions string, build 
 			return nil, err
 		}
 		reportWarnings(ctx, ref, resp)
-		if resp.StatusCode == http.StatusUnauthorized && !refreshed && c.forget(ref, actions, auth) {
+		if resp.StatusCode == http.StatusUnauthorized && !refreshed && c.forget(scope, auth) {
 			refreshed = true
 			resp.Body.Close()
 			continue
@@ -344,12 +357,12 @@ func parseWarning(h string) (string, bool) {
 	return text, true
 }
 
-// Artifact is one pull in progress: the manifest, plus the token that fetched it. A
+// ArtifactReader is one pull in progress: the manifest, plus the token that fetched it. A
 // reader that wants several layers holds one of these, so neither the token exchange nor
 // the manifest GET is repeated per layer.
 //
 // It is NOT safe for concurrent use.
-type Artifact struct {
+type ArtifactReader struct {
 	// Manifest is the fetched manifest, exposed so a caller can walk descriptors that
 	// Layer's title lookup does not reach.
 	Manifest ocispec.Manifest
@@ -361,27 +374,27 @@ type Artifact struct {
 	ref    Reference
 }
 
-// ErrLayerMiss reports that the manifest carries no layer with the requested title. A
+// ErrNoBlob reports that the manifest carries no blob with the requested title. A
 // caller deciding between fetching and rebuilding needs this distinguishable from a
 // transport failure, so it is a sentinel rather than a formatted error.
-var ErrLayerMiss = errors.New("oci: no layer with that title")
+var ErrNoBlob = errors.New("oci: no blob with that title")
 
-// Artifact fetches ref's manifest and returns a handle for reading its layers. It reads
-// no layer, so an artifact whose layers are large costs one manifest GET to inspect.
+// GetArtifact fetches ref's manifest and returns a reader for its layers. It reads no
+// layer, so an artifact whose layers are large costs one manifest GET to inspect.
 //
-// wantArtifactType, when non-empty, is checked before the handle is returned: a tag
-// someone else's tooling pushed to is the ordinary way to get bytes that parse as JSON
-// and mean something entirely different, and the artifact type is the only field that
-// says what the blob was meant to be.
-func (c *Client) Artifact(ctx context.Context, ref Reference, wantArtifactType string) (*Artifact, error) {
+// artifactType, when non-empty, is checked before the reader is returned: a tag someone
+// else's tooling pushed to is the ordinary way to get bytes that parse as JSON and mean
+// something entirely different, and the artifact type is the only field that says what
+// the blob was meant to be.
+func (c *Client) GetArtifact(ctx context.Context, ref Reference, artifactType string) (*ArtifactReader, error) {
 	m, raw, err := c.manifest(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	if wantArtifactType != "" && m.ArtifactType != wantArtifactType {
-		return nil, fmt.Errorf("oci: %s carries artifactType %q, wanted %q", ref, m.ArtifactType, wantArtifactType)
+	if artifactType != "" && m.ArtifactType != artifactType {
+		return nil, fmt.Errorf("oci: %s carries artifactType %q, wanted %q", ref, m.ArtifactType, artifactType)
 	}
-	return &Artifact{Manifest: m, Raw: raw, client: c, ref: ref}, nil
+	return &ArtifactReader{Manifest: m, Raw: raw, client: c, ref: ref}, nil
 }
 
 // ErrManifestDigest reports a manifest fetched by digest whose bytes hash to something
@@ -395,7 +408,7 @@ var ErrBlobDigest = errors.New("oci: blob does not match the digest its descript
 // Find returns the descriptor of the layer titled name, and whether there is one. The
 // first match wins; a publisher that titled two layers alike has already lost the ability
 // to address either.
-func (a *Artifact) Find(name string) (ocispec.Descriptor, bool) {
+func (a *ArtifactReader) Find(name string) (ocispec.Descriptor, bool) {
 	for _, d := range a.Manifest.Layers {
 		if d.Annotations[ocispec.AnnotationTitle] == name {
 			return d, true
@@ -404,11 +417,11 @@ func (a *Artifact) Find(name string) (ocispec.Descriptor, bool) {
 	return ocispec.Descriptor{}, false
 }
 
-// Layer fetches the layer titled name, or wraps ErrLayerMiss when the manifest has none.
-func (a *Artifact) Layer(ctx context.Context, name string) ([]byte, error) {
+// Layer fetches the layer titled name, or wraps ErrNoBlob when the manifest has none.
+func (a *ArtifactReader) Layer(ctx context.Context, name string) ([]byte, error) {
 	d, ok := a.Find(name)
 	if !ok {
-		return nil, fmt.Errorf("%q in %s: %w", name, a.ref, ErrLayerMiss)
+		return nil, fmt.Errorf("%q in %s: %w", name, a.ref, ErrNoBlob)
 	}
 	return a.Blob(ctx, d)
 }
@@ -417,7 +430,7 @@ func (a *Artifact) Layer(ctx context.Context, name string) ([]byte, error) {
 // and verified against the digest it names. desc must come from this artifact's own
 // manifest: a descriptor from anywhere else names a blob this repository need not hold,
 // and the size bound would be whatever that other manifest claimed.
-func (a *Artifact) Blob(ctx context.Context, desc ocispec.Descriptor) ([]byte, error) {
+func (a *ArtifactReader) Blob(ctx context.Context, desc ocispec.Descriptor) ([]byte, error) {
 	// Validated before Verifier, which panics on a digest whose algorithm this build has
 	// no hash for. The manifest is remote input, so that is a reachable panic.
 	if err := desc.Digest.Validate(); err != nil {
@@ -519,101 +532,93 @@ func (c *Client) base(ref Reference) string {
 	return fmt.Sprintf("https://%s/v2/%s", ref.endpoint(), ref.Repository)
 }
 
-// Layer is one named payload in an artifact. Name becomes the layer descriptor's title
-// annotation, which is how a puller addresses it; an empty Name leaves the layer
-// unaddressable by title, which is only sensible for a single-layer artifact.
-type Layer struct {
-	Name      string
+// Blob is one titled payload in an artifact. Title becomes the descriptor's
+// org.opencontainers.image.title annotation, which is how a puller addresses it; an
+// empty Title leaves the blob unaddressable by title, which is only sensible for an
+// artifact of one blob.
+type Blob struct {
+	Title     string
 	MediaType string
-	Payload   []byte
+	Data      []byte
 }
 
-// Content is what one artifact carries: its type, its manifest annotations, and its
-// layers in order.
-type Content struct {
+// Artifact is what one artifact manifest carries: its type, its annotations, and its
+// blobs in order, which become the manifest's layers.
+type Artifact struct {
 	ArtifactType string
 	// Annotations become the manifest's own annotations. Keys encode sorted, so equal
 	// maps always encode to the same manifest bytes.
 	Annotations map[string]string
-	Layers      []Layer
+	Blobs       []Blob
 }
 
-// Manifest encodes the manifest Push uploads for c and returns it with its digest. It
-// touches no network, so a caller learns the digest a push would produce before, or
-// instead of, pushing.
-func (c Content) Manifest() ([]byte, digest.Digest, error) {
-	if len(c.Layers) == 0 {
-		return nil, "", errors.New("oci: no layers, a manifest with none is not a valid artifact")
+// Manifest encodes the manifest PushArtifact uploads for a; its Descriptor carries the
+// digest. It touches no network, so a caller learns the digest a push would produce
+// before, or instead of, pushing.
+func (a Artifact) Manifest() (RawManifest, error) {
+	if len(a.Blobs) == 0 {
+		return RawManifest{}, errors.New("oci: no blobs, a manifest with none is not a valid artifact")
 	}
-	descs := make([]ocispec.Descriptor, 0, len(c.Layers))
-	for _, l := range c.Layers {
+	descs := make([]ocispec.Descriptor, 0, len(a.Blobs))
+	for _, b := range a.Blobs {
 		d := ocispec.Descriptor{
-			MediaType: l.MediaType,
-			Digest:    digest.FromBytes(l.Payload),
-			Size:      int64(len(l.Payload)),
+			MediaType: b.MediaType,
+			Digest:    digest.FromBytes(b.Data),
+			Size:      int64(len(b.Data)),
 		}
-		if l.Name != "" {
-			d.Annotations = map[string]string{ocispec.AnnotationTitle: l.Name}
+		if b.Title != "" {
+			d.Annotations = map[string]string{ocispec.AnnotationTitle: b.Title}
 		}
 		descs = append(descs, d)
 	}
-	raw, err := json.Marshal(ocispec.Manifest{
+	body, err := json.Marshal(ocispec.Manifest{
 		Versioned:    specs.Versioned{SchemaVersion: 2},
 		MediaType:    ocispec.MediaTypeImageManifest,
-		ArtifactType: c.ArtifactType,
+		ArtifactType: a.ArtifactType,
 		Config:       ocispec.DescriptorEmptyJSON,
 		Layers:       descs,
-		Annotations:  c.Annotations,
+		Annotations:  a.Annotations,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("oci: encode manifest: %w", err)
+		return RawManifest{}, fmt.Errorf("oci: encode manifest: %w", err)
 	}
-	return raw, digest.FromBytes(raw), nil
+	return RawManifest{
+		Descriptor: ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: digest.FromBytes(body), Size: int64(len(body))},
+		Body:       body,
+	}, nil
 }
 
-// Push uploads content's blobs once and PUTs its manifest under ref.Tag and then each
-// of moreTags, returning the manifest digest a pinned reference names. Every tag is
-// validated before anything is uploaded.
+// PushArtifact uploads a's blobs once, then pushes its manifest to repo as PushManifest
+// does: by digest, then under each of tags, and returns the manifest digest. repo names a
+// repository only; a tag goes in tags. Every tag is validated before anything uploads.
 //
-// This is the only way to publish: a registry has no per-blob append, so adding a layer
-// to an existing artifact means re-PUTting the manifest.
-//
-// It is NOT idempotent in the way a content-addressed store is: pushing to a tag that
-// already exists moves the tag. That is the intent for a floating tag like "latest" and
-// is why the caller, not this package, decides which tags to write.
-func (c *Client) Push(ctx context.Context, ref Reference, content Content, moreTags ...string) (digest.Digest, error) {
-	if ref.Tag == "" || ref.Digest != "" {
-		return "", fmt.Errorf("oci: push %s: name a tag and no digest, a push writes a tag, and a digest is what it returns", ref)
+// A registry has no per-blob append, so adding a blob means pushing the manifest again.
+// Pushing to a tag that already exists moves it, which is the intent for a floating tag
+// like "latest" and is why the caller decides which tags to write.
+func (c *Client) PushArtifact(ctx context.Context, repo Reference, a Artifact, tags ...string) (digest.Digest, error) {
+	if repo.Tag != "" || repo.Digest != "" {
+		return "", fmt.Errorf("oci: push to %s: name the repository alone and pass its tags as tags", repo)
 	}
-	tags := []string{ref.Tag}
-	for _, t := range moreTags {
+	for _, t := range tags {
 		if err := ValidateTag(t); err != nil {
-			return "", fmt.Errorf("push %s: %w", ref, err)
-		}
-		if !slices.Contains(tags, t) {
-			tags = append(tags, t)
+			return "", fmt.Errorf("push to %s: %w", repo, err)
 		}
 	}
-	raw, d, err := content.Manifest()
+	m, err := a.Manifest()
 	if err != nil {
-		return "", fmt.Errorf("push %s: %w", ref, err)
+		return "", fmt.Errorf("push to %s: %w", repo, err)
 	}
 	// The empty config blob must exist before a manifest may reference it, even though
 	// every artifact in every repository shares the same two bytes.
-	if err := c.putBlob(ctx, ref, emptyConfigPayload); err != nil {
+	if err := c.putBlob(ctx, repo, emptyConfigPayload); err != nil {
 		return "", err
 	}
-	for _, l := range content.Layers {
-		if err := c.putBlob(ctx, ref, l.Payload); err != nil {
+	for _, b := range a.Blobs {
+		if err := c.putBlob(ctx, repo, b.Data); err != nil {
 			return "", err
 		}
 	}
-	for _, tag := range tags {
-		if _, _, err := c.putManifest(ctx, ref, tag, ocispec.MediaTypeImageManifest, raw); err != nil {
-			return "", err
-		}
-	}
-	return d, nil
+	return c.PushManifest(ctx, repo, m, tags...)
 }
 
 // Tags lists repo's tags in the order the registry serves them, following its Link

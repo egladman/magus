@@ -196,7 +196,7 @@ func resolveSlot(ctx context.Context, ref Ref, opts Options, root, slot string) 
 func pull(ctx context.Context, c *oci.Client, ref Ref, dir string) error {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	art, err := c.Artifact(ctx, ref.OCI, artifactType)
+	art, err := c.GetArtifact(ctx, ref.OCI, artifactType)
 	if err != nil {
 		return pullError(ref, err)
 	}
@@ -556,19 +556,19 @@ func SourceURL(remote string) string {
 // Build packs dir into the artifact a push uploads, with prov as its manifest
 // annotations. The digest of its Manifest is the one a push of the same commit prints,
 // on any machine, so CI can compare a local build against a published pin.
-func Build(ctx context.Context, dir string, tracked types.TrackedFileReporter, prov Provenance) (oci.Content, error) {
+func Build(ctx context.Context, dir string, tracked types.TrackedFileReporter, prov Provenance) (oci.Artifact, error) {
 	layer, err := Pack(ctx, dir, tracked)
 	if err != nil {
-		return oci.Content{}, err
+		return oci.Artifact{}, err
 	}
 	return artifact(layer, prov), nil
 }
 
-func artifact(layer []byte, prov Provenance) oci.Content {
-	return oci.Content{
+func artifact(layer []byte, prov Provenance) oci.Artifact {
+	return oci.Artifact{
 		ArtifactType: artifactType,
 		Annotations:  prov.Annotations(),
-		Layers:       []oci.Layer{{Name: layerTitle, MediaType: layerMediaType, Payload: layer}},
+		Blobs:        []oci.Blob{{Title: layerTitle, MediaType: layerMediaType, Data: layer}},
 	}
 }
 
@@ -586,7 +586,7 @@ func ShippedProvenance(dir string) Provenance {
 }
 
 type shippedArtifact struct {
-	content  oci.Content
+	content  oci.Artifact
 	manifest digest.Digest
 }
 
@@ -597,7 +597,7 @@ var shippedArtifacts sync.Map // dir -> func() (shippedArtifact, error)
 // manifest digest. It packs the embedded files the way Build packs a checkout, with
 // ShippedProvenance, so the two agree on the digest (TestShippedMatchesBuild). The
 // artifact is computed once per dir.
-func Shipped(name, dir string) (oci.Reference, oci.Content, error) {
+func Shipped(name, dir string) (oci.Reference, oci.Artifact, error) {
 	f, _ := shippedArtifacts.LoadOrStore(dir, sync.OnceValues(func() (shippedArtifact, error) {
 		sub, err := fs.Sub(spells.Shipped(), dir)
 		if err != nil {
@@ -617,8 +617,8 @@ func Shipped(name, dir string) (oci.Reference, oci.Content, error) {
 			return shippedArtifact{}, err
 		}
 		content := artifact(layer, ShippedProvenance(dir))
-		_, d, err := content.Manifest()
-		return shippedArtifact{content: content, manifest: d}, err
+		m, err := content.Manifest()
+		return shippedArtifact{content: content, manifest: m.Digest}, err
 	}))
 	load, ok := f.(func() (shippedArtifact, error))
 	if !ok {
@@ -626,11 +626,11 @@ func Shipped(name, dir string) (oci.Reference, oci.Content, error) {
 	}
 	a, err := load()
 	if err != nil {
-		return oci.Reference{}, oci.Content{}, err
+		return oci.Reference{}, oci.Artifact{}, err
 	}
 	ref, err := oci.ParseRepository(fmt.Sprintf("%s/%s", ShippedRepository, name))
 	if err != nil {
-		return oci.Reference{}, oci.Content{}, err
+		return oci.Reference{}, oci.Artifact{}, err
 	}
 	ref.Digest = a.manifest
 	return ref, a.content, nil
@@ -652,7 +652,7 @@ func Eject(name, dir, dst string) (oci.Reference, error) {
 	if entries, err := os.ReadDir(dst); err == nil && len(entries) > 0 {
 		return oci.Reference{}, fmt.Errorf("eject into %s: directory is not empty", dst)
 	}
-	layer := content.Layers[0].Payload
+	layer := content.Blobs[0].Data
 	if err := walkTar(layer, func(file string, body []byte) error {
 		if file == entryFile {
 			body = append([]byte(fmt.Sprintf("%s%s\n", originPrefix, ref.String())), body...)
@@ -691,7 +691,7 @@ func ReadFork(forkDir, name, dir string) (Fork, error) {
 	if err != nil {
 		return Fork{}, err
 	}
-	want, err := tarFiles(content.Layers[0].Payload)
+	want, err := tarFiles(content.Blobs[0].Data)
 	if err != nil {
 		return Fork{}, err
 	}
@@ -723,7 +723,7 @@ func ReadFork(forkDir, name, dir string) (Fork, error) {
 // Pin resolves ref to the manifest digest it names now, checking the artifact type. A
 // ref that already carries a digest is verified against it and returned as is.
 func Pin(ctx context.Context, c *oci.Client, ref oci.Reference) (oci.Reference, error) {
-	art, err := c.Artifact(ctx, ref, artifactType)
+	art, err := c.GetArtifact(ctx, ref, artifactType)
 	if err != nil {
 		return oci.Reference{}, err
 	}

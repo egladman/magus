@@ -132,12 +132,13 @@ func pickPlatform(manifests []ocispec.Descriptor, want Platform) (ocispec.Descri
 }
 
 // Push uploads the layout's image to repo's repository and returns repo pinned at the
-// image's digest, what a signer or a deploy consumes. It sends every blob the registry
-// lacks, each manifest an index lists, the image under its digest and then each of
-// tags, then each referrer (see oci.Client.PushManifest for registries without the
-// Referrers API). A blob the registry holds costs one HEAD; one it lacks is hashed once,
-// while it uploads, and a local blob that does not match its descriptor aborts the
-// upload. A non-distributable layer is not uploaded, as image-spec asks.
+// image's digest. It sends every blob the registry lacks, each manifest an index lists,
+// the image under its digest and then each of tags, then each referrer, a platform's
+// included (see oci.Client.PushManifest for registries without the Referrers API). A
+// blob of an image whose base.name is another repository on repo's registry is mounted
+// from there (oci.Client.MountBlob). A blob is hashed once, while it uploads, and one
+// that does not match its descriptor aborts the upload. A non-distributable layer is
+// not uploaded, as image-spec asks.
 func Push(ctx context.Context, c *oci.Client, layout string, repo oci.Reference, tags ...string) (oci.Reference, error) {
 	if c == nil {
 		return oci.Reference{}, errors.New("image.push: no oci.Client, &oci.Client{} pushes anonymously")
@@ -148,6 +149,9 @@ func Push(ctx context.Context, c *oci.Client, layout string, repo oci.Reference,
 		}
 	}
 	l, err := OpenLayout(ctx, layout, "")
+	if err == nil {
+		l, err = withPlatformReferrers(ctx, l)
+	}
 	if err != nil {
 		return oci.Reference{}, fmt.Errorf("image.push: %w", err)
 	}
@@ -157,6 +161,76 @@ func Push(ctx context.Context, c *oci.Client, layout string, repo oci.Reference,
 	}
 	repo.Digest = l.Descriptor.Digest
 	return repo, nil
+}
+
+// withPlatformReferrers adds to l.Referrers the layout's referrers whose subject is a
+// manifest l's index lists: the per-platform ones AssembleIndex keeps.
+func withPlatformReferrers(ctx context.Context, l Layout) (Layout, error) {
+	if !isImageIndex(l.Descriptor.MediaType) {
+		return l, nil
+	}
+	listed, err := l.index(ctx, l.Descriptor)
+	if err != nil {
+		return l, err
+	}
+	platforms := map[digest.Digest]bool{}
+	for _, m := range listed.Manifests {
+		platforms[m.Digest] = true
+	}
+	idx, err := readIndexJSON(l.Path)
+	if err != nil {
+		return l, err
+	}
+	for _, d := range idx.Manifests {
+		if !isImageManifest(d.MediaType) {
+			continue
+		}
+		subject, err := l.subject(ctx, d)
+		if err != nil {
+			return l, err
+		}
+		if platforms[subject] {
+			l.Referrers = append(l.Referrers, d)
+		}
+	}
+	return l, nil
+}
+
+// mountSources maps each blob of l's image manifests to the repository a cross-repository
+// mount can take it from: the base its manifest names in base.name, when that is another
+// repository on repo's registry. A base.name that does not parse names no such repository.
+// A blob the base does not hold is uploaded as usual, so every blob of the manifest asks.
+func mountSources(ctx context.Context, l Layout, repo oci.Reference) (map[digest.Digest]oci.Reference, error) {
+	images := []ocispec.Descriptor{l.Descriptor}
+	if isImageIndex(l.Descriptor.MediaType) {
+		listed, err := l.index(ctx, l.Descriptor)
+		if err != nil {
+			return nil, err
+		}
+		images = listed.Manifests
+	}
+	sources := map[digest.Digest]oci.Reference{}
+	for _, d := range images {
+		if !isImageManifest(d.MediaType) {
+			continue
+		}
+		data, err := l.readBlob(ctx, d)
+		if err != nil {
+			return nil, err
+		}
+		var man ocispec.Manifest
+		if err := json.Unmarshal(data, &man); err != nil {
+			return nil, fmt.Errorf("manifest %s: %w", d.Digest, err)
+		}
+		base, err := oci.ParseReference(man.Annotations[ocispec.AnnotationBaseImageName])
+		if err != nil || base.Registry != repo.Registry || base.Repository == repo.Repository {
+			continue
+		}
+		for _, b := range append([]ocispec.Descriptor{man.Config}, man.Layers...) {
+			sources[b.Digest] = base
+		}
+	}
+	return sources, nil
 }
 
 // layoutContents sorts what l reaches into blobs and the manifests to push before the
@@ -189,6 +263,10 @@ func pushLayout(ctx context.Context, c *oci.Client, l Layout, repo oci.Reference
 	if err != nil {
 		return err
 	}
+	sources, err := mountSources(ctx, l, repo)
+	if err != nil {
+		return err
+	}
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(transferConcurrency)
 	seen := map[digest.Digest]bool{}
@@ -197,7 +275,7 @@ func pushLayout(ctx context.Context, c *oci.Client, l Layout, repo oci.Reference
 			continue
 		}
 		seen[b.Digest] = true
-		g.Go(func() error { return pushBlob(gctx, c, repo, l.Path, b) })
+		g.Go(func() error { return pushBlob(gctx, c, repo, sources[b.Digest], l.Path, b) })
 	}
 	if err := g.Wait(); err != nil {
 		return err
@@ -218,7 +296,8 @@ func pushLayout(ctx context.Context, c *oci.Client, l Layout, repo oci.Reference
 	return nil
 }
 
-func pushBlob(ctx context.Context, c *oci.Client, repo oci.Reference, layout string, d ocispec.Descriptor) error {
+// pushBlob uploads d, or mounts it from from's repository when from names one.
+func pushBlob(ctx context.Context, c *oci.Client, repo, from oci.Reference, layout string, d ocispec.Descriptor) error {
 	if err := checkDigest(d.Digest); err != nil {
 		return fmt.Errorf("blob %q: %w", d.Digest, err)
 	}
@@ -227,7 +306,12 @@ func pushBlob(ctx context.Context, c *oci.Client, repo oci.Reference, layout str
 		return err
 	}
 	defer f.Close()
-	if err := c.PushBlob(ctx, repo, d, f); err != nil {
+	if from.Repository != "" {
+		err = c.MountBlob(ctx, repo, from, d, f)
+	} else {
+		err = c.PushBlob(ctx, repo, d, f)
+	}
+	if err != nil {
 		return fmt.Errorf("blob %s: %w", d.Digest, err)
 	}
 	return nil

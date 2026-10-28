@@ -145,11 +145,11 @@ func (t trackedOnly) TrackedFiles(_ context.Context, _ string, paths []string) (
 // publish pushes a spell directory under tag v1 and returns the pin for it.
 func publish(t *testing.T, reg *registry, dir string) Ref {
 	t.Helper()
-	dest := oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1"}
+	dest := oci.Reference{Registry: reg.host(), Repository: "team/spells/x"}
 	content, err := Build(t.Context(), dir, allTracked{}, Provenance{Title: "x"})
 	require.NoError(t, err)
 	c := &oci.Client{HTTP: reg.srv.Client(), Credentials: oci.Credentials{Username: reg.user, Password: types.NewSecret(reg.pass)}}
-	d, err := c.Push(t.Context(), dest, content)
+	d, err := c.PushArtifact(t.Context(), dest, content, "v1")
 	require.NoError(t, err)
 	ref, err := Pinned(reg.host()+"/team/spells/x", d)
 	require.NoError(t, err)
@@ -378,10 +378,10 @@ func TestWalkTarRefusesAmbiguousEntries(t *testing.T) {
 
 func TestResolveRefusesAnotherArtifactType(t *testing.T) {
 	reg := newRegistry(t)
-	dest := oci.Reference{Registry: reg.host(), Repository: "team/graph", Tag: "v1"}
-	d, err := (&oci.Client{HTTP: reg.srv.Client()}).Push(t.Context(), dest, oci.Content{
+	dest := oci.Reference{Registry: reg.host(), Repository: "team/graph"}
+	d, err := (&oci.Client{HTTP: reg.srv.Client()}).PushArtifact(t.Context(), dest, oci.Artifact{
 		ArtifactType: "application/vnd.someone-else.v1",
-		Layers:       []oci.Layer{{Name: layerTitle, MediaType: layerMediaType, Payload: []byte("x")}},
+		Blobs:        []oci.Blob{{Title: layerTitle, MediaType: layerMediaType, Data: []byte("x")}},
 	})
 	require.NoError(t, err)
 	ref, err := Pinned(reg.host()+"/team/graph", d)
@@ -403,9 +403,9 @@ func TestBuildOfOneCommitHasOneDigest(t *testing.T) {
 		require.NoError(t, err)
 		content, err := Build(t.Context(), dir, allTracked{}, prov)
 		require.NoError(t, err)
-		raw, d, err := content.Manifest()
+		m, err := content.Manifest()
 		require.NoError(t, err)
-		return raw, d
+		return m.Body, m.Digest
 	}
 	parent := t.TempDir()
 	a, b := filepath.Join(parent, "a", "cursor"), filepath.Join(parent, "b", "cursor")
@@ -529,9 +529,9 @@ func TestShippedMatchesBuild(t *testing.T) {
 		built, err := Build(t.Context(), filepath.Join("..", "..", "..", "spells", dir), allTracked{}, ShippedProvenance(dir))
 		require.NoError(t, err, dir)
 		assert.Equal(t, built, shipped, dir)
-		_, d, err := built.Manifest()
+		m, err := built.Manifest()
 		require.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf("ghcr.io/egladman/magus/spells/%s@%s", dir, d.String()), ref.String())
+		assert.Equal(t, fmt.Sprintf("ghcr.io/egladman/magus/spells/%s@%s", dir, m.Digest.String()), ref.String())
 		assert.Equal(t, map[string]string{
 			ocispec.AnnotationTitle:  dir,
 			ocispec.AnnotationSource: "https://github.com/egladman/magus",
