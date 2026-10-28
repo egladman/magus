@@ -3447,13 +3447,15 @@ github.com/egladman/magus/types.KnowledgeSymbolDefinition type struct
 github.com/egladman/magus/types.KnowledgeSymbolDefinition.Doc field string
 github.com/egladman/magus/types.KnowledgeSymbolDefinition.Source field string
 github.com/egladman/magus/types.KnowledgeSymbolGap type struct
+github.com/egladman/magus/types.KnowledgeSymbolGap.Buildable method func() bool
 github.com/egladman/magus/types.KnowledgeSymbolGap.CouldHold method func(language string) bool
 github.com/egladman/magus/types.KnowledgeSymbolGap.Describe method func() string
-github.com/egladman/magus/types.KnowledgeSymbolGap.Detail field string "json:\"detail,omitempty\"   yaml:\"detail,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Hint field string "json:\"hint,omitempty\"     yaml:\"hint,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Language field string "json:\"language,omitempty\" yaml:\"language,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Project field ProjectRef "json:\"project\"            yaml:\"project\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.State field SymbolIndexFreshness "json:\"state\"              yaml:\"state\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Detail field string "json:\"detail,omitempty\"      yaml:\"detail,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Hint field string "json:\"hint,omitempty\"        yaml:\"hint,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Language field string "json:\"language,omitempty\"    yaml:\"language,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Project field ProjectRef "json:\"project\"               yaml:\"project\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.State field SymbolIndexFreshness "json:\"state\"                 yaml:\"state\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Unindexable field bool "json:\"unindexable,omitzero\"  yaml:\"unindexable,omitempty\""
 github.com/egladman/magus/types.KnowledgeSymbolRef type struct
 github.com/egladman/magus/types.KnowledgeSymbolRef.Alias field string
 github.com/egladman/magus/types.KnowledgeSymbolRef.Count field int
