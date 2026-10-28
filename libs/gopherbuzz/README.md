@@ -16,7 +16,7 @@ answers differently from upstream, or accepts source upstream refuses.
 
 ## Upstream parity
 
-Measured against `UpstreamRef` (`0.5.0-265-g294d8f9`) on 2026-08-12. Upstream ships
+Measured against `UpstreamRef` (`0.5.0-270-g14731dc`) on 2026-10-27. Upstream ships
 six test directories; three are measurable here, and all three numbers are below
 rather than only the flattering one.
 
