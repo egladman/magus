@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -180,6 +181,13 @@ func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
 		fs.Bool("private", false, "Only your own notes")
 }
 
+// negateScopeFlags binds --no-shared and --no-private for the subcommands whose
+// declared flags carry the pair.
+func negateScopeFlags(fs *flag.FlagSet, shared, private *bool) {
+	cmdline.NegatedBoolVar(fs, shared, "shared")
+	cmdline.NegatedBoolVar(fs, private, "private")
+}
+
 func notesScope(shared, private bool) (string, error) {
 	switch {
 	case shared && private:
@@ -268,6 +276,8 @@ func notesList(ctx context.Context, root string, args []string) error {
 	_, err := commandParse("notes ls", args, func(fs *flag.FlagSet) {
 		onlyShared, onlyPrivate = notesScopeFlags(fs)
 		reproducible = fs.Bool("reproducible", false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
+		negateScopeFlags(fs, onlyShared, onlyPrivate)
+		cmdline.NegatedBoolVar(fs, reproducible, "reproducible")
 		fs.Var(&tags, "tag", "Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus notes ls [flags]")
@@ -845,8 +855,10 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&name, "name", "", "Note name (defaults to review-<patch digest>)")
 		fs.Var(&tags, "tag", "Tag to set on the note; repeatable")
 		fs.BoolVar(&gap, "gap", false, "Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve")
+		cmdline.NegatedBoolVar(fs, &gap, "gap")
 		fs.Var(&anchors, "anchor", "With --gap, what the gap is about (repeatable): symbol:<key>, file:<path>#<decl>, diagnostic:<code>, or any note anchor")
 		shared, private = notesScopeFlags(fs)
+		negateScopeFlags(fs, shared, private)
 	})
 	if err != nil {
 		return err

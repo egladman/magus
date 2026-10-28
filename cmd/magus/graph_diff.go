@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/xdg"
@@ -35,6 +36,8 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	pos, err := commandParse("graph diff", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild of the current graph before diffing")
 		fs.BoolVar(&globalScope, "global", false, "diff the global (all-workspaces) graph; match this to how the baseline was exported")
+		cmdline.NegatedBoolVar(fs, &refresh, "refresh")
+		cmdline.NegatedBoolVar(fs, &globalScope, "global")
 		fs.StringVar(&rev, "rev", "", "diff against a git revision (e.g. HEAD~1, main) instead of an export file")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph diff <baseline.json> [flags]")

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
@@ -85,6 +86,7 @@ func whereCommand(ctx context.Context, root string, args []string) error {
 	filters, err := commandParse("where", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&printAll, "all", false, "Print all matching paths to stdout; do not error on ambiguity")
 		fs.BoolVar(&printAll, "A", false, "Short for --all")
+		cmdline.NegatedBoolVar(fs, &printAll, "all")
 		fs.StringVar(&filterPat, "filter", "", "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>")
 		fs.StringVar(&glob, "glob", "", "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)")
 		fs.StringVar(&regex, "regex", "", "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)")

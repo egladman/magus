@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/types"
 )
@@ -108,6 +109,8 @@ func graphPush(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
 		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
 		fs.BoolVar(&table, "table", false, "publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
+		cmdline.NegatedBoolVar(fs, &refresh, "refresh")
+		cmdline.NegatedBoolVar(fs, &table, "table")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph push [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -271,6 +274,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
 		fs.StringVar(&out, "out", "", "write the graph here instead of stdout")
 		fs.BoolVar(&table, "table", false, "fetch the embedding table the binary pins into the cache instead of the graph")
+		cmdline.NegatedBoolVar(fs, &table, "table")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph pull [flags]")
 			fmt.Fprintln(os.Stderr, "")

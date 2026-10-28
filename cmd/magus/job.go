@@ -1130,6 +1130,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&declared.model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 		fs.StringVar(&declared.briefFormat, "brief-format", "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
+		cmdline.NegatedBoolVar(fs, &schema, "schema")
+		cmdline.NegatedBoolVar(fs, &stdin, "stdin")
+		cmdline.NegatedBoolVar(fs, &fix, "fix")
+		cmdline.NegatedBoolVar(fs, &declared.readOnly, "read-only")
 		fs.StringVar(&declared.checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job fork <job> [flags]")
@@ -1861,6 +1865,8 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	pos, err := commandParse("job exit", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read this job's result from stdin; without it the job ends with no result filed")
+		cmdline.NegatedBoolVar(fs, &schema, "schema")
+		cmdline.NegatedBoolVar(fs, &stdin, "stdin")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exit <job> --stdin < result.json")
 			fmt.Fprintln(os.Stderr, "       magus job exit <job>...")
@@ -2137,6 +2143,9 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read the result from stdin instead of from the job, for one that was never filed")
 		fs.BoolVar(&integration, "integration", false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
+		cmdline.NegatedBoolVar(fs, &schema, "schema")
+		cmdline.NegatedBoolVar(fs, &stdin, "stdin")
+		cmdline.NegatedBoolVar(fs, &integration, "integration")
 		fs.Var(evidence, "evidence", evidenceFlagDoc)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job wait <job>")
@@ -2668,6 +2677,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	var force bool
 	pos, err := commandParse("job rm", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&force, "force", false, "Remove a row that already ended, destroying the record of what happened")
+		cmdline.NegatedBoolVar(fs, &force, "force")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job rm <job> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -2732,6 +2742,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	pos, err := commandParse("job apply", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "f", "", "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line")
 		fs.BoolVar(&fix, "fix", false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
+		cmdline.NegatedBoolVar(fs, &fix, "fix")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job apply -f <file|->")
 			fmt.Fprintln(os.Stderr, "")
@@ -2982,6 +2993,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	var all bool
 	pos, err := commandParse("job prune", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&all, "all", false, "Also end a job a holder took and nobody touched within jobs.stale_after")
+		cmdline.NegatedBoolVar(fs, &all, "all")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job prune [--all] [<job>...] [flags]")
 			fmt.Fprintln(os.Stderr, "")

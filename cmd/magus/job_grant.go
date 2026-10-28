@@ -31,6 +31,7 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 	rest, err := commandParse("job grant", args, func(fs *flag.FlagSet) {
 		fs.DurationVar(&lasting, "for", 0, "")
 		fs.BoolVar(&revoke, "revoke", false, "")
+		cmdline.NegatedBoolVar(fs, &revoke, "revoke")
 		fs.StringVar(&commit, "commit", "", "")
 		fs.StringVar(&reason, "reason", "", "")
 		fs.Usage = func() {

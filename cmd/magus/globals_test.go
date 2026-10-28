@@ -334,7 +334,8 @@ func flagProbes(cmd cmdline.Command) []flagProbe {
 // --explain <project>` and `--plan` each dispatch to a different command path with its
 // own flags (parseExplainArgs, and the --plan scan in affectedCmd). They are real, they
 // are documented correctly, and they can never appear in a recorded flag set, so they
-// are excluded rather than "fixed" out of the man page.
+// and the --no- form the binder generates for each are excluded rather than "fixed" out
+// of the man page.
 var modeSelectors = map[string]map[string]bool{
 	"affected": {"explain": true, "plan": true, "impact": true},
 }
@@ -419,7 +420,7 @@ func documentedFlagNames(command string, build func(*flag.FlagSet), globals map[
 	build(fs)
 	var out []string
 	fs.VisitAll(func(f *flag.Flag) {
-		if !globals[f.Name] && !modeSelectors[command][f.Name] {
+		if !globals[f.Name] && !modeSelectors[command][strings.TrimPrefix(f.Name, cmdline.NegationPrefix)] {
 			out = append(out, f.Name)
 		}
 	})

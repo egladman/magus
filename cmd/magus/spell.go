@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/oci"
@@ -456,6 +457,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 	var update bool
 	pos, err := commandParse("spell lock", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&update, "update", false, "ask the registry what each declared tag names now, and rewrite magus.lock")
+		cmdline.NegatedBoolVar(fs, &update, "update")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus spell lock [--update] [flags]")
 			fmt.Fprintln(os.Stderr, "")
