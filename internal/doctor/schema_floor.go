@@ -67,6 +67,8 @@ func usedSchemaKeys(projects []*types.Project) []gatedKey {
 			addPolicy("advisory", policy.Advisory)
 			addPolicy("sandbox", policy.Sandbox != nil)
 			addPolicy("human_only", policy.HumanOnly)
+			addPolicy("relinks", policy.Relinks != "")
+			addPolicy("integrates", policy.Integrates != "")
 		}
 	}
 	slices.SortFunc(used, func(a, b gatedKey) int { return strings.Compare(a.label, b.label) })
