@@ -280,6 +280,9 @@ type judgedCall struct {
 	// guardSource is a write to a file the policy load reads, the fix for a policy that
 	// fails on its own error.
 	guardSource bool
+	// policyNote says how a command call's target policies were read when the knowledge
+	// store's record could not answer, "" when it did or the line runs no target.
+	policyNote string
 }
 
 // denyUnloaded turns asked into a deny when no side of the policy loaded, and reports

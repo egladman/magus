@@ -741,3 +741,14 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 		}
 	}
 }
+
+// A rebuild judged while the knowledge store could not vouch for the target policies
+// carries the note saying how they were read into the stale-binary deny.
+func TestStaleBinaryDenialNamesThePolicyFallback(t *testing.T) {
+	at := location{policies: func() declaredIndex { return declaredIndex{note: policyUnreadNote} }}
+	call := commandCall(context.Background(), commandRuleInput{command: "./magus run go-build .", dialect: DialectBash}, at)
+	assert.Equal(t, policyUnreadNote, call.policyNote)
+
+	d := staleBinaryDenial(call, unloadReason{Cause: unloadStale}, nil, false, t.TempDir())
+	assert.True(t, strings.HasSuffix(d.Why, "\n"+policyUnreadNote), d.Why)
+}

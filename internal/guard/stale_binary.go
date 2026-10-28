@@ -451,7 +451,10 @@ func onlyEditorAssigns(assigns []*syntax.Assign) bool {
 // read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
 // may also record its work, which reads its row from the job store.
 func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCall {
-	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == "", command: in.command, dialect: in.dialect}
+	call := judgedCall{
+		seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == "",
+		command: in.command, dialect: in.dialect, policyNote: runPolicyNote(in.command, at),
+	}
 	if !call.builds {
 		role, _ := actingRole(ctx, at, in.lease, "")
 		call.builds = role == types.AgentRoleIntegrator
@@ -500,6 +503,9 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
+	}
+	if call.policyNote != "" {
+		why.WriteString("\n" + call.policyNote)
 	}
 	return denial{Say: fmt.Sprintf("%s; %s.", problem, fix.say), Why: why.String()}
 }
