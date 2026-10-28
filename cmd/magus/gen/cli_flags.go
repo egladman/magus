@@ -4,7 +4,11 @@ package flaggen
 import (
 	"flag"
 	"time"
+
+	"github.com/egladman/magus/libs/cmdline"
 )
+
+var _ = cmdline.NegationPrefix // a tree with no bool still imports cmdline
 
 // Flag names declared by the command tree, one constant
 // each so a caller never spells a flag as a literal.
@@ -15,6 +19,10 @@ const (
 	FlagAffectedBase = "base"
 	// affected: --bisect
 	FlagAffectedBisect = "bisect"
+	// affected: --cache
+	FlagAffectedCache = "cache"
+	// affected: --default-charms
+	FlagAffectedDefaultCharms = "default-charms"
 	// affected: --depth
 	FlagAffectedDepth = "depth"
 	// affected: --detach
@@ -33,12 +41,6 @@ const (
 	FlagAffectedMaxParallelBudget = "max-parallel-budget"
 	// affected: --max-shards
 	FlagAffectedMaxShards = "max-shards"
-	// affected: --no-cache
-	FlagAffectedNoCache = "no-cache"
-	// affected: --no-default-charms
-	FlagAffectedNoDefaultCharms = "no-default-charms"
-	// affected: --no-redundancy-check
-	FlagAffectedNoRedundancyCheck = "no-redundancy-check"
 	// affected: --null
 	FlagAffectedNull = "null"
 	// affected: --open
@@ -47,6 +49,8 @@ const (
 	FlagAffectedPlan = "plan"
 	// affected: --race
 	FlagAffectedRace = "race"
+	// affected: --redundancy-check
+	FlagAffectedRedundancyCheck = "redundancy-check"
 	// affected: --stdin
 	FlagAffectedStdin = "stdin"
 	// affected: --step
@@ -83,6 +87,8 @@ const (
 	FlagBrokerLog = "log"
 	// buzz: --C
 	FlagBuzzC = "C"
+	// buzz: --autoload
+	FlagBuzzAutoload = "autoload"
 	// buzz: --check
 	FlagBuzzCheck = "check"
 	// buzz: --coverprofile
@@ -91,8 +97,6 @@ const (
 	FlagBuzzE = "e"
 	// buzz: --embedded
 	FlagBuzzEmbedded = "embedded"
-	// buzz: --no-autoload
-	FlagBuzzNoAutoload = "no-autoload"
 	// buzz: --profile
 	FlagBuzzProfile = "profile"
 	// buzz: --record
@@ -155,14 +159,16 @@ const (
 	FlagDescribeTargetAgainst = "against"
 	// describe target: --cache
 	FlagDescribeTargetCache = "cache"
+	// describe target: --cache-key
+	FlagDescribeTargetCacheKey = "cache-key"
+	// describe target: --default-charms
+	FlagDescribeTargetDefaultCharms = "default-charms"
 	// describe target: --e
 	FlagDescribeTargetE = "e"
 	// describe target: --explain
 	FlagDescribeTargetExplain = "explain"
 	// describe target: --inputs
 	FlagDescribeTargetInputs = "inputs"
-	// describe target: --no-default-charms
-	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
 	// diff: --ack
 	FlagDiffAck = "ack"
 	// diff: --baseline
@@ -175,8 +181,6 @@ const (
 	FlagDiffGenerated = "generated"
 	// diff: --impact
 	FlagDiffImpact = "impact"
-	// diff: --no-tui
-	FlagDiffNoTui = "no-tui"
 	// diff: --patch
 	FlagDiffPatch = "patch"
 	// diff: --reason
@@ -185,6 +189,8 @@ const (
 	FlagDiffRev = "rev"
 	// diff: --thread
 	FlagDiffThread = "thread"
+	// diff: --tui
+	FlagDiffTui = "tui"
 	// diff: --unread
 	FlagDiffUnread = "unread"
 	// diff: --watch
@@ -209,10 +215,10 @@ const (
 	FlagExplainGlobal = "global"
 	// explain: --refresh
 	FlagExplainRefresh = "refresh"
-	// graph build: --no-sessions
-	FlagGraphBuildNoSessions = "no-sessions"
-	// graph build: --no-symbols
-	FlagGraphBuildNoSymbols = "no-symbols"
+	// graph build: --sessions
+	FlagGraphBuildSessions = "sessions"
+	// graph build: --symbols
+	FlagGraphBuildSymbols = "symbols"
 	// graph deps: --depth
 	FlagGraphDepsDepth = "depth"
 	// graph deps: --spell
@@ -245,8 +251,6 @@ const (
 	FlagGraphExportSelect = "select"
 	// graph export: --serve
 	FlagGraphExportServe = "serve"
-	// graph export: --static
-	FlagGraphExportStatic = "static"
 	// graph export: --symbols
 	FlagGraphExportSymbols = "symbols"
 	// graph export: --targets
@@ -525,10 +529,10 @@ const (
 	FlagQueueValidateVerdicts = "verdicts"
 	// refs: --definition
 	FlagRefsDefinition = "definition"
+	// refs: --generated
+	FlagRefsGenerated = "generated"
 	// refs: --limit
 	FlagRefsLimit = "limit"
-	// refs: --no-generated
-	FlagRefsNoGenerated = "no-generated"
 	// refs: --occurrences
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
@@ -539,6 +543,10 @@ const (
 	FlagRefsSource = "source"
 	// refs: --text
 	FlagRefsText = "text"
+	// run: --cache
+	FlagRunCache = "cache"
+	// run: --default-charms
+	FlagRunDefaultCharms = "default-charms"
 	// run: --depth
 	FlagRunDepth = "depth"
 	// run: --detach
@@ -547,18 +555,12 @@ const (
 	FlagRunGraph = "graph"
 	// run: --n-shards
 	FlagRunNShards = "n-shards"
-	// run: --no-cache
-	FlagRunNoCache = "no-cache"
-	// run: --no-default-charms
-	FlagRunNoDefaultCharms = "no-default-charms"
-	// run: --no-redundancy-check
-	FlagRunNoRedundancyCheck = "no-redundancy-check"
-	// run: --no-volatility-retry
-	FlagRunNoVolatilityRetry = "no-volatility-retry"
 	// run: --open
 	FlagRunOpen = "open"
 	// run: --race
 	FlagRunRace = "race"
+	// run: --redundancy-check
+	FlagRunRedundancyCheck = "redundancy-check"
 	// run: --shard
 	FlagRunShard = "shard"
 	// run: --skip
@@ -571,6 +573,8 @@ const (
 	FlagRunTimeout = "timeout"
 	// run: --upstream
 	FlagRunUpstream = "upstream"
+	// run: --volatility-retry
+	FlagRunVolatilityRetry = "volatility-retry"
 	// self install-shorthand: --dir
 	FlagSelfInstallShorthandDir = "dir"
 	// self install-shorthand: --force
@@ -731,11 +735,11 @@ const (
 
 // DescribeTargetFlags are the flags declared for `magus describe target`.
 type DescribeTargetFlags struct {
-	Explain         bool   // --explain, -e
-	Cache           bool   // --cache
-	Against         string // --against
-	Inputs          bool   // --inputs
-	NoDefaultCharms bool   // --no-default-charms
+	Explain       bool   // --[no-]explain, -e
+	CacheKey      bool   // --[no-]cache-key, --cache
+	Against       string // --against
+	Inputs        bool   // --[no-]inputs
+	DefaultCharms bool   // --[no-]default-charms
 }
 
 // BindDescribeTarget registers `magus describe target`'s flags on fs and returns the destination.
@@ -743,16 +747,21 @@ func BindDescribeTarget(fs *flag.FlagSet) *DescribeTargetFlags {
 	var f DescribeTargetFlags
 	fs.BoolVar(&f.Explain, FlagDescribeTargetExplain, false, "For a ref with charms: show the per-charm argv trace (base then each charm)")
 	fs.BoolVar(&f.Explain, FlagDescribeTargetE, false, "Short for --explain")
-	fs.BoolVar(&f.Cache, FlagDescribeTargetCache, false, "Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run")
-	fs.StringVar(&f.Against, FlagDescribeTargetAgainst, "", "With --cache: diff the live key inputs against the stored lines behind an output `ref`")
-	fs.BoolVar(&f.Inputs, FlagDescribeTargetInputs, false, "With --cache: list every key input line, so you can confirm a declared file was actually hashed")
-	fs.BoolVar(&f.NoDefaultCharms, FlagDescribeTargetNoDefaultCharms, false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
+	cmdline.NegatedBoolVar(fs, &f.Explain, FlagDescribeTargetExplain)
+	fs.BoolVar(&f.CacheKey, FlagDescribeTargetCacheKey, false, "Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run")
+	fs.BoolVar(&f.CacheKey, FlagDescribeTargetCache, false, "Same as --cache-key")
+	cmdline.NegatedBoolVar(fs, &f.CacheKey, FlagDescribeTargetCacheKey)
+	fs.StringVar(&f.Against, FlagDescribeTargetAgainst, "", "With --cache-key: diff the live key inputs against the stored lines behind an output `ref`")
+	fs.BoolVar(&f.Inputs, FlagDescribeTargetInputs, false, "With --cache-key: list every key input line, so you can confirm a declared file was actually hashed")
+	cmdline.NegatedBoolVar(fs, &f.Inputs, FlagDescribeTargetInputs)
+	fs.BoolVar(&f.DefaultCharms, FlagDescribeTargetDefaultCharms, true, "With --cache-key: key with magus.yaml default_charms; --no-default-charms matches a run made without them (CI)")
+	cmdline.NegatedBoolVar(fs, &f.DefaultCharms, FlagDescribeTargetDefaultCharms)
 	return &f
 }
 
 // DescribeProjectsFlags are the flags declared for `magus describe projects`.
 type DescribeProjectsFlags struct {
-	Evaluated bool // --evaluated, -e
+	Evaluated bool // --[no-]evaluated, -e
 }
 
 // BindDescribeProjects registers `magus describe projects`'s flags on fs and returns the destination.
@@ -760,24 +769,26 @@ func BindDescribeProjects(fs *flag.FlagSet) *DescribeProjectsFlags {
 	var f DescribeProjectsFlags
 	fs.BoolVar(&f.Evaluated, FlagDescribeProjectsEvaluated, false, "Print workspace-rooted globs, effective claims, and per-target policies")
 	fs.BoolVar(&f.Evaluated, FlagDescribeProjectsE, false, "Short for --evaluated")
+	cmdline.NegatedBoolVar(fs, &f.Evaluated, FlagDescribeProjectsEvaluated)
 	return &f
 }
 
 // DescribeSpellsFlags are the flags declared for `magus describe spells`.
 type DescribeSpellsFlags struct {
-	Versions bool // --versions
+	Versions bool // --[no-]versions
 }
 
 // BindDescribeSpells registers `magus describe spells`'s flags on fs and returns the destination.
 func BindDescribeSpells(fs *flag.FlagSet) *DescribeSpellsFlags {
 	var f DescribeSpellsFlags
 	fs.BoolVar(&f.Versions, FlagDescribeSpellsVersions, false, "Probe each spell's tools and report the versions that would key a run")
+	cmdline.NegatedBoolVar(fs, &f.Versions, FlagDescribeSpellsVersions)
 	return &f
 }
 
 // WhereFlags are the flags declared for `magus where`.
 type WhereFlags struct {
-	All     bool   // --all, -A
+	All     bool   // --[no-]all, -A
 	Filter  string // --filter
 	Glob    string // --glob
 	Regex   string // --regex
@@ -789,6 +800,7 @@ func BindWhere(fs *flag.FlagSet) *WhereFlags {
 	var f WhereFlags
 	fs.BoolVar(&f.All, FlagWhereAll, false, "Print all matching paths to stdout; do not error on ambiguity")
 	fs.BoolVar(&f.All, FlagWhereA, false, "Short for --all")
+	cmdline.NegatedBoolVar(fs, &f.All, FlagWhereAll)
 	fs.StringVar(&f.Filter, FlagWhereFilter, "", "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>")
 	fs.StringVar(&f.Glob, FlagWhereGlob, "", "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)")
 	fs.StringVar(&f.Regex, FlagWhereRegex, "", "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)")
@@ -801,41 +813,51 @@ func BindWhere(fs *flag.FlagSet) *WhereFlags {
 // It does NOT carry --skip: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type RunFlags struct {
-	Graph             bool          // --graph
-	Upstream          bool          // --upstream
-	Depth             int           // --depth
-	NoCache           bool          // --no-cache
-	NoDefaultCharms   bool          // --no-default-charms
-	Detach            bool          // --detach
-	Open              bool          // --open
-	Step              bool          // --step
-	Race              string        // --race
-	Timeout           time.Duration // --timeout
-	Stdin             bool          // --stdin
-	Shard             string        // --shard
-	NShards           int           // --n-shards
-	NoVolatilityRetry bool          // --no-volatility-retry
-	NoRedundancyCheck bool          // --no-redundancy-check
+	Graph           bool          // --[no-]graph
+	Upstream        bool          // --[no-]upstream
+	Depth           int           // --depth
+	Cache           bool          // --[no-]cache
+	DefaultCharms   bool          // --[no-]default-charms
+	Detach          bool          // --[no-]detach
+	Open            bool          // --[no-]open
+	Step            bool          // --[no-]step
+	Race            string        // --race
+	Timeout         time.Duration // --timeout
+	Stdin           bool          // --[no-]stdin
+	Shard           string        // --shard
+	NShards         int           // --n-shards
+	VolatilityRetry bool          // --[no-]volatility-retry
+	RedundancyCheck bool          // --[no-]redundancy-check
 }
 
 // BindRun registers `magus run`'s flags on fs and returns the destination.
 func BindRun(fs *flag.FlagSet) *RunFlags {
 	var f RunFlags
 	fs.BoolVar(&f.Graph, FlagRunGraph, false, "Render the dependency graph for the selected scope instead of executing")
+	cmdline.NegatedBoolVar(fs, &f.Graph, FlagRunGraph)
 	fs.BoolVar(&f.Upstream, FlagRunUpstream, false, "With --graph: show dependents instead of dependencies")
+	cmdline.NegatedBoolVar(fs, &f.Upstream, FlagRunUpstream)
 	fs.IntVar(&f.Depth, FlagRunDepth, 0, "With --graph: cap displayed depth (0 = unlimited)")
-	fs.BoolVar(&f.NoCache, FlagRunNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
-	fs.BoolVar(&f.NoDefaultCharms, FlagRunNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
+	fs.BoolVar(&f.Cache, FlagRunCache, true, "Replay a cache hit; --no-cache forces a fresh run, which still refreshes the entry")
+	cmdline.NegatedBoolVar(fs, &f.Cache, FlagRunCache)
+	fs.BoolVar(&f.DefaultCharms, FlagRunDefaultCharms, true, "Apply magus.yaml default_charms; --no-default-charms ignores them for this run")
+	cmdline.NegatedBoolVar(fs, &f.DefaultCharms, FlagRunDefaultCharms)
 	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server")
+	cmdline.NegatedBoolVar(fs, &f.Detach, FlagRunDetach)
 	fs.BoolVar(&f.Open, FlagRunOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
+	cmdline.NegatedBoolVar(fs, &f.Open, FlagRunOpen)
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
+	cmdline.NegatedBoolVar(fs, &f.Step, FlagRunStep)
 	fs.StringVar(&f.Race, FlagRunRace, "", "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.")
 	fs.DurationVar(&f.Timeout, FlagRunTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
 	fs.BoolVar(&f.Stdin, FlagRunStdin, false, "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagRunStdin)
 	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused")
-	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
-	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only")
+	fs.BoolVar(&f.VolatilityRetry, FlagRunVolatilityRetry, true, "Retry a target that fails with volatile output; --no-volatility-retry disables it for this run")
+	cmdline.NegatedBoolVar(fs, &f.VolatilityRetry, FlagRunVolatilityRetry)
+	fs.BoolVar(&f.RedundancyCheck, FlagRunRedundancyCheck, true, "Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); --no-redundancy-check runs it in full. ci target only")
+	cmdline.NegatedBoolVar(fs, &f.RedundancyCheck, FlagRunRedundancyCheck)
 	return &f
 }
 
@@ -844,20 +866,20 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 // It does NOT carry --explain, --plan: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type AffectedFlags struct {
-	Base              string        // --base, -b
-	Stdin             bool          // --stdin
-	Null              bool          // --null
-	NoCache           bool          // --no-cache
-	NoDefaultCharms   bool          // --no-default-charms
-	NoRedundancyCheck bool          // --no-redundancy-check
-	Detach            bool          // --detach
-	Open              bool          // --open
-	Step              bool          // --step
-	Race              string        // --race
-	Timeout           time.Duration // --timeout
-	Graph             bool          // --graph
-	Upstream          bool          // --upstream
-	Depth             int           // --depth
+	Base            string        // --base, -b
+	Stdin           bool          // --[no-]stdin
+	Null            bool          // --[no-]null
+	Cache           bool          // --[no-]cache
+	DefaultCharms   bool          // --[no-]default-charms
+	RedundancyCheck bool          // --[no-]redundancy-check
+	Detach          bool          // --[no-]detach
+	Open            bool          // --[no-]open
+	Step            bool          // --[no-]step
+	Race            string        // --race
+	Timeout         time.Duration // --timeout
+	Graph           bool          // --[no-]graph
+	Upstream        bool          // --[no-]upstream
+	Depth           int           // --depth
 }
 
 // BindAffected registers `magus affected`'s flags on fs and returns the destination.
@@ -866,24 +888,34 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
 	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
 	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagAffectedStdin)
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
-	fs.BoolVar(&f.NoCache, FlagAffectedNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
-	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
-	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only")
+	cmdline.NegatedBoolVar(fs, &f.Null, FlagAffectedNull)
+	fs.BoolVar(&f.Cache, FlagAffectedCache, true, "Replay a cache hit; --no-cache forces a fresh run, which still refreshes the entry")
+	cmdline.NegatedBoolVar(fs, &f.Cache, FlagAffectedCache)
+	fs.BoolVar(&f.DefaultCharms, FlagAffectedDefaultCharms, true, "Apply magus.yaml default_charms; --no-default-charms ignores them for this run")
+	cmdline.NegatedBoolVar(fs, &f.DefaultCharms, FlagAffectedDefaultCharms)
+	fs.BoolVar(&f.RedundancyCheck, FlagAffectedRedundancyCheck, true, "Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); --no-redundancy-check runs it in full. ci target only")
+	cmdline.NegatedBoolVar(fs, &f.RedundancyCheck, FlagAffectedRedundancyCheck)
 	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server")
+	cmdline.NegatedBoolVar(fs, &f.Detach, FlagAffectedDetach)
 	fs.BoolVar(&f.Open, FlagAffectedOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
+	cmdline.NegatedBoolVar(fs, &f.Open, FlagAffectedOpen)
 	fs.BoolVar(&f.Step, FlagAffectedStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
+	cmdline.NegatedBoolVar(fs, &f.Step, FlagAffectedStep)
 	fs.StringVar(&f.Race, FlagAffectedRace, "", "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.")
 	fs.DurationVar(&f.Timeout, FlagAffectedTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
 	fs.BoolVar(&f.Graph, FlagAffectedGraph, false, "Render the dependency graph for the affected scope instead of executing")
+	cmdline.NegatedBoolVar(fs, &f.Graph, FlagAffectedGraph)
 	fs.BoolVar(&f.Upstream, FlagAffectedUpstream, false, "With --graph: show dependents instead of dependencies")
+	cmdline.NegatedBoolVar(fs, &f.Upstream, FlagAffectedUpstream)
 	fs.IntVar(&f.Depth, FlagAffectedDepth, 0, "With --graph: cap displayed depth (0 = unlimited)")
 	return &f
 }
 
 // AffectedImpactFlags are the flags declared for `magus affected impact`.
 type AffectedImpactFlags struct {
-	Impact bool   // --impact
+	Impact bool   // --[no-]impact
 	Base   string // --base, -b
 }
 
@@ -891,6 +923,7 @@ type AffectedImpactFlags struct {
 func BindAffectedImpact(fs *flag.FlagSet) *AffectedImpactFlags {
 	var f AffectedImpactFlags
 	fs.BoolVar(&f.Impact, FlagAffectedImpact, false, "Report the blast radius of the changeset (read-only; runs nothing)")
+	cmdline.NegatedBoolVar(fs, &f.Impact, FlagAffectedImpact)
 	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
 	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
 	return &f
@@ -899,11 +932,11 @@ func BindAffectedImpact(fs *flag.FlagSet) *AffectedImpactFlags {
 // AffectedPlanFlags are the flags declared for `magus affected plan`.
 type AffectedPlanFlags struct {
 	Base              string // --base, -b
-	Stdin             bool   // --stdin
-	Null              bool   // --null
+	Stdin             bool   // --[no-]stdin
+	Null              bool   // --[no-]null
 	MaxShards         int    // --max-shards
 	MaxParallelBudget int    // --max-parallel-budget
-	Detail            bool   // --detail
+	Detail            bool   // --[no-]detail
 }
 
 // AffectedPlanDefaults carries the defaults `magus affected plan` resolves at runtime (config, a
@@ -919,10 +952,13 @@ func BindAffectedPlan(fs *flag.FlagSet, d AffectedPlanDefaults) *AffectedPlanFla
 	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
 	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
 	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagAffectedStdin)
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
+	cmdline.NegatedBoolVar(fs, &f.Null, FlagAffectedNull)
 	fs.IntVar(&f.MaxShards, FlagAffectedMaxShards, d.MaxShards, "With --plan: maximum CI shards (-1 = unlimited)")
 	fs.IntVar(&f.MaxParallelBudget, FlagAffectedMaxParallelBudget, d.MaxParallelBudget, "With --plan: cross-shard concurrency cap; 0 = unlimited")
 	fs.BoolVar(&f.Detail, FlagAffectedDetail, false, "With --plan: add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to")
+	cmdline.NegatedBoolVar(fs, &f.Detail, FlagAffectedDetail)
 	return &f
 }
 
@@ -944,21 +980,22 @@ func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
 
 // CleanFlags are the flags declared for `magus clean`.
 type CleanFlags struct {
-	Cache bool // --cache
+	Cache bool // --[no-]cache
 }
 
 // BindClean registers `magus clean`'s flags on fs and returns the destination.
 func BindClean(fs *flag.FlagSet) *CleanFlags {
 	var f CleanFlags
 	fs.BoolVar(&f.Cache, FlagCleanCache, false, "Also invalidate magus cache entries for the selected projects")
+	cmdline.NegatedBoolVar(fs, &f.Cache, FlagCleanCache)
 	return &f
 }
 
 // ShellFlags are the flags declared for `magus shell`.
 type ShellFlags struct {
-	Path           bool   // --path
-	Observe        bool   // --observe
-	Message        bool   // --message
+	Path           bool   // --[no-]path
+	Observe        bool   // --[no-]observe
+	Message        bool   // --[no-]message
 	Lease          string // --lease
 	AgentName      string // --agent-name
 	Transport      string // --transport
@@ -966,8 +1003,8 @@ type ShellFlags struct {
 	Agent          string // --agent
 	Transcript     string // --transcript
 	Event          string // --event
-	RendersAsk     bool   // --renders-ask
-	CallBackground bool   // --call-background
+	RendersAsk     bool   // --[no-]renders-ask
+	CallBackground bool   // --[no-]call-background
 	CallTimeoutMs  int    // --call-timeout-ms
 }
 
@@ -975,8 +1012,11 @@ type ShellFlags struct {
 func BindShell(fs *flag.FlagSet) *ShellFlags {
 	var f ShellFlags
 	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
+	cmdline.NegatedBoolVar(fs, &f.Path, FlagShellPath)
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
+	cmdline.NegatedBoolVar(fs, &f.Observe, FlagShellObserve)
 	fs.BoolVar(&f.Message, FlagShellMessage, false, "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass")
+	cmdline.NegatedBoolVar(fs, &f.Message, FlagShellMessage)
 	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
 	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from, required with --transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name")
 	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
@@ -985,7 +1025,9 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
+	cmdline.NegatedBoolVar(fs, &f.RendersAsk, FlagShellRendersAsk)
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
+	cmdline.NegatedBoolVar(fs, &f.CallBackground, FlagShellCallBackground)
 	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
 	return &f
 }
@@ -994,16 +1036,16 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 type QueryFlags struct {
 	Budget   int    // --budget
 	Kind     string // --kind
-	Refresh  bool   // --refresh
-	Global   bool   // --global
-	Identity bool   // --identity
-	Attempts bool   // --attempts
-	Publish  bool   // --publish
-	Stdin    bool   // --stdin
-	Open     bool   // --open
-	Print    bool   // --print
+	Refresh  bool   // --[no-]refresh
+	Global   bool   // --[no-]global
+	Identity bool   // --[no-]identity
+	Attempts bool   // --[no-]attempts
+	Publish  bool   // --[no-]publish
+	Stdin    bool   // --[no-]stdin
+	Open     bool   // --[no-]open
+	Print    bool   // --[no-]print
 	URL      string // --url
-	Secrets  bool   // --secrets
+	Secrets  bool   // --[no-]secrets
 }
 
 // QueryDefaults carries the defaults `magus query` resolves at runtime (config, a
@@ -1018,28 +1060,35 @@ func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
 	fs.IntVar(&f.Budget, FlagQueryBudget, 0, "Max nodes in the returned neighborhood (default 50)")
 	fs.StringVar(&f.Kind, FlagQueryKind, "", "Restrict matches to these node kinds (comma-separated)")
 	fs.BoolVar(&f.Refresh, FlagQueryRefresh, false, "Force a full graph rebuild before querying")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagQueryRefresh)
 	fs.BoolVar(&f.Global, FlagQueryGlobal, false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagQueryGlobal)
 	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity (descriptor, lineage, cache key, component digests)")
+	cmdline.NegatedBoolVar(fs, &f.Identity, FlagQueryIdentity)
 	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
+	cmdline.NegatedBoolVar(fs, &f.Attempts, FlagQueryAttempts)
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
+	cmdline.NegatedBoolVar(fs, &f.Publish, FlagQueryPublish)
 	fs.BoolVar(&f.Stdin, FlagQueryStdin, false, "output: print records `-o jsonl` wrote, from stdin; writes nothing")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagQueryStdin)
 	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
+	cmdline.NegatedBoolVar(fs, &f.Open, FlagQueryOpen)
 	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")
+	cmdline.NegatedBoolVar(fs, &f.Print, FlagQueryPrint)
 	fs.StringVar(&f.URL, FlagQueryURL, d.URL, "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
 	fs.BoolVar(&f.Secrets, FlagQuerySecrets, false, "invocation <id>: list only the credential reads (reference and provider, never the value)")
+	cmdline.NegatedBoolVar(fs, &f.Secrets, FlagQuerySecrets)
 	return &f
 }
 
 // RefsFlags are the flags declared for `magus refs`.
-//
-// It does NOT carry --no-generated: a custom-valued flag is bound by the command itself,
-// which must do so alongside this binder.
 type RefsFlags struct {
-	Refresh     bool   // --refresh
-	Occurrences bool   // --occurrences
-	Definition  bool   // --definition
-	Source      bool   // --source
-	Text        bool   // --text
+	Refresh     bool   // --[no-]refresh
+	Occurrences bool   // --[no-]occurrences
+	Definition  bool   // --[no-]definition
+	Source      bool   // --[no-]source
+	Text        bool   // --[no-]text
+	Generated   bool   // --[no-]generated
 	Limit       int    // --limit
 	Rename      string // --rename
 }
@@ -1048,10 +1097,17 @@ type RefsFlags struct {
 func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	var f RefsFlags
 	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagRefsRefresh)
 	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.")
+	cmdline.NegatedBoolVar(fs, &f.Occurrences, FlagRefsOccurrences)
 	fs.BoolVar(&f.Definition, FlagRefsDefinition, false, "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed")
+	cmdline.NegatedBoolVar(fs, &f.Definition, FlagRefsDefinition)
 	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n")
+	cmdline.NegatedBoolVar(fs, &f.Source, FlagRefsSource)
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
+	cmdline.NegatedBoolVar(fs, &f.Text, FlagRefsText)
+	fs.BoolVar(&f.Generated, FlagRefsGenerated, true, "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely")
+	cmdline.NegatedBoolVar(fs, &f.Generated, FlagRefsGenerated)
 	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
 	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
 	return &f
@@ -1059,43 +1115,49 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 
 // ExplainFlags are the flags declared for `magus explain`.
 type ExplainFlags struct {
-	Refresh bool // --refresh
-	Global  bool // --global
+	Refresh bool // --[no-]refresh
+	Global  bool // --[no-]global
 }
 
 // BindExplain registers `magus explain`'s flags on fs and returns the destination.
 func BindExplain(fs *flag.FlagSet) *ExplainFlags {
 	var f ExplainFlags
 	fs.BoolVar(&f.Refresh, FlagExplainRefresh, false, "Force a full graph rebuild before explaining")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagExplainRefresh)
 	fs.BoolVar(&f.Global, FlagExplainGlobal, false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagExplainGlobal)
 	return &f
 }
 
 // PathFlags are the flags declared for `magus path`.
 type PathFlags struct {
-	Refresh bool // --refresh
-	Global  bool // --global
+	Refresh bool // --[no-]refresh
+	Global  bool // --[no-]global
 }
 
 // BindPath registers `magus path`'s flags on fs and returns the destination.
 func BindPath(fs *flag.FlagSet) *PathFlags {
 	var f PathFlags
 	fs.BoolVar(&f.Refresh, FlagPathRefresh, false, "Force a full graph rebuild before pathfinding")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagPathRefresh)
 	fs.BoolVar(&f.Global, FlagPathGlobal, false, "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagPathGlobal)
 	return &f
 }
 
 // GraphBuildFlags are the flags declared for `magus graph build`.
 type GraphBuildFlags struct {
-	NoSessions bool // --no-sessions
-	NoSymbols  bool // --no-symbols
+	Sessions bool // --[no-]sessions
+	Symbols  bool // --[no-]symbols
 }
 
 // BindGraphBuild registers `magus graph build`'s flags on fs and returns the destination.
 func BindGraphBuild(fs *flag.FlagSet) *GraphBuildFlags {
 	var f GraphBuildFlags
-	fs.BoolVar(&f.NoSessions, FlagGraphBuildNoSessions, false, "Do not run the declared agent-session adapters first")
-	fs.BoolVar(&f.NoSymbols, FlagGraphBuildNoSymbols, false, "Rebuild the domain graph only; do not reindex code symbols")
+	fs.BoolVar(&f.Sessions, FlagGraphBuildSessions, true, "Run the declared agent-session adapters first; --no-sessions skips them")
+	cmdline.NegatedBoolVar(fs, &f.Sessions, FlagGraphBuildSessions)
+	fs.BoolVar(&f.Symbols, FlagGraphBuildSymbols, true, "Reindex code symbols; --no-symbols rebuilds the domain graph only")
+	cmdline.NegatedBoolVar(fs, &f.Symbols, FlagGraphBuildSymbols)
 	return &f
 }
 
@@ -1103,8 +1165,8 @@ func BindGraphBuild(fs *flag.FlagSet) *GraphBuildFlags {
 type GraphPushFlags struct {
 	Ref      string // --ref
 	Username string // --username
-	Refresh  bool   // --refresh
-	Table    bool   // --table
+	Refresh  bool   // --[no-]refresh
+	Table    bool   // --[no-]table
 }
 
 // BindGraphPush registers `magus graph push`'s flags on fs and returns the destination.
@@ -1113,7 +1175,9 @@ func BindGraphPush(fs *flag.FlagSet) *GraphPushFlags {
 	fs.StringVar(&f.Ref, FlagGraphPushRef, "", "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed")
 	fs.StringVar(&f.Username, FlagGraphPushUsername, "", "The registry username; the token is read from stdin, the way docker login --password-stdin takes one")
 	fs.BoolVar(&f.Refresh, FlagGraphPushRefresh, false, "Rebuild the graph before pushing instead of exporting what is cached")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagGraphPushRefresh)
 	fs.BoolVar(&f.Table, FlagGraphPushTable, false, "Publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
+	cmdline.NegatedBoolVar(fs, &f.Table, FlagGraphPushTable)
 	return &f
 }
 
@@ -1121,7 +1185,7 @@ func BindGraphPush(fs *flag.FlagSet) *GraphPushFlags {
 type GraphPullFlags struct {
 	Ref   string // --ref
 	Out   string // --out
-	Table bool   // --table
+	Table bool   // --[no-]table
 }
 
 // BindGraphPull registers `magus graph pull`'s flags on fs and returns the destination.
@@ -1130,12 +1194,13 @@ func BindGraphPull(fs *flag.FlagSet) *GraphPullFlags {
 	fs.StringVar(&f.Ref, FlagGraphPullRef, "", "The artifact to pull (default: derived from the repository's origin remote); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed")
 	fs.StringVar(&f.Out, FlagGraphPullOut, "", "Write the graph here instead of stdout")
 	fs.BoolVar(&f.Table, FlagGraphPullTable, false, "Fetch the embedding table the binary pins into the cache instead of the graph")
+	cmdline.NegatedBoolVar(fs, &f.Table, FlagGraphPullTable)
 	return &f
 }
 
 // GraphDepsFlags are the flags declared for `magus graph deps`.
 type GraphDepsFlags struct {
-	Upstream bool   // --upstream
+	Upstream bool   // --[no-]upstream
 	Depth    int    // --depth
 	Spell    string // --spell
 	Target   string // --target
@@ -1145,6 +1210,7 @@ type GraphDepsFlags struct {
 func BindGraphDeps(fs *flag.FlagSet) *GraphDepsFlags {
 	var f GraphDepsFlags
 	fs.BoolVar(&f.Upstream, FlagGraphDepsUpstream, false, "Show dependents instead of dependencies")
+	cmdline.NegatedBoolVar(fs, &f.Upstream, FlagGraphDepsUpstream)
 	fs.IntVar(&f.Depth, FlagGraphDepsDepth, 0, "Cap displayed depth (0 = unlimited)")
 	fs.StringVar(&f.Spell, FlagGraphDepsSpell, "", "Only projects driven by this spell")
 	fs.StringVar(&f.Target, FlagGraphDepsTarget, "", "Target whose duration history annotates nodes (default: build)")
@@ -1153,19 +1219,18 @@ func BindGraphDeps(fs *flag.FlagSet) *GraphDepsFlags {
 
 // GraphExportFlags are the flags declared for `magus graph export`.
 type GraphExportFlags struct {
-	Refresh      bool   // --refresh
-	Global       bool   // --global
-	Reproducible bool   // --reproducible
-	Open         bool   // --open
-	Follow       bool   // --follow
-	Targets      bool   // --targets
-	Serve        bool   // --serve
-	Print        bool   // --print
+	Refresh      bool   // --[no-]refresh
+	Global       bool   // --[no-]global
+	Reproducible bool   // --[no-]reproducible
+	Open         bool   // --[no-]open
+	Follow       bool   // --[no-]follow
+	Targets      bool   // --[no-]targets
+	Serve        bool   // --[no-]serve
+	Print        bool   // --[no-]print
 	URL          string // --url
-	Static       bool   // --static
 	Select       string // --select
 	Budget       int    // --budget
-	Symbols      bool   // --symbols
+	Symbols      bool   // --[no-]symbols
 }
 
 // GraphExportDefaults carries the defaults `magus graph export` resolves at runtime (config, a
@@ -1179,27 +1244,35 @@ type GraphExportDefaults struct {
 func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags {
 	var f GraphExportFlags
 	fs.BoolVar(&f.Refresh, FlagGraphExportRefresh, false, "Force a full graph rebuild before exporting")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagGraphExportRefresh)
 	fs.BoolVar(&f.Global, FlagGraphExportGlobal, false, "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagGraphExportGlobal)
 	fs.BoolVar(&f.Reproducible, FlagGraphExportReproducible, false, "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes")
+	cmdline.NegatedBoolVar(fs, &f.Reproducible, FlagGraphExportReproducible)
 	fs.BoolVar(&f.Open, FlagGraphExportOpen, false, "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine")
+	cmdline.NegatedBoolVar(fs, &f.Open, FlagGraphExportOpen)
 	fs.BoolVar(&f.Follow, FlagGraphExportFollow, false, "With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)")
+	cmdline.NegatedBoolVar(fs, &f.Follow, FlagGraphExportFollow)
 	fs.BoolVar(&f.Targets, FlagGraphExportTargets, false, "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
+	cmdline.NegatedBoolVar(fs, &f.Targets, FlagGraphExportTargets)
 	fs.BoolVar(&f.Serve, FlagGraphExportServe, false, "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
+	cmdline.NegatedBoolVar(fs, &f.Serve, FlagGraphExportServe)
 	fs.BoolVar(&f.Print, FlagGraphExportPrint, false, "With --open: print the explorer URL to stdout instead of launching a browser")
+	cmdline.NegatedBoolVar(fs, &f.Print, FlagGraphExportPrint)
 	fs.StringVar(&f.URL, FlagGraphExportURL, d.URL, "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
-	fs.BoolVar(&f.Static, FlagGraphExportStatic, false, "Deprecated alias for --reproducible")
 	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot")
 	fs.IntVar(&f.Budget, FlagGraphExportBudget, d.Budget, "Node budget for --select (how many nodes the neighborhood may collect)")
-	fs.BoolVar(&f.Symbols, FlagGraphExportSymbols, false, "Include every indexed code symbol, which the whole-graph export leaves out; a `magus diff --baseline` needs them")
+	fs.BoolVar(&f.Symbols, FlagGraphExportSymbols, false, "Include every indexed code symbol, which the whole-graph export leaves out; a magus diff --baseline needs them")
+	cmdline.NegatedBoolVar(fs, &f.Symbols, FlagGraphExportSymbols)
 	return &f
 }
 
 // GraphStatsFlags are the flags declared for `magus graph stats`.
 type GraphStatsFlags struct {
 	Kind    string // --kind
-	Refresh bool   // --refresh
-	Global  bool   // --global
-	Symbols bool   // --symbols
+	Refresh bool   // --[no-]refresh
+	Global  bool   // --[no-]global
+	Symbols bool   // --[no-]symbols
 }
 
 // BindGraphStats registers `magus graph stats`'s flags on fs and returns the destination.
@@ -1207,15 +1280,18 @@ func BindGraphStats(fs *flag.FlagSet) *GraphStatsFlags {
 	var f GraphStatsFlags
 	fs.StringVar(&f.Kind, FlagGraphStatsKind, "", "Scope every section to one node kind (spell, target, doc, ...)")
 	fs.BoolVar(&f.Refresh, FlagGraphStatsRefresh, false, "Force a full graph rebuild first")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagGraphStatsRefresh)
 	fs.BoolVar(&f.Global, FlagGraphStatsGlobal, false, "Union the workspaces registered in config (knowledge.workspaces) before computing stats")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagGraphStatsGlobal)
 	fs.BoolVar(&f.Symbols, FlagGraphStatsSymbols, false, "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph")
+	cmdline.NegatedBoolVar(fs, &f.Symbols, FlagGraphStatsSymbols)
 	return &f
 }
 
 // GraphDiffFlags are the flags declared for `magus graph diff`.
 type GraphDiffFlags struct {
-	Refresh bool   // --refresh
-	Global  bool   // --global
+	Refresh bool   // --[no-]refresh
+	Global  bool   // --[no-]global
 	Rev     string // --rev
 }
 
@@ -1223,7 +1299,9 @@ type GraphDiffFlags struct {
 func BindGraphDiff(fs *flag.FlagSet) *GraphDiffFlags {
 	var f GraphDiffFlags
 	fs.BoolVar(&f.Refresh, FlagGraphDiffRefresh, false, "Force a full graph rebuild of the current graph before diffing")
+	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagGraphDiffRefresh)
 	fs.BoolVar(&f.Global, FlagGraphDiffGlobal, false, "Diff the global (all-workspaces) graph; match this to how the baseline was exported")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagGraphDiffGlobal)
 	fs.StringVar(&f.Rev, FlagGraphDiffRev, "", "Diff against a git revision (e.g. HEAD~1, main) instead of an export file")
 	return &f
 }
@@ -1233,14 +1311,14 @@ func BindGraphDiff(fs *flag.FlagSet) *GraphDiffFlags {
 // It does NOT carry --conformance-min-share: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type DiffFlags struct {
-	Generated            bool   // --generated
-	Impact               bool   // --impact
-	NoTui                bool   // --no-tui
-	Watch                bool   // --watch
-	Ack                  bool   // --ack
+	Generated            bool   // --[no-]generated
+	Impact               bool   // --[no-]impact
+	Tui                  bool   // --[no-]tui
+	Watch                bool   // --[no-]watch
+	Ack                  bool   // --[no-]ack
 	Reason               string // --reason
 	Thread               string // --thread
-	Unread               bool   // --unread
+	Unread               bool   // --[no-]unread
 	Rev                  string // --rev
 	Patch                string // --patch
 	Baseline             string // --baseline
@@ -1251,13 +1329,19 @@ type DiffFlags struct {
 func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
+	cmdline.NegatedBoolVar(fs, &f.Generated, FlagDiffGenerated)
 	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted")
-	fs.BoolVar(&f.NoTui, FlagDiffNoTui, false, "Print the report instead of opening the interactive viewer")
+	cmdline.NegatedBoolVar(fs, &f.Impact, FlagDiffImpact)
+	fs.BoolVar(&f.Tui, FlagDiffTui, true, "Open the interactive viewer; --no-tui prints the report instead")
+	cmdline.NegatedBoolVar(fs, &f.Tui, FlagDiffTui)
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
+	cmdline.NegatedBoolVar(fs, &f.Watch, FlagDiffWatch)
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
+	cmdline.NegatedBoolVar(fs, &f.Ack, FlagDiffAck)
 	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
 	fs.StringVar(&f.Thread, FlagDiffThread, "", "Narrow the review to one pull request thread, by its id or the id of any comment in it, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it shows the conversation, the hunk and its reach")
 	fs.BoolVar(&f.Unread, FlagDiffUnread, false, "Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread")
+	cmdline.NegatedBoolVar(fs, &f.Unread, FlagDiffUnread)
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
 	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
 	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")
@@ -1270,23 +1354,29 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 // It does NOT carry --exclude, --project: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type VCSLsFilesFlags struct {
-	IncludeUntracked   bool // --include-untracked
-	IncludeGenerated   bool // --include-generated
-	IncludeUnexplained bool // --include-unexplained
-	IncludeUnclaimed   bool // --include-unclaimed
-	IncludeHeld        bool // --include-held
-	IncludeStaged      bool // --include-staged
+	IncludeUntracked   bool // --[no-]include-untracked
+	IncludeGenerated   bool // --[no-]include-generated
+	IncludeUnexplained bool // --[no-]include-unexplained
+	IncludeUnclaimed   bool // --[no-]include-unclaimed
+	IncludeHeld        bool // --[no-]include-held
+	IncludeStaged      bool // --[no-]include-staged
 }
 
 // BindVCSLsFiles registers `magus vcs ls-files`'s flags on fs and returns the destination.
 func BindVCSLsFiles(fs *flag.FlagSet) *VCSLsFilesFlags {
 	var f VCSLsFilesFlags
 	fs.BoolVar(&f.IncludeUntracked, FlagVCSLsFilesIncludeUntracked, false, "Also list untracked files; refused on jj, which has none")
+	cmdline.NegatedBoolVar(fs, &f.IncludeUntracked, FlagVCSLsFilesIncludeUntracked)
 	fs.BoolVar(&f.IncludeGenerated, FlagVCSLsFilesIncludeGenerated, false, "Also list declared outputs a dirty source in this change explains")
+	cmdline.NegatedBoolVar(fs, &f.IncludeGenerated, FlagVCSLsFilesIncludeGenerated)
 	fs.BoolVar(&f.IncludeUnexplained, FlagVCSLsFilesIncludeUnexplained, false, "Also list declared outputs no source change here explains")
+	cmdline.NegatedBoolVar(fs, &f.IncludeUnexplained, FlagVCSLsFilesIncludeUnexplained)
 	fs.BoolVar(&f.IncludeUnclaimed, FlagVCSLsFilesIncludeUnclaimed, false, "Also list paths no target declares, and the ones magus maintains itself")
+	cmdline.NegatedBoolVar(fs, &f.IncludeUnclaimed, FlagVCSLsFilesIncludeUnclaimed)
 	fs.BoolVar(&f.IncludeHeld, FlagVCSLsFilesIncludeHeld, false, "Also list paths another live job in this checkout writes")
+	cmdline.NegatedBoolVar(fs, &f.IncludeHeld, FlagVCSLsFilesIncludeHeld)
 	fs.BoolVar(&f.IncludeStaged, FlagVCSLsFilesIncludeStaged, false, "Also list paths whose whole change is already staged; git only")
+	cmdline.NegatedBoolVar(fs, &f.IncludeStaged, FlagVCSLsFilesIncludeStaged)
 	return &f
 }
 
@@ -1304,20 +1394,21 @@ func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 
 // VCSCheckpointFlags are the flags declared for `magus vcs checkpoint`.
 type VCSCheckpointFlags struct {
-	Preserve bool // --preserve
+	Preserve bool // --[no-]preserve
 }
 
 // BindVCSCheckpoint registers `magus vcs checkpoint`'s flags on fs and returns the destination.
 func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
 	var f VCSCheckpointFlags
 	fs.BoolVar(&f.Preserve, FlagVCSCheckpointPreserve, false, "Also capture the uncommitted work and print a handle that restores it")
+	cmdline.NegatedBoolVar(fs, &f.Preserve, FlagVCSCheckpointPreserve)
 	return &f
 }
 
 // SessionFlags are the flags declared for `magus session`.
 type SessionFlags struct {
-	Brief bool   // --brief
-	All   bool   // --all
+	Brief bool   // --[no-]brief
+	All   bool   // --[no-]all
 	Limit int    // --limit
 	Since string // --since
 }
@@ -1326,7 +1417,9 @@ type SessionFlags struct {
 func BindSession(fs *flag.FlagSet) *SessionFlags {
 	var f SessionFlags
 	fs.BoolVar(&f.Brief, FlagSessionBrief, false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, capped live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
+	cmdline.NegatedBoolVar(fs, &f.Brief, FlagSessionBrief)
 	fs.BoolVar(&f.All, FlagSessionAll, false, "List invocations from every checkout of this repository, not only this one")
+	cmdline.NegatedBoolVar(fs, &f.All, FlagSessionAll)
 	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many invocations (0 for all)")
 	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	return &f
@@ -1377,7 +1470,7 @@ func BindSessionCheckpoint(fs *flag.FlagSet) *SessionCheckpointFlags {
 // SessionNotifyFlags are the flags declared for `magus session notify`.
 type SessionNotifyFlags struct {
 	Outcome string // --outcome
-	Desktop bool   // --desktop
+	Desktop bool   // --[no-]desktop
 }
 
 // BindSessionNotify registers `magus session notify`'s flags on fs and returns the destination.
@@ -1385,6 +1478,7 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 	var f SessionNotifyFlags
 	fs.StringVar(&f.Outcome, FlagSessionNotifyOutcome, "", "Outcome vocabulary for the event")
 	fs.BoolVar(&f.Desktop, FlagSessionNotifyDesktop, false, "Also raise an OS notification")
+	cmdline.NegatedBoolVar(fs, &f.Desktop, FlagSessionNotifyDesktop)
 	return &f
 }
 
@@ -1393,8 +1487,8 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 // It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobForkFlags struct {
-	Schema      bool          // --schema
-	Stdin       bool          // --stdin
+	Schema      bool          // --[no-]schema
+	Stdin       bool          // --[no-]stdin
 	Criteria    string        // --criteria
 	Timeout     time.Duration // --timeout
 	Parent      string        // --parent
@@ -1402,16 +1496,18 @@ type JobForkFlags struct {
 	Check       string        // --check
 	Model       string        // --model
 	BriefFormat string        // --brief-format
-	ReadOnly    bool          // --read-only
+	ReadOnly    bool          // --[no-]read-only
 	Checkout    string        // --checkout
-	Fix         bool          // --fix
+	Fix         bool          // --[no-]fix
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
 func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	var f JobForkFlags
 	fs.BoolVar(&f.Schema, FlagJobForkSchema, false, "Print the JSON schema a job must satisfy, and exit")
+	cmdline.NegatedBoolVar(fs, &f.Schema, FlagJobForkSchema)
 	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobForkStdin)
 	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
 	fs.DurationVar(&f.Timeout, FlagJobForkTimeout, 0, "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
@@ -1420,15 +1516,17 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 	fs.StringVar(&f.BriefFormat, FlagJobForkBriefFormat, "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
+	cmdline.NegatedBoolVar(fs, &f.ReadOnly, FlagJobForkReadOnly)
 	fs.StringVar(&f.Checkout, FlagJobForkCheckout, "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
 	fs.BoolVar(&f.Fix, FlagJobForkFix, false, "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain")
+	cmdline.NegatedBoolVar(fs, &f.Fix, FlagJobForkFix)
 	return &f
 }
 
 // JobApplyFlags are the flags declared for `magus job apply`.
 type JobApplyFlags struct {
 	F   string // -f
-	Fix bool   // --fix
+	Fix bool   // --[no-]fix
 }
 
 // BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
@@ -1436,6 +1534,7 @@ func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	var f JobApplyFlags
 	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a file, or `-` for stdin; one JSON job, a JSON array, or one job per line")
 	fs.BoolVar(&f.Fix, FlagJobApplyFix, false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
+	cmdline.NegatedBoolVar(fs, &f.Fix, FlagJobApplyFix)
 	return &f
 }
 
@@ -1455,15 +1554,17 @@ func BindJobExec(fs *flag.FlagSet) *JobExecFlags {
 
 // JobExitFlags are the flags declared for `magus job exit`.
 type JobExitFlags struct {
-	Schema bool // --schema
-	Stdin  bool // --stdin
+	Schema bool // --[no-]schema
+	Stdin  bool // --[no-]stdin
 }
 
 // BindJobExit registers `magus job exit`'s flags on fs and returns the destination.
 func BindJobExit(fs *flag.FlagSet) *JobExitFlags {
 	var f JobExitFlags
 	fs.BoolVar(&f.Schema, FlagJobExitSchema, false, "Print the JSON schema a result must satisfy, and exit")
+	cmdline.NegatedBoolVar(fs, &f.Schema, FlagJobExitSchema)
 	fs.BoolVar(&f.Stdin, FlagJobExitStdin, false, "Read this job's result from stdin; without it the job is abandoned")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobExitStdin)
 	return &f
 }
 
@@ -1472,41 +1573,46 @@ func BindJobExit(fs *flag.FlagSet) *JobExitFlags {
 // It does NOT carry --evidence: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobWaitFlags struct {
-	Schema      bool // --schema
-	Stdin       bool // --stdin
-	Integration bool // --integration
+	Schema      bool // --[no-]schema
+	Stdin       bool // --[no-]stdin
+	Integration bool // --[no-]integration
 }
 
 // BindJobWait registers `magus job wait`'s flags on fs and returns the destination.
 func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
 	var f JobWaitFlags
 	fs.BoolVar(&f.Schema, FlagJobWaitSchema, false, "Print the JSON schema a result must satisfy, and exit")
+	cmdline.NegatedBoolVar(fs, &f.Schema, FlagJobWaitSchema)
 	fs.BoolVar(&f.Stdin, FlagJobWaitStdin, false, "Read the result from stdin instead of from the job, for one that was never filed")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobWaitStdin)
 	fs.BoolVar(&f.Integration, FlagJobWaitIntegration, false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
+	cmdline.NegatedBoolVar(fs, &f.Integration, FlagJobWaitIntegration)
 	return &f
 }
 
 // JobRmFlags are the flags declared for `magus job rm`.
 type JobRmFlags struct {
-	Force bool // --force
+	Force bool // --[no-]force
 }
 
 // BindJobRm registers `magus job rm`'s flags on fs and returns the destination.
 func BindJobRm(fs *flag.FlagSet) *JobRmFlags {
 	var f JobRmFlags
 	fs.BoolVar(&f.Force, FlagJobRmForce, false, "Remove a row that already ended, destroying the record of what happened")
+	cmdline.NegatedBoolVar(fs, &f.Force, FlagJobRmForce)
 	return &f
 }
 
 // JobPruneFlags are the flags declared for `magus job prune`.
 type JobPruneFlags struct {
-	All bool // --all
+	All bool // --[no-]all
 }
 
 // BindJobPrune registers `magus job prune`'s flags on fs and returns the destination.
 func BindJobPrune(fs *flag.FlagSet) *JobPruneFlags {
 	var f JobPruneFlags
 	fs.BoolVar(&f.All, FlagJobPruneAll, false, "Also end a job a holder took and nobody touched within jobs.stale_after")
+	cmdline.NegatedBoolVar(fs, &f.All, FlagJobPruneAll)
 	return &f
 }
 
@@ -1527,7 +1633,7 @@ func BindJobPause(fs *flag.FlagSet) *JobPauseFlags {
 // JobGrantFlags are the flags declared for `magus job grant`.
 type JobGrantFlags struct {
 	For    time.Duration // --for
-	Revoke bool          // --revoke
+	Revoke bool          // --[no-]revoke
 	Commit string        // --commit
 	Reason string        // --reason
 }
@@ -1537,6 +1643,7 @@ func BindJobGrant(fs *flag.FlagSet) *JobGrantFlags {
 	var f JobGrantFlags
 	fs.DurationVar(&f.For, FlagJobGrantFor, 0, "End the grant after this long (e.g. 2h); unset, it lasts until the job ends")
 	fs.BoolVar(&f.Revoke, FlagJobGrantRevoke, false, "End the job's grant of the rule")
+	cmdline.NegatedBoolVar(fs, &f.Revoke, FlagJobGrantRevoke)
 	fs.StringVar(&f.Commit, FlagJobGrantCommit, "", "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated")
 	fs.StringVar(&f.Reason, FlagJobGrantReason, "", "Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke")
 	return &f
@@ -1547,17 +1654,20 @@ func BindJobGrant(fs *flag.FlagSet) *JobGrantFlags {
 // It does NOT carry --tag: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type NotesLsFlags struct {
-	Shared       bool // --shared
-	Private      bool // --private
-	Reproducible bool // --reproducible
+	Shared       bool // --[no-]shared
+	Private      bool // --[no-]private
+	Reproducible bool // --[no-]reproducible
 }
 
 // BindNotesLs registers `magus notes ls`'s flags on fs and returns the destination.
 func BindNotesLs(fs *flag.FlagSet) *NotesLsFlags {
 	var f NotesLsFlags
 	fs.BoolVar(&f.Shared, FlagNotesLsShared, false, "Only notes committed to this repository (your team has these)")
+	cmdline.NegatedBoolVar(fs, &f.Shared, FlagNotesLsShared)
 	fs.BoolVar(&f.Private, FlagNotesLsPrivate, false, "Only your own notes")
+	cmdline.NegatedBoolVar(fs, &f.Private, FlagNotesLsPrivate)
 	fs.BoolVar(&f.Reproducible, FlagNotesLsReproducible, false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
+	cmdline.NegatedBoolVar(fs, &f.Reproducible, FlagNotesLsReproducible)
 	return &f
 }
 
@@ -1568,9 +1678,9 @@ func BindNotesLs(fs *flag.FlagSet) *NotesLsFlags {
 type NotesCaptureFlags struct {
 	Title   string // --title
 	Name    string // --name
-	Gap     bool   // --gap
-	Shared  bool   // --shared
-	Private bool   // --private
+	Gap     bool   // --[no-]gap
+	Shared  bool   // --[no-]shared
+	Private bool   // --[no-]private
 }
 
 // BindNotesCapture registers `magus notes capture`'s flags on fs and returns the destination.
@@ -1579,8 +1689,11 @@ func BindNotesCapture(fs *flag.FlagSet) *NotesCaptureFlags {
 	fs.StringVar(&f.Title, FlagNotesCaptureTitle, "", "Title for the note (defaults to naming the reviewed base)")
 	fs.StringVar(&f.Name, FlagNotesCaptureName, "", "Note name (defaults to review-<patch digest>)")
 	fs.BoolVar(&f.Gap, FlagNotesCaptureGap, false, "Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve")
+	cmdline.NegatedBoolVar(fs, &f.Gap, FlagNotesCaptureGap)
 	fs.BoolVar(&f.Shared, FlagNotesCaptureShared, false, "Only notes committed to this repository (your team has these)")
+	cmdline.NegatedBoolVar(fs, &f.Shared, FlagNotesCaptureShared)
 	fs.BoolVar(&f.Private, FlagNotesCapturePrivate, false, "Only your own notes (default for capture)")
+	cmdline.NegatedBoolVar(fs, &f.Private, FlagNotesCapturePrivate)
 	return &f
 }
 
@@ -1654,13 +1767,13 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 
 // QueueValidateFlags are the flags declared for `magus queue validate`.
 type QueueValidateFlags struct {
-	Stdin           bool   // --stdin
+	Stdin           bool   // --[no-]stdin
 	Gate            string // --gate
 	Regenerate      string // --regenerate
 	Verdicts        string // --verdicts
 	Only            string // --only
 	Parallel        int    // --parallel
-	RemoteCacheRead bool   // --remote-cache-read
+	RemoteCacheRead bool   // --[no-]remote-cache-read
 	Facts           string // --facts
 	Target          string // --target
 	Remote          string // --remote
@@ -1671,12 +1784,14 @@ type QueueValidateFlags struct {
 func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	var f QueueValidateFlags
 	fs.BoolVar(&f.Stdin, FlagQueueValidateStdin, false, "Read the mergequeue.plan/v1 document from stdin; required")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagQueueValidateStdin)
 	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green")
 	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `--` and the generated files to rewrite listed on stdin")
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
 	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
 	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
 	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key")
+	cmdline.NegatedBoolVar(fs, &f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead)
 	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
@@ -1708,7 +1823,7 @@ type QueueApplyFlags struct {
 	Base                string        // --base
 	Workflow            string        // --workflow
 	StatusContext       string        // --status-context
-	Once                bool          // --once
+	Once                bool          // --[no-]once
 	Interval            time.Duration // --interval
 	Committer           string        // --committer
 	App                 string        // --app
@@ -1729,6 +1844,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.StringVar(&f.Workflow, FlagQueueApplyWorkflow, "", "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)")
 	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
+	cmdline.NegatedBoolVar(fs, &f.Once, FlagQueueApplyOnce)
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
 	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
@@ -1748,7 +1864,7 @@ type QueueReviewsFlags struct {
 	Base     string // --base
 	Change   string // --change
 	Head     string // --head
-	Dismiss  bool   // --dismiss
+	Dismiss  bool   // --[no-]dismiss
 	Facts    string // --facts
 	Target   string // --target
 	Remote   string // --remote
@@ -1763,6 +1879,7 @@ func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
 	fs.StringVar(&f.Change, FlagQueueReviewsChange, "", "`id` of the change, as the provider names it (github: the pull request number)")
 	fs.StringVar(&f.Head, FlagQueueReviewsHead, "", "`commit` the change's head must be at; when it moved, nothing is classified or dismissed")
 	fs.BoolVar(&f.Dismiss, FlagQueueReviewsDismiss, false, "Dismiss each approval that does not carry, naming what changed since it")
+	cmdline.NegatedBoolVar(fs, &f.Dismiss, FlagQueueReviewsDismiss)
 	fs.StringVar(&f.Facts, FlagQueueReviewsFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueReviewsTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueReviewsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
@@ -1776,8 +1893,8 @@ func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
 // which must do so alongside this binder.
 type WatchFlags struct {
 	Debounce time.Duration // --debounce
-	Initial  bool          // --initial
-	Null     bool          // --null
+	Initial  bool          // --[no-]initial
+	Null     bool          // --[no-]null
 	Backend  string        // --backend
 }
 
@@ -1786,14 +1903,16 @@ func BindWatch(fs *flag.FlagSet) *WatchFlags {
 	var f WatchFlags
 	fs.DurationVar(&f.Debounce, FlagWatchDebounce, time.Duration(200000000), "Quiet window before emitting a batch")
 	fs.BoolVar(&f.Initial, FlagWatchInitial, true, "Emit an --all batch on startup before watching")
+	cmdline.NegatedBoolVar(fs, &f.Initial, FlagWatchInitial)
 	fs.BoolVar(&f.Null, FlagWatchNull, false, "NUL-separate paths; double-NUL between batches")
+	cmdline.NegatedBoolVar(fs, &f.Null, FlagWatchNull)
 	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)")
 	return &f
 }
 
 // EventsFlags are the flags declared for `magus events`.
 type EventsFlags struct {
-	Follow   bool          // --follow, -f
+	Follow   bool          // --[no-]follow, -f
 	Type     string        // --type
 	Limit    int           // --limit
 	Interval time.Duration // --interval
@@ -1804,6 +1923,7 @@ func BindEvents(fs *flag.FlagSet) *EventsFlags {
 	var f EventsFlags
 	fs.BoolVar(&f.Follow, FlagEventsFollow, false, "Keep streaming as events occur instead of exiting after the replay")
 	fs.BoolVar(&f.Follow, FlagEventsF, false, "Short for --follow")
+	cmdline.NegatedBoolVar(fs, &f.Follow, FlagEventsFollow)
 	fs.StringVar(&f.Type, FlagEventsType, "", "Restrict to these event types (comma-separated); default is every type except target.output")
 	fs.IntVar(&f.Limit, FlagEventsLimit, 20, "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run")
 	fs.DurationVar(&f.Interval, FlagEventsInterval, time.Duration(250000000), "How often --follow polls the run log for new events")
@@ -1812,20 +1932,21 @@ func BindEvents(fs *flag.FlagSet) *EventsFlags {
 
 // ServerStartFlags are the flags declared for `magus server start`.
 type ServerStartFlags struct {
-	Foreground bool // --foreground
+	Foreground bool // --[no-]foreground
 }
 
 // BindServerStart registers `magus server start`'s flags on fs and returns the destination.
 func BindServerStart(fs *flag.FlagSet) *ServerStartFlags {
 	var f ServerStartFlags
 	fs.BoolVar(&f.Foreground, FlagServerStartForeground, false, "Run in the foreground and block, instead of auto-backgrounding")
+	cmdline.NegatedBoolVar(fs, &f.Foreground, FlagServerStartForeground)
 	return &f
 }
 
 // ServerStopFlags are the flags declared for `magus server stop`.
 type ServerStopFlags struct {
 	Socket string // --socket
-	Pools  bool   // --pools
+	Pools  bool   // --[no-]pools
 }
 
 // BindServerStop registers `magus server stop`'s flags on fs and returns the destination.
@@ -1833,6 +1954,7 @@ func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	var f ServerStopFlags
 	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 	fs.BoolVar(&f.Pools, FlagServerStopPools, false, "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone")
+	cmdline.NegatedBoolVar(fs, &f.Pools, FlagServerStopPools)
 	return &f
 }
 
@@ -1876,25 +1998,26 @@ func BindBroker(fs *flag.FlagSet) *BrokerFlags {
 
 // BrokerStopFlags are the flags declared for `magus broker stop`.
 type BrokerStopFlags struct {
-	Services bool // --services
+	Services bool // --[no-]services
 }
 
 // BindBrokerStop registers `magus broker stop`'s flags on fs and returns the destination.
 func BindBrokerStop(fs *flag.FlagSet) *BrokerStopFlags {
 	var f BrokerStopFlags
 	fs.BoolVar(&f.Services, FlagBrokerStopServices, false, "Stop the broker's hosted services, leaving the broker running")
+	cmdline.NegatedBoolVar(fs, &f.Services, FlagBrokerStopServices)
 	return &f
 }
 
 // StatusFlags are the flags declared for `magus status`.
 type StatusFlags struct {
 	Watch     time.Duration // --watch, -W
-	Compact   bool          // --compact, -c
-	Symbols   bool          // --symbols
+	Compact   bool          // --[no-]compact, -c
+	Symbols   bool          // --[no-]symbols
 	Socket    string        // --socket
 	Probe     string        // --probe
 	Workspace string        // --workspace
-	Wait      bool          // --wait
+	Wait      bool          // --[no-]wait
 }
 
 // BindStatus registers `magus status`'s flags on fs and returns the destination.
@@ -1904,11 +2027,14 @@ func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	fs.DurationVar(&f.Watch, FlagStatusW, 0, "Short for --watch")
 	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
+	cmdline.NegatedBoolVar(fs, &f.Compact, FlagStatusCompact)
 	fs.BoolVar(&f.Symbols, FlagStatusSymbols, false, "Include the expensive symbol-index freshness scan")
+	cmdline.NegatedBoolVar(fs, &f.Symbols, FlagStatusSymbols)
 	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
 	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
 	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
 	fs.BoolVar(&f.Wait, FlagStatusWait, false, "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim")
+	cmdline.NegatedBoolVar(fs, &f.Wait, FlagStatusWait)
 	return &f
 }
 
@@ -1916,12 +2042,12 @@ func BindStatus(fs *flag.FlagSet) *StatusFlags {
 type BuzzFlags struct {
 	E            string // -e
 	Test         bool   // -t, --test
-	Check        bool   // --check
+	Check        bool   // --[no-]check
 	Coverprofile string // --coverprofile
-	Profile      bool   // --profile
-	Record       bool   // --record
-	Embedded     bool   // --embedded
-	NoAutoload   bool   // --no-autoload
+	Profile      bool   // --[no-]profile
+	Record       bool   // --[no-]record
+	Embedded     bool   // --[no-]embedded
+	Autoload     bool   // --[no-]autoload
 	C            string // -C
 }
 
@@ -1931,12 +2057,18 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.StringVar(&f.E, FlagBuzzE, "", "Execute `code` given on the command line instead of a file")
 	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the file's test \"...\" {} blocks and report pass/fail")
 	fs.BoolVar(&f.Test, FlagBuzzTest, false, "Alias for -t")
+	cmdline.NegatedBoolVar(fs, &f.Test, FlagBuzzT)
 	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
+	cmdline.NegatedBoolVar(fs, &f.Check, FlagBuzzCheck)
 	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Profile, FlagBuzzProfile, false, "Print where compile and import time went, after the script runs")
+	cmdline.NegatedBoolVar(fs, &f.Profile, FlagBuzzProfile)
 	fs.BoolVar(&f.Record, FlagBuzzRecord, false, "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)")
+	cmdline.NegatedBoolVar(fs, &f.Record, FlagBuzzRecord)
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
-	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
+	cmdline.NegatedBoolVar(fs, &f.Embedded, FlagBuzzEmbedded)
+	fs.BoolVar(&f.Autoload, FlagBuzzAutoload, true, "Execute the magusfile when the REPL starts; --no-autoload starts without it")
+	cmdline.NegatedBoolVar(fs, &f.Autoload, FlagBuzzAutoload)
 	fs.StringVar(&f.C, FlagBuzzC, "", "Change to `dir` before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag")
 	return &f
 }
@@ -1998,23 +2130,24 @@ func BindSpellLs(fs *flag.FlagSet) *SpellLsFlags {
 
 // SpellLockFlags are the flags declared for `magus spell lock`.
 type SpellLockFlags struct {
-	Update bool // --update
+	Update bool // --[no-]update
 }
 
 // BindSpellLock registers `magus spell lock`'s flags on fs and returns the destination.
 func BindSpellLock(fs *flag.FlagSet) *SpellLockFlags {
 	var f SpellLockFlags
 	fs.BoolVar(&f.Update, FlagSpellLockUpdate, false, "Ask the registry what each declared tag names now, and rewrite magus.lock")
+	cmdline.NegatedBoolVar(fs, &f.Update, FlagSpellLockUpdate)
 	return &f
 }
 
 // AgentFlags are the flags declared for `magus agent`.
 type AgentFlags struct {
 	Dir       string // --dir
-	Force     bool   // --force
-	DryRun    bool   // --dry-run
-	Tar       bool   // --tar
-	Global    bool   // --global
+	Force     bool   // --[no-]force
+	DryRun    bool   // --[no-]dry-run
+	Tar       bool   // --[no-]tar
+	Global    bool   // --[no-]global
 	SkillForm string // --skill-form
 }
 
@@ -2023,9 +2156,13 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	var f AgentFlags
 	fs.StringVar(&f.Dir, FlagAgentDir, ".", "Repo directory to install into (agent install)")
 	fs.BoolVar(&f.Force, FlagAgentForce, false, "Overwrite existing installed skill files (agent install)")
+	cmdline.NegatedBoolVar(fs, &f.Force, FlagAgentForce)
 	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
+	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagAgentDryRun)
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
+	cmdline.NegatedBoolVar(fs, &f.Tar, FlagAgentTar)
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagAgentGlobal)
 	fs.StringVar(&f.SkillForm, FlagAgentSkillForm, "both", "Skill form to install: both (default), short, or full (agent install)")
 	return &f
 }
@@ -2068,10 +2205,10 @@ func BindAgentAdoption(fs *flag.FlagSet) *AgentAdoptionFlags {
 
 // InitFlags are the flags declared for `magus init`.
 type InitFlags struct {
-	Global bool   // --global
-	DryRun bool   // --dry-run
-	Local  bool   // --local
-	Force  bool   // --force
+	Global bool   // --[no-]global
+	DryRun bool   // --[no-]dry-run
+	Local  bool   // --[no-]local
+	Force  bool   // --[no-]force
 	VCS    string // --vcs
 }
 
@@ -2079,38 +2216,46 @@ type InitFlags struct {
 func BindInit(fs *flag.FlagSet) *InitFlags {
 	var f InitFlags
 	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagInitGlobal)
 	fs.BoolVar(&f.DryRun, FlagInitDryRun, false, "Print the config, magusfile, and merge-driver destinations without writing any of them")
+	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagInitDryRun)
 	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
+	cmdline.NegatedBoolVar(fs, &f.Local, FlagInitLocal)
 	fs.BoolVar(&f.Force, FlagInitForce, false, "Replace an existing config file with one holding no keys")
+	cmdline.NegatedBoolVar(fs, &f.Force, FlagInitForce)
 	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
 	return &f
 }
 
 // DoctorFlags are the flags declared for `magus doctor`.
 type DoctorFlags struct {
-	Probe bool // --probe
-	Fix   bool // --fix
-	List  bool // --list
+	Probe bool // --[no-]probe
+	Fix   bool // --[no-]fix
+	List  bool // --[no-]list
 }
 
 // BindDoctor registers `magus doctor`'s flags on fs and returns the destination.
 func BindDoctor(fs *flag.FlagSet) *DoctorFlags {
 	var f DoctorFlags
 	fs.BoolVar(&f.Probe, FlagDoctorProbe, false, "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
+	cmdline.NegatedBoolVar(fs, &f.Probe, FlagDoctorProbe)
 	fs.BoolVar(&f.Fix, FlagDoctorFix, false, "Run the remedy each finding names, where one exists (see --dry-run to list them first)")
+	cmdline.NegatedBoolVar(fs, &f.Fix, FlagDoctorFix)
 	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run (name, subject, and MGS code) without running any of them")
+	cmdline.NegatedBoolVar(fs, &f.List, FlagDoctorList)
 	return &f
 }
 
 // ConfigSetFlags are the flags declared for `magus config set`.
 type ConfigSetFlags struct {
-	Global bool // --global
+	Global bool // --[no-]global
 }
 
 // BindConfigSet registers `magus config set`'s flags on fs and returns the destination.
 func BindConfigSet(fs *flag.FlagSet) *ConfigSetFlags {
 	var f ConfigSetFlags
 	fs.BoolVar(&f.Global, FlagConfigSetGlobal, false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
+	cmdline.NegatedBoolVar(fs, &f.Global, FlagConfigSetGlobal)
 	return &f
 }
 
@@ -2163,8 +2308,8 @@ func BindConfigHistoryImport(fs *flag.FlagSet, d ConfigHistoryImportDefaults) *C
 type ConfigCachePruneFlags struct {
 	OlderThan time.Duration // --older-than
 	KeepLast  int           // --keep-last
-	Remote    bool          // --remote
-	DryRun    bool          // --dry-run
+	Remote    bool          // --[no-]remote
+	DryRun    bool          // --[no-]dry-run
 }
 
 // BindConfigCachePrune registers `magus config cache prune`'s flags on fs and returns the destination.
@@ -2173,14 +2318,16 @@ func BindConfigCachePrune(fs *flag.FlagSet) *ConfigCachePruneFlags {
 	fs.DurationVar(&f.OlderThan, FlagConfigCachePruneOlderThan, 0, "Remove entries older than this duration (e.g. 168h = 7 days)")
 	fs.IntVar(&f.KeepLast, FlagConfigCachePruneKeepLast, 0, "Keep only the newest N entries, evict the rest (--remote only)")
 	fs.BoolVar(&f.Remote, FlagConfigCachePruneRemote, false, "Prune the configured remote backend instead of the local cache")
+	cmdline.NegatedBoolVar(fs, &f.Remote, FlagConfigCachePruneRemote)
 	fs.BoolVar(&f.DryRun, FlagConfigCachePruneDryRun, false, "Print what would be removed without deleting anything")
+	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagConfigCachePruneDryRun)
 	return &f
 }
 
 // ConfigCacheExportFlags are the flags declared for `magus config cache export`.
 type ConfigCacheExportFlags struct {
 	To     string // --to
-	Remote bool   // --remote
+	Remote bool   // --[no-]remote
 }
 
 // BindConfigCacheExport registers `magus config cache export`'s flags on fs and returns the destination.
@@ -2188,18 +2335,20 @@ func BindConfigCacheExport(fs *flag.FlagSet) *ConfigCacheExportFlags {
 	var f ConfigCacheExportFlags
 	fs.StringVar(&f.To, FlagConfigCacheExportTo, "", "Write the archive to this file (default: stdout)")
 	fs.BoolVar(&f.Remote, FlagConfigCacheExportRemote, false, "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive")
+	cmdline.NegatedBoolVar(fs, &f.Remote, FlagConfigCacheExportRemote)
 	return &f
 }
 
 // ConfigCacheImportFlags are the flags declared for `magus config cache import`.
 type ConfigCacheImportFlags struct {
-	Remote bool // --remote
+	Remote bool // --[no-]remote
 }
 
 // BindConfigCacheImport registers `magus config cache import`'s flags on fs and returns the destination.
 func BindConfigCacheImport(fs *flag.FlagSet) *ConfigCacheImportFlags {
 	var f ConfigCacheImportFlags
 	fs.BoolVar(&f.Remote, FlagConfigCacheImportRemote, false, "Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive")
+	cmdline.NegatedBoolVar(fs, &f.Remote, FlagConfigCacheImportRemote)
 	return &f
 }
 
@@ -2219,13 +2368,14 @@ func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFla
 
 // ConfigTokenGenerateFlags are the flags declared for `magus config token generate`.
 type ConfigTokenGenerateFlags struct {
-	Force bool // --force
+	Force bool // --[no-]force
 }
 
 // BindConfigTokenGenerate registers `magus config token generate`'s flags on fs and returns the destination.
 func BindConfigTokenGenerate(fs *flag.FlagSet) *ConfigTokenGenerateFlags {
 	var f ConfigTokenGenerateFlags
 	fs.BoolVar(&f.Force, FlagConfigTokenGenerateForce, false, "Overwrite an existing token (rotation)")
+	cmdline.NegatedBoolVar(fs, &f.Force, FlagConfigTokenGenerateForce)
 	return &f
 }
 
@@ -2233,8 +2383,8 @@ func BindConfigTokenGenerate(fs *flag.FlagSet) *ConfigTokenGenerateFlags {
 type ConfigConsoleTokenCreateFlags struct {
 	Name    string // --name
 	Expires string // --expires
-	Viewer  bool   // --viewer
-	Code    bool   // --code
+	Viewer  bool   // --[no-]viewer
+	Code    bool   // --[no-]code
 }
 
 // BindConfigConsoleTokenCreate registers `magus config console token create`'s flags on fs and returns the destination.
@@ -2243,14 +2393,16 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
 	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
 	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
+	cmdline.NegatedBoolVar(fs, &f.Viewer, FlagConfigConsoleTokenCreateViewer)
 	fs.BoolVar(&f.Code, FlagConfigConsoleTokenCreateCode, false, "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once")
+	cmdline.NegatedBoolVar(fs, &f.Code, FlagConfigConsoleTokenCreateCode)
 	return &f
 }
 
 // ManInstallFlags are the flags declared for `magus man install`.
 type ManInstallFlags struct {
 	Dir    string // --dir
-	DryRun bool   // --dry-run
+	DryRun bool   // --[no-]dry-run
 }
 
 // BindManInstall registers `magus man install`'s flags on fs and returns the destination.
@@ -2258,36 +2410,41 @@ func BindManInstall(fs *flag.FlagSet) *ManInstallFlags {
 	var f ManInstallFlags
 	fs.StringVar(&f.Dir, FlagManInstallDir, "", "Directory for section 1 man pages (default: the user manpath)")
 	fs.BoolVar(&f.DryRun, FlagManInstallDryRun, false, "Print what would be written without touching the filesystem")
+	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagManInstallDryRun)
 	return &f
 }
 
 // SelfUpdateFlags are the flags declared for `magus self update`.
 type SelfUpdateFlags struct {
-	Check   bool   // --check
+	Check   bool   // --[no-]check
 	Version string // --version
 	BinDir  string // --bin-dir
-	Force   bool   // --force
-	DryRun  bool   // --dry-run
-	Yes     bool   // --yes, -y
+	Force   bool   // --[no-]force
+	DryRun  bool   // --[no-]dry-run
+	Yes     bool   // --[no-]yes, -y
 }
 
 // BindSelfUpdate registers `magus self update`'s flags on fs and returns the destination.
 func BindSelfUpdate(fs *flag.FlagSet) *SelfUpdateFlags {
 	var f SelfUpdateFlags
 	fs.BoolVar(&f.Check, FlagSelfUpdateCheck, false, "Print whether an update is available and exit without installing")
+	cmdline.NegatedBoolVar(fs, &f.Check, FlagSelfUpdateCheck)
 	fs.StringVar(&f.Version, FlagSelfUpdateVersion, "", "Install a specific release tag (e.g. v0.4.2)")
 	fs.StringVar(&f.BinDir, FlagSelfUpdateBinDir, "", "Install into this directory instead of replacing in place")
 	fs.BoolVar(&f.Force, FlagSelfUpdateForce, false, "Allow downgrades and re-installs of the current version")
+	cmdline.NegatedBoolVar(fs, &f.Force, FlagSelfUpdateForce)
 	fs.BoolVar(&f.DryRun, FlagSelfUpdateDryRun, false, "Verify everything but do not replace the running binary")
+	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagSelfUpdateDryRun)
 	fs.BoolVar(&f.Yes, FlagSelfUpdateYes, false, "Skip interactive confirmation")
 	fs.BoolVar(&f.Yes, FlagSelfUpdateY, false, "Short for --yes")
+	cmdline.NegatedBoolVar(fs, &f.Yes, FlagSelfUpdateYes)
 	return &f
 }
 
 // SelfInstallShorthandFlags are the flags declared for `magus self install-shorthand`.
 type SelfInstallShorthandFlags struct {
 	Dir   string // --dir
-	Force bool   // --force
+	Force bool   // --[no-]force
 }
 
 // BindSelfInstallShorthand registers `magus self install-shorthand`'s flags on fs and returns the destination.
@@ -2295,17 +2452,19 @@ func BindSelfInstallShorthand(fs *flag.FlagSet) *SelfInstallShorthandFlags {
 	var f SelfInstallShorthandFlags
 	fs.StringVar(&f.Dir, FlagSelfInstallShorthandDir, "", "Directory for the shorthand (default: the running binary's directory)")
 	fs.BoolVar(&f.Force, FlagSelfInstallShorthandForce, false, "Replace an existing file at the shorthand path")
+	cmdline.NegatedBoolVar(fs, &f.Force, FlagSelfInstallShorthandForce)
 	return &f
 }
 
 // VersionFlags are the flags declared for `magus version`.
 type VersionFlags struct {
-	Client bool // --client
+	Client bool // --[no-]client
 }
 
 // BindVersion registers `magus version`'s flags on fs and returns the destination.
 func BindVersion(fs *flag.FlagSet) *VersionFlags {
 	var f VersionFlags
 	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the server probe entirely")
+	cmdline.NegatedBoolVar(fs, &f.Client, FlagVersionClient)
 	return &f
 }
