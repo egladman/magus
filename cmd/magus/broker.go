@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,10 +19,13 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -396,8 +400,8 @@ func crashHint(v versionOutput) string {
 // starts a broker when a step or a service finds none, which is how a long-lived
 // process (`magus mcp`, the server) gets one back after the last idled out. announce
 // false keeps a detached server's notice out of its log.
-func newBrokerClient(announce bool) *broker.Client {
-	return broker.NewClient(broker.DefaultAddr(),
+func newBrokerClient(announce bool, opts ...broker.ClientOption) *broker.Client {
+	return broker.NewClient(broker.DefaultAddr(), append([]broker.ClientOption{
 		broker.WithIdentity(os.Args, version),
 		broker.WithCrashHint(crashHint(newVersionOutput())),
 		broker.WithStart(func(ctx context.Context) bool {
@@ -406,7 +410,8 @@ func newBrokerClient(announce bool) *broker.Client {
 				noticeBroker(ctx, pid)
 			}
 			return broker.Live(ctx, broker.DefaultAddr())
-		}))
+		}),
+	}, opts...)...)
 }
 
 var (
@@ -415,10 +420,46 @@ var (
 )
 
 // processBrokerClient is this process's one broker client: one connection per process
-// is what lets the broker release everything the process held when it exits.
+// is what lets the broker release everything the process held when it exits. It names
+// the lease the process's checkout binds, and whether the process is a gate.
 func processBrokerClient() *broker.Client {
-	processBrokerOnce.Do(func() { processBroker = newBrokerClient(true) })
+	processBrokerOnce.Do(func() {
+		processBroker = newBrokerClient(true, broker.WithLease(processLease("")), broker.WithGate(gateArgv(os.Args[1:])))
+	})
 	return processBroker
+}
+
+// processLease is the lease this process's runs act under, as job.ActingLease resolves it
+// in the checkout workspace.FindRoot(rootOverride) finds. Outside a workspace only BAGGAGE
+// can name one. A checkout whose job store cannot be placed is said, and BAGGAGE answers.
+func processLease(rootOverride string) string {
+	claim := trail.LeaseFromEnv()
+	root, err := workspace.FindRoot(rootOverride)
+	if err != nil {
+		return claim
+	}
+	loc, err := jobPlace(root)
+	if err != nil {
+		slog.Warn("the broker charges this process's runs to the lease BAGGAGE names, not the one this checkout binds",
+			attr.Component("broker"), attr.Error(err))
+		return claim
+	}
+	lease, _ := job.ActingLease(loc, claim)
+	return lease
+}
+
+// gateArgv reports whether args run the ci composition: `affected ci` or `run ci`.
+func gateArgv(args []string) bool {
+	verb := slices.IndexFunc(args, func(a string) bool { return a == "affected" || a == "run" })
+	if verb < 0 {
+		return false
+	}
+	for _, a := range args[verb+1:] {
+		if !strings.HasPrefix(a, "-") {
+			return a == string(types.TargetCI)
+		}
+	}
+	return false
 }
 
 // brokerUnits is `magus broker units [systemd|launchd]`: print the files a supervisor

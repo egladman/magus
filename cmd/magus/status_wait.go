@@ -44,7 +44,7 @@ func awaitBudget(ctx context.Context, rootOverride string) error {
 		claims[i].Weight = weight
 	}
 	err := withinDeadline(ctx, 0, queryCapacity, func(ctx context.Context) error {
-		return awaitSeat(ctx, reader, argv, claims, waiting)
+		return awaitSeat(ctx, processLease(rootOverride), reader, argv, claims, waiting)
 	})
 	if err == nil && waited {
 		slog.InfoContext(ctx, fmt.Sprintf("the build budget can seat it now, after %s", time.Since(start).Round(time.Second)), attr.Notice(""), attr.Component("magus"))
@@ -75,9 +75,10 @@ func withinDeadline(ctx context.Context, deadline time.Duration, snapshot func(c
 // awaitSeat is one request the broker holds until the budget can seat claims: for a magus
 // reader, whose command argv is, a seat held for it; for any other reader (0), only the
 // word that the budget has room. The deadline is ctx's. With no broker, or one shutting
-// down, nothing is held and the run admits itself; that is said rather than assumed.
-func awaitSeat(ctx context.Context, reader int, argv []string, claims []types.MachineClaim, waiting func(string)) error {
-	client := broker.NewClient(broker.DefaultAddr())
+// down, nothing is held and the run admits itself; that is said rather than assumed. The
+// seat is held in lease's name.
+func awaitSeat(ctx context.Context, lease string, reader int, argv []string, claims []types.MachineClaim, waiting func(string)) error {
+	client := broker.NewClient(broker.DefaultAddr(), broker.WithLease(lease))
 	defer func() { _ = client.Close() }()
 	wait := func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
 		return client.Await(ctx, claims, parked)

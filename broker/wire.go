@@ -77,9 +77,13 @@ type hello struct {
 	Dir      string   `json:"dir,omitempty"`
 	Argv     []string `json:"argv,omitempty"`
 	Version  string   `json:"version,omitempty"`
-	// Lease is the job lease the process acts under, from its BAGGAGE; "" for a run
-	// nobody leased, which no validation cap counts.
+	// Lease is the job lease the process acts under: the one its checkout's marker binds
+	// (see [WithLease]), else its BAGGAGE's; "" for a run nobody leased, which no
+	// validation cap counts.
 	Lease string `json:"lease,omitempty"`
+	// Gate is a process running the ci composition. Its claims, and those of every magus
+	// it runs, outrank other runs' for seats (see [GateWait]).
+	Gate bool `json:"gate,omitzero"`
 	// Tree is the root of Lease's job tree and MaxValidations the workspace's
 	// jobs.max_validations: how many runs of that tree's leased workers the broker seats
 	// at once. Zero is no cap.
@@ -148,6 +152,8 @@ type parkedReply struct {
 	Verdict types.MachineVerdict `json:"verdict"`
 	Blocked types.MachineClaim   `json:"blocked,omitzero"`
 	Seat    *SeatWait            `json:"seat,omitempty"`
+	// Gate is set on a gate's claim that waits for another invocation's seats.
+	Gate *GateWait `json:"gate,omitempty"`
 }
 
 // cancelRequest drops this connection's parked request with id ID, which is then
@@ -254,6 +260,8 @@ const (
 	CodeDraining ErrorCode = "draining"
 	// CodeCancelled answers a parked request its client cancelled.
 	CodeCancelled ErrorCode = "cancelled"
+	// CodeGateTimeout answers a gate's claim that waited gateWaitBound for a seat.
+	CodeGateTimeout ErrorCode = "gate-timeout"
 )
 
 // errorReply is the body of an error frame.

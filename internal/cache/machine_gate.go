@@ -25,7 +25,9 @@ import (
 type MachineAdmitter interface {
 	// Claim asks the budget to seat c. A claim kept out only by its own process's or run's
 	// claims, or by its job tree's validation seat, is held by the budget until it is
-	// seated or ctx ends, which returns ctx's error; any other refusal answers at once.
+	// seated or ctx ends, which returns ctx's error; so is a claim of the oldest gate's run,
+	// up to a bound past which the error is a types.ExitError. Any other refusal answers
+	// at once.
 	Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
 	// Overrun says the granted claim id held more than its memory curve predicted, so

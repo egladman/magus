@@ -50,6 +50,19 @@ func WithIdentity(argv []string, version string) ClientOption {
 	return func(c *Client) { c.hello.Argv, c.hello.Version = argv, version }
 }
 
+// WithLease names the lease the client's runs act under, which the broker charges each
+// claim to: the one the checkout's marker binds, as job.ActingLease resolves it. Without
+// it the client names the lease its BAGGAGE carries, if any.
+func WithLease(lease string) ClientOption {
+	return func(c *Client) { c.hello.Lease = lease }
+}
+
+// WithGate marks the client's process as running the ci composition, whose claims
+// outrank other runs' for seats (see [GateWait]).
+func WithGate(gate bool) ClientOption {
+	return func(c *Client) { c.hello.Gate = gate }
+}
+
 // WithStart sets how a client brings up a broker when none answers a Request or an
 // AcquireService: start runs once per such call and reports whether one should now
 // answer, and the call dials again only then. Status, Release and Shutdown never start
@@ -190,8 +203,10 @@ func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.M
 
 // Claim is Request, except that a claim kept out only by its own process's or run's
 // claims, or by its job tree's validation seat, is held by the broker until a release
-// makes room, and answered then. It blocks on the connection meanwhile, and ctx ending
-// cancels the wait and returns ctx's error. Any other refusal answers at once.
+// makes room, and answered then. So is a claim of the oldest gate's run, until it has
+// waited gateWaitBound, when the error is a [types.ExitError] of exit 75 naming the bound.
+// It blocks on the connection meanwhile, and ctx ending cancels the wait and returns
+// ctx's error. Any other refusal answers at once.
 func (c *Client) Claim(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
 	return c.claim(ctx, claim, true)
 }
@@ -210,10 +225,18 @@ func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool)
 	}
 	if park {
 		request := claimRequest{Claim: claim, Park: true}
-		parked := func(p parkedReply) { c.noteSeat(ctx, p.Seat) }
+		parked := func(p parkedReply) {
+			c.noteSeat(ctx, p.Seat)
+			if p.Gate != nil {
+				slog.InfoContext(ctx, p.Gate.String(), attr.Notice("broker"))
+			}
+		}
 		err = c.parkedCall(ctx, cn, typeClaim, request, typeClaimReply, &reply, parked, late)
 	} else {
 		err = cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late)
+	}
+	if refused := (*Error)(nil); errors.As(err, &refused) && refused.Code == CodeGateTimeout {
+		return types.MachineVerdict{}, gateRefusal(refused.Message)
 	}
 	if err != nil {
 		return types.MachineVerdict{}, err

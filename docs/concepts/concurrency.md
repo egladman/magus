@@ -330,10 +330,20 @@ Key properties:
   for them, on the same terms as the lock. `magus status --wait` is the wait a caller
   asks for: it reserves the seat it sized for the run it pipes into, so that run is not
   refused, while a bare run still refuses at once.
+- **A gate goes first.** A gate is `magus affected ci` or `magus run ci`, and every magus
+  it runs. While a gate's claim waits, no other run is seated in the room it waits for:
+  that run is refused as if the gate already held it. The oldest gate on the machine,
+  counted from its first claim, waits for seats other invocations hold instead of
+  failing part-way, says what it waits for and who holds it, and gives up after 30
+  minutes with a refusal naming the bound. Every other gate still refuses at once, so two
+  gates never wait on each other. This covers the claims a gate makes after
+  `magus status --wait` reserved its first.
 - **A person can get one job out of a bind.** `magus job pause <job>...` refuses that
   job's holder its next magus run, through `magus job exec` and the guard, until
   `magus job resume <job>...`; a run already holding the budget finishes, since nothing
-  is preempted. A job's `weight`, in (0,1] on its record and 0.5 when omitted, leans
+  is preempted. A run is charged to the lease its checkout's `magus job exec` binds, else
+  to the one `BAGGAGE` names, and `magus status` names it, or says `unleased`. A job's
+  `weight`, in (0,1] on its record and 0.5 when omitted, leans
   its waiters forward: a run bound to the job asks again every 100ms (500ms under
   `status --wait`) divided by weight/0.5, so weight 1 asks twice as often. It is a lean,
   never a guarantee: the broker keeps no queue, and the first ask after a release wins.

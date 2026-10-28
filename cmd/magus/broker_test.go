@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -172,4 +173,30 @@ func TestCrashHint(t *testing.T) {
 		assert.Contains(t, hint, "not published")
 		assert.NotContains(t, hint, "/tree/")
 	}
+}
+
+// GateArgvSuite pins which command lines the broker is told run the ci composition, the
+// runs whose claims outrank every other's for seats.
+type GateArgvSuite struct{ suite.Suite }
+
+func TestGateArgvSuite(t *testing.T) { suite.Run(t, new(GateArgvSuite)) }
+
+func (s *GateArgvSuite) TestAffectedCIIsAGate() {
+	s.True(gateArgv([]string{"affected", "ci", "-s"}))
+}
+
+func (s *GateArgvSuite) TestRunCIIsAGate() {
+	s.True(gateArgv([]string{"-v", "run", "ci", "."}))
+}
+
+func (s *GateArgvSuite) TestANarrowRunIsNoGate() {
+	s.False(gateArgv([]string{"run", "go-test", "."}))
+}
+
+func (s *GateArgvSuite) TestAProjectNamedCIIsNoGate() {
+	s.False(gateArgv([]string{"run", "lint", "ci"}))
+}
+
+func (s *GateArgvSuite) TestAVerbThatRunsNothingIsNoGate() {
+	s.False(gateArgv([]string{"status", "--wait"}))
 }
