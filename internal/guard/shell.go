@@ -1313,8 +1313,10 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
 			op, _ := spell.Op(operation)
-			// Installs are advised, never denied: see installAdvised.
-			if op.Kind == spells.OpKindInstall || !carriesModeArgs(op.ModeArgs, c.Args) {
+			// Installs are advised, never denied: see installAdvised. A symbol index op
+			// is graph build's to run, and its command can be a read: matching the Go
+			// indexer's `go list ./...` would deny every `go list`.
+			if op.Kind == spells.OpKindInstall || op.Kind == spells.OpKindSymbolIndex || !carriesModeArgs(op.ModeArgs, c.Args) {
 				continue
 			}
 			for _, charms := range [][]string{nil, {"rw"}} {

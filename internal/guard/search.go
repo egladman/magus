@@ -48,8 +48,9 @@ type staleGraph struct {
 
 // graphMoved reports why the graph a deny would route to no longer describes this
 // checkout: a merge, rebase, cherry-pick or revert is underway, or the guard index was
-// built at another revision. A deny over a stale graph would push the reader from a
-// correct grep to a wrong answer. With no revision to compare, the index's stamps decide.
+// built during one. A deny over a stale graph would push the reader from a correct grep to
+// a wrong answer. The revision the index was built at is not compared: a commit moves it
+// without moving a file, and the index's per-file stamps already say which files moved.
 func graphMoved(deps Dependencies) staleGraph {
 	if deps.scope.root == "" {
 		return staleGraph{}
@@ -63,7 +64,6 @@ func graphMoved(deps Dependencies) staleGraph {
 	if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
 		return staleGraph{reason: knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), underway: true}
 	}
-	// The index header is a file read; the revision starts processes, so it waits on one.
 	cacheDir, err := deps.cacheDir(root)
 	if err != nil {
 		return staleGraph{}
@@ -72,14 +72,7 @@ func graphMoved(deps Dependencies) staleGraph {
 	if err != nil {
 		return staleGraph{}
 	}
-	if built.Operation != "" {
-		return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{})}
-	}
-	rev := deps.revision(ctx, root, "")
-	if rev == "" {
-		return staleGraph{}
-	}
-	return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{Revision: rev})}
+	return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{})}
 }
 
 // verdict is graph-stale's advice in place of the deny: the search runs, and the rebuild
@@ -151,7 +144,7 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 }
 
 // symbolSearchVerdict refuses a search the judgment routed, serving the rebuild first when
-// the index is behind or describes another revision. A rebase still underway advises
+// the index is behind or was built during a history rewrite. A rebase still underway advises
 // instead: a rebuild then would describe a tree about to move again.
 func symbolSearchVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, piped bool) ShellVerdict {
 	moved := graphMoved(deps)

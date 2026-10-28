@@ -428,36 +428,39 @@ func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
 	}
 }
 
-// An index built at another revision than HEAD advises in place of the translation and
-// reader denies, and turns symbol-search's deny into one that serves the rebuild first;
-// one built at HEAD, named by its full id or an abbreviation, denies as usual.
-func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
+// An index built at another revision than HEAD denies as usual: a commit moves the
+// revision without moving a file, and the index's per-file stamps say which files moved.
+func TestGraphBackedDeniesHoldOnAnIndexFromAnotherRevision(t *testing.T) {
 	root, deps := staleGraphTree(t)
 	cacheDir := t.TempDir()
-	const built = "0123456789abcdef0123"
-	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{Revision: built}))
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{Revision: "0123456789abcdef0123"}))
+	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
+	deps.Revision = func(context.Context, string, string) string { return "fedcba9" }
+
+	for _, tt := range staleGraphCommands {
+		v := Evaluate(strict(deps), tt.command)
+		assert.Equal(t, tt.rule, v.Rule.Name, tt.command)
+		assert.NotContains(t, v.Deny, "describes another tree", tt.command)
+	}
+}
+
+// An index built while a rebase was underway advises in place of the denies: it describes
+// a tree the rebase went on to move.
+func TestGraphBackedDeniesAdviseOnAnIndexBuiltMidRebase(t *testing.T) {
+	root, deps := staleGraphTree(t)
+	cacheDir := t.TempDir()
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{Operation: "rebase"}))
 	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
 
-	for _, head := range []string{built, "0123456"} {
-		deps.Revision = func(context.Context, string, string) string { return head }
-		for _, tt := range staleGraphCommands {
-			assert.Equal(t, tt.rule, Evaluate(strict(deps), tt.command).Rule.Name, "%s at %s", tt.command, head)
-		}
-	}
-
-	deps.Revision = func(context.Context, string, string) string { return "fedcba9" }
 	for _, tt := range staleGraphCommands {
 		v := Evaluate(strict(deps), tt.command)
 		if tt.rule == denyRuleSymbolSearch {
-			assert.Equal(t, denyRuleSymbolSearch, v.Rule.Name, tt.command)
-			assert.Contains(t, v.Deny, "graph build --silent`.", tt.command)
-			assert.Contains(t, v.Deny, "the symbol index describes another tree (the index was built at 0123456789ab and the checkout is at fedcba9)", tt.command)
+			assert.Contains(t, v.Deny, "the symbol index describes another tree (the index was built during a rebase)", tt.command)
 			continue
 		}
 		assert.Empty(t, v.Deny, tt.command)
 		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
-		assert.Contains(t, v.Brief, "the graph is stale, the index was built at 0123456789ab and the checkout is at fedcba9.", tt.command)
-		assert.NotContains(t, v.Brief, "once that is finished", tt.command)
+		assert.Contains(t, v.Brief, "the graph is stale, the index was built during a rebase.", tt.command)
 	}
 }
 
