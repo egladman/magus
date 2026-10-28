@@ -79,14 +79,8 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 	if truthyEnv(os.Getenv(bootstrapExecOptOutVar)) {
 		return "", false
 	}
-	// self is runningBinaryPath's symlink-resolved os.Executable; go run links it at
-	// <tmp>/go-build<N>/b001/exe/<name>.
-	if exeDir := filepath.Dir(self); filepath.Base(exeDir) == "exe" {
-		for dir := filepath.Dir(exeDir); filepath.Dir(dir) != dir; dir = filepath.Dir(dir) {
-			if strings.HasPrefix(filepath.Base(dir), "go-build") {
-				return "", false
-			}
-		}
+	if goRunBinary(self) {
+		return "", false
 	}
 	if os.Getenv(bootstrapExecSentinelVar) != "" {
 		return "", false

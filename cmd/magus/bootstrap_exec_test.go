@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -155,6 +156,18 @@ func TestBootstrapExecDecisionGoRunBuildKeepsOwnBinary(t *testing.T) {
 	installedSelf := filepath.Join(t.TempDir(), "bin", bootstrapFixtureBinaryName())
 	_, ok = bootstrapExecDecision(argv, installedSelf)
 	assert.True(t, ok, "an installed binary still defers to the placed ./magus")
+}
+
+func TestBootstrapExecDecisionCachedGoRunBuildKeepsOwnBinary(t *testing.T) {
+	unsetBootstrapExecEnv(t)
+	dir := t.TempDir()
+	writeBootstrapFixtureWorkspace(t, dir)
+	t.Chdir(dir)
+
+	id := "ab" + strings.Repeat("0", 62)
+	cachedSelf := filepath.Join(t.TempDir(), "go-cache", "ab", id+"-d", bootstrapFixtureBinaryName())
+	_, ok := bootstrapExecDecision([]string{"magus", "run", "go-build", "--no-cache", "."}, cachedSelf)
+	assert.False(t, ok, "the escape's go run build runs from the build cache and must not defer to the placed ./magus")
 }
 
 // Test 4: --root picks the named tree rather than $PWD.
