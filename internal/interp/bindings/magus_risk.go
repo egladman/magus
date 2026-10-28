@@ -13,14 +13,14 @@ import (
 // buildRisk assembles magus\risk, the tier magus proves for a change. Hand-bound for the
 // reason buildJob is: every failure goes through ffi.Error so a caught value is the same
 // map every other magus\* raise hands back.
-func buildRisk(obs buzz.DirectObserver) vm.Value {
+func buildRisk(sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	risk := vm.NewMap()
 	risk.MapSet("assess", directVal(obs, "magus.risk.assess", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		report, err := std.MagusRiskAssess(ctx, ffi.String(args, 0), ffi.AnyMap(args, 1))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindgen.ObjectRiskReport(report), nil
+		return bindgen.ObjectRiskReport(report, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	return risk
 }

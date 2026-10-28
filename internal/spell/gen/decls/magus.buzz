@@ -377,6 +377,14 @@ export enum<str> HarnessChangeOp {
     write = "write",
 }
 
+export enum<str> RiskTier {
+    none = "",
+    trivial = "trivial",
+    mechanical = "mechanical",
+    scoped = "scoped",
+    full = "full",
+}
+
 export enum<str> TrailSection {
     none = "",
     refused = "refused",
@@ -1688,6 +1696,25 @@ export object WriteRequest {
     newText: str = "",
 }
 
+export object StopRequest {
+    host: str = "",
+    session: str = "",
+    agent: str = "",
+    parent: str = "",
+    role: AgentRole = AgentRole.none,
+    lease: Job? = null,
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
+    window: ContextWindow? = null,
+    event: str = "",
+    stopHookActive: bool = false,
+    transcript: str = "",
+    checkout: CheckoutState? = null,
+    dir: str = "",
+    workspace: str = "",
+}
+
 export object BriefDecision {
     what: str = "",
     why: str = "",
@@ -2251,6 +2278,39 @@ export object ServiceLease {
     idle: str = "",
 }
 
+export object RiskOptions {
+    base: str = "",
+    paths: [str] = [],
+    checkout: str = "",
+}
+
+export object RiskEvidence {
+    path: str = "",
+    project: str = "",
+    target: str = "",
+    class: str = "",
+    tier: RiskTier = RiskTier.none,
+    why: str = "",
+    packages: [str] = [],
+}
+
+export object RiskGateStep {
+    target: str = "",
+    projects: [str] = [],
+    op: str = "",
+    packages: [str] = [],
+    argv: [str] = [],
+}
+
+export object RiskReport {
+    base: str = "",
+    target: str = "",
+    tier: RiskTier = RiskTier.none,
+    affected: [str] = [],
+    evidence: [RiskEvidence] = [],
+    gate: [RiskGateStep] = [],
+}
+
 export object TrailMark {
     id: str = "",
     section: TrailSection = TrailSection.none,
@@ -2363,6 +2423,7 @@ export object guard {
     static extern fun profile(level: str) > void;
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
+    static extern fun stop(rule: fun (req: StopRequest) > GuardVerdict !> any) > void;
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
 
@@ -2433,6 +2494,11 @@ export object service {
 // Facts about the workspace's version control that only magus computes. The `vcs` host module is the repository itself; this namespace is magus's reading of it. Bound by hand in internal/interp/bindings (buildVCS).
 export object vcs {
     static extern fun checkpoint() > VCSCheckpoint !> any;
+}
+
+// The risk tier magus proves for a change, the one `affected ci` sizes its gate by. Bound by hand in internal/interp/bindings (buildRisk).
+export object risk {
+    static extern fun assess(target: str, opts: RiskOptions? = null) > RiskReport !> any;
 }
 
 // A session's guard record, read from the activity trail, and the verdicts a person gives its rows. Bound by hand in internal/interp/bindings (buildTrail).

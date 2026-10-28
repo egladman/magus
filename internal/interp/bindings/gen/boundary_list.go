@@ -319,6 +319,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "RetryVerdict", Zero: types.RetryVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRetryVerdict(v.(types.RetryVerdict), enums) }},
 	{Name: "ReviewDraft", Zero: types.ReviewDraft{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewDraft(v.(types.ReviewDraft)) }},
 	{Name: "ReviewRef", Zero: types.ReviewRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewRef(v.(types.ReviewRef)) }},
+	{Name: "RiskEvidence", Zero: types.RiskEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRiskEvidence(v.(types.RiskEvidence), enums) }},
+	{Name: "RiskGateStep", Zero: types.RiskGateStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRiskGateStep(v.(types.RiskGateStep)) }},
+	{Name: "RiskReport", Zero: types.RiskReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRiskReport(v.(types.RiskReport), enums) }},
 	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc), enums) }},
 	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(types.StatusRun), enums) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandbox(v.(spells.Sandbox), enums) }},
@@ -339,6 +342,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "SpellToolchain", Zero: types.SpellToolchain{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellToolchain(v.(types.SpellToolchain)) }},
 	{Name: "SpellVersion", Zero: types.SpellVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellVersion(v.(types.SpellVersion)) }},
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
+	{Name: "StopRequest", Zero: types.StopRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStopRequest(v.(types.StopRequest), enums) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }},
 	{Name: "SymbolIndexDigest", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectSymbolIndexDigest(v.(types.SymbolIndexDigest), enums)

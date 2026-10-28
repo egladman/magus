@@ -4578,6 +4578,39 @@ func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
+func ObjectStopRequest(v types.StopRequest, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StringValue(v.Host))
+	out.MapSet("session", vm.StringValue(v.Session))
+	out.MapSet("agent", vm.StringValue(v.Agent))
+	out.MapSet("parent", vm.StringValue(v.Parent))
+	out.MapSet("role", enums.Case("AgentRole", string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease), enums)
+	}
+	out.MapSet("lease", optLease)
+	out.MapSet("thread", enums.Case("AgentThread", string(v.Thread)))
+	out.MapSet("threadFrom", enums.Case("ThreadSource", string(v.ThreadFrom)))
+	out.MapSet("orchestration", enums.Case("Orchestration", string(v.Orchestration)))
+	optWindow := vm.Null
+	if v.Window != nil {
+		optWindow = ObjectContextWindow((*v.Window), enums)
+	}
+	out.MapSet("window", optWindow)
+	out.MapSet("event", vm.StringValue(v.Event))
+	out.MapSet("stopHookActive", vm.BoolValue(v.StopHookActive))
+	out.MapSet("transcript", vm.StringValue(v.Transcript))
+	optCheckout := vm.Null
+	if v.Checkout != nil {
+		optCheckout = ObjectCheckoutState((*v.Checkout))
+	}
+	out.MapSet("checkout", optCheckout)
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	out.MapSet("workspace", vm.StringValue(v.Workspace))
+	return out
+}
+
 func ObjectGuardVerdict(v types.GuardVerdict, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", enums.Case("GuardDecision", string(v.Decision)))
@@ -4590,6 +4623,67 @@ func ObjectGuardBinary(v types.GuardBinary) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("stamp", vm.StringValue(v.Stamp))
+	return out
+}
+
+func ObjectRiskEvidence(v types.RiskEvidence, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("project", vm.StringValue(v.Project))
+	out.MapSet("target", vm.StringValue(v.Target))
+	out.MapSet("class", vm.StringValue(v.Class))
+	out.MapSet("tier", enums.Case("RiskTier", string(v.Tier)))
+	out.MapSet("why", vm.StringValue(v.Why))
+	itemsPackages := make([]vm.Value, len(v.Packages))
+	for indexPackages := range v.Packages {
+		itemsPackages[indexPackages] = vm.StringValue(v.Packages[indexPackages])
+	}
+	out.MapSet("packages", vm.ListValue(itemsPackages))
+	return out
+}
+
+func ObjectRiskGateStep(v types.RiskGateStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("target", vm.StringValue(v.Target))
+	itemsProjects := make([]vm.Value, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = vm.StringValue(v.Projects[indexProjects])
+	}
+	out.MapSet("projects", vm.ListValue(itemsProjects))
+	out.MapSet("op", vm.StringValue(v.Op))
+	itemsPackages := make([]vm.Value, len(v.Packages))
+	for indexPackages := range v.Packages {
+		itemsPackages[indexPackages] = vm.StringValue(v.Packages[indexPackages])
+	}
+	out.MapSet("packages", vm.ListValue(itemsPackages))
+	itemsArgv := make([]vm.Value, len(v.Argv))
+	for indexArgv := range v.Argv {
+		itemsArgv[indexArgv] = vm.StringValue(v.Argv[indexArgv])
+	}
+	out.MapSet("argv", vm.ListValue(itemsArgv))
+	return out
+}
+
+func ObjectRiskReport(v types.RiskReport, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StringValue(v.Base))
+	out.MapSet("target", vm.StringValue(v.Target))
+	out.MapSet("tier", enums.Case("RiskTier", string(v.Tier)))
+	itemsAffected := make([]vm.Value, len(v.Affected))
+	for indexAffected := range v.Affected {
+		itemsAffected[indexAffected] = vm.StringValue(v.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	itemsEvidence := make([]vm.Value, len(v.Evidence))
+	for indexEvidence := range v.Evidence {
+		itemsEvidence[indexEvidence] = ObjectRiskEvidence(v.Evidence[indexEvidence], enums)
+	}
+	out.MapSet("evidence", vm.ListValue(itemsEvidence))
+	itemsGate := make([]vm.Value, len(v.Gate))
+	for indexGate := range v.Gate {
+		itemsGate[indexGate] = ObjectRiskGateStep(v.Gate[indexGate])
+	}
+	out.MapSet("gate", vm.ListValue(itemsGate))
 	return out
 }
 
