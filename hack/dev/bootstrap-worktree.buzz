@@ -4,6 +4,7 @@ import "encoding/json";
 import "env";
 import "flags";
 import "fs";
+import "io";
 import "path";
 import "proc";
 import "std";
@@ -245,11 +246,20 @@ export fun buildRefusal(lease: str, source: str, root: str = "", described: str 
         + "or to place a built binary with `--from {source}`.";
 }
 
-// buildFrom compiles magus in source with the checkout's own ./magus, so the go-build target stamps it.
-fun buildFrom(source: str) > void !> any {
+// buildFrom compiles magus in source with the checkout's own ./magus, so the go-build target
+// stamps it, for placing in root. It raises buildRefusal under a lease that may not build.
+fun buildFrom(source: str, root: str) > void !> any {
     final bin = "{source}/magus";
     if (!fs\isFile(bin)) {
         throw "bootstrap-worktree: {source} holds no ./magus to build with; `GOEXPERIMENT=jsonv2 go -C {source} run -trimpath ./cmd/magus run go-build --no-cache .` makes the first one";
+    }
+    final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
+    if (lease != "") {
+        final described = magusAt(bin, root: source, args: ["describe", "job", lease, "-o", "json"]) catch "";
+        final refused = buildRefusal(lease, source: source, root: root, described: described);
+        if (refused != "") {
+            throw refused;
+        }
     }
     proc\exec(bin, args: buildArgs(source));
 }
@@ -306,9 +316,24 @@ export fun refreshSkills(run: fun (args: [str]) > str !> any, lease: str) > str 
 
 // claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
 // graph: the lease records the base, so an edit made while the graph builds lands after it.
-// run executes a magus subcommand and returns its output.
+// run executes a magus subcommand and returns its output. When the exec fails on a running
+// job, its holder already holds the lease: that is said on stderr, and the row comes back
+// with no id, taken by nobody here.
 export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: str, main: str, trackedClean: fun () > bool !> any, detach: fun (checkpoint: str) > void !> any) > Row !> any {
-    final took = run(["job", "exec", job]);
+    var took = "";
+    try {
+        took = run(["job", "exec", job]);
+    } catch (e: str) {
+        final held = parseRow(run(["describe", "job", job, "-o", "json"]));
+        if (held.state != "running") {
+            throw e;
+        }
+        // ./magus is placed and the lease is where it belongs. Raising here exited 1 on a
+        // success, which taught callers to ignore this script's exit status.
+        io\stderr.write("bootstrap-worktree: placed ./magus; job {job} is running, its lease held by its holder in {held.checkoutRoot}, "
+            + "so this session took no lease and built no graph. The exec said: {e}\n");
+        return Row{ id = "", state = held.state, checkpoint = held.checkpoint, reportedBase = held.reportedBase, baseVerdict = held.baseVerdict, checkoutRoot = held.checkoutRoot };
+    }
     foreach (line in took.split("\n")) {
         if (line.trim() != "") {
             std\print("  {line.trim()}");
@@ -377,19 +402,11 @@ export fun main(args: [str]) > void !> any {
         if (source != "" and source != built) {
             throw "bootstrap-worktree: --from and --build-from name different checkouts\n{USAGE}";
         }
-        final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
-        if (lease != "") {
-            final described = magusAt("{built}/magus", root: built, args: ["describe", "job", lease, "-o", "json"]) catch "";
-            final refused = buildRefusal(lease, source: built, root: root, described: described);
-            if (refused != "") {
-                throw refused;
-            }
-        }
         source = built;
         if (parsed.values["--check"] != null) {
             throw "bootstrap-worktree: --check writes nothing, so it cannot build; use --from\n{USAGE}";
         }
-        buildFrom(source);
+        buildFrom(source, root: root);
     }
     if (parsed.values["--check"] != null) {
         if (source == "") {
@@ -410,6 +427,9 @@ export fun main(args: [str]) > void !> any {
         throw "bootstrap-worktree: --job is required: the lease is the point of a worker's worktree\n{USAGE}";
     }
     final row = bootstrap(root, job: job, source: source);
+    if (row.id == "") {
+        return;
+    }
     foreach (line in render(row, root: root)) {
         std\print(line);
     }
