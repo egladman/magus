@@ -309,6 +309,8 @@ func printOwnDefaults(fs *flag.FlagSet) {
 
 // printRootFlags prints the flags the command tree declares on the program itself.
 func printRootFlags(w io.Writer) {
+	// nodisplayflags: this set only prints the root's declared flags in the top-level
+	// help, which lists the display flags itself; it parses nothing.
 	fs := flag.NewFlagSet(commands.Root.Name, flag.ContinueOnError)
 	commands.Root.BindFlags(fs)
 	printFlagHelp(w, cmdline.FlagHelp(fs, nil))
