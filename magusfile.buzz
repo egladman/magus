@@ -177,13 +177,44 @@ magus\project({
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
         "serve": {"skip_cache": "blocks as a long-running dev server and never returns"},
         // No ctx.writesFiles: output globs feed .gitattributes, where gen/site cannot conflict.
-        "deploy-generate": {"skip_cache": "assembles a gitignored deploy tree that is never snapshotted"},
+        "deploy-generate": {
+            "skip_cache": "assembles a gitignored deploy tree that is never snapshotted",
+            "integrates": "assembles the deploy tree",
+        },
         // No isolation flag; see docs/decisions/0001.
-        "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
+        "generate": {
+            "skip_cache": "is the drift gate itself; a replay would skip the check it exists to make",
+            "integrates": "regenerates every generated file",
+        },
         "harness-drift": {"skip_cache": "plans with the running binary's harness planner, which no input glob can key"},
-        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
-        "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
-        "symbol-digest-generate": {"skip_cache": "digests the symbol index in the cache, which no input glob can key; it runs before any replay of a target reading gen/symbol-index.json, so those stay cacheable"},
+        "index-generate": {
+            "skip_cache": "output derives from the entire knowledge graph, which no input glob can key",
+            "integrates": "regenerates the knowledge index",
+        },
+        "graph-generate": {
+            "skip_cache": "output derives from the entire knowledge graph, which no input glob can key",
+            "integrates": "regenerates the knowledge graph",
+        },
+        "symbol-digest-generate": {
+            "skip_cache": "digests the symbol index in the cache, which no input glob can key; it runs before any replay of a target reading gen/symbol-index.json, so those stay cacheable",
+            "integrates": "regenerates the symbol digest",
+        },
+        // An integrator runs these to integrate work; the guard reads `integrates`, never a name.
+        "bindings-generate": {"integrates": "regenerates the Buzz bindings"},
+        "config-generate": {"integrates": "regenerates the config bindings"},
+        "go-api-generate": {"integrates": "regenerates the Go API lock"},
+        "job-generate": {"integrates": "regenerates the job schemas"},
+        "langservice-generate": {"integrates": "regenerates the language service manifest"},
+        "magusfile-api-generate": {"integrates": "regenerates the magusfile API lock"},
+        "man-generate": {"integrates": "regenerates the man pages"},
+        "mcp-tools-generate": {"integrates": "regenerates the MCP tool registry"},
+        "mocks-generate": {"integrates": "regenerates the mocks"},
+        "proofread-decisions-generate": {"integrates": "regenerates the proofread decisions"},
+        "skills-generate": {"integrates": "regenerates the installed skills"},
+        "spells-generate": {"integrates": "regenerates the spell declarations"},
+        "termcast-generate": {"integrates": "regenerates the terminal casts"},
+        "termshots-generate": {"integrates": "regenerates the terminal shots"},
+        "types-generate": {"integrates": "regenerates the Buzz type mirrors"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
         "agent-bench-run": {
             "skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened",
@@ -195,7 +226,11 @@ magus\project({
             "skip_cache": "drives the installed agent hosts, whose versions and logins no input glob can key",
             "human_only": "drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
         },
-        "go-build": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
+        "go-build": {
+            "skip_cache": "declares no outputs, so a replay would skip the link and restore no binary",
+            "relinks": "./magus",
+            "integrates": "links ./magus",
+        },
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},

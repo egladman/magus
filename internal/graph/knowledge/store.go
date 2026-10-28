@@ -90,14 +90,13 @@ type manifest struct {
 	// IndexesKnown distinguishes a workspace that declares no index from a manifest that
 	// never recorded them, which the encoding of an empty list cannot.
 	IndexesKnown bool `json:"indexes_known,omitempty"`
-	// HumanOnly is what the workspace declared human_only at the same sync as Indexes (see
-	// Inputs.HumanOnly), under the same rule: a function of the inputs the domain stamps
-	// fold, so a read whose domain fast stamp matches may use it in place of evaluating
-	// the workspace.
-	HumanOnly types.HumanOnlyIndex `json:"human_only,omitzero"`
-	// HumanOnlyKnown distinguishes a workspace that declares no human_only target from a
+	// TargetPolicies are the workspace's target policies at the same sync as Indexes, read
+	// in place of evaluating while the domain fast stamp matches. An older manifest has no
+	// such key, so it reads as never recorded and the guard says it opened the workspace.
+	TargetPolicies types.TargetPolicyIndex `json:"target_policies,omitzero"`
+	// TargetPoliciesKnown distinguishes a workspace that declares no target policy from a
 	// manifest that never recorded one.
-	HumanOnlyKnown bool `json:"human_only_known,omitempty"`
+	TargetPoliciesKnown bool `json:"target_policies_known,omitempty"`
 	// Extra is, per class, the workspace files its assembly read that the tree walk does
 	// not cover, so the caller can fold them into that class's next stamp.
 	Extra map[ShardClass][]string `json:"extra,omitempty"`
@@ -192,14 +191,14 @@ type syncPlan struct {
 	// classes are the classes shards carries in full; nil means every class. Shards of any
 	// other class keep their manifest entries and files untouched, which is what lets a
 	// build reassemble one class without the inputs of the rest.
-	classes    []ShardClass
-	stamps     Stamps
-	fastStamps Stamps                   // see manifest.FastStamps; nil records none
-	indexes    []SymbolIndexDeclaration // see manifest.Indexes; nil keeps the recorded ones
-	reads      *readlog.Reads           // see manifest.Reads; nil keeps the recorded ones
-	humanOnly  *types.HumanOnlyIndex    // see manifest.HumanOnly; nil keeps the recorded one
-	extra      map[ShardClass][]string
-	refresh    bool
+	classes        []ShardClass
+	stamps         Stamps
+	fastStamps     Stamps                   // see manifest.FastStamps; nil records none
+	indexes        []SymbolIndexDeclaration // see manifest.Indexes; nil keeps the recorded ones
+	reads          *readlog.Reads           // see manifest.Reads; nil keeps the recorded ones
+	targetPolicies *types.TargetPolicyIndex // see manifest.TargetPolicies; nil keeps the recorded one
+	extra          map[ShardClass][]string
+	refresh        bool
 }
 
 func (p syncPlan) covers(c ShardClass) bool { return p.classes == nil || slices.Contains(p.classes, c) }
@@ -280,7 +279,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		}
 		newMan.Indexes, newMan.IndexesKnown = old.Indexes, old.IndexesKnown
 		newMan.Reads, newMan.ReadsKnown = old.Reads, old.ReadsKnown
-		newMan.HumanOnly, newMan.HumanOnlyKnown = old.HumanOnly, old.HumanOnlyKnown
+		newMan.TargetPolicies, newMan.TargetPoliciesKnown = old.TargetPolicies, old.TargetPoliciesKnown
 		for c, paths := range old.Extra {
 			if !plan.covers(c) {
 				newMan.Extra[c] = paths
@@ -293,8 +292,8 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	if plan.reads != nil {
 		newMan.Reads, newMan.ReadsKnown = *plan.reads, true
 	}
-	if plan.humanOnly != nil {
-		newMan.HumanOnly, newMan.HumanOnlyKnown = *plan.humanOnly, true
+	if plan.targetPolicies != nil {
+		newMan.TargetPolicies, newMan.TargetPoliciesKnown = *plan.targetPolicies, true
 	}
 	prev := old
 	if plan.refresh {
@@ -443,7 +442,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	if !changed && len(pruned) == 0 && maps.Equal(old.inputs(), newMan.Inputs) && maps.Equal(old.fastStamps(), newMan.FastStamps) &&
 		slices.Equal(old.indexes(), newMan.Indexes) && old.indexesKnown() == newMan.IndexesKnown &&
 		readsEqual(old.reads(), newMan.Reads) && old.readsKnown() == newMan.ReadsKnown &&
-		reflect.DeepEqual(old.humanOnly(), newMan.HumanOnly) && old.humanOnlyKnown() == newMan.HumanOnlyKnown &&
+		reflect.DeepEqual(old.targetPolicies(), newMan.TargetPolicies) && old.targetPoliciesKnown() == newMan.TargetPoliciesKnown &&
 		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) && old.routing() == newMan.Routing {
 		return nil
 	}
@@ -497,8 +496,8 @@ func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastSta
 	}
 	recordIndexes := rec.indexes != nil && !man.IndexesKnown
 	recordReads := rec.reads != nil && !man.ReadsKnown
-	recordHumanOnly := rec.humanOnly != nil && !man.HumanOnlyKnown
-	if len(missing) == 0 && !recordIndexes && !recordReads && !recordHumanOnly {
+	recordTargetPolicies := rec.targetPolicies != nil && !man.TargetPoliciesKnown
+	if len(missing) == 0 && !recordIndexes && !recordReads && !recordTargetPolicies {
 		return nil
 	}
 	return file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
@@ -519,8 +518,8 @@ func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastSta
 		if recordReads {
 			cur.Reads, cur.ReadsKnown = *rec.reads, true
 		}
-		if recordHumanOnly {
-			cur.HumanOnly, cur.HumanOnlyKnown = *rec.humanOnly, true
+		if recordTargetPolicies {
+			cur.TargetPolicies, cur.TargetPoliciesKnown = *rec.targetPolicies, true
 		}
 		return s.writeManifest(*cur)
 	})
@@ -529,13 +528,13 @@ func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastSta
 // fastStampRecord is what recordFastStamps writes onto a manifest whose shards stay as
 // they are: the fast stamps of the classes a read settled by their full stamps, and, when
 // the caller resolved the evaluation anyway, what it read, the indexes it declared and
-// what it declares human_only. A nil indexes, reads or humanOnly records none.
+// what it declares as target policy. A nil indexes, reads or targetPolicies records none.
 type fastStampRecord struct {
-	stamps    Stamps
-	classes   []ShardClass
-	indexes   []SymbolIndexDeclaration
-	reads     *readlog.Reads
-	humanOnly *types.HumanOnlyIndex
+	stamps         Stamps
+	classes        []ShardClass
+	indexes        []SymbolIndexDeclaration
+	reads          *readlog.Reads
+	targetPolicies *types.TargetPolicyIndex
 }
 
 // readsEqual reports whether two evaluation reads name the same inputs.
@@ -1247,14 +1246,14 @@ func (m *manifest) reads() readlog.Reads {
 
 func (m *manifest) readsKnown() bool { return m != nil && m.ReadsKnown }
 
-func (m *manifest) humanOnly() types.HumanOnlyIndex {
+func (m *manifest) targetPolicies() types.TargetPolicyIndex {
 	if m == nil {
-		return types.HumanOnlyIndex{}
+		return types.TargetPolicyIndex{}
 	}
-	return m.HumanOnly
+	return m.TargetPolicies
 }
 
-func (m *manifest) humanOnlyKnown() bool { return m != nil && m.HumanOnlyKnown }
+func (m *manifest) targetPoliciesKnown() bool { return m != nil && m.TargetPoliciesKnown }
 
 // EvaluationReads returns what the evaluation the store was last synced from read beyond
 // the tree, and whether that was ever recorded. The caller folds them into the fast domain
@@ -1279,17 +1278,17 @@ func (s *Store) SymbolIndexDeclarations(fastDomain string) ([]SymbolIndexDeclara
 	return slices.Clone(man.Indexes), true
 }
 
-// HumanOnly returns what the workspace declared human_only at its last evaluated sync,
+// TargetPolicies returns what the workspace declared as target policy at its last evaluated sync,
 // on SymbolIndexDeclarations' terms: only when fastDomain is the domain fast stamp that
 // sync recorded. Any other stamp, a store that never recorded one, or an empty fastDomain
 // answers false, and the caller evaluates the workspace instead. An index with no Targets
 // and true is a workspace that declares none.
-func (s *Store) HumanOnly(fastDomain string) (types.HumanOnlyIndex, bool) {
+func (s *Store) TargetPolicies(fastDomain string) (types.TargetPolicyIndex, bool) {
 	man := s.readManifestOrNil()
-	if man == nil || fastDomain == "" || man.FastStamps[ClassDomain] != fastDomain || !man.HumanOnlyKnown {
-		return types.HumanOnlyIndex{}, false
+	if man == nil || fastDomain == "" || man.FastStamps[ClassDomain] != fastDomain || !man.TargetPoliciesKnown {
+		return types.TargetPolicyIndex{}, false
 	}
-	return man.HumanOnly, true
+	return man.TargetPolicies, true
 }
 
 func (m *manifest) extra() map[ShardClass][]string {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -54,13 +55,13 @@ func benchWorkspace(t *testing.T) Dependencies {
 }
 
 // benchRecord is benchWorkspace's declarations as the knowledge store records them.
-func benchRecord() types.HumanOnlyIndex {
-	return types.HumanOnlyIndex{
+func benchRecord() types.TargetPolicyIndex {
+	return types.TargetPolicyIndex{
 		Projects: []string{".", "evals"},
-		Targets: []types.HumanOnlyTarget{
-			{TargetRef: types.TargetRef{Project: ".", Target: "agent-bench-run"}, Reason: benchReason, SkipCache: true,
+		Targets: []types.TargetPolicy{
+			{TargetRef: types.TargetRef{Project: ".", Target: "agent-bench-run"}, HumanOnly: true, Reason: benchReason, SkipCache: true,
 				ReachedBy: []types.TargetRef{{Project: ".", Target: "bench-all"}}},
-			{TargetRef: types.TargetRef{Project: "evals", Target: "grade"}, Reason: "spends model tokens per case",
+			{TargetRef: types.TargetRef{Project: "evals", Target: "grade"}, HumanOnly: true, Reason: "spends model tokens per case",
 				ReachedBy: []types.TargetRef{{Project: ".", Target: "evals-all"}}},
 		},
 	}
@@ -72,20 +73,20 @@ func benchRecord() types.HumanOnlyIndex {
 func TestBenchRecordIsTheOpenedIndex(t *testing.T) {
 	ws, err := benchWorkspace(t).Inspect(context.Background(), ".")
 	require.NoError(t, err)
-	assert.Equal(t, benchRecord(), types.IndexHumanOnly(ws))
+	assert.Equal(t, benchRecord(), types.IndexTargetPolicies(ws))
 }
 
 // benchRecorded is benchWorkspace with a current record of it, which the rule reads in
 // place of opening the workspace.
 func benchRecorded(t *testing.T) Dependencies {
 	deps := benchWorkspace(t)
-	deps.HumanOnlyRecord = func(context.Context, string) (types.HumanOnlyIndex, bool) { return benchRecord(), true }
+	deps.TargetPolicies = func(context.Context, string) (types.TargetPolicyIndex, bool) { return benchRecord(), true }
 	return deps
 }
 
 // humanOnlySources are the two places the rule learns what a workspace declares: the
 // opened workspace and the knowledge store's record of it. Every verdict must come out
-// byte for byte the same from either.
+// byte for byte the same from either, but for the note that says the workspace was opened.
 var humanOnlySources = []struct {
 	name string
 	deps func(*testing.T) Dependencies
@@ -101,7 +102,8 @@ func judgedAlike(t *testing.T, judge func(t *testing.T, deps func(*testing.T) De
 	for _, src := range humanOnlySources {
 		t.Run(src.name, func(t *testing.T) { answers[src.name] = judge(t, src.deps) })
 	}
-	assert.Equal(t, answers["inspect"], answers["record"], "the record and the opened workspace answer alike")
+	assert.Equal(t, strings.ReplaceAll(answers["inspect"], "\n"+policyOpenedNote, ""), answers["record"],
+		"the record and the opened workspace answer alike")
 }
 
 // benchWorker is a leased worker whose own check is the human-only target, so
@@ -253,17 +255,20 @@ func TestHumanOnlyCurrentRecordOpensNothing(t *testing.T) {
 			t.Error("a current record opened the workspace")
 			return nil, errors.New("not opened")
 		},
-		HumanOnlyRecord: func(context.Context, string) (types.HumanOnlyIndex, bool) { return benchRecord(), true },
+		TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) { return benchRecord(), true },
 	}
 	for _, line := range humanOnlyLines {
 		wantDecision, wantReason := gradeHumanOnly(ctx, opened, "", line)
 		decision, reason := gradeHumanOnly(ctx, recorded, "", line)
 		assert.Equal(t, wantDecision, decision, line)
-		assert.Equal(t, wantReason, reason, line)
+		if wantReason != "" {
+			assert.Contains(t, wantReason, policyOpenedNote, "an open the record did not vouch for says so: %s", line)
+		}
+		assert.Equal(t, strings.TrimSuffix(wantReason, "\n"+policyOpenedNote), reason, line)
 	}
 
-	recorded.HumanOnlyRecord = func(context.Context, string) (types.HumanOnlyIndex, bool) {
-		return types.HumanOnlyIndex{Projects: []string{"."}}, true
+	recorded.TargetPolicies = func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		return types.TargetPolicyIndex{Projects: []string{"."}}, true
 	}
 	decision, _ := gradeHumanOnly(ctx, recorded, "", "magus run agent-bench-run .")
 	assert.Empty(t, decision, "a workspace recorded as declaring none reaches nothing, unopened")
@@ -281,8 +286,8 @@ func TestHumanOnlyOpensTheWorkspaceWhenTheRecordCannotVouch(t *testing.T) {
 		opens++
 		return inspect(ctx, root)
 	}
-	deps.HumanOnlyRecord = func(context.Context, string) (types.HumanOnlyIndex, bool) {
-		return types.HumanOnlyIndex{Projects: []string{"."}}, false
+	deps.TargetPolicies = func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		return types.TargetPolicyIndex{Projects: []string{"."}}, false
 	}
 	decision, reason := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
 	assert.Equal(t, "ask", decision)

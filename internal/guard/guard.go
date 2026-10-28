@@ -100,11 +100,11 @@ type Dependencies struct {
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
 	ModelTiers func() *types.ModelTierSet
-	// HumanOnlyRecord answers what the workspace at root declares human_only from the
+	// TargetPolicies answers what the workspace at root declares as target policy from the
 	// record the knowledge store keeps of it, without opening the workspace; "" is the
 	// caller's own. false means it cannot prove the record current, and the rule opens
 	// the workspace through Inspect instead. Nil means no record: every judgment opens it.
-	HumanOnlyRecord func(ctx context.Context, root string) (types.HumanOnlyIndex, bool)
+	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
@@ -162,6 +162,13 @@ type Dependencies struct {
 	// against the disk itself, such as a listing walked entry for entry, where GraphIDs'
 	// freshness check would only silence it on the first edit.
 	IndexedIDs func(ctx context.Context, kind string) (ids []string, ok bool)
+	// GraphMoved says why the graph at root describes another tree than the one on disk,
+	// "" when it does not or cannot tell; underway is a history rewrite still in progress.
+	// Nil answers "" for every root.
+	GraphMoved func(ctx context.Context, root string) (reason string, underway bool)
+	// SymbolIndexBuilt reports whether `magus graph build` wrote an index holding symbols
+	// for root, current or not. Nil answers false.
+	SymbolIndexBuilt func(root string) bool
 	// TrackedFiles lists every file version control tracks in the checkout at root,
 	// relative to root, and reports false when it cannot say before ctx ends. A listing of
 	// tracked files is proved against it.
@@ -241,19 +248,19 @@ func (d Dependencies) inspect(ctx context.Context, root string) (types.Workspace
 	})
 }
 
-// humanOnlyRecord is HumanOnlyRecord as a boundedPhase of its own: a read that does not
+// targetPolicies is TargetPolicies as a boundedPhase of its own: a read that does not
 // answer in time answers false, as does every later one in the judgment, and the rule falls
 // back to the open.
-func (d Dependencies) humanOnlyRecord(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
-	if d.HumanOnlyRecord == nil {
-		return types.HumanOnlyIndex{}, false
+func (d Dependencies) targetPolicies(ctx context.Context, root string) (types.TargetPolicyIndex, bool) {
+	if d.TargetPolicies == nil {
+		return types.TargetPolicyIndex{}, false
 	}
 	type answer struct {
-		ix types.HumanOnlyIndex
+		ix types.TargetPolicyIndex
 		ok bool
 	}
-	a, err := boundedPhase(ctx, phaseHumanOnlyRecord, func(read context.Context) (answer, error) {
-		ix, ok := d.HumanOnlyRecord(read, root)
+	a, err := boundedPhase(ctx, phaseTargetPolicies, func(read context.Context) (answer, error) {
+		ix, ok := d.TargetPolicies(read, root)
 		return answer{ix, ok}, nil
 	})
 	return a.ix, err == nil && a.ok
@@ -2179,6 +2186,9 @@ type location struct {
 	dir string
 	// models is the judged request's Dependencies.ModelRows.
 	models func() []types.ModelPricing
+	// policies is what the workspace declares and how it was read, read once per judgment
+	// and only when a rule asks.
+	policies func() declaredIndex
 }
 
 // jobs places the job store and checkout record of the checkout at. A user state dir that
@@ -2559,6 +2569,9 @@ func hookLocation(ctx context.Context, deps Dependencies) location {
 		if at.models == nil {
 			at.models = deps.ModelRows
 		}
+		if at.policies == nil {
+			at.policies = policiesAt(ctx, deps, at.workspace)
+		}
 		return at
 	}
 	return hookLocationAt(deps, "")
@@ -2589,7 +2602,8 @@ func hookLocationAt(deps Dependencies, dir string) location {
 			dir = wd
 		}
 	}
-	return location{cacheDir: cacheDir, workspace: root, dir: dir, models: deps.ModelRows}
+	return location{cacheDir: cacheDir, workspace: root, dir: dir, models: deps.ModelRows,
+		policies: policiesAt(context.Background(), deps, root)}
 }
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host

@@ -373,6 +373,20 @@ func HumanOnly(reason string) TargetOption {
 	return func(t *types.Target) { t.HumanOnly = true; t.HumanOnlyReason = reason }
 }
 
+// Relinks returns a TargetOption that declares the binary a run of the target replaces,
+// workspace-relative ("./magus"). The guard keeps a pipe stage from following such a run,
+// and accepts it as the fix while that binary cannot load the tree.
+func Relinks(binary string) TargetOption {
+	return func(t *types.Target) { t.Relinks = binary }
+}
+
+// Integrates returns a TargetOption that declares the target one a checkout's integrator
+// runs to integrate work, such as a regeneration; the cost rule keeps such a run to one
+// line. reason is required for the same reason SkipCache's is.
+func Integrates(reason string) TargetOption {
+	return func(t *types.Target) { t.Integrates = reason }
+}
+
 // Slots returns a TargetOption that makes the target hold n concurrency slots
 // while it runs, throttling parallel work around a resource-heavy step. n is
 // clamped to the run's total slot budget at schedule time; n >= the budget makes

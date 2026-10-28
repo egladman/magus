@@ -222,7 +222,7 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	if !ok || len(skew.Contract) == 0 || skew.Dirty {
 		return ""
 	}
-	if readOnlyLine(line, d) || recoveryLine(line, d, deps.lease, deps.lease == "") || replacesStaleMagus(line, at.workspace) {
+	if readOnlyLine(line, d) || recoveryLine(line, d, deps.lease, deps.lease == "", at) || replacesStaleMagus(line, at) {
 		return ""
 	}
 	built := skew.Built

@@ -38,6 +38,8 @@ func unloadedDependencies(loadErr error) Dependencies {
 		ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return nil, approvedErr },
 		ApprovedSpawnRule:   func(context.Context) (workspace.SpawnRule, error) { return nil, approvedErr },
 		ApprovedWriteRule:   func(context.Context) (workspace.WriteRule, error) { return nil, approvedErr },
+		// The record a stale binary still reads: magus's own declarations.
+		TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) { return magusRepoPolicies, true },
 	}
 }
 

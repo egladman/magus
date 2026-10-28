@@ -124,7 +124,7 @@ func TestBoundedPhaseAnswersInTime(t *testing.T) {
 	got, err := boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) { return "ws", nil })
 	require.NoError(t, err)
 	assert.Equal(t, "ws", got)
-	_, err = boundedPhase(ctx, phaseHumanOnlyRecord, func(context.Context) (string, error) { return "", failed })
+	_, err = boundedPhase(ctx, phaseTargetPolicies, func(context.Context) (string, error) { return "", failed })
 	require.ErrorIs(t, err, failed)
 
 	phases := judgmentPhases(ctx).finished()

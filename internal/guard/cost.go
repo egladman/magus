@@ -450,7 +450,7 @@ func resultChars(raw json.RawMessage) int {
 // shell command by its line, a whole file read, a search pattern, a URL.
 func inputClass(input map[string]any) types.DelegableClass {
 	if line := inputCommand(input); line != "" {
-		return delegableClass(line)
+		return delegableClass(line, location{})
 	}
 	_, writes := input["content"]
 	_, edits := input["old_string"]
@@ -496,7 +496,7 @@ func orientationFile(p string) bool {
 // delegableClass names the work a shell line does that a subagent could have done in the
 // caller's place, "" for any other line. The final gate is never delegable: the main
 // thread runs it, and neither is a command that costFree reports.
-func delegableClass(line string) types.DelegableClass {
+func delegableClass(line string, at location) types.DelegableClass {
 	if commandRunsGate(line) {
 		return ""
 	}
@@ -505,7 +505,7 @@ func delegableClass(line string) types.DelegableClass {
 		return ""
 	}
 	for _, c := range cmds {
-		if freeInvocation(c) {
+		if freeInvocation(c, at) {
 			continue
 		}
 		if class := invocationClass(c); class != "" {
@@ -521,7 +521,7 @@ func delegableClass(line string) types.DelegableClass {
 // which matters most for work a subagent may not do: only the main session builds ./magus,
 // so a main thread past its budget must still be able to. A line that changes directory
 // first is judged by the rest of it.
-func costFree(line string) bool {
+func costFree(line string, at location) bool {
 	if strings.TrimSpace(line) == ward.BootstrapCommand {
 		return true
 	}
@@ -533,7 +533,7 @@ func costFree(line string) bool {
 	for _, c := range cmds {
 		switch {
 		case isCdInvocation(c):
-		case freeInvocation(c):
+		case freeInvocation(c, at):
 			free = true
 		default:
 			return false
@@ -542,9 +542,9 @@ func costFree(line string) bool {
 	return free
 }
 
-func freeInvocation(c hint.Invocation) bool {
+func freeInvocation(c hint.Invocation, at location) bool {
 	if isMagusInvocation(c) {
-		return freeMagus(c.Args)
+		return freeMagus(c, at)
 	}
 	v := vcsInvocation(c)
 	if v == nil || v.Tool != "git" {
@@ -579,9 +579,11 @@ func logLimited(args []string) bool {
 }
 
 // freeMagus reports a magus argv that prints a ref or one line: a run or an affected set
-// asked for silence, the build of ./magus itself, a job verb that files or waits, a
-// projection down to names or one template field, or the identity of a run's output.
-func freeMagus(args []string) bool {
+// asked for silence, a run of a target that relinks the binary judging it, a job verb that
+// files or waits, a projection down to names or one template field, or the identity of a
+// run's output.
+func freeMagus(c hint.Invocation, at location) bool {
+	args := c.Args
 	words := magusSubcommandWords(args)
 	if len(words) == 0 {
 		return false
@@ -591,7 +593,7 @@ func freeMagus(args []string) bool {
 		if magusFlag(args, "s", "silent") {
 			return true
 		}
-		if words[0] == "run" && len(words) > 1 && (words[1] == "go-build" || words[1] == "go::go-build") {
+		if r, ok := parseTargetRun(c); ok && runRelinks(at.declared().ix, r) {
 			return true
 		}
 	case "job":
@@ -687,8 +689,8 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 	out.Billing = accountAt(at.workspace).billing
 	free := false
 	if tool == hookToolCommand {
-		out.DelegableClass = delegableClass(input)
-		free = costFree(input)
+		out.DelegableClass = delegableClass(input, at)
+		free = costFree(input, at)
 	}
 	ran := verdict.Decision == decisionPass || verdict.Decision == decisionAdvise
 	var results []toolResult
@@ -925,7 +927,7 @@ func liveRowLookup(ctx context.Context, at location) func(id string) (types.Job,
 // The checks of the rows a thread forked are mainWork's to clear.
 func rootWorkClass(line string, at location) types.DelegableClass {
 	f, err := parseFile(line, DialectBash)
-	if err != nil || replacesStaleMagus(line, at.workspace) {
+	if err != nil || replacesStaleMagus(line, at) {
 		return ""
 	}
 	// A relative path is read from where the line's cds have moved the call, so a root that
@@ -990,7 +992,7 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 		// The workspace's own install, with no charm, is the gate's precondition: a fresh
 		// checkout runs no gate until its dependencies are there.
 		if r, ok := parseTargetRun(c); ok && !isGateCommand(c.Args) && !r.installs(Dependencies{}) {
-			if integrationTarget(r.target) {
+			if runIntegrates(at.declared().ix, r) {
 				return delegableIntegrate
 			}
 			return types.DelegableRun
@@ -1043,19 +1045,6 @@ func integratesVCS(sub string, args []string) bool {
 		})
 	}
 	return integrationVerbs[sub]
-}
-
-// integrationTarget reports a target a checkout's integrator runs to integrate work: the
-// build of ./magus, and regeneration.
-func integrationTarget(target string) bool {
-	if i := strings.LastIndex(target, "::"); i >= 0 {
-		target = target[i+2:]
-	}
-	t, err := types.ParseTarget(target)
-	if err != nil {
-		return false
-	}
-	return t.Name == "go-build" || t.Name == "generate" || strings.HasSuffix(t.Name, "-generate")
 }
 
 // drivesOnlyJobs reports a Buzz script whose every reach outside itself is magus\job: it

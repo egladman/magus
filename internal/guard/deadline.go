@@ -386,7 +386,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		call = judgedCall{seam: seamSpawn, changes: true, what: "a subagent spawn", lease: req.Lease}
 	default:
 		d := effectiveDialect(base.ShellDialect)
-		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease, req.Lease == "")
+		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease, req.Lease == "", hookLocation(ctx, base))
 		cmds, _ := ParseCommandsDialect(input, d)
 		pushes = slices.ContainsFunc(cmds, isPush)
 		writesOutside = call.changes && !pushes && writesOnlyOutside(input, d, callDir, hookLocation(ctx, base).workspace, userHome())

@@ -51,10 +51,10 @@ type BuildOptions struct {
 	// Inputs.Reads), under the same rule as IndexesFunc: only once the evaluation is paid
 	// for, and only for a manifest that has none recorded.
 	ReadsFunc func(context.Context) (readlog.Reads, error)
-	// HumanOnlyFunc resolves what the workspace declares human_only (see Inputs.HumanOnly),
+	// TargetPoliciesFunc resolves what the workspace declares as target policy (see Inputs.TargetPolicies),
 	// under IndexesFunc's rule: only once the evaluation is paid for, and only for a
 	// manifest that has none recorded.
-	HumanOnlyFunc func(context.Context) (types.HumanOnlyIndex, error)
+	TargetPoliciesFunc func(context.Context) (types.TargetPolicyIndex, error)
 	// Root is the workspace root stamped onto the returned graph (see Graph.SetRoot).
 	Root string
 }
@@ -65,7 +65,7 @@ type BuildOptions struct {
 // build; steady state writes only the shards whose content changed.
 func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, log *slog.Logger) (*Graph, error) {
 	opts.Stamps, opts.StampsFunc = nil, nil
-	opts.FastStamps, opts.FastStampsFunc, opts.IndexesFunc, opts.ReadsFunc, opts.HumanOnlyFunc = nil, nil, nil, nil, nil
+	opts.FastStamps, opts.FastStampsFunc, opts.IndexesFunc, opts.ReadsFunc, opts.TargetPoliciesFunc = nil, nil, nil, nil, nil
 	if opts.Root == "" {
 		opts.Root = in.Root
 	}
@@ -218,13 +218,13 @@ func (e *ensureRun) recordFastStamps(ctx context.Context, fresh []ShardClass) er
 		}
 		rec.indexes = indexes
 	}
-	if e.stampsResolved && e.opts.HumanOnlyFunc != nil && !e.man.humanOnlyKnown() {
-		humanOnly, err := e.opts.HumanOnlyFunc(ctx)
+	if e.stampsResolved && e.opts.TargetPoliciesFunc != nil && !e.man.targetPoliciesKnown() {
+		targetPolicies, err := e.opts.TargetPoliciesFunc(ctx)
 		if err != nil {
 			return err
 		}
-		if len(humanOnly.Projects) > 0 {
-			rec.humanOnly = &humanOnly
+		if len(targetPolicies.Projects) > 0 {
+			rec.targetPolicies = &targetPolicies
 		}
 	}
 	return e.store.recordFastStamps(ctx, e.man, rec)
@@ -313,8 +313,8 @@ func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []Shar
 		}
 	}
 	plan := syncPlan{classes: stale, stamps: opts.Stamps, fastStamps: fast, indexes: in.Indexes, reads: in.Reads, extra: in.Extra, refresh: opts.Refresh}
-	if len(in.HumanOnly.Projects) > 0 {
-		plan.humanOnly = &in.HumanOnly
+	if len(in.TargetPolicies.Projects) > 0 {
+		plan.targetPolicies = &in.TargetPolicies
 	}
 	if err := store.syncClasses(ctx, shards, fps, plan); err != nil {
 		return nil, err

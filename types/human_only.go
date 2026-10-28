@@ -5,50 +5,81 @@ import (
 	"slices"
 )
 
-// HumanOnlyTarget is one target a workspace declares human_only: the reason it gives,
-// whether the target is cached, and the targets that compose it.
-type HumanOnlyTarget struct {
+// TargetPolicy is one target's declared policy the guard reads without evaluating the
+// workspace: whether it is human_only and why, whether it is cached, the binary it relinks,
+// why an integrator runs it, and, for a human_only target, the targets that compose it.
+type TargetPolicy struct {
 	TargetRef
-	Reason    string `json:"reason"`
-	SkipCache bool   `json:"skip_cache,omitempty"`
-	// ReachedBy is every (project, target) whose ctx.needs chain reaches this target at
-	// depth > 0 without passing through another human_only target, the root included: a
-	// run a person approves covers the chain under it, so a human_only target is never
-	// reported as composed through one.
+	HumanOnly bool `json:"human_only,omitempty"`
+	// Reason is the human_only reason, "" for a target that is not human_only.
+	Reason     string `json:"reason,omitempty"`
+	SkipCache  bool   `json:"skip_cache,omitempty"`
+	Relinks    string `json:"relinks,omitempty"`
+	Integrates string `json:"integrates,omitempty"`
+	// ReachedBy is every target whose ctx.needs chain reaches this human_only one at depth
+	// > 0 through no other human_only target: an approved run covers the chain under it.
 	ReachedBy []TargetRef `json:"reached_by,omitempty"`
 }
 
-// HumanOnlyIndex is what a workspace declares human_only, resolved from its evaluated
-// projects so a reader can tell which targets a run reaches without evaluating them.
-// Projects is every project path in path order, listed whether or not any target is
-// human_only, so an index of a workspace that declares none still names its projects and
-// an index that names none was resolved from no workspace. Targets is sorted by
-// TargetRef.Compare.
-type HumanOnlyIndex struct {
-	Projects []string          `json:"projects,omitempty"`
-	Targets  []HumanOnlyTarget `json:"targets,omitempty"`
+// TargetPolicyIndex is every target policy a workspace declares, resolved from its
+// evaluated projects so a reader can tell what a run reaches and what it replaces without
+// evaluating them. Projects is every project path in path order, listed whether or not any
+// target declares a policy, so an index of a workspace that declares none still names its
+// projects and an index that names none was resolved from no workspace. Targets holds each
+// target that declares human_only, relinks or integrates, sorted by TargetRef.Compare.
+type TargetPolicyIndex struct {
+	Projects []string       `json:"projects,omitempty"`
+	Targets  []TargetPolicy `json:"targets,omitempty"`
 }
 
-// IndexHumanOnly is what ws declares human_only, in the form the knowledge store records:
-// every project path, and each human_only target with every target whose ctx.needs chain
-// reaches it the way the guard walks one, stopping at the first human_only target on a
-// branch. The guard reads the same index from an opened workspace that it reads from the
-// record, so a verdict cannot depend on which one answered.
-func IndexHumanOnly(ws WorkspaceReader) HumanOnlyIndex {
-	var ix HumanOnlyIndex
+// Lookup is ref's declared policy, and false when ref declares none the index holds.
+func (ix TargetPolicyIndex) Lookup(ref TargetRef) (TargetPolicy, bool) {
+	for _, t := range ix.Targets {
+		if t.TargetRef == ref {
+			return t, true
+		}
+	}
+	return TargetPolicy{}, false
+}
+
+// HumanOnly is the human_only targets of ix, in index order.
+func (ix TargetPolicyIndex) HumanOnly() []TargetPolicy {
+	var out []TargetPolicy
+	for _, t := range ix.Targets {
+		if t.HumanOnly {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// IndexTargetPolicies is what ws declares, in the form the knowledge store records: every
+// project path, and each target with a policy the guard reads, a human_only one with every
+// target whose ctx.needs chain reaches it the way the guard walks one, stopping at the
+// first human_only target on a branch. The guard reads the same index from an opened
+// workspace that it reads from the record, so a verdict cannot depend on which answered.
+func IndexTargetPolicies(ws WorkspaceReader) TargetPolicyIndex {
+	var ix TargetPolicyIndex
 	projects := ws.All()
 	at := map[TargetRef]int{}
+	humanOnly := false
 	for _, p := range projects {
 		ix.Projects = append(ix.Projects, p.Path)
 		for _, name := range slices.Sorted(maps.Keys(p.TargetPolicies)) {
-			if pol := p.TargetPolicies[name]; pol.HumanOnly {
-				ref := TargetRef{Project: p.Path, Target: name}
-				at[ref] = len(ix.Targets)
-				ix.Targets = append(ix.Targets, HumanOnlyTarget{TargetRef: ref, Reason: pol.HumanOnlyReason, SkipCache: pol.SkipCache})
+			pol := p.TargetPolicies[name]
+			if !pol.HumanOnly && pol.Relinks == "" && pol.Integrates == "" {
+				continue
 			}
+			ref := TargetRef{Project: p.Path, Target: name}
+			at[ref] = len(ix.Targets)
+			humanOnly = humanOnly || pol.HumanOnly
+			ix.Targets = append(ix.Targets, TargetPolicy{
+				TargetRef: ref, HumanOnly: pol.HumanOnly, Reason: pol.HumanOnlyReason, SkipCache: pol.SkipCache,
+				Relinks: pol.Relinks, Integrates: pol.Integrates,
+			})
 		}
 	}
-	if len(ix.Targets) == 0 {
+	if !humanOnly {
 		return ix
 	}
 	// Only a target with a chain composes anything, so only those are walked.

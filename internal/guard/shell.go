@@ -434,28 +434,26 @@ func pipeBreaks(stages []runStage) string {
 	return ""
 }
 
-// rebuildTargets are the targets of magus's own magusfile that relink ./magus, in their
-// dashed spelling (`go_build` names the same one). The go spell's `go::go-build` op counts
-// too, since `-- -o ./magus ./cmd/magus` relinks through it. Every stage of a pipe starts
-// at once, so a stage after one of these would run the binary it replaces.
-var rebuildTargets = []string{"go-build", "build"}
-
-// rebuildsOwnBinary reports a stage before the last that relinks the magus binary, in a
-// checkout of magus's own source.
-func rebuildsOwnBinary(root string, stages []runStage) bool {
+// relinkingStage is the binary a stage before the last replaces, by its target's declared
+// relinks, "" when none declares one, and the note declaredPolicies gave. Every stage of a
+// pipe starts at once, so a stage after one would run the binary it replaces.
+func relinkingStage(ctx context.Context, deps Dependencies, stages []runStage) (binary, note string) {
+	root := deps.scope.root
 	if root == "" {
-		return false
+		return "", ""
+	}
+	ix, note, ok := declaredPolicies(ctx, deps, root, lazyWorkspace(ctx, deps, root))
+	if !ok {
+		return "", note
 	}
 	for _, s := range stages[:len(stages)-1] {
-		raw := s.target
-		if i := strings.LastIndex(raw, "::"); i >= 0 {
-			raw = raw[i+2:]
-		}
-		if t, err := types.ParseTarget(raw); err == nil && slices.Contains(rebuildTargets, strings.ReplaceAll(t.Name, "_", "-")) {
-			return ownSourceRoot(root)
+		r := targetRun{verb: s.verb, target: s.target, projects: s.projects}
+		if runRelinks(ix, r) {
+			pol, _ := runPolicy(ix, r)
+			return pol.Relinks, note
 		}
 	}
-	return false
+	return "", note
 }
 
 // chainedRunVerdict judges magus runs sequenced with `&&` or `;`. The same target on
@@ -474,8 +472,14 @@ func chainedRunVerdict(deps Dependencies, command string, d Dialect) (ShellVerdi
 		return ShellVerdict{}, false
 	}
 	why := ch.breaks
-	if why == "" && rebuildsOwnBinary(deps.scope.root, ch.stages) {
-		why = "a pipe starts every stage at once, so a stage after one that relinks ./magus would run the binary it replaces"
+	if why == "" {
+		binary, note := relinkingStage(context.Background(), deps, ch.stages)
+		if binary != "" {
+			why = fmt.Sprintf("a pipe starts every stage at once, so a stage after one that relinks %s would run the binary it replaces", binary)
+			if note != "" {
+				why += ". " + strings.TrimSuffix(note, ".")
+			}
+		}
 	}
 	if why != "" {
 		said := advice{Say: adviseChainedRun, Why: adviseChainedRunWhy}

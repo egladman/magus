@@ -2452,16 +2452,6 @@ github.com/egladman/magus/types.HotspotOutput.Definition field string "json:\"de
 github.com/egladman/magus/types.HotspotOutput.Files field []FileHotspot "json:\"files,omitempty\" yaml:\"files,omitempty\""
 github.com/egladman/magus/types.HotspotOutput.Nodes field []Node "json:\"nodes\"      yaml:\"nodes\""
 github.com/egladman/magus/types.HotspotOutput.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
-github.com/egladman/magus/types.HumanOnlyIndex type struct
-github.com/egladman/magus/types.HumanOnlyIndex.Projects field []string "json:\"projects,omitempty\""
-github.com/egladman/magus/types.HumanOnlyIndex.Targets field []HumanOnlyTarget "json:\"targets,omitempty\""
-github.com/egladman/magus/types.HumanOnlyTarget type struct
-github.com/egladman/magus/types.HumanOnlyTarget.Compare method func(o TargetRef) int
-github.com/egladman/magus/types.HumanOnlyTarget.ReachedBy field []TargetRef "json:\"reached_by,omitempty\""
-github.com/egladman/magus/types.HumanOnlyTarget.Reason field string "json:\"reason\""
-github.com/egladman/magus/types.HumanOnlyTarget.Ref method func() string
-github.com/egladman/magus/types.HumanOnlyTarget.SkipCache field bool "json:\"skip_cache,omitempty\""
-github.com/egladman/magus/types.HumanOnlyTarget.TargetRef embedded TargetRef
 github.com/egladman/magus/types.Hunks func(path string, old []byte, new []byte, driver DiffDriver) ([]RegionChange, bool)
 github.com/egladman/magus/types.IgnorePattern type struct
 github.com/egladman/magus/types.IgnorePattern.Pattern field string "json:\"pattern\" yaml:\"pattern\" validate:\"required\""
@@ -2635,7 +2625,7 @@ github.com/egladman/magus/types.ImportGraph type struct
 github.com/egladman/magus/types.ImportGraph.Indexed field bool "json:\"indexed\""
 github.com/egladman/magus/types.ImportGraph.Languages field map[string]string "json:\"languages\""
 github.com/egladman/magus/types.ImportGraph.Packages field map[string][]string "json:\"packages\""
-github.com/egladman/magus/types.IndexHumanOnly func(ws WorkspaceReader) HumanOnlyIndex
+github.com/egladman/magus/types.IndexTargetPolicies func(ws WorkspaceReader) TargetPolicyIndex
 github.com/egladman/magus/types.InflightAttention type string
 github.com/egladman/magus/types.InflightChange type struct
 github.com/egladman/magus/types.InflightChange.Attention field InflightAttention "json:\"attention\" yaml:\"attention\""
@@ -5068,10 +5058,12 @@ github.com/egladman/magus/types.Target.HumanOnly field bool "json:\"human_only,o
 github.com/egladman/magus/types.Target.HumanOnlyReason field string "json:\"human_only_reason,omitempty\" buzz:\"human_only_reason\""
 github.com/egladman/magus/types.Target.IncludeArch field *bool "json:\"includeArch,omitempty\" buzz:\"-\""
 github.com/egladman/magus/types.Target.IncludeOS field *bool "json:\"includeOS,omitempty\" buzz:\"-\""
+github.com/egladman/magus/types.Target.Integrates field string "json:\"integrates,omitempty\" buzz:\"integrates\""
 github.com/egladman/magus/types.Target.Key method func() []string
 github.com/egladman/magus/types.Target.MemoryMB field int "json:\"memory_mb,omitempty\" buzz:\"memory_mb\""
 github.com/egladman/magus/types.Target.Name field string "json:\"name,omitempty\""
 github.com/egladman/magus/types.Target.Path field string "json:\"path,omitempty\"   buzz:\"projectPath\""
+github.com/egladman/magus/types.Target.Relinks field string "json:\"relinks,omitempty\" buzz:\"relinks\""
 github.com/egladman/magus/types.Target.RetryOnVolatile field bool "json:\"retryOnVolatile,omitempty\" buzz:\"retry_on_volatile\""
 github.com/egladman/magus/types.Target.RetryOnVolatileReason field string "json:\"retry_on_volatile_reason,omitempty\" buzz:\"retry_on_volatile_reason\""
 github.com/egladman/magus/types.Target.Sandbox field *github.com/egladman/magus/spells.Sandbox "json:\"sandbox,omitempty\" buzz:\"-\""
@@ -5136,6 +5128,21 @@ github.com/egladman/magus/types.TargetGraphProject.Path field string "json:\"pat
 github.com/egladman/magus/types.TargetGraphProject.RelPath field string "json:\"-\" yaml:\"-\" buzz:\"-\""
 github.com/egladman/magus/types.TargetMissingContext const DiagnosticCode = "MGS1008"
 github.com/egladman/magus/types.TargetNeverReplays const DiagnosticCode = "MGS1009"
+github.com/egladman/magus/types.TargetPolicy type struct
+github.com/egladman/magus/types.TargetPolicy.Compare method func(o TargetRef) int
+github.com/egladman/magus/types.TargetPolicy.HumanOnly field bool "json:\"human_only,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.Integrates field string "json:\"integrates,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.ReachedBy field []TargetRef "json:\"reached_by,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.Reason field string "json:\"reason,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.Ref method func() string
+github.com/egladman/magus/types.TargetPolicy.Relinks field string "json:\"relinks,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.SkipCache field bool "json:\"skip_cache,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.TargetRef embedded TargetRef
+github.com/egladman/magus/types.TargetPolicyIndex type struct
+github.com/egladman/magus/types.TargetPolicyIndex.HumanOnly method func() []TargetPolicy
+github.com/egladman/magus/types.TargetPolicyIndex.Lookup method func(ref TargetRef) (TargetPolicy, bool)
+github.com/egladman/magus/types.TargetPolicyIndex.Projects field []string "json:\"projects,omitempty\""
+github.com/egladman/magus/types.TargetPolicyIndex.Targets field []TargetPolicy "json:\"targets,omitempty\""
 github.com/egladman/magus/types.TargetPolicyKeys func() []string
 github.com/egladman/magus/types.TargetPolicyOptions var []ProjectOption
 github.com/egladman/magus/types.TargetPolicySince func(key string) (string, bool)

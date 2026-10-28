@@ -108,7 +108,7 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 	t.Parallel()
 	st := costState{Tokens: 900_000, Streak: 20, Repeats: map[string]int{}}
 	call := func(line string) mainCall {
-		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line}
+		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line, magusRepoAt), free: costFree(line, magusRepoAt), line: line}
 	}
 	for _, level := range []types.GuardProfile{types.GuardProfileLight, types.GuardProfileStandard, types.GuardProfileStrict} {
 		for _, line := range costFreeLines {
@@ -118,7 +118,7 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 		}
 	}
 	for line := range costBoundLines {
-		if delegableClass(line) == "" {
+		if delegableClass(line, magusRepoAt) == "" {
 			continue
 		}
 		rules := denyByRule(mainFindings(levelSetting(types.GuardProfileStrict), st, call(line)))
@@ -247,7 +247,7 @@ func TestOrchestratorGroundworkByRole(t *testing.T) {
 	at, notes := orchestratorFixture(t)
 	st := costState{Tokens: 900_000, Streak: 20}
 	call := func(line string, o types.Orchestration) mainCall {
-		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line,
+		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line, magusRepoAt), free: costFree(line, magusRepoAt), line: line,
 			orchestration: o, work: rootWorkClass(line, at)}
 	}
 	strict := levelSetting(types.GuardProfileStrict)

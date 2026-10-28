@@ -95,7 +95,7 @@ func TestContractSkewRefusesChangesUntilTheRebuild(t *testing.T) {
 	out, err := exec.Command("git", "-C", root, "reset", "-q", "--hard", decls).CombinedOutput()
 	require.NoError(t, err, string(out))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\n"), 0o755))
-	at := location{workspace: root, dir: root, cacheDir: t.TempDir()}
+	at := location{workspace: root, dir: root, cacheDir: t.TempDir(), policies: magusRepoAt.policies}
 	asked := 0
 	deps := Dependencies{Binary: filepath.Join(root, "magus"), BinaryCommit: base, Revision: func(context.Context, string, string) string {
 		asked++

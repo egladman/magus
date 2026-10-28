@@ -51,17 +51,17 @@ import (
 // workspacegraph cannot import this package, so the builders are registered from here.
 func init() { //nolint:gochecknoinits // workspacegraph cannot import this package, so the builders register from here
 	workspacegraph.Register(workspacegraph.Builders{
-		BuildGlobal:          buildGlobalKnowledgeGraph,
-		Build:                buildKnowledgeGraph,
-		MergeSymbols:         mergeWorkspaceSymbols,
-		MergeSymbolsForRef:   mergeWorkspaceSymbolsForRef,
-		Query:                queryKnowledgeGraph,
-		SymbolGaps:           workspaceSymbolGaps,
-		SymbolIndexTimes:     workspaceSymbolIndexTimes,
-		SymbolOccurrences:    workspaceSymbolOccurrences,
-		RecordedHumanOnly:    readRecordedHumanOnly,
-		RecordedStaleIndexes: readRecordedStaleIndexes,
-		UsePublishedShards:   usePublishedShards,
+		BuildGlobal:            buildGlobalKnowledgeGraph,
+		Build:                  buildKnowledgeGraph,
+		MergeSymbols:           mergeWorkspaceSymbols,
+		MergeSymbolsForRef:     mergeWorkspaceSymbolsForRef,
+		Query:                  queryKnowledgeGraph,
+		SymbolGaps:             workspaceSymbolGaps,
+		SymbolIndexTimes:       workspaceSymbolIndexTimes,
+		SymbolOccurrences:      workspaceSymbolOccurrences,
+		RecordedTargetPolicies: readRecordedTargetPolicies,
+		RecordedStaleIndexes:   readRecordedStaleIndexes,
+		UsePublishedShards:     usePublishedShards,
 		ReaderContext: func(ctx context.Context, _ types.Inspector, root string) ([]string, error) {
 			paths := map[string]bool{}
 			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
@@ -109,14 +109,14 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 	})
 }
 
-// readRecordedHumanOnly is recordedHumanOnly for a ws that may be no lazy workspace, which
+// readRecordedTargetPolicies is recordedTargetPolicies for a ws that may be no lazy workspace, which
 // has no record to answer from.
-func readRecordedHumanOnly(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool) {
+func readRecordedTargetPolicies(ctx context.Context, ws types.Inspector, cfg config.Config) (types.TargetPolicyIndex, bool) {
 	lw, ok := ws.(*LazyWorkspace)
 	if !ok {
-		return types.HumanOnlyIndex{}, false
+		return types.TargetPolicyIndex{}, false
 	}
-	return recordedHumanOnly(ctx, lw, cfg)
+	return recordedTargetPolicies(ctx, lw, cfg)
 }
 
 // readRecordedStaleIndexes is recordedStaleIndexes for a ws that may be no lazy workspace.
@@ -330,7 +330,7 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			model = knowledgeSources{
 				cfg: cfg, root: root, cacheDir: cacheDir,
-				spells: spells, graph: graph, projects: projects, humanOnly: humanOnlyIndexBehind(ctx, ws),
+				spells: spells, graph: graph, projects: projects, targetPolicies: targetPolicyIndexBehind(ctx, ws),
 				tree: tree, log: log.With(attr.Component("knowledge")),
 			}
 		})
@@ -358,12 +358,12 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			return symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws)), nil
 		},
-		HumanOnlyFunc: func(ctx context.Context) (types.HumanOnlyIndex, error) {
+		TargetPoliciesFunc: func(ctx context.Context) (types.TargetPolicyIndex, error) {
 			src, err := resolveModel(ctx)
 			if err != nil {
-				return types.HumanOnlyIndex{}, err
+				return types.TargetPolicyIndex{}, err
 			}
-			return src.humanOnly, nil
+			return src.targetPolicies, nil
 		},
 		ReadsFunc: func(ctx context.Context) (readlog.Reads, error) {
 			if _, err := resolveModel(ctx); err != nil {
@@ -381,7 +381,7 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 		}
 		in := gatherKnowledgeInputs(ctx, src, refresh, stale)
 		in.Indexes = symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws))
-		in.HumanOnly = src.humanOnly
+		in.TargetPolicies = src.targetPolicies
 		if reads, ok := evaluationReads(ctx, ws); ok {
 			in.Reads = &reads
 		}
@@ -561,11 +561,11 @@ type knowledgeSources struct {
 	spells   []types.Spell
 	graph    types.TargetGraphOutput
 	projects types.ProjectsOutput
-	// humanOnly is what the evaluation declares human_only. The graph and projects above
+	// targetPolicies is what the evaluation declares as target policy. The graph and projects above
 	// carry no target policy, so the domain stamp folds it on its own.
-	humanOnly types.HumanOnlyIndex
-	tree      *knowledge.TreeWalk // nil when there is no root to walk
-	log       *slog.Logger
+	targetPolicies types.TargetPolicyIndex
+	tree           *knowledge.TreeWalk // nil when there is no root to walk
+	log            *slog.Logger
 }
 
 func (s knowledgeSources) symbolInputs() symbolIngestInputs {
@@ -704,11 +704,11 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 	if wants(knowledge.ClassDomain) {
 		ignoreSources, ignoreKnown = vcsIgnoreSources(ctx, src.root)
 	}
-	humanOnly, humanOnlyErr := json.Marshal(src.humanOnly)
+	targetPolicies, humanOnlyErr := json.Marshal(src.targetPolicies)
 	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown && humanOnlyErr == nil {
 		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
 		h.String(base)
-		h.String(string(humanOnly))
+		h.String(string(targetPolicies))
 		h.String(tree)
 		h.String(vcsHead)
 		for _, p := range ignoreSources {

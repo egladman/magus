@@ -325,13 +325,13 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
 	deps, rules := guard.NewDependencies(ctx, guard.Wiring{
-		Root:            root,
-		Config:          globalCfg,
-		BinaryVersion:   version,
-		Binary:          binary,
-		Inspect:         inspect,
-		HumanOnlyRecord: guardHumanOnlyRecord(rootOverride, inspect),
-		CacheDir:        guardCacheDir(rootOverride),
+		Root:           root,
+		Config:         globalCfg,
+		BinaryVersion:  version,
+		Binary:         binary,
+		Inspect:        inspect,
+		TargetPolicies: guardTargetPolicies(rootOverride, inspect),
+		CacheDir:       guardCacheDir(rootOverride),
 		Trace: func(ctx context.Context, phase string) func() {
 			return traceFromContext(ctx).phase(phase)
 		},
@@ -344,6 +344,29 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	deps.SymbolSites = index.symbolSites
 	deps.GraphIDs = index.graphIDs
 	deps.IndexedIDs = index.indexedIDs
+	cacheDir := deps.CacheDir
+	deps.GraphMoved = func(ctx context.Context, root string) (string, bool) {
+		if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
+			return knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), true
+		}
+		dir, err := cacheDir(root)
+		if err != nil {
+			return "", false
+		}
+		built, err := knowledge.ReadGuardIndexCheckout(dir, root)
+		if err != nil {
+			return "", false
+		}
+		return built.StaleAt(knowledge.GuardCheckout{}), false
+	}
+	deps.SymbolIndexBuilt = func(root string) bool {
+		dir, err := cacheDir(root)
+		if err != nil {
+			return false
+		}
+		has, err := knowledge.GuardIndexHasSymbols(dir, root)
+		return err == nil && has
+	}
 	// A hook reads the model facts install wrote beside its tool rows: loading the workspace
 	// for them cost most of a judgment, and under load more than the hook's deadline. A
 	// caller that is no hook names no tool rows and loads the workspace as before.
@@ -362,20 +385,20 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	return deps, rules
 }
 
-// guardHumanOnlyRecord answers what the workspace at root, "" for the one found from
-// rootOverride, declares human_only from the knowledge store's record of it (see
-// workspacegraph.RecordedHumanOnly). Each call holds a lazy workspace of its own, whose one walk of
+// guardTargetPolicies answers what the workspace at root, "" for the one found from
+// rootOverride, declares as target policy from the knowledge store's record of it (see
+// workspacegraph.RecordedTargetPolicies). Each call holds a lazy workspace of its own, whose one walk of
 // the tree is taken now: a daemon grading checks keeps these dependencies for hours, and
 // a walk kept from an earlier call would vouch for a record the tree has since moved past.
 // The record is read without opening the workspace; open is there only because a lazy
 // workspace must say how it would be opened.
-func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, string) (types.WorkspaceRepository, error)) func(context.Context, string) (types.HumanOnlyIndex, bool) {
-	return func(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
+func guardTargetPolicies(rootOverride string, inspect func(context.Context, string) (types.WorkspaceRepository, error)) func(context.Context, string) (types.TargetPolicyIndex, bool) {
+	return func(ctx context.Context, root string) (types.TargetPolicyIndex, bool) {
 		ask := root
 		if root == "" {
 			found, err := workspace.FindRoot(rootOverride)
 			if err != nil {
-				return types.HumanOnlyIndex{}, false
+				return types.TargetPolicyIndex{}, false
 			}
 			root = found
 		}
@@ -386,7 +409,7 @@ func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, str
 			}
 			return asMagus(ws)
 		})
-		return workspacegraph.RecordedHumanOnly(ctx, lw, globalCfg)
+		return workspacegraph.RecordedTargetPolicies(ctx, lw, globalCfg)
 	}
 }
 

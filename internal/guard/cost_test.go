@@ -87,7 +87,7 @@ func TestDelegableClass(t *testing.T) {
 		"cd internal && rg -l Verdict .":       types.DelegableSearch,
 		"git diff --name-only main...HEAD":     "",
 	} {
-		assert.Equal(t, want, delegableClass(line), line)
+		assert.Equal(t, want, delegableClass(line, magusRepoAt), line)
 	}
 }
 
@@ -151,15 +151,15 @@ var costBoundLines = map[string]types.DelegableClass{
 func TestCostFree(t *testing.T) {
 	t.Parallel()
 	for _, line := range costFreeLines {
-		assert.True(t, costFree(line), line)
-		assert.Empty(t, delegableClass(line), line)
+		assert.True(t, costFree(line, magusRepoAt), line)
+		assert.Empty(t, delegableClass(line, magusRepoAt), line)
 	}
 	for line, class := range costBoundLines {
-		assert.False(t, costFree(line), line)
-		assert.Equal(t, class, delegableClass(line), line)
+		assert.False(t, costFree(line, magusRepoAt), line)
+		assert.Equal(t, class, delegableClass(line, magusRepoAt), line)
 	}
-	assert.False(t, costFree("cd /r"), "a line that only changes directory is not a quiet command")
-	assert.False(t, costFree(""))
+	assert.False(t, costFree("cd /r", magusRepoAt), "a line that only changes directory is not a quiet command")
+	assert.False(t, costFree("", magusRepoAt))
 }
 
 func TestInputClassOfAFreeCommandIsNone(t *testing.T) {
@@ -491,7 +491,7 @@ func orchestratorFixture(t *testing.T) (at location, notes string) {
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("binary"), 0o755))
-	return location{cacheDir: t.TempDir(), workspace: root, dir: root}, t.TempDir()
+	return location{cacheDir: t.TempDir(), workspace: root, dir: root, policies: magusRepoAt.policies}, t.TempDir()
 }
 
 // orchestrationLines are calls a session that hands out work makes as orchestration.
@@ -568,7 +568,7 @@ var groundworkLines = []struct {
 	{"./magus run go::go-build .", delegableIntegrate},
 	{"./magus run generate:rw .", delegableIntegrate},
 	{"./magus run generate / -s", delegableIntegrate},
-	{"./magus run content-generate docs", delegableIntegrate},
+	{"./magus run content-generate docs", types.DelegableRun},
 	{"./magus vcs ls-files internal/guard/root.go", types.DelegableRead},
 	{"git cherry-pick abc123", delegableIntegrate},
 	{"git cherry-pick --continue", delegableIntegrate},

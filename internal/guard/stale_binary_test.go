@@ -674,7 +674,7 @@ func TestRecoveryLine(t *testing.T) {
 		{workerPlacementRun, "lease-a", true, true},
 		{"./magus run test .", "lease-a", true, false},
 	} {
-		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.builds), "%s (lease %q, builds %v)", tc.line, tc.lease, tc.builds)
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.builds, magusRepoAt), "%s (lease %q, builds %v)", tc.line, tc.lease, tc.builds)
 	}
 	for _, tc := range []struct {
 		line, lease string
@@ -704,7 +704,7 @@ func TestRecoveryLine(t *testing.T) {
 		{"/repo/magus buzz hack/dev/other.buzz", "lease-a", false},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", true},
 	} {
-		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == ""), "%s (lease %q)", tc.line, tc.lease)
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == "", magusRepoAt), "%s (lease %q)", tc.line, tc.lease)
 	}
 }
 
@@ -729,7 +729,7 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 				named[0] = strings.ReplaceAll(named[0], "<main checkout>", "/repo")
 			}
 			for _, line := range named {
-				assert.True(t, recoveryLine(line, DialectBash, tc.lease, tc.builds), "%s (binary %v) names %q: %s", tc.name, hasBinary, line, fix.say)
+				assert.True(t, recoveryLine(line, DialectBash, tc.lease, tc.builds, magusRepoAt), "%s (binary %v) names %q: %s", tc.name, hasBinary, line, fix.say)
 			}
 		}
 	}

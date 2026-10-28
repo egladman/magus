@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -59,20 +58,13 @@ func graphMoved(deps Dependencies) staleGraph {
 	if !ok {
 		return staleGraph{}
 	}
+	if deps.GraphMoved == nil {
+		return staleGraph{}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), graphMovedBudget)
 	defer cancel()
-	if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
-		return staleGraph{reason: knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), underway: true}
-	}
-	cacheDir, err := deps.cacheDir(root)
-	if err != nil {
-		return staleGraph{}
-	}
-	built, err := knowledge.ReadGuardIndexCheckout(cacheDir, root)
-	if err != nil {
-		return staleGraph{}
-	}
-	return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{})}
+	reason, underway := deps.GraphMoved(ctx, root)
+	return staleGraph{reason: reason, underway: underway}
 }
 
 // verdict is graph-stale's advice in place of the deny: the search runs, and the rebuild
@@ -1261,15 +1253,10 @@ func symbolIndexBuilt(deps Dependencies) bool {
 		return false
 	}
 	root, ok := resolvedRoot(deps.scope.root)
-	if !ok {
+	if !ok || deps.SymbolIndexBuilt == nil {
 		return false
 	}
-	cacheDir, err := deps.cacheDir(root)
-	if err != nil {
-		return false
-	}
-	has, err := knowledge.GuardIndexHasSymbols(cacheDir, root)
-	return err == nil && has
+	return deps.SymbolIndexBuilt(root)
 }
 
 // symbolIndexCause is why the symbol index cannot vouch for every site, as a clause

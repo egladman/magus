@@ -293,7 +293,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 		return applyFindings(gate, verdict, []costFinding{f}, from)
 	}
 	st := sessionCostState(at, who, liveRowLookup(ctx, at), time.Now())
-	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command,
+	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command, at), free: costFree(in.command, at), line: in.command,
 		orchestration: orchestration(st, from), root: at.workspace}
 	if call.orchestration != "" {
 		call.work = mainWork(ctx, at, st, in.command)

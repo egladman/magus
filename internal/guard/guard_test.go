@@ -1272,7 +1272,7 @@ func strict(deps Dependencies) Dependencies {
 	for name, d := range builtin.Defaults() {
 		deps.Builtins[name] = builtin.Setting{Decision: d}
 	}
-	return deps
+	return indexReads(deps)
 }
 
 // advising returns deps with each named rule set to advise, the opt-out a workspace

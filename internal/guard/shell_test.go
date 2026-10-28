@@ -1,9 +1,9 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -1967,20 +1967,18 @@ func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
 	assert.Contains(t, v.Why, "cannot prove a pipe's upstream")
 }
 
-// In magus's own checkout go-build and build relink ./magus. Every pipe stage starts at
-// once, so the stage after one would run the binary being replaced; `&&` runs the new one.
-// The bootstrap link itself is raw-tool's, alone on its line.
+// A target that declares relinks replaces the binary a later pipe stage would run, since
+// every pipe stage starts at once; `&&` runs the new one. Only the declaration counts: a
+// target named build that declares nothing is refused toward the pipe like any other. The
+// bootstrap link itself is raw-tool's, alone on its line.
 func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
-	own := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(own, "go.mod"), []byte(fmt.Sprintf("module %s\n", ownModule)), 0o644))
 	deps := strict(testDependencies())
-	deps.scope = workspaceScope{root: own}
+	deps.scope = workspaceScope{root: t.TempDir()}
+	deps.TargetPolicies = func(context.Context, string) (types.TargetPolicyIndex, bool) { return magusRepoPolicies, true }
 
 	for _, cmd := range []string{
 		"./magus run go-build . && ./magus run generate:rw .",
 		"./magus run go_build . -s && ./magus run test .",
-		"./magus run build . ; ./magus run test .",
-		"./magus run go::go-build . -- -o ./magus ./cmd/magus && ./magus run test .",
 	} {
 		v := Evaluate(deps, cmd)
 		assert.Empty(t, v.Deny, cmd)
@@ -1988,11 +1986,8 @@ func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
 	}
 	assert.NotEmpty(t, Evaluate(deps, "./magus run test . && ./magus run go-build .").Deny,
 		"a relink in the LAST stage replaces nothing a later stage runs")
-
-	other := strict(testDependencies())
-	other.scope = workspaceScope{root: t.TempDir()}
-	assert.NotEmpty(t, Evaluate(other, "magus run build web && magus run test web").Deny,
-		"build relinks nothing another workspace's stages run")
+	assert.NotEmpty(t, Evaluate(deps, "./magus run build . ; ./magus run test .").Deny,
+		"a target named build that declares nothing relinks nothing")
 
 	assert.Equal(t, denyRuleRawTool, Evaluate(strict(testDependencies()), "go build -o magus ./cmd/magus && ./magus run go-build .").Rule.Name)
 }

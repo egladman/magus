@@ -2073,6 +2073,8 @@ func ObjectTarget(v types.Target, enums ffi.EnumCases) vm.Value {
 	out.MapSet("advisory_reason", vm.StringValue(v.AdvisoryReason))
 	out.MapSet("human_only", vm.BoolValue(v.HumanOnly))
 	out.MapSet("human_only_reason", vm.StringValue(v.HumanOnlyReason))
+	out.MapSet("relinks", vm.StringValue(v.Relinks))
+	out.MapSet("integrates", vm.StringValue(v.Integrates))
 	return out
 }
 

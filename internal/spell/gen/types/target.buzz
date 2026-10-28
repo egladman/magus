@@ -33,4 +33,6 @@ export object Target {
     advisory_reason: str = "",
     human_only: bool = false,
     human_only_reason: str = "",
+    relinks: str = "",
+    integrates: str = "",
 }

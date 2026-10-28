@@ -356,8 +356,9 @@ func scoutRecord(args []string) bool {
 // branch to the commit its placed binary was built at (see fastForward). The placement and
 // the bootstrap pass for every caller, lease or none: a worker runs the placement before its
 // lease is bound, and a judge that cannot load the tree must not deny the line it names.
-// Whether a worker may build is the raw-tool rule's to say.
-func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
+// Whether a worker may build is the raw-tool rule's to say. The rebuild is a run of a
+// target at declares relinks, read off at's record, never off a target's name.
+func recoveryLine(command string, d Dialect, lease string, builds bool, at location) bool {
 	call, ok := soleCall(command, d)
 	if !ok {
 		return false
@@ -385,7 +386,7 @@ func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 		return false
 	case prog == "magus" && len(call.Assigns) == 0:
 		if r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]}); ok {
-			return r.verb == "run" && targetName(r.target) == "go-build" && len(r.projects) <= 1 && (len(r.projects) == 0 || r.projects[0] == ".")
+			return runRelinks(at.declared().ix, r)
 		}
 	}
 	return false
@@ -462,7 +463,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	if in.mcpTool != "" {
 		call.what = fmt.Sprintf("this call to the magus %s tool", in.mcpTool)
 	}
-	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds)
+	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds, at)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
 		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
@@ -636,10 +637,12 @@ func staleOwnBinary(root string) bool {
 	return false
 }
 
-// replacesStaleMagus reports the line that gets root a current ./magus, alone on its line:
-// `./magus run go-build .`, or the bootstrap, while ./magus is stale or absent. Either is
-// the root's own to run then, since no worker builds magus and nothing else replaces it.
-func replacesStaleMagus(command string, root string) bool {
+// replacesStaleMagus reports the line that gets at's workspace a current ./magus, alone on
+// its line: a run of a target that declares relinks, or the bootstrap, while ./magus is
+// stale or absent. Either is the root's own to run then, since no worker builds magus and
+// nothing else replaces it.
+func replacesStaleMagus(command string, at location) bool {
+	root := at.workspace
 	if root == "" || (hasMagusBinary(root) && !staleOwnBinary(root)) {
 		return false
 	}
@@ -659,5 +662,5 @@ func replacesStaleMagus(command string, root string) bool {
 		return false
 	}
 	r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]})
-	return ok && r.verb == "run" && targetName(r.target) == "go-build" && slices.Equal(r.projects, []string{"."})
+	return ok && runRelinks(at.declared().ix, r)
 }

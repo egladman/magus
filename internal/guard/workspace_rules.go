@@ -1248,10 +1248,10 @@ type Wiring struct {
 	// trail row. Binary may be "" when the caller is not a magus binary.
 	BinaryVersion string
 	Binary        string
-	// Inspect, HumanOnlyRecord and CacheDir become the Dependencies members of the same name.
-	Inspect         func(ctx context.Context, root string) (types.WorkspaceRepository, error)
-	HumanOnlyRecord func(ctx context.Context, root string) (types.HumanOnlyIndex, bool)
-	CacheDir        func(root string) (string, error)
+	// Inspect, TargetPolicies and CacheDir become the Dependencies members of the same name.
+	Inspect        func(ctx context.Context, root string) (types.WorkspaceRepository, error)
+	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
+	CacheDir       func(root string) (string, error)
 	// Trace starts the named phase of the caller's trace and returns its end. Nil traces
 	// nothing.
 	Trace func(ctx context.Context, phase string) (end func())
@@ -1286,20 +1286,20 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 	})
 	end()
 	deps := Dependencies{
-		Inspect:         w.Inspect,
-		HumanOnlyRecord: w.HumanOnlyRecord,
-		CacheDir:        w.CacheDir,
-		NotesShared:     w.Config.Knowledge.Notes.Shared,
-		Spells:          project.DefaultSpellRegistry().All,
-		Revision:        revisionAt,
-		TrackedFiles:    trackedFilesAt,
-		CheckoutState:   checkoutStateAt,
-		VCS:             w.vcsOptions(),
-		DefaultCharms:   w.Config.DefaultCharms,
-		BinaryVersion:   w.BinaryVersion,
-		Binary:          w.Binary,
-		BinaryDirty:     buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
-		RuleLoad:        loaded,
+		Inspect:        w.Inspect,
+		TargetPolicies: w.TargetPolicies,
+		CacheDir:       w.CacheDir,
+		NotesShared:    w.Config.Knowledge.Notes.Shared,
+		Spells:         project.DefaultSpellRegistry().All,
+		Revision:       revisionAt,
+		TrackedFiles:   trackedFilesAt,
+		CheckoutState:  checkoutStateAt,
+		VCS:            w.vcsOptions(),
+		DefaultCharms:  w.Config.DefaultCharms,
+		BinaryVersion:  w.BinaryVersion,
+		Binary:         w.Binary,
+		BinaryDirty:    buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
+		RuleLoad:       loaded,
 	}
 	if commit, _ := buildinfo.Commit(); commit != "unknown" {
 		deps.BinaryCommit = commit

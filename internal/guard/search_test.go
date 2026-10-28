@@ -753,3 +753,35 @@ func TestStaleSymbolDenyCarriesTheIndexCause(t *testing.T) {
 	assert.NotContains(t, unnamed.Why, "Why:")
 	assert.Contains(t, unnamed.Deny, "the symbol index is older than the sources it covers")
 }
+
+// indexReads wires the guard-index reads cmd/magus/shell.go supplies, over deps.CacheDir as
+// it stands now: a test that changes CacheDir calls strict again.
+func indexReads(deps Dependencies) Dependencies {
+	cacheDir := deps.CacheDir
+	if cacheDir == nil {
+		cacheDir = func(string) (string, error) { return "", errNoDependency }
+	}
+	deps.GraphMoved = func(ctx context.Context, root string) (string, bool) {
+		if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
+			return knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), true
+		}
+		dir, err := cacheDir(root)
+		if err != nil {
+			return "", false
+		}
+		built, err := knowledge.ReadGuardIndexCheckout(dir, root)
+		if err != nil {
+			return "", false
+		}
+		return built.StaleAt(knowledge.GuardCheckout{}), false
+	}
+	deps.SymbolIndexBuilt = func(root string) bool {
+		dir, err := cacheDir(root)
+		if err != nil {
+			return false
+		}
+		has, err := knowledge.GuardIndexHasSymbols(dir, root)
+		return err == nil && has
+	}
+	return deps
+}

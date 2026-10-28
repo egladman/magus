@@ -52,10 +52,20 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 		return "", ""
 	}
 	at := hookLocation(ctx, deps)
-	pairs := humanOnlyReach(ctx, deps, at.workspace, lazyWorkspace(ctx, deps, at.workspace), runs)
+	pairs, note := humanOnlyReach(ctx, deps, at.workspace, lazyWorkspace(ctx, deps, at.workspace), runs)
 	if len(pairs) == 0 {
 		return "", ""
 	}
+	decision, reason = gradeHumanOnlyPairs(ctx, deps, actingLease, command, at.workspace, runs, pairs)
+	if note != "" {
+		reason += "\n" + note
+	}
+	return decision, reason
+}
+
+// gradeHumanOnlyPairs is gradeHumanOnly's verdict once it knows the human_only targets
+// the runs reach.
+func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, command, root string, runs []targetRun, pairs []humanOnlyPair) (decision, reason string) {
 	line := elideCommand(command)
 	var composed, unread []humanOnlyPair
 	for _, p := range pairs {
@@ -89,7 +99,7 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 	for _, p := range pairs {
 		reason := strings.TrimRight(p.reason, ".")
 		reasons = append(reasons, reason)
-		fmt.Fprintf(&facts, "`%s` is run by a person: %s. %s\n", humanOnlyRun(p, runs), reason, humanOnlyHistory(ctx, at.workspace, p))
+		fmt.Fprintf(&facts, "`%s` is run by a person: %s. %s\n", humanOnlyRun(p, runs), reason, humanOnlyHistory(ctx, root, p))
 	}
 	// The worker test push-ungated uses: a row that cannot be read stays a worker. The
 	// declared reasons ride the first line, the one a fork quotes when it refuses the check.
@@ -109,24 +119,15 @@ func humanOnlyRun(p humanOnlyPair, runs []targetRun) string {
 	return fmt.Sprintf("magus run %s %s", p.target, p.project)
 }
 
-// phaseHumanOnlyRecord is the trail's name for the read of the knowledge store's record
-// of what the workspace declares human_only.
-const phaseHumanOnlyRecord = "human_only_record"
-
 // humanOnlyReach is every human_only target runs reach in the workspace at root, each
-// once. It answers from the knowledge store's record while that record is provably
-// current, and opens the workspace through workspace otherwise. A workspace that cannot
+// once, and the note declaredPolicies gives for how it read them. A workspace that cannot
 // be read reaches none.
-func humanOnlyReach(ctx context.Context, deps Dependencies, root string, workspace func() (types.WorkspaceRepository, error), runs []targetRun) []humanOnlyPair {
-	ix, ok := deps.humanOnlyRecord(ctx, root)
+func humanOnlyReach(ctx context.Context, deps Dependencies, root string, workspace func() (types.WorkspaceRepository, error), runs []targetRun) ([]humanOnlyPair, string) {
+	ix, note, ok := declaredPolicies(ctx, deps, root, workspace)
 	if !ok {
-		ws, err := workspace()
-		if err != nil {
-			return nil
-		}
-		ix = types.IndexHumanOnly(ws)
+		return nil, note
 	}
-	return reachHumanOnly(indexedHumanOnly{ix}, runs)
+	return reachHumanOnly(indexedHumanOnly{ix}, runs), note
 }
 
 // reachHumanOnly is humanOnlyReach over decls, what the workspace declares.
@@ -166,13 +167,13 @@ func compareHumanOnlyPairs(a, b humanOnlyPair) int {
 }
 
 // indexedHumanOnly answers what a workspace declares human_only from its index: the record
-// the knowledge store keeps of it, or the one types.IndexHumanOnly builds from it opened.
+// the knowledge store keeps of it, or the one types.IndexTargetPolicies builds from it opened.
 // Both are the same index, so the verdict cannot depend on which one answered.
-type indexedHumanOnly struct{ ix types.HumanOnlyIndex }
+type indexedHumanOnly struct{ ix types.TargetPolicyIndex }
 
 func (d indexedHumanOnly) declared() []humanOnlyPair {
-	out := make([]humanOnlyPair, 0, len(d.ix.Targets))
-	for _, t := range d.ix.Targets {
+	out := make([]humanOnlyPair, 0, len(d.ix.HumanOnly()))
+	for _, t := range d.ix.HumanOnly() {
 		out = append(out, recordedPair(t, false))
 	}
 	slices.SortFunc(out, compareHumanOnlyPairs)
@@ -197,7 +198,7 @@ func (d indexedHumanOnly) projects(r targetRun) []string {
 func (d indexedHumanOnly) reached(project, target string) []humanOnlyPair {
 	run := types.TargetRef{Project: project, Target: target}
 	var out []humanOnlyPair
-	for _, t := range d.ix.Targets {
+	for _, t := range d.ix.HumanOnly() {
 		if t.TargetRef == run {
 			return []humanOnlyPair{recordedPair(t, false)}
 		}
@@ -209,7 +210,7 @@ func (d indexedHumanOnly) reached(project, target string) []humanOnlyPair {
 	return out
 }
 
-func recordedPair(t types.HumanOnlyTarget, composed bool) humanOnlyPair {
+func recordedPair(t types.TargetPolicy, composed bool) humanOnlyPair {
 	return humanOnlyPair{project: t.Project, target: t.Target, reason: t.Reason, skipCache: t.SkipCache, composed: composed}
 }
 

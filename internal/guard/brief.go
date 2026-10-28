@@ -259,15 +259,19 @@ func briefHumanOnly(ctx context.Context, deps Dependencies, root string, workspa
 		if r.negated {
 			continue
 		}
-		pairs := humanOnlyReach(ctx, deps, root, workspace, []targetRun{r.run})
+		pairs, note := humanOnlyReach(ctx, deps, root, workspace, []targetRun{r.run})
 		if len(pairs) == 0 {
 			continue
+		}
+		why := fmt.Sprintf(`The workspace declares it human_only: %s
+A leased worker is refused it whoever asks.`, pairs[0].reason)
+		if note != "" {
+			why += "\n" + note
 		}
 		return ShellVerdict{
 			Deny: fmt.Sprintf("this brief tells job %s's worker to run `%s`, which a person runs [%s]: fix the brief.\nThe line: %q",
 				row.ID, pairs[0].ref(), denyRuleHumanOnly, elideCommand(strings.TrimSpace(r.line))),
-			Why: fmt.Sprintf(`The workspace declares it human_only: %s
-A leased worker is refused it whoever asks.`, pairs[0].reason),
+			Why:  why,
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)},
 		}
 	}
