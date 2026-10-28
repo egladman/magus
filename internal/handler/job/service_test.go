@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -23,14 +24,18 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// trailWorkspace is a workspace whose trail lives at dir and whose cache reports a fixed size.
+// trailWorkspace is a workspace whose trail lives at dir, whose cache reports a fixed size,
+// and which declares projects.
 type trailWorkspace struct {
 	dir        string
 	cacheBytes int64
+	projects   []*types.Project
 }
 
-func (f trailWorkspace) CacheDir() string      { return f.dir }
-func (f trailWorkspace) CacheDiskBytes() int64 { return f.cacheBytes }
+func (f trailWorkspace) CacheDir() string            { return f.dir }
+func (f trailWorkspace) CacheDiskBytes() int64       { return f.cacheBytes }
+func (f trailWorkspace) Root() string                { return f.dir }
+func (f trailWorkspace) All() []*types.Project       { return f.projects }
 
 // newTestService builds a Service with injected proc seams so no live server is needed.
 func newTestService(ws workspace, submit func(context.Context, string, []string, string) (string, error), status func(context.Context, string) (*proc.StatusReply, error)) *Service {
@@ -475,4 +480,51 @@ func TestListJobs_ServesTheStoresReport(t *testing.T) {
 	require.Len(t, resp.Msg.Overlaps, 1)
 	require.Equal(t, types.ClaimsDisjoint, resp.Msg.Overlaps[0].Claims, "different declarations of one file are disjoint claims")
 	require.Equal(t, want.Overlaps[0].Claims, resp.Msg.Overlaps[0].Claims)
+}
+
+// listJobsSuite pins that the console's listing scopes overlaps by the served workspace,
+// as `magus ls jobs` and magus\job.list do.
+type listJobsSuite struct {
+	suite.Suite
+}
+
+func TestListJobsSuite(t *testing.T) { suite.Run(t, new(listJobsSuite)) }
+
+// overlaps lists two live jobs holding gen/decode.go, from one checkout or two, through a
+// service over a workspace declaring projects.
+func (s *listJobsSuite) overlaps(oneCheckout bool, projects []*types.Project) []*jobv1.JobOverlap {
+	dir := s.T().TempDir()
+	a, b := s.T().TempDir(), s.T().TempDir()
+	if oneCheckout {
+		b = a
+	}
+	store := jobstore.NewStore(jobstore.Location{StateBase: s.T().TempDir(), CacheDir: dir, Root: dir})
+	for id, checkout := range map[string]string{"a": a, "b": b} {
+		_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
+			cur.State, cur.WritePaths, cur.CheckoutRoot = types.StateRunning, []string{"gen/decode.go"}, checkout
+		})
+		s.Require().NoError(err)
+	}
+	svc := newTestService(trailWorkspace{dir: dir, projects: projects}, nil,
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+	svc.store = store
+	resp, err := svc.ListJobs(s.T().Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	s.Require().NoError(err)
+	return resp.Msg.Overlaps
+}
+
+func generatedProjects() []*types.Project {
+	return []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}
+}
+
+func (s *listJobsSuite) TestDropsAGeneratedOutputHeldInAnotherCheckout() {
+	s.Empty(s.overlaps(false, generatedProjects()))
+}
+
+func (s *listJobsSuite) TestKeepsAGeneratedOutputHeldInOneCheckout() {
+	s.Len(s.overlaps(true, generatedProjects()), 1)
+}
+
+func (s *listJobsSuite) TestKeepsThePairWhenTheWorkspaceListsNoProjects() {
+	s.Len(s.overlaps(false, nil), 1, "with no projects the scope check cannot run, so the hold stays")
 }

@@ -430,11 +430,16 @@ func lsJobs(root string, args []string) error {
 		return err
 	}
 	// The store's report, not the bare rows: magus\job.list and JobService's ListJobs
-	// build the same one, so the three doors cannot disagree about a row.
+	// build the same one. The workspace scoping its overlaps loads only for a pair across
+	// checkouts, so most listings never pay for a load.
 	list, err := store.Report(ctx, time.Now().Unix(), globalCfg.Jobs.StaleAfter)
 	if err != nil {
 		return err
 	}
+	list.Overlaps = job.ContendedOverlaps(list.Jobs, list.Overlaps, sync.OnceValues(func() ([]*types.Project, string) {
+		ws := jobWorkspace(ctx, root)
+		return ws.Projects, ws.Unavailable
+	}))
 	list, me, err := joinInflight(ctx, root, store, list)
 	if err != nil {
 		return err

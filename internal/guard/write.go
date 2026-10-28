@@ -314,54 +314,94 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	if len(live) == 0 && !enrolled {
 		return adviseUnleasedWorker(actingLease)
 	}
-	owners := contendingOwners(owningLeases(leases, live), rel, checkout, sync.OnceValue(func() []*types.Project {
-		repo, err := deps.inspect(ctx, checkout)
-		if err != nil || repo == nil {
-			return nil
-		}
-		return repo.All()
-	}))
+	owners, unchecked := contendingOwners(owningLeases(leases, live), rel, checkout, checkoutProjects(ctx, deps, checkout))
+	return sayUnchecked(gradeOwnedEdit(ctx, deps, ownedEdit{
+		location: location, checkout: checkout, rel: rel, me: me, enrolled: enrolled,
+		leases: leases, owners: owners, fields: fields,
+	}), unchecked)
+}
 
-	if enrolled {
-		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
-			return writeGrade{Decision: decisionDeny, Reason: reason}
+// checkoutProjects loads checkout's projects once, on first ask, or says why it could not.
+func checkoutProjects(ctx context.Context, deps Dependencies, checkout string) job.Projects {
+	return sync.OnceValues(func() ([]*types.Project, string) {
+		repo, err := deps.inspect(ctx, checkout)
+		switch {
+		case err != nil:
+			return nil, fmt.Sprintf("the workspace at %s did not load: %v", checkout, err)
+		case repo == nil:
+			return nil, "no workspace loaded at " + checkout
 		}
-		// A dead holder owns nothing against me: its path is the auto-claim's to grant.
-		dead := deadOwners(location, owners, rel, me.ID, time.Now())
-		owners = slices.DeleteFunc(owners, func(u types.Job) bool {
-			return slices.ContainsFunc(dead, func(d job.DeadHolder) bool { return d.Row.ID == u.ID })
-		})
-		enter := func(owner types.Job) (writeGrade, bool) {
-			return gradeEntry(ctx, deps, location, owner, rel)
-		}
-		claim := func(rel string) (writeGrade, string) {
-			return gradeClaimOutside(ctx, deps, location, checkout, me, leases, dead, rel)
-		}
-		knock := func(owner types.Job, rel string) string {
-			return knockHolder(ctx, deps, me, owner, rel)
-		}
-		g := gradeAgainstOwnLease(me, owners, rel, enter, knock, func() string { return deps.revision(ctx, checkout, "") }, claim)
-		if g.Decision == decisionDeny {
-			return g
-		}
-		if denied := gradeDeniedDeclarations(ctx, checkout, me, rel, fields); denied.Decision != "" {
-			return denied
-		}
-		if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
-			return claimed
-		}
-		if narrowed := gradeConfigNarrowing(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
-			return narrowed
-		}
-		// Graded whatever g says, so the root's row is filed even when another advisory
-		// takes the verdict.
-		who := hookAttribution{Host: deps.caller.Host, Session: deps.caller.Session, Agent: deps.caller.Agent}
-		compat := gradeCompatMarker(ctx, deps, location, who, me.ID, filepath.Join(checkout, filepath.FromSlash(rel)), fields)
-		if g.Decision != "" {
-			return g
-		}
-		return compat
+		return repo.All(), ""
+	})
+}
+
+// ownedEdit is one write gradeLeasedEdit has placed: the checkout and path it lands on,
+// the acting lease's row, and the live leases that own the path against it.
+type ownedEdit struct {
+	location location
+	checkout string
+	rel      string
+	me       types.Job
+	enrolled bool
+	leases   []types.Job
+	owners   []types.Job
+	fields   writeFields
+}
+
+// gradeOwnedEdit grades a placed write against the leases that own its path: as the
+// acting lease's own write when it is enrolled, else as an unattributed one.
+func gradeOwnedEdit(ctx context.Context, deps Dependencies, e ownedEdit) writeGrade {
+	if e.enrolled {
+		return gradeEnrolledEdit(ctx, deps, e)
 	}
+	return gradeUnattributedEdit(ctx, deps, e.location, e.owners, e.rel)
+}
+
+// gradeEnrolledEdit grades a placed write by the live lease it acts under.
+func gradeEnrolledEdit(ctx context.Context, deps Dependencies, e ownedEdit) writeGrade {
+	location, checkout, rel, me, fields := e.location, e.checkout, e.rel, e.me, e.fields
+	if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
+		return writeGrade{Decision: decisionDeny, Reason: reason}
+	}
+	// A dead holder owns nothing against me: its path is the auto-claim's to grant.
+	dead := deadOwners(location, e.owners, rel, me.ID, time.Now())
+	owners := slices.DeleteFunc(e.owners, func(u types.Job) bool {
+		return slices.ContainsFunc(dead, func(d job.DeadHolder) bool { return d.Row.ID == u.ID })
+	})
+	enter := func(owner types.Job) (writeGrade, bool) {
+		return gradeEntry(ctx, deps, location, owner, rel)
+	}
+	claim := func(rel string) (writeGrade, string) {
+		return gradeClaimOutside(ctx, deps, location, checkout, me, e.leases, dead, rel)
+	}
+	knock := func(owner types.Job, rel string) string {
+		return knockHolder(ctx, deps, me, owner, rel)
+	}
+	g := gradeAgainstOwnLease(me, owners, rel, enter, knock, func() string { return deps.revision(ctx, checkout, "") }, claim)
+	if g.Decision == decisionDeny {
+		return g
+	}
+	if denied := gradeDeniedDeclarations(ctx, checkout, me, rel, fields); denied.Decision != "" {
+		return denied
+	}
+	if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
+		return claimed
+	}
+	if narrowed := gradeConfigNarrowing(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
+		return narrowed
+	}
+	// Graded whatever g says, so the root's row is filed even when another advisory
+	// takes the verdict.
+	who := hookAttribution{Host: deps.caller.Host, Session: deps.caller.Session, Agent: deps.caller.Agent}
+	compat := gradeCompatMarker(ctx, deps, location, who, me.ID, filepath.Join(checkout, filepath.FromSlash(rel)), fields)
+	if g.Decision != "" {
+		return g
+	}
+	return compat
+}
+
+// gradeUnattributedEdit grades a placed write no live lease is acting under.
+func gradeUnattributedEdit(ctx context.Context, deps Dependencies, location location, owners []types.Job, rel string) writeGrade {
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose row in the store is simply stale.
@@ -756,12 +796,39 @@ func owningLeases(rows, live []types.Job) []types.Job {
 }
 
 // contendingOwners is owners without each whose hold on rel [job.HeldApart] frees for a
-// writer in checkout.
-func contendingOwners(owners []types.Job, rel, checkout string, projects func() []*types.Project) []types.Job {
-	return slices.DeleteFunc(slices.Clone(owners), func(u types.Job) bool {
+// writer in checkout, and the notes saying which holds stayed because the check could not
+// run.
+func contendingOwners(owners []types.Job, rel, checkout string, projects job.Projects) ([]types.Job, []string) {
+	var unchecked []string
+	kept := slices.DeleteFunc(slices.Clone(owners), func(u types.Job) bool {
 		decl, ok, _ := declarationCovering(u.HardPaths(), rel)
-		return ok && job.HeldApart(checkout, u, projects, rel, decl)
+		if !ok {
+			return false
+		}
+		apart, why := job.HeldApart(checkout, u, projects, rel, decl)
+		if why != "" {
+			unchecked = append(unchecked, why)
+		}
+		return apart
 	})
+	return kept, unchecked
+}
+
+// sayUnchecked appends to a deny's reason, or an advisory's context, each hold that stayed
+// because the generated-output scope check did not run. A grade with no verdict is left
+// alone: no hold cost the write anything.
+func sayUnchecked(g writeGrade, unchecked []string) writeGrade {
+	if len(unchecked) == 0 {
+		return g
+	}
+	note := " Also: " + strings.Join(unchecked, "; ") + "."
+	switch g.Decision {
+	case decisionDeny:
+		g.Reason += note
+	case decisionAdvise:
+		g.Context += note
+	}
+	return g
 }
 
 // findOwner finds the live lease whose [types.Job.HardPaths] cover rel, skipping exclude.

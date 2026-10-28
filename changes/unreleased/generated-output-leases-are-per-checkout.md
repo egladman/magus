@@ -5,4 +5,6 @@
   regenerating once, so a live lease in another checkout no longer blocks it: the fork's
   shared-file refusal, `magus job apply`, the guard's write and regenerate rules, and the
   overlap pairs of `magus ls jobs` all leave it alone. Hand-written source keeps its global
-  lease, and two jobs in one checkout still cannot both hold a generated output.
+  lease, and two jobs in one checkout still cannot both hold a generated output. When the
+  workspace does not load, the guard and the fork keep the hold and say the scope check did
+  not run.

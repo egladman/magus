@@ -3,6 +3,7 @@ package guard
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -3291,13 +3292,29 @@ func generatedWorkspace(t *testing.T) Dependencies {
 // writeHeldBeside grades an unattributed write to file while lease a/gen holds it in the
 // checkout checkout picks.
 func (s *guardSuite) writeHeldBeside(file string, checkout func(root string) string) writeGrade {
+	return s.writeHeldBesideIn(generatedWorkspace(s.T()), file, checkout)
+}
+
+// writeHeldBesideIn is writeHeldBeside with the workspace deps loads.
+func (s *guardSuite) writeHeldBesideIn(deps Dependencies, file string, checkout func(root string) string) writeGrade {
 	t := s.T()
 	holder := types.Job{ID: "a/gen", Criteria: "regenerate", WritePaths: []string{file}, State: types.StateRunning, Registered: 1}
 	ctx, root := fleetFixture(t)
 	holder.CheckoutRoot = checkout(root)
 	_, err := storeAt(ctx).Update(ctx, holder.ID, func(cur *types.Job) { *cur = holder })
 	s.Require().NoError(err)
-	return gradeLeasedWrite(ctx, generatedWorkspace(t), "", filepath.Join(root, filepath.FromSlash(file)))
+	return gradeLeasedWrite(ctx, deps, "", filepath.Join(root, filepath.FromSlash(file)))
+}
+
+func (s *guardSuite) TestAGeneratedOutputHeldInAnotherCheckoutStaysItsHoldersWhenTheWorkspaceWillNotLoad() {
+	elsewhere := s.T().TempDir()
+	broken := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, errors.New("magusfile.buzz: parse error")
+	}}
+	g := s.writeHeldBesideIn(broken, "testdata/api.lock", func(string) string { return elsewhere })
+	s.Contains(g.Context, "inside the paths lease a/gen", "the hold stays")
+	s.Contains(g.Context, "the generated-output scope check did not run")
+	s.Contains(g.Context, "magusfile.buzz: parse error")
 }
 
 func (s *guardSuite) TestAGeneratedOutputHeldInAnotherCheckoutIsNobodysToWriteHere() {

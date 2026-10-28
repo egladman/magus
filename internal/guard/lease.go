@@ -718,7 +718,8 @@ func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project)
 		}
 		for _, o := range shared {
 			pattern := strings.Fields(o.Output)[0]
-			if job.HeldApart(j.root, other, func() []*types.Project { return projects }, pattern) {
+			// own is read from projects, so a non-empty own means the check ran.
+			if apart, _ := job.HeldApart(j.root, other, func() ([]*types.Project, string) { return projects, "" }, pattern); apart {
 				continue
 			}
 			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {

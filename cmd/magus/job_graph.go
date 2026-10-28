@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -85,7 +86,8 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		return job.TermsFacts{WorkspaceCold: true}
 	}
 	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
-	derived = append(derived, leasedBoundary(row, leases)...)
+	here := job.WorkingCheckout(cmp.Or(row.CheckoutRoot, m.Root()), row)
+	derived = append(derived, leasedBoundary(row, leases, here, func() ([]*types.Project, string) { return m.All(), "" })...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	notes := collectNotes(ctx, m, row)
 	facts := job.TermsFacts{
@@ -149,7 +151,10 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 //
 // An ANCESTOR claims nothing against its descendant either: a child is forked inside its
 // parent's boundary, so listing the parent's paths would put the child's own out of reach.
-func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
+//
+// Nor does a lease in another checkout claim a generated output ([job.HeldApart]): row's
+// holder, working in here, regenerates its own copy.
+func leasedBoundary(row types.Job, leases []types.Job, here string, projects job.Projects) []job.TermsBoundary {
 	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
@@ -158,6 +163,9 @@ func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 			continue
 		}
 		for _, p := range other.HardPaths() {
+			if apart, _ := job.HeldApart(here, other, projects, p); apart {
+				continue
+			}
 			out = append(out, job.TermsBoundary{
 				Path:   p,
 				Reason: fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID),

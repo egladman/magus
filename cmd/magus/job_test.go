@@ -34,6 +34,7 @@ import (
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // A checkout whose magusfile this magus cannot load keeps one line naming the code, never
@@ -194,55 +195,70 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	assert.Contains(t, got[0].Reason, "except gen/runtime.go")
 }
 
-func TestLeasedBoundarySkipsTheRowsAncestors(t *testing.T) {
-	t.Parallel()
+// LeasedBoundarySuite pins which of a sibling lease's paths a job's terms put out of reach.
+type LeasedBoundarySuite struct {
+	suite.Suite
+}
 
+func TestLeasedBoundarySuite(t *testing.T) { suite.Run(t, new(LeasedBoundarySuite)) }
+
+// owners is the paths leasedBoundary lists for row, from a checkout at /repos/landing in a
+// workspace that declares gen/** a generated output.
+func (s *LeasedBoundarySuite) owners(row types.Job, rows []types.Job) []string {
+	projects := func() ([]*types.Project, string) {
+		return []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}, ""
+	}
+	var out []string
+	for _, b := range leasedBoundary(row, rows, "/repos/landing", projects) {
+		out = append(out, b.Path)
+	}
+	return out
+}
+
+func (s *LeasedBoundarySuite) TestSkipsTheRowsAncestors() {
 	rows := []types.Job{
 		{ID: "root", State: types.StateRunning, WritePaths: []string{"internal"}},
 		{ID: "root/a", Parent: "root", State: types.StateRunning, WritePaths: []string{"internal/job"}},
 		{ID: "root/a/leaf", Parent: "root/a", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go"}},
 		{ID: "root/b", Parent: "root", State: types.StateRunning, WritePaths: []string{"internal/guard"}},
 	}
-	var owners []string
-	for _, b := range leasedBoundary(rows[2], rows) {
-		owners = append(owners, b.Path)
-	}
-	assert.Equal(t, []string{"internal/guard"}, owners, "a sibling's boundary is off limits, an ancestor's is where the leaf was forked")
+	s.Equal([]string{"internal/guard"}, s.owners(rows[2], rows), "a sibling's boundary is off limits, an ancestor's is where the leaf was forked")
 }
 
 // An exited holder returned, so a sibling's terms no longer put its paths out of reach.
-func TestLeasedBoundarySkipsAnExitedRow(t *testing.T) {
-	t.Parallel()
-
+func (s *LeasedBoundarySuite) TestSkipsAnExitedRow() {
 	rows := []types.Job{
 		{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job"}},
 		{ID: "b", State: types.StateExited, WritePaths: []string{"internal/guard"}},
 		{ID: "c", State: types.StateDeclared, WritePaths: []string{"internal/hint"}},
 	}
-	var owners []string
-	for _, b := range leasedBoundary(rows[0], rows) {
-		owners = append(owners, b.Path)
-	}
-	assert.Equal(t, []string{"internal/hint"}, owners)
+	s.Equal([]string{"internal/hint"}, s.owners(rows[0], rows))
 }
 
 // A soft path is free until its holder writes it, so a sibling's terms leave it in reach.
-func TestLeasedBoundarySkipsASoftPath(t *testing.T) {
-	t.Parallel()
-
-	held := types.Job{ID: "b", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}
-	soft := held
+func (s *LeasedBoundarySuite) TestSkipsASoftPath() {
+	soft := types.Job{ID: "b", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}
 	soft.SoftPaths = []string{"internal/job/plan_test.go"}
 	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job/plan_test.go"}}
-	owned := func(other types.Job) []string {
-		var out []string
-		for _, b := range leasedBoundary(me, []types.Job{me, other}) {
-			out = append(out, b.Path)
-		}
-		return out
-	}
-	assert.Equal(t, []string{"internal/job/plan.go"}, owned(soft))
-	assert.Equal(t, []string{"internal/job/plan.go", "internal/job/plan_test.go"}, owned(held), "a hardened path is owned")
+	s.Equal([]string{"internal/job/plan.go"}, s.owners(me, []types.Job{me, soft}))
+}
+
+func (s *LeasedBoundarySuite) TestListsAHardenedPath() {
+	held := types.Job{ID: "b", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}
+	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job/plan_test.go"}}
+	s.Equal([]string{"internal/job/plan.go", "internal/job/plan_test.go"}, s.owners(me, []types.Job{me, held}))
+}
+
+func (s *LeasedBoundarySuite) TestSkipsAGeneratedOutputAnotherCheckoutHolds() {
+	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/mandate", WritePaths: []string{"gen/decode.go", "run.go"}}
+	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"gen/decode.go"}}
+	s.Equal([]string{"run.go"}, s.owners(me, []types.Job{me, other}), "each checkout regenerates its own gen/decode.go")
+}
+
+func (s *LeasedBoundarySuite) TestListsAGeneratedOutputHeldInTheSameCheckout() {
+	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/landing", WritePaths: []string{"gen/decode.go"}}
+	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"gen/decode.go"}}
+	s.Equal([]string{"gen/decode.go"}, s.owners(me, []types.Job{me, other}))
 }
 
 func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {

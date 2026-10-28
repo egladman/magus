@@ -1864,13 +1864,14 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	if err != nil {
 		return types.JobList{}, err
 	}
-	list, err := store.Report(ctx, time.Now().Unix(), staleAfter)
+	ws := types.WorkspaceFromContext(ctx)
+	list, err := store.InWorkspace(contextJobWorkspace(ctx, ws)).Report(ctx, time.Now().Unix(), staleAfter)
 	if err != nil {
 		return types.JobList{}, err
 	}
 	// The same join `magus ls jobs` makes, from the snapshot `magus queue ls` keeps; it
 	// never fetches.
-	root := types.WorkspaceFromContext(ctx).Root()
+	root := ws.Root()
 	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
 }
 
@@ -1891,23 +1892,25 @@ func MagusPutJob(ctx context.Context, id string, put types.JobPut) (types.Job, e
 	if l, ok := ws.(workspaceJobLimits); ok {
 		limits = l.JobLimits()
 	}
-	// A view that wraps no repository answers All by panicking; that is reported as
-	// Unavailable like an empty one, so the checks that need projects say they did not run.
-	validated := func() (validated job.Workspace) {
-		defer func() {
-			if r := recover(); r != nil {
-				validated = job.Workspace{Unavailable: fmt.Sprintf("the workspace on the context could not list its projects: %v", r)}
-			}
-		}()
-		projects := ws.All()
-		if len(projects) == 0 {
-			return job.Workspace{Unavailable: "the workspace on the context lists no projects"}
-		}
-		return job.Workspace{Projects: projects, Ignored: job.VCSIgnored(ctx, ws.Root())}
-	}()
 	// No symbol reader: a magusfile target holds no loaded graph, so only the ambiguity
 	// check is skipped here, and the gate still refuses to certify an unresolved name.
-	return job.ForkMerge(ctx, store.InWorkspace(validated), strings.TrimSpace(id), merge, limits, nil)
+	return job.ForkMerge(ctx, store.InWorkspace(contextJobWorkspace(ctx, ws)), strings.TrimSpace(id), merge, limits, nil)
+}
+
+// contextJobWorkspace is ws as a job record's validation reads it. A view that wraps no
+// repository answers All by panicking; that is reported as Unavailable like an empty one,
+// so the checks that need projects say they did not run.
+func contextJobWorkspace(ctx context.Context, ws types.WorkspaceRepository) (validated job.Workspace) {
+	defer func() {
+		if r := recover(); r != nil {
+			validated = job.Workspace{Unavailable: fmt.Sprintf("the workspace on the context could not list its projects: %v", r)}
+		}
+	}()
+	projects := ws.All()
+	if len(projects) == 0 {
+		return job.Workspace{Unavailable: "the workspace on the context lists no projects"}
+	}
+	return job.Workspace{Projects: projects, Ignored: job.VCSIgnored(ctx, ws.Root())}
 }
 
 // MagusRegisterJob backs magus\job.register: it records the base the workspace's
