@@ -40,7 +40,6 @@ type Config struct {
 	Diff       Diff       `json:"diff" yaml:"diff"`
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 	Queue      Queue      `json:"queue" yaml:"queue"`
-	Go         GoConfig   `json:"go" yaml:"go"`
 	Disk       Disk       `json:"disk" yaml:"disk"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
@@ -142,16 +141,6 @@ type Config struct {
 	// one exported env var would flip billing or the level for every workspace a shell
 	// touches without a trace in any file.
 	Agents Agents `json:"agents" yaml:"agents" cli:"-"`
-}
-
-// GoConfig configures what magus reports about the Go toolchain.
-type GoConfig struct {
-	// CacheBudgetMB is the size in MB (binary) past which `magus doctor` advises cleaning the Go
-	// build cache or the golangci-lint cache. Default 20480; 0 turns the check off.
-	//
-	// A budget rather than a cap: neither cache is magus's, so doctor measures and names the
-	// command that frees it and deletes nothing.
-	CacheBudgetMB int `json:"cache_budget_mb" yaml:"cache_budget_mb" validate:"gte=0"`
 }
 
 // Disk configures the reclaim hook every harness spell wires: it samples the free space of
@@ -1112,9 +1101,6 @@ var envOnly = []cmdline.Env{
 	{Name: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Key: "", Default: "", Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
 }
 
-// DefaultGoCacheBudgetMB is go.cache_budget_mb when nothing sets it: 20 GiB.
-const DefaultGoCacheBudgetMB = 20480
-
 // DefaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for most test
 // and build steps to finish; a supervisor that will not wait this long sends its own
 // second signal or SIGKILL, and runs outlive the broker anyway, re-asserting their claims
@@ -1137,7 +1123,6 @@ func Defaults() Config {
 			},
 		},
 		ShutdownGrace: DefaultShutdownGrace,
-		Go:            GoConfig{CacheBudgetMB: DefaultGoCacheBudgetMB},
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, IntegrateAdviseAt: 5, IntegrateRefuseAt: 10, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
