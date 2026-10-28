@@ -95,7 +95,7 @@ const (
 	OpNewList // pop A items → push list
 	OpNewMap  // pop A*2 items (k, v pairs) → push map
 
-	// Functions
+	// Closures, calls and returns
 	OpNewClosure // push closure from chunk.funs[A], capturing upvalues
 	OpCall       // A = arg count; stack: callee arg0…argN → result
 	OpReturn     // return pop
