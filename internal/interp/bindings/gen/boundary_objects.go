@@ -504,6 +504,7 @@ func ObjectKnowledgeSymbolGap(v types.KnowledgeSymbolGap, enums ffi.EnumCases) v
 	out.MapSet("state", enums.Case("SymbolIndexFreshness", string(v.State)))
 	out.MapSet("detail", vm.StringValue(v.Detail))
 	out.MapSet("hint", vm.StringValue(v.Hint))
+	out.MapSet("unindexable", vm.BoolValue(v.Unindexable))
 	return out
 }
 

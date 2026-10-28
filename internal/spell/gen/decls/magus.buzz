@@ -897,6 +897,7 @@ export object KnowledgeSymbolGap {
     state: SymbolIndexFreshness = SymbolIndexFreshness.none,
     detail: str = "",
     hint: str = "",
+    unindexable: bool = false,
 }
 
 export object KnowledgeTextPresence {
