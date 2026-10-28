@@ -463,6 +463,46 @@ func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, f
 		}
 		out = append(out, rec)
 	}
+	return append(out, unindexedLanguages(in, decls, dirByPath)...)
+}
+
+// unindexedLanguages records each language a project's bound spells name that none of
+// its symbol indexes covers, with no Path or Op: there is no index to build or read, and
+// a lookup that comes back empty says so instead of reading as absent. A project with a
+// knowledge.symbols entry is left out, since its entries are its whole index set.
+func unindexedLanguages(in symbolIngestInputs, decls []resolvedSymbolIndex, dirByPath map[string]string) []knowledge.SymbolIndexDeclaration {
+	langBySpell := map[string]string{}
+	for _, sp := range in.spells {
+		if sp.SymbolFormat == "" {
+			langBySpell[sp.Name] = sp.Language
+		}
+	}
+	type projectLanguage struct{ project, language string }
+	covered := map[projectLanguage]bool{}
+	for _, d := range decls {
+		covered[projectLanguage{d.project, d.language}] = true
+	}
+	overridden := map[string]bool{}
+	for _, decl := range in.cfg.Knowledge.Symbols {
+		if decl.Project != "" && decl.Index != "" {
+			overridden[decl.Project] = true
+		}
+	}
+	var out []knowledge.SymbolIndexDeclaration
+	for _, p := range in.projects.Projects {
+		bound := p.Spells
+		if len(bound) == 0 && p.Spell != "" {
+			bound = []string{p.Spell}
+		}
+		for _, name := range bound {
+			key := projectLanguage{p.Path, langBySpell[name]}
+			if key.language == "" || covered[key] || overridden[p.Path] {
+				continue
+			}
+			covered[key] = true
+			out = append(out, knowledge.SymbolIndexDeclaration{Project: p.Path, Dir: dirByPath[p.Path], Language: key.language})
+		}
+	}
 	return out
 }
 
@@ -1728,10 +1768,18 @@ func indexerInstalled(ctx context.Context) func(bin string) bool {
 // probeSymbolIndexes is the probe itself, over declarations however they were resolved: one Stat
 // per declared index, and a gap for each that is not a readable file. installed answers
 // whether a missing index's indexer could have built it, so the gap carries the install
-// as its fix.
+// as its fix. A declaration with no Path is a language nothing indexes, always a gap.
 func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration, installed func(bin string) bool) []types.KnowledgeSymbolGap {
 	out := make([]types.KnowledgeSymbolGap, 0, len(decls))
 	for _, decl := range decls {
+		if decl.Path == "" {
+			out = append(out, types.KnowledgeSymbolGap{
+				Project: types.NewProjectRef(decl.Project, decl.Dir),
+				State:   types.SymbolIndexNotBuilt,
+				Detail:  "no symbol index for " + decl.Language,
+			})
+			continue
+		}
 		// Detail carries what Stat can actually distinguish: absent, or present but
 		// unreadable. State stays the machine-branchable field and is accurate for both,
 		// since neither yields a usable index.

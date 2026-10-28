@@ -116,13 +116,15 @@ func writeSCIP(t *testing.T, path string) {
 func writeIndexFile(t *testing.T, path string, idx *scip.Index) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	if filepath.Ext(path) == ".pack" {
-		require.NoError(t, symbols.PackSCIP(path, "test", idx))
-		return
-	}
 	data, err := proto.Marshal(idx)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, data, 0o644))
+	if filepath.Ext(path) != ".pack" {
+		require.NoError(t, os.WriteFile(path, data, 0o644))
+		return
+	}
+	src := filepath.Join(t.TempDir(), "index.scip")
+	require.NoError(t, os.WriteFile(src, data, 0o644))
+	require.NoError(t, symbols.PackFromSCIP(src, path, "test"))
 }
 
 // goWorkspace describes a workspace whose "go" spell is symbol-capable (it declares a
@@ -222,13 +224,40 @@ func TestSymbolGapsLogsWhenTheProbeCannotRun(t *testing.T) {
 	assert.Contains(t, buf.String(), "cancelled", "the underlying error must be surfaced, not swallowed")
 }
 
-// A workspace with no symbol-capable project has no code-symbol layer to miss, so there
-// is nothing outside coverage and an unmatched name is a verified absence.
+// A workspace whose spells name no language and declare no indexer has no code-symbol
+// layer to miss, so there is nothing outside coverage and an unmatched name is a verified
+// absence.
 func TestSymbolGapsNoneCapable(t *testing.T) {
 	root := t.TempDir()
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}
 	spells := []types.Spell{{Name: "ts", Targets: []string{"tsc"}}} // no scip op
 	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells)))
+}
+
+// A language nothing indexes is a gap of its own: an unmatched name could be one of its
+// symbols, so the lookup is unknown and says which language it could not search.
+func TestSymbolGapsNamesALanguageNothingIndexes(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	writeSCIP(t, goIndexPath(cacheDir, "pkg/a"))
+	projects, spells := goWorkspace("pkg/a")
+	projects.Projects = append(projects.Projects, types.ProjectEntry{Path: "web", Spell: "ts", Spells: []string{"ts"}})
+	spells = append(spells, types.Spell{Name: "ts", Targets: []string{"tsc"}, Language: "typescript"})
+
+	got := symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
+	require.Len(t, got, 1, "the built go index is no gap")
+	assert.Equal(t, "web (no symbol index for typescript)", got[0].Describe())
+}
+
+// A knowledge.symbols entry is its project's whole index set, so the project's spells'
+// languages are not reported as unindexed beside it.
+func TestSymbolGapsLeaveAnOverriddenProjectToItsEntries(t *testing.T) {
+	root := t.TempDir()
+	writeSCIP(t, filepath.Join(root, "web", "index.scip"))
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}
+	spells := []types.Spell{{Name: "ts", Targets: []string{"tsc"}, Language: "typescript"}}
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: "web", Index: "web/index.scip"}}}}
+	assert.Empty(t, symbolGaps(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), projects, spells)))
 }
 
 // The declared language reaches ingestion, so an indexer that reports none still yields
