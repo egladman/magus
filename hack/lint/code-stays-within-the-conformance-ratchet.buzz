@@ -7,6 +7,7 @@ import "assert";
 import "std";
 import "magus";
 import "magus/lint";
+import "hack/magusfile/conformance-ratchet" as ratchet;
 
 // ENFORCED are the conformance metrics this repository fails on. The rest stay advice,
 // printed and never failing: most of what they flag is a size or a shape chosen on purpose.
@@ -93,16 +94,32 @@ export fun judge(report: {str: any}) > [Finding] !> any {
         }
     }
     final stale: [any] = report["stale"] ?? [<any>];
+    final languages = ratchet\indexedLanguages(report);
     foreach (k in stale) {
         final metric: str = k["metric"] ?? "";
         if (ENFORCED.indexOf(metric) == null) {
             continue;
         }
+        final items = measuredItems(names(k["items"]), metric: metric, languages: languages);
+        if (items.len() == 0) {
+            continue;
+        }
         found.append(Finding{ path = RATCHET,
-            message = "a {metric} known entry names {staleNames(k)}, which no longer violates" + because(why, metric: metric, items: names(k["items"])),
+            message = "a {metric} known entry names {items.join(", ")}, which no longer violates" + because(why, metric: metric, items: items),
             fix = "Run `magus run format .`: it deletes what no longer violates." });
     }
     return found;
+}
+
+// measuredItems is the items of a stale entry an index measured, so their staleness means
+// something: a language no index covers was never measured. A clone entry is stale whole,
+// so one unmeasured item keeps all of it, as `magus run format .` does.
+fun measuredItems(items: [str], metric: str, languages: {str: bool}) > [str] {
+    final kept = items.filter(fun (index: int, item: str) > bool => ratchet\measured(item, languages: languages));
+    if (metric == "clone-tokens" and kept.len() < items.len()) {
+        return [<str>];
+    }
+    return kept;
 }
 
 // Item is what fixFor reads of a violation: its file, where the lens says it belongs ("" when it
@@ -302,6 +319,17 @@ test "a boundary violation names where the item belongs" {
     assert\equal(store.indexOf("Only internal/hint may know where its store lives") != null, want: true, message: store);
     assert\equal(fixFor("file-lines", value: 938, item: Item{}).indexOf("Bring it under 938, or add it") == 0, want: true,
         message: "other metrics keep the plain fix");
+}
+
+test "a stale item in a language no index measures does not fail" {
+    final mixed: {str: any} = {"metric": "func-lines", "items": ["a.go#F", "web/main.ts#activate"], "reason": "r"};
+    final got = judge(report([fresh()], rows: [<any>], stale: [mixed]));
+    assert\equal(got.len(), want: 1, message: "the go item");
+    assert\equal(got[0].message.indexOf("names a.go#F, which") != null, want: true, message: got[0].message);
+    final clone: {str: any} = {"metric": "clone-tokens", "items": ["x.go#A", "web/y.ts#B"], "reason": "r"};
+    assert\equal(judge(report([fresh()], rows: [<any>], stale: [clone])).len(), want: 0, message: "a clone entry stays whole");
+    final ts: {str: any} = {"metric": "file-lines", "items": ["web/main.ts"], "reason": "r"};
+    assert\equal(judge(report([fresh()], rows: [<any>], stale: [ts])).len(), want: 0, message: "nothing indexes typescript");
 }
 
 test "a known entry that no longer violates fails at the ratchet" {

@@ -58,7 +58,29 @@ export fun check(files: [Path]) > [Finding] !> any {
             fix = "Run `{proofread\build}`, then {bin} doc-comment, and read why it stopped." }];
     }
     final findings: [any] = json\parse(run.stdout);
+    foreach (lang in outOfScope(indexes)) {
+        std\print("symbol-docs-follow-proofread-rules: no {lang} symbol index is declared, so {lang} docs are out of scope and none was judged");
+    }
     return judge(findings, judged: judgedCounts(symbols), indexes: indexes, sanctioned: SANCTIONED);
+}
+
+// outOfScope is each of LANGUAGES no index in indexes is declared for. Nothing measures such
+// a language's docs, so the rule says so and judges the rest, rather than failing on a gap
+// no fix to a doc can close.
+export fun outOfScope(indexes: [any]) > [str] {
+    final missing = mut [<str>];
+    foreach (lang in LANGUAGES) {
+        var declared = false;
+        foreach (idx in indexes) {
+            if (idx["language"] == lang) {
+                declared = true;
+            }
+        }
+        if (!declared) {
+            missing.append(lang);
+        }
+    }
+    return missing;
 }
 
 // ofLanguages keeps the symbols of LANGUAGES. magus\symbols returns every index, Buzz's
@@ -88,24 +110,22 @@ fun judgedCounts(symbols: [any]) > {str: int} {
 export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {str: str}) > [Finding] !> any {
     final found = mut [<Finding>];
     var judgeable = true;
+    final unindexed = outOfScope(indexes);
     foreach (lang in LANGUAGES) {
-        var declared = false;
+        if (unindexed.indexOf(lang) != null) {
+            continue;
+        }
         foreach (idx in indexes) {
             if (idx["language"] != lang) {
                 continue;
             }
-            declared = true;
             final stale = support\staleness(idx, judging: "docs");
             judgeable = judgeable and stale.judgeable;
             foreach (f in stale.findings) {
                 found.append(f);
             }
         }
-        if (!declared) {
-            judgeable = false;
-            found.append(Finding{ path = ".", message = "no {lang} symbol index is declared, so no {lang} doc was judged",
-                fix = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
-        } else if ((judged[lang] ?? 0) == 0) {
+        if ((judged[lang] ?? 0) == 0) {
             judgeable = false;
             found.append(Finding{ path = ".", message = "no {lang} symbol was judged: silence, not a pass",
                 fix = "The indexer emitted no {lang} docs or names; read `magus\\symbols()` before dropping the language." });
@@ -205,13 +225,21 @@ test "a sanctioned finding is skipped and a sanction that no longer applies fail
     assert\equal(bare.len(), want: 1, message: "a sanction needs a reason");
 }
 
-test "a stale or missing index fails instead of passing on what it lacks" {
+test "a stale index fails instead of passing on what it lacks" {
     final stale: {str: any} = {"project": {"path": "console"}, "language": "typescript", "freshness": "out-of-date"};
     final got = judge([<any>], judged: counts(), indexes: [fresh("go"), stale], sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "the stale index");
     assert\equal(got[0].path, want: "console", message: "names the project");
-    final none = judge([<any>], judged: counts(), indexes: [fresh("go")], sanctioned: {<str: str>});
-    assert\equal(none.len(), want: 1, message: "no typescript index at all");
+}
+
+test "a language with no declared index is out of scope, and the rest is judged" {
+    final indexes = [fresh("go")];
+    assert\equal(outOfScope(indexes).join(", "), want: "typescript", message: "typescript has no index");
+    final got = judge([finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41")],
+        judged: {"go": 12}, indexes: indexes, sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "the go finding, and no failure for typescript");
+    assert\equal(got[0].path, want: "cmd/magus/run.go", message: got[0].message);
+    assert\equal(outOfScope(both()).len(), want: 0, message: "both declared");
 }
 
 test "a stale index listing its changes fails at each one and still judges the rest" {

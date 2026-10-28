@@ -10,13 +10,29 @@ import "encoding/json";
 // and an item leaving it can break the pair the rest still form.
 final CLONES = "clone-tokens";
 
+// LANGUAGES is the symbol-index language a file extension is written in, as the indexes
+// name it. An item in a file of no language here, or of one no index covers, was never
+// measured, so a report calling it stale says nothing about it.
+final LANGUAGES = {
+    ".go": "go",
+    ".buzz": "buzz",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".py": "python",
+    ".rs": "rust",
+    ".proto": "protobuf",
+};
+
 // Pruned is a record after prune: its lines, what left it, what was re-keyed, how many
-// shapes were recorded, and why nothing changed when the report could not vouch for it.
+// shapes were recorded, the stale items kept because no index measures their language,
+// and why nothing changed when the report could not vouch for it.
 object Pruned {
     lines: [str],
     removed: [str],
     carried: [str],
     filled: int,
+    unmeasured: [str],
     refused: str,
 }
 
@@ -42,6 +58,9 @@ export fun run(path: str) > void !> any {
         std\print("conformance-ratchet: left {path} as it is: {got.refused}");
         return;
     }
+    foreach (item in got.unmeasured) {
+        std\print("conformance-ratchet: kept {item} in {path}: no symbol index measures its language, so stale says nothing");
+    }
     if (got.removed.len() == 0 and got.carried.len() == 0 and got.filled == 0) {
         return;
     }
@@ -65,9 +84,37 @@ export fun run(path: str) > void !> any {
 export fun prune(report: {str: any}, record: [str]) > Pruned !> any {
     final refused = unvouched(report);
     if (refused != "") {
-        return Pruned{ lines = record, removed = [<str>], carried = [<str>], filled = 0, refused = refused };
+        return Pruned{ lines = record, removed = [<str>], carried = [<str>], filled = 0, unmeasured = [<str>], refused = refused };
     }
     return rewrite(record, plan: planOf(report));
+}
+
+// indexedLanguages is the set of languages report's indexes cover.
+export fun indexedLanguages(report: {str: any}) > {str: bool} {
+    final covered = mut {<str: bool>};
+    final indexes: [any] = report["indexes"] ?? [<any>];
+    foreach (idx in indexes) {
+        final lang: str = idx["language"] ?? "";
+        if (lang != "") {
+            covered[lang] = true;
+        }
+    }
+    return covered;
+}
+
+// measured reports whether a symbol index of languages covers item's file: "<path>" or
+// "<path>#<symbol>".
+export fun measured(item: str, languages: {str: bool}) > bool {
+    var file = item;
+    if (item.indexOf("#") -> hash) {
+        file = item.sub(0, len: hash);
+    }
+    foreach (ext, lang in LANGUAGES) {
+        if (file.endsWith(ext)) {
+            return languages[lang] ?? false;
+        }
+    }
+    return false;
 }
 
 // rewrite is record with plan applied to each known row.
@@ -76,6 +123,7 @@ fun rewrite(record: [str], plan: Plan) > Pruned !> any {
     final seen = mut {<str: bool>};
     final removed = mut [<str>];
     final carried = mut [<str>];
+    final unmeasured = mut [<str>];
     var filled = 0;
     foreach (text in record) {
         if (text.trim() == "") {
@@ -89,16 +137,17 @@ fun rewrite(record: [str], plan: Plan) > Pruned !> any {
         final metric: str = row["metric"] ?? "";
         final items = names(row["items"]);
         if (metric == CLONES and plan.staleClones.hasKey(items.join(", "))) {
-            removed.append("the {metric} entry {items.join(", ")}");
-            continue;
+            final blind = items.filter(fun (index: int, item: str) > bool => !measured(item, languages: plan.languages));
+            if (blind.len() == 0) {
+                removed.append("the {metric} entry {items.join(", ")}");
+                continue;
+            }
+            appendAll(unmeasured, items: blind.map(fun (index: int, item: str) > str => "{metric} {item}"));
         }
         final got = rework(row["shapes"] ?? {<str: any>}, metric: metric, items: items, plan: plan);
-        foreach (item in got.removed) {
-            removed.append(item);
-        }
-        foreach (item in got.carried) {
-            carried.append(item);
-        }
+        appendAll(removed, items: got.removed);
+        appendAll(carried, items: got.carried);
+        appendAll(unmeasured, items: got.unmeasured);
         filled += got.filled;
         if (got.removed.len() == 0 and got.carried.len() == 0 and got.filled == 0) {
             kept.append(text);
@@ -114,17 +163,24 @@ fun rewrite(record: [str], plan: Plan) > Pruned !> any {
             kept.append(rebuilt);
         }
     }
-    return Pruned{ lines = kept, removed = removed, carried = carried, filled = filled, refused = "" };
+    return Pruned{ lines = kept, removed = removed, carried = carried, filled = filled, unmeasured = unmeasured, refused = "" };
+}
+
+fun appendAll(into: mut [str], items: [str]) > void {
+    foreach (item in items) {
+        into.append(item);
+    }
 }
 
 // Plan is what a report asks of the record: "<metric> <item>" keys for the stale per-item
 // metrics, the joined items of each stale clone entry, each carried "<metric> <item>" key's
-// new ID, and the current shape of each listed item.
+// new ID, the current shape of each listed item, and the languages an index measured.
 object Plan {
     staleItems: {str: bool},
     staleClones: {str: bool},
     renamed: {str: str},
     shapes: {str: any},
+    languages: {str: bool},
 }
 
 // planOf reads the stale, carried and shapes members of report into the keys rewrite looks
@@ -151,17 +207,20 @@ fun planOf(report: {str: any}) > Plan {
         final old: str = c["from"] ?? "";
         renamed["{metric} {old}"] = names(c["to"])[0];
     }
-    return Plan{ staleItems = items, staleClones = clones, renamed = renamed, shapes = report["shapes"] ?? {<str: any>} };
+    return Plan{ staleItems = items, staleClones = clones, renamed = renamed, shapes = report["shapes"] ?? {<str: any>},
+        languages = indexedLanguages(report) };
 }
 
 // Reworked is one known row's items after a plan: those it keeps under their current IDs,
-// their shapes, and what left, was re-keyed or had its shape recorded.
+// their shapes, what left, was re-keyed or had its shape recorded, and the stale ones kept
+// because nothing measured them.
 object Reworked {
     items: [str],
     shapes: {str: str},
     removed: [str],
     carried: [str],
     filled: int,
+    unmeasured: [str],
 }
 
 // rework applies plan to the items of one known row of metric, whose shapes the row records
@@ -171,11 +230,15 @@ fun rework(recorded: {str: any}, metric: str, items: [str], plan: Plan) > Rework
     final shapes = mut {<str: str>};
     final removed = mut [<str>];
     final carried = mut [<str>];
+    final unmeasured = mut [<str>];
     var filled = 0;
     foreach (item in items) {
         if (metric != CLONES and plan.staleItems.hasKey("{metric} {item}")) {
-            removed.append("{metric} {item}");
-            continue;
+            if (measured(item, languages: plan.languages)) {
+                removed.append("{metric} {item}");
+                continue;
+            }
+            unmeasured.append("{metric} {item}");
         }
         var id = item;
         if (plan.renamed["{metric} {item}"] -> to) {
@@ -190,7 +253,7 @@ fun rework(recorded: {str: any}, metric: str, items: [str], plan: Plan) > Rework
             filled += 1;
         }
     }
-    return Reworked{ items = left, shapes = shapes, removed = removed, carried = carried, filled = filled };
+    return Reworked{ items = left, shapes = shapes, removed = removed, carried = carried, filled = filled, unmeasured = unmeasured };
 }
 
 // knownRow is a known line in the record's member order. The record's reader refuses any
@@ -350,6 +413,31 @@ test "a carried item is re-keyed with its shape, and a listed item's missing sha
         message: got.lines[2]);
     assert\equal(got.carried.len(), want: 2, message: got.carried.join("; "));
     assert\equal(got.filled, want: 1, message: "b.go#Other had none");
+}
+
+test "a stale item in a language no index measures stays and is named" {
+    final record = [`{"kind":"known","metric":"func-lines","reason":"r","items":["a.go#F","web/main.ts#activate"]}`];
+    final stale: [any] = [{"metric": "func-lines", "items": ["a.go#F", "web/main.ts#activate"], "reason": "r"}];
+    final got = prune(report(stale), record: record);
+    assert\equal(got.lines[0], want: `{"kind":"known","metric":"func-lines","reason":"r","items":["web/main.ts#activate"]}`,
+        message: got.lines[0]);
+    assert\equal(got.removed.join("; "), want: "func-lines a.go#F", message: "the measured item leaves");
+    assert\equal(got.unmeasured.join("; "), want: "func-lines web/main.ts#activate", message: "the unmeasured one is named");
+}
+
+test "a stale clone entry with an unmeasured item stays" {
+    final record = [`{"kind":"known","metric":"clone-tokens","reason":"r","items":["x.go#A","web/y.ts#B"]}`];
+    final stale: [any] = [{"metric": "clone-tokens", "items": ["x.go#A", "web/y.ts#B"], "reason": "r"}];
+    final got = prune(report(stale), record: record);
+    assert\equal(got.lines.join("\n"), want: record.join("\n"), message: "unchanged");
+    assert\equal(got.unmeasured.join("; "), want: "clone-tokens web/y.ts#B", message: got.unmeasured.join("; "));
+}
+
+test "a file of an extension no language claims is never measured" {
+    final langs = {"go": true};
+    assert\equal(measured("a.go#F", languages: langs), want: true, message: "go");
+    assert\equal(measured("web/main.ts", languages: langs), want: false, message: "no typescript index");
+    assert\equal(measured("Makefile", languages: langs), want: false, message: "no language");
 }
 
 test "a recorded shape is kept even when the item's current one differs" {
