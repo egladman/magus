@@ -2,7 +2,7 @@
 
 package mem
 
-// This file is the DYNAMIC half of AvailableBytes. purego's cgo_import_dynamic
+// This file is the DYNAMIC half of availableBytes. purego's cgo_import_dynamic
 // gives a binary a PT_INTERP, which is exactly what the `noffi` tag exists to keep
 // out of the archives magus ships as static (see release-build in magusfile.buzz).
 // available_vmstat_darwin.go is the half that build gets instead.
@@ -54,22 +54,11 @@ var (
 	})
 )
 
-// AvailableBytes approximates MemAvailable as (free + inactive + speculative)
-// pages, or 0 when the statistics cannot be read.
-//
-// Darwin publishes no MemAvailable equivalent. Inactive pages are the closest
-// analogue to Linux's reclaimable cache; wired and active pages are excluded
-// because a new allocation cannot have them without paging.
-//
-// Read from the kernel directly rather than by parsing vm_stat(1), which is what
-// this used to do. Same source (vm_stat prints host_statistics64) without a fork
-// per sample, and without a text format to misparse: the old version had to
-// recover the page size from a header line and bail unless all three counters
-// were found, because a partial parse reads as a crisis.
-//
-// A watchdog input, so it may be approximate. It may not be confidently wrong in
-// the tight direction, which is why any failure yields 0 rather than a partial sum.
-func AvailableBytes(_ context.Context) int64 {
+// availableBytes approximates MemAvailable, which darwin lacks, as free, inactive and
+// speculative pages: inactive is the nearest to Linux's reclaimable cache. It reads
+// host_statistics64 with no fork, and any failure yields 0 rather than a partial sum,
+// since a watchdog input must never be wrong in the tight direction.
+func availableBytes(_ context.Context) int64 {
 	host, fn := machHostSelf(), hostStatistics64()
 	if host == 0 || fn == 0 {
 		return 0

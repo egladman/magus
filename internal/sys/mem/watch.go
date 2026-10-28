@@ -66,7 +66,7 @@ type Reading struct {
 // report takes the whole reading rather than a sentence, so the caller owns the
 // wording and whatever else the warning carries.
 func Watch(ctx context.Context, report func(Reading)) {
-	watch(ctx, UsableBytes(ctx), AvailableBytes, SwapUsedBytes, report, sampleEvery)
+	watch(ctx, UsableBytes(ctx), availableBytes, swapUsedBytes, report, sampleEvery)
 }
 
 // watch is Watch with the host readings and the interval injected, so its tests

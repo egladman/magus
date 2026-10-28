@@ -9,18 +9,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// LimitBytes reports the job object's memory ceiling, or 0 when this process is
-// in no job or the job caps nothing.
-//
-// Job objects are the Windows equivalent of the cgroup limit read on linux:
-// process-isolated Windows containers run their payload inside one, and
-// `docker run --memory` lands here rather than on any /proc-like file.
-//
-// A NULL handle asks about the job the CURRENT process belongs to, which is the
-// documented way to query one's own limits and needs no elevated privileges and
-// no handle to open. Failure is 0 (UNKNOWN), the same answer as a host that
-// imposes no limit at all: both mean magus has nothing to narrow the budget with.
-func LimitBytes(_ context.Context) int64 {
+// limitBytes reports the memory ceiling of the job object this process runs in (where
+// `docker run --memory` lands on Windows), or 0 for none or on failure. A NULL handle
+// asks about the current process's own job, which needs no privileges and no handle.
+func limitBytes(_ context.Context) int64 {
 	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
 	var retlen uint32
 	err := windows.QueryInformationJobObject(

@@ -66,7 +66,7 @@ func BudgetMB(usableBytes int64, profile types.ConcurrencyProfile) int {
 // a sentinel near the top of the address space, and neither sentinel has to be
 // recognized to be discarded here.
 func UsableBytes(ctx context.Context) int64 {
-	return narrowToLimit(TotalBytes(ctx), LimitBytes(ctx))
+	return narrowToLimit(TotalBytes(ctx), limitBytes(ctx))
 }
 
 // narrowToLimit is UsableBytes's arithmetic, separated because the two readings it

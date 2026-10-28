@@ -77,8 +77,8 @@ func (p Pipe) heldBy(pid int, end func(pid int, fd string) bool) bool {
 	return false
 }
 
-// Args returns pid's argument vector, argv[0] first.
-func Args(pid int) ([]string, error) {
+// procArgs returns pid's argument vector, argv[0] first.
+func procArgs(pid int) ([]string, error) {
 	raw, err := os.ReadFile(procPath(pid, "cmdline"))
 	if err != nil {
 		return nil, fmt.Errorf("pipepeer: read cmdline of %d: %w", pid, err)

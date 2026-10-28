@@ -9,26 +9,11 @@ import (
 	"strings"
 )
 
-// AvailableBytes approximates MemAvailable as (free + inactive + speculative)
-// pages, or 0 when vm_stat cannot be read or parsed.
-//
-// Darwin publishes no MemAvailable equivalent. Inactive pages are the closest
-// analogue to Linux's reclaimable cache; wired and active pages are excluded
-// because a new allocation cannot have them without paging.
-//
-// By forking vm_stat(1) and parsing it, which is what the whole package used to
-// do. The dynamic build asks the kernel directly instead
-// (available_mach_darwin.go), but that needs dlopen, and `noffi` exists to keep
-// dlopen out of the archives magus ships as static. vm_stat prints
-// host_statistics64, so this is the same source at the cost of a process per sample.
-//
-// A watchdog input, so it may be approximate. It may not be confidently wrong in
-// the tight direction, which is why a partial parse yields 0.
-//
-// CommandContext, not Command: the watchdog calls this every two seconds for the
-// life of an invocation, and a fork that hangs would block the watch goroutine
-// where ctx.Done() cannot reach it.
-func AvailableBytes(ctx context.Context) int64 {
+// availableBytes is available_mach_darwin.go's reading by a vm_stat(1) fork, for the
+// static (noffi) build that keeps dlopen out: the same counters at a process per
+// sample. A partial parse yields 0 rather than a figure wrong in the tight direction,
+// and CommandContext keeps a hung fork from blocking the watch goroutine.
+func availableBytes(ctx context.Context) int64 {
 	out, err := exec.CommandContext(ctx, "vm_stat").Output()
 	if err != nil {
 		return 0

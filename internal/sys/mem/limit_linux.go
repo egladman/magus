@@ -22,13 +22,13 @@ var cgroupLimitPaths = []string{
 	"/sys/fs/cgroup/memory/memory.limit_in_bytes", // v1
 }
 
-// LimitBytes reports the memory ceiling this process actually runs under, or 0
+// limitBytes reports the memory ceiling this process actually runs under, or 0
 // when there is none to read.
 //
 // Both files are world-readable, so this needs no elevated privileges; a kernel
 // without cgroups, a host outside a container, and a sandbox that hides the
 // mount all fall through to 0 rather than erroring.
-func LimitBytes(_ context.Context) int64 {
+func limitBytes(_ context.Context) int64 {
 	for _, path := range cgroupLimitPaths {
 		if n := readCgroupLimit(path); n > 0 {
 			return n

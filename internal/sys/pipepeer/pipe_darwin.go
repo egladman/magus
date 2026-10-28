@@ -150,8 +150,8 @@ func (p Pipe) WrittenBy(pid int) bool {
 	return false
 }
 
-// Args returns pid's argument vector, argv[0] first.
-func Args(pid int) ([]string, error) {
+// procArgs returns pid's argument vector, argv[0] first.
+func procArgs(pid int) ([]string, error) {
 	raw, err := unix.SysctlRaw("kern.procargs2", pid)
 	if err != nil {
 		return nil, fmt.Errorf("pipepeer: procargs of %d: %w", pid, err)

@@ -294,12 +294,12 @@ func TestSameExecutable(t *testing.T) {
 func TestArgsAndParent(t *testing.T) {
 	cmd := start(t, exec.Command("sleep", "5"))
 	time.Sleep(50 * time.Millisecond)
-	args, err := Args(cmd.Process.Pid)
+	args, err := procArgs(cmd.Process.Pid)
 	if err != nil {
-		t.Fatalf("Args: %v", err)
+		t.Fatalf("procArgs: %v", err)
 	}
 	if !slices.Equal(args, []string{"sleep", "5"}) {
-		t.Fatalf("Args() = %q, want [sleep 5]", args)
+		t.Fatalf("procArgs() = %q, want [sleep 5]", args)
 	}
 	parent, err := Parent(cmd.Process.Pid)
 	if err != nil {

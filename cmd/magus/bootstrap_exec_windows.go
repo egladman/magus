@@ -3,42 +3,37 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 )
 
-// bootstrapExecInto is the windows counterpart to the unix syscall.Exec form: there
-// is no exec() syscall to replace this process's image with, so this spawns target as
-// a child, wires its stdio straight through, waits for it, and exits with its exact
-// code. argv and stdio match the unix build; the exit code matches for a target that
-// runs to completion. Signal delivery is the one thing this cannot give for free:
-// windows has no POSIX signal delivery to a specific process the way unix does, so a
-// Ctrl+C reaches the child through its own console handling rather than being
-// forwarded by this process.
-//
-// cmd.Start failing (target missing, not runnable) is the same "safe to fall back"
-// case as a unix exec failure: nothing of target has run yet, so this reports it and
-// returns, leaving normal dispatch to proceed under the binary already running.
-// cmd.Wait failing means target DID run, so its result (not a fallback that would
-// risk doing the work twice) is what this process exits with.
+// bootstrapExecInto runs target as a child with this process's stdio and exits with its
+// code, since windows has no exec() to replace this image. A start failure ran nothing
+// of target, so it is reported and normal dispatch proceeds; Ctrl+C reaches the child
+// through its own console rather than being forwarded.
 func bootstrapExecInto(target string, argv []string, env []string) {
 	cmd := exec.Command(target, argv[1:]...)
 	cmd.Env = env
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: exec %s failed: %v\n", target, err)
 		return
 	}
-	err := cmd.Wait()
-	if err == nil {
-		os.Exit(0)
-	}
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		os.Exit(exitErr.ExitCode())
+	os.Exit(childExitCode(target, cmd.Wait()))
+}
+
+// childExitCode is the code to exit with once target ran: its own, or 1 when the wait
+// failed without one. target did run, so falling back would risk doing its work twice.
+func childExitCode(target string, err error) int {
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		return 0
+	case errors.As(err, &exitErr):
+		return exitErr.ExitCode()
 	}
 	fmt.Fprintf(os.Stderr, "magus: %s: %v\n", target, err)
-	os.Exit(1)
+	return 1
 }

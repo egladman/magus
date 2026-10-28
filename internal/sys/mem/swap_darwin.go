@@ -19,9 +19,9 @@ const (
 	xswUsedOffset = 16
 )
 
-// SwapUsedBytes reads the used half of vm.swapusage, or 0 when it cannot be read.
+// swapUsedBytes reads the used half of vm.swapusage, or 0 when it cannot be read.
 //
-// Darwin is the platform that needs this most. AvailableBytes counts free,
+// Darwin is the platform that needs this most. availableBytes counts free,
 // inactive and speculative pages, and none of them fall when the memory
 // compressor and the swap file absorb pressure, so a machine that is thrashing
 // can still report headroom that looks survivable. Swap is the reading that moves.
@@ -30,7 +30,7 @@ const (
 // the watchdog calls this every two seconds for the life of an invocation, so the
 // fork was a process per tick to read 32 bytes. ctx is unused now and kept for the
 // signature the watchdog calls through.
-func SwapUsedBytes(_ context.Context) int64 {
+func swapUsedBytes(_ context.Context) int64 {
 	raw, err := unix.SysctlRaw("vm.swapusage")
 	if err != nil || len(raw) < xswUsageSize {
 		return 0

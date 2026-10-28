@@ -90,7 +90,7 @@ func peerExec(pid int, holds func(pid int) bool) ([]string, ExecState) {
 	if !SameExecutable(pid) {
 		return nil, ExecOther
 	}
-	argv, _ := Args(pid)
+	argv, _ := procArgs(pid)
 	// Asked last: a fork that exec'd since it was listed, this executable included, gave
 	// up its copy of the end on the way unless the command it runs writes or reads the
 	// pipe itself.
@@ -116,10 +116,10 @@ func execPending(pid int) bool {
 		return false
 	}
 	// Arguments that cannot be read prove no exec either, so they count as pending.
-	args, err := Args(pid)
+	args, err := procArgs(pid)
 	if err != nil {
 		return true
 	}
-	parentArgs, err := Args(parent)
+	parentArgs, err := procArgs(parent)
 	return err != nil || slices.Equal(args, parentArgs)
 }

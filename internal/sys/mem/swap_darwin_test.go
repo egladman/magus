@@ -31,14 +31,14 @@ func TestSwapUsageLayout(t *testing.T) {
 	assert.Equal(t, total, used+avail, "the three fields must account for each other exactly")
 	assert.NotZero(t, pageSize&(pageSize-1) == 0, "swap page size is a power of two")
 
-	assert.Equal(t, int64(used), SwapUsedBytes(context.Background()),
-		"SwapUsedBytes must return the field this test located")
+	assert.Equal(t, int64(used), swapUsedBytes(context.Background()),
+		"swapUsedBytes must return the field this test located")
 }
 
 // A negative or absurd figure is UNKNOWN rather than a reading: this is a watchdog
 // input, and one wrong in the alarming direction invents an emergency.
 func TestSwapUsedIsPlausible(t *testing.T) {
-	used := SwapUsedBytes(context.Background())
+	used := swapUsedBytes(context.Background())
 	assert.GreaterOrEqual(t, used, int64(0))
 	if total := TotalBytes(context.Background()); total > 0 {
 		assert.Less(t, used, total*64, "swap in use is not orders of magnitude past RAM")

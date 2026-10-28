@@ -11,15 +11,15 @@ import (
 	"strings"
 )
 
-// SwapUsedBytes reports SwapTotal minus SwapFree from /proc/meminfo, or 0 when
+// swapUsedBytes reports SwapTotal minus SwapFree from /proc/meminfo, or 0 when
 // either line is missing or unparsable.
 //
 // A machine with swap disabled reports a total of 0 and so a used of 0, which is
 // the right answer: there is no swap for pressure to show up in, and the watchdog
-// has only AvailableBytes to go on.
+// has only availableBytes to go on.
 //
 // ctx is unused here; see TotalBytes.
-func SwapUsedBytes(_ context.Context) int64 {
+func swapUsedBytes(_ context.Context) int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0
@@ -28,7 +28,7 @@ func SwapUsedBytes(_ context.Context) int64 {
 	return parseSwapUsedMeminfo(f)
 }
 
-// parseSwapUsedMeminfo is SwapUsedBytes with the file injected, so its tests drive
+// parseSwapUsedMeminfo is swapUsedBytes with the file injected, so its tests drive
 // a truncated and a swapless /proc/meminfo instead of the one this machine happens
 // to have.
 func parseSwapUsedMeminfo(r io.Reader) int64 {
