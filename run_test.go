@@ -41,6 +41,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // A target declared `advisory` that fails inside a composite printed [fail] on its own
@@ -1401,10 +1402,14 @@ func TestRunOptions(t *testing.T) {
 	assert.False(t, r.Cache, "WithCache(false): Cache = true, want false")
 }
 
-func TestApplyRunOptions_DefaultsToCachingAndRetry(t *testing.T) {
+type magusSuite struct{ suite.Suite }
+
+func TestMagusSuite(t *testing.T) { suite.Run(t, new(magusSuite)) }
+
+func (s *magusSuite) TestApplyRunOptionsDefaultsToCachingAndRetry() {
 	r := applyRunOptions(nil)
-	assert.True(t, r.Cache)
-	assert.True(t, r.VolatilityRetry)
+	s.True(r.Cache)
+	s.True(r.VolatilityRetry)
 }
 
 func TestWithWrite_SetsWriteCharm(t *testing.T) {
