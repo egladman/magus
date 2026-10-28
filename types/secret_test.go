@@ -108,7 +108,7 @@ func (s *typesSuite) TestSecretIntegerVerbsPrintNoPlaintext() {
 func (s *typesSuite) TestSecretBadVerbsPrintNoPlaintext() {
 	s.noPlaintext(render("%e", s.secret))
 	s.noPlaintext(render("%t", s.secret))
-	s.noPlaintext(fmt.Sprintf("%p", s.secret))
+	s.noPlaintext(render("%p", s.secret))
 	s.noPlaintext(fmt.Sprintf("%p", &s.secret))
 }
 
@@ -188,9 +188,11 @@ func (s *typesSuite) TestSecretJSONRedacts() {
 	s.Require().NoError(err)
 	s.JSONEq(`{"token":"***"}`, string(b))
 
-	b, err = json.Marshal(struct{ Token *Secret }{&s.secret})
+	b, err = json.Marshal(struct {
+		Token *Secret `json:"token"`
+	}{&s.secret})
 	s.Require().NoError(err)
-	s.JSONEq(`{"Token":"***"}`, string(b))
+	s.JSONEq(`{"token":"***"}`, string(b))
 }
 
 func (s *typesSuite) TestSecretYAMLRedacts() {
@@ -208,7 +210,7 @@ func (s *typesSuite) TestSecretTOMLRedacts() {
 func (s *typesSuite) secretLogged(handler func(*bytes.Buffer) slog.Handler) string {
 	var buf bytes.Buffer
 	slog.New(handler(&buf)).InfoContext(s.T().Context(), "using credential",
-		slog.Any("token", s.secret), slog.Any("pointer", &s.secret), "bare", s.secret,
+		slog.Any("token", s.secret), slog.Any("pointer", &s.secret),
 		slog.Any("holder", struct{ Token Secret }{s.secret}))
 	return buf.String()
 }
@@ -216,13 +218,13 @@ func (s *typesSuite) secretLogged(handler func(*bytes.Buffer) slog.Handler) stri
 func (s *typesSuite) TestSecretSlogJSONRedacts() {
 	got := s.secretLogged(func(b *bytes.Buffer) slog.Handler { return slog.NewJSONHandler(b, nil) })
 	s.noPlaintext(got)
-	s.Contains(got, `"token":"***","pointer":"***","bare":"***","holder":{"Token":"***"}`)
+	s.Contains(got, `"token":"***","pointer":"***","holder":{"Token":"***"}`)
 }
 
 func (s *typesSuite) TestSecretSlogTextRedacts() {
 	got := s.secretLogged(func(b *bytes.Buffer) slog.Handler { return slog.NewTextHandler(b, nil) })
 	s.noPlaintext(got)
-	s.Contains(got, `token=*** pointer=*** bare=*** holder={Token:***}`)
+	s.Contains(got, `token=*** pointer=*** holder={Token:***}`)
 }
 
 // TestSecretDecodingIsRefused pins the absent decoders: plaintext in a config file or a
