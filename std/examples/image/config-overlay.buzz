@@ -23,8 +23,8 @@ export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
         base = "out/image/base",
         platform = PLATFORM,
         trees = [
-            image\Tree{ source = "conf.d", path = "/etc/nginx/conf.d", include = ["*.conf"], modes = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse },
-            image\Tree{ source = "entrypoint.d", path = "/docker-entrypoint.d", modes = image\ModePolicy.executableBit, symlinks = image\SymlinkPolicy.refuse },
+            image\Tree{ source = "conf.d", path = "/etc/nginx/conf.d", include = ["*.conf"], modePolicy = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse },
+            image\Tree{ source = "entrypoint.d", path = "/docker-entrypoint.d", modePolicy = image\ModePolicy.executableBit, symlinks = image\SymlinkPolicy.refuse },
         ],
         config = image\Config{
             exposedPorts = ["8080/tcp"],

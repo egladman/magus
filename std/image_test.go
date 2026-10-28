@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -50,11 +51,11 @@ func TestImageAssembleThenOpenReadsTheLayoutBack(t *testing.T) {
 		Config: types.ImageConfig{Entrypoint: &cmd}}, filepath.Join(root, "out"))
 	require.NoError(t, err)
 	assert.Equal(t, "sha256", got.Descriptor.Digest.Algorithm)
-	assert.Equal(t, types.ImageMediaTypeManifest, got.Descriptor.MediaType)
+	assert.Equal(t, string(types.ImageMediaTypeManifest), got.Descriptor.MediaType)
 	require.NotNil(t, got.Added)
 	assert.Equal(t, 1, got.Added.Files)
 
-	opened, err := ImageOpen(t.Context(), got.Path)
+	opened, err := ImageOpen(t.Context(), got.Path, "")
 	require.NoError(t, err)
 	assert.Equal(t, got.Descriptor.Digest, opened.Descriptor.Digest)
 	require.NotNil(t, opened.Platform)
@@ -64,6 +65,32 @@ func TestImageAssembleThenOpenReadsTheLayoutBack(t *testing.T) {
 func TestImageDigestString(t *testing.T) {
 	assert.Equal(t, "sha256:abc", types.ImageDigest{Algorithm: "sha256", Encoded: "abc"}.String())
 	assert.Empty(t, types.ImageDigest{}.String())
+}
+
+type ImageSuite struct {
+	suite.Suite
+}
+
+func TestImageSuite(t *testing.T) {
+	suite.Run(t, new(ImageSuite))
+}
+
+func (s *ImageSuite) TestParsePlatformTakesAnAMD64VariantThatSetsGOAMD64() {
+	p, err := ImageParsePlatform(s.T().Context(), "linux/amd64/v3")
+	s.Require().NoError(err)
+	s.Equal(types.ImagePlatform{OS: types.ImageOSLinux, Architecture: types.ImageArchitectureAMD64, Variant: types.ImageVariantV3}, p)
+
+	env, err := ImageGoEnv(s.T().Context(), p)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"GOOS": "linux", "GOARCH": "amd64", "GOAMD64": "v3"}, env)
+}
+
+func (s *ImageSuite) TestOpenRefusesANameTheLayoutDoesNotHold() {
+	got, err := ImageAssemble(s.T().Context(), types.ImageSpec{Scratch: true, Platform: linuxAMD64}, filepath.Join(s.T().TempDir(), "out"))
+	s.Require().NoError(err)
+
+	_, err = ImageOpen(s.T().Context(), got.Path, "registry.example/team/app:v1")
+	s.Require().Error(err)
 }
 
 func TestFsModeParsesOctalAndRwx(t *testing.T) {

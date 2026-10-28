@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hostmodules"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -123,4 +124,30 @@ func TestExternDeclTypesACallback(t *testing.T) {
 
 	_, err = externDecl(std.Method{Name: "bad", Args: []std.Arg{{Name: "s", Type: std.TypeString, Func: "fun () > void"}}})
 	assert.ErrorContains(t, err, "it types only a TypeFunc")
+}
+
+type ModuleDeclsSuite struct {
+	suite.Suite
+}
+
+func TestModuleDeclsSuite(t *testing.T) {
+	suite.Run(t, new(ModuleDeclsSuite))
+}
+
+// image\MediaType names values for a str field, so no signature or field names it, and
+// the module still declares it.
+func (s *ModuleDeclsSuite) TestCollectEnumsDeclaresAnEnumScopedToTheModule() {
+	mirrors, err := collectMirrors(std.Image)
+	s.Require().NoError(err)
+	enums, err := collectEnums(std.Image, mirrors)
+	s.Require().NoError(err)
+	names := make([]string, 0, len(enums))
+	for _, e := range enums {
+		names = append(names, e.Name)
+	}
+	s.Contains(names, "MediaType")
+
+	enums, err = collectEnums(std.Module{Name: "probe"}, nil)
+	s.Require().NoError(err)
+	s.Empty(enums, "another module declares no enum scoped to image")
 }

@@ -55,7 +55,7 @@ var Image = Module{
 		},
 		{
 			Name: "push",
-			Doc:  "Push the layout's image, its blobs and its referrers to repository, then tag it with each of tags; empty tags pushes by digest only.",
+			Doc:  "Push the layout's image, its blobs and its referrers to repository, then tag it with each of tags; empty tags pushes by digest only. On a registry without the Referrers API each referrer is also listed in the subject's sha256-<hex> tag index.",
 			Args: []Arg{
 				{Name: "layout", Type: TypeString},
 				{Name: "repository", Type: TypeString},
@@ -67,7 +67,7 @@ var Image = Module{
 			Impl:    ImagePush,
 		},
 		{
-			Name:    "write_sbom",
+			Name:    "writeSBOM",
 			Doc:     "Write an SPDX 2.3 document naming the layout's image by digest to path.",
 			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Document"}},
@@ -76,7 +76,7 @@ var Image = Module{
 		},
 		{
 			Name:    "write_provenance",
-			Doc:     "Write an in-toto Statement v1 with SLSA v1 provenance for the layout's image to path. The digest of each base it was assembled over joins the materials.",
+			Doc:     "Write an in-toto Statement v1 with SLSA v1 provenance for the layout's image to path. The digest of each base it was assembled over joins the dependencies.",
 			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "provenance", Type: TypeAnyMap, Object: "Provenance"}, {Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Document"}},
 			Raises:  true,
@@ -92,22 +92,22 @@ var Image = Module{
 		},
 		{
 			Name:    "open",
-			Doc:     "Read the layout at layout back: its image, its referrers, and for a single-platform image its platform, config and layers.",
-			Args:    []Arg{{Name: "layout", Type: TypeString}},
+			Doc:     "Read the layout at layout back: the image whose org.opencontainers.image.ref.name is name (the only image when name is empty), the referrers whose subject it is, and for a single-platform image whose index.json entry names its platform, that platform, config and layers.",
+			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "name", Type: TypeString, Optional: true}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageOpen,
 		},
 		{
-			Name:    "platform",
-			Doc:     "Parse \"linux/amd64\" or \"linux/arm64/v8\" into a Platform.",
+			Name:    "parsePlatform",
+			Doc:     "Parse \"linux/amd64\", \"linux/amd64/v3\" or \"linux/arm64/v8\" into a Platform.",
 			Args:    []Arg{{Name: "spec", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Platform"}},
 			Raises:  true,
 			Impl:    ImageParsePlatform,
 		},
 		{
-			Name:    "platforms",
+			Name:    "parsePlatforms",
 			Doc:     "Parse each of specs into a Platform, refusing two that name the same platform: the set a multi-arch build fans out over.",
 			Args:    []Arg{{Name: "specs", Type: TypeStringSlice}},
 			Returns: []Ret{{Type: TypeAny, Object: "[Platform]"}},
@@ -116,7 +116,7 @@ var Image = Module{
 		},
 		{
 			Name:    "go_env",
-			Doc:     "The GOOS and GOARCH that make go build target platform, for a build target's ctx.withEnv.",
+			Doc:     "The GOOS, GOARCH and, for an amd64 variant, GOAMD64 that make go build target platform, for a build target's ctx.withEnv.",
 			Args:    []Arg{{Name: "platform", Type: TypeAnyMap, Object: "Platform"}},
 			Returns: []Ret{{Type: TypeStringMap}},
 			Raises:  true,
@@ -245,10 +245,10 @@ func ImageWriteProvenance(ctx context.Context, layout string, p types.ImageProve
 		return types.ImageDocument{}, nil
 	}
 	prov := image.Provenance{BuilderID: p.BuilderID, SourceRevision: p.SourceRevision}
-	for i, m := range p.Materials {
+	for i, m := range p.Dependencies {
 		d, err := digestFromTypes(m.Digest)
 		if err != nil {
-			return types.ImageDocument{}, fmt.Errorf("image.provenance: materials[%d]: %w", i, err)
+			return types.ImageDocument{}, fmt.Errorf("image.provenance: dependencies[%d]: %w", i, err)
 		}
 		prov.Dependencies = append(prov.Dependencies, image.Dependency{URI: m.URI, Digest: d})
 	}
@@ -289,8 +289,8 @@ func ImageAttachReferrers(ctx context.Context, subject string, documents []types
 	return layoutToTypes(l), nil
 }
 
-// ImageOpen reads the layout at path back.
-func ImageOpen(ctx context.Context, path string) (types.ImageLayout, error) {
+// ImageOpen reads the layout at path back, opened at the image name names.
+func ImageOpen(ctx context.Context, path, name string) (types.ImageLayout, error) {
 	if types.Tracing(ctx) {
 		return types.ImageLayout{}, nil
 	}
@@ -298,7 +298,7 @@ func ImageOpen(ctx context.Context, path string) (types.ImageLayout, error) {
 	if err := imageCheck(ctx, []string{path}, nil); err != nil {
 		return types.ImageLayout{}, fmt.Errorf("image.open: %w", err)
 	}
-	l, err := image.OpenLayout(ctx, path, "")
+	l, err := image.OpenLayout(ctx, path, name)
 	if err != nil {
 		return types.ImageLayout{}, err
 	}
@@ -337,7 +337,7 @@ func ImageParsePlatforms(_ context.Context, specs []string) ([]types.ImagePlatfo
 	return out, nil
 }
 
-// ImageGoEnv is the GOOS/GOARCH environment for platform.
+// ImageGoEnv is the GOOS, GOARCH and GOAMD64 environment for platform.
 func ImageGoEnv(_ context.Context, platform types.ImagePlatform) (map[string]string, error) {
 	return platformFromTypes(platform).GoEnv()
 }
@@ -409,7 +409,7 @@ func imageSpec(ctx context.Context, in types.ImageSpec) (image.Spec, error) {
 	for _, t := range in.Trees {
 		s.Trees = append(s.Trees, image.Tree{
 			Source: resolvePath(ctx, t.Source), Path: t.Path, Include: t.Include, Exclude: t.Exclude,
-			ModePolicy: image.ModePolicy(t.Modes), Symlinks: image.SymlinkPolicy(t.Symlinks), UID: t.UID, GID: t.GID,
+			ModePolicy: image.ModePolicy(t.ModePolicy), Symlinks: image.SymlinkPolicy(t.Symlinks), UID: t.UID, GID: t.GID,
 		})
 	}
 	for _, l := range in.Symlinks {
@@ -437,18 +437,23 @@ func imageMode(bits int) (image.Mode, error) {
 }
 
 func platformFromTypes(p types.ImagePlatform) image.Platform {
-	return image.Platform{OS: string(p.OS), Architecture: string(p.Architecture), Variant: string(p.Variant)}
+	return image.Platform{OS: string(p.OS), Architecture: string(p.Architecture), Variant: string(p.Variant), OSVersion: p.OSVersion, OSFeatures: p.OSFeatures}
 }
 
 func platformToTypes(p image.Platform) types.ImagePlatform {
-	return types.ImagePlatform{OS: types.ImageOS(p.OS), Architecture: types.ImageArchitecture(p.Architecture), Variant: types.ImageVariant(p.Variant)}
+	return types.ImagePlatform{
+		OS: types.ImageOS(p.OS), Architecture: types.ImageArchitecture(p.Architecture), Variant: types.ImageVariant(p.Variant),
+		OSVersion: p.OSVersion, OSFeatures: p.OSFeatures,
+	}
 }
 
-func platformFromOCI(p *ocispec.Platform) image.Platform {
-	if p == nil {
-		return image.Platform{}
+// ociPlatformToTypes converts a descriptor's platform, which may name one magus does not
+// build for, so it does not pass through image.Platform's validation.
+func ociPlatformToTypes(p ocispec.Platform) types.ImagePlatform {
+	return types.ImagePlatform{
+		OS: types.ImageOS(p.OS), Architecture: types.ImageArchitecture(p.Architecture), Variant: types.ImageVariant(p.Variant),
+		OSVersion: p.OSVersion, OSFeatures: p.OSFeatures,
 	}
-	return image.Platform{OS: p.OS, Architecture: p.Architecture, Variant: p.Variant}
 }
 
 func digestToTypes(d digest.Digest) types.ImageDigest {
@@ -464,14 +469,14 @@ func digestFromTypes(d types.ImageDigest) (digest.Digest, error) {
 
 func descriptorToTypes(d ocispec.Descriptor) types.ImageDescriptor {
 	out := types.ImageDescriptor{
-		MediaType:    types.ImageMediaType(d.MediaType),
-		ArtifactType: types.ImageMediaType(d.ArtifactType),
+		MediaType:    d.MediaType,
+		ArtifactType: d.ArtifactType,
 		Digest:       digestToTypes(d.Digest),
 		Size:         int(d.Size),
 		Annotations:  d.Annotations,
 	}
 	if d.Platform != nil {
-		p := platformToTypes(platformFromOCI(d.Platform))
+		p := ociPlatformToTypes(*d.Platform)
 		out.Platform = &p
 	}
 	return out
@@ -482,7 +487,7 @@ func descriptorFromTypes(d types.ImageDescriptor) (ocispec.Descriptor, error) {
 	if err != nil {
 		return ocispec.Descriptor{}, err
 	}
-	return ocispec.Descriptor{MediaType: string(d.MediaType), ArtifactType: string(d.ArtifactType), Digest: dg, Size: int64(d.Size), Annotations: d.Annotations}, nil
+	return ocispec.Descriptor{MediaType: d.MediaType, ArtifactType: d.ArtifactType, Digest: dg, Size: int64(d.Size), Annotations: d.Annotations}, nil
 }
 
 func descriptorsToTypes(ds []ocispec.Descriptor) []types.ImageDescriptor {
@@ -503,8 +508,8 @@ func manifestToTypes(m image.Manifest) types.ImageLayout {
 	cfg := descriptorToTypes(m.Config)
 	out.Platform, out.Config, out.Layers, out.Created = &p, &cfg, descriptorsToTypes(m.Layers), m.Created
 	if m.Added != nil {
-		out.Added = &types.ImageAdded{
-			Layer:       descriptorToTypes(m.Added.Descriptor),
+		out.Added = &types.ImageAddedLayer{
+			Descriptor:  descriptorToTypes(m.Added.Descriptor),
 			DiffID:      digestToTypes(m.Added.DiffID),
 			Files:       m.Added.Files,
 			Symlinks:    m.Added.Symlinks,

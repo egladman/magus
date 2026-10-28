@@ -77,13 +77,13 @@ export fun image_arm64(ctx: magus\Context, args: [str]) > void !> any {
     assembleFor(ARM64);
 }
 
-// Fans in: both platform images, then one Image Index over them. platforms refuses a
+// Fans in: both platform images, then one Image Index over them. parsePlatforms refuses a
 // set that names one platform twice.
 export fun image_index(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(image_amd64, image_arm64);
     ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
     ctx.writesFiles(["out/image/index/**"]);
-    final platforms = image\platforms(["linux/amd64", "linux/arm64"]);
+    final platforms = image\parsePlatforms(["linux/amd64", "linux/arm64"]);
     final index = image\assembleIndex(platforms.map(fun (i: int, p: image\Platform) > str => "out/image/{slug(p)}"), layout: INDEX);
     std\print("index {index.descriptor.digest.string()}");
 }
@@ -95,9 +95,9 @@ export fun image_push(ctx: magus\Context, args: [str]) > void !> any {
         throw "image_push: pass a tag and a builder id, e.g. -- v1.4.0 https://github.com/acme/app/.github/workflows/release.yaml";
     }
     ctx.needs(image_index);
-    final sbom = image\writeSbom(INDEX, path: "out/image/sbom.spdx.json");
+    final sbom = image\writeSBOM(INDEX, path: "out/image/sbom.spdx.json");
     final provenance = image\writeProvenance(INDEX, provenance: image\Provenance{
-        builderId = args[1],
+        builderID = args[1],
         sourceRevision = vcs\commit().id,
     }, path: "out/image/provenance.intoto.json");
     image\attachReferrers(INDEX, documents: [sbom, provenance], layout: "out/image/attested");

@@ -49,7 +49,7 @@ export fun image_dependencies(ctx: magus\Context, args: [str]) > void !> any {
         trees = [image\Tree{
             source = "out/prod/node_modules",
             path = "/app/node_modules",
-            modes = image\ModePolicy.executableBit,
+            modePolicy = image\ModePolicy.executableBit,
             symlinks = image\SymlinkPolicy.keep,
         }],
     }, layout: "out/image/dependencies");
@@ -64,7 +64,7 @@ export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
     final layout = image\assemble(image\Spec{
         base = "out/image/dependencies",
         platform = PLATFORM,
-        trees = [image\Tree{ source = "out/js", path = "/app/dist", modes = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse }],
+        trees = [image\Tree{ source = "out/js", path = "/app/dist", modePolicy = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse }],
         files = [image\File{ source = "package.json", path = "/app/package.json", mode = fs\mode("0644") }],
         config = image\Config{
             user = "65532:65532",

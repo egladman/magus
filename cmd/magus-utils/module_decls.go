@@ -570,7 +570,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 }
 
 // collectEnums returns the enum declarations a module's signatures and its mirrors'
-// fields name, in first-use order.
+// fields name, in first-use order, then the ones boundaryEnums scopes to the module.
 //
 // Derived rather than hand-listed, as collectMirrors is: an enum whose declaration does
 // not travel with its use leaves the bundle naming an undefined type, and running the
@@ -620,6 +620,13 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		entry, _ := boundaryTypeIn(mod.Name, name)
 		for _, e := range enumsUsedBy(entry.Type) {
 			if err := add(e.Name, name); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, e := range boundaryEnums {
+		if e.Module == mod.Name {
+			if err := add(e.Name, mod.Name); err != nil {
 				return nil, err
 			}
 		}

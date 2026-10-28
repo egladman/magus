@@ -386,7 +386,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Digest", Type: reflect.TypeFor[types.ImageDigest](), RuntimeObject: true,
 		Methods: "fun string() > str {\n        if (this.algorithm == \"\" and this.encoded == \"\") {\n            return \"\";\n        }\n        return \"{this.algorithm}:{this.encoded}\";\n    }"},
 	{Name: "Descriptor", Type: reflect.TypeFor[types.ImageDescriptor](), RuntimeObject: true},
-	{Name: "Added", Type: reflect.TypeFor[types.ImageAdded](), RuntimeObject: true},
+	{Name: "AddedLayer", Type: reflect.TypeFor[types.ImageAddedLayer](), RuntimeObject: true},
 	{Name: "Layout", Type: reflect.TypeFor[types.ImageLayout](), RuntimeObject: true},
 	{Name: "File", Type: reflect.TypeFor[types.ImageFile]()},
 	{Name: "Tree", Type: reflect.TypeFor[types.ImageTree]()},
@@ -396,7 +396,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Spec", Type: reflect.TypeFor[types.ImageSpec]()},
 	{Name: "RegistryAuth", Type: reflect.TypeFor[types.ImageRegistryAuth]()},
 	{Name: "Pushed", Type: reflect.TypeFor[types.ImagePushed](), RuntimeObject: true},
-	{Name: "Material", Type: reflect.TypeFor[types.ImageMaterial]()},
+	{Name: "Dependency", Type: reflect.TypeFor[types.ImageDependency]()},
 	{Name: "Provenance", Type: reflect.TypeFor[types.ImageProvenance]()},
 	{Name: "Document", Type: reflect.TypeFor[types.ImageDocument](), RuntimeObject: true},
 	{Name: "ShippedAgent", Type: reflect.TypeFor[types.ShippedAgent](), RuntimeObject: true},
@@ -676,11 +676,18 @@ var boundaryEnums = []boundaryEnum{
 		Type:  reflect.TypeFor[types.ImageArchitecture](),
 		Cases: []enumCase{{"none", ""}, {"amd64", "amd64"}, {"arm64", "arm64"}},
 	},
-	{Name: "Variant", Type: reflect.TypeFor[types.ImageVariant](), Cases: []enumCase{{"none", ""}, {"v8", "v8"}}},
 	{
-		Name: "MediaType",
-		Type: reflect.TypeFor[types.ImageMediaType](),
-		Cases: []enumCase{{"none", ""},
+		Name:  "Variant",
+		Type:  reflect.TypeFor[types.ImageVariant](),
+		Cases: []enumCase{{"none", ""}, {"v1", "v1"}, {"v2", "v2"}, {"v3", "v3"}, {"v8", "v8"}},
+	},
+	{
+		// Named values, not a closed set: a descriptor's mediaType and artifactType are str,
+		// since a pulled base or a referrer may carry any type.
+		Name:   "MediaType",
+		Module: "image",
+		Type:   reflect.TypeFor[types.ImageMediaType](),
+		Cases:  []enumCase{
 			{"manifest", string(types.ImageMediaTypeManifest)}, {"index", string(types.ImageMediaTypeIndex)},
 			{"config", string(types.ImageMediaTypeConfig)}, {"layer", string(types.ImageMediaTypeLayer)},
 			{"layerGzip", string(types.ImageMediaTypeLayerGzip)}, {"layerZstd", string(types.ImageMediaTypeLayerZstd)},
@@ -1041,6 +1048,9 @@ type boundaryEnum struct {
 	Name  string
 	Type  reflect.Type
 	Cases []enumCase
+	// Module declares the enum in that host module's bundle although no signature or
+	// field names it: named values for a field that is a str because its set is open.
+	Module string
 }
 
 // enumCase is one case: the Buzz identifier and the string it carries.

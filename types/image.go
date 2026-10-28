@@ -26,14 +26,18 @@ const (
 	ImageArchitectureAMD64 ImageArchitecture = "amd64"
 	ImageArchitectureARM64 ImageArchitecture = "arm64"
 	ImageVariantNone       ImageVariant      = ""
+	ImageVariantV1         ImageVariant      = "v1"
+	ImageVariantV2         ImageVariant      = "v2"
+	ImageVariantV3         ImageVariant      = "v3"
 	ImageVariantV8         ImageVariant      = "v8"
 )
 
-// ImageMediaType is the media type of a descriptor magus reads or writes.
+// ImageMediaType names the media types magus writes, which Buzz reads as image\MediaType.
+// A descriptor's MediaType and ArtifactType are plain strings: a pulled base or a
+// referrer may carry a type this set does not name.
 type ImageMediaType string
 
 const (
-	ImageMediaTypeNone      ImageMediaType = ""
 	ImageMediaTypeManifest  ImageMediaType = "application/vnd.oci.image.manifest.v1+json"
 	ImageMediaTypeIndex     ImageMediaType = "application/vnd.oci.image.index.v1+json"
 	ImageMediaTypeConfig    ImageMediaType = "application/vnd.oci.image.config.v1+json"
@@ -66,6 +70,8 @@ type ImagePlatform struct {
 	OS           ImageOS
 	Architecture ImageArchitecture
 	Variant      ImageVariant
+	OSVersion    string
+	OSFeatures   []string
 }
 
 // ImageDigest is an OCI content digest. Empty fields mean unset.
@@ -94,14 +100,14 @@ type ImageFile struct {
 
 // ImageTree places the contents of a host directory at an image path.
 type ImageTree struct {
-	Source   string
-	Path     string
-	Include  []string
-	Exclude  []string
-	Modes    ImageModePolicy
-	Symlinks ImageSymlinkPolicy
-	UID      int `buzz:"uid"`
-	GID      int `buzz:"gid"`
+	Source     string
+	Path       string
+	Include    []string
+	Exclude    []string
+	ModePolicy ImageModePolicy
+	Symlinks   ImageSymlinkPolicy
+	UID        int `buzz:"uid"`
+	GID        int `buzz:"gid"`
 }
 
 // ImageSymlink places one symbolic link in the image.
@@ -151,17 +157,17 @@ type ImageSpec struct {
 
 // ImageDescriptor is an OCI descriptor.
 type ImageDescriptor struct {
-	MediaType    ImageMediaType
-	ArtifactType ImageMediaType
+	MediaType    string
+	ArtifactType string
 	Digest       ImageDigest
 	Size         int
 	Platform     *ImagePlatform
 	Annotations  map[string]string
 }
 
-// ImageAdded is the receipt of the layer an assemble wrote.
-type ImageAdded struct {
-	Layer       ImageDescriptor
+// ImageAddedLayer is the receipt of the layer an assemble wrote.
+type ImageAddedLayer struct {
+	Descriptor  ImageDescriptor
 	DiffID      ImageDigest
 	Files       int
 	Symlinks    int
@@ -177,7 +183,7 @@ type ImageLayout struct {
 	Platform   *ImagePlatform
 	Config     *ImageDescriptor
 	Layers     []ImageDescriptor
-	Added      *ImageAdded
+	Added      *ImageAddedLayer
 	Created    string
 }
 
@@ -196,17 +202,18 @@ type ImagePushed struct {
 	Reference  string // "<repository>@<digest>", what a signer or a deploy consumes
 }
 
-// ImageMaterial is one content-addressed input to a provenance statement.
-type ImageMaterial struct {
+// ImageDependency is one content-addressed input to a provenance statement: a SLSA v1
+// resolved dependency.
+type ImageDependency struct {
 	URI    string `buzz:"uri"`
 	Digest ImageDigest
 }
 
 // ImageProvenance is what a provenance statement says built the image.
 type ImageProvenance struct {
-	BuilderID      string `buzz:"builderId"`
+	BuilderID      string
 	SourceRevision string
-	Materials      []ImageMaterial
+	Dependencies   []ImageDependency
 }
 
 // ImageDocument is a written SBOM or provenance file and the descriptor of its bytes.

@@ -74,7 +74,7 @@ image\assemble(image\Spec{
     platform = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 },
     files = [image\File{ source = "out/app", path = "/app", mode = fs\mode("0755") }],
     trees = [image\Tree{ source = "out/rootfs", path = "/",
-        modes = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse }],
+        modePolicy = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse }],
     directories = [image\Directory{ path = "/tmp", mode = fs\mode("1777") }],
     config = image\Config{ user = "65532:65532", entrypoint = ["/app"] },
 }, layout: "out/image/linux-amd64");
@@ -84,7 +84,7 @@ image\assemble(image\Spec{
   refused: an omitted platform is an error, never linux/amd64.
 - `fs\mode` takes octal (`"0755"`) or ls notation (`"rwxr-xr-x"`); mode 0 is refused.
 - A `Tree` places the **contents** of `source` at `path`. Include and exclude filter
-  files only; a bad pattern is refused up front. `modes` is `fixed` (0644) or
+  files only; a bad pattern is refused up front. `modePolicy` is `fixed` (0644) or
   `executableBit` (0755 when the host owner-execute bit is set); there is no
   "keep host mode", which depends on the umask.
 - `Config` follows the image-spec config field for field. A null field inherits the
@@ -124,7 +124,7 @@ image\assemble(image\Spec{
 
 ## SBOM, provenance and referrers
 
-`image\writeSbom` and `image\writeProvenance` write deterministic documents (SPDX 2.3;
+`image\writeSBOM` and `image\writeProvenance` write deterministic documents (SPDX 2.3;
 in-toto Statement v1 with SLSA v1 provenance) naming the image by digest. Provenance adds
 each base digest to its resolved dependencies. `image\attachReferrers` writes a **new**
 layout with the image and one OCI 1.1 referrer per document, `subject` set and the empty
@@ -137,14 +137,15 @@ ways.
 
 ## Reading a layout back
 
-`image\open(layout)` returns the layout's image, the referrers whose `subject` is that
-image, and for a single-platform image its platform, config and layers. Each
-descriptor's `digest.string()` is the OCI form, `sha256:<hex>`. An image is an
-`index.json` entry with no subject; a layout holding several (as skopeo or oras write
-them) is opened in Go by `org.opencontainers.image.ref.name` with
-`image.OpenLayout(ctx, path, name)`, and entries of a media type magus does not read are
-passed over. `Layout.Manifests` lists the platform manifests and
-`Layout.Manifest(ctx, platform)` reads one.
+`image\open(layout, name:)` returns the image whose `org.opencontainers.image.ref.name`
+is `name`, the referrers whose `subject` is that image, and for a single-platform image
+its platform, config and layers. An image is an `index.json` entry with no subject; with
+no `name` the layout must hold exactly one, and a layout holding several (as skopeo or
+oras write them) needs the name. Entries of a media type magus does not read are passed
+over. Each descriptor's `digest.string()` is the OCI form, `sha256:<hex>`, and its
+`mediaType` and `artifactType` are strings, so a base or referrer of any type reads
+back; `image\MediaType` names the ones magus writes. In Go, `Layout.Manifests` lists
+the platform manifests and `Layout.Manifest(ctx, platform)` reads one.
 
 ## What this cannot express
 
@@ -153,7 +154,7 @@ passed over. `Layout.Manifests` lists the platform manifests and
 | Running a program inside the image          | A target runs the tool on the host, or on a Linux runner for cgo and native addons.          |
 | A package manager inside the image          | A container engine, or a pinned base that already holds the packages.                        |
 | Cache or SSH mounts for in-image steps      | There are no in-image steps. Caches and SSH agents belong to targets.                        |
-| Windows images                              | Not yet: platforms are linux/amd64 and linux/arm64 (Go also takes amd64 v2 and v3).          |
+| Windows images                              | Not yet: platforms are linux/amd64 (variant v1, v2 or v3) and linux/arm64.                   |
 
 ## Related
 

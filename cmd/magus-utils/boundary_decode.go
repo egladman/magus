@@ -111,7 +111,7 @@ var inboundTypes = []string{
 	"Config",
 	"Spec",
 	"RegistryAuth",
-	"Material",
+	"Dependency",
 	"Provenance",
 	"Document",
 	// The host doors' option records, each decoded strictly at its door.
@@ -159,11 +159,11 @@ var requiredMembers = map[string][]string{
 	"Platform":             {"os", "architecture"},
 	"Spec":                 {"platform"},
 	"File":                 {"source", "path", "mode"},
-	"Tree":                 {"source", "path", "modes", "symlinks"},
+	"Tree":                 {"source", "path", "modePolicy", "symlinks"},
 	"Symlink":              {"path", "target"},
 	"Directory":            {"path", "mode"},
 	"Document":             {"path", "descriptor"},
-	"Provenance":           {"builderId", "sourceRevision"},
+	"Provenance":           {"builderID", "sourceRevision"},
 }
 
 // inboundBoundaryTypes resolves inboundTypes against the registry, in list order.

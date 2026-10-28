@@ -32,7 +32,7 @@ export fun image_rootfs(ctx: magus\Context, args: [str]) > void !> any {
         trees = [image\Tree{
             source = "out/rootfs",
             path = "/",
-            modes = image\ModePolicy.fixed,
+            modePolicy = image\ModePolicy.fixed,
             symlinks = image\SymlinkPolicy.refuse,
         }],
         directories = [
