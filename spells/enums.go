@@ -24,7 +24,7 @@ func (v DiagnosticFormat) Values() []string { return diagnosticFormats.Strings()
 func (v DiagnosticFormat) Valid() bool      { return diagnosticFormats.Valid(v) }
 func (v DiagnosticFormat) String() string   { return enum.String(v) }
 
-var symbolFormats = enum.Set[SymbolFormat]{"scip", "go-packages"}
+var symbolFormats = enum.Set[SymbolFormat]{"scip", "go-packages", "buzz-module", "shell-script"}
 
 func (v SymbolFormat) Values() []string { return symbolFormats.Strings() }
 func (v SymbolFormat) Valid() bool      { return symbolFormats.Valid(v) }

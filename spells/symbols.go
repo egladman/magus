@@ -20,6 +20,12 @@ const (
 	// SymbolFormatGoPackages selects magus's in-process Go indexer (internal/symbols/goindex):
 	// the indexer's command args are the package patterns it loads, and nothing is executed.
 	SymbolFormatGoPackages SymbolFormat = "go-packages"
+	// SymbolFormatBuzzModule selects magus's in-process Buzz indexer
+	// (internal/symbols/buzzindex), one unit per module file. It runs no command.
+	SymbolFormatBuzzModule SymbolFormat = "buzz-module"
+	// SymbolFormatShellScript selects magus's in-process shell indexer
+	// (internal/symbols/shindex), one unit per *.sh or *.bash file. It runs no command.
+	SymbolFormatShellScript SymbolFormat = "shell-script"
 )
 
 // SymbolIndexer is what mgs_getSymbolIndexer declares: a spell's symbol-indexing

@@ -25,7 +25,9 @@ import (
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
+	"github.com/egladman/magus/internal/symbols/shindex"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -515,23 +517,32 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	var envs []map[string]string
 	var format spells.SymbolFormat
 	if spec.SymbolIndexer != nil {
-		envs = spec.SymbolIndexer.Envs
-		format = spec.SymbolIndexer.Format
+		envs, format = spec.SymbolIndexer.Envs, spec.SymbolIndexer.Format
 	}
 	if format == spells.SymbolFormatGoPackages {
 		patterns := slices.Clone(op.Args)
 		if len(patterns) == 0 {
 			patterns = []string{"."}
 		}
-		return nil, runGoIndexer(ctx, spec.Name, projectDir, indexPath, patterns, envs)
+		return nil, runUnitIndexer(ctx, spec.Name, "Go", projectDir, indexPath, &goindex.Indexer{Dir: projectDir, Patterns: patterns, Builds: envs})
 	}
 	if len(envs) > 0 {
 		return nil, fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (format %s), since %q runs once, in the host's environment",
 			spec.Name, spells.SymbolFormatGoPackages, op.Bin)
 	}
 	base := map[string]string{}
-	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws != nil {
 		base[symbols.WorkspaceRootEnvVar] = ws.Root()
+	}
+	if format == spells.SymbolFormatBuzzModule || format == spells.SymbolFormatShellScript {
+		if ws == nil {
+			return nil, fmt.Errorf("spell %q symbol indexer: %s names symbols by workspace path, and this run has no workspace", spec.Name, format)
+		}
+		if format == spells.SymbolFormatBuzzModule {
+			return nil, runUnitIndexer(ctx, spec.Name, "Buzz", projectDir, indexPath, &buzzindex.Indexer{Dir: projectDir, WorkspaceRoot: ws.Root()})
+		}
+		return nil, runUnitIndexer(ctx, spec.Name, "shell", projectDir, indexPath, &shindex.Indexer{Dir: projectDir, WorkspaceRoot: ws.Root()})
 	}
 	// The command writes SCIP beside the pack; the pack is what readers open.
 	scipPath := indexPath + ".scip"
@@ -545,21 +556,26 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	return noResult()
 }
 
-// runGoIndexer brings the pack at indexPath up to date with magus's in-process Go indexer,
-// re-indexing only the packages whose files moved and the dependents a removed symbol
-// reaches.
-func runGoIndexer(ctx context.Context, spellName, dir, indexPath string, patterns []string, builds []map[string]string) error {
-	ix := &goindex.Indexer{Dir: dir, Patterns: patterns, Builds: builds}
+// runUnitIndexer brings the pack at indexPath up to date with one of magus's in-process
+// indexers, re-indexing only the units whose files moved and the dependents a removed
+// symbol reaches. Each file the pack holds no document for is warned about by name on
+// every run, not only the run that met it.
+func runUnitIndexer(ctx context.Context, spellName, language, dir, indexPath string, ix symbols.UnitIndexer) error {
 	res, err := symbols.UpdatePack(ctx, indexPath, ix)
 	if err != nil {
 		return fmt.Errorf("spell %q symbol indexer: %w", spellName, err)
 	}
-	slog.With(attr.Component("symbols")).InfoContext(ctx, "updated the Go symbol index",
+	log := slog.With(attr.Component("symbols"))
+	for _, gap := range res.Gaps {
+		log.WarnContext(ctx, "the "+language+" symbol index leaves this out", slog.String("gap", gap))
+	}
+	log.InfoContext(ctx, "updated the "+language+" symbol index",
 		slog.String("dir", dir),
 		slog.Int("indexed", len(res.Indexed)),
 		slog.Int("dependents", len(res.Dependents)),
 		slog.Int("dropped", len(res.Dropped)),
 		slog.Int("kept", res.Kept),
+		slog.Int("gaps", len(res.Gaps)),
 		slog.Bool("rebuilt", res.Rebuilt))
 	return nil
 }
