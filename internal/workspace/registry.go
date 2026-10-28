@@ -50,6 +50,8 @@ type WorkspaceRegistry struct {
 	commandRule CommandRule
 	// writeRule is the function a magusfile registered via magus\guard.write, or nil.
 	writeRule WriteRule
+	// stopRule is the function a magusfile registered via magus\guard.stop, or nil.
+	stopRule StopRule
 	// builtins are the compiled guard rules a magusfile set via magus\guard.builtins, by
 	// name, already validated by builtin.Resolve; nil when it declared none.
 	builtins map[string]builtin.Setting
@@ -100,6 +102,10 @@ type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.
 // WriteRule judges one agent file write for magus\guard.write, with the same facts and
 // error contract as SpawnRule.
 type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (types.GuardVerdict, error)
+
+// StopRule judges one agent stop event for magus\guard.stop, with the same facts and error
+// contract as SpawnRule.
+type StopRule func(ctx context.Context, req types.StopRequest, facts hint.Gate) (types.GuardVerdict, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {
@@ -316,6 +322,20 @@ func (r *WorkspaceRegistry) WriteRule() WriteRule {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.writeRule
+}
+
+// SetStopRule records the magus\guard.stop rule, on the terms of SetSpawnRule.
+func (r *WorkspaceRegistry) SetStopRule(rule StopRule) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.stopRule = rule
+}
+
+// StopRule returns the magus\guard.stop rule, or nil when none was registered.
+func (r *WorkspaceRegistry) StopRule() StopRule {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.stopRule
 }
 
 // AddHarness records a spell name a magusfile wired as an agent harness,

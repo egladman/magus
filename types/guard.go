@@ -132,7 +132,7 @@ type GuardVerdict struct {
 
 // reservedGuardRuleNames are the seams an unnamed verdict reports under; a rule named
 // after one would read as an unnamed answer.
-var reservedGuardRuleNames = []string{"command", "spawn", "write"}
+var reservedGuardRuleNames = []string{"command", "spawn", "write", "stop"}
 
 // guardRuleName is a rule's name as written: lowercase words of letters and digits joined
 // by single hyphens. It is a label, never resolved through Normalize, so "rule2" stands as
@@ -281,6 +281,39 @@ type WriteRequest struct {
 	// three empty, which a rule reads as "unknown", never as "empty file".
 	OldText string
 	NewText string
+}
+
+// StopRequest is what a magus\guard.stop rule is handed: an agent ending its turn, as its
+// host reported the stop event.
+type StopRequest struct {
+	// Host, Session, Agent, Parent, Role, Lease, Thread, ThreadFrom, Orchestration and
+	// Window are the caller's, as on CommandRequest.
+	Host          string
+	Session       string
+	Agent         string
+	Parent        string
+	Role          AgentRole
+	Lease         *Job
+	Thread        AgentThread
+	ThreadFrom    ThreadSource
+	Orchestration Orchestration
+	Window        *ContextWindow
+	// Event is the host's hook event name, such as Claude Code's Stop or SubagentStop.
+	Event string
+	// StopHookActive is the host's report that this stop follows one a hook already
+	// refused, so a rule that refuses once per stop lets the second through.
+	StopHookActive bool
+	// Transcript is the path of the stopping agent's transcript as the host reported it,
+	// empty when it reported none.
+	Transcript string
+	// Checkout is the state of the checkout the stop happens in, nil when its version
+	// control cannot report it: a rule reads nil as unknown.
+	Checkout *CheckoutState
+	// Dir is the directory the host reported for the stopping agent, empty when it reported
+	// none.
+	Dir string
+	// Workspace is the root of the workspace holding Dir, empty when none does.
+	Workspace string
 }
 
 // CommandInvocation is one program a shell line runs.

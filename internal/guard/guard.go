@@ -83,6 +83,11 @@ type Dependencies struct {
 	WriteRule workspace.WriteRule
 	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per judgment.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
+	// StopRule is the working tree's magus\guard.stop rule, nil when none is registered.
+	// It is called on every Stop and SubagentStop event the built-in stop check lets through.
+	StopRule workspace.StopRule
+	// ApprovedStopRule is ApprovedSpawnRule for the stop rule, resolved per judgment.
+	ApprovedStopRule func(ctx context.Context) (workspace.StopRule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// mgs_listModels, nil when none does. It can load the workspace and its harness
 	// spells, so it must load them once however often it is called; the guard calls it
@@ -728,6 +733,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if !ok {
 				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
+			lease, _ := resolveLease(who, req.Lease, boundJob(who, at).Job)
+			v = gradeWorkspaceStop(withJobStoreRows(ctx, at), deps, v, input, who, at, lease)
 			if !req.DryRun && !req.Observe {
 				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, req.HostResumesOnBackgroundFrom, v); err != nil {
 					v.Context = fmt.Sprintf("%smagus workspace: the job store did not end the job this session held: %s", strings.TrimPrefix(v.Context+"\n", "\n"), err)

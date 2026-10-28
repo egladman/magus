@@ -60,6 +60,7 @@ type PolicyState struct {
 	SpawnRule   bool
 	CommandRule bool
 	WriteRule   bool
+	StopRule    bool
 	// Files are the files the load read, the root magusfile and every source it imports, as
 	// the load named them. Cheap, unlike Sources: they are what the load already logged.
 	Files []string
@@ -74,6 +75,7 @@ type policyMarker struct {
 	SpawnRule   bool   `json:"spawn_rule"`
 	CommandRule bool   `json:"command_rule,omitzero"`
 	WriteRule   bool   `json:"write_rule,omitzero"`
+	StopRule    bool   `json:"stop_rule,omitzero"`
 	Pending     bool   `json:"pending"`
 	// Files is PolicyState.Files, kept so a call whose own load ran out of time still knows
 	// which files the guard loads.
@@ -130,7 +132,7 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	}
 	pending := slices.ContainsFunc(sources, func(s PolicySource) bool { return s.Worktree != s.Approved })
 	action := classifyPolicy(prev, seen, now, pending)
-	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, Pending: pending, Files: now.Files}
+	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, StopRule: now.StopRule, Pending: pending, Files: now.Files}
 	if action != "" {
 		body, _ := json.Marshal(policyEvent{SchemaVersion: 1, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
 		ref, size := trail.WriteBlob(ctx, cacheDir, "policy", body)
@@ -164,7 +166,7 @@ func classifyPolicy(prev policyMarker, seen bool, now PolicyState, pending bool)
 		return PolicyRemoved
 	case !pending:
 		return PolicyCommitted
-	case prev.SpawnRule && !now.SpawnRule, prev.CommandRule && !now.CommandRule, prev.WriteRule && !now.WriteRule:
+	case prev.SpawnRule && !now.SpawnRule, prev.CommandRule && !now.CommandRule, prev.WriteRule && !now.WriteRule, prev.StopRule && !now.StopRule:
 		return PolicyLoosenPending
 	case now.ShellRules < prev.ShellRules:
 		// Shell rules have no approved twin, so a dropped one is in effect at once.
@@ -189,6 +191,8 @@ func recordedRule(cacheDir string, seam functionSeam) bool {
 		return m.CommandRule
 	case seamWrite:
 		return m.WriteRule
+	case seamStop:
+		return m.StopRule
 	}
 	return m.SpawnRule
 }
