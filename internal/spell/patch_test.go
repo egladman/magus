@@ -343,7 +343,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// that never run the tool. See spells/golang/spell.buzz.
 			"golangci-lint": {Observe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}},
 			"govulncheck":   {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
-			"scip-go":       {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
 		},
 		Language:           "go",
 		LanguageExtensions: []string{".go"},
@@ -403,10 +402,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}, Capture: true},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "go", Args: []string{"list", "./..."}, Capture: true, Quiet: true}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}, Uses: []string{"go"},
+			Command: spells.Command{Bin: "go", Args: []string{"list", "./..."}}, Uses: []string{"go"},
 			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}},
 	},
 	"markdown": {
@@ -453,8 +452,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "python",
 		Needs: []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		Tools: map[string]spells.Tool{
-			"python3":     {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"},
-			"scip-python": {Observe: spells.Command{Bin: "scip-python", Args: []string{"--version"}}},
+			"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"},
 		},
 		Language:           "python",
 		LanguageExtensions: []string{".py"},
@@ -491,10 +489,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		ScriptRunners: []spells.Command{
 			{Bin: "poe"},
 			{Bin: "hatch", Args: []string{"run"}},
@@ -506,8 +501,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "rust",
 		Needs: []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		Tools: map[string]spells.Tool{
-			"rustc":         {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
-			"rust-analyzer": {Observe: spells.Command{Bin: "rust-analyzer", Args: []string{"--version"}}},
+			"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
 		},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
@@ -538,10 +532,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
-			"scip":       {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 	},
 	"typescript": {
 		Name:  "typescript",
@@ -555,7 +546,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"tsc": {Probe: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--version"}},
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
-			"scip-typescript": {Observe: spells.Command{Bin: "scip-typescript", Args: []string{"--version"}}},
 		},
 		Language:           "typescript",
 		LanguageExtensions: []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"},
@@ -611,10 +601,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"dev-server": {Kind: "service", Command: goldenDevServerCommand, Service: &spells.Service{
 				Command: goldenDevServerCommand,
 			}},
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		ScriptRunners: []spells.Command{
 			{Bin: "npm", Args: []string{"run"}}, {Bin: "npm", Args: []string{"run-script"}},
 			{Bin: "npm", Args: []string{"test"}}, {Bin: "npm", Args: []string{"t"}},

@@ -485,12 +485,13 @@ export fun mgs_getSandbox() > Sandbox { return %s; }
 }
 
 // The go spell declares the two caches a warm build reads: the build cache, whose
-// entries go re-dates as it uses them, and the module cache less its zips and clones.
+// entries go re-dates as it uses them and which reclaiming trims to 20 GiB, and the
+// module cache less its zips and clones.
 func TestGoSpellDeclaresItsCaches(t *testing.T) {
 	sb := Builtins()["go"].Sandbox
 	require.NotNil(t, sb)
 	assert.Equal(t, []spells.SandboxCache{
-		{Env: "GOCACHE", StampsUse: true, Skip: []string{"README", "trim.txt", "fuzz/**"}},
+		{Env: "GOCACHE", StampsUse: true, Skip: []string{"README", "trim.txt", "fuzz/**"}, TrimMB: 20480},
 		{Env: "GOMODCACHE", Skip: []string{"cache/vcs/**", "cache/download/**/*.zip", "**/*.lock", "**/*.partial", "**/*.tmp"}},
 	}, sb.Caches)
 }
