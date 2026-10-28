@@ -67,8 +67,8 @@ Prove it before you plan it. A claim a plan or brief rests on cites the output r
 a run that settled it. A guess nobody ran stays out of the plan.
 
 {{if .Full}}The loop: state the goal and acceptance criteria, partition, hand out, observe,
-evaluate against the evidence, revise ownership or ordering, then integrate. The graph
-improves the partition and collision decisions; it does not replace the loop.
+evaluate against the evidence, revise ownership or ordering, then integrate. Graph engineering
+is a natural evolution of loop engineering: it improves the partition, never replaces the loop.
 
 Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
 never a worker's prose: a worker that ran a filtered subset, or restated its criteria
@@ -83,7 +83,7 @@ is complete.{{else}}The loop: define, partition, hand out, observe, evaluate, co
 
 ## Keep worker records out of the user update
 
-Read a worker's structured result, not its whole event stream. Keep its job id,
+{{if .Full}}Read a worker's structured result, not its whole event stream. Keep its job id,
 outcome, changed paths, validation refs and unresolved risks; reopen the relevant
 evidence when verification needs it. Persist the complete JSON or JSONL in the
 host capture or result file. Do not echo it into another tool call or the reply.
@@ -93,7 +93,10 @@ from `-o json` before it reaches your context. Keep the producer's failure statu
 when piping. Inspect individual permitted deviations only when they affect a
 decision; `--dry-run` text intentionally previews the full record. Prepare the
 spec once in a scratch file (`job_spec` below); do not retype its full exception
-list on every retry:
+list on every retry:{{else}}Read worker's structured result, never whole event stream. Keep job id, outcome, changed paths, validation refs, unresolved risks.
+Persist full JSON/JSONL in host capture or result file; never echo it into another call or reply.
+Job validation: project `problems`, `unchecked`, count of `permitted` from `-o json`; keep producer's failure status when piping.
+Inspect a permitted deviation only when it affects a decision. Spec once in scratch file (`job_spec`); never retype exception list per retry:{{end}}
 
 ```sh
 set -o pipefail
@@ -101,11 +104,12 @@ set -o pipefail
   jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
 ```
 
-Tell the person what changed, what passed, what remains unverified, and any decision
+{{if .Full}}Tell the person what changed, what passed, what remains unverified, and any decision
 they need to make. A routine claim, handled denial, or recorded deviation is not an
 update; collapse repeats into the current blocker and next action. A waiver that skips
 validation or accepts a material risk gets one plain sentence and its evidence link,
-never pasted waiver objects, claim lists or guard transcripts.
+never pasted waiver objects, claim lists or guard transcripts.{{else}}Tell person: what changed, passed, remains unverified, decisions needed. Routine claim, handled denial, recorded deviation: not an update; collapse repeats into current blocker + next action.
+Waiver skipping validation or accepting material risk: one plain sentence + evidence link, never pasted waiver objects, claim lists, guard transcripts.{{end}}
 
 ## Declare the interface before any job forks
 
@@ -150,7 +154,7 @@ the table, check it with `{{cmd "refs"}}` when the edits land, then report the c
 
 Before spawning, state the topology: the model per job, and whether isolated worktrees are available.
 
-- Fan-out and depth are not capped unless the workspace sets a cap. Spawn as many
+{{if .Full}}- Fan-out and depth are not capped unless the workspace sets a cap. Spawn as many
   jobs, nested as deep, as the partition supports.
 - A limit exists only when magus.yaml's `jobs` section sets one. Read it with
   `{{cmd "config view"}}` or `{{tool "config"}}`.
@@ -171,7 +175,13 @@ Assign the check from the pipeline the workspace composed, not from convention.
   where one exists. A go test check naming exactly the packages of the write paths
   (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
 - The integration job owns the full `go-test` and `lint`, and runs every check a merged
-  worker filed as owed. The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the whole composition.
+  worker filed as owed. The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the whole composition.{{else}}- No cap on fan-out or depth unless magus.yaml `jobs` sets one (`{{cmd "config view"}}`, `{{tool "config"}}`): `max_depth`, `max_live` refuse past them; `default_timeout` bounds a fork with no `--timeout`. User-stated cap: same.
+- Editing costs nothing; VALIDATION contends for machine build budget. Only integrator waits for it (`{{cmd "status"}} --wait` piped into its run), never a worker; spawn or `{{cmd "job fork"}}` into full budget says how full.
+- Serialize validations sharing a worktree, even with disjoint write sets.
+
+Assign check from composed pipeline, never convention: `{{cmd "describe target"}} ci <project>` names what `ci` chains, in order.
+- Job: narrowest target covering its edits, scoped with runner filter after `--` (`go::go-test . -- ./pkg/... -run 'Store'`). Never full suite.
+- Integration job: full `go-test`, `lint`, every check a merged worker filed owed; re-runs described order; `{{cmd "affected"}} ci` re-proves composition.{{end}}
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands{{if .Full}}, which is what stops seven fanned-out workers from
