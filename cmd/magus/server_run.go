@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -143,7 +144,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	// backs the dashboard's active-runs view via the console service.
 	serverRuns = console.NewRunRegistry()
 
-	brokerClient := newBrokerClient(false)
+	brokerClient := newBrokerClient(false, broker.WithLease(""))
 	declared := resolveDeclaredWorkspaces(cfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
 	reg := newWSRegistry(ctx, lim, brokerClient, ttl, sharedTel)
 	reg.setDeclared(declared)
