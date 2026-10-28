@@ -45,6 +45,7 @@ guard.once
 guard.profile
 guard.shell
 guard.spawn
+guard.stop
 guard.write
 harness
 harness.provider
@@ -82,6 +83,8 @@ raise
 refs
 review
 review.provider
+risk
+risk.assess
 run
 secret
 secret.endpoint

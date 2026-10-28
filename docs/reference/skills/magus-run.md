@@ -3,7 +3,7 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15519
+skill_full_bytes: 15258
 skill_short_bytes: 8892
 ---
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `149` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `d02272877e67` |
+| `skill-content` | `52b4a5cd1aec` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -343,11 +343,6 @@ WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
 hand-sequencing `magus run lint`, `format`, `test` to check your own work.
 CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
 change is done, and a single narrower target only to iterate on a failure.
-
-To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner (`magus buzz hack/remote/on-actions.buzz --
-<command>`) or in a local Podman container (`magus buzz hack/remote/on-linux.buzz --
-<command>`).
 
 ## Output control: silence runs, read structure
 

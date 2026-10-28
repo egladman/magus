@@ -3,7 +3,7 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12946
+skill_full_bytes: 12873
 skill_short_bytes: 9964
 ---
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `149` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `8ff27b00bf72` |
+| `skill-content` | `c66ee9e7bd0a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -573,8 +573,7 @@ test "slugify hyphenates" {
 ## Where Buzz code belongs
 
 - A one-off is a standalone `.buzz` file run with `magus buzz`. Before
-  writing one from nothing, look for a script the workspace keeps to copy; magus's own
-  repository indexes its tested scripts in `hack/README.md`.
+  writing one from nothing, look for a script the workspace keeps to copy.
 - Work the workspace repeats goes in a target in `magusfile.buzz`, so it is
   cached, sandboxed and affected-tracked; a script re-runs from scratch every time.
   Targets take `(ctx: magus\Context, args: [str])`.

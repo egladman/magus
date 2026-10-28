@@ -76,6 +76,7 @@ github.com/egladman/magus.Magus.Affinity method(ptr) func(ctx context.Context, o
 github.com/egladman/magus.Magus.All method(ptr) func() []*github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.ApplySandbox method(ptr) func(ctx context.Context) (context.Context, error)
 github.com/egladman/magus.Magus.AssessChange method(ptr) func(ctx context.Context, target string, o AssessOptions) (github.com/egladman/magus/types.RiskReport, error)
+github.com/egladman/magus.Magus.AssessRisk method(ptr) func(ctx context.Context, target string, o github.com/egladman/magus/types.RiskOptions) (github.com/egladman/magus/types.RiskReport, error)
 github.com/egladman/magus.Magus.AutoResolvable method(ptr) func(ctx context.Context, path string, base []byte, merged []byte) (verdict string, ok bool)
 github.com/egladman/magus.Magus.AutoResolve method(ptr) func(ctx context.Context, path string, base []byte, ours []byte, theirs []byte) (merged []byte, report string, ok bool)
 github.com/egladman/magus.Magus.AutoResolveGlobs method(ptr) func() []string
@@ -542,6 +543,7 @@ github.com/egladman/magus/std.MagusQuery func(ctx context.Context, query string,
 github.com/egladman/magus/std.MagusRaise func(ctx context.Context, code github.com/egladman/magus/types.DiagnosticCodeRef, message string, opts github.com/egladman/magus/types.RaiseOptions) error
 github.com/egladman/magus/std.MagusRefs func(ctx context.Context, symbol string, opts github.com/egladman/magus/types.KnowledgeRefsOptions) (github.com/egladman/magus/types.KnowledgeRefsOutput, error)
 github.com/egladman/magus/std.MagusRegisterJob func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, string, error)
+github.com/egladman/magus/std.MagusRiskAssess func(ctx context.Context, target string, opts map[string]any) (github.com/egladman/magus/types.RiskReport, error)
 github.com/egladman/magus/std.MagusRun func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.MagusStats func(ctx context.Context, kind string) (github.com/egladman/magus/types.KnowledgeStats, error)
 github.com/egladman/magus/std.MagusSymbolIndexDigest func(ctx context.Context) (github.com/egladman/magus/types.SymbolIndexDigest, error)
@@ -3458,13 +3460,15 @@ github.com/egladman/magus/types.KnowledgeSymbolDefinition type struct
 github.com/egladman/magus/types.KnowledgeSymbolDefinition.Doc field string
 github.com/egladman/magus/types.KnowledgeSymbolDefinition.Source field string
 github.com/egladman/magus/types.KnowledgeSymbolGap type struct
+github.com/egladman/magus/types.KnowledgeSymbolGap.Buildable method func() bool
 github.com/egladman/magus/types.KnowledgeSymbolGap.CouldHold method func(language string) bool
 github.com/egladman/magus/types.KnowledgeSymbolGap.Describe method func() string
-github.com/egladman/magus/types.KnowledgeSymbolGap.Detail field string "json:\"detail,omitempty\"   yaml:\"detail,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Hint field string "json:\"hint,omitempty\"     yaml:\"hint,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Language field string "json:\"language,omitempty\" yaml:\"language,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Project field ProjectRef "json:\"project\"            yaml:\"project\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.State field SymbolIndexFreshness "json:\"state\"              yaml:\"state\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Detail field string "json:\"detail,omitempty\"      yaml:\"detail,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Hint field string "json:\"hint,omitempty\"        yaml:\"hint,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Language field string "json:\"language,omitempty\"    yaml:\"language,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Project field ProjectRef "json:\"project\"               yaml:\"project\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.State field SymbolIndexFreshness "json:\"state\"                 yaml:\"state\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Unindexable field bool "json:\"unindexable,omitzero\"  yaml:\"unindexable,omitempty\""
 github.com/egladman/magus/types.KnowledgeSymbolRef type struct
 github.com/egladman/magus/types.KnowledgeSymbolRef.Alias field string
 github.com/egladman/magus/types.KnowledgeSymbolRef.Count field int
@@ -4500,6 +4504,8 @@ github.com/egladman/magus/types.RevisionFetcher.FetchCommit imethod func(ctx con
 github.com/egladman/magus/types.RevisionFetcher.FetchRef imethod func(ctx context.Context, root string, remote string, ref string) (string, error)
 github.com/egladman/magus/types.RevisionFileReader type interface
 github.com/egladman/magus/types.RevisionFileReader.ReadFileAt imethod func(ctx context.Context, root string, rev string, path string) (string, error)
+github.com/egladman/magus/types.RiskAssessor type interface
+github.com/egladman/magus/types.RiskAssessor.AssessRisk imethod func(ctx context.Context, target string, o RiskOptions) (RiskReport, error)
 github.com/egladman/magus/types.RiskEvidence type struct
 github.com/egladman/magus/types.RiskEvidence.Class field string "json:\"class,omitempty\"   yaml:\"class,omitempty\""
 github.com/egladman/magus/types.RiskEvidence.Line method func() string
@@ -4517,6 +4523,10 @@ github.com/egladman/magus/types.RiskGateStep.Packages field []string "json:\"pac
 github.com/egladman/magus/types.RiskGateStep.Projects field []string "json:\"projects\"           yaml:\"projects\""
 github.com/egladman/magus/types.RiskGateStep.Target field string "json:\"target\"             yaml:\"target\""
 github.com/egladman/magus/types.RiskMechanical const RiskTier = "mechanical"
+github.com/egladman/magus/types.RiskOptions type struct
+github.com/egladman/magus/types.RiskOptions.Base field string "json:\"base,omitempty\""
+github.com/egladman/magus/types.RiskOptions.Checkout field string "json:\"checkout,omitempty\""
+github.com/egladman/magus/types.RiskOptions.Paths field []string "json:\"paths,omitempty\""
 github.com/egladman/magus/types.RiskReport type struct
 github.com/egladman/magus/types.RiskReport.Affected field []string "json:\"affected\" yaml:\"affected\""
 github.com/egladman/magus/types.RiskReport.Base field string "json:\"base\"     yaml:\"base\""
@@ -4933,6 +4943,23 @@ github.com/egladman/magus/types.StatusWorkspace.LoadedAt field time.Time "json:\
 github.com/egladman/magus/types.StatusWorkspace.Root field string "json:\"root\" yaml:\"root\""
 github.com/egladman/magus/types.StatusWorkspace.SecretProvider field string "json:\"secret_provider,omitempty\" yaml:\"secret_provider,omitempty\""
 github.com/egladman/magus/types.StatusWorkspace.State field WorkspaceState "json:\"state,omitempty\" yaml:\"state,omitempty\""
+github.com/egladman/magus/types.StopRequest type struct
+github.com/egladman/magus/types.StopRequest.Agent field string
+github.com/egladman/magus/types.StopRequest.Checkout field *CheckoutState
+github.com/egladman/magus/types.StopRequest.Dir field string
+github.com/egladman/magus/types.StopRequest.Event field string
+github.com/egladman/magus/types.StopRequest.Host field string
+github.com/egladman/magus/types.StopRequest.Lease field *Job
+github.com/egladman/magus/types.StopRequest.Orchestration field Orchestration
+github.com/egladman/magus/types.StopRequest.Parent field string
+github.com/egladman/magus/types.StopRequest.Role field AgentRole
+github.com/egladman/magus/types.StopRequest.Session field string
+github.com/egladman/magus/types.StopRequest.StopHookActive field bool
+github.com/egladman/magus/types.StopRequest.Thread field AgentThread
+github.com/egladman/magus/types.StopRequest.ThreadFrom field ThreadSource
+github.com/egladman/magus/types.StopRequest.Transcript field string
+github.com/egladman/magus/types.StopRequest.Window field *ContextWindow
+github.com/egladman/magus/types.StopRequest.Workspace field string
 github.com/egladman/magus/types.StoredOutput type struct
 github.com/egladman/magus/types.StoredOutput.Bytes method func() []byte
 github.com/egladman/magus/types.StoredOutput.ClassDigests field []ClassDigest "json:\"class_digests,omitempty\""
