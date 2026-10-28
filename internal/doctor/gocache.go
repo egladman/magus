@@ -130,7 +130,7 @@ func (r *runner) checkGoCacheBudget() types.Check {
 	if unscoped != "" {
 		notes = append(notes, unscoped)
 	}
-	if dir, err := GoEnvCache(r.ctx); err != nil {
+	if dir, err := goEnvCache(r.ctx); err != nil {
 		notes = append(notes, fmt.Sprintf("go build cache not measured: %v", err))
 	} else {
 		caches = append(caches, goCache{label: "go build cache", dir: dir, fix: goBuildCacheFix})
@@ -158,8 +158,8 @@ func (r *runner) checkGoCacheBudget() types.Check {
 	return res
 }
 
-// GoEnvCache asks the Go toolchain where its build cache lives.
-func GoEnvCache(ctx context.Context) (string, error) {
+// goEnvCache asks the Go toolchain where its build cache lives.
+func goEnvCache(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, "go", "env", "GOCACHE").Output()
 	if err != nil {
 		return "", fmt.Errorf("go env GOCACHE: %w", err)
