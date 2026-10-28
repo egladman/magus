@@ -846,14 +846,15 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	var mu sync.Mutex
 	forked := map[string]int{}
+	goList := spells.Command{Bin: "go", Args: []string{"list", "./..."}}
 	sp := spells.NewSpell("go",
-		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-go"}}),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goList, Uses: []string{"go"}}),
 		spells.WithOps(map[string]spells.Op{
-			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
+			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: goList},
 			"govulncheck":               {Command: spells.Command{Bin: "govulncheck"}},
 		}),
 		spells.WithTools(map[string]spells.Tool{
-			"scip-go":     {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
+			"go":          {Observe: spells.Command{Bin: "go", Args: []string{"version"}}},
 			"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		}),
 		spells.WithVersionProber(func(_ context.Context, cmd spells.Command, _ string) (string, error) {
@@ -864,7 +865,7 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 		}),
 	)
 	binDir := testkit.NewWorkspace(t)
-	for _, bin := range []string{"scip-go", "govulncheck"} {
+	for _, bin := range []string{"go", "govulncheck"} {
 		binDir.WriteExecutable(bin, "\x7fELF binary")
 	}
 	t.Setenv("PATH", binDir.Root())
@@ -883,12 +884,12 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	}
 
 	got := m.probeObservations(t.Context(), ps, indexesDriven(idxs))
-	assert.Equal(t, map[string]int{"scip-go": 1}, forked,
-		"one scip-go fork for seven projects that see the same inputs, and no govulncheck")
-	assert.Equal(t, "v1", got["p3"]["go:scip-go"])
+	assert.Equal(t, map[string]int{"go": 1}, forked,
+		"one go fork for seven projects that see the same inputs, and no govulncheck")
+	assert.Equal(t, "v1", got["p3"]["go:go"])
 
 	m.probeObservations(t.Context(), ps, indexesDriven(idxs))
-	assert.Equal(t, map[string]int{"scip-go": 1}, forked, "the second status check is a cache hit")
+	assert.Equal(t, map[string]int{"go": 1}, forked, "the second status check is a cache hit")
 
 	m.probeObservations(t.Context(), ps, map[string]map[string]bool{"p0": {"go:govulncheck": true}, "p1": {"go:govulncheck": true}})
 	assert.Equal(t, 2, forked["govulncheck"], "the database observation is never cached: it moves on a clock")

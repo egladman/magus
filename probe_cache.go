@@ -55,12 +55,9 @@ var probeInputs = map[string]probeSpec{
 	},
 	"go version":              {goToolchain: true},
 	"golangci-lint --version": {},
-	"buf --version":           {},
-	// The symbol indexers' observe probes. govulncheck's is absent on purpose: it reports
-	// a vulnerability database that moves on a clock, not on any input listed here.
-	"scip-go --version":         {},
-	"scip-typescript --version": {},
-	"scip-python --version":     {},
+	// govulncheck's probe is absent on purpose: it reports a vulnerability database that
+	// moves on a clock, not on any input listed here.
+	"buf --version": {},
 }
 
 var pnpmInputs = []string{"package.json", "pnpm-workspace.yaml", ".npmrc"}
