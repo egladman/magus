@@ -23,7 +23,7 @@ func ReleaseCommand(constraint string) string {
 	if pin := ward.PinnedRelease(constraint); pin != "" {
 		argv = append(argv, "--version", pin)
 	}
-	return ShellLine(argv)
+	return shellLine(argv)
 }
 
 // SourceCommand is the shell line that rebuilds a binary built from checkout's own
@@ -31,9 +31,9 @@ func ReleaseCommand(constraint string) string {
 // ward.BootstrapCommand in checkout, the module's own build for a checkout of magus.
 func SourceCommand(checkout, pkg, output string, bootstrap bool) string {
 	if bootstrap {
-		return ShellLine(bootstrapIn(checkout))
+		return shellLine(bootstrapIn(checkout))
 	}
-	return ShellLine([]string{"go", "-C", checkout, "build", "-o", output, "./" + pkg})
+	return shellLine([]string{"go", "-C", checkout, "build", "-o", output, "./" + pkg})
 }
 
 // RequiredVersionAt is the required_version root's magus.yaml declares, read leniently: a
@@ -68,9 +68,9 @@ func bootstrapIn(dir string) []string {
 	return slices.Concat(words[:at+1], []string{"-C", dir}, words[at+1:])
 }
 
-// ShellLine joins argv into one line a POSIX shell splits back into argv. A leading
+// shellLine joins argv into one line a POSIX shell splits back into argv. A leading
 // NAME=value word that needs no quoting stays an assignment.
-func ShellLine(argv []string) string {
+func shellLine(argv []string) string {
 	quoted := make([]string, len(argv))
 	for i, a := range argv {
 		name, value, assigns := strings.Cut(a, "=")
