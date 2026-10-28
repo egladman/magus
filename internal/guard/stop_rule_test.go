@@ -46,64 +46,66 @@ func (s *StopRuleSuite) stop(event string, fields map[string]any) string {
 	return hookJSON(s.T(), env)
 }
 
+// judge is the stop's judgment with the fields the lease and the guard's version decide
+// cleared, so a case compares the rest whole.
 func (s *StopRuleSuite) judge(deps Dependencies, input string) types.GuardJudgment {
-	return Judge(s.ctx, deps, Request{Host: "claude-code", Input: input})
+	v := Judge(s.ctx, deps, Request{Host: "claude-code", Input: input})
+	v.SchemaVersion, v.Lease, v.LeaseFrom, v.Next = 0, "", "", nil
+	return v
+}
+
+// asked is the one request probe saw, with the fields the fixture's checkout, transcript
+// and context window decide cleared.
+func (s *StopRuleSuite) asked(probe *stopRuleProbe) types.StopRequest {
+	s.Require().Len(probe.asked, 1)
+	req := probe.asked[0]
+	var zero types.StopRequest
+	req.Checkout, req.Window, req.Thread, req.ThreadFrom, req.Orchestration, req.Dir = nil, nil, zero.Thread, zero.ThreadFrom, zero.Orchestration, ""
+	return req
 }
 
 func (s *StopRuleSuite) TestARootStopAsksTheRule() {
 	probe := &stopRuleProbe{}
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", map[string]any{"stop_hook_active": true}))
-	s.Equal(decisionPass, v.Decision, v.Reason+v.Context)
-	s.Require().Len(probe.asked, 1)
-	req := probe.asked[0]
-	s.Equal("Stop", req.Event)
-	s.True(req.StopHookActive)
-	s.Equal("/nonexistent/root.jsonl", req.Transcript)
-	s.Equal(types.AgentRoleRoot, req.Role)
-	s.Equal(s.root, req.Workspace)
-	s.Equal("8f2c6a1e", req.Session)
+	s.Equal(types.GuardJudgment{Decision: decisionPass}, v)
+	s.Equal(types.StopRequest{Host: "claude-code", Session: "8f2c6a1e", Role: types.AgentRoleRoot, Event: "Stop", StopHookActive: true,
+		Transcript: "/nonexistent/root.jsonl", Workspace: s.root}, s.asked(probe))
 }
 
 func (s *StopRuleSuite) TestTheRulesDenyRefusesTheStop() {
 	probe := &stopRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "row naming-lint is forkable", Rule: "idle-stop"}}
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", nil))
-	s.Equal(decisionDeny, v.Decision)
-	s.Equal("row naming-lint is forkable", v.Reason)
-	s.Equal(workspaceShellPrefix+"idle-stop", v.Rule)
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Reason: "row naming-lint is forkable", Rule: workspaceShellPrefix + "idle-stop"}, v)
 }
 
 func (s *StopRuleSuite) TestTheRulesAdviceBecomesContext() {
 	probe := &stopRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "two rows wait"}}
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", nil))
-	s.Equal(decisionAdvise, v.Decision)
-	s.Equal("two rows wait", v.Context)
-	s.Equal(workspaceStopRule, v.Rule)
+	s.Equal(types.GuardJudgment{Decision: decisionAdvise, Context: "two rows wait", Rule: workspaceStopRule}, v)
 }
 
 func (s *StopRuleSuite) TestTheApprovedRuleIsAsked() {
 	probe := &stopRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed rule"}}
 	deps := Dependencies{ApprovedStopRule: func(context.Context) (workspace.StopRule, error) { return probe.rule(), nil }}
 	v := s.judge(deps, s.stop("Stop", nil))
-	s.Equal(decisionDeny, v.Decision)
-	s.Equal("committed rule", v.Reason)
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Reason: "committed rule", Rule: workspaceStopRule}, v)
 }
 
 func (s *StopRuleSuite) TestABuiltinDenyIsNotAskedAbout() {
 	probe := &stopRuleProbe{}
 	input := s.stop("SubagentStop", map[string]any{"agent_id": "a05d44b006f8f68af", "agent_transcript_path": writeTranscript(s.T(), bgSearchCall, bgSearchResult)})
 	v := s.judge(Dependencies{StopRule: probe.rule()}, input)
-	s.Equal(decisionDeny, v.Decision)
-	s.Equal(string(denyRuleBackgroundLeft), v.Rule)
+	s.Equal(string(denyRuleBackgroundLeft), v.Rule, v.Reason)
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRuleBackgroundLeft)}, v)
 	s.Empty(probe.asked)
 }
 
 func (s *StopRuleSuite) TestASubagentStopAsksTheRule() {
 	probe := &stopRuleProbe{}
-	input := s.stop("SubagentStop", map[string]any{"agent_id": "a05d44b006f8f68af", "agent_transcript_path": writeTranscript(s.T())})
-	s.judge(Dependencies{StopRule: probe.rule()}, input)
-	s.Require().Len(probe.asked, 1)
-	s.Equal("SubagentStop", probe.asked[0].Event)
-	s.Equal("a05d44b006f8f68af", probe.asked[0].Agent)
+	transcript := writeTranscript(s.T())
+	s.judge(Dependencies{StopRule: probe.rule()}, s.stop("SubagentStop", map[string]any{"agent_id": "a05d44b006f8f68af", "agent_transcript_path": transcript}))
+	s.Equal(types.StopRequest{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af", Role: types.AgentRoleRoot, Event: "SubagentStop",
+		Transcript: transcript, Workspace: s.root}, s.asked(probe))
 }
 
 func (s *StopRuleSuite) TestAnotherEventIsNotAskedAbout() {

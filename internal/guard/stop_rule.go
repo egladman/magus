@@ -59,7 +59,7 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, verdict types.Gu
 	}
 	verdict, _ = applyWorkspaceAnswer(verdict, decided, asked, workspaceStopRule)
 	if note := stopFailureNote(asked); note != "" && verdict.Decision != decisionDeny {
-		verdict.Context = strings.TrimPrefix(verdict.Context+"\n\n"+note, "\n\n")
+		verdict.Context = strings.Join(slices.DeleteFunc([]string{verdict.Context, note}, func(s string) bool { return s == "" }), "\n\n")
 		if verdict.Decision == decisionPass {
 			verdict.Decision = decisionAdvise
 		}

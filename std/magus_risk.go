@@ -22,7 +22,7 @@ func MagusRiskAssess(ctx context.Context, target string, opts map[string]any) (t
 		return types.RiskReport{}, errors.New("magus\\risk.assess: this workspace cannot assess a change")
 	}
 	if target == "" {
-		return types.RiskReport{}, errors.New("magus\\risk.assess: target is empty; name the gate the change is tiered against, such as ci")
+		return types.RiskReport{}, errors.New("magus\\risk.assess: target is empty, so name the gate the change is tiered against, such as ci")
 	}
 	o, err := riskOptions(opts)
 	if err != nil {

@@ -298,7 +298,7 @@ type StopRequest struct {
 	ThreadFrom    ThreadSource
 	Orchestration Orchestration
 	Window        *ContextWindow
-	// Event is the host's hook event name, such as Claude Code's Stop or SubagentStop.
+	// Event is the host's name for the hook event, such as Stop or SubagentStop.
 	Event string
 	// StopHookActive is the host's report that this stop follows one a hook already
 	// refused, so a rule that refuses once per stop lets the second through.

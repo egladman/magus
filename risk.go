@@ -38,7 +38,7 @@ func (m *Magus) AssessRisk(ctx context.Context, target string, o types.RiskOptio
 	}
 	other, err := inspect(ctx, o.Checkout, WithSpawnRule(m.spawnRule))
 	if err != nil {
-		return types.RiskReport{}, fmt.Errorf("magus: assess %s: %w", o.Checkout, err)
+		return types.RiskReport{}, fmt.Errorf("assess %s: %w", o.Checkout, err)
 	}
 	defer func() { _ = other.Close() }()
 	if err := other.load(ctx); err != nil {
