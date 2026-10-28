@@ -110,9 +110,11 @@ func runCLI() int {
 	}
 	// Ahead of everything, including log setup: a binary below the workspace's
 	// required_version floor cannot get far enough into startup to discover that on
-	// its own, so this has to work on nothing but os.Args and a directory walk. See
-	// bootstrap_exec.go.
-	maybeBootstrapExec(os.Args)
+	// its own, so this works on os.Args and a directory walk alone. A go run build is the
+	// fresh one, never handed off (delegate.go).
+	if !builtByGoRun() {
+		maybeBootstrapExec(os.Args)
+	}
 
 	args := expandVerbosityArgs(os.Args[1:])
 
