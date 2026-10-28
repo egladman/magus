@@ -4556,11 +4556,9 @@ github.com/egladman/magus/types.ScopeConsole const Scope = "console"
 github.com/egladman/magus/types.ScopeMCP const Scope = "mcp"
 github.com/egladman/magus/types.ScopeTokens const Scope = "tokens"
 github.com/egladman/magus/types.Secret type struct
-github.com/egladman/magus/types.Secret.Format method func(f fmt.State, _ rune)
 github.com/egladman/magus/types.Secret.GoString method func() string
 github.com/egladman/magus/types.Secret.IsZero method func() bool
 github.com/egladman/magus/types.Secret.Len method func() int
-github.com/egladman/magus/types.Secret.LogValue method func() log/slog.Value
 github.com/egladman/magus/types.Secret.MarshalText method func() ([]byte, error)
 github.com/egladman/magus/types.Secret.Reveal method func() string
 github.com/egladman/magus/types.Secret.String method func() string
