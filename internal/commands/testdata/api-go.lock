@@ -2731,6 +2731,7 @@ github.com/egladman/magus/types.InvocationAncestorsFromContext func(ctx context.
 github.com/egladman/magus/types.InvocationRoot func(ctx context.Context) string
 github.com/egladman/magus/types.InvocationStalled const DiagnosticCode = "MGS3012"
 github.com/egladman/magus/types.IsDevMagusVersion func(version string) bool
+github.com/egladman/magus/types.IsDiagnosticCode func(text string) bool
 github.com/egladman/magus/types.IsGlobMeta func(s string) bool
 github.com/egladman/magus/types.IsLiteralGlob func(pattern string) bool
 github.com/egladman/magus/types.IsMagusMaintained func(path string) bool
