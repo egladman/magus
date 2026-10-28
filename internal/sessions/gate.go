@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -201,6 +202,41 @@ func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
 		}
 	}
 	return narrow, found
+}
+
+// GateFailure is one target a failed gate failed.
+type GateFailure struct {
+	Project string
+	Target  string
+}
+
+// FailuresOwed returns the targets the failed gate's run failed that no later run has
+// passed, in the order that run recorded them. results is a fold of [KindTargetResult]
+// records. The gate's own target is left out: every failure fails it, and only the next
+// gate passes it. A gate that did not fail, or names no run, owes nothing.
+func FailuresOwed(gate GateRecord, results Fold) []GateFailure {
+	if gate.Outcome != OutcomeFail || gate.Inv == "" {
+		return nil
+	}
+	var owed []GateFailure
+	after := gate.At.UnixMilli()
+	for _, rec := range results.Records {
+		if rec.Kind != KindTargetResult {
+			continue
+		}
+		var r TargetResult
+		if json.Unmarshal(rec.Payload, &r) != nil || r.Target == gate.Target {
+			continue
+		}
+		f := GateFailure{Project: r.Project, Target: r.Target}
+		switch {
+		case rec.Invocation == gate.Inv && r.Outcome == OutcomeFail && !slices.Contains(owed, f):
+			owed = append(owed, f)
+		case rec.Invocation != gate.Inv && rec.Ts > after && r.Outcome == OutcomePass:
+			owed = slices.DeleteFunc(owed, func(o GateFailure) bool { return o == f })
+		}
+	}
+	return owed
 }
 
 // RecordGate appends one gate result to the store under dir. A result that names no

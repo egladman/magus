@@ -215,8 +215,8 @@ func gateRepeatRepository(t *testing.T, runs int, outcome string) (context.Conte
 
 // From the third gate in the window, a gate over a tree its newest verdict passed and that
 // nothing changed since is refused: it can only pass again, and the advisory that only said
-// so was gated past again and again. A change after the verdict, a red verdict, fewer runs
-// or a command that is not the gate refuse nothing.
+// so was gated past again and again. A change after the verdict, a red verdict that names
+// no failing target, fewer runs or a command that is not the gate refuse nothing.
 func TestDenyRepeatGate(t *testing.T) {
 	const gate = "./magus affected ci"
 
@@ -253,7 +253,7 @@ func TestDenyRepeatGate(t *testing.T) {
 		require.NoError(t, os.Chtimes(repo.Path("c.go"), after, after))
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
 	})
-	t.Run("a red verdict", func(t *testing.T) {
+	t.Run("a red verdict whose run recorded no failing target", func(t *testing.T) {
 		ctx, _ := gateRepeatRepository(t, 2, sessions.OutcomeFail)
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
 	})
@@ -289,6 +289,72 @@ func TestDenyRepeatGate(t *testing.T) {
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus run test ."))
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus affected ci --plan"))
 	})
+}
+
+// redGateSuite pins the refusal of a gate repeated over the unchanged tree a red gate
+// failed, before any target it failed has passed alone (build-budget recommendation 3).
+type redGateSuite struct {
+	suite.Suite
+	ctx  context.Context
+	repo *testkit.Repo
+	dir  string
+}
+
+func TestRedGateSuite(t *testing.T) { suite.Run(t, new(redGateSuite)) }
+
+const redGate = "./magus affected ci"
+
+// SetupTest records a red gate at HEAD, run "inv-red", which failed the root's go-test
+// and docs' lint. No gate ran before it in the window.
+func (s *redGateSuite) SetupTest() {
+	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
+	s.ctx, s.repo = ctx, repo
+	dir, err := sessions.Dir(repo.Root())
+	s.Require().NoError(err)
+	s.dir = dir
+	s.results("inv-green",
+		sessions.TargetResult{Project: ".", Target: "go-test", Outcome: sessions.OutcomeFail},
+		sessions.TargetResult{Project: "docs", Target: "lint", Outcome: sessions.OutcomeFail},
+		sessions.TargetResult{Project: ".", Target: types.TargetCI, Outcome: sessions.OutcomeFail},
+	)
+}
+
+func (s *redGateSuite) results(inv string, results ...sessions.TargetResult) {
+	w, err := sessions.Open(s.dir, inv, sessions.InvocationStart{Workspace: s.repo.Root()})
+	s.Require().NoError(err)
+	for _, r := range results {
+		s.Require().NoError(w.Append(sessions.KindTargetResult, r))
+	}
+}
+
+func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRun() {
+	d := denyRepeatGate(s.ctx, Dependencies{}, "", redGate)
+	s.Require().NotEmpty(d)
+	s.Contains(d.Say, "`ci` failed on this branch")
+	s.Contains(d.Say, "run inv-green")
+	s.Contains(d.Say, "`.:go-test`, `docs:lint`")
+	s.Contains(d.Say, "run go-test .")
+	s.Contains(d.Say, "run lint docs")
+	s.NotContains(d.Say, "`.:ci`", "the gate's own target is not owed")
+	s.Contains(d.Why, s.repo.Head())
+}
+
+func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
+	time.Sleep(2 * time.Millisecond)
+	s.results("narrow-test", sessions.TargetResult{Project: ".", Target: "go-test", Outcome: sessions.OutcomePass})
+	d := denyRepeatGate(s.ctx, Dependencies{}, "", redGate)
+	s.Require().NotEmpty(d, "docs' lint is still owed")
+	s.NotContains(d.Say, "go-test")
+
+	s.results("narrow-lint", sessions.TargetResult{Project: "docs", Target: "lint", Outcome: sessions.OutcomePass})
+	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+}
+
+func (s *redGateSuite) TestAFileWrittenAfterTheRedGateAdmitsIt() {
+	s.repo.Write("a.go", "package a\n\nvar fixed = true\n")
+	after := time.Now().Add(time.Minute)
+	s.Require().NoError(os.Chtimes(s.repo.Path("a.go"), after, after))
+	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
 }
 
 func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {

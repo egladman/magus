@@ -185,3 +185,88 @@ func (s *GateScopeSuite) TestAnUnknownScopeIsAnError() {
 	var g GateResult
 	s.Error(json.Unmarshal([]byte(`{"target":"ci","scope":"branch"}`), &g))
 }
+
+// FailuresOwedSuite pins which targets a red gate still owes a pass of its own, the record
+// the guard refuses an unchanged repeat of that gate on.
+type FailuresOwedSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestFailuresOwedSuite(t *testing.T) { suite.Run(t, new(FailuresOwedSuite)) }
+
+func (s *FailuresOwedSuite) SetupTest() { s.dir = s.T().TempDir() }
+
+// results files one invocation's target results, then waits out the millisecond so the
+// next record sorts after them.
+func (s *FailuresOwedSuite) results(inv string, results ...TargetResult) {
+	w, err := Open(s.dir, inv, InvocationStart{Workspace: "/repo"})
+	s.Require().NoError(err)
+	for _, r := range results {
+		s.Require().NoError(w.Append(KindTargetResult, r))
+	}
+	time.Sleep(2 * time.Millisecond)
+}
+
+func (s *FailuresOwedSuite) gate(inv, outcome string) GateRecord {
+	s.Require().NoError(RecordGate(s.dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: outcome, Inv: inv},
+		InvocationStart{Workspace: "/repo"}))
+	time.Sleep(2 * time.Millisecond)
+	fold, err := ReadGateResults(s.dir)
+	s.Require().NoError(err)
+	rec, ok := LatestGate(fold, "b", "ci")
+	s.Require().True(ok)
+	return rec
+}
+
+func (s *FailuresOwedSuite) owed(gate GateRecord) []GateFailure {
+	fold, err := ReadKind(s.dir, KindTargetResult)
+	s.Require().NoError(err)
+	return FailuresOwed(gate, fold)
+}
+
+func (s *FailuresOwedSuite) TestARedGateOwesEachTargetItFailedButItself() {
+	s.results("red",
+		TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail},
+		TargetResult{Project: "docs", Target: "lint", Outcome: OutcomeFail},
+		TargetResult{Project: "docs", Target: "format", Outcome: OutcomePass},
+		TargetResult{Project: ".", Target: "ci", Outcome: OutcomeFail},
+	)
+	red := s.gate("red", OutcomeFail)
+
+	s.Equal([]GateFailure{{Project: ".", Target: "go-test"}, {Project: "docs", Target: "lint"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestALaterPassOfTheTargetClearsIt() {
+	s.results("red",
+		TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail},
+		TargetResult{Project: "docs", Target: "lint", Outcome: OutcomeFail},
+	)
+	red := s.gate("red", OutcomeFail)
+	s.results("narrow", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomePass})
+
+	s.Equal([]GateFailure{{Project: "docs", Target: "lint"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestAPassInAnotherProjectClearsNothing() {
+	s.results("red", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
+	red := s.gate("red", OutcomeFail)
+	s.results("narrow", TargetResult{Project: "libs/cmdline", Target: "go-test", Outcome: OutcomePass})
+
+	s.Equal([]GateFailure{{Project: ".", Target: "go-test"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestAPassBeforeTheGateClearsNothing() {
+	s.results("earlier", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomePass})
+	s.results("red", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
+	red := s.gate("red", OutcomeFail)
+
+	s.Equal([]GateFailure{{Project: ".", Target: "go-test"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestAGreenGateOwesNothing() {
+	s.results("green", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
+	green := s.gate("green", OutcomePass)
+
+	s.Empty(s.owed(green))
+}

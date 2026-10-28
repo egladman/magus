@@ -75,39 +75,64 @@ func adviseRepeatGate(runsDir string, now time.Time) (full advice, brief string)
 	return gateRepeatAdvice(runs, spent), gateRepeatBrief(runs, spent)
 }
 
-// denyRepeatGate refuses the gate from its third run in the window when the newest
-// verdict this branch recorded is green and nothing in the tree changed after it, or
-// refuses nothing. The advisory above states the cost, and callers gated past it again and
-// again. A gate over a tree it already passed can only pass again, so the refusal costs the
-// caller nothing it needed.
-//
-// The verdict, the run log and the changed files all come from the workspace the gate
-// call runs in (placedLocation), not the hook's, so a worker gating its own checkout from
-// the landing cwd is judged on its tree.
-//
-// "Changed" is read off version control: every file that differs from the green gate's
-// commit, committed or not, compared by modification time against the verdict. A file
-// edited before the gate ran was in the tree it passed; one it cannot stat counts as a
-// change. Anything unreadable (no run log, no store, no version control) refuses nothing.
+// denyRepeatGate refuses a gate over a tree unchanged since the branch's newest verdict,
+// which can only repeat it: at once after a fail whose targets have not passed alone, from
+// the third gate in the window after a pass. It reads the workspace the gate runs in
+// (placedLocation), not the hook's. Anything unreadable refuses nothing.
 func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) denial {
 	if !commandRunsGate(command) {
 		return denial{}
 	}
 	at := placedLocation(ctx, deps, command)
+	last, ok := gateUnchanged(ctx, deps, at.workspace)
+	if !ok {
+		return denial{}
+	}
+	if last.Outcome == sessions.OutcomeFail {
+		return denyFailedGate(at.workspace, last)
+	}
 	runs, _ := recentGateRuns(workspaceRunsDir(at.cacheDir), time.Now())
 	if runs < gateRepeatDenyRuns {
 		return denial{}
 	}
-	green, ok := greenGateUnchanged(ctx, deps, at.workspace)
-	if !ok {
-		return denial{}
-	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` passed on this branch %s ago (%s) and nothing changed since: gate after your next change.",
-			types.TargetCI, time.Since(green.At).Round(time.Second), gateRunRef(green)),
+			types.TargetCI, time.Since(last.At).Round(time.Second), gateRunRef(last)),
 		Why: fmt.Sprintf("The gate has run %d times here in the last %s, and the newest verdict, a pass at %s (%s), covers the tree as it stands: no file that differs from that commit was written after it. "+
 			"A gate over a tree it already passed only repeats the pass. %s.",
-			runs, gateRepeatWindow, green.Commit, gateRunRef(green), gateCadence),
+			runs, gateRepeatWindow, last.Commit, gateRunRef(last), gateCadence),
+	}
+}
+
+// denyFailedGate names each target red failed that no run has passed since, and the narrow
+// run of each. A red run that recorded no failing target has nothing to name, so refuses
+// nothing.
+func denyFailedGate(workspace string, red sessions.GateRecord) denial {
+	dir, err := sessions.Dir(workspace)
+	if err != nil {
+		return denial{}
+	}
+	results, err := sessions.ReadKind(dir, sessions.KindTargetResult)
+	if err != nil {
+		return denial{}
+	}
+	owed := sessions.FailuresOwed(red, results)
+	if len(owed) == 0 {
+		return denial{}
+	}
+	names := make([]string, len(owed))
+	runs := make([]string, len(owed))
+	for i, f := range owed {
+		names[i] = fmt.Sprintf("`%s:%s`", f.Project, f.Target)
+		runs[i] = "`" + hint.Run.With(f.Target, f.Project) + "`"
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` failed on this branch %s ago (%s) on %s, and nothing changed since: run %s until it passes, then gate.",
+			types.TargetCI, time.Since(red.At).Round(time.Second), gateRunRef(red), strings.Join(names, ", "), strings.Join(runs, ", ")),
+		Why: fmt.Sprintf("The newest verdict, a fail at %s (%s), covers the tree as it stands: no file that differs from that commit was written after it, and no run has passed %s since. "+
+			"A gate over that tree fails again on the same targets after running everything else the branch reaches. "+
+			"A change to the tree, or a pass of each target on its own, admits the next gate.",
+			red.Commit, gateRunRef(red), strings.Join(names, ", ")),
 	}
 }
 
@@ -124,11 +149,11 @@ func gateRunRef(rec sessions.GateRecord) string {
 // unchanged green tree: the third run is the first refused.
 const gateRepeatDenyRuns = 2
 
-// greenGateUnchanged is the newest gate verdict this branch recorded, when it passed and
-// no file that differs from its commit was written after it. A project-scoped pass is no
-// verdict on the branch (sessions.LatestGate skips it), so `magus run ci <project>` never
-// stands in for the `affected ci` this refuses.
-func greenGateUnchanged(ctx context.Context, deps Dependencies, workspace string) (sessions.GateRecord, bool) {
+// gateUnchanged is the newest gate verdict this branch recorded, pass or fail, when no file
+// that differs from its commit was written after it. A project-scoped pass is no verdict on
+// the branch (sessions.LatestGate skips it), so `magus run ci <project>` never stands in for
+// the `affected ci` this refuses.
+func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (sessions.GateRecord, bool) {
 	if workspace == "" {
 		return sessions.GateRecord{}, false
 	}
@@ -148,21 +173,21 @@ func greenGateUnchanged(ctx context.Context, deps Dependencies, workspace string
 	if err != nil {
 		return sessions.GateRecord{}, false
 	}
-	green, ok := sessions.LatestGate(fold, ref, string(types.TargetCI))
-	if !ok || green.Outcome != sessions.OutcomePass || green.Commit == "" {
+	last, ok := sessions.LatestGate(fold, ref, string(types.TargetCI))
+	if !ok || last.Commit == "" {
 		return sessions.GateRecord{}, false
 	}
-	changed, err := res.VCS.ChangedFiles(ctx, workspace, green.Commit)
+	changed, err := res.VCS.ChangedFiles(ctx, workspace, last.Commit)
 	if err != nil {
 		return sessions.GateRecord{}, false
 	}
 	for _, rel := range changed {
 		info, err := os.Lstat(filepath.Join(workspace, filepath.FromSlash(rel)))
-		if err != nil || info.ModTime().After(green.At) {
+		if err != nil || info.ModTime().After(last.At) {
 			return sessions.GateRecord{}, false
 		}
 	}
-	return green, true
+	return last, true
 }
 
 // gateReplayScanLimit bounds how many distinct commits with a passing gate are asked for
