@@ -113,7 +113,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return held;
     }
     final kept = mandateVerdict(req, programs: programs);
-    if (kept.decision != "allow") {
+    if (kept.decision != magus\GuardDecision.allow) {
         return kept;
     }
     var lease = "";
@@ -374,7 +374,7 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
         after = req.content;
     }
     final kept = mandate\decideWrite(req.path, workspace: req.workspace, m: mandate\loadMandate(req.workspace), now: mandate\now());
-    if (kept.decision != "allow") {
+    if (kept.decision != magus\GuardDecision.allow) {
         return kept;
     }
     final pathDenial = host\writePath(req.path);
