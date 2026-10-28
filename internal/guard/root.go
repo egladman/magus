@@ -115,6 +115,9 @@ type mainCall struct {
 	spawnBroken string
 	// root is the workspace root, "" when unknown.
 	root string
+	// policyNote is how the target policies the work was classed by were read, "" when
+	// the knowledge store's record answered or none were read.
+	policyNote string
 }
 
 // costFinding is one cost rule matching a call: a refusal, or advice said once per
@@ -196,7 +199,7 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 	if c.spawnBroken != "" {
 		say = fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork, but spawning is broken: %s; take a row with `./magus job exec <row>` and do it as its holder.", work, c.spawnBroken)
 	}
-	say += integrationScriptNote(c)
+	say = withPolicyNote(say+integrationScriptNote(c), c.policyNote)
 	return costFinding{
 		rule: denyRuleOrchestratorGroundwork,
 		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
@@ -305,6 +308,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 	}
 	if call.work != "" {
 		call.spawnBroken = spawnBroken(deps, who.Host)
+		call.policyNote = runPolicyNote(in.command, at)
 	}
 	return applyFindings(gate, verdict, mainFindings(deps.settingLookup, st, call), from)
 }

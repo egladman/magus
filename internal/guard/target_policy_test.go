@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/types"
 )
 
@@ -77,6 +78,28 @@ func (s *targetPolicySuite) TestNoRecordAndNoWorkspaceSaysNothingWasRead() {
 	})
 	s.False(ok)
 	s.Equal(policyUnreadNote, note)
+}
+
+func (s *targetPolicySuite) TestARunReadByAFallbackCarriesItsNote() {
+	at := location{policies: func() declaredIndex { return declaredIndex{note: policyOpenedNote} }}
+	s.Equal(policyOpenedNote, runPolicyNote("./magus run go-build .", at))
+}
+
+func (s *targetPolicySuite) TestALineThatRunsNoTargetCarriesNoNote() {
+	at := location{policies: func() declaredIndex { return declaredIndex{note: policyOpenedNote} }}
+	s.Empty(runPolicyNote("git status", at))
+}
+
+func (s *targetPolicySuite) TestARunTheRecordAnsweredCarriesNoNote() {
+	s.Empty(runPolicyNote("./magus run go-build .", magusRepoAt))
+}
+
+func (s *targetPolicySuite) TestAGroundworkFindingSaysHowThePoliciesWereRead() {
+	f, ok := groundworkFinding(builtin.Setting{Decision: builtin.Deny}, mainCall{
+		work: types.DelegableRun, orchestration: types.OrchestrationProven, line: "./magus run lint .", policyNote: policyUnreadNote,
+	})
+	s.True(ok)
+	s.Contains(f.say, policyUnreadNote)
 }
 
 // policyWorkspace is a workspace with one project and no target policy.

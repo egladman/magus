@@ -64,6 +64,32 @@ func (at location) declared() declaredIndex {
 	return at.policies()
 }
 
+// runPolicyNote is the note at's target policies were read with when line runs a magus
+// target, whose verdict reads them, and "" for any other line.
+func runPolicyNote(line string, at location) string {
+	cmds, ok := ParseCommands(line)
+	if !ok {
+		return ""
+	}
+	for _, c := range cmds {
+		if !isMagusInvocation(c) {
+			continue
+		}
+		if _, ok := parseTargetRun(c); ok {
+			return at.declared().note
+		}
+	}
+	return ""
+}
+
+// withPolicyNote is text with note appended as its own sentence, text alone for no note.
+func withPolicyNote(text, note string) string {
+	if note == "" {
+		return text
+	}
+	return text + " " + note
+}
+
 // runProjects are the projects r runs in: the ones it names, else the one its directory
 // selects, else the root.
 func runProjects(r targetRun) []string {

@@ -232,7 +232,7 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	fix := binaryRemedy(true, at.workspace, deps.lease, deps.lease == "")
 	return denial{
 		Say: fmt.Sprintf("magus workspace: ./magus was built at %s, before %s changed the load contract; %s first.", built, leadPath(skew.Contract), fix.say),
-		Why: "A binary built before a change to the host declarations, the API locks, the generated bindings or the Buzz checker may not load the tree after it, and anything run now is judged by a policy it may not read. " +
-			"Reads, `git status`, VCS recovery and the rebuild still run.",
+		Why: withPolicyNote("A binary built before a change to the host declarations, the API locks, the generated bindings or the Buzz checker may not load the tree after it, and anything run now is judged by a policy it may not read. "+
+			"Reads, `git status`, VCS recovery and the rebuild still run.", runPolicyNote(line, at)),
 	}.full()
 }
