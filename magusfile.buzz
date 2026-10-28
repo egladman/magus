@@ -20,6 +20,7 @@ magus\guard.profile("strict");
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);
+magus\guard.stop(agentpolicy\judgeStop);
 
 import "os";
 import "proc";
