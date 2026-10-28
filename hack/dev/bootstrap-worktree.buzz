@@ -221,8 +221,25 @@ export fun buildArgs(source: str) > [str] {
     return ["--root", source, "run", "go-build", "."];
 }
 
-// buildRefusal is what a leased worker is told for --build-from: it never compiles magus.
-export fun buildRefusal(lease: str, source: str) > str {
+// buildRefusal is what a leased worker is told for --build-from: it never compiles magus. It
+// is "" when described, `describe job <lease> -o json`, is a live integration row taken in
+// source, and source is root.
+export fun buildRefusal(lease: str, source: str, root: str = "", described: str = "") > str {
+    var j = {<str: any>};
+    try {
+        j = json\parse(described)["job"] ?? {<str: any>};
+    } catch (e: any) {
+        j = {<str: any>};
+    }
+    final integrates: [any] = j["integrates"] ?? [<any>];
+    final state: str = j["state"] ?? "";
+    final checkout: str = j["checkout_root"] ?? "";
+    final ownCheckout = checkout != "" and path\clean(checkout) == path\clean(source) and path\clean(source) == path\clean(root);
+    // The integrator builds in its own checkout, as the guard's actingIntegrator allows.
+    // Refusing it here sent every rebuild of an integration through the root's context.
+    if (integrates.len() > 0 and ["declared", "running", "exited"].indexOf(state) != null and ownCheckout) {
+        return "";
+    }
     return "bootstrap-worktree: --build-from compiles magus, and this session holds the lease `{lease}`; a worker never compiles magus\n"
         + "Ask the main session to run `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job {lease} --build-from {source}`, "
         + "or to place a built binary with `--from {source}`.";
@@ -362,7 +379,11 @@ export fun main(args: [str]) > void !> any {
         }
         final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
         if (lease != "") {
-            throw buildRefusal(lease, source: built);
+            final described = magusAt("{built}/magus", root: built, args: ["describe", "job", lease, "-o", "json"]) catch "";
+            final refused = buildRefusal(lease, source: built, root: root, described: described);
+            if (refused != "") {
+                throw refused;
+            }
         }
         source = built;
         if (parsed.values["--check"] != null) {
