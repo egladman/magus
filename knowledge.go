@@ -1774,9 +1774,10 @@ func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration, installed func
 	for _, decl := range decls {
 		if decl.Path == "" {
 			out = append(out, types.KnowledgeSymbolGap{
-				Project: types.NewProjectRef(decl.Project, decl.Dir),
-				State:   types.SymbolIndexNotBuilt,
-				Detail:  "no symbol index for " + decl.Language,
+				Project:     types.NewProjectRef(decl.Project, decl.Dir),
+				State:       types.SymbolIndexNotBuilt,
+				Detail:      "no symbol index for " + decl.Language,
+				Unindexable: true,
 			})
 			continue
 		}

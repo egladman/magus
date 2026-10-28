@@ -944,12 +944,20 @@ const (
 //
 // Language names which of the project's indexes is missing, empty when the declaration
 // does not say. Hint is the fix when the reason is an indexer that is not installed.
+// Unindexable marks a project whose language nothing indexes: no build closes that gap.
 type KnowledgeSymbolGap struct {
-	Project  ProjectRef           `json:"project"            yaml:"project"`
-	Language string               `json:"language,omitempty" yaml:"language,omitempty"`
-	State    SymbolIndexFreshness `json:"state"              yaml:"state"`
-	Detail   string               `json:"detail,omitempty"   yaml:"detail,omitempty"`
-	Hint     string               `json:"hint,omitempty"     yaml:"hint,omitempty"`
+	Project     ProjectRef           `json:"project"               yaml:"project"`
+	Language    string               `json:"language,omitempty"    yaml:"language,omitempty"`
+	State       SymbolIndexFreshness `json:"state"                 yaml:"state"`
+	Detail      string               `json:"detail,omitempty"      yaml:"detail,omitempty"`
+	Hint        string               `json:"hint,omitempty"        yaml:"hint,omitempty"`
+	Unindexable bool                 `json:"unindexable,omitzero"  yaml:"unindexable,omitempty"`
+}
+
+// Buildable reports whether `magus graph build` closes g: an index of a language something
+// indexes, whose indexer is installed.
+func (g KnowledgeSymbolGap) Buildable() bool {
+	return !g.Unindexable && g.Hint == ""
 }
 
 // Describe renders one gap as "libs/api (not-indexed)", or "libs/api (buzz index

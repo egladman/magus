@@ -183,7 +183,7 @@ func TestVerdictRemedySuite(t *testing.T) { suite.Run(t, new(VerdictRemedySuite)
 
 func unindexed(project, language string) types.KnowledgeSymbolGap {
 	return types.KnowledgeSymbolGap{Project: types.NewProjectRef(project, ""), State: types.SymbolIndexNotBuilt,
-		Detail: "no symbol index for " + language}
+		Detail: "no symbol index for " + language, Unindexable: true}
 }
 
 func (s *VerdictRemedySuite) TestALanguageNothingIndexesGetsNoBuildRemedy() {

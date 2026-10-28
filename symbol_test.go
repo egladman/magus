@@ -725,6 +725,16 @@ func TestSymbolGapNamesTheMissingIndexerOfASingleIndex(t *testing.T) {
 	}, probeSymbolIndexes(decls, installed))
 }
 
+func (s *magusSuite) TestALanguageNothingIndexesIsAnUnindexableGap() {
+	decls := []knowledge.SymbolIndexDeclaration{{Project: "web", Dir: "/ws/web", Language: "typescript"}}
+	gaps := probeSymbolIndexes(decls, func(string) bool { return true })
+	s.Equal([]types.KnowledgeSymbolGap{{
+		Project: types.NewProjectRef("web", "/ws/web"), State: types.SymbolIndexNotBuilt,
+		Detail: "no symbol index for typescript", Unindexable: true,
+	}}, gaps)
+	s.False(gaps[0].Buildable(), "no build makes an index nothing produces")
+}
+
 // Whether an indexer is installed is asked of the PATH a run hands its children, not the
 // server's own: a run that put scip-buzz on its PATH builds the index, so a review must
 // not leave that index out as uninstalled.

@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"slices"
-	"strings"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -93,20 +92,10 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
 		}
-		if slices.ContainsFunc(ans.Gaps, buildableGap) {
+		if slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable) {
 			fmt.Fprintf(w, "  build the missing index with: %s\n", hint.GraphBuild)
 		}
 	}
-}
-
-// noIndexDetail opens the detail of a gap for a language nothing indexes, as
-// probeSymbolIndexes in knowledge.go writes it.
-const noIndexDetail = "no symbol index for "
-
-// buildableGap reports whether `magus graph build` would close g. No build makes an index
-// for a language nothing indexes, and a missing indexer's gap carries its install as Hint.
-func buildableGap(g types.KnowledgeSymbolGap) bool {
-	return g.Hint == "" && !strings.HasPrefix(g.Detail, noIndexDetail)
 }
 
 // emitNearest offers the node id a zero-result lookup was probably reaching for,
