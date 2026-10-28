@@ -59,6 +59,7 @@ fs.chmod
 fs.copyDir
 fs.copyFile
 fs.dirname
+fs.diskUsage
 fs.exists
 fs.ext
 fs.glob
@@ -77,9 +78,11 @@ fs.rename
 fs.scratchCheckoutDir
 fs.size
 fs.stat
+fs.stateDir
 fs.symlink
 fs.tempDir
 fs.tempFile
+fs.trimOldest
 fs.walk
 fs.watch
 fs.writeFile

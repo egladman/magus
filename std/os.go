@@ -375,7 +375,16 @@ func OsPlatform(_ context.Context) (string, string, string, error) {
 // Capture stays on regardless, so a quiet call still returns stdout.
 func runResult(ctx context.Context, name string, args []string, dir, label, cmd string, opts types.ExecOptions) (types.ExecResult, error) {
 	overrides, _ := ctx.Value(withEnvKey{}).([]string)
-	res, err := spawn.Exec(ctx, name, args, spawn.ExecOptions{
+	if opts.TimeoutMs < 0 {
+		return types.ExecResult{}, fmt.Errorf("%s %s: timeoutMs is %v; it takes a positive bound, or 0 for none", label, cmd, opts.TimeoutMs)
+	}
+	callCtx := ctx
+	if opts.TimeoutMs > 0 {
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(ctx, time.Duration(opts.TimeoutMs*float64(time.Millisecond)))
+		defer cancel()
+	}
+	res, err := spawn.Exec(callCtx, name, args, spawn.ExecOptions{
 		Dir:     dir,
 		Env:     overrides,
 		Stdin:   opts.Stdin,
@@ -385,6 +394,9 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 	})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
+	}
+	if ctx.Err() == nil && errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+		return types.ExecResult{}, fmt.Errorf("%s %s: killed after its %vms timeoutMs", label, cmd, opts.TimeoutMs)
 	}
 	if res.Code != 0 && !opts.AllowFailure {
 		if !res.Started {
@@ -463,6 +475,9 @@ func ProcExec(ctx context.Context, cmd string, args []string, dir string, opts t
 		if err := checkRead(ctx, wd); err != nil {
 			return types.ExecResult{}, err
 		}
+	}
+	if opts.Detach {
+		return procDetach(ctx, cmd, args, wd, opts)
 	}
 	return runResult(ctx, cmd, args, wd, `proc\exec`, cmd, opts)
 }

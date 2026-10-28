@@ -89,6 +89,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Digest", Zero: types.ImageDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(types.ImageDigest), enums) }},
 	{Name: "Dir", Zero: types.Dir{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDir(v.(types.Dir)) }},
 	{Name: "DirCall", Zero: types.DirCall{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDirCall(v.(types.DirCall)) }},
+	{Name: "DiskUsage", Zero: types.DiskUsage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiskUsage(v.(types.DiskUsage)) }},
 	{Name: "DoctorReport", Zero: types.DoctorReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorReport(v.(types.DoctorReport), enums) }},
 	{Name: "DoctorSummary", Zero: types.DoctorSummary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorSummary(v.(types.DoctorSummary)) }},
 	{Name: "Document", Zero: types.ImageDocument{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDocument(v.(types.ImageDocument), enums) }},
@@ -364,6 +365,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TrailSpawn", Zero: types.TrailSpawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(types.TrailSpawn)) }},
 	{Name: "Trend", Zero: types.TrendOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendOutput(v.(types.TrendOutput)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},
+	{Name: "TrimReport", Zero: types.TrimReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrimReport(v.(types.TrimReport)) }},
 	{Name: "URL", Zero: types.URL{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectURL(v.(types.URL)) }},
 	{Name: "UncompressResult", Zero: types.UncompressResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUncompressResult(v.(types.UncompressResult)) }},
 	{Name: "Unreferenced", Zero: types.UnreferencedOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {

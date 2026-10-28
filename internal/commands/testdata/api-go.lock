@@ -427,6 +427,7 @@ github.com/egladman/magus/std.FsChmod func(ctx context.Context, path string, mod
 github.com/egladman/magus/std.FsCopyDir func(ctx context.Context, src string, dst string) error
 github.com/egladman/magus/std.FsCopyFile func(ctx context.Context, src string, dst string) error
 github.com/egladman/magus/std.FsDirname func(_ context.Context, path string) (string, error)
+github.com/egladman/magus/std.FsDiskUsage func(ctx context.Context, path string) (github.com/egladman/magus/types.DiskUsage, error)
 github.com/egladman/magus/std.FsExists func(ctx context.Context, path string) (bool, error)
 github.com/egladman/magus/std.FsExt func(_ context.Context, path string) (string, error)
 github.com/egladman/magus/std.FsGlob func(ctx context.Context, pattern string) ([]github.com/egladman/magus/types.Path, error)
@@ -445,9 +446,11 @@ github.com/egladman/magus/std.FsRename func(ctx context.Context, src string, dst
 github.com/egladman/magus/std.FsScratchCheckoutDir func(ctx context.Context, purpose string) (string, error)
 github.com/egladman/magus/std.FsSize func(ctx context.Context, path string) (int, error)
 github.com/egladman/magus/std.FsStat func(ctx context.Context, path string) (github.com/egladman/magus/types.FileInfo, error)
+github.com/egladman/magus/std.FsStateDir func(ctx context.Context, purpose string) (string, error)
 github.com/egladman/magus/std.FsSymlink func(ctx context.Context, target string, link string) error
 github.com/egladman/magus/std.FsTempDir func(ctx context.Context, prefix string) (string, error)
 github.com/egladman/magus/std.FsTempFile func(ctx context.Context, prefix string) (string, error)
+github.com/egladman/magus/std.FsTrimOldest func(ctx context.Context, dir string, maxBytes int, timeoutMs int) (github.com/egladman/magus/types.TrimReport, error)
 github.com/egladman/magus/std.FsWalk func(ctx context.Context, root string, cb Callback) error
 github.com/egladman/magus/std.FsWatch func(ctx context.Context, paths []string, cb Callback) error
 github.com/egladman/magus/std.FsWriteFile func(ctx context.Context, path string, content string) error
@@ -712,6 +715,7 @@ github.com/egladman/magus/std.TimeFormat func(_ context.Context, layout string, 
 github.com/egladman/magus/std.TimeNowISO func(_ context.Context) (string, error)
 github.com/egladman/magus/std.TimeParse func(_ context.Context, layout string, value string) (float64, error)
 github.com/egladman/magus/std.TimeParseDuration func(_ context.Context, duration string) (float64, error)
+github.com/egladman/magus/std.TrimOldest func(ctx context.Context, dir string, maxBytes int64, timeout time.Duration, now time.Time) (github.com/egladman/magus/types.TrimReport, error)
 github.com/egladman/magus/std.TypeAny const TypeTag = 14
 github.com/egladman/magus/std.TypeAnyMap const TypeTag = 11
 github.com/egladman/magus/std.TypeAnySlice const TypeTag = 12
@@ -1849,6 +1853,17 @@ github.com/egladman/magus/types.DirsOptions type struct
 github.com/egladman/magus/types.DirsOptions.Depth field int "json:\"depth,omitempty\" yaml:\"depth,omitempty\""
 github.com/egladman/magus/types.DirsOptions.Language field string "json:\"language,omitempty\" yaml:\"language,omitempty\""
 github.com/egladman/magus/types.DirsOptions.Layer field string "json:\"layer,omitempty\" yaml:\"layer,omitempty\""
+github.com/egladman/magus/types.DiskSample type struct
+github.com/egladman/magus/types.DiskSample.Action field string "json:\"action\""
+github.com/egladman/magus/types.DiskSample.At field float64 "json:\"at\""
+github.com/egladman/magus/types.DiskSample.Detail field string "json:\"detail\""
+github.com/egladman/magus/types.DiskSample.FreeBytes field int64 "json:\"freeBytes\""
+github.com/egladman/magus/types.DiskSample.Path field string "json:\"path\""
+github.com/egladman/magus/types.DiskSample.TotalBytes field int64 "json:\"totalBytes\""
+github.com/egladman/magus/types.DiskUsage type struct
+github.com/egladman/magus/types.DiskUsage.FreeBytes field int64
+github.com/egladman/magus/types.DiskUsage.Path field string
+github.com/egladman/magus/types.DiskUsage.TotalBytes field int64
 github.com/egladman/magus/types.DoctorReport type struct
 github.com/egladman/magus/types.DoctorReport.Checks field []Check "json:\"checks\" yaml:\"checks\""
 github.com/egladman/magus/types.DoctorReport.Summary field DoctorSummary "json:\"summary\" yaml:\"summary\""
@@ -2039,9 +2054,11 @@ github.com/egladman/magus/types.EvidenceUnknown const Evidence = "unknown"
 github.com/egladman/magus/types.ExecDenied const DiagnosticCode = "MGS2007"
 github.com/egladman/magus/types.ExecOptions type struct
 github.com/egladman/magus/types.ExecOptions.AllowFailure field bool
+github.com/egladman/magus/types.ExecOptions.Detach field bool
 github.com/egladman/magus/types.ExecOptions.Quiet field bool
 github.com/egladman/magus/types.ExecOptions.Stdin field string
 github.com/egladman/magus/types.ExecOptions.TTY field bool
+github.com/egladman/magus/types.ExecOptions.TimeoutMs field float64
 github.com/egladman/magus/types.ExecResult type struct
 github.com/egladman/magus/types.ExecResult.Code field int
 github.com/egladman/magus/types.ExecResult.OK field bool "buzz:\"ok\""
@@ -5310,6 +5327,14 @@ github.com/egladman/magus/types.TrendOutput.Commits field int "json:\"commits\" 
 github.com/egladman/magus/types.TrendOutput.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.TrendOutput.Projects field []TrendEntry "json:\"projects\"   yaml:\"projects\""
 github.com/egladman/magus/types.TrendOutput.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
+github.com/egladman/magus/types.TrimReport type struct
+github.com/egladman/magus/types.TrimReport.AfterBytes field int64
+github.com/egladman/magus/types.TrimReport.BeforeBytes field int64
+github.com/egladman/magus/types.TrimReport.CutoffMs field float64
+github.com/egladman/magus/types.TrimReport.Dir field string
+github.com/egladman/magus/types.TrimReport.RemovedBytes field int64
+github.com/egladman/magus/types.TrimReport.RemovedFiles field int
+github.com/egladman/magus/types.TrimReport.Stopped field string
 github.com/egladman/magus/types.URL type struct
 github.com/egladman/magus/types.URL.Fragment field string
 github.com/egladman/magus/types.URL.Host field string
@@ -5373,6 +5398,7 @@ github.com/egladman/magus/types.VCSCommandOptions.Dir field string
 github.com/egladman/magus/types.VCSCommandOptions.Quiet field bool
 github.com/egladman/magus/types.VCSCommandOptions.Stdin field string
 github.com/egladman/magus/types.VCSCommandOptions.TTY field bool
+github.com/egladman/magus/types.VCSCommandOptions.TimeoutMs field float64
 github.com/egladman/magus/types.VCSDriver type interface
 github.com/egladman/magus/types.VCSDriver.Base imethod func() string
 github.com/egladman/magus/types.VCSDriver.ChangedFiles imethod func(ctx context.Context, dir string, base string) ([]string, error)

@@ -878,3 +878,54 @@ func TestWarnIfMagusBinaryNamesTheTypedMember(t *testing.T) {
 	warnIfMagusBinary(t.Context(), "magus", []string{"run", "lint", "."})
 	assert.Empty(t, buf.String(), "a member is named once per process")
 }
+
+func TestProcExecTimeoutKillsASlowCommandAndRaises(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep is a unix binary")
+	}
+	start := time.Now()
+	_, err := ProcExec(t.Context(), "sleep", []string{"30"}, "", types.ExecOptions{TimeoutMs: 200, AllowFailure: true})
+	require.Error(t, err, "a call cut off raises even with allowFailure")
+	assert.Contains(t, err.Error(), "killed after its 200ms timeoutMs")
+	assert.Less(t, time.Since(start), 10*time.Second, "the process group was killed, not waited out")
+}
+
+func TestProcExecTimeoutLeavesAFastCommandAlone(t *testing.T) {
+	res, err := ProcExec(t.Context(), "printf", []string{"ok"}, "", types.ExecOptions{TimeoutMs: 10000})
+	require.NoError(t, err)
+	assert.Equal(t, "ok", res.Stdout)
+}
+
+func TestProcExecRefusesANegativeTimeout(t *testing.T) {
+	_, err := ProcExec(t.Context(), "printf", []string{"ok"}, "", types.ExecOptions{TimeoutMs: -1})
+	require.ErrorContains(t, err, "timeoutMs is -1")
+}
+
+func TestProcExecDetachReturnsBeforeTheChildExits(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh is a unix binary")
+	}
+	marker := filepath.Join(t.TempDir(), "done")
+	start := time.Now()
+	res, err := ProcExec(t.Context(), "sh", []string{"-c", "sleep 1; echo done > " + marker}, "", types.ExecOptions{Detach: true})
+	require.NoError(t, err)
+	assert.True(t, res.OK)
+	assert.Less(t, time.Since(start), time.Second, "detach does not wait for the child")
+	assert.NoFileExists(t, marker, "the child is still running when the call returns")
+	assert.Eventually(t, func() bool { _, err := os.Stat(marker); return err == nil }, 10*time.Second, 50*time.Millisecond,
+		"the detached child runs to completion after the caller moved on")
+}
+
+func TestProcExecDetachRefusesWhatNothingCouldHonor(t *testing.T) {
+	for name, opts := range map[string]types.ExecOptions{
+		"no timeoutMs": {Detach: true, TimeoutMs: 100},
+		"no stdin":     {Detach: true, Stdin: "x"},
+		"no terminal":  {Detach: true, TTY: true},
+	} {
+		_, err := ProcExec(t.Context(), "true", nil, "", opts)
+		assert.Error(t, err, name)
+	}
+	ctx := sandbox.WithPolicy(t.Context(), &sandbox.Policy{})
+	_, err := ProcExec(ctx, "true", nil, "", types.ExecOptions{Detach: true})
+	assert.ErrorContains(t, err, "sandbox policy")
+}

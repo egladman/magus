@@ -273,5 +273,31 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return vm.Null, nil
 	}))
+	m.MapSet("diskUsage", vm.DirectValue("fs.diskUsage", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		path := ffi.String(bzArgs, 0)
+		ret0, err := std.FsDiskUsage(ctx, path)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDiskUsage(ret0), nil
+	}))
+	m.MapSet("stateDir", vm.DirectValue("fs.stateDir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		purpose := ffi.String(bzArgs, 0)
+		ret0, err := std.FsStateDir(ctx, purpose)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("trimOldest", vm.DirectValue("fs.trimOldest", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		dir := ffi.String(bzArgs, 0)
+		maxBytes := ffi.Int(bzArgs, 1, 0)
+		timeoutMs := ffi.Int(bzArgs, 2, 0)
+		ret0, err := std.FsTrimOldest(ctx, dir, maxBytes, timeoutMs)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectTrimReport(ret0), nil
+	}))
 	return m
 }

@@ -14,6 +14,13 @@ type ExecOptions struct {
 	TTY bool
 	// AllowFailure returns the result of a non-zero exit instead of raising.
 	AllowFailure bool
+	// TimeoutMs kills the process group once it has run this long and raises, whatever
+	// AllowFailure says: a call cut off has no result to hand back. Zero is no bound.
+	TimeoutMs float64
+	// Detach starts the process in a session of its own with no stdio and returns before
+	// it exits, so it outlives the caller. Nothing waits on it, so it takes no TimeoutMs:
+	// the child bounds its own work.
+	Detach bool
 }
 
 // VCSCommandOptions are vcs\cmd's options: proc\exec's, plus Dir, which runs the
@@ -24,6 +31,8 @@ type VCSCommandOptions struct {
 	Quiet        bool
 	TTY          bool
 	AllowFailure bool
+	// TimeoutMs is proc\exec's: past it the binary is killed and the call raises.
+	TimeoutMs float64
 }
 
 // MagusCommandOptions are the options of every door that runs a nested magus: magus\cmd,

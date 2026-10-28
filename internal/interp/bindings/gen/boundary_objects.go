@@ -107,6 +107,26 @@ func ObjectFileInfo(v types.FileInfo) vm.Value {
 	return out
 }
 
+func ObjectDiskUsage(v types.DiskUsage) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("totalBytes", vm.IntValue(int64(v.TotalBytes)))
+	out.MapSet("freeBytes", vm.IntValue(int64(v.FreeBytes)))
+	return out
+}
+
+func ObjectTrimReport(v types.TrimReport) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	out.MapSet("beforeBytes", vm.IntValue(int64(v.BeforeBytes)))
+	out.MapSet("afterBytes", vm.IntValue(int64(v.AfterBytes)))
+	out.MapSet("removedFiles", vm.IntValue(int64(v.RemovedFiles)))
+	out.MapSet("removedBytes", vm.IntValue(int64(v.RemovedBytes)))
+	out.MapSet("cutoffMs", vm.FloatValue(float64(v.CutoffMs)))
+	out.MapSet("stopped", vm.StringValue(v.Stopped))
+	return out
+}
+
 func ObjectHTTPResponse(v types.HTTPResponse) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("status", vm.IntValue(int64(v.Status)))
@@ -5545,6 +5565,8 @@ func ObjectExecOptions(v types.ExecOptions) vm.Value {
 	out.MapSet("quiet", vm.BoolValue(v.Quiet))
 	out.MapSet("tty", vm.BoolValue(v.TTY))
 	out.MapSet("allowFailure", vm.BoolValue(v.AllowFailure))
+	out.MapSet("timeoutMs", vm.FloatValue(float64(v.TimeoutMs)))
+	out.MapSet("detach", vm.BoolValue(v.Detach))
 	return out
 }
 
@@ -5565,6 +5587,7 @@ func ObjectVCSCommandOptions(v types.VCSCommandOptions) vm.Value {
 	out.MapSet("quiet", vm.BoolValue(v.Quiet))
 	out.MapSet("tty", vm.BoolValue(v.TTY))
 	out.MapSet("allowFailure", vm.BoolValue(v.AllowFailure))
+	out.MapSet("timeoutMs", vm.FloatValue(float64(v.TimeoutMs)))
 	return out
 }
 

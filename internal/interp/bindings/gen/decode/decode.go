@@ -4929,6 +4929,18 @@ func decodeExecOptions(v vm.Value, path string) (types.ExecOptions, error) {
 				return out, err
 			}
 			out.AllowFailure = bAllowFailure
+		case "timeoutMs":
+			nTimeoutMs, err := decodeFloat(item, path+".timeoutMs")
+			if err != nil {
+				return out, err
+			}
+			out.TimeoutMs = nTimeoutMs
+		case "detach":
+			bDetach, err := decodeBool(item, path+".detach")
+			if err != nil {
+				return out, err
+			}
+			out.Detach = bDetach
 		default:
 			return out, unknownMember(path, "ExecOptions", key)
 		}
@@ -5031,6 +5043,12 @@ func decodeVCSCommandOptions(v vm.Value, path string) (types.VCSCommandOptions, 
 				return out, err
 			}
 			out.AllowFailure = bAllowFailure
+		case "timeoutMs":
+			nTimeoutMs, err := decodeFloat(item, path+".timeoutMs")
+			if err != nil {
+				return out, err
+			}
+			out.TimeoutMs = nTimeoutMs
 		default:
 			return out, unknownMember(path, "CommandOptions", key)
 		}

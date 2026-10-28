@@ -575,6 +575,6 @@ func VCSCommand(ctx context.Context, args []string, opts types.VCSCommandOptions
 	if err := vcsLeaseRefusal(ctx, v.Name(), args, dir, childEnv(ctx)); err != nil {
 		return types.ExecResult{}, err
 	}
-	execOpts := types.ExecOptions{Stdin: opts.Stdin, Quiet: opts.Quiet, TTY: opts.TTY, AllowFailure: opts.AllowFailure}
+	execOpts := types.ExecOptions{Stdin: opts.Stdin, Quiet: opts.Quiet, TTY: opts.TTY, AllowFailure: opts.AllowFailure, TimeoutMs: opts.TimeoutMs}
 	return runResult(ctx, bin, args, dir, `vcs\cmd`, bin, execOpts)
 }

@@ -32,6 +32,7 @@ export object CommandOptions {
     quiet: bool = false,
     tty: bool = false,
     allowFailure: bool = false,
+    timeoutMs: double = 0.0,
 }
 
 export object ExecResult {
