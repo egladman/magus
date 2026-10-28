@@ -819,6 +819,49 @@ test("a root session going idle records a checkpoint; a subagent's idle records 
   });
 });
 
+test("a root idle runs the disk hook, and its line reaches the next tool result once", async () => {
+  await withoutReplyScript(async () => {
+    const calls: SpawnCall[] = [];
+    const line = "magus: disk space is critical, 4.0 GiB free";
+    const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
+      const call = { bin: spawned[0], argv: spawned.slice(1), stdin: new TextDecoder().decode(opts.stdin) };
+      calls.push(call);
+      const body = call.argv[0] === "buzz" ? `${line}\n` : "";
+      return {
+        stdout: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(body));
+            controller.close();
+          },
+        }),
+        exited: Promise.resolve(0),
+      };
+    };
+    (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+    const h = await hooks();
+
+    await h.event(idle("root"));
+    assert.deepEqual(calls[1].argv, [
+      "buzz",
+      "-C",
+      "/work",
+      "-s",
+      "docs/guides/integrations/agents/magus-reclaim-disk.buzz",
+      "--",
+      "--agent-name",
+      "opencode",
+    ]);
+    assert.equal(calls[1].stdin, JSON.stringify({ cwd: "/work" }));
+
+    const first = { output: "ran" };
+    await h["tool.execute.after"]({ tool: "bash", callID: "c1", sessionID: "root" }, first);
+    assert.equal(first.output, `ran\n\n[magus disk] ${line}`);
+    const second = { output: "ran" };
+    await h["tool.execute.after"]({ tool: "bash", callID: "c2", sessionID: "root" }, second);
+    assert.equal(second.output, "ran", "the line is said once");
+  });
+});
+
 /** Runs `body` with an empty proofread-reply.buzz where the plugin looks first. */
 async function withReplyScript(body: (script: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "plugin-reply-"));
@@ -844,12 +887,15 @@ const turn = (reply: string): Row[] => [
 const followUp = "proofread judged your last reply. Send it again.";
 const findings = { prompt: followUp } as unknown as Canned;
 
+/** The reply check runs `buzz -s <script>`; the disk hook beside it runs `buzz -C <dir>`. */
+const isReplyCheck = (call: SpawnCall): boolean => call.argv[0] === "buzz" && call.argv[1] === "-s";
+
 test("findings on a root session's reply go back as one follow-up prompt per turn", async () => {
   await withReplyScript(async (script) => {
-    const calls = stubBun((call) => (call.argv[0] === "buzz" ? findings : pass));
+    const calls = stubBun((call) => (isReplyCheck(call) ? findings : pass));
     const prompts: Array<{ id: string; text: string }> = [];
     const h = await hooks({ messages: { root: turn("Done. Want me to go on?") }, prompts });
-    const judged = () => calls.filter((call) => call.argv[0] === "buzz");
+    const judged = () => calls.filter((call) => isReplyCheck(call));
 
     await h.event(idle("root"));
     assert.equal(judged().length, 1);
@@ -898,7 +944,7 @@ test("with no reply script the idle records its checkpoint and judges no reply",
     const calls = stubBun(() => findings);
     const h = await hooks({ messages: { root: turn("Done.") } });
     await h.event(idle("root"));
-    assert.ok(!calls.some((call) => call.argv[0] === "buzz"));
+    assert.ok(!calls.some((call) => isReplyCheck(call)));
   });
 });
 
@@ -913,7 +959,7 @@ test("the reply check is off by default: with the variable unset or empty nothin
       const h = await hooks({ messages: { root: turn("Done.") }, prompts });
       await h.event(idle("root"));
       assert.ok(
-        !calls.some((call) => call.argv[0] === "buzz"),
+        !calls.some((call) => isReplyCheck(call)),
         `judged with the variable ${value === undefined ? "unset" : "empty"}`,
       );
       assert.deepEqual(prompts, []);

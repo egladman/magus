@@ -88,6 +88,9 @@ fun cursor_hooks() > [HookCommand] {
         hooks.append(HookCommand{event = event, matcher = cursor_matcher(event), script = "cursor-hook", flags = cursor_guard_flags(), timeoutS = HOOK_TIMEOUT_S});
     }
     hooks.append(cursor_buzz_check_hook());
+    // Cursor reads a beforeSubmitPrompt hook's stdout as its JSON verdict, so the disk
+    // hook's one line goes to stderr, where Cursor's hook log shows it.
+    hooks.append(reclaimDiskHook(mgs_getName(), event: "beforeSubmitPrompt", say: "stderr"));
     return hooks;
 }
 

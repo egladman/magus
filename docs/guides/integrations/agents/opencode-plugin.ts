@@ -243,6 +243,9 @@ function replyScript(): string | null {
   return existsSync(named) ? named : null;
 }
 
+/** The disk hook, workspace-relative, as `magus describe harness` wires it on every host. */
+const RECLAIM_DISK_SCRIPT = "docs/guides/integrations/agents/magus-reclaim-disk.buzz";
+
 /** The session a call acts in: the root's id, plus the child's when a subagent made it. */
 type Who = { session?: string; agent?: string };
 
@@ -277,6 +280,11 @@ export const MagusGuard: Plugin = async (ctx) => {
   // tool.execute.after strands one string for the life of the session, which is a
   // cheaper leak than judging everything twice to avoid it.
   const pending = new Map<string, Held>();
+
+  // The disk hook's one line, said when it started a reclaim chunk or space is critical.
+  // OpenCode raises no event whose output reaches the model once a turn, so the line waits
+  // here for the next tool result, the same channel an advisory takes.
+  let diskNote: string | null = null;
 
   /**
    * Runs one `magus shell` invocation and returns its raw stdout, or null when the
@@ -538,6 +546,20 @@ export const MagusGuard: Plugin = async (ctx) => {
     }
   };
 
+  /**
+   * Runs the rate-limited disk hook the other hosts wire to their prompt event. It
+   * returns at once on most turns; past disk.sample_every it samples free space and may
+   * start one reclaim chunk detached. Its line, when it says one, is held for the next
+   * tool result.
+   */
+  const sampleDisk = async (): Promise<void> => {
+    const said = await runOnce(
+      ["buzz", "-C", ctx.directory, "-s", RECLAIM_DISK_SCRIPT, "--", "--agent-name", "opencode"],
+      JSON.stringify({ cwd: ctx.directory }),
+    );
+    if (said !== null && said.trim() !== "") diskNote = said.trim();
+  };
+
   return {
     "tool.execute.before": async (input, output) => {
       const who = await whoIs(input.sessionID);
@@ -655,6 +677,16 @@ export const MagusGuard: Plugin = async (ctx) => {
       // The hook types a result as text, but an MCP result carries `content` parts and no
       // `output`: a string set there is dropped, a part pushed there reaches the model.
       const result = output as { output?: string; content?: unknown; metadata?: unknown };
+      if (diskNote !== null) {
+        const note = `[magus disk] ${diskNote}`;
+        if (Array.isArray(result.content)) {
+          result.content.push({ type: "text", text: note });
+          diskNote = null;
+        } else if (typeof result.output === "string") {
+          result.output = `${result.output}\n\n${note}`;
+          diskNote = null;
+        }
+      }
       const held = pending.get(input.callID);
       if (held !== undefined) {
         pending.delete(input.callID);
@@ -724,6 +756,7 @@ export const MagusGuard: Plugin = async (ctx) => {
       // records where the work stands so whoever comes back reads `magus session`
       // rather than reconstructing it. It judges nothing and its output is ignored.
       await runOnce(["session", "checkpoint", "--agent-name", "opencode"], "");
+      await sampleDisk();
       await checkReply(id);
     },
   };

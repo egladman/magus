@@ -102,6 +102,9 @@ fun claude_hooks() > [HookCommand] {
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing: it records the topics a later rule reads.
         claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_named()),
+        // Claude Code adds a UserPromptSubmit hook's stdout to the turn's context, so the one
+        // line the disk hook prints reaches the agent before it starts on the request.
+        reclaimDiskHook(mgs_getName(), event: "UserPromptSubmit", say: "stdout"),
     ];
 }
 
@@ -520,8 +523,9 @@ test "the entries cover PreToolUse PostToolUse SessionStart Stop SubagentStop an
     assert\equal(start.entries[0]["matcher"] as? str, SESSION_PATH_MATCHER, "every start that gets a fresh env file");
     assert\equal(start.entries[1]["matcher"] as? str, "compact", "rehydrate");
     final message = claude_block("UserPromptSubmit")!;
-    assert\equal(message.entries.len(), 1, "one message entry");
+    assert\equal(message.entries.len(), 2, "the message record and the disk hook");
     assert\isTrue(message.entries[0]["matcher"] == null, "a message event takes no matcher");
+    assert\isTrue("{message.entries[1]["hooks"]}".indexOf("magus-reclaim-disk.buzz") != null, "the disk hook rides the message event");
     foreach (block in claude_entries()) {
         foreach (entry in block.entries) {
             final hooks = entry["hooks"] as [any];

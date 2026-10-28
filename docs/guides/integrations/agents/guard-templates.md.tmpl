@@ -304,6 +304,34 @@ not a call.
 
 <!-- embed: magus-buzz-check.buzz -->
 
+## `magus-reclaim-disk.buzz`
+
+Wire it to the event your host raises once a turn (Claude Code's and Codex's
+`UserPromptSubmit`, Cursor's `beforeSubmitPrompt`; the OpenCode plugin runs it when a
+session goes idle) as `magus buzz -s magus-reclaim-disk.buzz -- --agent-name <host>`. The
+harness spells declare it through `magus/harness.reclaimDiskHook`.
+
+It catches a disk filling up before it wedges the machine, and needs no daemon. On most
+turns it costs one stat: the free-space store at `$XDG_STATE_HOME/magus/disk/samples.jsonl`
+was written less than a minute ago. Past that it reads `disk.*` from `magus config view`,
+and once `disk.sample_every` has passed it samples the free space of the filesystem
+holding the event's `cwd`.
+
+Below `disk.min_free_mb`, or losing space faster than `disk.growth_mb_per_hour`, it starts
+one reclaim chunk detached and returns. The chunk removes the two removable worktrees
+untouched longest, deletes the agent branches nothing needs, and trims the Go build cache to
+`go.cache_budget_mb` by entry age, with every subprocess bounded by a five-minute deadline.
+It never removes a worktree holding uncommitted files, a commit no remote has, a live job,
+a working process or a lock, and it never empties the cache. `magus doctor` shows the
+trend and the last chunks.
+
+It prints one line, and only when it started a chunk or free space is below
+`disk.critical_free_mb`. `--say stderr` sends the line to stderr, for a host that reads
+stdout as a verdict. It always exits 0, and declares no `magus-guard-coverage` line: it
+judges no call.
+
+<!-- embed: magus-reclaim-disk.buzz -->
+
 ## Trying a verdict by hand
 
 ```sh

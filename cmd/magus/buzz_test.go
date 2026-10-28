@@ -254,6 +254,7 @@ var guardGlueScripts = []string{
 	"magus-rehydrate.buzz",
 	"magus-session.buzz",
 	"cursor-hook.buzz",
+	"magus-reclaim-disk.buzz",
 }
 
 // guardGlueModules are files the ports import. They are not hooks, so the
