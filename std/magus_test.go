@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestMagusCmdWarnsForTypedSubcommands verifies the escape hatch nudges authors
@@ -977,4 +978,31 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	tier := *got.ModelTier
 	tier.Reason = ""
 	assert.Equal(t, types.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
+}
+
+// RiskOptionsSuite pins how magus\risk.assess reads a RiskOptions object, which always
+// carries every field with its default.
+type RiskOptionsSuite struct {
+	suite.Suite
+}
+
+func TestRiskOptionsSuite(t *testing.T) {
+	suite.Run(t, new(RiskOptionsSuite))
+}
+
+func (s *RiskOptionsSuite) TestEmptyPathsKeepTheVCSDiff() {
+	o, err := riskOptions(map[string]any{"base": "abc123", "paths": []any{}, "checkout": ""})
+	s.Require().NoError(err)
+	s.Equal(types.RiskOptions{Base: "abc123"}, o)
+}
+
+func (s *RiskOptionsSuite) TestNamedPathsReplaceTheDiff() {
+	o, err := riskOptions(map[string]any{"base": "", "paths": []any{"notes/v1.md"}, "checkout": "/other"})
+	s.Require().NoError(err)
+	s.Equal(types.RiskOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"}, o)
+}
+
+func (s *RiskOptionsSuite) TestAnUnknownOptionRaises() {
+	_, err := riskOptions(map[string]any{"bse": "abc123"})
+	s.Require().ErrorContains(err, `unknown option "bse"`)
 }

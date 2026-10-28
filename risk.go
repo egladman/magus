@@ -29,14 +29,14 @@ var _ types.RiskAssessor = (*Magus)(nil)
 
 // AssessRisk is AssessChange over types.RiskOptions, the types.RiskAssessor a Buzz script
 // reaches through the workspace on its context. A Checkout other than m's root is loaded
-// read-only for the one assessment and closed after it, so a job's standing checkout is
-// measured against its own tree.
+// read-only for the one assessment, under m's spawn rule, and closed after it, so a job's
+// standing checkout is measured against its own tree.
 func (m *Magus) AssessRisk(ctx context.Context, target string, o types.RiskOptions) (types.RiskReport, error) {
 	opts := AssessOptions{Base: o.Base, ChangedPaths: o.Paths}
 	if o.Checkout == "" || filepath.Clean(o.Checkout) == filepath.Clean(m.Root()) {
 		return m.AssessChange(ctx, target, opts)
 	}
-	other, err := inspect(ctx, o.Checkout)
+	other, err := inspect(ctx, o.Checkout, WithSpawnRule(m.spawnRule))
 	if err != nil {
 		return types.RiskReport{}, fmt.Errorf("magus: assess %s: %w", o.Checkout, err)
 	}

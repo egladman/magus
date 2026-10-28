@@ -54,7 +54,11 @@ func riskOptions(opts map[string]any) (types.RiskOptions, error) {
 			if err != nil {
 				return types.RiskOptions{}, fmt.Errorf("paths: %w", err)
 			}
-			o.Paths = paths
+			// A RiskOptions object always carries paths, defaulting to [], so an empty
+			// list is a script that named none: the VCS diff, not an empty change.
+			if len(paths) > 0 {
+				o.Paths = paths
+			}
 		default:
 			return types.RiskOptions{}, fmt.Errorf("unknown option %q (want base, paths, checkout)", k)
 		}
@@ -62,8 +66,7 @@ func riskOptions(opts map[string]any) (types.RiskOptions, error) {
 	return o, nil
 }
 
-// riskPaths is a Buzz [str] as the VM hands it over, never nil so an empty list still
-// replaces the diff.
+// riskPaths is a Buzz [str] as the VM hands it over.
 func riskPaths(v any) ([]string, error) {
 	switch xs := v.(type) {
 	case []string:
