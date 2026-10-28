@@ -10,6 +10,9 @@
 import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
+import "encoding/json";
+import "encoding/yaml";
+import "path";
 
 export fun mgs_getName() > str { return "typescript"; }
 
@@ -22,9 +25,13 @@ export fun mgs_listRequiredGlobs() > [Path] {
     // workspace relies on lives there now. A .yaml matches none of the globs above, so
     // without this entry a project could move its supply-chain policy into that file and
     // every target would keep replaying the verdict it reached under the old one.
+    //
+    // package.json and pnpm-workspace.yaml match at any depth because discover_projects reads
+    // them in nested packages, and discovery passes content only for a glob whose basename is
+    // literal; **/*.json alone would hand it a nested package.json as a bare path.
     return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.mts"}, Path{value = "**/*.cts"}, Path{value = "**/*.js"}, Path{value = "**/*.jsx"},
-            Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "tsconfig*.json"}, Path{value = "package.json"},
-            Path{value = ".npmrc"}, Path{value = "pnpm-workspace.yaml"},
+            Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "tsconfig*.json"}, Path{value = "**/package.json"},
+            Path{value = ".npmrc"}, Path{value = "**/pnpm-workspace.yaml"},
             Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
             Path{value = "yarn.lock"}, Path{value = "bun.lockb"}];
 }
@@ -198,9 +205,9 @@ fun pnpmInstall() > Install {
     return Install{
         name = "pnpm-install",
         command = Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
-            "update": Charm{ops = set(args, "install", "update").ops
-                                  + drop(args, "--prefer-offline").ops
-                                  + drop(args, "--frozen-lockfile").ops},
+            "update": Charm{ops = set(args, anchor: "install", val: "update").ops
+                                  + drop(args, anchor: "--prefer-offline").ops
+                                  + drop(args, anchor: "--frozen-lockfile").ops},
         }},
         dir = "node_modules",
         relocatable = true,
@@ -217,7 +224,7 @@ fun npmInstall() > Install {
     return Install{
         name = "npm-ci",
         command = Command{bin = "npm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
-            "update": Charm{ops = set(args, "ci", "update").ops + drop(args, "--prefer-offline").ops},
+            "update": Charm{ops = set(args, anchor: "ci", val: "update").ops + drop(args, anchor: "--prefer-offline").ops},
         }},
         dir = "node_modules",
         stamps = ["node_modules/.package-lock.json"],
@@ -272,8 +279,8 @@ export fun mgs_listScriptRunners() > [Command] {
 fun biomeCheck(target: Target) > Command {
     final args = ["exec", "biome", "check", "."];
     return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
-        "rw":  after(args, "check", ["--write"]),
-        "gha": after(args, "check", ["--reporter=github"]),
+        "rw":  after(args, anchor: "check", vals: ["--write"]),
+        "gha": after(args, anchor: "check", vals: ["--reporter=github"]),
     }};
 }
 // biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat,
@@ -283,7 +290,7 @@ fun biomeCheck(target: Target) > Command {
 fun biomeFormat(target: Target) > Command {
     final args = ["exec", "biome", "format", "."];
     return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
-        "rw": after(args, "format", ["--write"]),
+        "rw": after(args, anchor: "format", vals: ["--write"]),
     }};
 }
 // eslint has no built-in "github" formatter (unlike ruff's --output-format=github);
@@ -292,14 +299,14 @@ fun biomeFormat(target: Target) > Command {
 fun eslint(target: Target) > Command {
     final args = ["exec", "eslint", "."];
     return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
-        "rw": after(args, "eslint", ["--fix"]),
-        "gha": after(args, "eslint", ["--format=unix"]),
+        "rw": after(args, anchor: "eslint", vals: ["--fix"]),
+        "gha": after(args, anchor: "eslint", vals: ["--format=unix"]),
     }};
 }
 fun prettier(target: Target) > Command {
     final args = ["exec", "prettier", "--check", "."];
     return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
-        "rw": set(args, "--check", "--write"),
+        "rw": set(args, anchor: "--check", val: "--write"),
     }};
 }
 fun tsc(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc"], hints = PACKAGE_MANAGER_HINTS}; }
@@ -369,4 +376,456 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer {
         format = SymbolFormat.scip,
         command = Command{bin = "scip-typescript", args = ["index", "--infer-tsconfig", "--output", "$MAGUS_SYMBOL_INDEX"]},
     };
+}
+
+// A package.json found by discover_projects, with its manifest parsed. manifest is empty
+// when the file is not a JSON object; that is reported as a gap where it is parsed.
+object NodePackage {
+    dir: str,
+    file: str,
+    manifest: {str: any},
+    name: str,
+}
+
+// A workspace root and the member globs it declares, from pnpm-workspace.yaml or the
+// package.json workspaces field. pnpm links a plain version range to a member only under
+// link-workspace-packages, which defaults to off; npm and yarn always link by name.
+object NodeWorkspace {
+    root: str,
+    file: str,
+    patterns: [str],
+    pnpm: bool,
+}
+
+// The dependency fields an install links workspace packages through. peerDependencies is
+// left out: a peer is the consumer's to provide, so it is no edge from this package.
+final LINKED_DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies"];
+
+// node --test's default file patterns, which node-test runs with no file arguments.
+final NODE_TEST_PATTERNS = ["**/*.test.\{cjs,mjs,js}", "**/*-test.\{cjs,mjs,js}", "**/*_test.\{cjs,mjs,js}",
+                            "**/test-*.\{cjs,mjs,js}", "**/test.\{cjs,mjs,js}", "**/test/**/*.\{cjs,mjs,js}"];
+final TS_TEST_PATTERNS = ["**/*.test.\{ts,mts,cts,tsx}", "**/*.spec.\{ts,mts,cts,tsx}", "**/*.spec.\{cjs,mjs,js}"];
+
+// Test runners a package can declare that no op in this spell runs.
+final UNWIRED_TEST_RUNNERS = ["jest", "mocha", "ava", "jasmine", "@playwright/test", "cypress"];
+
+final BUNDLER_CONFIG_PREFIXES = ["vite.config.", "webpack.config.", "rollup.config.", "rspack.config.",
+                                 "tsup.config.", "esbuild.config."];
+
+fun dirOf(file: str) > str {
+    final parts = file.split("/");
+    if (parts.len() == 1) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+fun baseOf(file: str) > str {
+    final parts = file.split("/");
+    return parts[parts.len() - 1];
+}
+
+fun isUnder(dir: str, file: str) > bool {
+    return dir == "." or file == dir or file.startsWith(dir + "/");
+}
+
+fun relativeTo(dir: str, file: str) > str {
+    if (dir == ".") {
+        return file;
+    }
+    if (file == dir) {
+        return ".";
+    }
+    return file.sub(dir.len() + 1);
+}
+
+fun joinPath(dir: str, rel: str) > str {
+    if (dir == ".") {
+        return path\clean(rel);
+    }
+    return path\clean("{dir}/{rel}");
+}
+
+fun asMap(value: any) > {str: any} {
+    if (value is {str: any}) {
+        final m: {str: any} = value;
+        return m;
+    }
+    return {<str: any>};
+}
+
+fun asStrings(value: any) > [str]? {
+    if (!(value is [any])) {
+        return null;
+    }
+    final items: [any] = value;
+    final strings = mut [<str>];
+    foreach (item in items) {
+        if (!(item is str)) {
+            return null;
+        }
+        final s: str = item;
+        strings.append(s);
+    }
+    return strings;
+}
+
+fun sortedKeys(m: {str: any}) > [str] {
+    final keys = m.keys().cloneMutable();
+    keys.sort(fun (left: str, right: str) > bool => left < right);
+    return keys;
+}
+
+fun gap(file: str, why: str) > DiscoveryGap {
+    return DiscoveryGap{file = file, why = why};
+}
+
+fun parsePackage(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodePackage !> any {
+    if (file.content -> content) {
+        final parsed: any = json\parse(content) catch null;
+        if (!(parsed is {str: any})) {
+            gaps.append(gap(file.path, why: "not a JSON object, so nothing in it was read"));
+        }
+        final manifest = asMap(parsed);
+        final name = manifest["name"];
+        return NodePackage{
+            dir = dirOf(file.path),
+            file = file.path,
+            manifest = manifest,
+            name = if (name is str) "{name}" else "",
+        };
+    }
+    throw "discover_projects: {file.path} arrived without content; **/package.json is a literal-basename glob, so discovery owes its content";
+}
+
+fun normalizePattern(pattern: str) > str {
+    var p = pattern;
+    if (p.startsWith("./")) {
+        p = p.sub(2);
+    }
+    while (p.endsWith("/")) {
+        p = p.sub(0, len: p.len() - 1);
+    }
+    return p;
+}
+
+fun workspaceOf(pkg: NodePackage, gaps: mut [DiscoveryGap]) > NodeWorkspace? {
+    final declared = pkg.manifest["workspaces"];
+    if (declared == null) {
+        return null;
+    }
+    final direct = asStrings(declared);
+    if (direct -> patterns) {
+        return NodeWorkspace{root = pkg.dir, file = pkg.file, patterns = patterns, pnpm = false};
+    }
+    final nested = asStrings(asMap(declared)["packages"]);
+    if (nested -> patterns) {
+        return NodeWorkspace{root = pkg.dir, file = pkg.file, patterns = patterns, pnpm = false};
+    }
+    gaps.append(gap(pkg.file, why: "workspaces: neither a list of globs nor an object with a packages list, so no member was read"));
+    return null;
+}
+
+fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodeWorkspace? !> any {
+    if (file.content -> content) {
+        final parsed: any = yaml\parse(content) catch null;
+        if (parsed == null) {
+            // An empty file, or one holding only settings: a workspace of the root alone.
+            return NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true};
+        }
+        if (!(parsed is {str: any})) {
+            gaps.append(gap(file.path, why: "not a YAML mapping, so no member was read"));
+            return null;
+        }
+        final declared = asMap(parsed)["packages"];
+        if (declared == null) {
+            return NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true};
+        }
+        if (asStrings(declared) -> patterns) {
+            return NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = patterns, pnpm = true};
+        }
+        gaps.append(gap(file.path, why: "packages: not a list of globs, so no member was read"));
+        return null;
+    }
+    throw "discover_projects: {file.path} arrived without content; **/pnpm-workspace.yaml is a literal-basename glob, so discovery owes its content";
+}
+
+fun isMember(ws: NodeWorkspace, dir: str) > bool !> any {
+    if (dir == ws.root or !isUnder(ws.root, file: dir)) {
+        return false;
+    }
+    final rel = relativeTo(ws.root, file: dir);
+    var included = false;
+    foreach (raw in ws.patterns) {
+        if (raw.startsWith("!")) {
+            if (path\matches(normalizePattern(raw.sub(1)), path: rel)) {
+                return false;
+            }
+        } else if (path\matches(normalizePattern(raw), path: rel)) {
+            included = true;
+        }
+    }
+    return included;
+}
+
+// The workspace a package installs under: the one it roots, else the nearest one whose
+// globs name it.
+fun owningWorkspace(pkg: NodePackage, workspaces: [NodeWorkspace]) > NodeWorkspace? !> any {
+    var best: NodeWorkspace? = null;
+    foreach (ws in workspaces) {
+        if (ws.root == pkg.dir) {
+            return ws;
+        }
+        if (isMember(ws, dir: pkg.dir) and (best == null or ws.root.len() > best!.root.len())) {
+            best = ws;
+        }
+    }
+    return best;
+}
+
+fun inWorkspace(pkg: NodePackage, ws: NodeWorkspace) > bool !> any {
+    return pkg.dir == ws.root or isMember(ws, dir: pkg.dir);
+}
+
+fun packageNamed(name: str, ws: NodeWorkspace, packages: [NodePackage]) > NodePackage? !> any {
+    foreach (other in packages) {
+        if (other.name == name and inWorkspace(other, ws: ws)) {
+            return other;
+        }
+    }
+    return null;
+}
+
+fun packageAt(dir: str, packages: [NodePackage]) > NodePackage? {
+    foreach (other in packages) {
+        if (other.dir == dir) {
+            return other;
+        }
+    }
+    return null;
+}
+
+fun dependsOn(pkg: NodePackage, ws: NodeWorkspace?, packages: [NodePackage], gaps: mut [DiscoveryGap]) > [str] !> any {
+    final deps = mut {<str: bool>};
+    foreach (field in LINKED_DEPENDENCY_FIELDS) {
+        final declared = asMap(pkg.manifest[field]);
+        foreach (name in sortedKeys(declared)) {
+            final spec = declared[name];
+            if (!(spec is str)) {
+                continue;
+            }
+            final range = "{spec}";
+            var linked: NodePackage? = null;
+            if (range.startsWith("workspace:")) {
+                if (ws -> workspace) {
+                    linked = packageNamed(name, ws: workspace, packages: packages);
+                }
+                if (linked == null) {
+                    gaps.append(gap(pkg.file, why: "{field}.{name}: {range} names no package in this workspace"));
+                }
+            } else if (range.startsWith("file:") or range.startsWith("link:")) {
+                final target = range.sub(range.indexOf(":")! + 1);
+                linked = packageAt(joinPath(pkg.dir, rel: target), packages: packages);
+                if (linked == null) {
+                    gaps.append(gap(pkg.file, why: "{field}.{name}: {range} is no discovered package, so no dependency was drawn"));
+                }
+            } else if (ws -> workspace) {
+                final member = packageNamed(name, ws: workspace, packages: packages);
+                if (member -> sibling) {
+                    if (workspace.pnpm) {
+                        gaps.append(gap(pkg.file, why: "{field}.{name}: names the workspace package in {sibling.dir}, but pnpm links a version range only under link-workspace-packages; write workspace:{range} to make it an edge"));
+                    } else {
+                        linked = sibling;
+                    }
+                }
+            }
+            if (linked -> other) {
+                if (other.dir != pkg.dir) {
+                    deps[other.dir] = true;
+                }
+            }
+        }
+    }
+    return sortedKeys(deps);
+}
+
+fun hasDependency(pkg: NodePackage, name: str) > bool {
+    return asMap(pkg.manifest["dependencies"])[name] != null or asMap(pkg.manifest["devDependencies"])[name] != null;
+}
+
+fun ownerOf(file: str, packages: [NodePackage]) > str? {
+    var best: str? = null;
+    foreach (pkg in packages) {
+        if (isUnder(pkg.dir, file: file) and (best == null or pkg.dir.len() > best!.len())) {
+            best = pkg.dir;
+        }
+    }
+    return best;
+}
+
+fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: [str]} !> any {
+    final targets = mut {<str: [str]>};
+    final lint = mut [<str>];
+    final format = mut [<str>];
+    if (hasDependency(pkg, name: "eslint")) {
+        lint.append("eslint");
+    }
+    if (hasDependency(pkg, name: "@biomejs/biome")) {
+        lint.append("biome-check");
+        format.append("biome-format");
+    }
+    if (hasDependency(pkg, name: "prettier")) {
+        format.append("prettier");
+    }
+    if (lint.len() > 0) {
+        targets["lint"] = lint;
+    }
+    if (format.len() > 0) {
+        targets["format"] = format;
+    }
+
+    final tsconfig = joinPath(pkg.dir, rel: "tsconfig.json");
+    if (owned.indexOf(tsconfig) != null) {
+        targets["build"] = ["tsc-build"];
+    } else {
+        foreach (file in owned) {
+            if (dirOf(file) == pkg.dir and baseOf(file).startsWith("tsconfig")) {
+                gaps.append(gap(file, why: "tsc --build reads tsconfig.json, which this package lacks, so no build was wired"));
+            }
+        }
+    }
+    foreach (file in owned) {
+        if (dirOf(file) != pkg.dir) {
+            continue;
+        }
+        foreach (prefix in BUNDLER_CONFIG_PREFIXES) {
+            if (baseOf(file).startsWith(prefix)) {
+                gaps.append(gap(file, why: "bundler config: no op runs it, so build does not cover what it emits"));
+            }
+        }
+    }
+
+    if (hasDependency(pkg, name: "vitest")) {
+        targets["test"] = ["vitest"];
+        return targets;
+    }
+    var unwired = false;
+    foreach (runner in UNWIRED_TEST_RUNNERS) {
+        if (hasDependency(pkg, name: runner)) {
+            unwired = true;
+            gaps.append(gap(pkg.file, why: "{runner}: no op in this spell runs it, so no test was wired"));
+        }
+    }
+    if (unwired) {
+        return targets;
+    }
+    var nodeTests = false;
+    var tsTests: str? = null;
+    foreach (file in owned) {
+        final rel = relativeTo(pkg.dir, file: file);
+        if (path\matchesAny(NODE_TEST_PATTERNS, path: rel)) {
+            nodeTests = true;
+        } else if (tsTests == null and path\matchesAny(TS_TEST_PATTERNS, path: rel)) {
+            tsTests = file;
+        }
+    }
+    if (nodeTests) {
+        targets["test"] = ["node-test"];
+    } else if (tsTests -> file) {
+        gaps.append(gap(file, why: "a test file with no vitest dependency and no name node --test finds by default, so no test was wired"));
+    }
+    return targets;
+}
+
+// discover_projects claims one project per package.json. Workspace globs from
+// pnpm-workspace.yaml or package.json workspaces decide which packages link by name.
+// Every package.json script is reported, never wired: its meaning is the project's.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    final packages = mut [<NodePackage>];
+    final gapsByFile = mut {<str: [DiscoveryGap]>};
+    final workspaces = mut [<NodeWorkspace>];
+    final workspaceGaps = mut [<DiscoveryGap>];
+    final pnpmRoots = mut {<str: bool>};
+
+    foreach (file in req.files) {
+        if (baseOf(file.path) == "pnpm-workspace.yaml") {
+            if (parsePnpmWorkspace(file, gaps: workspaceGaps) -> ws) {
+                workspaces.append(ws);
+                pnpmRoots[ws.root] = true;
+            }
+        }
+    }
+    foreach (file in req.files) {
+        if (baseOf(file.path) != "package.json") {
+            continue;
+        }
+        final gaps = mut [<DiscoveryGap>];
+        final pkg = parsePackage(file, gaps: gaps);
+        if (pnpmRoots[pkg.dir] ?? false) {
+            if (pkg.manifest["workspaces"] != null) {
+                gaps.append(gap(pkg.file, why: "workspaces: pnpm reads its members from pnpm-workspace.yaml, so this field was ignored"));
+            }
+        } else if (workspaceOf(pkg, gaps: gaps) -> ws) {
+            workspaces.append(ws);
+        }
+        packages.append(pkg);
+        gapsByFile[pkg.file] = gaps;
+    }
+
+    foreach (ws in workspaces) {
+        foreach (raw in ws.patterns) {
+            if (raw.startsWith("!")) {
+                continue;
+            }
+            var matched = false;
+            foreach (pkg in packages) {
+                if (pkg.dir != ws.root and isUnder(ws.root, file: pkg.dir)
+                    and path\matches(normalizePattern(raw), path: relativeTo(ws.root, file: pkg.dir))) {
+                    matched = true;
+                }
+            }
+            if (!matched) {
+                workspaceGaps.append(gap(ws.file, why: "workspace glob {raw} matches no package.json"));
+            }
+        }
+    }
+
+    final owned = mut {<str: mut [str]>};
+    foreach (file in req.files) {
+        if (ownerOf(file.path, packages: packages) -> dir) {
+            if (owned[dir] == null) {
+                owned[dir] = mut [<str>];
+            }
+            owned[dir]!.append(file.path);
+        }
+    }
+
+    final claims = mut [<DiscoveredProject>];
+    foreach (pkg in packages) {
+        final gaps = gapsByFile[pkg.file]!.cloneMutable();
+        final ws = owningWorkspace(pkg, workspaces: workspaces);
+        final deps = dependsOn(pkg, ws: ws, packages: packages, gaps: gaps);
+        final targets = targetsOf(pkg, owned: owned[pkg.dir] ?? [<str>], gaps: gaps);
+        foreach (script in sortedKeys(asMap(pkg.manifest["scripts"]))) {
+            gaps.append(gap(pkg.file, why: "scripts.{script}: meaning unknown, so it was not wired; a package.json script never runs as a target"));
+        }
+        if (targets.len() == 0) {
+            gaps.append(gap(pkg.file, why: "no tsconfig.json, test runner, linter or formatter found, so no target was wired"));
+        }
+        foreach (wsGap in workspaceGaps) {
+            if (dirOf(wsGap.file) == pkg.dir) {
+                gaps.append(wsGap);
+            }
+        }
+        claims.append(DiscoveredProject{
+            path = pkg.dir,
+            role = DiscoveryRole.project,
+            name = pkg.name,
+            dependsOn = deps,
+            targets = targets,
+            notInferred = gaps,
+        });
+    }
+    claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
+    return claims;
 }
