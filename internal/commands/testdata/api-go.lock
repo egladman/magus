@@ -109,6 +109,7 @@ github.com/egladman/magus.Magus.ExpandAffected method(ptr) func(ctx context.Cont
 github.com/egladman/magus.Magus.ExpandAffectedSet method(ptr) func(ctx context.Context, target string, baseRef string) (targets []github.com/egladman/magus/types.Target, source string, fellBack bool, res *github.com/egladman/magus/types.AffectedResult, err error)
 github.com/egladman/magus.Magus.ExpandPath method(ptr) func(t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.Target, error)
 github.com/egladman/magus.Magus.ExportCache method(ptr) func(ctx context.Context, w io.Writer) error
+github.com/egladman/magus.Magus.ExportSCIP method(ptr) func(ctx context.Context, w io.Writer) error
 github.com/egladman/magus.Magus.FileAt method(ptr) func(ctx context.Context, rev string, path string) (string, error)
 github.com/egladman/magus.Magus.FindOutputProducer method(ptr) func(absPath string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx context.Context) error

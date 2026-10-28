@@ -1823,6 +1823,31 @@ func (m *Magus) SymbolsOccurrences(ctx context.Context, keys []string) (map[stri
 	return workspaceSymbolsOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), keys)
 }
 
+// ExportSCIP writes every symbol index the workspace declares to w as one SCIP protobuf
+// index rooted at the workspace, for code-intelligence tools that read SCIP. It reads the
+// indexes as they stand and builds none: an index not built yet fails the export, naming
+// its project, and `magus graph build` builds it. A language nothing indexes has no index
+// to export and is left out.
+func (m *Magus) ExportSCIP(ctx context.Context, w io.Writer) error {
+	spells, err := ListSpells(ctx)
+	if err != nil {
+		return err
+	}
+	projects, err := m.ListProjects(ctx)
+	if err != nil {
+		return err
+	}
+	decls := symbolIndexDeclarations(ctx, symbolIngestInputs{
+		cfg: m.cfg, root: m.Root(), cacheDir: resolveCacheDir(m.Root(), m.cfg),
+		projects: projects, spells: spells, log: slog.Default(),
+	})
+	indexes := make([]symbols.ProjectIndex, 0, len(decls))
+	for _, decl := range decls {
+		indexes = append(indexes, symbols.ProjectIndex{Project: decl.project, Path: decl.path, Pack: decl.op != ""})
+	}
+	return symbols.ExportSCIP(w, m.Root(), indexes)
+}
+
 // resolvedSymbolIndex pairs a project with the absolute path of its SCIP index and the
 // language the spell that produced it adapts.
 //

@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 
@@ -109,6 +110,52 @@ func (s *symbolsSuite) TestPackFromSCIPRoundTrips() {
 	s.Require().Len(got.Documents, 2)
 	s.Equal(want.Documents[1].RelativePath, got.Documents[1].RelativePath)
 	s.Len(got.Documents[1].Occurrences, len(want.Documents[1].Occurrences))
+}
+
+// exportedSCIP exports a pack of methodShards and an override's SCIP file holding a
+// document outside its project, and decodes what the export wrote.
+func (s *symbolsSuite) exportedSCIP() *scip.Index {
+	dir := s.T().TempDir()
+	pack, override := filepath.Join(dir, "go.pack"), filepath.Join(dir, "override.scip")
+	s.Require().NoError(writePack(pack, versionV1, []Unit{{ID: "a"}, {ID: "b"}}, methodShards()))
+	data, err := proto.Marshal(&scip.Index{Documents: []*scip.Document{
+		{RelativePath: "web/app.ts", Language: "typescript"},
+		{RelativePath: "../outside.ts", Language: "typescript"},
+	}})
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(override, data, 0o644))
+
+	var out bytes.Buffer
+	s.Require().NoError(ExportSCIP(&out, "/repo", []ProjectIndex{
+		{Project: ".", Path: pack, Pack: true},
+		{Project: "console", Path: override},
+	}))
+	idx, err := decodeIndex(out.Bytes())
+	s.Require().NoError(err)
+	return idx
+}
+
+func (s *symbolsSuite) TestExportSCIPRootsTheIndexAtTheWorkspace() {
+	idx := s.exportedSCIP()
+	s.Equal("file:///repo", idx.Metadata.ProjectRoot)
+	s.Equal("magus", idx.Metadata.ToolInfo.Name)
+}
+
+func (s *symbolsSuite) TestExportSCIPRebasesEachDocumentOntoTheWorkspace() {
+	var paths []string
+	for _, d := range s.exportedSCIP().Documents {
+		paths = append(paths, d.RelativePath)
+	}
+	s.Equal([]string{"a/a.go", "b/b.go", "console/web/app.ts"}, paths, "a document outside its project is dropped")
+}
+
+func (s *symbolsSuite) TestExportSCIPKeepsImplementations() {
+	s.Equal([]string{symIface}, implemented(infoOf(s.exportedSCIP(), symImpl)))
+}
+
+func (s *symbolsSuite) TestExportSCIPFailsOnAnIndexThatWillNotRead() {
+	err := ExportSCIP(&bytes.Buffer{}, "/repo", []ProjectIndex{{Project: "web", Path: filepath.Join(s.T().TempDir(), "missing.pack"), Pack: true}})
+	s.ErrorContains(err, "project web")
 }
 
 func (s *symbolsSuite) TestReadIndexRefusesBytesThatAreNotSCIP() {

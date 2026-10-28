@@ -2,12 +2,16 @@ package symbols
 
 import (
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/scip-code/scip/bindings/go/scip"
+	"google.golang.org/protobuf/proto"
 )
 
 // packIndex assembles shards into one in-memory SCIP index, adding the implementation
@@ -152,6 +156,49 @@ func ReadIndex(path string, pack bool) (*scip.Index, error) {
 		return nil, fmt.Errorf("%s: %w: %w", path, ErrIndexFormat, err)
 	}
 	return packIndex(shards), nil
+}
+
+// ProjectIndex is one project's symbol index file: a pack an indexer op wrote, or SCIP
+// protobuf a knowledge.symbols override names when Pack is false. Project is the
+// project's workspace-relative directory.
+type ProjectIndex struct {
+	Project string
+	Path    string
+	Pack    bool
+}
+
+// ExportSCIP writes indexes to w as one SCIP protobuf index rooted at the workspace root,
+// the format other code-intelligence tools read. The packs stay magus's storage; this is
+// the interchange copy. Each document's path is rebased from its project onto the
+// workspace, and one outside the workspace is dropped, as the graph drops it. An index
+// that will not read fails the export, naming it: a partial interchange copy would pass for
+// a whole one.
+func ExportSCIP(w io.Writer, root string, indexes []ProjectIndex) error {
+	out := &scip.Index{Metadata: &scip.Metadata{
+		ToolInfo:             &scip.ToolInfo{Name: "magus"},
+		ProjectRoot:          (&url.URL{Scheme: "file", Path: filepath.ToSlash(root)}).String(),
+		TextDocumentEncoding: scip.TextEncoding_UTF8,
+	}}
+	for _, ix := range indexes {
+		idx, err := ReadIndex(ix.Path, ix.Pack)
+		if err != nil {
+			return fmt.Errorf("project %s: %w", ix.Project, err)
+		}
+		for _, doc := range idx.Documents {
+			rebased, ok := workspacePath(ix.Project, doc.RelativePath)
+			if !ok {
+				continue
+			}
+			doc.RelativePath = rebased
+			out.Documents = append(out.Documents, doc)
+		}
+	}
+	data, err := proto.Marshal(out)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
 
 // scipShards splits a SCIP index an external indexer wrote into one shard per directory,
