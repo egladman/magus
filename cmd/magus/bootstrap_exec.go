@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 )
 
@@ -79,7 +80,7 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 	if truthyEnv(os.Getenv(bootstrapExecOptOutVar)) {
 		return "", false
 	}
-	if goRunBinary(self) {
+	if ward.GoRunBinary(self) {
 		return "", false
 	}
 	if os.Getenv(bootstrapExecSentinelVar) != "" {
