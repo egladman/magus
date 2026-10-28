@@ -18,6 +18,10 @@
       {
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
+      },
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name cursor --say stderr",
+        "timeout": 10
       }
     ],
     "postToolUse": [

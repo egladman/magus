@@ -129,6 +129,15 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
       }
     ]
   }
