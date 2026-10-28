@@ -44,6 +44,11 @@ type wsEntry struct {
 	loadedAt   time.Time
 	lastAccess atomic.Int64 // unix nanoseconds; updated on every acquire
 	inflight   int          // in-flight dispatches holding m; guarded by wsRegistry.mu
+	// lease is what root's checkout bound when m opened, which m's runs are charged to.
+	// broker carries it and closes with the entry; nil when m shares the server's client.
+	// Both published by load under wsRegistry.mu.
+	lease  string
+	broker *broker.Client
 	// gone is closed when the entry leaves the registry, stopping its source watcher.
 	gone chan struct{}
 }
@@ -75,10 +80,9 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 		workspace.WithLimiter(lim),
 		metricsOpt,
 	)
-	// Every workspace the server opens shares ONE broker client, so the server holds one
-	// broker connection however many workspaces it serves. A workspace whose own broker
-	// setting is off gets none, since Open refuses a client it would not use. A registry
-	// built without one (every test that does) leaves Open to its own.
+	// b carries root's lease (wsRegistry.brokerFor). A workspace whose broker setting is
+	// off gets none, since Open refuses a client it would not use; a registry built
+	// without one (every test that does) leaves Open to its own.
 	if b != nil && cfg.Broker.Resolved() != types.BrokerOff {
 		opts = append(opts, magus.WithBroker(b))
 	}
@@ -93,10 +97,16 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 // load opens e once and publishes the outcome. A failure starts the watcher that retries it.
 func (r *wsRegistry) load(e *wsEntry) {
 	e.once.Do(func() {
-		m, err := r.open(e.root, r.lim, r.broker, r.tel)
+		lease := r.leaseOf(e.root)
+		b, owned := r.brokerFor(lease)
+		m, err := r.open(e.root, r.lim, b, r.tel)
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		defer r.bump()
+		e.lease = lease
+		if owned {
+			e.broker = b
+		}
 		if err != nil {
 			e.loadErr = err
 			e.failure = magus.WorkspaceLoadFailure(e.root, err)
@@ -135,14 +145,17 @@ type wsRegistry struct {
 	entries  map[string]*wsEntry
 	declared map[string]struct{} // nil/empty = legacy lazy mode (any workspace admissible)
 	lim      *cache.Limiter
-	broker   *broker.Client         // the server's one broker connection, shared with every workspace it serves
+	broker   *broker.Client         // the server's own connection, shared by every workspace whose checkout binds no lease
 	tel      observability.Provider // shared with the bridge Magus; owned by the server, outlives evictions
 	ttl      time.Duration
 	now      func() time.Time // injectable for tests
-	// open and awaitChange are seams for tests; production opens with openWorkspace and
-	// waits on a filesystem watcher.
-	open        func(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
-	awaitChange func(e *wsEntry) bool
+	// open, awaitChange, leaseOf and leasedBroker are seams for tests; production opens
+	// with openWorkspace, waits on a filesystem watcher, reads the checkout record and
+	// dials with leasedBrokerClient.
+	open         func(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
+	awaitChange  func(e *wsEntry) bool
+	leaseOf      func(root string) string
+	leasedBroker func(lease string) *broker.Client
 	// changed is closed and replaced whenever an entry's state moves; guarded by mu.
 	changed chan struct{}
 	ctx     context.Context
@@ -160,11 +173,13 @@ func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, tt
 		broker:  b,
 		tel:     tel,
 		ttl:     ttl,
-		now:     time.Now,
-		open:    openWorkspace,
-		changed: make(chan struct{}),
-		ctx:     ctx,
-		stopCh:  make(chan struct{}),
+		now:          time.Now,
+		open:         openWorkspace,
+		leaseOf:      boundLease,
+		leasedBroker: leasedBrokerClient,
+		changed:      make(chan struct{}),
+		ctx:          ctx,
+		stopCh:       make(chan struct{}),
 	}
 	r.awaitChange = r.awaitSourceChange
 	r.wg.Add(1)
@@ -278,6 +293,9 @@ func (r *wsRegistry) drop(e *wsEntry) {
 		default:
 			close(e.gone)
 		}
+	}
+	if e.broker != nil {
+		_ = e.broker.Close()
 	}
 }
 
@@ -443,6 +461,9 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 // on ctx) goes to dispatchJob, which admits the wider maintenance command set. Both reuse the
 // warm workspace via withMagus.
 func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, args []string) error {
+	if !proc.IsJob(ctx) {
+		r.rebind(root, r.leaseOf(root))
+	}
 	e, err := r.acquire(root)
 	if err != nil {
 		return err
@@ -452,8 +473,69 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 	if proc.IsJob(ctx) {
 		return dispatchJob(trail.ContextWithEntryPoint(ctx, types.EntryPointServer), root, rc, args)
 	}
+	noticeRunLease(ctx, e.lease, types.JobLeaseFromContext(ctx))
 	// An adopted run is a CLI invocation the server executes on the client's behalf.
 	return dispatchAdopted(trail.ContextWithEntryPoint(ctx, types.EntryPointCLI), root, rc, args)
+}
+
+// rebind drops root's idle workspace when the lease its checkout binds moved since it
+// opened, so the next acquire opens it with a client naming the new one. A busy workspace
+// keeps the lease it opened with until its runs finish.
+func (r *wsRegistry) rebind(root, lease string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.entries[root]
+	if !ok || e.m == nil || e.inflight > 0 || e.lease == lease {
+		return
+	}
+	_ = e.m.Close()
+	r.drop(e)
+}
+
+// brokerFor is the client a workspace whose checkout binds lease runs under: the server's
+// own for none, else a new one naming lease, which owned says the caller closes.
+// TODO(runs-carry-their-lease): a gate the daemon runs wants the broker's gate flag, which
+// one client per workspace cannot carry; that needs an admitter per run.
+func (r *wsRegistry) brokerFor(lease string) (b *broker.Client, owned bool) {
+	if r.broker == nil || lease == "" {
+		return r.broker, false
+	}
+	return r.leasedBroker(lease), true
+}
+
+// boundLease is the lease root's checkout record binds, "" for none. Unlike checkoutLease,
+// no claim counts: one workspace serves every run against root, whatever it names.
+func boundLease(root string) string {
+	loc, err := jobPlace(root)
+	if err != nil {
+		slog.With(attr.Component("server")).Warn("the daemon charges this workspace's runs to no lease: its job store cannot be placed",
+			slog.String("root", root), attr.Error(err))
+		return ""
+	}
+	lease, _ := job.ActingLease(loc, "")
+	return lease
+}
+
+// leasedBrokerClient is a broker client of the daemon's own for one lease's runs.
+func leasedBrokerClient(_ string) *broker.Client {
+	// TODO(runs-carry-their-lease): name the lease with that branch's broker client option
+	// once it lands here; until then the handshake names the daemon's own BAGGAGE lease.
+	return newBrokerClient(false)
+}
+
+// noticeRunLease says when the daemon charges an adopted run to no lease: its checkout
+// binds none, so no job's weight, validation cap or ci priority applies. claim is the
+// lease the client was launched under, which a CLI run would have been charged to.
+func noticeRunLease(ctx context.Context, charged, claim string) {
+	if charged != "" {
+		return
+	}
+	if claim != "" {
+		slog.InfoContext(ctx, fmt.Sprintf("this run names lease %s, but its checkout binds none, so the daemon charges it to no lease", claim),
+			attr.Notice("broker"))
+		return
+	}
+	slog.InfoContext(ctx, "this run is unleased: its checkout binds no lease, so the broker counts it against no job", attr.Notice("broker"))
 }
 
 // recordJobActivity appends a KIND_JOB event to the server-wide activity trail after a background
@@ -546,6 +628,7 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 // is pinned (inflight held, never released) so the idle janitor never evicts the server's
 // long-lived MCP workspace.
 func (r *wsRegistry) adoptBridge(root string, m *magus.Magus) {
+	lease := r.leaseOf(root)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if cur, ok := r.entries[root]; ok {
@@ -555,7 +638,7 @@ func (r *wsRegistry) adoptBridge(root string, m *magus.Magus) {
 		r.drop(cur) // the bridge loaded where an earlier attempt failed; it supersedes that
 	}
 	e := newEntry(root, r.now())
-	e.m, e.loadedAt = m, r.now()
+	e.m, e.loadedAt, e.lease = m, r.now(), lease
 	// Consume the once so a later acquire()'s load() is a no-op and returns this m,
 	// rather than re-opening the workspace.
 	e.once.Do(func() {})
