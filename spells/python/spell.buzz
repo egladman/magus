@@ -13,6 +13,9 @@ export fun mgs_listRequiredGlobs() > [Path] {
 export fun mgs_getTools() > {str: Tool} {
     return {
         "python3": Tool{probe = Command{bin = "python3", args = ["--version"]}, lifecycle = "python"},
+        // Observed, not probed: only the scip op drives it, so its version keys the index
+        // and no other target.
+        "scip-python": Tool{observe = Command{bin = "scip-python", args = ["--version"]}},
     };
 }
 
@@ -132,4 +135,14 @@ fun ruffFormat(target: Target) > Command {
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat};
+}
+
+// External, so it runs only where magus.yaml lists python under spells.symbol_indexers.
+// scip-python is a PATH binary (install it with mise, not as a project dep) and writes to
+// MAGUS_SYMBOL_INDEX, never the tree.
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        command = Command{bin = "scip-python", args = ["index", ".", "--output", "$MAGUS_SYMBOL_INDEX"]},
+    };
 }

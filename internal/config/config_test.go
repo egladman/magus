@@ -10,9 +10,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -332,4 +334,47 @@ func TestJobsMaxClaims(t *testing.T) {
 			assert.Equal(t, tc.want, cfg.Jobs.MaxClaims)
 		})
 	}
+}
+
+type SymbolIndexersSuite struct {
+	suite.Suite
+}
+
+func TestSymbolIndexersSuite(t *testing.T) {
+	suite.Run(t, new(SymbolIndexersSuite))
+}
+
+func (s *SymbolIndexersSuite) TestExternalIndexerWaitsForTheOptIn() {
+	si := &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-typescript", Args: []string{"index"}}}
+	s.False(SpellsConfig{}.RunsSymbolIndexer("typescript", si))
+	s.False(SpellsConfig{SymbolIndexers: []string{"python"}}.RunsSymbolIndexer("typescript", si))
+	s.True(SpellsConfig{SymbolIndexers: []string{"typescript"}}.RunsSymbolIndexer("typescript", si))
+}
+
+func (s *SymbolIndexersSuite) TestInProcessGoIndexerNeedsNoOptIn() {
+	si := &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "go", Args: []string{"list", "./..."}}}
+	s.True(SpellsConfig{}.RunsSymbolIndexer("go", si))
+}
+
+func (s *SymbolIndexersSuite) TestNoIndexerNeverRuns() {
+	s.False(SpellsConfig{SymbolIndexers: []string{"typescript"}}.RunsSymbolIndexer("typescript", nil))
+}
+
+func (s *SymbolIndexersSuite) TestLoadsBesideSpellImports() {
+	path := filepath.Join(s.T().TempDir(), Filename)
+	s.Require().NoError(os.WriteFile(path, []byte(`spells:
+  symbol_indexers: [typescript]
+  magus/spell/go:
+    path: spells/go
+`), 0o644))
+	cfg, err := LoadFile(path, true)
+	s.Require().NoError(err)
+	s.Equal([]string{"typescript"}, cfg.Spells.SymbolIndexers)
+	s.Equal(map[string]SpellImport{"magus/spell/go": {Path: "spells/go"}}, cfg.Spells.Imports)
+}
+
+func (s *SymbolIndexersSuite) TestValidateRefusesADuplicate() {
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs,
+		Spells: SpellsConfig{SymbolIndexers: []string{"typescript", "typescript"}}}
+	s.ErrorContains(Validate(cfg), "spells.symbol_indexers")
 }

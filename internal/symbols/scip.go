@@ -683,3 +683,13 @@ func sortedRefs(m map[string]*types.KnowledgeSymbolRef) []types.KnowledgeSymbolR
 	slices.SortFunc(out, func(x, y types.KnowledgeSymbolRef) int { return cmp.Compare(x.Path, y.Path) })
 	return out
 }
+
+// OptInSetting is the magus.yaml key listing the spells whose external SCIP indexer runs.
+const OptInSetting = "spells.symbol_indexers"
+
+// OptInHint is the gap detail for a language whose spell declares an external SCIP
+// indexer, bin, that the workspace has not opted in. It names the setting that runs it.
+func OptInHint(language, spell, bin string) string {
+	return fmt.Sprintf("no symbol index for %s: %s is an external SCIP indexer and runs only when opted in; add %s to %s in magus.yaml",
+		language, bin, spell, OptInSetting)
+}

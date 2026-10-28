@@ -300,6 +300,10 @@ type SpellsConfig struct {
 	// Registries are the credentials `magus spell` verbs present to a container
 	// registry, one entry per host. A registry with no entry is reached anonymously.
 	Registries []SpellRegistry `json:"registries" yaml:"registries" validate:"unique=Host,dive"`
+	// SymbolIndexers names the spells whose external SCIP indexer runs here, such as
+	// typescript for scip-typescript. One forks a tool the workspace installs and is slower
+	// than magus's in-process indexers, so unlisted, its language has no symbol index.
+	SymbolIndexers []string `json:"symbol_indexers" yaml:"symbol_indexers" validate:"unique,dive,required"`
 	// Imports declares spells by the path a magusfile imports them under, so an entry
 	// reads like the import it answers:
 	//
@@ -332,6 +336,19 @@ type SpellRegistry struct {
 	Host        string `json:"host" yaml:"host" validate:"required,registry_host"`
 	Username    string `json:"username" yaml:"username" validate:"required"`
 	PasswordRef string `json:"password" yaml:"password" validate:"required"`
+}
+
+// RunsSymbolIndexer reports whether si, the indexer the spell called name declares, runs
+// in this workspace. A nil si never runs and an in-process indexer always does. An
+// external SCIP command runs only when SymbolIndexers lists name.
+func (s SpellsConfig) RunsSymbolIndexer(name string, si *spells.SymbolIndexer) bool {
+	if si == nil {
+		return false
+	}
+	if _, inProcess := spells.InProcessGoPatterns(si.Command); inProcess || si.Format != spells.SymbolFormatSCIP {
+		return true
+	}
+	return slices.Contains(s.SymbolIndexers, name)
 }
 
 // Registry returns the entry for host, and whether there is one.

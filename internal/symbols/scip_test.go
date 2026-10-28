@@ -8,6 +8,7 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/egladman/magus/types"
@@ -827,4 +828,17 @@ func TestParseIndexSkipsEscapingDocuments(t *testing.T) {
 			assert.NotContains(t, r.Path, "..")
 		}
 	}
+}
+
+type OptInSuite struct {
+	suite.Suite
+}
+
+func TestOptInSuite(t *testing.T) {
+	suite.Run(t, new(OptInSuite))
+}
+
+func (s *OptInSuite) TestHintNamesTheSetting() {
+	s.Equal("no symbol index for typescript: scip-typescript is an external SCIP indexer and runs only when opted in; add typescript to spells.symbol_indexers in magus.yaml",
+		OptInHint("typescript", "typescript", "scip-typescript"))
 }
