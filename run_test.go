@@ -81,7 +81,7 @@ func TestDiagEventFromError(t *testing.T) {
 	de := types.DiagnosticErrorf(types.ExecDenied, "exec denied: /bin/x")
 	ev, ok := diagEventFromError("pkg/foo", "build", de)
 	assert.True(t, ok)
-	assert.Equal(t, types.DiagnosticEvent{Code: types.ExecDenied, Message: de.Msg, Unit: "pkg/foo:build"}, ev)
+	assert.Equal(t, types.DiagnosticEvent{Code: types.ExecDenied, Message: de.Msg, Unit: "pkg/foo:build", URL: types.CodeURL(types.ExecDenied)}, ev)
 
 	// A wrapped diagnostic error is still recognized (errors.As unwraps).
 	wrapped := fmt.Errorf("run failed: %w", de)

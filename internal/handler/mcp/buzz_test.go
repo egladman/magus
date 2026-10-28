@@ -15,12 +15,34 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
+
+// mcpSuite is the package's one testify suite: add tests here as methods.
+type mcpSuite struct {
+	suite.Suite
+}
+
+func TestMCPSuite(t *testing.T) {
+	suite.Run(t, new(mcpSuite))
+}
+
+func (s *mcpSuite) TestCodedStderrPassesAWorkspaceCode() {
+	s.True(codedStderr.MatchString("[WS1001] registry rejected the manifest\n  see: docs/codes/WS1001.md"))
+}
+
+func (s *mcpSuite) TestCodedStderrPassesAnMGSCode() {
+	s.True(codedStderr.MatchString("[MGS3033] buzz: boom"))
+}
+
+func (s *mcpSuite) TestCodedStderrLeavesUncodedTextToBeWrapped() {
+	s.False(codedStderr.MatchString("panic: [WS1001] somewhere inside"))
+}
 
 const buzzStandInEnv = "MCP_BUZZ_STAND_IN"
 

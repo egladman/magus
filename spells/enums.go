@@ -24,10 +24,6 @@ func (v DiagnosticFormat) Values() []string { return diagnosticFormats.Strings()
 func (v DiagnosticFormat) Valid() bool      { return diagnosticFormats.Valid(v) }
 func (v DiagnosticFormat) String() string   { return enum.String(v) }
 
-// SymbolFormatGoPackages selects magus's in-process Go indexer (internal/symbols/goindex):
-// the indexer's command args are the package patterns it loads, and nothing is executed.
-const SymbolFormatGoPackages SymbolFormat = "go-packages"
-
 var symbolFormats = enum.Set[SymbolFormat]{"scip", "go-packages"}
 
 func (v SymbolFormat) Values() []string { return symbolFormats.Strings() }

@@ -3224,18 +3224,14 @@ func diagnosticCaptureOption(ctx context.Context) cache.RunOption {
 
 // diagEventFromError extracts a DiagnosticEvent from a target's run error when it
 // is a coded DiagnosticError, tagging it with the target's identity. Returns
-// ok=false for a nil or non-diagnostic error (a plain build failure is not an MGS
-// event).
+// ok=false for a nil or uncoded error (a plain build failure is not a diagnostic
+// event). The event keeps the docs page the raise captured.
 func diagEventFromError(projectPath, target string, err error) (types.DiagnosticEvent, bool) {
-	var de *types.DiagnosticError
-	if err == nil || !errors.As(err, &de) {
-		return types.DiagnosticEvent{}, false
-	}
 	unit := projectPath
 	if target != "" {
 		unit += ":" + target
 	}
-	return types.DiagnosticEvent{Code: de.Code, Message: de.Msg, Unit: unit}, true
+	return types.DiagnosticEventOf(err, unit)
 }
 
 // charmedTarget renders "target:charm,..." the way cache.reproTarget does for an

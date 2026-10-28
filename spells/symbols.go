@@ -1,7 +1,5 @@
 package spells
 
-import "slices"
-
 // SymbolFormat names the code-index format a spell's symbol indexer writes.
 //
 // It is declared rather than inferred because the format decides which reader
@@ -19,6 +17,9 @@ const (
 	// SymbolFormatSCIP is SCIP's symbol and occurrence model. magus stores it in its own
 	// pack layout (internal/symbols) and writes SCIP protobuf only as an export.
 	SymbolFormatSCIP SymbolFormat = "scip"
+	// SymbolFormatGoPackages selects magus's in-process Go indexer (internal/symbols/goindex):
+	// the indexer's command args are the package patterns it loads, and nothing is executed.
+	SymbolFormatGoPackages SymbolFormat = "go-packages"
 )
 
 // SymbolIndexer is what mgs_getSymbolIndexer declares: a spell's symbol-indexing
@@ -26,8 +27,8 @@ const (
 // name hidden in mgs_listTargets. Exporting it IS the capability; a spell that does
 // not export it is not symbol-capable.
 //
-// A Command of `go list <patterns>` selects magus's in-process Go indexer
-// (internal/symbols/goindex). Any other Command writes SCIP protobuf to the destination
+// Format go-packages selects magus's in-process Go indexer, reading Command's args as the
+// package patterns. Format scip runs Command, which writes SCIP protobuf to the destination
 // magus injects as MAGUS_SYMBOL_INDEX. The command is straight-line data like any op
 // command: it is charm-patched, rendered by `magus describe`, and keyed into the cache
 // without being executed.
@@ -77,15 +78,3 @@ func (si *SymbolIndexer) OpName() string {
 // SymbolIndexOp returns the op s's symbol indexer runs under, or "" when s declares none.
 func (s *Spell) SymbolIndexOp() string { return s.symbolIndexer.OpName() }
 
-// InProcessGoPatterns is the package patterns of a `go list <patterns>` indexer command,
-// which selects magus's in-process Go indexer, and false for any other command. A bare
-// `go list` lists the package in the directory, as go list does.
-func InProcessGoPatterns(c Command) ([]string, bool) {
-	if c.Bin != "go" || len(c.Args) == 0 || c.Args[0] != "list" {
-		return nil, false
-	}
-	if len(c.Args) == 1 {
-		return []string{"."}, true
-	}
-	return slices.Clone(c.Args[1:]), true
-}

@@ -9,9 +9,32 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
+
+// hintSuite is the package's one testify suite: add tests here as methods.
+type hintSuite struct {
+	suite.Suite
+}
+
+func TestHintSuite(t *testing.T) {
+	suite.Run(t, new(hintSuite))
+}
+
+// Buzz interpolates {name} in a string, so a script writes a placeholder as \{name}.
+func (s *hintSuite) TestServesReadsAnEscapedPlaceholder() {
+	src := "final SUMMARY = \"build\";\nfinal SERVES = [\"code:MGS1021 -- --checkout \\{checkout}\"];\n"
+	d, declared, err := parseScriptDeclaration([]byte(src))
+	s.Require().NoError(err)
+	s.True(declared)
+	s.Equal([]scriptSituation{{Situation: "code:MGS1021", Args: []string{"--checkout", "{checkout}"}}}, d.Serves)
+}
+
+func (s *hintSuite) TestTheMGSFamilyIsGone() {
+	s.ErrorContains(ValidateSituation("mgs:MGS1021"), "names no family")
+}
 
 // scriptFixture writes a script under root and returns the entry the graph build would
 // record for it: stamped with the file as written.
