@@ -441,11 +441,11 @@ fun write_image_summary(ctx: magus\Context, refs: [str]) > void !> any {
     }
     if (refs.len() == 0) { return; }
 
-    var md = "## Container images\n\n| Reference | Pull |\n| --- | --- |\n";
+    final rows = mut ["## Container images\n\n| Reference | Pull |\n| --- | --- |\n"];
     foreach (r in refs) {
-        md = md + "| `" + r + "` | `docker pull " + r + "` |\n";
+        rows.append("| `" + r + "` | `docker pull " + r + "` |\n");
     }
-    md = md + "\nRun one against this workspace:\n\n```sh\ndocker run --rm -v \"$PWD\":/workspace "
+    final md = rows.join("") + "\nRun one against this workspace:\n\n```sh\ndocker run --rm -v \"$PWD\":/workspace "
         + refs[0] + " ls\n```\n";
 
     final sp = "{summaryPath}";
@@ -570,13 +570,12 @@ fun channel(ctx: magus\Context) > str !> any {
 // By host, never index: how many registries there are depends on the charms.
 fun select_registries(registries: [Registry], host: str) > [Registry] !> any {
     if (host == "") { return registries; }
-    var hosts = "";
+    final hosts = mut [<str>];
     foreach (reg in registries) {
         if (reg.host == host) { return [reg]; }
-        if (hosts != "") { hosts = hosts + ", "; }
-        hosts = hosts + reg.host;
+        hosts.append(reg.host);
     }
-    throw "no registry \"{host}\" for these charms; this mode publishes to: {hosts}";
+    throw "no registry \"{host}\" for these charms; this mode publishes to: {hosts.join(", ")}";
 }
 
 // Reports where image-build under the same charms pushes and, with `verify`, fails when a
@@ -591,16 +590,16 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void !> any {
     }
     // Resolving can open a provider's unlock prompt, so only `verify` resolves.
     final checking = ctx.hasCharm("verify");
-    var table = pad("REGISTRY", 12) + pad("REPOSITORY", 28) + pad("USERNAME REF", 20) + pad("TOKEN REF", 20) + "CREDENTIALS";
+    final table = mut [pad("REGISTRY", 12) + pad("REPOSITORY", 28) + pad("USERNAME REF", 20) + pad("TOKEN REF", 20) + "CREDENTIALS"];
     foreach (reg in registries) {
         var state = "not checked (add the verify charm)";
         if (checking) { state = credential_state(reg); }
-        table = table + "\n" + pad(reg.host, 12) + pad(reg.repository, 28)
+        table.append(pad(reg.host, 12) + pad(reg.repository, 28)
             + pad(reg.user_ref, 20) + pad(reg.token_ref, 20)
-            + state;
+            + state);
     }
     // magus\log.info prefixes only its first line, so the table follows a lead line.
-    magus\log.info("image-build under these charms publishes to:\n" + table);
+    magus\log.info("image-build under these charms publishes to:\n" + table.join("\n"));
 
     if (!checking) { return; }
     var unready = mut [<str>];
@@ -632,9 +631,8 @@ fun resolvable(ref: str) > bool {
 }
 
 fun pad(s: str, width: int) > str !> any {
-    var padded = s;
-    while (padded.len() < width) { padded = padded + " "; }
-    return padded + " ";
+    if (s.len() >= width) { return s + " "; }
+    return s + " ".repeat(width - s.len() + 1);
 }
 
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
@@ -1241,11 +1239,11 @@ fun write_notices(stage: str, tool: str, binary: str) > void !> any {
     final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".").stdout.split(separator: "\n")[0];
     final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".").stdout;
 
-    var body = "THIRD-PARTY NOTICES\n\n"
+    final body = mut ["THIRD-PARTY NOTICES\n\n"
         + tool + " is licensed under the terms in the accompanying LICENSE file. It links the\n"
         + "modules below, each under its own terms, reproduced here in full. This list is read\n"
         + "from the shipped binary, so it describes THIS artifact rather than the module graph\n"
-        + "in general.\n\n";
+        + "in general.\n\n"];
     var missing = mut [<str>];
     var count = 0;
 
@@ -1257,10 +1255,10 @@ fun write_notices(stage: str, tool: str, binary: str) > void !> any {
 
         final text = read_module_license(modcache, f[2], f[3]);
         if (text == "") { missing.append(f[2] + "@" + f[3]); continue; }
-        body = body + "==============================================================================\n"
+        body.append("==============================================================================\n"
             + f[2] + " " + f[3] + "\n"
             + "==============================================================================\n\n"
-            + text + "\n\n";
+            + text + "\n\n");
         count = count + 1;
     }
 
@@ -1269,7 +1267,7 @@ fun write_notices(stage: str, tool: str, binary: str) > void !> any {
             + " module(s), refusing to write an incomplete THIRD-PARTY-NOTICES: "
             + missing.join(separator: ", ");
     }
-    fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body);
+    fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body.join(""));
     magus\log.info("notices: documented {count} third-party modules");
 }
 
@@ -1285,15 +1283,15 @@ fun read_module_license(modcache: str, path: str, version: str) > str !> any {
 
 // The module cache's case encoding: an uppercase letter becomes "!" plus its lowercase.
 fun escape_module_path(path: str) > str {
-    var escaped = "";
+    final escaped = mut [<str>];
     var i = 0;
     while (i < path.len()) {
         final ch = path.sub(i, len: 1);
         final lower = ch.lower();
-        if (lower != ch) { escaped = escaped + "!" + lower; } else { escaped = escaped + ch; }
+        if (lower != ch) { escaped.append("!" + lower); } else { escaped.append(ch); }
         i = i + 1;
     }
-    return escaped;
+    return escaped.join("");
 }
 
 // release_asset is tool's archive path in dist/, refused before any write when its upload
@@ -2712,13 +2710,12 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
 fun publish_report(agent: str, results: str, provider: str) > void !> any {
     final report = fs\readFile(fs\join(agent, "report.md"));
     final analysis = json\parse(fs\readFile(fs\join(agent, "analysis.json")));
-    var models = "";
-    var count = 0;
+    final names = mut [<str>];
     foreach (model in analysis["models"]) {
-        if (models != "") { models = models + ", "; }
-        models = models + "{model}";
-        count = count + 1;
+        names.append("{model}");
     }
+    final models = names.join(", ");
+    final count = names.len();
     if (count != 1) {
         throw "agent-bench-report: --publish files a report under one model, and `" + results
             + "` carries " + "{count}" + " (" + models + ")";
