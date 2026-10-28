@@ -11,13 +11,14 @@
 //
 // --apply runs `git worktree remove`, never with --force, on each removable worktree after
 // the guard (`magus shell`) passes that exact line, then deletes each agent branch nothing
-// needs; with --go-cache it also trims the Go build cache to go.cache_budget_mb by entry
+// needs; with --go-cache it also trims the Go build cache to GO_CACHE_TRIM_MB by entry
 // age, never emptying it.
 namespace reclaimdiskspace;
 
 import "flags";
 import "fs";
 import "os";
+import "proc";
 import "std";
 import "time";
 import "vcs";
@@ -25,6 +26,21 @@ import "serialize";
 import "magus/reclaimdisk" as reclaim;
 
 import "assert";
+
+// A copy of the go spell's GOCACHE trimMb: a script cannot read a spell's sandbox
+// declaration, and only a magusfile can import a spell.
+final GO_CACHE_TRIM_MB = 20480;
+
+// trimGoCache is this repository's choice to reclaim the Go build cache too, where `go env`
+// says it is.
+fun trimGoCache() > str !> any {
+    final res = proc\exec("go", args: ["env", "GOCACHE"], opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+    final dir = res.stdout.trim();
+    if (!res.ok or dir == "" or dir == "off") {
+        throw "reclaim-disk-space: --go-cache needs `go env GOCACHE` to name a directory, and it printed \"{dir}\"";
+    }
+    return reclaim\trimCache("the Go build cache", dir: dir, trimMb: GO_CACHE_TRIM_MB, deadline: 0.0);
+}
 
 final SUMMARY = "free disk by removing finished worktrees and trimming the Go build cache";
 final SERVES = ["rule:worktree-remove -- --go-cache", "event:disk-low -- --go-cache"];
@@ -75,9 +91,9 @@ export fun main(args: [str]) > void !> any {
     final items = if (applied) reclaim\apply(planned, root: s.root, deadline: 0.0) else planned;
     var trimmed = "";
     if (goCache and applied) {
-        trimmed = reclaim\trimGoCache(s.root, deadline: 0.0);
+        trimmed = trimGoCache();
     } else if (goCache) {
-        trimmed = "--apply trims the Go build cache to go.cache_budget_mb by entry age";
+        trimmed = "--apply trims the Go build cache to {GO_CACHE_TRIM_MB} MiB by entry age";
     }
     // -o json prints the plan document alone, so a reader can parse the whole of stdout.
     if (format == "json") {

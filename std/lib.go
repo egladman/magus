@@ -51,7 +51,7 @@ var sourceBuiltin = []SourceModule{
 	{
 		Name:   "reclaimdisk",
 		Path:   "magus/reclaimdisk",
-		Doc:    "Plan and take back the disk a repository's git worktrees, merged agent branches and Go build cache hold: never a dirty, unpushed, leased, busy or locked worktree, and the cache trimmed by entry age, never emptied.",
+		Doc:    "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; trimCache trims a cache directory to a budget by file age, never emptying it.",
 		Source: reclaimDiskSource,
 	},
 }

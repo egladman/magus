@@ -15,9 +15,9 @@
 // Below disk.min_free_mb, or losing space faster than disk.growth_mb_per_hour, it starts
 // ONE reclaim chunk detached, unless one is already running, and returns at once: the
 // chunk is magus/reclaimdisk's, which removes the two removable worktrees untouched
-// longest, the agent branches nothing needs, and trims the Go build cache by entry age, with
-// every subprocess bounded by the chunk's five-minute deadline. It never removes a worktree
-// holding uncommitted files or a commit no remote has, and never empties the cache.
+// longest and the agent branches nothing needs, with every subprocess bounded by the
+// chunk's five-minute deadline. It never removes a worktree holding uncommitted files or a
+// commit no remote has, and trims no toolchain's cache.
 //
 // Contract: prints ONE line, and only when it started a chunk or free space is below
 // disk.critical_free_mb, so an agent puts reclaiming first; otherwise nothing. It always

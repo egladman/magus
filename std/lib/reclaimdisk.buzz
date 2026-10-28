@@ -1,11 +1,10 @@
-/// reclaimdisk plans and takes back the disk a repository's git worktrees, merged agent
-/// branches and the Go build cache hold. It never removes a worktree holding uncommitted
-/// files, a commit no remote or base has, a live job, a working process or a lock, and it
-/// never empties the Go build cache: fs\trimOldest trims it by entry age to
-/// go.cache_budget_mb.
+/// reclaimdisk plans and takes back the disk a repository's git worktrees and merged agent
+/// branches hold. It never removes a worktree holding uncommitted files, a commit no remote
+/// or base has, a live job, a working process or a lock. It knows no toolchain: a spell's
+/// cache is the spell's to trim.
 ///
 /// chunk is what the reclaim hook starts in the background: a few of the oldest removable
-/// worktrees and one cache trim, every subprocess bounded by what is left of its deadline.
+/// worktrees, every subprocess bounded by what is left of its deadline.
 namespace reclaimdisk;
 
 import "std";
@@ -14,7 +13,6 @@ import "os";
 import "proc";
 import "vcs";
 import "magus";
-import "encoding/json";
 import "diskwatch";
 
 import "assert";
@@ -68,7 +66,7 @@ export object Cache {
     kib: int,
 }
 
-/// Item is one row of the plan: a worktree, an agent branch, or the Go build cache. class is
+/// Item is one row of the plan: a worktree or an agent branch. class is
 /// removable, keep or report; kib is -1 when not measured; a held branch's path is the
 /// worktree holding it.
 export object Item {
@@ -365,17 +363,19 @@ fun count(items: [Item], kind: str, result: str) > int {
     return items.filter(fun (i: int, it: Item) > bool => it.kind == kind and it.result == result).len();
 }
 
+/// headline is the plan's one-line summary; trimmed, when not empty, is what a cache trim
+/// the caller ran reported, and follows it.
 export fun headline(items: [Item], applied: bool, trimmed: str) > str {
     final t = totals(items);
-    final go = if (trimmed == "") "" else "; {trimmed}";
+    final tail = if (trimmed == "") "" else "; {trimmed}";
     if (!applied) {
-        return "dry run: nothing removed; --apply removes {plural(t.removableWorktrees, word: "worktree")} ({size(t.removableKiB)}) and {plural(t.branches, word: "agent branch")}{go}";
+        return "dry run: nothing removed; --apply removes {plural(t.removableWorktrees, word: "worktree")} ({size(t.removableKiB)}) and {plural(t.branches, word: "agent branch")}{tail}";
     }
     var kib = 0;
     foreach (it in items) {
         if (it.kind == "worktree" and it.result == "removed" and it.kib > 0) { kib = kib + it.kib; }
     }
-    return "removed {count(items, kind: "worktree", result: "removed")} of {plural(t.removableWorktrees, word: "removable worktree")} ({size(kib)}) and deleted {count(items, kind: "branch", result: "deleted")} of {plural(t.branches, word: "agent branch")}{go}";
+    return "removed {count(items, kind: "worktree", result: "removed")} of {plural(t.removableWorktrees, word: "removable worktree")} ({size(kib)}) and deleted {count(items, kind: "branch", result: "deleted")} of {plural(t.branches, word: "agent branch")}{tail}";
 }
 
 /// timeLeft is the timeoutMs a call made now may take: 0, no bound, when deadline is 0, and
@@ -603,34 +603,23 @@ export fun apply(items: [Item], root: str, deadline: double) > [Item] {
     return done;
 }
 
-/// config is the effective magus config as `magus config view -o json` prints it.
-export fun config(root: str, deadline: double) > any !> any {
-    return json\parse(proc\exec(magusBin(), args: ["config", "view", "-o", "json"], dir: root, opts: proc\ExecOptions{ quiet = true, timeoutMs = bound(deadline) }).stdout);
-}
-
-/// trimGoCache trims the Go build cache to go.cache_budget_mb by entry age through
-/// fs\trimOldest, which never removes an entry used within the last day. It names why it
-/// did nothing: a budget of 0, or no Go toolchain to ask where the cache is.
-export fun trimGoCache(root: str, deadline: double) > str !> any {
-    final budget = std\toInt(config(root, deadline: deadline)["go"]["cache_budget_mb"]);
-    if (budget <= 0) { return "go.cache_budget_mb is 0, so the Go build cache was not trimmed"; }
-    final res = proc\exec("go", args: ["env", "GOCACHE"], opts: proc\ExecOptions{ quiet = true, allowFailure = true, timeoutMs = bound(deadline) }) catch null;
-    if (res == null or !res!.ok or res!.stdout == "" or res!.stdout == "off") {
-        return "no Go toolchain answered `go env GOCACHE`, so no Go build cache was trimmed";
-    }
-    final r = fs\trimOldest(res!.stdout, maxBytes: budget * 1048576, timeoutMs: std\toInt(bound(deadline)));
-    if (r.removedFiles == 0) {
-        final note = if (r.stopped == "") "" else "; {r.stopped}";
-        return "the Go build cache holds {size(std\toInt(r.afterBytes / 1024))}, within its {budget} MB budget{note}";
-    }
+/// trimCache trims the cache named name at dir to trimMb MiB through fs\trimOldest, which
+/// never removes a file modified within the last day, and returns the line headline appends.
+/// A trimMb below 1 raises: a cache declared with no budget is not one to trim.
+export fun trimCache(name: str, dir: str, trimMb: int, deadline: double) > str !> any {
+    if (trimMb < 1) { throw "reclaimdisk\\trimCache: {name} has no trim budget ({trimMb} MiB)"; }
+    final r = fs\trimOldest(dir, maxBytes: trimMb * 1048576, timeoutMs: std\toInt(bound(deadline)));
     final stopped = if (r.stopped == "") "" else "; {r.stopped}";
-    return "trimmed {size(std\toInt(r.removedBytes / 1024))} of Go build cache entries by age, {size(std\toInt(r.afterBytes / 1024))} left{stopped}";
+    if (r.removedFiles == 0) {
+        return "{name} holds {size(std\toInt(r.afterBytes / 1024))}, within its {trimMb} MiB budget{stopped}";
+    }
+    return "trimmed {size(std\toInt(r.removedBytes / 1024))} of {name} by age, {size(std\toInt(r.afterBytes / 1024))} left{stopped}";
 }
 
 /// chunk is one bounded reclaim pass, the one the reclaim hook starts in the background: the
-/// CHUNK_WORKTREES removable worktrees untouched longest, the agent branches they and no
-/// worktree hold, and one Go build cache trim, all done by deadline (Unix millis). It
-/// records what it did in the diskwatch store, and records a failure there too.
+/// CHUNK_WORKTREES removable worktrees untouched longest and the agent branches they and no
+/// worktree hold, all done by deadline (Unix millis). It records what it did in the
+/// diskwatch store, and records a failure there too.
 export fun chunk(deadline: double) > void !> any {
     final store = diskwatch\storePath();
     final root = vcs\root();
@@ -638,7 +627,7 @@ export fun chunk(deadline: double) > void !> any {
     try {
         final s = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
         final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: root, deadline: deadline);
-        detail = headline(done, applied: true, trimmed: trimGoCache(root, deadline: deadline));
+        detail = headline(done, applied: true, trimmed: "");
     } catch (e) {
         detail = "stopped: {e}";
     }
@@ -714,6 +703,15 @@ test "porcelain parses to one worktree per stanza, the main one first" {
 test "the guard judges the same words git receives, or nothing" {
     assert\equal(guardLine("/work/repo", path: "/work/repo/.claude/worktrees/agent-a1"), want: "git -C /work/repo worktree remove /work/repo/.claude/worktrees/agent-a1", message: "plain");
     assert\equal(guardLine("/work/repo", path: "/work/my repo/wt"), want: null, message: "a space");
+}
+
+test "a cache trim refuses a missing budget and leaves a cache within its budget alone" {
+    assert\equal(trimCache("a cache", dir: "/nowhere", trimMb: 0, deadline: 0.0) catch "raised", want: "raised", message: "no budget");
+    final dir = fs\tempDir("trimcache");
+    fs\writeFile(fs\join(dir, name: "entry"), content: "x");
+    assert\equal(trimCache("a cache", dir: dir, trimMb: 1, deadline: 0.0) catch "raised", want: "a cache holds 0 KiB, within its 1 MiB budget", message: "within");
+    assert\isTrue(fs\exists(fs\join(dir, name: "entry")), message: "kept");
+    fs\removeAll(dir);
 }
 
 test "the headline says what ran" {
