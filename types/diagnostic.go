@@ -197,6 +197,19 @@ func WorkspaceDiagnosticCode(prefix, text string) (DiagnosticCode, error) {
 	return c, nil
 }
 
+// IsDiagnosticCode reports whether text is shaped as a code, capitals then four digits,
+// under a prefix this process knows: MGS, or one a catalog or the workspace registered.
+// A pattern routes as a code only when its prefix is declared, so ACME1001 in a workspace
+// that never declared ACME stays text.
+func IsDiagnosticCode(text string) bool {
+	p := diagnostics.Prefix(DiagnosticCode(text))
+	digits := text[len(p):]
+	if len(p) < 2 || len(digits) != 4 || strings.Trim(digits, "0123456789") != "" {
+		return false
+	}
+	return OriginOf(DiagnosticCode(text)) != DiagnosticOriginUnknown
+}
+
 // DiagnosticCodeRef is a code as it crosses into Buzz: the magus\DiagnosticCode object that
 // magus\diagnosticCode mints and magus\raise takes, so a typo is a type error rather than a
 // string that renders like a real code.

@@ -185,7 +185,6 @@ var recoveryForms = []string{
 	"go generate ./internal/spell/...",
 	"go generate ./std/... ./internal/langservice",
 	"GOEXPERIMENT=jsonv2 go generate ./internal/handler/mcp",
-	"go run ./cmd/magus-utils jobschema -out internal/job/gen",
 }
 
 // A checkout that cannot load its own sources gets the relink and the generators, with or

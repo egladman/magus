@@ -136,19 +136,10 @@ func (g goCall) linksMagus() bool {
 	return slices.ContainsFunc(g.args[1:], func(a string) bool { return path.Clean(a) == "cmd/magus" })
 }
 
-// magusUtilsGenerators are the cmd/magus-utils subcommands that write generated source, the
-// ones the *_generate targets and the go:generate directives they drive run. The rest
-// (cut, release-index, diffdemo) are release and demo tools, not part of regenerating a
-// tree.
-var magusUtilsGenerators = []string{
-	"api", "bindings", "boundarylist", "boundaryobjects", "cliflags", "completions", "config",
-	"jobschema", "mcptools", "moduledecls", "moduleset", "types",
-}
-
 // recoversMagus reports a command that rebuilds a checkout whose committed generated files
 // or binary lag its sources: the relink MGS1021 prints, `go build [-trimpath] -o magus
-// ./cmd/magus`, a `go generate` of packages inside the checkout, or `go run [-trimpath]
-// ./cmd/magus-utils` with one of magusUtilsGenerators.
+// ./cmd/magus`, or a `go generate` of packages inside the checkout. A generator is reached
+// through the go:generate lines that drive it, never by naming a module's own tool.
 func (g goCall) recoversMagus() bool {
 	if len(g.args) == 0 {
 		return false
@@ -171,9 +162,6 @@ func (g goCall) recoversMagus() bool {
 			}
 		}
 		return true
-	case "run":
-		args = trimpathOptional(args)
-		return len(args) >= 2 && path.Clean(args[0]) == "cmd/magus-utils" && slices.Contains(magusUtilsGenerators, args[1])
 	}
 	return false
 }

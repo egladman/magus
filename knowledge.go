@@ -595,7 +595,8 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 	if needs(knowledge.ClassDomain) {
 		cfg := src.cfg
 		in.Modules = allModuleEntries()
-		in.Diagnostics = types.AllDiagnosticCodes()
+		in.Diagnostics = append(types.AllDiagnosticCodes(), workspaceDiagnosticCodes(src.root, cfg.Diagnostics)...)
+		in.DiagnosticDocs = cfg.Diagnostics.Resolver()
 		in.Packages = loadKnowledgePackages(ctx, src.projects, src.log)
 		in.VCSAuthorship = cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship
 		in.DeclaredSpells = declaredSpellSet(src.projects)
@@ -621,6 +622,30 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 		in.AgentContacts = loadKnowledgeAgentContacts(src.root)
 	}
 	return in
+}
+
+// workspaceDiagnosticCodes are the codes the pages diagnostics.docs names inside the
+// workspace document, sorted, none when docs is a URL or names no page. A page that is not a
+// code under the prefix is doctor's to report, not a node.
+func workspaceDiagnosticCodes(root string, d config.Diagnostics) []types.DiagnosticCode {
+	if root == "" || d.Prefix == "" || d.Docs == "" || strings.Contains(d.Docs, "://") {
+		return nil
+	}
+	pattern := filepath.Join(root, filepath.FromSlash(strings.ReplaceAll(d.Docs, "{code}", "*")))
+	pages, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil
+	}
+	before, after, _ := strings.Cut(filepath.Base(pattern), "*")
+	var codes []types.DiagnosticCode
+	for _, page := range pages {
+		text := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(page), before), after)
+		if c, err := types.WorkspaceDiagnosticCode(d.Prefix, text); err == nil {
+			codes = append(codes, c)
+		}
+	}
+	slices.Sort(codes)
+	return codes
 }
 
 // symbolSourcesOutside lists the defining files the symbols read that the tree walk did

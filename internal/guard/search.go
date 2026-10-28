@@ -1026,7 +1026,7 @@ func classifyAlternative(raw string, mode regexMode, word bool) searchAlt {
 	if mode == regexFixed {
 		norm = strings.TrimSpace(raw)
 	}
-	if diagnosticCodeRe.MatchString(norm) {
+	if types.IsDiagnosticCode(norm) {
 		a.kind, a.ident, a.how = altDiagnostic, norm, "a diagnostic code"
 		return a
 	}
@@ -1397,10 +1397,6 @@ func noGraphVerdict(ident string) ShellVerdict {
 // shape rather than precedentIdentRe's.
 var definitionLookupRe = regexp.MustCompile(`^(?:func|type) (?:\\?\([^()]*\\?\) ?)?([A-Za-z_][A-Za-z0-9_]*)$`)
 
-// diagnosticCodeRe matches a diagnostic code. A BZZ code is recognized so it is never
-// mistaken for a symbol, and never provable: the graph carries no node for one.
-var diagnosticCodeRe = regexp.MustCompile(`^(?:MGS|BZZ)[0-9]{4}$`)
-
 // graphDiagnostics are the codes of the graph's diagnostic nodes, definitive on graphIDs'
 // terms. They come from the graph and not this binary's catalog: the two differ once the
 // checkout moves past the build the graph describes, as it does mid-rebase.
@@ -1419,7 +1415,7 @@ func graphDiagnostics(deps Dependencies) ([]string, bool) {
 }
 
 func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
-	if diagnosticCodeRe.MatchString(alt) {
+	if types.IsDiagnosticCode(alt) {
 		if codes, ok := graphDiagnostics(deps); !ok || !slices.Contains(codes, alt) {
 			return searchRoute{}, false
 		}

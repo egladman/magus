@@ -31,7 +31,9 @@ type Inputs struct {
 	Graph       types.TargetGraphOutput // TargetGraph(): projects, targets, deps, charms, spell ops
 	Spells      []types.Spell           // ListSpells(): spell + op nodes
 	Modules     []types.ModuleEntry     // host modules, each with Methods populated
-	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes()
+	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes(), then the workspace's own
+	// DiagnosticDocs resolves each code's url attr, the workspace's codes included.
+	DiagnosticDocs types.DiagnosticDocs
 	// Layers is every project's magus.project "layers", joined by unionLayers; Build fills it.
 	Layers map[string]string
 	// Root is the absolute workspace root, used by the docs and buzz-source
@@ -617,11 +619,15 @@ func assembleRegistry(in Inputs) Shard {
 	}
 
 	for _, code := range in.Diagnostics {
+		attrs := map[string]string{"url": in.DiagnosticDocs.URL(code)}
+		if types.OriginOf(code) == types.DiagnosticOriginWorkspace {
+			attrs["origin"] = string(types.DiagnosticOriginWorkspace)
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:    diagnosticID(string(code)),
 			Kind:  types.KindDiagnostic,
 			Label: string(code),
-			Attrs: map[string]string{"url": types.CodeURL(code)},
+			Attrs: attrs,
 		})
 	}
 
