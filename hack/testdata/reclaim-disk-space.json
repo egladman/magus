@@ -18,7 +18,7 @@
     {"path": "/work/repo/.claude/worktrees/gone", "branch": "worktree-agent-gone", "dirty": -1, "unique": 0, "locked": "", "idle_minutes": 0, "want": "keep"}
   ],
   "jobs": [
-    {"id": "prune-worktrees", "state": "running", "checkout_root": "/work/repo/.claude/worktrees/leased"},
+    {"id": "reclaim-disk-space", "state": "running", "checkout_root": "/work/repo/.claude/worktrees/leased"},
     {"id": "old-fix", "state": "pass", "checkout_root": "/work/repo/.claude/worktrees/finished-job"},
     {"id": "many-job", "state": "declared", "checkout_root": "/work/repo/.claude/worktrees/many"},
     {"id": "unbound", "state": "running", "checkout_root": ""}
