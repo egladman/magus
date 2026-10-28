@@ -2374,10 +2374,10 @@ holding the event's `cwd`.
 
 Below `disk.min_free_mb`, or losing space faster than `disk.growth_mb_per_hour`, it starts
 one reclaim chunk detached and returns. The chunk removes the two removable worktrees
-untouched longest, deletes the agent branches nothing needs, and trims the Go build cache to
-`go.cache_budget_mb` by entry age, with every subprocess bounded by a five-minute deadline.
-It never removes a worktree holding uncommitted files, a commit no remote has, a live job,
-a working process or a lock, and it never empties the cache. `magus doctor` shows the
+untouched longest and deletes the agent branches nothing needs, with every subprocess
+bounded by a five-minute deadline. It never removes a worktree holding uncommitted files, a
+commit no remote has, a live job, a working process or a lock, and it trims no toolchain's
+cache. `magus doctor` shows the
 trend and the last chunks.
 
 It prints one line, and only when it started a chunk or free space is below
@@ -2403,9 +2403,9 @@ judges no call.
 // Below disk.min_free_mb, or losing space faster than disk.growth_mb_per_hour, it starts
 // ONE reclaim chunk detached, unless one is already running, and returns at once: the
 // chunk is magus/reclaimdisk's, which removes the two removable worktrees untouched
-// longest, the agent branches nothing needs, and trims the Go build cache by entry age, with
-// every subprocess bounded by the chunk's five-minute deadline. It never removes a worktree
-// holding uncommitted files or a commit no remote has, and never empties the cache.
+// longest and the agent branches nothing needs, with every subprocess bounded by the
+// chunk's five-minute deadline. It never removes a worktree holding uncommitted files or a
+// commit no remote has, and trims no toolchain's cache.
 //
 // Contract: prints ONE line, and only when it started a chunk or free space is below
 // disk.critical_free_mb, so an agent puts reclaiming first; otherwise nothing. It always
