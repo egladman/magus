@@ -17,6 +17,12 @@ var lcovSource string
 //go:embed lib/modeltiers.buzz
 var modelTiersSource string
 
+//go:embed lib/diskwatch.buzz
+var diskWatchSource string
+
+//go:embed lib/reclaimdisk.buzz
+var reclaimDiskSource string
+
 var sourceBuiltin = []SourceModule{
 	{
 		Name:   "lcov",
@@ -34,5 +40,18 @@ var sourceBuiltin = []SourceModule{
 		Path:   "magus/modeltiers",
 		Doc:    "The default model-tier declaration: the ModelTier enum, cheapest first, its default, and the bounds and skill variant of each tier.",
 		Source: modelTiersSource,
+	},
+	{
+		// No magus/ path: the reclaim hook imports it, and a hook may import nothing under
+		// magus/, since that namespace is where the workspace readers live.
+		Name:   "diskwatch",
+		Doc:    "The reclaim hook's cheap half: sample free disk space into a per-user store at most once per disk.sample_every, and decide from the last two samples whether to start a reclaim chunk.",
+		Source: diskWatchSource,
+	},
+	{
+		Name:   "reclaimdisk",
+		Path:   "magus/reclaimdisk",
+		Doc:    "Plan and take back the disk a repository's git worktrees, merged agent branches and Go build cache hold: never a dirty, unpushed, leased, busy or locked worktree, and the cache trimmed by entry age, never emptied.",
+		Source: reclaimDiskSource,
 	},
 }

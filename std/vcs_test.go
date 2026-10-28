@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -496,4 +498,22 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"GIT_INDEX_FILE=/from/the/process", "GIT_DIR=/from/with_env"}, gitEnv,
 		"the gate reads the environment the child starts with: the process's, then os\\with_env's")
+}
+
+// A hung `git worktree remove` is what the reclaim chunk's deadline has to cut off: a fake
+// git that sleeps stands in for it.
+func TestVcsCmdTimeoutCutsOffAHungBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake git is a shell script")
+	}
+	root := testkit.NewRepository(t, nil).Root()
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	start := time.Now()
+	_, err := VCSCommand(WithCurrentWorkingDirectory(t.Context(), root), []string{"worktree", "remove", "wt"},
+		types.VCSCommandOptions{Quiet: true, AllowFailure: true, TimeoutMs: 300})
+	require.ErrorContains(t, err, "killed after its 300ms timeoutMs")
+	assert.Less(t, time.Since(start), 10*time.Second, "the hung git was killed, not waited out")
 }
