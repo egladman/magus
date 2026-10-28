@@ -1,9 +1,11 @@
 package job
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -1405,4 +1408,104 @@ func TestStoreWritesAStoreANewerCommitStamped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "B", rows[0].ID)
+}
+
+// migratingStore is a Store over a planted file, with migrations and its notices kept.
+func (s *jobSuite) migratingStore(body string, migrations ...migrate.Migration) (*Store, string, *bytes.Buffer) {
+	st := tempStore(s.T(), s.T().TempDir())
+	notices := &bytes.Buffer{}
+	st.notices, st.migrations = notices, migrations
+	return st, plantRaw(s.T(), st, body), notices
+}
+
+// renamed is a migration that renames one member of every row carrying it.
+func renamed(from, to string) migrate.Migration {
+	return migrate.Migration{Name: from + " to " + to, Up: func(e migrate.Entry) (migrate.Entry, error) {
+		if v, ok := e[from]; ok {
+			delete(e, from)
+			e[to] = v
+		}
+		return e, nil
+	}}
+}
+
+func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
+	st, path, notices := s.migratingStore(`{"schema_version":13}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`,
+		renamed("goal", "criteria"))
+	notice := "job: migrated job store " + path + " from 0 to 1 (1 entries)\n"
+
+	f, err := st.read()
+	s.Require().NoError(err)
+	s.Require().Len(f.Jobs, 1)
+	s.Equal("ship it", f.Jobs[0].Criteria, "the row reads under the name the migration gave it")
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0, "the header records the migration")
+	s.Equal(notice, notices.String())
+
+	_, err = st.read()
+	s.Require().NoError(err)
+	s.Equal(notice, notices.String(), "a second read migrates nothing")
+}
+
+func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
+	st, path, _ := s.migratingStore(`{"schema_version":13,"migration":1}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"aim":"ship it"}`,
+		renamed("goal", "aim"), renamed("aim", "intent"), renamed("intent", "criteria"))
+
+	_, err := st.Update(s.T().Context(), "a", func(u *types.Job) { u.Model = "standard" })
+	s.Require().NoError(err)
+	row := storedRow(s.T(), path, "a")
+	s.Equal("ship it", row["criteria"], "migrations 2 and 3 ran, in order, before the write")
+	s.Equal("standard", row["model"])
+	s.InDelta(3, storedLines(s.T(), path)[0]["migration"], 0)
+}
+
+func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
+	body := `{"schema_version":13,"migration":1}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
+	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
+		return nil, errors.New("ran")
+	}})
+
+	_, err := st.read()
+	s.Require().NoError(err)
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(body+"\n", string(raw))
+	s.Empty(notices.String())
+}
+
+func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
+	body := `{"schema_version":13,"migration":3}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
+	st, path, _ := s.migratingStore(body, renamed("goal", "criteria"))
+
+	_, err := st.read()
+	s.Require().ErrorIs(err, types.JobStoreWriterOlder)
+	s.ErrorContains(err, "job store "+path+" is at migration 3, newer than this magus knows (1): update magus")
+	_, err = st.Update(s.T().Context(), "b", func(cur *types.Job) { *cur = lease("b") })
+	s.Require().ErrorIs(err, types.JobStoreWriterOlder, "a write refuses it too")
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(body+"\n", string(raw))
+}
+
+func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
+	body := `{"schema_version":13}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`
+	st, path, notices := s.migratingStore(body, renamed("goal", "criteria"), migrate.Migration{Name: "fail", Up: func(migrate.Entry) (migrate.Entry, error) {
+		return nil, errors.New("disk on fire")
+	}})
+
+	_, err := st.read()
+	s.Require().ErrorContains(err, "migration 2 (fail): disk on fire")
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(body+"\n", string(raw), "the first migration's work never reached the file")
+	s.Empty(notices.String())
+}
+
+func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
+	st := tempStore(s.T(), s.T().TempDir())
+	st.migrations = []migrate.Migration{renamed("goal", "criteria"), renamed("aim", "criteria")}
+	seed(s.T(), st, lease("a"))
+
+	path, err := st.Path()
+	s.Require().NoError(err)
+	s.InDelta(2, storedLines(s.T(), path)[0]["migration"], 0, "a new store needs no migration")
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -128,7 +129,14 @@ type storeConfig struct {
 	// workspace is what validation reads the record against (see [Store.InWorkspace]);
 	// nil names those checks unchecked.
 	workspace *Workspace
+	// migrations is [jobMigrations] outside a test.
+	migrations []migrate.Migration
 }
+
+// jobMigrations take a jobs.jsonl from each migration to the next, in order; see
+// [Store.migrate]. A migration rewrites stored rows once, so a change to a stored member's
+// name lands here and no reader keeps the old name.
+var jobMigrations []migrate.Migration
 
 // Location is where a Store lives: the repository whose rows these are, the state base
 // that places the file, and the checkout's cache directory.
@@ -215,7 +223,8 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}}
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext,
+		migrations: jobMigrations}}
 	s.path, s.err = jobsPath(loc)
 	return s
 }
@@ -298,6 +307,10 @@ func (s *Store) Path() (string, error) { return s.path, s.err }
 // break no row-level requirement can express, and a reader lacking one refuses the file.
 type jobsFile struct {
 	types.Schema
+	// Migration is how many of [jobMigrations] the rows have been through; see
+	// [Store.migrate]. Unlike Schema.Version it never runs ahead of the reader: a file past
+	// this build's migrations is refused.
+	Migration int `json:"migration,omitzero"`
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
 	Retained int64       `json:"retained,omitempty"`
 	Jobs     []types.Job `json:"-"`
@@ -977,6 +990,7 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 // wiped in one second is one mistake being repeated, and the rows worth keeping are the
 // ones there now.
 func (s *Store) archive(f jobsFile) error {
+	f.Migration = len(s.migrations)
 	lines, err := encodeJobs(f)
 	if err != nil {
 		return err
@@ -1178,6 +1192,7 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 // appended lines would make it [file.CompactDue].
 func (s *Store) write(f jobsFile, log jobsLog) error {
 	f.Version = max(f.Version, types.JobSchemaVersion)
+	f.Migration = len(s.migrations)
 	lines, err := encodeJobs(f)
 	if err != nil {
 		return err
@@ -1259,7 +1274,60 @@ func (s *Store) read() (jobsFile, error) {
 // ride in the row's Schema.Unknown and go back out on the next write, and authorizeRow and
 // jobOverlaps need only fields every version carries. A row requiring a feature this magus
 // lacks is read too, and only a write to it is refused (see readOnly).
+//
+// A file behind [jobMigrations] is migrated first, once, under the lock (see
+// [Store.migrate]); without wait the caller already holds it.
 func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
+	f, log, err := s.parse(wait)
+	if err != nil || f.Migration == len(s.migrations) || log.lines == 0 {
+		return f, log, err
+	}
+	if err := s.migrate(f.Migration, !wait); err != nil {
+		return jobsFile{}, jobsLog{}, err
+	}
+	return s.parse(wait)
+}
+
+// migrate brings the file at migration found to the last of s.migrations, taking the lock
+// unless held. A file past them is refused with MGS3051 before anything is locked.
+func (s *Store) migrate(found int, held bool) error {
+	st := migrate.Store{
+		Name:       "job store",
+		Path:       s.path,
+		Header:     func(e migrate.Entry) bool { _, ok := e["id"]; return !ok },
+		Migrations: s.migrations,
+	}
+	refuse := func(err error) error {
+		if newer, ok := errors.AsType[*migrate.NewerError](err); ok {
+			return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s", newer.Error())
+		}
+		return err
+	}
+	if err := st.Check(found); err != nil {
+		return refuse(err)
+	}
+	apply := func() error {
+		res, err := st.Apply()
+		if err != nil {
+			return refuse(err)
+		}
+		if res.Migrated() {
+			out := s.notices
+			if out == nil {
+				out = os.Stderr
+			}
+			fmt.Fprintf(out, "job: %s\n", res)
+		}
+		return nil
+	}
+	if held {
+		return apply()
+	}
+	return s.locked(context.Background(), apply)
+}
+
+// parse reads the file as it stands; see [Store.readFile].
+func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 	if s.err != nil {
 		return jobsFile{}, jobsLog{}, s.err
 	}
@@ -1294,7 +1362,7 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 			if err := json.Unmarshal(line.Text, &header); err != nil {
 				return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s:%d: %w", s.path, line.N, err)
 			}
-			f.Schema, f.Retained, log.header = header.Schema, header.Retained, line.Text
+			f.Schema, f.Migration, f.Retained, log.header = header.Schema, header.Migration, header.Retained, line.Text
 			continue
 		}
 		log.rows[row.ID] = line.Text
