@@ -1,5 +1,6 @@
 import "magus/spell";
 import "magus/charm";
+import "path";
 
 export fun mgs_getName() > str { return "go"; }
 
@@ -342,5 +343,364 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-mod-json": goModJSON,
         "go-vet": goVet,
         "govulncheck": goVulncheck,
+    };
+}
+
+// discover_projects claims one project per Go module: go.work's use list when the root
+// holds one, else every go.mod outside the dirs ./... skips. It reads no .go content,
+// so whatever only content shows (build tags, go:generate) is reported per module.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    final mods = mut {<str: DiscoveryFile>};
+    final goDirs = mut {<str: str>};
+    final cgoFiles = mut {<str: str>};
+    final orphanGaps = mut [<DiscoveryGap>];
+    var work: DiscoveryFile? = null;
+    foreach (file in req.files) {
+        final base = goBase(file.path);
+        final dir = goDir(file.path);
+        if (base == "go.mod") {
+            mods[dir] = file;
+        } else if (base == "go.work" and dir == ".") {
+            work = file;
+        } else if (base == "go.work") {
+            orphanGaps.append(DiscoveryGap{file = file.path, why = "go.work below the root: only the root's use list is read"});
+        } else if (base.endsWith(".go")) {
+            goDirs[dir] = goDirs[dir] ?? file.path;
+        } else if ((base.endsWith(".c") or base.endsWith(".S")) and cgoFiles[dir] == null) {
+            cgoFiles[dir] = file.path;
+        }
+    }
+
+    final selected = mut [<str>];
+    var workspaceMode = false;
+    if (work -> found) {
+        if (found.content -> content) {
+            workspaceMode = true;
+            foreach (use in goDirectives(content).filter(fun (i: int, d: GoDirective) > bool => d.verb == "use")) {
+                final dir = path\clean(use.args[0]);
+                if (dir == ".." or dir.startsWith("../") or path\isAbs(dir)) {
+                    orphanGaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} leaves the workspace root"});
+                } else if (mods[dir] == null) {
+                    orphanGaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} names a dir with no go.mod"});
+                } else if (selected.indexOf(dir) == null) {
+                    selected.append(dir);
+                }
+            }
+        } else {
+            orphanGaps.append(DiscoveryGap{file = "go.work", why = "content not passed, so every go.mod is read instead of its use list"});
+        }
+    }
+    foreach (dir in goSortedKeys(mods)) {
+        final skipped = goSkippedSegment(dir);
+        if (workspaceMode) {
+            if (selected.indexOf(dir) == null) {
+                orphanGaps.append(DiscoveryGap{file = mods[dir]!.path, why = "not in go.work's use list, so workspace mode ignores it"});
+            }
+        } else if (skipped -> segment) {
+            orphanGaps.append(DiscoveryGap{file = mods[dir]!.path, why = "under {segment}, which ./... skips, so it forms no project"});
+        } else {
+            selected.append(dir);
+        }
+    }
+    selected.sort(fun (a: str, b: str) > bool => a < b);
+
+    final parsed = mut {<str: GoModule>};
+    final dirByModule = mut {<str: str>};
+    foreach (dir in selected) {
+        final module = goModule(mods[dir]!);
+        parsed[dir] = module;
+        if (module.path != "") {
+            dirByModule[module.path] = dir;
+        }
+    }
+    final workReplaces = mut {<str: str>};
+    if (workspaceMode) {
+        foreach (r in goReplaces(goDirectives(work!.content!))) {
+            if (goIsLocal(r.to)) {
+                workReplaces[r.old] = path\clean(r.to);
+            }
+        }
+    }
+
+    final claims = mut [<DiscoveredProject>];
+    foreach (dir in selected) {
+        claims.append(goClaim(dir, module: parsed[dir]!, modDirs: goSortedKeys(mods), selected: selected,
+            dirByModule: dirByModule, workReplaces: workReplaces, workspaceMode: workspaceMode,
+            goDirs: goDirs, cgoFiles: cgoFiles));
+    }
+
+    if (goDirs.len() > 0 and mods.len() == 0) {
+        orphanGaps.append(DiscoveryGap{file = goDirs[goSortedKeys(goDirs)[0]]!, why = "Go sources with no go.mod: GOPATH mode forms no project"});
+    }
+    if (orphanGaps.len() == 0) {
+        return claims;
+    }
+    // The contract carries a gap only on a claim, so a gap no module owns rides a
+    // member claim at the root rather than going unreported.
+    if (claims.len() == 0) {
+        return [DiscoveredProject{path = ".", role = DiscoveryRole.member, notInferred = orphanGaps}];
+    }
+    final owned = mut [<DiscoveredProject>];
+    foreach (claim in claims) {
+        final gaps = claim.notInferred.cloneMutable();
+        foreach (gap in orphanGaps) {
+            if (goOwner(gap.file, dirs: selected) == claim.path) {
+                gaps.append(gap);
+            }
+        }
+        owned.append(DiscoveredProject{path = claim.path, role = claim.role, name = claim.name,
+            dependsOn = claim.dependsOn, targets = claim.targets, spans = claim.spans, notInferred = gaps});
+    }
+    return owned;
+}
+
+object GoDirective {
+    verb: str,
+    args: [str],
+}
+
+object GoReplace {
+    old: str,
+    to: str,
+}
+
+object GoModule {
+    file: str,
+    path: str,
+    requires: [str],
+    replaces: [GoReplace],
+    ignores: [str],
+    readable: bool,
+}
+
+fun goBase(file: str) > str {
+    final parts = file.split("/");
+    return parts[parts.len() - 1];
+}
+
+fun goDir(file: str) > str {
+    final parts = file.split("/");
+    if (parts.len() == 1) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+fun goWithin(dir: str, file: str) > bool {
+    return dir == "." or file == dir or file.startsWith(dir + "/");
+}
+
+// goOwner is the longest dir containing file, or the first dir when none does.
+fun goOwner(file: str, dirs: [str]) > str {
+    var best = "";
+    foreach (dir in dirs) {
+        if (goWithin(dir, file: file) and (best == "" or dir.len() > best.len())) {
+            best = dir;
+        }
+    }
+    if (best == "" and dirs.len() > 0) {
+        return dirs[0];
+    }
+    return best;
+}
+
+fun goSortedKeys(values: {str: any}) > [str] {
+    final keys = values.keys().cloneMutable();
+    keys.sort(fun (a: str, b: str) > bool => a < b);
+    return keys;
+}
+
+// goSkippedSegment names the first segment ./... refuses to descend into: testdata,
+// or a name starting with . or _. vendor is pruned by core through mgs_listIgnoreDirs.
+fun goSkippedSegment(rel: str) > str? {
+    if (rel == ".") {
+        return null;
+    }
+    foreach (segment in rel.split("/")) {
+        if (segment == "testdata" or segment == "vendor" or segment.startsWith(".") or segment.startsWith("_")) {
+            return segment;
+        }
+    }
+    return null;
+}
+
+fun goIsLocal(replacement: str) > bool {
+    return replacement == "." or replacement == ".." or replacement.startsWith("./") or replacement.startsWith("../") or replacement.startsWith("/");
+}
+
+fun goUnquote(token: str) > str {
+    if (token.len() >= 2 and ((token.startsWith("\"") and token.endsWith("\"")) or (token.startsWith("`") and token.endsWith("`")))) {
+        return token.sub(1, len: token.len() - 2);
+    }
+    return token;
+}
+
+// goDirectives reads go.mod and go.work syntax: one directive per line, or a verb
+// followed by a parenthesized block of argument lines.
+fun goDirectives(content: str) > [GoDirective] {
+    final directives = mut [<GoDirective>];
+    var block = "";
+    foreach (raw in content.split("\n")) {
+        var line = raw;
+        if (line.indexOf("//") -> at) {
+            line = line.sub(0, len: at);
+        }
+        final tokens = line.replace("\t", with: " ").replace("\r", with: " ").split(" ")
+            .filter(fun (i: int, t: str) > bool => t != "")
+            .map(fun (i: int, t: str) > str => goUnquote(t));
+        if (tokens.len() == 0) {
+            continue;
+        }
+        if (block != "") {
+            if (tokens[0] == ")") {
+                block = "";
+            } else {
+                directives.append(GoDirective{verb = block, args = tokens});
+            }
+        } else if (tokens.len() == 2 and tokens[1] == "(") {
+            block = tokens[0];
+        } else if (tokens.len() > 1) {
+            directives.append(GoDirective{verb = tokens[0], args = tokens.sub(1, len: tokens.len() - 1)});
+        }
+    }
+    return directives;
+}
+
+fun goReplaces(directives: [GoDirective]) > [GoReplace] {
+    final replaces = mut [<GoReplace>];
+    foreach (d in directives) {
+        if (d.verb == "replace") {
+            if (d.args.indexOf("=>") -> arrow) {
+                if (arrow > 0 and arrow + 1 < d.args.len()) {
+                    replaces.append(GoReplace{old = d.args[0], to = d.args[arrow + 1]});
+                }
+            }
+        }
+    }
+    return replaces;
+}
+
+fun goModule(file: DiscoveryFile) > GoModule {
+    if (file.content -> content) {
+        final directives = goDirectives(content);
+        var name = "";
+        final requires = mut [<str>];
+        final ignores = mut [<str>];
+        foreach (d in directives) {
+            if (d.verb == "module") {
+                name = d.args[0];
+            } else if (d.verb == "require") {
+                requires.append(d.args[0]);
+            } else if (d.verb == "ignore") {
+                ignores.append(d.args[0]);
+            }
+        }
+        return GoModule{file = file.path, path = name, requires = requires, replaces = goReplaces(directives), ignores = ignores, readable = true};
+    }
+    return GoModule{file = file.path, path = "", requires = [<str>], replaces = [<GoReplace>], ignores = [<str>], readable = false};
+}
+
+// goModuleOwner is the go.mod dir whose ./... compiles file: the longest containing one,
+// since a nested go.mod ends its parent's ./... whether or not it forms a project.
+fun goModuleOwner(file: str, modDirs: [str]) > str? {
+    var best: str? = null;
+    foreach (dir in modDirs) {
+        if (goWithin(dir, file: file) and (best == null or dir.len() > best!.len())) {
+            best = dir;
+        }
+    }
+    return best;
+}
+
+fun goRelative(dir: str, file: str) > str {
+    if (dir == ".") {
+        return file;
+    }
+    if (file == dir) {
+        return ".";
+    }
+    return file.sub(dir.len() + 1, len: file.len() - dir.len() - 1);
+}
+
+fun goClaim(dir: str, module: GoModule, modDirs: [str], selected: [str], dirByModule: {str: str},
+        workReplaces: {str: str}, workspaceMode: bool, goDirs: {str: str}, cgoFiles: {str: str}) > DiscoveredProject !> any {
+    final gaps = mut [<DiscoveryGap>];
+    final deps = mut [<str>];
+    if (!module.readable) {
+        gaps.append(DiscoveryGap{file = module.file, why = "content not passed, so its name and dependencies are not read"});
+    } else if (module.path == "") {
+        gaps.append(DiscoveryGap{file = module.file, why = "no module directive, so the name derives from the path"});
+    }
+
+    final replaced = mut {<str: bool>};
+    foreach (r in module.replaces) {
+        replaced[r.old] = true;
+        if (!goIsLocal(r.to)) {
+            continue;
+        }
+        if (r.to.startsWith("/")) {
+            gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} is absolute, so it is not a dependency inside the workspace"});
+            continue;
+        }
+        final to = path\clean(if (dir == ".") r.to else "{dir}/{r.to}");
+        if (to == ".." or to.startsWith("../")) {
+            gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} leaves the workspace root"});
+        } else if (selected.indexOf(to) == null) {
+            gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} names {to}, which forms no Go project here"});
+        } else if (to != dir and deps.indexOf(to) == null) {
+            deps.append(to);
+        }
+    }
+    foreach (req in module.requires) {
+        final local = dirByModule[req];
+        if (workspaceMode) {
+            final via = workReplaces[req] ?? local;
+            if (via -> upstream) {
+                if (upstream != dir and selected.indexOf(upstream) != null and deps.indexOf(upstream) == null) {
+                    deps.append(upstream);
+                }
+            }
+        } else if (local -> upstream) {
+            if (!(replaced[req] ?? false) and upstream != dir) {
+                gaps.append(DiscoveryGap{file = module.file, why = "requires {req}, the module at {upstream}, with no local replace, so go builds the published version and no dependency is drawn"});
+            }
+        }
+    }
+    deps.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (ignored in module.ignores) {
+        gaps.append(DiscoveryGap{file = module.file, why = "ignore {ignored}: ./... skips it, and spans do not apply it"});
+    }
+
+    final spans = mut [<str>];
+    foreach (goDir in goSortedKeys(goDirs)) {
+        if (goDir != dir and goModuleOwner(goDir, modDirs: modDirs) == dir and goSkippedSegment(goRelative(dir, file: goDir)) == null) {
+            spans.append(goDir);
+        }
+    }
+    foreach (cgoDir in goSortedKeys(cgoFiles)) {
+        if (goModuleOwner(cgoDir, modDirs: modDirs) == dir and goSkippedSegment(goRelative(dir, file: cgoDir)) == null) {
+            gaps.append(DiscoveryGap{file = cgoFiles[cgoDir]!, why = "C or .S sources need cgo: a C toolchain and CGO_ENABLED=1 are not checked"});
+        }
+    }
+
+    final targets = mut {"test": ["go-test"], "lint": ["go-vet"]};
+    if (goDirs[dir] != null) {
+        targets["build"] = ["go-build"];
+    } else {
+        gaps.append(DiscoveryGap{file = module.file, why = "build not wired: go-build builds the module dir's own package, and it holds no .go file"});
+    }
+    gaps.append(DiscoveryGap{file = module.file, why = "build tags, -race and GOFLAGS are not inferred: .go content is not read, so go-test runs with none"});
+    gaps.append(DiscoveryGap{file = module.file, why = "tests needing a service, docker or network are not inferred: go-test runs every package"});
+    gaps.append(DiscoveryGap{file = module.file, why = "go:generate drift is not checked: no generate target is wired, so committed output is trusted"});
+    gaps.append(DiscoveryGap{file = module.file, why = "lint runs go-vet only: a golangci-lint config is outside this spell's globs"});
+
+    return DiscoveredProject{
+        path = dir,
+        role = DiscoveryRole.project,
+        name = module.path,
+        dependsOn = deps,
+        targets = targets,
+        spans = spans,
+        notInferred = gaps,
     };
 }
