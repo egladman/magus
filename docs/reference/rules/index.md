@@ -44,7 +44,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [exit-status-echo](exit-status-echo.md)               | a line ending by printing an exit status, which the harness already reports                        |
 | [filter-without-input](filter-without-input.md)       | a filter or interpreter with no file, script, pipe or redirect, which reads a stdin nothing feeds  |
 | [focus-read](focus-read.md)                           | a read outside the paths a focus lease was given                                                   |
-| [gate-repeat](gate-repeat.md)                         | the gate run a third time over a tree its last green verdict already covers                        |
+| [gate-repeat](gate-repeat.md)                         | the gate run again over a tree its last verdict already covers, red or green                       |
 | [generated-write](generated-write.md)                 | a hand edit to a declared output, which the next run overwrites                                    |
 | [grant-is-a-persons](grant-is-a-persons.md)           | an agent running `magus job grant`, in any spelling and any role                                   |
 | [graph-pipe](graph-pipe.md)                           | a read-only graph verb piped into a text filter, when magus projects the record itself             |
