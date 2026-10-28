@@ -551,3 +551,14 @@ func TestCacheDirsLocateEachCacheAsItsGrantDoes(t *testing.T) {
 	assert.Equal(t, map[string]string{"GOMODCACHE": filepath.Join(home, "go", "pkg", "mod")},
 		CacheDirs(sb, []string{"GOCACHE=off"}, home), "GOCACHE=off locates nothing")
 }
+
+// A negative trim size names no size to trim back to; zero leaves the cache alone.
+func TestCheckDeclarationRefusesANegativeTrim(t *testing.T) {
+	sb := spells.Sandbox{
+		Allow:  []spells.SandboxAllow{{Env: "GOCACHE", Mode: spells.SandboxAccessRW}},
+		Caches: []spells.SandboxCache{{Env: "GOCACHE", TrimMB: -1}},
+	}
+	assert.ErrorContains(t, CheckDeclaration(sb), "caches[0]: trimMb is -1")
+	sb.Caches[0].TrimMB = 0
+	assert.NoError(t, CheckDeclaration(sb))
+}
