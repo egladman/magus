@@ -7,7 +7,7 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 export enum<str> DiagnosticOrigin {
-    none = "",
+    unknown = "",
     builtin = "builtin",
     workspace = "workspace",
 }
@@ -453,7 +453,7 @@ export object DriftResult {
 
 export object DiagnosticCode {
     code: str = "",
-    origin: DiagnosticOrigin = DiagnosticOrigin.none,
+    origin: DiagnosticOrigin = DiagnosticOrigin.unknown,
 }
 
 export object DiffOptions {

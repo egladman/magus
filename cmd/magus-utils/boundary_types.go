@@ -488,7 +488,7 @@ var boundaryEnums = []boundaryEnum{
 	{
 		Name:  "DiagnosticOrigin",
 		Type:  reflect.TypeFor[types.DiagnosticOrigin](),
-		Cases: []enumCase{{"none", ""}, {"builtin", "builtin"}, {"workspace", "workspace"}},
+		Cases: []enumCase{{"unknown", ""}, {"builtin", "builtin"}, {"workspace", "workspace"}},
 	},
 	{
 		Name:  "SignAlgorithm",
