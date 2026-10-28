@@ -235,8 +235,23 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// must not actually fail, so it traces the code and message and returns; the point
 	// of the probe is which branch a target would take, not that it aborts there.
 	m.MapSet("raise", function("magus.raise", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		tr.addOp("raise", stringArg(args, 0), stringArg(args, 1))
+		code := ""
+		if len(args) > 0 {
+			if v, ok := args[0].MapGet("code"); ok && v.IsString() {
+				code = v.AsString()
+			}
+		}
+		tr.addOp("raise", code, stringArg(args, 1))
 		return vm.Null, nil
+	}))
+
+	// magus.diagnosticCode(text) mints the object raise takes. A dry run reads no
+	// magus.yaml, so it checks no prefix and hands the text back as a workspace code.
+	m.MapSet("diagnosticCode", function("magus.diagnosticCode", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		code := vm.NewMap()
+		code.MapSet("code", vm.StringValue(stringArg(args, 0)))
+		code.MapSet("origin", vm.StringValue("workspace"))
+		return code, nil
 	}))
 
 	// magus.run(argv, opts?) recursively invokes `magus run <argv>`. The dry run

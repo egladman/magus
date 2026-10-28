@@ -76,7 +76,6 @@ github.com/egladman/magus.Magus.Affinity method(ptr) func(ctx context.Context, o
 github.com/egladman/magus.Magus.All method(ptr) func() []*github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.ApplySandbox method(ptr) func(ctx context.Context) (context.Context, error)
 github.com/egladman/magus.Magus.AssessChange method(ptr) func(ctx context.Context, target string, o AssessOptions) (github.com/egladman/magus/types.RiskReport, error)
-github.com/egladman/magus.Magus.AssessRisk method(ptr) func(ctx context.Context, target string, o github.com/egladman/magus/types.RiskOptions) (github.com/egladman/magus/types.RiskReport, error)
 github.com/egladman/magus.Magus.AutoResolvable method(ptr) func(ctx context.Context, path string, base []byte, merged []byte) (verdict string, ok bool)
 github.com/egladman/magus.Magus.AutoResolve method(ptr) func(ctx context.Context, path string, base []byte, ours []byte, theirs []byte) (merged []byte, report string, ok bool)
 github.com/egladman/magus.Magus.AutoResolveGlobs method(ptr) func() []string
@@ -519,6 +518,7 @@ github.com/egladman/magus/std.MagusDescribeTarget func(ctx context.Context, opts
 github.com/egladman/magus/std.MagusDescribeTool func(ctx context.Context) (github.com/egladman/magus/types.ToolReport, error)
 github.com/egladman/magus/std.MagusDescribeWorkspace func(ctx context.Context, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.WorkspaceEntry, error)
 github.com/egladman/magus/std.MagusDiagnoseDrift func(ctx context.Context, outputs []string, inputs []string) (github.com/egladman/magus/types.DriftResult, error)
+github.com/egladman/magus/std.MagusDiagnosticCode func(ctx context.Context, text string) (github.com/egladman/magus/types.DiagnosticCodeRef, error)
 github.com/egladman/magus/std.MagusDiff func(ctx context.Context, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types.Diff, error)
 github.com/egladman/magus/std.MagusDir func(ctx context.Context, dir string) (github.com/egladman/magus/types.Dir, error)
 github.com/egladman/magus/std.MagusDirs func(ctx context.Context, glob string, opts github.com/egladman/magus/types.DirsOptions) ([]github.com/egladman/magus/types.Dir, error)
@@ -539,10 +539,9 @@ github.com/egladman/magus/std.MagusPrecedents func(ctx context.Context) (map[str
 github.com/egladman/magus/std.MagusProjectGraph func(ctx context.Context) (github.com/egladman/magus/types.GraphView, error)
 github.com/egladman/magus/std.MagusPutJob func(ctx context.Context, id string, put github.com/egladman/magus/types.JobPut) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusQuery func(ctx context.Context, query string, opts github.com/egladman/magus/types.KnowledgeQueryOptions) (github.com/egladman/magus/types.KnowledgeQueryOutput, error)
-github.com/egladman/magus/std.MagusRaise func(_ context.Context, code string, message string, opts github.com/egladman/magus/types.RaiseOptions) error
+github.com/egladman/magus/std.MagusRaise func(ctx context.Context, code github.com/egladman/magus/types.DiagnosticCodeRef, message string, opts github.com/egladman/magus/types.RaiseOptions) error
 github.com/egladman/magus/std.MagusRefs func(ctx context.Context, symbol string, opts github.com/egladman/magus/types.KnowledgeRefsOptions) (github.com/egladman/magus/types.KnowledgeRefsOutput, error)
 github.com/egladman/magus/std.MagusRegisterJob func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, string, error)
-github.com/egladman/magus/std.MagusRiskAssess func(ctx context.Context, target string, opts map[string]any) (github.com/egladman/magus/types.RiskReport, error)
 github.com/egladman/magus/std.MagusRun func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.MagusStats func(ctx context.Context, kind string) (github.com/egladman/magus/types.KnowledgeStats, error)
 github.com/egladman/magus/std.MagusSymbolIndexDigest func(ctx context.Context) (github.com/egladman/magus/types.SymbolIndexDigest, error)
@@ -1538,12 +1537,20 @@ github.com/egladman/magus/types.Diagnostic.URL field string "json:\"url,omitempt
 github.com/egladman/magus/types.Diagnostic.Why field string "json:\"why,omitempty\" yaml:\"why,omitempty\" buzz:\"-\""
 github.com/egladman/magus/types.DiagnosticCode type = github.com/egladman/magus/libs/diagnostics.Code
 github.com/egladman/magus/types.DiagnosticCode.Error method func() string
+github.com/egladman/magus/types.DiagnosticCodeRef type struct
+github.com/egladman/magus/types.DiagnosticCodeRef.Code field string "json:\"code\" yaml:\"code\""
+github.com/egladman/magus/types.DiagnosticCodeRef.Origin field DiagnosticOrigin "json:\"origin\" yaml:\"origin\""
+github.com/egladman/magus/types.DiagnosticDocs type struct
+github.com/egladman/magus/types.DiagnosticDocs.Docs field string
+github.com/egladman/magus/types.DiagnosticDocs.Prefix field string
+github.com/egladman/magus/types.DiagnosticDocs.URL method func(c DiagnosticCode) string
 github.com/egladman/magus/types.DiagnosticError type = github.com/egladman/magus/libs/diagnostics.Error
 github.com/egladman/magus/types.DiagnosticError.BuzzError method(ptr) func() map[string]string
 github.com/egladman/magus/types.DiagnosticError.Code field github.com/egladman/magus/libs/diagnostics.Code
 github.com/egladman/magus/types.DiagnosticError.Error method(ptr) func() string
 github.com/egladman/magus/types.DiagnosticError.Is method(ptr) func(target error) bool
 github.com/egladman/magus/types.DiagnosticError.Msg field string
+github.com/egladman/magus/types.DiagnosticError.URL method(ptr) func() string
 github.com/egladman/magus/types.DiagnosticError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.DiagnosticError.Why field string
 github.com/egladman/magus/types.DiagnosticError.WithWhy method(ptr) func(why string) *github.com/egladman/magus/libs/diagnostics.Error
@@ -1551,7 +1558,18 @@ github.com/egladman/magus/types.DiagnosticErrorf func(c DiagnosticCode, format s
 github.com/egladman/magus/types.DiagnosticEvent type = github.com/egladman/magus/libs/diagnostics.Event
 github.com/egladman/magus/types.DiagnosticEvent.Code field github.com/egladman/magus/libs/diagnostics.Code "json:\"code\"              yaml:\"code\""
 github.com/egladman/magus/types.DiagnosticEvent.Message field string "json:\"message,omitempty\" yaml:\"message,omitempty\""
+github.com/egladman/magus/types.DiagnosticEvent.URL field string "json:\"url,omitempty\"     yaml:\"url,omitempty\""
 github.com/egladman/magus/types.DiagnosticEvent.Unit field string "json:\"unit,omitempty\"    yaml:\"unit,omitempty\""
+github.com/egladman/magus/types.DiagnosticEventOf func(err error, unit string) (DiagnosticEvent, bool)
+github.com/egladman/magus/types.DiagnosticOrigin type string
+github.com/egladman/magus/types.DiagnosticOrigin.String method func() string
+github.com/egladman/magus/types.DiagnosticOrigin.Valid method func() bool
+github.com/egladman/magus/types.DiagnosticOrigin.Values method func() []string
+github.com/egladman/magus/types.DiagnosticOriginBuiltin const DiagnosticOrigin = "builtin"
+github.com/egladman/magus/types.DiagnosticOriginUnknown const DiagnosticOrigin = ""
+github.com/egladman/magus/types.DiagnosticOriginWorkspace const DiagnosticOrigin = "workspace"
+github.com/egladman/magus/types.DiagnosticOwnerMagus const untyped string = "magus"
+github.com/egladman/magus/types.DiagnosticOwnerWorkspace const untyped string = "workspace"
 github.com/egladman/magus/types.DiagnosticRationale func(err error) string
 github.com/egladman/magus/types.DiagnosticSink type = github.com/egladman/magus/libs/diagnostics.Sink
 github.com/egladman/magus/types.DiagnosticSink.Record imethod func(github.com/egladman/magus/libs/diagnostics.Event)
@@ -3449,15 +3467,13 @@ github.com/egladman/magus/types.KnowledgeSymbolDefinition type struct
 github.com/egladman/magus/types.KnowledgeSymbolDefinition.Doc field string
 github.com/egladman/magus/types.KnowledgeSymbolDefinition.Source field string
 github.com/egladman/magus/types.KnowledgeSymbolGap type struct
-github.com/egladman/magus/types.KnowledgeSymbolGap.Buildable method func() bool
 github.com/egladman/magus/types.KnowledgeSymbolGap.CouldHold method func(language string) bool
 github.com/egladman/magus/types.KnowledgeSymbolGap.Describe method func() string
-github.com/egladman/magus/types.KnowledgeSymbolGap.Detail field string "json:\"detail,omitempty\"      yaml:\"detail,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Hint field string "json:\"hint,omitempty\"        yaml:\"hint,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Language field string "json:\"language,omitempty\"    yaml:\"language,omitempty\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Project field ProjectRef "json:\"project\"               yaml:\"project\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.State field SymbolIndexFreshness "json:\"state\"                 yaml:\"state\""
-github.com/egladman/magus/types.KnowledgeSymbolGap.Unindexable field bool "json:\"unindexable,omitzero\"  yaml:\"unindexable,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Detail field string "json:\"detail,omitempty\"   yaml:\"detail,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Hint field string "json:\"hint,omitempty\"     yaml:\"hint,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Language field string "json:\"language,omitempty\" yaml:\"language,omitempty\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.Project field ProjectRef "json:\"project\"            yaml:\"project\""
+github.com/egladman/magus/types.KnowledgeSymbolGap.State field SymbolIndexFreshness "json:\"state\"              yaml:\"state\""
 github.com/egladman/magus/types.KnowledgeSymbolRef type struct
 github.com/egladman/magus/types.KnowledgeSymbolRef.Alias field string
 github.com/egladman/magus/types.KnowledgeSymbolRef.Count field int
@@ -3994,6 +4010,7 @@ github.com/egladman/magus/types.Origin.Session field string "json:\"session,omit
 github.com/egladman/magus/types.Origin.UID field string "json:\"uid,omitempty\" yaml:\"uid,omitempty\""
 github.com/egladman/magus/types.Origin.User field string "json:\"user,omitempty\" yaml:\"user,omitempty\""
 github.com/egladman/magus/types.OriginMagusfile const ProjectOrigin = "magusfile"
+github.com/egladman/magus/types.OriginOf func(c DiagnosticCode) DiagnosticOrigin
 github.com/egladman/magus/types.OutcomeDiagnostic const EventOutcome = "diagnostic"
 github.com/egladman/magus/types.OutcomeFailed const EventOutcome = "failed"
 github.com/egladman/magus/types.OutcomeFinished const EventOutcome = "finished"
@@ -4374,6 +4391,7 @@ github.com/egladman/magus/types.RegionReporter.Drivers imethod func(ctx context.
 github.com/egladman/magus/types.RegionReporter.Regions imethod func(ctx context.Context, root string, base string, files []FileChange) ([]RegionChange, error)
 github.com/egladman/magus/types.RegionReporter.RegionsBetween imethod func(ctx context.Context, root string, path string, before []byte, after []byte) ([]RegionChange, error)
 github.com/egladman/magus/types.RegionSide type string
+github.com/egladman/magus/types.RegisterDiagnosticPrefix func(prefix string) error
 github.com/egladman/magus/types.RegisteredCheckout type struct
 github.com/egladman/magus/types.RegisteredCheckout.Head field string
 github.com/egladman/magus/types.RegisteredCheckout.LockReason field string
@@ -4491,8 +4509,6 @@ github.com/egladman/magus/types.RevisionFetcher.FetchCommit imethod func(ctx con
 github.com/egladman/magus/types.RevisionFetcher.FetchRef imethod func(ctx context.Context, root string, remote string, ref string) (string, error)
 github.com/egladman/magus/types.RevisionFileReader type interface
 github.com/egladman/magus/types.RevisionFileReader.ReadFileAt imethod func(ctx context.Context, root string, rev string, path string) (string, error)
-github.com/egladman/magus/types.RiskAssessor type interface
-github.com/egladman/magus/types.RiskAssessor.AssessRisk imethod func(ctx context.Context, target string, o RiskOptions) (RiskReport, error)
 github.com/egladman/magus/types.RiskEvidence type struct
 github.com/egladman/magus/types.RiskEvidence.Class field string "json:\"class,omitempty\"   yaml:\"class,omitempty\""
 github.com/egladman/magus/types.RiskEvidence.Line method func() string
@@ -4510,10 +4526,6 @@ github.com/egladman/magus/types.RiskGateStep.Packages field []string "json:\"pac
 github.com/egladman/magus/types.RiskGateStep.Projects field []string "json:\"projects\"           yaml:\"projects\""
 github.com/egladman/magus/types.RiskGateStep.Target field string "json:\"target\"             yaml:\"target\""
 github.com/egladman/magus/types.RiskMechanical const RiskTier = "mechanical"
-github.com/egladman/magus/types.RiskOptions type struct
-github.com/egladman/magus/types.RiskOptions.Base field string "json:\"base,omitempty\""
-github.com/egladman/magus/types.RiskOptions.Checkout field string "json:\"checkout,omitempty\""
-github.com/egladman/magus/types.RiskOptions.Paths field []string "json:\"paths,omitempty\""
 github.com/egladman/magus/types.RiskReport type struct
 github.com/egladman/magus/types.RiskReport.Affected field []string "json:\"affected\" yaml:\"affected\""
 github.com/egladman/magus/types.RiskReport.Base field string "json:\"base\"     yaml:\"base\""
@@ -4930,23 +4942,6 @@ github.com/egladman/magus/types.StatusWorkspace.LoadedAt field time.Time "json:\
 github.com/egladman/magus/types.StatusWorkspace.Root field string "json:\"root\" yaml:\"root\""
 github.com/egladman/magus/types.StatusWorkspace.SecretProvider field string "json:\"secret_provider,omitempty\" yaml:\"secret_provider,omitempty\""
 github.com/egladman/magus/types.StatusWorkspace.State field WorkspaceState "json:\"state,omitempty\" yaml:\"state,omitempty\""
-github.com/egladman/magus/types.StopRequest type struct
-github.com/egladman/magus/types.StopRequest.Agent field string
-github.com/egladman/magus/types.StopRequest.Checkout field *CheckoutState
-github.com/egladman/magus/types.StopRequest.Dir field string
-github.com/egladman/magus/types.StopRequest.Event field string
-github.com/egladman/magus/types.StopRequest.Host field string
-github.com/egladman/magus/types.StopRequest.Lease field *Job
-github.com/egladman/magus/types.StopRequest.Orchestration field Orchestration
-github.com/egladman/magus/types.StopRequest.Parent field string
-github.com/egladman/magus/types.StopRequest.Role field AgentRole
-github.com/egladman/magus/types.StopRequest.Session field string
-github.com/egladman/magus/types.StopRequest.StopHookActive field bool
-github.com/egladman/magus/types.StopRequest.Thread field AgentThread
-github.com/egladman/magus/types.StopRequest.ThreadFrom field ThreadSource
-github.com/egladman/magus/types.StopRequest.Transcript field string
-github.com/egladman/magus/types.StopRequest.Window field *ContextWindow
-github.com/egladman/magus/types.StopRequest.Workspace field string
 github.com/egladman/magus/types.StoredOutput type struct
 github.com/egladman/magus/types.StoredOutput.Bytes method func() []byte
 github.com/egladman/magus/types.StoredOutput.ClassDigests field []ClassDigest "json:\"class_digests,omitempty\""
@@ -5584,6 +5579,7 @@ github.com/egladman/magus/types.WorkspaceConfig type struct
 github.com/egladman/magus/types.WorkspaceConfig.CacheDir field string
 github.com/egladman/magus/types.WorkspaceConfig.Concurrency field int
 github.com/egladman/magus/types.WorkspaceDefinition const untyped string = "A workspace is a magus root directory that owns a set of projects, a configuration file, a content-addressed cache, and VCS integration. Every magus invocation operates within exactly one workspace, identified by walking up from the current directory to the nearest go.mod."
+github.com/egladman/magus/types.WorkspaceDiagnosticCode func(prefix string, text string) (DiagnosticCode, error)
 github.com/egladman/magus/types.WorkspaceEntry type struct
 github.com/egladman/magus/types.WorkspaceEntry.CacheDir field string "json:\"cache_dir,omitempty\"     yaml:\"cache_dir,omitempty\""
 github.com/egladman/magus/types.WorkspaceEntry.Concurrency field int "json:\"concurrency,omitempty\"   yaml:\"concurrency,omitempty\""

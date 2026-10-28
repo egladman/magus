@@ -19,6 +19,8 @@ config concurrency
 config concurrency_profile
 config console.enabled
 config default_charms
+config diagnostics.docs
+config diagnostics.prefix
 config diff.tui
 config disk.critical_free_mb
 config disk.growth_mb_per_hour
