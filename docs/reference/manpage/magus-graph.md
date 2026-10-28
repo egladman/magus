@@ -35,7 +35,9 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
            the magus domain (projects, targets, spells, ops, charms, modules,
            methods, diagnostics, docs, buzz sources). -o json emits the
            node-link form; -o graphml emits GraphML. External graph viewers
-           (Gephi, yEd) read both directly. --select "\<terms\>" narrows the
+           (Gephi, yEd) read both directly. -o scip writes the workspace's
+           symbol index as one binary SCIP index, for code-intelligence tools,
+           and refuses a terminal. --select "\<terms\>" narrows the
            export to a query's neighborhood (same engine as magus query); -o dot
            renders only with --select, since the full graph has too many nodes
            to lay out. The graph is cache-backed under
@@ -183,7 +185,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 : Emit the project dependency DAG (text, json, yaml, dot, tree)
 
 **export**
-: Export the merged knowledge graph (json node-link or graphml)
+: Export the merged knowledge graph (json node-link or graphml), or the symbol index as SCIP
 
 **stats**
 : Report the knowledge graph's shape: god nodes, orphans, doc coverage
@@ -215,6 +217,12 @@ magus graph export -o json > graph.json
 
 ```sh
 magus graph export -o graphml > graph.graphml
+```
+
+*Symbol index for SCIP tools*
+
+```sh
+magus graph export -o scip > index.scip
 ```
 
 *A query's neighborhood as DOT*
