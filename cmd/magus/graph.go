@@ -118,10 +118,9 @@ func graphUsage() {
 // because an outer run holds the project's lock (MGS3007), or because the machine's build
 // budget is full (MGS3009), fails the build once the rest is done.
 func graphBuild(ctx context.Context, root string, args []string) (err error) {
-	var skipSymbols, skipSessions bool
+	var bf *flaggen.GraphBuildFlags
 	_, err = commandParse("graph build", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
-		fs.BoolVar(&skipSessions, "no-sessions", false, "do not run the declared agent-session adapters first")
+		bf = flaggen.BindGraphBuild(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph build [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -151,7 +150,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 
 	var refused error
-	if !skipSymbols {
+	if bf.Symbols {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
 			return err
@@ -167,7 +166,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 	}
 
-	if !skipSessions {
+	if bf.Sessions {
 		ingestSessions(ctx, root)
 	}
 
@@ -454,9 +453,6 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		if out.NodeCount == 0 {
 			slog.WarnContext(ctx, fmt.Sprintf("no nodes matched --select %q", ef.Select), attr.Notice("magus graph export"))
 		}
-	}
-	if ef.Static {
-		ef.Reproducible = true
 	}
 	if ef.Reproducible {
 		stripUnreproducible(&out)

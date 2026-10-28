@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/libs/cmdline"
@@ -335,6 +337,80 @@ func flagProbes(cmd cmdline.Command) []flagProbe {
 // are excluded rather than "fixed" out of the man page.
 var modeSelectors = map[string]map[string]bool{
 	"affected": {"explain": true, "plan": true, "impact": true},
+}
+
+func TestPrintOwnDefaultsPrintsTheGeneratedTable(t *testing.T) {
+	var buf bytes.Buffer
+	fs := flag.NewFlagSet("graph build", flag.ContinueOnError)
+	fs.SetOutput(&buf)
+	flaggen.BindGraphBuild(fs)
+	printOwnDefaults(fs)
+	got := buf.String()
+
+	assert.Contains(t, got, "--[no-]symbols (default: on)")
+	assert.Contains(t, got, "--[no-]sessions (default: on)")
+	assert.NotContains(t, got, "  -symbols", "help names a flag with two dashes")
+	assert.NotContains(t, got, "--no-symbols\n", "the negation folds into --[no-]symbols")
+}
+
+// The garbled `-symbols magus diff --baseline` line: UnquoteUsage lifted the first
+// backquoted word out of a bool's usage as its value name.
+func TestUsageLineKeepsABoolsBackquotedWords(t *testing.T) {
+	var buf bytes.Buffer
+	fs := flag.NewFlagSet("graph export", flag.ContinueOnError)
+	fs.SetOutput(&buf)
+	flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{})
+	printOwnDefaults(fs)
+
+	assert.Contains(t, buf.String(), "--[no-]symbols (default: off)\n")
+	assert.NotContains(t, buf.String(), "-symbols magus diff")
+}
+
+func TestGraphSymbolsHasOnePolarityAcrossCommands(t *testing.T) {
+	parse := func(t *testing.T, args ...string) (build, export bool) {
+		t.Helper()
+		bfs := flag.NewFlagSet("graph build", flag.ContinueOnError)
+		bf := flaggen.BindGraphBuild(bfs)
+		require.NoError(t, bfs.Parse(args))
+		efs := flag.NewFlagSet("graph export", flag.ContinueOnError)
+		ef := flaggen.BindGraphExport(efs, flaggen.GraphExportDefaults{})
+		require.NoError(t, efs.Parse(args))
+		return bf.Symbols, ef.Symbols
+	}
+
+	build, export := parse(t)
+	assert.True(t, build, "build reindexes by default")
+	assert.False(t, export, "export leaves symbols out by default")
+
+	build, export = parse(t, "--symbols")
+	assert.True(t, build)
+	assert.True(t, export)
+
+	build, export = parse(t, "--no-symbols")
+	assert.False(t, build)
+	assert.False(t, export)
+}
+
+func TestNegatedBoolRefusesAValueAndNamesThePositiveSpelling(t *testing.T) {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	fs.SetOutput(&bytes.Buffer{})
+	rf := flaggen.BindRun(fs)
+	require.NoError(t, fs.Parse([]string{"--no-cache"}))
+	assert.False(t, rf.Cache)
+
+	fs = flag.NewFlagSet("run", flag.ContinueOnError)
+	fs.SetOutput(&bytes.Buffer{})
+	flaggen.BindRun(fs)
+	err := fs.Parse([]string{"--no-cache=false"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write --cache")
+}
+
+func TestGraphExportHasNoStaticAlias(t *testing.T) {
+	fs := flag.NewFlagSet("graph export", flag.ContinueOnError)
+	fs.SetOutput(&bytes.Buffer{})
+	flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{})
+	assert.Error(t, fs.Parse([]string{"--static"}))
 }
 
 // documentedFlagNames lists the non-global flag names a BuildFlags closure declares.

@@ -672,24 +672,24 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	}
 	ctx = project.WithExtraArgs(ctx, targetArgs)
 	if tf.Against != "" {
-		tf.Cache = true
+		tf.CacheKey = true
 	}
-	if tf.Cache {
+	if tf.CacheKey {
 		if tf.Explain {
-			// --explain traces argv, --cache keys inputs: two different questions, and
+			// --explain traces argv, --cache-key keys inputs: two different questions, and
 			// silently answering one would misread as the other having no output.
-			slog.ErrorContext(ctx, "--explain traces the rendered command and --cache keys the inputs; run them separately",
+			slog.ErrorContext(ctx, "--explain traces the rendered command and --cache-key keys the inputs; run them separately",
 				attr.Notice(""), attr.Component("magus describe target"))
 			return exit.Reported(exit.Usage)
 		}
-		return describeTargetCache(ctx, root, pos, tf.Against, tf.NoDefaultCharms, tf.Inputs)
+		return describeTargetCache(ctx, root, pos, tf.Against, !tf.DefaultCharms, tf.Inputs)
 	}
-	if tf.NoDefaultCharms {
-		slog.ErrorContext(ctx, "--no-default-charms applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
+	if !tf.DefaultCharms {
+		slog.ErrorContext(ctx, "--no-default-charms applies only to --cache-key", attr.Notice(""), attr.Component("magus describe target"))
 		return exit.Reported(exit.Usage)
 	}
 	if tf.Inputs {
-		slog.ErrorContext(ctx, "--inputs applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
+		slog.ErrorContext(ctx, "--inputs applies only to --cache-key", attr.Notice(""), attr.Component("magus describe target"))
 		return exit.Reported(exit.Usage)
 	}
 	if len(pos) == 0 {

@@ -323,7 +323,7 @@ func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 // testable without a pty.
 func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format output.Format, term diffTUITerm, enabled bool) bool {
 	switch {
-	case rf.NoTui, !enabled:
+	case !rf.Tui, !enabled:
 		return false
 	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
 	// bump. They are requests for an answer rather than for somewhere to read.

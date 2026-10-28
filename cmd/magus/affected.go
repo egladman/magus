@@ -266,7 +266,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
-	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, af.NoDefaultCharms)
+	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, !af.DefaultCharms)
 	// Same as `magus run`: an affected ci run goes through RunCI and loses the write
 	// charms, so the header has to say so.
 	if target == "ci" {
@@ -288,12 +288,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// advises when the machine is idle. See prepareGateRedundancy.
 	gate := prepareGateRedundancy(ctx, m, target, targets, charms, false)
 	gate.noteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
-	if gateErr := gate.evaluate(ctx, af.NoRedundancyCheck); gateErr != nil {
+	if gateErr := gate.evaluate(ctx, !af.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 	// Sized once the gate is going to run. A trivial change is proven to need no gate,
 	// which is a verdict on the change rather than a deferral, so it exits 0.
-	sized := gate.size(ctx, af.Base, af.NoRedundancyCheck)
+	sized := gate.size(ctx, af.Base, !af.RedundancyCheck)
 	if sized != nil {
 		slog.InfoContext(ctx, renderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
 		if sized.Tier == types.RiskTrivial {
@@ -324,7 +324,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if af.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if af.NoCache {
+	if !af.Cache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))

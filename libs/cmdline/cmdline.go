@@ -1,8 +1,11 @@
 package cmdline
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -68,7 +71,8 @@ type Flag struct {
 	Doc  string // one-line help; a `quoted` word names the value in the man page
 
 	// Default is the value the flag takes when unset, of the Go type its Kind binds:
-	// bool, string, int or time.Duration. nil is the kind's zero value.
+	// bool, string, int or time.Duration. nil is the kind's zero value, except for a
+	// Bool, which must declare true or false.
 	Default any
 
 	// DefaultAtBind means the real default is a runtime value, such as a config
@@ -130,12 +134,21 @@ func walk(path string, c Command, visit func(string, Command)) {
 // BindFlags registers c's flags on fs to render or inspect them; the program parses
 // with its generated binders. A Flag with an unknown Kind, or a Default whose type
 // does not match its Kind, panics: the declaration is static data, and a wrong one
-// would document a flag the program does not have.
+// would document a flag the program does not have. So does a bool whose name starts
+// with no- or that declares no Default; see Check.
+//
+// Each bool also gets its --no-<name> form, as the generated binders do.
 func (c Command) BindFlags(fs *flag.FlagSet) {
+	if err := checkFlags(c.Name, c.Flags); err != nil {
+		panic(err.Error())
+	}
 	for _, f := range c.Flags {
 		switch f.Kind {
 		case Bool:
-			fs.Bool(f.Name, TypedDefault[bool](f), f.Doc)
+			p := fs.Bool(f.Name, TypedDefault[bool](f), f.Doc)
+			if f.AliasOf == "" {
+				NegatedBoolVar(fs, p, f.Name)
+			}
 		case String, Custom:
 			fs.String(f.Name, TypedDefault[string](f), f.Doc)
 		case Int:
@@ -146,6 +159,138 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 			panic(fmt.Sprintf("cmdline: flag --%s has unknown kind %s", f.Name, string(f.Kind)))
 		}
 	}
+}
+
+// Check reports every flag declaration in root's tree the generators refuse: a bool
+// whose name starts with no- (declare the positive name; the generator adds the
+// negation), a bool with no Default, and a bool whose --no-<name> form another flag
+// of the same command already takes.
+func Check(root Command) error {
+	errs := checkFlags(root.Name, root.Flags)
+	Walk(root, func(path string, c Command) {
+		if err := checkFlags(path, c.Flags); err != nil {
+			errs = errors.Join(errs, err)
+		}
+	})
+	return errs
+}
+
+func checkFlags(command string, flags []Flag) error {
+	declared := make(map[string]bool, len(flags))
+	for _, f := range flags {
+		declared[f.Name] = true
+	}
+	var errs error
+	for _, f := range flags {
+		if f.Kind != Bool {
+			continue
+		}
+		if strings.HasPrefix(f.Name, NegationPrefix) {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a bool named with %q: declare the positive name and let the generator emit the negation", command, f.Name, NegationPrefix))
+		}
+		if f.Default == nil && f.AliasOf == "" && negatable(f.Name) {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a bool with no Default: declare true or false", command, f.Name))
+		}
+		if f.AliasOf == "" && negatable(f.Name) && declared[NegationPrefix+f.Name] {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s declares --%s, which is the negation of bool --%s", command, NegationPrefix+f.Name, f.Name))
+		}
+	}
+	return errs
+}
+
+// NegationPrefix turns a bool's positive name into its off spelling.
+const NegationPrefix = "no-"
+
+// negatable reports whether a bool named name has a --no- form. A one-character
+// name is a short flag (-v, -q); --no-v reads as nothing.
+func negatable(name string) bool { return len(name) > 1 }
+
+// NegatedBoolVar registers --no-<name> on fs so that it clears *p. It takes no
+// value: --no-<name>=false is refused, because "not not" is a second way to say
+// --<name> and the two readings disagree about which the caller meant.
+// A one-character name registers nothing.
+func NegatedBoolVar(fs *flag.FlagSet, p *bool, name string) {
+	if !negatable(name) {
+		return
+	}
+	fs.Var(&negation{dst: p, name: name}, NegationPrefix+name, "Turn off --"+name)
+}
+
+type negation struct {
+	dst  *bool
+	name string
+}
+
+func (n *negation) IsBoolFlag() bool { return true }
+
+// String is the value --no-<name> would leave in the flag, which flag reads on a
+// zero negation to decide whether to print a default.
+func (n *negation) String() string {
+	if n == nil || n.dst == nil {
+		return ""
+	}
+	return strconv.FormatBool(!*n.dst)
+}
+
+func (n *negation) Set(s string) error {
+	if s != "true" {
+		return fmt.Errorf("--%s%s takes no value: write --%s to turn it on", NegationPrefix, n.name, n.name)
+	}
+	*n.dst = false
+	return nil
+}
+
+// Help is one flag as help, man and markdown print it.
+type Help struct {
+	Name    string // as typed, such as "--[no-]cache" or "-c"
+	Value   string // the value's placeholder; empty for a bool
+	Usage   string
+	Default string // "on" or "off" for a negatable bool; the declared value otherwise; empty when zero
+}
+
+// FlagHelp describes the flags on fs in name order, skipping those skip names and
+// folding each --no-<name> into its positive flag as "--[no-]<name>".
+func FlagHelp(fs *flag.FlagSet, skip func(name string) bool) []Help {
+	var out []Help
+	fs.VisitAll(func(f *flag.Flag) {
+		if _, isNegation := f.Value.(*negation); isNegation || (skip != nil && skip(f.Name)) {
+			return
+		}
+		h := Help{Name: dashes(f.Name) + f.Name}
+		if isBool(f) {
+			h.Usage = strings.ReplaceAll(f.Usage, "`", "")
+			if g := fs.Lookup(NegationPrefix + f.Name); g != nil {
+				if _, ok := g.Value.(*negation); ok {
+					h.Name = "--[no-]" + f.Name
+					h.Default = "off"
+					if f.DefValue == "true" {
+						h.Default = "on"
+					}
+				}
+			}
+		} else {
+			h.Value, h.Usage = flag.UnquoteUsage(f)
+			switch f.DefValue {
+			case "", "0", "0s", "false":
+			default:
+				h.Default = f.DefValue
+			}
+		}
+		out = append(out, h)
+	})
+	return out
+}
+
+func dashes(name string) string {
+	if len(name) == 1 {
+		return "-"
+	}
+	return "--"
+}
+
+func isBool(f *flag.Flag) bool {
+	b, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && b.IsBoolFlag()
 }
 
 // TypedDefault returns f.Default as T, or T's zero value when it is nil. A Default of

@@ -192,9 +192,9 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		}
 	}
 	isRepl := bf.E == "" && !bf.Test && !bf.Check && len(rest) == 0
-	if !isRepl && bf.NoAutoload {
+	if !isRepl && !bf.Autoload {
 		return exit.Usagef("magus buzz: --%s applies to the REPL, not to a script, -%s, or -%s",
-			flaggen.FlagBuzzNoAutoload, flaggen.FlagBuzzE, flaggen.FlagBuzzT)
+			"no-"+flaggen.FlagBuzzAutoload, flaggen.FlagBuzzE, flaggen.FlagBuzzT)
 	}
 	if bf.Coverprofile != "" && !bf.Test {
 		return exit.Usagef("magus buzz: --%s requires -%s", flaggen.FlagBuzzCoverprofile, flaggen.FlagBuzzT)
@@ -240,7 +240,7 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
 	// so the session is always embedded regardless of the flag.
 	if isRepl && stdinIsTerminal() {
-		return buzzRepl(ctx, bf.NoAutoload)
+		return buzzRepl(ctx, !bf.Autoload)
 	}
 
 	code, name, scriptArgs, err := buzzSource(bf.E, rest)
