@@ -129,8 +129,10 @@ export fun mgs_getSandbox() > Sandbox {
         ]},
         caches = [
             // go re-dates a build cache entry it uses once the entry is an hour old.
-            // README, trim.txt and the fuzzer's cached inputs are not build entries.
-            SandboxCache{env = "GOCACHE", stampsUse = true, skip = ["README", "trim.txt", "fuzz/**"]},
+            // README, trim.txt and the fuzzer's cached inputs are not build entries. go's own
+            // trim drops only entries unused for five days, so the cache grows without bound
+            // while builds keep touching it; reclaiming disk holds it to 20 GiB.
+            SandboxCache{env = "GOCACHE", stampsUse = true, skip = ["README", "trim.txt", "fuzz/**"], trimMb = 20480},
             // A build reads the extracted tree and its .ziphash, never the zip, so zips
             // would double the bundle for nothing. VCS clones serve only direct fetches,
             // and the rest is go's own in-flight work.
