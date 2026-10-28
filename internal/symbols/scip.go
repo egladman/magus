@@ -199,9 +199,10 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	}
 
 	type acc struct {
-		sym  types.KnowledgeSymbol
-		defs map[string]types.KnowledgeSymbolDefinition // defining file -> its first definition
-		refs map[string]*types.KnowledgeSymbolRef       // ref file -> tally
+		sym    types.KnowledgeSymbol
+		defs   map[string]types.KnowledgeSymbolDefinition // defining file -> its first definition
+		bodies map[string]defBody                         // defining file -> that definition's body
+		refs   map[string]*types.KnowledgeSymbolRef       // ref file -> tally
 	}
 	byKey := map[string]*acc{}
 	skipped := 0
@@ -252,7 +253,8 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 			if a == nil {
 				a = &acc{
 					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage, Namespace: info.Namespace},
-					defs: map[string]types.KnowledgeSymbolDefinition{},
+					defs:   map[string]types.KnowledgeSymbolDefinition{},
+					bodies: map[string]defBody{},
 					refs: map[string]*types.KnowledgeSymbolRef{},
 				}
 				if si := infoByKey[key]; si != nil {
@@ -277,21 +279,27 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 					def.Doc = docText(si)
 				}
 				a.defs[docPath] = def
+				// The body's extent, from the same occurrence, so the pair bounds the
+				// definition. EnclosingSourceRange (not the EnclosingRange field) for
+				// the reason given at sortedEnclosing: scip-go emits only the
+				// deprecated packed form. Absent for indexers that emit no enclosing
+				// range, and 0 is how that says so.
+				var body defBody
+				if r, ok := occ.EnclosingSourceRange(); ok && r.End.Line >= 0 {
+					body.end = int(r.End.Line) + 1
+				}
+				if si != nil {
+					body.signature = renderedSignature(si)
+				}
+				a.bodies[docPath] = body
 				// First definition seen (in document then occurrence order, both stable
 				// slices) wins the Source, and its own document's doc and signature come
 				// with it; later defs still add their defines edge.
 				if a.sym.Source == "" {
 					a.sym.Source = source
-					// The body's extent, from the same occurrence, so the pair bounds the
-					// definition. EnclosingSourceRange (not the EnclosingRange field) for
-					// the reason given at sortedEnclosing: scip-go emits only the
-					// deprecated packed form. Absent for indexers that emit no enclosing
-					// range, and 0 is how that says so.
-					if r, ok := occ.EnclosingSourceRange(); ok && r.End.Line >= 0 {
-						a.sym.DefEndLine = int(r.End.Line) + 1
-					}
+					a.sym.DefEndLine = body.end
 					if si != nil {
-						a.sym.Signature = renderedSignature(si)
+						a.sym.Signature = body.signature
 						a.sym.Doc = def.Doc
 					}
 				}
@@ -322,14 +330,18 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	out := make([]types.KnowledgeSymbol, 0, len(byKey))
 	for _, a := range byKey {
 		a.sym.Defs = sortedKeys(a.defs)
+		a.sym.Refs = sortedRefs(a.refs)
+		a.sym.Calls = sortedCalls(calls[a.sym.Key], defined)
+		a.sym.Implements = sortedImplements(implements[a.sym.Key], defined)
+		if len(a.sym.Defs) > 1 && a.sym.Namespace != a.sym.Key {
+			out = append(out, platformTwins(a.sym, a.defs, a.bodies)...)
+			continue
+		}
 		if len(a.sym.Defs) > 1 {
 			for _, file := range a.sym.Defs {
 				a.sym.Definitions = append(a.sym.Definitions, a.defs[file])
 			}
 		}
-		a.sym.Refs = sortedRefs(a.refs)
-		a.sym.Calls = sortedCalls(calls[a.sym.Key], defined)
-		a.sym.Implements = sortedImplements(implements[a.sym.Key], defined)
 		out = append(out, a.sym)
 	}
 	// byKey iteration is unordered; the sort is what makes the output deterministic.
@@ -400,6 +412,45 @@ func isFencedBlock(s string) bool {
 		}
 	}
 	return true
+}
+
+// defBody is one file's definition of a symbol beyond where it starts: the last line of
+// its body (0 when the indexer recorded no extent) and its rendered signature.
+type defBody struct {
+	end       int
+	signature string
+}
+
+// platformTwins splits sym into one symbol per defining file: only exclusive build
+// constraints define a key twice (foo_darwin.go, foo_linux.go), and one node would hide
+// every body but the first. The first keeps the key, so refs still resolve it; the others
+// share its references, which name the key and not a file.
+func platformTwins(sym types.KnowledgeSymbol, defs map[string]types.KnowledgeSymbolDefinition, bodies map[string]defBody) []types.KnowledgeSymbol {
+	first, _, _ := strings.Cut(sym.Source, ":")
+	out := make([]types.KnowledgeSymbol, 0, len(sym.Defs))
+	for _, file := range sym.Defs {
+		twin := sym
+		twin.Defs = []string{file}
+		twin.Definitions = nil
+		twin.Refs = slices.Clone(sym.Refs)
+		if file != first {
+			body := bodies[file]
+			twin.Key = twinKey(sym.Key, file)
+			twin.Source, twin.Doc, twin.DefEndLine = defs[file].Source, defs[file].Doc, body.end
+			if body.signature != "" {
+				twin.Signature = body.signature
+			}
+		}
+		out = append(out, twin)
+	}
+	return out
+}
+
+// twinKey is the key of key's definition in file when another file defines key first.
+// The space puts it outside the SCIP descriptor grammar, so nothing parses it as a
+// different symbol of the same package.
+func twinKey(key, file string) string {
+	return key + " " + file
 }
 
 // workspacePath rebases an indexer-relative document path onto the workspace by joining
