@@ -77,4 +77,3 @@ func (si *SymbolIndexer) OpName() string {
 
 // SymbolIndexOp returns the op s's symbol indexer runs under, or "" when s declares none.
 func (s *Spell) SymbolIndexOp() string { return s.symbolIndexer.OpName() }
-

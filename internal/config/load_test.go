@@ -330,15 +330,15 @@ func TestUnknownKeyMessage(t *testing.T) {
 		strings.Repeat("    - env: X\n      base: y\n      name: spells/a\n      reason: r\n    #\n", 3))
 	const devBuild, release = "v0.4.3-122-g1a2b3c4", "v0.4.3"
 	cases := map[string]struct {
-		doc        string
-		served     bool
-		running    string
-		want       string
+		doc     string
+		served  bool
+		running string
+		want    string
 	}{
 		"the reported sample": {
-			doc:        sample,
-			served:     true,
-			running:    devBuild,
+			doc:     sample,
+			served:  true,
+			running: devBuild,
 			want: "magus.yaml has keys this magus does not know:\n" +
 				"  - spells.allow_shadow.env   (lines 16, 21, 26)\n" +
 				"  - spells.allow_shadow.base  (lines 17, 22, 27; did you mean \"name\"?)\n" +
@@ -352,9 +352,9 @@ func TestUnknownKeyMessage(t *testing.T) {
 		// A release build cannot be the one a checkout outgrew, so it is never told to
 		// bootstrap; the workspace's script is still a fix.
 		"a release build with a served script": {
-			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
-			served:     true,
-			running:    release,
+			doc:     "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
+			served:  true,
+			running: release,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - zzzzzzzz  (line 2)\n" +
 				"\n" +
@@ -364,9 +364,9 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"  - this workspace's script for it: {script}",
 		},
 		"a dev build with a served script": {
-			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
-			served:     true,
-			running:    devBuild,
+			doc:     "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
+			served:  true,
+			running: devBuild,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - zzzzzzzz  (line 2)\n" +
 				"\n" +
@@ -388,9 +388,9 @@ func TestUnknownKeyMessage(t *testing.T) {
 		},
 		// A near miss is a typo: no version gap, however old the build is.
 		"a typo only": {
-			doc:        "required_version: \">= 0.4.4\"\nconcurrencyy: 4\n",
-			served:     true,
-			running:    devBuild,
+			doc:     "required_version: \">= 0.4.4\"\nconcurrencyy: 4\n",
+			served:  true,
+			running: devBuild,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - concurrencyy  (line 2; did you mean \"concurrency\"?)",
 		},

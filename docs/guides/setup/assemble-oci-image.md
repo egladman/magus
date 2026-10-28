@@ -32,9 +32,9 @@ The Buzz reference is [`image`](../../reference/buzz/image.md), the decision rec
 ## The shape: everything is a target
 
 ```text
-  build_amd64 ──> image_amd64 ─┐
-                               ├─> image_index ──> image_push   (skip_cache)
-  build_arm64 ──> image_arm64 ─┘
+build_amd64 ──> image_amd64 ─┐
+                             ├─> image_index ──> image_push   (skip_cache)
+build_arm64 ──> image_arm64 ─┘
 ```
 
 - **A stage is a target.** A compile, a codegen, an asset bundle: a target with literal
@@ -149,12 +149,12 @@ the platform manifests and `Layout.Manifest(ctx, platform)` reads one.
 
 ## What this cannot express
 
-| Not here                                    | Instead                                                                                     |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Running a program inside the image          | A target runs the tool on the host, or on a Linux runner for cgo and native addons.          |
-| A package manager inside the image          | A container engine, or a pinned base that already holds the packages.                        |
-| Cache or SSH mounts for in-image steps      | There are no in-image steps. Caches and SSH agents belong to targets.                        |
-| Windows images                              | Not yet: platforms are linux/amd64 (variant v1, v2 or v3) and linux/arm64.                   |
+| Not here                               | Instead                                                                             |
+| -------------------------------------- | ----------------------------------------------------------------------------------- |
+| Running a program inside the image     | A target runs the tool on the host, or on a Linux runner for cgo and native addons. |
+| A package manager inside the image     | A container engine, or a pinned base that already holds the packages.               |
+| Cache or SSH mounts for in-image steps | There are no in-image steps. Caches and SSH agents belong to targets.               |
+| Windows images                         | Not yet: platforms are linux/amd64 (variant v1, v2 or v3) and linux/arm64.          |
 
 ## Related
 

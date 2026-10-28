@@ -168,11 +168,11 @@ func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, tt
 		ttl = defaultIdleTTL
 	}
 	r := &wsRegistry{
-		entries: make(map[string]*wsEntry),
-		lim:     lim,
-		broker:  b,
-		tel:     tel,
-		ttl:     ttl,
+		entries:      make(map[string]*wsEntry),
+		lim:          lim,
+		broker:       b,
+		tel:          tel,
+		ttl:          ttl,
 		now:          time.Now,
 		open:         openWorkspace,
 		leaseOf:      boundLease,

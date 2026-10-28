@@ -336,16 +336,16 @@ final SUMMARY = "build ./magus in a checkout at its own revision";
 final SERVES = ["code:MGS1021 -- --checkout \{checkout}"];
 ```
 
-`magus graph build` indexes every tracked script that declares `SUMMARY` and `SERVES`. Each entry is a situation, optionally followed by ` -- ` and the arguments the script is served with. The families:
+`magus graph build` indexes every tracked script that declares `SUMMARY` and `SERVES`. Each entry is a situation, optionally followed by `--` and the arguments the script is served with. The families:
 
-| Family      | Serves                                                  | Example                       |
-| ----------- | ------------------------------------------------------- | ----------------------------- |
-| `rule:`     | a guard denial, by [rule](../reference/rules/index.md) | `rule:stale-binary`           |
-| `code:`     | a diagnostic, by code, built-in or the workspace's      | `code:MGS1021`                |
-| `doctor:`   | a `magus doctor` check, by name                         | `doctor:guard-binary`         |
-| `event:`    | a moment magus names: disk-low, pre-pr, session-end     | `event:disk-low`              |
-| `next:`     | a breadcrumb id on a result                             | `next:jobs-exited`            |
-| `replaces:` | a command shape the script stands in for                | `replaces:sed -i`             |
+| Family      | Serves                                                 | Example               |
+| ----------- | ------------------------------------------------------ | --------------------- |
+| `rule:`     | a guard denial, by [rule](../reference/rules/index.md) | `rule:stale-binary`   |
+| `code:`     | a diagnostic, by code, built-in or the workspace's     | `code:MGS1021`        |
+| `doctor:`   | a `magus doctor` check, by name                        | `doctor:guard-binary` |
+| `event:`    | a moment magus names: disk-low, pre-pr, session-end    | `event:disk-low`      |
+| `next:`     | a breadcrumb id on a result                            | `next:jobs-exited`    |
+| `replaces:` | a command shape the script stands in for               | `replaces:sed -i`     |
 
 - Arguments may name `{ref}`, `{rule}`, `{project}`, `{file}` and `{checkout}`, which the serving site fills. Write `\{` in Buzz so the string is not interpolated.
 - `final EFFECT = "read";` marks a script that changes nothing, which a reviewer may run under any role. A script that declares none is a write.
