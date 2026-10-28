@@ -47,6 +47,48 @@ type Options struct {
 // from two checkouts, gives equal bytes. Metadata.ProjectRoot is left empty for
 // that reason; documents are relative to the indexed directory.
 func Index(ctx context.Context, opts Options) (*scip.Index, error) {
+	p, err := NewProject(opts)
+	if err != nil {
+		return nil, err
+	}
+	files, err := p.Files(ctx)
+	if err != nil {
+		return nil, err
+	}
+	idx := &scip.Index{
+		Metadata: &scip.Metadata{
+			ToolInfo:             &scip.ToolInfo{Name: "scip-buzz", Version: Version},
+			TextDocumentEncoding: scip.TextEncoding_UTF8,
+		},
+	}
+	defined := map[string]bool{}
+	for _, f := range files {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if f.Err != nil {
+			continue
+		}
+		doc, _, err := p.Document(f.Path)
+		if err != nil {
+			return nil, err
+		}
+		idx.Documents = append(idx.Documents, doc)
+		for _, d := range p.files[f.Path].decls {
+			defined[d.symbol] = true
+		}
+	}
+	for sym, info := range p.ix.external {
+		if !defined[sym] {
+			idx.ExternalSymbols = append(idx.ExternalSymbols, info)
+		}
+	}
+	idx.ExternalSymbols = scip.CanonicalizeSymbols(idx.ExternalSymbols)
+	return idx, nil
+}
+
+// newIndexer resolves opts's roots and checks that the project lies in the workspace.
+func newIndexer(opts Options) (*indexer, error) {
 	if opts.ProjectRoot == "" {
 		return nil, errors.New("scipbuzz: no project root")
 	}
@@ -64,52 +106,14 @@ func Index(ctx context.Context, opts Options) (*scip.Index, error) {
 	ix := &indexer{
 		project:   project,
 		workspace: workspace,
-		onWarn:    opts.Warn,
+		userWarn:  opts.Warn,
 		files:     map[string]*file{},
 		external:  map[string]*scip.SymbolInformation{},
 	}
 	if _, ok := ix.workspaceRel(project); !ok {
 		return nil, fmt.Errorf("scipbuzz: project root %s is outside workspace root %s", project, workspace)
 	}
-	rels, err := discover(project)
-	if err != nil {
-		return nil, fmt.Errorf("discover .buzz files: %w", err)
-	}
-
-	var docs []*file
-	for _, rel := range rels {
-		f := ix.load(filepath.Join(project, filepath.FromSlash(rel)))
-		if f == nil || f.prog == nil {
-			continue
-		}
-		f.docPath = rel
-		docs = append(docs, f)
-	}
-	idx := &scip.Index{
-		Metadata: &scip.Metadata{
-			ToolInfo:             &scip.ToolInfo{Name: "scip-buzz", Version: Version},
-			TextDocumentEncoding: scip.TextEncoding_UTF8,
-		},
-	}
-	for _, f := range docs {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		idx.Documents = append(idx.Documents, ix.document(f))
-	}
-	defined := map[string]bool{}
-	for _, f := range docs {
-		for _, d := range f.decls {
-			defined[d.symbol] = true
-		}
-	}
-	for sym, info := range ix.external {
-		if !defined[sym] {
-			idx.ExternalSymbols = append(idx.ExternalSymbols, info)
-		}
-	}
-	idx.ExternalSymbols = scip.CanonicalizeSymbols(idx.ExternalSymbols)
-	return idx, nil
+	return ix, nil
 }
 
 // Write encodes idx in the SCIP protobuf wire format.
@@ -124,10 +128,11 @@ func Write(w io.Writer, idx *scip.Index) error {
 	return nil
 }
 
-// indexer holds what one Index call has read.
+// indexer holds what one Project, and so one Index call, has read.
 type indexer struct {
 	project, workspace string
-	onWarn             func(msg string)
+	// onWarn hears every problem first and forwards each to userWarn, Options.Warn.
+	onWarn, userWarn func(msg string)
 	// files caches every file read, documents and import targets alike, by
 	// absolute path.
 	files map[string]*file
