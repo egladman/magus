@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // describe runs the semantic checks over a Contract as Resolve would have decoded it.
@@ -728,4 +729,138 @@ func TestBuiltinStubSyntax(t *testing.T) {
 	assert.Nil(t, m["bash"].Syntax, "a spell that cannot declare a body honestly declares none")
 	require.NotNil(t, m["buzz"].Syntax)
 	assert.Nil(t, m["buzz"].Syntax.Stubs, "buzz declares comments only")
+}
+
+type discoveredSuite struct {
+	suite.Suite
+	spell spells.Descriptor
+}
+
+func TestDiscoveredSuite(t *testing.T) { suite.Run(t, new(discoveredSuite)) }
+
+func (s *discoveredSuite) SetupTest() {
+	s.spell = spells.Descriptor{Name: "go", Ops: map[string]spells.Op{"go-build": {}, "go-test": {}, "go-vet": {}}}
+}
+
+func (s *discoveredSuite) claim() spells.DiscoveredProject {
+	return spells.DiscoveredProject{
+		Path:        ".",
+		Role:        spells.DiscoveryRoleProject,
+		DependsOn:   []string{"libs/proto"},
+		Targets:     map[string][]string{"build": {"go-build"}, "test": {"go-test"}, "lint": {"go-vet"}},
+		Spans:       []string{"web"},
+		NotInferred: []spells.DiscoveryGap{{File: "Makefile", Why: "recipes: meaning unknown"}},
+	}
+}
+
+func (s *discoveredSuite) refuse(c spells.DiscoveredProject, want string) {
+	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{c})
+	s.Require().Error(err)
+	s.Contains(err.Error(), `spell "go": discover_projects:`)
+	s.Contains(err.Error(), want)
+}
+
+func (s *discoveredSuite) TestAcceptsARootProject() {
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim()}))
+}
+
+func (s *discoveredSuite) TestAcceptsAMemberWithNoTargets() {
+	member := spells.DiscoveredProject{Path: "scripts", Role: spells.DiscoveryRoleMember}
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{member}))
+}
+
+func (s *discoveredSuite) TestAcceptsAnOpInAnotherSpelling() {
+	c := s.claim()
+	c.Targets = map[string][]string{"build": {"go_build"}}
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{c}))
+}
+
+func (s *discoveredSuite) TestRefusesCI() {
+	c := s.claim()
+	c.Targets["ci"] = []string{"go-test"}
+	s.refuse(c, `target "ci": core composes ci`)
+}
+
+func (s *discoveredSuite) TestRefusesATargetNameOutsideTheVocabulary() {
+	c := s.claim()
+	c.Targets["vet"] = []string{"go-vet"}
+	s.refuse(c, `target "vet" is not a discovery target name, one of install, generate, format, lint, build, test, security`)
+}
+
+func (s *discoveredSuite) TestRefusesClean() {
+	c := s.claim()
+	c.Targets["clean"] = []string{"go-build"}
+	s.refuse(c, `target "clean" is not a discovery target name`)
+}
+
+func (s *discoveredSuite) TestRefusesAnOpTheSpellDoesNotDeclare() {
+	c := s.claim()
+	c.Targets["test"] = []string{"go-test", "vitest"}
+	s.refuse(c, `target "test": op "vitest" is not one the spell declares, one of go-build, go-test, go-vet`)
+}
+
+func (s *discoveredSuite) TestRefusesATargetWithNoOp() {
+	c := s.claim()
+	c.Targets["build"] = nil
+	s.refuse(c, `target "build" names no op`)
+}
+
+func (s *discoveredSuite) TestRefusesAnUnsetRole() {
+	c := s.claim()
+	c.Role = ""
+	s.refuse(c, `role "unset": want one of project, member`)
+}
+
+func (s *discoveredSuite) TestRefusesAnUnknownRole() {
+	c := s.claim()
+	c.Role = "workspace"
+	s.refuse(c, `role "workspace": want one of project, member`)
+}
+
+func (s *discoveredSuite) TestRefusesAnEmptyPath() {
+	c := s.claim()
+	c.Path = ""
+	s.refuse(c, "a path is required")
+}
+
+func (s *discoveredSuite) TestRefusesAnUncleanPath() {
+	c := s.claim()
+	c.Path = "./web/"
+	s.refuse(c, `not clean, write "web"`)
+}
+
+func (s *discoveredSuite) TestRefusesAnAbsolutePath() {
+	c := s.claim()
+	c.Path = "/repo/web"
+	s.refuse(c, "never absolute")
+}
+
+func (s *discoveredSuite) TestRefusesABackslash() {
+	c := s.claim()
+	c.Path = `web\app`
+	s.refuse(c, "forward slashes")
+}
+
+func (s *discoveredSuite) TestRefusesADependencyOutsideTheRoot() {
+	c := s.claim()
+	c.DependsOn = []string{"../other"}
+	s.refuse(c, `dependsOn "../other": leaves the workspace root`)
+}
+
+func (s *discoveredSuite) TestRefusesTheRootAsASpan() {
+	c := s.claim()
+	c.Spans = []string{"."}
+	s.refuse(c, `spans ".": names the workspace root`)
+}
+
+func (s *discoveredSuite) TestRefusesAGapWithNoReason() {
+	c := s.claim()
+	c.NotInferred = []spells.DiscoveryGap{{File: "Makefile", Why: " "}}
+	s.refuse(c, `notInferred "Makefile": why is required`)
+}
+
+func (s *discoveredSuite) TestRefusesTwoClaimsOnOnePath() {
+	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim(), s.claim()})
+	s.Require().Error(err)
+	s.Contains(err.Error(), `claims "." twice`)
 }

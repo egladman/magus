@@ -70,6 +70,13 @@ var boundaryTypes = []boundaryType{
 	// [ReleaseCycle].
 	{Name: "ReleaseCycle", Type: reflect.TypeFor[spells.ReleaseCycle]()},
 	{Name: "Lifecycle", Type: reflect.TypeFor[spells.Lifecycle]()},
+	// discover_projects: magus encodes the query and a spell writes the claims. Leaves
+	// first: DiscoveryQuery.files is [DiscoveryFile], DiscoveredProject.notInferred is
+	// [DiscoveryGap].
+	{Name: "DiscoveryFile", Type: reflect.TypeFor[spells.DiscoveryFile](), RuntimeObject: true},
+	{Name: "DiscoveryQuery", Type: reflect.TypeFor[spells.DiscoveryQuery](), RuntimeObject: true},
+	{Name: "DiscoveryGap", Type: reflect.TypeFor[spells.DiscoveryGap]()},
+	{Name: "DiscoveredProject", Type: reflect.TypeFor[spells.DiscoveredProject]()},
 	// A provider op's records (provider_ops.go). magus encodes each request, so it is a
 	// RuntimeObject; it decodes each response, so that one is listed in inboundTypes.
 	{Name: "Empty", Type: reflect.TypeFor[types.Empty](), RuntimeObject: true},
@@ -641,6 +648,11 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "SkillForm",
 		Type:  reflect.TypeFor[types.SkillForm](),
 		Cases: []enumCase{{"none", ""}, {"both", "both"}, {"short", "short"}, {"full", "full"}},
+	},
+	{
+		Name:  "DiscoveryRole",
+		Type:  reflect.TypeFor[spells.DiscoveryRole](),
+		Cases: []enumCase{{"none", ""}, {"project", "project"}, {"member", "member"}},
 	},
 	{
 		Name: "ToolCapability",
