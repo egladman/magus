@@ -6,6 +6,12 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export enum<str> DiagnosticOrigin {
+    none = "",
+    builtin = "builtin",
+    workspace = "workspace",
+}
+
 export enum<str> CheckStatus {
     none = "",
     ok = "ok",
@@ -443,6 +449,11 @@ export object DriftResult {
     message: str = "",
     url: str = "",
     files: [Path] = [],
+}
+
+export object DiagnosticCode {
+    code: str = "",
+    origin: DiagnosticOrigin = DiagnosticOrigin.none,
 }
 
 export object DiffOptions {
@@ -1938,6 +1949,8 @@ export object Target {
     advisory_reason: str = "",
     human_only: bool = false,
     human_only_reason: str = "",
+    relinks: str = "",
+    integrates: str = "",
 }
 
 export object EvaluatedProject {
@@ -2364,6 +2377,7 @@ export extern fun clean(args: [str], opts: CommandOptions? = null) > CleanReport
 export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > ExecResult !> any;
 export extern fun conformance() > {str: any} !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
+export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
 export extern fun diff(opts: DiffOptions? = null) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;
 export extern fun dirs(glob: str, opts: DirsOptions? = null) > [Dir] !> any;
@@ -2383,7 +2397,7 @@ export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
 export extern fun query(query: str, opts: QueryOptions? = null) > QueryResult !> any;
-export extern fun raise(code: str, message: str, opts: RaiseOptions? = null) > void !> any;
+export extern fun raise(code: DiagnosticCode, message: str, opts: RaiseOptions? = null) > void !> any;
 export extern fun refs(symbol: str, opts: RefsOptions? = null) > RefsResult !> any;
 export extern fun run(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;

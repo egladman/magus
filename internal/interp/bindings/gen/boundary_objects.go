@@ -311,6 +311,13 @@ func ObjectGraphView(v types.GraphView) vm.Value {
 	return out
 }
 
+func ObjectDiagnosticCodeRef(v types.DiagnosticCodeRef, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("code", vm.StringValue(v.Code))
+	out.MapSet("origin", enums.Case("DiagnosticOrigin", string(v.Origin)))
+	return out
+}
+
 func ObjectNode(v types.Node) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))

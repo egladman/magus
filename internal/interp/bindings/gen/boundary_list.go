@@ -69,6 +69,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "Deviation", Zero: types.Deviation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDeviation(v.(types.Deviation)) }},
 	{Name: "Diagnostic", Zero: types.Diagnostic{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiagnostic(v.(types.Diagnostic)) }},
+	{Name: "DiagnosticCode", Zero: types.DiagnosticCodeRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectDiagnosticCodeRef(v.(types.DiagnosticCodeRef), enums)
+	}},
 	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(types.Diff), enums) }},
 	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
 	{Name: "DiffChurn", Zero: types.DiffChurn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffChurn(v.(types.DiffChurn)) }},
