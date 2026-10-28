@@ -56,6 +56,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		format  output.Format
 		term    diffTUITerm
 		enabled bool
+		noTUI   bool
 		want    bool
 	}{
 		{
@@ -88,7 +89,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--no-tui is the one explicit answer",
-			flags:   flaggen.DiffFlags{NoTui: true},
+			noTUI:   true,
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -165,6 +166,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			flags := tc.flags
+			flags.Tui = !tc.noTUI
 			assert.Equal(t, tc.want, wantsTUI(&flags, tc.src, tc.format, tc.term, tc.enabled))
 		})
 	}
@@ -2099,10 +2101,10 @@ func TestWantsTUIKeepsTheViewerForUnreadAndThread(t *testing.T) {
 	term := diffTUITerm{Reads: true, Paints: true}
 	src := diffInput{kind: inputWorkingTree}
 
-	assert.True(t, wantsTUI(&flaggen.DiffFlags{Unread: true}, src, outputText, term, true))
-	assert.True(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
-	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
-	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Unread: true, Tui: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", Tui: true}, src, outputText, term, true))
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", Tui: true}, src, outputJSON, term, true), "-o json prints the record")
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
 }
 
 // TestPrintDiffTextOrdersTheEvidence covers the whole text rendering: the counts headline,
