@@ -31,7 +31,7 @@ func write(t *testing.T, path, content string, mode os.FileMode) string {
 func layerHeaders(t *testing.T, m Manifest) map[string]*tar.Header {
 	t.Helper()
 	require.NotNil(t, m.Added)
-	f, err := os.Open(blobPath(m.Path, m.Added.Descriptor.Digest))
+	f, err := os.Open(blobPath(m.Path, m.Added.Digest))
 	require.NoError(t, err)
 	defer f.Close()
 	gz, err := gzip.NewReader(f)
@@ -334,7 +334,6 @@ func TestAssembleIndexRefusesTheSamePlatformTwiceOnceNormalized(t *testing.T) {
 	require.ErrorContains(t, err, "are both")
 }
 
-
 func BenchmarkAssembleLayer(b *testing.B) {
 	root := b.TempDir()
 	data := make([]byte, 16<<20)
@@ -350,4 +349,20 @@ func BenchmarkAssembleLayer(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// magus places no whiteouts, by any placement.
+func TestAssembleRefusesAWhiteoutName(t *testing.T) {
+	root := t.TempDir()
+	src := write(t, filepath.Join(root, "f"), "x", 0o644)
+	for _, p := range []string{"/etc/.wh.passwd", "/etc/.wh..wh..opq"} {
+		err := Spec{Scratch: true, Platform: amd64, Files: []File{{Source: src, Path: p, Mode: ModeFile}}}.Validate()
+		require.ErrorContains(t, err, "OCI whiteout", p)
+	}
+	tree := filepath.Join(root, "tree")
+	write(t, filepath.Join(tree, "etc", ".wh.passwd"), "x", 0o644)
+	_, err := Assemble(t.Context(), Spec{Scratch: true, Platform: amd64, Trees: []Tree{
+		{Source: tree, Path: "/", ModePolicy: ModePolicyFixed, Symlinks: SymlinkPolicyRefuse},
+	}}, filepath.Join(root, "out"))
+	require.ErrorContains(t, err, "OCI whiteout")
 }

@@ -1,9 +1,12 @@
 package oci
 
 import (
+	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -260,7 +263,7 @@ func (r *inMemoryRegistry) serveManifest(w http.ResponseWriter, req *http.Reques
 		if r.dockerDigest != nil {
 			w.Header().Set("Docker-Content-Digest", r.dockerDigest(body))
 		}
-		if subject := subjectOf(body); r.referrersAPI && subject != "" {
+		if subject := manifestSubject(body); r.referrersAPI && subject != "" {
 			w.Header().Set("OCI-Subject", subject)
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -278,7 +281,7 @@ func (r *inMemoryRegistry) serveManifest(w http.ResponseWriter, req *http.Reques
 	_, _ = w.Write(b)
 }
 
-func subjectOf(body []byte) string {
+func manifestSubject(body []byte) string {
 	var m struct {
 		Subject *ocispec.Descriptor `json:"subject"`
 	}
@@ -298,7 +301,7 @@ func (r *inMemoryRegistry) serveReferrers(w http.ResponseWriter, subject string)
 	idx := ocispec.Index{MediaType: ocispec.MediaTypeImageIndex, Manifests: []ocispec.Descriptor{}}
 	idx.SchemaVersion = 2
 	for name, body := range r.tags {
-		if !strings.HasPrefix(name, "sha256:") || subjectOf(body) != subject {
+		if !strings.HasPrefix(name, "sha256:") || manifestSubject(body) != subject {
 			continue
 		}
 		var m ocispec.Manifest
@@ -682,4 +685,117 @@ func TestAuthorizeAnswersABasicChallenge(t *testing.T) {
 
 	_, err = reg.client().Artifact(t.Context(), ref, testArtifactType)
 	require.ErrorContains(t, err, "asks for Basic credentials")
+}
+
+// docker.io answers /v2/ with a redirect to www.docker.com; only registry-1.docker.io
+// serves the API, and an official image lives under library/.
+func TestDockerHubRequestsGoToRegistry1AndABareNameIsRefused(t *testing.T) {
+	for _, host := range []string{"docker.io", "index.docker.io"} {
+		ref, err := ParseReference(host + "/library/alpine:3")
+		require.NoError(t, err)
+		assert.Equal(t, host+"/library/alpine:3", ref.String(), "the reference keeps what was written")
+		assert.Equal(t, "https://registry-1.docker.io/v2/library/alpine", (&Client{}).base(ref))
+
+		_, err = ParseReference(host + "/alpine:3")
+		require.ErrorContains(t, err, host+"/library/alpine")
+	}
+	ghcr, err := ParseReference("ghcr.io/alpine:3")
+	require.NoError(t, err, "a one-segment repository is only a Docker Hub mistake")
+	assert.Equal(t, "https://ghcr.io/v2/alpine", (&Client{}).base(ghcr))
+}
+
+// distribution-spec "Error Codes": a 4XX body is {"errors":[{code,message,detail}]}.
+func TestStatusErrorReadsTheSpecErrorBody(t *testing.T) {
+	reg := newInMemoryRegistry(t)
+	reg.intercept = func(w http.ResponseWriter, req *http.Request) bool {
+		if !strings.Contains(req.URL.Path, "/blobs/") {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"errors":[{"code":"BLOB_UNKNOWN","message":"blob unknown to registry","detail":{"digest":"x"}}]}`))
+		return true
+	}
+	err := reg.client().GetBlob(t.Context(), reg.repository(), blobDescriptor([]byte("absent")), new(bytes.Buffer))
+	require.ErrorIs(t, err, ErrNotFound)
+	var status *StatusError
+	require.ErrorAs(t, err, &status)
+	require.Len(t, status.Errors, 1)
+	assert.Equal(t, "BLOB_UNKNOWN", status.Errors[0].Code)
+	assert.JSONEq(t, `{"digest":"x"}`, string(status.Errors[0].Detail))
+	assert.Empty(t, status.Body)
+	assert.ErrorContains(t, err, "BLOB_UNKNOWN: blob unknown to registry")
+}
+
+func TestForbiddenIsDeniedNotUnauthorized(t *testing.T) {
+	reg := newInMemoryRegistry(t)
+	reg.intercept = func(w http.ResponseWriter, req *http.Request) bool {
+		if !strings.Contains(req.URL.Path, "/blobs/") {
+			return false
+		}
+		w.WriteHeader(http.StatusForbidden)
+		return true
+	}
+	err := reg.client().GetBlob(t.Context(), reg.repository(), blobDescriptor([]byte("x")), new(bytes.Buffer))
+	require.ErrorIs(t, err, ErrDenied)
+	assert.False(t, errors.Is(err, ErrUnauthorized))
+}
+
+func TestTooManyRequestsWaitsOutAShortRetryAfter(t *testing.T) {
+	reg := newInMemoryRegistry(t)
+	payload := []byte("rate limited")
+	reg.blobs[blobDescriptor(payload).Digest.String()] = payload
+	limited := 0
+	reg.intercept = func(w http.ResponseWriter, req *http.Request) bool {
+		if !strings.Contains(req.URL.Path, "/blobs/") || limited == 2 {
+			return false
+		}
+		limited++
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+		return true
+	}
+	var got bytes.Buffer
+	require.NoError(t, reg.client().GetBlob(t.Context(), reg.repository(), blobDescriptor(payload), &got))
+	assert.Equal(t, payload, got.Bytes())
+	assert.Equal(t, 2, limited)
+}
+
+func TestTooManyRequestsWithALongRetryAfterFailsAtOnce(t *testing.T) {
+	reg := newInMemoryRegistry(t)
+	reg.intercept = func(w http.ResponseWriter, req *http.Request) bool {
+		if !strings.Contains(req.URL.Path, "/blobs/") {
+			return false
+		}
+		w.Header().Set("Retry-After", "3600")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"errors":[{"code":"TOOMANYREQUESTS","message":"pull rate limit"}]}`))
+		return true
+	}
+	err := reg.client().GetBlob(t.Context(), reg.repository(), blobDescriptor([]byte("x")), new(bytes.Buffer))
+	require.ErrorIs(t, err, ErrTooManyRequests)
+	assert.ErrorContains(t, err, "TOOMANYREQUESTS: pull rate limit; retry after 3600")
+}
+
+// distribution-spec "Warnings": clients SHOULD report `Warning: 299 - "..."` headers.
+func TestRegistryWarningIsLogged(t *testing.T) {
+	logged := &capturedLog{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	reg := newInMemoryRegistry(t)
+	payload := []byte("warned")
+	reg.blobs[blobDescriptor(payload).Digest.String()] = payload
+	reg.intercept = func(w http.ResponseWriter, req *http.Request) bool {
+		w.Header().Add("Warning", `299 - "this repository is deprecated"`)
+		w.Header().Add("Warning", `199 - "not a registry warning"`)
+		return false
+	}
+	require.NoError(t, reg.client().GetBlob(t.Context(), reg.repository(), blobDescriptor(payload), new(bytes.Buffer)))
+
+	logged.mu.Lock()
+	defer logged.mu.Unlock()
+	assert.Contains(t, logged.buf.String(), `"warning":"this repository is deprecated"`)
+	assert.NotContains(t, logged.buf.String(), "not a registry warning")
 }

@@ -1,8 +1,10 @@
 package image
 
 import (
+	"path/filepath"
 	"testing"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,4 +71,19 @@ func TestParseMode(t *testing.T) {
 	var m Mode
 	require.NoError(t, m.UnmarshalText([]byte("rw-------")))
 	assert.Equal(t, ModePrivate, m)
+}
+
+// written and read back, and take no part in matching.
+func TestPlatformCarriesOSVersionAndOSFeatures(t *testing.T) {
+	p := Platform{OS: "linux", Architecture: "amd64", Variant: "v3", OSVersion: "6.1", OSFeatures: []string{"example"}}
+	m, err := Assemble(t.Context(), Spec{Scratch: true, Platform: p}, filepath.Join(t.TempDir(), "out"))
+	require.NoError(t, err)
+	cfg := readConfig(t, m)
+	assert.Equal(t, ocispec.Platform{OS: "linux", Architecture: "amd64", Variant: "v3", OSVersion: "6.1", OSFeatures: []string{"example"}}, cfg.Platform)
+
+	opened, err := OpenLayout(t.Context(), m.Path, "")
+	require.NoError(t, err)
+	back, err := opened.Manifest(t.Context(), Platform{OS: "linux", Architecture: "amd64", Variant: "v3"})
+	require.NoError(t, err)
+	assert.Equal(t, p, back.Platform)
 }
