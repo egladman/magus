@@ -1,0 +1,718 @@
+// Away mode, this repository's reference policy (ADR 0019): a window a person opens with
+// `hack/dev/away.buzz start`, inside which the guard lets a long session carry out the job
+// rows the person approved and denies every act the person keeps. Copy it and edit it: the
+// ceiling, the reserved paths and the loop limit below are opinions, not magus's.
+//
+// The contract is one JSON Lines entry per start or end, in the repository's git common
+// directory under magus/away.jsonl, so every worktree reads one window; the last line wins.
+namespace agentpolicy\away;
+
+import "std";
+import "fs";
+import "os";
+import "encoding/json";
+import "magus";
+import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
+
+// ceiling is the highest tolerance `start` accepts: the most an unsettled job's proven tier
+// may be for it to land with no one present.
+export final ceiling = "mechanical";
+
+// tiers are the risk tiers, lowest first, as internal/risk proves them.
+export final tiers = ["trivial", "mechanical", "scoped", "full"];
+
+// loopLimit is how many stops running a refusal naming the same rows holds before it lets the
+// turn end and files an attention row.
+final loopLimit = 3;
+
+// reservedPaths are the workspace paths no agent writes while a window is open: decisions,
+// design pages, and hook and permission config.
+final reservedPaths = ["docs/decisions/", "docs/design/", ".claude/", ".codex/", "hack/policy/", "spells/harness/", "magus.yaml"];
+
+// Contract is one line of the contract file: a window's start, or its end.
+export object Contract {
+    action: str,
+    // at is when the line was written, in Unix milliseconds.
+    at: int,
+    // endClock is the end time as the person typed it, HH:MM local.
+    endClock: str = "",
+    // ends is endClock resolved to Unix milliseconds when the window started.
+    ends: int = 0,
+    tolerance: str = "",
+    rows: [str] = [],
+}
+
+// Row is what the rules read of one job store row, copied out of magus\job.list so a test can
+// build one.
+export object Row {
+    id: str,
+    state: str,
+    parent: str = "",
+    paused: bool = false,
+    dependsOn: [str] = [],
+    created: int = 0,
+    checkoutRoot: str = "",
+    unresolvedRisks: [str] = [],
+}
+
+// Assessed is a job's proven risk tier and the evidence behind it.
+export object Assessed {
+    tier: str,
+    evidence: [str] = [],
+}
+
+// unproven is the tier source while no risk call reaches Buzz: anything unproven is full, so
+// every unsettled job parks. It names why, so the report does not read as a measured tier.
+export fun unproven(id: str) > Assessed {
+    return Assessed{ tier = "full", evidence = ["{id}: full (this magus has no magus\\risk.assess, so no tier below full is proven)"] };
+}
+
+// rows copies a job store's rows.
+export fun rows(jobs: [Job]) > [Row] {
+    final found =mut [<Row>];
+    foreach (j in jobs) {
+        var risks = [<str>];
+        if (j.result != null) {
+            risks = j.result!.unresolvedRisks;
+        }
+        found.append(Row{ id = j.id, state = j.state, parent = j.parent, paused = j.paused != 0, dependsOn = j.dependsOn,
+            created = j.created, checkoutRoot = j.checkoutRoot, unresolvedRisks = risks });
+    }
+    return found;
+}
+
+// commonDir is the git common directory of the repository holding workspace, read from the
+// checkout's .git without running git, since a guard rule runs on every call; null when the
+// workspace is not a git checkout.
+export fun commonDir(workspace: str) > str? {
+    final dotgit = workspace + "/.git";
+    if (fs\isDir(dotgit) catch false) {
+        return dotgit;
+    }
+    final text = fs\readFile(dotgit) catch "";
+    if (!text.startsWith("gitdir: ")) {
+        return null;
+    }
+    var gitdir = text.sub(8).trim();
+    if (!gitdir.startsWith("/")) {
+        gitdir = workspace + "/" + gitdir;
+    }
+    final common = (fs\readFile(gitdir + "/commondir") catch "").trim();
+    if (common == "") {
+        return gitdir;
+    }
+    if (common.startsWith("/")) {
+        return common;
+    }
+    return gitdir + "/" + common;
+}
+
+// contractFile is where the contract of the repository holding workspace lives, null outside
+// a git checkout.
+export fun contractFile(workspace: str) > str? {
+    if (commonDir(workspace) -> dir) {
+        return dir + "/magus/away.jsonl";
+    }
+    return null;
+}
+
+// attentionFile is where the Stop rule files the rows a refusal loop gave up on.
+export fun attentionFile(workspace: str) > str? {
+    if (commonDir(workspace) -> dir) {
+        return dir + "/magus/away-attention.jsonl";
+    }
+    return null;
+}
+
+// parseContract reads one contract line, null for one that is not a contract.
+export fun parseContract(line: str) > Contract? {
+    if (line.trim() == "") {
+        return null;
+    }
+    final doc: {str: any} = json\parse(line) catch {<str: any>};
+    final action: str = doc["action"] ?? "";
+    if (action != "start" and action != "end") {
+        return null;
+    }
+    final named: [any] = doc["rows"] ?? [<any>];
+    final ids = mut [<str>];
+    foreach (r in named) {
+        final id: str = r;
+        ids.append(id);
+    }
+    return Contract{
+        action = action,
+        at = std\toInt(doc["at"] ?? 0),
+        endClock = doc["until"] ?? "",
+        ends = std\toInt(doc["ends"] ?? 0),
+        tolerance = doc["tolerance"] ?? "",
+        rows = ids,
+    };
+}
+
+// encodeContract is c as one contract line, without its newline.
+export fun encodeContract(c: Contract) > str !> any {
+    return json\stringify({"action": c.action, "at": c.at, "until": c.endClock, "ends": c.ends, "tolerance": c.tolerance, "rows": c.rows});
+}
+
+// lastContract is the last contract in text, null when it holds none.
+export fun lastContract(text: str) > Contract? {
+    var last: Contract? = null;
+    foreach (line in text.split("\n")) {
+        if (parseContract(line) -> c) {
+            last = c;
+        }
+    }
+    return last;
+}
+
+// loadContract is the last contract of the repository holding workspace, null when none was
+// ever written there.
+export fun loadContract(workspace: str) > Contract? {
+    if (contractFile(workspace) -> file) {
+        return lastContract(fs\readFile(file) catch "");
+    }
+    return null;
+}
+
+// now is the current time in Unix milliseconds.
+export fun now() > int {
+    return std\toInt(os\time());
+}
+
+// isOpen reports whether c is a window still open at now.
+export fun isOpen(c: Contract?, now: int) > bool {
+    if (c -> contract) {
+        return contract.action == "start" and now < contract.ends;
+    }
+    return false;
+}
+
+// rank is tier's place in tiers, full for a tier magus does not prove.
+export fun rank(tier: str) > int {
+    return tiers.indexOf(tier) ?? tiers.len() - 1;
+}
+
+// settled reports whether a job is done with no call left for the person: `job wait`
+// recorded it pass and its exit record names no unresolved risk. A worker's own report can
+// only unsettle a job.
+export fun settled(row: Row) > bool {
+    return row.state == "pass" and row.unresolvedRisks.len() == 0;
+}
+
+fun byId(jobs: [Row], id: str) > Row? {
+    foreach (r in jobs) {
+        if (r.id == id) {
+            return r;
+        }
+    }
+    return null;
+}
+
+// approved reports whether id is a row c names, or a child forked from one, which by the job
+// rules narrows its parent.
+export fun approved(id: str, c: Contract, jobs: [Row]) > bool {
+    var at = id;
+    var hops = 0;
+    while (at != "" and hops <= jobs.len()) {
+        if (c.rows.indexOf(at) != null) {
+            return true;
+        }
+        if (byId(jobs, id: at) -> row) {
+            at = row.parent;
+        } else {
+            at = "";
+        }
+        hops = hops + 1;
+    }
+    return false;
+}
+
+fun isMagus(p: helpers\Program) > bool {
+    return p.name == "magus";
+}
+
+// awayAction is the subcommand a line runs hack/dev/away.buzz with, "" for any other line.
+fun awayAction(p: helpers\Program) > str {
+    if (!isMagus(p)) {
+        return "";
+    }
+    final ops = helpers\magusOperands(p.args);
+    if (ops.len() < 3 or ops[0] != "buzz" or !ops[1].endsWith("hack/dev/away.buzz")) {
+        return "";
+    }
+    return ops[2];
+}
+
+// jobVerb is a magus job line's verb and its operands after it, [] for any other line.
+fun jobVerb(p: helpers\Program) > [str] {
+    if (!isMagus(p)) {
+        return [<str>];
+    }
+    final ops = helpers\magusOperands(p.args);
+    if (ops.len() < 2 or ops[0] != "job") {
+        return [<str>];
+    }
+    return ops.sub(1);
+}
+
+// Fork is a `magus job fork` as the rule reads it: the row it declares, its parent, and the
+// rows it integrates, read from a --stdin record the line carries as a heredoc.
+export object Fork {
+    id: str,
+    parent: str = "",
+    integrates: [str] = [],
+    // known is false for a --stdin fork whose record the line does not carry.
+    known: bool = true,
+}
+
+// readFork is the fork p declares; body is the heredoc the line feeds it, "" for none.
+export fun readFork(p: helpers\Program, body: str) > Fork {
+    final ops = helpers\stripFlags(p.args, valueFlags: ["--parent", "--write-paths", "--deny-paths", "--read-paths", "--depends-on", "--criteria",
+        "--check", "--checkout", "--checkpoint", "--model", "--timeout", "--brief-format", "--write-paths"]);
+    if (!helpers\hasFlag(p.args, long: "--stdin")) {
+        final named = helpers\magusOperands(ops);
+        final id = if (named.len() > 2) named[2] else "";
+        return Fork{ id = id, parent = helpers\flagValue(p.args, long: "--parent", short: "") ?? "" };
+    }
+    final doc: {str: any} = json\parse(body) catch {<str: any>};
+    final id: str = doc["id"] ?? "";
+    if (id == "") {
+        return Fork{ id = "", known = false };
+    }
+    final listed: [any] = doc["integrates"] ?? [<any>];
+    final integrates = mut [<str>];
+    foreach (i in listed) {
+        final name: str = i;
+        integrates.append(name);
+    }
+    return Fork{ id = id, parent = doc["parent"] ?? "", integrates = integrates };
+}
+
+// plainHeredocs are the bodies of every heredoc on line, in order, fed to a command
+// substitution or straight to a program's stdin.
+export fun plainHeredocs(line: str) > [str] {
+    final bodies = mut [<str>];
+    final lines = line.split("\n");
+    var i = 0;
+    while (i < lines.len()) {
+        final at = lines[i].indexOf("<<");
+        if (at == null) {
+            i = i + 1;
+            continue;
+        }
+        final rest = lines[i].sub(at! + 2).replace("-", with: "").trim();
+        final word = rest.split(" ")[0].replace("'", with: "").replace("\"", with: "");
+        final body = mut [<str>];
+        var j = i + 1;
+        while (j < lines.len() and lines[j].trim() != word) {
+            body.append(lines[j]);
+            j = j + 1;
+        }
+        bodies.append(body.join("\n"));
+        i = j + 1;
+    }
+    return bodies;
+}
+
+fun deny(reason: str) > GuardVerdict {
+    return magus\guard.deny(reason, opts: {"rule": "away-mode"});
+}
+
+// decideCommand judges one shell line against the contract. Starting or ending a window is
+// the person's decision, so it is denied whether or not one is open; every other denial holds
+// only while one is.
+export fun decideCommand(programs: [helpers\Program], line: str, c: Contract?, jobs: [Row], now: int, assess: fun (id: str) > Assessed) > GuardVerdict {
+    foreach (p in programs) {
+        final action = awayAction(p);
+        if (action == "start" or action == "end") {
+            return deny("an away window is opened and closed by the person, never an agent; propose the line and let them type it\n"
+                + "ADR 0019 section 2: starting the window is the decision. `hack/dev/away.buzz report` reads it.");
+        }
+    }
+    if (!isOpen(c, now: now)) {
+        return magus\guard.allow();
+    }
+    final contract = c!;
+    final bodies = plainHeredocs(line);
+    var body = "";
+    if (bodies.len() > 0) {
+        body = bodies[0];
+    }
+    foreach (p in programs) {
+        final verdict = decideProgram(p, body: body, c: contract, jobs: jobs, assess: assess);
+        if (verdict.decision != "allow") {
+            return verdict;
+        }
+    }
+    return magus\guard.allow();
+}
+
+fun decideProgram(p: helpers\Program, body: str, c: Contract, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+    final verb = jobVerb(p);
+    if (verb.len() > 0) {
+        return decideJob(p, verb: verb, body: body, c: c, jobs: jobs, assess: assess);
+    }
+    if (p.name == "gh" and p.args.len() > 1 and p.args[0] == "pr" and p.args[1] == "merge") {
+        return deny("merging is the person's while an away window is open; the report lists the pull request\n"
+            + "ADR 0019 section 5: merge and push stay reserved.");
+    }
+    if (p.vcs -> call) {
+        if (call.subcommand == "push") {
+            return deny("pushing is the person's while an away window is open; the report lists the branch\n"
+                + "ADR 0019 section 5: merge and push stay reserved.");
+        }
+        if (call.subcommand == "branch" and (call.args.indexOf("-D") != null or call.args.indexOf("-d") != null or call.args.indexOf("--delete") != null)) {
+            foreach (name in helpers\stripFlags(call.args, valueFlags: [<str>])) {
+                if (!madeInWindow(jobs, id: name, c: c)) {
+                    return deny("branch {name} is older than the away window, so deleting it is the person's\n"
+                        + "ADR 0019 section 5: a window deletes only work it created.");
+                }
+            }
+        }
+        if (call.subcommand == "worktree" and call.args.len() > 1 and call.args[0] == "remove") {
+            foreach (dir in helpers\stripFlags(call.args.sub(1), valueFlags: [<str>])) {
+                if (!checkoutMadeInWindow(jobs, dir: dir, c: c)) {
+                    return deny("worktree {dir} is not one a row of this window owns, so removing it is the person's\n"
+                        + "ADR 0019 section 5: a window deletes only work it created.");
+                }
+            }
+        }
+    }
+    return magus\guard.allow();
+}
+
+fun madeInWindow(jobs: [Row], id: str, c: Contract) > bool {
+    if (byId(jobs, id: id) -> row) {
+        return row.created >= c.at;
+    }
+    return false;
+}
+
+fun checkoutMadeInWindow(jobs: [Row], dir: str, c: Contract) > bool {
+    foreach (r in jobs) {
+        if (r.checkoutRoot != "" and (r.checkoutRoot == dir or r.checkoutRoot.endsWith("/" + dir)) and r.created >= c.at) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun decideJob(p: helpers\Program, verb: [str], body: str, c: Contract, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+    final what = verb[0];
+    if (what == "grant") {
+        return deny("a job grant is typed by the person, never an agent\nADR 0019 section 5: the report names the grant left.");
+    }
+    if (what == "apply") {
+        return deny("a plan goes into the store before an away window opens; `job apply` inside one is new scope\n"
+            + "ADR 0019, Consequences: the contract can name only rows that exist when it starts.");
+    }
+    if (what == "rm") {
+        foreach (id in verb.sub(1)) {
+            if (!madeInWindow(jobs, id: id, c: c)) {
+                return deny("job {id} is older than the away window, so removing it is the person's\n"
+                    + "ADR 0019 section 5: a window deletes only work it created.");
+            }
+        }
+        return magus\guard.allow();
+    }
+    if (what != "fork") {
+        return magus\guard.allow();
+    }
+    final fork = readFork(p, body: body);
+    if (!fork.known) {
+        return deny("this --stdin fork's record is not on the line, so the away contract cannot place it; feed it as a heredoc\n"
+            + "ADR 0019 section 5: a fork the contract cannot read is judged as new scope.");
+    }
+    if (!approved(fork.id, c: c, jobs: jobs) and !approved(fork.parent, c: c, jobs: jobs)) {
+        return deny("{fork.id} is new scope: the away contract names {c.rows.join(", ")} and their children\n"
+            + "ADR 0019 section 2: a row the contract does not name waits for the person.");
+    }
+    foreach (id in fork.integrates) {
+        final parked = decidePark(id, c: c, jobs: jobs, assess: assess);
+        if (parked.decision != "allow") {
+            return parked;
+        }
+    }
+    return magus\guard.allow();
+}
+
+// decidePark parks an unsettled job whose proven tier is above the window's tolerance: the
+// integration fork naming it is denied, the row stays for the person, and the queue goes on.
+export fun decidePark(id: str, c: Contract, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+    if (byId(jobs, id: id) -> row) {
+        if (settled(row)) {
+            return magus\guard.allow();
+        }
+    }
+    final got = assess(id);
+    if (rank(got.tier) <= rank(c.tolerance)) {
+        return magus\guard.allow();
+    }
+    return deny("{id} is parked: unsettled at tier {got.tier}, above the window's tolerance {c.tolerance}; fork the next row\n"
+        + "ADR 0019 section 4. Evidence:\n" + got.evidence.join("\n"));
+}
+
+// relative is path as a workspace-relative path, "" when it lies outside workspace.
+fun relative(path: str, workspace: str) > str {
+    if (!path.startsWith("/")) {
+        return path;
+    }
+    if (path.startsWith(workspace + "/")) {
+        return path.sub(workspace.len() + 1);
+    }
+    return "";
+}
+
+// decideWrite judges one file write. The contract file is denied always, since writing it
+// opens a window; the reserved paths only while one is open.
+export fun decideWrite(path: str, workspace: str, c: Contract?, now: int) > GuardVerdict {
+    final contract = contractFile(workspace) ?? "";
+    final attention = attentionFile(workspace) ?? "";
+    if (path != "" and (path == contract or path == attention)) {
+        return deny("the away contract is written by `hack/dev/away.buzz`, run by the person\nADR 0019 section 8.");
+    }
+    if (!isOpen(c, now: now)) {
+        return magus\guard.allow();
+    }
+    final rel = relative(path, workspace: workspace);
+    foreach (reserved in reservedPaths) {
+        if (rel == reserved or (reserved.endsWith("/") and rel.startsWith(reserved))) {
+            return deny("{rel} is reserved while an away window is open: decisions, design and hook config stay the person's\n"
+                + "ADR 0019 section 5.");
+        }
+    }
+    return magus\guard.allow();
+}
+
+// StopFacts is what the Stop rule reads of a stop.
+export object StopFacts {
+    role: str,
+    stopHookActive: bool,
+}
+
+// Queue is the job store as the Stop rule reads it.
+export object Queue {
+    jobs: [Row],
+    // blocked are the rows the store reports waiting on another.
+    blocked: [str] = [],
+}
+
+// forkable are the rows a root could work next: declared, not paused or blocked, every row
+// they depend on passed. With a window open they are the approved rows; with none, every row.
+export fun forkable(q: Queue, c: Contract?, now: int) > [str] {
+    final open = isOpen(c, now: now);
+    final found =mut [<str>];
+    foreach (r in q.jobs) {
+        if (r.state != "declared" or r.paused or q.blocked.indexOf(r.id) != null) {
+            continue;
+        }
+        if (open and !approved(r.id, c: c!, jobs: q.jobs)) {
+            continue;
+        }
+        var ready = true;
+        foreach (dep in r.dependsOn) {
+            final row = byId(q.jobs, id: dep);
+            if (row == null or row!.state != "pass") {
+                ready = false;
+            }
+        }
+        if (ready) {
+            found.append(r.id);
+        }
+    }
+    return found;
+}
+
+// decideStop refuses a root's stop while rows it could fork wait and no worker runs to wake
+// it. With no window open it refuses once per stop, so a person present can end a turn. Inside
+// a window a refusal naming the same rows loopLimit stops running lets the turn end and calls
+// file with the rows, for the person. Past the window's end the turn ends.
+export fun decideStop(facts: StopFacts, q: Queue, c: Contract?, now: int, count: fun (key: str) > int, file: fun (rows: [str]) > void) > GuardVerdict {
+    if (facts.role != "root") {
+        return magus\guard.allow();
+    }
+    foreach (r in q.jobs) {
+        if (r.state == "running") {
+            return magus\guard.allow();
+        }
+    }
+    if (c -> contract) {
+        if (contract.action == "start" and now >= contract.ends) {
+            return magus\guard.allow();
+        }
+    }
+    final ready = forkable(q, c: c, now: now);
+    if (ready.len() == 0) {
+        return magus\guard.allow();
+    }
+    final reason = "{ready.join(", ")} can be worked and no worker is running to wake this session; spawn a worker on {ready[0]}\n"
+        + "`./magus describe job {ready[0]}` prints its terms. To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
+    if (!isOpen(c, now: now)) {
+        if (facts.stopHookActive) {
+            return magus\guard.allow();
+        }
+        return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
+    }
+    if (count("away-idle-stop:" + ready.join(",")) >= loopLimit) {
+        file(ready);
+        return magus\guard.advise("the away window refused this stop {loopLimit} times over the same rows, so the turn ends and they wait for the person: {ready.join(", ")}",
+            opts: {"rule": "idle-stop"});
+    }
+    return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
+}
+
+// fileAttention appends one attention entry for rows to the repository's attention file.
+export fun fileAttention(workspace: str, rows: [str], now: int) > void {
+    if (attentionFile(workspace) -> file) {
+        fs\mkdirAll(fs\dirname(file)) catch void;
+        final line = json\stringify({"at": now, "rows": rows, "why": "a fork kept failing: the Stop rule refused {loopLimit} stops over these rows"}) catch "";
+        if (line != "") {
+            fs\appendFile(file, content: line + "\n") catch void;
+        }
+    }
+}
+
+final window = Contract{ action = "start", at = 1000, endClock = "07:30", ends = 5000, tolerance = "mechanical", rows = ["naming-lint", "go-indexer"] };
+final store = [
+    Row{ id = "naming-lint", state = "declared", created = 500 },
+    Row{ id = "go-indexer", state = "pass", created = 500 },
+    Row{ id = "naming-lint/docs", state = "declared", parent = "naming-lint", created = 1500 },
+    Row{ id = "landing", state = "declared", created = 500 },
+    Row{ id = "late", state = "pass", created = 2000, unresolvedRisks = ["picked a name"] },
+];
+final fullTier = fun (id: str) > Assessed => Assessed{ tier = "full", evidence = ["x.go: full (unproven)"] };
+final mechanicalTier = fun (id: str) > Assessed => Assessed{ tier = "mechanical" };
+
+fun magusLine(args: [str]) > [helpers\Program] {
+    return helpers\request([["magus"] + args]);
+}
+
+test "a contract file's last line wins and a line that is no contract is skipped" {
+    final text = "\{\"action\":\"start\",\"at\":1,\"ends\":9,\"tolerance\":\"mechanical\",\"rows\":[\"a\"]\}\nnot json\n\{\"action\":\"end\",\"at\":5\}\n";
+    final c = lastContract(text);
+    std\assert(c != null and c!.action == "end" and c!.at == 5, message: "the end line wins");
+    std\assert(lastContract("") == null, message: "no contract");
+    std\assert(lastContract("\{\"action\":\"start\",\"at\":1,\"ends\":9,\"rows\":[\"a\",\"b\"]\}").rows.len() == 2, message: "rows decode");
+}
+
+test "a window is open from its start until its end time, and an end line closes it" {
+    std\assert(isOpen(window, now: 4999), message: "before the end");
+    std\assert(!isOpen(window, now: 5000), message: "at the end");
+    std\assert(!isOpen(Contract{ action = "end", at = 2000 }, now: 3000), message: "ended");
+    std\assert(!isOpen(null, now: 3000), message: "none");
+}
+
+test "a contract round-trips through its line" {
+    final again = parseContract(encodeContract(window) catch "");
+    std\assert(again != null and again!.ends == 5000 and again!.rows.join(",") == "naming-lint,go-indexer" and again!.tolerance == "mechanical", message: "round trip");
+}
+
+test "a named row and its children are approved and another row is new scope" {
+    std\assert(approved("naming-lint", c: window, jobs: store), message: "named");
+    std\assert(approved("naming-lint/docs", c: window, jobs: store), message: "child");
+    std\assert(!approved("landing", c: window, jobs: store), message: "unnamed");
+    std\assert(!approved("", c: window, jobs: store), message: "empty");
+}
+
+test "starting or ending a window is denied to an agent, open or not" {
+    final start = magusLine(["buzz", "hack/dev/away.buzz", "--", "start", "--until", "07:30"]);
+    std\assert(decideCommand(start, line: "", c: null, jobs: store, now: 0, assess: fullTier).decision == "deny", message: "start");
+    std\assert(decideCommand(magusLine(["buzz", "hack/dev/away.buzz", "--", "end"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "end");
+    std\assert(decideCommand(magusLine(["buzz", "hack/dev/away.buzz", "--", "report"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "report");
+}
+
+test "a fork inside the contract passes and new scope is denied while the window is open" {
+    final child = magusLine(["job", "fork", "naming-lint/tests", "--parent", "naming-lint"]);
+    std\assert(decideCommand(child, line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "child of a named row");
+    final scope = magusLine(["job", "fork", "new-idea"]);
+    final denied = decideCommand(scope, line: "", c: window, jobs: store, now: 2000, assess: fullTier);
+    std\assert(denied.decision == "deny", message: "new scope");
+    std\assert(denied.reason.indexOf("naming-lint, go-indexer") != null, message: "names the contract");
+    std\assert(decideCommand(scope, line: "", c: window, jobs: store, now: 6000, assess: fullTier).decision == "allow", message: "past the end, the window holds nothing");
+    std\assert(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "apply");
+}
+
+test "a --stdin fork is read from its heredoc and one the line does not carry is denied" {
+    final line = "./magus job fork --stdin <<'EOF'\n\{\"id\":\"naming-lint/land\",\"parent\":\"naming-lint\",\"integrates\":[\"go-indexer\"]\}\nEOF";
+    final stdin = magusLine(["job", "fork", "--stdin"]);
+    std\assert(decideCommand(stdin, line: line, c: window, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "settled job lands at any tier");
+    std\assert(decideCommand(stdin, line: "./magus job fork --stdin < job.json", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "unread record");
+}
+
+test "an unsettled job above the tolerance is parked and one at or below it lands" {
+    std\assert(decidePark("late", c: window, jobs: store, assess: fullTier).decision == "deny", message: "risks above tolerance");
+    std\assert(decidePark("late", c: window, jobs: store, assess: mechanicalTier).decision == "allow", message: "at tolerance");
+    std\assert(decidePark("naming-lint", c: window, jobs: store, assess: fullTier).decision == "deny", message: "not passed is unsettled");
+    std\assert(decidePark("go-indexer", c: window, jobs: store, assess: fullTier).decision == "allow", message: "settled");
+    final parked = decidePark("late", c: window, jobs: store, assess: fullTier);
+    std\assert(parked.reason.indexOf("x.go: full (unproven)") != null, message: "carries the evidence");
+}
+
+test "merge, push, grant and deleting older work are reserved while the window is open" {
+    std\assert(decideCommand(helpers\request([["gh", "pr", "merge", "625"]]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "merge");
+    std\assert(decideCommand(helpers\vcsRequest([["git", "push", "origin", "x"]]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "push");
+    std\assert(decideCommand(magusLine(["job", "grant", "x"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "grant");
+    std\assert(decideCommand(magusLine(["job", "rm", "landing"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "older row");
+    std\assert(decideCommand(magusLine(["job", "rm", "naming-lint/docs"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "row made in the window");
+    std\assert(decideCommand(helpers\vcsRequest([["git", "branch", "-D", "landing"]]), line: "", c: window, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "older branch");
+    std\assert(decideCommand(helpers\vcsRequest([["git", "push", "origin", "x"]]), line: "", c: null, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "no window adds nothing");
+}
+
+test "reserved paths are denied only while a window is open and the contract file always" {
+    std\assert(decideWrite("/w/docs/decisions/0020.md", workspace: "/w", c: window, now: 2000).decision == "deny", message: "decision");
+    std\assert(decideWrite("/w/magus.yaml", workspace: "/w", c: window, now: 2000).decision == "deny", message: "config");
+    std\assert(decideWrite("/w/internal/guard/x.go", workspace: "/w", c: window, now: 2000).decision == "allow", message: "code");
+    std\assert(decideWrite("/w/docs/decisions/0020.md", workspace: "/w", c: null, now: 2000).decision == "allow", message: "no window");
+}
+
+test "an idle root stop is refused once with no window and every time inside one" {
+    final q = Queue{ jobs = store };
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final once = decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, c: null, now: 2000, count: none, file: skip);
+    std\assert(once.decision == "deny", message: "first stop");
+    std\assert(once.reason.indexOf("naming-lint") != null, message: "names the row");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, c: null, now: 2000, count: none, file: skip).decision == "allow", message: "second stop");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, c: window, now: 2000, count: none, file: skip).decision == "deny", message: "inside a window");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, c: window, now: 6000, count: none, file: skip).decision == "allow", message: "past the end");
+    std\assert(decideStop(StopFacts{ role = "worker", stopHookActive = false }, q: q, c: window, now: 2000, count: none, file: skip).decision == "allow", message: "a worker");
+}
+
+test "a running row lets the root stop, and so do rows paused, blocked or waiting on a dependency" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final root = StopFacts{ role = "root", stopHookActive = false };
+    final running = Queue{ jobs = [Row{ id = "naming-lint", state = "declared" }, Row{ id = "go-indexer", state = "running" }] };
+    std\assert(decideStop(root, q: running, c: window, now: 2000, count: none, file: skip).decision == "allow", message: "a worker will wake it");
+    final held = Queue{ jobs = [Row{ id = "naming-lint", state = "declared", paused = true }, Row{ id = "go-indexer", state = "declared", dependsOn = ["gone"] }] };
+    std\assert(decideStop(root, q: held, c: window, now: 2000, count: none, file: skip).decision == "allow", message: "paused and waiting");
+    final blocked = Queue{ jobs = [Row{ id = "naming-lint", state = "declared" }], blocked = ["naming-lint"] };
+    std\assert(decideStop(root, q: blocked, c: window, now: 2000, count: none, file: skip).decision == "allow", message: "blocked");
+}
+
+test "every denial carries the verdict shape" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    verdict\checked(decideCommand(magusLine(["buzz", "hack/dev/away.buzz", "--", "start"]), line: "", c: null, jobs: store, now: 0, assess: fullTier), label: "start");
+    verdict\checked(decideCommand(magusLine(["job", "fork", "new-idea"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier), label: "new scope");
+    verdict\checked(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier), label: "apply");
+    verdict\checked(decideCommand(magusLine(["job", "rm", "landing"]), line: "", c: window, jobs: store, now: 2000, assess: fullTier), label: "rm");
+    verdict\checked(decidePark("late", c: window, jobs: store, assess: fullTier), label: "park");
+    verdict\checked(decideWrite("/w/docs/design/x.md", workspace: "/w", c: window, now: 2000), label: "write");
+    verdict\checked(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: Queue{ jobs = store }, c: null, now: 2000, count: none, file: skip), label: "stop");
+}
+
+test "the third refusal over the same rows lets the turn end and files them" {
+    final filed = mut [<str>];
+    final third = fun (key: str) > int => 3;
+    final record = fun (rows: [str]) > void {
+        foreach (r in rows) {
+            filed.append(r);
+        }
+    };
+    final v = decideStop(StopFacts{ role = "root", stopHookActive = true }, q: Queue{ jobs = store }, c: window, now: 2000, count: third, file: record);
+    std\assert(v.decision == "advise", message: "the turn ends");
+    std\assert(filed.join(",") == "naming-lint,naming-lint/docs", message: "files the rows");
+}
