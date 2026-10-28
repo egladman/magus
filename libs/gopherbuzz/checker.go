@@ -137,6 +137,13 @@ type checker struct {
 	// moduleVars holds each imported module's exported `final`/`var` names, so the
 	// namespace object is COMPLETE and a missing member can be reported.
 	moduleVars map[string][]*ast.DeclStmt
+	// declImports maps a module's namespace key to its declarations' imports, by
+	// qualifier; a qualified type in the namespace nsScope names resolves through it.
+	declImports map[string]map[string]string
+	nsScope     string
+	// nsTypes holds the types the namespace being built declares, which its own
+	// bare names resolve to first.
+	nsTypes map[string]types.Type
 	// enumNS maps an enum's bare name to the namespace it is reachable through, for
 	// a module imported without flattening. See ast.EnumCaseExpr.EnumNS.
 	enumNS map[string]string
@@ -293,7 +300,7 @@ func (c *checker) baseEntry(name string) (scopeEntry, bool) {
 // the missing `export` instead of a bare "undefined". embedded mirrors
 // Session.embedded (see checker.embedded).
 func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool) (errs []typeError, warnings []typeError) {
-	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, private, embedded, nil)
+	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, nil, private, embedded, nil)
 }
 
 // checkWithPrelude is checkWithGlobals with the builtins and imported types
@@ -306,12 +313,13 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 //	measured: BenchmarkSessionImportedTypes -43% B/op, -77% allocs/op (benchstat, n=10).
 //	trade-off: a global resolves through two map layers (scopes[0], then base), and
 //	a type a check rewrites must be copied out of base first (ownBaseObject).
-func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool, valueImports map[string]bool) (errs []typeError, warnings []typeError) {
+func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports map[string]bool) (errs []typeError, warnings []typeError) {
 	c := &checker{
 		types:        map[string]types.Type{},
 		moduleFuncs:  moduleFuncs,
 		moduleTypes:  moduleTypes,
 		moduleVars:   moduleVars,
+		declImports:  declImports,
 		private:      private,
 		embedded:     embedded,
 		valueImports: valueImports,
@@ -364,15 +372,21 @@ func (c *checker) namespaceType(name string) *types.ObjectType {
 	}
 	e := c.base.ns[name]
 	if e == nil || !slices.Equal(e.funcs, fds) || !slices.Equal(e.decls, decls) || !slices.Equal(e.vars, vars) {
-		saved := c.enumNS
+		saved, savedRefs := c.enumNS, c.typeRefs
 		c.enumNS, c.typeRefs = nil, map[string]bool{}
 		typ := c.buildNamespaceType(name, fds, decls, vars)
 		e = &preludeNS{funcs: fds, decls: decls, vars: vars, typ: typ, refs: c.typeRefs}
 		for enum := range c.enumNS {
 			e.enums = append(e.enums, enum)
 		}
-		c.enumNS, c.typeRefs = saved, nil
+		c.enumNS, c.typeRefs = saved, savedRefs
 		c.base.ns[name] = e
+	}
+	// A namespace built inside another's depends on the names this one resolved.
+	for ref := range e.refs {
+		if c.typeRefs != nil {
+			c.typeRefs[ref] = true
+		}
 	}
 	for _, enum := range e.enums {
 		if c.enumNS == nil {
@@ -385,6 +399,30 @@ func (c *checker) namespaceType(name string) *types.ObjectType {
 
 func (c *checker) buildNamespaceType(name string, fds []*ast.FunDecl, decls []ast.Node, vars []*ast.DeclStmt) *types.ObjectType {
 	nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
+	defer func(scope string, own map[string]types.Type) { c.nsScope, c.nsTypes = scope, own }(c.nsScope, c.nsTypes)
+	c.nsScope, c.nsTypes = name, map[string]types.Type{}
+	// No program binds a declaration's own import, so a case of its enum has no
+	// namespace to compile through.
+	routesEnums := !strings.HasPrefix(name, declDepKey(""))
+	// The module's own types first, so its signatures name them and not a type of
+	// the same name another module registered later.
+	for _, d := range decls {
+		switch v := d.(type) {
+		case *ast.ObjectDecl:
+			c.nsTypes[v.Name] = c.buildObjectType(v)
+		case *ast.EnumDecl:
+			c.nsTypes[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
+			if !routesEnums {
+				continue
+			}
+			// The enum's VALUE lives behind the namespace, so a resolved case has to
+			// compile to `ns\Enum.case` rather than the bare name the checker uses.
+			if c.enumNS == nil {
+				c.enumNS = map[string]string{}
+			}
+			c.enumNS[v.Name] = name
+		}
+	}
 	for _, fd := range fds {
 		nt.Fields[fd.Name] = c.funDeclType(fd)
 	}
@@ -402,20 +440,7 @@ func (c *checker) buildNamespaceType(name string, fds []*ast.FunDecl, decls []as
 	// An exported TYPE is reachable through the namespace too, as the type value
 	// itself, so `io\File.open(...)` resolves the same static method a bare
 	// `File.open(...)` does, and `io\FileMode.read` the same case.
-	for _, d := range decls {
-		switch v := d.(type) {
-		case *ast.ObjectDecl:
-			nt.Fields[v.Name] = c.buildObjectType(v)
-		case *ast.EnumDecl:
-			nt.Fields[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
-			// The enum's VALUE lives behind the namespace, so a resolved case has to
-			// compile to `ns\Enum.case` rather than the bare name the checker uses.
-			if c.enumNS == nil {
-				c.enumNS = map[string]string{}
-			}
-			c.enumNS[v.Name] = name
-		}
-	}
+	maps.Copy(nt.Fields, c.nsTypes)
 	return nt
 }
 
@@ -665,19 +690,29 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 		IsProtocol: v.IsProtocol, Conforms: v.Conforms,
 	}
 	for _, f := range v.Fields {
-		ot.Fields[f.Name] = types.ParseAnnot(f.TypeAnnot)
+		ot.Fields[f.Name] = c.fieldType(f.TypeAnnot)
 	}
 	// Static fields share the instance field map. The object type is the type of
 	// both the type value (Foo.next) and an instance, so one map answers both, at
 	// the cost of letting an instance name a static too: the same latitude the
 	// enum member path already takes.
 	for _, f := range v.StaticFields {
-		ot.Fields[f.Name] = types.ParseAnnot(f.TypeAnnot)
+		ot.Fields[f.Name] = c.fieldType(f.TypeAnnot)
 	}
 	for _, m := range v.Methods {
 		ot.Methods[m.Name] = c.funDeclType(m)
 	}
 	return ot
+}
+
+// fieldType is a field's declared type, left for its reader to resolve by name
+// except where a declaration module names another module's type: only its own
+// imports know which module that is, so it resolves now.
+func (c *checker) fieldType(annot string) types.Type {
+	if c.declImports[c.nsScope] != nil && qualifiedTypeNames(annot) != nil {
+		return c.resolveAnnot(annot)
+	}
+	return types.ParseAnnot(annot)
 }
 
 func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
@@ -705,14 +740,29 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 // namespace type is being memoized: that type is shared by checks whose scopes
 // may bind ns differently.
 func (c *checker) resolveAnnot(s string) types.Type {
-	t := types.ParseAnnot(s)
-	if c.typeRefs == nil {
-		return c.resolveTypeIn(t, qualifiedTypeNames(s))
-	}
-	return c.resolveType(t)
+	return c.resolveTypeIn(types.ParseAnnot(s), qualifiedTypeNames(s))
 }
 
 func (c *checker) resolveType(t types.Type) types.Type { return c.resolveTypeIn(t, nil) }
+
+// declImportedType is the type `qual\name` names inside the namespace being built,
+// through that module's own declaration imports; nil when they do not resolve it.
+// The answer does not depend on the importer, so a memoized namespace may hold it.
+func (c *checker) declImportedType(qual, name string) types.Type {
+	home, ok := c.declImports[c.nsScope][qual]
+	if !ok {
+		return nil
+	}
+	ns := c.namespaceType(home)
+	if ns == nil {
+		return nil
+	}
+	switch member := ns.Fields[name].(type) {
+	case *types.ObjectType, *types.EnumType:
+		return member
+	}
+	return nil
+}
 
 // resolveTypeIn resolves t, reading a name in quals through the namespace its
 // qualifier binds; see qualifiedTypeNames.
@@ -723,6 +773,13 @@ func (c *checker) resolveTypeIn(t types.Type, quals map[string]string) types.Typ
 			c.typeRefs[v.Name] = true
 		}
 		if qual := quals[v.Name]; qual != "" {
+			if member := c.declImportedType(qual, v.Name); member != nil {
+				return member
+			}
+		} else if own, ok := c.nsTypes[v.Name]; ok {
+			return own
+		}
+		if qual := quals[v.Name]; qual != "" && c.typeRefs == nil {
 			if member, known := c.namespaceMemberType(qual, v.Name); known {
 				if member != nil {
 					return member

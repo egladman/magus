@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -2919,4 +2921,86 @@ func TestSession_RelativeImportResolvesBesideTheEntry(t *testing.T) {
 	sess.SetIncludeDirs([]string{entryDir})
 	require.NoError(t, sess.Exec(ctx, "import \"../lib\";\nfinal got = which;\n"))
 	assert.Equal(t, "entry", sess.GetGlobal("got").String())
+}
+
+// A declaration source names another module's type through its own import, as
+// upstream resolves `fs\Path` only through the script's own globals. magus declares
+// a Path with other fields, so a qualified reference must reach the home module's.
+func TestDeclImports(t *testing.T) {
+	ctx := context.Background()
+	decls := map[string]string{
+		"fs":    `export object Path { abs: str = "" } export extern fun glob(p: str) > [Path];`,
+		"magus": `export object Path { rel: str = "" } export extern fun here() > Path;`,
+		"proc": `import "fs";
+export object ExecResult { cwd: fs\Path }
+export extern fun run(p: fs\Path) > str;
+export extern fun cwd() > fs\Path;
+export extern fun exec(c: str) > ExecResult;`,
+	}
+	compile := func(t *testing.T, decls map[string]string, src string) error {
+		t.Helper()
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		for _, name := range slices.Sorted(maps.Keys(decls)) {
+			sess.SetNativeModule(name, vm.NewMap())
+			sess.SetModuleDecls(name, decls[name])
+		}
+		_, err := sess.Compile(src)
+		return err
+	}
+
+	for _, tc := range []struct {
+		name, src, wantErr string
+	}{
+		{"a parameter takes the home type", `import "proc"; import "fs"; final _r = proc\run(fs\glob("x")[0]);`, ""},
+		{"a parameter refuses another type", `import "proc"; final _r = proc\run(1);`, `cannot pass int as argument "p" of type Path`},
+		{"a return is the home type", `import "proc"; final _r: int = proc\cwd().abs;`, `cannot assign str to int variable "_r"`},
+		{"a field is the home type", `import "proc"; import "magus"; final _s: str = proc\exec("x").cwd.abs;`, ""},
+		{"a field is not the same-named type", `import "magus"; import "proc"; final _s: str = proc\exec("x").cwd.rel;`, `object Path has no field or method "rel"`},
+		{"a return is not the same-named type", `import "proc"; import "magus"; final _s: str = proc\cwd().rel;`, `object Path has no field or method "rel"`},
+		{"the declarations' import binds nothing in the program", `import "proc"; final _p = fs\glob("x");`, string(UnimportedNamespace)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := compile(t, decls, tc.src)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+
+	t.Run("an unimported qualifier names the module", func(t *testing.T) {
+		err := compile(t, map[string]string{"proc": `export extern fun run(p: nope\Path) > str;`}, `import "proc";`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), string(UnimportedNamespace))
+		assert.Contains(t, err.Error(), `module proc: undefined type "nope\Path": no import binds nope in its declarations`)
+	})
+	t.Run("a type the home does not declare names the module", func(t *testing.T) {
+		err := compile(t, map[string]string{"fs": decls["fs"], "proc": `import "fs"; export extern fun run(p: fs\Nope) > str;`}, `import "proc";`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), string(UndefinedType))
+		assert.Contains(t, err.Error(), `module proc: undefined type "fs\Nope": fs declares no type Nope`)
+	})
+	t.Run("a cycle between two declaration modules is refused", func(t *testing.T) {
+		err := compile(t, map[string]string{
+			"a": `import "b"; export object A { b: b\B? = null } export extern fun f() > A;`,
+			"b": `import "a"; export object B { a: a\A? = null } export extern fun g() > B;`,
+		}, `import "a";`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), string(UnresolvedImport))
+		assert.Contains(t, err.Error(), "import cycle between declaration modules: a -> b -> a")
+	})
+	t.Run("a host declaration imports too", func(t *testing.T) {
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		sess.SetNativeModule("fs", vm.NewMap())
+		sess.SetModuleDecls("fs", decls["fs"])
+		sess.SetGlobal("host", vm.NewMap())
+		sess.DeclareModuleTypes("host", `import "fs"; export extern fun cwd() > fs\Path;`)
+		_, err := sess.Compile(`final _r: int = host\cwd().abs;`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `cannot assign str to int variable "_r"`)
+	})
 }

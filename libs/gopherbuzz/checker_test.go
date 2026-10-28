@@ -1636,14 +1636,14 @@ func TestCheckPrelude_NamespaceRebuiltWhenItsTypeArrives(t *testing.T) {
 	require.NoError(t, err)
 
 	p := (*checkPrelude)(nil).sync(nil)
-	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true, nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil)
 	before := p.ns["host"]
 	require.NotNil(t, before)
 	assert.IsType(t, &types.NamedType{}, before.typ.Fields["make"].(*types.FuncType).Ret)
 
 	p = p.sync(late.Stmts)
 	assert.Nil(t, p.ns["host"])
-	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true, nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil)
 	assert.Same(t, p.types["Late"], p.ns["host"].typ.Fields["make"].(*types.FuncType).Ret)
 }
 
