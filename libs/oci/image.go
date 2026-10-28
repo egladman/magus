@@ -314,7 +314,7 @@ func (c *Client) PushManifest(ctx context.Context, repo Reference, m RawManifest
 	}
 	if !subjectSeen {
 		if err := c.addToReferrersTag(ctx, repo, m, confirmed); err != nil {
-			return "", fmt.Errorf("oci: push to %s: %w", repo, err)
+			return "", fmt.Errorf("update the referrers tag of %s: %w", repo, err)
 		}
 	}
 	return confirmed, nil

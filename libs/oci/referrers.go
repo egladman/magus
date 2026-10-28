@@ -37,10 +37,11 @@ func (c *Client) Referrers(ctx context.Context, subject Reference, artifactType 
 	repo := subject.repository()
 	idx, filtered, err := c.referrersAPI(ctx, repo, subject.Digest, artifactType)
 	if errors.Is(err, ErrNotFound) {
-		idx, filtered, err = c.referrersIndex(ctx, repo, subject.Digest)
+		idx, err = c.referrersIndex(ctx, repo, subject.Digest)
+		filtered = false
 	}
 	if err != nil {
-		return nil, fmt.Errorf("oci: referrers of %s: %w", subject, err)
+		return nil, fmt.Errorf("read the referrers of %s: %w", subject, err)
 	}
 	if artifactType == "" || filtered {
 		return idx.Manifests, nil
@@ -57,7 +58,7 @@ func (c *Client) Referrers(ctx context.Context, subject Reference, artifactType 
 // referrersAPI asks GET /v2/<name>/referrers/<digest>. filtered reports that the registry
 // applied the artifactType filter itself (OCI-Filters-Applied); a registry may ignore it.
 func (c *Client) referrersAPI(ctx context.Context, repo Reference, subject digest.Digest, artifactType string) (idx ocispec.Index, filtered bool, err error) {
-	u := c.base(repo) + "/referrers/" + subject.String()
+	u := fmt.Sprintf("%s/referrers/%s", c.base(repo), subject)
 	if artifactType != "" {
 		u += "?artifactType=" + url.QueryEscape(artifactType)
 	}
@@ -89,22 +90,22 @@ func (c *Client) referrersAPI(ctx context.Context, repo Reference, subject diges
 
 // referrersIndex reads the ReferrersTag index; a tag that does not exist yet is an empty
 // index.
-func (c *Client) referrersIndex(ctx context.Context, repo Reference, subject digest.Digest) (idx ocispec.Index, filtered bool, err error) {
+func (c *Client) referrersIndex(ctx context.Context, repo Reference, subject digest.Digest) (idx ocispec.Index, err error) {
 	tag := ReferrersTag(subject)
 	raw, err := c.getManifest(ctx, repo, tag)
 	if errors.Is(err, ErrNotFound) {
-		return ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex}, false, nil
+		return ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex}, nil
 	}
 	if err != nil {
-		return idx, false, err
+		return idx, err
 	}
 	if raw.MediaType != ocispec.MediaTypeImageIndex {
-		return idx, false, fmt.Errorf("the referrers tag %s holds %q, want an image index", tag, raw.MediaType)
+		return idx, fmt.Errorf("the referrers tag %s holds %q, want an image index", tag, raw.MediaType)
 	}
 	if err := json.Unmarshal(raw.Body, &idx); err != nil {
-		return idx, false, fmt.Errorf("decode the referrers tag %s: %w", tag, err)
+		return idx, fmt.Errorf("decode the referrers tag %s: %w", tag, err)
 	}
-	return idx, false, nil
+	return idx, nil
 }
 
 // addToReferrersTag adds m, confirmed under d, to its subject's ReferrersTag index. A
@@ -123,7 +124,7 @@ func (c *Client) addToReferrersTag(ctx context.Context, repo Reference, m RawMan
 	if man.Subject == nil {
 		return nil
 	}
-	idx, _, err := c.referrersIndex(ctx, repo, man.Subject.Digest)
+	idx, err := c.referrersIndex(ctx, repo, man.Subject.Digest)
 	if err != nil {
 		return err
 	}

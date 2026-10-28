@@ -290,7 +290,7 @@ func checkImagePath(p string) error {
 // the whole directory), and magus places no whiteouts.
 func checkWhiteout(p string) error {
 	if strings.HasPrefix(path.Base(p), ".wh.") {
-		return fmt.Errorf("path %q: a name starting with .wh. is an OCI whiteout, which would delete a base path", p)
+		return fmt.Errorf("path %q: a name starting with \".wh.\" is an OCI whiteout, which would delete a base path", p)
 	}
 	return nil
 }

@@ -22,7 +22,7 @@ import (
 // org.opencontainers.image.ref.name, which Assemble writes as base.name.
 func Pull(ctx context.Context, c *oci.Client, ref oci.Reference, p Platform, dest string) (Manifest, error) {
 	if c == nil {
-		return Manifest{}, errors.New("image.pull: no oci.Client; &oci.Client{} pulls anonymously")
+		return Manifest{}, errors.New("image.pull: no oci.Client, &oci.Client{} pulls anonymously")
 	}
 	if err := p.Validate(); err != nil {
 		return Manifest{}, fmt.Errorf("image.pull: %w", err)
@@ -140,7 +140,7 @@ func pickPlatform(manifests []ocispec.Descriptor, want Platform) (ocispec.Descri
 // upload. A non-distributable layer is not uploaded, as image-spec asks.
 func Push(ctx context.Context, c *oci.Client, layout string, repo oci.Reference, tags ...string) (oci.Reference, error) {
 	if c == nil {
-		return oci.Reference{}, errors.New("image.push: no oci.Client; &oci.Client{} pushes anonymously")
+		return oci.Reference{}, errors.New("image.push: no oci.Client, &oci.Client{} pushes anonymously")
 	}
 	for _, t := range tags {
 		if err := oci.ValidateTag(t); err != nil {

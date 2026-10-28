@@ -162,7 +162,7 @@ func (l Layout) subject(ctx context.Context, d ocispec.Descriptor) (digest.Diges
 }
 
 func selectImage(path string, images []ocispec.Descriptor, name string) (ocispec.Descriptor, error) {
-	var names []string
+	names := make([]string, 0, len(images))
 	var matched []ocispec.Descriptor
 	for _, d := range images {
 		n := d.Annotations[ocispec.AnnotationRefName]
@@ -179,7 +179,7 @@ func selectImage(path string, images []ocispec.Descriptor, name string) (ocispec
 	case name == "":
 		return ocispec.Descriptor{}, fmt.Errorf("%s holds %d images (ref.name %s): name one", path, len(images), strings.Join(names, ", "))
 	case len(matched) == 0:
-		return ocispec.Descriptor{}, fmt.Errorf("%s: no image has ref.name %q; it holds %s", path, name, strings.Join(names, ", "))
+		return ocispec.Descriptor{}, fmt.Errorf("%s: no image has ref.name %q, it holds %s", path, name, strings.Join(names, ", "))
 	}
 	return ocispec.Descriptor{}, fmt.Errorf("%s: %d images have ref.name %q", path, len(matched), name)
 }
