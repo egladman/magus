@@ -38,7 +38,7 @@ func TestRegistryFlagsPassTheGeneratorRefusals(t *testing.T) {
 
 func TestEveryFlagRegistersItsConcept(t *testing.T) {
 	known := map[string]bool{}
-	for _, c := range Vocabulary {
+	for _, c := range vocabulary {
 		known[c.Flag] = true
 	}
 	for _, name := range registryFlags() {
@@ -50,7 +50,7 @@ func TestEveryFlagRegistersItsConcept(t *testing.T) {
 
 func TestNoVocabularyRowOutlivesItsFlag(t *testing.T) {
 	declared := registryFlags()
-	for _, c := range Vocabulary {
+	for _, c := range vocabulary {
 		if !slices.Contains(declared, c.Flag) {
 			t.Errorf("Vocabulary row %q names no flag the registry declares: delete the row", c.Flag)
 		}
@@ -59,17 +59,17 @@ func TestNoVocabularyRowOutlivesItsFlag(t *testing.T) {
 
 func TestNoConceptHasTwoRows(t *testing.T) {
 	byKey := map[string]string{}
-	claim := func(surface, spelling, flag string) {
+	claim := func(column, spelling, flag string) {
 		if spelling == "" {
 			return
 		}
-		key := surface + ":" + conceptKey(spelling)
+		key := column + ":" + conceptKey(spelling)
 		if prev, dup := byKey[key]; dup && prev != flag {
-			t.Errorf("--%s and --%s are one concept under two names (%s %q): keep one", prev, flag, surface, spelling)
+			t.Errorf("--%s and --%s are one concept under two names (%s %q): keep one", prev, flag, column, spelling)
 		}
 		byKey[key] = flag
 	}
-	for _, c := range Vocabulary {
+	for _, c := range vocabulary {
 		claim("flag", c.Flag, c.Flag)
 		claim("config", c.Config, c.Flag)
 		claim("go", c.GoField, c.Flag)
@@ -84,8 +84,8 @@ func conceptKey(s string) string {
 	return strings.TrimPrefix(s, "no")
 }
 
-func TestEverySurfaceSpellsTheFlag(t *testing.T) {
-	for _, c := range Vocabulary {
+func TestEveryColumnSpellsTheFlag(t *testing.T) {
+	for _, c := range vocabulary {
 		if want := strings.ReplaceAll(c.Flag, "-", "_"); c.Config != "" && c.Config != want {
 			t.Errorf("--%s: magus.yaml key is %q, want %q", c.Flag, c.Config, want)
 		}

@@ -1,27 +1,19 @@
 package commands
 
-// Concept is one idea that more than one surface spells: the CLI flag, the
-// magus.yaml key, the Go option field and the Buzz option-record field. The table
-// below gives each flag its one spelling per surface, and vocabulary_test.go fails
-// when a surface says it another way, when a registry flag has no row, and when a
-// second row names an existing concept again.
-//
-// A blank column means that surface does not carry the concept. A filled one must
-// be the flag's name in that surface's case: snake_case for Config, PascalCase
-// (the generator's initialisms included) for GoField, camelCase for BuzzField.
-//
-// Flag is always the positive spelling. A bool's off form is --no-<Flag>, which the
-// generator adds, so no row spells it.
-type Concept struct {
+// concept is one flag's spelling as a CLI flag, magus.yaml key, Go option field and
+// Buzz option-record field. A blank column is a place that does not carry it; a
+// filled one is snake_case, PascalCase with the generator's initialisms, or
+// camelCase. Flag is the positive spelling; the generator adds --no-<Flag>.
+type concept struct {
 	Flag      string
 	Config    string
 	GoField   string
 	BuzzField string
 }
 
-// Vocabulary lists every flag the command registry declares, one row each. Add the
+// vocabulary lists every flag the command registry declares, one row each. Add the
 // row in the same change as the flag.
-var Vocabulary = []Concept{
+var vocabulary = []concept{
 	{Flag: "cache", GoField: "Cache"},
 	{Flag: "default-charms", Config: "default_charms", GoField: "DefaultCharms"},
 	{Flag: "volatility-retry", GoField: "VolatilityRetry"},

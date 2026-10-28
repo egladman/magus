@@ -8,7 +8,7 @@
   `--no-sessions` still parse. `describe target` names its flag `--cache-key`, with
   `--cache` as a second spelling, so `--cache` and `--no-cache` mean one thing on
   `run` and `affected`. A flag table lists each concept with its magus.yaml key, Go
-  field and Buzz field, and a test fails when a surface spells one differently.
+  field and Buzz field, and a test fails when any of the four spells one differently.
 - **`--no-<name>` takes no value.** `--no-cache=false` is refused and names `--cache`.
 
 ### Removed

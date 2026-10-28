@@ -363,7 +363,7 @@ var initialisms = map[string]string{
 }
 
 // FieldName is the Go identifier the generated binders give flag name, so a
-// vocabulary check can hold other surfaces to the same spelling.
+// vocabulary check can hold the Go option fields to the same spelling.
 func FieldName(name string) string { return goIdent(name) }
 
 // goIdent turns a command or flag name into an exported Go identifier fragment:

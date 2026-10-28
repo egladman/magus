@@ -34,21 +34,21 @@ sentence.
 - **Help shows both forms and the default.** A bool reads
   `--[no-]cache (default: on)`. Help is printed from the same table the man
   page is, never from `flag.PrintDefaults`.
-- **One concept, one spelling per surface.** `Vocabulary` in
+- **One concept, one spelling in each place it appears.** The `vocabulary` table in
   [`internal/commands/vocabulary.go`](https://github.com/egladman/magus/blob/main/internal/commands/vocabulary.go)
   lists each flag with its magus.yaml key, its Go option field and its Buzz
   option-record field. A column that is filled in must be the flag's name in
-  that surface's case.
+  that column's case.
 
 ## Enforced by
 
 - `cmdline.Check` and the generator refuse a bool named `no-x`, a bool with no
   default, and a bool whose `--no-x` another flag already takes.
 - `cmdline.NegatedBoolVar` refuses a value on `--no-x`.
-- `TestEveryFlagRegistersItsConcept` fails when a flag has no `Vocabulary` row.
+- `TestEveryFlagRegistersItsConcept` fails when a flag has no `vocabulary` row.
   `TestNoConceptHasTwoRows` fails when two rows are one concept under two
-  names, and `TestEverySurfaceSpellsTheFlag` fails when a surface spells a row
-  another way.
+  names, and `TestEveryColumnSpellsTheFlag` fails when the magus.yaml key, Go
+  field or Buzz field spells a row another way.
 - `TestManpageFlagsMatchTheCLI` fails when a command binds a flag the registry
   does not declare, or the reverse.
 
