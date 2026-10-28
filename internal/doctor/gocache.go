@@ -19,7 +19,7 @@ import (
 const goCacheWalkEntries = 500_000
 
 const (
-	goBuildCacheFix = `magus buzz -e 'import "magus/reclaimdisk" as reclaim; reclaim\trimGoCache();'`
+	goBuildCacheFix = `magus buzz -e 'import "std"; import "vcs"; import "magus/reclaimdisk" as reclaim; fun main(args: [str]) > void !> any { std\print(reclaim\trimGoCache(vcs\root(), deadline: 0.0)); }'`
 	lintCacheFix    = "golangci-lint cache clean"
 )
 

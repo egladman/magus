@@ -725,8 +725,9 @@ func TestTrimOldestOnAMissingDirReportsZero(t *testing.T) {
 }
 
 func TestFsDiskUsageReadsTheFilesystem(t *testing.T) {
-	got, err := FsDiskUsage(t.Context(), t.TempDir())
+	got, err := FsDiskUsage(t.Context(), ".")
 	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(got.Path), "a relative path is named absolute: %s", got.Path)
 	assert.Positive(t, got.TotalBytes)
 	assert.LessOrEqual(t, got.FreeBytes, got.TotalBytes)
 	_, err = FsDiskUsage(t.Context(), filepath.Join(t.TempDir(), "absent"))

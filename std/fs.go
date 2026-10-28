@@ -1125,17 +1125,22 @@ func callbackTruthy(ret []any) bool {
 	}
 }
 
-// FsDiskUsage reads the filesystem holding path, subject to the sandbox read policy.
+// FsDiskUsage reads the filesystem holding path, subject to the sandbox read policy. The
+// record names path absolute, so two samples of one filesystem compare alike.
 func FsDiskUsage(ctx context.Context, path string) (types.DiskUsage, error) {
 	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		return types.DiskUsage{}, err
 	}
-	total, free, err := statDisk(path)
+	abs, err := filepath.Abs(path)
 	if err != nil {
 		return types.DiskUsage{}, fmt.Errorf("fs.disk_usage: %w", err)
 	}
-	return types.DiskUsage{Path: path, TotalBytes: total, FreeBytes: free}, nil
+	total, free, err := statDisk(abs)
+	if err != nil {
+		return types.DiskUsage{}, fmt.Errorf("fs.disk_usage: %w", err)
+	}
+	return types.DiskUsage{Path: abs, TotalBytes: total, FreeBytes: free}, nil
 }
 
 // FsStateDir is $XDG_STATE_HOME/magus/<purpose>, created 0700, subject to the sandbox

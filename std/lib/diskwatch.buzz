@@ -139,7 +139,12 @@ export fun lastOf(samples: [DiskSample], path: str) > DiskSample? {
 export fun line(d: Decision, cur: DiskSample, started: bool) > str? {
     final free = "{gib(cur.freeBytes)} free of {gib(cur.totalBytes)} on {cur.path}";
     if (d.critical) {
-        final doing = if (started) "reclaiming a chunk in the background" else "a reclaim chunk is already running";
+        var doing = "nothing is reclaiming it, since disk.min_free_mb does not ask for it";
+        if (started) {
+            doing = "reclaiming a chunk in the background";
+        } else if (d.reclaim) {
+            doing = "a reclaim chunk is already running";
+        }
         return "magus: disk space is critical, {free}; {doing}. Before more work, remove worktrees and builds you no longer need.";
     }
     if (started) {
@@ -219,6 +224,10 @@ test "a quiet disk prints nothing; acting or critical prints one line" {
     assert\equal(line(Decision{ reclaim = false, critical = false, why = "" }, cur: cur, started: false), want: null, message: "quiet");
     assert\equal(line(Decision{ reclaim = true, critical = false, why = "x" }, cur: cur, started: true),
         want: "magus: 40.0 GiB free of 500.0 GiB on /w (x); reclaiming one chunk in the background.", message: "started");
+    final critical = line(Decision{ reclaim = false, critical = true, why = "" }, cur: cur, started: false) ?? "";
+    assert\isTrue(critical.indexOf("nothing is reclaiming it") != null, message: "critical with reclaiming off says so, not that a chunk runs");
+    final running = line(Decision{ reclaim = true, critical = true, why = "x" }, cur: cur, started: false) ?? "";
+    assert\isTrue(running.indexOf("already running") != null, message: "critical while a chunk runs");
 }
 
 test "a sample round-trips through its line" {
