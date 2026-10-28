@@ -288,8 +288,9 @@ func (w internals) CheckSpawn(parent, child types.ModelTier) error {
 func (w internals) Telemetry() observability.Provider { return w.tel }
 
 // FindRoot walks up from dir to the workspace root. The nearest magus.yaml wins; with
-// none, the root is the outermost contiguous directory holding a project marker
-// (magusfiles/, magusfile.buzz or go.mod). With neither, the error carries
+// none, the root is the outermost contiguous directory holding a magusfile
+// (magusfiles/ or magusfile.buzz), and then the nearest VCS checkout, which logs a
+// warning naming `magus init`. No language manifest roots one. With none, the error carries
 // [types.NoWorkspaceRoot]. An empty dir is an error: a library has no working directory
 // to fall back to, so pass the directory to start from (os.Getwd's, if that is meant).
 func FindRoot(dir string) (string, error) {

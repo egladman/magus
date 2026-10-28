@@ -52,7 +52,7 @@ var toolTokenRe = func() *regexp.Regexp {
 func fixtureMagus(t *testing.T) *magus.Magus {
 	t.Helper()
 	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module mcptest\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
 	pkg := filepath.Join(root, "pkg")
 	require.NoError(t, os.MkdirAll(pkg, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pkg, "package.json"), []byte(`{"name":"pkg"}`), 0o644))
