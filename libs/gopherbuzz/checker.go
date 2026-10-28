@@ -687,7 +687,11 @@ func (c *checker) registerTypeDecls(decls []ast.Node) {
 func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	ot := &types.ObjectType{
 		Name: v.Name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{},
-		IsProtocol: v.IsProtocol, Conforms: v.Conforms,
+		IsProtocol: v.IsProtocol,
+	}
+	// types.Compat names a protocol by its bare name, as it names every object.
+	for _, name := range v.Conforms {
+		ot.Conforms = append(ot.Conforms, name[strings.LastIndexByte(name, '\\')+1:])
 	}
 	for _, f := range v.Fields {
 		ot.Fields[f.Name] = c.fieldType(f.TypeAnnot)
@@ -2096,12 +2100,18 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			continue
 		}
 		got := c.infer(a)
+		m, isMember := v.Callee.(*ast.MemberExpr)
+		if !isMember {
+			continue
+		}
 		// A list's indexOf matches by ==, so an enum needle in a [str] (or the reverse)
 		// is never found, under the same rule BZZ1005 holds == to.
-		if m, isMember := v.Callee.(*ast.MemberExpr); isMember && m.Name == "indexOf" && i == 0 {
-			if lt, isList := c.builtinRecv[m].(*types.ListType); isList {
-				c.checkEnumEquality(v.Pos, "indexOf", c.resolveType(lt.Elem), got)
-			}
+		if lt, isList := c.builtinRecv[m].(*types.ListType); isList && m.Name == "indexOf" && i == 0 {
+			c.checkEnumEquality(v.Pos, "indexOf", c.resolveType(lt.Elem), got)
+			continue
+		}
+		if want := builtinArgType(c.builtinRecv[m], m.Name, i); want != nil {
+			c.checkEnumForString(a, i, got, c.resolveType(want))
 		}
 	}
 	// An explicit generic type argument (`buf.readZAt::<double>(...)`) names the
@@ -2443,6 +2453,7 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 			return types.Int
 		}
 		c.checkBuiltinMethod(v, vm.StrReceiver, ot)
+		c.noteBuiltinRecv(v, ot)
 	}
 	return types.Unknown
 }
@@ -3314,8 +3325,7 @@ func (c *checker) checkCollectionMutator(pos ast.Pos, recv types.Type, name stri
 // declaration is the promise; this is what makes it one.
 func (c *checker) checkProtocolConformance(v *ast.ObjectDecl, ot *types.ObjectType) {
 	for _, name := range v.Conforms {
-		t, _ := c.namedType(name)
-		pt, ok := t.(*types.ObjectType)
+		pt, ok := c.resolveAnnot(name).(*types.ObjectType)
 		if !ok || !pt.IsProtocol {
 			// An unresolved or non-protocol name is a different error, reported where
 			// the conformance list is built. Nothing to verify against here.

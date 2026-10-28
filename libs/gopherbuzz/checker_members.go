@@ -61,6 +61,46 @@ func (c *checker) noteBuiltinRecv(v *ast.MemberExpr, recv types.Type) {
 	c.builtinRecv[v] = recv
 }
 
+// builtinArgType is the type a builtin method of recv takes at argument i, as
+// upstream declares it (src/builtin/str.zig, list.zig, map.zig), or nil where
+// this checker does not model the argument.
+func builtinArgType(recv types.Type, method string, i int) types.Type {
+	switch r := recv.(type) {
+	case *types.ListType:
+		switch {
+		case method == "append" && i == 0, method == "insert" && i == 1:
+			return r.Elem
+		case method == "join" && i == 0:
+			return types.Str
+		}
+	case *types.MapType:
+		if (method == "hasKey" || method == "remove") && i == 0 {
+			return r.Key
+		}
+	}
+	if recv != types.Str {
+		return nil
+	}
+	switch {
+	case method == "replace" && i < 2:
+		return types.Str
+	case i == 0 && (method == "indexOf" || method == "startsWith" || method == "endsWith" || method == "split"):
+		return types.Str
+	}
+	return nil
+}
+
+// checkEnumForString reports an enum value passed where a builtin takes a str: a case
+// is not its value, so `s.startsWith(E.a)` never matches. A str where the enum is
+// expected stays legal, as types.Compat lets a backed enum take its backing value.
+func (c *checker) checkEnumForString(arg ast.Node, i int, got, want types.Type) {
+	enum, isEnum := c.resolveType(got).(*types.EnumType)
+	if !isEnum || want != types.Str {
+		return
+	}
+	c.errorfc(ast.NodePos(arg), TypeMismatch, "cannot pass %s as argument %d of type str; pass its .value", enum.Name, i+1)
+}
+
 // suggestBuiltinMethod names the builtin a mistaken name most likely meant: a
 // known foreign spelling, then a case-insensitive match, then the closest name
 // within two edits. It returns "" when nothing is close.

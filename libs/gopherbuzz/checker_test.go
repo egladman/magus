@@ -1793,3 +1793,56 @@ func TestUnimportedNamespace_AmbiguousPathNamesNoLine(t *testing.T) {
 	assert.Equal(t, UnimportedNamespace, d.Code)
 	assert.Equal(t, `undefined: demo\answer: no import binds demo in this module`, d.Msg)
 }
+
+// A builtin method takes a str where upstream declares one (obj.zig typedefs such
+// as `extern fun startsWith(needle: str) > bool`), and a case is not its value.
+func TestCheck_EnumPassedWhereABuiltinTakesStr(t *testing.T) {
+	const decl = "enum<str> E { a = \"a\" }\n"
+	for name, src := range map[string]string{
+		"list append":    `final l = mut ["a"]; l.append(E.a);`,
+		"list insert":    `final l = mut ["a"]; l.insert(0, value: E.a);`,
+		"list join":      `final _s = ["a"].join(E.a);`,
+		"map hasKey":     `final m = {"a": 1}; final _b = m.hasKey(E.a);`,
+		"map remove":     `final m = mut {"a": 1}; final _r = m.remove(E.a);`,
+		"str indexOf":    `final _i = "abc".indexOf(E.a);`,
+		"str startsWith": `final _b = "abc".startsWith(E.a);`,
+		"str endsWith":   `final _b = "abc".endsWith(E.a);`,
+		"str split":      `final _p = "a,b".split(E.a);`,
+		"str replace":    `final _p = "a,b".replace("a", with: E.a);`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			checkError(t, decl+src, "cannot pass E as argument")
+		})
+	}
+	t.Run("its value passes", func(t *testing.T) {
+		checkOK(t, decl+`final _b = "abc".startsWith(E.a.value); final l = mut ["a"]; l.append(E.a.value);`)
+	})
+	t.Run("a str where the enum is expected stays open", func(t *testing.T) {
+		checkOK(t, decl+`final l = mut [E.a]; l.append("b");`)
+	})
+}
+
+// Upstream reads a qualified name in a conformance list, so a module's object can
+// conform to another module's protocol.
+func TestCheck_QualifiedProtocolConformance(t *testing.T) {
+	ctx := context.Background()
+	compile := func(t *testing.T, src string) error {
+		t.Helper()
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		sess.SetModuleDecls("shapes", `export protocol Drawable { fun draw() > str; }`)
+		_, err := sess.Compile(src)
+		return err
+	}
+	_, err := ParseEmbedded(`object<a\b\P, Q> X {}`)
+	require.NoError(t, err, "a qualified protocol must parse")
+
+	require.NoError(t, compile(t, `import "shapes";
+object<shapes\Drawable> Box { fun draw() > str { return "box"; } }
+fun show(d: shapes\Drawable) > str { return d.draw(); }
+final _s = show(Box{});`))
+
+	err = compile(t, `import "shapes"; object<shapes\Drawable> Box {}`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `object Box is declared as conforming to protocol shapes\Drawable but does not implement method "draw"`)
+}
