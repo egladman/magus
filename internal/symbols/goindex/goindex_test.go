@@ -181,6 +181,26 @@ func (s *goindexSuite) TestPackageDocAndImportsRecorded() {
 	s.True(importRef, "the import path references package a")
 }
 
+// Each file's package clause defines its package, test files included: the graph places a
+// file in the package it defines, and only one defining file would leave the rest unplaced.
+func (s *goindexSuite) TestEveryPackageClauseDefinesItsPackage() {
+	idx := s.index(s.packOf())
+	defined := map[string]bool{}
+	for _, d := range idx.Documents {
+		for _, o := range d.Occurrences {
+			if o.Symbol == sym("b", "") && o.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 {
+				defined[d.RelativePath] = true
+			}
+		}
+	}
+	s.Equal(map[string]bool{"b/b.go": true, "b/b_test.go": true}, defined)
+}
+
+func (s *goindexSuite) TestAnonymousStructVarFieldsKeyAsScipGoDid() {
+	s.write("c/once.go", "package c\n\nvar once struct {\n\tn int\n}\n\nfunc N() int { return once.n }\n")
+	s.True(s.parsed(s.packOf())["gomod example.com/m `example.com/m/c`/once:n."])
+}
+
 func (s *goindexSuite) packOf() string {
 	_, pack := s.update(s.indexer())
 	return pack

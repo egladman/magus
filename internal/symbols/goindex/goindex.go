@@ -27,7 +27,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "goindex 1"
+const formatVersion = "goindex 2"
 
 // Scheme is the SCIP scheme of every symbol the indexer names. Keys drop it with the
 // version, so a key matches the one scip-go named the same symbol by.
@@ -449,8 +449,9 @@ func (w *walker) shard() symbols.Shard {
 	return s
 }
 
-// packageDocFile is the file whose package clause defines the package symbol: the first
-// carrying a package doc comment, else the first by name.
+// packageDocFile is the file that carries the package symbol's information: the first with
+// a package doc comment, else the first by name. Every file's package clause defines the
+// symbol, as scip-go's did, since a file belongs to the package its clause defines.
 func (w *walker) packageDocFile() int {
 	best := -1
 	for i, f := range w.pkg.Syntax {
@@ -532,20 +533,18 @@ func firstDoc(docs ...*ast.CommentGroup) *ast.CommentGroup {
 	return nil
 }
 
-func (w *walker) document(rel string, f *ast.File, definesPackage bool) symbols.Document {
+func (w *walker) document(rel string, f *ast.File, describesPackage bool) symbols.Document {
 	doc := symbols.Document{Path: rel, Language: "go"}
 	info := w.pkg.TypesInfo
 	decls := declarations(f)
 	pkgSym := w.packageSymbol(w.pkg.Types)
-	if definesPackage {
-		doc.Occurrences = append(doc.Occurrences, symbols.Occurrence{Symbol: pkgSym, Range: w.span(f.Name.Pos(), f.Name.End()), Roles: int32(scip.SymbolRole_Definition)})
+	doc.Occurrences = append(doc.Occurrences, symbols.Occurrence{Symbol: pkgSym, Range: w.span(f.Name.Pos(), f.Name.End()), Roles: int32(scip.SymbolRole_Definition)})
+	if describesPackage {
 		si := symbols.SymbolInfo{Symbol: pkgSym, DisplayName: w.pkg.Types.Name(), Kind: int32(scip.SymbolInformation_Package)}
 		if f.Doc != nil {
 			si.Documentation = []string{strings.TrimSpace(f.Doc.Text())}
 		}
 		doc.Symbols = append(doc.Symbols, si)
-	} else {
-		doc.Occurrences = append(doc.Occurrences, symbols.Occurrence{Symbol: pkgSym, Range: w.span(f.Name.Pos(), f.Name.End())})
 	}
 	for _, d := range f.Decls {
 		ast.Inspect(d, w.visit(&doc, decls, info))
@@ -646,26 +645,7 @@ func (w *walker) computeSymbol(obj types.Object) string {
 	case *types.PkgName:
 		return w.packageSymbol(o.Imported())
 	case *types.Func:
-		o = o.Origin()
-		recv := o.Signature().Recv()
-		if recv == nil {
-			if !pkgLevel {
-				return ""
-			}
-			return w.format(o.Pkg(), []*scip.Descriptor{{Name: o.Name(), Suffix: scip.Descriptor_Method}})
-		}
-		named := receiverNamed(recv.Type())
-		if named == nil {
-			return ""
-		}
-		suffix := scip.Descriptor_Method
-		if types.IsInterface(named) {
-			suffix = scip.Descriptor_Term
-		}
-		return w.format(o.Pkg(), []*scip.Descriptor{
-			{Name: named.Obj().Name(), Suffix: scip.Descriptor_Type},
-			{Name: o.Name(), Suffix: suffix},
-		})
+		return w.funcSymbol(o.Origin(), pkgLevel)
 	case *types.TypeName:
 		if !pkgLevel {
 			return ""
@@ -694,6 +674,30 @@ func (w *walker) computeSymbol(obj types.Object) string {
 	return ""
 }
 
+// funcSymbol is fn's symbol: a package-level function's, or a method's under its
+// receiver type, where an interface method is a term as scip-go named it.
+func (w *walker) funcSymbol(fn *types.Func, pkgLevel bool) string {
+	recv := fn.Signature().Recv()
+	if recv == nil {
+		if !pkgLevel {
+			return ""
+		}
+		return w.format(fn.Pkg(), []*scip.Descriptor{{Name: fn.Name(), Suffix: scip.Descriptor_Method}})
+	}
+	named := receiverNamed(recv.Type())
+	if named == nil {
+		return ""
+	}
+	suffix := scip.Descriptor_Method
+	if types.IsInterface(named) {
+		suffix = scip.Descriptor_Term
+	}
+	return w.format(fn.Pkg(), []*scip.Descriptor{
+		{Name: named.Obj().Name(), Suffix: scip.Descriptor_Type},
+		{Name: fn.Name(), Suffix: suffix},
+	})
+}
+
 func receiverNamed(t types.Type) *types.Named {
 	if p, ok := t.(*types.Pointer); ok {
 		t = p.Elem()
@@ -706,7 +710,8 @@ func receiverNamed(t types.Type) *types.Named {
 }
 
 // scanFields records the owner path of every field of p's named struct types, nested
-// anonymous structs included: Outer#field.inner.
+// anonymous structs included (Outer#field.inner), and of a package-level variable's
+// anonymous struct (v:field.), the descriptors scip-go gave each.
 func (w *walker) scanFields(p *types.Package) {
 	if w.scanned[p] {
 		return
@@ -725,12 +730,15 @@ func (w *walker) scanFields(p *types.Package) {
 	}
 	scope := p.Scope()
 	for _, name := range scope.Names() {
-		tn, ok := scope.Lookup(name).(*types.TypeName)
-		if !ok || tn.IsAlias() {
-			continue
-		}
-		if st, ok := tn.Type().Underlying().(*types.Struct); ok {
-			walk(st, []*scip.Descriptor{{Name: tn.Name(), Suffix: scip.Descriptor_Type}})
+		switch obj := scope.Lookup(name).(type) {
+		case *types.TypeName:
+			if st, ok := obj.Type().Underlying().(*types.Struct); ok && !obj.IsAlias() {
+				walk(st, []*scip.Descriptor{{Name: obj.Name(), Suffix: scip.Descriptor_Type}})
+			}
+		case *types.Var:
+			if st, ok := obj.Type().(*types.Struct); ok {
+				walk(st, []*scip.Descriptor{{Name: obj.Name(), Suffix: scip.Descriptor_Meta}})
+			}
 		}
 	}
 }
