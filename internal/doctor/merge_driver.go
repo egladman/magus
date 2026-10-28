@@ -63,7 +63,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 			Details: []string{
 				"registered: " + registered,
 				"it said: " + firstLine(string(out)),
-				fmt.Sprintf("point it at a magus that can read this tree: %s, then ./hack/install-dogfood.sh", hint.Run.With("dogfood", ".")),
+				fmt.Sprintf("point it at a magus that can read this tree: rebuild one (%s) or `magus self update`, then register the driver again", hint.Run.With("build", ".")),
 			},
 		}
 	}

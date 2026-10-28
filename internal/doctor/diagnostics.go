@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
@@ -146,6 +147,53 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 // next step.
 func (r *runner) checkDiagnosticDocs() types.Check {
 	return checkDiagnosticDocs(r.root, types.AllDiagnosticCodes(), types.CodeURL, rpcerr.Titles())
+}
+
+// workspaceDiagnosticDocsCheck names the check over the workspace's own code pages.
+const workspaceDiagnosticDocsCheck = "workspace-diagnostic-docs"
+
+// checkWorkspaceDiagnosticDocs reports the pages diagnostics.docs names inside the
+// workspace that are not a code under its prefix or name no next step, the same bar
+// magus's own code pages meet. A docs URL off the workspace is out of reach, and saying so
+// is the answer rather than a pass.
+func checkWorkspaceDiagnosticDocs(root string, d config.Diagnostics) types.Check {
+	switch {
+	case d.Prefix == "":
+		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckOK,
+			Message: "this workspace declares no diagnostics.prefix, so it mints no codes to document"}
+	case d.Docs == "":
+		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckAdvice,
+			Message: fmt.Sprintf("diagnostics.prefix %s mints codes, but diagnostics.docs names no page for them, so each raise prints no see: line", d.Prefix)}
+	case strings.Contains(d.Docs, "://"):
+		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckAdvice,
+			Message: fmt.Sprintf("diagnostics.docs is a URL (%s), so doctor cannot read the pages it names", d.Docs)}
+	}
+	pattern := filepath.Join(root, filepath.FromSlash(strings.ReplaceAll(d.Docs, "{code}", "*")))
+	pages, err := filepath.Glob(pattern)
+	if err != nil {
+		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckFail,
+			Message: fmt.Sprintf("diagnostics.docs %q is not a pattern doctor can read: %v", d.Docs, err)}
+	}
+	before, after, _ := strings.Cut(filepath.Base(pattern), "*")
+	var problems []string
+	for _, page := range pages {
+		text := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(page), before), after)
+		if _, err := types.WorkspaceDiagnosticCode(d.Prefix, text); err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", relToRoot(root, page), err))
+			continue
+		}
+		md, err := os.ReadFile(page)
+		if err != nil || !hasRemediation(string(md)) {
+			problems = append(problems, fmt.Sprintf("%s: declares no remediation section; add a `## Resolution` naming the next step", relToRoot(root, page)))
+		}
+	}
+	if len(problems) > 0 {
+		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckFail,
+			Message: fmt.Sprintf("%d of %d workspace code page(s) are not a %s code or name no next step", len(problems), len(pages), d.Prefix),
+			Details: problems}
+	}
+	return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckOK,
+		Message: fmt.Sprintf("%d workspace code page(s) under %s carry a remediation section", len(pages), d.Docs)}
 }
 
 // codeDocsRoot is the directory every code page lives under, and the one whose absence

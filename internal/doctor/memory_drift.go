@@ -25,7 +25,7 @@ func historyUnreadableCheck(name string, err error) types.Check {
 	if errors.As(err, &skew) {
 		c.Message = fmt.Sprintf("run history is version %d, written by a newer magus than this build (reads up to %d), so declarations could not be checked", skew.Have, skew.Max)
 		c.Details = append(c.Details, "the file is left alone; rebuild this magus to read it")
-		c.Fix = hint.Run.Argv("go-build", ".")
+		c.Fix = hint.Run.Argv("build", ".")
 	}
 	return c
 }

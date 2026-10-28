@@ -150,7 +150,6 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	w.Write(".git", "gitdir: /elsewhere\n")
-	require.NoError(t, os.MkdirAll(w.Path("cmd", "magus"), 0o755))
 	pathBin := versionedMagus(testkit.NewWorkspace(t), "v0.5.0")
 	t.Setenv("PATH", filepath.Dir(pathBin))
 	r := &runner{root: root, ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
@@ -167,9 +166,7 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 		Message: "this worktree has no ./magus",
 		Details: []string{
 			"its guard hooks judge with the magus on PATH, which may not load this tree",
-			"the main session builds one ./magus per base and places a copy here",
 			"place it, from the main checkout: magus buzz hack/dev/bootstrap-worktree.buzz, to place ./magus and a lease in a job's worktree",
-			fmt.Sprintf("on your own: build one with %s, or bootstrap it with the command the guard prints", hint.Run.With("build", ".")),
 		},
 	}, got)
 

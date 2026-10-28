@@ -7,10 +7,69 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// doctorSuite is the package's one testify suite: add tests here as methods.
+type doctorSuite struct {
+	suite.Suite
+}
+
+func TestDoctorSuite(t *testing.T) {
+	suite.Run(t, new(doctorSuite))
+}
+
+// SetupSuite registers the MGS catalog as magus's startup does.
+func (s *doctorSuite) SetupSuite() {
+	s.Require().NoError(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()))
+}
+
+// workspaceCodePage writes a page under docs/codes in a fresh root and returns the root.
+func (s *doctorSuite) workspaceCodePage(name, body string) string {
+	root := s.T().TempDir()
+	s.Require().NoError(os.MkdirAll(filepath.Join(root, "docs", "codes"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "docs", "codes", name), []byte(body), 0o644))
+	return root
+}
+
+var wsDocs = config.Diagnostics{Prefix: "WS", Docs: "docs/codes/{code}.md"}
+
+func (s *doctorSuite) TestWorkspaceDiagnosticDocsPassesAPageWithAResolution() {
+	root := s.workspaceCodePage("WS1001.md", "# WS1001\n\n## Resolution\n\nRun the fix.\n")
+	got := checkWorkspaceDiagnosticDocs(root, wsDocs)
+	s.Equal(types.CheckOK, got.Status, got.Message)
+}
+
+func (s *doctorSuite) TestWorkspaceDiagnosticDocsFailsAPageWithNoResolution() {
+	root := s.workspaceCodePage("WS1001.md", "# WS1001\n\nSomething broke.\n")
+	got := checkWorkspaceDiagnosticDocs(root, wsDocs)
+	s.Equal(types.CheckFail, got.Status)
+	s.Contains(got.Details[0], "docs/codes/WS1001.md: declares no remediation section")
+}
+
+func (s *doctorSuite) TestWorkspaceDiagnosticDocsFailsAPageForAnotherPrefix() {
+	root := s.workspaceCodePage("MGS1001.md", "# MGS1001\n\n## Resolution\n\nRun the fix.\n")
+	got := checkWorkspaceDiagnosticDocs(root, wsDocs)
+	s.Equal(types.CheckFail, got.Status)
+	s.Contains(got.Details[0], "MGS catalog magus ships")
+}
+
+func (s *doctorSuite) TestWorkspaceDiagnosticDocsSaysAURLIsOutOfReach() {
+	got := checkWorkspaceDiagnosticDocs(s.T().TempDir(), config.Diagnostics{Prefix: "WS", Docs: "https://ws.example/{code}/"})
+	s.Equal(types.CheckAdvice, got.Status)
+	s.Contains(got.Message, "cannot read the pages")
+}
+
+func (s *doctorSuite) TestWorkspaceDiagnosticDocsWithNoPrefixHasNothingToCheck() {
+	got := checkWorkspaceDiagnosticDocs(s.T().TempDir(), config.Diagnostics{})
+	s.Equal(types.CheckOK, got.Status)
+	s.Contains(got.Message, "no diagnostics.prefix")
+}
 
 // writeCodePage plants a docs page for an MGS1### code under a fake root. The path is
 // spelled out rather than taken from codeDocPath, so the fixture pins the site-to-tree

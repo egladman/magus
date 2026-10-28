@@ -238,6 +238,14 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkDiagnosticDocs() },
 	},
 	{
+		Name:     workspaceDiagnosticDocsCheck,
+		Doc:      "every page diagnostics.docs names is a code under the workspace's prefix and names a next step",
+		Evidence: types.EvidenceMeasured,
+		run: func(r *runner, _ []*types.Project) types.Check {
+			return checkWorkspaceDiagnosticDocs(r.root, r.opts.cfg.Diagnostics)
+		},
+	},
+	{
 		Name:           "dependency-graph",
 		Doc:            "the target dependency graph builds without a cycle",
 		Code:           types.TargetDependencyCycle,

@@ -810,7 +810,7 @@ func checkSchemaDowngrade(ctx context.Context, path string) error {
 	return types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus,
 		"refusing to overwrite %s: it carries knowledge-schema v%d and this build renders v%d, "+
 			"so regenerating it here would downgrade committed output. The running binary is %s. "+
-			"Build one from this checkout with `magus run go-build .` and re-run the target with `./magus`.",
+			"Re-run the target with a magus that renders it: `magus self update`, or rebuild ./magus the way this workspace builds it.",
 		path, stamped, types.KnowledgeSchemaVersion, self)
 }
 
