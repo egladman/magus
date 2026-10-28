@@ -1,13 +1,13 @@
 package goindex
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"go/ast"
 	"go/build"
+	"go/format"
 	"go/token"
 	"go/types"
 	"os"
@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -27,7 +28,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "goindex 3"
+const formatVersion = "goindex 4"
 
 // scheme is the SCIP scheme of every symbol the indexer names. Keys drop it with the
 // version, so a key matches the one scip-go named the same symbol by.
@@ -797,29 +798,17 @@ func kindOf(obj types.Object) scip.SymbolInformation_Kind {
 	return scip.SymbolInformation_UnspecifiedKind
 }
 
-// signature renders obj's declaration the way scip-go did, which the graph's declaration
-// readers (internal/graph/knowledge naming_shape.go) parse: types.ObjectString, with a
-// struct or interface spelled one member per line and a field prefixed "struct field".
+// signature renders obj's declaration the way scip-go v0.2.7 did, which the graph's
+// declaration readers (internal/graph/knowledge naming_shape.go) parse: types.ObjectString,
+// a field prefixed "struct field" with its tags in backquotes, and a type's struct or
+// interface gofmt-aligned one member per line, an interface naming only what it declares.
 func (w *walker) signature(obj types.Object) string {
 	switch o := obj.(type) {
 	case *types.TypeName:
-		if o.IsAlias() {
-			return types.ObjectString(o, w.qual)
-		}
-		head, _, _ := strings.Cut(types.ObjectString(o, w.qual), " ")
-		head += " " + o.Name()
-		if named, ok := o.Type().(*types.Named); ok && named.TypeParams().Len() > 0 {
-			var parts []string
-			for i := range named.TypeParams().Len() {
-				tp := named.TypeParams().At(i)
-				parts = append(parts, tp.Obj().Name()+" "+types.TypeString(tp.Constraint(), w.qual))
-			}
-			head += "[" + strings.Join(parts, ", ") + "]"
-		}
-		return head + " " + w.underlying(o.Type().Underlying())
+		return w.typeDeclaration(o)
 	case *types.Var:
 		if o.IsField() {
-			return "struct " + types.ObjectString(o, w.qual)
+			return "struct " + backquoteTags(types.ObjectString(o, w.qual))
 		}
 	case *types.Const:
 		return types.ObjectString(o, w.qual) + " = " + o.Val().String()
@@ -827,34 +816,80 @@ func (w *walker) signature(obj types.Object) string {
 	return types.ObjectString(obj, w.qual)
 }
 
-func (w *walker) underlying(t types.Type) string {
-	var b bytes.Buffer
-	switch u := t.(type) {
-	case *types.Struct:
-		b.WriteString("struct {")
-		for i := range u.NumFields() {
-			f := u.Field(i)
-			b.WriteString("\n    ")
-			if !f.Embedded() {
-				b.WriteString(f.Name() + " ")
-			}
-			b.WriteString(types.TypeString(f.Type(), w.qual))
-			if tag := u.Tag(i); tag != "" {
-				fmt.Fprintf(&b, " %q", tag)
-			}
-		}
-		b.WriteString("\n}")
-	case *types.Interface:
-		b.WriteString("interface {")
-		for i := range u.NumMethods() {
-			m := u.Method(i)
-			b.WriteString("\n    " + m.Name() + strings.TrimPrefix(types.TypeString(m.Type(), w.qual), "func"))
-		}
-		b.WriteString("\n}")
-	default:
-		return types.TypeString(t, w.qual)
+// typeDeclaration is o's declaration; a type's own type parameters are left out, and an
+// alias's are kept, as scip-go wrote them.
+func (w *walker) typeDeclaration(o *types.TypeName) string {
+	alias, ok := o.Type().(*types.Alias)
+	if !ok || !o.IsAlias() {
+		return "type " + o.Name() + " " + w.expand(o.Type().Underlying())
 	}
-	return b.String()
+	lhs := o.Name()
+	if tps := alias.TypeParams(); tps.Len() > 0 {
+		parts := make([]string, 0, tps.Len())
+		for i := range tps.Len() {
+			parts = append(parts, tps.At(i).Obj().Name()+" "+tps.At(i).Constraint().String())
+		}
+		lhs += "[" + strings.Join(parts, ", ") + "]"
+	}
+	switch rhs := alias.Rhs(); rhs.(type) {
+	case *types.Alias, *types.Named:
+		return "type " + lhs + " = " + types.TypeString(rhs, w.qual)
+	default:
+		return "type " + lhs + " = " + w.expand(rhs)
+	}
+}
+
+// expand is t's type expression, a struct or interface run through gofmt with tabs as four
+// spaces; anything else, or one gofmt refuses, as types.TypeString spells it.
+func (w *walker) expand(t types.Type) string {
+	raw := types.TypeString(t, w.qual)
+	switch t.(type) {
+	case *types.Struct, *types.Interface:
+	default:
+		return raw
+	}
+	src, err := format.Source([]byte("package p\n\ntype _ " + raw + "\n"))
+	if err != nil {
+		return raw
+	}
+	decl := strings.TrimSpace(strings.TrimPrefix(string(src), "package p\n\n"))
+	return strings.ReplaceAll(strings.TrimPrefix(decl, "type _ "), "\t", "    ")
+}
+
+// backquoteTags rewrites each double-quoted string in s, a field's struct tag, in
+// backquotes; one that does not unquote stays as it was.
+func backquoteTags(s string) string {
+	var b strings.Builder
+	for {
+		start := strings.IndexByte(s, '"')
+		if start < 0 {
+			return b.String() + s
+		}
+		end := closingQuote(s, start)
+		if end < 0 {
+			return b.String() + s
+		}
+		b.WriteString(s[:start])
+		if unquoted, err := strconv.Unquote(s[start : end+1]); err == nil {
+			b.WriteString("`" + unquoted + "`")
+		} else {
+			b.WriteString(s[start : end+1])
+		}
+		s = s[end+1:]
+	}
+}
+
+// closingQuote is the index of the double quote closing the one at s[open], or -1.
+func closingQuote(s string, open int) int {
+	for j := open + 1; j < len(s); j++ {
+		switch s[j] {
+		case '\\':
+			j++
+		case '"':
+			return j
+		}
+	}
+	return -1
 }
 
 // methodSets is every non-generic named type of the package with the methods its pointer

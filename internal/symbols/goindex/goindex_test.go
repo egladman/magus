@@ -135,7 +135,7 @@ func (s *goindexSuite) TestSignaturesRenderAsScipGoDid() {
 	s.Equal("func (*File).Read(p []byte) (int, error)", byKey["gomod example.com/m `example.com/m/b`/File#Read()."])
 	s.Equal("const Limit untyped int = 4", byKey["gomod example.com/m `example.com/m/a`/Limit."])
 	s.Equal("struct field Name string", byKey["gomod example.com/m `example.com/m/b`/File#Name."])
-	s.Equal("type File struct {\n    Name string\n}", byKey["gomod example.com/m `example.com/m/b`/File#"])
+	s.Equal("type File struct{ Name string }", byKey["gomod example.com/m `example.com/m/b`/File#"])
 }
 
 // Another package's type is spelled by its package name, not its import path: the
@@ -148,6 +148,21 @@ func (s *goindexSuite) TestSignaturesNameAnotherPackageByItsName() {
 		byKey[ks.Key] = ks.Signature
 	}
 	s.Equal("func Wrap(r a.Reader) a.Reader", byKey["gomod example.com/m `example.com/m/b`/Wrap()."])
+}
+
+// An interface names what it declares, an embedded interface by name rather than its
+// methods, a struct's fields align as gofmt aligns them, and a field of an anonymous
+// struct type spells that struct's tags in backquotes.
+func (s *goindexSuite) TestTypeSignaturesKeepTheDeclaredShape() {
+	s.write("b/shape.go", "package b\n\nimport \"example.com/m/a\"\n\ntype ReadCloser interface {\n\ta.Reader\n\tClose() error\n}\n\ntype Pair struct {\n\tK string `json:\"k\"`\n\tValue int\n\tIn struct {\n\t\tN int `json:\"n\"`\n\t}\n}\n")
+	_, pack := s.update(s.indexer())
+	byKey := map[string]string{}
+	for _, ks := range symbols.ParseDecoded(s.T().Context(), s.index(pack), ".", "go") {
+		byKey[ks.Key] = ks.Signature
+	}
+	s.Equal("type ReadCloser interface {\n    Close() error\n    a.Reader\n}", byKey["gomod example.com/m `example.com/m/b`/ReadCloser#"])
+	s.Equal("type Pair struct {\n    K     string \"json:\\\"k\\\"\"\n    Value int\n    In    struct {\n        N int \"json:\\\"n\\\"\"\n    }\n}", byKey["gomod example.com/m `example.com/m/b`/Pair#"])
+	s.Equal("struct field In struct{N int `json:\"n\"`}", byKey["gomod example.com/m `example.com/m/b`/Pair#In."])
 }
 
 func (s *goindexSuite) TestImplementationsCrossPackages() {
