@@ -107,7 +107,7 @@ func goCacheBudget(ctx context.Context, caches []goCache, budgetMB, maxEntries i
 	return types.Check{
 		Name:   name,
 		Status: types.CheckAdvice,
-		Message: fmt.Sprintf("%d of %d cache(s) past or unverifiable against the %d MB go.cache_budget_mb; doctor deletes nothing (the daemon and the reclaim hook trim the Go build cache to the budget by entry age)",
+		Message: fmt.Sprintf("%d of %d cache(s) past or unverifiable against the %d MB go.cache_budget_mb; doctor deletes nothing (only Buzz trims the Go build cache to the budget by entry age: the reclaim hook, or each fix's reclaim\\trimGoCache)",
 			len(details), len(caches), budgetMB),
 		Details: details,
 	}
@@ -123,7 +123,7 @@ func (r *runner) checkGoCacheBudget() types.Check {
 		if unscoped != "" {
 			return types.Check{Name: name, Status: types.CheckAdvice, Message: unscoped, Details: []string{unscoped}}
 		}
-		return types.Check{Name: name, Status: types.CheckOK, Message: "go.cache_budget_mb is 0: the Go caches are not measured, and neither the daemon nor the reclaim hook trims them"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "go.cache_budget_mb is 0: the Go caches are not measured, and the reclaim hook does not trim them"}
 	}
 	var caches []goCache
 	var notes []string

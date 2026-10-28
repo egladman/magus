@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"time"
 
 	"connectrpc.com/connect"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler"
@@ -51,12 +49,10 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
@@ -207,10 +203,6 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 	bridgeLog, shareLog := log.With(attr.Component("bridge")), log.With(attr.Component("share"))
-
-	if opts.Magus != nil {
-		go runGoCacheTrim(ctx, newGoCacheTrimmer(opts.Magus.Root(), opts.Config.Go.CacheBudgetMB), log.With(attr.Component("go-cache")))
-	}
 
 	// ONE job store for the server's own readers, the activity feed and the JobService
 	// below. Two stores over one file each take their own mutex, and the merge Update
@@ -919,94 +911,4 @@ func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, e
 		return types.ImportGraph{}, err
 	}
 	return kg.ImportGraph(), nil
-}
-
-const (
-	goCacheTrimInterval = 10 * time.Minute
-	goCacheTrimTimeout  = 5 * time.Minute
-	goCacheTrimSource   = "daemon/go-cache"
-)
-
-// goCacheTrimmer trims the Go build cache to go.cache_budget_mb by entry age. trimDir and
-// record are fields so a test supplies a fake trim and a fake attention row.
-type goCacheTrimmer struct {
-	budgetMB int
-	trimDir  func(ctx context.Context, maxBytes int64) (types.TrimReport, error)
-	record   func(ctx context.Context, message string) error
-}
-
-// trim reports whether it removed anything. A budget of zero or less does nothing. Go
-// refreshes an entry's mtime when a build uses it, so the oldest mtimes are the entries no
-// build has wanted longest; std.TrimOldest never removes one used within the last day.
-func (t goCacheTrimmer) trim(ctx context.Context) (bool, error) {
-	if t.budgetMB <= 0 {
-		return false, nil
-	}
-	report, err := t.trimDir(ctx, int64(t.budgetMB)<<20)
-	if err != nil {
-		return false, fmt.Errorf("server: trim the go build cache to its %d MB go.cache_budget_mb: %w", t.budgetMB, err)
-	}
-	if report.RemovedFiles == 0 {
-		return false, nil
-	}
-	msg := fmt.Sprintf("the daemon trimmed the go build cache %s to its %d MB go.cache_budget_mb by entry age: removed %d files (%d MB) unused since %s, %d MB remain",
-		report.Dir, t.budgetMB, report.RemovedFiles, report.RemovedBytes>>20,
-		time.UnixMilli(int64(report.CutoffMs)).Format(time.DateOnly), report.AfterBytes>>20)
-	if report.Stopped != "" {
-		msg += "; " + report.Stopped
-	}
-	if err := t.record(ctx, msg); err != nil {
-		return true, fmt.Errorf("server: trimmed the go build cache but could not record it: %w", err)
-	}
-	return true, nil
-}
-
-func newGoCacheTrimmer(root string, budgetMB int) goCacheTrimmer {
-	return goCacheTrimmer{
-		budgetMB: budgetMB,
-		trimDir: func(ctx context.Context, maxBytes int64) (types.TrimReport, error) {
-			dir, err := doctor.GoEnvCache(ctx)
-			if err != nil {
-				return types.TrimReport{}, err
-			}
-			return std.TrimOldest(ctx, dir, maxBytes, goCacheTrimTimeout, time.Now())
-		},
-		record: func(ctx context.Context, message string) error {
-			dir, err := sessions.Dir(root)
-			if err != nil {
-				return err
-			}
-			_, _, err = sessions.OpenRequest(dir, goCacheTrimSource, sessions.AttentionOpen{
-				Outcome:  string(types.OutcomeDiagnostic),
-				Severity: string(types.SeverityWarning),
-				Source:   goCacheTrimSource,
-				Message:  message,
-			}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root})
-			return err
-		},
-	}
-}
-
-// runGoCacheTrim trims at start and then every goCacheTrimInterval until ctx ends. A failed
-// pass is logged and the next tick tries again.
-func runGoCacheTrim(ctx context.Context, t goCacheTrimmer, log *slog.Logger) {
-	if t.budgetMB <= 0 {
-		log.InfoContext(ctx, "go.cache_budget_mb is 0: the daemon does not trim the go build cache")
-		return
-	}
-	tick := time.NewTicker(goCacheTrimInterval)
-	defer tick.Stop()
-	for {
-		trimmed, err := t.trim(ctx)
-		if err != nil {
-			log.ErrorContext(ctx, "go build cache trim", attr.Error(err))
-		} else if trimmed {
-			log.WarnContext(ctx, "trimmed the go build cache", slog.Int("budget_mb", t.budgetMB))
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
 }
