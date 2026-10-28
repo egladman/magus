@@ -16,9 +16,6 @@ export fun mgs_getTools() > {str: Tool} {
     return {
         "rustc": Tool{probe = Command{bin = "rustc", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch},
                       lifecycle = "rust"},
-        // Observed, not probed: only the scip op drives it, so its version keys the index
-        // and no other target.
-        "rust-analyzer": Tool{observe = Command{bin = "rust-analyzer", args = ["--version"]}},
     };
 }
 
@@ -115,15 +112,4 @@ fun cargoFmt(target: Target) > Command {
 fun cargoTest(target: Target) > Command { return Command{bin = "cargo", args = ["test"]}; }
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest};
-}
-
-// magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never
-// lands in the tree; rust-analyzer's scip subcommand writes there via --output. The
-// runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no
-// shell is needed to expand it.
-export fun mgs_getSymbolIndexer() > SymbolIndexer {
-    return SymbolIndexer{
-        format = SymbolFormat.scip,
-        command = Command{bin = "rust-analyzer", args = ["scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"]},
-    };
 }

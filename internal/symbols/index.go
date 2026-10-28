@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -29,12 +28,10 @@ const (
 	// paths (scip-buzz) roots them where magus resolves them rather than finding a root
 	// of its own.
 	WorkspaceRootEnvVar = "MAGUS_WORKSPACE_ROOT"
-	// indexFileName is the basename of the index the default indexer op writes.
-	indexFileName = "index.scip"
 )
 
-// IndexPath returns the path of the SCIP index op writes for a project:
-// <cacheDir>/symbols/<hash>/<op>.scip, where <hash> is derived from projectPath, the
+// IndexPath returns the path of the symbol pack (see OpenPack) op writes for a project:
+// <cacheDir>/symbols/<hash>/<op>.pack, where <hash> is derived from projectPath, the
 // project's workspace-relative directory ("." for the root), and op is the indexer op
 // (spells.SymbolIndexer.OpName), so each indexing op bound to one project has a file of
 // its own. Nothing in it names the checkout, so under a cache dir inside the workspace
@@ -42,15 +39,7 @@ const (
 // records the index as an output replays it into any of them.
 func IndexPath(cacheDir, projectPath, op string) string {
 	sum := sha256.Sum256([]byte(filepath.ToSlash(filepath.Clean(projectPath))))
-	name := op + ".scip"
-	if op == spells.DefaultSymbolIndexOp {
-		// compat(until: the cache key schema next changes, which re-runs every index
-		// anyway): the default op's index keeps the name it had before a project could
-		// hold two, because every cached run records that path as its output and a new
-		// one would re-run the indexer.
-		name = indexFileName
-	}
-	return filepath.Join(cacheDir, "symbols", hex.EncodeToString(sum[:8]), name)
+	return filepath.Join(cacheDir, "symbols", hex.EncodeToString(sum[:8]), op+".pack")
 }
 
 // FingerprintBodies sets each symbol's BodyDigest from the definition lines under root,

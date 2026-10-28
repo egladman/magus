@@ -69,9 +69,6 @@ export fun mgs_getTools() > {str: Tool} {
                      key = VersionKey{upTo = VersionComponent.patch}},
         "tsc": Tool{probe = Command{bin = "pnpm", args = ["exec", "tsc", "--version"]},
                     key = VersionKey{upTo = VersionComponent.patch}},
-        // Observed, not probed: only the scip op drives it, so its version keys the index
-        // and no other target.
-        "scip-typescript": Tool{observe = Command{bin = "scip-typescript", args = ["--version"]}},
     };
 }
 
@@ -358,16 +355,4 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 
 export fun mgs_listServices() > {str: fun(Target) Service} {
     return {"dev-server": devServer};
-}
-
-// The indexer is a PATH binary (install it with mise, not as a project dep), so it is
-// forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the
-// index never lands in the tree; scip-typescript writes there via --output. The runner
-// resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is
-// needed to expand it.
-export fun mgs_getSymbolIndexer() > SymbolIndexer {
-    return SymbolIndexer{
-        format = SymbolFormat.scip,
-        command = Command{bin = "scip-typescript", args = ["index", "--output", "$MAGUS_SYMBOL_INDEX"]},
-    };
 }

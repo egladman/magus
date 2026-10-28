@@ -15,14 +15,10 @@ type Indexer struct {
 	URL      string // install / source page
 }
 
-// indexers maps a canonical language to its SCIP indexer. Keep the keys in lockstep
-// with the languages the built-in spells declare via mgs_getLanguage.
+// indexers maps a canonical language to the external SCIP indexer a built-in spell runs.
+// Go is indexed in process (goindex), so it has none to install.
 var indexers = map[string]Indexer{
-	"buzz":       {Language: "buzz", Tool: "scip-buzz", URL: "https://github.com/egladman/magus/tree/main/libs/scipbuzz"},
-	"go":         {Language: "go", Tool: "scip-go", URL: "https://github.com/sourcegraph/scip-go"},
-	"typescript": {Language: "typescript", Tool: "scip-typescript", URL: "https://github.com/sourcegraph/scip-typescript"},
-	"python":     {Language: "python", Tool: "scip-python", URL: "https://github.com/sourcegraph/scip-python"},
-	"rust":       {Language: "rust", Tool: "rust-analyzer", URL: "https://github.com/rust-lang/rust-analyzer"},
+	"buzz": {Language: "buzz", Tool: "scip-buzz", URL: "https://github.com/egladman/magus/tree/main/libs/scipbuzz"},
 }
 
 // MissingIndexerHint is the fix for an index never built because its indexer, bin as the

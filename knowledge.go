@@ -1308,13 +1308,14 @@ func newSymbolIndexCache(in symbolIngestInputs, decl resolvedSymbolIndex) symbol
 // that one decode, writing them for the next reader: whichever of the parse or the
 // occurrences a process needs first, it never decodes the index a second time for the other.
 func decodeSymbolIndex(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, c symbolIndexCache) ([]types.KnowledgeSymbol, map[string]symbols.KeyOccurrences, error) {
-	data, err := os.ReadFile(decl.path)
+	// An index a knowledge.symbols entry names (no op) is the user's own SCIP build output;
+	// an indexer op writes a pack.
+	idx, err := symbols.ReadIndex(decl.path, decl.op != "")
+	if errors.Is(err, symbols.ErrIndexFormat) {
+		return nil, nil, symbolDecodeError{err}
+	}
 	if err != nil {
 		return nil, nil, err
-	}
-	idx, err := symbols.DecodeIndex(data)
-	if err != nil {
-		return nil, nil, symbolDecodeError{err}
 	}
 	syms := symbols.ParseDecoded(ctx, idx, decl.project, decl.language)
 	occ, err := symbols.IndexOccurrences(ctx, idx, decl.project)

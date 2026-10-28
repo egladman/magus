@@ -315,10 +315,10 @@ func TestSymbolStatusCache(t *testing.T) {
 func TestSymbolRunError(t *testing.T) {
 	base := errors.New("exit status 127")
 
-	withHint := symbolRunError(types.NewProjectRef("docs", "/ws/docs"), "typescript", base)
+	withHint := symbolRunError(types.NewProjectRef("docs", "/ws/docs"), "buzz", base)
 	assert.ErrorIs(t, withHint, base, "wraps the cause")
 	assert.Contains(t, withHint.Error(), "docs", "names the project")
-	assert.Contains(t, withHint.Error(), "scip-typescript", "adds the actionable indexer hint")
+	assert.Contains(t, withHint.Error(), "scip-buzz", "adds the actionable indexer hint")
 
 	// The workspace-root project reads as its repo name, never the bare ".".
 	root := symbolRunError(types.NewProjectRef(".", "/ws/magus"), "go", base)
@@ -1032,7 +1032,7 @@ func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "locked by another magus process")
 	assert.Contains(t, err.Error(), "pid 4242")
-	assert.NotContains(t, err.Error(), symbols.InstallHint("go"), "the indexer never ran, so it is not missing")
+	assert.NotContains(t, err.Error(), "may not be installed", "the indexer never ran, so it is not missing")
 }
 
 // A read-only cache runs the indexer and records nothing, so the fresh index is one nothing can

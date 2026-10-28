@@ -501,3 +501,15 @@ layout on disk. magus still never runs a container, never reads or authors a Doc
 Containerfile, and never detects a runtime. The rest of that list, including exposing no
 container API to Buzz, is unchanged. [ADR 0018](0018-magus-assembles-oci-images.md) records
 the decision and its limits.
+
+### 2026-10-28: the indexers are magus's own, so none runs from an image
+
+Eli decided that magus produces its own symbol index (decisions 62 and 63 of the PR 625
+plan), which voids "The indexers run from their images and from nowhere else" and the
+"The indexers" contract under it. scip-go, scip-typescript, scip-python and rust-analyzer
+no longer run or install: Go is indexed in process with go/types, one package at a time,
+and TypeScript, Python and Rust have no symbol index until magus's own indexers for them
+land. scip-buzz, which this repository builds, stays a command indexer on the host. No
+indexer image, digest, mount set or resource bound is built, because no external indexer
+is left to contain. The index is stored in magus's own pack layout and exported as SCIP on
+demand. The relay half of this page is unchanged.

@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -507,58 +508,64 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 		_, err := runCommand(ctx, op, opts)
 		return nil, err
 	}
-	indexPath, err := symbolIndexEnv(ctx, req.Dir, req.Target)
+	projectDir, indexPath, err := symbolIndexEnv(ctx, req.Dir, req.Target)
 	if err != nil {
 		return nil, err
-	}
-	base := map[string]string{}
-	if ws := types.WorkspaceFromContext(ctx); ws != nil {
-		base[symbols.WorkspaceRootEnvVar] = ws.Root()
 	}
 	var envs []map[string]string
 	if spec.SymbolIndexer != nil {
 		envs = spec.SymbolIndexer.Envs
 	}
-	if len(envs) == 0 {
-		return nil, runSymbolIndexer(ctx, spec.Name, op, opts, base, nil, indexPath)
+	if patterns, ok := spells.InProcessGoPatterns(op.Command); ok {
+		return nil, runGoIndexer(ctx, spec.Name, projectDir, indexPath, patterns, envs)
 	}
-	// Each run writes its own index beside the merged one, so a failed run never leaves
-	// a half-merged index where ingestion reads.
-	tmp, err := os.MkdirTemp(filepath.Dir(indexPath), fmt.Sprintf(".%s-envs-", filepath.Base(indexPath)))
-	if err != nil {
-		return nil, fmt.Errorf("prepare symbol index dir: %w", err)
+	if len(envs) > 0 {
+		return nil, fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (command `go list <patterns>`); %q runs once, in the host's environment",
+			spec.Name, op.Bin)
 	}
-	defer os.RemoveAll(tmp)
-	dests := make([]string, len(envs))
-	for i, overlay := range envs {
-		dests[i] = filepath.Join(tmp, fmt.Sprintf("%d.scip", i))
-		if err := runSymbolIndexer(ctx, spec.Name, op, opts, base, overlay, dests[i]); err != nil {
-			return nil, err
-		}
+	base := map[string]string{}
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		base[symbols.WorkspaceRootEnvVar] = ws.Root()
 	}
-	if err := symbols.MergeIndexes(indexPath, dests); err != nil {
-		return nil, fmt.Errorf("spell %q symbol indexer: %w", spec.Name, err)
+	// The command writes SCIP beside the pack; the pack is what readers open.
+	scipPath := indexPath + ".scip"
+	defer os.Remove(scipPath)
+	if err := runSymbolIndexer(ctx, spec.Name, op, opts, base, scipPath); err != nil {
+		return nil, err
+	}
+	if err := symbols.PackFromSCIP(scipPath, indexPath, "scip "+op.Bin); err != nil {
+		return nil, fmt.Errorf("spell %q symbol indexer: storing the index %q wrote: %w", spec.Name, op.Bin, err)
 	}
 	return noResult()
 }
 
-// runSymbolIndexer runs op once with overlay over its environment, handing it dest as
-// MAGUS_SYMBOL_INDEX. base is the rest of what magus sets for the run; overlay never
-// reaches opts.refs, which holds only values magus computes.
-func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts commandOpts, base, overlay map[string]string, dest string) error {
+// runGoIndexer brings the pack at indexPath up to date with magus's in-process Go indexer,
+// re-indexing only the packages whose files moved and the dependents a removed symbol
+// reaches.
+func runGoIndexer(ctx context.Context, spellName, dir, indexPath string, patterns []string, builds []map[string]string) error {
+	ix := &goindex.Indexer{Dir: dir, Patterns: patterns, Builds: builds}
+	res, err := symbols.UpdatePack(ctx, indexPath, ix)
+	if err != nil {
+		return fmt.Errorf("spell %q symbol indexer: %w", spellName, err)
+	}
+	slog.With(attr.Component("symbols")).InfoContext(ctx, "updated the Go symbol index",
+		slog.String("dir", dir),
+		slog.Int("indexed", len(res.Indexed)),
+		slog.Int("dependents", len(res.Dependents)),
+		slog.Int("dropped", len(res.Dropped)),
+		slog.Int("kept", res.Kept),
+		slog.Bool("rebuilt", res.Rebuilt))
+	return nil
+}
+
+// runSymbolIndexer runs op once, handing it dest as MAGUS_SYMBOL_INDEX. base is the rest
+// of what magus sets for the run.
+func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts commandOpts, base map[string]string, dest string) error {
 	refs := maps.Clone(base)
 	refs[symbols.IndexEnvVar] = dest
-	env := maps.Clone(overlay)
-	if env == nil {
-		env = map[string]string{}
-	}
-	maps.Copy(env, refs)
-	opts.env = env
+	opts.env = maps.Clone(refs)
 	opts.refs = refs
 	if _, err := runCommand(ctx, op, opts); err != nil {
-		if len(overlay) > 0 {
-			return fmt.Errorf("symbol index under %s: %w", formatEnv(overlay), err)
-		}
 		return err
 	}
 	// Checked HERE because this is the site that made the promise: it handed the
@@ -582,16 +589,6 @@ func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts 
 		return fmt.Errorf("spell %q symbol indexer: reading the index %q wrote: %w", spellName, op.Bin, err)
 	}
 	return nil
-}
-
-// formatEnv renders an env overlay as sorted NAME=value pairs, for naming which run of
-// an indexer failed.
-func formatEnv(env map[string]string) string {
-	pairs := make([]string, 0, len(env))
-	for _, k := range slices.Sorted(maps.Keys(env)) {
-		pairs = append(pairs, fmt.Sprintf("%s=%s", k, env[k]))
-	}
-	return strings.Join(pairs, " ")
 }
 
 // resolveSecretEnv resolves a command's declared secrets (env var name -> provider
@@ -649,23 +646,23 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 // cached target. Only the authoring hack went away, not the path this defends.
 //
 // op is the indexer's op name, which keys the file: two indexing spells on one project
-// write two indexes.
-func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, error) {
+// write two indexes. The project's absolute directory comes back with the path.
+func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, string, error) {
 	c := cache.FromContext(ctx)
 	if c == nil {
-		return "", fmt.Errorf("a symbol indexer must run as a magus target so its index lands in the cache")
+		return "", "", fmt.Errorf("a symbol indexer must run as a magus target so its index lands in the cache")
 	}
 	abs := projectDir
 	if !filepath.IsAbs(abs) {
 		cwd, err := std.EffectiveCurrentWorkingDirectory(ctx)
 		if err != nil {
-			return "", fmt.Errorf("resolve symbol index dir: %w", err)
+			return "", "", fmt.Errorf("resolve symbol index dir: %w", err)
 		}
 		abs = filepath.Join(cwd, abs)
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return "", fmt.Errorf("a symbol indexer must run in a workspace so its index is keyed by project path")
+		return "", "", fmt.Errorf("a symbol indexer must run in a workspace so its index is keyed by project path")
 	}
 	// Resolved, so a root and a project dir reached through different spellings (macOS
 	// /var and /private/var) still relate.
@@ -677,13 +674,13 @@ func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, error) 
 	}
 	project, err := filepath.Rel(canonical(ws.Root()), canonical(abs))
 	if err != nil || !filepath.IsLocal(project) {
-		return "", fmt.Errorf("symbol index dir %s is outside the workspace %s", abs, ws.Root())
+		return "", "", fmt.Errorf("symbol index dir %s is outside the workspace %s", abs, ws.Root())
 	}
 	path := symbols.IndexPath(c.Dir(), project, op)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("prepare symbol index dir: %w", err)
+		return "", "", fmt.Errorf("prepare symbol index dir: %w", err)
 	}
-	return path, nil
+	return abs, path, nil
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops

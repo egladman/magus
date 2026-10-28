@@ -7,15 +7,12 @@ import (
 )
 
 func TestInstallHint(t *testing.T) {
-	hint := InstallHint("typescript")
-	assert.Contains(t, hint, "scip-typescript", "names the indexer binary")
-	assert.Contains(t, hint, "https://github.com/", "carries the install URL")
-
-	assert.Contains(t, InstallHint("buzz"), "scip-buzz")
-	assert.Contains(t, InstallHint("buzz"), "libs/scipbuzz")
+	assert.Contains(t, InstallHint("buzz"), "scip-buzz", "names the indexer binary")
+	assert.Contains(t, InstallHint("buzz"), "libs/scipbuzz", "carries the install URL")
 
 	assert.Empty(t, InstallHint(""), "no hint for a language with no indexer")
 	assert.Empty(t, InstallHint("cobol"))
+	assert.Empty(t, InstallHint("go"), "Go is indexed in process: nothing to install")
 }
 
 // The hint names the binary the spell declares, which need not be the one the table

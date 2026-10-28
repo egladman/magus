@@ -102,13 +102,24 @@ func goIndexPath(cacheDir, project string) string {
 // writeSCIP writes a minimal one-definition index to path (creating parent dirs).
 func writeSCIP(t *testing.T, path string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	idx := &scip.Index{Documents: []*scip.Document{{
+	writeIndexFile(t, path, &scip.Index{Documents: []*scip.Document{{
 		RelativePath: "pkg/a/a.go",
 		Occurrences: []*scip.Occurrence{
 			{Symbol: "scip-go gomod example.com/a v1 Foo#", SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{0, 0, 3}},
 		},
-	}}}
+	}}})
+}
+
+// writeIndexFile writes idx to path as an indexer op stores it, a pack, or as SCIP
+// protobuf for any path that is not one: a knowledge.symbols override names the user's
+// own SCIP output.
+func writeIndexFile(t *testing.T, path string, idx *scip.Index) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	if filepath.Ext(path) == ".pack" {
+		require.NoError(t, symbols.PackSCIP(path, "test", idx))
+		return
+	}
 	data, err := proto.Marshal(idx)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0o644))
@@ -221,24 +232,24 @@ func TestSymbolGapsNoneCapable(t *testing.T) {
 }
 
 // The declared language reaches ingestion, so an indexer that reports none still yields
-// labelled symbols. Without it `magus query language:typescript` is empty while
-// `language:go` works, and the graph looks like it has no TypeScript at all.
+// labelled symbols. Without it `magus query language:buzz` is empty while
+// `language:go` works, and the graph looks like it has no Buzz at all.
 func TestLoadKnowledgeSymbolsCarriesDeclaredLanguage(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	writeSCIP(t, goIndexPath(cacheDir, "web"))
+	writeSCIP(t, symbols.IndexPath(cacheDir, "web", "scip-buzz"))
 
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
-		{Path: "web", Spell: "typescript", Spells: []string{"typescript"}},
+		{Path: "web", Spell: "buzz", Spells: []string{"buzz"}},
 	}}
 	spells := []types.Spell{
-		{Name: "typescript", Language: "typescript", SymbolFormat: "scip"},
+		{Name: "buzz", Language: "buzz", SymbolFormat: "scip"},
 	}
 	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 
 	require.Len(t, got["web"], 1)
-	assert.Equal(t, "typescript", got["web"][0].Language,
-		"writeSCIP's fixture sets no Document.Language, exactly like scip-typescript")
+	assert.Equal(t, "buzz", got["web"][0].Language,
+		"writeSCIP's fixture sets no Document.Language, as an indexer may not")
 }
 
 func TestLoadKnowledgeSymbolsNoneCapable(t *testing.T) {
@@ -1311,10 +1322,7 @@ func writeSCIPIndex(t *testing.T, root, path, language string, docs map[string][
 		}
 		idx.Documents = append(idx.Documents, doc)
 	}
-	data, err := proto.Marshal(idx)
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, data, 0o644))
+	writeIndexFile(t, path, idx)
 }
 
 // The end-to-end shape of a project bound to a Go and a Buzz indexing spell: each declares

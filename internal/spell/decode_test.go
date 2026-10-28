@@ -212,14 +212,12 @@ func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
 			assert.Equalf(t, spells.OpKindSymbolIndex, d.Ops[ops[name]].Kind, "%s registers its indexer under the op it names", name)
 		}
 	}
-	assert.Equal(t, map[string]string{
-		"buzz": "scip-buzz", "go": "scip", "python": "scip", "rust": "scip", "typescript": "scip",
-	}, ops)
-	assert.Equal(t, "index.scip", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
+	assert.Equal(t, map[string]string{"buzz": "scip-buzz", "go": "scip"}, ops)
+	assert.Equal(t, "scip.pack", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
 }
 
-// Every shipped indexer (scip-go, scip-python, scip-typescript, rust-analyzer, scip-buzz)
-// reaches the runner through the synthesized op, so each one is quiet on success.
+// Every shipped indexer (the in-process Go indexer's `go list`, scip-buzz) reaches the
+// runner through the synthesized op, so each one is quiet on success.
 func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 	bins := map[string]string{}
 	for name, d := range Builtins() {
@@ -231,9 +229,7 @@ func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 		bins[name] = command.Bin
 		assert.Truef(t, command.Capture && command.Quiet, "%s: its indexer prints nothing on success", name)
 	}
-	assert.Equal(t, map[string]string{
-		"buzz": "scip-buzz", "go": "scip-go", "python": "scip-python", "rust": "rust-analyzer", "typescript": "scip-typescript",
-	}, bins)
+	assert.Equal(t, map[string]string{"buzz": "scip-buzz", "go": "go"}, bins)
 }
 
 // The tools an indexer runs besides its binary decode onto the indexer, and each must be a
