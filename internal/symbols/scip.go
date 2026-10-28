@@ -446,27 +446,36 @@ func platformTwins(sym types.KnowledgeSymbol, defs map[string]types.KnowledgeSym
 	return out
 }
 
-// twinKey is the key of key's definition in file when another file defines key first.
-// The space puts it outside the SCIP descriptor grammar, so nothing parses it as a
-// different symbol of the same package.
+// twinKey is the key of key's definition in file when another file defines key first:
+// the file rides on the package name, `gomod example.com/m@mem/total_linux.go <descriptors>`,
+// so the descriptors still parse and every lens measures the twin's body as its own.
 func twinKey(key, file string) string {
-	return fmt.Sprintf("%s %s", key, file)
+	parts := keyParts(key)
+	parts[len(parts)-2] = fmt.Sprintf("%s@%s", parts[len(parts)-2], file)
+	return strings.Join(parts, " ")
 }
 
-// TwinBase is the key whose occurrences key's are: for a platform twin's key
-// (`<key> <file>`) the key without its file, since the twins share their references, and
-// key itself otherwise. Every key ends in a descriptor's suffix and a file never does,
-// which is what tells the two apart.
+// TwinBase is the key whose occurrences key's are: for a platform twin's key the key
+// without its file, since the twins share their references, and key itself otherwise. A
+// package name never holds an @ past its first byte, which is what marks a twin.
 func TwinBase(key string) string {
-	i := strings.LastIndexByte(key, ' ')
-	if i < 0 || endsDescriptor(key) || !endsDescriptor(key[:i]) {
+	parts := keyParts(key)
+	if len(parts) < 2 {
 		return key
 	}
-	return key[:i]
+	name := parts[len(parts)-2]
+	i := strings.LastIndexByte(name, '@')
+	if i <= 0 {
+		return key
+	}
+	parts[len(parts)-2] = name[:i]
+	return strings.Join(parts, " ")
 }
 
-func endsDescriptor(s string) bool {
-	return s != "" && strings.ContainsRune("./#:!)]", rune(s[len(s)-1]))
+// keyParts splits a key into its manager, its package name when it has one, and its
+// descriptors, which may hold spaces of their own.
+func keyParts(key string) []string {
+	return strings.SplitN(key, " ", 3)
 }
 
 // workspacePath rebases an indexer-relative document path onto the workspace by joining

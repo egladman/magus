@@ -178,7 +178,7 @@ func (s *symbolsSuite) TestAPlatformTwinKeepsTheKeyInTheFirstFile() {
 func (s *symbolsSuite) TestAPlatformTwinInAnotherFileIsItsOwnSymbol() {
 	syms := s.platformTwins()
 	want := syms[0]
-	want.Key, want.Source, want.DefEndLine = "gomod example.com/foo run(). run_windows.go", "run_windows.go:10", 16
+	want.Key, want.Source, want.DefEndLine = "gomod example.com/foo@run_windows.go run().", "run_windows.go:10", 16
 	want.Doc, want.Signature = "run starts a child and waits.", "func run(args []string) error"
 	want.Defs = []string{"run_windows.go"}
 	s.Equal(want, syms[1], "the twin's own body, measured apart from the first")
@@ -191,13 +191,13 @@ func (s *symbolsSuite) TestPlatformTwinsShareTheirReferences() {
 }
 
 func (s *symbolsSuite) TestTwinBaseStripsATwinsFile() {
-	s.Equal("gomod example.com/foo run().", TwinBase("gomod example.com/foo run(). run_windows.go"))
-	s.Equal("gomod example.com/foo `example.com/foo/mem`/Total#", TwinBase("gomod example.com/foo `example.com/foo/mem`/Total# mem/total_linux.go"))
+	s.Equal("gomod example.com/foo run().", TwinBase("gomod example.com/foo@run_windows.go run()."))
+	s.Equal("gomod example.com/foo `example.com/foo/mem`/Total#", TwinBase("gomod example.com/foo@mem/total_linux.go `example.com/foo/mem`/Total#"))
 }
 
 func (s *symbolsSuite) TestTwinBaseLeavesAKeyAlone() {
 	s.Equal("gomod example.com/foo run().", TwinBase("gomod example.com/foo run()."))
-	s.Equal("gomod github.com/a/b `github.com/a/b/x`/T#M().", TwinBase("gomod github.com/a/b `github.com/a/b/x`/T#M()."))
+	s.Equal("npm @scope/pkg `x`/Y#", TwinBase("npm @scope/pkg `x`/Y#"), "a scoped npm name opens with @")
 	s.Equal("noSpace.", TwinBase("noSpace."))
 }
 

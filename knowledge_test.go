@@ -743,7 +743,7 @@ func (s *magusSuite) TestAPlatformTwinReadsItsBaseKeysOccurrences() {
 	writeSCIP(s.T(), goIndexPath(cacheDir, "pkg/a"))
 
 	projects, spells := goWorkspace("pkg/a")
-	foo, twin := "gomod example.com/a Foo#", "gomod example.com/a Foo# pkg/a/pkg/a/a_linux.go"
+	foo, twin := "gomod example.com/a Foo#", "gomod example.com/a@pkg/a/pkg/a/a_linux.go Foo#"
 	got := symbolsOccurrences(s.T().Context(), ingest(config.Config{}, root, cacheDir, projects, spells), []string{twin, foo})
 
 	s.Require().Len(got[twin].Files, 1, "never silently empty: the twin shares Foo's sites")
