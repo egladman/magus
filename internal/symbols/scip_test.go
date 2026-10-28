@@ -167,32 +167,27 @@ func (s *symbolsSuite) platformTwins() []types.KnowledgeSymbol {
 }
 
 func (s *symbolsSuite) TestAPlatformTwinKeepsTheKeyInTheFirstFile() {
-	first := s.platformTwins()[0]
-	s.Equal("gomod example.com/foo run().", first.Key)
-	s.Equal("run_unix.go:25", first.Source)
-	s.Equal(31, first.DefEndLine)
-	s.Equal("run replaces the process.", first.Doc)
-	s.Equal("func run(argv []string) error", first.Signature)
-	s.Equal([]string{"run_unix.go"}, first.Defs)
-	s.Empty(first.Definitions)
+	syms := s.platformTwins()
+	want := syms[1]
+	want.Key, want.Source, want.DefEndLine = "gomod example.com/foo run().", "run_unix.go:25", 31
+	want.Doc, want.Signature = "run replaces the process.", "func run(argv []string) error"
+	want.Defs = []string{"run_unix.go"}
+	s.Equal(want, syms[0], "the first twin is the second but for its own file's definition")
 }
 
 func (s *symbolsSuite) TestAPlatformTwinInAnotherFileIsItsOwnSymbol() {
-	second := s.platformTwins()[1]
-	s.Equal("gomod example.com/foo run(). run_windows.go", second.Key)
-	s.Equal("run", second.Label)
-	s.Equal("run_windows.go:10", second.Source)
-	s.Equal(16, second.DefEndLine, "the twin's own body, measured apart from the first")
-	s.Equal("run starts a child and waits.", second.Doc)
-	s.Equal("func run(args []string) error", second.Signature)
-	s.Equal([]string{"run_windows.go"}, second.Defs)
+	syms := s.platformTwins()
+	want := syms[0]
+	want.Key, want.Source, want.DefEndLine = "gomod example.com/foo run(). run_windows.go", "run_windows.go:10", 16
+	want.Doc, want.Signature = "run starts a child and waits.", "func run(args []string) error"
+	want.Defs = []string{"run_windows.go"}
+	s.Equal(want, syms[1], "the twin's own body, measured apart from the first")
 }
 
 func (s *symbolsSuite) TestPlatformTwinsShareTheirReferences() {
 	syms := s.platformTwins()
+	s.Equal([]types.KnowledgeSymbolRef{{Path: "main.go", Count: 1, Lines: []int{4}}}, syms[0].Refs)
 	s.Equal(syms[0].Refs, syms[1].Refs)
-	s.Require().Len(syms[1].Refs, 1)
-	s.Equal("main.go", syms[1].Refs[0].Path)
 }
 
 func (s *symbolsSuite) TestTwinBaseStripsATwinsFile() {

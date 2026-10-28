@@ -142,7 +142,7 @@ func ReadIndex(path string, pack bool) (*scip.Index, error) {
 		}
 		idx, err := decodeIndex(data)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w: %w", path, ErrIndexFormat, err)
+			return nil, fmt.Errorf("%w: %s: %w", ErrIndexFormat, path, err)
 		}
 		return idx, nil
 	}
@@ -153,7 +153,7 @@ func ReadIndex(path string, pack bool) (*scip.Index, error) {
 	defer p.Close()
 	shards, err := p.Shards()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w: %w", path, ErrIndexFormat, err)
+		return nil, fmt.Errorf("%w: %s: %w", ErrIndexFormat, path, err)
 	}
 	return packIndex(shards), nil
 }
@@ -256,7 +256,7 @@ func PackFromSCIP(src, dest, indexer string) error {
 	}
 	idx, err := decodeIndex(data)
 	if err != nil {
-		return fmt.Errorf("%s: %w: %w", src, ErrIndexFormat, err)
+		return fmt.Errorf("%w: %s: %w", ErrIndexFormat, src, err)
 	}
 	return packSCIP(dest, indexer, idx)
 }

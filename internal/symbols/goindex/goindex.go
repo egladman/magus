@@ -77,7 +77,7 @@ func (ix *Indexer) Version() string {
 			ix.goVersion = "unknown"
 		}
 	}
-	return formatVersion + " " + ix.goVersion
+	return fmt.Sprintf("%s %s", formatVersion, ix.goVersion)
 }
 
 func (ix *Indexer) env(overlay map[string]string) []string {
@@ -86,7 +86,7 @@ func (ix *Indexer) env(overlay map[string]string) []string {
 		env = os.Environ()
 	}
 	for _, k := range sortedKeys(overlay) {
-		env = append(env, k+"="+overlay[k])
+		env = append(env, fmt.Sprintf("%s=%s", k, overlay[k]))
 	}
 	return env
 }
@@ -269,9 +269,9 @@ func (ix *Indexer) selectsExcluded(unit string, overlay map[string]string) bool 
 }
 
 func formatOverlay(overlay map[string]string) string {
-	var parts []string
+	parts := make([]string, 0, len(overlay))
 	for _, k := range sortedKeys(overlay) {
-		parts = append(parts, k+"="+overlay[k])
+		parts = append(parts, fmt.Sprintf("%s=%s", k, overlay[k]))
 	}
 	return strings.Join(parts, " ")
 }
@@ -757,7 +757,7 @@ func (w *walker) scanFields(p *types.Package) {
 }
 
 func (w *walker) symbolInfo(obj types.Object, sym string, doc *ast.CommentGroup) symbols.SymbolInfo {
-	si := symbols.SymbolInfo{Symbol: sym, DisplayName: obj.Name(), Kind: int32(kindOf(obj)), Signature: w.signature(obj)}
+	si := symbols.SymbolInfo{Symbol: sym, DisplayName: obj.Name(), Kind: int32(objectKind(obj)), Signature: w.signature(obj)}
 	if doc != nil {
 		if text := strings.TrimSpace(doc.Text()); text != "" {
 			si.Documentation = []string{text}
@@ -766,7 +766,7 @@ func (w *walker) symbolInfo(obj types.Object, sym string, doc *ast.CommentGroup)
 	return si
 }
 
-func kindOf(obj types.Object) scip.SymbolInformation_Kind {
+func objectKind(obj types.Object) scip.SymbolInformation_Kind {
 	switch o := obj.(type) {
 	case *types.Func:
 		if recv := o.Signature().Recv(); recv != nil {
@@ -811,7 +811,7 @@ func (w *walker) signature(obj types.Object) string {
 			return "struct " + backquoteTags(types.ObjectString(o, w.qual))
 		}
 	case *types.Const:
-		return types.ObjectString(o, w.qual) + " = " + o.Val().String()
+		return fmt.Sprintf("%s = %s", types.ObjectString(o, w.qual), o.Val())
 	}
 	return types.ObjectString(obj, w.qual)
 }
@@ -821,21 +821,21 @@ func (w *walker) signature(obj types.Object) string {
 func (w *walker) typeDeclaration(o *types.TypeName) string {
 	alias, ok := o.Type().(*types.Alias)
 	if !ok || !o.IsAlias() {
-		return "type " + o.Name() + " " + w.expand(o.Type().Underlying())
+		return fmt.Sprintf("type %s %s", o.Name(), w.expand(o.Type().Underlying()))
 	}
 	lhs := o.Name()
 	if tps := alias.TypeParams(); tps.Len() > 0 {
 		parts := make([]string, 0, tps.Len())
 		for i := range tps.Len() {
-			parts = append(parts, tps.At(i).Obj().Name()+" "+tps.At(i).Constraint().String())
+			parts = append(parts, fmt.Sprintf("%s %s", tps.At(i).Obj().Name(), tps.At(i).Constraint()))
 		}
-		lhs += "[" + strings.Join(parts, ", ") + "]"
+		lhs = fmt.Sprintf("%s[%s]", lhs, strings.Join(parts, ", "))
 	}
 	switch rhs := alias.Rhs(); rhs.(type) {
 	case *types.Alias, *types.Named:
-		return "type " + lhs + " = " + types.TypeString(rhs, w.qual)
+		return fmt.Sprintf("type %s = %s", lhs, types.TypeString(rhs, w.qual))
 	default:
-		return "type " + lhs + " = " + w.expand(rhs)
+		return fmt.Sprintf("type %s = %s", lhs, w.expand(rhs))
 	}
 }
 
@@ -848,7 +848,7 @@ func (w *walker) expand(t types.Type) string {
 	default:
 		return raw
 	}
-	src, err := format.Source([]byte("package p\n\ntype _ " + raw + "\n"))
+	src, err := format.Source(fmt.Appendf(nil, "package p\n\ntype _ %s\n", raw))
 	if err != nil {
 		return raw
 	}
@@ -871,7 +871,7 @@ func backquoteTags(s string) string {
 		}
 		b.WriteString(s[:start])
 		if unquoted, err := strconv.Unquote(s[start : end+1]); err == nil {
-			b.WriteString("`" + unquoted + "`")
+			fmt.Fprintf(&b, "`%s`", unquoted)
 		} else {
 			b.WriteString(s[start : end+1])
 		}
@@ -934,7 +934,7 @@ func (w *walker) methodSets() []symbols.MethodSet {
 func (w *walker) method(fn *types.Func) symbols.Method {
 	name := fn.Name()
 	if !fn.Exported() && fn.Pkg() != nil {
-		name = fn.Pkg().Path() + "." + name
+		name = fmt.Sprintf("%s.%s", fn.Pkg().Path(), name)
 	}
 	return symbols.Method{Name: name, Signature: types.TypeString(fn.Signature(), nil), Symbol: w.symbol(fn)}
 }

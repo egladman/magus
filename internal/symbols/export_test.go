@@ -20,12 +20,12 @@ const (
 )
 
 func methodShards() []Shard {
-	a := shardOf("a", "a/a.go", []string{symIface, symIfaceRead})
+	a := testShard("a", "a/a.go", []string{symIface, symIfaceRead})
 	a.MethodSets = []MethodSet{{Symbol: symIface, Interface: true, Methods: []Method{
 		{Name: "Read", Signature: readSignature, Symbol: symIfaceRead},
 		{Name: "Close", Signature: closeSignature},
 	}}}
-	b := shardOf("b", "b/b.go", []string{symImpl, symImplRead, symPartial})
+	b := testShard("b", "b/b.go", []string{symImpl, symImplRead, symPartial})
 	b.MethodSets = []MethodSet{
 		{Symbol: symImpl, Methods: []Method{
 			{Name: "Close", Signature: closeSignature},
@@ -36,7 +36,7 @@ func methodShards() []Shard {
 	return []Shard{a, b}
 }
 
-func infoOf(idx *scip.Index, symbol string) *scip.SymbolInformation {
+func findInfo(idx *scip.Index, symbol string) *scip.SymbolInformation {
 	for _, d := range idx.Documents {
 		for _, si := range d.Symbols {
 			if si.Symbol == symbol {
@@ -61,13 +61,13 @@ func implemented(si *scip.SymbolInformation) []string {
 // records the other.
 func (s *symbolsSuite) TestPackIndexDerivesImplementationsAcrossShards() {
 	idx := packIndex(methodShards())
-	s.Equal([]string{symIface}, implemented(infoOf(idx, symImpl)))
-	s.Equal([]string{symIfaceRead}, implemented(infoOf(idx, symImplRead)))
+	s.Equal([]string{symIface}, implemented(findInfo(idx, symImpl)))
+	s.Equal([]string{symIfaceRead}, implemented(findInfo(idx, symImplRead)))
 }
 
 func (s *symbolsSuite) TestPackIndexSkipsATypeMissingAMethod() {
 	idx := packIndex(methodShards())
-	s.Empty(implemented(infoOf(idx, symPartial)))
+	s.Empty(implemented(findInfo(idx, symPartial)))
 }
 
 func (s *symbolsSuite) TestPackIndexKeepsDocumentsAndRanges() {
@@ -86,7 +86,7 @@ func (s *symbolsSuite) TestReadIndexAssemblesAPackWhole() {
 	idx, err := ReadIndex(pack, true)
 	s.Require().NoError(err)
 	s.Len(idx.Documents, 2)
-	s.Equal([]string{symIface}, implemented(infoOf(idx, symImpl)))
+	s.Equal([]string{symIface}, implemented(findInfo(idx, symImpl)))
 }
 
 // A SCIP index an external indexer wrote is stored one shard per directory and reads back
@@ -150,7 +150,7 @@ func (s *symbolsSuite) TestExportSCIPRebasesEachDocumentOntoTheWorkspace() {
 }
 
 func (s *symbolsSuite) TestExportSCIPKeepsImplementations() {
-	s.Equal([]string{symIface}, implemented(infoOf(s.exportedSCIP(), symImpl)))
+	s.Equal([]string{symIface}, implemented(findInfo(s.exportedSCIP(), symImpl)))
 }
 
 func (s *symbolsSuite) TestExportSCIPFailsOnAnIndexThatWillNotRead() {

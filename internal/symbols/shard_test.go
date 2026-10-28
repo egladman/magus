@@ -45,7 +45,7 @@ func (f *fakeIndexer) Index(_ context.Context, units []Unit) ([]Shard, error) {
 	return out, nil
 }
 
-func shardOf(unit, path string, defs []string, refs ...string) Shard {
+func testShard(unit, path string, defs []string, refs ...string) Shard {
 	d := Document{Path: path, Language: "go"}
 	for i, s := range defs {
 		d.Occurrences = append(d.Occurrences, Occurrence{Symbol: s, Range: []int32{int32(i), 5, 6}, Roles: defRole})
@@ -67,9 +67,9 @@ func threeUnits() *fakeIndexer {
 			{ID: "c", Digest: "c1", Deps: []string{"a"}},
 		},
 		shards: map[string]Shard{
-			"a": shardOf("a", "a/a.go", []string{symA, symAOld}),
-			"b": shardOf("b", "b/b.go", []string{symB}, symAOld),
-			"c": shardOf("c", "c/c.go", []string{symC}, symA),
+			"a": testShard("a", "a/a.go", []string{symA, symAOld}),
+			"b": testShard("b", "b/b.go", []string{symB}, symAOld),
+			"c": testShard("c", "c/c.go", []string{symC}, symA),
 		},
 	}
 }
@@ -130,12 +130,11 @@ func (s *symbolsSuite) TestUpdatePackReindexesDependentsReferencingARemovedSymbo
 
 	ix.asked = nil
 	ix.units[0].Digest = "a2"
-	ix.shards["a"] = shardOf("a", "a/a.go", []string{symA})
+	ix.shards["a"] = testShard("a", "a/a.go", []string{symA})
 	res, err := UpdatePack(s.T().Context(), path, ix)
 	s.Require().NoError(err)
 	s.Equal([]string{"a", "b"}, ix.asked)
-	s.Equal([]string{"b"}, res.Dependents)
-	s.Equal(1, res.Kept)
+	s.Equal(UpdateResult{Indexed: []string{"a"}, Dependents: []string{"b"}, Kept: 1}, res)
 }
 
 func (s *symbolsSuite) TestUpdatePackDropsAUnitNoLongerDeclared() {
@@ -193,6 +192,6 @@ func (s *symbolsSuite) TestShardOfAnAbsentUnitIsNotExist() {
 }
 
 func (s *symbolsSuite) TestDefinedIsSortedAndSkipsReferences() {
-	sh := shardOf("a", "a/a.go", []string{symAOld, symA}, symB)
+	sh := testShard("a", "a/a.go", []string{symAOld, symA}, symB)
 	s.Equal([]string{symA, symAOld}, sh.Defined())
 }

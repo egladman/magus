@@ -252,10 +252,10 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 			a := byKey[key]
 			if a == nil {
 				a = &acc{
-					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage, Namespace: info.Namespace},
+					sym:    types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage, Namespace: info.Namespace},
 					defs:   map[string]types.KnowledgeSymbolDefinition{},
 					bodies: map[string]defBody{},
-					refs: map[string]*types.KnowledgeSymbolRef{},
+					refs:   map[string]*types.KnowledgeSymbolRef{},
 				}
 				if si := infoByKey[key]; si != nil {
 					if si.DisplayName != "" {
@@ -450,7 +450,7 @@ func platformTwins(sym types.KnowledgeSymbol, defs map[string]types.KnowledgeSym
 // The space puts it outside the SCIP descriptor grammar, so nothing parses it as a
 // different symbol of the same package.
 func twinKey(key, file string) string {
-	return key + " " + file
+	return fmt.Sprintf("%s %s", key, file)
 }
 
 // TwinBase is the key whose occurrences key's are: for a platform twin's key

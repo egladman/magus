@@ -274,14 +274,13 @@ func newPackWriter(path string) (*packWriter, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	f, err := os.CreateTemp(filepath.Dir(path), fmt.Sprintf(".%s.*", filepath.Base(path)))
 	if err != nil {
 		return nil, err
 	}
 	pw := &packWriter{f: f, w: bufio.NewWriterSize(f, 1<<20)}
 	if err := pw.write([]byte(packMagic)); err != nil {
-		pw.abort()
-		return nil, err
+		return nil, errors.Join(err, pw.abort())
 	}
 	return pw, nil
 }
@@ -301,43 +300,36 @@ func (pw *packWriter) commit(path, indexer string) error {
 	slices.SortFunc(pw.entries, func(a, b packEntry) int { return cmp.Compare(a.Unit, b.Unit) })
 	var toc bytes.Buffer
 	if err := gob.NewEncoder(&toc).Encode(packTOC{Indexer: indexer, Entries: pw.entries}); err != nil {
-		pw.abort()
-		return err
+		return errors.Join(err, pw.abort())
 	}
 	tocOff := pw.off
 	if err := pw.write(toc.Bytes()); err != nil {
-		pw.abort()
-		return err
+		return errors.Join(err, pw.abort())
 	}
 	var trailer [trailerSize]byte
 	binary.BigEndian.PutUint64(trailer[:8], uint64(tocOff))
 	binary.BigEndian.PutUint64(trailer[8:], uint64(toc.Len()))
 	if err := pw.write(trailer[:]); err != nil {
-		pw.abort()
-		return err
+		return errors.Join(err, pw.abort())
 	}
 	if err := pw.w.Flush(); err != nil {
-		pw.abort()
-		return err
+		return errors.Join(err, pw.abort())
 	}
 	if err := pw.f.Close(); err != nil {
-		os.Remove(pw.f.Name())
-		return err
+		return errors.Join(err, os.Remove(pw.f.Name()))
 	}
 	if err := os.Chmod(pw.f.Name(), 0o644); err != nil {
-		os.Remove(pw.f.Name())
-		return err
+		return errors.Join(err, os.Remove(pw.f.Name()))
 	}
 	if err := os.Rename(pw.f.Name(), path); err != nil {
-		os.Remove(pw.f.Name())
-		return err
+		return errors.Join(err, os.Remove(pw.f.Name()))
 	}
 	return nil
 }
 
-func (pw *packWriter) abort() {
-	pw.f.Close()
-	os.Remove(pw.f.Name())
+// abort closes and removes the temporary pack, returning what failed in doing so.
+func (pw *packWriter) abort() error {
+	return errors.Join(pw.f.Close(), os.Remove(pw.f.Name()))
 }
 
 func encodeShard(s Shard) ([]byte, error) {
@@ -361,17 +353,14 @@ func writePack(path, indexer string, units []Unit, shards []Shard) error {
 	for _, u := range units {
 		s, ok := byID[u.ID]
 		if !ok {
-			pw.abort()
-			return fmt.Errorf("unit %q has no shard", u.ID)
+			return errors.Join(fmt.Errorf("unit %q has no shard", u.ID), pw.abort())
 		}
 		enc, err := encodeShard(s)
 		if err != nil {
-			pw.abort()
-			return err
+			return errors.Join(err, pw.abort())
 		}
 		if err := pw.add(u, enc); err != nil {
-			pw.abort()
-			return err
+			return errors.Join(err, pw.abort())
 		}
 	}
 	return pw.commit(path, indexer)
@@ -420,7 +409,8 @@ func UpdatePack(ctx context.Context, path string, ix UnitIndexer) (UpdateResult,
 	if err != nil {
 		return res, err
 	}
-	return res, writeUpdated(path, ix.Version(), old, units, fresh, &res)
+	err = writeUpdated(path, ix.Version(), old, units, fresh, &res)
+	return res, err
 }
 
 // openPrior opens the pack at path for an update by the indexer at version. ok is false
@@ -430,8 +420,7 @@ func openPrior(path, version string) (old *packFile, ok bool, err error) {
 	old, err = openPack(path)
 	switch {
 	case err == nil && old.Indexer() != version:
-		old.Close()
-		return nil, false, nil
+		return nil, false, old.Close()
 	case err == nil:
 		return old, true, nil
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, ErrIndexFormat):
@@ -554,8 +543,7 @@ func writeUpdated(path, version string, old *packFile, units []Unit, fresh map[s
 			err = pw.add(u, enc)
 		}
 		if err != nil {
-			pw.abort()
-			return err
+			return errors.Join(err, pw.abort())
 		}
 	}
 	return pw.commit(path, version)
