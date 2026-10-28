@@ -360,7 +360,7 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 	require.NoError(t, m.Run(ctx, targets), "first run")
 	assert.Equal(t, int32(1), calls.Load(), "first run: expected one real execution")
 
-	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "second run (--no-cache)")
+	require.NoError(t, m.Run(ctx, targets, WithCache(false)), "second run (--no-cache)")
 	assert.Equal(t, int32(2), calls.Load(), "--no-cache run: a cached target must still genuinely re-execute")
 
 	require.NoError(t, m.Run(ctx, targets), "third run (ordinary)")
@@ -400,7 +400,7 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 	require.NoError(t, m.RunAffected(ctx, "build"), "second affected run (should hit cache)")
 	assert.Equal(t, int32(1), calls.Load(), "second run: cache hit must not re-execute")
 
-	require.NoError(t, m.RunAffected(ctx, "build", WithNoCache()), "third affected run (--no-cache)")
+	require.NoError(t, m.RunAffected(ctx, "build", WithCache(false)), "third affected run (--no-cache)")
 	assert.Equal(t, int32(2), calls.Load(), "affected --no-cache must still genuinely re-execute a cached target")
 
 	require.NoError(t, m.RunAffected(ctx, "build"), "fourth affected run (ordinary)")
@@ -713,7 +713,7 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 	assert.Equal(t, int32(1), composer.Load(), "second run: the composer replays")
 	assert.Equal(t, int32(2), gate.Load(), "a replayed composer must still run its gate")
 
-	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "third run (--no-cache)")
+	require.NoError(t, m.Run(ctx, targets, WithCache(false)), "third run (--no-cache)")
 	assert.Equal(t, int32(2), composer.Load(), "--no-cache re-executes the composer")
 	assert.Equal(t, int32(3), gate.Load(),
 		"--no-cache still stores the entry, so the skip_cache member still runs before its key")
@@ -1395,8 +1395,16 @@ func TestRunOptions(t *testing.T) {
 	assert.Equal(t, "main", r.BaseRef)
 	WithSpellFilter("go")(&r)
 	assert.Equal(t, "go", r.Spell)
-	WithNoVolatilityRetry()(&r)
-	assert.True(t, r.NoVolatilityRetry, "WithNoVolatilityRetry: NoVolatilityRetry = false, want true")
+	WithVolatilityRetry(false)(&r)
+	assert.False(t, r.VolatilityRetry, "WithVolatilityRetry(false): VolatilityRetry = true, want false")
+	WithCache(false)(&r)
+	assert.False(t, r.Cache, "WithCache(false): Cache = true, want false")
+}
+
+func TestApplyRunOptions_DefaultsToCachingAndRetry(t *testing.T) {
+	r := applyRunOptions(nil)
+	assert.True(t, r.Cache)
+	assert.True(t, r.VolatilityRetry)
 }
 
 func TestWithWrite_SetsWriteCharm(t *testing.T) {

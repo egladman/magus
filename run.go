@@ -60,14 +60,14 @@ type run struct {
 	sink              *Sink          // nil reports through a text sink on stderr. See WithSink
 	report            *report.Writer // sink's record stream; nil unless its format records
 	lockReport        *report.Writer // report, unless the sink prints lock decisions as prose
-	NoVolatilityRetry bool
+	VolatilityRetry   bool // retry volatile targets; applyRunOptions defaults it true
 	BaseRef           string
 	Race              bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
 	RaceReplay        bool     // MGS4003 determinism replay; orthogonal to Race
 	Spell             string   // when set, restricts execution to this spell; unmatched projects are skipped
 	Step              bool     // forces Concurrency=1; StepGate comes from ctx
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
-	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
+	Cache             bool     // replay cache hits; false forces a fresh run that still refreshes the entry (magus run --no-cache); applyRunOptions defaults it true
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	narrowing         *project.OpNarrowing
 	session           string // the host session the guard judges the run for; see WithSession
@@ -93,8 +93,8 @@ func WithCharms(charms ...string) RunOption {
 	return func(o *run) { o.Charms = append(o.Charms, charms...) }
 }
 
-// WithNoVolatilityRetry disables the volatility auto-retry logic.
-func WithNoVolatilityRetry() RunOption { return func(o *run) { o.NoVolatilityRetry = true } }
+// WithVolatilityRetry sets whether the volatility auto-retry logic runs; the default is true.
+func WithVolatilityRetry(on bool) RunOption { return func(o *run) { o.VolatilityRetry = on } }
 
 // WithBaseRef overrides MAGUS_VCS_BASE_REF for RunAffected invocations.
 func WithBaseRef(ref string) RunOption { return func(o *run) { o.BaseRef = ref } }
@@ -114,11 +114,11 @@ func WithRace() RunOption { return func(o *run) { o.Race = true } }
 // WithRaceReplay enables determinism replay (MGS4003). Compose with WithRace for MGS4001/4002/4004.
 func WithRaceReplay() RunOption { return func(o *run) { o.RaceReplay = true } }
 
-// WithNoCache forces every selected target to run fresh even on a cache hit.
-// Unlike a skip_cache target policy (which never snapshots), a --no-cache run
-// still refreshes the cache entry on success, so a subsequent ordinary run
-// replays the rebuilt result instead of the stale one.
-func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
+// WithCache sets whether selected targets may replay a cache hit; the default is true.
+// WithCache(false) runs every selected target fresh. Unlike a skip_cache target policy
+// (which never snapshots), such a run still refreshes the cache entry on success, so a
+// subsequent ordinary run replays the rebuilt result instead of the stale one.
+func WithCache(on bool) RunOption { return func(o *run) { o.Cache = on } }
 
 // WithGate marks this invocation as the workspace's gate: the whole ci target, run to
 // judge the tree as it stands rather than to build one part of it.
@@ -148,7 +148,7 @@ func (o run) observed(ctx context.Context) context.Context {
 }
 
 func applyRunOptions(opts []RunOption) run {
-	var o run
+	o := run{Cache: true, VolatilityRetry: true}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -2106,7 +2106,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			if forcesNoCache(opts) {
 				step.NoCache = true
 			}
-			if opts.NoCache {
+			if !opts.Cache {
 				step.SkipReplay = true
 			}
 			steps = append(steps, step)
@@ -2214,7 +2214,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// twenty others still retries exactly the one.
 	var volatilityRT *volatility.Runtime
 	if history != nil {
-		retry := trackVolatile && !opts.NoVolatilityRetry
+		retry := trackVolatile && opts.VolatilityRetry
 		volatilityRT = m.buildVolatilityRuntime(ctx, retry, history)
 		if volatilityRT != nil {
 			ctx = volatility.WithRuntime(ctx, volatilityRT)
@@ -2296,10 +2296,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
-		skipReplay: opts.NoCache, opts: cacheOpts,
+		skipReplay: !opts.Cache, opts: cacheOpts,
 	}))
 	composed := &composedRunner{m: m, runs: runs, newStep: newStep,
-		skipReplay: opts.NoCache, forceNoCache: forcesNoCache(opts), cacheOpts: cacheOpts}
+		skipReplay: !opts.Cache, forceNoCache: forcesNoCache(opts), cacheOpts: cacheOpts}
 	// A body that reads a symbol index freshens it through this run (see
 	// freshenSymbolIndexes): a nested `magus run` of the index op is refused MGS3007.
 	cross.RunStepsWith(func(ctx context.Context, p *types.Project, step cache.Step) error {

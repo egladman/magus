@@ -325,7 +325,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		runOpts = append(runOpts, magus.WithStep())
 	}
 	if !af.Cache {
-		runOpts = append(runOpts, magus.WithNoCache())
+		runOpts = append(runOpts, magus.WithCache(false))
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
 	ctx = processStdioContext(ctx)

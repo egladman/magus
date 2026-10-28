@@ -350,9 +350,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
-	if !rf.VolatilityRetry {
-		runOpts = append(runOpts, magus.WithNoVolatilityRetry())
-	}
+	runOpts = append(runOpts, magus.WithVolatilityRetry(rf.VolatilityRetry))
 	race, err := resolveRace(rf.Race)
 	if err != nil {
 		return err
@@ -366,9 +364,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if !rf.Cache {
-		runOpts = append(runOpts, magus.WithNoCache())
-	}
+	runOpts = append(runOpts, magus.WithCache(rf.Cache))
 	runOpts = append(runOpts, magus.WithSink(sink))
 	ctx = processStdioContext(ctx)
 	if spellFilter != "" {
