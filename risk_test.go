@@ -29,6 +29,30 @@ func TestSizedRuns(t *testing.T) {
 	assert.Empty(t, sizedRuns(types.RiskReport{}))
 }
 
+// TestAssessRiskTiersASmallChangeHereAndInAnotherCheckout: the RiskAssessor a Buzz script
+// reaches answers AssessChange's tier, for this workspace and for another checkout it loads
+// for the one call.
+func TestAssessRiskTiersASmallChangeHereAndInAnotherCheckout(t *testing.T) {
+	files := map[string]string{
+		"magusfile.buzz": "import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n",
+		"notes/v1.md":    "# v1\n",
+	}
+	root := writeWorkspace(t, files)
+	other := writeWorkspace(t, files)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	var assessor types.RiskAssessor = m
+	here, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.RiskOptions{Paths: []string{"notes/v1.md"}})
+	require.NoError(t, err)
+	assert.Equal(t, types.RiskTrivial, here.Tier, here.Lines())
+
+	there, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.RiskOptions{Paths: []string{"magusfile.buzz"}, Checkout: other})
+	require.NoError(t, err)
+	assert.Equal(t, types.RiskFull, there.Tier, there.Lines())
+}
+
 // TestAssessChangeTiersFromDeclarations: prose tiers from what the workspace declares.
 // Markdown nothing in ci's chain reads needs no gate; markdown a chain target reads is
 // its input, so the gate runs that reader; a magusfile edit can move the graph itself.

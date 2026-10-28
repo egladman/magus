@@ -585,14 +585,28 @@ var Magus = Module{
 					Extern: true,
 				},
 				{
+					Name: "stop",
+					Doc: "Register the one function the agent guard calls when an agent ends its turn, on " +
+						"the host's Stop and SubagentStop events, after the built-in stop check lets the stop " +
+						"through: fun(req: StopRequest) > GuardVerdict. Its deny refuses the stop through the " +
+						"host's own reply, so the agent keeps working; its advise is told beside the stop. " +
+						"Declared at the top level of the root magusfile, once. Strengthen only and evaluated " +
+						"from both the committed and the working-tree sources, exactly as guard.command is; a " +
+						"rule that fails lets the stop through and says so, since refusing on a broken rule " +
+						"would hold the session open. Registering twice, from another project, or with a " +
+						"non-function is MGS1045. magus ships no rule.",
+					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: StopRequest) > GuardVerdict !> any"}},
+					Extern: true,
+				},
+				{
 					Name:    "allow",
-					Doc:     "The verdict a spawn, command or write rule returns to add nothing.",
+					Doc:     "The verdict a spawn, command, write or stop rule returns to add nothing.",
 					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},
 				{
 					Name: "advise",
-					Doc: "The verdict a spawn, command or write rule returns to let the call through with text for the agent. " +
+					Doc: "The verdict a spawn, command, write or stop rule returns to let the call through with text for the agent. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
 					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
 					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
@@ -600,7 +614,7 @@ var Magus = Module{
 				},
 				{
 					Name: "deny",
-					Doc: "The verdict a spawn, command or write rule returns to block the call, with text saying why. " +
+					Doc: "The verdict a spawn, command, write or stop rule returns to block the call, with text saying why. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>, is stored, " +
 						"and a repeat in the same session shortens to its first line.",
 					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
@@ -610,7 +624,7 @@ var Magus = Module{
 				{
 					Name: "once",
 					Doc: "True the first time key is asked in the calling agent's session, false after. " +
-						"Only callable inside a spawn, command or write rule while the guard runs it.",
+						"Only callable inside a spawn, command, write or stop rule while the guard runs it.",
 					Args:    []Arg{{Name: "key", Type: TypeString}},
 					Returns: []Ret{{Type: TypeBool}},
 					Extern:  true,
@@ -618,7 +632,7 @@ var Magus = Module{
 				{
 					Name: "count",
 					Doc: "Adds one to key's tally in the calling agent's session and returns the new " +
-						"total, starting at 1. Only callable inside a spawn, command or write rule while the guard runs it.",
+						"total, starting at 1. Only callable inside a spawn, command, write or stop rule while the guard runs it.",
 					Args:    []Arg{{Name: "key", Type: TypeString}},
 					Returns: []Ret{{Type: TypeInt}},
 					Extern:  true,
@@ -634,7 +648,7 @@ var Magus = Module{
 			},
 			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
 			// guard type-checks against this declaration.
-			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "GuardBinary", "Brief"},
+			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", "GuardBinary", "Brief"},
 		},
 		{
 			Name: "harness",
@@ -744,7 +758,7 @@ var Magus = Module{
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
 						"workspace; raises MGS1022 only when there is no workspace to read. " +
-						"Inside a magus\\guard.spawn, command or write rule it answers from the rows the guard read for " +
+						"Inside a magus\\guard.spawn, command, write or stop rule it answers from the rows the guard read for " +
 						"that call, and every other job member raises there: the store is read-only " +
 						"to a rule.",
 					Returns: []Ret{{Type: TypeAnyMap, Object: "JobList"}},
@@ -1090,6 +1104,29 @@ var Magus = Module{
 				Raises:  true,
 				Extern:  true,
 			}},
+		},
+		{
+			Name: "risk",
+			Doc: "The risk tier magus proves for a change, the one `affected ci` sizes its gate by. " +
+				"Bound by hand in internal/interp/bindings (buildRisk).",
+			Methods: []Method{{
+				Name: "assess",
+				Doc: "Tier a change against target's gate: {base, target, tier, affected, evidence, gate}, " +
+					"tier one of trivial, mechanical, scoped or full, and anything magus cannot prove is full. " +
+					"opts.base is the revision measured from (the affected base when empty); opts.paths " +
+					"replaces the version-control diff; opts.checkout assesses another checkout of the " +
+					"repository, such as a job's, loaded for the one call. Read-only: nothing runs but " +
+					"`go list` in the Go modules the change touches. An unknown option raises, and so " +
+					"does a change that cannot be read. Raises MGS1022 outside a workspace.",
+				Args: []Arg{
+					{Name: "target", Type: TypeString},
+					{Name: "opts", Type: TypeAnyMap, Object: "RiskOptions", Optional: true},
+				},
+				Returns: []Ret{{Type: TypeAnyMap, Object: "RiskReport"}},
+				Raises:  true,
+				Extern:  true,
+			}},
+			Objects: []string{"RiskOptions", "RiskEvidence", "RiskGateStep", "RiskReport"},
 		},
 		{
 			Name: "trail",

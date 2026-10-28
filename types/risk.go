@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -78,6 +79,26 @@ type RiskReport struct {
 	Affected []string       `json:"affected" yaml:"affected"`
 	Evidence []RiskEvidence `json:"evidence" yaml:"evidence"`
 	Gate     []RiskGateStep `json:"gate"     yaml:"gate"`
+}
+
+// RiskOptions are what a change is assessed against: magus\risk.assess's options, and the
+// workspace's RiskAssessor's.
+type RiskOptions struct {
+	// Base is the revision the change is measured from; empty is the configured affected
+	// base.
+	Base string `json:"base,omitempty"`
+	// Paths replaces the version-control diff when non-nil: the change is these paths.
+	Paths []string `json:"paths,omitempty"`
+	// Checkout is the root of another checkout of the same repository whose change is
+	// assessed, such as a job's standing checkout; empty is the workspace's own.
+	Checkout string `json:"checkout,omitempty"`
+}
+
+// RiskAssessor is a workspace that proves a change's risk tier, recovered from the
+// workspace on a context by assertion because the package that implements it imports the
+// ones that need it.
+type RiskAssessor interface {
+	AssessRisk(ctx context.Context, target string, o RiskOptions) (RiskReport, error)
 }
 
 // Lines renders one line per evidence entry, every changed path included, because the

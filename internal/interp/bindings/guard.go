@@ -30,10 +30,11 @@ import (
 // Shell rules are APPEND-ONLY. Match criteria are the resolved program name plus an
 // optional arg subset, judged by ParseCommands.
 //
-// spawn(), command() and write() each register the one function the guard calls on every
-// agent spawn and continuation, every agent shell command, or every agent file write, with
-// allow/advise/deny to build its answer and once/count for state that lasts the calling
-// session. See registerSpawnRule, registerCommandRule and registerWriteRule.
+// spawn(), command(), write() and stop() each register the one function the guard calls on
+// every agent spawn and continuation, every agent shell command, every agent file write, or
+// every agent stop, with allow/advise/deny to build its answer and once/count for state that
+// lasts the calling session. See registerSpawnRule, registerCommandRule, registerWriteRule
+// and registerStopRule.
 //
 // builtins() sets compiled rules by name; see registerBuiltins. profile() picks the level
 // those settings start from; see registerProfile.
@@ -43,6 +44,7 @@ func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 	registerSpawnRule(ctx, sess, obs, guardMap)
 	registerCommandRule(ctx, sess, obs, guardMap)
 	registerWriteRule(ctx, sess, obs, guardMap)
+	registerStopRule(ctx, sess, obs, guardMap)
 	registerBuiltins(ctx, obs, guardMap)
 	registerProfile(ctx, obs, guardMap)
 	guardMap.MapSet("shell", directVal(obs, "magus.guard.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {

@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -22,6 +23,28 @@ type AssessOptions struct {
 	Base string
 	// ChangedPaths replaces the VCS diff when non-nil.
 	ChangedPaths []string
+}
+
+var _ types.RiskAssessor = (*Magus)(nil)
+
+// AssessRisk is AssessChange over types.RiskOptions, the types.RiskAssessor a Buzz script
+// reaches through the workspace on its context. A Checkout other than m's root is loaded
+// read-only for the one assessment and closed after it, so a job's standing checkout is
+// measured against its own tree.
+func (m *Magus) AssessRisk(ctx context.Context, target string, o types.RiskOptions) (types.RiskReport, error) {
+	opts := AssessOptions{Base: o.Base, ChangedPaths: o.Paths}
+	if o.Checkout == "" || filepath.Clean(o.Checkout) == filepath.Clean(m.Root()) {
+		return m.AssessChange(ctx, target, opts)
+	}
+	other, err := inspect(ctx, o.Checkout)
+	if err != nil {
+		return types.RiskReport{}, fmt.Errorf("magus: assess %s: %w", o.Checkout, err)
+	}
+	defer func() { _ = other.Close() }()
+	if err := other.load(ctx); err != nil {
+		return types.RiskReport{}, other.explainStale(err)
+	}
+	return other.AssessChange(ctx, target, opts)
 }
 
 // AssessChange tiers the change by how much of target's gate it provably needs and

@@ -444,8 +444,14 @@ var boundaryTypes = []boundaryType{
 	{Name: "CheckoutState", Type: reflect.TypeFor[types.CheckoutState](), RuntimeObject: true},
 	{Name: "CommandRequest", Type: reflect.TypeFor[types.CommandRequest](), RuntimeObject: true},
 	{Name: "WriteRequest", Type: reflect.TypeFor[types.WriteRequest](), RuntimeObject: true},
+	{Name: "StopRequest", Type: reflect.TypeFor[types.StopRequest](), RuntimeObject: true},
 	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},
 	{Name: "GuardBinary", Type: reflect.TypeFor[types.GuardBinary](), RuntimeObject: true},
+	// magus\risk.assess takes RiskOptions and returns RiskReport, leaf first.
+	{Name: "RiskOptions", Type: reflect.TypeFor[types.RiskOptions]()},
+	{Name: "RiskEvidence", Type: reflect.TypeFor[types.RiskEvidence](), RuntimeObject: true},
+	{Name: "RiskGateStep", Type: reflect.TypeFor[types.RiskGateStep](), RuntimeObject: true},
+	{Name: "RiskReport", Type: reflect.TypeFor[types.RiskReport](), RuntimeObject: true},
 	{Name: "Skill", Type: reflect.TypeFor[types.Skill](), RuntimeObject: true},
 	// magus\service.acquire returns it and magus\service.release takes it back.
 	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
