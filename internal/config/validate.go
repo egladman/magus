@@ -91,6 +91,7 @@ func Validate(cfg Config) error {
 	failures = append(failures, cacheWriteFailures(cfg.Cache)...)
 	failures = append(failures, mcpHTTPFailures(cfg.MCP)...)
 	failures = append(failures, conformanceFailures(cfg.Knowledge.Conformance)...)
+	failures = append(failures, diagnosticsFailures(cfg.Diagnostics)...)
 	if !cfg.Broker.Valid() {
 		failures = append(failures, FieldFailure{Field: "broker", Tag: "oneof",
 			Param: strings.Join(cfg.Broker.Values(), " "), Value: string(cfg.Broker)})
@@ -159,6 +160,25 @@ func spellImportFailures(imports map[string]SpellImport) []FieldFailure {
 				out = append(out, FieldFailure{Field: "spells." + inner, Tag: "spell_path_nested", Param: outer, Value: inner})
 			}
 		}
+	}
+	return out
+}
+
+// diagnosticsFailures refuses a prefix a code could not carry or that collides with a
+// built-in catalog's, and a docs template with no {code} in it, which would send every code
+// to one page.
+func diagnosticsFailures(d Diagnostics) []FieldFailure {
+	var out []FieldFailure
+	if d.Prefix != "" {
+		if err := types.ValidateDiagnosticPrefix(d.Prefix); err != nil {
+			out = append(out, FieldFailure{Field: "diagnostics.prefix", Tag: "diagnostic_prefix", Param: err.Error(), Value: d.Prefix})
+		}
+	}
+	if d.Docs != "" && !strings.Contains(d.Docs, "{code}") {
+		out = append(out, FieldFailure{Field: "diagnostics.docs", Tag: "diagnostic_docs", Value: d.Docs})
+	}
+	if d.Docs != "" && d.Prefix == "" {
+		out = append(out, FieldFailure{Field: "diagnostics.docs", Tag: "diagnostic_docs_prefix", Value: d.Docs})
 	}
 	return out
 }
@@ -355,6 +375,12 @@ func humanReason(f FieldFailure) string {
 		return "cannot be true while cache.write.enabled is false: the remote cache tier is written from the local tier, so there would be nothing to write; enable cache.write.enabled or set this false"
 	case "mcp_enabled_required":
 		return "cannot be true while mcp.enabled is false: the server serves no MCP at all then, so there is no HTTP endpoint to mount; enable mcp.enabled or drop this key"
+	case "diagnostic_prefix":
+		return f.Param
+	case "diagnostic_docs":
+		return fmt.Sprintf("must hold {code}, which stands for the code being documented (got %q)", f.Value)
+	case "diagnostic_docs_prefix":
+		return "documents codes, but diagnostics.prefix declares none for the workspace to mint"
 	case "spell_path_nested":
 		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:

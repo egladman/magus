@@ -1462,13 +1462,17 @@ func startupTraceEnabled(args []string) bool {
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
 }
 
-// rationaleArgs returns err's rationale as an [attr.Why] log argument, or none when err
-// carries no rationale.
-func rationaleArgs(err error) []any {
+// diagnosticArgs returns err's rationale as an [attr.Why] log argument, and marks a code
+// the workspace minted, so a reader never takes a workspace's WS1001 for one of magus's own.
+func diagnosticArgs(err error) []any {
+	var args []any
 	if why := types.DiagnosticRationale(err); why != "" {
-		return []any{attr.Why(why)}
+		args = append(args, attr.Why(why))
 	}
-	return nil
+	if ev, ok := types.DiagnosticEventOf(err, ""); ok && types.OriginOf(ev.Code) == types.DiagnosticOriginWorkspace {
+		args = append(args, slog.String("origin", string(types.DiagnosticOriginWorkspace)))
+	}
+	return args
 }
 
 // mapExitCode maps a dispatch error to an exit code and logs it unless it was already reported.
@@ -1480,7 +1484,7 @@ func mapExitCode(err error) int {
 	// MGS3012 twice and promoted MGS3014, a deliberate non-failure, from Warn to Error.
 	var exitErr types.ExitError
 	if code != exit.OK && !exit.AlreadyReported(err) && !errors.As(err, &exitErr) {
-		slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
+		slog.Error(err.Error(), diagnosticArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
 	}
 	return code
 }

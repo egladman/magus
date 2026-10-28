@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/testkit"
@@ -330,13 +331,13 @@ func TestUnknownKeyMessage(t *testing.T) {
 	const devBuild, release = "v0.4.3-122-g1a2b3c4", "v0.4.3"
 	cases := map[string]struct {
 		doc        string
-		sourceTree bool
+		served     bool
 		running    string
 		want       string
 	}{
 		"the reported sample": {
 			doc:        sample,
-			sourceTree: true,
+			served:     true,
 			running:    devBuild,
 			want: "magus.yaml has keys this magus does not know:\n" +
 				"  - spells.allow_shadow.env   (lines 16, 21, 26)\n" +
@@ -345,14 +346,14 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" +
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
-				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+				"  - this workspace's script for it: {script}\n" +
+				"  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// A release build cannot be the one a checkout outgrew, so it is never told to
-		// bootstrap; the checkout's own build is still a fix.
-		"a release build in a source tree": {
+		// bootstrap; the workspace's script is still a fix.
+		"a release build with a served script": {
 			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
-			sourceTree: true,
+			served:     true,
 			running:    release,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - zzzzzzzz  (line 2)\n" +
@@ -360,11 +361,11 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" +
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
-				"  - built from this checkout: ./magus run go-build .",
+				"  - this workspace's script for it: {script}",
 		},
-		"a dev build in a source tree": {
+		"a dev build with a served script": {
 			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
-			sourceTree: true,
+			served:     true,
 			running:    devBuild,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - zzzzzzzz  (line 2)\n" +
@@ -372,8 +373,8 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" +
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
-				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+				"  - this workspace's script for it: {script}\n" +
+				"  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// The loader is never told the version, and neither side is invented.
 		"a single unknown key with nothing known": {
@@ -388,7 +389,7 @@ func TestUnknownKeyMessage(t *testing.T) {
 		// A near miss is a typo: no version gap, however old the build is.
 		"a typo only": {
 			doc:        "required_version: \">= 0.4.4\"\nconcurrencyy: 4\n",
-			sourceTree: true,
+			served:     true,
 			running:    devBuild,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - concurrencyy  (line 2; did you mean \"concurrency\"?)",
@@ -420,28 +421,35 @@ func TestUnknownKeyMessage(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			dir := unknownKeyWorkspace(t, tc.doc, tc.sourceTree)
+			dir := unknownKeyWorkspace(t, tc.doc, tc.served)
 
 			_, err := loadDirInto(Defaults(), dir)
 			if tc.running != "" {
 				err = WithRunningVersion(err, tc.running)
 			}
 			require.ErrorIs(t, err, types.UnknownConfigKey)
-			assert.Equal(t, types.DiagnosticErrorf(types.UnknownConfigKey, "%s", tc.want).Error(), err.Error())
+			want := strings.ReplaceAll(tc.want, "{script}", strings.Join(StaleBinaryScripts(dir, nil), ""))
+			assert.Equal(t, types.DiagnosticErrorf(types.UnknownConfigKey, "%s", want).Error(), err.Error())
 		})
 	}
 }
 
-// unknownKeyWorkspace writes doc as the magus.yaml of a fresh workspace root, with
-// cmd/magus in it when sourceTree. The cwd stays elsewhere: the file's own workspace
-// decides how its path renders and whether it is a source tree.
-func unknownKeyWorkspace(t *testing.T, doc string, sourceTree bool) string {
+// unknownKeyWorkspace writes doc as the magus.yaml of a fresh workspace root, with a
+// script indexed as serving MGS1021 when served. The cwd stays elsewhere: the file's own
+// workspace decides how its path renders and which scripts it serves.
+func unknownKeyWorkspace(t *testing.T, doc string, served bool) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	w.Write("go.mod", "module tmp\n")
 	w.Write("magus.yaml", doc)
-	if sourceTree {
-		require.NoError(t, os.MkdirAll(w.Path("cmd", "magus"), 0o755))
+	if served {
+		w.Write("hack/relink.buzz", "// relinks\n")
+		require.NoError(t, hint.WriteScriptsIndex(CacheDir(w.Root(), Config{}), hint.ScriptsIndex{
+			Root: w.Root(),
+			Serves: map[string][]hint.ScriptServe{"code:MGS1021": {{
+				Path: "hack/relink.buzz", Effect: hint.ScriptEffectWrite, Summary: "relink",
+			}}},
+		}))
 	}
 	return w.Root()
 }

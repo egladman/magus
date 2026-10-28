@@ -6,9 +6,57 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
+
+// configSuite is the package's one testify suite: add tests here as methods.
+type configSuite struct {
+	suite.Suite
+}
+
+func TestConfigSuite(t *testing.T) {
+	suite.Run(t, new(configSuite))
+}
+
+// diagnosticsFailure is the one failure Validate reports for d on a valid config.
+func (s *configSuite) diagnosticsFailure(d Diagnostics) FieldFailure {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Diagnostics = d
+	var ve *ValidationError
+	s.Require().ErrorAs(Validate(cfg), &ve)
+	s.Require().Len(ve.Failures, 1)
+	return ve.Failures[0]
+}
+
+func (s *configSuite) TestDiagnosticsAcceptsAPrefixAndATemplate() {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Diagnostics = Diagnostics{Prefix: "WS", Docs: "docs/codes/{code}.md"}
+	s.NoError(Validate(cfg))
+}
+
+func (s *configSuite) TestDiagnosticsRefusesTheMGSPrefix() {
+	f := s.diagnosticsFailure(Diagnostics{Prefix: "MGS"})
+	s.Equal("diagnostics.prefix", f.Field)
+	s.Contains(f.String(), "collides with MGS")
+}
+
+func (s *configSuite) TestDiagnosticsRefusesAPrefixOfAReservedOne() {
+	s.Contains(s.diagnosticsFailure(Diagnostics{Prefix: "MG"}).String(), "collides with MGS")
+}
+
+func (s *configSuite) TestDiagnosticsRefusesADocsTemplateWithoutTheCode() {
+	f := s.diagnosticsFailure(Diagnostics{Prefix: "WS", Docs: "https://ws.example/codes/"})
+	s.Equal("diagnostics.docs", f.Field)
+	s.Contains(f.String(), "must hold {code}")
+}
+
+func (s *configSuite) TestDiagnosticsRefusesDocsWithNoPrefix() {
+	s.Contains(s.diagnosticsFailure(Diagnostics{Docs: "docs/codes/{code}.md"}).String(), "declares none")
+}
 
 func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.

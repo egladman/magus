@@ -141,6 +141,26 @@ type Config struct {
 	// one exported env var would flip billing or the level for every workspace a shell
 	// touches without a trace in any file.
 	Agents Agents `json:"agents" yaml:"agents" cli:"-"`
+
+	// Diagnostics declares this workspace's own codes. cli:"-": a flag changing the prefix
+	// would make one raise valid in one shell and refused in another.
+	Diagnostics Diagnostics `json:"diagnostics" yaml:"diagnostics" cli:"-"`
+}
+
+// Diagnostics is the namespace of the codes a workspace mints with magus\diagnosticCode and
+// attaches to its guard rules: one prefix per workspace, numbers within it.
+type Diagnostics struct {
+	// Prefix is the code prefix, 2 to 8 capital letters, clear of every prefix magus's own
+	// catalogs reserve. Empty mints no codes: magus\diagnosticCode refuses every one.
+	Prefix string `json:"prefix" yaml:"prefix"`
+	// Docs is a code's page with {code} standing for the code: a URL or a workspace path.
+	// Empty renders a raised code with no see: line.
+	Docs string `json:"docs" yaml:"docs"`
+}
+
+// Resolver is the docs resolver for every code this workspace can raise.
+func (d Diagnostics) Resolver() types.DiagnosticDocs {
+	return types.DiagnosticDocs{Prefix: d.Prefix, Docs: d.Docs}
 }
 
 // Disk configures the reclaim hook every harness spell wires: it samples the free space of

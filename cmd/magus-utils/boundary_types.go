@@ -293,6 +293,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "CommandOptions", Module: "magus", Type: reflect.TypeFor[types.MagusCommandOptions]()},
 	{Name: "CommandOptions", Module: "vcs", Type: reflect.TypeFor[types.VCSCommandOptions]()},
 	{Name: "DiffOptions", Module: "magus", Type: reflect.TypeFor[types.MagusDiffOptions]()},
+	// RuntimeObject because magus\diagnosticCode hands one back; magus\raise takes it in.
+	{Name: "DiagnosticCode", Type: reflect.TypeFor[types.DiagnosticCodeRef](), RuntimeObject: true},
 	{Name: "RaiseOptions", Type: reflect.TypeFor[types.RaiseOptions]()},
 	{Name: "SkillsOptions", Type: reflect.TypeFor[types.SkillsOptions]()},
 	{Name: "Options", Module: "http", Type: reflect.TypeFor[types.HTTPOptions]()},
@@ -484,6 +486,11 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"id", "id"}, {"path", "path"}, {"fuzzy", "fuzzy"}},
 	},
 	{
+		Name:  "DiagnosticOrigin",
+		Type:  reflect.TypeFor[types.DiagnosticOrigin](),
+		Cases: []enumCase{{"none", ""}, {"builtin", "builtin"}, {"workspace", "workspace"}},
+	},
+	{
 		Name:  "SignAlgorithm",
 		Type:  reflect.TypeFor[types.SignAlgorithm](),
 		Cases: []enumCase{{"Ed25519", "ed25519"}},
@@ -607,7 +614,7 @@ var boundaryEnums = []boundaryEnum{
 	{
 		Name:  "SymbolFormat",
 		Type:  reflect.TypeFor[spells.SymbolFormat](),
-		Cases: []enumCase{{"none", ""}, {"scip", "scip"}},
+		Cases: []enumCase{{"none", ""}, {"scip", "scip"}, {"goPackages", "go-packages"}},
 	},
 	{
 		Name:  "External",

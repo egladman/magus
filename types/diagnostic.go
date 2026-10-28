@@ -60,7 +60,8 @@ type DiagnosticSink = diagnostics.Sink
 var ErrDiag = diagnostics.ErrSentinel
 
 // mgs is the magus diagnostic domain: it maps an MGS code to its docs page by prefix range. Every magus
-// coded error is minted through it so the docs URL is captured for rendering.
+// coded error is minted through it so the docs URL is captured for rendering. Its catalog reserves the
+// MGS prefix, so no workspace can declare one that collides with it.
 var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	switch {
 	// BEFORE the single-digit cases: MGS11## starts with "MGS1" too, so the magusfile family
@@ -83,14 +84,102 @@ var mgs = diagnostics.New(func(c DiagnosticCode) string {
 		return fmt.Sprintf("%s%s/", diagnosticRaceBase, string(c))
 	case strings.HasPrefix(string(c), "MGS1"):
 		return fmt.Sprintf("%s%s/", diagnosticMagusfileBase, string(c))
-	default:
+	// The sandbox family holds the workspace-scope codes too: MGS3### pages live beside MGS2###.
+	case strings.HasPrefix(string(c), "MGS2"), strings.HasPrefix(string(c), "MGS3"):
 		return fmt.Sprintf("%s%s/", diagnosticSandboxBase, string(c))
+	default:
+		return ""
 	}
-})
+}).Catalog(allDiagnosticCodes...)
 
-// CodeURL returns the documentation URL for an MGS code. (URL resolution is domain-specific, so it is a
-// function on the magus domain rather than a method on the shared Code type.)
-func CodeURL(c DiagnosticCode) string { return mgs.URL(c) }
+// DiagnosticOrigin says who minted a diagnostic code: a catalog compiled into magus, or the
+// workspace, under the prefix its magus.yaml declares.
+type DiagnosticOrigin string
+
+const (
+	DiagnosticOriginBuiltin   DiagnosticOrigin = "builtin"
+	DiagnosticOriginWorkspace DiagnosticOrigin = "workspace"
+)
+
+// OriginOf derives c's origin from the prefixes the built-in catalogs reserve: a code under
+// one is builtin, any other is the workspace's. Nothing stores an origin beside a code, so a
+// workspace cannot claim builtin by saying so.
+func OriginOf(c DiagnosticCode) DiagnosticOrigin {
+	if _, ok := diagnostics.Owner(c); ok {
+		return DiagnosticOriginBuiltin
+	}
+	return DiagnosticOriginWorkspace
+}
+
+// DiagnosticDocs is the one docs resolver for a diagnostic code, keyed by prefix: a built-in
+// prefix resolves through the catalog that reserved it, the workspace's declared Prefix
+// through its Docs template, and any other prefix to "". The zero value resolves built-in
+// codes only.
+type DiagnosticDocs struct {
+	// Prefix is the workspace's declared code prefix (magus.yaml diagnostics.prefix).
+	Prefix string
+	// Docs is the page template for a workspace code, with {code} standing for the code
+	// (magus.yaml diagnostics.docs). Empty means the workspace documents no codes.
+	Docs string
+}
+
+// URL is c's docs page, or "" when no catalog and no workspace declaration covers c.
+func (d DiagnosticDocs) URL(c DiagnosticCode) string {
+	if owner, ok := diagnostics.Owner(c); ok {
+		return owner.URL(c)
+	}
+	if d.Prefix == "" || d.Docs == "" || diagnostics.Prefix(c) != d.Prefix {
+		return ""
+	}
+	return strings.ReplaceAll(d.Docs, "{code}", string(c))
+}
+
+// CodeURL returns the documentation URL for a built-in code, and "" for a code no built-in
+// catalog reserves: a workspace code's page is DiagnosticDocs.URL's to resolve.
+func CodeURL(c DiagnosticCode) string { return DiagnosticDocs{}.URL(c) }
+
+// ValidateDiagnosticPrefix refuses a workspace prefix that is not 2 to 8 capital letters, or
+// that equals, starts or is started by a prefix a built-in catalog reserves.
+func ValidateDiagnosticPrefix(prefix string) error {
+	if len(prefix) < 2 || len(prefix) > 8 || diagnostics.Prefix(DiagnosticCode(prefix)) != prefix {
+		return fmt.Errorf("diagnostics.prefix %q is not 2 to 8 capital letters", prefix)
+	}
+	if r, ok := diagnostics.Collides(prefix); ok {
+		return fmt.Errorf("diagnostics.prefix %q collides with %s, a prefix magus's own catalogs reserve (%s)",
+			prefix, r, strings.Join(diagnostics.ReservedPrefixes(), ", "))
+	}
+	return nil
+}
+
+// WorkspaceDiagnosticCode validates text as a code under the workspace's declared prefix:
+// the prefix followed by four digits. It refuses every code when prefix is empty, naming
+// the magus.yaml key that declares one, and refuses a built-in or foreign prefix.
+func WorkspaceDiagnosticCode(prefix, text string) (DiagnosticCode, error) {
+	c := DiagnosticCode(text)
+	if prefix == "" {
+		return "", fmt.Errorf("%q: this workspace declares no diagnostic prefix; set diagnostics.prefix in magus.yaml", text)
+	}
+	got := diagnostics.Prefix(c)
+	if OriginOf(c) == DiagnosticOriginBuiltin {
+		return "", fmt.Errorf("%q is in magus's own %s catalog, which only magus mints; use this workspace's prefix %s", text, got, prefix)
+	}
+	if got != prefix {
+		return "", fmt.Errorf("%q is not under this workspace's prefix %s (diagnostics.prefix in magus.yaml)", text, prefix)
+	}
+	digits := text[len(got):]
+	if len(digits) != 4 || strings.Trim(digits, "0123456789") != "" {
+		return "", fmt.Errorf("%q is not %s followed by four digits", text, prefix)
+	}
+	return c, nil
+}
+
+// DiagnosticCodeRef is a code as it crosses into Buzz: the magus\DiagnosticCode object that
+// magus\diagnosticCode mints and magus\raise takes, so a typo is a type error rather than a
+// string that renders like a real code.
+type DiagnosticCodeRef struct {
+	Code   string           `json:"code" yaml:"code"`
+	Origin DiagnosticOrigin `json:"origin" yaml:"origin"`
+}
 
 const NoCITarget DiagnosticCode = "MGS1001"
 const SpellShadowed DiagnosticCode = "MGS1002"
@@ -1128,6 +1217,12 @@ func DiagnosticRationale(err error) string {
 // sink without threading it through every signature.
 func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
 	return diagnostics.WithSink(ctx, s)
+}
+
+// DiagnosticEventOf is the event err's outermost coded error fires from unit, its docs page
+// included, and false when err carries no code.
+func DiagnosticEventOf(err error, unit string) (DiagnosticEvent, bool) {
+	return diagnostics.EventOf(err, unit)
 }
 
 // EmitDiagnostic records ev to the sink in ctx, or is a no-op when none is

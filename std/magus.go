@@ -122,15 +122,23 @@ var Magus = Module{
 		},
 		{
 			Name: "raise",
-			Doc:  "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. opts.url is the page documenting the code, rendered as the `see:` line the CLI prints under its own diagnostics.",
+			Doc:  "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"WS1001\") ... }`. code is a DiagnosticCode from magus\\diagnosticCode, and it is checked again here against the prefix magus.yaml's diagnostics.prefix declares, so a raise from an imported spell carries the importing workspace's prefix or fails. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. The `see:` line under the message is opts.url when given, else the page diagnostics.docs names for the code, else none.",
 			Args: []Arg{
-				{Name: "code", Type: TypeString},
+				{Name: "code", Type: TypeAnyMap, Object: "DiagnosticCode"},
 				{Name: "message", Type: TypeString},
 				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "RaiseOptions"},
 			},
 			Returns: nil,
 			Raises:  true,
 			Impl:    MagusRaise,
+		},
+		{
+			Name:    "diagnosticCode",
+			Doc:     "Mint a workspace diagnostic code for magus\\raise: {code, origin}. text is the prefix magus.yaml's diagnostics.prefix declares followed by four digits (WS1003). Raises on an MGS, BZZ or other built-in prefix, which only magus mints, on a prefix this workspace did not declare, on a malformed code, and on any code when no prefix is declared, naming the magus.yaml key.",
+			Args:    []Arg{{Name: "text", Type: TypeString}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "DiagnosticCode"}},
+			Raises:  true,
+			Impl:    MagusDiagnosticCode,
 		},
 		{
 			Name: "run",
@@ -1519,37 +1527,67 @@ func MagusVCSCheckpoint(ctx context.Context) (types.VCSCheckpoint, error) {
 // half: a magusfile could only `throw` a string, leaving its callers doing the substring
 // matching that mechanism exists to avoid.
 //
-// The MGS prefix is REFUSED, not discouraged: MGS codes are a closed catalog that
-// `magus explain`, the knowledge graph and the docs URL map resolve against, so a
-// workspace minting MGS9999 would render like magus's own and document nothing.
+// The code is checked again here, not only where magus\diagnosticCode minted it: an object
+// literal can carry any text, and an imported spell's code must carry the importing
+// workspace's prefix. A built-in code is refused because its catalog is closed: the graph,
+// `magus explain` and the docs resolve against it, so a workspace raising MGS9999 would
+// render like magus's own and document nothing.
 //
 // `raise` rather than `throw` because throw is a reserved Buzz keyword; error and fatal
 // are taken by the logging members above.
-//
-// cause and url live in an options record: the generated trampoline binds by index, so a fourth
-// positional url was unreachable without also passing a cause.
-func MagusRaise(_ context.Context, code, message string, opts types.RaiseOptions) error {
-	if code == "" {
-		return errors.New(`magus\raise: needs a code, e.g. "ACME1001", it is the stable identifier a caller branches on`)
+func MagusRaise(ctx context.Context, code types.DiagnosticCodeRef, message string, opts types.RaiseOptions) error {
+	docs, err := workspaceDiagnostics(ctx)
+	if err != nil {
+		return fmt.Errorf(`magus\raise: %w`, err)
+	}
+	c, err := types.WorkspaceDiagnosticCode(docs.Prefix, code.Code)
+	if err != nil {
+		return fmt.Errorf(`magus\raise: %w`, err)
 	}
 	if message == "" {
-		return fmt.Errorf(`magus\raise: %s needs a message, a code is an identifier, not a sentence`, code)
+		return fmt.Errorf(`magus\raise: %s needs a message, a code is an identifier, not a sentence`, c)
 	}
-	if strings.HasPrefix(strings.ToUpper(code), "MGS") {
-		return fmt.Errorf(`magus\raise: %q is in magus's own MGS namespace, which is a closed catalog, pick a prefix for this workspace instead`, code)
-	}
-	// A per-call domain is how a caller-supplied url reaches the rendered error: Error's
-	// url field is captured at construction from the domain's function, never set later.
+	// Error's url is captured from the domain at construction, so a per-call domain is how
+	// the override or the workspace's page reaches the rendered error.
 	url := opts.URL
-	d := diagnostics.New(func(diagnostics.Code) string { return url })
-	summary, c := buzzCause(opts.Cause)
-	if c == nil {
-		return d.Errorf(diagnostics.Code(code), "%s", message)
+	if url == "" {
+		url = docs.URL(c)
 	}
-	// Wrapf keeps the cause reachable through Unwrap but deliberately does not render it,
-	// so the summary is spliced in here to match what Go's %w prints. A cause nobody can
-	// see is the failure the author was trying to report.
-	return d.Wrapf(diagnostics.Code(code), c, "%s: %s", message, summary)
+	d := diagnostics.New(func(diagnostics.Code) string { return url })
+	summary, cause := buzzCause(opts.Cause)
+	if cause == nil {
+		return d.Errorf(c, "%s", message)
+	}
+	// Wrapf keeps the cause reachable but does not render it, so the summary is spliced in
+	// to match what Go's %w prints.
+	return d.Wrapf(c, cause, "%s: %s", message, summary)
+}
+
+// MagusDiagnosticCode mints text as a code under the workspace's declared prefix.
+func MagusDiagnosticCode(ctx context.Context, text string) (types.DiagnosticCodeRef, error) {
+	docs, err := workspaceDiagnostics(ctx)
+	if err != nil {
+		return types.DiagnosticCodeRef{}, fmt.Errorf(`magus\diagnosticCode: %w`, err)
+	}
+	c, err := types.WorkspaceDiagnosticCode(docs.Prefix, text)
+	if err != nil {
+		return types.DiagnosticCodeRef{}, fmt.Errorf(`magus\diagnosticCode: %w`, err)
+	}
+	return types.DiagnosticCodeRef{Code: string(c), Origin: types.OriginOf(c)}, nil
+}
+
+// workspaceDiagnostics is the diagnostics section of the magus.yaml of the workspace on ctx,
+// and the zero value, which mints no codes, outside a workspace.
+func workspaceDiagnostics(ctx context.Context) (types.DiagnosticDocs, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.DiagnosticDocs{}, nil
+	}
+	cfg, err := config.LoadWorkspaceOnly(ws.Root())
+	if err != nil {
+		return types.DiagnosticDocs{}, err
+	}
+	return cfg.Diagnostics.Resolver(), nil
 }
 
 // buzzCause converts a caught Buzz value into the one-line summary to splice into the

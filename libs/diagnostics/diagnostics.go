@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -109,6 +110,9 @@ func (e *Error) Is(target error) bool {
 	return false
 }
 
+// URL is the docs page the domain captured for e, or "" for a bare errors.Is target.
+func (e *Error) URL() string { return e.url }
+
 // Unwrap returns the wrapped cause (nil if none), so errors.Is/As can reach an underlying sentinel or
 // error a coded error was layered over. See Domain.Wrapf.
 func (e *Error) Unwrap() error { return e.cause }
@@ -128,6 +132,63 @@ func New(urlFn func(Code) string) *Domain {
 
 // URL returns the docs page for c under this domain.
 func (d *Domain) URL(c Code) string { return d.urlFn(c) }
+
+// catalogs maps each prefix a catalog declared to the domain that owns it. It is written
+// only while package variables initialize, through Catalog, so reads need no lock.
+var catalogs = map[string]*Domain{}
+
+// Catalog registers codes as d's closed catalog and returns d, so a consumer declares it
+// where it declares the domain: `var mgs = diagnostics.New(url).Catalog(all...)`. Each
+// prefix the codes carry becomes reserved for d in this process, which is what lets a
+// workspace prefix that would collide with a built-in one be refused. Call it only from a
+// package variable's initializer: the registry takes no lock.
+func (d *Domain) Catalog(codes ...Code) *Domain {
+	for _, c := range codes {
+		if p := Prefix(c); p != "" {
+			catalogs[p] = d
+		}
+	}
+	return d
+}
+
+// Prefix is the run of ASCII capital letters c starts with: MGS for MGS1021, "" for a code
+// that starts with anything else.
+func Prefix(c Code) string {
+	s := string(c)
+	i := 0
+	for i < len(s) && 'A' <= s[i] && s[i] <= 'Z' {
+		i++
+	}
+	return s[:i]
+}
+
+// ReservedPrefixes lists, sorted, every prefix a catalog linked into this process declared.
+func ReservedPrefixes() []string {
+	out := make([]string, 0, len(catalogs))
+	for p := range catalogs {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Owner returns the domain whose catalog reserved c's prefix, and false when none did.
+func Owner(c Code) (*Domain, bool) {
+	d, ok := catalogs[Prefix(c)]
+	return d, ok
+}
+
+// Collides returns the reserved prefix that prefix equals, starts or is started by, and
+// false when none does. Both directions count: WSX1001 beside WS1001 would make a reader
+// work out which catalog owns which.
+func Collides(prefix string) (string, bool) {
+	for _, r := range ReservedPrefixes() {
+		if strings.HasPrefix(r, prefix) || strings.HasPrefix(prefix, r) {
+			return r, true
+		}
+	}
+	return "", false
+}
 
 // Errorf builds an *Error with c, a formatted message, and c's docs URL captured for rendering.
 // An error argument carrying a coded *Error is formatted as Inline renders it, so the message
@@ -216,12 +277,25 @@ func (d *Domain) Format(c Code, msg string) string {
 	return fmt.Sprintf("[%s] %s (see %s)", c, msg, d.urlFn(c))
 }
 
-// Event is one diagnostic fired during a run: the code, a message, and the unit that emitted it
-// ("<project>:<target>", a project path, or empty).
+// Event is one diagnostic fired during a run: the code, a message, the unit that emitted it
+// ("<project>:<target>", a project path, or empty), and the docs page the raise captured. URL
+// travels with the event because only the raise knows it: a workspace code's page comes from
+// that workspace's configuration, which a reader of the run record does not load.
 type Event struct {
 	Code    Code   `json:"code"              yaml:"code"`
 	Message string `json:"message,omitempty" yaml:"message,omitempty"`
 	Unit    string `json:"unit,omitempty"    yaml:"unit,omitempty"`
+	URL     string `json:"url,omitempty"     yaml:"url,omitempty"`
+}
+
+// EventOf is the event err's outermost coded error fires from unit, carrying its docs page,
+// and false when err carries no code.
+func EventOf(err error, unit string) (Event, bool) {
+	var e *Error
+	if !errors.As(err, &e) {
+		return Event{}, false
+	}
+	return Event{Code: e.Code, Message: e.Msg, Unit: unit, URL: e.url}, true
 }
 
 // Sink records diagnostics fired during a run; it must be safe for concurrent use. A run installs one in

@@ -352,37 +352,37 @@ func TestPinnedRelease(t *testing.T) {
 func TestStaleBuildAdvice(t *testing.T) {
 	t.Parallel()
 	const selfUpdate = "Fix it:\n  - released binary: magus self update"
-	const goBuild = "\n  - built from this checkout: ./magus run go-build ."
-	const bootstrap = "\n  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+	const script = "\n  - this workspace's script for it: ./magus buzz hack/dev/bootstrap-checkout.buzz"
+	const bootstrap = "\n  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+	served := []string{"./magus buzz hack/dev/bootstrap-checkout.buzz"}
 	for name, tc := range map[string]struct {
 		build StaleBuild
 		want  string
 	}{
-		"a dev build in a source tree, below the floor": {
-			build: StaleBuild{Running: "v0.4.3-122-g1a2b3c4", Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + goBuild + bootstrap,
+		"a dev build with a served script, below the floor": {
+			build: StaleBuild{Running: "v0.4.3-122-g1a2b3c4", Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + script + bootstrap,
 		},
-		"a release in a source tree gets no bootstrap": {
-			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + goBuild,
+		"a release with a served script gets no bootstrap": {
+			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + script,
 		},
-		"a release outside a source tree": {
+		"a release with no served script": {
 			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4"},
 			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate,
 		},
-		"a dev build outside a source tree": {
+		"a dev build with no served script": {
 			build: StaleBuild{Running: "v0.4.3-1-gabc", Floor: ">= 0.4.4"},
-			want: "This magus (v0.4.3-1-gabc) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate +
-				"\n  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+			want:  "This magus (v0.4.3-1-gabc) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + bootstrap,
 		},
 		"a dev build that meets the floor": {
-			build: StaleBuild{Running: "v0.4.4-3-gabc", Floor: ">= 0.4.4", SourceTree: true},
+			build: StaleBuild{Running: "v0.4.4-3-gabc", Floor: ">= 0.4.4", Scripts: served},
 			want: "This magus (v0.4.4-3-gabc) meets the workspace floor (>= 0.4.4) but was likely built before the workspace changed.\n" +
-				selfUpdate + goBuild + bootstrap,
+				selfUpdate + script + bootstrap,
 		},
 		"an unknown running version is not a dev build": {
-			build: StaleBuild{Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus's version is unknown here; the workspace needs >= 0.4.4.\n" + selfUpdate + goBuild,
+			build: StaleBuild{Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus's version is unknown here; the workspace needs >= 0.4.4.\n" + selfUpdate + script,
 		},
 		"nothing known": {
 			want: "This magus's version is unknown here, and the workspace declares no required_version floor.\n" + selfUpdate,
@@ -392,8 +392,8 @@ func TestStaleBuildAdvice(t *testing.T) {
 			want:  "This magus is v0.4.3; the workspace declares no required_version floor.\n" + selfUpdate,
 		},
 		"an unstamped build": {
-			build: StaleBuild{Running: DevVersion, Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus is an unstamped build, so its version is unknown; the workspace needs >= 0.4.4.\n" + selfUpdate + goBuild + bootstrap,
+			build: StaleBuild{Running: DevVersion, Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus is an unstamped build, so its version is unknown; the workspace needs >= 0.4.4.\n" + selfUpdate + script + bootstrap,
 		},
 		"a floor that does not parse": {
 			build: StaleBuild{Running: "v0.4.3", Floor: "soon"},

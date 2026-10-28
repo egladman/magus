@@ -96,7 +96,7 @@ func TestBuildScriptsIndexIndexesDeclaredScripts(t *testing.T) {
 		require.NoError(t, err)
 		return info
 	}
-	show := write("hack/dev/show-x.buzz", "final SUMMARY = \"show x\";\nfinal SERVES = [\"rule:a\", \"mgs:MGS1\"];\nfinal EFFECT = \"read\";\n")
+	show := write("hack/dev/show-x.buzz", "final SUMMARY = \"show x\";\nfinal SERVES = [\"rule:a\", \"code:MGS1\"];\nfinal EFFECT = \"read\";\n")
 	edited := write("hack/dev/ls-y.buzz", "final SUMMARY = \"list y\";\nfinal SERVES = [\"rule:a\"];\nfinal EFFECT = \"read\";\n")
 	write("hack/dev/plain.buzz", "fun main(args: [str]) > void {}\n")
 	write("hack/dev/broken.buzz", "final SERVES = [\"rule:a\"];\n")
@@ -114,7 +114,7 @@ func TestBuildScriptsIndexIndexesDeclaredScripts(t *testing.T) {
 			{Path: "hack/dev/ls-y.buzz", Effect: ScriptEffectWrite, Summary: "list y", MtimeNs: editedMtime, Size: editedSize},
 			{Path: "hack/dev/show-x.buzz", Effect: ScriptEffectRead, Summary: "show x", MtimeNs: showMtime, Size: showSize},
 		},
-		"mgs:MGS1": {{Path: "hack/dev/show-x.buzz", Effect: ScriptEffectRead, Summary: "show x", MtimeNs: showMtime, Size: showSize}},
+		"code:MGS1": {{Path: "hack/dev/show-x.buzz", Effect: ScriptEffectRead, Summary: "show x", MtimeNs: showMtime, Size: showSize}},
 	}}, x, "an uncommitted read is indexed as a write")
 }
 
@@ -232,12 +232,12 @@ func TestScriptsForGrantsReadsOnlyToAnUnchangedReadScript(t *testing.T) {
 	edited := scriptFixture(t, root, "hack/dev/show-session-figure.buzz", ScriptEffectRead)
 	write := scriptFixture(t, root, "hack/dev/merge-job-branches.buzz", ScriptEffectWrite)
 	undeclared := scriptFixture(t, root, "hack/dev/ls-uncommitted.buzz", "")
-	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{"mgs:MGS3009": {read, edited, write, undeclared}})
+	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{"code:MGS3009": {read, edited, write, undeclared}})
 
 	later := time.Now().Add(time.Hour)
 	require.NoError(t, os.Chtimes(filepath.Join(root, edited.Path), later, later))
 
-	next, err := MatchScripts(cacheDir, "mgs:MGS3009", nil)
+	next, err := MatchScripts(cacheDir, "code:MGS3009", nil)
 	require.NoError(t, err)
 	reads := map[string]bool{}
 	for _, n := range next {
@@ -294,7 +294,7 @@ func TestScriptsForRejectsUnknownSituations(t *testing.T) {
 	for _, s := range AllEvents {
 		require.NoError(t, ValidateSituation(s), s)
 	}
-	for _, s := range []string{"rule:stage-all", "mgs:MGS3009", "doctor:stale-worktrees", "next:jobs-exited"} {
+	for _, s := range []string{"rule:stage-all", "code:MGS3009", "doctor:stale-worktrees", "next:jobs-exited"} {
 		require.NoError(t, ValidateSituation(s), s)
 	}
 	for _, s := range []string{"event:disk-full", "event:", "rule:", "stage-all", "", "Event:pre-pr"} {

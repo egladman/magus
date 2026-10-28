@@ -10,6 +10,12 @@ import (
 // cmd/magus-utils's boundaryEnums names the same values for the Buzz mirror, and
 // TestBoundaryEnumsMatchTheirSets holds the two to one list.
 
+var diagnosticOrigins = enum.Set[DiagnosticOrigin]{"builtin", "workspace"}
+
+func (v DiagnosticOrigin) Values() []string { return diagnosticOrigins.Strings() }
+func (v DiagnosticOrigin) Valid() bool      { return diagnosticOrigins.Valid(v) }
+func (v DiagnosticOrigin) String() string   { return enum.String(v) }
+
 var signAlgorithms = enum.Set[SignAlgorithm]{"ed25519"}
 
 func (v SignAlgorithm) Values() []string { return signAlgorithms.Strings() }

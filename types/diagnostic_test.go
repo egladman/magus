@@ -45,3 +45,80 @@ func TestManifestScriptDelegationRoutesToMagusfileDocs(t *testing.T) {
 func TestSpellContractViolatedRoutesToMagusfileDocs(t *testing.T) {
 	assert.Equal(t, "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1051/", CodeURL(SpellContractViolated))
 }
+
+func (s *typesSuite) TestCodeURLRoutesAWorkspaceScopeCodeToSandboxDocs() {
+	s.Equal("https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3044/", CodeURL("MGS3044"))
+}
+
+func (s *typesSuite) TestCodeURLOfAnUnknownPrefixIsEmpty() {
+	s.Empty(CodeURL("ACME1001"))
+}
+
+func (s *typesSuite) TestDiagnosticDocsResolveTheWorkspacePrefix() {
+	d := DiagnosticDocs{Prefix: "WS", Docs: "docs/codes/{code}.md"}
+	s.Equal("docs/codes/WS1003.md", d.URL("WS1003"))
+}
+
+func (s *typesSuite) TestDiagnosticDocsKeepABuiltinCodeOnItsOwnPage() {
+	d := DiagnosticDocs{Prefix: "WS", Docs: "docs/codes/{code}.md"}
+	s.Equal(CodeURL(WorkspaceNeedsNewerMagus), d.URL(WorkspaceNeedsNewerMagus))
+}
+
+func (s *typesSuite) TestDiagnosticDocsOfAForeignPrefixIsEmpty() {
+	d := DiagnosticDocs{Prefix: "WS", Docs: "docs/codes/{code}.md"}
+	s.Empty(d.URL("ACME1001"))
+}
+
+func (s *typesSuite) TestOriginOfAnMGSCodeIsBuiltin() {
+	s.Equal(DiagnosticOriginBuiltin, OriginOf(WorkspaceNeedsNewerMagus))
+}
+
+func (s *typesSuite) TestOriginOfAnUnreservedCodeIsWorkspace() {
+	s.Equal(DiagnosticOriginWorkspace, OriginOf("WS1001"))
+}
+
+func (s *typesSuite) TestValidateDiagnosticPrefixAcceptsWS() {
+	s.NoError(ValidateDiagnosticPrefix("WS"))
+}
+
+func (s *typesSuite) TestValidateDiagnosticPrefixRefusesMGS() {
+	s.ErrorContains(ValidateDiagnosticPrefix("MGS"), "collides with MGS")
+}
+
+func (s *typesSuite) TestValidateDiagnosticPrefixRefusesAPrefixOfMGS() {
+	s.ErrorContains(ValidateDiagnosticPrefix("MG"), "collides with MGS")
+}
+
+func (s *typesSuite) TestValidateDiagnosticPrefixRefusesOneMGSStarts() {
+	s.ErrorContains(ValidateDiagnosticPrefix("MGSX"), "collides with MGS")
+}
+
+func (s *typesSuite) TestValidateDiagnosticPrefixRefusesLowercase() {
+	s.ErrorContains(ValidateDiagnosticPrefix("ws"), "capital letters")
+}
+
+func (s *typesSuite) TestWorkspaceDiagnosticCodeMintsUnderThePrefix() {
+	c, err := WorkspaceDiagnosticCode("WS", "WS1003")
+	s.Require().NoError(err)
+	s.Equal(DiagnosticCode("WS1003"), c)
+}
+
+func (s *typesSuite) TestWorkspaceDiagnosticCodeRefusesWithNoPrefixDeclared() {
+	_, err := WorkspaceDiagnosticCode("", "WS1003")
+	s.ErrorContains(err, "diagnostics.prefix in magus.yaml")
+}
+
+func (s *typesSuite) TestWorkspaceDiagnosticCodeRefusesAnMGSCode() {
+	_, err := WorkspaceDiagnosticCode("WS", "MGS1021")
+	s.ErrorContains(err, "magus's own MGS catalog")
+}
+
+func (s *typesSuite) TestWorkspaceDiagnosticCodeRefusesAForeignPrefix() {
+	_, err := WorkspaceDiagnosticCode("WS", "ACME1001")
+	s.ErrorContains(err, "not under this workspace's prefix WS")
+}
+
+func (s *typesSuite) TestWorkspaceDiagnosticCodeRefusesAMalformedCode() {
+	_, err := WorkspaceDiagnosticCode("WS", "WS12")
+	s.ErrorContains(err, "four digits")
+}

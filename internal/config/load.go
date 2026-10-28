@@ -385,11 +385,33 @@ func unknownKeyError(path string, data []byte, err error) error {
 	// re-read leniently from the same bytes; unknown keys are ignored here on purpose.
 	ue.Build.Floor = requiredVersion(data)
 	if root != "" {
-		if fi, err := os.Stat(filepath.Join(root, "cmd", "magus")); err == nil && fi.IsDir() {
-			ue.Build.SourceTree = true
-		}
+		ue.Build.Scripts = StaleBinaryScripts(root, data)
 	}
 	return ue.diagnostic()
+}
+
+// StaleBinaryScripts are the run lines of the scripts the workspace at root declares for
+// MGS1021, read from the scripts index a newer magus wrote. data is the workspace's
+// magus.yaml, read leniently for cache.dir, since the binary asking may not decode the
+// rest of it.
+func StaleBinaryScripts(root string, data []byte) []string {
+	var head struct {
+		Cache struct {
+			Dir string `yaml:"dir"`
+		} `yaml:"cache"`
+	}
+	_ = yaml.Unmarshal(data, &head)
+	var cfg Config
+	cfg.Cache.Dir = head.Cache.Dir
+	next, err := hint.MatchScripts(CacheDir(root, cfg), hint.SituationCode+string(types.WorkspaceNeedsNewerMagus), map[string]string{"checkout": root})
+	if err != nil {
+		return nil
+	}
+	var runs []string
+	for _, n := range next {
+		runs = append(runs, n.Run)
+	}
+	return runs
 }
 
 // keyPath is the dotted path of the mapping key named key on line in doc, such as

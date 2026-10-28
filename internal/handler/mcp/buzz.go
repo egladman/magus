@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -88,6 +89,10 @@ type worker struct {
 	timeoutRemedy string
 }
 
+// codedStderr matches a worker failure that already carries a code, magus's or the
+// workspace's, so its own see: line reaches the caller rather than a wrapper's.
+var codedStderr = regexp.MustCompile(`^\[[A-Z]{2,8}[0-9]{4}\] `)
+
 // runWorker sends req to a fresh worker process and decodes its one response.
 // A worker failure that is already a diagnostic is returned as written, so its
 // code and remedy reach the caller once.
@@ -124,7 +129,7 @@ func runWorker[R any](ctx context.Context, w worker, req any) (R, error) {
 		return zero, types.DiagnosticErrorf(w.code, "%s: script cancelled", w.tool)
 	case !res.Started:
 		return zero, types.DiagnosticErrorf(w.code, "%s: start magus executable %q: %v", w.tool, exe, err)
-	case res.Code != 0 && strings.HasPrefix(stderr, "[MGS"):
+	case res.Code != 0 && codedStderr.MatchString(stderr):
 		return zero, errors.New(stderr)
 	case res.Code != 0:
 		return zero, types.DiagnosticErrorf(w.code, "%s: script failed: %s", w.tool, stderr)

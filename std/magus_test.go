@@ -148,75 +148,96 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	assert.True(t, ok.OK)
 }
 
-// TestMagusRaise covers the contract a magusfile author depends on: the code and url
-// survive onto the caught value as fields, and the MGS namespace is closed to them.
-func TestMagusRaise(t *testing.T) {
-	t.Run("carries code, message and url onto the caught value", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1001", "registry rejected the manifest", raiseOptions(nil, "https://acme.dev/codes/ACME1001"))
-		require.Error(t, err)
-
-		var de *diagnostics.Error
-		require.ErrorAs(t, err, &de, "must be a diagnostics.Error so Buzz sees structured fields")
-		assert.Equal(t, map[string]string{
-			"code":    "ACME1001",
-			"message": "registry rejected the manifest",
-			"url":     "https://acme.dev/codes/ACME1001",
-		}, de.BuzzError())
-		assert.Equal(t, "[ACME1001] registry rejected the manifest\n  see: https://acme.dev/codes/ACME1001", de.Error())
-	})
-
-	t.Run("omits url when none was supplied", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1002", "no url", raiseOptions(nil, ""))
-		var de *diagnostics.Error
-		require.ErrorAs(t, err, &de)
-		assert.Equal(t, map[string]string{"code": "ACME1002", "message": "no url"}, de.BuzzError(),
-			"an absent url must be absent, not an empty field a caller has to test for")
-	})
-
-	// The whole point of refusing MGS: a workspace code must never render like magus's
-	// own, because explain and the docs URL map resolve MGS against a closed catalog.
-	for _, code := range []string{"MGS9999", "mgs1001", "Mgs0001"} {
-		t.Run("refuses the magus namespace: "+code, func(t *testing.T) {
-			err := MagusRaise(context.Background(), code, "impersonating magus", types.RaiseOptions{})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "MGS namespace")
-			var de *diagnostics.Error
-			assert.NotErrorIs(t, err, diagnostics.ErrSentinel, "the refusal is a usage error, not a minted diagnostic")
-			assert.False(t, errors.As(err, &de), "refusing must not produce the very diagnostic it rejected")
-		})
-	}
-
-	t.Run("requires a code and a message", func(t *testing.T) {
-		assert.ErrorContains(t, MagusRaise(context.Background(), "", "msg", raiseOptions(nil, "")), "needs a code")
-		assert.ErrorContains(t, MagusRaise(context.Background(), "ACME1001", "", raiseOptions(nil, "")), "needs a message")
-	})
+// diagnosticsWorkspace is a workspace whose magus.yaml declares the WS prefix and a docs
+// template, the declaration magus\diagnosticCode and magus\raise read.
+type diagnosticsWorkspace struct {
+	types.WorkspaceRepository
+	root string
 }
 
-// TestMagusRaiseCause covers wrapping: the cause has to stay reachable for errors.Is and
-// stay VISIBLE in the rendered message, which Wrapf alone does not do.
-func TestMagusRaiseCause(t *testing.T) {
-	t.Run("splices a string cause and unwraps to it", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1001", "push failed", raiseOptions("exec docker: exit 1", ""))
-		assert.EqualError(t, err, "[ACME1001] push failed: exec docker: exit 1")
-		assert.ErrorContains(t, errors.Unwrap(err), "exec docker: exit 1")
-	})
+func (w diagnosticsWorkspace) Root() string { return w.root }
 
-	// The realistic shape: an inner catch hands back the map BuzzError built, and the
-	// inner code must keep matching once the outer one wraps it.
-	t.Run("keeps a coded cause matchable underneath the new code", func(t *testing.T) {
-		inner := map[string]any{"code": "MGS2001", "message": "spell not found", "url": "https://x/MGS2001"}
-		err := MagusRaise(context.Background(), "ACME1001", "build failed", raiseOptions(inner, ""))
-		assert.EqualError(t, err, "[ACME1001] build failed: [MGS2001] spell not found")
-		assert.ErrorIs(t, err, diagnostics.Code("MGS2001"),
-			"the inner code must still match after wrapping, which is the point of a cause")
-	})
+// raiseContext is a context whose workspace declares the WS prefix.
+func (s *ImageSuite) raiseContext() context.Context {
+	root := s.T().TempDir()
+	yaml := "diagnostics:\n  prefix: WS\n  docs: https://ws.example/codes/{code}/\n"
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(yaml), 0o644))
+	return types.WithWorkspace(s.T().Context(), diagnosticsWorkspace{root: root})
+}
 
-	t.Run("an absent cause changes nothing", func(t *testing.T) {
-		for _, empty := range []any{nil, "", map[string]any{}} {
-			err := MagusRaise(context.Background(), "ACME1001", "plain", raiseOptions(empty, ""))
-			assert.EqualError(t, err, "[ACME1001] plain")
-		}
-	})
+// wsCode is the DiagnosticCode object magus\diagnosticCode would mint for text.
+func wsCode(text string) types.DiagnosticCodeRef {
+	return types.DiagnosticCodeRef{Code: text, Origin: types.DiagnosticOriginWorkspace}
+}
+
+func (s *ImageSuite) TestDiagnosticCodeMintsAWorkspaceCode() {
+	got, err := MagusDiagnosticCode(s.raiseContext(), "WS1003")
+	s.Require().NoError(err)
+	s.Equal(wsCode("WS1003"), got)
+}
+
+func (s *ImageSuite) TestDiagnosticCodeRefusesAnMGSCode() {
+	_, err := MagusDiagnosticCode(s.raiseContext(), "MGS1021")
+	s.ErrorContains(err, "magus's own MGS catalog")
+}
+
+func (s *ImageSuite) TestDiagnosticCodeRefusesAForeignPrefix() {
+	_, err := MagusDiagnosticCode(s.raiseContext(), "ACME1001")
+	s.ErrorContains(err, "not under this workspace's prefix WS")
+}
+
+func (s *ImageSuite) TestDiagnosticCodeOutsideAWorkspaceNamesTheKey() {
+	_, err := MagusDiagnosticCode(s.T().Context(), "WS1003")
+	s.ErrorContains(err, "diagnostics.prefix in magus.yaml")
+}
+
+func (s *ImageSuite) TestRaiseCarriesCodeMessageAndTheWorkspacePage() {
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "registry rejected the manifest", raiseOptions(nil, ""))
+	var de *diagnostics.Error
+	s.Require().ErrorAs(err, &de, "must be a diagnostics.Error so Buzz sees structured fields")
+	s.Equal(map[string]string{
+		"code":    "WS1001",
+		"message": "registry rejected the manifest",
+		"url":     "https://ws.example/codes/WS1001/",
+	}, de.BuzzError())
+}
+
+func (s *ImageSuite) TestRaiseURLOverridesTheWorkspacePage() {
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "boom", raiseOptions(nil, "https://other.example/WS1001"))
+	s.Equal("[WS1001] boom\n  see: https://other.example/WS1001", err.Error())
+}
+
+func (s *ImageSuite) TestRaiseOmitsTheURLWhenNoPageIsDeclared() {
+	root := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("diagnostics:\n  prefix: WS\n"), 0o644))
+	ctx := types.WithWorkspace(s.T().Context(), diagnosticsWorkspace{root: root})
+	var de *diagnostics.Error
+	s.Require().ErrorAs(MagusRaise(ctx, wsCode("WS1002"), "no url", raiseOptions(nil, "")), &de)
+	s.Equal(map[string]string{"code": "WS1002", "message": "no url"}, de.BuzzError(),
+		"an absent url must be absent, not an empty field a caller has to test for")
+}
+
+func (s *ImageSuite) TestRaiseRechecksAnMGSCodeInTheObject() {
+	err := MagusRaise(s.raiseContext(), types.DiagnosticCodeRef{Code: "MGS9999"}, "impersonating magus", types.RaiseOptions{})
+	s.ErrorContains(err, "magus's own MGS catalog")
+	var de *diagnostics.Error
+	s.False(errors.As(err, &de), "refusing must not produce the very diagnostic it rejected")
+}
+
+func (s *ImageSuite) TestRaiseRequiresAMessage() {
+	s.ErrorContains(MagusRaise(s.raiseContext(), wsCode("WS1001"), "", raiseOptions(nil, "")), "needs a message")
+}
+
+func (s *ImageSuite) TestRaiseSplicesAStringCauseAndUnwrapsToIt() {
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "push failed", raiseOptions("exec docker: exit 1", ""))
+	s.ErrorContains(err, "[WS1001] push failed: exec docker: exit 1")
+	s.ErrorContains(errors.Unwrap(err), "exec docker: exit 1")
+}
+
+func (s *ImageSuite) TestRaiseKeepsACodedCauseMatchable() {
+	inner := map[string]any{"code": "MGS2001", "message": "spell not found", "url": "https://x/MGS2001"}
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "build failed", raiseOptions(inner, ""))
+	s.ErrorIs(err, diagnostics.Code("MGS2001"), "the inner code must still match after wrapping")
 }
 
 // raiseOptions builds the RaiseOptions record a magusfile would pass.

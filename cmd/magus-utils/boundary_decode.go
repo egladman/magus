@@ -125,6 +125,7 @@ var inboundTypes = []string{
 	`magus\CommandOptions`,
 	`vcs\CommandOptions`,
 	`magus\DiffOptions`,
+	"DiagnosticCode",
 	"RaiseOptions",
 	"SkillsOptions",
 	`http\Options`,

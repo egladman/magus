@@ -4,9 +4,77 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
+
+// catalogued registers the TST catalog the way a consumer's package variable does.
+var catalogued = New(testURL).Catalog("TST0001", "TST0002")
+
+func TestPrefixIsTheLeadingCapitals(t *testing.T) {
+	if got := Prefix("ACME1001"); got != "ACME" {
+		t.Errorf("Prefix(ACME1001) = %q, want ACME", got)
+	}
+}
+
+func TestPrefixOfACodeWithNoCapitalsIsEmpty(t *testing.T) {
+	if got := Prefix("1001"); got != "" {
+		t.Errorf("Prefix(1001) = %q, want empty", got)
+	}
+}
+
+func TestCatalogReservesItsPrefix(t *testing.T) {
+	if !slices.Contains(ReservedPrefixes(), "TST") {
+		t.Errorf("ReservedPrefixes() = %v, want TST among them", ReservedPrefixes())
+	}
+}
+
+func TestOwnerIsTheCataloguingDomain(t *testing.T) {
+	d, ok := Owner("TST0009")
+	if !ok || d != catalogued {
+		t.Errorf("Owner(TST0009) = %p, %v, want the TST domain", d, ok)
+	}
+}
+
+func TestOwnerOfAnUncataloguedPrefixIsNone(t *testing.T) {
+	if _, ok := Owner("NOPE0001"); ok {
+		t.Error("Owner(NOPE0001) found a domain no catalog declared")
+	}
+}
+
+func TestCollidesWithAReservedPrefixItStarts(t *testing.T) {
+	if r, ok := Collides("TS"); !ok || r != "TST" {
+		t.Errorf("Collides(TS) = %q, %v, want TST", r, ok)
+	}
+}
+
+func TestCollidesWithAReservedPrefixThatStartsIt(t *testing.T) {
+	if r, ok := Collides("TSTX"); !ok || r != "TST" {
+		t.Errorf("Collides(TSTX) = %q, %v, want TST", r, ok)
+	}
+}
+
+func TestADistinctPrefixDoesNotCollide(t *testing.T) {
+	if r, ok := Collides("WS"); ok {
+		t.Errorf("Collides(WS) = %q, want no collision", r)
+	}
+}
+
+func TestEventOfCarriesTheCapturedURL(t *testing.T) {
+	err := fmt.Errorf("wrapped: %w", New(testURL).Errorf("TST0001", "boom"))
+	ev, ok := EventOf(err, "a:build")
+	want := Event{Code: "TST0001", Message: "boom", Unit: "a:build", URL: "https://example/docs/TST0001.md"}
+	if !ok || ev != want {
+		t.Errorf("EventOf = %+v, %v, want %+v", ev, ok, want)
+	}
+}
+
+func TestEventOfAnUncodedErrorIsNone(t *testing.T) {
+	if _, ok := EventOf(errors.New("plain"), "a:build"); ok {
+		t.Error("EventOf found a code in a plain error")
+	}
+}
 
 // testURL is a stand-in docs-URL layout for a fake "TST" domain, so the framework can be tested without
 // any consumer's real code catalog.

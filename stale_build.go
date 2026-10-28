@@ -12,7 +12,6 @@ import (
 	"golang.org/x/mod/modfile"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,36 +56,27 @@ func ownBuildEscape(exe string, info *debug.BuildInfo, root string) string {
 	if err != nil || modfile.ModulePath(data) != info.Main.Path {
 		return ""
 	}
-	name := filepath.Base(exe)
 	pkg := strings.TrimPrefix(info.Path, info.Main.Path+"/")
-	ownsMagus := info.Main.Path == ownModule && name == "magus" && pkg == "cmd/magus"
-	rebuild := config.SourceCommand(root, pkg, name, ownsMagus)
-	if ownsMagus {
-		return fmt.Sprintf("This binary was built from this checkout's own sources and predates them. Rebuild this checkout with `%s`, alone on its line; the explicit -C keeps the build and guard on the same checkout even when the host starts elsewhere. From a functioning magus checkout, the existing recovery script is `%s`; it builds from the target checkout's own sources and checks its HEAD. If compilation fails with `undefined:` in generated code, %s, then retry the bootstrap. Never move ./magus aside or disable the guard.", rebuild, job.CheckoutBootstrap(config.ShellLine([]string{root})), regenerate(info.Main.Path))
+	link := config.SourceCommand(root, pkg, filepath.Base(exe), false)
+	escape := fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot rebuild itself: every command it runs loads the same tree. Link a new one from source, one command at a time: `%s`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in generated code, the checkout's committed generated files are behind its sources (a merge kept one side), and restoring either side's copy brings back the mismatch: regenerate them with the commands its generate targets run, then link again.", link)
+	scripts := config.StaleBinaryScripts(root, workspaceConfigBytes(root))
+	if len(scripts) == 0 {
+		return escape + " No script in this workspace declares SERVES \"code:MGS1021\", so magus names none of its own."
 	}
-	return fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot rebuild itself: every command it runs loads the same tree. Link a new one from source, one command at a time: `%s`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in generated code, the checkout's committed generated files are behind its sources (a merge kept one side), and restoring either side's copy brings back the mismatch: %s, then link again.", rebuild, regenerate(info.Main.Path))
+	return escape + fmt.Sprintf(" This workspace's script for it: `%s`.", strings.Join(scripts, "`, or `"))
+}
+
+// workspaceConfigBytes is root's magus.yaml as bytes, nil when it has none; the stale
+// binary reading it may not decode it.
+func workspaceConfigBytes(root string) []byte {
+	for _, name := range []string{config.Filename, config.DottedFilename} {
+		if data, err := os.ReadFile(filepath.Join(root, name)); err == nil {
+			return data
+		}
+	}
+	return nil
 }
 
 // ownModule is the module this package was compiled from, read off a type so a renamed fork
-// still recognizes its own tree.
+// still recognizes its own tree. Only the binary-versus-own-source skew check reads it.
 var ownModule = reflect.TypeFor[Magus]().PkgPath()
-
-// ownGenerators are the commands this module's *_generate targets in magusfile.buzz run, in
-// the order their ctx.needs settle: types, spells, job, langservice, bindings, mcp_tools.
-var ownGenerators = []string{
-	"go generate ./cmd/magus-utils",
-	"go generate ./internal/spell/...",
-	"go run ./cmd/magus-utils jobschema -out internal/job/gen",
-	"go generate ./internal/langservice",
-	"go generate ./std/...",
-	"go generate ./internal/handler/mcp",
-}
-
-// regenerate names how a checkout of module rebuilds its generated files without a binary.
-// Only this module's generators are known; any other checkout is pointed at its own.
-func regenerate(module string) string {
-	if module != ownModule {
-		return "regenerate them with the `go generate` commands its generate targets run"
-	}
-	return fmt.Sprintf("regenerate them, one command at a time, with what the *_generate targets run: `%s`", strings.Join(ownGenerators, "`, then `"))
-}
