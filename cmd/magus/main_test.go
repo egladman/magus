@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -447,7 +448,8 @@ func TestWantsUsage(t *testing.T) {
 // `magus diff -h`: the flag set is generated from the registry, but the
 // usage prose is hand-written, so a new flag lands in the binding and never in the help.
 // Deriving the expectation from the bound flags rather than a hand-list makes the help
-// self-check against what the command actually accepts.
+// self-check against what the command actually accepts. A generated --no-<name> is
+// covered by its bool, which the help names as --<name> or --[no-]<name>.
 func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	flaggen.BindDiff(fs)
@@ -455,8 +457,13 @@ func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	diffUsage(&buf)
 	out := buf.String()
 	fs.VisitAll(func(f *flag.Flag) {
-		assert.Contains(t, out, "--"+f.Name,
-			"magus diff -h must name --%s; the hand-written help has drifted from the bound flags", f.Name)
+		name := f.Name
+		if base, ok := strings.CutPrefix(name, cmdline.NegationPrefix); ok && fs.Lookup(base) != nil {
+			return
+		}
+		named := strings.Contains(out, "--"+name) || strings.Contains(out, "--[no-]"+name)
+		assert.True(t, named,
+			"magus diff -h must name --%s; the hand-written help has drifted from the bound flags", name)
 	})
 }
 

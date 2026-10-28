@@ -1460,9 +1460,9 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	tty.ProseItem(w, tty.SystemProbe, "  --generated   ", "include the folded declared outputs")
-	tty.ProseItem(w, tty.SystemProbe, "  --no-tui      ",
-		"print the report instead of opening the viewer.",
-		"At a terminal the viewer opens by default, joined to the session the console and an agent share:",
+	tty.ProseItem(w, tty.SystemProbe, "  --[no-]tui    ",
+		"open the viewer (default: on); --no-tui prints the report instead.",
+		"At a terminal the viewer opens joined to the session the console and an agent share:",
 		"] and [ walk hunks, v marks one read, q leaves.",
 		"Anywhere it cannot draw it stands aside on its own, so a script needs no flag.")
 	tty.ProseItem(w, tty.SystemProbe, "  --impact      ",
