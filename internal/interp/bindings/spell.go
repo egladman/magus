@@ -520,7 +520,7 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 		return nil, runGoIndexer(ctx, spec.Name, projectDir, indexPath, patterns, envs)
 	}
 	if len(envs) > 0 {
-		return nil, fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (command `go list <patterns>`); %q runs once, in the host's environment",
+		return nil, fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (command `go list <patterns>`), since %q runs once, in the host's environment",
 			spec.Name, op.Bin)
 	}
 	base := map[string]string{}

@@ -91,9 +91,9 @@ var Proc = Module{
 func procDetach(ctx context.Context, cmd string, args []string, dir string, opts types.ExecOptions) (types.ExecResult, error) {
 	switch {
 	case opts.TimeoutMs != 0:
-		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: detach takes no timeoutMs, since nothing waits on a detached process; pass the deadline to the child and bound each call it makes`, cmd)
+		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: detach takes no timeoutMs, since nothing waits on a detached process: pass the deadline to the child and bound each call it makes`, cmd)
 	case opts.Stdin != "" || opts.TTY:
-		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: a detached process has no stdin or terminal; drop stdin and tty`, cmd)
+		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: a detached process has no stdin or terminal, so drop stdin and tty`, cmd)
 	case sandbox.PolicyFromContext(ctx) != nil:
 		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: detach is refused under a sandbox policy, which ends with the run the detached process outlives`, cmd)
 	}

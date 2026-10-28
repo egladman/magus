@@ -509,7 +509,7 @@ func TestVcsCmdTimeoutCutsOffAHungBinary(t *testing.T) {
 	root := testkit.NewRepository(t, nil).Root()
 	bin := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o755))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", strings.Join([]string{bin, os.Getenv("PATH")}, string(os.PathListSeparator)))
 
 	start := time.Now()
 	_, err := VCSCommand(WithCurrentWorkingDirectory(t.Context(), root), []string{"worktree", "remove", "wt"},

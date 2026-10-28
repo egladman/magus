@@ -447,7 +447,7 @@ func checkCache(sb spells.Sandbox, c spells.SandboxCache) error {
 		return fmt.Errorf("env %q is not a variable name", c.Env)
 	}
 	if c.TrimMB < 0 {
-		return fmt.Errorf("trimMb is %d; want 0 to leave the cache alone, or a size in MiB", c.TrimMB)
+		return fmt.Errorf("trimMb is %d, want 0 to leave the cache alone or a size in MiB", c.TrimMB)
 	}
 	if !slices.ContainsFunc(sb.Allow, func(a spells.SandboxAllow) bool { return a.Env == c.Env && writable(a.Mode) }) {
 		return fmt.Errorf("no writable allow entry has env %s", c.Env)

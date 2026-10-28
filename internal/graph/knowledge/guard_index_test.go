@@ -305,4 +305,3 @@ func TestGuardIndexStaleDuringARebaseStoppedOnACleanPick(t *testing.T) {
 		assert.False(t, x.Fresh(kind), kind)
 	}
 }
-

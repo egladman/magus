@@ -324,8 +324,8 @@ var Fs = Module{
 			Impl:    FsStateDir,
 		},
 		{
-			Name:    "trim_oldest",
-			Doc:     "Remove the least recently modified files under dir, whole days of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within the last day are never removed, so the directory is never emptied; stopped says when they alone pass the budget. Two walks with one counter per day of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.",
+			Name: "trim_oldest",
+			Doc:  "Remove the least recently modified files under dir, whole days of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within the last day are never removed, so the directory is never emptied; stopped says when they alone pass the budget. Two walks with one counter per day of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.",
 			Args: []Arg{
 				{Name: "dir", Type: TypeString},
 				{Name: "maxBytes", Type: TypeInt},
@@ -1170,7 +1170,7 @@ func FsTrimOldest(ctx context.Context, dir string, maxBytes int, timeoutMs int) 
 		return types.TrimReport{}, err
 	}
 	if timeoutMs < 0 {
-		return types.TrimReport{}, fmt.Errorf("fs.trim_oldest: timeoutMs is %d; it takes a positive bound, or 0 for none", timeoutMs)
+		return types.TrimReport{}, fmt.Errorf("fs.trim_oldest: timeoutMs is %d, and it takes a positive bound or 0 for none", timeoutMs)
 	}
 	return TrimOldest(ctx, dir, int64(maxBytes), time.Duration(timeoutMs)*time.Millisecond, time.Now())
 }
@@ -1189,7 +1189,7 @@ const trimDay = 24 * time.Hour
 func TrimOldest(ctx context.Context, dir string, maxBytes int64, timeout time.Duration, now time.Time) (types.TrimReport, error) {
 	report := types.TrimReport{Dir: dir}
 	if maxBytes < 0 {
-		return report, fmt.Errorf("trim %s: maxBytes is %d; it takes 0 or more", dir, maxBytes)
+		return report, fmt.Errorf("trim %s: maxBytes is %d, and it takes 0 or more", dir, maxBytes)
 	}
 	if timeout > 0 {
 		var cancel context.CancelFunc

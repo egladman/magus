@@ -158,7 +158,7 @@ func diskTrend(samples []types.DiskSample, cfg config.Disk) types.Check {
 	if len(reclaimed) > 3 {
 		reclaimed = reclaimed[len(reclaimed)-3:]
 	}
-	return types.Check{Name: name, Status: status, Message: msg + "; " + thresholds, Details: reclaimed}
+	return types.Check{Name: name, Status: status, Message: fmt.Sprintf("%s; %s", msg, thresholds), Details: reclaimed}
 }
 
 func defaulted(value, def int) string {

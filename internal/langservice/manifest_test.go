@@ -39,9 +39,9 @@ func TestExcludedModules(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"os", "fs", "vcs", "archive", "http", // process / filesystem / network
 		"net", "proc", "term", // same three categories, added later
-		"image", // writes layouts to disk and pushes to a registry
-		"lcov",  // reads a coverage file from disk
-		"pipe",  // reads and writes the process's own stdio
+		"image",       // writes layouts to disk and pushes to a registry
+		"lcov",        // reads a coverage file from disk
+		"pipe",        // reads and writes the process's own stdio
 		"diskwatch",   // samples free disk space into a per-user store
 		"reclaimdisk", // removes worktrees and trims the Go build cache
 		// A Buzz module dry.PlaygroundSourceModules does not list.

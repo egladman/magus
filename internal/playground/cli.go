@@ -91,7 +91,7 @@ func cliFlagNames(name string) []string {
 	for _, f := range c.Flags {
 		out = append(out, dashPrefix(f.Name)+f.Name)
 		if f.Kind == cmdline.Bool && f.AliasOf == "" && len(f.Name) > 1 {
-			out = append(out, "--"+cmdline.NegationPrefix+f.Name)
+			out = append(out, fmt.Sprintf("--%s%s", cmdline.NegationPrefix, f.Name))
 		}
 	}
 	sort.Strings(out)

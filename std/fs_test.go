@@ -673,11 +673,9 @@ func TestTrimOldestRemovesWholeDaysOldestFirstUntilItFits(t *testing.T) {
 
 	got, err := TrimOldest(t.Context(), dir, 250, 0, now)
 	require.NoError(t, err)
-	assert.Equal(t, int64(400), got.BeforeBytes)
-	assert.Equal(t, int64(200), got.AfterBytes)
-	assert.Equal(t, 2, got.RemovedFiles)
-	assert.Empty(t, got.Stopped)
 	assert.InDelta(t, float64(now.Add(-5*24*time.Hour).UnixMilli()), got.CutoffMs, 1)
+	got.CutoffMs = 0
+	assert.Equal(t, types.TrimReport{Dir: dir, BeforeBytes: 400, AfterBytes: 200, RemovedFiles: 2, RemovedBytes: 200}, got)
 	assert.FileExists(t, fresh)
 	assert.FileExists(t, day2)
 	assert.NoFileExists(t, day5)

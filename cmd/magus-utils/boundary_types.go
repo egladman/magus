@@ -687,7 +687,7 @@ var boundaryEnums = []boundaryEnum{
 		Name:   "MediaType",
 		Module: "image",
 		Type:   reflect.TypeFor[types.ImageMediaType](),
-		Cases:  []enumCase{
+		Cases: []enumCase{
 			{"manifest", string(types.ImageMediaTypeManifest)}, {"index", string(types.ImageMediaTypeIndex)},
 			{"config", string(types.ImageMediaTypeConfig)}, {"layer", string(types.ImageMediaTypeLayer)},
 			{"layerGzip", string(types.ImageMediaTypeLayerGzip)}, {"layerZstd", string(types.ImageMediaTypeLayerZstd)},

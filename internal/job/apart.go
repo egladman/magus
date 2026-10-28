@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"path"
 	"slices"
 
@@ -27,7 +28,7 @@ func HeldApart(here string, holder types.Job, projects Projects, paths ...string
 		why = "the workspace lists no projects"
 	}
 	if why != "" {
-		return false, "the generated-output scope check did not run, so " + holder.ID + "'s hold in " + there + " stays: " + why
+		return false, fmt.Sprintf("the generated-output scope check did not run, so %s's hold in %s stays: %s", holder.ID, there, why)
 	}
 	return slices.ContainsFunc(paths, func(p string) bool { return generatedEntry(declared, p) }), ""
 }

@@ -211,7 +211,7 @@ func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	// Before the /blobs/ case, which its path also matches.
 	case strings.HasSuffix(p, "/blobs/uploads/"):
 		if mount := req.URL.Query().Get("mount"); mount != "" {
-			r.mounts = append(r.mounts, req.URL.Query().Get("from")+"@"+mount)
+			r.mounts = append(r.mounts, fmt.Sprintf("%s@%s", req.URL.Query().Get("from"), mount))
 			if _, held := r.blobs[mount]; held && !r.refuseMounts {
 				w.WriteHeader(http.StatusCreated)
 				return

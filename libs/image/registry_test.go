@@ -38,6 +38,18 @@ type registry struct {
 	mounts    []string // the from repository of each mount asked
 }
 
+// registryTraffic is what a push asked of the registry: each mount's from repository and
+// how many uploads it opened.
+type registryTraffic struct {
+	mounts  []string
+	uploads int
+}
+
+// traffic is r's traffic so far; the caller holds r.mu.
+func (r *registry) traffic() registryTraffic {
+	return registryTraffic{mounts: r.mounts, uploads: r.uploads}
+}
+
 type stored struct {
 	mediaType string
 	body      []byte
@@ -525,6 +537,7 @@ func (s *RegistrySuite) TestPushMountsTheBaseLayersFromTheBaseRepository() {
 
 	s.reg.mu.Lock()
 	defer s.reg.mu.Unlock()
-	s.Equal([]string{"team/app", "team/app", "team/app"}, s.reg.mounts, "the config and both layers are asked of the base repository")
-	s.Equal(2, s.reg.uploads, "the new config and the added layer upload; the base layer mounts")
+	// The config and both layers are asked of the base repository; the new config and the
+	// added layer upload, and the base layer mounts.
+	s.Equal(registryTraffic{mounts: []string{"team/app", "team/app", "team/app"}, uploads: 2}, s.reg.traffic())
 }

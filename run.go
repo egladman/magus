@@ -55,23 +55,23 @@ type RunOption func(*run)
 
 // run is the accumulated state of a Run/CI/RunAffected call.
 type run struct {
-	DryRun            bool
-	Charms            []string       // execution charms propagated via context; "rw" enables mutating targets
-	sink              *Sink          // nil reports through a text sink on stderr. See WithSink
-	report            *report.Writer // sink's record stream; nil unless its format records
-	lockReport        *report.Writer // report, unless the sink prints lock decisions as prose
-	VolatilityRetry   bool // retry volatile targets; applyRunOptions defaults it true
-	BaseRef           string
-	Race              bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
-	RaceReplay        bool     // MGS4003 determinism replay; orthogonal to Race
-	Spell             string   // when set, restricts execution to this spell; unmatched projects are skipped
-	Step              bool     // forces Concurrency=1; StepGate comes from ctx
-	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
-	Cache             bool     // replay cache hits; false forces a fresh run that still refreshes the entry (magus run --no-cache); applyRunOptions defaults it true
-	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
-	narrowing         *project.OpNarrowing
-	session           string // the host session the guard judges the run for; see WithSession
-	observer          types.Observer
+	DryRun          bool
+	Charms          []string       // execution charms propagated via context; "rw" enables mutating targets
+	sink            *Sink          // nil reports through a text sink on stderr. See WithSink
+	report          *report.Writer // sink's record stream; nil unless its format records
+	lockReport      *report.Writer // report, unless the sink prints lock decisions as prose
+	VolatilityRetry bool           // retry volatile targets; applyRunOptions defaults it true
+	BaseRef         string
+	Race            bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
+	RaceReplay      bool     // MGS4003 determinism replay; orthogonal to Race
+	Spell           string   // when set, restricts execution to this spell; unmatched projects are skipped
+	Step            bool     // forces Concurrency=1; StepGate comes from ctx
+	ExtraArgs       []string // forwarded to spells via project.WithExtraArgs
+	Cache           bool     // replay cache hits; false forces a fresh run that still refreshes the entry (magus run --no-cache); applyRunOptions defaults it true
+	Gate            bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
+	narrowing       *project.OpNarrowing
+	session         string // the host session the guard judges the run for; see WithSession
+	observer        types.Observer
 }
 
 // out is the sink the run reports through.

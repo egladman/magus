@@ -323,7 +323,7 @@ func printFlagHelp(w io.Writer, flags []cmdline.Help) {
 			label += " " + h.Value
 		}
 		if h.Default != "" {
-			label += " (default: " + h.Default + ")"
+			label = fmt.Sprintf("%s (default: %s)", label, h.Default)
 		}
 		fmt.Fprintf(w, "%s\n    \t%s\n", label, strings.ReplaceAll(h.Usage, "\n", "\n    \t"))
 	}

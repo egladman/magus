@@ -376,7 +376,7 @@ func OsPlatform(_ context.Context) (string, string, string, error) {
 func runResult(ctx context.Context, name string, args []string, dir, label, cmd string, opts types.ExecOptions) (types.ExecResult, error) {
 	overrides, _ := ctx.Value(withEnvKey{}).([]string)
 	if opts.TimeoutMs < 0 {
-		return types.ExecResult{}, fmt.Errorf("%s %s: timeoutMs is %v; it takes a positive bound, or 0 for none", label, cmd, opts.TimeoutMs)
+		return types.ExecResult{}, fmt.Errorf("%s %s: timeoutMs is %v, and it takes a positive bound or 0 for none", label, cmd, opts.TimeoutMs)
 	}
 	callCtx := ctx
 	if opts.TimeoutMs > 0 {

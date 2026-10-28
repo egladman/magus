@@ -32,10 +32,10 @@ type trailWorkspace struct {
 	projects   []*types.Project
 }
 
-func (f trailWorkspace) CacheDir() string            { return f.dir }
-func (f trailWorkspace) CacheDiskBytes() int64       { return f.cacheBytes }
-func (f trailWorkspace) Root() string                { return f.dir }
-func (f trailWorkspace) All() []*types.Project       { return f.projects }
+func (f trailWorkspace) CacheDir() string      { return f.dir }
+func (f trailWorkspace) CacheDiskBytes() int64 { return f.cacheBytes }
+func (f trailWorkspace) Root() string          { return f.dir }
+func (f trailWorkspace) All() []*types.Project { return f.projects }
 
 // newTestService builds a Service with injected proc seams so no live server is needed.
 func newTestService(ws workspace, submit func(context.Context, string, []string, string) (string, error), status func(context.Context, string) (*proc.StatusReply, error)) *Service {

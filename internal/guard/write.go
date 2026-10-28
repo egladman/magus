@@ -821,7 +821,7 @@ func sayUnchecked(g writeGrade, unchecked []string) writeGrade {
 	if len(unchecked) == 0 {
 		return g
 	}
-	note := " Also: " + strings.Join(unchecked, "; ") + "."
+	note := fmt.Sprintf(" Also: %s.", strings.Join(unchecked, "; "))
 	switch g.Decision {
 	case decisionDeny:
 		g.Reason += note

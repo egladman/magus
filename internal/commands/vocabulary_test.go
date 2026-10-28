@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -63,7 +64,7 @@ func TestNoConceptHasTwoRows(t *testing.T) {
 		if spelling == "" {
 			return
 		}
-		key := column + ":" + conceptKey(spelling)
+		key := fmt.Sprintf("%s:%s", column, conceptKey(spelling))
 		if prev, dup := byKey[key]; dup && prev != flag {
 			t.Errorf("--%s and --%s are one concept under two names (%s %q): keep one", prev, flag, column, spelling)
 		}
