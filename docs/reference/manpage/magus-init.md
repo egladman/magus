@@ -40,16 +40,16 @@ mgs_ contract stubbed, each function documented, and a runnable test block.
 
 ## Options
 
-**--dry-run**
+**--[no-]dry-run** (default: off)
 : Print the config, magusfile, and merge-driver destinations without writing any of them
 
-**--force**
+**--[no-]force** (default: off)
 : Replace an existing config file with one holding no keys
 
-**--global**
+**--[no-]global** (default: off)
 : Write only the global config; skip the workspace bootstrap
 
-**--local**
+**--[no-]local** (default: off)
 : Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/
 
 **--vcs** *string*

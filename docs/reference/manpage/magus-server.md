@@ -43,12 +43,12 @@ Signals:
 
 ### server start options
 
-**--foreground**
+**--[no-]foreground** (default: off)
 : Run in the foreground and block, instead of auto-backgrounding
 
 ### server stop options
 
-**--pools**
+**--[no-]pools** (default: off)
 : Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone
 
 **--socket** *string*

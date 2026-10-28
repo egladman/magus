@@ -109,7 +109,7 @@ them and magus describe job prints one job's terms.
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
 
-**--fix**
+**--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
 
 **--model** *string*
@@ -118,16 +118,16 @@ them and magus describe job prints one job's terms.
 **--parent** *string*
 : The job this one is forked from
 
-**--read-only**
+**--[no-]read-only** (default: off)
 : A job that gathers evidence and writes nothing
 
 **--read-paths** *string*
 : A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)
 
-**--schema**
+**--[no-]schema** (default: off)
 : Print the JSON schema a job must satisfy, and exit
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Read one job as JSON on stdin instead of taking it from flags
 
 **--timeout** *duration*
@@ -141,7 +141,7 @@ them and magus describe job prints one job's terms.
 **-f** *-*
 : The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line
 
-**--fix**
+**--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records
 
 ### job exec options
@@ -154,10 +154,10 @@ them and magus describe job prints one job's terms.
 
 ### job exit options
 
-**--schema**
+**--[no-]schema** (default: off)
 : Print the JSON schema a result must satisfy, and exit
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Read this job's result from stdin; without it the job is abandoned
 
 ### job wait options
@@ -165,23 +165,23 @@ them and magus describe job prints one job's terms.
 **--evidence** *\<goal\>*
 : Grade check goal \<goal\> against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
 
-**--integration**
+**--[no-]integration** (default: off)
 : Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state
 
-**--schema**
+**--[no-]schema** (default: off)
 : Print the JSON schema a result must satisfy, and exit
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Read the result from stdin instead of from the job, for one that was never filed
 
 ### job rm options
 
-**--force**
+**--[no-]force** (default: off)
 : Remove a row that already ended, destroying the record of what happened
 
 ### job prune options
 
-**--all**
+**--[no-]all** (default: off)
 : Also end a job a holder took and nobody touched within jobs.stale_after
 
 ### job pause options
@@ -203,7 +203,7 @@ them and magus describe job prints one job's terms.
 **--reason** *string*
 : Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke
 
-**--revoke**
+**--[no-]revoke** (default: off)
 : End the job's grant of the rule
 
 ## Subcommands

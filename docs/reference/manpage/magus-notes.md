@@ -38,13 +38,13 @@ to declare where they live; with nothing declared the feature is inert.
 
 ### notes ls options
 
-**--private**
+**--[no-]private** (default: off)
 : Only your own notes
 
-**--reproducible**
+**--[no-]reproducible** (default: off)
 : Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed
 
-**--shared**
+**--[no-]shared** (default: off)
 : Only notes committed to this repository (your team has these)
 
 **--tag** *string*
@@ -55,16 +55,16 @@ to declare where they live; with nothing declared the feature is inert.
 **--anchor** *string*
 : With --gap, what the gap is about (repeatable): symbol:\<key\>, file:\<path\>#\<decl\>, diagnostic:\<code\>, or any note anchor
 
-**--gap**
+**--[no-]gap** (default: off)
 : Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve
 
 **--name** *string*
 : Note name (defaults to review-\<patch digest\>)
 
-**--private**
+**--[no-]private** (default: off)
 : Only your own notes (default for capture)
 
-**--shared**
+**--[no-]shared** (default: off)
 : Only notes committed to this repository (your team has these)
 
 **--tag** *string*

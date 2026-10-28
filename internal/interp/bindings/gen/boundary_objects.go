@@ -148,13 +148,19 @@ func ObjectImagePlatform(v types.ImagePlatform, enums ffi.EnumCases) vm.Value {
 	out.MapSet("os", enums.Case("OS", string(v.OS)))
 	out.MapSet("architecture", enums.Case("Architecture", string(v.Architecture)))
 	out.MapSet("variant", enums.Case("Variant", string(v.Variant)))
+	out.MapSet("osVersion", vm.StringValue(v.OSVersion))
+	itemsOSFeatures := make([]vm.Value, len(v.OSFeatures))
+	for indexOSFeatures := range v.OSFeatures {
+		itemsOSFeatures[indexOSFeatures] = vm.StringValue(v.OSFeatures[indexOSFeatures])
+	}
+	out.MapSet("osFeatures", vm.ListValue(itemsOSFeatures))
 	return out
 }
 
 func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("mediaType", enums.Case("MediaType", string(v.MediaType)))
-	out.MapSet("artifactType", enums.Case("MediaType", string(v.ArtifactType)))
+	out.MapSet("mediaType", vm.StringValue(v.MediaType))
+	out.MapSet("artifactType", vm.StringValue(v.ArtifactType))
 	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
 	out.MapSet("size", vm.IntValue(int64(v.Size)))
 	optPlatform := vm.Null
@@ -170,9 +176,9 @@ func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectImageAdded(v types.ImageAdded, enums ffi.EnumCases) vm.Value {
+func ObjectImageAddedLayer(v types.ImageAddedLayer, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("layer", ObjectImageDescriptor(v.Layer, enums))
+	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
 	out.MapSet("diffID", ObjectImageDigest(v.DiffID, enums))
 	out.MapSet("files", vm.IntValue(int64(v.Files)))
 	out.MapSet("symlinks", vm.IntValue(int64(v.Symlinks)))
@@ -206,7 +212,7 @@ func ObjectImageLayout(v types.ImageLayout, enums ffi.EnumCases) vm.Value {
 	out.MapSet("layers", vm.ListValue(itemsLayers))
 	optAdded := vm.Null
 	if v.Added != nil {
-		optAdded = ObjectImageAdded((*v.Added), enums)
+		optAdded = ObjectImageAddedLayer((*v.Added), enums)
 	}
 	out.MapSet("added", optAdded)
 	out.MapSet("created", vm.StringValue(v.Created))
@@ -2180,6 +2186,7 @@ func ObjectSandboxCache(v spells.SandboxCache) vm.Value {
 		itemsSkip[indexSkip] = vm.StringValue(v.Skip[indexSkip])
 	}
 	out.MapSet("skip", vm.ListValue(itemsSkip))
+	out.MapSet("trimMb", vm.IntValue(int64(v.TrimMB)))
 	return out
 }
 
@@ -5360,7 +5367,7 @@ func ObjectImageTree(v types.ImageTree, enums ffi.EnumCases) vm.Value {
 		itemsExclude[indexExclude] = vm.StringValue(v.Exclude[indexExclude])
 	}
 	out.MapSet("exclude", vm.ListValue(itemsExclude))
-	out.MapSet("modes", enums.Case("ModePolicy", string(v.Modes)))
+	out.MapSet("modePolicy", enums.Case("ModePolicy", string(v.ModePolicy)))
 	out.MapSet("symlinks", enums.Case("SymlinkPolicy", string(v.Symlinks)))
 	out.MapSet("uid", vm.IntValue(int64(v.UID)))
 	out.MapSet("gid", vm.IntValue(int64(v.GID)))
@@ -5498,7 +5505,7 @@ func ObjectImageRegistryAuth(v types.ImageRegistryAuth) vm.Value {
 	return out
 }
 
-func ObjectImageMaterial(v types.ImageMaterial, enums ffi.EnumCases) vm.Value {
+func ObjectImageDependency(v types.ImageDependency, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("uri", vm.StringValue(v.URI))
 	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
@@ -5507,13 +5514,13 @@ func ObjectImageMaterial(v types.ImageMaterial, enums ffi.EnumCases) vm.Value {
 
 func ObjectImageProvenance(v types.ImageProvenance, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("builderId", vm.StringValue(v.BuilderID))
+	out.MapSet("builderID", vm.StringValue(v.BuilderID))
 	out.MapSet("sourceRevision", vm.StringValue(v.SourceRevision))
-	itemsMaterials := make([]vm.Value, len(v.Materials))
-	for indexMaterials := range v.Materials {
-		itemsMaterials[indexMaterials] = ObjectImageMaterial(v.Materials[indexMaterials], enums)
+	itemsDependencies := make([]vm.Value, len(v.Dependencies))
+	for indexDependencies := range v.Dependencies {
+		itemsDependencies[indexDependencies] = ObjectImageDependency(v.Dependencies[indexDependencies], enums)
 	}
-	out.MapSet("materials", vm.ListValue(itemsMaterials))
+	out.MapSet("dependencies", vm.ListValue(itemsDependencies))
 	return out
 }
 

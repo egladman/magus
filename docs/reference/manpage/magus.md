@@ -387,9 +387,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_JOBS_MAX_CLAIMS**
 : The most proved claims any job may be given through its max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an error. Workspace only, like StaleAfter (default: 10). Config file key: **jobs.max_claims**.
 
-**MAGUS_GO_CACHE_BUDGET_MB**
-: The size in MB (binary) past which \`magus doctor\` advises cleaning the Go build cache or the golangci-lint cache. Default 20480; 0 turns the check off (default: 20480). Config file key: **go.cache_budget_mb**.
-
 **MAGUS_DISK_MIN_FREE_MB**
 : The free space in MB (binary) below which the hook reclaims. Default 51200; 0 turns reclaiming off and leaves the samples (default: 51200). Config file key: **disk.min_free_mb**.
 

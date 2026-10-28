@@ -180,12 +180,6 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-## scip
-
-The indexer is a PATH binary (install it with mise, not as a project dep), so it is forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
-
-**Command:** `scip-python index . --output $MAGUS_SYMBOL_INDEX`
-
 ## uv-build
 
 build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.

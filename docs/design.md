@@ -82,6 +82,7 @@ automates a decision and when it hands the decision to you.
 - [Enforcement, not pinky promises](design/principles/enforcement-not-pinky-promises.md): A rule written only as prose in an agent's context is a pinky promise; each rule lives at the lowest layer that can enforce it, and skills teach rather than guard.
 - [The harness belongs in the task runner](design/principles/the-harness-sits-on-the-tool-layer.md): Loosen the reins at the right layers; magus builds the harness on the task runner's record of declared inputs and outputs, and the CLI, the harness and the Go SDK all read that one record.
 - [The checker catches it; the runtime is the backstop](design/principles/the-checker-catches-it.md): A mistake the Buzz checker, the spell contract, a generated decoder or a Go analyzer can find is refused at check time; a runtime refusal is for input the checker cannot see, and it names the typed fix.
+- [Flags, config and help from one source](design/principles/flags-config-help-one-source.md): Each flag is declared once, by its positive name. Parsing, help, the man page, the completions and the config vocabulary read that declaration.
 
 ### Judgment
 

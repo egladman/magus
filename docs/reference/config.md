@@ -67,12 +67,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `stall_timeout`       | `MAGUS_STALL_TIMEOUT`       | `--stall-timeout`       | duration                           |
 | `target_timeout`      | `MAGUS_TARGET_TIMEOUT`      | `--target-timeout`      | duration                           |
 
-## go
-
-| Config key           | Environment variable       | Flag                   | Type |
-| -------------------- | -------------------------- | ---------------------- | ---- |
-| `go.cache_budget_mb` | `MAGUS_GO_CACHE_BUDGET_MB` | `--go-cache-budget-mb` | int  |
-
 ## hints
 
 | Config key      | Environment variable  | Flag         | Type              |

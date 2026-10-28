@@ -22,7 +22,7 @@ Write the complete magus manpage set carried by this binary. The installer uses 
 **--dir** *string*
 : Directory for section 1 man pages (default: the user manpath)
 
-**--dry-run**
+**--[no-]dry-run** (default: off)
 : Print what would be written without touching the filesystem
 
 ## Subcommands

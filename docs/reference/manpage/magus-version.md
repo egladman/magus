@@ -30,7 +30,7 @@ renders no server), and an empty value means it ran and nothing answered.
 
 ## Options
 
-**--client**
+**--[no-]client** (default: off)
 : Print only this binary's version; skip the server probe entirely
 
 ## Examples

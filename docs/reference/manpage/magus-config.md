@@ -30,7 +30,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config set options
 
-**--global**
+**--[no-]global** (default: off)
 : Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)
 
 ### config history passed options
@@ -57,7 +57,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config cache prune options
 
-**--dry-run**
+**--[no-]dry-run** (default: off)
 : Print what would be removed without deleting anything
 
 **--keep-last** *int*
@@ -66,12 +66,12 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 **--older-than** *duration*
 : Remove entries older than this duration (e.g. 168h = 7 days)
 
-**--remote**
+**--[no-]remote** (default: off)
 : Prune the configured remote backend instead of the local cache
 
 ### config cache export options
 
-**--remote**
+**--[no-]remote** (default: off)
 : Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive
 
 **--to** *string*
@@ -79,7 +79,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config cache import options
 
-**--remote**
+**--[no-]remote** (default: off)
 : Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive
 
 ### config mcp connector create options
@@ -92,12 +92,12 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config token generate options
 
-**--force**
+**--[no-]force** (default: off)
 : Overwrite an existing token (rotation)
 
 ### config console token create options
 
-**--code**
+**--[no-]code** (default: off)
 : Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once
 
 **--expires** *string*
@@ -106,7 +106,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 **--name** *string*
 : Name for this console token (default: console-N)
 
-**--viewer**
+**--[no-]viewer** (default: off)
 : Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share
 
 ## Subcommands

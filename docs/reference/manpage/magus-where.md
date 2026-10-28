@@ -31,7 +31,7 @@ that.
 **-A**
 : Short for --all
 
-**--all**
+**--[no-]all** (default: off)
 : Print all matching paths to stdout; do not error on ambiguity
 
 **--filter** *string*

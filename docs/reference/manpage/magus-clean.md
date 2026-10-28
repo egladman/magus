@@ -32,7 +32,7 @@ leaves the entries that would replay them.
 
 ## Options
 
-**--cache**
+**--[no-]cache** (default: off)
 : Also invalidate magus cache entries for the selected projects
 
 ## Examples

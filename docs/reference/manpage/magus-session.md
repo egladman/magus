@@ -60,10 +60,10 @@ session-start event and hand the model state instead of prose.
 
 ## Options
 
-**--all**
+**--[no-]all** (default: off)
 : List invocations from every checkout of this repository, not only this one
 
-**--brief**
+**--[no-]brief** (default: off)
 : Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, capped live leases, the last run's failures, guard wiring (--limit and --since do not apply)
 
 **--limit** *int*
@@ -98,7 +98,7 @@ session-start event and hand the model state instead of prose.
 
 ### session notify options
 
-**--desktop**
+**--[no-]desktop** (default: off)
 : Also raise an OS notification
 
 **--outcome** *string*

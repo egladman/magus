@@ -245,6 +245,7 @@ github.com/egladman/magus.TierCeiling func(parent github.com/egladman/magus/type
 github.com/egladman/magus.WithBaseRef func(ref string) RunOption
 github.com/egladman/magus.WithBroker func(b *github.com/egladman/magus/broker.Client) Option
 github.com/egladman/magus.WithBrokerPolicy func(p github.com/egladman/magus/types.BrokerPolicy) Option
+github.com/egladman/magus.WithCache func(on bool) RunOption
 github.com/egladman/magus.WithCacheBackend func(b github.com/egladman/magus/types.CacheBackend) Option
 github.com/egladman/magus.WithCharms func(charms ...string) RunOption
 github.com/egladman/magus.WithCommandLine func(args []string) Option
@@ -259,8 +260,6 @@ github.com/egladman/magus.WithGate func() RunOption
 github.com/egladman/magus.WithGraphHistory func(h DurationPredictor, target string) ComposeOption
 github.com/egladman/magus.WithGraphInput func(g *github.com/egladman/magus/types.Graph) ComposeOption
 github.com/egladman/magus.WithMetricsCollection func() Option
-github.com/egladman/magus.WithNoCache func() RunOption
-github.com/egladman/magus.WithNoVolatilityRetry func() RunOption
 github.com/egladman/magus.WithObserver func(o github.com/egladman/magus/types.Observer) RunOption
 github.com/egladman/magus.WithOutputs func(paths ...string) ProjectOption
 github.com/egladman/magus.WithRace func() RunOption
@@ -279,6 +278,7 @@ github.com/egladman/magus.WithTarget func(name string, opts ...TargetOption) Pro
 github.com/egladman/magus.WithUpstream func() ComposeOption
 github.com/egladman/magus.WithVCSDriver func(d github.com/egladman/magus/types.VCSDriver) Option
 github.com/egladman/magus.WithVersion func(v string) Option
+github.com/egladman/magus.WithVolatilityRetry func(on bool) RunOption
 github.com/egladman/magus.WithWatchIgnore func(patterns ...github.com/egladman/magus/types.IgnorePattern) ProjectOption
 github.com/egladman/magus.WithWorkspaceRegistry func(reg *WorkspaceRegistry) Option
 github.com/egladman/magus.WithWorkspaceRegistryContext func(ctx context.Context, reg *WorkspaceRegistry) context.Context
@@ -470,7 +470,7 @@ github.com/egladman/magus/std.ImageAssemble func(ctx context.Context, spec githu
 github.com/egladman/magus/std.ImageAssembleIndex func(ctx context.Context, layouts []string, dest string) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImageAttachReferrers func(ctx context.Context, subject string, documents []github.com/egladman/magus/types.ImageDocument, dest string) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImageGoEnv func(_ context.Context, platform github.com/egladman/magus/types.ImagePlatform) (map[string]string, error)
-github.com/egladman/magus/std.ImageOpen func(ctx context.Context, path string) (github.com/egladman/magus/types.ImageLayout, error)
+github.com/egladman/magus/std.ImageOpen func(ctx context.Context, path string, name string) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImageParsePlatform func(_ context.Context, spec string) (github.com/egladman/magus/types.ImagePlatform, error)
 github.com/egladman/magus/std.ImageParsePlatforms func(_ context.Context, specs []string) ([]github.com/egladman/magus/types.ImagePlatform, error)
 github.com/egladman/magus/std.ImagePull func(ctx context.Context, reference string, platform github.com/egladman/magus/types.ImagePlatform, dest string, auth *github.com/egladman/magus/types.ImageRegistryAuth) (github.com/egladman/magus/types.ImageLayout, error)
@@ -2447,12 +2447,12 @@ github.com/egladman/magus/types.IgnorePattern.Pattern field string "json:\"patte
 github.com/egladman/magus/types.IgnorePattern.Type field PatternType "json:\"type\" yaml:\"type\" validate:\"required,oneof=glob regex literal\""
 github.com/egladman/magus/types.IgnoredFileReporter type interface
 github.com/egladman/magus/types.IgnoredFileReporter.IgnoredFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
-github.com/egladman/magus/types.ImageAdded type struct
-github.com/egladman/magus/types.ImageAdded.DiffID field ImageDigest
-github.com/egladman/magus/types.ImageAdded.Directories field int
-github.com/egladman/magus/types.ImageAdded.Files field int
-github.com/egladman/magus/types.ImageAdded.Layer field ImageDescriptor
-github.com/egladman/magus/types.ImageAdded.Symlinks field int
+github.com/egladman/magus/types.ImageAddedLayer type struct
+github.com/egladman/magus/types.ImageAddedLayer.Descriptor field ImageDescriptor
+github.com/egladman/magus/types.ImageAddedLayer.DiffID field ImageDigest
+github.com/egladman/magus/types.ImageAddedLayer.Directories field int
+github.com/egladman/magus/types.ImageAddedLayer.Files field int
+github.com/egladman/magus/types.ImageAddedLayer.Symlinks field int
 github.com/egladman/magus/types.ImageArchitecture type string
 github.com/egladman/magus/types.ImageArchitectureAMD64 const ImageArchitecture = "amd64"
 github.com/egladman/magus/types.ImageArchitectureARM64 const ImageArchitecture = "arm64"
@@ -2468,11 +2468,14 @@ github.com/egladman/magus/types.ImageConfig.UnsetEnv field []string
 github.com/egladman/magus/types.ImageConfig.User field *string
 github.com/egladman/magus/types.ImageConfig.Volumes field *[]string
 github.com/egladman/magus/types.ImageConfig.WorkingDir field *string
+github.com/egladman/magus/types.ImageDependency type struct
+github.com/egladman/magus/types.ImageDependency.Digest field ImageDigest
+github.com/egladman/magus/types.ImageDependency.URI field string "buzz:\"uri\""
 github.com/egladman/magus/types.ImageDescriptor type struct
 github.com/egladman/magus/types.ImageDescriptor.Annotations field map[string]string
-github.com/egladman/magus/types.ImageDescriptor.ArtifactType field ImageMediaType
+github.com/egladman/magus/types.ImageDescriptor.ArtifactType field string
 github.com/egladman/magus/types.ImageDescriptor.Digest field ImageDigest
-github.com/egladman/magus/types.ImageDescriptor.MediaType field ImageMediaType
+github.com/egladman/magus/types.ImageDescriptor.MediaType field string
 github.com/egladman/magus/types.ImageDescriptor.Platform field *ImagePlatform
 github.com/egladman/magus/types.ImageDescriptor.Size field int
 github.com/egladman/magus/types.ImageDigest type struct
@@ -2494,7 +2497,7 @@ github.com/egladman/magus/types.ImageFile.Path field string
 github.com/egladman/magus/types.ImageFile.Source field string
 github.com/egladman/magus/types.ImageFile.UID field int "buzz:\"uid\""
 github.com/egladman/magus/types.ImageLayout type struct
-github.com/egladman/magus/types.ImageLayout.Added field *ImageAdded
+github.com/egladman/magus/types.ImageLayout.Added field *ImageAddedLayer
 github.com/egladman/magus/types.ImageLayout.Config field *ImageDescriptor
 github.com/egladman/magus/types.ImageLayout.Created field string
 github.com/egladman/magus/types.ImageLayout.Descriptor field ImageDescriptor
@@ -2502,9 +2505,6 @@ github.com/egladman/magus/types.ImageLayout.Layers field []ImageDescriptor
 github.com/egladman/magus/types.ImageLayout.Path field string
 github.com/egladman/magus/types.ImageLayout.Platform field *ImagePlatform
 github.com/egladman/magus/types.ImageLayout.Referrers field []ImageDescriptor
-github.com/egladman/magus/types.ImageMaterial type struct
-github.com/egladman/magus/types.ImageMaterial.Digest field ImageDigest
-github.com/egladman/magus/types.ImageMaterial.URI field string "buzz:\"uri\""
 github.com/egladman/magus/types.ImageMediaType type string
 github.com/egladman/magus/types.ImageMediaTypeConfig const ImageMediaType = "application/vnd.oci.image.config.v1+json"
 github.com/egladman/magus/types.ImageMediaTypeEmpty const ImageMediaType = "application/vnd.oci.empty.v1+json"
@@ -2514,7 +2514,6 @@ github.com/egladman/magus/types.ImageMediaTypeLayer const ImageMediaType = "appl
 github.com/egladman/magus/types.ImageMediaTypeLayerGzip const ImageMediaType = "application/vnd.oci.image.layer.v1.tar+gzip"
 github.com/egladman/magus/types.ImageMediaTypeLayerZstd const ImageMediaType = "application/vnd.oci.image.layer.v1.tar+zstd"
 github.com/egladman/magus/types.ImageMediaTypeManifest const ImageMediaType = "application/vnd.oci.image.manifest.v1+json"
-github.com/egladman/magus/types.ImageMediaTypeNone const ImageMediaType = ""
 github.com/egladman/magus/types.ImageMediaTypeSPDX const ImageMediaType = "application/spdx+json"
 github.com/egladman/magus/types.ImageModePolicy type string
 github.com/egladman/magus/types.ImageModePolicyExecutableBit const ImageModePolicy = "executable-bit"
@@ -2526,10 +2525,12 @@ github.com/egladman/magus/types.ImageOSNone const ImageOS = ""
 github.com/egladman/magus/types.ImagePlatform type struct
 github.com/egladman/magus/types.ImagePlatform.Architecture field ImageArchitecture
 github.com/egladman/magus/types.ImagePlatform.OS field ImageOS
+github.com/egladman/magus/types.ImagePlatform.OSFeatures field []string
+github.com/egladman/magus/types.ImagePlatform.OSVersion field string
 github.com/egladman/magus/types.ImagePlatform.Variant field ImageVariant
 github.com/egladman/magus/types.ImageProvenance type struct
-github.com/egladman/magus/types.ImageProvenance.BuilderID field string "buzz:\"builderId\""
-github.com/egladman/magus/types.ImageProvenance.Materials field []ImageMaterial
+github.com/egladman/magus/types.ImageProvenance.BuilderID field string
+github.com/egladman/magus/types.ImageProvenance.Dependencies field []ImageDependency
 github.com/egladman/magus/types.ImageProvenance.SourceRevision field string
 github.com/egladman/magus/types.ImagePushed type struct
 github.com/egladman/magus/types.ImagePushed.Digest field ImageDigest
@@ -2564,13 +2565,16 @@ github.com/egladman/magus/types.ImageTree type struct
 github.com/egladman/magus/types.ImageTree.Exclude field []string
 github.com/egladman/magus/types.ImageTree.GID field int "buzz:\"gid\""
 github.com/egladman/magus/types.ImageTree.Include field []string
-github.com/egladman/magus/types.ImageTree.Modes field ImageModePolicy
+github.com/egladman/magus/types.ImageTree.ModePolicy field ImageModePolicy
 github.com/egladman/magus/types.ImageTree.Path field string
 github.com/egladman/magus/types.ImageTree.Source field string
 github.com/egladman/magus/types.ImageTree.Symlinks field ImageSymlinkPolicy
 github.com/egladman/magus/types.ImageTree.UID field int "buzz:\"uid\""
 github.com/egladman/magus/types.ImageVariant type string
 github.com/egladman/magus/types.ImageVariantNone const ImageVariant = ""
+github.com/egladman/magus/types.ImageVariantV1 const ImageVariant = "v1"
+github.com/egladman/magus/types.ImageVariantV2 const ImageVariant = "v2"
+github.com/egladman/magus/types.ImageVariantV3 const ImageVariant = "v3"
 github.com/egladman/magus/types.ImageVariantV8 const ImageVariant = "v8"
 github.com/egladman/magus/types.ImpactCoverage type struct
 github.com/egladman/magus/types.ImpactCoverage.Covered field int "json:\"covered_stmts\" yaml:\"covered_stmts\""

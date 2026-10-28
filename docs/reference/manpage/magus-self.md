@@ -28,13 +28,13 @@ To bootstrap a workspace, use: magus init
 **--bin-dir** *string*
 : Install into this directory instead of replacing in place
 
-**--check**
+**--[no-]check** (default: off)
 : Print whether an update is available and exit without installing
 
-**--dry-run**
+**--[no-]dry-run** (default: off)
 : Verify everything but do not replace the running binary
 
-**--force**
+**--[no-]force** (default: off)
 : Allow downgrades and re-installs of the current version
 
 **--version** *string*
@@ -43,7 +43,7 @@ To bootstrap a workspace, use: magus init
 **-y**
 : Short for --yes
 
-**--yes**
+**--[no-]yes** (default: off)
 : Skip interactive confirmation
 
 ### self install-shorthand options
@@ -51,7 +51,7 @@ To bootstrap a workspace, use: magus init
 **--dir** *string*
 : Directory for the shorthand (default: the running binary's directory)
 
-**--force**
+**--[no-]force** (default: off)
 : Replace an existing file at the shorthand path
 
 ## Subcommands

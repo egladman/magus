@@ -82,7 +82,7 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectImagePushed(ret0, enums), nil
 	}))
-	m.MapSet("writeSbom", vm.DirectValue("image.writeSbom", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("writeSBOM", vm.DirectValue("image.writeSBOM", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		layout := ffi.String(bzArgs, 0)
 		path := ffi.String(bzArgs, 1)
 		ret0, err := std.ImageWriteSBOM(ctx, layout, path)
@@ -119,13 +119,14 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("open", vm.DirectValue("image.open", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		layout := ffi.String(bzArgs, 0)
-		ret0, err := std.ImageOpen(ctx, layout)
+		name := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageOpen(ctx, layout, name)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectImageLayout(ret0, enums), nil
 	}))
-	m.MapSet("platform", vm.DirectValue("image.platform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("parsePlatform", vm.DirectValue("image.parsePlatform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		spec := ffi.String(bzArgs, 0)
 		ret0, err := std.ImageParsePlatform(ctx, spec)
 		if err != nil {
@@ -133,7 +134,7 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectImagePlatform(ret0, enums), nil
 	}))
-	m.MapSet("platforms", vm.DirectValue("image.platforms", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("parsePlatforms", vm.DirectValue("image.parsePlatforms", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		specs := ffi.StringSlice(bzArgs, 0)
 		ret0, err := std.ImageParsePlatforms(ctx, specs)
 		if err != nil {

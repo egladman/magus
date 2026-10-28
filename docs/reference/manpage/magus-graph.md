@@ -60,21 +60,21 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 
 ### graph build options
 
-**--no-sessions**
-: Do not run the declared agent-session adapters first
+**--[no-]sessions** (default: on)
+: Run the declared agent-session adapters first; --no-sessions skips them
 
-**--no-symbols**
-: Rebuild the domain graph only; do not reindex code symbols
+**--[no-]symbols** (default: on)
+: Reindex code symbols; --no-symbols rebuilds the domain graph only
 
 ### graph push options
 
 **--ref** *string*
 : The artifact to push to, as \<registry\>/\<repository\>:\<tag\> (required; never derived); with --table, a \<registry\>/\<repository\> defaulting to ghcr.io/egladman/magus-embed
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Rebuild the graph before pushing instead of exporting what is cached
 
-**--table**
+**--[no-]table** (default: off)
 : Publish the embedding table from the cache instead of the graph, tagged with its pin, write-once
 
 **--username** *string*
@@ -88,7 +88,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 **--ref** *string*
 : The artifact to pull (default: derived from the repository's origin remote); with --table, a \<registry\>/\<repository\> defaulting to ghcr.io/egladman/magus-embed
 
-**--table**
+**--[no-]table** (default: off)
 : Fetch the embedding table the binary pins into the cache instead of the graph
 
 ### graph deps options
@@ -102,7 +102,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 **--target** *string*
 : Target whose duration history annotates nodes (default: build)
 
-**--upstream**
+**--[no-]upstream** (default: off)
 : Show dependents instead of dependencies
 
 ### graph export options
@@ -110,37 +110,34 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 **--budget** *int* (default: 50)
 : Node budget for --select (how many nodes the neighborhood may collect)
 
-**--follow**
+**--[no-]follow** (default: off)
 : With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)
 
-**--global**
+**--[no-]global** (default: off)
 : Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace
 
-**--open**
+**--[no-]open** (default: off)
 : Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine
 
-**--print**
+**--[no-]print** (default: off)
 : With --open: print the explorer URL to stdout instead of launching a browser
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Force a full graph rebuild before exporting
 
-**--reproducible**
+**--[no-]reproducible** (default: off)
 : Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes
 
 **--select** *string*
 : Export only the neighborhood of a query (same grammar as magus query); required for -o dot
 
-**--serve**
+**--[no-]serve** (default: off)
 : With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)
 
-**--static**
-: Deprecated alias for --reproducible
-
-**--symbols** *magus diff --baseline*
+**--[no-]symbols** (default: off)
 : Include every indexed code symbol, which the whole-graph export leaves out; a magus diff --baseline needs them
 
-**--targets**
+**--[no-]targets** (default: off)
 : With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it
 
 **--url** *string* (default: https://eli.gladman.cc/magus/console/graph/)
@@ -148,24 +145,24 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 
 ### graph stats options
 
-**--global**
+**--[no-]global** (default: off)
 : Union the workspaces registered in config (knowledge.workspaces) before computing stats
 
 **--kind** *string*
 : Scope every section to one node kind (spell, target, doc, ...)
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Force a full graph rebuild first
 
-**--symbols**
+**--[no-]symbols** (default: off)
 : Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph
 
 ### graph diff options
 
-**--global**
+**--[no-]global** (default: off)
 : Diff the global (all-workspaces) graph; match this to how the baseline was exported
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Force a full graph rebuild of the current graph before diffing
 
 **--rev** *string*

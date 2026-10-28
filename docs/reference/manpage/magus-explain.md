@@ -33,10 +33,10 @@ changed are rebuilt; --refresh forces a full rebuild.
 
 ## Options
 
-**--global**
+**--[no-]global** (default: off)
 : Resolve across the workspaces registered in config (knowledge.workspaces)
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Force a full graph rebuild before explaining
 
 ## Examples

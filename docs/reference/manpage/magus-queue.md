@@ -124,10 +124,10 @@ apply report what would merge and call nothing on the provider.
 **--remote** *remote* (default: origin)
 : Name of the configured remote changes and the base are fetched from
 
-**--remote-cache-read**
+**--[no-]remote-cache-read** (default: off)
 : Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Read the mergequeue.plan/v1 document from stdin; required
 
 **--target** *target* (default: ci)
@@ -170,7 +170,7 @@ apply report what would merge and call nothing on the provider.
 **--interval** *duration* (default: 10s)
 : How often \<source\> is read while following it
 
-**--once**
+**--[no-]once** (default: off)
 : Apply what \<source\> holds now and stop, rather than following it until it is complete
 
 **--provider** *provider*
@@ -208,7 +208,7 @@ apply report what would merge and call nothing on the provider.
 **--change** *id*
 : id of the change, as the provider names it (github: the pull request number)
 
-**--dismiss**
+**--[no-]dismiss** (default: off)
 : Dismiss each approval that does not carry, naming what changed since it
 
 **--facts** *command*

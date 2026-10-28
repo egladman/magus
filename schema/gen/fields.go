@@ -698,15 +698,6 @@ var Fields = []fieldtype.Field{
 		Doc:      "The most proved claims any job may be given through its max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an error. Workspace only, like StaleAfter",
 	},
 	{
-		GoPath:   "Go.CacheBudgetMB",
-		YamlPath: "go.cache_budget_mb",
-		EnvVar:   "MAGUS_GO_CACHE_BUDGET_MB",
-		Flag:     fieldtype.FlagNames{Long: "go-cache-budget-mb"},
-		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_GO_CACHE_BUDGET_MB: CacheBudgetMB is the size in MB (binary) past which 'magus doctor' advises cleaning the Go build cache or the golangc...",
-		Doc:      "The size in MB (binary) past which `magus doctor` advises cleaning the Go build cache or the golangci-lint cache. Default 20480; 0 turns the check off",
-	},
-	{
 		GoPath:   "Disk.MinFreeMB",
 		YamlPath: "disk.min_free_mb",
 		EnvVar:   "MAGUS_DISK_MIN_FREE_MB",

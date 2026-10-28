@@ -55,19 +55,19 @@ a pattern no graph verb fits.
 **--dir** *string* (default: .)
 : Repo directory to install into (agent install)
 
-**--dry-run**
+**--[no-]dry-run** (default: off)
 : Print what would be written and removed without touching the filesystem (agent install)
 
-**--force**
+**--[no-]force** (default: off)
 : Overwrite existing installed skill files (agent install)
 
-**--global**
+**--[no-]global** (default: off)
 : Allow absolute destination paths in write mode (agent install)
 
 **--skill-form** *string* (default: both)
 : Skill form to install: both (default), short, or full (agent install)
 
-**--tar**
+**--[no-]tar** (default: off)
 : Stream a tar archive to stdout instead of writing files (agent install)
 
 ### agent harness verify options

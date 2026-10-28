@@ -35,10 +35,10 @@ The graph is cache-backed under \<cache\>/knowledge; --refresh forces a full reb
 
 ## Options
 
-**--global**
+**--[no-]global** (default: off)
 : Resolve endpoints across the workspaces registered in config (knowledge.workspaces)
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Force a full graph rebuild before pathfinding
 
 ## Examples

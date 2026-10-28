@@ -130,7 +130,7 @@ performance metric, and a performance metric gets gamed rather than met.
 
 ## Options
 
-**--ack**
+**--[no-]ack** (default: off)
 : Record that you have read the changed files at their current content; --impact reports what carries no such record
 
 **--baseline** *graph export --symbols -o json*
@@ -142,14 +142,11 @@ performance metric, and a performance metric gets gamed rather than met.
 **--conformance-min-share** *string*
 : The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conformance.gates.min_share
 
-**--generated**
+**--[no-]generated** (default: off)
 : Include declared target outputs, which are folded away by default
 
-**--impact**
+**--[no-]impact** (default: off)
 : Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted
-
-**--no-tui**
-: Print the report instead of opening the interactive viewer
 
 **--patch** *-*
 : Review a patch somebody handed you instead of the working tree; - reads stdin
@@ -163,10 +160,13 @@ performance metric, and a performance metric gets gamed rather than met.
 **--thread** *string*
 : Narrow the review to one pull request thread, by its id or the id of any comment in it, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it shows the conversation, the hunk and its reach
 
-**--unread**
+**--[no-]tui** (default: on)
+: Open the interactive viewer; --no-tui prints the report instead
+
+**--[no-]unread** (default: off)
 : Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread
 
-**--watch**
+**--[no-]watch** (default: off)
 : Re-read and re-render whenever the working tree changes
 
 ## Exit status

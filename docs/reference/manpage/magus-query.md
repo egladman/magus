@@ -52,37 +52,37 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 
 ## Options
 
-**--attempts**
+**--[no-]attempts** (default: off)
 : output \<ref\>: list the ref's stored attempts (newest first)
 
 **--budget** *int*
 : Max nodes in the returned neighborhood (default 50)
 
-**--global**
+**--[no-]global** (default: off)
 : Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace
 
-**--identity**
+**--[no-]identity** (default: off)
 : output \<ref\>: show the run's identity (descriptor, lineage, cache key, component digests)
 
 **--kind** *string*
 : Restrict matches to these node kinds (comma-separated)
 
-**--open**
+**--[no-]open** (default: off)
 : output \<ref\>: open the captured output in the browser log viewer (delivered privately)
 
-**--print**
+**--[no-]print** (default: off)
 : With --open, print the viewer URL instead of launching a browser
 
-**--publish**
+**--[no-]publish** (default: off)
 : output \<ref\>: upload this run's output to the remote cache as a signed bundle
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Force a full graph rebuild before querying
 
-**--secrets**
+**--[no-]secrets** (default: off)
 : invocation \<id\>: list only the credential reads (reference and provider, never the value)
 
-**--stdin** *-o jsonl*
+**--[no-]stdin** (default: off)
 : output: print records -o jsonl wrote, from stdin; writes nothing
 
 **--url** *string* (default: https://eli.gladman.cc/magus/console/logs/)

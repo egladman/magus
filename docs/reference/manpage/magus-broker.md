@@ -63,7 +63,7 @@ the next one.
 
 ### broker stop options
 
-**--services**
+**--[no-]services** (default: off)
 : Stop the broker's hosted services, leaving the broker running
 
 ## Subcommands

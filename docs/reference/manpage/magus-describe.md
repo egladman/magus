@@ -38,34 +38,37 @@ step at a time.
 ### describe target options
 
 **--against** *ref*
-: With --cache: diff the live key inputs against the stored lines behind an output ref
+: With --cache-key: diff the live key inputs against the stored lines behind an output ref
 
 **--cache**
+: Same as --cache-key
+
+**--[no-]cache-key** (default: off)
 : Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run
+
+**--[no-]default-charms** (default: on)
+: With --cache-key: key with magus.yaml default_charms; --no-default-charms matches a run made without them (CI)
 
 **-e**
 : Short for --explain
 
-**--explain**
+**--[no-]explain** (default: off)
 : For a ref with charms: show the per-charm argv trace (base then each charm)
 
-**--inputs**
-: With --cache: list every key input line, so you can confirm a declared file was actually hashed
-
-**--no-default-charms**
-: With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)
+**--[no-]inputs** (default: off)
+: With --cache-key: list every key input line, so you can confirm a declared file was actually hashed
 
 ### describe projects options
 
 **-e**
 : Short for --evaluated
 
-**--evaluated**
+**--[no-]evaluated** (default: off)
 : Print workspace-rooted globs, effective claims, and per-target policies
 
 ### describe spells options
 
-**--versions**
+**--[no-]versions** (default: off)
 : Probe each spell's tools and report the versions that would key a run
 
 ## Subcommands

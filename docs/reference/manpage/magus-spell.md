@@ -89,7 +89,7 @@ its owner makes it public in the package settings; magus never changes it.
 
 ### spell lock options
 
-**--update**
+**--[no-]update** (default: off)
 : Ask the registry what each declared tag names now, and rewrite magus.lock
 
 ## Subcommands

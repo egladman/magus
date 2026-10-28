@@ -99,22 +99,22 @@ base in yourself on the others, then run resolve.
 **--exclude** *pattern*
 : Leave out paths this write-path pattern covers; repeatable or comma-separated
 
-**--include-generated**
+**--[no-]include-generated** (default: off)
 : Also list declared outputs a dirty source in this change explains
 
-**--include-held**
+**--[no-]include-held** (default: off)
 : Also list paths another live job in this checkout writes
 
-**--include-staged**
+**--[no-]include-staged** (default: off)
 : Also list paths whose whole change is already staged; git only
 
-**--include-unclaimed**
+**--[no-]include-unclaimed** (default: off)
 : Also list paths no target declares, and the ones magus maintains itself
 
-**--include-unexplained**
+**--[no-]include-unexplained** (default: off)
 : Also list declared outputs no source change here explains
 
-**--include-untracked**
+**--[no-]include-untracked** (default: off)
 : Also list untracked files; refused on jj, which has none
 
 **--project** *project*
@@ -127,7 +127,7 @@ base in yourself on the others, then run resolve.
 
 ### vcs checkpoint options
 
-**--preserve**
+**--[no-]preserve** (default: off)
 : Also capture the uncommitted work and print a handle that restores it
 
 ## Subcommands

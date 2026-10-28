@@ -57,7 +57,7 @@ Fetch reference for platform into a layout at layout. A name@sha256:<hex> refere
 
 ### push
 
-Push the layout's image, its blobs and its referrers to repository, then tag it with each of tags; empty tags pushes by digest only.
+Push the layout's image, its blobs and its referrers to repository, then tag it with each of tags; empty tags pushes by digest only. On a registry without the Referrers API each referrer is also listed in the subject's sha256-<hex> tag index.
 
 **Signature:** `image\push(layout, repository, tags, [auth]) -> Pushed` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
@@ -70,11 +70,11 @@ Push the layout's image, its blobs and its referrers to repository, then tag it 
 
 **Returns:** map[string]any
 
-### writeSbom
+### writeSBOM
 
 Write an SPDX 2.3 document naming the layout's image by digest to path.
 
-**Signature:** `image\writeSbom(layout, path) -> Document` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\writeSBOM(layout, path) -> Document` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -85,7 +85,7 @@ Write an SPDX 2.3 document naming the layout's image by digest to path.
 
 ### writeProvenance
 
-Write an in-toto Statement v1 with SLSA v1 provenance for the layout's image to path. The digest of each base it was assembled over joins the materials.
+Write an in-toto Statement v1 with SLSA v1 provenance for the layout's image to path. The digest of each base it was assembled over joins the dependencies.
 
 **Signature:** `image\writeProvenance(layout, provenance, path) -> Document` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
@@ -113,21 +113,22 @@ Write a new layout at layout holding subject's image and one OCI 1.1 referrer pe
 
 ### open
 
-Read the layout at layout back: its image, its referrers, and for a single-platform image its platform, config and layers.
+Read the layout at layout back: the image whose org.opencontainers.image.ref.name is name (the only image when name is empty), the referrers whose subject it is, and for a single-platform image whose index.json entry names its platform, that platform, config and layers.
 
-**Signature:** `image\open(layout) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\open(layout, [name]) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `layout`  | `string` |          |             |
+| `name`    | `string` | yes      |             |
 
 **Returns:** map[string]any
 
-### platform
+### parsePlatform
 
-Parse "linux/amd64" or "linux/arm64/v8" into a Platform.
+Parse "linux/amd64", "linux/amd64/v3" or "linux/arm64/v8" into a Platform.
 
-**Signature:** `image\platform(spec) -> Platform` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\parsePlatform(spec) -> Platform` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -135,11 +136,11 @@ Parse "linux/amd64" or "linux/arm64/v8" into a Platform.
 
 **Returns:** map[string]any
 
-### platforms
+### parsePlatforms
 
 Parse each of specs into a Platform, refusing two that name the same platform: the set a multi-arch build fans out over.
 
-**Signature:** `image\platforms(specs) -> [Platform]` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+**Signature:** `image\parsePlatforms(specs) -> [Platform]` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 
 | Parameter | Type       | Optional | Description |
 | --------- | ---------- | -------- | ----------- |
@@ -149,7 +150,7 @@ Parse each of specs into a Platform, refusing two that name the same platform: t
 
 ### goEnv
 
-The GOOS and GOARCH that make go build target platform, for a build target's ctx.withEnv.
+The GOOS, GOARCH and, for an amd64 variant, GOAMD64 that make go build target platform, for a build target's ctx.withEnv.
 
 **Signature:** `image\goEnv(platform) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
 

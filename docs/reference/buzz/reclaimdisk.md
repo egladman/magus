@@ -2,13 +2,13 @@
 title: reclaimdisk module
 generated_from: reference/buzz/
 aliases: [modules/reclaimdisk]
-description: "Plan and take back the disk a repository's git worktrees, merged agent branches and Go build cache hold: never a dirty, unpushed, leased, busy or locked worktree, and the cache ..."
+description: "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; trimCache trims a cache direct..."
 tags: [reclaimdisk, module, stdlib, magusfile]
 ---
 
 # reclaimdisk
 
-Plan and take back the disk a repository's git worktrees, merged agent branches and Go build cache hold: never a dirty, unpushed, leased, busy or locked worktree, and the cache trimmed by entry age, never emptied.
+Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; trimCache trims a cache directory to a budget by file age, never emptying it.
 
 > **Naming convention:** import the module under its bare name (`import "reclaimdisk"`), reach members with a backslash, and call methods in `camelCase`: `reclaimdisk\someMethod`.
 
@@ -211,6 +211,8 @@ guardLine is the shell line the guard judges for one removal: the same argv vcs\
 
 ### headline
 
+headline is the plan's one-line summary; trimmed, when not empty, is what a cache trim
+
 **Signature:** `reclaimdisk\headline(items, applied, trimmed) -> str`
 
 | Parameter | Type  | Optional | Description |
@@ -277,28 +279,17 @@ apply removes the removable rows and returns the plan with each row's result. A 
 
 **Returns:** any
 
-### config
+### trimCache
 
-config is the effective magus config as `magus config view -o json` prints it.
+trimCache trims the cache named name at dir to trimMb MiB through fs\trimOldest, which
 
-**Signature:** `reclaimdisk\config(root, deadline) -> any`
-
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `root`     | `any` |          |             |
-| `deadline` | `any` |          |             |
-
-**Returns:** any
-
-### trimGoCache
-
-trimGoCache trims the Go build cache to go.cache_budget_mb by entry age through
-
-**Signature:** `reclaimdisk\trimGoCache(root, deadline) -> str`
+**Signature:** `reclaimdisk\trimCache(name, dir, trimMb, deadline) -> str`
 
 | Parameter  | Type  | Optional | Description |
 | ---------- | ----- | -------- | ----------- |
-| `root`     | `any` |          |             |
+| `name`     | `any` |          |             |
+| `dir`      | `any` |          |             |
+| `trimMb`   | `any` |          |             |
 | `deadline` | `any` |          |             |
 
 **Returns:** any

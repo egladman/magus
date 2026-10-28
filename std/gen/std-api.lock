@@ -100,12 +100,12 @@ image.assembleIndex
 image.attachReferrers
 image.goEnv
 image.open
-image.platform
-image.platforms
+image.parsePlatform
+image.parsePlatforms
 image.pull
 image.push
 image.writeProvenance
-image.writeSbom
+image.writeSBOM
 log.at
 log.debug
 log.error

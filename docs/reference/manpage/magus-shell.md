@@ -89,7 +89,7 @@ not block every tool call.
 **--agent-name** *string*
 : Name of the agent host this invocation came from, required with --transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name
 
-**--call-background**
+**--[no-]call-background** (default: off)
 : The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
 
 **--call-timeout-ms** *int*
@@ -101,16 +101,16 @@ not block every tool call.
 **--lease** *string*
 : The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE
 
-**--message**
+**--[no-]message** (default: off)
 : Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass
 
-**--observe**
+**--[no-]observe** (default: off)
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 
-**--path**
+**--[no-]path** (default: off)
 : Judge the input as a file path an edit is about to write, not as a shell command
 
-**--renders-ask**
+**--[no-]renders-ask** (default: off)
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 
 **--session** *string*

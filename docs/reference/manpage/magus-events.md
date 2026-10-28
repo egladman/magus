@@ -39,7 +39,7 @@ schema.
 **-f**
 : Short for --follow
 
-**--follow**
+**--[no-]follow** (default: off)
 : Keep streaming as events occur instead of exiting after the replay
 
 **--interval** *duration* (default: 250ms)

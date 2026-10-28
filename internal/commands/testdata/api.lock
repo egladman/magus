@@ -25,7 +25,6 @@ config disk.growth_mb_per_hour
 config disk.min_free_mb
 config disk.sample_every
 config dry_run
-config go.cache_budget_mb
 config hints.enabled
 config history_path
 config jobs.default_timeout

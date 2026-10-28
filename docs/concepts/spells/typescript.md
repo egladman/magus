@@ -325,12 +325,6 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-## scip
-
-The indexer is a PATH binary (install it with mise, not as a project dep), so it is forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
-
-**Command:** `scip-typescript index --output $MAGUS_SYMBOL_INDEX`
-
 ## tsc
 
 **Command:** `pnpm exec tsc`

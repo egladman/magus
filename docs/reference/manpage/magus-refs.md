@@ -58,28 +58,28 @@ nothing. The inverse is the same command with the two names swapped.
 
 ## Options
 
-**--definition**
+**--[no-]definition** (default: off)
 : Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed
+
+**--[no-]generated** (default: on)
+: In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely
 
 **--limit** *| head*
 : Print at most this many --text matches, then say how many more there were (0 for all). What | head would do, without losing the count or the exit code
 
-**--no-generated** *string*
-: In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match
-
-**--occurrences**
+**--[no-]occurrences** (default: off)
 : Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Re-ingest the SCIP index before answering
 
 **--rename** *string*
 : Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is
 
-**--source**
+**--[no-]source** (default: off)
 : With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n
 
-**--text**
+**--[no-]text** (default: off)
 : Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace
 
 ## Examples

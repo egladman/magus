@@ -13,7 +13,9 @@ import (
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
 // with its encoder. A test populates each and asserts the round trip loses nothing.
 var RuntimeBoundaryTypes = []ffi.BoundaryType{
-	{Name: "Added", Zero: types.ImageAdded{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageAdded(v.(types.ImageAdded), enums) }},
+	{Name: "AddedLayer", Zero: types.ImageAddedLayer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectImageAddedLayer(v.(types.ImageAddedLayer), enums)
+	}},
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.AffinityOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffinityOutput(v.(types.AffinityOutput)) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},

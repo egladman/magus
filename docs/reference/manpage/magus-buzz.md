@@ -58,7 +58,10 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
 **-C** *dir*
 : Change to dir before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag
 
-**--check**
+**--[no-]autoload** (default: on)
+: Execute the magusfile when the REPL starts; --no-autoload starts without it
+
+**--[no-]check** (default: off)
 : Parse and type-check the named files without running them; report every diagnostic
 
 **--coverprofile** *-t*
@@ -67,16 +70,13 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
 **-e** *code*
 : Execute code given on the command line instead of a file
 
-**--embedded**
+**--[no-]embedded** (default: off)
 : Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine
 
-**--no-autoload**
-: Start the REPL without executing the magusfile
-
-**--profile**
+**--[no-]profile** (default: off)
 : Print where compile and import time went, after the script runs
 
-**--record** *magus query output \<ref\>*
+**--[no-]record** (default: off)
 : Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output \<ref\> reopens it)
 
 **-t**

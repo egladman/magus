@@ -814,6 +814,12 @@ func decodeSandboxCache(v vm.Value, path string) (spells.SandboxCache, error) {
 				return out, err
 			}
 			out.Skip = strsSkip
+		case "trimMb":
+			nTrimMB, err := decodeInt(item, path+".trimMb")
+			if err != nil {
+				return out, err
+			}
+			out.TrimMB = int(nTrimMB)
 		default:
 			return out, unknownMember(path, "SandboxCache", key)
 		}
@@ -3816,6 +3822,18 @@ func decodeImagePlatform(v vm.Value, path string) (types.ImagePlatform, error) {
 				return out, err
 			}
 			out.Variant = types.ImageVariant(sVariant)
+		case "osVersion":
+			sOSVersion, err := decodeString(item, path+".osVersion")
+			if err != nil {
+				return out, err
+			}
+			out.OSVersion = sOSVersion
+		case "osFeatures":
+			strsOSFeatures, err := decodeStringList(item, path+".osFeatures")
+			if err != nil {
+				return out, err
+			}
+			out.OSFeatures = strsOSFeatures
 		default:
 			return out, unknownMember(path, "Platform", key)
 		}
@@ -3877,17 +3895,17 @@ func decodeImageDescriptor(v vm.Value, path string) (types.ImageDescriptor, erro
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "mediaType":
-			sMediaType, err := decodeEnum(item, path+".mediaType", "MediaType", enumMediaTypeValues)
+			sMediaType, err := decodeString(item, path+".mediaType")
 			if err != nil {
 				return out, err
 			}
-			out.MediaType = types.ImageMediaType(sMediaType)
+			out.MediaType = sMediaType
 		case "artifactType":
-			sArtifactType, err := decodeEnum(item, path+".artifactType", "MediaType", enumMediaTypeValues)
+			sArtifactType, err := decodeString(item, path+".artifactType")
 			if err != nil {
 				return out, err
 			}
-			out.ArtifactType = types.ImageMediaType(sArtifactType)
+			out.ArtifactType = sArtifactType
 		case "digest":
 			xDigest, err := decodeImageDigest(item, path+".digest")
 			if err != nil {
@@ -4015,7 +4033,7 @@ func decodeImageTree(v vm.Value, path string) (types.ImageTree, error) {
 	}
 	hasSource := false
 	hasPath := false
-	hasModes := false
+	hasModePolicy := false
 	hasSymlinks := false
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
@@ -4046,13 +4064,13 @@ func decodeImageTree(v vm.Value, path string) (types.ImageTree, error) {
 				return out, err
 			}
 			out.Exclude = strsExclude
-		case "modes":
-			hasModes = true
-			sModes, err := decodeEnum(item, path+".modes", "ModePolicy", enumModePolicyValues)
+		case "modePolicy":
+			hasModePolicy = true
+			sModePolicy, err := decodeEnum(item, path+".modePolicy", "ModePolicy", enumModePolicyValues)
 			if err != nil {
 				return out, err
 			}
-			out.Modes = types.ImageModePolicy(sModes)
+			out.ModePolicy = types.ImageModePolicy(sModePolicy)
 		case "symlinks":
 			hasSymlinks = true
 			sSymlinks, err := decodeEnum(item, path+".symlinks", "SymlinkPolicy", enumSymlinkPolicyValues)
@@ -4082,8 +4100,8 @@ func decodeImageTree(v vm.Value, path string) (types.ImageTree, error) {
 	if !hasPath {
 		return out, missingMember(path, "Tree", "path")
 	}
-	if !hasModes {
-		return out, missingMember(path, "Tree", "modes")
+	if !hasModePolicy {
+		return out, missingMember(path, "Tree", "modePolicy")
 	}
 	if !hasSymlinks {
 		return out, missingMember(path, "Tree", "symlinks")
@@ -4508,16 +4526,16 @@ func decodeImageRegistryAuth(v vm.Value, path string) (types.ImageRegistryAuth, 
 	return out, nil
 }
 
-// DecodeImageMaterial decodes a Buzz Material, an object instance or a map, into a types.ImageMaterial.
-func DecodeImageMaterial(v vm.Value) (types.ImageMaterial, error) {
-	return decodeImageMaterial(v, "material")
+// DecodeImageDependency decodes a Buzz Dependency, an object instance or a map, into a types.ImageDependency.
+func DecodeImageDependency(v vm.Value) (types.ImageDependency, error) {
+	return decodeImageDependency(v, "dependency")
 }
 
-func decodeImageMaterial(v vm.Value, path string) (types.ImageMaterial, error) {
-	var out types.ImageMaterial
+func decodeImageDependency(v vm.Value, path string) (types.ImageDependency, error) {
+	var out types.ImageDependency
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "Material", v)
+		return out, mismatch(path, "Dependency", v)
 	}
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
@@ -4535,7 +4553,7 @@ func decodeImageMaterial(v vm.Value, path string) (types.ImageMaterial, error) {
 			}
 			out.Digest = xDigest
 		default:
-			return out, unknownMember(path, "Material", key)
+			return out, unknownMember(path, "Dependency", key)
 		}
 	}
 	return out, nil
@@ -4552,14 +4570,14 @@ func decodeImageProvenance(v vm.Value, path string) (types.ImageProvenance, erro
 	if !ok {
 		return out, mismatch(path, "Provenance", v)
 	}
-	hasBuilderId := false
+	hasBuilderID := false
 	hasSourceRevision := false
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
-		case "builderId":
-			hasBuilderId = true
-			sBuilderID, err := decodeString(item, path+".builderId")
+		case "builderID":
+			hasBuilderID = true
+			sBuilderID, err := decodeString(item, path+".builderID")
 			if err != nil {
 				return out, err
 			}
@@ -4571,28 +4589,28 @@ func decodeImageProvenance(v vm.Value, path string) (types.ImageProvenance, erro
 				return out, err
 			}
 			out.SourceRevision = sSourceRevision
-		case "materials":
-			listMaterials, err := decodeList(item, path+".materials", "[Material]")
+		case "dependencies":
+			listDependencies, err := decodeList(item, path+".dependencies", "[Dependency]")
 			if err != nil {
 				return out, err
 			}
-			if len(listMaterials) > 0 {
-				itemsMaterials := make([]types.ImageMaterial, len(listMaterials))
-				for indexMaterials, itemMaterials := range listMaterials {
-					xMaterialsItem, err := decodeImageMaterial(itemMaterials, fmt.Sprintf("%s[%d]", path+".materials", indexMaterials))
+			if len(listDependencies) > 0 {
+				itemsDependencies := make([]types.ImageDependency, len(listDependencies))
+				for indexDependencies, itemDependencies := range listDependencies {
+					xDependenciesItem, err := decodeImageDependency(itemDependencies, fmt.Sprintf("%s[%d]", path+".dependencies", indexDependencies))
 					if err != nil {
 						return out, err
 					}
-					itemsMaterials[indexMaterials] = xMaterialsItem
+					itemsDependencies[indexDependencies] = xDependenciesItem
 				}
-				out.Materials = itemsMaterials
+				out.Dependencies = itemsDependencies
 			}
 		default:
 			return out, unknownMember(path, "Provenance", key)
 		}
 	}
-	if !hasBuilderId {
-		return out, missingMember(path, "Provenance", "builderId")
+	if !hasBuilderID {
+		return out, missingMember(path, "Provenance", "builderID")
 	}
 	if !hasSourceRevision {
 		return out, missingMember(path, "Provenance", "sourceRevision")
@@ -5878,7 +5896,6 @@ var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumEdgeDirectionValues = []string{"", "out", "in"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}
-var enumMediaTypeValues = []string{"", "application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.config.v1+json", "application/vnd.oci.image.layer.v1.tar", "application/vnd.oci.image.layer.v1.tar+gzip", "application/vnd.oci.image.layer.v1.tar+zstd", "application/vnd.oci.empty.v1+json", "application/spdx+json", "application/vnd.in-toto+json"}
 var enumModePolicyValues = []string{"", "fixed", "executable-bit"}
 var enumOSValues = []string{"", "linux"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
@@ -5888,7 +5905,7 @@ var enumSkillFormValues = []string{"", "both", "short", "full"}
 var enumSymbolFormatValues = []string{"", "scip"}
 var enumSymlinkPolicyValues = []string{"", "refuse", "keep", "follow"}
 var enumToolCapabilityValues = []string{"", "runs", "reads", "writes", "spawns", "network", "inert"}
-var enumVariantValues = []string{"", "v8"}
+var enumVariantValues = []string{"", "v1", "v2", "v3", "v8"}
 var enumVersionComponentValues = []string{"", "major", "minor", "patch"}
 
 // mismatch names an object by its type, which says more than "object".

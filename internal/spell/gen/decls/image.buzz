@@ -19,6 +19,9 @@ export enum<str> Architecture {
 
 export enum<str> Variant {
     none = "",
+    v1 = "v1",
+    v2 = "v2",
+    v3 = "v3",
     v8 = "v8",
 }
 
@@ -36,7 +39,6 @@ export enum<str> SymlinkPolicy {
 }
 
 export enum<str> MediaType {
-    none = "",
     manifest = "application/vnd.oci.image.manifest.v1+json",
     index = "application/vnd.oci.image.index.v1+json",
     config = "application/vnd.oci.image.config.v1+json",
@@ -52,6 +54,8 @@ export object Platform {
     os: OS = OS.none,
     architecture: Architecture = Architecture.none,
     variant: Variant = Variant.none,
+    osVersion: str = "",
+    osFeatures: [str] = [],
 }
 
 export object File {
@@ -67,7 +71,7 @@ export object Tree {
     path: str = "",
     include: [str] = [],
     exclude: [str] = [],
-    modes: ModePolicy = ModePolicy.none,
+    modePolicy: ModePolicy = ModePolicy.none,
     symlinks: SymlinkPolicy = SymlinkPolicy.none,
     uid: int = 0,
     gid: int = 0,
@@ -126,16 +130,16 @@ export object Digest {
 }
 
 export object Descriptor {
-    mediaType: MediaType = MediaType.none,
-    artifactType: MediaType = MediaType.none,
+    mediaType: str = "",
+    artifactType: str = "",
     digest: Digest = Digest{},
     size: int = 0,
     platform: Platform? = null,
     annotations: {str: str} = {},
 }
 
-export object Added {
-    layer: Descriptor = Descriptor{},
+export object AddedLayer {
+    descriptor: Descriptor = Descriptor{},
     diffID: Digest = Digest{},
     files: int = 0,
     symlinks: int = 0,
@@ -149,7 +153,7 @@ export object Layout {
     platform: Platform? = null,
     config: Descriptor? = null,
     layers: [Descriptor] = [],
-    added: Added? = null,
+    added: AddedLayer? = null,
     created: str = "",
 }
 
@@ -174,25 +178,25 @@ export object Pushed {
     reference: str = "",
 }
 
-export object Material {
+export object Dependency {
     uri: str = "",
     digest: Digest = Digest{},
 }
 
 export object Provenance {
-    builderId: str = "",
+    builderID: str = "",
     sourceRevision: str = "",
-    materials: [Material] = [],
+    dependencies: [Dependency] = [],
 }
 
 export extern fun assemble(spec: Spec, layout: str) > Layout !> any;
 export extern fun assembleIndex(layouts: [str], layout: str) > Layout !> any;
 export extern fun attachReferrers(subject: str, documents: [Document], layout: str) > Layout !> any;
 export extern fun goEnv(platform: Platform) > {str: str} !> any;
-export extern fun open(layout: str) > Layout !> any;
-export extern fun platform(spec: str) > Platform !> any;
-export extern fun platforms(specs: [str]) > [Platform] !> any;
+export extern fun open(layout: str, name: str = "") > Layout !> any;
+export extern fun parsePlatform(spec: str) > Platform !> any;
+export extern fun parsePlatforms(specs: [str]) > [Platform] !> any;
 export extern fun pull(reference: str, platform: Platform, layout: str, auth: RegistryAuth? = null) > Layout !> any;
 export extern fun push(layout: str, repository: str, tags: [str], auth: RegistryAuth? = null) > Pushed !> any;
+export extern fun writeSBOM(layout: str, path: str) > Document !> any;
 export extern fun writeProvenance(layout: str, provenance: Provenance, path: str) > Document !> any;
-export extern fun writeSbom(layout: str, path: str) > Document !> any;

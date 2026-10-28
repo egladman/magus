@@ -37,10 +37,10 @@ trigger a full initial build in the downstream magus affected --stdin.
 **--ignore** *string*
 : Ignore pattern; repeatable. Form: type=\<glob|regex|literal\>,pattern=\<value\>
 
-**--initial** (default: true)
+**--[no-]initial** (default: on)
 : Emit an --all batch on startup before watching
 
-**--null**
+**--[no-]null** (default: off)
 : NUL-separate paths; double-NUL between batches
 
 ## Examples
