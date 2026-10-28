@@ -138,6 +138,18 @@ func (s *goindexSuite) TestSignaturesRenderAsScipGoDid() {
 	s.Equal("type File struct {\n    Name string\n}", byKey["gomod example.com/m `example.com/m/b`/File#"])
 }
 
+// Another package's type is spelled by its package name, not its import path: the
+// graph's readers match a parameter's type against interface names that way.
+func (s *goindexSuite) TestSignaturesNameAnotherPackageByItsName() {
+	s.write("b/wrap.go", "package b\n\nimport \"example.com/m/a\"\n\nfunc Wrap(r a.Reader) a.Reader { return r }\n")
+	_, pack := s.update(s.indexer())
+	byKey := map[string]string{}
+	for _, ks := range symbols.ParseDecoded(s.T().Context(), s.index(pack), ".", "go") {
+		byKey[ks.Key] = ks.Signature
+	}
+	s.Equal("func Wrap(r a.Reader) a.Reader", byKey["gomod example.com/m `example.com/m/b`/Wrap()."])
+}
+
 func (s *goindexSuite) TestImplementationsCrossPackages() {
 	_, pack := s.update(s.indexer())
 	for _, ks := range symbols.ParseDecoded(s.T().Context(), s.index(pack), ".", "go") {

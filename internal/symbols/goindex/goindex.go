@@ -27,11 +27,11 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "goindex 2"
+const formatVersion = "goindex 3"
 
-// Scheme is the SCIP scheme of every symbol the indexer names. Keys drop it with the
+// scheme is the SCIP scheme of every symbol the indexer names. Keys drop it with the
 // version, so a key matches the one scip-go named the same symbol by.
-const Scheme = "magus"
+const scheme = "magus"
 
 // workspaceVersion stands in for the workspace module's version in every symbol: a
 // revision there would rename every symbol on every commit and stop shards built at two
@@ -424,7 +424,19 @@ func newWalker(root string, p *packages.Package, mods *moduleTable) *walker {
 		syms:    map[types.Object]string{},
 		owners:  map[*types.Var][]*scip.Descriptor{},
 		scanned: map[*types.Package]bool{},
-		qual:    types.RelativeTo(p.Types),
+		qual:    packageNameQualifier(p.Types),
+	}
+}
+
+// packageNameQualifier spells another package's type by its package name, cache.Limiter
+// rather than its import path, as scip-go did: the graph's signature readers match a
+// parameter's type against the interfaces a file names by that spelling.
+func packageNameQualifier(self *types.Package) types.Qualifier {
+	return func(p *types.Package) string {
+		if p == self {
+			return ""
+		}
+		return p.Name()
 	}
 }
 
@@ -619,7 +631,7 @@ func (w *walker) format(p *types.Package, descs []*scip.Descriptor) string {
 	name, version := w.mods.resolve(p.Path())
 	all := append([]*scip.Descriptor{{Name: p.Path(), Suffix: scip.Descriptor_Namespace}}, descs...)
 	return scip.VerboseSymbolFormatter.FormatSymbol(&scip.Symbol{
-		Scheme:      Scheme,
+		Scheme:      scheme,
 		Package:     &scip.Package{Manager: "gomod", Name: name, Version: version},
 		Descriptors: all,
 	})
