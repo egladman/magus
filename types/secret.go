@@ -1,9 +1,6 @@
 package types
 
 import (
-	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"strings"
 )
@@ -18,7 +15,9 @@ const secretMask = "***"
 // fails loudly; no exported field, so gob refuses it.
 //
 // The plaintext sits behind a pointer because fmt calls no method on an unexported field
-// and prints a pointer there as an address. So == compares identity: compare by Reveal.
+// and prints a pointer there as an address. The same holds for the verbs String and
+// GoString do not serve (%d, %p, %T and the rest): they print the struct, so an address.
+// So == compares identity: compare by Reveal.
 type Secret struct{ p *string }
 
 // NewSecret wraps plaintext. A zero Secret is an empty credential.
@@ -44,22 +43,15 @@ func (v Secret) Len() int {
 	return len(*v.p)
 }
 
-// String masks fmt's %s and %v and any direct String() call.
+// String masks %v, %+v, %s, %q, %x and %X under any flag or width. %x and %X
+// print the mask in hex.
 func (Secret) String() string { return secretMask }
 
 // GoString masks %#v, which String does not reach.
 func (Secret) GoString() string { return secretMask }
 
-// Format makes every fmt verb print the mask, including %q and %x, which String alone
-// does not reach.
-func (Secret) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, secretMask) }
-
-// LogValue masks in slog, before any handler formats it.
-func (Secret) LogValue() slog.Value { return slog.StringValue(secretMask) }
-
 // MarshalText masks every encoder that honors encoding.TextMarshaler: encoding/json,
-// yaml.v3 and go-toml all do. A separate MarshalJSON was tried and removed because no
-// test could tell it from this one.
+// yaml.v3, go-toml and slog's JSON and text handlers all do.
 func (Secret) MarshalText() ([]byte, error) { return []byte(secretMask), nil }
 
 // SecretGrant declares one credential and the single destination it may be sent to. It
