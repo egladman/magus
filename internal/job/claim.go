@@ -235,7 +235,8 @@ func driverPattern(p string) string {
 // attention request asks the holder to release what it does not edit (see requestRelease).
 //
 // Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
-// sharedCheckoutProblems and the overlap report already watch; a holder that exited, whose
+// sharedCheckoutProblems and the overlap report already watch; a generated output
+// ([HeldApart]); a holder that exited, whose
 // editing is over (see [Editing]); a holder blocked on
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
 // no diff driver, for which depends_on is the only move. An integration row is
@@ -287,7 +288,8 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 			if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
 				continue
 			}
-			if !types.PathsIntersect(mine, theirs) || mergeLeftAlone(ctx, store, rows, holder, mine) {
+			if !types.PathsIntersect(mine, theirs) || mergeLeftAlone(ctx, store, rows, holder, mine) ||
+				HeldApart(WorkingCheckout(here, row), holder, store.workspaceProjects, mine, theirs) {
 				continue
 			}
 			touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)

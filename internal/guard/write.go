@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -313,12 +314,18 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	if len(live) == 0 && !enrolled {
 		return adviseUnleasedWorker(actingLease)
 	}
+	owners := contendingOwners(owningLeases(leases, live), rel, checkout, sync.OnceValue(func() []*types.Project {
+		repo, err := deps.inspect(ctx, checkout)
+		if err != nil || repo == nil {
+			return nil
+		}
+		return repo.All()
+	}))
 
 	if enrolled {
 		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
 			return writeGrade{Decision: decisionDeny, Reason: reason}
 		}
-		owners := owningLeases(leases, live)
 		// A dead holder owns nothing against me: its path is the auto-claim's to grant.
 		dead := deadOwners(location, owners, rel, me.ID, time.Now())
 		owners = slices.DeleteFunc(owners, func(u types.Job) bool {
@@ -358,7 +365,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose row in the store is simply stale.
-	owner, owned, err := findOwner(owningLeases(leases, live), rel, "")
+	owner, owned, err := findOwner(owners, rel, "")
 	if err != nil {
 		return adviseMalformedDeclaration(err)
 	}
@@ -745,6 +752,15 @@ func owningLeases(rows, live []types.Job) []types.Job {
 	return slices.DeleteFunc(slices.Clone(live), func(u types.Job) bool {
 		_, blocked := types.JobBlockedOn(rows, u)
 		return blocked
+	})
+}
+
+// contendingOwners is owners without each whose hold on rel [job.HeldApart] frees for a
+// writer in checkout.
+func contendingOwners(owners []types.Job, rel, checkout string, projects func() []*types.Project) []types.Job {
+	return slices.DeleteFunc(slices.Clone(owners), func(u types.Job) bool {
+		decl, ok, _ := declarationCovering(u.HardPaths(), rel)
+		return ok && job.HeldApart(checkout, u, projects, rel, decl)
 	})
 }
 

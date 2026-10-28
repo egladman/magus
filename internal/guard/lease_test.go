@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // writeRun plants one invocation log: a started event carrying argv, with the file's
@@ -3229,40 +3230,90 @@ func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
 	}
 }
 
-// An output the VCS ignores is a file of each checkout, never of the change: a lease taken
-// in another checkout regenerates its own copy, so only a holder in the same checkout, or
-// any holder of an output the change commits, makes the run wait.
-func TestWorkerRegenerateWaitsOnlyForAHolderOfTheSameCopy(t *testing.T) {
-	deps := regeneratingWorkspace(t)
-	elsewhere := t.TempDir()
-	for _, tt := range []struct {
-		name     string
-		checkout func(root string) string
-		ignore   string
-		want     string
-	}{
-		{"an ignored output regenerated in another checkout", func(string) string { return elsewhere }, "testdata/api.lock\n", ""},
-		{"an ignored output regenerated in the same checkout", func(root string) string { return root }, "testdata/api.lock\n",
-			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; magus filed an attention row for a/first, the root of lease a/first's job tree, since lease z/flag waits only on a job below it; leave the output and carry on."},
-		{"a committed output regenerated in another checkout", func(string) string { return elsewhere }, "",
-			"magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; magus filed an attention row for a/first, the root of lease a/first's job tree, since lease z/flag waits only on a job below it; leave the output and carry on."},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			first, row := regeneratingLease("a/first"), regeneratingLease("z/flag")
-			ctx, root := fleetFixture(t)
-			first.CheckoutRoot, row.CheckoutRoot = tt.checkout(root), root
-			store := storeAt(ctx)
-			for _, r := range []types.Job{first, row} {
-				_, err := store.Update(ctx, r.ID, func(cur *types.Job) { *cur = r })
-				require.NoError(t, err)
-			}
-			require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(tt.ignore), 0o644))
-			out, err := exec.Command("git", "-C", root, "init", "-q").CombinedOutput()
-			require.NoError(t, err, "%s", out)
+type guardSuite struct {
+	suite.Suite
+}
 
-			assert.Equal(t, tt.want, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run api-generate:rw .").Say)
-		})
+func TestGuardSuite(t *testing.T) {
+	suite.Run(t, new(guardSuite))
+}
+
+const heldByFirst = "magus workspace: `api-generate:rw` regenerates `testdata/api.lock` held by live lease a/first; magus filed an attention row for a/first, the root of lease a/first's job tree, since lease z/flag waits only on a job below it; leave the output and carry on."
+
+// regenerateBeside runs z/flag's generator while a/first, declared before it, regenerates
+// the same output in the checkout checkout picks, in a repository ignoring ignore.
+func (s *guardSuite) regenerateBeside(checkout func(root string) string, ignore string) string {
+	t := s.T()
+	first, row := regeneratingLease("a/first"), regeneratingLease("z/flag")
+	ctx, root := fleetFixture(t)
+	first.CheckoutRoot, row.CheckoutRoot = checkout(root), root
+	store := storeAt(ctx)
+	for _, r := range []types.Job{first, row} {
+		_, err := store.Update(ctx, r.ID, func(cur *types.Job) { *cur = r })
+		s.Require().NoError(err)
 	}
+	s.Require().NoError(os.WriteFile(filepath.Join(root, ".gitignore"), []byte(ignore), 0o644))
+	out, err := exec.Command("git", "-C", root, "init", "-q").CombinedOutput()
+	s.Require().NoError(err, "%s", out)
+	return denyWorkerCheckOnly(ctx, regeneratingWorkspace(t), row.ID, "./magus run api-generate:rw .").Say
+}
+
+func (s *guardSuite) TestAnIgnoredOutputRegeneratedInAnotherCheckoutRuns() {
+	elsewhere := s.T().TempDir()
+	s.Empty(s.regenerateBeside(func(string) string { return elsewhere }, "testdata/api.lock\n"))
+}
+
+func (s *guardSuite) TestACommittedOutputRegeneratedInAnotherCheckoutRuns() {
+	elsewhere := s.T().TempDir()
+	s.Empty(s.regenerateBeside(func(string) string { return elsewhere }, ""),
+		"each branch regenerates its own copy, and integration regenerates once")
+}
+
+func (s *guardSuite) TestAnIgnoredOutputRegeneratedInTheSameCheckoutWaits() {
+	s.Equal(heldByFirst, s.regenerateBeside(func(root string) string { return root }, "testdata/api.lock\n"))
+}
+
+func (s *guardSuite) TestACommittedOutputRegeneratedInTheSameCheckoutWaits() {
+	s.Equal(heldByFirst, s.regenerateBeside(func(root string) string { return root }, ""))
+}
+
+// generatedWorkspace answers the projects of regeneratingWorkspace, whose api-generate
+// writes testdata/api.lock.
+func generatedWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().All().Return([]*types.Project{{
+		Path: ".", TargetOutputs: map[string][]types.OutputRef{"api-generate": {{Glob: "testdata/api.lock"}}},
+	}}).Maybe()
+	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
+// writeHeldBeside grades an unattributed write to file while lease a/gen holds it in the
+// checkout checkout picks.
+func (s *guardSuite) writeHeldBeside(file string, checkout func(root string) string) writeGrade {
+	t := s.T()
+	holder := types.Job{ID: "a/gen", Criteria: "regenerate", WritePaths: []string{file}, State: types.StateRunning, Registered: 1}
+	ctx, root := fleetFixture(t)
+	holder.CheckoutRoot = checkout(root)
+	_, err := storeAt(ctx).Update(ctx, holder.ID, func(cur *types.Job) { *cur = holder })
+	s.Require().NoError(err)
+	return gradeLeasedWrite(ctx, generatedWorkspace(t), "", filepath.Join(root, filepath.FromSlash(file)))
+}
+
+func (s *guardSuite) TestAGeneratedOutputHeldInAnotherCheckoutIsNobodysToWriteHere() {
+	elsewhere := s.T().TempDir()
+	s.Equal(writeGrade{}, s.writeHeldBeside("testdata/api.lock", func(string) string { return elsewhere }))
+}
+
+func (s *guardSuite) TestAGeneratedOutputHeldInTheSameCheckoutStaysItsHolders() {
+	g := s.writeHeldBeside("testdata/api.lock", func(root string) string { return root })
+	s.Contains(g.Context, "inside the paths lease a/gen")
+}
+
+func (s *guardSuite) TestHandWrittenSourceHeldInAnotherCheckoutStaysItsHolders() {
+	elsewhere := s.T().TempDir()
+	g := s.writeHeldBeside("cli/registry.go", func(string) string { return elsewhere })
+	s.Contains(g.Context, "inside the paths lease a/gen")
 }
 
 // The ended-binding refusal names `magus job exec`, so every spelling of that bind runs:

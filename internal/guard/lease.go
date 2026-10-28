@@ -696,9 +696,9 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 // and was declared before the row. The first holder regenerates it and the other waits, so
 // neither silently overwrites the other's copy.
 //
-// A lease taken in another checkout holds only the outputs the change commits. One the VCS
-// ignores, such as a coverage profile, is a file of each checkout, so the two leases
-// regenerate two copies and neither overwrites the other.
+// A lease taken in another checkout holds no output [job.HeldApart] frees: each branch
+// regenerates its own copy. It holds only an output that carves out a hand-maintained file
+// and that the change commits, since one the VCS ignores is a file of each checkout.
 func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project) (string, types.Job) {
 	if len(own) == 0 {
 		return "", types.Job{}
@@ -718,6 +718,9 @@ func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project)
 		}
 		for _, o := range shared {
 			pattern := strings.Fields(o.Output)[0]
+			if job.HeldApart(j.root, other, func() []*types.Project { return projects }, pattern) {
+				continue
+			}
 			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {
 				return o.Output, other
 			}
