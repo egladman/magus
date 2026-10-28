@@ -583,15 +583,6 @@ func LoadApprovedWriteRule(ctx context.Context, root string) (workspace.WriteRul
 	return reg.WriteRule(), nil
 }
 
-// LoadApprovedStopRule is LoadApprovedSpawnRule for the magus\guard.stop rule.
-func LoadApprovedStopRule(ctx context.Context, root string) (workspace.StopRule, error) {
-	reg, err := loadApprovedRegistry(ctx, root)
-	if err != nil || reg == nil {
-		return nil, err
-	}
-	return reg.StopRule(), nil
-}
-
 // LoadApprovedBuiltins is LoadApprovedSpawnRule for the magus\guard.builtins settings: the
 // approved sources' declaration over their magus\guard.profile level, raised by the
 // person's agents.profile, resolved over the compiled defaults. With no approval authority
