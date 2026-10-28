@@ -1,5 +1,5 @@
 // Mandates, this repository's reference policy (ADR 0019). A mandate is what the person
-// issues with `hack/dev/mandate.buzz issue` so a long session carries out the plan they
+// issues with `hack/dev/issue-mandate.buzz issue` so a long session carries out the plan they
 // approved while they are away: inside it the guard lets the root and its workers work the
 // mandated rows and denies every act the person keeps. A mandate raises the bar; a grant
 // lowers one rule. Copy it and edit it: the ceiling, the reserved paths and the loop limit
@@ -283,14 +283,14 @@ fun isMagus(p: helpers\Program) > bool {
     return p.name == "magus";
 }
 
-// mandateAction is the subcommand a line runs hack/dev/mandate.buzz with, "" for any other
+// mandateAction is the subcommand a line runs hack/dev/issue-mandate.buzz with, "" for any other
 // line.
 fun mandateAction(p: helpers\Program) > str {
     if (!isMagus(p)) {
         return "";
     }
     final ops = helpers\magusOperands(p.args);
-    if (ops.len() < 3 or ops[0] != "buzz" or !ops[1].endsWith("hack/dev/mandate.buzz")) {
+    if (ops.len() < 3 or ops[0] != "buzz" or !ops[1].endsWith("hack/dev/issue-mandate.buzz")) {
         return "";
     }
     return ops[2];
@@ -379,7 +379,7 @@ export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jo
         final action = mandateAction(p);
         if (action == "issue" or action == "revoke") {
             return deny("a mandate is issued and revoked by the person, never by the root or a worker; propose the line and let them type it\n"
-                + "ADR 0019 section 2: issuing it is the decision. `hack/dev/mandate.buzz report` reads it.");
+                + "ADR 0019 section 2: issuing it is the decision. `hack/dev/issue-mandate.buzz report` reads it.");
         }
     }
     if (pastCap(m, now: now)) {
@@ -387,7 +387,7 @@ export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jo
             final verb = jobVerb(p);
             if (verb.len() > 0 and verb[0] == "fork") {
                 return deny("the mandate ended at {m!.endClock}, so no fork runs until the person revokes it\n"
-                    + "ADR 0019 section 3: the end time is the cap. `hack/dev/mandate.buzz report` lists what is left.");
+                    + "ADR 0019 section 3: the end time is the cap. `hack/dev/issue-mandate.buzz report` lists what is left.");
             }
         }
     }
@@ -532,7 +532,7 @@ export fun decideWrite(path: str, workspace: str, m: Mandate?, now: int) > Guard
     final file = mandateFile(workspace) ?? "";
     final attention = attentionFile(workspace) ?? "";
     if (path != "" and (path == file or path == attention)) {
-        return deny("the mandate file is written by `hack/dev/mandate.buzz`, run by the person\nADR 0019 section 8.");
+        return deny("the mandate file is written by `hack/dev/issue-mandate.buzz`, run by the person\nADR 0019 section 8.");
     }
     if (!inForce(m, now: now)) {
         return magus\guard.allow();
@@ -678,10 +678,10 @@ test "a named row and its children are mandated and another row is new scope" {
 }
 
 test "issuing or revoking a mandate is denied to the root and its workers, in force or not" {
-    final issue = magusLine(["buzz", "hack/dev/mandate.buzz", "--", "issue", "--until", "07:30"]);
+    final issue = magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "issue", "--until", "07:30"]);
     std\assert(decideCommand(issue, line: "", m: null, jobs: store, now: 0, assess: fullTier).decision == magus\GuardDecision.deny, message: "issue");
-    std\assert(decideCommand(magusLine(["buzz", "hack/dev/mandate.buzz", "--", "revoke"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "revoke");
-    std\assert(decideCommand(magusLine(["buzz", "hack/dev/mandate.buzz", "--", "report"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.allow, message: "report");
+    std\assert(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "revoke"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "revoke");
+    std\assert(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "report"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.allow, message: "report");
 }
 
 test "a fork inside the mandate is allowed and new scope is denied while it is in force" {
@@ -776,7 +776,7 @@ test "a running row lets the root stop, and so do rows paused, blocked or waitin
 test "every denial carries the verdict shape" {
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
-    verdict\checked(decideCommand(magusLine(["buzz", "hack/dev/mandate.buzz", "--", "issue"]), line: "", m: null, jobs: store, now: 0, assess: fullTier), label: "issue");
+    verdict\checked(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "issue"]), line: "", m: null, jobs: store, now: 0, assess: fullTier), label: "issue");
     verdict\checked(decideCommand(magusLine(["job", "fork", "new-idea"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "new scope");
     verdict\checked(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "apply");
     verdict\checked(decideCommand(magusLine(["job", "rm", "landing"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "rm");

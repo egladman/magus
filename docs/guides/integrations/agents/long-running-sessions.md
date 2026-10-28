@@ -72,7 +72,7 @@ whose last worker has reported back unless you set it up before you leave:
    `/goal ./magus ls jobs shows no free declared row and no job running`. The
    condition must not depend on a check only you can pass.
 4. In this repository, issue a mandate with the line the session proposes:
-   `./magus buzz hack/dev/mandate.buzz -- issue --until <time> --tolerance <tier> --rows <ids>`.
+   `./magus buzz hack/dev/issue-mandate.buzz -- issue --until <time> --tolerance <tier> --rows <ids>`.
    It names the plan's rows, the end time and the highest risk tier at which an
    unsettled job's work is integrated without you; above it, the job is held for
    review and the root goes on with the next row. `-- report` prints what was

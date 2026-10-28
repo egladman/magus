@@ -1,9 +1,9 @@
 // Issues, revokes and reports on a mandate (ADR 0019), run by the person, never by the root
 // or a worker: the guard denies issue and revoke to every agent.
 //
-//	magus buzz hack/dev/mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b
-//	magus buzz hack/dev/mandate.buzz -- revoke
-//	magus buzz hack/dev/mandate.buzz -- report
+//	magus buzz hack/dev/issue-mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b
+//	magus buzz hack/dev/issue-mandate.buzz -- revoke
+//	magus buzz hack/dev/issue-mandate.buzz -- report
 //
 // issue appends the mandate to the repository's mandate file (hack/policy/mandate.buzz says
 // where) and prints its terms back; revoke appends the line that ends it; report prints what
@@ -18,7 +18,7 @@ import "flags";
 import "magus";
 import "./hack/policy/mandate" as mandate;
 
-final USAGE = "usage: magus buzz hack/dev/mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b | revoke | report";
+final USAGE = "usage: magus buzz hack/dev/issue-mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b | revoke | report";
 
 final dayMs = 86400000;
 
@@ -133,7 +133,7 @@ fun issue(root: str, args: [str]) > void !> any {
     }
     final now = mandate\now();
     if (mandate\inForce(mandate\loadMandate(root), now: now)) {
-        throw "mandate issue: a mandate is already in force; `magus buzz hack/dev/mandate.buzz -- revoke` ends it first";
+        throw "mandate issue: a mandate is already in force; `magus buzz hack/dev/issue-mandate.buzz -- revoke` ends it first";
     }
     final ends = nextAt(minutes!, now: now, offset: localOffset());
     append(root, m: mandate\Mandate{ action = "issue", at = now, endClock = clock, ends = ends, tolerance = tolerance, rows = named });

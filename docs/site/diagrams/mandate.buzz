@@ -15,7 +15,7 @@ export fun mandateRolesFigure() > figure\Figure !> any {
     final root = figure\external("Root", sub: "the session");
     final workers = figure\external("Workers", sub: "one per job");
     final disposition = figure\external("Disposition", sub: "integrated or held for review");
-    final report = figure\external("Report", sub: "hack/dev/mandate.buzz");
+    final report = figure\external("Report", sub: "hack/dev/issue-mandate.buzz");
     return figure\of("mandate-roles",
             title: "The person decides; the guard enforces what they wrote down",
             eyebrow: "decision",

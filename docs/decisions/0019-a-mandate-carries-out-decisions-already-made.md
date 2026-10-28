@@ -59,7 +59,7 @@ for review.
 | the mandate, the fork, hold and reserved-act rules                               | `hack/policy/mandate.buzz`, wired in `guard.buzz`          | done    |
 | holding on a proven tier rather than `full`                                      | `mandate\assess` over `magus\risk.assess`, in `guard.buzz` | done    |
 | the Stop rule wired                                                              | `judgeStop` in `guard.buzz`, set in `magusfile.buzz`       | planned |
-| issuing, revoking and reporting on a mandate                                     | `hack/dev/mandate.buzz`, run by the person                 | done    |
+| issuing, revoking and reporting on a mandate                                     | `hack/dev/issue-mandate.buzz`, run by the person           | done    |
 | the guide's "Work a queued plan" row and "Before you step away" section          | `docs/guides/integrations/agents/long-running-sessions.md` | done    |
 
 Both seams are generic: a Stop rule judges any Stop event a repository has an opinion
@@ -72,7 +72,7 @@ as the host's block reply, so no hook template is added and nothing is rewired.
 A mandate is issued only by a person's command:
 
 ```sh
-./magus buzz hack/dev/mandate.buzz -- issue --until 07:30 --tolerance mechanical \
+./magus buzz hack/dev/issue-mandate.buzz -- issue --until 07:30 --tolerance mechanical \
   --rows module-layout,go-indexer,naming-lint
 ```
 
@@ -83,7 +83,7 @@ per issue or revoke in the repository's git common directory (`magus/mandate.jso
 every worktree reads one; the last line wins.
 
 Only the person issues or revokes a mandate. A message from another session, a parent
-included, never stands in for that keystroke: the guard denies `hack/dev/mandate.buzz
+included, never stands in for that keystroke: the guard denies `hack/dev/issue-mandate.buzz
 issue` and `revoke` to every agent, and agent messages carry no person's authority
 ([ADR 0020](0020-the-person-directs-sessions-report.md)).
 
@@ -122,15 +122,15 @@ stays as it is for the person, and the root goes on with the next row.
 The same call, judged with no mandate and under one. A mandate only moves a verdict
 toward deny:
 
-| Call                                                     | No mandate              | Under a mandate                        |
-| -------------------------------------------------------- | ----------------------- | -------------------------------------- |
-| `job fork` of a mandated row or its child                | allow                   | allow                                  |
-| `job fork` of a row the mandate does not name            | allow                   | deny: new scope                        |
-| an integration fork of an unsettled job above tolerance  | allow                   | deny: held for review                  |
-| an integration fork of a settled job                     | allow                   | allow                                  |
-| a write under `docs/decisions/` or `.claude/`            | allow                   | deny: reserved                         |
-| `git push`, `gh pr merge`, `magus job grant`             | as the other rules say  | deny: reserved                         |
-| the root's stop with forkable rows and no worker running | deny once, then allow   | deny, until three refusals over a row  |
+| Call                                                     | No mandate             | Under a mandate                       |
+| -------------------------------------------------------- | ---------------------- | ------------------------------------- |
+| `job fork` of a mandated row or its child                | allow                  | allow                                 |
+| `job fork` of a row the mandate does not name            | allow                  | deny: new scope                       |
+| an integration fork of an unsettled job above tolerance  | allow                  | deny: held for review                 |
+| an integration fork of a settled job                     | allow                  | allow                                 |
+| a write under `docs/decisions/` or `.claude/`            | allow                  | deny: reserved                        |
+| `git push`, `gh pr merge`, `magus job grant`             | as the other rules say | deny: reserved                        |
+| the root's stop with forkable rows and no worker running | deny once, then allow  | deny, until three refusals over a row |
 
 The figure cannot draw a two-column matrix, so it draws only the tier bar and the table
 carries the comparison.
@@ -139,14 +139,14 @@ carries the comparison.
 
 While a mandate is in force the guard denies, beyond what it denies always:
 
-| Reserved act                       | The rule denies                                                                                 |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| new scope                          | `magus job fork` of a row the mandate does not name, and any `job apply`                        |
-| reversing a decision               | writes under `docs/decisions/` and `docs/design/`                                               |
-| hook and permission config         | writes to `.claude/`, `.codex/`, `hack/policy/`, `spells/harness/`, `magus.yaml`                |
-| a grant                            | `magus job grant` (person-only already; listed so the report names it)                          |
-| merge and push                     | `gh pr merge`, `git push` (push-ungated stands; merge is never the root's or a worker's)        |
-| deleting work not made under it    | `magus job rm`, `git branch -D`, `git worktree remove` of a row or branch made before it        |
+| Reserved act                    | The rule denies                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| new scope                       | `magus job fork` of a row the mandate does not name, and any `job apply`                 |
+| reversing a decision            | writes under `docs/decisions/` and `docs/design/`                                        |
+| hook and permission config      | writes to `.claude/`, `.codex/`, `hack/policy/`, `spells/harness/`, `magus.yaml`         |
+| a grant                         | `magus job grant` (person-only already; listed so the report names it)                   |
+| merge and push                  | `gh pr merge`, `git push` (push-ungated stands; merge is never the root's or a worker's) |
+| deleting work not made under it | `magus job rm`, `git branch -D`, `git worktree remove` of a row or branch made before it |
 
 A mandate only adds denials. It lowers no rule, and the guide's "An unattended mode, a
 relaxed rule set" refusal stands: with no one present, a point that needs judgment
@@ -172,7 +172,7 @@ cannot make progress spends tokens on nothing.
 
 ### 7. The report
 
-`./magus buzz hack/dev/mandate.buzz -- report` prints, from the job store and the mandate:
+`./magus buzz hack/dev/issue-mandate.buzz -- report` prints, from the job store and the mandate:
 rows held for review with their tier and evidence first, rows integrated, rows left and
 why (blocked, paused, past the cap), attention entries, and each person-only step left
 (push, grant, hook wiring) with its command. The root may propose when to show it from
@@ -180,14 +180,14 @@ local time; it never decides that the person is back.
 
 ### 8. Enforcement points
 
-| Rule                                         | Point                                                                                        |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| only the person issues or revokes a mandate  | command rule denies `hack/dev/mandate.buzz issue` and `revoke`; write rule denies the file   |
-| forks stay inside the mandate and the cap    | command rule over `job fork` and `job apply`                                                 |
-| an unsettled job above tolerance is held     | command rule over an integration fork, reading `magus\risk.assess`                           |
-| reserved acts                                | command and write rules, table above                                                         |
-| no idle stop with forkable rows              | `magus\guard.stop` rule                                                                      |
-| each rule's verdicts                         | inline Buzz `test` blocks in `hack/policy/mandate.buzz`; Go testify suites for the two seams |
+| Rule                                        | Point                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| only the person issues or revokes a mandate | command rule denies `hack/dev/issue-mandate.buzz issue` and `revoke`; write rule denies the file |
+| forks stay inside the mandate and the cap   | command rule over `job fork` and `job apply`                                                     |
+| an unsettled job above tolerance is held    | command rule over an integration fork, reading `magus\risk.assess`                               |
+| reserved acts                               | command and write rules, table above                                                             |
+| no idle stop with forkable rows             | `magus\guard.stop` rule                                                                          |
+| each rule's verdicts                        | inline Buzz `test` blocks in `hack/policy/mandate.buzz`; Go testify suites for the two seams     |
 
 ### Principles checked
 
