@@ -1846,3 +1846,22 @@ final _s = show(Box{});`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `object Box is declared as conforming to protocol shapes\Drawable but does not implement method "draw"`)
 }
+
+// Upstream refuses a literal that leaves a field with no default unset
+// (TypeChecker.zig, property_not_initialized); an optional field defaults to null.
+func TestCheck_ObjectLiteralMissingRequiredField(t *testing.T) {
+	checkError(t, `object O { a: str, b: int } final _o = O{ a = "x" };`, "Property `b` was not initialized and has no default value")
+	checkOK(t, `object O { a: str = "", b: int?, static s: int = 1 } final _o = O{};`)
+	checkOK(t, `object O { a: str } final _o = O{ a = "x" };`)
+
+	t.Run("a module's object", func(t *testing.T) {
+		ctx := context.Background()
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		sess.SetModuleDecls("host", `export object Site { file: str }`)
+		_, err := sess.Compile(`import "host"; final _s = host\Site{};`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Property `file` was not initialized and has no default value")
+		assert.Contains(t, err.Error(), string(ArgumentError))
+	})
+}

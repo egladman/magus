@@ -173,6 +173,10 @@ type checker struct {
 	// builtinRecv is the list or map receiver of each builtin method member, so a
 	// call through one can tell an element type argument from a result type.
 	builtinRecv map[*ast.MemberExpr]types.Type
+	// required names each object type's instance fields a literal must set: no
+	// default, and not optional, which upstream defaults to null. types.ObjectType
+	// erases both facts, so they are kept beside it; see requiredFields.
+	required map[*types.ObjectType][]string
 }
 
 // checkPrelude is what every check in a session registers before reading the
@@ -184,6 +188,7 @@ type checkPrelude struct {
 	types    map[string]types.Type
 	scope    map[string]scopeEntry
 	ns       map[string]*preludeNS
+	required map[*types.ObjectType][]string
 }
 
 // preludeNS is one module's namespace type and the enums it routes through the
@@ -199,8 +204,8 @@ type preludeNS struct {
 }
 
 func newCheckPrelude() *checkPrelude {
-	p := &checkPrelude{types: map[string]types.Type{}, scope: map[string]scopeEntry{}, ns: map[string]*preludeNS{}}
-	c := &checker{types: p.types, scopes: []map[string]scopeEntry{p.scope}}
+	p := &checkPrelude{types: map[string]types.Type{}, scope: map[string]scopeEntry{}, ns: map[string]*preludeNS{}, required: map[*types.ObjectType][]string{}}
+	c := &checker{types: p.types, scopes: []map[string]scopeEntry{p.scope}, required: p.required}
 	c.registerBuiltins()
 	return p
 }
@@ -218,7 +223,7 @@ func (p *checkPrelude) sync(imported []ast.Node) *checkPrelude {
 	}
 	// Registered in order against the types before them, exactly as a check that
 	// registered the whole list itself would.
-	c := &checker{types: p.types, scopes: []map[string]scopeEntry{p.scope}}
+	c := &checker{types: p.types, scopes: []map[string]scopeEntry{p.scope}, required: p.required}
 	c.registerTypeDecls(added)
 	p.imported = append(p.imported, added...)
 	for name, e := range p.ns {
@@ -237,7 +242,7 @@ func (p *checkPrelude) clone() *checkPrelude {
 	if p == nil {
 		return nil
 	}
-	return &checkPrelude{imported: slices.Clip(p.imported), types: maps.Clone(p.types), scope: maps.Clone(p.scope), ns: maps.Clone(p.ns)}
+	return &checkPrelude{imported: slices.Clip(p.imported), types: maps.Clone(p.types), scope: maps.Clone(p.scope), ns: maps.Clone(p.ns), required: maps.Clone(p.required)}
 }
 
 func typeDeclName(d ast.Node) string {
@@ -276,6 +281,9 @@ func (c *checker) ownBaseObject(name string) *types.ObjectType {
 	own := *bt
 	own.Methods = maps.Clone(bt.Methods)
 	c.types[name] = &own
+	if r, ok := c.base.required[bt]; ok && c.required != nil {
+		c.required[&own] = r
+	}
 	if e, ok := c.base.scope[name]; ok && e.typ == types.Type(bt) {
 		e.typ = &own
 		c.scopes[0][name] = e
@@ -320,6 +328,7 @@ func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPr
 		moduleTypes:  moduleTypes,
 		moduleVars:   moduleVars,
 		declImports:  declImports,
+		required:     map[*types.ObjectType][]string{},
 		private:      private,
 		embedded:     embedded,
 		valueImports: valueImports,
@@ -693,8 +702,20 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	for _, name := range v.Conforms {
 		ot.Conforms = append(ot.Conforms, name[strings.LastIndexByte(name, '\\')+1:])
 	}
+	var required []string
 	for _, f := range v.Fields {
 		ot.Fields[f.Name] = c.fieldType(f.TypeAnnot)
+		if f.Default == nil && !strings.HasSuffix(strings.TrimSpace(f.TypeAnnot), "?") {
+			required = append(required, f.Name)
+		}
+	}
+	// A namespace memoized in base outlives this check, and so must what it built.
+	sink := c.required
+	if c.typeRefs != nil && c.base != nil {
+		sink = c.base.required
+	}
+	if len(required) > 0 && sink != nil && !v.IsProtocol {
+		sink[ot] = required
 	}
 	// Static fields share the instance field map. The object type is the type of
 	// both the type value (Foo.next) and an instance, so one map answers both, at
@@ -2747,7 +2768,24 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 			c.errorfc(ast.NodePos(v.Values[i]), TypeMismatch, "wrong property type: field %s.%s is %s, got %s", v.TypeName, key, want.TypeName(), got.TypeName())
 		}
 	}
+	for _, name := range c.requiredFields(ot) {
+		if !slices.Contains(v.Keys, name) {
+			c.errorfc(v.Pos, ArgumentError, "Property `%s` was not initialized and has no default value", name)
+		}
+	}
 	return ot
+}
+
+// requiredFields is what a literal of ot must set, as upstream's TypeChecker.zig
+// checkObjectInit reports property_not_initialized.
+func (c *checker) requiredFields(ot *types.ObjectType) []string {
+	if r, ok := c.required[ot]; ok {
+		return r
+	}
+	if c.base != nil {
+		return c.base.required[ot]
+	}
+	return nil
 }
 
 // enumGotPrimitive reports a str, int, double or bool where an enum is wanted, or a list
