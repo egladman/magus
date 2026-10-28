@@ -192,6 +192,14 @@ export fun inForce(m: Mandate?, now: int) > bool {
     return false;
 }
 
+// pastCap reports whether m is an issued mandate whose end time has passed with no revoke.
+export fun pastCap(m: Mandate?, now: int) > bool {
+    if (m -> mandate) {
+        return mandate.action == "issue" and now >= mandate.ends;
+    }
+    return false;
+}
+
 // rank is tier's place in tiers, full for a tier magus does not prove.
 export fun rank(tier: str) > int {
     return tiers.indexOf(tier) ?? tiers.len() - 1;
@@ -333,6 +341,15 @@ export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jo
         if (action == "issue" or action == "revoke") {
             return deny("a mandate is issued and revoked by the person, never by the root or a worker; propose the line and let them type it\n"
                 + "ADR 0019 section 2: issuing it is the decision. `hack/dev/mandate.buzz report` reads it.");
+        }
+    }
+    if (pastCap(m, now: now)) {
+        foreach (p in programs) {
+            final verb = jobVerb(p);
+            if (verb.len() > 0 and verb[0] == "fork") {
+                return deny("the mandate ended at {m!.endClock}, so no fork runs until the person revokes it\n"
+                    + "ADR 0019 section 3: the end time is the cap. `hack/dev/mandate.buzz report` lists what is left.");
+            }
         }
     }
     if (!inForce(m, now: now)) {
@@ -635,7 +652,8 @@ test "a fork inside the mandate is allowed and new scope is denied while it is i
     final denied = decideCommand(scope, line: "", m: issued, jobs: store, now: 2000, assess: fullTier);
     std\assert(denied.decision == magus\GuardDecision.deny, message: "new scope");
     std\assert(denied.reason.indexOf("naming-lint, go-indexer") != null, message: "names the mandate");
-    std\assert(decideCommand(scope, line: "", m: issued, jobs: store, now: 6000, assess: fullTier).decision == magus\GuardDecision.allow, message: "past the end, the mandate holds nothing");
+    std\assert(decideCommand(child, line: "", m: issued, jobs: store, now: 6000, assess: fullTier).decision == magus\GuardDecision.deny, message: "past the end, every fork waits for a revoke");
+    std\assert(decideCommand(scope, line: "", m: Mandate{ action = "revoke", at = 6000 }, jobs: store, now: 7000, assess: fullTier).decision == magus\GuardDecision.allow, message: "revoked, the mandate holds nothing");
     std\assert(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == magus\GuardDecision.deny, message: "apply");
 }
 
