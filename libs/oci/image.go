@@ -185,10 +185,10 @@ func (c *Client) MountBlob(ctx context.Context, repo, from Reference, d ocispec.
 	if err != nil {
 		return err
 	}
-	scope := repo.scope("push,pull") + " " + from.scope("pull")
+	scope := fmt.Sprintf("%s %s", repo.scope("push,pull"), from.scope("pull"))
 	mount := url.Values{"mount": {d.Digest.String()}, "from": {from.Repository}}
 	upload, err := c.startUpload(ctx, repo, scope, mount)
-	if err != nil || upload == nil {
+	if err != nil || upload.mounted {
 		return err
 	}
 	return c.sendBlob(ctx, repo, scope, upload, d, vr)
@@ -245,14 +245,16 @@ func sourceLen(r io.Reader) (int64, bool) {
 const DefaultChunkSize = 64 << 20
 
 // uploadSession is an open blob upload: where to send the next request, and the smallest
-// chunk the registry takes (OCI-Chunk-Min-Length, 0 when it names none).
+// chunk the registry takes (OCI-Chunk-Min-Length, 0 when it names none). mounted says the
+// registry mounted the blob instead, so there is nothing to send.
 type uploadSession struct {
 	location *url.URL
 	minChunk int64
+	mounted  bool
 }
 
 // startUpload opens an upload session. With a mount query a registry may answer 201,
-// the blob mounted, and the session is nil.
+// the blob mounted, and the session says so.
 func (c *Client) startUpload(ctx context.Context, ref Reference, scope string, query url.Values) (*uploadSession, error) {
 	u := c.base(ref) + "/blobs/uploads/"
 	if query != nil {
@@ -275,7 +277,7 @@ func (c *Client) startUpload(ctx context.Context, ref Reference, scope string, q
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusCreated && query != nil:
-		return nil, nil
+		return &uploadSession{mounted: true}, nil
 	case resp.StatusCode != http.StatusAccepted:
 		return nil, fmt.Errorf("oci: start upload to %s: %w", ref.Repository, statusError(resp))
 	}
