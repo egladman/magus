@@ -215,8 +215,9 @@ export fun load() > Snapshot !> any {
     }
 
     final digest = magus\symbolIndexDigest();
-    if (!digest.indexed or digest.gaps.len() > 0) {
-        throw "sources: the symbol index is missing or partial ({digest.gaps.len()} gaps); run `magus graph build`";
+    final missing = buildableGaps(digest.gaps);
+    if (!digest.indexed or missing > 0) {
+        throw "sources: the symbol index is missing or partial ({missing} gaps); run `magus graph build`";
     }
     final q = everyNode("symbol");
     final symbols: mut [magus\KnowledgeNode] = mut [];
@@ -253,6 +254,29 @@ export fun load() > Snapshot !> any {
         refLinks = refLinks,
         cache = mut {},
     };
+}
+
+// buildableGaps counts the gaps a build closes, and names each project whose language
+// nothing indexes: its files carry no symbols, which is the corpus as it stands, not a hole.
+export fun buildableGaps(gaps: [magus\KnowledgeSymbolGap]) > int {
+    var missing = 0;
+    foreach (gap in gaps) {
+        if (gap.unindexable) {
+            std\print("sources: {gap.project.path} has {gap.detail}, so its files carry no symbols");
+            continue;
+        }
+        missing += 1;
+    }
+    return missing;
+}
+
+test "a language nothing indexes is not a gap a build closes" {
+    final gaps = [
+        magus\KnowledgeSymbolGap{ detail = "no symbol index for typescript", unindexable = true },
+        magus\KnowledgeSymbolGap{ language = "go" },
+    ];
+    std\assert(buildableGaps(gaps) == 1, message: "only the go index is missing");
+    std\assert(buildableGaps([<magus\KnowledgeSymbolGap>]) == 0, message: "no gaps");
 }
 
 // spanPath is the path part of a graph source, "path:line" or "path#anchor".
