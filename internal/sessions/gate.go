@@ -46,6 +46,9 @@ const (
 func (s GateScope) CoversBranch() bool { return s == GateScopeAffected }
 
 // Unscoped reports whether the entry predates gate scopes.
+//
+// compat(until: no gate store holds an unscoped record): such an entry reads as project
+// scope, so it never covers a push and the push refusal names it.
 func (s GateScope) Unscoped() bool { return s == "" }
 
 // MarshalJSON refuses the zero value: a record written now that names no scope would

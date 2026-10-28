@@ -68,6 +68,7 @@ const (
 	gateProjectScoped
 	// gateUnscoped is a passing gate at this commit recorded before gate records named
 	// their scope, and no branch verdict. It reads as project scope.
+	// compat: see sessions.GateScope.Unscoped.
 	gateUnscoped
 )
 
