@@ -195,6 +195,7 @@
 {"name":"WithBaseRef","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBroker","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBrokerPolicy","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithCache","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithCacheBackend","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithCharms","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithCommandLine","reason":"functional option that configures a Run, a Target or a Project declaration"}
@@ -209,8 +210,6 @@
 {"name":"WithGraphHistory","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithGraphInput","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithMetricsCollection","reason":"functional option that configures a Run, a Target or a Project declaration"}
-{"name":"WithNoCache","reason":"functional option that configures a Run, a Target or a Project declaration"}
-{"name":"WithNoVolatilityRetry","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithObserver","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithOutputs","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithRace","reason":"functional option that configures a Run, a Target or a Project declaration"}
@@ -229,6 +228,7 @@
 {"name":"WithUpstream","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithVCSDriver","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithVersion","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithVolatilityRetry","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithWatchIgnore","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithWorkspaceRegistry","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithWorkspaceRegistryContext","reason":"functional option that configures a Run, a Target or a Project declaration"}
