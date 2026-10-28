@@ -59,9 +59,9 @@ func TestBudgetMB_Aggressive(t *testing.T) {
 // UsableBytes never exceeds the machine, whatever this host reports.
 func TestUsableNeverExceedsTotal(t *testing.T) {
 	ctx := context.Background()
-	if total := TotalBytes(ctx); total > 0 {
+	if total := totalBytes(ctx); total > 0 {
 		assert.LessOrEqual(t, UsableBytes(ctx), total)
 	} else {
-		assert.Zero(t, TotalBytes(ctx), "an unmeasurable host reports UNKNOWN")
+		assert.Zero(t, totalBytes(ctx), "an unmeasurable host reports UNKNOWN")
 	}
 }

@@ -9,18 +9,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// TotalBytes reads hw.memsize, or 0 when it cannot. See total_linux.go for why
+// totalBytes reads hw.memsize, or 0 when it cannot. See total_linux.go for why
 // this is the machine's total rather than what is free now.
 //
-// A sysctl read rather than a fork of sysctl(8): the value is the same and the
-// cost is a syscall instead of a process. ctx is unused for that reason, and kept
-// so the signature matches the other platforms and the callers that pass one.
-//
-// Cached: the answer is a property of the machine and cannot change while the
-// process runs, while the call sites are not one-shot. The cache holds the first
-// successful reading only, so a transient failure during startup does not pin 0
-// (UNKNOWN) for the life of the process.
-func TotalBytes(_ context.Context) int64 {
+// Cached after the first successful reading only, so a transient startup failure
+// does not pin 0 (UNKNOWN) for the life of the process. ctx is unused: a sysctl is
+// a syscall, not a fork.
+func totalBytes(_ context.Context) int64 {
 	totalOnce.mu.Lock()
 	defer totalOnce.mu.Unlock()
 	if totalOnce.bytes > 0 {

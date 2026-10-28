@@ -55,18 +55,18 @@ func BudgetMB(usableBytes int64, profile types.ConcurrencyProfile) int {
 // UsableBytes is the memory THIS PROCESS may actually commit: the machine's total,
 // narrowed by any ceiling the process runs under.
 //
-// The distinction TotalBytes cannot make. In a memory-limited container the machine
-// reports its own RAM, which the process can never have, so a budget computed from
-// it admits work the OOM killer then takes: magus would report a scheduling success
-// and a killed build. Every caller sizing work THIS process will run wants this;
-// only a caller planning for a DIFFERENT machine wants TotalBytes.
+// The distinction the machine total cannot make. In a memory-limited container the
+// machine reports its own RAM, which the process can never have, so a budget
+// computed from it admits work the OOM killer then takes: magus would report a
+// scheduling success and a killed build. Every caller sizing work THIS process will
+// run wants this.
 //
 // A limit at or above the machine's total is treated as no limit, which is what
 // makes reading the raw cgroup files safe: both cgroup versions spell unlimited as
 // a sentinel near the top of the address space, and neither sentinel has to be
 // recognized to be discarded here.
 func UsableBytes(ctx context.Context) int64 {
-	return narrowToLimit(TotalBytes(ctx), limitBytes(ctx))
+	return narrowToLimit(totalBytes(ctx), limitBytes(ctx))
 }
 
 // narrowToLimit is UsableBytes's arithmetic, separated because the two readings it

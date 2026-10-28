@@ -18,7 +18,7 @@ import (
 // the right answer: there is no swap for pressure to show up in, and the watchdog
 // has only availableBytes to go on.
 //
-// ctx is unused here; see TotalBytes.
+// ctx is unused here; see totalBytes.
 func swapUsedBytes(_ context.Context) int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {

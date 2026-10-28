@@ -396,12 +396,12 @@ func TestMemoryBudget_derivedFromTheHostWithNoKnob(t *testing.T) {
 	// the protection has to be on for people who never heard of it.
 	f := Forecaster{Target: "ci"}
 	got := f.memoryBudget()
-	if mem.TotalBytes(context.Background()) == 0 {
+	if mem.UsableBytes(context.Background()) == 0 {
 		assert.Zero(t, got, "an unmeasurable host must plan exactly as before, never on a guess")
 		return
 	}
 	assert.Positive(t, got, "a measurable host must get a budget without being configured")
-	assert.Less(t, got, mem.TotalBytes(context.Background()), "the budget must leave headroom for the agent, caches and toolchains")
+	assert.Less(t, got, mem.UsableBytes(context.Background()), "the budget must leave headroom for the agent, caches and toolchains")
 }
 
 func TestMemoryBudget_explicitSettingWins(t *testing.T) {

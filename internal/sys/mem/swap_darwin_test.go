@@ -40,7 +40,7 @@ func TestSwapUsageLayout(t *testing.T) {
 func TestSwapUsedIsPlausible(t *testing.T) {
 	used := swapUsedBytes(context.Background())
 	assert.GreaterOrEqual(t, used, int64(0))
-	if total := TotalBytes(context.Background()); total > 0 {
+	if total := totalBytes(context.Background()); total > 0 {
 		assert.Less(t, used, total*64, "swap in use is not orders of magnitude past RAM")
 	}
 }

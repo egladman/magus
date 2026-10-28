@@ -48,9 +48,8 @@ func (f Forecaster) memoryBudget() int64 {
 	}
 	// Usable, so a planner running inside a memory-limited container plans for the
 	// class it is actually in. A ceiling is part of the machine class in a way
-	// transient free memory is not, which is the distinction TotalBytes's own doc
-	// draws. When the planner and the shards genuinely differ, MemoryBudgetBytes
-	// above is the explicit answer.
+	// transient free memory is not. When the planner and the shards genuinely
+	// differ, MemoryBudgetBytes above is the explicit answer.
 	if total := mem.UsableBytes(context.Background()); total > 0 {
 		return int64(float64(total) * usableMemoryFraction)
 	}

@@ -17,7 +17,7 @@ import (
 // mid-build sits near zero on every healthy run, so a watchdog wired to it would
 // fire constantly.
 //
-// ctx is unused here; see TotalBytes.
+// ctx is unused here; see totalBytes.
 func availableBytes(_ context.Context) int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
