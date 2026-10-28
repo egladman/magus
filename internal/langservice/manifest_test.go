@@ -42,6 +42,8 @@ func TestExcludedModules(t *testing.T) {
 		"image", // writes layouts to disk and pushes to a registry
 		"lcov",  // reads a coverage file from disk
 		"pipe",  // reads and writes the process's own stdio
+		"diskwatch",   // samples free disk space into a per-user store
+		"reclaimdisk", // removes worktrees and trims the Go build cache
 		// A Buzz module dry.PlaygroundSourceModules does not list.
 		"modeltiers",
 	}, got, "only the process/filesystem/network modules and unvetted Buzz modules should be excluded")
