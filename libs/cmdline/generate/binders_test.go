@@ -245,7 +245,7 @@ func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 
 	contains(t, got, "// DemoFlags are the flags declared for `magus demo`.")
 	contains(t, got, "type DemoFlags struct {")
-	contains(t, got, "\tWatch bool // --watch, -W")
+	contains(t, got, "\tWatch bool // --[no-]watch, -W")
 	contains(t, got, "func BindDemo(fs *flag.FlagSet) *DemoFlags {")
 	// Both spellings write to the one destination; dropping either leaves a flag that
 	// parses and does nothing.
