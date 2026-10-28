@@ -1,6 +1,7 @@
 import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
+import "encoding/toml";
 
 export fun mgs_getName() > str { return "python"; }
 
@@ -145,4 +146,377 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer {
         format = SymbolFormat.scip,
         command = Command{bin = "scip-python", args = ["index", ".", "--output", "$MAGUS_SYMBOL_INDEX"]},
     };
+}
+
+fun dirOf(path: str) > str {
+    final parts = path.split("/");
+    if (parts.len() == 1) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+fun baseOf(path: str) > str {
+    final parts = path.split("/");
+    return parts[parts.len() - 1];
+}
+
+fun isUnder(path: str, dir: str) > bool {
+    return dir == "." or path == dir or path.startsWith(dir + "/");
+}
+
+// joinRelative resolves a pyproject's relative path against its directory, or null
+// when it leaves the workspace root.
+fun joinRelative(dir: str, rel: str) > str? {
+    final parts = mut [<str>];
+    if (dir != ".") {
+        foreach (part in dir.split("/")) {
+            parts.append(part);
+        }
+    }
+    foreach (part in rel.split("/")) {
+        if (part == "" or part == ".") {
+            continue;
+        }
+        if (part == "..") {
+            if (parts.len() == 0) {
+                return null;
+            }
+            parts.pop();
+            continue;
+        }
+        parts.append(part);
+    }
+    if (parts.len() == 0) {
+        return ".";
+    }
+    return parts.join("/");
+}
+
+// requirementName is the PEP 503 normalized name a PEP 508 requirement opens with:
+// "Pytest_Cov[toml]>=4; python_version>'3'" is "pytest-cov".
+fun requirementName(spec: str) > str {
+    final name = mut [<str>];
+    final text = spec.trim().lower();
+    for (var i = 0; i < text.len(); i = i + 1) {
+        final ch = text.sub(i, len: 1);
+        if ((ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9") or ch == "-") {
+            name.append(ch);
+        } else if (ch == "_" or ch == ".") {
+            name.append("-");
+        } else {
+            break;
+        }
+    }
+    return name.join("");
+}
+
+fun tableAt(doc: {str: any}, keys: [str]) > {str: any}? {
+    var at: {str: any}? = doc;
+    foreach (key in keys) {
+        at = (at?[key]) as? {str: any};
+    }
+    return at;
+}
+
+fun sortedKeys(table: {str: any}) > [str] {
+    final keys = table.keys().cloneMutable();
+    keys.sort(fun (left: str, right: str) > bool => left < right);
+    return keys;
+}
+
+fun appendRequirements(names: mut [str], list: any?) > void {
+    if ((list as? [any]) -> items) {
+        foreach (item in items) {
+            if ((item as? str) -> spec) {
+                names.append(requirementName(spec));
+            }
+        }
+    }
+}
+
+fun appendKeys(names: mut [str], table: {str: any}?) > void {
+    if (table -> deps) {
+        foreach (key in sortedKeys(deps)) {
+            names.append(requirementName(key));
+        }
+    }
+}
+
+// declaredNames is every dependency a pyproject.toml names, in any group a tool
+// installs from: PEP 621, PEP 735, uv, poetry, pdm and hatch.
+fun declaredNames(doc: {str: any}) > [str] {
+    final names = mut [<str>];
+    appendRequirements(names, list: tableAt(doc, keys: ["project"])?["dependencies"]);
+    foreach (groups in [tableAt(doc, keys: ["project", "optional-dependencies"]), tableAt(doc, keys: ["dependency-groups"]),
+                        tableAt(doc, keys: ["tool", "pdm", "dev-dependencies"])]) {
+        if (groups -> table) {
+            foreach (key in sortedKeys(table)) {
+                appendRequirements(names, list: table[key]);
+            }
+        }
+    }
+    appendRequirements(names, list: tableAt(doc, keys: ["tool", "uv"])?["dev-dependencies"]);
+    appendKeys(names, table: tableAt(doc, keys: ["tool", "poetry", "dependencies"]));
+    appendKeys(names, table: tableAt(doc, keys: ["tool", "poetry", "dev-dependencies"]));
+    if (tableAt(doc, keys: ["tool", "poetry", "group"]) -> groups) {
+        foreach (key in sortedKeys(groups)) {
+            appendKeys(names, table: tableAt(groups, keys: [key, "dependencies"]));
+        }
+    }
+    if (tableAt(doc, keys: ["tool", "hatch", "envs"]) -> envs) {
+        foreach (key in sortedKeys(envs)) {
+            appendRequirements(names, list: tableAt(envs, keys: [key])?["dependencies"]);
+        }
+    }
+    return names;
+}
+
+// A pytest plugin depends on pytest, so declaring pytest-cov alone installs it.
+fun declaresPytest(names: [str]) > bool {
+    foreach (name in names) {
+        if (name == "pytest" or name.startsWith("pytest-")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Tools a project may declare that no op of this spell runs.
+final unwiredTools = ["black", "flake8", "isort", "mypy", "nox", "pylint", "pyright", "tox"];
+
+fun taskGaps(gaps: mut [DiscoveryGap], file: str, table: {str: any}?, label: str, runner: str) > void {
+    if (table -> tasks) {
+        foreach (key in sortedKeys(tasks)) {
+            gaps.append(DiscoveryGap{file = file, why = "{label} {key}: task meaning unknown, run by {runner}"});
+        }
+    }
+}
+
+object LocalProject {
+    dir: str,
+    name: str,
+}
+
+fun pathSourceGaps(gaps: mut [DiscoveryGap], deps: mut [str], file: str, dir: str, name: str, source: {str: any},
+                   projects: [LocalProject]) > void {
+    if ((source["path"] as? str) -> rel) {
+        final resolved = joinRelative(dir, rel: rel);
+        foreach (p in projects) {
+            if (resolved == p.dir and p.dir != dir) {
+                deps.append(p.dir);
+                return;
+            }
+        }
+        gaps.append(DiscoveryGap{file = file, why = "{name}: path source {rel} names no discovered python project"});
+        return;
+    }
+    if ((source["workspace"] as? bool) ?? false) {
+        foreach (p in projects) {
+            if (p.name != "" and p.name == requirementName(name) and p.dir != dir) {
+                deps.append(p.dir);
+                return;
+            }
+        }
+        gaps.append(DiscoveryGap{file = file, why = "{name}: workspace source names no discovered [project] of that name"});
+    }
+}
+
+fun pyprojectClaim(dir: str, file: str, doc: {str: any}, locks: [str], projects: [LocalProject], spans: [str]) > DiscoveredProject {
+    final names = declaredNames(doc);
+    final targets = mut {<str: [str]>};
+    final gaps = mut [<DiscoveryGap>];
+    final deps = mut [<str>];
+
+    if (names.indexOf("ruff") != null or tableAt(doc, keys: ["tool", "ruff"]) != null) {
+        targets["lint"] = ["ruff-check"];
+        targets["format"] = ["ruff-format"];
+    } else {
+        gaps.append(DiscoveryGap{file = file, why = "no ruff dependency or [tool.ruff]: no lint or format target"});
+    }
+    if (declaresPytest(names) or tableAt(doc, keys: ["tool", "pytest"]) != null) {
+        targets["test"] = ["pytest"];
+    } else {
+        gaps.append(DiscoveryGap{file = file, why = "no pytest dependency or [tool.pytest]: a test runner other than pytest is not inferred"});
+    }
+    if (tableAt(doc, keys: ["build-system"]) != null) {
+        targets["build"] = ["uv-build"];
+    }
+    foreach (tool in unwiredTools) {
+        if (names.indexOf(tool) != null) {
+            gaps.append(DiscoveryGap{file = file, why = "{tool} is declared and no python spell op runs it"});
+        }
+    }
+    if (locks.indexOf("uv.lock") == null) {
+        foreach (lock in locks) {
+            gaps.append(DiscoveryGap{file = joinRelative(dir, rel: lock)!, why = "the ops run through uv, which does not read {lock}"});
+        }
+    }
+    taskGaps(gaps, file: file, table: tableAt(doc, keys: ["tool", "poe", "tasks"]), label: "[tool.poe.tasks]", runner: "poe");
+    taskGaps(gaps, file: file, table: tableAt(doc, keys: ["tool", "pdm", "scripts"]), label: "[tool.pdm.scripts]", runner: "pdm run");
+    if (tableAt(doc, keys: ["tool", "hatch", "envs"]) -> envs) {
+        foreach (env in sortedKeys(envs)) {
+            taskGaps(gaps, file: file, table: tableAt(envs, keys: [env, "scripts"]), label: "[tool.hatch.envs.{env}.scripts]", runner: "hatch run");
+        }
+    }
+    if (tableAt(doc, keys: ["tool", "uv", "sources"]) -> sources) {
+        foreach (key in sortedKeys(sources)) {
+            if ((sources[key] as? {str: any}) -> source) {
+                pathSourceGaps(gaps, deps: deps, file: file, dir: dir, name: key, source: source, projects: projects);
+            }
+        }
+    }
+    if (tableAt(doc, keys: ["tool", "poetry", "dependencies"]) -> poetry) {
+        foreach (key in sortedKeys(poetry)) {
+            if ((poetry[key] as? {str: any}) -> source) {
+                pathSourceGaps(gaps, deps: deps, file: file, dir: dir, name: key, source: source, projects: projects);
+            }
+        }
+    }
+    foreach (spec in directReferences(doc)) {
+        gaps.append(DiscoveryGap{file = file, why = "{spec}: a direct reference is not resolved to a project"});
+    }
+
+    final name = ((tableAt(doc, keys: ["project"])?["name"]) as? str) ?? ((tableAt(doc, keys: ["tool", "poetry"])?["name"]) as? str) ?? "";
+    return DiscoveredProject{path = dir, role = DiscoveryRole.project, name = name, dependsOn = deps, targets = targets, spans = spans,
+        notInferred = gaps};
+}
+
+// directReferences is every PEP 508 "name @ url" requirement: a file or VCS URL may
+// name a sibling project, and the spell does not resolve URLs.
+fun directReferences(doc: {str: any}) > [str] {
+    final lists = mut [tableAt(doc, keys: ["project"])?["dependencies"], tableAt(doc, keys: ["tool", "uv"])?["dev-dependencies"]];
+    foreach (groups in [tableAt(doc, keys: ["project", "optional-dependencies"]), tableAt(doc, keys: ["dependency-groups"])]) {
+        if (groups -> table) {
+            foreach (key in sortedKeys(table)) {
+                lists.append(table[key]);
+            }
+        }
+    }
+    final refs = mut [<str>];
+    foreach (list in lists) {
+        if ((list as? [any]) -> items) {
+            foreach (item in items) {
+                if ((item as? str) -> spec) {
+                    if (spec.indexOf("@") != null) {
+                        refs.append(spec);
+                    }
+                }
+            }
+        }
+    }
+    return refs;
+}
+
+fun legacyClaim(dir: str, files: [str], spans: [str]) > DiscoveredProject {
+    final gaps = mut [<DiscoveryGap>];
+    foreach (file in files) {
+        gaps.append(DiscoveryGap{file = file, why = "no pyproject.toml beside it: uv reads dependencies and tool tables only from pyproject.toml, so no target is inferred"});
+    }
+    return DiscoveredProject{path = dir, role = DiscoveryRole.project, spans = spans, notInferred = gaps};
+}
+
+// spansOf names every directory between dir and a .py file under it: pytest and
+// `ruff check .` walk them all, whichever project claims one.
+fun spansOf(dir: str, pyFiles: [str]) > [str] {
+    final seen = mut {<str: bool>};
+    foreach (file in pyFiles) {
+        if (!isUnder(file, dir: dir)) {
+            continue;
+        }
+        var at = dirOf(file);
+        while (at != dir and at != "." and !(seen[at] ?? false)) {
+            seen[at] = true;
+            at = dirOf(at);
+        }
+    }
+    return sortedKeys(seen);
+}
+
+final markers = ["pyproject.toml", "setup.py", "setup.cfg"];
+final lockFiles = ["Pipfile.lock", "poetry.lock", "uv.lock"];
+
+// discover_projects claims a project in every directory holding pyproject.toml,
+// setup.py or setup.cfg. Python sources, requirements files and a Pipfile outside
+// every such directory join their owning project as members, each with a gap naming
+// what is missing. It throws when core omits a pyproject.toml's content.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    final markersByDir = mut {<str: [str]>};
+    final locksByDir = mut {<str: [str]>};
+    final pyprojects = mut {<str: {str: any}?>};
+    final parseErrors = mut {<str: str>};
+    final pyFiles = mut [<str>];
+    final loose = mut [<str>];
+
+    foreach (file in req.files) {
+        final base = baseOf(file.path);
+        final dir = dirOf(file.path);
+        if (markers.indexOf(base) != null) {
+            final found = markersByDir[dir] ?? [];
+            markersByDir[dir] = found + [file.path];
+        }
+        if (lockFiles.indexOf(base) != null) {
+            final found = locksByDir[dir] ?? [];
+            locksByDir[dir] = found + [base];
+        }
+        if (base == "pyproject.toml") {
+            if (file.content == null) {
+                throw "discover_projects: {file.path} arrived without content, though pyproject.toml is a literal glob";
+            }
+            try {
+                pyprojects[dir] = toml\parse(file.content!) as? {str: any};
+            } catch (err: any) {
+                pyprojects[dir] = null;
+                parseErrors[dir] = "{err}";
+            }
+        } else if (base.endsWith(".py") and base != "setup.py") {
+            pyFiles.append(file.path);
+        }
+        if (base == "Pipfile" or base == "requirements.txt" or (base.startsWith("requirements-") and base.endsWith(".txt"))) {
+            loose.append(file.path);
+        }
+    }
+
+    final dirs = sortedKeys(markersByDir);
+    final local = mut [<LocalProject>];
+    foreach (dir in dirs) {
+        final name = ((tableAt(pyprojects[dir] ?? {}, keys: ["project"])?["name"]) as? str) ?? "";
+        local.append(LocalProject{dir = dir, name = requirementName(name)});
+    }
+
+    final claims = mut [<DiscoveredProject>];
+    foreach (dir in dirs) {
+        final file = joinRelative(dir, rel: "pyproject.toml")!;
+        final spans = spansOf(dir, pyFiles: pyFiles);
+        if (parseErrors[dir] -> err) {
+            claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.project, spans = spans,
+                notInferred = [DiscoveryGap{file = file, why = "not valid TOML, so nothing is inferred: {err}"}]});
+        } else if (pyprojects[dir] -> doc) {
+            claims.append(pyprojectClaim(dir, file: file, doc: doc, locks: locksByDir[dir] ?? [], projects: local, spans: spans));
+        } else {
+            claims.append(legacyClaim(dir, files: markersByDir[dir]!, spans: spans));
+        }
+    }
+
+    final orphans = mut {<str: [DiscoveryGap]>};
+    foreach (file in pyFiles + loose) {
+        var owned = false;
+        foreach (dir in dirs) {
+            if (isUnder(file, dir: dir)) {
+                owned = true;
+            }
+        }
+        if (owned) {
+            continue;
+        }
+        final dir = dirOf(file);
+        final gaps = orphans[dir] ?? [];
+        if (gaps.len() == 0 or loose.indexOf(file) != null) {
+            orphans[dir] = gaps + [DiscoveryGap{file = file, why = "no pyproject.toml, setup.py or setup.cfg owns it, so no python target is inferred"}];
+        }
+    }
+    foreach (dir in sortedKeys(orphans)) {
+        claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.member, notInferred = orphans[dir]!});
+    }
+    return claims;
 }
