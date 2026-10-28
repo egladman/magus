@@ -1,0 +1,33 @@
+package fixture
+
+import (
+	"fmt"
+	"testing"
+)
+
+func TestPass(t *testing.T) {}
+
+func TestFail(t *testing.T) {
+	t.Error("boom")
+}
+
+func TestSkip(t *testing.T) {
+	t.Skip("not here")
+}
+
+func TestParent(t *testing.T) {
+	t.Run("ok case", func(t *testing.T) {})
+	t.Run("bad", func(t *testing.T) { t.Error("boom") })
+	t.Run("skipped", func(t *testing.T) { t.Skip("not here") })
+}
+
+func TestNested(t *testing.T) {
+	t.Run("outer", func(t *testing.T) {
+		t.Run("inner", func(t *testing.T) {})
+	})
+}
+
+// Output without a trailing newline glues the result onto it in -v mode.
+func TestUnterminatedOutput(t *testing.T) {
+	fmt.Print("no newline")
+}
