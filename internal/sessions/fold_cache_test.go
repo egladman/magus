@@ -127,7 +127,7 @@ func TestReadGateResultsFoldsOnlyGateVerdicts(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	writeRaw(t, dir, "a", []Record{agentRecord("a", 1, "x.go")})
-	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Commit: "abc123", Outcome: OutcomePass}, InvocationStart{}))
+	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "abc123", Outcome: OutcomePass}, InvocationStart{}))
 
 	_, err := ReadAgentEvents(dir)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestReadGateResultsFoldsOnlyGateVerdicts(t *testing.T) {
 	assert.Empty(t, readFoldCache(foldCachePath(dir, KindGateResult), KindGateResult).Files["a"+fileExt].Records,
 		"the gate cache holds no agent event")
 
-	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Commit: "def456", Outcome: OutcomeFail}, InvocationStart{}))
+	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "def456", Outcome: OutcomeFail}, InvocationStart{}))
 	gates, err = ReadGateResults(dir)
 	require.NoError(t, err)
 	rec, ok := GateAt(gates, "def456", "ci")

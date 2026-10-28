@@ -14,7 +14,55 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// GateScopeSuite pins running-doc entry 277 at the writer: a gate record names whether it
+// covered every project the branch affects, so `magus run ci libs/cmdline` never records
+// itself as the branch gate.
+type GateScopeSuite struct {
+	suite.Suite
+}
+
+func TestGateScopeSuite(t *testing.T) { suite.Run(t, new(GateScopeSuite)) }
+
+func (s *GateScopeSuite) affected(paths ...string) []types.Target {
+	out := make([]types.Target, len(paths))
+	for i, p := range paths {
+		out[i] = types.Target{Path: p, Name: types.TargetCI}
+	}
+	return out
+}
+
+func (s *GateScopeSuite) TestOneProjectOfSeveralAffectedIsProjectScope() {
+	s.Equal(sessions.GateScopeProject, scopeOver(s.affected(".", "docs", "libs/cmdline"), []string{"libs/cmdline"}))
+}
+
+func (s *GateScopeSuite) TestEveryAffectedProjectIsAffectedScope() {
+	s.Equal(sessions.GateScopeAffected, scopeOver(s.affected("docs", "libs/cmdline"), []string{".", "docs", "libs/cmdline"}),
+		"`magus run ci` over a superset of the affected set covers the branch")
+}
+
+func (s *GateScopeSuite) TestNothingAffectedIsAffectedScope() {
+	s.Equal(sessions.GateScopeAffected, scopeOver(nil, []string{"libs/cmdline"}))
+}
+
+func (s *GateScopeSuite) TestAProjectScopedPassIsNotTheBranchGate() {
+	testkit.Isolate(s.T())
+	root := s.T().TempDir()
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1",
+		projects: []string{"libs/cmdline"}, scope: sessions.GateScopeProject}
+	g.record(context.Background(), nil, false)
+
+	dir, err := sessions.Dir(root)
+	s.Require().NoError(err)
+	_, ok := sessions.LatestGate(fold2(s.T(), dir), "b", types.TargetCI)
+	s.False(ok, "the redundancy check and the guard both read the branch gate through LatestGate")
+
+	rec, ok := sessions.GateAt(fold2(s.T(), dir), "c1", types.TargetCI)
+	s.Require().True(ok)
+	s.Equal(sessions.GateScopeProject, rec.Scope, "the scope rides the record")
+}
 
 // seedGreenGate records a passing ci gate for branch b with fingerprint fp in
 // the session store XDG_STATE_HOME points at.
@@ -23,7 +71,7 @@ func seedGreenGate(t *testing.T, root, fp string) {
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Ref: "b", Commit: "c1",
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
 		Outcome: sessions.OutcomePass, Fingerprint: fp,
 		Projects: []string{"."}, Charms: []string{"quiet"},
 		Inv: "inv123",
@@ -53,7 +101,7 @@ func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
 	seedGreenGate(t, root, "fp-1")
 	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 	err := g.evaluate(context.Background(), false)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.RedundantGateDeferred), "the refusal carries MGS3010")
@@ -80,7 +128,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	seedGreenGate(t, root, "fp-1")
 	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c2", fp: "fp-1", projects: []string{"."}}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c2", fp: "fp-1", projects: []string{"."}, scope: sessions.GateScopeAffected}
 	require.Error(t, g.evaluate(context.Background(), false))
 
 	dir, err := sessions.Dir(root)
@@ -92,7 +140,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	// The deferral does not shadow the green verdict.
 	assert.Equal(t, sessions.GateRecord{
 		GateResult: sessions.GateResult{
-			Target: types.TargetCI, Ref: "b", Commit: "c1",
+			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
 			Outcome: sessions.OutcomePass, Fingerprint: "fp-1",
 			Projects: []string{"."}, Charms: []string{"quiet"},
 			Inv: "inv123",
@@ -115,7 +163,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	require.NotNil(t, deferred, "the refusal persisted a deferred gate record")
 	// It points at the green gate it deferred to, from the commit the refused run was at.
 	assert.Equal(t, sessions.GateResult{
-		Target: types.TargetCI, Ref: "b", Commit: "c2",
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c2",
 		Outcome: sessions.OutcomeDeferred, Fingerprint: "fp-1",
 		Projects:   []string{"."},
 		DeferredTo: "c1",
@@ -136,7 +184,7 @@ func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 	seedGreenGate(t, root, "fp-1")
 	pinPoolLoad(t, false)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 	err := g.evaluate(context.Background(), false)
 	require.Error(t, err, "an idle machine is not a reason to re-verify a passed gate")
 	assert.Contains(t, err.Error(), "re-verifies a gate that already passed",
@@ -164,7 +212,7 @@ func TestGateEvaluateOverride(t *testing.T) {
 	seedGreenGate(t, root, "fp-1")
 	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 	require.NoError(t, g.evaluate(context.Background(), true))
 }
 
@@ -190,12 +238,12 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Ref: "b", Commit: "c1",
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
 		Outcome: sessions.OutcomeFail, Fingerprint: "fp-1",
 	}, sessions.InvocationStart{Workspace: root}))
 	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 	require.NoError(t, g.evaluate(context.Background(), false))
 }
 
@@ -208,7 +256,7 @@ func TestGateEvaluateNestedNeverRefuses(t *testing.T) {
 	seedGreenGate(t, root, "fp-1")
 	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 	require.NoError(t, g.evaluate(context.Background(), false))
 }
 
@@ -328,7 +376,7 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 
 	cut, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -356,7 +404,7 @@ func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 
 	interrupted, cancel := context.WithCancel(context.Background())
 	cancel()

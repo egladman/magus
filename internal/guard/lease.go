@@ -125,7 +125,9 @@ func gateRunRef(rec sessions.GateRecord) string {
 const gateRepeatDenyRuns = 2
 
 // greenGateUnchanged is the newest gate verdict this branch recorded, when it passed and
-// no file that differs from its commit was written after it.
+// no file that differs from its commit was written after it. A project-scoped pass is no
+// verdict on the branch (sessions.LatestGate skips it), so `magus run ci <project>` never
+// stands in for the `affected ci` this refuses.
 func greenGateUnchanged(ctx context.Context, deps Dependencies, workspace string) (sessions.GateRecord, bool) {
 	if workspace == "" {
 		return sessions.GateRecord{}, false
@@ -198,7 +200,7 @@ func gateReplayAt(ctx context.Context, workspace, dir, commit string) (sessions.
 		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
-		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || g.Commit == "" || seen[g.Commit] {
+		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || !g.Scope.CoversBranch() || g.Commit == "" || seen[g.Commit] {
 			continue
 		}
 		seen[g.Commit] = true
@@ -284,18 +286,30 @@ var gateReadFlags = []string{"--plan", "--impact", "--explain", "--dry-run"}
 // `-run ci` argument to a test command to masquerade as the gate. The two callers
 // both supply one: a recorded invocation's arguments, and a parsed command line.
 func isGateCommand(args []string) bool {
+	return gateVerb(args) != ""
+}
+
+// isAffectedGateCommand reports whether an argv runs the gate as `affected ci`, the one
+// form whose selection is every project the branch affects.
+func isAffectedGateCommand(args []string) bool {
+	return gateVerb(args) == "affected"
+}
+
+// gateVerb is the verb, run or affected, of an argv that runs the CI gate, or "" for one
+// that does not.
+func gateVerb(args []string) string {
 	for i, a := range args {
 		if a != "run" && a != "affected" {
 			continue
 		}
 		if slices.ContainsFunc(args[i+1:], func(f string) bool { return slices.Contains(gateReadFlags, f) }) {
-			return false
+			return ""
 		}
 		for _, rest := range args[i+1:] {
 			// Everything past `--` belongs to the underlying tool, where a bare `ci`
 			// is a test filter rather than this workspace's gate.
 			if rest == "--" {
-				return false
+				return ""
 			}
 			if rest == "" || rest[0] == '-' {
 				continue
@@ -305,12 +319,12 @@ func isGateCommand(args []string) bool {
 			// ParseTarget strips the charm suffix and normalizes, so `ci:rw` and `CI`
 			// both resolve; a project path or a duration simply does not match.
 			if t, err := types.ParseTarget(rest); err == nil && t.Name == types.TargetCI {
-				return true
+				return a
 			}
 		}
-		return false
+		return ""
 	}
-	return false
+	return ""
 }
 
 // gateRepeatAdvice names no target but the gate itself: a workspace calls its

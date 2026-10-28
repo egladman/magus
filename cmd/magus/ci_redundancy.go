@@ -54,6 +54,8 @@ type gateRedundancy struct {
 	undeclared []string
 	// tier is what size narrowed the gate to; empty runs the full gate.
 	tier types.RiskTier
+	// scope is what this gate's verdict covers; see gateScope.
+	scope sessions.GateScope
 }
 
 // gateFinding is one redundancy match: the green gate, and either an identical
@@ -115,7 +117,32 @@ func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, t
 		fp:       internalci.GateFingerprint(steps),
 		projects: projects,
 		charms:   sorted,
+		scope:    gateScope(ctx, m, target, projects),
 	}
+}
+
+// gateScope is affected when projects hold every project the branch affects against its
+// default base, and project otherwise. The default base, not the run's own: the push rule
+// asks about the branch CI builds, so `affected ci --base <rev>` over a narrower range
+// does not cover it, and `run ci` over every affected project does.
+func gateScope(ctx context.Context, m *magus.Magus, target string, projects []string) sessions.GateScope {
+	affected, _, _, _, err := m.ExpandAffectedSet(ctx, target, "")
+	if err != nil {
+		slog.InfoContext(ctx, "recording this gate as project scope: the affected set could not be read",
+			attr.Error(err), attr.Component("gate redundancy"))
+		return sessions.GateScopeProject
+	}
+	return scopeOver(affected, projects)
+}
+
+// scopeOver is affected when projects hold every affected target's project.
+func scopeOver(affected []types.Target, projects []string) sessions.GateScope {
+	for _, t := range affected {
+		if !slices.Contains(projects, t.Path) {
+			return sessions.GateScopeProject
+		}
+	}
+	return sessions.GateScopeAffected
 }
 
 // noteUndeclaredSeeds records which of this gate's projects were selected only through
@@ -310,6 +337,7 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 	}
 	g.append(ctx, sessions.GateResult{
 		Target:          g.target,
+		Scope:           g.scope,
 		Ref:             g.ref,
 		Commit:          g.commit,
 		Outcome:         outcome,
@@ -328,6 +356,7 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 func (g *gateRedundancy) recordDeferral(ctx context.Context, green sessions.GateRecord) {
 	g.append(ctx, sessions.GateResult{
 		Target:      g.target,
+		Scope:       g.scope,
 		Ref:         g.ref,
 		Commit:      g.commit,
 		Outcome:     sessions.OutcomeDeferred,

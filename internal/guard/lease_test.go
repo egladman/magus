@@ -206,7 +206,7 @@ func gateRepeatRepository(t *testing.T, runs int, outcome string) (context.Conte
 	dir, err := sessions.Dir(repo.Root())
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Ref: "main", Commit: repo.Head(), Outcome: outcome, Inv: "inv-green",
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: repo.Head(), Outcome: outcome, Inv: "inv-green",
 	}, sessions.InvocationStart{Workspace: repo.Root()}))
 	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
 }
@@ -270,7 +270,7 @@ func TestDenyRepeatGate(t *testing.T) {
 		otherDir, err := sessions.Dir(other.Root())
 		require.NoError(t, err)
 		require.NoError(t, sessions.RecordGate(otherDir, sessions.GateResult{
-			Target: types.TargetCI, Ref: "main", Commit: other.Head(), Outcome: sessions.OutcomePass, Inv: "inv-other",
+			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: other.Head(), Outcome: sessions.OutcomePass, Inv: "inv-other",
 		}, sessions.InvocationStart{Workspace: other.Root()}))
 		other.Write("b.go", "package a\n")
 		after := time.Now().Add(time.Minute)

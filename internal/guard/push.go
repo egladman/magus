@@ -63,6 +63,12 @@ const (
 	// gateWaived is no passing gate at this commit, and a person's waiver of this commit
 	// alone (`magus job grant --commit`).
 	gateWaived
+	// gateProjectScoped is a passing gate at this commit over named projects that left an
+	// affected project out, such as `magus run ci libs/cmdline`, and no branch verdict.
+	gateProjectScoped
+	// gateUnscoped is a passing gate at this commit recorded before gate records named
+	// their scope, and no branch verdict. It reads as project scope.
+	gateUnscoped
 )
 
 // gateCoverageAt reads the run log for gate invocations built from commit.
@@ -96,8 +102,12 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 		case gateFailed:
 			out = gateFailed
 		case gateIncomplete:
-			if out == gateAbsent {
+			if out == gateAbsent || out == gateProjectScoped {
 				out = gateIncomplete
+			}
+		case gateProjectScoped:
+			if out == gateAbsent {
+				out = gateProjectScoped
 			}
 		}
 	}
@@ -130,6 +140,10 @@ func gateVerdictAt(workspace, commit string) gateCoverage {
 	switch {
 	case !ok:
 		return gateUnknown
+	case !rec.BranchVerdict() && rec.Scope.Unscoped():
+		return gateUnscoped
+	case !rec.BranchVerdict():
+		return gateProjectScoped
 	case rec.Outcome == sessions.OutcomePass:
 		return gatePassed
 	default:
@@ -173,6 +187,11 @@ func readGateOutcome(path, commit string) gateCoverage {
 		if ev.Kind == journal.KindStarted {
 			if ev.Command == nil || !isGateCommand(ev.Command.Arguments) || !namesCommit(ev.MagusVersion, commit) {
 				return gateUnknown
+			}
+			// The log names the argv, not the affected set, so only `affected ci` is known
+			// to cover the branch; a `run ci` names its own selection.
+			if !isAffectedGateCommand(ev.Command.Arguments) {
+				return gateProjectScoped
 			}
 		}
 		if ev.Kind == journal.KindStarted || ev.Kind == journal.KindFinished {
@@ -270,6 +289,10 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 		state = "the `" + string(types.TargetCI) + "` run at this commit failed"
 	case gateIncomplete:
 		state = "the `" + string(types.TargetCI) + "` run at this commit never finished"
+	case gateProjectScoped:
+		state = "the `" + string(types.TargetCI) + "` run at this commit covered named projects, not every project the branch affects"
+	case gateUnscoped:
+		state = "the `" + string(types.TargetCI) + "` verdict at this commit was recorded before gate records named their scope, so it reads as project scope"
 	}
 	head := fmt.Sprintf("pushing %s, which no passing gate covers: %s.\n", commit, state)
 	if cover == gateIncomplete {
