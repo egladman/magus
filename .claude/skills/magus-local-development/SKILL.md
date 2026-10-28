@@ -58,3 +58,16 @@ For every package-level `var` cache, memo or
 
 Before adding code to keep something working, check whether removing the path, flag,
 fallback or test reaches the goal. magus is pre-1.0, so the break is allowed.
+
+<!-- rule: child-decisions-reach-the-parent-log; added: 2026-10-28; origin: agent, unreviewed;
+     evidence: plans/oci-dx-pr625-2026-10-27/DECISIONS.md entries 88 and 89, where a parent kept working from a stale plan after the person decided in a child session;
+     retire-when: the guard refuses an agent's job fork that overlaps a child row carrying a newer person decision (ADR 0020, decision 89) -->
+## 6. Decisions made in a child reach the parent's log
+
+The person may direct any session at any time. A parent steers the sessions and workers it
+started. A sibling or worker reports and never directs.
+
+- When the person decides something in a child session, the child appends it to the
+  parent's decision log before doing anything else.
+- Before forking work in an area a child covers, the parent re-reads that log. A plan
+  older than the log is stale.
