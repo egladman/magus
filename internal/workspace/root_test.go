@@ -1,101 +1,119 @@
 package workspace
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
-// mkTree creates dirs and marker files in w. A trailing "/" makes a directory,
-// otherwise an empty marker file.
-func mkTree(t *testing.T, w *testkit.Workspace, paths ...string) {
-	t.Helper()
+// RootSuite pins the one-workspace rule: a magusfile marks a PROJECT, only magus.yaml
+// declares where a workspace begins, and no language's manifest roots one.
+type RootSuite struct {
+	suite.Suite
+	w *testkit.Workspace
+}
+
+func TestRootSuite(t *testing.T) { suite.Run(t, new(RootSuite)) }
+
+func (s *RootSuite) SetupTest() { s.w = testkit.NewWorkspace(s.T()) }
+
+// mkTree creates dirs and marker files. A trailing "/" makes a directory, otherwise
+// an empty marker file.
+func (s *RootSuite) mkTree(paths ...string) {
 	for _, p := range paths {
 		if p[len(p)-1] == '/' {
-			if err := os.MkdirAll(w.Path(p), 0o755); err != nil {
-				t.Fatalf("mkdir %s: %v", p, err)
-			}
+			s.Require().NoError(os.MkdirAll(s.w.Path(p), 0o755))
 			continue
 		}
-		w.Write(p, "")
+		s.w.Write(p, "")
 	}
 }
 
-func mustFindRoot(t *testing.T, dir string) string {
-	t.Helper()
-	got, err := FindRoot(dir)
-	if err != nil {
-		t.Fatalf("FindRoot(%s): %v", dir, err)
-	}
+func (s *RootSuite) findRoot(rel ...string) string {
+	got, err := FindRoot(s.w.Path(rel...))
+	s.Require().NoError(err)
 	return got
 }
 
-// TestFindRoot pins the one-workspace rule: a magusfile marks a PROJECT, and only
-// magus.yaml declares where a workspace begins.
-func TestFindRoot(t *testing.T) {
-	t.Run("a nested project does not become its own workspace", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "magus.yaml", "magusfile.buzz", "console/magusfile.buzz")
-		if got := mustFindRoot(t, filepath.Join(root, "console")); got != root {
-			t.Errorf("root = %q, want %q; halting at console's magusfile is the original bug", got, root)
-		}
-	})
+func (s *RootSuite) TestANestedProjectDoesNotBecomeItsOwnWorkspace() {
+	s.mkTree("magus.yaml", "magusfile.buzz", "console/magusfile.buzz")
+	s.Equal(s.w.Root(), s.findRoot("console"), "halting at console's magusfile is the original bug")
+}
 
-	// The regression the first attempt shipped: go.mod was treated as a workspace
-	// marker on the theory it only sits at a repo's top, which is false in any
-	// multi-module repo. A submodule then locked its own cache dir and stopped
-	// excluding the root run despite touching the same files.
-	t.Run("a nested go.mod does not become its own workspace", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "magus.yaml", "go.mod", "libs/diagnostics/go.mod", "libs/diagnostics/magusfile.buzz")
-		if got := mustFindRoot(t, filepath.Join(root, "libs", "diag")); got != root {
-			t.Errorf("root = %q, want %q; a submodule must not split the workspace", got, root)
-		}
-	})
+// Worktrees nest INSIDE their parent repo, so an outermost-wins rule swallows them.
+// The nearest declaration governs, the same way .git behaves.
+func (s *RootSuite) TestTheNearestMagusYAMLWinsSoANestedWorktreeKeepsItsOwn() {
+	s.mkTree("magus.yaml", "magusfile.buzz",
+		".claude/worktrees/feature/magus.yaml",
+		".claude/worktrees/feature/magusfile.buzz",
+		".claude/worktrees/feature/console/magusfile.buzz")
+	wt := s.w.Path(".claude", "worktrees", "feature")
 
-	// Worktrees nest INSIDE their parent repo, so an outermost-wins rule swallows
-	// them. The nearest declaration governs, the same way .git behaves.
-	t.Run("nearest magus.yaml wins so a nested worktree keeps its own", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		outer := w.Root()
-		mkTree(t, w, "magus.yaml", "magusfile.buzz",
-			".claude/worktrees/feature/magus.yaml",
-			".claude/worktrees/feature/magusfile.buzz",
-			".claude/worktrees/feature/console/magusfile.buzz")
+	s.Equal(wt, s.findRoot(".claude", "worktrees", "feature"), "not its parent repo")
+	s.Equal(wt, s.findRoot(".claude", "worktrees", "feature", "console"))
+	s.Equal(s.w.Root(), s.findRoot())
+}
 
-		wt := filepath.Join(outer, ".claude", "worktrees", "feature")
-		if got := mustFindRoot(t, wt); got != wt {
-			t.Errorf("root = %q, want the worktree %q, not its parent repo", got, wt)
-		}
-		if got := mustFindRoot(t, filepath.Join(wt, "console")); got != wt {
-			t.Errorf("root from inside the worktree = %q, want %q", got, wt)
-		}
-		if got := mustFindRoot(t, outer); got != outer {
-			t.Errorf("root from the parent = %q, want %q", got, outer)
-		}
-	})
+func (s *RootSuite) TestAStandaloneProjectResolvesToItsOutermostMagusfile() {
+	s.mkTree("solo/magusfile.buzz", "solo/nested/magusfile.buzz")
+	s.Equal(s.w.Path("solo"), s.findRoot("solo", "nested"))
+}
 
-	t.Run("a standalone project with no magus.yaml resolves to its outermost marker", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "solo/magusfile.buzz", "solo/nested/magusfile.buzz")
-		if got, want := mustFindRoot(t, filepath.Join(root, "solo", "nested")), filepath.Join(root, "solo"); got != want {
-			t.Errorf("root = %q, want %q", got, want)
-		}
-	})
+// Contiguity bounds the fallback: without it, one stray magusfile in a home directory
+// would adopt every project beneath it.
+func (s *RootSuite) TestAGapStopsTheMagusfileRunFromReachingAStrayAncestor() {
+	s.mkTree("magusfile.buzz", "gap/", "gap/proj/magusfile.buzz")
+	s.Equal(s.w.Path("gap", "proj"), s.findRoot("gap", "proj"), "the marker-less gap must stop the walk")
+}
 
-	// Contiguity bounds the fallback: without it, one stray magusfile in a home
-	// directory would adopt every project beneath it.
-	t.Run("a gap stops the fallback from reaching a stray ancestor", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "magusfile.buzz", "gap/", "gap/proj/magusfile.buzz")
-		if got, want := mustFindRoot(t, filepath.Join(root, "gap", "proj")), filepath.Join(root, "gap", "proj"); got != want {
-			t.Errorf("root = %q, want %q; the marker-less gap must stop the walk", got, want)
+func (s *RootSuite) TestAMagusfileWinsOverTheCheckoutAboveIt() {
+	s.mkTree(".git/", "app/magusfile.buzz", "app/web/")
+	s.Equal(s.w.Path("app"), s.findRoot("app", "web"))
+}
+
+// go.mod once rooted a workspace from shipped Go, which put one language's knowledge
+// in core and split a multi-module repo at each submodule.
+func (s *RootSuite) TestAGoModRootsNothingSoTheCheckoutDoes() {
+	s.mkTree(".git/", "go.mod", "libs/diagnostics/go.mod")
+	s.Equal(s.w.Root(), s.findRoot("libs", "diagnostics"))
+}
+
+// A linked git worktree carries .git as a file, and the nearest checkout governs.
+func (s *RootSuite) TestTheNearestCheckoutRootsTheWorkspace() {
+	s.mkTree(".hg/", "worktree/.git", "worktree/src/")
+	s.Equal(s.w.Path("worktree"), s.findRoot("worktree", "src"))
+}
+
+func (s *RootSuite) TestRootingAtTheCheckoutWarnsAndNamesInit() {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	s.T().Cleanup(func() { slog.SetDefault(prev) })
+
+	s.mkTree(".jj/", "src/")
+	s.findRoot("src")
+	s.findRoot()
+
+	s.Contains(logged.String(), "the workspace root is the VCS checkout")
+	s.Contains(logged.String(), "init")
+	s.Equal(1, bytes.Count(logged.Bytes(), []byte("level=WARN")), "one warning per root per process")
+}
+
+func (s *RootSuite) TestNoMagusFileAndNoCheckoutIsNoWorkspaceRoot() {
+	for d := filepath.Dir(s.w.Root()); d != filepath.Dir(d); d = filepath.Dir(d) {
+		if dirHasMarker(d, slices.Concat([]string{workspaceMarker}, projectMarkers, vcsMarkers)) {
+			s.T().Skipf("%s, above the temp dir, carries a marker, so the walk cannot run out", d)
 		}
-	})
+	}
+	s.mkTree("go.mod", "pkg/")
+	_, err := FindRoot(s.w.Path("pkg"))
+	s.ErrorIs(err, types.NoWorkspaceRoot)
 }
