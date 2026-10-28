@@ -615,6 +615,7 @@ func TestBinaryAnswersCoverEveryForkingMember(t *testing.T) {
 		filepath.Join("bindings", "gen", "magus.go"): nil,
 		filepath.Join("bindings", "describe.go"):     {"describe"},
 		filepath.Join("bindings", "job.go"):          {"job"},
+		filepath.Join("bindings", "magus_risk.go"):   {"risk"},
 		filepath.Join("bindings", "magus_trail.go"):  {"trail"},
 		filepath.Join("bindings", "magus_vcs.go"):    {"vcs"},
 	}

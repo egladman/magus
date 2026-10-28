@@ -45,6 +45,7 @@
 {"name":"Magus.All","reason":"workspace accessor the CLI or std calls on the loaded handle"}
 {"name":"Magus.ApplySandbox","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.AssessChange","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.AssessRisk","reason":"types.RiskAssessor, which std reaches magus\\risk.assess through, needs it exported"}
 {"name":"Magus.AutoResolvable","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
 {"name":"Magus.AutoResolve","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
 {"name":"Magus.AutoResolveGlobs","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}

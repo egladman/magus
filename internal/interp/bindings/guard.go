@@ -36,18 +36,14 @@ import (
 // spawn(), command(), write() and stop() each register the one function the guard calls on
 // every agent spawn and continuation, every agent shell command, every agent file write, or
 // every agent stop, with allow/advise/deny to build its answer and once/count for state that
-// lasts the calling session. See registerSpawnRule, registerCommandRule, registerWriteRule
-// and registerStopRule.
+// lasts the calling session. See registerEventRules.
 //
 // builtins() sets compiled rules by name; see registerBuiltins. profile() picks the level
 // those settings start from; see registerProfile.
 func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	guardMap := vm.NewMap()
 	registerVerdictMembers(ctx, sess, obs, guardMap)
-	registerSpawnRule(ctx, sess, obs, guardMap)
-	registerCommandRule(ctx, sess, obs, guardMap)
-	registerWriteRule(ctx, sess, obs, guardMap)
-	registerStopRule(ctx, sess, obs, guardMap)
+	registerEventRules(ctx, sess, obs, guardMap)
 	registerBuiltins(ctx, obs, guardMap)
 	registerProfile(ctx, obs, guardMap)
 	guardMap.MapSet("shell", directVal(obs, "magus.guard.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -285,28 +281,36 @@ func parseShellDialect(s string) (string, error) {
 	}
 }
 
-// registerStopRule binds magus\guard.stop onto guardMap:
-//
-//	magus\guard.stop(fun(req: StopRequest) > GuardVerdict {
-//	    if (req.role == "root" and !req.stopHookActive) { return magus\guard.deny("two rows wait"); }
-//	    return magus\guard.allow();
-//	});
-//
-// The guard calls it on every Stop and SubagentStop its built-in stop check lets through.
-func registerStopRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
-	registerFunctionRule(ctx, sess, obs, guardMap, functionRule{
-		member:    "stop",
-		signature: "fun(req: StopRequest) > GuardVerdict",
-		judges:    "every agent stop",
-		set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
-			reg.SetStopRule(buzzStopRule(sess, fn))
-		},
-	})
+// registerEventRules binds magus\guard.spawn, command, write and stop onto guardMap. Command
+// and write run after the built-in rules; stop runs on each Stop and SubagentStop the
+// built-in stop check lets through.
+func registerEventRules(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
+	for _, r := range []functionRule{
+		{member: "spawn", signature: "fun(req: SpawnRequest) > GuardVerdict", judges: "every agent spawn",
+			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
+				reg.SetSpawnRule(buzzRule(sess, fn, "spawn", bindgen.ObjectSpawnRequest))
+			}},
+		{member: "command", signature: "fun(req: CommandRequest) > GuardVerdict", judges: "every agent shell command",
+			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
+				reg.SetCommandRule(buzzRule(sess, fn, "command", bindgen.ObjectCommandRequest))
+			}},
+		{member: "write", signature: "fun(req: WriteRequest) > GuardVerdict", judges: "every agent file write",
+			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
+				reg.SetWriteRule(buzzRule(sess, fn, "write", bindgen.ObjectWriteRequest))
+			}},
+		{member: "stop", signature: "fun(req: StopRequest) > GuardVerdict", judges: "every agent stop",
+			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
+				reg.SetStopRule(buzzRule(sess, fn, "stop", bindgen.ObjectStopRequest))
+			}},
+	} {
+		registerFunctionRule(ctx, sess, obs, guardMap, r)
+	}
 }
 
-// buzzStopRule adapts the registered Buzz function to the guard's rule type.
-func buzzStopRule(sess *buzz.Session, rule vm.Value) workspace.StopRule {
-	return func(ctx context.Context, req types.StopRequest, facts hint.Gate) (types.GuardVerdict, error) {
-		return callFunctionRule(ctx, sess, rule, "stop", bindgen.ObjectStopRequest(req, ffi.SessionEnums(ctx, sess, "magus")), facts)
+// buzzRule adapts a registered Buzz function to the guard's rule type over requests of
+// type R; object renders one as the value the function takes.
+func buzzRule[R any](sess *buzz.Session, rule vm.Value, member string, object func(R, ffi.EnumCases) vm.Value) func(context.Context, R, hint.Gate) (types.GuardVerdict, error) {
+	return func(ctx context.Context, req R, facts hint.Gate) (types.GuardVerdict, error) {
+		return callFunctionRule(ctx, sess, rule, member, object(req, ffi.SessionEnums(ctx, sess, "magus")), facts)
 	}
 }

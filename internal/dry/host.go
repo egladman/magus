@@ -573,6 +573,14 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	m.MapSet("trail", trail)
 
+	// A tier is proven from a checkout's diff and go list, neither of which the sandbox has,
+	// so assess raises rather than answer a tier nothing measured.
+	risk := vm.NewMap()
+	risk.MapSet("assess", function("magus.risk.assess", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.Null, errors.New(`magus\risk.assess: the playground has no checkout to measure a change in`)
+	}))
+	m.MapSet("risk", risk)
+
 	addPureMagus(m)
 
 	// The skill catalog is internal/agent's, which the sandbox does not link either.
