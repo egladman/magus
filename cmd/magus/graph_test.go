@@ -1,20 +1,27 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
 )
 
 // Which diagnostic this is does not matter; it is an edge endpoint.
@@ -266,4 +273,38 @@ func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
 	got = reindexRefusals(errors.Join(missing, full))
 	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
+}
+
+// GraphExportSCIPSuite pins `magus graph export -o scip`: the symbol index as SCIP, for
+// tools that read it, written only where a binary stream belongs.
+type GraphExportSCIPSuite struct {
+	suite.Suite
+}
+
+func TestGraphExportSCIPSuite(t *testing.T) { suite.Run(t, new(GraphExportSCIPSuite)) }
+
+func (s *GraphExportSCIPSuite) TestRefusesASelection() {
+	err := graphExportSCIP(s.T().Context(), s.T().TempDir(), &bytes.Buffer{}, neverTerminalProbe{}, true)
+	s.ErrorContains(err, "drop --select")
+}
+
+func (s *GraphExportSCIPSuite) TestRefusesATerminal() {
+	f, err := os.Create(filepath.Join(s.T().TempDir(), "tty"))
+	s.Require().NoError(err)
+	defer f.Close()
+	err = graphExportSCIP(s.T().Context(), s.T().TempDir(), f, fixedSizeTerminal{w: 80, h: 24}, false)
+	s.ErrorContains(err, "redirect it to a file")
+}
+
+func (s *GraphExportSCIPSuite) TestWritesAnIndexRootedAtTheWorkspace() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+	var out bytes.Buffer
+	s.Require().NoError(graphExportSCIP(s.T().Context(), w.Root(), &out, neverTerminalProbe{}, false))
+
+	var idx scip.Index
+	s.Require().NoError(proto.Unmarshal(out.Bytes(), &idx))
+	s.Equal("magus", idx.Metadata.ToolInfo.Name)
+	s.Contains(idx.Metadata.ProjectRoot, filepath.ToSlash(w.Root()))
+	s.Empty(idx.Documents, "a workspace no spell indexes exports no documents")
 }

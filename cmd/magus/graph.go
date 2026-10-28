@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -25,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
@@ -394,7 +396,8 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Emits the merged graph: -o json for the node-link form, -o graphml for")
 			fmt.Fprintln(os.Stderr, "GraphML (Gephi, yEd, and other graph viewers read both directly). The")
 			fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
-			fmt.Fprintln(os.Stderr, "changed are rebuilt.")
+			fmt.Fprintln(os.Stderr, "changed are rebuilt. -o scip writes the symbol index instead, as one binary")
+			fmt.Fprintln(os.Stderr, "SCIP index for code-intelligence tools: redirect it to a file.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open sends the same graph to the interactive Graph Explorer instead of")
 			fmt.Fprintln(os.Stderr, "stdout. It never leaves your machine: by default it rides in the link's URL")
@@ -431,9 +434,12 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}, pos)
 	}
 
-	opts, err := output.Parse(global.output, outputGraphML, outputDot)
+	opts, err := output.Parse(global.output, outputGraphML, outputDot, outputSCIP)
 	if err != nil {
 		return err
+	}
+	if opts.Format == outputSCIP {
+		return graphExportSCIP(ctx, root, os.Stdout, tty.SystemProbe, ef.Select != "")
 	}
 	// dot is a graph-layout format; on the whole graph (1000s of nodes) it is
 	// unreadable, so it requires a --select neighborhood to scope down.
@@ -500,6 +506,26 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	}
 	fmt.Println("\nRun with -o json (node-link) or -o graphml for the full graph.")
 	return nil
+}
+
+// outputSCIP is graph export's SCIP protobuf index, for code-intelligence tools.
+const outputSCIP output.Format = "scip"
+
+// graphExportSCIP writes the workspace's symbol indexes to out as one SCIP index, judging
+// out a terminal by probe. --select narrows the knowledge graph, which this export does
+// not carry, so it is refused rather than ignored.
+func graphExportSCIP(ctx context.Context, root string, out io.Writer, probe tty.Probe, selected bool) error {
+	if selected {
+		return fmt.Errorf("-o %s exports the whole symbol index, and --select narrows the knowledge graph, which it does not carry: drop --select", outputSCIP)
+	}
+	if tty.IsTerminalWriter(out, probe) {
+		return fmt.Errorf("-o %[1]s writes a binary SCIP index: redirect it to a file, as in magus graph export -o %[1]s > index.scip", outputSCIP)
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	return m.ExportSCIP(ctx, out)
 }
 
 // stripUnreproducible removes everything from an exported graph that is not a function of

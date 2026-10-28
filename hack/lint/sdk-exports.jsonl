@@ -78,6 +78,7 @@
 {"name":"Magus.ExpandAffectedSet","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ExpandPath","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ExportCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.ExportSCIP","reason":"symbol index export as SCIP for code-intelligence tools, behind magus graph export -o scip"}
 {"name":"Magus.FileAt","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.FindOutputProducer","reason":"captured output lookup behind query output and the run ref"}
 {"name":"Magus.FreshenSymbolIndexes","reason":"symbol index query or refresh for refs and the conformance lens"}

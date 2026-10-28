@@ -589,7 +589,9 @@ Subcommands (the first argument):
            the magus domain (projects, targets, spells, ops, charms, modules,
            methods, diagnostics, docs, buzz sources). -o json emits the
            node-link form; -o graphml emits GraphML. External graph viewers
-           (Gephi, yEd) read both directly. --select "<terms>" narrows the
+           (Gephi, yEd) read both directly. -o scip writes the workspace's
+           symbol index as one binary SCIP index, for code-intelligence tools,
+           and refuses a terminal. --select "<terms>" narrows the
            export to a query's neighborhood (same engine as magus query); -o dot
            renders only with --select, since the full graph has too many nodes
            to lay out. The graph is cache-backed under
@@ -646,7 +648,7 @@ Subcommands (the first argument):
 			{Name: "spell", Kind: cmdline.String, Doc: "Only projects driven by this spell"},
 			{Name: "target", Kind: cmdline.String, Doc: "Target whose duration history annotates nodes (default: build)"},
 		}},
-		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml)", Flags: []cmdline.Flag{
+		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml), or the symbol index as SCIP", Flags: []cmdline.Flag{
 			{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild before exporting"},
 			{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace"},
 			{Name: "reproducible", Kind: cmdline.Bool, Default: false, Doc: "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes"},
@@ -681,6 +683,7 @@ Subcommands (the first argument):
 		{Comment: "DAG rooted at one project, dependents up", Command: "magus graph deps pkg/api --upstream"},
 		{Comment: "Knowledge graph for an external viewer", Command: "magus graph export -o json > graph.json"},
 		{Comment: "GraphML for Gephi or yEd", Command: "magus graph export -o graphml > graph.graphml"},
+		{Comment: "Symbol index for SCIP tools", Command: "magus graph export -o scip > index.scip"},
 		{Comment: "A query's neighborhood as DOT", Command: "magus graph export --select 'kind=spell go' -o dot"},
 		{Comment: "Where structural risk concentrates", Command: "magus graph stats"},
 		{Comment: "Doc coverage for spells only", Command: "magus graph stats --kind spell"},
