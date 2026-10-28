@@ -1,11 +1,9 @@
 # Splitting work across agents
 
 Count the WRITE SETS your change needs (the distinct groups of files to edit), not the
-projects it invalidates. Getting this backwards is the standard fan-out failure{{if .Full}}: a
+projects it invalidates. Getting this backwards is the standard fan-out failure. A
 one-line edit in a central package invalidates half the workspace and is still one
-edit, and fanning it out produces several agents editing one file{{else}}. A
-one-line edit in a central package invalidates half the workspace and is still one
-edit{{end}}.
+edit{{if .Full}}; fanned out, it puts several agents on one file{{end}}.
 
 `{{cmd "affected"}} <target> --plan` partitions VALIDATION: which targets to run, grouped
 for runner balance. It is neither an edit assignment nor a proof of write isolation.
@@ -26,9 +24,8 @@ You do not need to be asked to split work{{if .Full}}. "Split this across agents
 several disjoint write sets you can name is another{{else}}: several disjoint write sets
 you can name are reason enough{{end}}.
 
-{{if .Full}}Fan-out is not inherently expensive. What costs is unbounded fan-out:
-workers that hand work on without a shrinking scope, jobs with no acceptance criteria
-so nobody can say when to stop, and a principal model assigned to mechanical edits. Each of those is a choice made below, not a property of fanning out. {{end}}Say what a round
+{{if .Full}}What costs is unbounded fan-out, not fan-out: a hand-on without a shrinking scope,
+a job with no criteria, a principal model on mechanical edits. {{end}}Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
@@ -47,11 +44,9 @@ The guard enforces this by role, and the role is the live lease: the root may ta
 ## Coalesce what the write sets allow
 
 Disjoint write sets LICENSE parallelism; they do not require it. Every worker carries
-a fixed load before it reads a line of the diff{{if .Full}}: a system
-prompt, the repository's instruction file, the routing index, the skills that
-load, and the graph queries it runs to find its own footing, spent identically
-whether the unit is fifty lines or five hundred{{end}}.{{if .Full}} So after partitioning,
-ask whether each unit is big enough to be worth a worker.{{end}}
+a fixed load before it reads a line of the diff{{if .Full}} (system prompt, instruction
+file, routing index, skills, its own graph queries), so ask whether each unit is big
+enough to be worth one{{end}}.
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn{{if .Full}}.
   Two is two loads for one unit of work, and the second starts by rediscovering
@@ -71,19 +66,15 @@ ask whether each unit is big enough to be worth a worker.{{end}}
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-{{if .Full}}Graph engineering is a natural evolution of loop engineering: the graph improves
-the loop's partition and collision decisions, and does not replace the loop. The loop:
-state the goal and acceptance criteria, partition, hand out, observe, evaluate against
-the evidence, revise ownership or ordering, then integrate.
+{{if .Full}}The loop: state the goal and acceptance criteria, partition, hand out, observe,
+evaluate against the evidence, revise ownership or ordering, then integrate. The graph
+improves the partition and collision decisions; it does not replace the loop.
 
 Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
-never a worker's prose. A worker that ran a filtered subset, or quietly restated its
-criteria into something it did pass, reports success either way, and a
-transcript cannot tell you which happened.
-
-An agent may report that its edits are done, but no job is complete until its
-acceptance criteria and assigned check pass. The root agent, not a worker,
-decides whether the top-level goal is complete.{{else}}The loop: define, partition, hand out, observe, evaluate, course-correct, integrate.
+never a worker's prose: a worker that ran a filtered subset, or restated its criteria
+into ones it passed, reports success either way. No job is complete until its criteria
+and assigned check pass, and the root, not a worker, decides whether the top-level goal
+is complete.{{else}}The loop: define, partition, hand out, observe, evaluate, course-correct, integrate.
 
 - Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
   never a worker's prose.
@@ -110,13 +101,11 @@ set -o pipefail
   jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
 ```
 
-Tell the person what changed, what passed, what remains unverified, and any
-decision they need to make. A routine claim, handled denial, or already-recorded
-deviation is not a progress update. Collapse repeated events into the current
-blocker and next action. When a waiver skips validation or accepts a material
-risk, explain that consequence once in plain language and link the evidence;
-do not paste waiver objects, claim lists or guard transcripts. A detailed audit
-requested by the person can open those records.
+Tell the person what changed, what passed, what remains unverified, and any decision
+they need to make. A routine claim, handled denial, or recorded deviation is not an
+update; collapse repeats into the current blocker and next action. A waiver that skips
+validation or accepts a material risk gets one plain sentence and its evidence link,
+never pasted waiver objects, claim lists or guard transcripts.
 
 ## Declare the interface before any job forks
 
@@ -154,9 +143,8 @@ Check each declared name with `{{cmd "refs"}}` before forking.{{if .Full}} A bar
 to more than one definition is graded against one of them, silently.{{end}}
 
 This applies with zero workers. A solo change across several call sites is a one-job
-tree. Skipping the declaration because nothing is forked is the same failure{{if .Full}} without
-a fork to blame. Write the table in the conversation, check it with `{{cmd "refs"}}` when
-the edits land, and only then report the change done{{end}}.
+tree. Skipping the declaration because nothing is forked is the same failure{{if .Full}}: write
+the table, check it with `{{cmd "refs"}}` when the edits land, then report the change done{{end}}.
 
 ## Set one topology boundary
 
@@ -196,9 +184,8 @@ writes. Mark that job's check ROOT-DEFERRED when you fork it:
 
 - the worker writes the tests, stops at the static checks its environment does run,
   and says so;
-- the root executes the job's target centrally before verifying.{{if .Full}} Leaving each worker to discover the wall
-  spends its budget once per worker, and its report reads "done" with nothing executed,
-  which `{{cmd "job wait"}}` refuses to record as a pass.{{end}}
+- the root executes the job's target centrally before verifying.{{if .Full}} Otherwise each
+  worker reports "done" with nothing executed, which `{{cmd "job wait"}}` refuses to pass.{{end}}
 
 A worker may fork part of its own job. It may not hand it out without shrinking the
 problem{{if .Full}}; that is the shape that does not terminate, and
@@ -233,22 +220,17 @@ cheaper{{end}}.
 Naming it is the checkable half: every spawn names a model, or an agent definition
 that names one.
 
-- Inheriting the parent's model ON PURPOSE is fine and often right{{if .Full}}. A hard review
-  under a cheaper coordinator is exactly the case a weaker-only ordering would forbid{{end}}.
+- Inheriting the parent's model ON PURPOSE is fine and often right{{if .Full}}, such as a hard review under a cheaper coordinator{{end}}.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
-  makes every unnamed spawn the most expensive one, and records no choice{{if .Full}}.
-  Measured 2026-09-15: five of nine workers that inherited the root's model did mechanical
-  work a cheaper model does as well{{end}}.
+  makes every unnamed spawn the most expensive one, and records no choice.
 
 When the tier is unclear, start at economy. A job that fails its criteria there is
-re-forked one tier up, not retried at the same one.{{if .Full}} "Only ever spawn something
-weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
-is a starting point and not a ceiling.{{end}}
+re-forked one tier up, not retried at the same one.{{if .Full}} Economy is a starting
+point, not a ceiling: same-strength offload is legitimate.{{end}}
 
-Tiers are the workspace's.{{if .Full}} A magusfile enum (`magus\job.modelTiers`, shipped as economy,
-standard, principal) maps each to every harness's model alias.{{end}} `--model` takes a tier or a
-model.{{if .Full}} The row records tier, rank, source (row, matrix, default) and why, and the guard
-compares a spawn's tier by rank.{{end}} magus never picks a model live: re-fork to change a tier.
+Tiers are the workspace's{{if .Full}}: a magusfile enum (`magus\job.modelTiers`) maps each to every
+harness's model alias, and the guard compares a spawn's tier by rank{{end}}. `--model` takes a tier
+or a model. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
 |---|---|
@@ -271,9 +253,8 @@ fast as one principal worker, for far fewer tokens{{end}}:
 - The principal tier only reconciles the claims where workers disagree.
 
 Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
-row) and carries no transcript.{{if .Full}} A worker resends its whole context every turn, and some
-providers raise a tier's price past a prompt size.{{end}} Where the brief names that size, the
-worker reports and stops before passing it.
+row) and carries no transcript.{{if .Full}} Some providers raise a tier's price past a prompt size.{{end}}
+Where the brief names that size, the worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map. A child reports its proposed descendants to its parent before it
@@ -297,11 +278,6 @@ magus affected <target> --plan
 
 For a proposed change whose paths are known but not yet edited, plan those paths
 instead of the current diff (`--stdin --plan`, one repo-relative path per line).
-{{if .Full}}
-```sh
-printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan
-```
-{{end}}
 Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`.{{if .Full}} A shard is a
 history-balanced execution group, not an edit assignment or proof of write isolation.{{end}}
 Use a shard only as the first partition. If paths are unknown, query the task's symbols,
@@ -342,9 +318,8 @@ ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: a
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 
 magus READS those files to load the workspace. A half-saved one stops the workspace
-loading for everybody in that checkout{{if .Full}} at once. The rest lose `{{cmd "run"}}`, `{{cmd "ls"}}` and their own tests over an edit they
-cannot see. Measured 2026-09-17: one half-saved magusfile stopped three workers
-sharing a checkout{{end}}.
+loading for everybody in that checkout{{if .Full}}, who lose `{{cmd "run"}}`, `{{cmd "ls"}}`
+and their own tests over an edit they cannot see{{end}}.
 When `{{cmd "job fork"}}` refuses one, the answer is a separate worktree, not a narrower
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
@@ -404,9 +379,8 @@ job's own criteria, boundary and check, plus what the workspace knows and nobody
 down{{if .Full}}: the projects the write paths reach, the declared
 output globs that land inside them, the paths a sibling job is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
-change alongside the leased ones without declaring a dependency{{end}}. {{if .Full}}Two renders of one
-row are byte-identical, which hand-typed prompts are not: seven of
-them disagreed about a dedup key and every one ended with the gate.{{end}}
+change alongside the leased ones without declaring a dependency{{end}}.{{if .Full}} Two renders of one
+row are byte-identical; hand-typed prompts are not.{{end}}
 
 The guard grades every command a brief presents in a shell fence or a code span. One
 it would deny refuses the spawn{{if .Full}}, since the worker runs a brief's
@@ -417,10 +391,9 @@ commands as written{{end}}. A line that names a command to forbid it ("never ...
 {{if .Full}}A brief carries the JOB ID, the goal and why, the decisions made, and evidence refs.
 It leaves out skill loads, command style, the `BAGGAGE` export, write paths, the check,
 how to commit and push, and attribution: the guard, the harness and `{{cmd "describe job"}}`
-supply or enforce each, and a refusal says what to do. Restated, a guard rule costs every
-worker tokens, goes stale, and crowds out the model's own judgment. When a worker keeps
-missing something, fix the guard rule or its message, not the brief. A follow-up message
-to a bound worker carries only what changed.{{else}}Brief carries only: JOB ID, goal and why, decisions made, evidence refs.
+supply or enforce each. A restated guard rule costs every worker tokens and goes stale;
+when a worker keeps missing something, fix the guard rule or its message, not the brief.
+A follow-up message to a bound worker carries only what changed.{{else}}Brief carries only: JOB ID, goal and why, decisions made, evidence refs.
 Leave out: skill loads, command style, `BAGGAGE` export, write paths, check, how to commit and push, attribution; guard, harness, `{{cmd "describe job"}}` supply or enforce each.
 Restated guard rule costs every worker tokens, goes stale. Worker keeps missing something -> fix guard rule or its message, never brief.
 Follow-up message to bound worker: only what changed.{{end}}
@@ -428,14 +401,10 @@ Follow-up message to bound worker: only what changed.{{end}}
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
 
-- export `BAGGAGE=magus.lease=<its id>` before it works{{if .Full}}: that is the W3C
-  Baggage channel, and the member is what tells the agent guard whose declared boundary
-  to grade a write against, so a worker that never exports it is graded as an editor
-  magus cannot attribute. Export `TRACEPARENT` too when your host has one, and add
-  `magus.spawner=<your label>` to the baggage: magus records the trace, the parent span
-  and the label as CLAIMS, so `{{cmd "session"}} ls` can show who spawned whom, and no
-  verdict is ever keyed on them{{else}}: the guard grades its writes only when that is
-  set{{end}};
+- export `BAGGAGE=magus.lease=<its id>` before it works: the guard grades its writes only
+  when that is set{{if .Full}}. Add `magus.spawner=<your label>` to the baggage, and
+  `TRACEPARENT` where the host has one: magus records them as claims for
+  `{{cmd "session"}} ls`, and no verdict is keyed on them{{end}};
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
 - never wait for the build budget, `{{cmd "status"}} --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
