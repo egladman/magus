@@ -167,7 +167,7 @@ func tieHash(doc string) uint64 {
 // MeanInterval is the mean of values and its 95% Student t interval. It panics on
 // fewer than 2 values.
 func MeanInterval(values []float64) (mean, lo, hi float64) {
-	return pairedTInterval(values, make([]float64, len(values)), 0.95)
+	return PairedTInterval(values, make([]float64, len(values)), 0.95)
 }
 
 // WilsonInterval is the 95% Wilson score interval of a binomial proportion

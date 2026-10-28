@@ -377,7 +377,7 @@ func Compare(base, now Report) []Comparison {
 			tested = append(tested, i)
 		}
 	}
-	for j, p := range holm(ps) {
+	for j, p := range Holm(ps) {
 		out[tested[j]].PHolm = p
 	}
 	return out
@@ -415,12 +415,12 @@ func compareScores(set EvalSet, metric string, base, now []QueryScore, value fun
 		return c
 	}
 	if clustered {
-		c.Delta, c.P = clusteredRandomization(a, b, clusters, randomizationSamples, randomizationSeed)
+		c.Delta, c.P = ClusteredRandomization(a, b, clusters, randomizationSamples, randomizationSeed)
 	} else {
-		c.Delta, c.P = pairedRandomization(a, b, randomizationSamples, randomizationSeed)
+		c.Delta, c.P = PairedRandomization(a, b, randomizationSamples, randomizationSeed)
 	}
-	_, c.Lo, c.Hi = pairedTInterval(ia, ib, 0.95)
-	c.Effect = effectSize(ia, ib)
+	_, c.Lo, c.Hi = PairedTInterval(ia, ib, 0.95)
+	c.Effect = EffectSize(ia, ib)
 	return c
 }
 

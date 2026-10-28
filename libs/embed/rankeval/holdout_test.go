@@ -11,7 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHoldoutLedgerRefusesASecondRead(t *testing.T) {
+func (s *rankevalSuite) TestHoldoutLedgerRefusesASecondRead() {
+	t := s.T()
 	ledger := filepath.Join(t.TempDir(), "holdout-reads.jsonl")
 	at := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 	first := HoldoutRead{Set: SetJudgedHoldout, Digest: "d1", Candidate: "k2-seed1", At: at}
@@ -50,7 +51,8 @@ func TestHoldoutLedgerRefusesASecondRead(t *testing.T) {
 	}, lines, "the refused reads appended nothing")
 }
 
-func TestHoldoutLedgerRejects(t *testing.T) {
+func (s *rankevalSuite) TestHoldoutLedgerRejects() {
+	t := s.T()
 	at := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 	cases := map[string]struct {
 		read HoldoutRead
@@ -71,7 +73,8 @@ func TestHoldoutLedgerRejects(t *testing.T) {
 	}
 }
 
-func TestHoldoutLedgerNamesABadLine(t *testing.T) {
+func (s *rankevalSuite) TestHoldoutLedgerNamesABadLine() {
+	t := s.T()
 	ledger := filepath.Join(t.TempDir(), "holdout-reads.jsonl")
 	good := `{"eval_set":"judged-holdout","eval_digest":"d1","candidate":"c","at":"2026-10-16T12:00:00Z"}`
 	require.NoError(t, os.WriteFile(ledger, []byte(good+"\n"+`{"eval_set":"judged-holdout","eval_digest":"d1","candidate":"c","at":"2026-10-16T12:00:00Z","chose":true}`+"\n"), 0o644))

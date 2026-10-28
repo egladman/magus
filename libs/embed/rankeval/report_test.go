@@ -24,7 +24,8 @@ func fileOfFixture(id string) string {
 	return ""
 }
 
-func TestFileCutMixedIDs(t *testing.T) {
+func (s *rankevalSuite) TestFileCutMixedIDs() {
+	t := s.T()
 	ranked := []string{
 		"symbol:a.go#A", "dir:.", "file:a.go", "symbol:b.go#B", "dir:pkg",
 		"symbol:a.go#C", "file:c.go", "target:pkg:build", "symbol:b.go#D", "file:d.go",
@@ -35,7 +36,8 @@ func TestFileCutMixedIDs(t *testing.T) {
 	assert.Empty(t, FileCut(nil, fileOfFixture, cutoff))
 }
 
-func TestFileCutStopsAtTenFiles(t *testing.T) {
+func (s *rankevalSuite) TestFileCutStopsAtTenFiles() {
+	t := s.T()
 	var ranked []string
 	for i := range 30 {
 		ranked = append(ranked, "symbol:f"+strconv.Itoa(i)+".go#S", "dir:d"+strconv.Itoa(i), "file:f"+strconv.Itoa(i)+".go")
@@ -69,7 +71,8 @@ func sampleRuns() []Run {
 	return []Run{r1, r2, r3, r4}
 }
 
-func TestSummarizeOverall(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeOverall() {
+	t := s.T()
 	rep := Summarize(SetJudgedDev, sampleRuns())
 	third := 1.0 / 3
 	// TestSummarizeSlices covers the per-shape slices.
@@ -102,7 +105,8 @@ func TestSummarizeOverall(t *testing.T) {
 	}, rep)
 }
 
-func TestSummarizeSlices(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeSlices() {
+	t := s.T()
 	rep := Summarize(SetJudgedDev, sampleRuns())
 	require.Len(t, rep.Shapes, 3)
 	assert.Equal(t, Metrics{Unscorable: 1, DroppedGold: 2}, rep.Shapes[ShapePath], "a run with nothing relevant scores nothing")
@@ -112,7 +116,8 @@ func TestSummarizeSlices(t *testing.T) {
 	assert.Nil(t, rep.Verbs, "one verb is no slice")
 }
 
-func TestPrecisionSeparatesWhatRecallTies(t *testing.T) {
+func (s *rankevalSuite) TestPrecisionSeparatesWhatRecallTies() {
+	t := s.T()
 	gold := map[string]int{"file:a": 1}
 	padded := []string{"file:a", "file:u1", "file:u2", "file:u3", "file:u4", "file:u5", "file:u6", "file:u7", "file:u8", "file:u9"}
 	got := []Metrics{
@@ -125,7 +130,8 @@ func TestPrecisionSeparatesWhatRecallTies(t *testing.T) {
 	})
 }
 
-func TestSummarizeAgentAgreementIsBinaryWithNodes(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeAgentAgreementIsBinaryWithNodes() {
+	t := s.T()
 	r := run("h", SetAgentAgreement, ShapeIdentifier, map[string]int{"file:a": 3, "file:b": 1, "dir:pkg": 1}, "file:b", "file:a")
 	r.Judgment.Session = "s1"
 	r.Ranked = []string{"symbol:b#B", "file:b", "dir:pkg", "symbol:a#A", "file:a"}
@@ -138,12 +144,14 @@ func TestSummarizeAgentAgreementIsBinaryWithNodes(t *testing.T) {
 	assert.InDelta(t, 0.5, rep.Nodes.MRR, 1e-12)
 }
 
-func TestSummarizeEmpty(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeEmpty() {
+	t := s.T()
 	rep := Summarize(SetJudgedDev, nil)
 	assert.Equal(t, SetReport{Set: SetJudgedDev}, rep)
 }
 
-func TestSummarizeText(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeText() {
+	t := s.T()
 	text := Report{Sets: []SetReport{
 		Summarize(SetJudgedDev, sampleRuns()),
 		{Set: SetJudgedHoldout, Absent: "sealed"},
@@ -158,7 +166,8 @@ func TestSummarizeText(t *testing.T) {
 	assert.Contains(t, text, "== agent-agreement (report-only): not built\n")
 }
 
-func TestSummarizeReportRoundTripsJSON(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeReportRoundTripsJSON() {
+	t := s.T()
 	rep := Report{Sets: []SetReport{Summarize(SetJudgedDev, sampleRuns()), {Set: SetFigures, Absent: "not built"}}}
 	b, err := marshalJSON(rep)
 	require.NoError(t, err)
@@ -175,7 +184,8 @@ func scores(cluster func(i int) string, values ...float64) []QueryScore {
 	return out
 }
 
-func TestSummarizeCompare(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeCompare() {
+	t := s.T()
 	none := func(int) string { return "" }
 	base := Report{Sets: []SetReport{
 		{Set: SetJudgedDev, Scores: scores(none, 0.2, 0.4, 0.1, 0.5, 0.3, 0.2, 0.6, 0.1)},
@@ -212,7 +222,8 @@ func TestSummarizeCompare(t *testing.T) {
 	assert.Zero(t, def.PHolm)
 }
 
-func TestSummarizeCompareClustersBySession(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeCompareClustersBySession() {
+	t := s.T()
 	session := func(i int) string { return "s" + strconv.Itoa(i/3) }
 	base := Report{Sets: []SetReport{{Set: SetAgentAgreement, Scores: scores(session, 0, 0, 0, 0, 0, 0)}}}
 	now := Report{Sets: []SetReport{{Set: SetAgentAgreement, Scores: scores(session, 1, 1, 1, 1, 1, 0.4)}}}
@@ -229,7 +240,8 @@ func TestSummarizeCompareClustersBySession(t *testing.T) {
 	assert.Equal(t, "1 paired unit(s); a test needs 2", Compare(one, one)[0].Skipped)
 }
 
-func TestSummarizeComparisonText(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeComparisonText() {
+	t := s.T()
 	text := ComparisonText([]Comparison{
 		{Set: SetJudgedDev, Metric: "ndcg@10", Pairs: 8, Base: 0.3, Now: 0.5, Delta: 0.2, Lo: 0.1, Hi: 0.3, Effect: math.NaN(), P: 0.01, PHolm: 0.02},
 		{Set: SetDefinitionLookup, Metric: "ndcg@10", Pairs: 1, Skipped: "1 paired unit(s); a test needs 2"},

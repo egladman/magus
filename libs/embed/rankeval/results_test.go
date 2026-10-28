@@ -21,7 +21,8 @@ q1 Q0 d2 3 1e-3 sys
 q2	Q0	d9	1	7	sys
 `
 
-func TestReadRunOrdersByScoreAndRoundTrips(t *testing.T) {
+func (s *rankevalSuite) TestReadRunOrdersByScoreAndRoundTrips() {
+	t := s.T()
 	run, err := ReadRun(strings.NewReader(trecRunFixture))
 	require.NoError(t, err)
 	assert.Equal(t, TRECRun{Tag: "sys", Queries: map[string][]Hit{
@@ -49,7 +50,8 @@ q2 Q0 d9 1 7 sys
 	assert.InDelta(t, want, NDCGAt(ranked, map[string]int{"d3": 1, "d2": 2}, 10), 1e-12)
 }
 
-func TestReadRunKeepsScoresExact(t *testing.T) {
+func (s *rankevalSuite) TestReadRunKeepsScoresExact() {
+	t := s.T()
 	scores := []float64{0.1, 1.0 / 3, math.Nextafter(1, 2), -2.5e-300, 123456789.123456789}
 	run := TRECRun{Tag: "exact", Queries: map[string][]Hit{}}
 	for i, s := range scores {
@@ -62,7 +64,8 @@ func TestReadRunKeepsScoresExact(t *testing.T) {
 	assert.Equal(t, Rank(slices.Clone(run.Queries["q"]), len(scores)), back.Queries["q"])
 }
 
-func TestReadRunRefusesMalformedLines(t *testing.T) {
+func (s *rankevalSuite) TestReadRunRefusesMalformedLines() {
+	t := s.T()
 	for name, tc := range map[string]struct{ in, want string }{
 		"five fields":   {"q1 Q0 d1 1 0.5\n", "run line 1: 5 fields"},
 		"bad rank":      {"q1 Q0 d1 one 0.5 s\n", `run line 1: rank "one"`},
@@ -80,13 +83,15 @@ func TestReadRunRefusesMalformedLines(t *testing.T) {
 	}
 }
 
-func TestWriteRunRefusesWhiteSpaceInIDs(t *testing.T) {
+func (s *rankevalSuite) TestWriteRunRefusesWhiteSpaceInIDs() {
+	t := s.T()
 	assert.ErrorContains(t, WriteRun(&bytes.Buffer{}, TRECRun{}), "run tag")
 	assert.ErrorContains(t, WriteRun(&bytes.Buffer{}, TRECRun{Tag: "s", Queries: map[string][]Hit{"a b": {{"d", 1}}}}), "query id")
 	assert.ErrorContains(t, WriteRun(&bytes.Buffer{}, TRECRun{Tag: "s", Queries: map[string][]Hit{"q": {{"d 1", 1}}}}), "document id")
 }
 
-func TestRankBreaksTiesByHashWhateverTheInputOrder(t *testing.T) {
+func (s *rankevalSuite) TestRankBreaksTiesByHashWhateverTheInputOrder() {
+	t := s.T()
 	tied := []Hit{{"dir:a", 1}, {"file:a", 1}, {"symbol:a", 1}, {"file:b", 1}, {"top", 2}}
 	want := Rank(slices.Clone(tied), len(tied))
 	assert.Equal(t, "top", want[0].Doc, "a higher score always leads")
@@ -99,7 +104,8 @@ func TestRankBreaksTiesByHashWhateverTheInputOrder(t *testing.T) {
 	assert.Equal(t, want[:2], Rank(slices.Clone(tied), 2))
 }
 
-func TestTopMatchesRankWithTies(t *testing.T) {
+func (s *rankevalSuite) TestTopMatchesRankWithTies() {
+	t := s.T()
 	var hits []Hit
 	for i := range 500 {
 		hits = append(hits, Hit{Doc: fmt.Sprintf("d%03d", i), Score: float64(i % 7)})
@@ -110,7 +116,8 @@ func TestTopMatchesRankWithTies(t *testing.T) {
 	assert.Empty(t, Top(slices.Values(hits), 0))
 }
 
-func TestWilsonInterval(t *testing.T) {
+func (s *rankevalSuite) TestWilsonInterval() {
+	t := s.T()
 	// statsmodels proportion_confint(..., method="wilson") at alpha 0.05.
 	lo, hi := WilsonInterval(50, 100)
 	assert.InDelta(t, 0.40383153, lo, 1e-6)
@@ -121,7 +128,8 @@ func TestWilsonInterval(t *testing.T) {
 	assert.Panics(t, func() { WilsonInterval(3, 2) })
 }
 
-func TestMeanInterval(t *testing.T) {
+func (s *rankevalSuite) TestMeanInterval() {
+	t := s.T()
 	// mean 2.5, sd sqrt(5/3), t(0.975, 3) = 3.182446305284263.
 	mean, lo, hi := MeanInterval([]float64{1, 2, 3, 4})
 	half := 3.182446305284263 * math.Sqrt(5.0/3) / 2

@@ -19,7 +19,8 @@ func judgments(n int) []Judgment {
 	return out
 }
 
-func TestReplayKeepsJudgmentOrder(t *testing.T) {
+func (s *rankevalSuite) TestReplayKeepsJudgmentOrder() {
+	t := s.T()
 	js := judgments(50)
 	last := js[len(js)-1].ID
 	lastDone := make(chan struct{})
@@ -52,7 +53,8 @@ func TestReplayKeepsJudgmentOrder(t *testing.T) {
 	assert.LessOrEqual(t, peak.Load(), int32(4))
 }
 
-func TestReplayStopsAtTheFirstError(t *testing.T) {
+func (s *rankevalSuite) TestReplayStopsAtTheFirstError() {
+	t := s.T()
 	boom := errors.New("boom")
 	var calls atomic.Int32
 	runs, err := Replay(context.Background(), judgments(100), 1, func(_ context.Context, j Judgment) (Run, error) {
@@ -68,7 +70,8 @@ func TestReplayStopsAtTheFirstError(t *testing.T) {
 	assert.Less(t, calls.Load(), int32(100), "judgments after the failure are not started")
 }
 
-func TestReplayZeroWorkersRunsOneAtATime(t *testing.T) {
+func (s *rankevalSuite) TestReplayZeroWorkersRunsOneAtATime() {
+	t := s.T()
 	runs, err := Replay(context.Background(), judgments(3), 0, func(_ context.Context, j Judgment) (Run, error) {
 		return Run{Judgment: j}, nil
 	})
