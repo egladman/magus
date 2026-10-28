@@ -71,3 +71,16 @@ started. A sibling or worker reports and never directs.
   parent's decision log before doing anything else.
 - Before forking work in an area a child covers, the parent re-reads that log. A plan
   older than the log is stale.
+
+<!-- rule: repo-scripts-live-here-not-in-shipped-skills; added: 2026-10-28; origin: agent, unreviewed;
+     evidence: plans/oci-dx-pr625-2026-10-27/reports/workspace-seam.md finding 6, decision D8, where installed skills named this repository's hack/ scripts in every user's workspace;
+     retire-when: these scripts serve their situations through SERVES and the guard or doctor names them -->
+## 7. This repository's own scripts
+
+The shipped skills name nothing under `hack/`; these do.
+
+- Prove a command on Linux without a pull request: `magus buzz hack/remote/on-actions.buzz -- <command>`
+  runs it on a GitHub Actions runner, and `magus buzz hack/remote/on-linux.buzz -- <command>` in a
+  local Podman container.
+- Before writing a one-off script from nothing, look in `hack/README.md`, which indexes the tested
+  scripts by task.

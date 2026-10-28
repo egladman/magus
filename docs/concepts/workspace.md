@@ -312,6 +312,45 @@ The workspace/project model is the substrate the affected engine and the cache b
 
 Together, discovery gives magus the set of projects, `depends_on` gives it the edges, and the cache gives it the memory, so a run touches only the minimum the change demands.
 
+## The workspace's own diagnostic codes
+
+A workspace mints codes of its own under one prefix that `magus.yaml` declares:
+
+```yaml
+diagnostics:
+  prefix: WS
+  docs: docs/codes/{code}.md
+```
+
+- `prefix` is 2 to 8 capital letters. Every code catalog magus ships registers its own prefix (MGS for magus, BZZ for Buzz), and a workspace prefix that equals, starts or is started by one of them is a load-time error.
+- `docs` is the page for a code, with `{code}` standing for it: a URL or a workspace path. Without it a raised code prints no `see:` line.
+- `magus\diagnosticCode("WS1003")` mints a code under the prefix and refuses any other, and `magus\raise` takes what it returns. A spell a workspace imports raises under that workspace's prefix.
+- A workspace code never replaces a built-in one: the CLI marks its origin, and its page comes only from `docs`.
+
+## Scripts the guard and doctor serve
+
+magus never guesses a workspace's own remedy from its layout. A script says which situations it serves, and magus names it there:
+
+```buzz
+final SUMMARY = "build ./magus in a checkout at its own revision";
+final SERVES = ["code:MGS1021 -- --checkout \{checkout}"];
+```
+
+`magus graph build` indexes every tracked script that declares `SUMMARY` and `SERVES`. Each entry is a situation, optionally followed by ` -- ` and the arguments the script is served with. The families:
+
+| Family      | Serves                                                  | Example                       |
+| ----------- | ------------------------------------------------------- | ----------------------------- |
+| `rule:`     | a guard denial, by [rule](../reference/rules/index.md) | `rule:stale-binary`           |
+| `code:`     | a diagnostic, by code, built-in or the workspace's      | `code:MGS1021`                |
+| `doctor:`   | a `magus doctor` check, by name                         | `doctor:guard-binary`         |
+| `event:`    | a moment magus names: disk-low, pre-pr, session-end     | `event:disk-low`              |
+| `next:`     | a breadcrumb id on a result                             | `next:jobs-exited`            |
+| `replaces:` | a command shape the script stands in for                | `replaces:sed -i`             |
+
+- Arguments may name `{ref}`, `{rule}`, `{project}`, `{file}` and `{checkout}`, which the serving site fills. Write `\{` in Buzz so the string is not interpolated.
+- `final EFFECT = "read";` marks a script that changes nothing, which a reviewer may run under any role. A script that declares none is a write.
+- `magus doctor`'s served-scripts check fails on an indexed script that is gone.
+
 ## Glossary
 
 | Term                | Definition                                                                                                                  |

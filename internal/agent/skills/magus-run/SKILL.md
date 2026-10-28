@@ -132,12 +132,7 @@ MCP equivalents: `{{tool "client"}}` (`{{buzz "run"}}`) with the arguments of `{
 hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check your own work.
 CORRECT: `{{cmd "run"}} ci <project>` while working, `{{cmd "affected"}} ci` once the
 change is done, and a single narrower target only to iterate on a failure.{{else}}Wrong: `go test ./...` after editing Go; hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check own work.
-Right: `{{cmd "run"}} ci <project>` while working; `{{cmd "affected"}} ci` once done.{{end}}{{if .Full}}
-
-To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner (`{{cmd "buzz"}} hack/remote/on-actions.buzz --
-<command>`) or in a local Podman container (`{{cmd "buzz"}} hack/remote/on-linux.buzz --
-<command>`).{{end}}
+Right: `{{cmd "run"}} ci <project>` while working; `{{cmd "affected"}} ci` once done.{{end}}
 
 {{if .Full}}## Output control: silence runs, read structure{{else}}## Output control{{end}}
 {{if .Full}}

@@ -731,7 +731,7 @@ export function reportHttpStatus(host: string, what: string, status: number): vo
 }
 
 // Refusal is what a person needs from a server error body: its message, and the Help link naming
-// the MGS code's page when the body carries one.
+// the code's page, magus's or the workspace's, when the body carries one.
 export interface Refusal {
   message: string;
   help?: NotifyLink;

@@ -316,8 +316,7 @@ test "slugify hyphenates" {
 ## Where Buzz code belongs
 
 {{if .Full}}- A one-off is a standalone `.buzz` file run with `{{cmd "buzz"}}`. Before
-  writing one from nothing, look for a script the workspace keeps to copy; magus's own
-  repository indexes its tested scripts in `hack/README.md`.{{else}}- one-off standalone `.buzz` file run with `{{cmd "buzz"}}`.{{end}}
+  writing one from nothing, look for a script the workspace keeps to copy.{{else}}- one-off standalone `.buzz` file run with `{{cmd "buzz"}}`.{{end}}
 {{if .Full}}- Work the workspace repeats goes in a target in `magusfile.buzz`, so it is
   cached, sandboxed and affected-tracked; a script re-runs from scratch every time.{{else}}- Work workspace repeats goes in target in `magusfile.buzz`.{{end}}
   Targets take `(ctx: magus\Context, args: [str])`.
