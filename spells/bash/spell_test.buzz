@@ -1,0 +1,40 @@
+import "std";
+import "magus/spell";
+import "./spell" as bash;
+
+fun discover(paths: [str]) > [DiscoveredProject] {
+    final files = mut [<DiscoveryFile>];
+    foreach (path in paths) {
+        files.append(DiscoveryFile{path = path});
+    }
+    return bash\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
+}
+
+test "scripts claim their directories as members linted by shellcheck" {
+    final claims = discover(["scripts/release.sh", "deploy.bash", "scripts/ci.sh", "web/build.sh"]);
+    std\assert(claims.len() == 3, message: "one claim per directory: {claims.len()}");
+    std\assert(claims.map(fun (index: int, c: DiscoveredProject) > str => c.path).join(" ") == ". scripts web",
+        message: "sorted directories");
+    foreach (claim in claims) {
+        std\assert(claim.role == DiscoveryRole.member, message: "{claim.path} is a member, never a project");
+        std\assert((claim.targets["lint"] ?? []).join(" ") == "shellcheck", message: "{claim.path} lints with shellcheck");
+        std\assert(claim.notInferred.len() == 0, message: "{claim.path} has no gap");
+    }
+}
+
+test "a shellcheckrc beside scripts is config, not a gap" {
+    final claims = discover([".shellcheckrc", "hack/run.sh"]);
+    std\assert(claims.len() == 1 and claims[0].path == "hack", message: "only the script dir is claimed");
+}
+
+test "a shellcheckrc with no script is reported" {
+    final claims = discover([".shellcheckrc"]);
+    std\assert(claims.len() == 1, message: "one claim carries the gap");
+    std\assert(claims[0].path == "." and claims[0].targets.len() == 0, message: "the gap claim wires no target");
+    std\assert(claims[0].notInferred.len() == 1 and claims[0].notInferred[0].file == ".shellcheckrc",
+        message: "the gap names the file");
+}
+
+test "no shell files claim nothing" {
+    std\assert(discover([]).len() == 0, message: "no claim");
+}
