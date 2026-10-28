@@ -929,10 +929,9 @@ func (s *bindingsSuite) TestCommandIndexerOutputIsStoredAsAPack() {
 	s.Require().NoError(err)
 
 	pack := symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp)
-	p, err := symbols.OpenPack(pack)
+	stored, err := symbols.ReadIndex(pack, true)
 	s.Require().NoError(err)
-	defer p.Close()
-	s.Len(p.Entries(), 2)
+	s.Len(stored.Documents, 2)
 	s.NoFileExists(pack + ".scip")
 }
 
@@ -957,11 +956,10 @@ func (s *bindingsSuite) TestGoListIndexerRunsInProcess() {
 	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
 	s.Require().NoError(err)
 
-	p, err := symbols.OpenPack(symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp))
+	stored, err := symbols.ReadIndex(symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp), true)
 	s.Require().NoError(err)
-	defer p.Close()
-	s.Require().Len(p.Entries(), 1)
-	s.Equal("example.com/m", p.Entries()[0].Unit)
+	s.Require().Len(stored.Documents, 1)
+	s.Equal("m.go", stored.Documents[0].RelativePath)
 }
 
 // symbolIndexerSpec builds the descriptor a declared symbol indexer produces: the

@@ -154,17 +154,17 @@ func sortedEnclosing(buf []enclosingDef, doc *scip.Document) []enclosingDef {
 // relative to the INDEXER's root, so each is joined onto projectPath to land on the same
 // spine the file nodes use. "" or "." leaves paths unchanged.
 func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage string) ([]types.KnowledgeSymbol, error) {
-	idx, err := DecodeIndex(data)
+	idx, err := decodeIndex(data)
 	if err != nil {
 		return nil, err
 	}
 	return ParseDecoded(ctx, idx, projectPath, declaredLanguage), nil
 }
 
-// DecodeIndex decodes a SCIP index's bytes. It is the expensive half of every read of an
+// decodeIndex decodes a SCIP index's bytes. It is the expensive half of every read of an
 // index, so a caller deriving several things from one index decodes it once and hands the
 // result to ParseDecoded and IndexOccurrences.
-func DecodeIndex(data []byte) (*scip.Index, error) {
+func decodeIndex(data []byte) (*scip.Index, error) {
 	var idx scip.Index
 	if err := proto.Unmarshal(data, &idx); err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func DecodeIndex(data []byte) (*scip.Index, error) {
 	return &idx, nil
 }
 
-// ParseDecoded is ParseIndex over an index DecodeIndex already decoded.
+// ParseDecoded is ParseIndex over an index ReadIndex already decoded.
 func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLanguage string) []types.KnowledgeSymbol {
 	// SymbolInformation (display name, kind) can live in any document; index it by
 	// the version-stripped KEY (not the raw moniker) so a symbol whose definition and

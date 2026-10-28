@@ -30,7 +30,7 @@ const (
 	WorkspaceRootEnvVar = "MAGUS_WORKSPACE_ROOT"
 )
 
-// IndexPath returns the path of the symbol pack (see OpenPack) op writes for a project:
+// IndexPath returns the path of the symbol pack (see ReadIndex) op writes for a project:
 // <cacheDir>/symbols/<hash>/<op>.pack, where <hash> is derived from projectPath, the
 // project's workspace-relative directory ("." for the root), and op is the indexer op
 // (spells.SymbolIndexer.OpName), so each indexing op bound to one project has a file of

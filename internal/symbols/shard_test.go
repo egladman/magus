@@ -84,7 +84,7 @@ func (s *symbolsSuite) TestUpdatePackBuildsEveryUnitWhenNoPackExists() {
 	s.Equal([]string{"a", "b", "c"}, res.Indexed)
 	s.Equal([]string{"a", "b", "c"}, ix.asked)
 
-	p, err := OpenPack(path)
+	p, err := openPack(path)
 	s.Require().NoError(err)
 	defer p.Close()
 	s.Equal(versionV1, p.Indexer())
@@ -150,7 +150,7 @@ func (s *symbolsSuite) TestUpdatePackDropsAUnitNoLongerDeclared() {
 	s.Equal([]string{"c"}, res.Dropped)
 	s.Empty(ix.asked)
 
-	p, err := OpenPack(path)
+	p, err := openPack(path)
 	s.Require().NoError(err)
 	defer p.Close()
 	_, ok := p.Entry("c")
@@ -172,12 +172,12 @@ func (s *symbolsSuite) TestUpdatePackRebuildsAPackFromAnotherIndexerVersion() {
 func (s *symbolsSuite) TestOpenPackRefusesAnotherFile() {
 	path := s.packPath()
 	s.Require().NoError(os.WriteFile(path, []byte("not a pack, just bytes long enough to have a trailer"), 0o644))
-	_, err := OpenPack(path)
+	_, err := openPack(path)
 	s.ErrorIs(err, ErrIndexFormat)
 }
 
 func (s *symbolsSuite) TestOpenPackMissingIsNotExist() {
-	_, err := OpenPack(s.packPath())
+	_, err := openPack(s.packPath())
 	s.ErrorIs(err, os.ErrNotExist)
 }
 
@@ -185,7 +185,7 @@ func (s *symbolsSuite) TestShardOfAnAbsentUnitIsNotExist() {
 	path, ix := s.packPath(), threeUnits()
 	_, err := UpdatePack(s.T().Context(), path, ix)
 	s.Require().NoError(err)
-	p, err := OpenPack(path)
+	p, err := openPack(path)
 	s.Require().NoError(err)
 	defer p.Close()
 	_, err = p.Shard("zz")

@@ -8,15 +8,12 @@ import (
 	"strings"
 
 	"github.com/scip-code/scip/bindings/go/scip"
-	"google.golang.org/protobuf/proto"
-
-	"github.com/egladman/magus/internal/file"
 )
 
-// PackIndex assembles shards into one in-memory SCIP index, adding the implementation
+// packIndex assembles shards into one in-memory SCIP index, adding the implementation
 // relationships their method sets imply. Nothing is protobuf-decoded: the result feeds
-// ParseDecoded and IndexOccurrences directly, and ExportSCIP encodes it.
-func PackIndex(shards []Shard) *scip.Index {
+// ParseDecoded and IndexOccurrences directly.
+func packIndex(shards []Shard) *scip.Index {
 	idx := &scip.Index{Metadata: &scip.Metadata{
 		ToolInfo:             &scip.ToolInfo{Name: "magus"},
 		TextDocumentEncoding: scip.TextEncoding_UTF8,
@@ -139,13 +136,13 @@ func ReadIndex(path string, pack bool) (*scip.Index, error) {
 		if err != nil {
 			return nil, err
 		}
-		idx, err := DecodeIndex(data)
+		idx, err := decodeIndex(data)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w: %w", path, ErrIndexFormat, err)
 		}
 		return idx, nil
 	}
-	p, err := OpenPack(path)
+	p, err := openPack(path)
 	if err != nil {
 		return nil, err
 	}
@@ -154,32 +151,12 @@ func ReadIndex(path string, pack bool) (*scip.Index, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w: %w", path, ErrIndexFormat, err)
 	}
-	return PackIndex(shards), nil
+	return packIndex(shards), nil
 }
 
-// ExportSCIP writes the pack at packPath to dest as a SCIP protobuf index, the format
-// other code-intelligence tools read. The pack stays magus's storage; this is the
-// interchange copy.
-func ExportSCIP(packPath, dest string) error {
-	p, err := OpenPack(packPath)
-	if err != nil {
-		return err
-	}
-	defer p.Close()
-	shards, err := p.Shards()
-	if err != nil {
-		return err
-	}
-	data, err := proto.Marshal(PackIndex(shards))
-	if err != nil {
-		return err
-	}
-	return file.WriteFileAtomic(dest, data, 0o644)
-}
-
-// SCIPShards splits a SCIP index an external indexer wrote into one shard per directory,
+// scipShards splits a SCIP index an external indexer wrote into one shard per directory,
 // so its documents are stored and read like any other pack.
-func SCIPShards(idx *scip.Index) ([]Unit, []Shard) {
+func scipShards(idx *scip.Index) ([]Unit, []Shard) {
 	byDir := map[string]*Shard{}
 	for _, doc := range idx.Documents {
 		dir := path.Dir(doc.RelativePath)
@@ -230,15 +207,15 @@ func PackFromSCIP(src, dest, indexer string) error {
 	if err != nil {
 		return err
 	}
-	idx, err := DecodeIndex(data)
+	idx, err := decodeIndex(data)
 	if err != nil {
 		return fmt.Errorf("%s: %w: %w", src, ErrIndexFormat, err)
 	}
-	return PackSCIP(dest, indexer, idx)
+	return packSCIP(dest, indexer, idx)
 }
 
-// PackSCIP writes a decoded SCIP index as a pack at dest, one shard per directory.
-func PackSCIP(dest, indexer string, idx *scip.Index) error {
-	units, shards := SCIPShards(idx)
-	return WritePack(dest, indexer, units, shards)
+// packSCIP writes a decoded SCIP index as a pack at dest, one shard per directory.
+func packSCIP(dest, indexer string, idx *scip.Index) error {
+	units, shards := scipShards(idx)
+	return writePack(dest, indexer, units, shards)
 }

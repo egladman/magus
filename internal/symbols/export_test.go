@@ -59,18 +59,18 @@ func implemented(si *scip.SymbolInformation) []string {
 // An interface in one shard relates to an implementer in another, though neither shard
 // records the other.
 func (s *symbolsSuite) TestPackIndexDerivesImplementationsAcrossShards() {
-	idx := PackIndex(methodShards())
+	idx := packIndex(methodShards())
 	s.Equal([]string{symIface}, implemented(infoOf(idx, symImpl)))
 	s.Equal([]string{symIfaceRead}, implemented(infoOf(idx, symImplRead)))
 }
 
 func (s *symbolsSuite) TestPackIndexSkipsATypeMissingAMethod() {
-	idx := PackIndex(methodShards())
+	idx := packIndex(methodShards())
 	s.Empty(implemented(infoOf(idx, symPartial)))
 }
 
 func (s *symbolsSuite) TestPackIndexKeepsDocumentsAndRanges() {
-	idx := PackIndex(methodShards())
+	idx := packIndex(methodShards())
 	s.Require().Len(idx.Documents, 2)
 	s.Equal("a/a.go", idx.Documents[0].RelativePath)
 	r, ok := idx.Documents[0].Occurrences[0].SourceRange()
@@ -78,16 +78,11 @@ func (s *symbolsSuite) TestPackIndexKeepsDocumentsAndRanges() {
 	s.Equal(scip.Position{Line: 0, Character: 5}, r.Start)
 }
 
-func (s *symbolsSuite) TestExportSCIPWritesADecodableIndex() {
-	dir := s.T().TempDir()
-	pack, out := filepath.Join(dir, "scip.pack"), filepath.Join(dir, "index.scip")
-	shards := methodShards()
-	s.Require().NoError(WritePack(pack, versionV1, []Unit{{ID: "a"}, {ID: "b"}}, shards))
-	s.Require().NoError(ExportSCIP(pack, out))
+func (s *symbolsSuite) TestReadIndexAssemblesAPackWhole() {
+	pack := filepath.Join(s.T().TempDir(), "scip.pack")
+	s.Require().NoError(writePack(pack, versionV1, []Unit{{ID: "a"}, {ID: "b"}}, methodShards()))
 
-	data, err := os.ReadFile(out)
-	s.Require().NoError(err)
-	idx, err := DecodeIndex(data)
+	idx, err := ReadIndex(pack, true)
 	s.Require().NoError(err)
 	s.Len(idx.Documents, 2)
 	s.Equal([]string{symIface}, implemented(infoOf(idx, symImpl)))
@@ -98,13 +93,13 @@ func (s *symbolsSuite) TestExportSCIPWritesADecodableIndex() {
 func (s *symbolsSuite) TestPackFromSCIPRoundTrips() {
 	dir := s.T().TempDir()
 	src, pack := filepath.Join(dir, "in.scip"), filepath.Join(dir, "scip-buzz.pack")
-	want := PackIndex(methodShards())
+	want := packIndex(methodShards())
 	data, err := proto.Marshal(want)
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(src, data, 0o644))
 
 	s.Require().NoError(PackFromSCIP(src, pack, "scip scip-buzz"))
-	p, err := OpenPack(pack)
+	p, err := openPack(pack)
 	s.Require().NoError(err)
 	defer p.Close()
 	s.Equal([]string{"a", "b"}, []string{p.Entries()[0].Unit, p.Entries()[1].Unit})

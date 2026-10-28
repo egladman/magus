@@ -144,8 +144,8 @@ const (
 // or not SCIP protobuf.
 var ErrIndexFormat = errors.New("not a symbol index this binary reads")
 
-// PackEntry is one unit's row in a pack's table of contents.
-type PackEntry struct {
+// packEntry is one unit's row in a pack's table of contents.
+type packEntry struct {
 	Unit   string
 	Digest string
 	Deps   []string
@@ -155,19 +155,19 @@ type PackEntry struct {
 
 type packTOC struct {
 	Indexer string
-	Entries []PackEntry
+	Entries []packEntry
 }
 
-// Pack is an open pack file. Not safe for concurrent use; Close releases the file.
-type Pack struct {
+// packFile is an open pack file. Not safe for concurrent use; Close releases the file.
+type packFile struct {
 	f   *os.File
 	toc packTOC
 	at  map[string]int
 }
 
-// OpenPack opens the pack at path. A missing file is an fs.ErrNotExist error; any other
+// openPack opens the pack at path. A missing file is an fs.ErrNotExist error; any other
 // file there is ErrIndexFormat.
-func OpenPack(path string) (*Pack, error) {
+func openPack(path string) (*packFile, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func OpenPack(path string) (*Pack, error) {
 	return p, nil
 }
 
-func readPack(f *os.File) (*Pack, error) {
+func readPack(f *os.File) (*packFile, error) {
 	info, err := f.Stat()
 	if err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func readPack(f *os.File) (*Pack, error) {
 	if off < int64(len(packMagic)) || n < 0 || off+n > info.Size()-trailerSize {
 		return nil, ErrIndexFormat
 	}
-	p := &Pack{f: f, at: map[string]int{}}
+	p := &packFile{f: f, at: map[string]int{}}
 	if err := gob.NewDecoder(io.NewSectionReader(f, off, n)).Decode(&p.toc); err != nil {
 		return nil, fmt.Errorf("%w: table of contents: %w", ErrIndexFormat, err)
 	}
@@ -211,25 +211,25 @@ func readPack(f *os.File) (*Pack, error) {
 }
 
 // Close closes the pack's file.
-func (p *Pack) Close() error { return p.f.Close() }
+func (p *packFile) Close() error { return p.f.Close() }
 
 // Indexer is the version of the indexer that wrote p.
-func (p *Pack) Indexer() string { return p.toc.Indexer }
+func (p *packFile) Indexer() string { return p.toc.Indexer }
 
 // Entries is p's table of contents, sorted by unit.
-func (p *Pack) Entries() []PackEntry { return p.toc.Entries }
+func (p *packFile) Entries() []packEntry { return p.toc.Entries }
 
 // Entry is unit's row, and false when p holds no such unit.
-func (p *Pack) Entry(unit string) (PackEntry, bool) {
+func (p *packFile) Entry(unit string) (packEntry, bool) {
 	i, ok := p.at[unit]
 	if !ok {
-		return PackEntry{}, false
+		return packEntry{}, false
 	}
 	return p.toc.Entries[i], true
 }
 
 // Shard reads and decodes one unit's shard. An absent unit is an fs.ErrNotExist error.
-func (p *Pack) Shard(unit string) (Shard, error) {
+func (p *packFile) Shard(unit string) (Shard, error) {
 	e, ok := p.Entry(unit)
 	if !ok {
 		return Shard{}, fmt.Errorf("unit %q: %w", unit, fs.ErrNotExist)
@@ -242,7 +242,7 @@ func (p *Pack) Shard(unit string) (Shard, error) {
 }
 
 // Shards decodes every shard, in table order.
-func (p *Pack) Shards() ([]Shard, error) {
+func (p *packFile) Shards() ([]Shard, error) {
 	out := make([]Shard, 0, len(p.toc.Entries))
 	for _, e := range p.toc.Entries {
 		s, err := p.Shard(e.Unit)
@@ -255,7 +255,7 @@ func (p *Pack) Shards() ([]Shard, error) {
 }
 
 // raw is unit's encoded bytes, copied without a decode.
-func (p *Pack) raw(e PackEntry) ([]byte, error) {
+func (p *packFile) raw(e packEntry) ([]byte, error) {
 	buf := make([]byte, e.Length)
 	_, err := p.f.ReadAt(buf, e.Offset)
 	return buf, err
@@ -267,7 +267,7 @@ type packWriter struct {
 	f       *os.File
 	w       *bufio.Writer
 	off     int64
-	entries []PackEntry
+	entries []packEntry
 }
 
 func newPackWriter(path string) (*packWriter, error) {
@@ -293,12 +293,12 @@ func (pw *packWriter) write(b []byte) error {
 }
 
 func (pw *packWriter) add(unit Unit, encoded []byte) error {
-	pw.entries = append(pw.entries, PackEntry{Unit: unit.ID, Digest: unit.Digest, Deps: unit.Deps, Offset: pw.off, Length: int64(len(encoded))})
+	pw.entries = append(pw.entries, packEntry{Unit: unit.ID, Digest: unit.Digest, Deps: unit.Deps, Offset: pw.off, Length: int64(len(encoded))})
 	return pw.write(encoded)
 }
 
 func (pw *packWriter) commit(path, indexer string) error {
-	slices.SortFunc(pw.entries, func(a, b PackEntry) int { return cmp.Compare(a.Unit, b.Unit) })
+	slices.SortFunc(pw.entries, func(a, b packEntry) int { return cmp.Compare(a.Unit, b.Unit) })
 	var toc bytes.Buffer
 	if err := gob.NewEncoder(&toc).Encode(packTOC{Indexer: indexer, Entries: pw.entries}); err != nil {
 		pw.abort()
@@ -348,8 +348,8 @@ func encodeShard(s Shard) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// WritePack writes shards as a whole new pack at path, each under the Unit of the same ID.
-func WritePack(path, indexer string, units []Unit, shards []Shard) error {
+// writePack writes shards as a whole new pack at path, each under the Unit of the same ID.
+func writePack(path, indexer string, units []Unit, shards []Shard) error {
 	byID := make(map[string]Shard, len(shards))
 	for _, s := range shards {
 		byID[s.Unit] = s
@@ -396,97 +396,150 @@ type UpdateResult struct {
 // written by another indexer version is rebuilt whole, and Rebuilt says so.
 func UpdatePack(ctx context.Context, path string, ix UnitIndexer) (UpdateResult, error) {
 	var res UpdateResult
-	old, err := OpenPack(path)
-	switch {
-	case err == nil && old.Indexer() != ix.Version():
-		old.Close()
-		old = nil
-	case err == nil:
-		defer old.Close()
-	case errors.Is(err, fs.ErrNotExist), errors.Is(err, ErrIndexFormat):
-		old = nil
-	default:
+	old, ok, err := openPrior(path, ix.Version())
+	if err != nil {
 		return res, err
 	}
-	res.Rebuilt = old == nil
+	if ok {
+		defer old.Close()
+	}
+	res.Rebuilt = !ok
 	units, err := ix.Units(ctx)
 	if err != nil {
 		return res, err
 	}
-	declared := make(map[string]Unit, len(units))
+	dirty := dirtyUnits(old, units)
+	for _, u := range dirty {
+		res.Indexed = append(res.Indexed, u.ID)
+	}
+	removed, err := droppedDefinitions(old, units, &res)
+	if err != nil {
+		return res, err
+	}
+	fresh, err := reindex(ctx, ix, old, units, dirty, removed, &res)
+	if err != nil {
+		return res, err
+	}
+	return res, writeUpdated(path, ix.Version(), old, units, fresh, &res)
+}
+
+// openPrior opens the pack at path for an update by the indexer at version. ok is false
+// for a pack to rebuild whole: missing, in another format, or written by another indexer
+// version.
+func openPrior(path, version string) (old *packFile, ok bool, err error) {
+	old, err = openPack(path)
+	switch {
+	case err == nil && old.Indexer() != version:
+		old.Close()
+		return nil, false, nil
+	case err == nil:
+		return old, true, nil
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, ErrIndexFormat):
+		return nil, false, nil
+	}
+	return nil, false, err
+}
+
+// dirtyUnits is the units old lacks or holds at another digest; every unit when old is nil.
+func dirtyUnits(old *packFile, units []Unit) []Unit {
+	if old == nil {
+		return slices.Clone(units)
+	}
 	var dirty []Unit
 	for _, u := range units {
-		declared[u.ID] = u
-		if old == nil {
-			dirty = append(dirty, u)
-			continue
-		}
 		if e, ok := old.Entry(u.ID); !ok || e.Digest != u.Digest {
 			dirty = append(dirty, u)
 		}
 	}
-	fresh := map[string]Shard{}
+	return dirty
+}
+
+// droppedDefinitions records in res the units old holds that units no longer declares, and
+// returns every symbol they defined.
+func droppedDefinitions(old *packFile, units []Unit, res *UpdateResult) (map[string]bool, error) {
 	removed := map[string]bool{}
-	if old != nil {
-		for _, e := range old.Entries() {
-			if _, ok := declared[e.Unit]; ok {
-				continue
-			}
-			res.Dropped = append(res.Dropped, e.Unit)
-			s, err := old.Shard(e.Unit)
-			if err != nil {
-				return res, err
-			}
-			for _, sym := range s.Defined() {
-				removed[sym] = true
-			}
+	if old == nil {
+		return removed, nil
+	}
+	declared := make(map[string]bool, len(units))
+	for _, u := range units {
+		declared[u.ID] = true
+	}
+	for _, e := range old.Entries() {
+		if declared[e.Unit] {
+			continue
+		}
+		res.Dropped = append(res.Dropped, e.Unit)
+		s, err := old.Shard(e.Unit)
+		if err != nil {
+			return nil, err
+		}
+		for _, sym := range s.Defined() {
+			removed[sym] = true
 		}
 	}
-	for _, u := range dirty {
-		res.Indexed = append(res.Indexed, u.ID)
-	}
-	pending := dirty
-	for len(pending) > 0 {
+	return removed, nil
+}
+
+// reindex indexes dirty, then each round's dependents that reference a symbol the round
+// removed, until a round removes none; it returns every shard it indexed by unit.
+func reindex(ctx context.Context, ix UnitIndexer, old *packFile, units, dirty []Unit, removed map[string]bool, res *UpdateResult) (map[string]Shard, error) {
+	fresh := map[string]Shard{}
+	for pending := dirty; len(pending) > 0; clear(removed) {
 		shards, err := ix.Index(ctx, pending)
 		if err != nil {
-			return res, err
+			return nil, err
 		}
 		changed := map[string]bool{}
-		for _, s := range shards {
-			fresh[s.Unit] = s
-			if old == nil {
-				continue
-			}
-			prev, err := old.Shard(s.Unit)
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			if err != nil {
-				return res, err
-			}
-			now := s.Defined()
-			for _, sym := range prev.Defined() {
-				if _, found := slices.BinarySearch(now, sym); !found {
-					removed[sym] = true
-					changed[s.Unit] = true
-				}
-			}
-		}
 		for _, id := range res.Dropped {
 			changed[id] = true
 		}
+		for _, s := range shards {
+			fresh[s.Unit] = s
+			if err := noteRemoved(old, s, removed, changed); err != nil {
+				return nil, err
+			}
+		}
 		pending, err = dependentsReferencing(old, units, fresh, changed, removed)
 		if err != nil {
-			return res, err
+			return nil, err
 		}
 		for _, u := range pending {
 			res.Dependents = append(res.Dependents, u.ID)
 		}
-		clear(removed)
 	}
+	return fresh, nil
+}
+
+// noteRemoved adds to removed each symbol old's shard for s's unit defined and s does not,
+// and marks the unit changed when there is one.
+func noteRemoved(old *packFile, s Shard, removed, changed map[string]bool) error {
+	if old == nil {
+		return nil
+	}
+	prev, err := old.Shard(s.Unit)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	now := s.Defined()
+	for _, sym := range prev.Defined() {
+		if _, found := slices.BinarySearch(now, sym); !found {
+			removed[sym] = true
+			changed[s.Unit] = true
+		}
+	}
+	return nil
+}
+
+// writeUpdated writes units to a new pack at path: each fresh shard encoded, every other
+// one copied from old as stored, which res counts as Kept.
+func writeUpdated(path, version string, old *packFile, units []Unit, fresh map[string]Shard, res *UpdateResult) error {
 	pw, err := newPackWriter(path)
 	if err != nil {
-		return res, err
+		return err
 	}
 	for _, u := range units {
 		var enc []byte
@@ -502,18 +555,15 @@ func UpdatePack(ctx context.Context, path string, ix UnitIndexer) (UpdateResult,
 		}
 		if err != nil {
 			pw.abort()
-			return res, err
+			return err
 		}
 	}
-	if err := pw.commit(path, ix.Version()); err != nil {
-		return res, err
-	}
-	return res, nil
+	return pw.commit(path, version)
 }
 
 // dependentsReferencing is the units not yet re-indexed that depend on a changed unit and
 // whose stored shard references a removed symbol.
-func dependentsReferencing(old *Pack, units []Unit, fresh map[string]Shard, changed, removed map[string]bool) ([]Unit, error) {
+func dependentsReferencing(old *packFile, units []Unit, fresh map[string]Shard, changed, removed map[string]bool) ([]Unit, error) {
 	if old == nil || len(removed) == 0 {
 		return nil, nil
 	}
