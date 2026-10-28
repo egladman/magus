@@ -20,7 +20,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 .SS config set options
 .RS
 .TP
-\fB\-\-global\fR
+\fB\-\-[no\-]global\fR (default: off)
 Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)
 .RE
 .SS config history passed options
@@ -50,7 +50,7 @@ Path to the history JSON to write (default: configured history_path)
 .SS config cache prune options
 .RS
 .TP
-\fB\-\-dry\-run\fR
+\fB\-\-[no\-]dry\-run\fR (default: off)
 Print what would be removed without deleting anything
 .TP
 \fB\-\-keep\-last\fR \fIint\fR
@@ -59,13 +59,13 @@ Keep only the newest N entries, evict the rest (\-\-remote only)
 \fB\-\-older\-than\fR \fIduration\fR
 Remove entries older than this duration (e.g. 168h = 7 days)
 .TP
-\fB\-\-remote\fR
+\fB\-\-[no\-]remote\fR (default: off)
 Prune the configured remote backend instead of the local cache
 .RE
 .SS config cache export options
 .RS
 .TP
-\fB\-\-remote\fR
+\fB\-\-[no\-]remote\fR (default: off)
 Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive
 .TP
 \fB\-\-to\fR \fIstring\fR
@@ -74,7 +74,7 @@ Write the archive to this file (default: stdout)
 .SS config cache import options
 .RS
 .TP
-\fB\-\-remote\fR
+\fB\-\-[no\-]remote\fR (default: off)
 Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive
 .RE
 .SS config mcp connector create options
@@ -89,13 +89,13 @@ Name for this connector token (default: connector\-N)
 .SS config token generate options
 .RS
 .TP
-\fB\-\-force\fR
+\fB\-\-[no\-]force\fR (default: off)
 Overwrite an existing token (rotation)
 .RE
 .SS config console token create options
 .RS
 .TP
-\fB\-\-code\fR
+\fB\-\-[no\-]code\fR (default: off)
 Print a one\-time code instead, for a console link's #code=; the console trades it for the token within a minute, once
 .TP
 \fB\-\-expires\fR \fIstring\fR
@@ -104,7 +104,7 @@ Lifetime: a duration like 90d or 48h, at most 366d (default 90d)
 \fB\-\-name\fR \fIstring\fR
 Name for this console token (default: console\-N)
 .TP
-\fB\-\-viewer\fR
+\fB\-\-[no\-]viewer\fR (default: off)
 Mint a READ\-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share
 .RE
 .SH SUBCOMMANDS

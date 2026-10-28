@@ -33,35 +33,32 @@ plan renders more than once without being computed again.
 .SH OPTIONS
 .RS
 .TP
+\fB\-\-[no\-]cache\fR (default: on)
+Replay a cache hit; \-\-no\-cache forces a fresh run, which still refreshes the entry
+.TP
+\fB\-\-[no\-]default\-charms\fR (default: on)
+Apply magus.yaml default_charms; \-\-no\-default\-charms ignores them for this run
+.TP
 \fB\-\-depth\fR \fIint\fR
 With \-\-graph: cap displayed depth (0 = unlimited)
 .TP
-\fB\-\-detach\fR
+\fB\-\-[no\-]detach\fR (default: off)
 Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server
 .TP
-\fB\-\-graph\fR
+\fB\-\-[no\-]graph\fR (default: off)
 Render the dependency graph for the selected scope instead of executing
 .TP
 \fB\-\-n\-shards\fR \fIint\fR
 Without \-\-stdin: the shard count the \-\-shard label belongs to. With it the count is the saved plan's, and a different value is refused
 .TP
-\fB\-\-no\-cache\fR
-Force a fresh run even on a cache hit; still refreshes the entry
-.TP
-\fB\-\-no\-default\-charms\fR
-Ignore magus.yaml default_charms for this run
-.TP
-\fB\-\-no\-redundancy\-check\fR
-Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only
-.TP
-\fB\-\-no\-volatility\-retry\fR
-Disable volatility auto\-retry for this run
-.TP
-\fB\-\-open\fR
+\fB\-\-[no\-]open\fR (default: off)
 Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 .TP
 \fB\-\-race\fR \fIstring\fR
 Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non\-determinism (MGS4003), at double the time.
+.TP
+\fB\-\-[no\-]redundancy\-check\fR (default: on)
+Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); \-\-no\-redundancy\-check runs it in full. ci target only
 .TP
 \fB\-\-shard\fR \fIstring\fR
 With \-\-stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with \-\-n\-shards; it selects nothing
@@ -69,17 +66,20 @@ With \-\-stdin: run only the saved plan's shard with this id. Without it: a labe
 \fB\-\-skip\fR \fIstring\fR
 Exclude projects from the selection; repeatable or comma\-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error
 .TP
-\fB\-\-stdin\fR
+\fB\-\-[no\-]stdin\fR (default: off)
 Run the shards of a saved shard plan, the document affected \-\-plan prints, read from stdin; the plan names the target and the projects
 .TP
-\fB\-\-step\fR
+\fB\-\-[no\-]step\fR (default: off)
 Pause before each subprocess for interactive stepping (needs a TTY; implies \-\-concurrency=1)
 .TP
 \fB\-\-timeout\fR \fIduration\fR
 Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
 .TP
-\fB\-\-upstream\fR
+\fB\-\-[no\-]upstream\fR (default: off)
 With \-\-graph: show dependents instead of dependencies
+.TP
+\fB\-\-[no\-]volatility\-retry\fR (default: on)
+Retry a target that fails with volatile output; \-\-no\-volatility\-retry disables it for this run
 .RE
 .SH OPERANDS
 .RS

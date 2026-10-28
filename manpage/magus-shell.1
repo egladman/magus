@@ -79,7 +79,7 @@ The host's id for the subagent making this call, empty for the main conversation
 \fB\-\-agent\-name\fR \fIstring\fR
 Name of the agent host this invocation came from, required with \-\-transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name
 .TP
-\fB\-\-call\-background\fR
+\fB\-\-[no\-]call\-background\fR (default: off)
 The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
 .TP
 \fB\-\-call\-timeout\-ms\fR \fIint\fR
@@ -91,16 +91,16 @@ The host's hook event name (e.g. PreToolUse)
 \fB\-\-lease\fR \fIstring\fR
 The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE
 .TP
-\fB\-\-message\fR
+\fB\-\-[no\-]message\fR (default: off)
 Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass
 .TP
-\fB\-\-observe\fR
+\fB\-\-[no\-]observe\fR (default: off)
 Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 .TP
-\fB\-\-path\fR
+\fB\-\-[no\-]path\fR (default: off)
 Judge the input as a file path an edit is about to write, not as a shell command
 .TP
-\fB\-\-renders\-ask\fR
+\fB\-\-[no\-]renders\-ask\fR (default: off)
 This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 .TP
 \fB\-\-session\fR \fIstring\fR

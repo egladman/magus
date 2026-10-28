@@ -459,10 +459,10 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": guard.payload,
+    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = guard.payload,
     });
 }
 
@@ -488,10 +488,10 @@ fun recordMessage(bin: str, message: str, dir: str, attribution: [str]) > void {
     if (bin == "") { return; }
     final args = mut ["shell", "--message"];
     foreach (word in attribution) { args.append(word); }
-    proc\exec(bin, args: args, dir: dir, opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": message,
+    proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = message,
     }) catch void;
 }
 
@@ -507,7 +507,7 @@ fun recordMessage(bin: str, message: str, dir: str, attribution: [str]) > void {
 // symptom of the same staleness, not the error.
 fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
-    final probe = proc\exec(guard.bin, args: ["version"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final probe = proc\exec(guard.bin, args: ["version"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
 
@@ -861,10 +861,10 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": guard.payload,
+    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = guard.payload,
     });
 }
 
@@ -1150,7 +1150,7 @@ fun main(args: [str]) > void {
         "--session", field(event, dotPath: sessionPath),
         "--transcript", field(event, dotPath: transcriptPath),
         "--event", "PreToolUse",
-    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
+    ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = reached}) catch void;
 }
 ```
 
@@ -1317,7 +1317,7 @@ fun main(args: [str]) > void {
     proc\exec(bin, args: [
         "session", "checkpoint",
         "--agent-name", agentName,
-    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
+    ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = event}) catch void;
 }
 ```
 
@@ -1470,9 +1470,9 @@ fun main(args: [str]) > void {
     // Captured rather than streamed, because the json arm has to wrap it. stderr is
     // discarded by `quiet`: a magus too old for `session --brief` prints its usage
     // there, and that would otherwise be injected as this hook's answer.
-    final result = proc\exec(bin, args: ["session", "--brief"], dir: cwd, opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["session", "--brief"], dir: cwd, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return; }
 
@@ -1644,9 +1644,9 @@ fun firstLine(text: str) > str {
 // loadFailure loads the workspace with bin, the way any command would, and returns the error
 // it printed. "" means it loaded; a binary that would not even start reports that.
 fun loadFailure(bin: str, root: str) > str {
-    final result = proc\exec(bin, args: ["--root", root, "ls", "-o", "name"], dir: root, opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["--root", root, "ls", "-o", "name"], dir: root, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return "it could not be started"; }
     if (result!.code == 0) { return ""; }
@@ -1955,7 +1955,7 @@ fun judge(bin: str, decisions: str, reply: str) > [Finding] {
         argv.append("{MINIMUM}");
     }
     final run = proc\exec(bin, args: argv,
-        opts: {"stdin": reply, "quiet": true, "allow_failure": true}) catch null;
+        opts: proc\ExecOptions{stdin = reply, quiet = true, allowFailure = true}) catch null;
     // Exit 1 is a deny finding, written to stdout like any other; 2 is a run that could not judge.
     if (run == null or (run!.code != 0 and run!.code != 1)) {
         return [<Finding>];
@@ -2327,7 +2327,7 @@ fun main(args: [str]) > void {
         final check = mut ["buzz", "--check"];
         if (embedded(rel)) { check.append("--embedded"); }
         check.append(rel);
-        final result = proc\exec(bin, args: check, dir: if (root != "") root else ".", opts: {"quiet": true, "allow_failure": true}) catch null;
+        final result = proc\exec(bin, args: check, dir: if (root != "") root else ".", opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
         if (result == null or result!.ok) { continue; }
         failures.append("`magus {check.join(" ")}` failed:\n" + (result!.stdout + result!.stderr).trim());
     }
@@ -2356,6 +2356,179 @@ test "the engine's own Buzz is checked embedded and everything else strict" {
     std\assert(embedded("spells/harness/codex/spell.buzz") and embedded("hack/dev/a.buzz") and embedded("magusfiles/a.buzz"), message: "spells and scripts");
     std\assert(!embedded("docs/guides/integrations/agents/magus-command.buzz"), message: "a standalone script is strict");
     std\assert(relativeTo("/r/spells/a.buzz", root: "/r") == "spells/a.buzz", message: "under the root");
+}
+```
+
+## `magus-reclaim-disk.buzz`
+
+Wire it to the event your host raises once a turn (Claude Code's and Codex's
+`UserPromptSubmit`, Cursor's `beforeSubmitPrompt`; the OpenCode plugin runs it when a
+session goes idle) as `magus buzz -s magus-reclaim-disk.buzz -- --agent-name <host>`. The
+harness spells declare it through `magus/harness.reclaimDiskHook`.
+
+It catches a disk filling up before it wedges the machine, and needs no daemon. On most
+turns it costs one stat: the free-space store at `$XDG_STATE_HOME/magus/disk/samples.jsonl`
+was written less than a minute ago. Past that it reads `disk.*` from `magus config view`,
+and once `disk.sample_every` has passed it samples the free space of the filesystem
+holding the event's `cwd`.
+
+Below `disk.min_free_mb`, or losing space faster than `disk.growth_mb_per_hour`, it starts
+one reclaim chunk detached and returns. The chunk removes the two removable worktrees
+untouched longest, deletes the agent branches nothing needs, and trims the Go build cache to
+`go.cache_budget_mb` by entry age, with every subprocess bounded by a five-minute deadline.
+It never removes a worktree holding uncommitted files, a commit no remote has, a live job,
+a working process or a lock, and it never empties the cache. `magus doctor` shows the
+trend and the last chunks.
+
+It prints one line, and only when it started a chunk or free space is below
+`disk.critical_free_mb`. `--say stderr` sends the line to stderr, for a host that reads
+stdout as a verdict. It always exits 0, and declares no `magus-guard-coverage` line: it
+judges no call.
+
+```buzz
+// magus reclaim-disk hook: notices a disk filling up early and takes space back in small
+// chunks, without the daemon.
+//
+// Run it as `magus buzz -s magus-reclaim-disk.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports diskwatch, which imports no magus module, and no spell, so
+// the workspace stays CLOSED: wire it to an event that fires every turn and a turn pays
+// one stat for it.
+//
+// Rate limited. A store written within the last minute ends the hook at that stat. Past
+// it, the hook asks `magus config view` for disk.*, and returns again unless
+// disk.sample_every has passed. Only then does it read the free space of the filesystem
+// holding the event's cwd and append a sample to $XDG_STATE_HOME/magus/disk/samples.jsonl,
+// the store `magus doctor`'s disk-trend check reads.
+//
+// Below disk.min_free_mb, or losing space faster than disk.growth_mb_per_hour, it starts
+// ONE reclaim chunk detached, unless one is already running, and returns at once: the
+// chunk is magus/reclaimdisk's, which removes the two removable worktrees untouched
+// longest, the agent branches nothing needs, and trims the Go build cache by entry age, with
+// every subprocess bounded by the chunk's five-minute deadline. It never removes a worktree
+// holding uncommitted files or a commit no remote has, and never empties the cache.
+//
+// Contract: prints ONE line, and only when it started a chunk or free space is below
+// disk.critical_free_mb, so an agent puts reclaiming first; otherwise nothing. It always
+// exits 0. `--say stderr` sends the line to stderr, for a host that reads stdout as a
+// verdict. Override:
+//
+//   __MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// REQUIRED argument: `-- --agent-name <host>`, which the configuration
+// `magus describe harness` prints puts on the command. Without it nothing is sampled and
+// MGS3024 goes to stderr.
+//
+// NO magus-guard-coverage line: it carries no verdict on any input.
+//
+// magus-guard-template: 34
+
+import "io";
+import "std";
+import "os";
+import "fs";
+import "flags";
+import "proc";
+import "encoding/json";
+import "diskwatch";
+import "lib/hook" as hook;
+
+final AGENT_NAME_FLAG = "--agent-name";
+final SAY_FLAG = "--say";
+
+fun warn(message: str) > void {
+    io\stderr.write("magus-reclaim-disk.buzz: {message}\n") catch void;
+}
+
+object Args {
+    agentName: str,
+    say: str,
+}
+
+fun readArgs(args: [str]) > Args {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG, SAY_FLAG]) catch null;
+    if (parsed == null) { return Args{ agentName = "", say = "stdout" }; }
+    foreach (word in parsed!.unknown + parsed!.positionals) {
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG} and {SAY_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    final say = parsed!.values[SAY_FLAG] ?? "stdout";
+    if (say != "stdout" and say != "stderr") {
+        warn("{SAY_FLAG} takes stdout or stderr, not \"{say}\"; saying it on stdout.");
+        return Args{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", say = "stdout" };
+    }
+    return Args{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", say = say };
+}
+
+fun lastWrite(store: str) > double? {
+    final info = fs\stat(store) catch null;
+    if (info == null) { return null; }
+    return info!.mtime;
+}
+
+// chunkSnippet is the detached child's program. The deadline is the only value in it, a
+// number, so nothing an event carries reaches the source; chunk records its own failure
+// in the store, so the snippet has nothing left to catch.
+export fun chunkSnippet(deadline: double) > str {
+    return "import \"magus/reclaimdisk\" as reclaim; reclaim\\chunk({std\toInt(deadline)}.0) catch void;";
+}
+
+// sample is the hook past its rate limit: one config read, one statfs, one store append,
+// and at most one detached chunk. It returns the line to say, or null.
+fun sample(bin: str, cwd: str, store: str, now: double) > str? !> any {
+    final config = proc\exec(bin, args: ["config", "view", "-o", "json"], dir: cwd, opts: proc\ExecOptions{ quiet = true, timeoutMs = 5000.0 });
+    final t = diskwatch\thresholds(config.stdout);
+    if (!diskwatch\due(lastWrite(store), now: now, everyMs: t.everyMs)) { return null; }
+    final du = fs\diskUsage(cwd);
+    final samples = diskwatch\read(store);
+    final cur = diskwatch\DiskSample{ at = now, path = du.path, totalBytes = du.totalBytes, freeBytes = du.freeBytes };
+    final d = diskwatch\decide(diskwatch\lastOf(samples, path: du.path), cur: cur, t: t);
+    diskwatch\append(store, s: cur);
+    var started = false;
+    if (d.reclaim and !diskwatch\chunkRunning(samples, now: now)) {
+        proc\exec(bin, args: ["buzz", "-C", cwd, "-s", "-e", chunkSnippet(now + 300000.0)], opts: proc\ExecOptions{ detach = true });
+        diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, action = "started", detail = d.why });
+        started = true;
+    }
+    return diskwatch\line(d, cur: cur, started: started);
+}
+
+fun main(args: [str]) > void {
+    final a = readArgs(args);
+    if (a.agentName == "") {
+        warn("[MGS3024] this hook was not given --agent-name, so nothing was sampled. "
+            + "Merge what `magus describe harness` prints into the host's hook configuration; "
+            + "the commands it prints name the host.");
+        return;
+    }
+    final event = io\stdin.readAll() catch "";
+    var cwd = hook\field(json\parse(event) catch null, dotPath: "cwd");
+    if (cwd == "") { cwd = "."; }
+
+    final store = diskwatch\storePath() catch "";
+    if (store == "") { return; }
+    final now = os\time();
+    // The cheap path every turn takes: one stat, and nothing else, inside the floor.
+    if (!diskwatch\due(lastWrite(store), now: now, everyMs: diskwatch\FLOOR_MS)) { return; }
+
+    // An absent magus is SILENT: there is no config to read thresholds from, and a hook
+    // that guessed them would act on numbers nobody set.
+    final bin = hook\resolveBin(cwd: cwd);
+    if (bin == "" or !hook\isExecutable(bin)) { return; }
+
+    var said: str? = null;
+    try {
+        said = sample(bin, cwd: cwd, store: store, now: now);
+    } catch (e) {
+        warn("disk sample failed: {e}");
+        return;
+    }
+    if (said -> text) {
+        if (a.say == "stderr") {
+            io\stderr.write(text + "\n") catch void;
+        } else {
+            std\print(text);
+        }
+    }
 }
 ```
 

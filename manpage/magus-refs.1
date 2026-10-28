@@ -48,28 +48,28 @@ nothing. The inverse is the same command with the two names swapped.
 .SH OPTIONS
 .RS
 .TP
-\fB\-\-definition\fR
+\fB\-\-[no\-]definition\fR (default: off)
 Print each definition as path:start\-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed
+.TP
+\fB\-\-[no\-]generated\fR (default: on)
+In the fallback text search shown beside a symbol miss, or with \-\-text, search declared\-output files and mark the ones that match; \-\-no\-generated excludes them entirely
 .TP
 \fB\-\-limit\fR \fI| head\fR
 Print at most this many \-\-text matches, then say how many more there were (0 for all). What | head would do, without losing the count or the exit code
 .TP
-\fB\-\-no\-generated\fR \fIstring\fR
-In the fallback text search shown beside a symbol miss, or with \-\-text, exclude declared\-output files entirely instead of searching them and marking the ones that match
-.TP
-\fB\-\-occurrences\fR
+\fB\-\-[no\-]occurrences\fR (default: off)
 Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan\-in.
 .TP
-\fB\-\-refresh\fR
+\fB\-\-[no\-]refresh\fR (default: off)
 Re\-ingest the SCIP index before answering
 .TP
 \fB\-\-rename\fR \fIstring\fR
 Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is
 .TP
-\fB\-\-source\fR
+\fB\-\-[no\-]source\fR (default: off)
 With \-\-definition (implied), also print the definition's lines: a symbol's body by name, in place of grep \-n then sed \-n
 .TP
-\fB\-\-text\fR
+\fB\-\-[no\-]text\fR (default: off)
 Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no\-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace
 .RE
 .SH EXAMPLES

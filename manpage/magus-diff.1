@@ -120,7 +120,7 @@ performance metric, and a performance metric gets gamed rather than met.
 .SH OPTIONS
 .RS
 .TP
-\fB\-\-ack\fR
+\fB\-\-[no\-]ack\fR (default: off)
 Record that you have read the changed files at their current content; \-\-impact reports what carries no such record
 .TP
 \fB\-\-baseline\fR \fIgraph export --symbols -o json\fR
@@ -132,14 +132,11 @@ How many declarations a conformance norm needs before a changed symbol is compar
 \fB\-\-conformance\-min\-share\fR \fIstring\fR
 The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conformance.gates.min_share
 .TP
-\fB\-\-generated\fR
+\fB\-\-[no\-]generated\fR (default: off)
 Include declared target outputs, which are folded away by default
 .TP
-\fB\-\-impact\fR
+\fB\-\-[no\-]impact\fR (default: off)
 Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted
-.TP
-\fB\-\-no\-tui\fR
-Print the report instead of opening the interactive viewer
 .TP
 \fB\-\-patch\fR \fI-\fR
 Review a patch somebody handed you instead of the working tree; \- reads stdin
@@ -153,10 +150,13 @@ Review a committed range instead of the working tree, as base...head: a colleagu
 \fB\-\-thread\fR \fIstring\fR
 Narrow the review to one pull request thread, by its id or the id of any comment in it, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it shows the conversation, the hunk and its reach
 .TP
-\fB\-\-unread\fR
+\fB\-\-[no\-]tui\fR (default: on)
+Open the interactive viewer; \-\-no\-tui prints the report instead
+.TP
+\fB\-\-[no\-]unread\fR (default: off)
 Narrow the report to the hunks no read mark covers, under every \-o; \-o name prints one path:start\-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread
 .TP
-\fB\-\-watch\fR
+\fB\-\-[no\-]watch\fR (default: off)
 Re\-read and re\-render whenever the working tree changes
 .RE
 .SH EXIT STATUS

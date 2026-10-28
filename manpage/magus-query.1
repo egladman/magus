@@ -42,37 +42,37 @@ changed are rebuilt, so a query is cheap to repeat; \-\-refresh forces a full re
 .SH OPTIONS
 .RS
 .TP
-\fB\-\-attempts\fR
+\fB\-\-[no\-]attempts\fR (default: off)
 output <ref>: list the ref's stored attempts (newest first)
 .TP
 \fB\-\-budget\fR \fIint\fR
 Max nodes in the returned neighborhood (default 50)
 .TP
-\fB\-\-global\fR
+\fB\-\-[no\-]global\fR (default: off)
 Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace
 .TP
-\fB\-\-identity\fR
+\fB\-\-[no\-]identity\fR (default: off)
 output <ref>: show the run's identity (descriptor, lineage, cache key, component digests)
 .TP
 \fB\-\-kind\fR \fIstring\fR
 Restrict matches to these node kinds (comma\-separated)
 .TP
-\fB\-\-open\fR
+\fB\-\-[no\-]open\fR (default: off)
 output <ref>: open the captured output in the browser log viewer (delivered privately)
 .TP
-\fB\-\-print\fR
+\fB\-\-[no\-]print\fR (default: off)
 With \-\-open, print the viewer URL instead of launching a browser
 .TP
-\fB\-\-publish\fR
+\fB\-\-[no\-]publish\fR (default: off)
 output <ref>: upload this run's output to the remote cache as a signed bundle
 .TP
-\fB\-\-refresh\fR
+\fB\-\-[no\-]refresh\fR (default: off)
 Force a full graph rebuild before querying
 .TP
-\fB\-\-secrets\fR
+\fB\-\-[no\-]secrets\fR (default: off)
 invocation <id>: list only the credential reads (reference and provider, never the value)
 .TP
-\fB\-\-stdin\fR \fI-o jsonl\fR
+\fB\-\-[no\-]stdin\fR (default: off)
 output: print records \-o jsonl wrote, from stdin; writes nothing
 .TP
 \fB\-\-url\fR \fIstring\fR (default: https://eli.gladman.cc/magus/console/logs/)

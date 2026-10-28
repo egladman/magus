@@ -28,22 +28,25 @@ step at a time.
 .RS
 .TP
 \fB\-\-against\fR \fIref\fR
-With \-\-cache: diff the live key inputs against the stored lines behind an output ref
+With \-\-cache\-key: diff the live key inputs against the stored lines behind an output ref
 .TP
 \fB\-\-cache\fR
+Same as \-\-cache\-key
+.TP
+\fB\-\-[no\-]cache\-key\fR (default: off)
 Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run
+.TP
+\fB\-\-[no\-]default\-charms\fR (default: on)
+With \-\-cache\-key: key with magus.yaml default_charms; \-\-no\-default\-charms matches a run made without them (CI)
 .TP
 \fB\-e\fR
 Short for \-\-explain
 .TP
-\fB\-\-explain\fR
+\fB\-\-[no\-]explain\fR (default: off)
 For a ref with charms: show the per\-charm argv trace (base then each charm)
 .TP
-\fB\-\-inputs\fR
-With \-\-cache: list every key input line, so you can confirm a declared file was actually hashed
-.TP
-\fB\-\-no\-default\-charms\fR
-With \-\-cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)
+\fB\-\-[no\-]inputs\fR (default: off)
+With \-\-cache\-key: list every key input line, so you can confirm a declared file was actually hashed
 .RE
 .SS describe projects options
 .RS
@@ -51,13 +54,13 @@ With \-\-cache: ignore magus.yaml default_charms when keying, matching a run mad
 \fB\-e\fR
 Short for \-\-evaluated
 .TP
-\fB\-\-evaluated\fR
+\fB\-\-[no\-]evaluated\fR (default: off)
 Print workspace\-rooted globs, effective claims, and per\-target policies
 .RE
 .SS describe spells options
 .RS
 .TP
-\fB\-\-versions\fR
+\fB\-\-[no\-]versions\fR (default: off)
 Probe each spell's tools and report the versions that would key a run
 .RE
 .SH SUBCOMMANDS
