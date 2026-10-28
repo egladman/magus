@@ -55,7 +55,7 @@ func (s *migrateSuite) TestUpOneVersion() {
 
 	res, err := st.Apply()
 	s.Require().NoError(err)
-	s.Equal(Result{Store: "thing store", Path: st.Path, From: 0, To: 1, Entries: 3}, res)
+	s.Equal(result{Store: "thing store", Path: st.Path, From: 0, To: 1, Entries: 3}, res)
 	s.Equal("{\"migration\":1,\"plan\":\"p\"}\n{\"id\":\"a\",\"run\":1}\n{\"id\":\"b\"}\n{\"id\":\"a\",\"run\":2}\n", s.contents(st),
 		"every line is migrated, superseded ones included, and the header carries the version")
 	s.Equal("migrated thing store "+st.Path+" from 0 to 1 (3 entries)", res.String())
