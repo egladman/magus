@@ -5161,6 +5161,39 @@ func decodeMagusDiffOptions(v vm.Value, path string) (types.MagusDiffOptions, er
 	return out, nil
 }
 
+// DecodeDiagnosticCodeRef decodes a Buzz DiagnosticCode, an object instance or a map, into a types.DiagnosticCodeRef.
+func DecodeDiagnosticCodeRef(v vm.Value) (types.DiagnosticCodeRef, error) {
+	return decodeDiagnosticCodeRef(v, "diagnosticCode")
+}
+
+func decodeDiagnosticCodeRef(v vm.Value, path string) (types.DiagnosticCodeRef, error) {
+	var out types.DiagnosticCodeRef
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "DiagnosticCode", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "code":
+			sCode, err := decodeString(item, path+".code")
+			if err != nil {
+				return out, err
+			}
+			out.Code = sCode
+		case "origin":
+			sOrigin, err := decodeEnum(item, path+".origin", "DiagnosticOrigin", enumDiagnosticOriginValues)
+			if err != nil {
+				return out, err
+			}
+			out.Origin = types.DiagnosticOrigin(sOrigin)
+		default:
+			return out, unknownMember(path, "DiagnosticCode", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeRaiseOptions decodes a Buzz RaiseOptions, an object instance or a map, into a types.RaiseOptions.
 func DecodeRaiseOptions(v vm.Value) (types.RaiseOptions, error) {
 	return decodeRaiseOptions(v, "raiseOptions")
@@ -5893,6 +5926,7 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 
 var enumArchitectureValues = []string{"", "amd64", "arm64"}
 var enumDiagnosticFormatValues = []string{"", "gnu"}
+var enumDiagnosticOriginValues = []string{"", "builtin", "workspace"}
 var enumEdgeDirectionValues = []string{"", "out", "in"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}
@@ -5902,7 +5936,7 @@ var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "co
 var enumRelationIDValues = []string{"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"}
 var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
 var enumSkillFormValues = []string{"", "both", "short", "full"}
-var enumSymbolFormatValues = []string{"", "scip"}
+var enumSymbolFormatValues = []string{"", "scip", "go-packages"}
 var enumSymlinkPolicyValues = []string{"", "refuse", "keep", "follow"}
 var enumToolCapabilityValues = []string{"", "runs", "reads", "writes", "spawns", "network", "inert"}
 var enumVariantValues = []string{"", "v1", "v2", "v3", "v8"}
