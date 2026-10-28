@@ -1,14 +1,14 @@
-// Opens, closes and reports on an away window (ADR 0019), run by the person, never an agent:
-// the guard denies start and end to one.
+// Issues, revokes and reports on a mandate (ADR 0019), run by the person, never by the root
+// or a worker: the guard denies issue and revoke to every agent.
 //
-//	magus buzz hack/dev/away.buzz -- start --until HH:MM --tolerance <tier> --rows a,b
-//	magus buzz hack/dev/away.buzz -- end
-//	magus buzz hack/dev/away.buzz -- report
+//	magus buzz hack/dev/mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b
+//	magus buzz hack/dev/mandate.buzz -- revoke
+//	magus buzz hack/dev/mandate.buzz -- report
 //
-// start appends the contract to the repository's away file (hack/policy/away.buzz says
-// where) and prints its terms back; end appends the line that closes it; report prints what
-// the window did from the job store and the contract.
-namespace awaywindow;
+// issue appends the mandate to the repository's mandate file (hack/policy/mandate.buzz says
+// where) and prints its terms back; revoke appends the line that ends it; report prints what
+// was done under it from the job store and the mandate.
+namespace mandatescript;
 
 import "std";
 import "fs";
@@ -16,20 +16,20 @@ import "proc";
 import "vcs";
 import "flags";
 import "magus";
-import "./hack/policy/away" as away;
+import "./hack/policy/mandate" as mandate;
 
-final USAGE = "usage: magus buzz hack/dev/away.buzz -- start --until HH:MM --tolerance <tier> --rows a,b | end | report";
+final USAGE = "usage: magus buzz hack/dev/mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b | revoke | report";
 
 final dayMs = 86400000;
 
-// reserved is what the window keeps for the person, printed back at start.
+// reserved is what a mandate keeps for the person, printed back at issue.
 final reserved = [
-    "new scope: `job fork` of a row the contract does not name, and any `job apply`",
+    "new scope: `job fork` of a row the mandate does not name, and any `job apply`",
     "reversing a decision: writes under docs/decisions/ and docs/design/",
     "hook and permission config: writes to .claude/, .codex/, hack/policy/, spells/harness/, magus.yaml",
-    "a job grant",
+    "a grant",
     "merge and push",
-    "deleting work the window did not create: `job rm`, `git branch -D`, `git worktree remove`",
+    "deleting work not made under the mandate: `job rm`, `git branch -D`, `git worktree remove`",
 ];
 
 // parseClock reads HH:MM as minutes past midnight, null for anything else.
@@ -63,7 +63,7 @@ export fun parseOffset(text: str) > int? {
 }
 
 // nextAt is the first moment after now at minutes past local midnight, local being offset
-// milliseconds east of UTC. A daylight-saving change inside the window moves it by the change.
+// milliseconds east of UTC. A daylight-saving change inside the mandate moves it by the change.
 export fun nextAt(minutes: int, now: int, offset: int) > int {
     final local = now + offset;
     final midnight = local - local % dayMs - offset;
@@ -79,47 +79,47 @@ fun localOffset() > int !> any {
     if (parseOffset(printed) -> offset) {
         return offset;
     }
-    throw "away: `date +%z` printed {printed.trim()}, which is no UTC offset; the end time cannot be placed";
+    throw "mandate: `date +%z` printed {printed.trim()}, which is no UTC offset; the end time cannot be placed";
 }
 
-fun contractFile(root: str) > str !> any {
-    if (away\contractFile(root) -> file) {
+fun mandateFile(root: str) > str !> any {
+    if (mandate\mandateFile(root) -> file) {
         return file;
     }
-    throw "away: {root} is not a git checkout, so there is no repository directory to keep the contract in";
+    throw "mandate: {root} is not a git checkout, so there is no repository directory to keep the mandate in";
 }
 
-fun append(root: str, c: away\Contract) > void !> any {
-    final file = contractFile(root);
+fun append(root: str, m: mandate\Mandate) > void !> any {
+    final file = mandateFile(root);
     fs\mkdirAll(fs\dirname(file));
-    fs\appendFile(file, content: away\encodeContract(c) + "\n");
+    fs\appendFile(file, content: mandate\encodeMandate(m) + "\n");
 }
 
-fun start(root: str, args: [str]) > void !> any {
+fun issue(root: str, args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: [<str>], valued: ["--until", "--tolerance", "--rows", "--tokens"]);
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "away start: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+        throw "mandate issue: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     if (parsed.values["--tokens"] != null) {
-        throw "away start: --tokens is refused: magus counts no session tokens, so no budget could be obeyed; the end time is the cap";
+        throw "mandate issue: --tokens is refused: magus counts no session tokens, so no budget could be obeyed; the end time is the cap";
     }
     final clock = parsed.values["--until"] ?? "";
     final minutes = parseClock(clock);
     if (minutes == null) {
-        throw "away start: --until takes the local end time as HH:MM, and got {shown(clock)}\n{USAGE}";
+        throw "mandate issue: --until takes the local end time as HH:MM, and got {shown(clock)}\n{USAGE}";
     }
     final tolerance = parsed.values["--tolerance"] ?? "";
-    if (away\tiers.indexOf(tolerance) == null) {
-        throw "away start: --tolerance takes one of {away\tiers.join(", ")}, and got {shown(tolerance)}";
+    if (mandate\tiers.indexOf(tolerance) == null) {
+        throw "mandate issue: --tolerance takes one of {mandate\tiers.join(", ")}, and got {shown(tolerance)}";
     }
-    if (away\rank(tolerance) > away\rank(away\ceiling)) {
-        throw "away start: --tolerance {tolerance} is above this repository's ceiling, {away\ceiling} (hack/policy/away.buzz)";
+    if (mandate\rank(tolerance) > mandate\rank(mandate\ceiling)) {
+        throw "mandate issue: --tolerance {tolerance} is above this repository's ceiling, {mandate\ceiling} (hack/policy/mandate.buzz)";
     }
     final named = (parsed.values["--rows"] ?? "").split(",").filter(fun (index: int, id: str) > bool => id.trim() != "");
     if (named.len() == 0) {
-        throw "away start: --rows names the approved job rows, comma-separated; a window with none has nothing to carry out";
+        throw "mandate issue: --rows names the plan's job rows, comma-separated; a mandate with none has nothing to carry out";
     }
-    final jobs = away\rows(magus\job.list().jobs);
+    final jobs = mandate\rows(magus\job.list().jobs);
     final missing = named.filter(fun (index: int, id: str) > bool {
         foreach (r in jobs) {
             if (r.id == id) {
@@ -129,96 +129,96 @@ fun start(root: str, args: [str]) > void !> any {
         return true;
     });
     if (missing.len() > 0) {
-        throw "away start: the job store holds no row {missing.join(", ")}; `job apply` the plan before the window opens";
+        throw "mandate issue: the job store holds no row {missing.join(", ")}; `job apply` the plan before the mandate is issued";
     }
-    final now = away\now();
-    if (away\isOpen(away\loadContract(root), now: now)) {
-        throw "away start: a window is already open; `magus buzz hack/dev/away.buzz -- end` closes it first";
+    final now = mandate\now();
+    if (mandate\inForce(mandate\loadMandate(root), now: now)) {
+        throw "mandate issue: a mandate is already in force; `magus buzz hack/dev/mandate.buzz -- revoke` ends it first";
     }
     final ends = nextAt(minutes!, now: now, offset: localOffset());
-    append(root, c: away\Contract{ action = "start", at = now, endClock = clock, ends = ends, tolerance = tolerance, rows = named });
-    std\print("away window open until {clock} local ({(ends - now) / 60000} minutes from now)");
+    append(root, m: mandate\Mandate{ action = "issue", at = now, endClock = clock, ends = ends, tolerance = tolerance, rows = named });
+    std\print("mandate in force until {clock} local ({(ends - now) / 60000} minutes from now)");
     std\print("rows: {named.join(", ")} and the children forked from them");
-    std\print("tolerance: an unsettled job lands only at {tolerance} or below; above it, it parks");
-    std\print("stop condition: the end time passes, every approved row is paused or done, or one refusal repeats {3} stops running");
+    std\print("tolerance: an unsettled job's work is integrated only at {tolerance} or below; above it, it is held for review");
+    std\print("stop condition: the end time passes, every mandated row is paused or done, or one refusal repeats {mandate\loopLimit} stops running");
     std\print("reserved for you:");
     foreach (r in reserved) {
         std\print("  - {r}");
     }
 }
 
-fun end(root: str) > void !> any {
-    final now = away\now();
-    if (!away\isOpen(away\loadContract(root), now: now)) {
-        std\print("no away window is open; nothing to end");
+fun revoke(root: str) > void !> any {
+    final now = mandate\now();
+    if (!mandate\inForce(mandate\loadMandate(root), now: now)) {
+        std\print("no mandate is in force; nothing to revoke");
         return;
     }
-    append(root, c: away\Contract{ action = "end", at = now });
-    std\print("away window closed");
+    append(root, m: mandate\Mandate{ action = "revoke", at = now });
+    std\print("mandate revoked");
 }
 
 fun report(root: str) > void !> any {
-    var last: away\Contract? = null;
-    var started: away\Contract? = null;
-    foreach (line in (fs\readFile(contractFile(root)) catch "").split("\n")) {
-        if (away\parseContract(line) -> c) {
-            last = c;
-            if (c.action == "start") {
-                started = c;
+    var last: mandate\Mandate? = null;
+    var issued: mandate\Mandate? = null;
+    foreach (line in (fs\readFile(mandateFile(root)) catch "").split("\n")) {
+        if (mandate\parseMandate(line) -> m) {
+            last = m;
+            if (m.action == "issue") {
+                issued = m;
             }
         }
     }
-    if (started == null) {
-        std\print("no away window was ever opened in this repository");
+    if (issued == null) {
+        std\print("no mandate was ever issued in this repository");
         return;
     }
-    final window = started!;
+    final terms = issued!;
     final list = magus\job.list();
-    final jobs = away\rows(list.jobs);
-    final now = away\now();
-    if (last!.action == "end") {
-        std\print("the last away window, until {window.endClock} with tolerance {window.tolerance}, was closed by hand");
+    final jobs = mandate\rows(list.jobs);
+    final now = mandate\now();
+    if (last!.action == "revoke") {
+        std\print("the last mandate, until {terms.endClock} with tolerance {terms.tolerance}, was revoked");
     } else {
-        final state = if (away\isOpen(window, now: now)) "open" else "past its end time";
-        std\print("away window until {window.endClock}, {state}; tolerance {window.tolerance}");
+        final state = if (mandate\inForce(terms, now: now)) "in force" else "past its end time";
+        std\print("mandate until {terms.endClock}, {state}; tolerance {terms.tolerance}");
     }
     final blocked = mut [<str>];
     foreach (b in list.blocked) {
         blocked.append(b.job);
     }
-    final landed = mut [<str>];
-    final parked = mut [<str>];
+    final integrated = mut [<str>];
+    final held = mut [<str>];
     final left = mut [<str>];
     foreach (r in jobs) {
-        if (!away\approved(r.id, c: window, jobs: jobs)) {
+        if (!mandate\mandated(r.id, m: terms, jobs: jobs)) {
             continue;
         }
-        if (away\settled(r)) {
-            landed.append(r.id);
+        if (mandate\settled(r)) {
+            integrated.append(r.id);
         } else if (r.state == "pass" or r.state == "exited" or r.state == "fail") {
-            final got = away\unproven(r.id);
-            parked.append("{r.id}: {r.state}, tier {got.tier}; {got.evidence.join("; ")}");
+            final got = mandate\unproven(r.id);
+            held.append("{r.id}: {r.state}, tier {got.tier}; {got.evidence.join("; ")}");
         } else if (r.paused) {
             left.append("{r.id}: paused");
         } else if (blocked.indexOf(r.id) != null) {
             left.append("{r.id}: blocked");
-        } else if (now >= window.ends) {
+        } else if (now >= terms.ends) {
             left.append("{r.id}: {r.state}, past the cap");
         } else {
             left.append("{r.id}: {r.state}");
         }
     }
-    section("parked, for you to read first", rows: parked);
-    section("landed", rows: landed);
+    section("held for review, for you to read first", rows: held);
+    section("integrated", rows: integrated);
     section("left", rows: left);
-    final attention = away\attentionFile(root) ?? "";
+    final attention = mandate\attentionFile(root) ?? "";
     final filed = if (attention != "") (fs\readLines(attention) catch [<str>]) else [<str>];
     section("attention", rows: filed);
     section("left for you", rows: [
-        "push each landed branch: `git push origin <branch>`",
+        "push each integrated branch: `git push origin <branch>`",
         "merge: `gh pr merge <n>` once its checks pass",
-        "grants a parked row needs: `./magus job grant <job> <rule>`",
-        "hook wiring: the root magusfile registers `magus\\guard.stop(agentpolicy\\judgeStop);` once this magus has the seam",
+        "a grant a held row needs: `./magus job grant <job> <rule>`",
+        "hook wiring: the root magusfile registers `magus\\guard.stop(agentpolicy\\judgeStop);`",
     ]);
 }
 
@@ -235,21 +235,21 @@ fun section(title: str, rows: [str]) > void {
 
 export fun main(args: [str]) > void !> any {
     if (args.len() == 0) {
-        throw "away: {USAGE}";
+        throw "mandate: {USAGE}";
     }
     if (vcs\name() != "git") {
-        throw "away: the contract lives in the git common directory, and this checkout is {vcs\name()}";
+        throw "mandate: the mandate lives in the git common directory, and this checkout is {vcs\name()}";
     }
     final root = vcs\root();
     final rest = args.sub(1);
-    if (args[0] == "start") {
-        start(root, args: rest);
-    } else if (args[0] == "end") {
-        end(root);
+    if (args[0] == "issue") {
+        issue(root, args: rest);
+    } else if (args[0] == "revoke") {
+        revoke(root);
     } else if (args[0] == "report") {
         report(root);
     } else {
-        throw "away: unknown subcommand {args[0]}\n{USAGE}";
+        throw "mandate: unknown subcommand {args[0]}\n{USAGE}";
     }
 }
 

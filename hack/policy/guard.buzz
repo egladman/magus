@@ -102,7 +102,7 @@ import "./hack/policy/comments" as comments;
 import "./hack/policy/host" as host;
 import "./hack/policy/sealed" as sealed;
 import "./hack/policy/branches" as branches;
-import "./hack/policy/away" as away;
+import "./hack/policy/mandate" as mandate;
 import "./hack/magusfile/commits" as conventional;
 
 // judge is the command rule the root magusfile registers.
@@ -112,7 +112,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     if (held.decision != magus\GuardDecision.allow) {
         return held;
     }
-    final kept = awayVerdict(req, programs: programs);
+    final kept = mandateVerdict(req, programs: programs);
     if (kept.decision != "allow") {
         return kept;
     }
@@ -160,16 +160,16 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
 }
 
-// awayVerdict is the away contract's answer for req's line (ADR 0019). The job store is read
-// only while a window is open, since nothing else the contract judges needs it.
-fun awayVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
-    final contract = away\loadContract(req.workspace);
-    final now = away\now();
-    var jobs = [<away\Row>];
-    if (away\isOpen(contract, now: now)) {
-        jobs = away\rows((magus\job.list() catch JobList{}).jobs);
+// mandateVerdict is the mandate's answer for req's line (ADR 0019). The job store is read
+// only while a mandate is in force, since nothing else it judges needs it.
+fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
+    final issued = mandate\loadMandate(req.workspace);
+    final now = mandate\now();
+    var jobs = [<mandate\Row>];
+    if (mandate\inForce(issued, now: now)) {
+        jobs = mandate\rows((magus\job.list() catch JobList{}).jobs);
     }
-    return away\decideCommand(programs, line: req.command, c: contract, jobs: jobs, now: now, assess: away\unproven);
+    return mandate\decideCommand(programs, line: req.command, m: issued, jobs: jobs, now: now, assess: mandate\unproven);
 }
 
 fun leaseWrites(req: CommandRequest) > [str] {
@@ -373,7 +373,7 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
         before = "";
         after = req.content;
     }
-    final kept = away\decideWrite(req.path, workspace: req.workspace, c: away\loadContract(req.workspace), now: away\now());
+    final kept = mandate\decideWrite(req.path, workspace: req.workspace, m: mandate\loadMandate(req.workspace), now: mandate\now());
     if (kept.decision != "allow") {
         return kept;
     }

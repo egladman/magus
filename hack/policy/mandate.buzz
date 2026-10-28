@@ -1,0 +1,723 @@
+// Mandates, this repository's reference policy (ADR 0019). A mandate is what the person
+// issues with `hack/dev/mandate.buzz issue` so a long session carries out the plan they
+// approved while they are away: inside it the guard lets the root and its workers work the
+// mandated rows and denies every act the person keeps. A mandate raises the bar; a grant
+// lowers one rule. Copy it and edit it: the ceiling, the reserved paths and the loop limit
+// below are opinions, not magus's.
+//
+// The mandate is one JSON Lines entry per issue or revoke, in the repository's git common
+// directory under magus/mandate.jsonl, so every worktree reads one; the last line wins.
+namespace agentpolicy\mandate;
+
+import "std";
+import "fs";
+import "os";
+import "encoding/json";
+import "magus";
+import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
+
+// ceiling is the highest tolerance `issue` accepts: the most an unsettled job's proven tier
+// may be for its work to be integrated with no one present.
+export final ceiling = "mechanical";
+
+// tiers are the risk tiers, lowest first, as internal/risk proves them.
+export final tiers = ["trivial", "mechanical", "scoped", "full"];
+
+// loopLimit is how many stops running a refusal naming the same rows holds before it lets the
+// turn end and files an attention entry.
+export final loopLimit = 3;
+
+// reservedPaths are the workspace paths the root and its workers do not write under a
+// mandate: decisions, design pages, and hook and permission config.
+final reservedPaths = ["docs/decisions/", "docs/design/", ".claude/", ".codex/", "hack/policy/", "spells/harness/", "magus.yaml"];
+
+// Mandate is one line of the mandate file: an issue, or a revoke.
+export object Mandate {
+    action: str,
+    // at is when the line was written, in Unix milliseconds.
+    at: int,
+    // endClock is the end time as the person typed it, HH:MM local.
+    endClock: str = "",
+    // ends is endClock resolved to Unix milliseconds when the mandate was issued.
+    ends: int = 0,
+    tolerance: str = "",
+    rows: [str] = [],
+}
+
+// Row is what the rules read of one job store row, copied out of magus\job.list so a test can
+// build one.
+export object Row {
+    id: str,
+    state: str,
+    parent: str = "",
+    paused: bool = false,
+    dependsOn: [str] = [],
+    created: int = 0,
+    checkoutRoot: str = "",
+    unresolvedRisks: [str] = [],
+}
+
+// Assessed is a job's proven risk tier and the evidence behind it.
+export object Assessed {
+    tier: str,
+    evidence: [str] = [],
+}
+
+// unproven is the tier source where no risk call reaches Buzz: anything unproven is full, so
+// every unsettled job is held for review. It names why, so the report does not read as a
+// measured tier.
+export fun unproven(id: str) > Assessed {
+    return Assessed{ tier = "full", evidence = ["{id}: full (this magus has no magus\\risk.assess, so no tier below full is proven)"] };
+}
+
+// rows copies a job store's rows.
+export fun rows(jobs: [Job]) > [Row] {
+    final found = mut [<Row>];
+    foreach (j in jobs) {
+        var risks = [<str>];
+        if (j.result != null) {
+            risks = j.result!.unresolvedRisks;
+        }
+        found.append(Row{ id = j.id, state = j.state, parent = j.parent, paused = j.paused != 0, dependsOn = j.dependsOn,
+            created = j.created, checkoutRoot = j.checkoutRoot, unresolvedRisks = risks });
+    }
+    return found;
+}
+
+// commonDir is the git common directory of the repository holding workspace, read from the
+// checkout's .git without running git, since a guard rule runs on every call; null when the
+// workspace is not a git checkout.
+export fun commonDir(workspace: str) > str? {
+    final dotgit = workspace + "/.git";
+    if (fs\isDir(dotgit) catch false) {
+        return dotgit;
+    }
+    final text = fs\readFile(dotgit) catch "";
+    if (!text.startsWith("gitdir: ")) {
+        return null;
+    }
+    var gitdir = text.sub(8).trim();
+    if (!gitdir.startsWith("/")) {
+        gitdir = workspace + "/" + gitdir;
+    }
+    final common = (fs\readFile(gitdir + "/commondir") catch "").trim();
+    if (common == "") {
+        return gitdir;
+    }
+    if (common.startsWith("/")) {
+        return common;
+    }
+    return gitdir + "/" + common;
+}
+
+// mandateFile is where the mandate of the repository holding workspace lives, null outside a
+// git checkout.
+export fun mandateFile(workspace: str) > str? {
+    if (commonDir(workspace) -> dir) {
+        return dir + "/magus/mandate.jsonl";
+    }
+    return null;
+}
+
+// attentionFile is where the Stop rule files the rows a refusal loop gave up on.
+export fun attentionFile(workspace: str) > str? {
+    if (commonDir(workspace) -> dir) {
+        return dir + "/magus/mandate-attention.jsonl";
+    }
+    return null;
+}
+
+// parseMandate reads one mandate line, null for one that is not a mandate.
+export fun parseMandate(line: str) > Mandate? {
+    if (line.trim() == "") {
+        return null;
+    }
+    final doc: {str: any} = json\parse(line) catch {<str: any>};
+    final action: str = doc["action"] ?? "";
+    if (action != "issue" and action != "revoke") {
+        return null;
+    }
+    final named: [any] = doc["rows"] ?? [<any>];
+    final ids = mut [<str>];
+    foreach (r in named) {
+        final id: str = r;
+        ids.append(id);
+    }
+    return Mandate{
+        action = action,
+        at = std\toInt(doc["at"] ?? 0),
+        endClock = doc["until"] ?? "",
+        ends = std\toInt(doc["ends"] ?? 0),
+        tolerance = doc["tolerance"] ?? "",
+        rows = ids,
+    };
+}
+
+// encodeMandate is m as one mandate line, without its newline.
+export fun encodeMandate(m: Mandate) > str !> any {
+    return json\stringify({"action": m.action, "at": m.at, "until": m.endClock, "ends": m.ends, "tolerance": m.tolerance, "rows": m.rows});
+}
+
+// lastMandate is the last mandate line in text, null when it holds none.
+export fun lastMandate(text: str) > Mandate? {
+    var last: Mandate? = null;
+    foreach (line in text.split("\n")) {
+        if (parseMandate(line) -> m) {
+            last = m;
+        }
+    }
+    return last;
+}
+
+// loadMandate is the last mandate line of the repository holding workspace, null when none
+// was ever issued there.
+export fun loadMandate(workspace: str) > Mandate? {
+    if (mandateFile(workspace) -> file) {
+        return lastMandate(fs\readFile(file) catch "");
+    }
+    return null;
+}
+
+// now is the current time in Unix milliseconds.
+export fun now() > int {
+    return std\toInt(os\time());
+}
+
+// inForce reports whether m is a mandate issued and not yet past its end at now.
+export fun inForce(m: Mandate?, now: int) > bool {
+    if (m -> mandate) {
+        return mandate.action == "issue" and now < mandate.ends;
+    }
+    return false;
+}
+
+// rank is tier's place in tiers, full for a tier magus does not prove.
+export fun rank(tier: str) > int {
+    return tiers.indexOf(tier) ?? tiers.len() - 1;
+}
+
+// settled reports whether a job is done with no call left for the person: `job wait`
+// recorded it pass and its exit record names no unresolved risk. A worker's own report can
+// only unsettle a job.
+export fun settled(row: Row) > bool {
+    return row.state == "pass" and row.unresolvedRisks.len() == 0;
+}
+
+fun byId(jobs: [Row], id: str) > Row? {
+    foreach (r in jobs) {
+        if (r.id == id) {
+            return r;
+        }
+    }
+    return null;
+}
+
+// mandated reports whether id is a row m names, or a child forked from one, which by the job
+// rules narrows its parent.
+export fun mandated(id: str, m: Mandate, jobs: [Row]) > bool {
+    var at = id;
+    var hops = 0;
+    while (at != "" and hops <= jobs.len()) {
+        if (m.rows.indexOf(at) != null) {
+            return true;
+        }
+        if (byId(jobs, id: at) -> row) {
+            at = row.parent;
+        } else {
+            at = "";
+        }
+        hops = hops + 1;
+    }
+    return false;
+}
+
+fun isMagus(p: helpers\Program) > bool {
+    return p.name == "magus";
+}
+
+// mandateAction is the subcommand a line runs hack/dev/mandate.buzz with, "" for any other
+// line.
+fun mandateAction(p: helpers\Program) > str {
+    if (!isMagus(p)) {
+        return "";
+    }
+    final ops = helpers\magusOperands(p.args);
+    if (ops.len() < 3 or ops[0] != "buzz" or !ops[1].endsWith("hack/dev/mandate.buzz")) {
+        return "";
+    }
+    return ops[2];
+}
+
+// jobVerb is a magus job line's verb and its operands after it, [] for any other line.
+fun jobVerb(p: helpers\Program) > [str] {
+    if (!isMagus(p)) {
+        return [<str>];
+    }
+    final ops = helpers\magusOperands(p.args);
+    if (ops.len() < 2 or ops[0] != "job") {
+        return [<str>];
+    }
+    return ops.sub(1);
+}
+
+// Fork is a `magus job fork` as the rule reads it: the row it declares, its parent, and the
+// rows it integrates, read from a --stdin record the line carries as a heredoc.
+export object Fork {
+    id: str,
+    parent: str = "",
+    integrates: [str] = [],
+    // known is false for a --stdin fork whose record the line does not carry.
+    known: bool = true,
+}
+
+// readFork is the fork p declares; body is the heredoc the line feeds it, "" for none.
+export fun readFork(p: helpers\Program, body: str) > Fork {
+    if (!helpers\hasFlag(p.args, long: "--stdin")) {
+        final ops = helpers\stripFlags(p.args, valueFlags: ["--parent", "--write-paths", "--deny-paths", "--read-paths", "--depends-on", "--criteria",
+            "--check", "--checkout", "--checkpoint", "--model", "--timeout", "--brief-format"]);
+        final named = helpers\magusOperands(ops);
+        final id = if (named.len() > 2) named[2] else "";
+        return Fork{ id = id, parent = helpers\flagValue(p.args, long: "--parent", short: "") ?? "" };
+    }
+    final doc: {str: any} = json\parse(body) catch {<str: any>};
+    final id: str = doc["id"] ?? "";
+    if (id == "") {
+        return Fork{ id = "", known = false };
+    }
+    final listed: [any] = doc["integrates"] ?? [<any>];
+    final integrates = mut [<str>];
+    foreach (i in listed) {
+        final name: str = i;
+        integrates.append(name);
+    }
+    return Fork{ id = id, parent = doc["parent"] ?? "", integrates = integrates };
+}
+
+// plainHeredocs are the bodies of every heredoc on line, in order, fed to a command
+// substitution or straight to a program's stdin.
+export fun plainHeredocs(line: str) > [str] {
+    final bodies = mut [<str>];
+    final lines = line.split("\n");
+    var i = 0;
+    while (i < lines.len()) {
+        final at = lines[i].indexOf("<<");
+        if (at == null) {
+            i = i + 1;
+            continue;
+        }
+        final rest = lines[i].sub(at! + 2).replace("-", with: "").trim();
+        final word = rest.split(" ")[0].replace("'", with: "").replace("\"", with: "");
+        final body = mut [<str>];
+        var j = i + 1;
+        while (j < lines.len() and lines[j].trim() != word) {
+            body.append(lines[j]);
+            j = j + 1;
+        }
+        bodies.append(body.join("\n"));
+        i = j + 1;
+    }
+    return bodies;
+}
+
+fun deny(reason: str) > GuardVerdict {
+    return magus\guard.deny(reason, opts: {"rule": "mandate"});
+}
+
+// decideCommand judges one shell line against the mandate. Issuing or revoking one is the
+// person's act, so it is denied whether or not one is in force; every other denial holds
+// only while one is.
+export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jobs: [Row], now: int, assess: fun (id: str) > Assessed) > GuardVerdict {
+    foreach (p in programs) {
+        final action = mandateAction(p);
+        if (action == "issue" or action == "revoke") {
+            return deny("a mandate is issued and revoked by the person, never by the root or a worker; propose the line and let them type it\n"
+                + "ADR 0019 section 2: issuing it is the decision. `hack/dev/mandate.buzz report` reads it.");
+        }
+    }
+    if (!inForce(m, now: now)) {
+        return magus\guard.allow();
+    }
+    final mandate = m!;
+    final bodies = plainHeredocs(line);
+    var body = "";
+    if (bodies.len() > 0) {
+        body = bodies[0];
+    }
+    foreach (p in programs) {
+        final judged = decideProgram(p, body: body, m: mandate, jobs: jobs, assess: assess);
+        if (judged.decision != "allow") {
+            return judged;
+        }
+    }
+    return magus\guard.allow();
+}
+
+fun decideProgram(p: helpers\Program, body: str, m: Mandate, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+    final verb = jobVerb(p);
+    if (verb.len() > 0) {
+        return decideJob(p, verb: verb, body: body, m: m, jobs: jobs, assess: assess);
+    }
+    if (p.name == "gh" and p.args.len() > 1 and p.args[0] == "pr" and p.args[1] == "merge") {
+        return deny("merging is the person's under a mandate; the report lists the pull request\n"
+            + "ADR 0019 section 5: merge and push stay reserved.");
+    }
+    if (p.vcs -> call) {
+        if (call.subcommand == "push") {
+            return deny("pushing is the person's under a mandate; the report lists the branch\n"
+                + "ADR 0019 section 5: merge and push stay reserved.");
+        }
+        if (call.subcommand == "branch" and (call.args.indexOf("-D") != null or call.args.indexOf("-d") != null or call.args.indexOf("--delete") != null)) {
+            foreach (name in helpers\stripFlags(call.args, valueFlags: [<str>])) {
+                if (!madeUnder(jobs, id: name, m: m)) {
+                    return deny("branch {name} is older than the mandate, so deleting it is the person's\n"
+                        + "ADR 0019 section 5: a mandate deletes only work made under it.");
+                }
+            }
+        }
+        if (call.subcommand == "worktree" and call.args.len() > 1 and call.args[0] == "remove") {
+            foreach (dir in helpers\stripFlags(call.args.sub(1), valueFlags: [<str>])) {
+                if (!checkoutMadeUnder(jobs, dir: dir, m: m)) {
+                    return deny("worktree {dir} is not one a row made under the mandate owns, so removing it is the person's\n"
+                        + "ADR 0019 section 5: a mandate deletes only work made under it.");
+                }
+            }
+        }
+    }
+    return magus\guard.allow();
+}
+
+fun madeUnder(jobs: [Row], id: str, m: Mandate) > bool {
+    if (byId(jobs, id: id) -> row) {
+        return row.created >= m.at;
+    }
+    return false;
+}
+
+fun checkoutMadeUnder(jobs: [Row], dir: str, m: Mandate) > bool {
+    foreach (r in jobs) {
+        if (r.checkoutRoot != "" and (r.checkoutRoot == dir or r.checkoutRoot.endsWith("/" + dir)) and r.created >= m.at) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun decideJob(p: helpers\Program, verb: [str], body: str, m: Mandate, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+    final what = verb[0];
+    if (what == "grant") {
+        return deny("a grant is typed by the person, never by the root or a worker\nADR 0019 section 5: the report names the grant left.");
+    }
+    if (what == "apply") {
+        return deny("a plan goes into the store before its mandate is issued; `job apply` under one is new scope\n"
+            + "ADR 0019, Consequences: the mandate can name only rows that exist when it is issued.");
+    }
+    if (what == "rm") {
+        foreach (id in verb.sub(1)) {
+            if (!madeUnder(jobs, id: id, m: m)) {
+                return deny("job {id} is older than the mandate, so removing it is the person's\n"
+                    + "ADR 0019 section 5: a mandate deletes only work made under it.");
+            }
+        }
+        return magus\guard.allow();
+    }
+    if (what != "fork") {
+        return magus\guard.allow();
+    }
+    final fork = readFork(p, body: body);
+    if (!fork.known) {
+        return deny("this --stdin fork's record is not on the line, so the mandate cannot place it; feed it as a heredoc\n"
+            + "ADR 0019 section 5: a fork the mandate cannot read is judged as new scope.");
+    }
+    if (!mandated(fork.id, m: m, jobs: jobs) and !mandated(fork.parent, m: m, jobs: jobs)) {
+        return deny("{fork.id} is new scope: the mandate names {m.rows.join(", ")} and their children\n"
+            + "ADR 0019 section 2: a row the mandate does not name waits for the person.");
+    }
+    foreach (id in fork.integrates) {
+        final held = decideHold(id, m: m, jobs: jobs, assess: assess);
+        if (held.decision != "allow") {
+            return held;
+        }
+    }
+    return magus\guard.allow();
+}
+
+// decideHold holds an unsettled job for review when its proven tier is above the mandate's
+// tolerance: the integration fork naming it is denied, the row stays for the person, and the
+// root goes on with the next row.
+export fun decideHold(id: str, m: Mandate, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+    if (byId(jobs, id: id) -> row) {
+        if (settled(row)) {
+            return magus\guard.allow();
+        }
+    }
+    final got = assess(id);
+    if (rank(got.tier) <= rank(m.tolerance)) {
+        return magus\guard.allow();
+    }
+    return deny("{id} is held for review: unsettled at tier {got.tier}, above the mandate's tolerance {m.tolerance}; fork the next row\n"
+        + "ADR 0019 section 4. Evidence:\n" + got.evidence.join("\n"));
+}
+
+// relative is path as a workspace-relative path, "" when it lies outside workspace.
+fun relative(path: str, workspace: str) > str {
+    if (!path.startsWith("/")) {
+        return path;
+    }
+    if (path.startsWith(workspace + "/")) {
+        return path.sub(workspace.len() + 1);
+    }
+    return "";
+}
+
+// decideWrite judges one file write. The mandate file is denied always, since writing it
+// issues a mandate; the reserved paths only while one is in force.
+export fun decideWrite(path: str, workspace: str, m: Mandate?, now: int) > GuardVerdict {
+    final file = mandateFile(workspace) ?? "";
+    final attention = attentionFile(workspace) ?? "";
+    if (path != "" and (path == file or path == attention)) {
+        return deny("the mandate file is written by `hack/dev/mandate.buzz`, run by the person\nADR 0019 section 8.");
+    }
+    if (!inForce(m, now: now)) {
+        return magus\guard.allow();
+    }
+    final rel = relative(path, workspace: workspace);
+    foreach (reserved in reservedPaths) {
+        if (rel == reserved or (reserved.endsWith("/") and rel.startsWith(reserved))) {
+            return deny("{rel} is reserved under a mandate: decisions, design and hook config stay the person's\n"
+                + "ADR 0019 section 5.");
+        }
+    }
+    return magus\guard.allow();
+}
+
+// StopFacts is what the Stop rule reads of a stop.
+export object StopFacts {
+    role: str,
+    stopHookActive: bool,
+}
+
+// Queue is the job store as the Stop rule reads it.
+export object Queue {
+    jobs: [Row],
+    // blocked are the rows the store reports waiting on another.
+    blocked: [str] = [],
+}
+
+// forkable are the rows the root could work next: declared, not paused or blocked, every row
+// they depend on passed. Under a mandate they are the mandated rows; with none, every row.
+export fun forkable(q: Queue, m: Mandate?, now: int) > [str] {
+    final under = inForce(m, now: now);
+    final found = mut [<str>];
+    foreach (r in q.jobs) {
+        if (r.state != "declared" or r.paused or q.blocked.indexOf(r.id) != null) {
+            continue;
+        }
+        if (under and !mandated(r.id, m: m!, jobs: q.jobs)) {
+            continue;
+        }
+        var ready = true;
+        foreach (dep in r.dependsOn) {
+            final row = byId(q.jobs, id: dep);
+            if (row == null or row!.state != "pass") {
+                ready = false;
+            }
+        }
+        if (ready) {
+            found.append(r.id);
+        }
+    }
+    return found;
+}
+
+// decideStop refuses the root's stop while rows it could fork wait and no worker runs to wake
+// it. With no mandate in force it refuses once per stop, so a person present can end a turn.
+// Under a mandate a refusal naming the same rows loopLimit stops running lets the turn end and
+// calls file with the rows, for the person. Past the mandate's end the turn ends.
+export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: fun (key: str) > int, file: fun (rows: [str]) > void) > GuardVerdict {
+    if (facts.role != "root") {
+        return magus\guard.allow();
+    }
+    foreach (r in q.jobs) {
+        if (r.state == "running") {
+            return magus\guard.allow();
+        }
+    }
+    if (m -> mandate) {
+        if (mandate.action == "issue" and now >= mandate.ends) {
+            return magus\guard.allow();
+        }
+    }
+    final ready = forkable(q, m: m, now: now);
+    if (ready.len() == 0) {
+        return magus\guard.allow();
+    }
+    final reason = "{ready.join(", ")} can be worked and no worker is running to wake this session; spawn a worker on {ready[0]}\n"
+        + "`./magus describe job {ready[0]}` prints its terms. To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
+    if (!inForce(m, now: now)) {
+        if (facts.stopHookActive) {
+            return magus\guard.allow();
+        }
+        return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
+    }
+    if (count("mandate-idle-stop:" + ready.join(",")) >= loopLimit) {
+        file(ready);
+        return magus\guard.advise("the mandate refused this stop {loopLimit} times over the same rows, so the turn ends and they wait for the person: {ready.join(", ")}",
+            opts: {"rule": "idle-stop"});
+    }
+    return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
+}
+
+// fileAttention appends one attention entry for rows to the repository's attention file.
+export fun fileAttention(workspace: str, rows: [str], now: int) > void {
+    if (attentionFile(workspace) -> file) {
+        fs\mkdirAll(fs\dirname(file)) catch void;
+        final line = json\stringify({"at": now, "rows": rows, "why": "a fork kept failing: the Stop rule refused {loopLimit} stops over these rows"}) catch "";
+        if (line != "") {
+            fs\appendFile(file, content: line + "\n") catch void;
+        }
+    }
+}
+
+final issued = Mandate{ action = "issue", at = 1000, endClock = "07:30", ends = 5000, tolerance = "mechanical", rows = ["naming-lint", "go-indexer"] };
+final store = [
+    Row{ id = "naming-lint", state = "declared", created = 500 },
+    Row{ id = "go-indexer", state = "pass", created = 500 },
+    Row{ id = "naming-lint/docs", state = "declared", parent = "naming-lint", created = 1500 },
+    Row{ id = "landing", state = "declared", created = 500 },
+    Row{ id = "late", state = "pass", created = 2000, unresolvedRisks = ["picked a name"] },
+];
+final fullTier = fun (id: str) > Assessed => Assessed{ tier = "full", evidence = ["x.go: full (unproven)"] };
+final mechanicalTier = fun (id: str) > Assessed => Assessed{ tier = "mechanical" };
+
+fun magusLine(args: [str]) > [helpers\Program] {
+    return helpers\request([["magus"] + args]);
+}
+
+test "a mandate file's last line wins and a line that is no mandate is skipped" {
+    final text = "\{\"action\":\"issue\",\"at\":1,\"ends\":9,\"tolerance\":\"mechanical\",\"rows\":[\"a\"]\}\nnot json\n\{\"action\":\"revoke\",\"at\":5\}\n";
+    final m = lastMandate(text);
+    std\assert(m != null and m!.action == "revoke" and m!.at == 5, message: "the revoke line wins");
+    std\assert(lastMandate("") == null, message: "no mandate");
+    std\assert(lastMandate("\{\"action\":\"issue\",\"at\":1,\"ends\":9,\"rows\":[\"a\",\"b\"]\}").rows.len() == 2, message: "rows decode");
+}
+
+test "a mandate is in force from its issue until its end time, and a revoke line ends it" {
+    std\assert(inForce(issued, now: 4999), message: "before the end");
+    std\assert(!inForce(issued, now: 5000), message: "at the end");
+    std\assert(!inForce(Mandate{ action = "revoke", at = 2000 }, now: 3000), message: "revoked");
+    std\assert(!inForce(null, now: 3000), message: "none");
+}
+
+test "a mandate round-trips through its line" {
+    final again = parseMandate(encodeMandate(issued) catch "");
+    std\assert(again != null and again!.ends == 5000 and again!.rows.join(",") == "naming-lint,go-indexer" and again!.tolerance == "mechanical", message: "round trip");
+}
+
+test "a named row and its children are mandated and another row is new scope" {
+    std\assert(mandated("naming-lint", m: issued, jobs: store), message: "named");
+    std\assert(mandated("naming-lint/docs", m: issued, jobs: store), message: "child");
+    std\assert(!mandated("landing", m: issued, jobs: store), message: "unnamed");
+    std\assert(!mandated("", m: issued, jobs: store), message: "empty");
+}
+
+test "issuing or revoking a mandate is denied to the root and its workers, in force or not" {
+    final issue = magusLine(["buzz", "hack/dev/mandate.buzz", "--", "issue", "--until", "07:30"]);
+    std\assert(decideCommand(issue, line: "", m: null, jobs: store, now: 0, assess: fullTier).decision == "deny", message: "issue");
+    std\assert(decideCommand(magusLine(["buzz", "hack/dev/mandate.buzz", "--", "revoke"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "revoke");
+    std\assert(decideCommand(magusLine(["buzz", "hack/dev/mandate.buzz", "--", "report"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "report");
+}
+
+test "a fork inside the mandate is allowed and new scope is denied while it is in force" {
+    final child = magusLine(["job", "fork", "naming-lint/tests", "--parent", "naming-lint"]);
+    std\assert(decideCommand(child, line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "child of a named row");
+    final scope = magusLine(["job", "fork", "new-idea"]);
+    final denied = decideCommand(scope, line: "", m: issued, jobs: store, now: 2000, assess: fullTier);
+    std\assert(denied.decision == "deny", message: "new scope");
+    std\assert(denied.reason.indexOf("naming-lint, go-indexer") != null, message: "names the mandate");
+    std\assert(decideCommand(scope, line: "", m: issued, jobs: store, now: 6000, assess: fullTier).decision == "allow", message: "past the end, the mandate holds nothing");
+    std\assert(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "apply");
+}
+
+test "a --stdin fork is read from its heredoc and one the line does not carry is denied" {
+    final line = "./magus job fork --stdin <<'EOF'\n\{\"id\":\"naming-lint/land\",\"parent\":\"naming-lint\",\"integrates\":[\"go-indexer\"]\}\nEOF";
+    final stdin = magusLine(["job", "fork", "--stdin"]);
+    std\assert(decideCommand(stdin, line: line, m: issued, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "a settled job is integrated at any tier");
+    std\assert(decideCommand(stdin, line: "./magus job fork --stdin < job.json", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "unread record");
+}
+
+test "an unsettled job above the tolerance is held for review and one at or below it is integrated" {
+    std\assert(decideHold("late", m: issued, jobs: store, assess: fullTier).decision == "deny", message: "risks above tolerance");
+    std\assert(decideHold("late", m: issued, jobs: store, assess: mechanicalTier).decision == "allow", message: "at tolerance");
+    std\assert(decideHold("naming-lint", m: issued, jobs: store, assess: fullTier).decision == "deny", message: "not passed is unsettled");
+    std\assert(decideHold("go-indexer", m: issued, jobs: store, assess: fullTier).decision == "allow", message: "settled");
+    final held = decideHold("late", m: issued, jobs: store, assess: fullTier);
+    std\assert(held.reason.indexOf("x.go: full (unproven)") != null, message: "carries the evidence");
+}
+
+test "merge, push, grant and deleting older work are reserved under a mandate" {
+    std\assert(decideCommand(helpers\request([["gh", "pr", "merge", "625"]]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "merge");
+    std\assert(decideCommand(helpers\vcsRequest([["git", "push", "origin", "x"]]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "push");
+    std\assert(decideCommand(magusLine(["job", "grant", "x"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "grant");
+    std\assert(decideCommand(magusLine(["job", "rm", "landing"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "older row");
+    std\assert(decideCommand(magusLine(["job", "rm", "naming-lint/docs"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "row made under the mandate");
+    std\assert(decideCommand(helpers\vcsRequest([["git", "branch", "-D", "landing"]]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier).decision == "deny", message: "older branch");
+    std\assert(decideCommand(helpers\vcsRequest([["git", "push", "origin", "x"]]), line: "", m: null, jobs: store, now: 2000, assess: fullTier).decision == "allow", message: "no mandate adds nothing");
+}
+
+test "reserved paths are denied only under a mandate and the mandate file always" {
+    std\assert(decideWrite("/w/docs/decisions/0020.md", workspace: "/w", m: issued, now: 2000).decision == "deny", message: "decision");
+    std\assert(decideWrite("/w/magus.yaml", workspace: "/w", m: issued, now: 2000).decision == "deny", message: "config");
+    std\assert(decideWrite("/w/internal/guard/x.go", workspace: "/w", m: issued, now: 2000).decision == "allow", message: "code");
+    std\assert(decideWrite("/w/docs/decisions/0020.md", workspace: "/w", m: null, now: 2000).decision == "allow", message: "no mandate");
+}
+
+test "an idle root stop is refused once with no mandate and every time under one" {
+    final q = Queue{ jobs = store };
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final once = decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, m: null, now: 2000, count: none, file: skip);
+    std\assert(once.decision == "deny", message: "first stop");
+    std\assert(once.reason.indexOf("naming-lint") != null, message: "names the row");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, m: null, now: 2000, count: none, file: skip).decision == "allow", message: "second stop");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, m: issued, now: 2000, count: none, file: skip).decision == "deny", message: "under a mandate");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, m: issued, now: 6000, count: none, file: skip).decision == "allow", message: "past the end");
+    std\assert(decideStop(StopFacts{ role = "worker", stopHookActive = false }, q: q, m: issued, now: 2000, count: none, file: skip).decision == "allow", message: "a worker");
+}
+
+test "a running row lets the root stop, and so do rows paused, blocked or waiting on a dependency" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final root = StopFacts{ role = "root", stopHookActive = false };
+    final running = Queue{ jobs = [Row{ id = "naming-lint", state = "declared" }, Row{ id = "go-indexer", state = "running" }] };
+    std\assert(decideStop(root, q: running, m: issued, now: 2000, count: none, file: skip).decision == "allow", message: "a worker will wake it");
+    final held = Queue{ jobs = [Row{ id = "naming-lint", state = "declared", paused = true }, Row{ id = "go-indexer", state = "declared", dependsOn = ["gone"] }] };
+    std\assert(decideStop(root, q: held, m: issued, now: 2000, count: none, file: skip).decision == "allow", message: "paused and waiting");
+    final blocked = Queue{ jobs = [Row{ id = "naming-lint", state = "declared" }], blocked = ["naming-lint"] };
+    std\assert(decideStop(root, q: blocked, m: issued, now: 2000, count: none, file: skip).decision == "allow", message: "blocked");
+}
+
+test "every denial carries the verdict shape" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    verdict\checked(decideCommand(magusLine(["buzz", "hack/dev/mandate.buzz", "--", "issue"]), line: "", m: null, jobs: store, now: 0, assess: fullTier), label: "issue");
+    verdict\checked(decideCommand(magusLine(["job", "fork", "new-idea"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "new scope");
+    verdict\checked(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "apply");
+    verdict\checked(decideCommand(magusLine(["job", "rm", "landing"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "rm");
+    verdict\checked(decideHold("late", m: issued, jobs: store, assess: fullTier), label: "held for review");
+    verdict\checked(decideWrite("/w/docs/design/x.md", workspace: "/w", m: issued, now: 2000), label: "write");
+    verdict\checked(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: Queue{ jobs = store }, m: null, now: 2000, count: none, file: skip), label: "stop");
+}
+
+test "the third refusal over the same rows lets the turn end and files them" {
+    final filed = mut [<str>];
+    final third = fun (key: str) > int => 3;
+    final record = fun (rows: [str]) > void {
+        foreach (r in rows) {
+            filed.append(r);
+        }
+    };
+    final v = decideStop(StopFacts{ role = "root", stopHookActive = true }, q: Queue{ jobs = store }, m: issued, now: 2000, count: third, file: record);
+    std\assert(v.decision == "advise", message: "the turn ends");
+    std\assert(filed.join(",") == "naming-lint,naming-lint/docs", message: "files the rows");
+}
