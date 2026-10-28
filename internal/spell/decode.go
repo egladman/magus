@@ -645,12 +645,9 @@ func validateSandbox(sb spells.Sandbox) error {
 	return sandbox.CheckDeclaration(sb)
 }
 
-// ValidateDiscovered checks the claims spell's discover_projects answered, once decoded.
-// A bad claim fails the whole answer: an unset or unknown role, a path that is not clean and
-// workspace-relative, a target name outside [spells.DiscoveryTargets] (ci included,
-// which core composes), an op key the spell does not declare, two claims on one path,
-// or a gap with no file or reason.
-func ValidateDiscovered(spell spells.Descriptor, claims []spells.DiscoveredProject) error {
+// validateDiscovered checks a decoded discover_projects answer; one bad claim fails it
+// whole. TODO: export it from the discovery merge, its first caller.
+func validateDiscovered(spell spells.Descriptor, claims []spells.DiscoveredProject) error {
 	seen := map[string]bool{}
 	for _, c := range claims {
 		if err := validateClaim(spell, c); err != nil {

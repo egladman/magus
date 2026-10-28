@@ -59,6 +59,8 @@ var inboundTypes = []string{
 	"ReviewTarget",
 	"ReviewComment",
 	"Project",
+	"DiscoveryGap",
+	"DiscoveredProject",
 	// The queue script's answers, leaf first.
 	"Person",
 	"QueueIntegration",
@@ -140,6 +142,7 @@ var inboundTypes = []string{
 // what the provider meant to refuse: a change missing "fork" read as one from this
 // repository, a missing approval count as a base requiring no review.
 var requiredMembers = map[string][]string{
+	"DiscoveredProject":    {"path", "role"},
 	"QueueCapabilities":    {"stackMerge", "linearStacks", "methods", "requiredApprovals"},
 	"QueueSetup":           {"statusContext", "credential"},
 	"QueueSetupRefusal":    {"reason", "url", "app"},

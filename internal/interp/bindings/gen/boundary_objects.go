@@ -2284,6 +2284,28 @@ func ObjectSyntax(v spells.Syntax) vm.Value {
 	return out
 }
 
+func ObjectDiscoveryFile(v spells.DiscoveryFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	optContent := vm.Null
+	if v.Content != nil {
+		optContent = vm.StringValue((*v.Content))
+	}
+	out.MapSet("content", optContent)
+	return out
+}
+
+func ObjectDiscoveryQuery(v spells.DiscoveryQuery) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("root", vm.StringValue(v.Root))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = ObjectDiscoveryFile(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	return out
+}
+
 func ObjectEmpty(v types.Empty) vm.Value {
 	out := vm.NewMap()
 	return out
@@ -4994,6 +5016,45 @@ func ObjectProvidedProject(v spells.ProvidedProject) vm.Value {
 		itemsOutputs[indexOutputs] = vm.StringValue(v.Outputs[indexOutputs])
 	}
 	out.MapSet("outputs", vm.ListValue(itemsOutputs))
+	return out
+}
+
+func ObjectDiscoveryGap(v spells.DiscoveryGap) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", vm.StringValue(v.File))
+	out.MapSet("why", vm.StringValue(v.Why))
+	return out
+}
+
+func ObjectDiscoveredProject(v spells.DiscoveredProject, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("role", enums.Case("DiscoveryRole", string(v.Role)))
+	out.MapSet("name", vm.StringValue(v.Name))
+	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
+	for indexDependsOn := range v.DependsOn {
+		itemsDependsOn[indexDependsOn] = vm.StringValue(v.DependsOn[indexDependsOn])
+	}
+	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
+	mappedTargets := vm.NewMap()
+	for keyTargets, itemTargets := range v.Targets {
+		itemsTargetsValue := make([]vm.Value, len(itemTargets))
+		for indexTargetsValue := range itemTargets {
+			itemsTargetsValue[indexTargetsValue] = vm.StringValue(itemTargets[indexTargetsValue])
+		}
+		mappedTargets.MapSet(keyTargets, vm.ListValue(itemsTargetsValue))
+	}
+	out.MapSet("targets", mappedTargets)
+	itemsSpans := make([]vm.Value, len(v.Spans))
+	for indexSpans := range v.Spans {
+		itemsSpans[indexSpans] = vm.StringValue(v.Spans[indexSpans])
+	}
+	out.MapSet("spans", vm.ListValue(itemsSpans))
+	itemsNotInferred := make([]vm.Value, len(v.NotInferred))
+	for indexNotInferred := range v.NotInferred {
+		itemsNotInferred[indexNotInferred] = ObjectDiscoveryGap(v.NotInferred[indexNotInferred])
+	}
+	out.MapSet("notInferred", vm.ListValue(itemsNotInferred))
 	return out
 }
 

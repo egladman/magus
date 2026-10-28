@@ -94,6 +94,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Digest", Zero: types.ImageDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(types.ImageDigest), enums) }},
 	{Name: "Dir", Zero: types.Dir{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDir(v.(types.Dir)) }},
 	{Name: "DirCall", Zero: types.DirCall{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDirCall(v.(types.DirCall)) }},
+	{Name: "DiscoveryFile", Zero: spells.DiscoveryFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiscoveryFile(v.(spells.DiscoveryFile)) }},
+	{Name: "DiscoveryQuery", Zero: spells.DiscoveryQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiscoveryQuery(v.(spells.DiscoveryQuery)) }},
 	{Name: "DiskUsage", Zero: types.DiskUsage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiskUsage(v.(types.DiskUsage)) }},
 	{Name: "DoctorReport", Zero: types.DoctorReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorReport(v.(types.DoctorReport), enums) }},
 	{Name: "DoctorSummary", Zero: types.DoctorSummary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorSummary(v.(types.DoctorSummary)) }},

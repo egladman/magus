@@ -44,6 +44,10 @@ import (
 //go:generate go run ../../cmd/magus-utils types -type Service -out gen/types/service.buzz
 //go:generate go run ../../cmd/magus-utils types -type SymbolIndexer -out gen/types/symbolindexer.buzz
 //go:generate go run ../../cmd/magus-utils types -type Project -out gen/types/project.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveryFile -out gen/types/discoveryfile.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveryQuery -out gen/types/discoveryquery.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveryGap -out gen/types/discoverygap.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveredProject -out gen/types/discoveredproject.buzz
 //go:generate go run ../../cmd/magus-utils types -type ReleaseCycle -out gen/types/releasecycle.buzz
 //go:generate go run ../../cmd/magus-utils types -type Lifecycle -out gen/types/lifecycle.buzz
 

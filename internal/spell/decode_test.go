@@ -749,30 +749,30 @@ func (s *discoveredSuite) claim() spells.DiscoveredProject {
 		DependsOn:   []string{"libs/proto"},
 		Targets:     map[string][]string{"build": {"go-build"}, "test": {"go-test"}, "lint": {"go-vet"}},
 		Spans:       []string{"web"},
-		NotInferred: []spells.DiscoveryGap{{File: "Makefile", Why: "recipes: meaning unknown"}},
+		NotInferred: []spells.DiscoveryGap{{File: "Makefile", Why: "make rules: meaning unknown"}},
 	}
 }
 
 func (s *discoveredSuite) refuse(c spells.DiscoveredProject, want string) {
-	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{c})
+	err := validateDiscovered(s.spell, []spells.DiscoveredProject{c})
 	s.Require().Error(err)
 	s.Contains(err.Error(), `spell "go": discover_projects:`)
 	s.Contains(err.Error(), want)
 }
 
 func (s *discoveredSuite) TestAcceptsARootProject() {
-	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim()}))
+	s.NoError(validateDiscovered(s.spell, []spells.DiscoveredProject{s.claim()}))
 }
 
 func (s *discoveredSuite) TestAcceptsAMemberWithNoTargets() {
 	member := spells.DiscoveredProject{Path: "scripts", Role: spells.DiscoveryRoleMember}
-	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{member}))
+	s.NoError(validateDiscovered(s.spell, []spells.DiscoveredProject{member}))
 }
 
 func (s *discoveredSuite) TestAcceptsAnOpInAnotherSpelling() {
 	c := s.claim()
 	c.Targets = map[string][]string{"build": {"go_build"}}
-	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{c}))
+	s.NoError(validateDiscovered(s.spell, []spells.DiscoveredProject{c}))
 }
 
 func (s *discoveredSuite) TestRefusesCI() {
@@ -860,7 +860,7 @@ func (s *discoveredSuite) TestRefusesAGapWithNoReason() {
 }
 
 func (s *discoveredSuite) TestRefusesTwoClaimsOnOnePath() {
-	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim(), s.claim()})
+	err := validateDiscovered(s.spell, []spells.DiscoveredProject{s.claim(), s.claim()})
 	s.Require().Error(err)
 	s.Contains(err.Error(), `claims "." twice`)
 }

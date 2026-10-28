@@ -61,6 +61,8 @@ var providerOps = []providerOp{
 
 	{Family: "workspace", Op: "list_projects", Req: reflect.TypeFor[types.ProjectQuery](), Resp: reflect.TypeFor[[]spells.ProvidedProject]()},
 
+	{Family: "discovery", Op: "discover_projects", Req: reflect.TypeFor[spells.DiscoveryQuery](), Resp: reflect.TypeFor[[]spells.DiscoveredProject]()},
+
 	{Family: queueFamily, Op: "describe", Req: reflect.TypeFor[queuetypes.DescribeRequest](), Resp: reflect.TypeFor[queuetypes.DescribeResult]()},
 	{Family: queueFamily, Op: "list_changes", Req: reflect.TypeFor[queuetypes.ListChangesRequest](), Resp: reflect.TypeFor[queuetypes.Changes]()},
 	{Family: queueFamily, Op: "approval_at", Req: reflect.TypeFor[queuetypes.ApprovalRequest](), Resp: reflect.TypeFor[queuetypes.Approval]()},
