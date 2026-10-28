@@ -43,6 +43,15 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | ---------- | -------------------- | ------------ | ----------------- |
 | `diff.tui` | `MAGUS_DIFF_TUI`     | _(env only)_ | bool _(env only)_ |
 
+## disk
+
+| Config key                | Environment variable            | Flag                        | Type     |
+| ------------------------- | ------------------------------- | --------------------------- | -------- |
+| `disk.critical_free_mb`   | `MAGUS_DISK_CRITICAL_FREE_MB`   | `--disk-critical-free-mb`   | int      |
+| `disk.growth_mb_per_hour` | `MAGUS_DISK_GROWTH_MB_PER_HOUR` | `--disk-growth-mb-per-hour` | int      |
+| `disk.min_free_mb`        | `MAGUS_DISK_MIN_FREE_MB`        | `--disk-min-free-mb`        | int      |
+| `disk.sample_every`       | `MAGUS_DISK_SAMPLE_EVERY`       | `--disk-sample-every`       | duration |
+
 ## general
 
 | Config key            | Environment variable        | Flag                    | Type                               |

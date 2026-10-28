@@ -681,6 +681,44 @@ try {
 }
 ```
 
+### diskUsage
+
+Return {path, totalBytes, freeBytes} for the filesystem holding path: statfs on unix, GetDiskFreeSpaceEx on Windows. freeBytes is what this process may still write, so it leaves out the blocks reserved for root.
+
+**Signature:** `fs\diskUsage(path) -> DiskUsage` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
+
+**Returns:** map[string]any
+
+### stateDir
+
+Return $XDG_STATE_HOME/magus/<purpose> (LocalAppData on Windows, else ~/.local/state), created 0700: the per-user home for state nothing can rebuild and that outlives any one workspace, such as a store several checkouts append to. purpose must be one path element.
+
+**Signature:** `fs\stateDir(purpose) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `purpose` | `string` |          |             |
+
+**Returns:** string
+
+### trimOldest
+
+Remove the least recently modified files under dir, whole days of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within the last day are never removed, so the directory is never emptied; stopped says when they alone pass the budget. Two walks with one counter per day of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.
+
+**Signature:** `fs\trimOldest(dir, maxBytes, [timeoutMs]) -> TrimReport` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
+
+| Parameter   | Type     | Optional | Description |
+| ----------- | -------- | -------- | ----------- |
+| `dir`       | `string` |          |             |
+| `maxBytes`  | `int`    |          |             |
+| `timeoutMs` | `int`    | yes      |             |
+
+**Returns:** map[string]any
+
 [^buzz-stdlib-fs-exists]: `fs\exists` is also in Buzz's standard library (`fs.exists`); the magus form is sandbox-aware.
 [^buzz-stdlib-fs-mkdir_all]: `fs\mkdirAll` is also in Buzz's standard library (`fs.makeDirectory`); the magus form is sandbox-aware.
 [^buzz-stdlib-fs-remove_all]: `fs\removeAll` is also in Buzz's standard library (`fs.delete`); the magus form is sandbox-aware.

@@ -390,6 +390,18 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_GO_CACHE_BUDGET_MB**
 : The size in MB (binary) past which \`magus doctor\` advises cleaning the Go build cache or the golangci-lint cache. Default 20480; 0 turns the check off (default: 20480). Config file key: **go.cache_budget_mb**.
 
+**MAGUS_DISK_MIN_FREE_MB**
+: The free space in MB (binary) below which the hook reclaims. Default 51200; 0 turns reclaiming off and leaves the samples (default: 51200). Config file key: **disk.min_free_mb**.
+
+**MAGUS_DISK_CRITICAL_FREE_MB**
+: The free space in MB below which the hook says so on every sample, so an agent puts reclaiming first. Default 10240; 0 turns the line off (default: 10240). Config file key: **disk.critical_free_mb**.
+
+**MAGUS_DISK_GROWTH_MB_PER_HOUR**
+: The rate at which free space may fall, in MB an hour, before the hook reclaims however much is left. Default 20480; 0 turns the growth trigger off (default: 20480). Config file key: **disk.growth_mb_per_hour**.
+
+**MAGUS_DISK_SAMPLE_EVERY**
+: The hook's rate limit: a hook that fires sooner reads one file's mtime and returns. Default 10m; 0 turns the hook off, and anything else takes at least 1m (default: 10m). Config file key: **disk.sample_every**.
+
 **MAGUS_CONCURRENCY**
 : Caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set. Config file key: **concurrency**.
 
