@@ -44,8 +44,9 @@ var HTTPResponseSource string
 var URLSource string
 
 // SemverVersionSource is the generated Buzz mirror of semver.parse's result. Ships with
-// "semver", and also with "vcs", whose tags carry a SemverVersion: an import inside a
-// synthetic module's companion source is inert, so vcs's bundle cannot reach "semver".
+// "semver", and also with "vcs", whose tags carry a SemverVersion. vcs's declarations
+// could `import "semver";` and name semver\SemverVersion, but the generator still emits
+// the copy rather than the qualified reference.
 //
 //go:generate go run ../../cmd/magus-utils types -type SemverVersion -out gen/types/semverversion.buzz
 //go:embed gen/types/semverversion.buzz
