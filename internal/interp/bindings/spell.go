@@ -513,15 +513,21 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 		return nil, err
 	}
 	var envs []map[string]string
+	var format spells.SymbolFormat
 	if spec.SymbolIndexer != nil {
 		envs = spec.SymbolIndexer.Envs
+		format = spec.SymbolIndexer.Format
 	}
-	if patterns, ok := spells.InProcessGoPatterns(op.Command); ok {
+	if format == spells.SymbolFormatGoPackages {
+		patterns := slices.Clone(op.Args)
+		if len(patterns) == 0 {
+			patterns = []string{"."}
+		}
 		return nil, runGoIndexer(ctx, spec.Name, projectDir, indexPath, patterns, envs)
 	}
 	if len(envs) > 0 {
-		return nil, fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (command `go list <patterns>`), since %q runs once, in the host's environment",
-			spec.Name, op.Bin)
+		return nil, fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (format %s), since %q runs once, in the host's environment",
+			spec.Name, spells.SymbolFormatGoPackages, op.Bin)
 	}
 	base := map[string]string{}
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {

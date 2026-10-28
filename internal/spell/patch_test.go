@@ -402,10 +402,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}, Capture: true},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "go", Args: []string{"list", "./..."}, Capture: true, Quiet: true}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "go", Args: []string{"./..."}, Capture: true, Quiet: true}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "go", Args: []string{"list", "./..."}}, Uses: []string{"go"},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages,
+			Command: spells.Command{Bin: "go", Args: []string{"./..."}}, Uses: []string{"go"},
 			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}},
 	},
 	"markdown": {

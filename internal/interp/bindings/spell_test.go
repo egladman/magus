@@ -946,12 +946,14 @@ func (s *bindingsSuite) TestCommandIndexerWithEnvsIsRefused() {
 	s.ErrorContains(err, "envs need magus's in-process Go indexer")
 }
 
-// `go list <patterns>` runs no command: magus indexes the packages in process.
-func (s *bindingsSuite) TestGoListIndexerRunsInProcess() {
+// The go-packages format runs no command: magus indexes the packages its args name in
+// process.
+func (s *bindingsSuite) TestGoPackagesIndexerRunsInProcess() {
 	ctx, c, projDir := s.symbolIndexWorld()
 	s.Require().NoError(os.WriteFile(filepath.Join(projDir, "go.mod"), []byte("module example.com/m\n\ngo 1.22\n"), 0o644))
 	s.Require().NoError(os.WriteFile(filepath.Join(projDir, "m.go"), []byte("package m\n\nfunc M() {}\n"), 0o644))
-	spec := symbolIndexerSpec(spells.Command{Bin: "go", Args: []string{"list", "./..."}})
+	spec := symbolIndexerSpec(spells.Command{Bin: "go", Args: []string{"./..."}})
+	spec.SymbolIndexer.Format = spells.SymbolFormatGoPackages
 
 	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
 	s.Require().NoError(err)
