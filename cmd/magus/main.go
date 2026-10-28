@@ -85,19 +85,15 @@ func main() {
 // claims of its own rather than running inside the parent step's seat. `ci` is a target
 // these verbs reach, not a verb.
 func schedulesSteps(args []string) bool {
-	switch sub, _ := peekSub(expandVerbosityArgs(args)); sub {
-	case "run", "affected":
-		return true
-	}
-	return false
+	sub, _ := peekSub(expandVerbosityArgs(args))
+	return sub == "run" || sub == "affected"
 }
 
 // runCLI is the CLI entry point as a function returning an exit code, so both main
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
-	// First, so every worker and command below derives origins and refuses a colliding
-	// workspace prefix against the same registry.
+	// First: every worker and command below reads code origins off this registry.
 	if err := registerDiagnosticCatalogs(); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return 1
@@ -1469,17 +1465,13 @@ func startupTraceEnabled(args []string) bool {
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
 }
 
-// registerDiagnosticCatalogs reserves the prefix of every code catalog this binary ships.
-// A clash between two of them is a build defect, so the caller exits on it.
+// registerDiagnosticCatalogs reserves each shipped catalog's prefix; a clash is a build defect.
 func registerDiagnosticCatalogs() error {
-	return errors.Join(
-		diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()),
-		diagnostics.RegisterCatalog("gopherbuzz", buzz.Codes()),
-	)
+	own := diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes())
+	return errors.Join(own, diagnostics.RegisterCatalog("gopherbuzz", buzz.Codes()))
 }
 
-// diagnosticArgs returns err's rationale as an [attr.Why] log argument, and marks a code
-// the workspace minted, so a reader never takes a workspace's WS1001 for one of magus's own.
+// diagnosticArgs is err's rationale as an [attr.Why], plus an origin mark on a workspace code.
 func diagnosticArgs(err error) []any {
 	var args []any
 	if why := types.DiagnosticRationale(err); why != "" {
