@@ -11,6 +11,7 @@
 import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
+import "encoding/yaml";
 
 export fun mgs_getName() > str { return "buf"; }
 
@@ -96,6 +97,290 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "buf-format": bufFormat,
         "buf-breaking": bufBreaking,
     };
+}
+
+// One record per claimed directory while discovery builds its answer. modules holds the
+// workspace-relative module directories a buf.work.yaml or v2 buf.yaml lists.
+object BufClaim {
+    path: str,
+    role: DiscoveryRole,
+    marker: str,
+    modules: mut [str],
+    gaps: mut [DiscoveryGap],
+}
+
+fun dirOf(p: str) > str {
+    final parts = p.split("/");
+    if (parts.len() < 2) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+fun baseOf(p: str) > str {
+    final parts = p.split("/");
+    return parts[parts.len() - 1];
+}
+
+// Null when rel climbs out of the workspace root.
+fun joinClean(base: str, rel: str) > str? {
+    final parts = mut [<str>];
+    if (base != ".") {
+        foreach (part in base.split("/")) {
+            parts.append(part);
+        }
+    }
+    foreach (part in rel.split("/")) {
+        if (part == "" or part == ".") {
+            continue;
+        }
+        if (part == "..") {
+            if (parts.len() == 0) {
+                return null;
+            }
+            parts.pop();
+            continue;
+        }
+        parts.append(part);
+    }
+    if (parts.len() == 0) {
+        return ".";
+    }
+    return parts.join("/");
+}
+
+fun isUnder(p: str, dir: str) > bool {
+    return dir == "." or p == dir or p.startsWith(dir + "/");
+}
+
+fun parseMarker(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > {str: any}? {
+    if (file.content -> text) {
+        try {
+            return yaml\parse(text) as? {str: any};
+        } catch (e) {
+            gaps.append(DiscoveryGap{file = file.path, why = "not valid YAML ({e}), so buf would refuse it too"});
+            return null;
+        }
+    }
+    gaps.append(DiscoveryGap{file = file.path, why = "magus passed no content for this marker, so its version and modules are unknown"});
+    return null;
+}
+
+// The module directories a buf.work.yaml `directories` or a v2 buf.yaml `modules[].path`
+// lists, relative to the workspace root. An entry that leaves the root is a gap.
+fun listModules(file: DiscoveryFile, doc: {str: any}, gaps: mut [DiscoveryGap]) > [str] {
+    final dir = dirOf(file.path);
+    final listed = mut [<str>];
+    if (baseOf(file.path) == "buf.work.yaml") {
+        foreach (entry in (doc["directories"] as? [any]) ?? []) {
+            if (entry as? str -> rel) {
+                listed.append(rel);
+            }
+        }
+    } else {
+        foreach (entry in (doc["modules"] as? [any]) ?? []) {
+            if ((entry as? {str: any})?["path"] as? str -> rel) {
+                listed.append(rel);
+            }
+        }
+        if (listed.len() == 0) {
+            listed.append(".");
+        }
+    }
+    final modules = mut [<str>];
+    foreach (rel in listed) {
+        if (joinClean(dir, rel: rel) -> module) {
+            modules.append(module);
+        } else {
+            gaps.append(DiscoveryGap{file = file.path, why = "module {rel} leaves the workspace root, so buf-build and buf-lint never reach it"});
+        }
+    }
+    return modules;
+}
+
+// The deepest project claim whose directory holds p, or null.
+fun ownerOf(claims: {str: mut BufClaim}, p: str) > mut BufClaim? {
+    var best: mut BufClaim? = null;
+    foreach (dir, claim in claims) {
+        if (claim.role == DiscoveryRole.project and isUnder(p, dir: dir)) {
+            if (best == null or dir.len() > best!.path.len()) {
+                best = claim;
+            }
+        }
+    }
+    return best;
+}
+
+fun memberAt(claims: mut {str: mut BufClaim}, dir: str) > mut BufClaim {
+    if (claims[dir] -> existing) {
+        return existing;
+    }
+    final claim = mut BufClaim{path = dir, role = DiscoveryRole.member, marker = "", modules = mut [], gaps = mut []};
+    claims[dir] = claim;
+    return claim;
+}
+
+// discover_projects is the discovery contract magus invokes by name. A buf workspace
+// (buf.work.yaml, or a v2 buf.yaml) and a v1 buf.yaml no workspace lists each form a
+// project, because buf build, lint and format run from that directory over every module
+// it holds. What buf would not see, and the buf.gen.yaml outputs only a generate target
+// can declare, come back as gaps.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    final claims = mut {<str: mut BufClaim>};
+    final looseModules = mut [<DiscoveryFile>];
+    final genFiles = mut [<DiscoveryFile>];
+    final protos = mut [<str>];
+
+    fun rootAt(dir: str, marker: str) > mut BufClaim {
+        if (claims[dir] -> existing) {
+            existing.gaps.append(DiscoveryGap{file = marker, why = "{existing.marker} already roots a buf workspace here, and buf refuses two"});
+            return existing;
+        }
+        final claim = mut BufClaim{path = dir, role = DiscoveryRole.project, marker = marker, modules = mut [], gaps = mut []};
+        claims[dir] = claim;
+        return claim;
+    }
+
+    foreach (file in req.files) {
+        final base = baseOf(file.path);
+        if (base.endsWith(".proto")) {
+            protos.append(file.path);
+        } else if (base == "buf.gen.yaml") {
+            genFiles.append(file);
+        } else if (base == "buf.work.yaml" or base == "buf.yaml") {
+            final gaps = mut [<DiscoveryGap>];
+            final doc = parseMarker(file, gaps: gaps);
+            final version = ((doc?["version"]) as? str) ?? "";
+            if (base == "buf.yaml" and version != "v2") {
+                looseModules.append(file);
+                continue;
+            }
+            final claim = rootAt(dirOf(file.path), marker: file.path);
+            foreach (gap in gaps) {
+                claim.gaps.append(gap);
+            }
+            if (doc -> d) {
+                foreach (module in listModules(file, doc: d, gaps: claim.gaps)) {
+                    claim.modules.append(module);
+                }
+            }
+            if (claim.modules.len() == 0) {
+                claim.gaps.append(DiscoveryGap{file = file.path, why = "lists no module, so buf has nothing to build"});
+            }
+        }
+    }
+
+    foreach (file in looseModules) {
+        final dir = dirOf(file.path);
+        var listed = false;
+        foreach (_, claim in claims) {
+            if (claim.modules.indexOf(dir) != null) {
+                listed = true;
+            }
+        }
+        if (!listed) {
+            final claim = rootAt(dir, marker: file.path);
+            claim.modules.append(dir);
+            parseMarker(file, gaps: claim.gaps);
+        }
+    }
+
+    final roots = claims.clone();
+    final strayCount = mut {<str: int>};
+    final strayFirst = mut {<str: str>};
+    foreach (p in protos) {
+        if (ownerOf(roots, p: p) -> owner) {
+            var inModule = false;
+            foreach (module in owner.modules) {
+                if (isUnder(p, dir: module)) {
+                    inModule = true;
+                }
+            }
+            if (!inModule) {
+                owner.gaps.append(DiscoveryGap{file = p, why = "in no module {owner.marker} lists, so buf-build and buf-lint skip it"});
+            }
+            continue;
+        }
+        final dir = dirOf(p);
+        strayCount[dir] = (strayCount[dir] ?? 0) + 1;
+        if (strayFirst[dir] == null) {
+            strayFirst[dir] = p;
+        }
+    }
+
+    // A stray directory nested in another folds into the outer one, so the answer carries
+    // one member claim per tree of .proto files with no buf.yaml.
+    final strayDirs = strayCount.keys().cloneMutable();
+    strayDirs.sort(fun (left: str, right: str) > bool => left < right);
+    final kept = mut [<str>];
+    final keptCount = mut {<str: int>};
+    foreach (dir in strayDirs) {
+        var outer: str? = null;
+        foreach (k in kept) {
+            if (isUnder(dir, dir: k)) {
+                outer = k;
+            }
+        }
+        if (outer -> o) {
+            keptCount[o] = keptCount[o]! + strayCount[dir]!;
+        } else {
+            kept.append(dir);
+            keptCount[dir] = strayCount[dir]!;
+        }
+    }
+    foreach (dir in kept) {
+        memberAt(claims, dir: dir).gaps.append(DiscoveryGap{
+            file = strayFirst[dir]!,
+            why = "{keptCount[dir]!} .proto file(s) under {dir} have no buf.yaml, so no buf-build, buf-lint or buf-format is wired; a buf.yaml there makes it a module",
+        });
+    }
+
+    foreach (file in genFiles) {
+        final outs = mut [<str>];
+        final gaps = mut [<DiscoveryGap>];
+        if (parseMarker(file, gaps: gaps) -> doc) {
+            foreach (plugin in (doc["plugins"] as? [any]) ?? []) {
+                if ((plugin as? {str: any})?["out"] as? str -> outDir) {
+                    outs.append(outDir);
+                }
+            }
+        }
+        final where = if (outs.len() > 0) outs.join(", ") else "no out: found";
+        gaps.append(DiscoveryGap{
+            file = file.path,
+            why = "buf-generate is not wired into generate: it writes each plugin's out: ({where}), which only the target running it can declare with ctx.writesFiles",
+        });
+        final claim = ownerOf(roots, p: file.path) ?? memberAt(claims, dir: dirOf(file.path));
+        foreach (gap in gaps) {
+            claim.gaps.append(gap);
+        }
+    }
+
+    final paths = claims.keys().cloneMutable();
+    paths.sort(fun (left: str, right: str) > bool => left < right);
+    final answer = mut [<DiscoveredProject>];
+    foreach (path in paths) {
+        final claim = claims[path]!;
+        final spans = mut [<str>];
+        foreach (module in claim.modules) {
+            if (module != path and spans.indexOf(module) == null) {
+                spans.append(module);
+            }
+        }
+        spans.sort(fun (left: str, right: str) > bool => left < right);
+        var targets: {str: [str]} = {};
+        if (claim.role == DiscoveryRole.project) {
+            targets = {"build": ["buf-build"], "lint": ["buf-lint"], "format": ["buf-format"]};
+        }
+        answer.append(DiscoveredProject{
+            path = path,
+            role = claim.role,
+            targets = targets,
+            spans = spans,
+            notInferred = claim.gaps,
+        });
+    }
+    return answer;
 }
 
 export fun mgs_getTools() > {str: Tool} {
