@@ -20,6 +20,10 @@ config concurrency_profile
 config console.enabled
 config default_charms
 config diff.tui
+config disk.critical_free_mb
+config disk.growth_mb_per_hour
+config disk.min_free_mb
+config disk.sample_every
 config dry_run
 config go.cache_budget_mb
 config hints.enabled

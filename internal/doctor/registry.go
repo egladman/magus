@@ -565,6 +565,12 @@ var allChecks = []checkDef{
 		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkGoCacheBudget() },
 	},
 	{
+		Name:     "disk-trend",
+		Doc:      "the free space the reclaim hook last sampled, how fast it fell over the last day, and its last reclaim chunks, against the disk.* thresholds",
+		Evidence: types.EvidenceMeasured,
+		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkDiskTrend() },
+	},
+	{
 		Name:           "stale-spell-shadow-acknowledgments",
 		Doc:            "a spells.allow_shadow entry whose shadow no longer exists, so the reason is dead config",
 		Code:           types.SpellShadowed,

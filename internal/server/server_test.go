@@ -1215,56 +1215,54 @@ func TestServerSocketCarriesTheUnloadedFailure(t *testing.T) {
 
 func TestGoCacheTrimmer(t *testing.T) {
 	const budgetMB = 100
-	overBytes := int64(budgetMB+1) << 20
 
-	run := func(budget int, size int64, sizeErr, cleanErr error) (trimmed bool, cleaned int, recorded []string, err error) {
+	run := func(budget int, report types.TrimReport, trimErr error) (trimmed bool, asked []int64, recorded []string, err error) {
 		tr := goCacheTrimmer{
 			budgetMB: budget,
-			size:     func(context.Context, int64) (int64, error) { return size, sizeErr },
-			clean:    func(context.Context) error { cleaned++; return cleanErr },
-			record:   func(_ context.Context, m string) error { recorded = append(recorded, m); return nil },
+			trimDir: func(_ context.Context, maxBytes int64) (types.TrimReport, error) {
+				asked = append(asked, maxBytes)
+				return report, trimErr
+			},
+			record: func(_ context.Context, m string) error { recorded = append(recorded, m); return nil },
 		}
 		trimmed, err = tr.trim(context.Background())
 		return
 	}
 
-	t.Run("under budget leaves the cache alone", func(t *testing.T) {
-		trimmed, cleaned, recorded, err := run(budgetMB, 1<<20, nil, nil)
+	t.Run("within budget removes nothing and records nothing", func(t *testing.T) {
+		trimmed, asked, recorded, err := run(budgetMB, types.TrimReport{BeforeBytes: 1 << 20, AfterBytes: 1 << 20}, nil)
 		require.NoError(t, err)
 		assert.False(t, trimmed)
-		assert.Zero(t, cleaned)
+		assert.Equal(t, []int64{budgetMB << 20}, asked, "the budget reaches the trim in bytes")
 		assert.Empty(t, recorded)
 	})
 
 	t.Run("no budget does nothing", func(t *testing.T) {
-		trimmed, cleaned, recorded, err := run(0, overBytes<<10, nil, nil)
+		trimmed, asked, recorded, err := run(0, types.TrimReport{}, nil)
 		require.NoError(t, err)
 		assert.False(t, trimmed)
-		assert.Zero(t, cleaned)
+		assert.Empty(t, asked)
 		assert.Empty(t, recorded)
 	})
 
-	t.Run("past budget cleans once and records the size", func(t *testing.T) {
-		trimmed, cleaned, recorded, err := run(budgetMB, overBytes, nil, nil)
+	t.Run("a trim records what went by age and never says the cache was emptied", func(t *testing.T) {
+		cutoff := time.Date(2026, 10, 20, 12, 0, 0, 0, time.Local)
+		trimmed, _, recorded, err := run(budgetMB, types.TrimReport{
+			Dir: "/c", BeforeBytes: 300 << 20, AfterBytes: 90 << 20, RemovedFiles: 7, RemovedBytes: 210 << 20,
+			CutoffMs: float64(cutoff.UnixMilli()),
+		}, nil)
 		require.NoError(t, err)
 		assert.True(t, trimmed)
-		assert.Equal(t, 1, cleaned)
 		require.Len(t, recorded, 1)
-		assert.Contains(t, recorded[0], "go clean -cache")
-		assert.Contains(t, recorded[0], fmt.Sprintf("at least %d MB", budgetMB+1))
+		assert.Equal(t, "the daemon trimmed the go build cache /c to its 100 MB go.cache_budget_mb by entry age: removed 7 files (210 MB) unused since 2026-10-20, 90 MB remain", recorded[0])
+		assert.NotContains(t, recorded[0], "go clean")
 	})
 
-	t.Run("a failed clean is an error and records nothing", func(t *testing.T) {
-		trimmed, _, recorded, err := run(budgetMB, overBytes, nil, errors.New("disk gone"))
+	t.Run("a failed trim is an error and records nothing", func(t *testing.T) {
+		trimmed, _, recorded, err := run(budgetMB, types.TrimReport{}, errors.New("no cache dir"))
 		require.Error(t, err)
 		assert.False(t, trimmed)
-		assert.Contains(t, err.Error(), "disk gone")
+		assert.Contains(t, err.Error(), "no cache dir")
 		assert.Empty(t, recorded)
-	})
-
-	t.Run("a failed measurement is an error and cleans nothing", func(t *testing.T) {
-		_, cleaned, _, err := run(budgetMB, 0, errors.New("no cache dir"), nil)
-		require.Error(t, err)
-		assert.Zero(t, cleaned)
 	})
 }

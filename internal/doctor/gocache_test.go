@@ -42,7 +42,7 @@ func TestGoCacheBudgetOverBudgetNamesTheFixAndKeepsTheFiles(t *testing.T) {
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "past the 3 MB budget")
-	assert.Contains(t, got.Details[0], "`magus run go::go-clean . -- -cache`")
+	assert.Contains(t, got.Details[0], "reclaim\\trimGoCache()", "the fix trims by entry age; it never empties the cache")
 	assert.Contains(t, got.Details[0], dir)
 
 	var files int

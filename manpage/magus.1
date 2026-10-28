@@ -382,6 +382,18 @@ The most proved claims any job may be given through its max_claims; a fork or a 
 \fBMAGUS_GO_CACHE_BUDGET_MB\fR
 The size in MB (binary) past which `magus doctor` advises cleaning the Go build cache or the golangci\-lint cache. Default 20480; 0 turns the check off (default: 20480). Config file key: \fBgo.cache_budget_mb\fR.
 .TP
+\fBMAGUS_DISK_MIN_FREE_MB\fR
+The free space in MB (binary) below which the hook reclaims. Default 51200; 0 turns reclaiming off and leaves the samples (default: 51200). Config file key: \fBdisk.min_free_mb\fR.
+.TP
+\fBMAGUS_DISK_CRITICAL_FREE_MB\fR
+The free space in MB below which the hook says so on every sample, so an agent puts reclaiming first. Default 10240; 0 turns the line off (default: 10240). Config file key: \fBdisk.critical_free_mb\fR.
+.TP
+\fBMAGUS_DISK_GROWTH_MB_PER_HOUR\fR
+The rate at which free space may fall, in MB an hour, before the hook reclaims however much is left. Default 20480; 0 turns the growth trigger off (default: 20480). Config file key: \fBdisk.growth_mb_per_hour\fR.
+.TP
+\fBMAGUS_DISK_SAMPLE_EVERY\fR
+The hook's rate limit: a hook that fires sooner reads one file's mtime and returns. Default 10m; 0 turns the hook off, and anything else takes at least 1m (default: 10m). Config file key: \fBdisk.sample_every\fR.
+.TP
 \fBMAGUS_CONCURRENCY\fR
 Caps concurrent builds; top\-level and in\-process fan\-out share one limiter. Overrides concurrency_profile when set. Config file key: \fBconcurrency\fR.
 .TP

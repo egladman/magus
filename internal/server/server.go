@@ -17,8 +17,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"os/exec"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -58,6 +56,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
@@ -923,39 +922,39 @@ func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, e
 }
 
 const (
-	goCacheTrimInterval    = 10 * time.Minute
-	goCacheTrimWalkEntries = 5_000_000
-	goCacheTrimSource      = "daemon/go-cache"
+	goCacheTrimInterval = 10 * time.Minute
+	goCacheTrimTimeout  = 5 * time.Minute
+	goCacheTrimSource   = "daemon/go-cache"
 )
 
-// goCacheTrimmer decides whether the Go build cache is past go.cache_budget_mb and trims it.
-// Size, clean and record are fields so a test supplies a fake size and a fake cleaner.
+// goCacheTrimmer trims the Go build cache to go.cache_budget_mb by entry age. trimDir and
+// record are fields so a test supplies a fake trim and a fake attention row.
 type goCacheTrimmer struct {
 	budgetMB int
-	size     func(ctx context.Context, limit int64) (int64, error)
-	clean    func(ctx context.Context) error
+	trimDir  func(ctx context.Context, maxBytes int64) (types.TrimReport, error)
 	record   func(ctx context.Context, message string) error
 }
 
-// trim reports whether it cleaned the cache. A budget of zero or less does nothing.
-// The size is a floor: the measuring walk stops once it passes the budget.
+// trim reports whether it removed anything. A budget of zero or less does nothing. Go
+// refreshes an entry's mtime when a build uses it, so the oldest mtimes are the entries no
+// build has wanted longest; std.TrimOldest never removes one used within the last day.
 func (t goCacheTrimmer) trim(ctx context.Context) (bool, error) {
 	if t.budgetMB <= 0 {
 		return false, nil
 	}
-	limit := int64(t.budgetMB) << 20
-	bytes, err := t.size(ctx, limit)
+	report, err := t.trimDir(ctx, int64(t.budgetMB)<<20)
 	if err != nil {
-		return false, fmt.Errorf("server: measure the go build cache: %w", err)
+		return false, fmt.Errorf("server: trim the go build cache to its %d MB go.cache_budget_mb: %w", t.budgetMB, err)
 	}
-	if bytes <= limit {
+	if report.RemovedFiles == 0 {
 		return false, nil
 	}
-	if err := t.clean(ctx); err != nil {
-		return false, fmt.Errorf("server: the go build cache is past its %d MB go.cache_budget_mb (at least %d MB) and `go clean -cache` failed: %w",
-			t.budgetMB, bytes>>20, err)
+	msg := fmt.Sprintf("the daemon trimmed the go build cache %s to its %d MB go.cache_budget_mb by entry age: removed %d files (%d MB) unused since %s, %d MB remain",
+		report.Dir, t.budgetMB, report.RemovedFiles, report.RemovedBytes>>20,
+		time.UnixMilli(int64(report.CutoffMs)).Format(time.DateOnly), report.AfterBytes>>20)
+	if report.Stopped != "" {
+		msg += "; " + report.Stopped
 	}
-	msg := fmt.Sprintf("the daemon ran `go clean -cache`: the go build cache passed the %d MB go.cache_budget_mb (at least %d MB)", t.budgetMB, bytes>>20)
 	if err := t.record(ctx, msg); err != nil {
 		return true, fmt.Errorf("server: trimmed the go build cache but could not record it: %w", err)
 	}
@@ -965,21 +964,12 @@ func (t goCacheTrimmer) trim(ctx context.Context) (bool, error) {
 func newGoCacheTrimmer(root string, budgetMB int) goCacheTrimmer {
 	return goCacheTrimmer{
 		budgetMB: budgetMB,
-		size: func(ctx context.Context, limit int64) (int64, error) {
+		trimDir: func(ctx context.Context, maxBytes int64) (types.TrimReport, error) {
 			dir, err := doctor.GoEnvCache(ctx)
 			if err != nil {
-				return 0, err
+				return types.TrimReport{}, err
 			}
-			size, err := doctor.MeasureCache(ctx, dir, limit, goCacheTrimWalkEntries)
-			return size.Bytes, err
-		},
-		clean: func(ctx context.Context) error {
-			cmd := exec.CommandContext(ctx, "go", "clean", "-cache")
-			cmd.Dir = root
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-			}
-			return nil
+			return std.TrimOldest(ctx, dir, maxBytes, goCacheTrimTimeout, time.Now())
 		},
 		record: func(ctx context.Context, message string) error {
 			dir, err := sessions.Dir(root)
