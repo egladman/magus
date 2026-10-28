@@ -106,18 +106,30 @@ var mgsPrefix = diagnostics.Prefix(NoCITarget)
 type DiagnosticOrigin string
 
 const (
+	// DiagnosticOriginUnknown is a code under a prefix nobody registered: a program that
+	// never ran magus's startup, or a code that is neither magus's nor its workspace's.
+	DiagnosticOriginUnknown   DiagnosticOrigin = ""
 	DiagnosticOriginBuiltin   DiagnosticOrigin = "builtin"
 	DiagnosticOriginWorkspace DiagnosticOrigin = "workspace"
 )
 
-// OriginOf derives c's origin from who registered its prefix: a code under a catalog the
-// binary registered is builtin, any other the workspace's. Nothing stores an origin beside
-// a code, so a workspace cannot claim builtin by saying so.
+// OriginOf derives c's origin from its prefix. MGS is builtin whatever the registry holds,
+// since this package owns that catalog; any other prefix is builtin or the workspace's by
+// who registered it, and unknown when nobody did. Nothing stores an origin beside a code,
+// so a workspace cannot claim builtin by saying so.
 func OriginOf(c DiagnosticCode) DiagnosticOrigin {
-	if owner, ok := diagnostics.Owner(c); ok && owner != DiagnosticOwnerWorkspace {
+	if diagnostics.Prefix(c) == mgsPrefix {
 		return DiagnosticOriginBuiltin
 	}
-	return DiagnosticOriginWorkspace
+	owner, ok := diagnostics.Owner(c)
+	switch {
+	case !ok:
+		return DiagnosticOriginUnknown
+	case owner == DiagnosticOwnerWorkspace:
+		return DiagnosticOriginWorkspace
+	default:
+		return DiagnosticOriginBuiltin
+	}
 }
 
 // DiagnosticDocs is the one docs resolver for a diagnostic code, keyed by prefix: MGS
@@ -147,8 +159,12 @@ func (d DiagnosticDocs) URL(c DiagnosticCode) string {
 func CodeURL(c DiagnosticCode) string { return DiagnosticDocs{}.URL(c) }
 
 // RegisterDiagnosticPrefix reserves a workspace's declared prefix, refusing one that is
-// malformed or collides with a prefix a registered catalog holds.
+// malformed or collides with a prefix a registered catalog holds. It registers the MGS
+// catalog first, so a program that never ran magus's startup still refuses MGS.
 func RegisterDiagnosticPrefix(prefix string) error {
+	if err := diagnostics.RegisterCatalog(DiagnosticOwnerMagus, allDiagnosticCodes); err != nil {
+		return fmt.Errorf("diagnostics: the MGS catalog: %w", err)
+	}
 	if err := diagnostics.Register(prefix, DiagnosticOwnerWorkspace); err != nil {
 		return fmt.Errorf("diagnostics.prefix: %w", err)
 	}
@@ -157,11 +173,15 @@ func RegisterDiagnosticPrefix(prefix string) error {
 
 // WorkspaceDiagnosticCode validates text as a code under the workspace's declared prefix:
 // the prefix followed by four digits. It refuses every code when prefix is empty, naming
-// the magus.yaml key that declares one, and refuses a built-in or foreign prefix.
+// the magus.yaml key that declares one, and refuses a built-in or foreign prefix. The
+// prefix is registered on the way, so the code it returns reads as the workspace's.
 func WorkspaceDiagnosticCode(prefix, text string) (DiagnosticCode, error) {
 	c := DiagnosticCode(text)
 	if prefix == "" {
 		return "", fmt.Errorf("%q: this workspace declares no diagnostic prefix; set diagnostics.prefix in magus.yaml", text)
+	}
+	if err := RegisterDiagnosticPrefix(prefix); err != nil {
+		return "", err
 	}
 	got := diagnostics.Prefix(c)
 	if OriginOf(c) == DiagnosticOriginBuiltin {

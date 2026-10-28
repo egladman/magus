@@ -465,10 +465,10 @@ fun load_platform(ctx: magus\Context) > str !> any {
 }
 
 // Charms are an unordered set, so reading two in sequence would invent a precedence.
-// WS is this workspace's code prefix; magus\raise refuses MGS.
+// WS is the code prefix magus.yaml declares; magus\diagnosticCode refuses MGS.
 fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
     if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
-        magus\raise(code, message: "the `" + a + "` and `" + b
+        magus\raise(magus\diagnosticCode(code), message: "the `" + a + "` and `" + b
             + "` charms both answer " + question + " - name one",
             opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
     }
@@ -528,7 +528,7 @@ fun channel(ctx: magus\Context) > str !> any {
     final wantStable = ctx.hasCharm("stable");
     final wantUnstable = ctx.hasCharm("unstable");
     if (wantTagged and (wantStable or wantUnstable)) {
-        magus\raise("WS1002", message: "the `tagged` charm reads which channel to publish "
+        magus\raise(magus\diagnosticCode("WS1002"), message: "the `tagged` charm reads which channel to publish "
             + "to off the release tag, so naming `stable` or `unstable` beside it answers "
             + "that question twice - name one",
             opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});

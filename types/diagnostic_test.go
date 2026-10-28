@@ -81,8 +81,18 @@ func (s *typesSuite) TestOriginOfAnMGSCodeIsBuiltin() {
 	s.Equal(DiagnosticOriginBuiltin, OriginOf(WorkspaceNeedsNewerMagus))
 }
 
-func (s *typesSuite) TestOriginOfAnUnreservedCodeIsWorkspace() {
-	s.Equal(DiagnosticOriginWorkspace, OriginOf("WS1001"))
+func (s *typesSuite) TestOriginOfAnUnregisteredPrefixIsUnknown() {
+	s.Equal(DiagnosticOriginUnknown, OriginOf("ZQ1001"))
+}
+
+func (s *typesSuite) TestOriginOfARegisteredWorkspacePrefixIsWorkspace() {
+	s.Require().NoError(RegisterDiagnosticPrefix("WQ"))
+	s.Equal(DiagnosticOriginWorkspace, OriginOf("WQ1001"))
+}
+
+// MGS is this package's own catalog, so its origin holds when nothing registered it.
+func (s *typesSuite) TestOriginOfMGSNeedsNoRegistration() {
+	s.Equal(DiagnosticOriginBuiltin, OriginOf("MGS9999"))
 }
 
 func (s *typesSuite) TestRegisterDiagnosticPrefixAcceptsWS() {

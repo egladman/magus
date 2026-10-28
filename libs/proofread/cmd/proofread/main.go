@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/proofread"
 )
 
@@ -54,6 +55,12 @@ type finding struct {
 }
 
 func main() {
+	// The composition point for proofread's catalog: a PRF prefix that clashes with
+	// another registered one is a build defect, so it stops here.
+	if err := diagnostics.RegisterCatalog("proofread", proofread.Codes()); err != nil {
+		fmt.Fprintf(os.Stderr, "proofread: %v\n", err)
+		os.Exit(1)
+	}
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
