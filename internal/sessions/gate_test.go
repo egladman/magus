@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -219,7 +220,7 @@ func (s *FailuresOwedSuite) gate(inv, outcome string) GateRecord {
 	return rec
 }
 
-func (s *FailuresOwedSuite) owed(gate GateRecord) []GateFailure {
+func (s *FailuresOwedSuite) owed(gate GateRecord) []types.TargetRef {
 	fold, err := ReadKind(s.dir, KindTargetResult)
 	s.Require().NoError(err)
 	return FailuresOwed(gate, fold)
@@ -234,7 +235,7 @@ func (s *FailuresOwedSuite) TestARedGateOwesEachTargetItFailedButItself() {
 	)
 	red := s.gate("red", OutcomeFail)
 
-	s.Equal([]GateFailure{{Project: ".", Target: "go-test"}, {Project: "docs", Target: "lint"}}, s.owed(red))
+	s.Equal([]types.TargetRef{{Project: ".", Target: "go-test"}, {Project: "docs", Target: "lint"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestALaterPassOfTheTargetClearsIt() {
@@ -245,7 +246,7 @@ func (s *FailuresOwedSuite) TestALaterPassOfTheTargetClearsIt() {
 	red := s.gate("red", OutcomeFail)
 	s.results("narrow", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomePass})
 
-	s.Equal([]GateFailure{{Project: "docs", Target: "lint"}}, s.owed(red))
+	s.Equal([]types.TargetRef{{Project: "docs", Target: "lint"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAPassInAnotherProjectClearsNothing() {
@@ -253,7 +254,7 @@ func (s *FailuresOwedSuite) TestAPassInAnotherProjectClearsNothing() {
 	red := s.gate("red", OutcomeFail)
 	s.results("narrow", TargetResult{Project: "libs/cmdline", Target: "go-test", Outcome: OutcomePass})
 
-	s.Equal([]GateFailure{{Project: ".", Target: "go-test"}}, s.owed(red))
+	s.Equal([]types.TargetRef{{Project: ".", Target: "go-test"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAPassBeforeTheGateClearsNothing() {
@@ -261,7 +262,7 @@ func (s *FailuresOwedSuite) TestAPassBeforeTheGateClearsNothing() {
 	s.results("red", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
 	red := s.gate("red", OutcomeFail)
 
-	s.Equal([]GateFailure{{Project: ".", Target: "go-test"}}, s.owed(red))
+	s.Equal([]types.TargetRef{{Project: ".", Target: "go-test"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAGreenGateOwesNothing() {
