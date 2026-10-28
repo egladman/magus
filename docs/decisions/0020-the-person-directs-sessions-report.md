@@ -47,17 +47,17 @@ write over each other. What the parent lacked was not permission but sight of a 
    - **Area** is write-path overlap: the fork's write paths intersect the child's live or
      last row's, proven the way fork already proves collisions. A project or a plan is too
      coarse.
-   - **Fold, don't add**: no new store and no new verb. A decision is an entry on the
-     child's job row (who decided, which session, the text, and optional narrower scope
-     paths) in the existing JSON Lines job store. A plan's DECISIONS.md may be generated
-     from it, never the reverse.
+   - The design folds into what exists: no new store and no new verb. A decision is an
+     entry on the child's job row (who decided, which session, the text, and optional
+     narrower scope paths) in the existing JSON Lines job store. A plan's DECISIONS.md
+     may be generated from it, never the reverse.
    - **The read** is recorded when the session runs `magus describe job <child>`, kept as a
      per-session mark in the guard's existing session facts. A shell `cat` of a file is
      not a read, because the guard cannot see one reliably.
-   - **Accepted wrong firing**: a child logs a decision unrelated to the fork but its row
-     overlaps. The cost is one describe, seconds, and it does not repeat until the next
-     entry; a narrower scope on the entry avoids it. It never fires on non-overlapping
-     paths, and never blocks a person.
+   - The accepted wrong firing is a child that logs a decision unrelated to the fork while
+     its row overlaps. The cost is one describe, seconds, and it does not repeat until the
+     next entry; a narrower scope on the entry avoids it. It never fires on
+     non-overlapping paths, and never blocks a person.
 
 | Part                                                         | Where                                   | State   |
 | ------------------------------------------------------------ | --------------------------------------- | ------- |

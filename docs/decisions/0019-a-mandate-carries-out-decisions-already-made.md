@@ -152,13 +152,13 @@ A mandate only adds denials. It lowers no rule, and the guide's "An unattended m
 relaxed rule set" refusal stands: with no one present, a point that needs judgment
 denies harder.
 
-### 6. The Stop rule
+### 6. The stop rule
 
 The Stop rule refuses the root's Stop when every one of these holds:
 
 - some mandated row is `declared`, not paused, not blocked, and its `depends_on` rows
   passed;
-- no row is `running`, so no hand-back will wake the root;
+- no row is `running`, so no hand-back wakes the root;
 - the mandate is in force (before its end time).
 
 The refusal names the rows and `./magus describe job` for the first. With no mandate in
@@ -238,10 +238,10 @@ Rejected for the same reason as the key: the reserved list, the ceiling and the 
 limit are opinions. Go gains the two facts Buzz could not reach. Reopen if every
 repository that copies the reference ends up with the same file unchanged.
 
-### A new Stop hook template beside `magus-checkpoint.buzz`
+### A new stop hook template beside `magus-checkpoint.buzz`
 
 Rejected. A shipped template is wired into every host config, `hookTemplates` and
-`TestShippedHookConfigsWireTheSameJobs`, for a check most workspaces will not want.
+`TestShippedHookConfigsWireTheSameJobs`, for a check most workspaces do not want.
 `magus-command.buzz` already runs on Stop and renders a deny as a block. Reopen if a host
 runs `magus-command.buzz` on no Stop event.
 

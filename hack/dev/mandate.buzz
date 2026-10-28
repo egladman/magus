@@ -186,6 +186,20 @@ fun report(root: str) > void !> any {
     foreach (b in list.blocked) {
         blocked.append(b.job);
     }
+    rowSections(jobs, terms: terms, blocked: blocked, now: now);
+    final attention = mandate\attentionFile(root) ?? "";
+    final filed = if (attention != "") (fs\readLines(attention) catch [<str>]) else [<str>];
+    section("attention", rows: filed);
+    section("left for you", rows: [
+        "push each integrated branch: `git push origin <branch>`",
+        "merge: `gh pr merge <n>` once its checks pass",
+        "a grant a held row needs: `./magus job grant <job> <rule>`",
+        "hook wiring: the root magusfile registers `magus\\guard.stop(agentpolicy\\judgeStop);`",
+    ]);
+}
+
+// rowSections prints the mandated rows held for review first, then integrated, then left.
+fun rowSections(jobs: [mandate\Row], terms: mandate\Mandate, blocked: [str], now: int) > void {
     final integrated = mut [<str>];
     final held = mut [<str>];
     final left = mut [<str>];
@@ -211,15 +225,6 @@ fun report(root: str) > void !> any {
     section("held for review, for you to read first", rows: held);
     section("integrated", rows: integrated);
     section("left", rows: left);
-    final attention = mandate\attentionFile(root) ?? "";
-    final filed = if (attention != "") (fs\readLines(attention) catch [<str>]) else [<str>];
-    section("attention", rows: filed);
-    section("left for you", rows: [
-        "push each integrated branch: `git push origin <branch>`",
-        "merge: `gh pr merge <n>` once its checks pass",
-        "a grant a held row needs: `./magus job grant <job> <rule>`",
-        "hook wiring: the root magusfile registers `magus\\guard.stop(agentpolicy\\judgeStop);`",
-    ]);
 }
 
 fun shown(value: str) > str {

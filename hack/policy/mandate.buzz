@@ -86,7 +86,7 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > RiskReport !> 
     foreach (e in report.evidence) {
         lines.append(evidenceLine(e));
     }
-    return Assessed{ tier = report.tier, evidence = lines };
+    return Assessed{ tier = report.tier.value, evidence = lines };
 }
 
 // measured is assess's measure outside a test: the ci gate's tier for the job's change.
@@ -105,9 +105,9 @@ fun evidenceLine(e: RiskEvidence) > str {
         why = "{e.class}: {why}";
     }
     if (subject == "") {
-        return "{e.tier} ({why})";
+        return "{e.tier.value} ({why})";
     }
-    return "{subject}: {e.tier} ({why})";
+    return "{subject}: {e.tier.value} ({why})";
 }
 
 // rows copies a job store's rows.
@@ -713,11 +713,11 @@ test "an unsettled job above the tolerance is held for review and one at or belo
 }
 
 test "a job's tier is measured in its checkout from its checkpoint, and anything unmeasured is full" {
-    final measured = [Row{ id = "late", state = "pass", checkpoint = "abc", checkoutRoot = "/w/late" }, Row{ id = "bare", state = "pass" }];
+    final measured = [Row{ id = "late", state = magus\JobState.pass, checkpoint = "abc", checkoutRoot = "/w/late" }, Row{ id = "bare", state = magus\JobState.pass }];
     final asked = mut [<str>];
     final mechanical = fun (row: Row) > RiskReport !> any {
         asked.append("{row.checkoutRoot}@{row.checkpoint}");
-        return RiskReport{ tier = "mechanical", evidence = [RiskEvidence{ path = "x.go", tier = "mechanical", class = "comment", why = "comments only" }] };
+        return RiskReport{ tier = magus\RiskTier.mechanical, evidence = [RiskEvidence{ path = "x.go", tier = magus\RiskTier.mechanical, class = "comment", why = "comments only" }] };
     };
     final got = assess("late", jobs: measured, measure: mechanical);
     std\assert(got.tier == "mechanical" and asked.join(",") == "/w/late@abc", message: "measured in the job's checkout");

@@ -116,13 +116,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     if (kept.decision != magus\GuardDecision.allow) {
         return kept;
     }
-    var lease = "";
-    if (req.lease != null) {
-        lease = req.lease!.id;
-    }
-    final integrator = req.role == magus\AgentRole.integrator;
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
-        worker: !integrator and (req.role == magus\AgentRole.worker or req.parent != "" or req.agent != ""));
+    final denial = binariesDenial(req, programs: programs);
     if (denial != "") {
         return magus\guard.deny(denial);
     }
@@ -160,6 +154,17 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
 }
 
+// binariesDenial is the binaries rule's answer for req's programs, "" when it allows them.
+fun binariesDenial(req: CommandRequest, programs: [helpers\Program]) > str {
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    final integrator = req.role == magus\AgentRole.integrator;
+    return binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
+        worker: !integrator and (req.role == magus\AgentRole.worker or req.parent != "" or req.agent != ""));
+}
+
 // mandateVerdict is the mandate's answer for req's line (ADR 0019). The job store is read
 // only while a mandate is in force, since nothing else it judges needs it.
 fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
@@ -194,7 +199,7 @@ export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
     final file = fun (rows: [str]) > void {
         mandate\fileAttention(req.workspace, rows: rows, now: now);
     };
-    return mandate\decideStop(mandate\StopFacts{ role = req.role, stopHookActive = req.stopHookActive },
+    return mandate\decideStop(mandate\StopFacts{ role = req.role.value,stopHookActive = req.stopHookActive },
         q: mandate\Queue{ jobs = mandate\rows(list.jobs), blocked = blocked }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
 }
 
