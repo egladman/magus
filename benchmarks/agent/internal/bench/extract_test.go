@@ -11,7 +11,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-func TestBenchFixtureExtraction(t *testing.T) {
+func (s *benchSuite) TestBenchFixtureExtraction() {
+	t := s.T()
 	results, byID, _ := fixtureRecords(t)
 	if len(byID) != 12 {
 		t.Fatalf("run count = %d, want 12", len(byID))
@@ -230,7 +231,8 @@ func (d defectRun) mustScore() *ScoredRun {
 	return r.Scored
 }
 
-func TestBenchTranscriptDefects(t *testing.T) {
+func (s *benchSuite) TestBenchTranscriptDefects() {
+	t := s.T()
 	initRec := map[string]any{"type": "system", "subtype": "init", "model": "claude-opus-5"}
 	t.Run("assistant record without usage", func(t *testing.T) {
 		d := newDefectRun(t)
@@ -337,4 +339,22 @@ func TestBenchTranscriptDefects(t *testing.T) {
 		d.writeMeta(meta)
 		d.mustFail("placebo")
 	})
+}
+
+func (s *benchSuite) TestExtractReadsAnswerCountsForAnInterrogationTask() {
+	_, byID, _ := fixtureRecords(s.T())
+	s.Equal(&AnswerCounts{TP: 4, FP: 0, FN: 1}, scoredRecord(s.T(), byID, "full", answerTask, 1).Answer)
+	s.Equal(&AnswerCounts{TP: 3, FP: 2, FN: 2}, scoredRecord(s.T(), byID, "rampant", answerTask, 2).Answer)
+}
+
+func (s *benchSuite) TestExtractLeavesAnswerNilWithoutAnswerJSON() {
+	_, byID, _ := fixtureRecords(s.T())
+	s.Nil(scoredRecord(s.T(), byID, "full", "task-a", 1).Answer, "no answer.json is no answer, not a zero score")
+}
+
+func (s *benchSuite) TestExtractRefusesANegativeAnswerCount() {
+	d := newDefectRun(s.T())
+	d.writeSingleTurn("claude-opus-5", map[string]any{"input_tokens": 1, "output_tokens": 1})
+	s.Require().NoError(os.WriteFile(filepath.Join(d.dir, "answer.json"), []byte(`{"tp":1,"fp":-1,"fn":0}`), 0o644))
+	d.mustFail("negative count")
 }

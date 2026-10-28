@@ -20,11 +20,13 @@ const (
 	controlNull   = "null"
 )
 
-// Verdicts a paired delta can earn.
+// Verdicts a comparison can earn. A metric outside the headline family is
+// described, never judged: judging it would widen the family Holm corrects for.
 const (
 	verdictLower        = "lower under full"
 	verdictHigher       = "higher under full"
 	verdictInconclusive = "inconclusive"
+	verdictDescriptive  = "descriptive"
 )
 
 // TokenCounts are the billed tokens of one run. TotalBilled is a token count,
@@ -109,6 +111,29 @@ type ScoredRun struct {
 	Ended        *string  `json:"ended"         bench:"optional"`
 	ExitReason   *string  `json:"exit_reason"   bench:"optional"`
 	Control      *string  `json:"control"       bench:"optional"`
+	// Answer is set only for an interrogation task, whose grader writes answer.json.
+	Answer *AnswerCounts `json:"answer" bench:"optional"`
+}
+
+// AnswerCounts grade an interrogation answer against its key: TP key items
+// named, FP items named that the key lacks, FN key items missed.
+type AnswerCounts struct {
+	TP int64 `json:"tp"`
+	FP int64 `json:"fp"`
+	FN int64 `json:"fn"`
+}
+
+// AnswerScore is precision, recall and F1 micro-averaged from the summed counts
+// of Runs graded answers. Precision is nil when nothing was named, recall when
+// the key is empty, F1 when either is.
+type AnswerScore struct {
+	Runs      int64    `json:"runs"`
+	TP        int64    `json:"tp"`
+	FP        int64    `json:"fp"`
+	FN        int64    `json:"fn"`
+	Precision *float64 `json:"precision"`
+	Recall    *float64 `json:"recall"`
+	F1        *float64 `json:"f1"`
 }
 
 // RunRecord is one line of metrics.jsonl: exactly one of the two is set.
@@ -127,14 +152,17 @@ type Spread struct {
 }
 
 // CellStats are the pass rates and metric spreads of one (arm, task) cell.
+// PassAtK[k-1] and PassPowK[k-1] are the unbiased pass@k and pass^k estimates
+// for k = 1 up to the graded run count (Chen et al. 2021; Yao et al., tau-bench).
 type CellStats struct {
 	N                  int64             `json:"n"`
 	Successes          int64             `json:"successes"`
 	UnknownOutcomes    int64             `json:"unknown_outcomes"`
 	PassAt1            *float64          `json:"pass_at_1"`
 	PassAt1CI          [2]*float64       `json:"pass_at_1_ci"`
-	K                  int64             `json:"k"`
-	PassPowK           float64           `json:"pass_pow_k"`
+	PassAtK            []float64         `json:"pass_at_k"`
+	PassPowK           []float64         `json:"pass_pow_k"`
+	Answers            *AnswerScore      `json:"answers"`
 	Metrics            map[string]Spread `json:"metrics"`
 	MetricsSuccessOnly map[string]Spread `json:"metrics_success_only"`
 }
@@ -146,30 +174,57 @@ type CostOfPass struct {
 	Infinite bool     `json:"infinite"`
 }
 
-// ArmSummary is one arm's pass rate and cost-of-pass over every task.
+// ArmSummary is one arm over every task it ran. The task is the unit: PassAt1 is
+// the macro mean of per-task pass rates and its CI a t interval over those
+// rates, never a Wilson interval pooling trials of different tasks. PassAtK and
+// PassPowK average the per-task estimates at a k every task reached, k = 1..K.
+// CostOfPassUSD is the dollars of every graded run over the passes among them.
 type ArmSummary struct {
-	N             int64       `json:"n"`
-	Successes     int64       `json:"successes"`
-	PassRate      float64     `json:"pass_rate"`
-	PassRateCI    [2]*float64 `json:"pass_rate_ci"`
-	Dollars       Spread      `json:"dollars"`
-	CostOfPassUSD CostOfPass  `json:"cost_of_pass_usd"`
+	N             int64        `json:"n"`
+	Graded        int64        `json:"graded"`
+	Successes     int64        `json:"successes"`
+	Tasks         int64        `json:"tasks"`
+	PassAt1       *float64     `json:"pass_at_1"`
+	PassAt1CI     [2]*float64  `json:"pass_at_1_ci"`
+	K             int64        `json:"k"`
+	PassAtK       []float64    `json:"pass_at_k"`
+	PassPowK      []float64    `json:"pass_pow_k"`
+	Answers       *AnswerScore `json:"answers"`
+	Dollars       Spread       `json:"dollars"`
+	CostOfPassUSD CostOfPass   `json:"cost_of_pass_usd"`
 }
 
-// PairedDelta is treatment minus baseline for one metric on one task, over
-// matched reps.
-type PairedDelta struct {
-	NPairs         int64    `json:"n_pairs"`
-	DeltaMean      *float64 `json:"delta_mean"`
-	DeltaMedian    *float64 `json:"delta_median"`
-	CILow          *float64 `json:"ci_low"`
-	CIHigh         *float64 `json:"ci_high"`
-	P              *float64 `json:"p"`
-	BaselineMedian *float64 `json:"baseline_median"`
-	Relative       *float64 `json:"relative"`
-	CIExcludesZero bool     `json:"ci_excludes_zero"`
-	Verdict        string   `json:"verdict"`
-	PHolm          *float64 `json:"p_holm"`
+// TaskDelta is one task's per-task means under each arm.
+type TaskDelta struct {
+	Task     string  `json:"task"`
+	Treated  float64 `json:"treated"`
+	Baseline float64 `json:"baseline"`
+	Delta    float64 `json:"delta"`
+}
+
+// Comparison is full minus rampant for one metric, paired by task: each task's
+// mean under one arm against its mean under the other, since reps are
+// independent draws and rep i of one arm shares nothing with rep i of the other.
+// P is the two-sided sign-flip p, exact up to 16 tasks; MinAttainableP is the
+// floor that test has at this many tasks. CI is the paired t interval, and
+// MinDetectable the difference this many tasks detects at 80% power.
+type Comparison struct {
+	Metric         string      `json:"metric"`
+	Family         bool        `json:"family"`
+	Tasks          int64       `json:"tasks"`
+	Deltas         []TaskDelta `json:"deltas"`
+	DeltaMean      *float64    `json:"delta_mean"`
+	BaselineMean   *float64    `json:"baseline_mean"`
+	Relative       *float64    `json:"relative"`
+	CILow          *float64    `json:"ci_low"`
+	CIHigh         *float64    `json:"ci_high"`
+	P              *float64    `json:"p"`
+	MinAttainableP *float64    `json:"min_attainable_p"`
+	PHolm          *float64    `json:"p_holm"`
+	EffectSize     *float64    `json:"effect_size_dz"`
+	MinDetectable  *float64    `json:"min_detectable"`
+	Verdict        string      `json:"verdict"`
+	Reason         string      `json:"reason"`
 }
 
 // ControlCount is how many controls of one kind a task ran and how many passed.
@@ -187,27 +242,27 @@ type ControlCell struct {
 	Discriminates bool         `json:"discriminates"`
 }
 
-// UnpairedRep is a rep one arm ran and another did not.
-type UnpairedRep struct {
+// UnpairedTask is a task one arm ran and another did not.
+type UnpairedTask struct {
 	Task        string   `json:"task"`
-	Rep         int64    `json:"rep"`
 	MissingArms []string `json:"missing_arms"`
 }
 
 // DataQuality holds the facts the report's caveats are generated from, not
 // prose about them.
 type DataQuality struct {
-	TableToBilledRatioMedian    *float64      `json:"table_to_billed_ratio_median"`
-	RunsWithoutBilledCost       []string      `json:"runs_without_billed_cost"`
-	RunsWithoutGuardEvents      []string      `json:"runs_without_guard_events"`
-	RunsWithoutCheck            []string      `json:"runs_without_check"`
-	RunsWithAssumedCacheTTL     []string      `json:"runs_with_assumed_cache_ttl"`
-	RunsWithInvariantViolations []string      `json:"runs_with_invariant_violations"`
-	UnpairedReps                []UnpairedRep `json:"incomplete_pairs"`
+	TableToBilledRatioMedian    *float64       `json:"table_to_billed_ratio_median"`
+	RunsWithoutBilledCost       []string       `json:"runs_without_billed_cost"`
+	RunsWithoutGuardEvents      []string       `json:"runs_without_guard_events"`
+	RunsWithoutCheck            []string       `json:"runs_without_check"`
+	RunsWithAssumedCacheTTL     []string       `json:"runs_with_assumed_cache_ttl"`
+	RunsWithInvariantViolations []string       `json:"runs_with_invariant_violations"`
+	UnpairedTasks               []UnpairedTask `json:"unpaired_tasks"`
 }
 
-// Analysis is analysis.json. Cells are keyed arm/task; Paired is keyed
-// metric, then task.
+// Analysis is analysis.json. Cells are keyed arm/task, Comparisons by metric.
+// Refusal, when set, names the field besides the arm that differs across runs;
+// Comparisons is then empty, since a difference could be either factor's.
 type Analysis struct {
 	// Platform is the OS, architecture and toolchain the statistics were
 	// computed on, as GOOS/GOARCH/go-version.
@@ -217,17 +272,20 @@ type Analysis struct {
 	// machines can report the same figure to different last bits. A number is
 	// only reproducible against the platform that produced it, so every report
 	// names it.
-	Platform         string                            `json:"platform"`
-	Seed             int64                             `json:"seed"`
-	BootstrapIters   int64                             `json:"bootstrap_iters"`
-	MinRelativeDelta float64                           `json:"min_relative_delta"`
-	Runs             int64                             `json:"runs"`
-	Arms             []string                          `json:"arms"`
-	Tasks            []string                          `json:"tasks"`
-	Models           []string                          `json:"models"`
-	Controls         map[string]ControlCell            `json:"controls"`
-	Cells            map[string]CellStats              `json:"cells"`
-	ArmSummaries     map[string]ArmSummary             `json:"arm_summary"`
-	Paired           map[string]map[string]PairedDelta `json:"paired"`
-	DataQuality      DataQuality                       `json:"data_quality"`
+	Platform             string                 `json:"platform"`
+	Seed                 uint64                 `json:"seed"`
+	RandomizationSamples int64                  `json:"randomization_samples"`
+	Alpha                float64                `json:"alpha"`
+	Power                float64                `json:"power"`
+	MinRelativeDelta     float64                `json:"min_relative_delta"`
+	Runs                 int64                  `json:"runs"`
+	Arms                 []string               `json:"arms"`
+	Tasks                []string               `json:"tasks"`
+	Models               []string               `json:"models"`
+	Controls             map[string]ControlCell `json:"controls"`
+	Cells                map[string]CellStats   `json:"cells"`
+	ArmSummaries         map[string]ArmSummary  `json:"arm_summary"`
+	Refusal              string                 `json:"refusal"`
+	Comparisons          map[string]Comparison  `json:"comparisons"`
+	DataQuality          DataQuality            `json:"data_quality"`
 }

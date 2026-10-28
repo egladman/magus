@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/render/md"
 )
 
-// Below this the paired deltas are directional at best; Terminal-Bench runs 5.
+// Below this the per-cell rates are directional at best; Terminal-Bench runs 5.
 const minReps = 5
 
 // num prints a statistic to the given digits, or n/a when the cell had no
@@ -31,6 +31,14 @@ func pct(value *float64) string {
 	return strconv.FormatFloat(100.0**value, 'f', 0, 64) + "%"
 }
 
+// pValue prints a p to three significant digits, never rounded to 0.
+func pValue(value *float64) string {
+	if value == nil {
+		return "n/a"
+	}
+	return formatP(*value)
+}
+
 // passAt1 is a cell's pass rate beside its counts. A run with no check is not
 // graded, so the denominator is N less the unknown outcomes.
 func passAt1(cell CellStats) string {
@@ -42,6 +50,18 @@ func interval(bounds [2]*float64, digits int) string {
 		return "n/a"
 	}
 	return fmt.Sprintf("[%s, %s]", num(bounds[0], digits), num(bounds[1], digits))
+}
+
+// byK prints estimates indexed from k = 1 as "k=1 0.83, k=2 0.67".
+func byK(values []float64) string {
+	if len(values) == 0 {
+		return "n/a"
+	}
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = fmt.Sprintf("k=%d %s", i+1, strconv.FormatFloat(v, 'f', 2, 64))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // row is a table row. An alias, not a defined type, so []row is the [][]string
@@ -97,19 +117,21 @@ func headlineSection(a *Analysis) []string {
 		}
 		rows = append(rows, row{
 			arm,
-			strconv.FormatInt(summary.N, 10),
-			strconv.FormatInt(summary.Successes, 10),
-			pct(&summary.PassRate),
-			interval(summary.PassRateCI, 3),
+			strconv.FormatInt(summary.Tasks, 10),
+			fmt.Sprintf("%d of %d", summary.Successes, summary.Graded),
+			pct(summary.PassAt1),
+			interval(summary.PassAt1CI, 3),
 			usd(summary.Dollars.Mean),
 			usd(summary.Dollars.Median),
 			cost,
 		})
 	}
 	return section(
-		"Headline: cost-of-pass",
-		"Expected dollars per correct solution (mean dollars / pass rate).",
-		table(row{"arm", "n", "passes", "pass rate", "Wilson 95%", "mean $", "median $", "cost-of-pass"}, rows),
+		"Headline: pass@1 and cost-of-pass",
+		"pass@1 is the mean of per-task pass rates, so each task weighs the same; its "+
+			"interval is a t interval over those rates (n/a under 2 tasks). Cost-of-pass is "+
+			"the dollars of every graded run over the passes among them.",
+		table(row{"arm", "tasks", "passes", "pass@1", "95% CI over tasks", "mean $", "median $", "cost-of-pass"}, rows),
 	)
 }
 
@@ -135,64 +157,116 @@ func paretoSection(a *Analysis) []string {
 	)
 }
 
-func deltasSection(a *Analysis) []string {
+// verdictLine is one family comparison's verdict and the numbers behind it.
+func verdictLine(m metric, c Comparison) string {
+	line := fmt.Sprintf("%s: %s over %d task(s), mean difference %s, p (Holm) %s",
+		m.label, c.Verdict, c.Tasks, num(c.DeltaMean, m.digits), pValue(c.PHolm))
+	if c.Reason != "" {
+		line += "; " + c.Reason
+	}
+	if c.MinDetectable != nil {
+		line += fmt.Sprintf("; this many tasks detect a difference of %s at %s%% power",
+			num(c.MinDetectable, m.digits), strconv.FormatFloat(100*power, 'f', 0, 64))
+	}
+	return line + "."
+}
+
+func comparisonsSection(a *Analysis) []string {
 	lines := []string{
-		"## Paired deltas, full minus rampant",
+		"## Full minus rampant, paired by task",
 		"",
-		fmt.Sprintf("Rep i of one arm is paired with rep i of the other. CI is a seeded "+
-			"%d-sample bootstrap of the mean paired delta; p is "+
-			"Holm-adjusted across tasks. A verdict needs the CI to exclude zero AND the delta "+
-			"to reach %s%% of the rampant median.",
-			a.BootstrapIters, strconv.FormatFloat(100.0*a.MinRelativeDelta, 'f', 0, 64)),
+		fmt.Sprintf("The task is the unit: each task's mean under full is paired with its mean "+
+			"under rampant. p is a two-sided sign-flip test over the tasks, exact up to 16 "+
+			"tasks, and Holm-adjusted across pass@1, total billed tokens, dollars and wall "+
+			"clock. CI is the paired t interval. A verdict needs p (Holm) at or under %s AND a "+
+			"difference of %s%% of the rampant mean; every other metric is descriptive.",
+			formatP(a.Alpha), strconv.FormatFloat(100.0*a.MinRelativeDelta, 'f', 0, 64)),
 		"",
 	}
-	for _, m := range metrics {
-		perTask := a.Paired[m.name]
-		if !m.headline || len(perTask) == 0 {
+	if a.Refusal != "" {
+		return append(lines, "No comparison: "+a.Refusal+".", "")
+	}
+	compared := comparedMetrics()
+	for _, m := range compared {
+		if c, ok := a.Comparisons[m.name]; ok && c.Family {
+			lines = append(lines, "- "+verdictLine(m, c))
+		}
+	}
+	lines = append(lines, "")
+	rows := make([]row, 0, len(compared))
+	for _, m := range compared {
+		c, ok := a.Comparisons[m.name]
+		if !ok || !m.headline {
 			continue
 		}
-		lines = append(lines, "### "+m.label, "")
-		rows := make([]row, 0, len(a.Tasks))
-		for _, task := range a.Tasks {
-			delta, ok := perTask[task]
-			if !ok {
-				continue
-			}
-			rows = append(rows, row{
-				task,
-				strconv.FormatInt(delta.NPairs, 10),
-				num(delta.DeltaMedian, m.digits),
-				num(delta.DeltaMean, m.digits),
-				interval([2]*float64{delta.CILow, delta.CIHigh}, m.digits),
-				pct(delta.Relative),
-				num(delta.PHolm, 3),
-				delta.Verdict,
-			})
-		}
-		lines = append(lines, table(row{"task", "pairs", "median delta", "mean delta", "95% CI", "relative", "p (Holm)", "verdict"}, rows)...)
-		lines = append(lines, "")
+		rows = append(rows, row{
+			m.label,
+			strconv.FormatInt(c.Tasks, 10),
+			num(c.DeltaMean, m.digits),
+			interval([2]*float64{c.CILow, c.CIHigh}, m.digits),
+			pct(c.Relative),
+			pValue(c.P),
+			pValue(c.PHolm),
+			pValue(c.MinAttainableP),
+			num(c.MinDetectable, m.digits),
+			num(c.EffectSize, 2),
+			c.Verdict,
+		})
 	}
-	return lines
+	lines = append(lines, table(row{"metric", "tasks", "mean delta", "95% CI", "relative", "p", "p (Holm)",
+		"smallest attainable p", "detectable at 80% power", "d_z", "verdict"}, rows)...)
+	return append(lines, "")
 }
 
 func passRatesSection(a *Analysis) []string {
-	rows := make([]row, 0, len(a.Cells))
+	rows := make([]row, 0, len(a.Cells)+len(a.Arms))
+	for _, arm := range a.Arms {
+		summary := a.ArmSummaries[arm]
+		rows = append(rows, row{arm, "all (mean over tasks)", pct(summary.PassAt1), "n/a", byK(summary.PassAtK), byK(summary.PassPowK)})
+	}
 	for _, key := range slices.Sorted(maps.Keys(a.Cells)) {
 		arm, task, _ := strings.Cut(key, "/")
 		cell := a.Cells[key]
-		rows = append(rows, row{
-			arm,
-			task,
-			strconv.FormatInt(cell.K, 10),
-			passAt1(cell),
-			interval(cell.PassAt1CI, 3),
-			num(&cell.PassPowK, 0),
-		})
+		rows = append(rows, row{arm, task, passAt1(cell), interval(cell.PassAt1CI, 3), byK(cell.PassAtK), byK(cell.PassPowK)})
 	}
 	return section(
-		"pass@1 and pass^k",
-		"pass@1 is capability; pass^k (all k reps succeed) is reliability.",
-		table(row{"arm", "task", "k", "pass@1", "Wilson 95%", "pass^k"}, rows),
+		"pass@k and pass^k",
+		"pass@k is the chance at least one of k runs passes, a capability; pass^k the chance "+
+			"all k pass, a reliability (Chen et al. 2021; tau-bench). Both are the unbiased "+
+			"estimates from c passes of n graded runs, and an arm's row averages its tasks at "+
+			"a k every task reached.",
+		table(row{"arm", "task", "pass@1", "Wilson 95%", "pass@k", "pass^k"}, rows),
+	)
+}
+
+// answersSection is precision and recall for interrogation tasks, never a bare
+// accuracy: an answer naming every package scores full recall and poor precision.
+func answersSection(a *Analysis) []string {
+	var rows []row
+	answerRow := func(arm, task string, s *AnswerScore) row {
+		return row{arm, task, strconv.FormatInt(s.Runs, 10), strconv.FormatInt(s.TP, 10),
+			strconv.FormatInt(s.FP, 10), strconv.FormatInt(s.FN, 10),
+			num(s.Precision, 3), num(s.Recall, 3), num(s.F1, 3)}
+	}
+	for _, arm := range a.Arms {
+		if s := a.ArmSummaries[arm].Answers; s != nil {
+			rows = append(rows, answerRow(arm, "all", s))
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(a.Cells)) {
+		if s := a.Cells[key].Answers; s != nil {
+			arm, task, _ := strings.Cut(key, "/")
+			rows = append(rows, answerRow(arm, task, s))
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return section(
+		"Answers: precision and recall",
+		"For interrogation tasks, micro-averaged from the summed true positives, false "+
+			"positives and false negatives of each graded answer.",
+		table(row{"arm", "task", "answers", "tp", "fp", "fn", "precision", "recall", "F1"}, rows),
 	)
 }
 
@@ -220,11 +294,15 @@ func caveatLines(a *Analysis) []string {
 	}
 	lines = append(lines, fmt.Sprintf("Reps per cell: %s.", strings.Join(reps, ", ")))
 	if len(small) > 0 {
-		lines = append(lines, fmt.Sprintf("Under the %d-rep protocol: %s. Treat those deltas as directional.", minReps, strings.Join(small, ", ")))
+		lines = append(lines, fmt.Sprintf("Under the %d-rep protocol: %s. Treat those per-task rates as directional.", minReps, strings.Join(small, ", ")))
 	}
-	for _, gap := range quality.UnpairedReps {
-		lines = append(lines, fmt.Sprintf("Unpaired: %s rep %d is missing arm(s) %s, so it contributes to no delta.",
-			gap.Task, gap.Rep, strings.Join(gap.MissingArms, ", ")))
+	if c, ok := a.Comparisons[passAt1Metric]; ok && c.MinAttainableP != nil && *c.MinAttainableP > a.Alpha {
+		lines = append(lines, fmt.Sprintf("Only %d task(s) ran under both arms, so no comparison can reach p %s: an exact test over them bottoms out at %s.",
+			c.Tasks, formatP(a.Alpha), formatP(*c.MinAttainableP)))
+	}
+	for _, gap := range quality.UnpairedTasks {
+		lines = append(lines, fmt.Sprintf("Unpaired: %s is missing arm(s) %s, so it is in no comparison.",
+			gap.Task, strings.Join(gap.MissingArms, ", ")))
 	}
 	if n := len(quality.RunsWithoutCheck); n > 0 {
 		lines = append(lines, fmt.Sprintf("Unknown outcome: %d run(s) carry no acceptance check and are excluded from pass rates (%s).",
@@ -240,9 +318,6 @@ func caveatLines(a *Analysis) []string {
 	}
 	if len(quality.RunsWithInvariantViolations) > 0 {
 		lines = append(lines, fmt.Sprintf("Invariant violation (test file deleted) in %s.", strings.Join(quality.RunsWithInvariantViolations, ", ")))
-	}
-	if len(a.Models) > 1 {
-		lines = append(lines, fmt.Sprintf("More than one model appears across runs (%s); the arm is no longer the only variable.", strings.Join(a.Models, ", ")))
 	}
 	if ratio := quality.TableToBilledRatioMedian; ratio != nil && !(0.9 <= *ratio && *ratio <= 1.1) {
 		lines = append(lines, fmt.Sprintf("Dollars are priced from the table at list price; the host's self-reported estimate disagrees by %sx. The likely cause is the host CLI's unknown-model fallback, which prices an id its compiled-in table lacks at a default model's rates; a ratio near 0.67 or 1.67 is that signature, since it is the Sonnet-to-Opus list-price ratio and not a token miscount.",
@@ -277,7 +352,7 @@ func Report(a *Analysis) string {
 	head := []string{
 		"# Harness-effectiveness benchmark",
 		"",
-		fmt.Sprintf("%d runs, %d task(s), arms %s, model(s) %s, bootstrap seed %d.",
+		fmt.Sprintf("%d runs, %d task(s), arms %s, model(s) %s, randomization seed %d.",
 			a.Runs, len(a.Tasks), strings.Join(a.Arms, " and "), models, a.Seed),
 		"",
 		// Named because the last bits of an interpolated quartile depend on it;
@@ -288,6 +363,6 @@ func Report(a *Analysis) string {
 	// Every section ends with an empty line, so the join already closes the file
 	// with one newline, which is the one dprint keeps.
 	lines := slices.Concat(head, controlsSection(a), headlineSection(a), paretoSection(a),
-		deltasSection(a), passRatesSection(a), caveatsSection(a))
+		comparisonsSection(a), passRatesSection(a), answersSection(a), caveatsSection(a))
 	return strings.Join(lines, "\n")
 }

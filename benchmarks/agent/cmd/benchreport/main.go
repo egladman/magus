@@ -148,7 +148,7 @@ func extract(args []string) error {
 func analyze(args []string) error {
 	fs := flag.NewFlagSet("analyze", flag.ContinueOnError)
 	out := fs.String("o", "", "analysis.json to write")
-	seed := fs.Int64("seed", 20260902, "bootstrap seed")
+	seed := fs.Uint64("seed", 20260902, "seed for the sampled randomization tests")
 	metrics, err := parse(fs, args)
 	if err != nil {
 		return err

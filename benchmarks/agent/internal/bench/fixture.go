@@ -48,6 +48,15 @@ var (
 	testDeletingRun = fixtureKey{"rampant", "task-a", 1}
 )
 
+// answerTask is graded as an interrogation task too: full names 4 of the key's
+// 5 items and nothing else, rampant 3 of them and 2 strays.
+const answerTask = "task-b"
+
+var fixtureAnswers = map[string]AnswerCounts{
+	"full":    {TP: 4, FP: 0, FN: 1},
+	"rampant": {TP: 3, FP: 2, FN: 2},
+}
+
 const fixtureDiff = `diff --git a/src/app.ts b/src/app.ts
 index 1111111..2222222 100644
 --- a/src/app.ts
@@ -254,6 +263,11 @@ func writeRun(resultsDir string, run fixtureRun) error {
 	}); err != nil {
 		return err
 	}
+	if answer, ok := fixtureAnswers[run.arm]; ok && run.task == answerTask {
+		if err := writeJSON(filepath.Join(runDir, "answer.json"), answer); err != nil {
+			return err
+		}
+	}
 	if run.fixtureKey != noTrailRun {
 		activity := filepath.Join(runDir, "activity")
 		if err := os.MkdirAll(activity, 0o755); err != nil {
@@ -269,7 +283,8 @@ func writeRun(resultsDir string, run fixtureRun) error {
 // WriteFixture writes a synthetic results tree under <root>/results: two
 // arms, two tasks, three reps, carrying the shapes the extractor has to
 // survive (a failing run, a run with no activity trail, a run whose cache
-// writes report a 5m/1h split, and a diff that deletes a test file).
+// writes report a 5m/1h split, a diff that deletes a test file, and a task
+// whose answers are graded for precision and recall).
 func WriteFixture(root, model string) error {
 	resultsDir := filepath.Join(root, "results")
 	if err := os.MkdirAll(resultsDir, 0o755); err != nil {

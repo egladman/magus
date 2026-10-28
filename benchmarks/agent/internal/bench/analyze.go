@@ -6,37 +6,46 @@ import (
 	"hash/fnv"
 	"maps"
 	"math"
-	"math/bits"
-	"math/rand/v2"
 	"os"
 	"reflect"
 	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/embed/rankeval"
 )
 
-// bootstrapIters is the resample count behind every paired CI.
-const bootstrapIters = 10000
+// randomizationSamples makes the sign-flip test exact up to 16 tasks, where
+// 2^16 patterns fit; past that its Monte Carlo error at p = 0.05 is about 0.0007.
+const randomizationSamples = 100_000
 
-const z95 = 1.959963984540054
+const (
+	alpha = 0.05
+	power = 0.8
+)
 
-// minRelativeDelta is the relative size a paired delta must clear before it
-// earns a verdict, on top of the CI excluding zero. A significant 2 percent
-// difference is not a finding.
+// minRelativeDelta is the relative size a comparison must reach before it earns
+// a verdict, on top of its Holm-adjusted p clearing alpha. A significant 2
+// percent difference is not a finding.
 const minRelativeDelta = 0.10
 
-// metric is one per-run value every cell describes and every pairing
-// compares. A headline metric also gets its own delta table in the report,
-// titled label and printed to digits; the rest stay in analysis.json rather
-// than padding the report with fourteen tables nobody reads.
+// passAt1Metric names the pass@1 comparison, which reads a per-task pass rate
+// rather than one value per run.
+const passAt1Metric = "pass_at_1"
+
+// metric is one per-run value every cell describes and every comparison pairs
+// by task. A headline metric gets a row in the report's comparison table; a
+// family metric is one of the claims Holm corrects across, and the only kind
+// that earns a verdict.
 type metric struct {
 	name     string
 	label    string
 	digits   int
 	headline bool
+	family   bool
 	read     func(*ScoredRun) *float64
 }
 
@@ -55,15 +64,15 @@ func floatMetric(read func(*ScoredRun) float64) func(*ScoredRun) *float64 {
 }
 
 var metrics = []metric{
-	{name: "total_billed_tokens", label: "total billed tokens", digits: 1, headline: true,
+	{name: "total_billed_tokens", label: "total billed tokens", digits: 1, headline: true, family: true,
 		read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.TotalBilled })},
 	{name: "input_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.Input })},
 	{name: "output_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.Output })},
 	{name: "cache_read_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.CacheRead })},
 	{name: "cache_write_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.CacheWrite })},
-	{name: "dollars", label: "dollars", digits: 4, headline: true,
+	{name: "dollars", label: "dollars", digits: 4, headline: true, family: true,
 		read: floatMetric(func(r *ScoredRun) float64 { return r.Dollars })},
-	{name: "wall_ms", label: "wall clock (ms)", digits: 1, headline: true,
+	{name: "wall_ms", label: "wall clock (ms)", digits: 1, headline: true, family: true,
 		read: func(r *ScoredRun) *float64 { return r.WallMs }},
 	{name: "time_to_first_edit_ms", read: func(r *ScoredRun) *float64 { return r.TimeToFirstEditMs }},
 	{name: "time_to_done_ms", read: func(r *ScoredRun) *float64 { return r.TimeToDoneMs }},
@@ -79,110 +88,48 @@ var metrics = []metric{
 		read: intMetric(func(r *ScoredRun) int64 { return r.ToolResultBytes })},
 }
 
-// wilsonInterval is the Wilson score interval for a binomial proportion;
-// both bounds are nil when total is 0.
-func wilsonInterval(successes, total int64) [2]*float64 {
-	if total <= 0 {
+// passAt1Row is pass@1's place among the comparisons: first, and in the family.
+var passAt1Row = metric{name: passAt1Metric, label: "pass@1", digits: 3, headline: true, family: true}
+
+// comparedMetrics is every comparison in report order.
+func comparedMetrics() []metric { return append([]metric{passAt1Row}, metrics...) }
+
+// wilsonInterval is the cell's Wilson score interval; both bounds are nil when
+// nothing was graded.
+func wilsonInterval(successes, graded int) [2]*float64 {
+	if graded <= 0 {
 		return [2]*float64{}
 	}
-	z := z95
-	t := float64(total)
-	p := float64(successes) / t
-	denom := 1.0 + z*z/t
-	center := (p + z*z/(2.0*t)) / denom
-	half := z * math.Sqrt(p*(1.0-p)/t+z*z/(4.0*t*t)) / denom
-	low := math.Max(0.0, center-half)
-	high := math.Min(1.0, center+half)
+	low, high := rankeval.WilsonInterval(successes, graded)
 	return [2]*float64{&low, &high}
 }
 
-// percentile takes the value at index `floor(q * (n - 1))` of an already sorted
-// list. Deliberately not the nearest-rank definition, which rounds up and would
-// move every bound; the CIs pinned in testdata depend on this one.
-func percentile(sorted []float64, q float64) *float64 {
-	if len(sorted) == 0 {
-		return nil
+// passAtK is the unbiased pass@k of c passes in n graded runs,
+// 1 - C(n-c, k)/C(n, k), as the product of (n-c-i)/(n-i) over i < k so no
+// binomial is formed.
+func passAtK(n, c, k int) float64 {
+	miss := 1.0
+	for i := range k {
+		miss *= float64(n-c-i) / float64(n-i)
+		if miss <= 0 {
+			return 1
+		}
 	}
-	v := sorted[int(math.Floor(q*float64(len(sorted)-1)))]
-	return &v
+	return 1 - miss
 }
 
-// bootstrapPaired bootstraps the mean of paired deltas; it returns the CI and
-// a two-sided p value. The RNG is seeded from the metric and task name so
-// each interval is independent of how many other cells are analyzed
-// alongside it. The resampled mean accumulates left to right; a compensated sum
-// here would move the CI bounds, so it stays a plain accumulate on purpose.
-func bootstrapPaired(deltas []float64, seedKey string) (ci [2]*float64, p *float64) {
-	n := len(deltas)
-	if n == 0 {
-		return ci, nil
-	}
-	rng := seededRNG(seedKey)
-	means := make([]float64, bootstrapIters)
-	for i := range means {
-		total := 0.0
-		for range n {
-			total += deltas[rng.IntN(n)]
-		}
-		means[i] = total / float64(n)
-	}
-	sort.Float64s(means)
-	var atOrBelow, atOrAbove int64
-	for _, m := range means {
-		if m <= 0.0 {
-			atOrBelow++
-		}
-		if m >= 0.0 {
-			atOrAbove++
+// passPowK is tau-bench's pass^k, C(c, k)/C(n, k): the chance k runs drawn
+// without replacement all pass. It is not pass@1^k unless every task's rate is
+// the same.
+func passPowK(n, c, k int) float64 {
+	all := 1.0
+	for i := range k {
+		all *= float64(c-i) / float64(n-i)
+		if all <= 0 {
+			return 0
 		}
 	}
-	v := math.Min(1.0, 2.0*float64(min(atOrBelow, atOrAbove))/float64(bootstrapIters))
-	v = math.Max(v, 1.0/float64(bootstrapIters))
-	return [2]*float64{percentile(means, 0.025), percentile(means, 0.975)}, &v
-}
-
-// holm adjusts a {key: p} mapping across the family of tasks
-// (Holm-Bonferroni); a nil p stays nil.
-func holm(pvalues map[string]*float64) map[string]*float64 {
-	type ranked struct {
-		p   float64
-		key string
-	}
-	var order []ranked
-	adjusted := map[string]*float64{}
-	for key, p := range pvalues {
-		adjusted[key] = nil
-		if p != nil {
-			order = append(order, ranked{*p, key})
-		}
-	}
-	sort.Slice(order, func(i, j int) bool {
-		if order[i].p != order[j].p {
-			return order[i].p < order[j].p
-		}
-		return order[i].key < order[j].key
-	})
-	m := len(order)
-	running := 0.0
-	for i, r := range order {
-		running = math.Max(running, math.Min(1.0, float64(m-i)*r.p))
-		v := running
-		adjusted[r.key] = &v
-	}
-	return adjusted
-}
-
-// seededRNG derives a deterministic generator from a metric-and-task key, so a
-// cell's interval does not depend on how many other cells were analyzed beside
-// it. FNV-1a rather than maphash: maphash.MakeSeed is per process, which would
-// move every interval between two runs over the same inputs.
-func seededRNG(seedKey string) *rand.Rand {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(seedKey)) // hash.Hash.Write never returns an error
-	sum := h.Sum64()
-	// A reproducible interval is the whole point, so a generator nobody can
-	// reseed would defeat it.
-	return rand.New(rand.NewPCG(sum, bits.ReverseBytes64(sum))) //nolint:gosec // G404: resampling, not cryptography
+	return all
 }
 
 // median is statistics.median over a sorted list: the middle value as it is,
@@ -202,6 +149,17 @@ func fmean(values []float64) float64 {
 		total += v
 	}
 	return total / float64(len(values))
+}
+
+// sampleSD is the n-1 standard deviation, in two passes so a large mean does not
+// cancel the variance.
+func sampleSD(values []float64) float64 {
+	mean := fmean(values)
+	var ss float64
+	for _, v := range values {
+		ss += (v - mean) * (v - mean)
+	}
+	return math.Sqrt(ss / float64(len(values)-1))
 }
 
 // quartiles is statistics.quantiles(n=4, method="inclusive") over a sorted
@@ -361,37 +319,77 @@ func countPasses(successes []*bool) int64 {
 	return n
 }
 
+// graded counts the runs that carry a check, and the passes among them. A run
+// with no check is unknown, not failed, and stays out of every pass rate.
+func graded(runs []*ScoredRun) (n, passes int) {
+	for _, run := range runs {
+		if run.Success == nil {
+			continue
+		}
+		n++
+		if *run.Success {
+			passes++
+		}
+	}
+	return n, passes
+}
+
+// answerScore sums the answer counts of the runs that carry one; nil when none do.
+func answerScore(runs []*ScoredRun) *AnswerScore {
+	var s AnswerScore
+	for _, run := range runs {
+		if run.Answer == nil {
+			continue
+		}
+		s.Runs++
+		s.TP += run.Answer.TP
+		s.FP += run.Answer.FP
+		s.FN += run.Answer.FN
+	}
+	if s.Runs == 0 {
+		return nil
+	}
+	if named := s.TP + s.FP; named > 0 {
+		v := float64(s.TP) / float64(named)
+		s.Precision = &v
+	}
+	if key := s.TP + s.FN; key > 0 {
+		v := float64(s.TP) / float64(key)
+		s.Recall = &v
+	}
+	if s.Precision != nil && s.Recall != nil {
+		f1 := 0.0
+		if sum := *s.Precision + *s.Recall; sum > 0 {
+			f1 = 2 * *s.Precision * *s.Recall / sum
+		}
+		s.F1 = &f1
+	}
+	return &s
+}
+
 // cellStats computes pass rates and metric spreads for one (arm, task) cell.
 func cellStats(runs []*ScoredRun) CellStats {
-	n := int64(len(runs))
-	var successes, unknown int64
+	n, passes := graded(runs)
 	var successful []*ScoredRun
 	for _, run := range runs {
-		switch {
-		case run.Success == nil:
-			unknown++
-		case *run.Success:
-			successes++
+		if run.Success != nil && *run.Success {
 			successful = append(successful, run)
 		}
 	}
-	// A run with no check is unknown, not failed, and the caveat says it is
-	// excluded from the pass rate; graded is the denominator that makes that true.
-	graded := n - unknown
-	var passAt1 *float64
-	if graded > 0 {
-		p := float64(successes) / float64(graded)
-		passAt1 = &p
+	cell := CellStats{
+		N: int64(len(runs)), Successes: int64(passes), UnknownOutcomes: int64(len(runs) - n),
+		PassAt1CI: wilsonInterval(passes, n), PassAtK: []float64{}, PassPowK: []float64{},
+		Answers: answerScore(runs), Metrics: spreads(runs), MetricsSuccessOnly: spreads(successful),
 	}
-	passPowK := 0.0
-	if graded > 0 && successes == graded {
-		passPowK = 1.0
+	if n > 0 {
+		p := float64(passes) / float64(n)
+		cell.PassAt1 = &p
 	}
-	return CellStats{
-		N: n, Successes: successes, UnknownOutcomes: unknown,
-		PassAt1: passAt1, PassAt1CI: wilsonInterval(successes, graded), K: n, PassPowK: passPowK,
-		Metrics: spreads(runs), MetricsSuccessOnly: spreads(successful),
+	for k := 1; k <= n; k++ {
+		cell.PassAtK = append(cell.PassAtK, passAtK(n, passes, k))
+		cell.PassPowK = append(cell.PassPowK, passPowK(n, passes, k))
 	}
+	return cell
 }
 
 func spreads(runs []*ScoredRun) map[string]Spread {
@@ -406,138 +404,257 @@ func spreads(runs []*ScoredRun) map[string]Spread {
 	return out
 }
 
-// armSummary is the arm-level pass rate and cost-of-pass: expected dollars
-// per correct solution.
-func armSummary(runs []*ScoredRun) ArmSummary {
-	n := int64(len(runs))
-	var successes, graded int64
+// armSummary is one arm over the tasks it graded, each task weighing the same
+// whatever its rep count.
+func armSummary(runs []*ScoredRun, cells map[string]CellStats) ArmSummary {
+	n, passes := graded(runs)
 	dollars := make([]*float64, len(runs))
+	var spent []float64
 	for i, run := range runs {
 		d := run.Dollars
 		dollars[i] = &d
 		if run.Success != nil {
-			graded++
-			if *run.Success {
-				successes++
-			}
+			spent = append(spent, d)
 		}
 	}
-	spread := describe(dollars)
-	passRate := 0.0
-	if graded > 0 {
-		passRate = float64(successes) / float64(graded)
+	// Summed in sorted order, so record order cannot move the last bits.
+	sort.Float64s(spent)
+	var gradedDollars float64
+	for _, d := range spent {
+		gradedDollars += d
 	}
-	cost := CostOfPass{Infinite: true}
-	if passRate > 0 && spread.Mean != nil {
-		v := *spread.Mean / passRate
-		cost = CostOfPass{Value: &v}
+	summary := ArmSummary{
+		N: int64(len(runs)), Graded: int64(n), Successes: int64(passes),
+		PassAtK: []float64{}, PassPowK: []float64{},
+		Answers: answerScore(runs), Dollars: describe(dollars), CostOfPassUSD: CostOfPass{Infinite: true},
 	}
-	return ArmSummary{
-		N: n, Successes: successes, PassRate: passRate, PassRateCI: wilsonInterval(successes, graded),
-		Dollars: spread, CostOfPassUSD: cost,
+	if passes > 0 {
+		v := gradedDollars / float64(passes)
+		summary.CostOfPassUSD = CostOfPass{Value: &v}
 	}
-}
-
-// pairedDelta bootstraps treated-minus-baseline over the reps both arms ran,
-// for one metric.
-func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey string) PairedDelta {
-	var reps []int64
-	for rep := range treated {
-		if _, ok := baseline[rep]; ok {
-			reps = append(reps, rep)
-		}
-	}
-	slices.Sort(reps)
-	var deltas, baseValues []float64
-	for _, rep := range reps {
-		after, before := m.read(treated[rep]), m.read(baseline[rep])
-		if after == nil || before == nil {
+	var rates []float64
+	k := math.MaxInt
+	for _, key := range slices.Sorted(maps.Keys(cells)) {
+		cell := cells[key]
+		if cell.PassAt1 == nil {
 			continue
 		}
-		deltas = append(deltas, *after-*before)
-		baseValues = append(baseValues, *before)
+		rates = append(rates, *cell.PassAt1)
+		k = min(k, len(cell.PassAtK))
 	}
-	ci, p := bootstrapPaired(deltas, seedKey)
-	out := PairedDelta{NPairs: int64(len(deltas)), CILow: ci[0], CIHigh: ci[1], P: p, Verdict: verdictInconclusive}
-	if len(deltas) == 0 {
-		return out
+	summary.Tasks = int64(len(rates))
+	if len(rates) == 0 {
+		return summary
 	}
-	sort.Float64s(baseValues)
-	baseMedian := median(baseValues)
-	deltaMean := fmean(deltas)
-	sortedDeltas := append([]float64(nil), deltas...)
-	sort.Float64s(sortedDeltas)
-	deltaMedian := median(sortedDeltas)
-	out.DeltaMean, out.DeltaMedian, out.BaselineMedian = &deltaMean, &deltaMedian, &baseMedian
-	if baseMedian != 0 {
-		rel := deltaMean / baseMedian
-		out.Relative = &rel
+	mean := fmean(rates)
+	summary.PassAt1 = &mean
+	if len(rates) >= 2 {
+		_, lo, hi := rankeval.MeanInterval(rates)
+		lo, hi = max(0, lo), min(1, hi)
+		summary.PassAt1CI = [2]*float64{&lo, &hi}
 	}
-	out.CIExcludesZero = ci[0] != nil && ci[1] != nil && (*ci[0] > 0 || *ci[1] < 0)
-	if out.CIExcludesZero && out.Relative != nil && math.Abs(*out.Relative) >= minRelativeDelta {
-		out.Verdict = verdictHigher
-		if deltaMean < 0 {
-			out.Verdict = verdictLower
+	summary.K = int64(k)
+	for i := range k {
+		var at, pow float64
+		for _, key := range slices.Sorted(maps.Keys(cells)) {
+			if cell := cells[key]; cell.PassAt1 != nil {
+				at += cell.PassAtK[i]
+				pow += cell.PassPowK[i]
+			}
 		}
+		summary.PassAtK = append(summary.PassAtK, at/float64(len(rates)))
+		summary.PassPowK = append(summary.PassPowK, pow/float64(len(rates)))
 	}
-	return out
+	return summary
 }
 
 type cellKey struct{ arm, task string }
 
 type cellRuns map[cellKey][]*ScoredRun
 
-func (c cellRuns) byRep(arm, task string) map[int64]*ScoredRun {
-	out := map[int64]*ScoredRun{}
-	for _, run := range c[cellKey{arm, task}] {
-		out[run.Rep] = run
+// taskValue is one task's value of m under arm: the mean over runs that carry
+// it, or for pass@1 the pass rate over graded runs. nil when no run does.
+func (c cellRuns) taskValue(arm, task string, m metric) *float64 {
+	runs := c[cellKey{arm, task}]
+	if m.name == passAt1Metric {
+		n, passes := graded(runs)
+		if n == 0 {
+			return nil
+		}
+		v := float64(passes) / float64(n)
+		return &v
+	}
+	var values []float64
+	for _, run := range runs {
+		if v := m.read(run); v != nil {
+			values = append(values, *v)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	// Summed in sorted order, so record order cannot move the last bits.
+	sort.Float64s(values)
+	v := fmean(values)
+	return &v
+}
+
+// metricSeed gives each comparison its own randomization stream, so one
+// metric's p does not move when another is added.
+func metricSeed(seed uint64, name string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(name)) // hash.Hash.Write never returns an error
+	return seed ^ h.Sum64()
+}
+
+// compare pairs m by task: each task's full value against its rampant value.
+func compare(c cellRuns, tasks []string, m metric, seed uint64) Comparison {
+	out := Comparison{Metric: m.name, Family: m.family, Deltas: []TaskDelta{}, Verdict: verdictInconclusive}
+	var treated, baseline []float64
+	for _, task := range tasks {
+		after, before := c.taskValue(armFull, task, m), c.taskValue(armRampant, task, m)
+		if after == nil || before == nil {
+			continue
+		}
+		treated, baseline = append(treated, *after), append(baseline, *before)
+		out.Deltas = append(out.Deltas, TaskDelta{Task: task, Treated: *after, Baseline: *before, Delta: *after - *before})
+	}
+	out.Tasks = int64(len(treated))
+	if len(treated) == 0 {
+		out.Reason = "no task ran under both arms"
+		return out
+	}
+	mean, p := rankeval.PairedRandomization(treated, baseline, randomizationSamples, metricSeed(seed, m.name))
+	minP := rankeval.MinimumAttainableP(len(treated))
+	baseMean := fmean(baseline)
+	out.DeltaMean, out.P, out.MinAttainableP, out.BaselineMean = &mean, &p, &minP, &baseMean
+	if baseMean != 0 {
+		rel := mean / baseMean
+		out.Relative = &rel
+	}
+	if len(treated) >= 2 {
+		_, lo, hi := rankeval.PairedTInterval(treated, baseline, 0.95)
+		out.CILow, out.CIHigh = &lo, &hi
+		deltas := make([]float64, len(treated))
+		for i := range deltas {
+			deltas[i] = treated[i] - baseline[i]
+		}
+		// A zero spread leaves d_z infinite and the power curve undefined; both
+		// stay nil rather than print a number the data cannot support.
+		if sd := sampleSD(deltas); sd > 0 {
+			dz := rankeval.EffectSize(treated, baseline)
+			mde := rankeval.MinimumDetectableEffect(len(treated), sd, alpha, power)
+			out.EffectSize, out.MinDetectable = &dz, &mde
+		}
 	}
 	return out
 }
 
-// pairedDeltas is, per metric, per task, the full-minus-rampant delta, with
-// p Holm-adjusted across tasks.
-func pairedDeltas(c cellRuns, tasks []string, seed int64) map[string]map[string]PairedDelta {
-	out := map[string]map[string]PairedDelta{}
-	for _, m := range metrics {
-		perTask := map[string]PairedDelta{}
-		pvalues := map[string]*float64{}
-		for _, task := range tasks {
-			delta := pairedDelta(c.byRep(armFull, task), c.byRep(armRampant, task), m, fmt.Sprintf("%d|%s|%s", seed, m.name, task))
-			perTask[task] = delta
-			pvalues[task] = delta.P
+// judge sets a family comparison's verdict once Holm has adjusted its p, and
+// says why when it stays inconclusive.
+func judge(c *Comparison) {
+	switch {
+	case !c.Family:
+		c.Verdict, c.Reason = verdictDescriptive, "outside the headline family, so Holm does not cover it"
+	case c.P == nil:
+	case *c.MinAttainableP > alpha:
+		c.Reason = fmt.Sprintf("%d task(s): the smallest p an exact test can reach is %s, above %s",
+			c.Tasks, formatP(*c.MinAttainableP), formatP(alpha))
+	case *c.PHolm > alpha:
+		c.Reason = fmt.Sprintf("p (Holm) %s is above %s", formatP(*c.PHolm), formatP(alpha))
+	case c.Relative == nil || math.Abs(*c.Relative) < minRelativeDelta:
+		c.Reason = fmt.Sprintf("the difference is under %s%% of the rampant mean",
+			strconv.FormatFloat(100*minRelativeDelta, 'f', 0, 64))
+	default:
+		c.Verdict, c.Reason = verdictHigher, ""
+		if *c.DeltaMean < 0 {
+			c.Verdict = verdictLower
 		}
-		adjusted := holm(pvalues)
-		for task, delta := range perTask {
-			delta.PHolm = adjusted[task]
-			perTask[task] = delta
+	}
+}
+
+// formatP prints a p to three significant digits; an exact p never rounds to 0.
+func formatP(p float64) string { return strconv.FormatFloat(p, 'g', 3, 64) }
+
+// comparisons is every metric compared by task, p Holm-adjusted across the
+// headline family only: adjusting across tasks or every metric would answer a
+// question nobody asked.
+func comparisons(c cellRuns, tasks []string, seed uint64) map[string]Comparison {
+	out := map[string]Comparison{}
+	var family []string
+	var ps []float64
+	for _, m := range comparedMetrics() {
+		row := compare(c, tasks, m, seed)
+		out[m.name] = row
+		if m.family && row.P != nil {
+			family = append(family, m.name)
+			ps = append(ps, *row.P)
 		}
-		out[m.name] = perTask
+	}
+	for i, adjusted := range rankeval.Holm(ps) {
+		row := out[family[i]]
+		row.PHolm = &adjusted
+		out[family[i]] = row
+	}
+	for name, row := range out {
+		judge(&row)
+		out[name] = row
 	}
 	return out
+}
+
+// comparability is every recorded field that must hold one value across the
+// runs a comparison reads: the arm is the one factor it may vary.
+var comparability = []struct {
+	name string
+	read func(*ScoredRun) string
+}{
+	{"model", func(r *ScoredRun) string { return r.Model }},
+	{"effort", func(r *ScoredRun) string { return optional(r.Effort, strconv.Quote) }},
+	{"max_turns", func(r *ScoredRun) string { return optional(r.MaxTurns, formatFloat) }},
+	{"budget_usd", func(r *ScoredRun) string { return optional(r.BudgetUSD, formatFloat) }},
+	{"magus_version", func(r *ScoredRun) string { return optional(r.MagusVersion, strconv.Quote) }},
+	{"fixture_sha", func(r *ScoredRun) string { return optional(r.FixtureSHA, strconv.Quote) }},
+}
+
+func formatFloat(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+
+func optional[T any](v *T, format func(T) string) string {
+	if v == nil {
+		return "unrecorded"
+	}
+	return format(*v)
+}
+
+// refusal names the first comparability field the compared arms' runs disagree
+// on, with the values seen; "" when they agree on all of them.
+func refusal(runs []*ScoredRun) string {
+	for _, field := range comparability {
+		seen := map[string]bool{}
+		for _, run := range runs {
+			if run.Arm == armFull || run.Arm == armRampant {
+				seen[field.read(run)] = true
+			}
+		}
+		if len(seen) > 1 {
+			return fmt.Sprintf("%s differs across the runs (%s); a comparison may vary only the arm",
+				field.name, strings.Join(slices.Sorted(maps.Keys(seen)), ", "))
+		}
+	}
+	return ""
 }
 
 func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQuality {
-	unpaired := []UnpairedRep{} // serialized; see runIDs
+	unpaired := []UnpairedTask{} // serialized; see runIDs
 	for _, task := range tasks {
-		repsByArm := map[string]map[int64]*ScoredRun{}
-		union := map[int64]bool{}
-		for _, arm := range arms {
-			repsByArm[arm] = c.byRep(arm, task)
-			for rep := range repsByArm[arm] {
-				union[rep] = true
+		var missing []string
+		for _, arm := range []string{armFull, armRampant} {
+			if slices.Contains(arms, arm) && len(c[cellKey{arm, task}]) == 0 {
+				missing = append(missing, arm)
 			}
 		}
-		for _, rep := range slices.Sorted(maps.Keys(union)) {
-			var missing []string
-			for _, arm := range arms {
-				if _, ok := repsByArm[arm][rep]; !ok {
-					missing = append(missing, arm)
-				}
-			}
-			if len(missing) > 0 {
-				unpaired = append(unpaired, UnpairedRep{Task: task, Rep: rep, MissingArms: missing})
-			}
+		if len(missing) > 0 {
+			unpaired = append(unpaired, UnpairedTask{Task: task, MissingArms: missing})
 		}
 	}
 	// How far the table sits from what the host reported, over the runs that
@@ -570,7 +687,7 @@ func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQualit
 		RunsWithoutCheck:            runIDs(runs, func(r *ScoredRun) bool { return r.Success == nil }),
 		RunsWithAssumedCacheTTL:     runIDs(runs, func(r *ScoredRun) bool { return r.CacheWriteTTLAssumed }),
 		RunsWithInvariantViolations: runIDs(runs, func(r *ScoredRun) bool { return len(r.InvariantViolations.TestsDeleted) > 0 }),
-		UnpairedReps:                unpaired,
+		UnpairedTasks:               unpaired,
 	}
 }
 
@@ -619,9 +736,9 @@ func controlCount(controls []*ControlRun, task, kind string) ControlCount {
 }
 
 // Analyze turns the records into the statistics analysis.json carries. The
-// seed drives every bootstrap, so the same records and seed give identical
-// output, and record order does not matter.
-func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
+// seed drives every sampled randomization test, so the same records and seed
+// give identical output, and record order does not matter.
+func Analyze(records []RunRecord, seed uint64) (*Analysis, error) {
 	var controls []*ControlRun
 	var runs []*ScoredRun
 	for _, record := range records {
@@ -635,8 +752,8 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 		return nil, fmt.Errorf("no scored runs, only %d control(s)", len(controls))
 	}
 	// A rep that ran twice leaves two directories, since run ids carry a
-	// timestamp; pairing would take whichever came last while the cell counted
-	// both, so the tree has to be cleaned up before it is read.
+	// timestamp, and would count twice in its cell, so the tree has to be
+	// cleaned up before it is read.
 	seen := map[cellKey]map[int64]string{}
 	for _, run := range runs {
 		key := cellKey{run.Arm, run.Task}
@@ -661,8 +778,14 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 	}
 	arms, tasks := slices.Sorted(maps.Keys(armSet)), slices.Sorted(maps.Keys(taskSet))
 	cells := map[string]CellStats{}
+	armCells := map[string]map[string]CellStats{}
 	for key, members := range c {
-		cells[fmt.Sprintf("%s/%s", key.arm, key.task)] = cellStats(members)
+		cell := cellStats(members)
+		cells[fmt.Sprintf("%s/%s", key.arm, key.task)] = cell
+		if armCells[key.arm] == nil {
+			armCells[key.arm] = map[string]CellStats{}
+		}
+		armCells[key.arm][key.task] = cell
 	}
 	summaries := map[string]ArmSummary{}
 	for _, arm := range arms {
@@ -672,22 +795,30 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 				armRuns = append(armRuns, run)
 			}
 		}
-		summaries[arm] = armSummary(armRuns)
+		summaries[arm] = armSummary(armRuns, armCells[arm])
+	}
+	refused := refusal(runs)
+	compared := map[string]Comparison{}
+	if refused == "" {
+		compared = comparisons(c, tasks, seed)
 	}
 	return &Analysis{
-		Platform:         fmt.Sprintf("%s/%s/%s", runtime.GOOS, runtime.GOARCH, runtime.Version()),
-		Seed:             seed,
-		BootstrapIters:   bootstrapIters,
-		MinRelativeDelta: minRelativeDelta,
-		Runs:             int64(len(runs)),
-		Arms:             arms,
-		Tasks:            tasks,
-		Models:           slices.Sorted(maps.Keys(modelSet)),
-		Controls:         controlSummary(controls, tasks),
-		Cells:            cells,
-		ArmSummaries:     summaries,
-		Paired:           pairedDeltas(c, tasks, seed),
-		DataQuality:      dataQuality(runs, c, tasks, arms),
+		Platform:             fmt.Sprintf("%s/%s/%s", runtime.GOOS, runtime.GOARCH, runtime.Version()),
+		Seed:                 seed,
+		RandomizationSamples: randomizationSamples,
+		Alpha:                alpha,
+		Power:                power,
+		MinRelativeDelta:     minRelativeDelta,
+		Runs:                 int64(len(runs)),
+		Arms:                 arms,
+		Tasks:                tasks,
+		Models:               slices.Sorted(maps.Keys(modelSet)),
+		Controls:             controlSummary(controls, tasks),
+		Cells:                cells,
+		ArmSummaries:         summaries,
+		Refusal:              refused,
+		Comparisons:          compared,
+		DataQuality:          dataQuality(runs, c, tasks, arms),
 	}, nil
 }
 
