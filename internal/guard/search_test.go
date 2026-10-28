@@ -672,7 +672,7 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
 	exts := indexedExtensions(Dependencies{Spells: spellCatalog})
 	assert.True(t, exts[".go"], "%v", exts)
-	assert.True(t, exts[".ts"], "%v", exts)
+	assert.False(t, exts[".ts"], "the typescript spell declares no symbol index: %v", exts)
 	assert.True(t, exts[".buzz"], "the buzz spell declares scip-buzz")
 	assert.False(t, exts[".md"])
 	assert.Empty(t, indexedExtensions(Dependencies{}))
