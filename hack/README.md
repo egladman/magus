@@ -25,7 +25,8 @@ A script's name starts with what running it does. `ls`, `show`, `count`, `diff`,
 reports how long, writing nothing in the tree. `check` replays calls through what the
 workspace wires and reports what was not refused, writing nothing in the tree. `rename`, `split`, `mark`, `prune`,
 `merge` and `resolve` print a plan and write only with `--apply`. `bootstrap` prepares the checkout it
-runs in, writing there and to its job's row only. `on-<where>` runs the command after it
+runs in, writing there and to its job's row only. `issue` records a decision only the person
+makes, at once, and the guard denies it to agents. `on-<where>` runs the command after it
 somewhere else. The first line a
 script prints says what it did, and the first line of `--help` says what it costs.
 `hack/lint/hack-scripts-start-with-a-verb.buzz` holds every script to that and this file
