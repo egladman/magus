@@ -66,6 +66,11 @@ type CompileOptions struct {
 	// one. Nil skips the check.
 	TypeBound func(key string) bool
 
+	// ModuleTypes are the types each import exports, by the name it is bound under. A
+	// qualified `ns\Name{...}` builds from ns's own declaration where the Env binds it
+	// under QualifiedTypeKey, so two modules exporting one name do not collide.
+	ModuleTypes map[string][]ast.Node
+
 	// SourceFile stamps Chunk.SourceFile on every chunk this compile emits
 	// (top-level and nested). Empty leaves SourceFile unset. Session.Compile
 	// passes the entry file under test so line coverage and DebugFrame.Source
@@ -102,6 +107,7 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, erro
 	// below overwrite on a name clash, so a local type always shadows an import.
 	c.importedTypes = opts.ImportedTypes
 	c.typeBound = opts.TypeBound
+	c.moduleTypes = opts.ModuleTypes
 	c.entryTypes = opts.EntryTypes
 	for _, s := range prog.Stmts {
 		if od, ok := s.(*ast.ObjectDecl); ok {
@@ -496,9 +502,10 @@ type compiler struct {
 	importedTypes []ast.Node
 	// typeBound and entryTypes are CompileOptions.TypeBound and EntryTypes,
 	// likewise top-level only.
-	typeBound  func(key string) bool
-	entryTypes map[string]*ast.ObjectDecl
-	loops      []loopInfo
+	typeBound   func(key string) bool
+	entryTypes  map[string]*ast.ObjectDecl
+	moduleTypes map[string][]ast.Node
+	loops       []loopInfo
 	// blockExprs is a stack, one entry per `from { ... }` currently being
 	// compiled, holding the jump indexes each `out` inside it emitted. They are
 	// patched to the block's end once its body is done.
@@ -625,6 +632,50 @@ func (c *compiler) checkConstructible(v *ast.ObjectLit, key string) error {
 		name = fmt.Sprintf(`%s\%s`, v.Namespace, name)
 	}
 	return fmt.Errorf("buzz: line %d:%d: %s is declared for type checking only and has no definition to construct", v.Line, v.Col, name)
+}
+
+// QualifiedTypeKey is the Env key an import bound as ns binds its exported object name
+// under. No identifier can spell it, so it shadows nothing a script declares.
+func QualifiedTypeKey(ns, name string) string {
+	return ns + `\` + name
+}
+
+// qualifiedType resolves `ns\name` to ns's own declaration and the Env key that builds
+// it. A module whose objects the Env does not bind per namespace falls back to the bare
+// name, the one key every flat import binds.
+func (c *compiler) qualifiedType(ns, name string) (*ast.ObjectDecl, bool, string) {
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
+	key := QualifiedTypeKey(ns, name)
+	if root.typeBound != nil && root.typeBound(key) {
+		for _, n := range root.moduleTypes[ns] {
+			if od, ok := n.(*ast.ObjectDecl); ok && od.Name == name {
+				return od, true, key
+			}
+		}
+	}
+	decl, ok := c.importedType(name)
+	return decl, ok, name
+}
+
+// moduleEnum reports whether m names an enum an import bound as m's object exports.
+func (c *compiler) moduleEnum(m *ast.MemberExpr) bool {
+	id, ok := m.Object.(*ast.IdentExpr)
+	if !ok {
+		return false
+	}
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
+	for _, n := range root.moduleTypes[id.Name] {
+		if ed, isEnum := n.(*ast.EnumDecl); isEnum && ed.Name == m.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // importedType finds the object type an import exports as name, skipping any
@@ -2314,7 +2365,9 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 	// without allocating a bound method value (the bound-funObj copy getMember
 	// would make). The receiver is pushed once and reused as the call's base; the
 	// VM handler reads the method name from the const pool (A) and arg count (B).
-	if m, ok := v.Callee.(*ast.MemberExpr); ok {
+	// `ns\E(v)` reads the enum off its module and calls it, as `E(v)` does: OpInvoke
+	// resolves methods, and an enum is a value that answers its case for v.
+	if m, ok := v.Callee.(*ast.MemberExpr); ok && !c.moduleEnum(m) {
 		emitInvoke := func() error {
 			for _, arg := range v.Args {
 				if err := c.compileExpr(arg); err != nil {
@@ -2350,9 +2403,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 	decl, ok := c.typeDecl(v.TypeName)
 	typeKey := c.globalName(v.TypeName)
 	if v.Namespace != "" {
-		// A qualified name is an import's export, which binds under its bare name.
-		decl, ok = c.importedType(v.TypeName)
-		typeKey = v.TypeName
+		decl, ok, typeKey = c.qualifiedType(v.Namespace, v.TypeName)
 	}
 	if ok && (v.Namespace != "" || !c.localType(v.TypeName)) {
 		if err := c.checkConstructible(v, typeKey); err != nil {

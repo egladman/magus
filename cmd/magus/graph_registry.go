@@ -21,8 +21,10 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/types"
 )
 
@@ -84,16 +86,18 @@ func errorNoGraphDestination(verb string) error {
 // does, so a secret never becomes a flag argument that lands in a process listing, a
 // shell history, or a run log. The caller resolving it is the magusfile, through
 // magus\secret.read, which is what keeps the credential source pluggable: a workspace
-// picks its provider and this never learns which one.
-func readToken() (string, error) {
+// picks its provider and this never learns which one. The token never passed through
+// this run's resolver, so it is registered there for redaction.
+func readToken(ctx context.Context) (types.Secret, error) {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		return "", fmt.Errorf("read token from stdin: %w", err)
+		return types.Secret{}, fmt.Errorf("read token from stdin: %w", err)
 	}
-	tok := strings.TrimSpace(string(raw))
-	if tok == "" {
-		return "", fmt.Errorf("no token on stdin, pipe one in the way graph-generate does (magus\\secret.read resolves it)")
+	tok := types.NewSecret(strings.TrimSpace(string(raw)))
+	if tok.IsZero() {
+		return types.Secret{}, fmt.Errorf("no token on stdin, pipe one in the way graph-generate does (magus\\secret.read resolves it)")
 	}
+	secret.ResolverFromContext(ctx).Register(tok)
 	return tok, nil
 }
 
@@ -105,6 +109,8 @@ func graphPush(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
 		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
 		fs.BoolVar(&table, "table", false, "publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
+		cmdline.NegatedBoolVar(fs, &refresh, "refresh")
+		cmdline.NegatedBoolVar(fs, &table, "table")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph push [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -164,14 +170,13 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 		size += len(l.Payload)
 	}
 
-	pass, err := readToken()
+	pass, err := readToken(ctx)
 	if err != nil {
 		return fmt.Errorf("graph push: %w", err)
 	}
 	client := &oci.Client{
-		HTTP:     &http.Client{Timeout: graphRegistryTimeout},
-		Username: user,
-		Password: pass,
+		HTTP:        &http.Client{Timeout: graphRegistryTimeout},
+		Credentials: oci.Credentials{Username: user, Password: pass},
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
@@ -269,6 +274,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
 		fs.StringVar(&out, "out", "", "write the graph here instead of stdout")
 		fs.BoolVar(&table, "table", false, "fetch the embedding table the binary pins into the cache instead of the graph")
+		cmdline.NegatedBoolVar(fs, &table, "table")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph pull [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -343,11 +349,11 @@ func tablePush(ctx context.Context, repo, user string) error {
 	if err != nil {
 		return fmt.Errorf("graph push -table: %w", err)
 	}
-	pass, err := readToken()
+	pass, err := readToken(ctx)
 	if err != nil {
 		return fmt.Errorf("graph push -table: %w", err)
 	}
-	client := &oci.Client{HTTP: registryHTTP(), Username: user, Password: pass}
+	client := &oci.Client{HTTP: registryHTTP(), Credentials: oci.Credentials{Username: user, Password: pass}}
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
 	pushed, err := embedtable.Publish(ctx, client, dest, path)

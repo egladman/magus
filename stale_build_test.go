@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -32,13 +34,14 @@ func moduleBuildInfo(module, pkg string) *debug.BuildInfo {
 
 func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
 	root, exe := sourceCheckout(t, "example.com/tool")
-	assert.Equal(t, "This binary was built from this checkout's own sources and predates them, so it cannot "+
+	want := fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot "+
 		"rebuild itself: every command it runs loads the same tree. Link a new one from source, one "+
-		"command at a time: `go build -o magus ./cmd/tool`, then rebuild it the "+
+		"command at a time: `go -C %s build -o magus ./cmd/tool`, then rebuild it the "+
 		"way this workspace builds it. If that link fails with `undefined:` in generated code, the "+
 		"checkout's committed generated files are behind its sources (a merge kept one side), and "+
 		"restoring either side's copy brings back the mismatch: regenerate them with the `go generate` "+
-		"commands its generate targets run, then link again.",
+		"commands its generate targets run, then link again.", root)
+	assert.Equal(t, want,
 		ownBuildEscape(exe, moduleBuildInfo("example.com/tool", "cmd/tool"), root))
 }
 
@@ -48,13 +51,35 @@ func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
 	root, exe := sourceCheckout(t, ownModule)
 	escape := ownBuildEscape(exe, moduleBuildInfo(ownModule, "cmd/magus"), root)
 
-	assert.Contains(t, escape, "command at a time: `go build -o magus ./cmd/magus`, then rebuild")
+	assert.Contains(t, escape, fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", root))
 	assert.NotContains(t, escape, "magus.old")
 	assert.Contains(t, escape, "regenerate them, one command at a time, with what the *_generate targets run: "+
 		"`go generate ./cmd/magus-utils`, then `go generate ./internal/spell/...`, then "+
 		"`go run ./cmd/magus-utils jobschema -out internal/job/gen`, then `go generate ./internal/langservice`, then "+
-		"`go generate ./std/...`, then `go generate ./internal/handler/mcp`, then link again.")
+		"`go generate ./std/...`, then `go generate ./internal/handler/mcp`, then retry the bootstrap.")
 	assert.NotContains(t, escape, "restore them")
+}
+
+func TestOwnBuildEscapeNamesTheCheckoutBootstrap(t *testing.T) {
+	root, exe := sourceCheckout(t, ownModule)
+	escape := ownBuildEscape(exe, moduleBuildInfo(ownModule, "cmd/magus"), root)
+	assert.Contains(t, escape, fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", root))
+	assert.Contains(t, escape, "hack/dev/bootstrap-checkout.buzz -- --checkout "+root)
+}
+
+// A checkout path the shell would split or expand is quoted once, so the line pasted builds
+// that checkout.
+func TestOwnBuildEscapeQuotesTheCheckout(t *testing.T) {
+	root, exe := sourceCheckout(t, ownModule)
+	quoted := filepath.Join(t.TempDir(), "landing $cache 'quoted'")
+	require.NoError(t, os.Rename(root, quoted))
+	escape := ownBuildEscape(filepath.Join(quoted, filepath.Base(exe)), moduleBuildInfo(ownModule, "cmd/magus"), quoted)
+	resolved, err := filepath.EvalSymlinks(quoted)
+	require.NoError(t, err)
+	words := config.ShellLine([]string{resolved})
+	assert.Contains(t, words, `\$cache`, "the $ stays literal")
+	assert.Contains(t, escape, fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", words))
+	assert.Contains(t, escape, fmt.Sprintf("--checkout %s", words))
 }
 
 // ownGenerators restates what magusfile.buzz runs, so each must still be a proc\exec there.

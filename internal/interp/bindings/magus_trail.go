@@ -16,7 +16,7 @@ import (
 // buildTrail assembles magus\trail: a session's guard record and the marks a person gives
 // its rows. Hand-bound for the reason buildVCS is: every failure goes through ffi.Error so
 // a caught value is the same map every other magus\* raise hands back.
-func buildTrail(obs buzz.DirectObserver) vm.Value {
+func buildTrail(sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	t := vm.NewMap()
 	t.MapSet("read", directVal(obs, "magus.trail.read", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		opts, err := decodeTrailReadOptions(ffi.AnyMap(args, 0))
@@ -40,14 +40,16 @@ func buildTrail(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(marks, bindgen.ObjectTrailMark), nil
+		return ffi.ObjectSlice(marks, func(m types.TrailMark) vm.Value {
+			return bindgen.ObjectTrailMark(m, ffi.SessionEnums(ctx, sess, "magus"))
+		}), nil
 	}))
 	t.MapSet("mark", directVal(obs, "magus.trail.mark", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		m, err := std.MagusTrailMark(ctx, ffi.AnyMap(args, 0))
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindgen.ObjectTrailMark(m), nil
+		return bindgen.ObjectTrailMark(m, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	return t
 }

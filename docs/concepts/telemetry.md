@@ -252,7 +252,7 @@ processors:
 
 Alternatively, use an SDK View at startup to drop the attribute before it leaves
 the process. Four other instruments carry a workspace-sized attribute and the
-same recipe applies: `magus.sandbox.checks` and `magus.sandbox.env.dropped`
+same pattern applies: `magus.sandbox.checks` and `magus.sandbox.env.dropped`
 carry `magus.project`, and `magus.buzz.spell.resolve.duration` and
 `magus.buzz.spell.builtins.warm` carry `spell`, a workspace-authored name.
 Every other metric omits them. The remote

@@ -227,7 +227,7 @@ final base_query = `query($owner: String!, $name: String!, $expr: String!) {
 }`;
 
 fun gh(args: [str]) > str !> any {
-    return proc\exec("gh", args: args, dir: ".", opts: {"quiet": true}).stdout;
+    return proc\exec("gh", args: args, dir: ".", opts: proc\ExecOptions{ quiet = true }).stdout;
 }
 
 fun headWorkflows() > [Workflow] !> any {

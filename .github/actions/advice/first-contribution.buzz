@@ -20,7 +20,7 @@ final section = "first-contribution";
 fun isFirst(repo: str, author: str) > bool !> any {
     final query = "repo:" + repo + "+author:" + author + "+is:pr+is:merged";
     final res = proc\exec("gh", args: ["api", "search/issues?q=" + query],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
+        dir: ".", opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (!res.ok) { return false; }
     return serialize\jsonDecode(res.stdout).q("total_count").integerValue() == 0;
 }

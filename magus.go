@@ -34,7 +34,6 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/report"
@@ -45,6 +44,7 @@ import (
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
@@ -480,11 +480,11 @@ func (m *Magus) spellRegistryClient(ctx context.Context, host string) (*oci.Clie
 	if !ok {
 		return c, nil
 	}
-	pass, err := m.resolver.Read(ctx, entry.Password)
+	pass, err := m.resolver.Read(ctx, entry.PasswordRef)
 	if err != nil {
 		return nil, fmt.Errorf("spells.registries %s: %w", host, err)
 	}
-	c.Username, c.Password = entry.Username, pass.Reveal()
+	c.Credentials = oci.Credentials{Username: entry.Username, Password: pass}
 	return c, nil
 }
 

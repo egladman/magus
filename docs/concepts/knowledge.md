@@ -127,7 +127,7 @@ cannot pull in the whole graph.
 
 ## Questions you can ask
 
-Recipes for the graph as a lens on the workspace. Rebuild first with `magus graph
+Examples for the graph as a lens on the workspace. Rebuild first with `magus graph
 build` if you want it fresh; combine field filters freely.
 
 **What programs does the workspace run?** magus owns the task layer, so it

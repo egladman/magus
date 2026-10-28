@@ -241,7 +241,7 @@ fun main() > void !> any {
         if (has(asked, name: path)) { continue; }
         asked.append(path);
         final res = vcs\cmd(["show", "origin/" + base + ":" + magusfilePath(path)],
-            opts: {"dir": ".", "quiet": true, "allow_failure": true});
+            opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
         if (res.ok) { atBase[path] = declaredTargets(res.stdout); }
     }
 

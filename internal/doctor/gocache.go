@@ -19,7 +19,7 @@ import (
 const goCacheWalkEntries = 500_000
 
 const (
-	goBuildCacheFix = "magus run go::go-clean . -- -cache"
+	goBuildCacheFix = `magus buzz -e 'import "std"; import "vcs"; import "magus/reclaimdisk" as reclaim; fun main(args: [str]) > void !> any { std\print(reclaim\trimGoCache(vcs\root(), deadline: 0.0)); }'`
 	lintCacheFix    = "golangci-lint cache clean"
 )
 
@@ -37,9 +37,9 @@ type cacheSize struct {
 	Stopped string
 }
 
-// MeasureCache sums file sizes under dir until the total passes limit or maxEntries entries
+// measureCache sums file sizes under dir until the total passes limit or maxEntries entries
 // have been visited. A missing dir measures zero.
-func MeasureCache(ctx context.Context, dir string, limit int64, maxEntries int) (cacheSize, error) {
+func measureCache(ctx context.Context, dir string, limit int64, maxEntries int) (cacheSize, error) {
 	var out cacheSize
 	entries := 0
 	errStop := errors.New("walk stopped")
@@ -87,7 +87,7 @@ func goCacheBudget(ctx context.Context, caches []goCache, budgetMB, maxEntries i
 	limit := int64(budgetMB) << 20
 	var over, partial, unread []string
 	for _, c := range caches {
-		size, err := MeasureCache(ctx, c.dir, limit, maxEntries)
+		size, err := measureCache(ctx, c.dir, limit, maxEntries)
 		switch {
 		case err != nil:
 			unread = append(unread, fmt.Sprintf("%s %s: cannot measure: %v", c.label, c.dir, err))
@@ -107,7 +107,7 @@ func goCacheBudget(ctx context.Context, caches []goCache, budgetMB, maxEntries i
 	return types.Check{
 		Name:   name,
 		Status: types.CheckAdvice,
-		Message: fmt.Sprintf("%d of %d cache(s) past or unverifiable against the %d MB go.cache_budget_mb; doctor deletes nothing (the daemon trims the Go build cache past the budget)",
+		Message: fmt.Sprintf("%d of %d cache(s) past or unverifiable against the %d MB go.cache_budget_mb; doctor deletes nothing (only Buzz trims the Go build cache to the budget by entry age: the reclaim hook, or each fix's reclaim\\trimGoCache)",
 			len(details), len(caches), budgetMB),
 		Details: details,
 	}
@@ -123,14 +123,14 @@ func (r *runner) checkGoCacheBudget() types.Check {
 		if unscoped != "" {
 			return types.Check{Name: name, Status: types.CheckAdvice, Message: unscoped, Details: []string{unscoped}}
 		}
-		return types.Check{Name: name, Status: types.CheckOK, Message: "go.cache_budget_mb is 0: the Go caches are not measured and the daemon trims nothing"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "go.cache_budget_mb is 0: the Go caches are not measured, and the reclaim hook does not trim them"}
 	}
 	var caches []goCache
 	var notes []string
 	if unscoped != "" {
 		notes = append(notes, unscoped)
 	}
-	if dir, err := GoEnvCache(r.ctx); err != nil {
+	if dir, err := goEnvCache(r.ctx); err != nil {
 		notes = append(notes, fmt.Sprintf("go build cache not measured: %v", err))
 	} else {
 		caches = append(caches, goCache{label: "go build cache", dir: dir, fix: goBuildCacheFix})
@@ -158,8 +158,8 @@ func (r *runner) checkGoCacheBudget() types.Check {
 	return res
 }
 
-// GoEnvCache asks the Go toolchain where its build cache lives.
-func GoEnvCache(ctx context.Context) (string, error) {
+// goEnvCache asks the Go toolchain where its build cache lives.
+func goEnvCache(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, "go", "env", "GOCACHE").Output()
 	if err != nil {
 		return "", fmt.Errorf("go env GOCACHE: %w", err)

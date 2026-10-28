@@ -33,13 +33,13 @@ Verification happens before any bytes are written to disk.
 Without --bin-dir the running binary is replaced in place. With --bin-dir the
 updated binary is written to <dir>/magus (or magus.exe on Windows) instead.`,
 			Flags: []cmdline.Flag{
-				{Name: "check", Kind: cmdline.Bool, Doc: "Print whether an update is available and exit without installing"},
+				{Name: "check", Kind: cmdline.Bool, Default: false, Doc: "Print whether an update is available and exit without installing"},
 				{Name: "version", Kind: cmdline.String, Doc: "Install a specific release tag (e.g. v0.4.2)"},
 				{Name: "bin-dir", Kind: cmdline.String, Doc: "Install into this directory instead of replacing in place"},
-				{Name: "force", Kind: cmdline.Bool, Doc: "Allow downgrades and re-installs of the current version"},
-				{Name: "dry-run", Kind: cmdline.Bool, Doc: "Verify everything but do not replace the running binary"},
-				{Name: "yes", Kind: cmdline.Bool, Doc: "Skip interactive confirmation"},
-				{Name: "y", Kind: cmdline.Bool, AliasOf: "yes", Doc: "Short for --yes"},
+				{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Allow downgrades and re-installs of the current version"},
+				{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Verify everything but do not replace the running binary"},
+				{Name: "yes", Kind: cmdline.Bool, Default: false, Doc: "Skip interactive confirmation"},
+				{Name: "y", Kind: cmdline.Bool, Default: false, AliasOf: "yes", Doc: "Short for --yes"},
 			},
 			Examples: []cmdline.Example{
 				{Comment: "Update to the latest release", Command: "magus self update"},

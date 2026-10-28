@@ -89,7 +89,7 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
     // "wrong path", and a message naming which one and what to type is the difference
     // between a five-second fix and an afternoon.
     final res = proc\exec("op", args: ["read", uri], dir: ".",
-        opts: {"allow_failure": true, "quiet": true});
+        opts: proc\ExecOptions{allowFailure = true, quiet = true});
     if (res["code"] != 0) {
         final err = "{res["stderr"]}";
         if (has(err, "not signed in") or has(err, "no active session")) {

@@ -109,21 +109,21 @@ func TestPathMatches(t *testing.T) {
 
 	// ** crosses separators; * does not. That difference is the whole reason a
 	// caller reaches for a glob rather than a prefix check.
-	ok, err := PathMatch(ctx, "**/*.go", "internal/interp/bindings/modules.go")
+	ok, err := PathMatches(ctx, "**/*.go", "internal/interp/bindings/modules.go")
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	ok, err = PathMatch(ctx, "*.go", "internal/modules.go")
+	ok, err = PathMatches(ctx, "*.go", "internal/modules.go")
 	require.NoError(t, err)
 	assert.False(t, ok, "* must not cross a separator")
 
-	ok, err = PathMatch(ctx, "std/*.go", "std/net.go")
+	ok, err = PathMatches(ctx, "std/*.go", "std/net.go")
 	require.NoError(t, err)
 	assert.True(t, ok)
 
 	// A malformed pattern raises rather than reporting "no match", so a typo is
 	// not read as "nothing changed".
-	_, err = PathMatch(ctx, "[unterminated", "any")
+	_, err = PathMatches(ctx, "[unterminated", "any")
 	require.Error(t, err)
 }
 

@@ -96,7 +96,7 @@ func TestPlatformCPUs(t *testing.T) {
 // rather than sizing work off it. Either answer is legitimate here: the host may
 // be a platform mem cannot measure.
 func TestPlatformMemory(t *testing.T) {
-	got, err := PlatformMemory(context.Background())
+	got, err := PlatformMemoryBytes(context.Background())
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, got, 0, "memory_bytes never reports a negative or truncated figure")
 }

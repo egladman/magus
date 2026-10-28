@@ -383,11 +383,7 @@ func unknownKeyError(path string, data []byte, err error) error {
 	}
 	// The strict decode that produced this error never completed, so the floor is
 	// re-read leniently from the same bytes; unknown keys are ignored here on purpose.
-	var head struct {
-		RequiredVersion string `yaml:"required_version"`
-	}
-	_ = yaml.Unmarshal(data, &head)
-	ue.Build.Floor = head.RequiredVersion
+	ue.Build.Floor = requiredVersion(data)
 	if root != "" {
 		if fi, err := os.Stat(filepath.Join(root, "cmd", "magus")); err == nil && fi.IsDir() {
 			ue.Build.SourceTree = true

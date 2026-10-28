@@ -2,6 +2,16 @@
 
 package std
 
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
+)
+
 //go:generate go run ../cmd/magus-utils bindings -module proc -lang buzz -out ../internal/interp/bindings/gen/proc.go -pkg bindgen
 
 // Proc is running OTHER processes, and it is a separate module from os for a
@@ -25,16 +35,16 @@ var Proc = Module{
 	Methods: []Method{
 		{
 			Name: "exec",
-			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console. opts.tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their color and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only. A version-control binary (git, hg, sl, jj) is refused, whether named, given by path, behind a wrapper such as env, or inside a proc.shell line: run it with vcs\\cmd, which holds it to the lease rules.",
+			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allowFailure is true. Optional dir runs cmd there (relative to the target's cwd). opts is an ExecOptions: stdin is fed to the process as standard input - pipe by passing a prior call's stdout. quiet captures the output without echoing it to the console. tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their color and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only. timeoutMs kills the process group once the call has run that long and raises whatever allowFailure says. detach starts cmd in a session of its own with no stdio and returns at once, so it outlives the script; it takes no timeoutMs, stdin or tty, and a sandbox policy refuses it, so a detached child bounds each call it makes with its own timeoutMs. A version-control binary (git, hg, sl, jj) is refused, whether named, given by path, behind a wrapper such as env, or inside a proc.shell line: run it with vcs\\cmd, which holds it to the lease rules.",
 			Args: []Arg{
 				{Name: "cmd", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice, Optional: true},
 				{Name: "dir", Type: TypeString, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "ExecOptions"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Raises:  true,
-			Impl:    OsExec,
+			Impl:    ProcExec,
 		},
 		{
 			Name: "shell",
@@ -44,7 +54,7 @@ var Proc = Module{
 				{Name: "shell", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ShellCommand"}},
-			Impl:    OsShell,
+			Impl:    ProcShell,
 		},
 		{
 			Name:    "which",
@@ -52,7 +62,7 @@ var Proc = Module{
 			Args:    []Arg{{Name: "cmd", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
-			Impl:    OsWhich,
+			Impl:    ProcWhich,
 		},
 		{
 			Name: "with_slots",
@@ -63,14 +73,40 @@ var Proc = Module{
 			},
 			Returns: nil,
 			Raises:  true,
-			Impl:    OsWithSlots,
+			Impl:    ProcWithSlots,
 		},
 		{
 			Name:    "stdin_is_terminal",
 			Doc:     "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeBool}},
-			Impl:    OsStdinIsTerminal,
+			Impl:    ProcStdinIsTerminal,
 		},
 	},
+}
+
+// procDetach starts cmd in a session of its own with stdio on the null device and returns
+// once it runs. Leaving the caller's process group is the point: the group kill at the end
+// of a run cannot reach it, which is also why a sandbox policy, scoped to the run, refuses it.
+func procDetach(ctx context.Context, cmd string, args []string, dir string, opts types.ExecOptions) (types.ExecResult, error) {
+	switch {
+	case opts.TimeoutMs != 0:
+		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: detach takes no timeoutMs, since nothing waits on a detached process; pass the deadline to the child and bound each call it makes`, cmd)
+	case opts.Stdin != "" || opts.TTY:
+		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: a detached process has no stdin or terminal; drop stdin and tty`, cmd)
+	case sandbox.PolicyFromContext(ctx) != nil:
+		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: detach is refused under a sandbox policy, which ends with the run the detached process outlives`, cmd)
+	}
+	c := exec.Command(cmd, args...)
+	c.Dir = dir
+	overrides, _ := ctx.Value(withEnvKey{}).([]string)
+	c.Env = append(os.Environ(), overrides...)
+	c.SysProcAttr = detachedProcAttr()
+	if err := c.Start(); err != nil {
+		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: start detached: %w`, cmd, err)
+	}
+	if err := c.Process.Release(); err != nil {
+		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: release detached pid %d: %w`, cmd, c.Process.Pid, err)
+	}
+	return types.ExecResult{Code: 0, OK: true}, nil
 }

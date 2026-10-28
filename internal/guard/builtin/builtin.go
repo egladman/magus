@@ -342,7 +342,6 @@ var defaults = map[string]decision{
 	"stale-binary":          Deny,
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,
-	"waiver-is-a-persons":   Deny,
 	"whole-tree":            Deny,
 	"worker-background-run": Deny,
 	"worker-check-only":     Deny,
@@ -427,7 +426,6 @@ var fixed = map[string]string{
 	"workspace-spawn-failed":   "it is how a workspace learns that a spawn rule of its own judged nothing, so it can be neither silenced nor promoted",
 	"workspace-write-failed":   "it is how a workspace learns that a write rule of its own judged nothing, so it can be neither silenced nor promoted",
 	"grant-is-a-persons":       "a grant is a person's approval, so no workspace setting may let an agent issue one",
-	"waiver-is-a-persons":      "a gate waiver is a person's approval, so no workspace setting may let an agent issue one",
 }
 
 // removal is why a rule the guard no longer has under its name is gone, and the name it

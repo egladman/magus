@@ -1,0 +1,37 @@
+// config-overlay: a pinned base keeps what its package manager installed; this
+// project adds configuration files and config. A null Config field inherits the base's
+// value, so the base's entrypoint script stays; an empty list would clear it.
+import "magus";
+import "std";
+import "image";
+
+final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+final NGINX = "docker.io/nginxinc/nginx-unprivileged@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+export fun image_base(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["out/image/base/**"]);
+    image\pull(NGINX, platform: PLATFORM, layout: "out/image/base");
+}
+
+// The manifest carries org.opencontainers.image.base.name and base.digest, read from
+// the pulled layout.
+export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(image_base);
+    ctx.readsFiles(["conf.d/**", "entrypoint.d/**"]);
+    ctx.writesFiles(["out/image/site/**"]);
+    final layout = image\assemble(image\Spec{
+        base = "out/image/base",
+        platform = PLATFORM,
+        trees = [
+            image\Tree{ source = "conf.d", path = "/etc/nginx/conf.d", include = ["*.conf"], modes = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse },
+            image\Tree{ source = "entrypoint.d", path = "/docker-entrypoint.d", modes = image\ModePolicy.executableBit, symlinks = image\SymlinkPolicy.refuse },
+        ],
+        config = image\Config{
+            exposedPorts = ["8080/tcp"],
+            stopSignal = "SIGQUIT",
+            cmd = ["nginx", "-g", "daemon off;"],
+            labels = {"org.opencontainers.image.title": "site"},
+        },
+    }, layout: "out/image/site");
+    std\print("{layout.descriptor.digest.string()} over {layout.layers.len() - 1} base layers");
+}

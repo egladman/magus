@@ -117,7 +117,7 @@ export fun restore(outputs: [str], saved: str, dirtyBefore: [str]) > void !> any
         if (fs\isFile(kept)) {
             fs\copyFile(kept, dst: p);
         } else if (dirtyBefore.indexOf(p) == null) {
-            final head = vcs\cmd(["checkout", "HEAD", "--", p], opts: {"quiet": true, "allow_failure": true});
+            final head = vcs\cmd(["checkout", "HEAD", "--", p], opts: vcs\CommandOptions{quiet = true, allowFailure = true});
             if (!head.ok and fs\isFile(p)) { fs\remove(p); }
         }
     }

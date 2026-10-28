@@ -27,8 +27,8 @@ fun describe(r: magus\Rule) > str {
 // verdict the rule can give, then off.
 fun settable(r: magus\Rule) > [str] {
     final choices = mut [<str>];
-    foreach (d in ["deny", "advise"]) {
-        if (r.verdicts.indexOf(d) != null) { choices.append(d); }
+    foreach (d in [magus\GuardDecision.deny, magus\GuardDecision.advise]) {
+        if (r.verdicts.indexOf(d) != null) { choices.append(d.value); }
     }
     choices.append("off");
     return choices;
@@ -61,13 +61,23 @@ fun override(r: magus\Rule) > str {
         + "A loosening takes effect once it is committed; a tightening applies at once.\n\n";
 }
 
+// gives reports whether the rule can give verdict, a GuardDecision's value.
+fun gives(r: magus\Rule, verdict: str) > bool {
+    foreach (v in r.verdicts) {
+        if (v.value == verdict) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // shownVerdict is the verdict the example line shows: the one the rule gives by default,
 // or for an off rule the one it gives once on, the least refusing it can.
 fun shownVerdict(r: magus\Rule) > str {
     if (r.decision != "off") {
         return r.decision;
     }
-    if (r.verdicts.indexOf("advise") != null) {
+    if (gives(r, verdict: "advise")) {
         return "advise";
     }
     return "deny";
@@ -77,7 +87,7 @@ fun shownVerdict(r: magus\Rule) > str {
 // that cannot give it.
 fun verdictLines(r: magus\Rule) > str {
     final shown = shownVerdict(r);
-    if (r.verdicts.indexOf(shown) == null) {
+    if (!gives(r, verdict: shown)) {
         return "";
     }
     return shown + " [" + r.name + "]: ...\n";
@@ -88,7 +98,7 @@ fun verdictLines(r: magus\Rule) > str {
 fun otherVerdictNote(r: magus\Rule) > str {
     final shown = shownVerdict(r);
     foreach (d in ["deny", "advise"]) {
-        if (d != shown and r.verdicts.indexOf(d) != null) {
+        if (d != shown and gives(r, verdict: d)) {
             return "A workspace that sets this rule to `" + d + "` sees `" + d + " [" + r.name + "]: ...` instead.\n\n";
         }
     }
@@ -535,15 +545,15 @@ export fun writeProofread(dir: str, raw: str) > void !> any {
 }
 
 fun sleepRule() > magus\Rule {
-    return magus\Rule{ name = "sleep-loop", decision = "deny", catches = "a loop that only sleeps", why = "It holds a tool slot.", verdicts = ["advise", "deny"] };
+    return magus\Rule{ name = "sleep-loop", decision = "deny", catches = "a loop that only sleeps", why = "It holds a tool slot.", verdicts = [magus\GuardDecision.advise, magus\GuardDecision.deny] };
 }
 
 fun pipeRule() > magus\Rule {
-    return magus\Rule{ name = "raw-pipe", decision = "advise", catches = "`a | b` piped \"raw\"", why = "", verdicts = ["advise", "deny"] };
+    return magus\Rule{ name = "raw-pipe", decision = "advise", catches = "`a | b` piped \"raw\"", why = "", verdicts = [magus\GuardDecision.advise, magus\GuardDecision.deny] };
 }
 
 test "a rule that never refuses offers no deny" {
-    final r = magus\Rule{ name = "stall", decision = "off", catches = "a blocked worker", why = "", verdicts = ["advise"] };
+    final r = magus\Rule{ name = "stall", decision = "off", catches = "a blocked worker", why = "", verdicts = [magus\GuardDecision.advise] };
     final page = renderRule(r);
     std\assert(page.indexOf("to `advise` or `off`:") != null, message: page);
     std\assert(page.indexOf("magus\\guard.builtins(\{\"stall\": \"advise\"})") != null, message: page);

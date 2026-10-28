@@ -83,7 +83,7 @@ The registry username; the password is then read from stdin, overriding spells.r
 .SS spell lock options
 .RS
 .TP
-\fB\-\-update\fR
+\fB\-\-[no\-]update\fR (default: off)
 Ask the registry what each declared tag names now, and rewrite magus.lock
 .RE
 .SH SUBCOMMANDS
@@ -162,7 +162,6 @@ magus spell lock --update
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

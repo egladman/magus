@@ -152,7 +152,7 @@ type Server struct {
 	svc  *service
 	http *http.Server
 	// token is the secret every /proc/ request must carry; see [TokenEnv].
-	token string
+	token types.Secret
 	// peerChecked is whether requests pass the peer-uid guard; see Server.
 	peerChecked bool
 	// extra is what Mount installed for the paths outside /proc/, nil for none.
@@ -174,7 +174,7 @@ func (s *Server) Addr() string { return s.ep.String() }
 
 // Token returns the secret a client presents on every /proc/ request. A process hands it
 // to the nested magus it spawns through [TokenEnv], and to nothing else.
-func (s *Server) Token() string { return s.token }
+func (s *Server) Token() string { return s.token.Reveal() }
 
 // Done returns a channel closed when the server has been Closed, whether by an RPC
 // shutdown request or a signal. A blocking server loop selects on it so an RPC-driven
@@ -282,7 +282,7 @@ func New(opts Options) (*Server, error) {
 	srv := &Server{
 		ep:          ep,
 		svc:         svc,
-		token:       hex.EncodeToString(secret),
+		token:       types.NewSecret(hex.EncodeToString(secret)),
 		peerChecked: httpx.PeerCredentialsSupported(),
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -353,7 +353,7 @@ func (s *Server) routes() (http.Handler, error) {
 // lacks: it rides only to a nested magus (see [TokenEnv]) and in a 0600 file in the
 // private socket directory, which the sandbox does not grant.
 func (s *Server) requireToken(next http.Handler) http.Handler {
-	want := []byte(s.token)
+	want := []byte(s.token.Reveal())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get(tokenHeader)), want) != 1 {
 			writeJSON(w, http.StatusUnauthorized, errorReply{Message: ErrTokenRefused.Error()})
@@ -394,7 +394,7 @@ func (s *Server) Start() error {
 	}
 	// Socket security comes from the parent directory (0700 per sockdir_unix.go);
 	// a post-Listen chmod would create a brief world-accessible window.
-	if err := sockdir.WriteToken(s.ep.Addr, s.token); err != nil {
+	if err := sockdir.WriteToken(s.ep.Addr, s.token.Reveal()); err != nil {
 		_ = ln.Close()
 		s.cancel()
 		return err

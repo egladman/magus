@@ -41,6 +41,7 @@ type Config struct {
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 	Queue      Queue      `json:"queue" yaml:"queue"`
 	Go         GoConfig   `json:"go" yaml:"go"`
+	Disk       Disk       `json:"disk" yaml:"disk"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -151,6 +152,24 @@ type GoConfig struct {
 	// A budget rather than a cap: neither cache is magus's, so doctor measures and names the
 	// command that frees it and deletes nothing.
 	CacheBudgetMB int `json:"cache_budget_mb" yaml:"cache_budget_mb" validate:"gte=0"`
+}
+
+// Disk configures the reclaim hook every harness spell wires: it samples the free space of
+// the filesystem holding the workspace at most once per SampleEvery, and past MinFreeMB or
+// GrowthMBPerHour starts one small reclaim chunk in the background. It needs no daemon.
+type Disk struct {
+	// MinFreeMB is the free space in MB (binary) below which the hook reclaims. Default
+	// 51200; 0 turns reclaiming off and leaves the samples.
+	MinFreeMB int `json:"min_free_mb" yaml:"min_free_mb" validate:"gte=0"`
+	// CriticalFreeMB is the free space in MB below which the hook says so on every sample,
+	// so an agent puts reclaiming first. Default 10240; 0 turns the line off.
+	CriticalFreeMB int `json:"critical_free_mb" yaml:"critical_free_mb" validate:"gte=0"`
+	// GrowthMBPerHour is the rate at which free space may fall, in MB an hour, before the hook
+	// reclaims however much is left. Default 20480; 0 turns the growth trigger off.
+	GrowthMBPerHour int `json:"growth_mb_per_hour" yaml:"growth_mb_per_hour" validate:"gte=0"`
+	// SampleEvery is the hook's rate limit: a hook that fires sooner reads one file's mtime
+	// and returns. Default 10m; 0 turns the hook off, and anything else takes at least 1m.
+	SampleEvery time.Duration `json:"sample_every" yaml:"sample_every" validate:"omitempty,gte=1m"`
 }
 
 // Queue configures the merge queue, `magus queue`.
@@ -294,16 +313,16 @@ type SpellImport struct {
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
-// SpellRegistry authenticates to one registry host. Password is a secret REFERENCE,
+// SpellRegistry authenticates to one registry host. PasswordRef is a secret REFERENCE,
 // never the value: it resolves through the workspace's selected secret provider
 // exactly as magus\secret.read does, so under the built-in provider it names an
 // environment variable (GITHUB_TOKEN for ghcr.io in Actions), and under a provider
 // spell it is that provider's own path.
 type SpellRegistry struct {
 	// Host is the registry as a reference spells it: "ghcr.io", "localhost:5000".
-	Host     string `json:"host" yaml:"host" validate:"required,registry_host"`
-	Username string `json:"username" yaml:"username" validate:"required"`
-	Password string `json:"password" yaml:"password" validate:"required"`
+	Host        string `json:"host" yaml:"host" validate:"required,registry_host"`
+	Username    string `json:"username" yaml:"username" validate:"required"`
+	PasswordRef string `json:"password" yaml:"password" validate:"required"`
 }
 
 // Registry returns the entry for host, and whether there is one.
@@ -1119,6 +1138,7 @@ func Defaults() Config {
 		},
 		ShutdownGrace: DefaultShutdownGrace,
 		Go:            GoConfig{CacheBudgetMB: DefaultGoCacheBudgetMB},
+		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, IntegrateAdviseAt: 5, IntegrateRefuseAt: 10, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built

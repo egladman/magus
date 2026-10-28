@@ -1783,7 +1783,17 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			if err != nil {
 				return nil, err
 			}
-			conforms = append(conforms, id.Val)
+			name := id.Val
+			// `object<mod\Proto>` names a protocol another module declares.
+			for p.check(token.Backslash) {
+				p.advance()
+				seg, err := p.eatBindingIdent()
+				if err != nil {
+					return nil, err
+				}
+				name += `\` + seg.Val
+			}
+			conforms = append(conforms, name)
 			if !p.check(token.Comma) {
 				break
 			}

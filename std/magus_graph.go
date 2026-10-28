@@ -167,17 +167,9 @@ func loadGraph(ctx context.Context, g knowledgeGraphs, seeded bool) (*knowledge.
 // record `magus path -o json` prints. opts is a PathOptions; relations narrows the hops.
 // A resolved pair with no connection is an answer (found is false); only an endpoint
 // that resolves to nothing, or an option that names nothing, raises.
-func MagusPath(ctx context.Context, node, to string, opts map[string]any) (types.KnowledgePathOutput, error) {
+func MagusPath(ctx context.Context, node, to string, opts types.KnowledgePathOptions) (types.KnowledgePathOutput, error) {
 	if node == "" || to == "" {
 		return types.KnowledgePathOutput{}, errors.New("magus\\path: needs both endpoints")
-	}
-	o := optionReader{member: "path", opts: opts}
-	if err := o.only("relations"); err != nil {
-		return types.KnowledgePathOutput{}, err
-	}
-	rels, err := o.relations()
-	if err != nil {
-		return types.KnowledgePathOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "path")
 	if err != nil {
@@ -187,7 +179,7 @@ func MagusPath(ctx context.Context, node, to string, opts map[string]any) (types
 	if err != nil {
 		return types.KnowledgePathOutput{}, err
 	}
-	out, ok := kg.PathWith(node, to, types.KnowledgePathOptions{Relations: rels})
+	out, ok := kg.PathWith(node, to, opts)
 	if !ok {
 		return types.KnowledgePathOutput{}, fmt.Errorf("magus\\path: could not resolve %q or %q to a node", node, to)
 	}
@@ -439,23 +431,11 @@ func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
 // MagusDirs backs magus\dirs: every dir whose workspace path matches glob, sorted by
 // path. opts is a DirsOptions; a layer it names that nothing declares raises
 // LayerNotDeclared.
-func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.Dir, error) {
+func MagusDirs(ctx context.Context, glob string, opts types.DirsOptions) ([]types.Dir, error) {
 	if strings.TrimSpace(glob) == "" {
 		return nil, errors.New("magus\\dirs: needs a glob over workspace paths, such as \"internal/**\"")
 	}
-	o := optionReader{member: "dirs", opts: opts}
-	if err := o.only("layer", "language", "depth"); err != nil {
-		return nil, err
-	}
-	var do types.DirsOptions
-	var err error
-	if do.Layer, err = o.string("layer"); err != nil {
-		return nil, err
-	}
-	if do.Language, err = o.string("language"); err != nil {
-		return nil, err
-	}
-	if do.Depth, err = o.count("depth"); err != nil {
+	if err := nonNegative("dirs", map[string]int{"depth": opts.Depth}); err != nil {
 		return nil, err
 	}
 	g, err := graphsFromContext(ctx, "dirs")
@@ -466,7 +446,7 @@ func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.D
 	if err != nil {
 		return nil, err
 	}
-	dirs, err := kg.Dirs(glob, do, workspaceLayers(ctx))
+	dirs, err := kg.Dirs(glob, opts, workspaceLayers(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("magus\\dirs: %w", err)
 	}
@@ -497,34 +477,14 @@ func MagusLayer(ctx context.Context, name string) (types.Layer, error) {
 // MagusNeighborhood backs magus\neighborhood: the subgraph within opts.depth hops of
 // focus, along opts.relations in opts.direction, folded by opts.collapse. opts is a
 // NeighborhoodOptions.
-func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (types.KnowledgeNeighborhoodOutput, error) {
+func MagusNeighborhood(ctx context.Context, focus string, opts types.KnowledgeNeighborhoodOptions) (types.KnowledgeNeighborhoodOutput, error) {
 	if strings.TrimSpace(focus) == "" {
 		return types.KnowledgeNeighborhoodOutput{}, errors.New("magus\\neighborhood: needs a focus node ID, path or name")
 	}
-	o := optionReader{member: "neighborhood", opts: opts}
-	if err := o.only("depth", "relations", "direction", "collapse"); err != nil {
+	if err := nonNegative("neighborhood", map[string]int{"depth": opts.Depth}); err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
-	var no types.KnowledgeNeighborhoodOptions
-	var err error
-	if no.Depth, err = o.count("depth"); err != nil {
-		return types.KnowledgeNeighborhoodOutput{}, err
-	}
-	if no.Relations, err = o.relations(); err != nil {
-		return types.KnowledgeNeighborhoodOutput{}, err
-	}
-	dir, err := o.string("direction")
-	if err != nil {
-		return types.KnowledgeNeighborhoodOutput{}, err
-	}
-	switch no.Direction = types.EdgeDirection(dir); no.Direction {
-	case "", types.EdgeIn, types.EdgeOut:
-	default:
-		return types.KnowledgeNeighborhoodOutput{}, fmt.Errorf("magus\\neighborhood: direction must be %q, %q or empty for both, got %q", types.EdgeOut, types.EdgeIn, dir)
-	}
-	if no.Collapse, err = o.strings("collapse"); err != nil {
-		return types.KnowledgeNeighborhoodOutput{}, err
-	}
+	no := opts
 	g, err := graphsFromContext(ctx, "neighborhood")
 	if err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
@@ -577,87 +537,6 @@ func workspaceLayers(ctx context.Context) map[string]string {
 	return layers
 }
 
-// optionReader decodes one member's options object. An unknown key or a value of the
-// wrong shape raises: dropping `{dpeth = 2}` would answer a different question with
-// nothing to say the typo did not take.
-type optionReader struct {
-	member string
-	opts   map[string]any
-}
-
-func (o optionReader) only(keys ...string) error {
-	for _, k := range slices.Sorted(maps.Keys(o.opts)) {
-		if !slices.Contains(keys, k) {
-			return fmt.Errorf("magus\\%s: unknown option %q (want %s)", o.member, k, strings.Join(keys, ", "))
-		}
-	}
-	return nil
-}
-
-func (o optionReader) string(key string) (string, error) {
-	v, ok := o.opts[key]
-	if !ok || v == nil {
-		return "", nil
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("magus\\%s: %s must be a string, got %T", o.member, key, v)
-	}
-	return s, nil
-}
-
-func (o optionReader) strings(key string) ([]string, error) {
-	switch v := o.opts[key].(type) {
-	case nil:
-		return nil, nil
-	case []string:
-		return v, nil
-	case []any:
-		out := make([]string, len(v))
-		for i, item := range v {
-			s, ok := item.(string)
-			if !ok {
-				return nil, fmt.Errorf("magus\\%s: %s[%d] must be a string, got %T", o.member, key, i, item)
-			}
-			out[i] = s
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("magus\\%s: %s must be a list of strings, got %T", o.member, key, v)
-	}
-}
-
-// count reads a non-negative integer option; absent is 0.
-func (o optionReader) count(key string) (int, error) {
-	v, ok := o.opts[key]
-	if !ok {
-		return 0, nil
-	}
-	n, err := intOptions(o.member, map[string]any{key: v}, key)
-	return n[key], err
-}
-
-// relations reads the relations option, refusing a name the graph does not define: a
-// misspelt relation filters every edge out and reads as an empty neighborhood.
-func (o optionReader) relations() ([]types.RelationID, error) {
-	names, err := o.strings("relations")
-	if err != nil {
-		return nil, err
-	}
-	rels := make([]types.RelationID, 0, len(names))
-	for _, name := range names {
-		if _, ok := types.KnowledgeRelation(types.RelationID(name)); !ok {
-			var known []string
-			for _, d := range types.KnowledgeRelationDefinitions() {
-				known = append(known, string(d.ID))
-			}
-			return nil, fmt.Errorf("magus\\%s: unknown relation %q (want one of %s)", o.member, name, strings.Join(known, ", "))
-		}
-		rels = append(rels, types.RelationID(name))
-	}
-	return rels, nil
-}
-
 // MagusOutput backs magus\output: one target run's captured output by its ref, the bytes
 // `magus query output <ref>` prints, with the run's identity beside them. It reads this
 // checkout's output store, so a ref minted in another worktree does not resolve here.
@@ -693,36 +572,6 @@ func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 		DurationMs: desc.DurationMs,
 		Output:     string(data),
 	}, nil
-}
-
-// intOptions decodes the integer options a graph member takes. An unknown key or a
-// negative value is an error: dropping `{limt = 5}` would answer a different question
-// with nothing to say the typo did not take.
-func intOptions(member string, opts map[string]any, keys ...string) (map[string]int, error) {
-	out := make(map[string]int, len(keys))
-	for k, v := range opts {
-		if !slices.Contains(keys, k) {
-			return nil, fmt.Errorf("magus\\%s: unknown option %q (want %s)", member, k, strings.Join(keys, ", "))
-		}
-		// A Buzz integer arrives as int64 and a Buzz float as float64; int is what a Go
-		// caller passes.
-		var n int
-		switch x := v.(type) {
-		case int64:
-			n = int(x)
-		case float64:
-			n = int(x)
-		case int:
-			n = x
-		default:
-			return nil, fmt.Errorf("magus\\%s: %s must be a number, got %T", member, k, v)
-		}
-		if n < 0 {
-			return nil, fmt.Errorf("magus\\%s: %s must not be negative, got %d", member, k, n)
-		}
-		out[k] = n
-	}
-	return out, nil
 }
 
 // nonNegative refuses a negative window option, the first in name order.

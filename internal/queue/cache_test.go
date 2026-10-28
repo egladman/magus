@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // upstreamCall is one request the recording cache service received.
@@ -51,7 +52,7 @@ func recordingCacheService(t *testing.T) (*httptest.Server, func() []upstreamCal
 
 func startProxy(t *testing.T, upstream string, log *HookLog) *CacheReadProxy {
 	t.Helper()
-	p, err := StartCacheReadProxy(upstream+"/", "real-runtime-token", log)
+	p, err := StartCacheReadProxy(upstream+"/", magustypes.NewSecret("real-runtime-token"), log)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 	return p
@@ -76,10 +77,10 @@ func TestCacheReadProxyForwardsALookupWithTheRealTokenUpstreamOnly(t *testing.T)
 	p := startProxy(t, up.URL, nil)
 	require.True(t, strings.HasPrefix(p.URL, "http://127.0.0.1:"), "loopback only: %s", p.URL)
 	require.True(t, strings.HasSuffix(p.URL, "/"), "a base URL, as the runner's is")
-	assert.NotContains(t, p.Token, "real-runtime-token")
+	assert.NotContains(t, p.Token.Reveal(), "real-runtime-token")
 
 	lookup := `{"key":"magus-abc","version":"v"}`
-	res, body := twirp(t, p, p.Token, "GetCacheEntryDownloadURL", lookup)
+	res, body := twirp(t, p, p.Token.Reveal(), "GetCacheEntryDownloadURL", lookup)
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	assert.Equal(t, `{"ok":true,"signed_download_url":"https://blob.example/entry?sp=r&sig=s"}`, body,
 		"the download URL reaches the hook as the service sent it; the hook fetches the blob itself")
@@ -98,14 +99,14 @@ func TestCacheReadProxyRefusesEveryWriteAndAnythingUnknown(t *testing.T) {
 	var log bytes.Buffer
 	p := startProxy(t, up.URL, NewHookLog(&log))
 	for _, method := range []string{"CreateCacheEntry", "FinalizeCacheEntryUpload", "DeleteCacheEntry", "Unknown", "../CacheService/CreateCacheEntry", ""} {
-		res, body := twirp(t, p, p.Token, method, `{"key":"magus-abc"}`)
+		res, body := twirp(t, p, p.Token.Reveal(), method, `{"key":"magus-abc"}`)
 		assert.Equal(t, http.StatusForbidden, res.StatusCode, method)
 		assert.Contains(t, body, `"code":"permission_denied"`, method)
 	}
 	for _, path := range []string{"/", "/_apis/artifactcache/caches", "/twirp/other.Service/GetCacheEntryDownloadURL"} {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, strings.TrimSuffix(p.URL, "/")+path, strings.NewReader("{}"))
 		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+p.Token)
+		req.Header.Set("Authorization", "Bearer "+p.Token.Reveal())
 		res, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		_ = res.Body.Close()
@@ -118,7 +119,7 @@ func TestCacheReadProxyRefusesEveryWriteAndAnythingUnknown(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("%s%sGetCacheEntryDownloadURL", p.URL, strings.TrimPrefix(cacheService, "/")), nil)
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+p.Token)
+	req.Header.Set("Authorization", "Bearer "+p.Token.Reveal())
 	get, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	_ = get.Body.Close()
@@ -126,13 +127,13 @@ func TestCacheReadProxyRefusesEveryWriteAndAnythingUnknown(t *testing.T) {
 
 	assert.Empty(t, calls(), "nothing refused reaches the service")
 	assert.Contains(t, log.String(), "[remote cache read] refused POST "+cacheService+"CreateCacheEntry")
-	assert.NotContains(t, log.String(), p.Token)
+	assert.NotContains(t, log.String(), p.Token.Reveal())
 }
 
 func TestStartCacheReadProxyNeedsTheRunnersCredentials(t *testing.T) {
-	_, err := StartCacheReadProxy("", "t", nil)
+	_, err := StartCacheReadProxy("", magustypes.NewSecret("t"), nil)
 	require.Error(t, err)
-	_, err = StartCacheReadProxy("https://results.example/", "", nil)
+	_, err = StartCacheReadProxy("https://results.example/", magustypes.Secret{}, nil)
 	require.Error(t, err)
 }
 
@@ -153,7 +154,7 @@ func TestHooksReadTheCacheThroughTheProxyAndNeverHoldTheRealToken(t *testing.T) 
 		seen, err := os.ReadFile(filepath.Join(d, "seen"))
 		require.NoError(t, err)
 		assert.Contains(t, string(seen), fmt.Sprintf("ACTIONS_RESULTS_URL=%s\n", p.URL))
-		assert.Contains(t, string(seen), fmt.Sprintf("ACTIONS_RUNTIME_TOKEN=%s\n", p.Token))
+		assert.Contains(t, string(seen), fmt.Sprintf("ACTIONS_RUNTIME_TOKEN=%s\n", p.Token.Reveal()))
 		assert.NotContains(t, string(seen), "real-runtime-token")
 		assert.NotContains(t, string(seen), up.URL+"/\n")
 	}

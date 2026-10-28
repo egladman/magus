@@ -95,7 +95,7 @@ fun trackedPaths() > [str] !> any {
     if (vcs\name() != "git") {
         throw "sources: lists the tree with git ls-files; this checkout is {vcs\name()}";
     }
-    final listing = vcs\cmd(["-c", "core.quotepath=off", "ls-files", "--full-name", "--", ":/"], opts: {"quiet": true}).stdout;
+    final listing = vcs\cmd(["-c", "core.quotepath=off", "ls-files", "--full-name", "--", ":/"], opts: vcs\CommandOptions{quiet = true}).stdout;
     final keep: mut [str] = mut [];
     foreach (p in listing.split("\n")) {
         if (p == "" or inDotDir(p)) {
@@ -110,8 +110,8 @@ fun trackedPaths() > [str] !> any {
 }
 
 fun everyNode(kind: str) > magus\QueryResult !> any {
-    final probe: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": 1, "budget": 1});
-    return magus\query("kind={kind}", opts: {"limit": probe.matchCount, "budget": probe.matchCount * 4 + 1000});
+    final probe: magus\QueryResult = magus\query("kind={kind}", opts: magus\QueryOptions{limit = 1, budget = 1});
+    return magus\query("kind={kind}", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * 4 + 1000});
 }
 
 // nodes is every graph node of kind, sorted by id.
@@ -146,11 +146,11 @@ export fun figureId(svg: str) > str {
 // `documents` edge says it documents: the source it was generated from. A generated page
 // with no such edge, and every generated Go file, stays in the group its path starts in.
 fun outputLinks(generated: {str: bool}, kept: {str: bool}) > [[str]] !> any {
-    final probe: magus\QueryResult = magus\query("kind=doc", opts: {"limit": 1, "budget": 1});
-    final q: magus\QueryResult = magus\query("kind=doc", opts: {"limit": probe.matchCount, "budget": probe.matchCount * 8 + 1000});
+    final probe: magus\QueryResult = magus\query("kind=doc", opts: magus\QueryOptions{limit = 1, budget = 1});
+    final q: magus\QueryResult = magus\query("kind=doc", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * 8 + 1000});
     final links: mut [[str]] = mut [];
     foreach (e in q.links) {
-        if (e.relation != "documents" or e.confidence != "extracted" or !e.source.startsWith("doc:")) {
+        if (e.relation != magus\RelationID.documents or e.confidence != "extracted" or !e.source.startsWith("doc:")) {
             continue;
         }
         final page = e.source.sub(4, len: e.source.len() - 4);
@@ -235,7 +235,7 @@ export fun load() > Snapshot !> any {
     symbols.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
     final refLinks: mut [magus\KnowledgeEdge] = mut [];
     foreach (e in q.links) {
-        if (e.relation == "references" and e.source.startsWith("file:") and e.target.startsWith("symbol:")) {
+        if (e.relation == magus\RelationID.references and e.source.startsWith("file:") and e.target.startsWith("symbol:")) {
             refLinks.append(e);
         }
     }

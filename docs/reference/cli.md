@@ -29,6 +29,12 @@ structured output**, as do `-o yaml`, `-o name`, and
 reading its output, reach for that first instead of parsing the human format.
 The human format is allowed to change; the JSON shape is the contract.
 
+**Every boolean flag has an off spelling.** `-h` prints a boolean as
+`--[no-]cache (default: on)`: `--cache` turns it on, `--no-cache` turns it off,
+and the default says which one you get by typing neither. `--no-cache` takes no
+value, so `--no-cache=false` is an error; write `--cache`. A one-character flag
+such as `-v` has no off form.
+
 ## What is in this workspace?
 
 `magus ls` enumerates the projects magus discovered, with what each declares:

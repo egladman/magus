@@ -59,6 +59,12 @@ fun codex_hook(event: str, matcher: str, script: str, flags: [str], status: str)
     return CodexHook{hook = HookCommand{event = event, matcher = matcher, script = script, flags = flags}, status = status};
 }
 
+// The disk hook rides UserPromptSubmit, whose plain stdout Codex adds to the turn as context.
+fun codex_reclaim_hook() > CodexHook {
+    final disk = reclaimDiskHook(mgs_getName(), event: "UserPromptSubmit", say: "stdout");
+    return codex_hook(disk.event, matcher: "", script: disk.script, flags: disk.flags, status: "magus: sampling free disk space");
+}
+
 fun codex_hooks() > [CodexHook] {
     final check = buzzCheckHook(mgs_getName());
     return [
@@ -85,6 +91,7 @@ fun codex_hooks() > [CodexHook] {
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing. Codex ignores a matcher on this event.
         codex_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: noting the request"),
+        codex_reclaim_hook(),
     ];
 }
 

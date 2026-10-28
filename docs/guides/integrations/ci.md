@@ -27,7 +27,7 @@ tags:
 Every incremental-CI tool tells you to clone the full history, and then never
 mentions it again. It is the single line in a pipeline whose cost grows every day
 the repository lives, and it buys almost nothing. This page is the model behind a
-cheaper checkout and the per-provider recipes that implement it.
+cheaper checkout and the per-provider checkouts that implement it.
 
 ## What magus needs
 

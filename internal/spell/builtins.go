@@ -384,6 +384,9 @@ func defineMagusRecords(sess *buzz.Session) {
 		if _, bound := globals[r.name]; !bound {
 			sess.SetGlobal(r.name, r.value)
 		}
+		if !r.enum {
+			sess.SetGlobal(buzz.QualifiedTypeKey("magus", r.name), r.value)
+		}
 		if hasModule && r.enum {
 			if _, taken := mod.MapGet(r.name); !taken {
 				mod.MapSet(r.name, r.value)

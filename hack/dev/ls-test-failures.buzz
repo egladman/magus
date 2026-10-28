@@ -89,7 +89,7 @@ export fun render(f: Failure) > str {
 
 // latestFailedTest is the newest failed test target's output ref, or "".
 fun latestFailedTest() > str !> any {
-    final listing = json\parse(magus\cmd("session", args: ["ls", "-o", "json"], opts: {"quiet": true}).stdout);
+    final listing = json\parse(magus\cmd("session", args: ["ls", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout);
     foreach (inv in listing["invocations"] ?? []) {
         foreach (t in inv["targets"] ?? []) {
             if ((t["target"] ?? "").startsWith("test") and t["outcome"] == "fail") {

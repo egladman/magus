@@ -8,9 +8,11 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // RegisterOs builds the "os" module map and returns it.
@@ -72,7 +74,14 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("retry", vm.DirectValue("os.retry", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		max := ffi.Int(bzArgs, 0, 0)
 		fn := ffi.CallbackArg(sess, bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.RetryOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("os\\retry", "opts", bzArgs, 2, decode.DecodeRetryOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.OsRetry(ctx, max, fn, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

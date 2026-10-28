@@ -154,12 +154,12 @@ export fun input(name: str) > str !> any {
 export fun fetchBase(base: str, refspec: bool) > void !> str {
     if (collecting()) { return; }
     if (!refspec) {
-        vcs\cmd(["fetch", "--no-tags", "origin", base], opts: {"dir": "."});
+        vcs\cmd(["fetch", "--no-tags", "origin", base], opts: vcs\CommandOptions{ dir = "." });
         return;
     }
     final fetched = vcs\cmd(["fetch", "--no-tags", "origin",
         "+refs/heads/" + base + ":refs/remotes/origin/" + base],
-        opts: {"dir": ".", "allow_failure": true});
+        opts: vcs\CommandOptions{ dir = ".", allowFailure = true });
     if (!fetched.ok) { throw "advice: git fetch " + base + ": " + fetched.stderr; }
 }
 
@@ -183,7 +183,7 @@ export fun fetchBase(base: str, refspec: bool) > void !> str {
 export fun diffRange(base: str, head: str) > str !> any {
     if (!collecting()) { return "origin/" + base + "..." + head; }
     final merged = vcs\cmd(["merge-base", "origin/" + base, head],
-        opts: {"dir": ".", "quiet": true, "allow_failure": true});
+        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
     // A base this clone cannot resolve is ordinary locally - nothing ever fetched it - and
     // the three-dot form is what to hand back, not an error. It then fails inside the
     // advisor's own git call exactly as it always has, every caller already tolerates that
@@ -205,13 +205,25 @@ export fun diffRange(base: str, head: str) > str !> any {
 // baseline is the base's `graph export --symbols`, when the workflow built one. Without it
 // every symbol's `change` is empty and `api` is null. minCohort and minShare are the
 // conformance checks' silence gates, passed through as given; "" keeps the defaults.
-export fun reviewOpts(baseline: str, base: str, head: str, local: bool, minCohort: str, minShare: str) > {str: any} {
-    var opts = mut {<str: any>};
-    if (baseline != "") { opts["baseline"] = baseline; }
-    if (!local) { opts["rev"] = "origin/" + base + "..." + head; }
-    if (minCohort != "") { opts["minCohort"] = minCohort; }
-    if (minShare != "") { opts["minShare"] = minShare; }
-    return opts;
+export fun reviewOpts(baseline: str, base: str, head: str, local: bool, minCohort: str, minShare: str) > magus\DiffOptions !> any {
+    var cohort = 0;
+    if (minCohort != "") {
+        final parsed = std\parseInt(minCohort);
+        if (parsed == null) { throw "conformance-min-cohort is not an integer: {minCohort}"; }
+        cohort = parsed!;
+    }
+    var share = 0.0;
+    if (minShare != "") {
+        final parsed = std\parseDouble(minShare);
+        if (parsed == null) { throw "conformance-min-share is not a number: {minShare}"; }
+        share = parsed!;
+    }
+    return magus\DiffOptions{
+        baseline = baseline,
+        rev = if (local) "" else "origin/" + base + "..." + head,
+        minCohort = cohort,
+        minShare = share,
+    };
 }
 
 // review_env names a file holding the change's `magus diff -o json`, which `magus diff
@@ -223,8 +235,8 @@ final review_env = "ADVICE_REVIEW";
 // wrote one, and otherwise computed here from the baseline and conformance gate inputs.
 export fun review(base: str, head: str) > magus\Diff !> any {
     final saved = os\env(review_env) ?? "";
-    if (saved != "") { return magus\diff({"from": saved}); }
-    return magus\diff(reviewOpts(baseline: input("baseline"), base: base, head: head, local: collecting(),
+    if (saved != "") { return magus\diff(opts: magus\DiffOptions{ from = saved }); }
+    return magus\diff(opts: reviewOpts(baseline: input("baseline"), base: base, head: head, local: collecting(),
         minCohort: input("conformance-min-cohort"), minShare: input("conformance-min-share")));
 }
 
@@ -255,7 +267,7 @@ export fun addedTargets(diff: str) > [str] {
 // which predated the pull request. Only the base tree settles it.
 export fun declaredAtBase(name: str, base: str) > bool !> any {
     final res = vcs\cmd(["grep", "-q", "export fun " + name + "(",
-        "origin/" + base, "--", "*.buzz"], opts: {"dir": ".", "allow_failure": true});
+        "origin/" + base, "--", "*.buzz"], opts: vcs\CommandOptions{ dir = ".", allowFailure = true });
     return res.ok;
 }
 
@@ -458,14 +470,14 @@ fun withoutFooter(text: str) > str {
 test "on the forge the changeset is the RANGE, and locally it is the working tree" {
     final ci = reviewOpts(baseline: "/tmp/base.json", base: "main", head: "abc123", local: false,
         minCohort: "", minShare: "");
-    std\assert(ci["rev"] == "origin/main...abc123", message: "a clean checkout has to be told the range");
-    std\assert(ci["baseline"] == "/tmp/base.json", message: "and what to compare it against");
-    std\assert(ci["minCohort"] == null, message: "an unset gate keeps its default");
+    std\assert(ci.rev == "origin/main...abc123", message: "a clean checkout has to be told the range");
+    std\assert(ci.baseline == "/tmp/base.json", message: "and what to compare it against");
+    std\assert(ci.minCohort == 0, message: "an unset gate keeps its default");
 
     final here = reviewOpts(baseline: "", base: "main", head: "HEAD", local: true, minCohort: "3", minShare: "0.9");
-    std\assert(here["rev"] == null, message: "the uncommitted edit is what a local reader is weighing");
-    std\assert(here["baseline"] == null, message: "no baseline, no bump claimed");
-    std\assert(here["minCohort"] == "3" and here["minShare"] == "0.9", message: "the gates reach magus\\diff as given");
+    std\assert(here.rev == "", message: "the uncommitted edit is what a local reader is weighing");
+    std\assert(here.baseline == "", message: "no baseline, no bump claimed");
+    std\assert(here.minCohort == 3 and here.minShare == 0.9, message: "the gates reach magus\\diff as given");
 }
 
 test "withoutFooter ignores a changed timestamp" {
@@ -665,7 +677,7 @@ export fun silenced(repo: str, pr: str, name: str) > bool !> any {
     // whoever asked for the run, not for a label on a change that may not exist yet.
     if (collecting()) { return false; }
     final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
+        dir: ".", opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (!res.ok) { return false; }
     var labels = mut [];
     foreach (l in serialize\jsonDecode(res.stdout).listValue()) {
@@ -680,7 +692,7 @@ export fun silenced(repo: str, pr: str, name: str) > bool !> any {
 // bash is three layers of escaping to get wrong.
 fun find(repo: str, pr: str) > str !> any {
     final listed = proc\exec("gh", args: ["api", "--paginate",
-        "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
+        "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: proc\ExecOptions{ quiet = true });
     foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
         if (c.q("body").stringValue().indexOf(comment_marker) != null) {
             return "{c.q("id").integerValue()}";
@@ -726,7 +738,7 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     var current = "";
     if (id != "") {
         final got = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
-            dir: ".", opts: {"quiet": true});
+            dir: ".", opts: proc\ExecOptions{ quiet = true });
         current = serialize\jsonDecode(got.stdout).q("body").stringValue();
     }
     var composed = compose(current, name: name, title: title, body: body);
@@ -750,11 +762,11 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
     if (id == "") {
         proc\exec("gh", args: ["api", "--method", "POST",
-            "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: {});
+            "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: proc\ExecOptions{});
         return;
     }
     proc\exec("gh", args: ["api", "--method", "PATCH",
-        "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: {});
+        "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: proc\ExecOptions{});
 }
 
 test "compose opens with what this is before any finding" {

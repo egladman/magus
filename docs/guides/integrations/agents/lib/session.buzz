@@ -65,9 +65,9 @@ export fun transcripts(dir: str) > [str] {
 export fun repoRoot(bin: str) > str {
     final declared = env\get("HOST_REPO_ROOT") catch "";
     if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
-    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null or result!.code != 0) { return ""; }
     return hook\trimTrailingNewlines(result!.stdout);

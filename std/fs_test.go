@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -650,6 +651,99 @@ func TestFsWalkPropagatesACallbackFailure(t *testing.T) {
 	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).Return(nil, boom).Once()
 	err := FsWalk(context.Background(), t.TempDir(), cb)
 	assert.ErrorIs(t, err, boom)
+}
+
+// agedFile writes size bytes to dir/name, last modified days before now.
+func agedFile(t *testing.T, dir, name string, size int, now time.Time, days float64) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+	require.NoError(t, os.WriteFile(p, make([]byte, size), 0o644))
+	at := now.Add(-time.Duration(days * float64(24*time.Hour)))
+	require.NoError(t, os.Chtimes(p, at, at))
+	return p
+}
+
+func TestTrimOldestRemovesWholeDaysOldestFirstUntilItFits(t *testing.T) {
+	dir, now := t.TempDir(), time.Now()
+	fresh := agedFile(t, dir, "00/fresh", 100, now, 0.1)
+	day2 := agedFile(t, dir, "01/two", 100, now, 2.5)
+	day5 := agedFile(t, dir, "02/five", 100, now, 5.5)
+	day9 := agedFile(t, dir, "ab/nine", 100, now, 9.5)
+
+	got, err := TrimOldest(t.Context(), dir, 250, 0, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(400), got.BeforeBytes)
+	assert.Equal(t, int64(200), got.AfterBytes)
+	assert.Equal(t, 2, got.RemovedFiles)
+	assert.Empty(t, got.Stopped)
+	assert.InDelta(t, float64(now.Add(-5*24*time.Hour).UnixMilli()), got.CutoffMs, 1)
+	assert.FileExists(t, fresh)
+	assert.FileExists(t, day2)
+	assert.NoFileExists(t, day5)
+	assert.NoFileExists(t, day9)
+	assert.DirExists(t, filepath.Join(dir, "ab"), "directories stay")
+}
+
+func TestTrimOldestWithinBudgetRemovesNothing(t *testing.T) {
+	dir, now := t.TempDir(), time.Now()
+	old := agedFile(t, dir, "old", 100, now, 30)
+	got, err := TrimOldest(t.Context(), dir, 100, 0, now)
+	require.NoError(t, err)
+	assert.Equal(t, types.TrimReport{Dir: dir, BeforeBytes: 100, AfterBytes: 100}, got)
+	assert.FileExists(t, old)
+}
+
+func TestTrimOldestNeverEmptiesTheDirectory(t *testing.T) {
+	dir, now := t.TempDir(), time.Now()
+	today := agedFile(t, dir, "today", 500, now, 0.5)
+	old := agedFile(t, dir, "old", 100, now, 3)
+
+	got, err := TrimOldest(t.Context(), dir, 0, 0, now)
+	require.NoError(t, err)
+	assert.FileExists(t, today, "a file used within a day survives a zero budget")
+	assert.NoFileExists(t, old)
+	assert.Equal(t, int64(500), got.AfterBytes)
+	assert.Contains(t, got.Stopped, "within a day hold 500 bytes")
+}
+
+func TestTrimOldestStopsAtItsTimeout(t *testing.T) {
+	dir, now := t.TempDir(), time.Now()
+	agedFile(t, dir, "old", 100, now, 3)
+	ctx, cancel := context.WithDeadline(t.Context(), now.Add(-time.Second))
+	defer cancel()
+	got, err := TrimOldest(ctx, dir, 0, 0, now)
+	require.NoError(t, err, "a timeout is a reason to stop, not a failure")
+	assert.Equal(t, "stopped at its timeout", got.Stopped)
+}
+
+func TestTrimOldestOnAMissingDirReportsZero(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "absent")
+	got, err := TrimOldest(t.Context(), dir, 0, 0, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, types.TrimReport{Dir: dir}, got)
+}
+
+func TestFsDiskUsageReadsTheFilesystem(t *testing.T) {
+	got, err := FsDiskUsage(t.Context(), ".")
+	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(got.Path), "a relative path is named absolute: %s", got.Path)
+	assert.Positive(t, got.TotalBytes)
+	assert.LessOrEqual(t, got.FreeBytes, got.TotalBytes)
+	_, err = FsDiskUsage(t.Context(), filepath.Join(t.TempDir(), "absent"))
+	assert.Error(t, err)
+}
+
+func TestFsStateDirIsOnePrivateDirectoryUnderXDGState(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir, err := FsStateDir(t.Context(), "disk")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(os.Getenv("XDG_STATE_HOME"), "magus", "disk"), dir)
+	assert.DirExists(t, dir)
+	for _, bad := range []string{"", ".", "..", "a/b"} {
+		_, err := FsStateDir(t.Context(), bad)
+		assert.Error(t, err, bad)
+	}
 }
 
 func TestFsWalkOnAMissingRoot(t *testing.T) {

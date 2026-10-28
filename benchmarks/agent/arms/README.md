@@ -1,6 +1,6 @@
 # Arms
 
-An arm is a provisioning recipe applied to a fresh worktree of the benchmark
+An arm is a provisioning setup applied to a fresh worktree of the benchmark
 fixture (a magus-ified TypeScript monorepo, not this repository), plus a probe
 that proves the worktree is in that arm. The two arms differ ONLY in the agent
 integration; the fixture, the model, the prompts, and the budget caps are held
@@ -11,7 +11,7 @@ benchmarks/agent/arms/<arm>/provision.sh <worktree> <magus-binary>
 benchmarks/agent/arms/<arm>/probe.sh <worktree>
 ```
 
-`<magus-binary>` is passed rather than resolved so one recipe can pin two
+`<magus-binary>` is passed rather than resolved so one setup can pin two
 different builds: that is how a change to magus itself is A/B'd on the same arm.
 Provisioning writes `<worktree>/.benchmark/env.sh`, which the runner sources
 after scrubbing the environment to its whitelist.
@@ -43,7 +43,7 @@ the repo prose, is what the arms differ by.
 
 ## Skill-form arms
 
-Three arms reuse the full recipe and differ from it, and from each other, only
+Three arms reuse the full setup and differ from it, and from each other, only
 in the skill bodies. Each is a pair of few-line wrappers over `full/`:
 
 | Arm            | Skills                                                                    |

@@ -299,7 +299,7 @@ export fun blockTableForFile(path: str, scratch: str) > [str] !> any {
     // quiet because this runs once per file in the tree and cover says nothing useful
     // on success.
     proc\exec("go", args: ["tool", "cover", "-mode=set", "-var=CoverBlocks", "-o", scratch, path],
-        opts: {"quiet": true});
+        opts: proc\ExecOptions{quiet = true});
     return parseBlockTable(fs\readFile(scratch));
 }
 

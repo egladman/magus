@@ -5,7 +5,6 @@ import "magus";
 import "./lib/embed" as embed;
 import "../../../../hack/magusfile/drift" as drift;
 import "../../../../hack/magusfile/index" as index;
-import "os";
 
 import "proc";
 import "fs";
@@ -83,7 +82,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.writesFiles(["../../../../testdata/hosts/cursor/gen/*.schema.json"]);
-    proc\exec("node", ["cursor-schemas.ts"], ".", {});
+    proc\exec("node", ["cursor-schemas.ts"], ".");
 }
 
 
@@ -116,7 +115,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     final run = mut ["--test"];
     foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }
-    proc\exec("node", run, ".", {});
+    proc\exec("node", run, ".");
 }
 
 // The anchor `magus affected ci` keys off.

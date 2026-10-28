@@ -95,6 +95,22 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		}
 		b.WriteString(decl)
 	}
+	for _, p := range sortedProtocols(mod) {
+		if p.Doc != "" {
+			fmt.Fprintf(&b, "// %s\n", p.Doc)
+		}
+		fmt.Fprintf(&b, "export protocol %s {\n", p.Name)
+		methods := slices.Clone(p.Methods)
+		slices.SortFunc(methods, func(a, c std.Method) int { return strings.Compare(a.Name, c.Name) })
+		for _, m := range methods {
+			sig, err := protocolMethodSig(m)
+			if err != nil {
+				return "", fmt.Errorf("protocol %s: %s: %w", p.Name, m.Name, err)
+			}
+			fmt.Fprintf(&b, "    %s\n", sig)
+		}
+		b.WriteString("}\n\n")
+	}
 	// A Namespace renders as an OBJECT whose members are static extern methods:
 	// `magus\cache.remote(...)` is member access on a value, not a nested namespace,
 	// which Buzz does not have. Declaring it this way is what makes an unknown member
@@ -144,10 +160,17 @@ func renderRecordDecls(mod std.Module) (string, error) {
 		b.WriteByte('\n')
 	}
 	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name) // collectMirrors already resolved every name it returns
+		entry, _ := boundaryTypeIn(mod.Name, name) // collectMirrors already resolved every name it returns
 		out, err := renderBuzzMirrorDecl(name, entry.Type)
 		if err != nil {
 			return "", err
+		}
+		if entry.Methods != "" {
+			closing := bytes.LastIndex(out, []byte("}"))
+			if closing < 0 {
+				return "", fmt.Errorf("mirror %s: no closing brace to declare its methods before", name)
+			}
+			out = slices.Concat(out[:closing], fmt.Appendf(nil, "\n    %s\n", entry.Methods), out[closing:])
 		}
 		b.Write(out)
 		b.WriteByte('\n')
@@ -161,6 +184,26 @@ func sortedNamespaceMethods(ns std.Namespace) []std.Method {
 	out := slices.Clone(ns.Methods)
 	slices.SortFunc(out, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
 	return out
+}
+
+// sortedProtocols orders a module's protocols by name for stable generated output.
+func sortedProtocols(mod std.Module) []std.Protocol {
+	out := slices.Clone(mod.Protocols)
+	slices.SortFunc(out, func(a, b std.Protocol) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+// protocolMethodSig renders one protocol method as `fun name(params) > ret[!> any];`.
+// Same shape as externDecl's parameter list, without the export-extern wrapper.
+func protocolMethodSig(m std.Method) (string, error) {
+	decl, err := externDecl(m)
+	if err != nil {
+		return "", err
+	}
+	// externDecl returns "export extern fun …;\n" or a variadic final — protocols
+	// only carry ordinary methods, so strip the wrapper.
+	line := strings.TrimPrefix(strings.TrimSpace(decl), "export extern ")
+	return line, nil
 }
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
@@ -188,7 +231,7 @@ func externDecl(m std.Method) (string, error) {
 	}
 
 	params := make([]string, 0, len(m.Args))
-	for _, a := range m.Args {
+	for i, a := range m.Args {
 		typ, err := buzzArgType(a.Type)
 		if err != nil {
 			return "", fmt.Errorf("arg %s: %w", a.Name, err)
@@ -217,9 +260,9 @@ func externDecl(m std.Method) (string, error) {
 		if a.Type == std.TypeByteSlice {
 			typ = "any"
 		}
-		p := fmt.Sprintf("%s: %s", a.Name, typ)
+		p := fmt.Sprintf("%s: %s%s", a.Name, typ, nullable(m, i))
 		if a.Optional {
-			def, derr := buzzDefault(a)
+			def, derr := optionalDefault(m, i)
 			if derr != nil {
 				return "", fmt.Errorf("arg %s: %w", a.Name, derr)
 			}
@@ -242,6 +285,32 @@ func externDecl(m std.Method) (string, error) {
 		raises = " !> any"
 	}
 	return fmt.Sprintf("export extern fun %s(%s) > %s%s;\n", name, strings.Join(params, ", "), ret, raises), nil
+}
+
+// optionalRecord reports whether argument i is an optional object, not a list of them.
+// It defaults to null rather than `T{}`: a default is evaluated at the call site, where a
+// bare T can name another module's record of the same name (magus and vcs both export
+// CommandOptions). The trampoline decodes a null as the zero record.
+func optionalRecord(m std.Method, i int) bool {
+	a := m.Args[i]
+	return a.Optional && a.Object != "" && !strings.HasPrefix(a.Object, "[")
+}
+
+func nullable(m std.Method, i int) string {
+	if optionalRecord(m, i) {
+		return "?"
+	}
+	return ""
+}
+
+func optionalDefault(m std.Method, i int) (string, error) {
+	if optionalRecord(m, i) {
+		return "null", nil
+	}
+	if obj := m.Args[i].Object; obj != "" {
+		return fmt.Sprintf("[<%s>]", strings.Trim(obj, "[]")), nil
+	}
+	return buzzDefault(m.Args[i])
 }
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.
@@ -269,6 +338,8 @@ func buzzArgType(t std.TypeTag) (string, error) {
 		return "{str: str}", nil
 	case std.TypeAnyMap:
 		return "{str: any}", nil
+	case std.TypeAnySlice:
+		return "[any]", nil
 	case std.TypeFunc:
 		// A Buzz function type fixes its arity and parameter types, and a TypeFunc
 		// Arg carries neither; the host checks the callable when it is called.
@@ -367,6 +438,8 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "{<str: str>}", nil
 	case std.TypeAnyMap:
 		return "{<str: any>}", nil
+	case std.TypeAnySlice:
+		return "[<any>]", nil
 	case std.TypeAny:
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
 		// annotates cleanly.
@@ -433,7 +506,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		if name == "" || seen[name] {
 			return nil
 		}
-		entry, ok := boundaryTypeNamed(name)
+		entry, ok := boundaryTypeIn(mod.Name, name)
 		if !ok {
 			return fmt.Errorf("object %q is not declared in boundaryTypes", name)
 		}
@@ -486,6 +559,13 @@ func collectMirrors(mod std.Module) ([]string, error) {
 			}
 		}
 	}
+	for _, p := range sortedProtocols(mod) {
+		for _, m := range p.Methods {
+			if err := visitMethod(m); err != nil {
+				return nil, fmt.Errorf("protocol %s: %w", p.Name, err)
+			}
+		}
+	}
 	return order, nil
 }
 
@@ -522,8 +602,22 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 			}
 		}
 	}
+	for _, p := range sortedProtocols(mod) {
+		for _, m := range p.Methods {
+			for _, a := range m.Args {
+				if err := add(a.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
+					return nil, err
+				}
+			}
+			for _, r := range m.Returns {
+				if err := add(r.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name)
+		entry, _ := boundaryTypeIn(mod.Name, name)
 		for _, e := range enumsUsedBy(entry.Type) {
 			if err := add(e.Name, name); err != nil {
 				return nil, err

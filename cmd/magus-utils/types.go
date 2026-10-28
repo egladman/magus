@@ -45,7 +45,7 @@ func runTypes(args []string) error {
 		return fmt.Errorf("unknown boundary type %q: declare it in boundaryTypes first", *typeName)
 	}
 
-	out, err := renderBuzzMirror(*typeName, entry.Type)
+	out, err := renderBuzzMirror(entry.Name, entry.Type)
 	if err != nil {
 		return err
 	}
@@ -113,6 +113,9 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 // from the header so a module bundle (moduledecls) can carry many mirrors under one
 // header instead of repeating the banner per type.
 func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
+	if err := checkNamedStrings(rt); err != nil {
+		return nil, fmt.Errorf("mirror %s: %w", name, err)
+	}
 	return buzzgen.ObjectDecl(name, rt, mirrorOptions())
 }
 

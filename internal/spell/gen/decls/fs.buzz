@@ -6,6 +6,12 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object DiskUsage {
+    path: str = "",
+    totalBytes: int = 0,
+    freeBytes: int = 0,
+}
+
 export object Path {
     value: str = "",
     base: str = "",
@@ -19,12 +25,23 @@ export object FileInfo {
     is_dir: bool = false,
 }
 
+export object TrimReport {
+    dir: str = "",
+    beforeBytes: int = 0,
+    afterBytes: int = 0,
+    removedFiles: int = 0,
+    removedBytes: int = 0,
+    cutoffMs: double = 0.0,
+    stopped: str = "",
+}
+
 export extern fun appendFile(path: str, content: str) > void !> any;
 export extern fun basename(path: str) > str;
 export extern fun chmod(path: str, mode: int) > void !> any;
 export extern fun copyDir(src: str, dst: str) > void !> any;
 export extern fun copyFile(src: str, dst: str) > void !> any;
 export extern fun dirname(path: str) > str;
+export extern fun diskUsage(path: str) > DiskUsage !> any;
 export extern fun exists(path: str) > bool !> any;
 export extern fun ext(path: str) > str;
 export extern fun glob(pattern: str) > [Path] !> any;
@@ -34,6 +51,7 @@ export extern fun isFile(path: str) > bool !> any;
 export final join: any = null;
 export extern fun listDir(path: str) > [str] !> any;
 export extern fun mkdirAll(path: str, perm: int = 493) > void !> any;
+export extern fun mode(notation: str) > int !> any;
 export extern fun readFile(path: str) > str !> any;
 export extern fun readLines(path: str) > [str] !> any;
 export extern fun readlink(path: str) > str !> any;
@@ -43,9 +61,11 @@ export extern fun rename(src: str, dst: str) > void !> any;
 export extern fun scratchCheckoutDir(purpose: str) > str !> any;
 export extern fun size(path: str) > int !> any;
 export extern fun stat(path: str) > FileInfo !> any;
+export extern fun stateDir(purpose: str) > str !> any;
 export extern fun symlink(target: str, link: str) > void !> any;
 export extern fun tempDir(prefix: str = "") > str !> any;
 export extern fun tempFile(prefix: str = "") > str !> any;
+export extern fun trimOldest(dir: str, maxBytes: int, timeoutMs: int = 0) > TrimReport !> any;
 export extern fun walk(root: str, callback: fun (path: str, isDir: bool) > bool !> any) > void !> any;
 export extern fun watch(paths: [str], callback: fun (paths: [str]) > bool !> any) > void !> any;
 export extern fun writeFile(path: str, content: str) > void !> any;

@@ -6,9 +6,9 @@ package bindgen
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -29,7 +29,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("cmd", vm.DirectValue("magus.cmd", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		sub := ffi.String(bzArgs, 0)
 		args := ffi.StringSlice(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\cmd", "opts", bzArgs, 2, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusCommand(ctx, sub, args, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -45,7 +52,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectAffectedResult(ret0), nil
 	}))
 	m.MapSet("projectGraph", vm.DirectValue("magus.projectGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusGraph(ctx)
+		ret0, err := std.MagusProjectGraph(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -62,7 +69,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("raise", vm.DirectValue("magus.raise", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		code := ffi.String(bzArgs, 0)
 		message := ffi.String(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.RaiseOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\raise", "opts", bzArgs, 2, decode.DecodeRaiseOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		if err := std.MagusRaise(ctx, code, message, opts); err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -70,7 +84,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("run", vm.DirectValue("magus.run", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := ffi.StringSlice(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\run", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusRun(ctx, args, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -78,7 +99,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("insight", vm.DirectValue("magus.insight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := ffi.AnyMap(bzArgs, 0)
+		var opts types.InsightOptions
+		if ffi.Present(bzArgs, 0) {
+			x, err := ffi.Object("magus\\insight", "opts", bzArgs, 0, decode.DecodeInsightOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusInsight(ctx, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -87,9 +115,13 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("query", vm.DirectValue("magus.query", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		query := ffi.String(bzArgs, 0)
-		opts, err := decodeKnowledgeQueryOptions("magus\\query", ffi.AnyMap(bzArgs, 1))
-		if err != nil {
-			return vm.Null, ffi.Error(err)
+		var opts types.KnowledgeQueryOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\query", "opts", bzArgs, 1, decode.DecodeKnowledgeQueryOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
 		}
 		ret0, err := std.MagusQuery(ctx, query, opts)
 		if err != nil {
@@ -108,18 +140,29 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("path", vm.DirectValue("magus.path", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		node := ffi.String(bzArgs, 0)
 		to := ffi.String(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.KnowledgePathOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\path", "opts", bzArgs, 2, decode.DecodeKnowledgePathOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusPath(ctx, node, to, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectKnowledgePathOutput(ret0), nil
+		return ObjectKnowledgePathOutput(ret0, enums), nil
 	}))
 	m.MapSet("refs", vm.DirectValue("magus.refs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		symbol := ffi.String(bzArgs, 0)
-		opts, err := decodeKnowledgeRefsOptions("magus\\refs", ffi.AnyMap(bzArgs, 1))
-		if err != nil {
-			return vm.Null, ffi.Error(err)
+		var opts types.KnowledgeRefsOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\refs", "opts", bzArgs, 1, decode.DecodeKnowledgeRefsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
 		}
 		ret0, err := std.MagusRefs(ctx, symbol, opts)
 		if err != nil {
@@ -180,7 +223,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("dirs", vm.DirectValue("magus.dirs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		glob := ffi.String(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.DirsOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\dirs", "opts", bzArgs, 1, decode.DecodeDirsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusDirs(ctx, glob, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -197,7 +247,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("neighborhood", vm.DirectValue("magus.neighborhood", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		focus := ffi.String(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.KnowledgeNeighborhoodOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\neighborhood", "opts", bzArgs, 1, decode.DecodeKnowledgeNeighborhoodOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusNeighborhood(ctx, focus, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -214,7 +271,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("impact", vm.DirectValue("magus.impact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := ffi.String(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\impact", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusImpact(ctx, base, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -222,7 +286,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectImpactResult(ret0), nil
 	}))
 	m.MapSet("diff", vm.DirectValue("magus.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := ffi.AnyMap(bzArgs, 0)
+		var opts types.MagusDiffOptions
+		if ffi.Present(bzArgs, 0) {
+			x, err := ffi.Object("magus\\diff", "opts", bzArgs, 0, decode.DecodeMagusDiffOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusDiff(ctx, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -231,7 +302,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := ffi.StringSlice(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\doctor", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusDoctor(ctx, args, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -240,7 +318,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("clean", vm.DirectValue("magus.clean", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := ffi.StringSlice(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\clean", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusClean(ctx, args, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -249,7 +334,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("attention", vm.DirectValue("magus.attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := ffi.StringSlice(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\attention", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.MagusAttention(ctx, args, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -266,8 +358,8 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectDriftResult(ret0), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		project_path := ffi.String(bzArgs, 0)
-		if err := std.MagusBustCache(ctx, project_path); err != nil {
+		projectPath := ffi.String(bzArgs, 0)
+		if err := std.MagusBustCache(ctx, projectPath); err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
@@ -281,81 +373,4 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	return m
-}
-
-func decodeKnowledgeQueryOptions(member string, in map[string]any) (types.KnowledgeQueryOptions, error) {
-	var out types.KnowledgeQueryOptions
-	for key, v := range in {
-		switch key {
-		case "budget":
-			switch x := v.(type) {
-			case int64:
-				out.Budget = int(x)
-			case float64:
-				out.Budget = int(x)
-			case int:
-				out.Budget = x
-			default:
-				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
-			}
-		case "limit":
-			switch x := v.(type) {
-			case int64:
-				out.Limit = int(x)
-			case float64:
-				out.Limit = int(x)
-			case int:
-				out.Limit = x
-			default:
-				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
-			}
-		case "offset":
-			switch x := v.(type) {
-			case int64:
-				out.Offset = int(x)
-			case float64:
-				out.Offset = int(x)
-			case int:
-				out.Offset = x
-			default:
-				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
-			}
-		default:
-			return out, fmt.Errorf("%s: unknown option %q (want budget, limit, offset)", member, key)
-		}
-	}
-	return out, nil
-}
-
-func decodeKnowledgeRefsOptions(member string, in map[string]any) (types.KnowledgeRefsOptions, error) {
-	var out types.KnowledgeRefsOptions
-	for key, v := range in {
-		switch key {
-		case "limit":
-			switch x := v.(type) {
-			case int64:
-				out.Limit = int(x)
-			case float64:
-				out.Limit = int(x)
-			case int:
-				out.Limit = x
-			default:
-				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
-			}
-		case "offset":
-			switch x := v.(type) {
-			case int64:
-				out.Offset = int(x)
-			case float64:
-				out.Offset = int(x)
-			case int:
-				out.Offset = x
-			default:
-				return out, fmt.Errorf("%s: %s must be a number, got %T", member, key, v)
-			}
-		default:
-			return out, fmt.Errorf("%s: unknown option %q (want limit, offset)", member, key)
-		}
-	}
-	return out, nil
 }

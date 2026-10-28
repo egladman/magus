@@ -10,7 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 )
 
 // publishedShards reads shards out of a published OCI artifact: the read-only half of the

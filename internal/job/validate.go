@@ -525,6 +525,20 @@ func rowDeclaration(row types.Job) types.Declaration {
 	return rec
 }
 
+// RetryDeclaration is the spec row was declared with, for forking it again by id alone: every
+// field [types.Declaration.Apply] writes, with no state, so the retry is a new attempt.
+func RetryDeclaration(row types.Job) types.Declaration {
+	rec := rowDeclaration(row)
+	rec.Schema = types.Schema{Version: types.JobSchemaVersion}
+	rec.State = ""
+	rec.SoftPaths, rec.Integrates = row.SoftPaths, row.Integrates
+	rec.BriefFormat, rec.Follows, rec.FreshReason = row.BriefFormat, row.Follows, row.FreshReason
+	if row.Weight != 0 {
+		rec.Weight = &row.Weight
+	}
+	return rec
+}
+
 // newProblems is the problems of after that before does not show.
 func newProblems(before, after types.JobProblems) types.JobProblems {
 	return slices.DeleteFunc(after, func(p types.JobProblem) bool { return slices.Contains(before, p) })

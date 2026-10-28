@@ -325,11 +325,11 @@ fun queriesFor(terms: str, opts: Options) > [str] {
 }
 
 fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > void !> any {
-    final res: magus\QueryResult = magus\query(q, opts: {"limit": fetch, "budget": fetch});
+    final res: magus\QueryResult = magus\query(q, opts: magus\QueryOptions{limit = fetch, budget = fetch});
     pool.total = pool.total + res.matchCount;
     pool.fetched = pool.fetched + res.matches.len();
-    if (res.answer.verdict == UNKNOWN and (alone or res.answer.reason != DOMAIN_ONLY)) {
-        pool.reason = if (res.answer.reason != "") res.answer.reason else "a declared index was not searched";
+    if (res.answer.verdict.value == UNKNOWN and (alone or res.answer.reason.value != DOMAIN_ONLY)) {
+        pool.reason = if (res.answer.reason != magus\KnowledgeUnknownReason.none) res.answer.reason.value else "a declared index was not searched";
         foreach (s in res.answer.staleIndexes) {
             pool.stale.append(s);
         }
@@ -600,7 +600,7 @@ fun position(n: magus\KnowledgeNode?) > str {
 // calls reads one neighborhood: callers and callees from the calls edges, with callers in
 // test files listed apart as tests.
 fun calls(h: Hit, opts: Options) > [mut Section] !> any {
-    final hood: magus\NeighborhoodResult = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = ["calls"] });
+    final hood: magus\NeighborhoodResult = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = [magus\RelationID.calls] });
     final nodes = mut {<str: magus\KnowledgeNode>};
     foreach (n in hood.nodes) {
         nodes[n.id] = n;
@@ -611,7 +611,7 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
     final listed = mut {<str: bool>};
     foreach (l in hood.links) {
         final inbound = l.target == hood.focus;
-        if (l.relation != "calls" or (!inbound and l.source != hood.focus)) {
+        if (l.relation != magus\RelationID.calls or (!inbound and l.source != hood.focus)) {
             continue;
         }
         final otherId = if (inbound) l.source else l.target;
@@ -636,10 +636,10 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
         section("callees", all: callees, limit: opts.neighbors),
         section("tests", all: tests, limit: opts.neighbors),
     ];
-    if (hood.answer.verdict == UNKNOWN) {
+    if (hood.answer.verdict.value == UNKNOWN) {
         foreach (s in sections) {
             s.verdict = UNKNOWN;
-            s.note = "unknown: {hood.answer.reason}";
+            s.note = "unknown: {hood.answer.reason.value}";
         }
     }
     return sections;
@@ -648,7 +648,7 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
 // references lists every file that uses the symbol with its first lines, and counts the
 // test files among them.
 fun references(h: Hit, opts: Options) > Section !> any {
-    final refs: magus\RefsResult = magus\refs(h.id, opts: {"limit": 200});
+    final refs: magus\RefsResult = magus\refs(h.id, opts: magus\RefsOptions{limit = 200});
     final files = mut [<Neighbor>];
     var testFiles = 0;
     foreach (r in refs.refs) {
@@ -662,9 +662,9 @@ fun references(h: Hit, opts: Options) > Section !> any {
     final s = section("references", all: files, limit: opts.neighbors);
     s.total = refs.fileCount;
     s.note = "{plural(refs.refCount, word: "use")} in {plural(refs.fileCount, word: "file")}, {plural(testFiles, word: "test file")}";
-    if (refs.answer.verdict == UNKNOWN) {
+    if (refs.answer.verdict.value == UNKNOWN) {
         s.verdict = UNKNOWN;
-        s.note = "unknown: {refs.answer.reason}";
+        s.note = "unknown: {refs.answer.reason.value}";
     }
     return s;
 }
@@ -692,7 +692,7 @@ fun nodeAround(h: Hit, opts: Options) > [Section] !> any {
 
 // docs are the doc sections a query for the hit's name matches on every word.
 fun docs(h: Hit, opts: Options) > Section !> any {
-    final q: magus\QueryResult = magus\query("kind=docsection {shortLabel(h.label)}", opts: {"limit": cap(opts.neighbors)});
+    final q: magus\QueryResult = magus\query("kind=docsection {shortLabel(h.label)}", opts: magus\QueryOptions{limit = cap(opts.neighbors)});
     final all = mut [<Neighbor>];
     foreach (m in q.matches) {
         var whole = true;

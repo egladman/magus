@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,4 +58,50 @@ func TestCheckStaleWorktrees(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, ".claude", "worktrees", "README"), []byte("x"), 0o600))
 		assert.Equal(t, types.CheckOK, checkStaleWorktrees(root).Status)
 	})
+}
+
+const gib = int64(1) << 30
+
+func sampleAt(hoursAgo float64, freeGiB int64, action string) types.DiskSample {
+	at := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC).Add(-time.Duration(hoursAgo * float64(time.Hour)))
+	return types.DiskSample{At: float64(at.UnixMilli()), Path: "/w", TotalBytes: 500 * gib, FreeBytes: freeGiB * gib, Action: action}
+}
+
+func TestDiskTrendWithNoSamplesSaysWhereTheyComeFrom(t *testing.T) {
+	got := diskTrend(nil, config.Defaults().Disk)
+	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Contains(t, got.Message, "no disk samples yet")
+	assert.Contains(t, got.Message, "disk.min_free_mb 51200 (the default)")
+}
+
+func TestDiskTrendIsAdviceBelowTheFloor(t *testing.T) {
+	got := diskTrend([]types.DiskSample{sampleAt(2, 40, "sample")}, config.Defaults().Disk)
+	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Contains(t, got.Message, "40960 MB free of 512000 MB on /w")
+}
+
+func TestDiskTrendIsAdviceWhenFreeSpaceFallsFast(t *testing.T) {
+	cfg := config.Defaults().Disk
+	cfg.GrowthMBPerHour = 1024
+	got := diskTrend([]types.DiskSample{sampleAt(48, 400, "sample"), sampleAt(4, 300, "sample"), sampleAt(0, 290, "sample")}, cfg)
+	assert.Equal(t, types.CheckAdvice, got.Status, "10 GiB in 4h is past 1 GiB an hour; the 48h-old sample is outside the day")
+	assert.Contains(t, got.Message, "changed -2560 MB an hour over 4.0h")
+	assert.Contains(t, got.Message, "disk.growth_mb_per_hour 1024")
+	assert.NotContains(t, got.Message, "1024 (the default)", "a set threshold is not called the default")
+}
+
+func TestDiskTrendNamesTheLastReclaimChunks(t *testing.T) {
+	done := sampleAt(1, 300, "reclaimed")
+	done.Detail = "removed 2 worktrees"
+	got := diskTrend([]types.DiskSample{sampleAt(2, 300, "sample"), done}, config.Defaults().Disk)
+	assert.Equal(t, types.CheckOK, got.Status)
+	require.Len(t, got.Details, 1)
+	assert.Contains(t, got.Details[0], "removed 2 worktrees")
+}
+
+func TestReadDiskSamplesNamesAMalformedLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "samples.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(`{"at":1,"path":"/w","totalBytes":2,"freeBytes":1,"action":"sample","detail":""}`+"\nnot json\n"), 0o644))
+	_, err := readDiskSamples(path)
+	assert.ErrorContains(t, err, "line 2")
 }

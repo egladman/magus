@@ -88,7 +88,7 @@ import "site/config" as _;
 // proc\exec raises on a non-zero exit, so a bundle that cannot build stops the render where
 // it broke.
 fun esbuild(args: [str]) > void !> any {
-    proc\exec("esbuild", args, ".", {});
+    proc\exec("esbuild", args, ".", proc\ExecOptions{});
 }
 
 // walkBlog visits every publishable blog/*.md post (isPublishablePost: not the index, not

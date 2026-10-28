@@ -30,12 +30,12 @@ export fun reads() > [str] {
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
-    final probe: magus\QueryResult = magus\query("kind=doc", opts: {"limit": 1, "budget": 1});
+    final probe: magus\QueryResult = magus\query("kind=doc", opts: magus\QueryOptions{ limit = 1, budget = 1 });
     if (probe.matchCount == 0) {
         return [Finding{ path = ".", message = "the graph holds no doc node",
             fix = "The docs adapter indexed nothing, so nothing was checked; run `magus graph build`." }];
     }
-    final all: magus\QueryResult = magus\query("kind=doc", opts: {"limit": probe.matchCount, "budget": probe.matchCount});
+    final all: magus\QueryResult = magus\query("kind=doc", opts: magus\QueryOptions{ limit = probe.matchCount, budget = probe.matchCount });
     final found = mut [<Claim>];
     foreach (n in all.nodes) {
         final raw = n.attrs[UNKNOWN_TARGETS];

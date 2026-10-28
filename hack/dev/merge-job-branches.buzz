@@ -204,11 +204,11 @@ export fun candidatesFromBranches(branches: [str], rows: [JobRow], checkedOut: f
 }
 
 fun git(dir: str, args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": dir}).stdout.trim();
+    return vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = dir }).stdout.trim();
 }
 
 fun gitOK(dir: str, args: [str]) > bool !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": dir, "allow_failure": true}).code == 0;
+    return vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = dir, allowFailure = true }).code == 0;
 }
 
 fun lines(text: str) > [str] {
@@ -222,7 +222,7 @@ fun lines(text: str) > [str] {
 // requireBranch accepts any ref that resolves to a commit, a remote-tracking one included,
 // and returns the line naming what it resolved to.
 fun requireBranch(root: str, branch: str) > str !> any {
-    final found = vcs\cmd(["rev-parse", "--verify", "--quiet", "{branch}^\{commit\}"], opts: {"quiet": true, "dir": root, "allow_failure": true});
+    final found = vcs\cmd(["rev-parse", "--verify", "--quiet", "{branch}^\{commit\}"], opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
     if (found.code != 0) {
         throw "merge-job-branches: unknown branch {branch}: it resolves to no commit";
     }
@@ -285,7 +285,7 @@ fun storeRows() > [JobRow] !> any {
     foreach (j in magus\job.list().jobs) {
         final goals = mut [<stack\CheckGoal>];
         foreach (g in j.goals) {
-            if (g.kind == "check") {
+            if (g.kind == magus\GoalKind.check) {
                 goals.append(stack\CheckGoal{ id = g.id, target = g.check.target, project = g.check.project, args = g.check.args });
             }
         }
@@ -296,7 +296,7 @@ fun storeRows() > [JobRow] !> any {
 
 fun checkedOutIn(row: JobRow) > str !> any {
     if (row.checkoutRoot == "" or !fs\isDir(row.checkoutRoot)) { return ""; }
-    final res = vcs\cmd(["branch", "--show-current"], opts: {"quiet": true, "dir": row.checkoutRoot, "allow_failure": true});
+    final res = vcs\cmd(["branch", "--show-current"], opts: vcs\CommandOptions{ quiet = true, dir = row.checkoutRoot, allowFailure = true });
     if (res.code != 0) { return ""; }
     return res.stdout.trim();
 }
@@ -355,7 +355,7 @@ fun settleWithMagus(dir: str, branch: str) > [str] !> any {
     // from the tree either way, and the layer stops there, so its settles do not matter.
     var said = "";
     try {
-        said = magus\cmd("vcs", args: ["resolve", "--against", branch], opts: {"dir": dir, "root": dir, "quiet": true}).stdout;
+        said = magus\cmd("vcs", args: ["resolve", "--against", branch], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true }).stdout;
     } catch (e) {
         if (!gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"])) {
             throw "merge-job-branches: merging {branch} did not start: {e}; the tree holds {lines(git(dir, args: ["status", "--porcelain"])).join(", ")}";
@@ -421,7 +421,7 @@ export fun readyFailure(text: str) > str {
 }
 
 // readyAt builds a ./magus at the tree's own HEAD, plus the graph and symbol digest it
-// needs, with the recipe every gate uses.
+// needs, with the steps every gate uses.
 fun readyAt(dir: str) > [str] !> any {
     return bootstrap\gateReady(bootstrap\liveHost(), dir: dir);
 }
@@ -436,14 +436,14 @@ fun regenerateWithMagus(base: str, ready: fun (dir: str) > [str] !> any) > fun (
             throw keptTree(dir, target: readyFailure("{e}"), text: "{e}");
         }
         final ran = proc\exec(fs\join(dir, name: "magus"), args: ["affected", "generate:rw", "--vcs-base-ref", base], dir: dir,
-            opts: {"quiet": true, "allow_failure": true});
+            opts: proc\ExecOptions{ quiet = true, allowFailure = true });
         if (ran.code != 0) {
             throw keptTree(dir, target: "affected generate:rw", text: "{ran.stderr}\n{ran.stdout}");
         }
         final changed = unstaged(dir);
         if (changed.len() == 0) { return; }
         final undeclared = mut [<str>];
-        foreach (f in magus\describe.file(changed, opts: {"dir": dir, "root": dir}).files) {
+        foreach (f in magus\describe.file(changed, opts: magus\CommandOptions{ dir = dir, root = dir }).files) {
             if (f.role != "output" and f.role != "maintained") { undeclared.append(f.path); }
         }
         if (undeclared.len() > 0) {
@@ -461,6 +461,49 @@ fun unstaged(dir: str) > [str] !> any {
     foreach (p in lines(git(dir, args: ["diff", "--name-only"]))) { acc.append(p); }
     foreach (p in lines(git(dir, args: ["ls-files", "--others", "--exclude-standard"]))) { acc.append(p); }
     return acc;
+}
+
+// CONTRACT_DIRS and loadContract are the load contract: what a magus built before a change
+// needs to load the tree after it. A copy of loadContract in internal/guard/load_contract.go,
+// since neither can read the other.
+final CONTRACT_DIRS = ["internal/spell/gen/decls/", "internal/interp/bindings/gen/"];
+
+export fun loadContract(p: str) > bool {
+    if (p.endsWith("_test.go")) { return false; }
+    if (p.endsWith("api.lock") or p.endsWith("api-go.lock")) { return true; }
+    foreach (d in CONTRACT_DIRS) {
+        if (p.startsWith(d)) { return true; }
+    }
+    if (!p.startsWith("libs/gopherbuzz/") or !p.endsWith(".go")) { return false; }
+    final name = p.sub("libs/gopherbuzz/".len(), len: p.len() - "libs/gopherbuzz/".len());
+    return name.indexOf("/") == null and (name.startsWith("checker") or name.startsWith("compiler"));
+}
+
+export fun contractPaths(changed: [str]) > [str] {
+    return changed.filter(fun (index: int, p: str) > bool => loadContract(p));
+}
+
+// policyFailure reads the verdict the merged ./magus gave a state-changing line, as a hook
+// would ask it, and says why the guard policy does not load, "" when it does.
+export fun policyFailure(verdictJSON: str) > str !> any {
+    final v = serialize\jsonDecode(verdictJSON);
+    final rule = v.q("rule").stringValue();
+    final said = v.q("reason").stringValue() + v.q("context").stringValue();
+    if (rule == "policy-unloaded" or rule == "stale-binary" or said.indexOf("judged nothing") != null) {
+        return "{rule}: {said}";
+    }
+    return "";
+}
+
+// requirePolicyLoads asks the ./magus built at dir to judge a write there and fails, keeping
+// the tree, when the guard policy does not load: landing it would leave every write waiting.
+fun requirePolicyLoads(dir: str) > void !> any {
+    final judged = proc\exec(fs\join(dir, name: "magus"), args: ["shell", "-o", "json", "touch .merge-job-branches-probe"], dir: dir,
+        opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+    final why = policyFailure(judged.stdout) catch "it printed no verdict: {judged.stderr}";
+    if (why != "") {
+        throw keptTree(dir, target: "the guard policy under the merged ./magus", text: why);
+    }
 }
 
 // mergeLayers merges each layer of s, in order, into the detached tree at dir. It stops at
@@ -548,7 +591,7 @@ fun withTree(root: str, rev: str, dir: str, body: fun (dir: str) > void !> any) 
         body(dir);
     } catch (e) {
         if ("{e}".startsWith(KEPT)) { throw e; }
-        vcs\cmd(["worktree", "remove", "--force", dir], opts: {"quiet": true, "dir": root, "allow_failure": true});
+        vcs\cmd(["worktree", "remove", "--force", dir], opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
         fs\removeAll(dir);
         throw e;
     }
@@ -564,7 +607,7 @@ fun requireTrusted(dir: str, checkouts: str) > void !> any {
     } catch {
         return;
     }
-    final shown = proc\exec("mise", args: ["trust", "--show"], dir: dir, opts: {"quiet": true, "allow_failure": true});
+    final shown = proc\exec("mise", args: ["trust", "--show"], dir: dir, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if ("{shown.stdout}{shown.stderr}".indexOf(": untrusted") != null) {
         throw "merge-job-branches: mise does not trust {dir}; run `mise settings add trusted_config_paths {checkouts}` once";
     }
@@ -594,14 +637,14 @@ export object Verdict {
 // runCheck runs one check through the status --wait pipe in dir, returning its output ref
 // and whether it passed.
 fun runCheck(dir: str, g: stack\CheckGoal) > [str] !> any {
-    final wait = magus\cmd("status", args: ["--wait"], opts: {"dir": dir, "root": dir, "quiet": true});
+    final wait = magus\cmd("status", args: ["--wait"], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true });
     final args = mut [g.target, g.project, "--concurrency", "1"];
     if (g.args.len() > 0) {
         args.append("--");
         foreach (a in g.args) { args.append(a); }
     }
     try {
-        final res = magus\run(args, opts: {"dir": dir, "root": dir, "quiet": true, "stdin": wait.stdout});
+        final res = magus\run(args, opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true, stdin = wait.stdout });
         return ["pass", refIn(res.stdout + " " + res.stderr)];
     } catch (e) {
         return ["fail", refIn("{e}")];
@@ -635,7 +678,7 @@ export fun verifyLayers(dir: str, s: stack\BranchStack) > [Verdict] !> any {
         final rep = serialize\jsonEncode(serialize\Boxed.init({"schema_version": 2, "job": l.job, "changed_paths": [<str>],
             "validation": {"command": l.check, "output_ref": primary}, "gate_evidence": evidence, "unresolved_risks": [<str>]}));
         try {
-            magus\cmd("job", args: ["wait", l.job, "--integration", "--stdin"], opts: {"dir": dir, "root": dir, "quiet": true, "stdin": rep});
+            magus\cmd("job", args: ["wait", l.job, "--integration", "--stdin"], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true, stdin = rep });
             said.append("recorded: job wait --integration passed");
         } catch (e) {
             pass = false;
@@ -775,6 +818,21 @@ test "requireBranch resolves a remote-tracking ref and refuses a name that is no
     fs\removeAll(root);
 }
 
+test "the load contract is the decls, the API locks, the bindings and the Buzz checker" {
+    assert\equal(contractPaths(["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
+        "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go",
+        "libs/gopherbuzz/checker_test.go", "libs/gopherbuzz/vm.go", "libs/gopherbuzz/docs/checker.go", "run.go", "docs/a.md"]),
+        want: ["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
+            "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go"],
+        message: "only the paths a binary built before them cannot load past");
+}
+
+test "policyFailure names a policy the merged binary cannot load" {
+    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"workspace:command\",\"context\":\"fine\"}"), want: "", message: "a loaded policy");
+    assert\equal(policyFailure("\{\"decision\":\"deny\",\"rule\":\"policy-unloaded\",\"reason\":\"line 3: bad\"}"), want: "policy-unloaded: line 3: bad", message: "a broken policy");
+    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"command-rule-failed\",\"context\":\"the rule judged nothing\"}").startsWith("command-rule-failed"), want: true, message: "a rule that judged nothing");
+}
+
 fun printVerdicts(verdicts: [Verdict]) > bool {
     var all = true;
     foreach (v in verdicts) {
@@ -823,6 +881,10 @@ export fun main(args: [str]) > void !> any {
             result = mergeLayers(dir, s: plan, into: into, settle: settleWithMagus);
             if (!allMerged(result)) { return; }
             regenerated = commitRegenerated(dir, s: result, regenerate: regenerateWithMagus(plan.base, ready: readyAt));
+            // About one merge in five changes the load contract; only those pay for the probe.
+            if (contractPaths(lines(git(dir, args: ["diff", "--name-only", plan.base, "HEAD"]))).len() > 0) {
+                requirePolicyLoads(dir);
+            }
             git(root, args: ["branch", into, git(dir, args: ["rev-parse", "HEAD"])]);
             // A file settled by job claims is a merge no job's check has seen, so every
             // merged job's checks run on it whether or not --verify asked.
@@ -1005,7 +1067,7 @@ fun fixtureRepo() > str !> any {
     put(root, path: "gen/list.txt", content: "a.txt\n");
     // Loading the workspace writes the merge driver's .gitattributes, which the base has to
     // carry, or every merge would find the tree dirty.
-    magus\cmd("ls", args: [<str>], opts: {"dir": root, "root": root, "quiet": true});
+    magus\cmd("ls", args: [<str>], opts: magus\CommandOptions{ dir = root, root = root, quiet = true });
     commitAll(root, subject: "base");
     branchFrom(root, name: "gen-b", start: "main", files: {"src/b.txt": "b\n", "gen/list.txt": "a.txt\nb.txt\n"}, subject: "add b");
     branchFrom(root, name: "gen-c", start: "main", files: {"src/c.txt": "c\n", "gen/list.txt": "a.txt\nc.txt\n"}, subject: "add c");
@@ -1155,7 +1217,7 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
     assert\equal(said.indexOf("output ref: out123abc (") != null, want: true, message: "the ref: {said}");
     assert\equal(said.indexOf("cause: MGS8001 digest failed, output: out123abc\n") != null, want: true, message: "the cause: {said}");
     assert\equal(said.indexOf("findings") == null, want: true, message: "no JSON dump: {said}");
-    vcs\cmd(["worktree", "remove", "--force", kept], opts: {"quiet": true, "dir": root});
+    vcs\cmd(["worktree", "remove", "--force", kept], opts: vcs\CommandOptions{ quiet = true, dir = root });
     fs\removeAll(root);
 }
 

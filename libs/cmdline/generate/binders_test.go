@@ -238,18 +238,21 @@ func TestRenderConstsRefusesTwoFlagsUnderOneName(t *testing.T) {
 func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 	var b bytes.Buffer
 	writeBinder(&b, "demo", "demo", []cmdline.Flag{
-		{Name: "watch", Kind: cmdline.Bool, Doc: "Watch it"},
+		{Name: "watch", Kind: cmdline.Bool, Default: false, Doc: "Watch it"},
 		{Name: "W", Kind: cmdline.Bool, AliasOf: "watch", Doc: "Short for --watch"},
 	})
 	got := b.String()
 
 	contains(t, got, "// DemoFlags are the flags declared for `magus demo`.")
 	contains(t, got, "type DemoFlags struct {")
-	contains(t, got, "\tWatch bool // --watch, -W")
+	contains(t, got, "\tWatch bool // --[no-]watch, -W")
 	contains(t, got, "func BindDemo(fs *flag.FlagSet) *DemoFlags {")
 	// Both spellings write to the one destination; dropping either leaves a flag that
 	// parses and does nothing.
 	contains(t, got, `fs.BoolVar(&f.Watch, FlagDemoWatch, false, "Watch it")`)
+	contains(t, got, "cmdline.NegatedBoolVar(fs, &f.Watch, FlagDemoWatch)")
+	notContains(t, got, "FlagDemoNoWatch", "the negation is derived, never a constant")
+	notContains(t, got, "NegatedBoolVar(fs, &f.Watch, FlagDemoW)", "an alias gets no --no- form")
 	contains(t, got, `fs.BoolVar(&f.Watch, FlagDemoW, false, "Short for --watch")`)
 	contains(t, got, "\treturn &f\n}\n")
 	notContains(t, got, "DemoDefaults", "no flag declared DefaultAtBind")
@@ -325,4 +328,46 @@ func TestWriteBinderEmitsParsableGo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generated binder does not parse: %v\n%s", err, b.String())
 	}
+}
+
+func TestBindersRefusesWhatTheConventionForbids(t *testing.T) {
+	tree := func(f cmdline.Flag) cmdline.Command {
+		return cmdline.Command{Name: "tool", Children: []cmdline.Command{{Name: "run", Flags: []cmdline.Flag{f}}}}
+	}
+	cases := []struct {
+		name string
+		flag cmdline.Flag
+		want string
+	}{
+		{"a bool named no-x", cmdline.Flag{Name: "no-cache", Kind: cmdline.Bool, Default: false}, "declare the positive name"},
+		{"a bool with no default", cmdline.Flag{Name: "cache", Kind: cmdline.Bool}, "bool with no Default"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Binders(tree(c.flag), "gen")
+			isError(t, err, c.name)
+			contains(t, err.Error(), c.want)
+		})
+	}
+
+	t.Run("a bool whose negation another flag takes", func(t *testing.T) {
+		root := cmdline.Command{Name: "tool", Children: []cmdline.Command{{Name: "run", Flags: []cmdline.Flag{
+			{Name: "cache", Kind: cmdline.Bool, Default: true},
+			{Name: "no-cache", Kind: cmdline.String},
+		}}}}
+		_, err := Binders(root, "gen")
+		isError(t, err)
+		contains(t, err.Error(), "negation of bool --cache")
+	})
+}
+
+func TestBindersAcceptsADeclaredPositiveBool(t *testing.T) {
+	root := cmdline.Command{Name: "tool", Children: []cmdline.Command{{Name: "run", Flags: []cmdline.Flag{
+		{Name: "cache", Kind: cmdline.Bool, Default: true, Doc: "Replay hits"},
+	}}}}
+	got, err := Binders(root, "gen")
+	noError(t, err)
+	contains(t, string(got), `fs.BoolVar(&f.Cache, FlagRunCache, true, "Replay hits")`)
+	contains(t, string(got), "cmdline.NegatedBoolVar(fs, &f.Cache, FlagRunCache)")
+	contains(t, string(got), "Cache bool // --[no-]cache")
 }

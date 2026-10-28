@@ -143,7 +143,7 @@ export fun lintFindings(file: str, rows: [any]) > [Finding] {
 // returns it; the skills land in its skills/ directory.
 fun render() > str !> any {
     final dir = fs\tempDir("skill-renders-");
-    magus\cmd("agent", args: ["install", "--dir", dir, "--skill-form", "both", "skills"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install", "--dir", dir, "--skill-form", "both", "skills"], opts: magus\CommandOptions{ quiet = true });
     return dir;
 }
 
@@ -199,7 +199,7 @@ fun markdownlint(dir: str) > [Finding] !> any {
 fun markdownlintText(text: str, results: str) > [any] !> any {
     fs\remove(results) catch void;
     final run = proc\exec("markdownlint", args: ["--config", CONFIG, "--json", "--output", results, "--stdin"],
-        opts: {"stdin": text, "quiet": true, "allow_failure": true});
+        opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
     if (run.code == 0) {
         return [<any>];
     }
@@ -217,7 +217,7 @@ fun judge(dir: str, pairs: [Pair]) > [any] !> any {
     final table = decisions\writeDecisions([<str>]);
     final run = proc\exec(path\abs("{proofread\home}/{proofread\binary}"),
         args: ["skill-template", "--decisions", table, "--only", RULES, listing],
-        opts: {"quiet": true, "allow_failure": true}) catch null;
+        opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
     fs\remove(table) catch void;
     // Exit 1 is a deny finding, written to stdout like any other.
     if (run == null or (run!.code != 0 and run!.code != 1)) {

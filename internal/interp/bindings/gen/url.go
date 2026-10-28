@@ -34,8 +34,8 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("parse", vm.DirectValue("url.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		raw_url := ffi.String(bzArgs, 0)
-		ret0, err := url.URLParse(ctx, raw_url)
+		rawUrl := ffi.String(bzArgs, 0)
+		ret0, err := url.URLParse(ctx, rawUrl)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

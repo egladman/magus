@@ -20,7 +20,7 @@ Provider namespaces are wired by the runtime rather than declared here, so they 
 
 ### cmd
 
-Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus\cmd(sub, args, [opts]) beside magus\run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, doctor, the magus\describe methods) when one exists - magus\cmd warns when sub, or a describe noun, names one that has; a describe noun with no method (job), and any noun's text in an explicit -o format, is reached here without a warning. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.
+Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus\cmd(sub, args, [opts]) beside magus\run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, doctor, the magus\describe methods) when one exists - magus\cmd warns when sub, or a describe noun, names one that has; a describe noun with no method (job), and any noun's text in an explicit -o format, is reached here without a warning. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.AllowFailure is set. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.
 
 **Signature:** `magus\cmd(sub, args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
 
@@ -78,7 +78,7 @@ Fail with a CODED diagnostic instead of a bare string, so a caller can branch on
 
 ### run
 
-Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.
+Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.AllowFailure is set. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.
 
 **Signature:** `magus\run(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
 
@@ -91,7 +91,7 @@ Run `magus run <args>` recursively in the target's project directory and capture
 
 ### insight
 
-Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.
+Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes an InsightOptions (commits, default 500; since; dir; files for file rather than project hotspots) and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.
 
 **Signature:** `magus\insight([opts]) -> InsightReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
 
@@ -269,7 +269,7 @@ One target run's captured output by its ref: {ref, project, target, failed, dura
 
 ### impact
 
-The blast radius of a changeset: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}. Each affected project carries whether it was a seed and, for a seed, the changed files in it. Annotate the result `> Impact`. This is `magus affected --impact`: the report, with no target run. opts.commits caps the commits scanned; opts.since bounds the window (90d, 12w, 6mo, 1y).
+The blast radius of a changeset: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}. Each affected project carries whether it was a seed and, for a seed, the changed files in it. Annotate the result `> Impact`. This is `magus affected --impact`: the report, with no target run. opts is a CommandOptions: root and dir as on doctor.
 
 **Signature:** `magus\impact([base], [opts]) -> Impact` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
 
@@ -348,11 +348,11 @@ Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {
 
 Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.
 
-**Signature:** `magus\bustCache([project_path])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
+**Signature:** `magus\bustCache([projectPath])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
 
-| Parameter      | Type     | Optional | Description |
-| -------------- | -------- | -------- | ----------- |
-| `project_path` | `string` | yes      |             |
+| Parameter     | Type     | Optional | Description |
+| ------------- | -------- | -------- | ----------- |
+| `projectPath` | `string` | yes      |             |
 
 ### hasCharm
 

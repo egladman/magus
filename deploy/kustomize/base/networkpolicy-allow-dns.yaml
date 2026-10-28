@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  labels:
+    app.kubernetes.io/name: magus
+    app.kubernetes.io/component: network
+  annotations:
+    kubernetes.io/description: Lets the daemon resolve names through cluster DNS and nothing else.
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: magus
+      app.kubernetes.io/component: daemon
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

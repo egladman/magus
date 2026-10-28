@@ -118,7 +118,7 @@ fun layout() > Layout !> any {
         throw "git hooks: only git runs git hooks, and this checkout's VCS is `{backend}`";
     }
     final revParse = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-path", "hooks", "--show-prefix"],
-        opts: {"quiet": true}).stdout;
+        opts: vcs\CommandOptions{quiet = true}).stdout;
     final lines = revParse.split("\n");
     var prefix = "";
     if (lines.len() > 1) { prefix = lines[1]; }

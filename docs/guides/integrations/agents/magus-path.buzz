@@ -108,10 +108,10 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": guard.payload,
+    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = guard.payload,
     });
 }
 

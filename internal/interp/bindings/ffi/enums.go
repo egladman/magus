@@ -20,6 +20,10 @@ type EnumCases interface {
 	// declaration does not list is a bug on the Go side, and the VM reports the
 	// panic as an internal error.
 	Case(enum, value string) vm.Value
+	// Instance returns an instance of the module's object, fields in declaration order
+	// and named by names. A mirror that declares methods crosses as one, since a map has
+	// no methods to dispatch. It panics when the module declares no such object.
+	Instance(object string, names []string, fields []vm.Value) vm.Value
 }
 
 // SessionEnums resolves cases through sess from the enums the module imported as
@@ -45,6 +49,15 @@ type enumBacking struct{}
 
 func (enumBacking) Case(_, value string) vm.Value { return vm.StringValue(value) }
 
+// Instance writes the fields as a map: a value Go decodes back by value calls no method.
+func (enumBacking) Instance(_ string, names []string, fields []vm.Value) vm.Value {
+	m := vm.NewMap()
+	for i, name := range names {
+		m.MapSet(name, fields[i])
+	}
+	return m
+}
+
 type sessionEnums struct {
 	ctx    context.Context
 	sess   *buzz.Session
@@ -52,6 +65,42 @@ type sessionEnums struct {
 
 	mu    sync.Mutex
 	cases map[string]map[string]vm.Value
+	defs  map[string]vm.Value
+}
+
+// Instance builds the object through a constructor function declared in the session:
+// a module's object type is not a value a host can reach (`image\Digest` reads null),
+// but a literal of it is.
+func (s *sessionEnums) Instance(object string, names []string, fields []vm.Value) vm.Value {
+	s.mu.Lock()
+	ctor, ok := s.defs[object]
+	s.mu.Unlock()
+	if !ok {
+		params := make([]string, len(names))
+		inits := make([]string, len(names))
+		for i, name := range names {
+			params[i] = fmt.Sprintf("f%d: any", i)
+			inits[i] = fmt.Sprintf("%s = f%d", name, i)
+		}
+		fn := "__object_" + object
+		decl := fmt.Sprintf("import %q; fun %s(%s) > any { return %s{ %s }; }",
+			s.module, fn, strings.Join(params, ", "), s.qualify(object), strings.Join(inits, ", "))
+		if _, err := s.sess.Eval(s.ctx, decl); err != nil {
+			panic(fmt.Sprintf("declaring %s's constructor: %v", s.qualify(object), err))
+		}
+		ctor = s.sess.GetGlobal(fn)
+		s.mu.Lock()
+		if s.defs == nil {
+			s.defs = map[string]vm.Value{}
+		}
+		s.defs[object] = ctor
+		s.mu.Unlock()
+	}
+	inst, err := s.sess.CallValue(s.ctx, ctor, fields)
+	if err != nil {
+		panic(fmt.Sprintf("%s: %v", s.qualify(object), err))
+	}
+	return inst
 }
 
 func (s *sessionEnums) Case(enum, value string) vm.Value {
@@ -83,27 +132,32 @@ func (s *sessionEnums) qualify(enum string) string {
 	return fmt.Sprintf(`%s\%s`, s.module[strings.LastIndex(s.module, "/")+1:], enum)
 }
 
-// read evaluates the enum's cases in the session, since only the VM that holds a
-// definition can intern its cases.
+// definition is the enum's definition on the module value the session registered.
+// An import puts it there, so a session that has not imported the module yet imports
+// it here, compiling once; every later read, and every session that imported it
+// already, compiles nothing.
+func (s *sessionEnums) definition(enum string) (vm.Value, error) {
+	if mod, ok := s.sess.NativeModule(s.module); ok {
+		if def, found := mod.MapGet(enum); found {
+			return def, nil
+		}
+	}
+	return s.value("def", enum, s.qualify(enum))
+}
+
+// read takes the enum's cases from its definition: the cases a Buzz `Enum.case` in
+// the session evaluates to.
 func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
-	def, err := s.value("def", enum, s.qualify(enum))
+	def, err := s.definition(enum)
 	if err != nil {
 		return nil, err
 	}
-	_, names, ok := def.EnumDef()
+	cases, ok := def.EnumCases()
 	if !ok {
 		return nil, fmt.Errorf("it is a %s, not an enum", def.Kind())
 	}
-	refs := make([]string, len(names))
-	for i, name := range names {
-		refs[i] = fmt.Sprintf("%s.%s", s.qualify(enum), name)
-	}
-	list, err := s.value("cases", enum, fmt.Sprintf("[%s]", strings.Join(refs, ", ")))
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]vm.Value, len(names))
-	for _, c := range list.ListItems() {
+	out := make(map[string]vm.Value, len(cases))
+	for _, c := range cases {
 		backing, _ := c.EnumValue()
 		if !backing.IsString() {
 			return nil, fmt.Errorf("case %s is not str-backed", describeCase(c))

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // cacheService is the GitHub Actions cache service's Twirp path under ACTIONS_RESULTS_URL.
@@ -36,10 +37,10 @@ const (
 // Token, a random stand-in valid only here.
 type CacheReadProxy struct {
 	URL   string // ends in "/", as ACTIONS_RESULTS_URL does
-	Token string
+	Token types.Secret
 
 	upstream string
-	token    string
+	token    types.Secret
 	client   *http.Client
 	log      *HookLog
 	srv      *http.Server
@@ -48,8 +49,8 @@ type CacheReadProxy struct {
 // StartCacheReadProxy listens on an ephemeral loopback port and serves until Close.
 // upstream and token are the runner's ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN.
 // Each refused request is a line on log; a nil log discards.
-func StartCacheReadProxy(upstream, token string, log *HookLog) (*CacheReadProxy, error) {
-	if upstream == "" || token == "" {
+func StartCacheReadProxy(upstream string, token types.Secret, log *HookLog) (*CacheReadProxy, error) {
+	if upstream == "" || token.IsZero() {
 		return nil, errors.New("the cache read proxy needs the cache service URL and its token")
 	}
 	stand := make([]byte, 32)
@@ -62,7 +63,7 @@ func StartCacheReadProxy(upstream, token string, log *HookLog) (*CacheReadProxy,
 	}
 	p := &CacheReadProxy{
 		URL:      fmt.Sprintf("http://%s/", ln.Addr().String()),
-		Token:    hex.EncodeToString(stand),
+		Token:    types.NewSecret(hex.EncodeToString(stand)),
 		upstream: strings.TrimSuffix(upstream, "/"),
 		token:    token,
 		// A lookup is one POST; following a redirect would carry it somewhere unnamed.
@@ -80,7 +81,7 @@ func StartCacheReadProxy(upstream, token string, log *HookLog) (*CacheReadProxy,
 // Env is what a hook's environment takes to read through the proxy: its URL and the
 // stand-in token, under the names the runner gives the real ones.
 func (p *CacheReadProxy) Env() []string {
-	return []string{"ACTIONS_RESULTS_URL=" + p.URL, "ACTIONS_RUNTIME_TOKEN=" + p.Token}
+	return []string{"ACTIONS_RESULTS_URL=" + p.URL, "ACTIONS_RUNTIME_TOKEN=" + p.Token.Reveal()}
 }
 
 // Close stops serving; a request in flight is cut off.
@@ -90,7 +91,7 @@ func (p *CacheReadProxy) Close() error { return p.srv.Close() }
 func (p *CacheReadProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Loopback is open to every process on the machine; the stand-in is handed only to
 	// hooks, so the port alone reads nothing.
-	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+p.Token)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+p.Token.Reveal())) != 1 {
 		p.refuse(w, r, http.StatusUnauthorized, "unauthenticated", "not the token this proxy handed its hooks")
 		return
 	}
@@ -116,7 +117,7 @@ func (p *CacheReadProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		twirpError(w, http.StatusBadGateway, "internal", err.Error())
 		return
 	}
-	up.Header.Set("Authorization", "Bearer "+p.token)
+	up.Header.Set("Authorization", "Bearer "+p.token.Reveal())
 	for _, h := range []string{"Content-Type", "Accept"} {
 		if v := r.Header.Get(h); v != "" {
 			up.Header.Set(h, v)

@@ -40,12 +40,12 @@ var Diff = Module{
 	Methods: []Method{
 		{
 			Name: "unified",
-			Doc:  "Return a unified diff of a and b, or \"\" when they are identical - so the result doubles as the check. from_label and to_label name the two sides in the +++/--- header (default \"a\" and \"b\"); pass the file path and something like \"regenerated\" to make a drift report read like a patch. context is the unchanged lines kept around each hunk, defaulting to 3 as git does.",
+			Doc:  "Return a unified diff of a and b, or \"\" when they are identical - so the result doubles as the check. fromLabel and toLabel name the two sides in the +++/--- header (default \"a\" and \"b\"); pass the file path and something like \"regenerated\" to make a drift report read like a patch. context is the unchanged lines kept around each hunk, defaulting to 3 as git does.",
 			Args: []Arg{
 				{Name: "a", Type: TypeString},
 				{Name: "b", Type: TypeString},
-				{Name: "from_label", Type: TypeString, Optional: true},
-				{Name: "to_label", Type: TypeString, Optional: true},
+				{Name: "fromLabel", Type: TypeString, Optional: true},
+				{Name: "toLabel", Type: TypeString, Optional: true},
 				{Name: "context", Type: TypeInt, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeString}},

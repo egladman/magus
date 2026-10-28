@@ -101,7 +101,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     var output = "";
     var raised = "";
     try {
-        output = magus\cmd("buzz", args: argv, opts: {"dir": dir, "quiet": true}).stderr;
+        output = magus\cmd("buzz", args: argv, opts: magus\CommandOptions{ dir = dir, quiet = true }).stderr;
     } catch (e) {
         raised = "{e}";
         output = raised;

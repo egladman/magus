@@ -99,7 +99,7 @@ A path this job may not write, carved out of its write paths; repeatable or comm
 \fB\-\-depends\-on\fR \fIstring\fR
 A job this one waits on; repeatable or comma\-separated
 .TP
-\fB\-\-fix\fR
+\fB\-\-[no\-]fix\fR (default: off)
 Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
 .TP
 \fB\-\-model\fR \fIstring\fR
@@ -108,16 +108,16 @@ The model tier, or the model, the work was matched to; unset, the workspace's ma
 \fB\-\-parent\fR \fIstring\fR
 The job this one is forked from
 .TP
-\fB\-\-read\-only\fR
+\fB\-\-[no\-]read\-only\fR (default: off)
 A job that gathers evidence and writes nothing
 .TP
 \fB\-\-read\-paths\fR \fIstring\fR
 A path whose projects this job may read; repeatable or comma\-separated (additive: the written paths are readable already)
 .TP
-\fB\-\-schema\fR
+\fB\-\-[no\-]schema\fR (default: off)
 Print the JSON schema a job must satisfy, and exit
 .TP
-\fB\-\-stdin\fR
+\fB\-\-[no\-]stdin\fR (default: off)
 Read one job as JSON on stdin instead of taking it from flags
 .TP
 \fB\-\-timeout\fR \fIduration\fR
@@ -132,7 +132,7 @@ A path this job may write, or <file>#<declaration> to claim one declaration of a
 \fB\-f\fR \fI-\fR
 The records to apply: a file, or \- for stdin; one JSON job, a JSON array, or one job per line
 .TP
-\fB\-\-fix\fR
+\fB\-\-[no\-]fix\fR (default: off)
 Make every edit a problem's fix names without judgment, as job fork \-\-fix does, before applying the records
 .RE
 .SS job exec options
@@ -147,10 +147,10 @@ Run the command after \-\- and stop its whole process group once this long has p
 .SS job exit options
 .RS
 .TP
-\fB\-\-schema\fR
+\fB\-\-[no\-]schema\fR (default: off)
 Print the JSON schema a result must satisfy, and exit
 .TP
-\fB\-\-stdin\fR
+\fB\-\-[no\-]stdin\fR (default: off)
 Read this job's result from stdin; without it the job is abandoned
 .RE
 .SS job wait options
@@ -159,25 +159,25 @@ Read this job's result from stdin; without it the job is abandoned
 \fB\-\-evidence\fR \fI<goal>\fR
 Grade check goal <goal> against the run `<ref>` recorded in THIS checkout instead of the job's own; `check` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
 .TP
-\fB\-\-integration\fR
+\fB\-\-[no\-]integration\fR (default: off)
 Grade only the job's check goals against the runs the \-\-stdin result names in THIS checkout, and record that beside its state
 .TP
-\fB\-\-schema\fR
+\fB\-\-[no\-]schema\fR (default: off)
 Print the JSON schema a result must satisfy, and exit
 .TP
-\fB\-\-stdin\fR
+\fB\-\-[no\-]stdin\fR (default: off)
 Read the result from stdin instead of from the job, for one that was never filed
 .RE
 .SS job rm options
 .RS
 .TP
-\fB\-\-force\fR
+\fB\-\-[no\-]force\fR (default: off)
 Remove a row that already ended, destroying the record of what happened
 .RE
 .SS job prune options
 .RS
 .TP
-\fB\-\-all\fR
+\fB\-\-[no\-]all\fR (default: off)
 Also end a job a holder took and nobody touched within jobs.stale_after
 .RE
 .SS job pause options
@@ -192,10 +192,16 @@ Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds
 .SS job grant options
 .RS
 .TP
+\fB\-\-commit\fR \fIstring\fR
+Waive the push gate for this one commit instead of lowering a rule for a job; takes only push\-ungated
+.TP
 \fB\-\-for\fR \fIduration\fR
 End the grant after this long (e.g. 2h); unset, it lasts until the job ends
 .TP
-\fB\-\-revoke\fR
+\fB\-\-reason\fR \fIstring\fR
+Why the gate was skipped, recorded with the waiver; required with \-\-commit unless \-\-revoke
+.TP
+\fB\-\-[no\-]revoke\fR (default: off)
 End the job's grant of the rule
 .RE
 .SH SUBCOMMANDS
@@ -316,6 +322,18 @@ magus job prune --dry-run
 magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core
 .EE
 .PP
+\fIPush HEAD without the local gate, saying why\fR
+.PP
+.EX
+magus job grant --commit HEAD push-ungated --reason "CI gates this release branch"
+.EE
+.PP
+\fITake that waiver back\fR
+.PP
+.EX
+magus job grant --commit HEAD push-ungated --revoke
+.EE
+.PP
 .SH SEE ALSO
 \fBmagus\fR(1),
 \fBmagus\-ls\fR(1),
@@ -336,7 +354,6 @@ magus job pause session-load/core --reason 'release build needs the machine' --u
 \fBmagus\-session\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

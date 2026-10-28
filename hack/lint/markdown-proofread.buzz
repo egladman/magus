@@ -77,11 +77,11 @@ final HAND_WRITTEN = ["changes/unreleased/", "internal/agent/agents-section.md",
 final ALLOW = [
     // Products, languages, projects and companies.
     "Backblaze", "Buildkite", "Buzz", "Chrome", "CircleCI", "Claude", "Cloudflare", "Cursor",
-    "GitHub", "Go", "Jenkins", "Jujutsu", "Linux", "Mercurial", "MinIO", "Nx", "OpenTelemetry", "PatternFly", "Python",
+    "GitHub", "Go", "Jenkins", "Jujutsu", "Kubernetes", "Linux", "Mercurial", "MinIO", "Nx", "OpenTelemetry", "PatternFly", "Python",
     "Swift", "TypeScript", "Unix", "Windows",
     // Acronyms and initialisms.
     "ADR", "AI", "API", "CI", "CLI", "CSS", "CWD", "FAQ", "FFI", "HTTP", "ID", "IDs", "JIT", "JSON",
-    "LLM", "MCP", "PATH", "PF", "REPL", "RFC", "SBOM", "SCIP", "SDK", "UI", "URL", "URLs",
+    "LLM", "MCP", "OCI", "PATH", "PF", "REPL", "RFC", "SBOM", "SCIP", "SDK", "UI", "URL", "URLs",
     "VCS", "YAML",
 ];
 
@@ -193,7 +193,7 @@ fun judge(files: [str], base: str, module: str, kind: str) > [Finding] !> any {
     }
     final fix = "Run `{proofread\build}`, then {module}/{proofread\binary} {kind} <file>, and read why it stopped.";
     final run = proc\exec(bin, args: args, dir: if (base == "") "." else base,
-        opts: {"quiet": true, "allow_failure": true}) catch null;
+        opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
     fs\remove(table) catch void;
     // Exit 1 is a deny finding, written to stdout like any other.
     if (run == null or (run!.code != 0 and run!.code != 1)) {

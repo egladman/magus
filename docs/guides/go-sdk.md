@@ -1,6 +1,6 @@
 ---
 title: Using the Go SDK
-description: Task-shaped recipes for calling magus from Go (open a workspace, list projects and targets, run a target and read its result, ask what a change affects, query the graph, judge a tool call with the guard) and one program that is its own harness.
+description: Task-shaped examples for calling magus from Go (open a workspace, list projects and targets, run a target and read its result, ask what a change affects, query the graph, judge a tool call with the guard) and one program that is its own harness.
 tags: [go, sdk, library, guide, guard, harness, cache, embedding]
 ---
 
@@ -9,7 +9,7 @@ tags: [go, sdk, library, guide, guard, harness, cache, embedding]
 This guide does one thing per section with `import "github.com/egladman/magus"`. Each
 section is a runnable program. The [Go SDK reference](../reference/go-sdk.md) explains
 the shape of the API behind them: `Open` and `Inspect`, the interface roles, the
-`List`/`Evaluate` axis, cancellation, and testing. Read it when a recipe here leaves you
+`List`/`Evaluate` axis, cancellation, and testing. Read it when an example here leaves you
 asking why.
 
 Every code block on this page is a Go example in

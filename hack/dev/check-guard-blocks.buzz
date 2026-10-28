@@ -249,7 +249,7 @@ fun ruleOf(text: str) > str {
     if (ref == "") {
         return "";
     }
-    final stored = magus\cmd("query", args: ["output", ref], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final stored = magus\cmd("query", args: ["output", ref], opts: magus\CommandOptions{ quiet = true, allowFailure = true }) catch null;
     if (stored == null) {
         return "";
     }
@@ -530,7 +530,7 @@ fun quote(s: str) > str {
 // command into an argv and runs it, every other host hands it to a shell, and Claude Code
 // sets CLAUDE_PROJECT_DIR for it first.
 fun runHook(host: str, h: HookCommand, root: str, payload: str) > Observed !> any {
-    final opts: {str: any} = {"quiet": true, "allow_failure": true, "stdin": payload};
+    final opts = proc\ExecOptions{ quiet = true, allowFailure = true, stdin = payload };
     final started = os\time();
     var r: proc\ExecResult? = null;
     if (host == "cursor") {
@@ -656,7 +656,7 @@ fun leaseAt(root: str) > Lease !> any {
     foreach (j in list.jobs) {
         // Only a live lease with something to write grades an edit: an exited job holds
         // nothing, and a read-only one has no boundary to step outside of.
-        if (j.checkoutRoot == root and ["declared", "running"].indexOf(j.state) != null and j.writePaths.len() > 0) {
+        if (j.checkoutRoot == root and (j.state == magus\JobState.declared or j.state == magus\JobState.running) and j.writePaths.len() > 0) {
             return Lease{ job = j.id, outside = outsidePath(j.writePaths) };
         }
     }
@@ -689,7 +689,7 @@ export fun check(root: str) > Report {
     var err = "";
     try {
         final wired = mut [<magus\HarnessPlan>];
-        foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: {"quiet": true}).stdout.trim().split("\n")) {
+        foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim().split("\n")) {
             if (id != "") { wired.append(magus\describe.harness(id)); }
         }
         plans = wired;

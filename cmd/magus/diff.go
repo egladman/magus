@@ -323,7 +323,7 @@ func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 // testable without a pty.
 func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format output.Format, term diffTUITerm, enabled bool) bool {
 	switch {
-	case rf.NoTui, !enabled:
+	case !rf.Tui, !enabled:
 		return false
 	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
 	// bump. They are requests for an answer rather than for somewhere to read.
@@ -1112,7 +1112,7 @@ func (diffStoreSync) close() {}
 // waited on, and drained in full at close.
 type diffBridge struct {
 	addr    string
-	token   string
+	token   types.Secret
 	session *types.DiffReview
 
 	cursors chan diffSessionOp
@@ -1123,6 +1123,11 @@ type diffBridge struct {
 	done chan struct{}
 	// cancel aborts the post on the wire once close has spent its budget.
 	cancel context.CancelFunc
+}
+
+// setBearer is where the operator token leaves this process for the server's API.
+func setBearer(req *http.Request, token types.Secret) {
+	req.Header.Set("Authorization", "Bearer "+token.Reveal())
 }
 
 // diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route
@@ -1184,7 +1189,7 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	setBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		if !errors.Is(err, syscall.ECONNREFUSED) {
@@ -1398,7 +1403,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+b.token)
+	setBearer(req, b.token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1455,9 +1460,9 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	tty.ProseItem(w, tty.SystemProbe, "  --generated   ", "include the folded declared outputs")
-	tty.ProseItem(w, tty.SystemProbe, "  --no-tui      ",
-		"print the report instead of opening the viewer.",
-		"At a terminal the viewer opens by default, joined to the session the console and an agent share:",
+	tty.ProseItem(w, tty.SystemProbe, "  --[no-]tui    ",
+		"open the viewer (default: on); --no-tui prints the report instead.",
+		"At a terminal the viewer opens joined to the session the console and an agent share:",
 		"] and [ walk hunks, v marks one read, q leaves.",
 		"Anywhere it cannot draw it stands aside on its own, so a script needs no flag.")
 	tty.ProseItem(w, tty.SystemProbe, "  --impact      ",

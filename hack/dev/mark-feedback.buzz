@@ -43,7 +43,7 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [TrailMa
         }
         final row = found!;
         marks.append(TrailMark{
-            id = row.id, section = row.section, key = row.key, rule = row.rule, verdict = verdict, note = note,
+            id = row.id, section = magus\TrailSection(row.section), key = row.key, rule = row.rule, verdict = magus\TrailVerdict(verdict), note = note,
             session = r.session, at = 0, examples = row.examples,
         });
     }
@@ -57,7 +57,7 @@ fun planLine(m: TrailMark, r: show\Report) > str {
             label = row.label;
         }
     }
-    return "  {label}  {m.id}  {m.section}  {m.key}";
+    return "  {label}  {m.id}  {m.section.value}  {m.key}";
 }
 
 export fun main(args: [str]) > void !> any {

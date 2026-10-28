@@ -71,11 +71,11 @@ import "magus" as m;
 
 export fun build() > str {
     final dirs = magus\DirsOptions{ language = "go", depth = 2 };
-    final path = m\PathOptions{ relations = ["imports"] };
+    final path = m\PathOptions{ relations = [m\RelationID.imports] };
     final hood = magus\NeighborhoodOptions{ depth = 1 };
     final check = magus\Check{};
     final none = check.status == magus\CheckStatus.none;
-    return "{dirs.language} {dirs.depth} {dirs.layer == ""} {path.relations[0]} {hood.depth} {none}";
+    return "{dirs.language} {dirs.depth} {dirs.layer == ""} {path.relations[0].value} {hood.depth} {none}";
 }
 `))
 	got, err := sess.CallValue(ctx, sess.Exports()["build"], nil)

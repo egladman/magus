@@ -741,9 +741,12 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
 		row.ModelTier = prev.ModelTier
-		// Only RecordWorktree and EndWorktrees write the worktree record. The next attempt
-		// keeps a checkout that still stands and forgets one magus removed.
-		row.Worktree = prev.Clone().Worktree
+		// Only RecordWorktree and EndWorktrees write the worktree record, and Exec rebinding
+		// an untaken row from an adopted checkout to another. The next attempt keeps a
+		// checkout that still stands and forgets one magus removed.
+		if kind != asExec || !rebindsAdopted(prev, row) {
+			row.Worktree = prev.Clone().Worktree
+		}
 		if refork && row.Worktree != nil {
 			row.Worktree.Kept = ""
 			if row.Worktree.Removed != 0 {
@@ -1369,7 +1372,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 				" delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
 		}
-		if dropped.Worktree.Standing() {
+		if dropped.Worktree.Standing() && dropped.Worktree.Made {
 			here, _ := filepath.Abs(s.root)
 			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row types.Job) bool { return row.ID == id })
 			if kept := endCheckout(ctx, others, here, dropped, *dropped.Worktree, nil); kept != "" {

@@ -17,12 +17,13 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -456,6 +457,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 	var update bool
 	pos, err := commandParse("spell lock", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&update, "update", false, "ask the registry what each declared tag names now, and rewrite magus.lock")
+		cmdline.NegatedBoolVar(fs, &update, "update")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus spell lock [--update] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -549,7 +551,7 @@ func lockRegistryClient(spells config.SpellsConfig) func(context.Context, string
 		if err != nil {
 			return nil, err
 		}
-		c.Username, c.Password = user, pass.Reveal()
+		c.Credentials = oci.Credentials{Username: user, Password: pass}
 		return c, nil
 	}
 }
@@ -565,10 +567,9 @@ func pullSpell(ctx context.Context, client *oci.Client, ref oci.Reference, cache
 	}
 	pinned.Tag = ""
 	dir, err := remotespell.Resolve(ctx, remotespell.Ref{Import: pinned.String(), OCI: pinned}, remotespell.Options{
-		CacheRoot: cacheRoot,
-		Client:    client.HTTP,
-		Username:  client.Username,
-		Password:  client.Password,
+		CacheRoot:   cacheRoot,
+		Client:      client.HTTP,
+		Credentials: client.Credentials,
 	})
 	if err != nil {
 		return spellPullResult{}, err
@@ -701,11 +702,11 @@ func shippedSpells() ([]shippedSpell, error) {
 func registryClient(ctx context.Context, root, host, username string) (*oci.Client, error) {
 	c := &oci.Client{HTTP: registryHTTP()}
 	if username != "" {
-		pass, err := readToken()
+		pass, err := readToken(ctx)
 		if err != nil {
 			return nil, err
 		}
-		c.Username, c.Password = username, pass
+		c.Credentials = oci.Credentials{Username: username, Password: pass}
 		return c, nil
 	}
 	if _, ok := globalCfg.Spells.Registry(host); !ok {
@@ -722,20 +723,20 @@ func registryClient(ctx context.Context, root, host, username string) (*oci.Clie
 	if err != nil {
 		return nil, err
 	}
-	c.Username, c.Password = user, pass.Reveal()
+	c.Credentials = oci.Credentials{Username: user, Password: pass}
 	return c, nil
 }
 
 // registryCredential resolves host's spells.registries entry through r, which registers
 // the value for redaction before returning it.
-func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, secret.Value, error) {
+func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, types.Secret, error) {
 	entry, ok := spells.Registry(host)
 	if !ok {
-		return "", secret.Value{}, fmt.Errorf("spells.registries has no entry for %s", host)
+		return "", types.Secret{}, fmt.Errorf("spells.registries has no entry for %s", host)
 	}
-	pass, err := r.Read(ctx, entry.Password)
+	pass, err := r.Read(ctx, entry.PasswordRef)
 	if err != nil {
-		return "", secret.Value{}, fmt.Errorf("spells.registries %s: %w", host, err)
+		return "", types.Secret{}, fmt.Errorf("spells.registries %s: %w", host, err)
 	}
 	return entry.Username, pass, nil
 }

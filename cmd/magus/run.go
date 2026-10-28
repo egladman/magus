@@ -312,7 +312,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
-	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, rf.NoDefaultCharms)
+	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, !rf.DefaultCharms)
 	// ci dispatches through RunCI, which drops the write-granting charms. Report what
 	// runs, not what was asked for, or the header contradicts the run it introduces.
 	if targetName == "ci" {
@@ -336,7 +336,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// is idle. Inert off the ci target and when nothing is on record.
 	partial := rf.Shard != "" || rf.NShards > 0
 	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, partial)
-	if gateErr := gate.evaluate(ctx, rf.NoRedundancyCheck); gateErr != nil {
+	if gateErr := gate.evaluate(ctx, !rf.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 
@@ -350,7 +350,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
-	if rf.NoVolatilityRetry {
+	if !rf.VolatilityRetry {
 		runOpts = append(runOpts, magus.WithNoVolatilityRetry())
 	}
 	race, err := resolveRace(rf.Race)
@@ -366,7 +366,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if rf.NoCache {
+	if !rf.Cache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))

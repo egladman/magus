@@ -1,5 +1,4 @@
 import "magus";
-import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
 import "../../hack/magusfile/run-golangci" as golangci;
 
@@ -144,14 +143,14 @@ export fun conformance(ctx: magus\Context, args: [str]) > void !> any {
     final cache_dir = fs\join(env\home(), ".cache", "magus", "gopherbuzz-upstream-buzz");
 
     if (fs\exists(cache_dir)) {
-        vcs\cmd(["fetch", "origin"], opts: {"dir": cache_dir});
+        vcs\cmd(["fetch", "origin"], opts: vcs\CommandOptions{dir = cache_dir});
     } else {
         vcs\cmd(["clone", "https://github.com/buzz-language/buzz", cache_dir]);
     }
-    vcs\cmd(["checkout", pinned], opts: {"dir": cache_dir});
+    vcs\cmd(["checkout", pinned], opts: vcs\CommandOptions{dir = cache_dir});
 
     magus\log.info("running upstream conformance against {cache_dir} @ {pinned}");
     os\withEnv({"GOPHERBUZZ_UPSTREAM_DIR": cache_dir}, fun() > void !> any {
-        proc\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".", {});
+        proc\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".");
     });
 }

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: magus
+  labels:
+    app.kubernetes.io/name: magus
+    app.kubernetes.io/component: daemon
+  annotations:
+    kubernetes.io/description: >-
+      A stable name for `kubectl port-forward svc/magus 7391`. The daemon binds loopback and
+      the default-deny policy admits no ingress, so nothing in the cluster reaches it.
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: magus
+    app.kubernetes.io/component: daemon
+  ports:
+    - name: http
+      port: 7391
+      targetPort: http
+      protocol: TCP

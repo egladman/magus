@@ -37,7 +37,7 @@ fun harnessIds(id: str?) > [str] !> any {
     if (id != null) {
         return [id!];
     }
-    final names = magus\cmd("describe", args: ["harness", "-o", "name"], opts: {"quiet": true}).stdout.trim();
+    final names = magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim();
     return if (names == "") [<str>] else names.split("\n");
 }
 
@@ -83,7 +83,7 @@ export fun main(args: [str]) > void !> any {
         install.append("--id");
         install.append(id!);
     }
-    magus\cmd("agent", args: install, opts: {"quiet": true});
+    magus\cmd("agent", args: install, opts: magus\CommandOptions{ quiet = true });
     final lines = mut [<str>];
     foreach (each in harnessIds(id)) {
         foreach (line in applyPlan(magus\describe.harness(each), root: ".")) {

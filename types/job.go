@@ -933,7 +933,7 @@ type Job struct {
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.
 	CheckoutRoot string `json:"checkout_root,omitempty" yaml:"checkout_root,omitempty"`
-	// Worktree is the checkout a fork made for this job (see [Declaration.Checkout]), nil
+	// Worktree is the checkout a fork made or adopted for this job (see [Declaration.Checkout]), nil
 	// when the job works wherever it is taken. Store-computed like CheckoutRoot: only the
 	// fork that made it and the removal at the job's end write it.
 	Worktree *JobWorktree `json:"worktree,omitempty" yaml:"worktree,omitempty"`
@@ -994,9 +994,9 @@ type Job struct {
 	WaiterEvidence *JobIntegration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
 }
 
-// JobWorktree is a checkout `magus job fork --checkout` made for one job, which the job
-// owns: the job's holder takes it there and nowhere else, and magus removes it once the job
-// ends unless removing it would lose work.
+// JobWorktree is the checkout `magus job fork --checkout` made or adopted for one job: the
+// job's holder takes it there and nowhere else. One the fork made (Made) magus removes once
+// the job ends unless removing it would lose work.
 type JobWorktree struct {
 	// Root is the checkout's top level, absolute.
 	Root string `json:"root" yaml:"root"`
@@ -1015,6 +1015,10 @@ type JobWorktree struct {
 	// Kept is why magus left it standing after the job ended, "" until then or once it is
 	// removed.
 	Kept string `json:"kept,omitempty" yaml:"kept,omitempty"`
+	// Made is true when the job's fork created the checkout, the one kind magus removes once
+	// the job ends. A checkout the fork adopted, and a row recorded before Made existed, read
+	// false and stand until whoever made them removes them.
+	Made bool `json:"made,omitempty" yaml:"made,omitempty"`
 }
 
 // Standing reports whether the checkout has not been removed: it binds its job's holder,

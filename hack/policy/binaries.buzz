@@ -10,6 +10,7 @@ import "proc";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/builds" as builds;
+import "./hack/policy/stale" as stale;
 
 // Where is where a command runs: the directory the host reported, and the workspace root
 // holding it. Either is "" when unknown. lease is the job the caller works under, "" for the
@@ -51,18 +52,13 @@ export fun onDisk() > Disk {
         hasBinary = fun (dir: str) > bool {
             return fs\exists("{dir}/magus") catch true;
         },
-        sameFile = fun (a: str, b: str) > bool {
-            final x = fs\stat(a) catch null;
-            final y = fs\stat(b) catch null;
-            if (x == null or y == null) { return false; }
-            return x!.size == y!.size and x!.mtime == y!.mtime and x!.mode == y!.mode;
-        },
+        sameFile = fun (a: str, b: str) > bool { return stale\sameFile(a, b: b); },
         binaryScopes = fun (root: str) > [str]? {
             final listed = proc\exec("env", args: ["GOEXPERIMENT=jsonv2", "go", "list", "-deps", "-f",
-                `{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus"],
-                dir: root, opts: {"quiet": true, "allow_failure": true}) catch null;
+                stale\goListFormat, "./cmd/magus"],
+                dir: root, opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
             if (listed == null or listed!.code != 0) { return null; }
-            return builds\packageScopes(listed!.stdout, root: root);
+            return builds\inputScopes(stale\goInputs(listed!.stdout, root: root));
         },
     };
 }
@@ -137,7 +133,7 @@ fun foreignBinary(p: helpers\Program, where: Where, disk: Disk) > str {
     }
     if (target == "" or target == built or !isCheckout(target)) { return ""; }
     final sameFile = disk.sameFile;
-    if (sameFile("{target}/magus", p.path)) { return ""; }
+    if (sameFile("{target}/magus", b: p.path)) { return ""; }
     final hasBinary = disk.hasBinary;
     if (places(p.args, built: built, dir: where.dir) and !hasBinary(target)) { return ""; }
     return ("a binary from another checkout runs here; use `{target}/magus`\n"
@@ -171,7 +167,7 @@ fun goIntoCheckout(p: helpers\Program, where: Where, disk: Disk) > str {
 }
 
 // placementScript copies an eligible ./magus into a fresh worktree and refuses any other.
-final placementScript = builds\placementScript;
+final placementScript = stale\placementScript;
 
 // places: the line runs placementScript with --from naming the checkout the binary was built
 // in. The script proves the binary is the one the worktree would build, so this rule lets it

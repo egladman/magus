@@ -54,7 +54,7 @@ Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts
 .SS broker stop options
 .RS
 .TP
-\fB\-\-services\fR
+\fB\-\-[no\-]services\fR (default: off)
 Stop the broker's hosted services, leaving the broker running
 .RE
 .SH SUBCOMMANDS
@@ -115,7 +115,6 @@ magus run test . --broker off
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

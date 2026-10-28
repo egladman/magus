@@ -88,9 +88,9 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("verify", vm.DirectValue("crypto.verify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		alg := ffi.String(bzArgs, 0)
 		data := ffi.String(bzArgs, 1)
-		sig_hex := ffi.String(bzArgs, 2)
-		pub_hex := ffi.String(bzArgs, 3)
-		ret0, err := std.CryptoVerify(ctx, alg, data, sig_hex, pub_hex)
+		sigHex := ffi.String(bzArgs, 2)
+		pubHex := ffi.String(bzArgs, 3)
+		ret0, err := std.CryptoVerify(ctx, alg, data, sigHex, pubHex)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

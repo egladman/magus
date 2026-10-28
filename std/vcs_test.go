@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,11 +48,11 @@ func TestVcsAccessorsRaiseWithNoVCS(t *testing.T) {
 
 	for name, call := range map[string]func() (string, error){
 		"ref": func() (string, error) {
-			ref, err := VcsRef(ctx, "")
+			ref, err := VCSRef(ctx, "")
 			assert.Nil(t, ref, "no VCS is an error, not a checkout that names no ref")
 			return "", err
 		},
-		"describe": func() (string, error) { return VcsDescribe(ctx) },
+		"describe": func() (string, error) { return VCSDescribe(ctx) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			v, err := call()
@@ -68,7 +70,7 @@ func TestVcsAccessorsRaiseWithNoVCS(t *testing.T) {
 func TestVcsCommitRaisesWithNoVCS(t *testing.T) {
 	chdirOutsideAnyRepository(t)
 
-	c, err := VcsCommit(context.Background(), "")
+	c, err := VCSCommit(context.Background(), "")
 	require.Error(t, err)
 	assert.Empty(t, c.ID, "no half-populated record to sniff")
 	assert.Contains(t, err.Error(), "git")
@@ -79,7 +81,7 @@ func TestVcsCommitRaisesWithNoVCS(t *testing.T) {
 func TestVcsHistoryRaisesWithNoVCS(t *testing.T) {
 	chdirOutsideAnyRepository(t)
 
-	got, err := VcsHistory(context.Background(), 5, nil, false)
+	got, err := VCSHistory(context.Background(), 5, nil, false)
 	require.Error(t, err)
 	assert.Nil(t, got)
 }
@@ -93,7 +95,7 @@ func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
 	repo.Git("commit", "-q", "--amend", "-m", "both")
 	repo.Commit("outside", map[string]string{"other.txt.2": "other.txt.2"})
 
-	got, err := VcsHistory(WithCurrentWorkingDirectory(context.Background(), dir), 0, []string{"docs"}, true)
+	got, err := VCSHistory(WithCurrentWorkingDirectory(context.Background(), dir), 0, []string{"docs"}, true)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	// The revision's identity, author, date and parents are git's to stamp, not this test's to pin.
@@ -102,7 +104,7 @@ func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
 		Subject: "both", Files: []string{"docs/a.md"},
 	}, got[0])
 
-	all, err := VcsHistory(WithCurrentWorkingDirectory(context.Background(), dir), 0, nil, false)
+	all, err := VCSHistory(WithCurrentWorkingDirectory(context.Background(), dir), 0, nil, false)
 	require.NoError(t, err)
 	assert.Len(t, all, 2)
 }
@@ -113,13 +115,13 @@ func TestVcsRefIsNullOnADetachedCheckout(t *testing.T) {
 	repo := testkit.NewRepository(t, nil)
 	ctx := WithCurrentWorkingDirectory(context.Background(), repo.Root())
 
-	ref, err := VcsRef(ctx, "")
+	ref, err := VCSRef(ctx, "")
 	require.NoError(t, err)
 	require.NotNil(t, ref)
 	assert.Equal(t, "main", *ref)
 
 	repo.Git("switch", "-q", "--detach")
-	ref, err = VcsRef(ctx, "")
+	ref, err = VCSRef(ctx, "")
 	require.NoError(t, err)
 	assert.Nil(t, ref)
 }
@@ -145,29 +147,29 @@ func TestVcsDirArgumentsReadTheRepositoryHoldingDir(t *testing.T) {
 
 	for name, dir := range map[string]string{"absolute": caller, "relative to the cwd": relative} {
 		t.Run(name, func(t *testing.T) {
-			ref, err := VcsRef(ctx, dir)
+			ref, err := VCSRef(ctx, dir)
 			require.NoError(t, err)
 			require.NotNil(t, ref)
 			assert.Equal(t, "beta", *ref)
 
-			files, err := VcsChangedFiles(ctx, "main", dir)
+			files, err := VCSChangedFiles(ctx, "main", dir)
 			require.NoError(t, err)
 			require.Len(t, files, 1)
 			assert.Equal(t, "b.txt", files[0].Value)
 			assert.Equal(t, canonical(t, caller), canonical(t, files[0].Base))
 
-			regions, err := VcsRegions(ctx, "main", dir)
+			regions, err := VCSRegions(ctx, "main", dir)
 			require.NoError(t, err)
 			require.Len(t, regions, 1)
 			assert.Equal(t, "b.txt", regions[0].File.Path)
 		})
 	}
 
-	ref, err := VcsRef(ctx, "")
+	ref, err := VCSRef(ctx, "")
 	require.NoError(t, err)
 	require.NotNil(t, ref)
 	assert.Equal(t, "alpha", *ref, "no dir still reads the cwd's repository")
-	files, err := VcsChangedFiles(ctx, "main", "")
+	files, err := VCSChangedFiles(ctx, "main", "")
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	assert.Equal(t, "a.txt", files[0].Value)
@@ -259,17 +261,17 @@ func TestVcsDirReadsEachBackendsRepository(t *testing.T) {
 			require.NoError(t, os.Mkdir(dir, 0o755))
 			b.init(t, dir)
 
-			ref, err := VcsRef(ctx, dir)
+			ref, err := VCSRef(ctx, dir)
 			require.NoError(t, err)
 			require.NotNil(t, ref)
 			assert.Equal(t, "topic", *ref)
 
-			files, err := VcsChangedFiles(ctx, b.parent, dir)
+			files, err := VCSChangedFiles(ctx, b.parent, dir)
 			require.NoError(t, err)
 			require.Len(t, files, 1)
 			assert.Equal(t, "b.txt", files[0].Value)
 
-			base, err := VcsBase(ctx, dir)
+			base, err := VCSBase(ctx, dir)
 			require.NoError(t, err)
 			assert.Equal(t, b.base, base)
 		})
@@ -285,19 +287,19 @@ func TestVcsDirArgumentsRaiseForAMissingDir(t *testing.T) {
 	ctx := WithCurrentWorkingDirectory(context.Background(), t.TempDir())
 	missing := filepath.Join(t.TempDir(), "gone")
 
-	ref, err := VcsRef(ctx, missing)
+	ref, err := VCSRef(ctx, missing)
 	require.ErrorContains(t, err, "vcs.ref: dir")
 	assert.Nil(t, ref)
-	files, err := VcsChangedFiles(ctx, "", missing)
+	files, err := VCSChangedFiles(ctx, "", missing)
 	require.ErrorContains(t, err, "vcs.changedFiles: dir")
 	assert.Nil(t, files)
-	regions, err := VcsRegions(ctx, "", missing)
+	regions, err := VCSRegions(ctx, "", missing)
 	require.ErrorContains(t, err, "vcs.regions: dir")
 	assert.Nil(t, regions)
-	base, err := VcsBase(ctx, missing)
+	base, err := VCSBase(ctx, missing)
 	require.ErrorContains(t, err, "vcs.base: dir")
 	assert.Empty(t, base)
-	_, err = VcsBase(ctx, "")
+	_, err = VCSBase(ctx, "")
 	require.NoError(t, err, "with no dir, base never raises")
 }
 
@@ -314,7 +316,7 @@ func TestVcsRefRaisesOnAnUnbornBranch(t *testing.T) {
 	repo := testkit.NewRepository(t, nil)
 	repo.Git("update-ref", "-d", "refs/heads/main")
 
-	ref, err := VcsRef(WithCurrentWorkingDirectory(context.Background(), repo.Root()), "")
+	ref, err := VCSRef(WithCurrentWorkingDirectory(context.Background(), repo.Root()), "")
 	require.Error(t, err)
 	assert.Nil(t, ref)
 }
@@ -329,7 +331,7 @@ func TestVcsRefRaisesOnAnUnbornBranch(t *testing.T) {
 func TestVcsIsDirtyRaisesWhenTheProbeFails(t *testing.T) {
 	chdirOutsideAnyRepository(t)
 
-	_, err := VcsIsDirty(context.Background(), nil)
+	_, err := VCSIsDirty(context.Background(), nil)
 	require.Error(t, err, "a failed status probe must not read as a clean tree")
 	assert.Contains(t, err.Error(), "status")
 }
@@ -344,7 +346,7 @@ func TestVcsIsDirtySaysWhyGitFailed(t *testing.T) {
 	unreadable := t.TempDir()
 	t.Setenv("GIT_CONFIG_GLOBAL", unreadable)
 
-	_, err := VcsIsDirty(context.Background(), nil)
+	_, err := VCSIsDirty(context.Background(), nil)
 	require.ErrorIs(t, err, types.VCSUnavailable)
 	assert.Contains(t, err.Error(), unreadable)
 }
@@ -359,7 +361,7 @@ func TestVcsIsDirtySaysWhyGitFailed(t *testing.T) {
 func TestVcsNameNeverRaises(t *testing.T) {
 	chdirOutsideAnyRepository(t)
 
-	_, err := VcsName(context.Background())
+	_, err := VCSName(context.Background())
 	require.NoError(t, err, "detection must never raise; that is its whole job")
 }
 
@@ -390,7 +392,7 @@ func TestOsWhichRaisesForAMissingCommand(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("resolves a real command", func(t *testing.T) {
-		got, err := OsWhich(ctx, "sh")
+		got, err := ProcWhich(ctx, "sh")
 		require.NoError(t, err)
 		assert.NotEmpty(t, got)
 	})
@@ -398,7 +400,7 @@ func TestOsWhichRaisesForAMissingCommand(t *testing.T) {
 	t.Run("raises for a missing one", func(t *testing.T) {
 		// Previously "", so a caller that skipped the equality check passed the empty
 		// string straight into an exec or a path join.
-		got, err := OsWhich(ctx, "definitely-no-such-cmd-zzz")
+		got, err := ProcWhich(ctx, "definitely-no-such-cmd-zzz")
 		require.Error(t, err)
 		assert.Empty(t, got)
 		assert.Contains(t, err.Error(), "not on PATH")
@@ -441,7 +443,7 @@ func TestVcsRegionsNamesEachChangedDeclaration(t *testing.T) {
 	})
 	repo.Write("a.go", "package a\n\nfunc One() int {\n\treturn 2\n}\n\nfunc Two() int {\n\treturn One()\n}\n")
 
-	got, err := VcsRegions(WithCurrentWorkingDirectory(context.Background(), repo.Root()), "main", "")
+	got, err := VCSRegions(WithCurrentWorkingDirectory(context.Background(), repo.Root()), "main", "")
 	require.NoError(t, err)
 	var placed []string
 	for _, r := range got {
@@ -477,11 +479,11 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 		return refusal
 	})
 
-	_, err = VcsCommand(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, map[string]any{"quiet": true})
+	_, err = VCSCommand(types.WithJobLease(ws, "worker"), []string{"push", "origin", "main"}, types.VCSCommandOptions{Quiet: true})
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"worker git push origin main " + dir}, asked)
 
-	res, err := VcsCommand(ws, []string{"status", "--porcelain"}, map[string]any{"quiet": true})
+	res, err := VCSCommand(ws, []string{"status", "--porcelain"}, types.VCSCommandOptions{Quiet: true})
 	require.NoError(t, err, "no acting lease, so the gate is not asked")
 	assert.True(t, res.OK)
 	assert.Len(t, asked, 1)
@@ -490,10 +492,28 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	t.Setenv("GIT_INDEX_FILE", "/from/the/process")
 	err = OsWithEnv(types.WithJobLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
 		cbFunc(func(ctx context.Context) error {
-			_, err := VcsCommand(ctx, []string{"commit", "-m", "x"}, map[string]any{"quiet": true})
+			_, err := VCSCommand(ctx, []string{"commit", "-m", "x"}, types.VCSCommandOptions{Quiet: true})
 			return err
 		}))
 	require.ErrorIs(t, err, refusal)
 	assert.Equal(t, []string{"GIT_INDEX_FILE=/from/the/process", "GIT_DIR=/from/with_env"}, gitEnv,
 		"the gate reads the environment the child starts with: the process's, then os\\with_env's")
+}
+
+// A hung `git worktree remove` is what the reclaim chunk's deadline has to cut off: a fake
+// git that sleeps stands in for it.
+func TestVcsCmdTimeoutCutsOffAHungBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake git is a shell script")
+	}
+	root := testkit.NewRepository(t, nil).Root()
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	start := time.Now()
+	_, err := VCSCommand(WithCurrentWorkingDirectory(t.Context(), root), []string{"worktree", "remove", "wt"},
+		types.VCSCommandOptions{Quiet: true, AllowFailure: true, TimeoutMs: 300})
+	require.ErrorContains(t, err, "killed after its 300ms timeoutMs")
+	assert.Less(t, time.Since(start), 10*time.Second, "the hung git was killed, not waited out")
 }

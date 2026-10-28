@@ -124,7 +124,7 @@ export fun issuesAt(dir: str, packages: [str], files: [str]) > [str] !> any {
         "--path-mode", "abs", "--issues-exit-code", "0"] + (if (dir != ".") libArgs(dir) else [<str>]) + packages;
     var printed = "";
     os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, fun () > void !> any {
-        printed = proc\exec(bin, args, root + "/" + dir, opts: {"quiet": true}).stdout;
+        printed = proc\exec(bin, args, root + "/" + dir, opts: proc\ExecOptions{quiet = true}).stdout;
     });
     return issuesIn(printed, root: root, files: files);
 }

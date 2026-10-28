@@ -75,7 +75,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     final base = vcs\base();
     // A ref from before the module existed has no schema to break.
     final schema = vcs\cmd(["cat-file", "-e", base + ":proto/buf.yaml"],
-                           opts: {"allow_failure": true, "quiet": true});
+                           opts: vcs\CommandOptions{allowFailure = true, quiet = true});
     if (base == "" or !schema["ok"]) {
         magus\log.info("ci: no proto/buf.yaml at `{base}`; skipping buf-breaking");
         return;

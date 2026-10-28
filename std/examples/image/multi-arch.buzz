@@ -1,0 +1,107 @@
+// multi-arch: one build and one image target per platform, an Image Index target that
+// fans them in, then an SBOM, provenance and a push. Each step is a target, so the
+// platforms build in parallel and each caches on its own inputs. Fibers would add no
+// parallelism: a host call blocks its fiber's thread.
+//
+//   magus run image_push -- v1.4.0 https://github.com/acme/app/.github/workflows/release.yaml
+import "magus";
+import "std";
+import "fs";
+import "proc";
+import "vcs";
+import "image";
+
+magus\project({
+    "targets": {
+        "image-push": {"skip_cache": "reads a registry credential and writes to a registry"},
+    },
+});
+
+final AMD64 = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+final ARM64 = image\Platform{ os = image\OS.linux, architecture = image\Architecture.arm64 };
+final INDEX = "out/image/index";
+final REPOSITORY = "ghcr.io/acme/app";
+
+fun slug(p: image\Platform) > str {
+    return "{p.os.value}-{p.architecture.value}";
+}
+
+// go build for p without cgo; see static-go.buzz.
+fun goBuild(p: image\Platform) > void !> any {
+    final argv: mut [str] = mut [];
+    foreach (key, value in image\goEnv(p)) {
+        argv.append("{key}={value}");
+    }
+    foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-o", "out/{slug(p)}/app", "./cmd/app"]) {
+        argv.append(arg);
+    }
+    _ = proc\exec("env", args: argv);
+}
+
+fun assembleFor(p: image\Platform) > void !> any {
+    final layout = image\assemble(image\Spec{
+        scratch = true,
+        platform = p,
+        files = [image\File{ source = "out/{slug(p)}/app", path = "/app", mode = fs\mode("0755") }],
+        config = image\Config{ user = "65532:65532", entrypoint = ["/app"] },
+    }, layout: "out/image/{slug(p)}");
+    std\print("{slug(p)} {layout.descriptor.digest.string()}");
+}
+
+// One target per platform: the graph sees each edge, and image_index runs them in
+// parallel. The wrappers differ only in their literal globs, which magus reads before
+// a target runs.
+export fun build_amd64(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/linux-amd64/app"]);
+    goBuild(AMD64);
+}
+
+export fun build_arm64(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/linux-arm64/app"]);
+    goBuild(ARM64);
+}
+
+export fun image_amd64(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build_amd64);
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/image/linux-amd64/**"]);
+    assembleFor(AMD64);
+}
+
+export fun image_arm64(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build_arm64);
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/image/linux-arm64/**"]);
+    assembleFor(ARM64);
+}
+
+// Fans in: both platform images, then one Image Index over them. platforms refuses a
+// set that names one platform twice.
+export fun image_index(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(image_amd64, image_arm64);
+    ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/image/index/**"]);
+    final platforms = image\platforms(["linux/amd64", "linux/arm64"]);
+    final index = image\assembleIndex(platforms.map(fun (i: int, p: image\Platform) > str => "out/image/{slug(p)}"), layout: INDEX);
+    std\print("index {index.descriptor.digest.string()}");
+}
+
+// The tag and builder id are told, never guessed from the environment. The SBOM and
+// provenance attach as OCI 1.1 referrers in a NEW layout; the index is not edited.
+export fun image_push(ctx: magus\Context, args: [str]) > void !> any {
+    if (args.len() != 2) {
+        throw "image_push: pass a tag and a builder id, e.g. -- v1.4.0 https://github.com/acme/app/.github/workflows/release.yaml";
+    }
+    ctx.needs(image_index);
+    final sbom = image\writeSbom(INDEX, path: "out/image/sbom.spdx.json");
+    final provenance = image\writeProvenance(INDEX, provenance: image\Provenance{
+        builderId = args[1],
+        sourceRevision = vcs\commit().id,
+    }, path: "out/image/provenance.intoto.json");
+    image\attachReferrers(INDEX, documents: [sbom, provenance], layout: "out/image/attested");
+    final pushed = image\push("out/image/attested", repository: REPOSITORY, tags: [args[0]],
+        auth: image\RegistryAuth{ username = "acme-ci", password = image\Secret{ value = magus\secret.read("ghcr-token") } });
+    std\print(pushed.reference);
+}

@@ -1401,7 +1401,7 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 				if extracted != nil && r.full != "" {
 					extracted[fmt.Sprintf("%s\x00%s\x00%s", p.Path, s.Name(), tool)] = r.full
 				}
-				vers = append(vers, fmt.Sprintf("%s:%s:%s", s.Name(), tool, r.token))
+				vers = append(vers, fmt.Sprintf("%s:%s:%s", s.Name(), tool, r.narrowed))
 			}
 		}
 		if len(vers) > 0 {
@@ -1411,9 +1411,9 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 	return out, nil
 }
 
-// toolReading is one probe's two consumers: the cache key wants a narrowed token, the
+// toolReading is one probe's two consumers: the cache key wants a narrowed version, the
 // window gate wants the whole version, and both come from the same spawn.
-type toolReading struct{ token, full string }
+type toolReading struct{ narrowed, full string }
 
 // probeReadings resolves every distinct (spell, dir, tool) a run needs, CONCURRENTLY.
 //
@@ -1523,7 +1523,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	// A declared constant needs no process. It stays out of `full`: an author typed it,
 	// so there is nothing for the gate to compare.
 	if t.Probe.Bin == "" {
-		return toolReading{token: t.Key.Const}, nil
+		return toolReading{narrowed: t.Key.Const}, nil
 	}
 	// The absence is decided inside the fork, so probeCached records it as an absence
 	// (no TTL) rather than as a failure.
@@ -1545,10 +1545,10 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 			} else {
 				slog.WarnContext(ctx, absentMessage(tool, absent.cause), slog.String("spell", s.Name()))
 			}
-			return toolReading{token: unprobedToken}, nil
+			return toolReading{narrowed: unprobedToken}, nil
 		case ctx.Err() != nil:
 			// A cancelled run keys nothing, and its failure says nothing about the tool.
-			return toolReading{token: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
+			return toolReading{narrowed: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
 		default:
 			// The usual cause is a fresh checkout: a launcher such as pnpm runs, and the tool it
 			// would exec was never installed beside it.
@@ -1558,7 +1558,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 				WithWhy("No cache key could tell the tool's upgrades apart.")
 		}
 	}
-	token, note := spells.VersionToken(probed, t.Key)
+	narrowed, note := spells.VersionToken(probed, t.Key)
 	if note != "" {
 		slog.With(attr.Component("magus")).WarnContext(ctx, "tool-version key degraded; cache key is coarser than declared",
 			slog.String("spell", s.Name()), slog.String("tool", tool),
@@ -1566,8 +1566,8 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	}
 	slog.With(attr.Component("magus")).DebugContext(ctx, "tool-version probe",
 		slog.String("spell", s.Name()), slog.String("tool", tool),
-		slog.String("output", probed), slog.String("token", token))
-	r := toolReading{token: token}
+		slog.String("output", probed), slog.String("narrowed", narrowed))
+	r := toolReading{narrowed: narrowed}
 	if full, ok := spells.ExtractVersion(probed); ok {
 		r.full = full
 	}

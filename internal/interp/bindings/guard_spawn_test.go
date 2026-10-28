@@ -39,7 +39,7 @@ fun describe(req: SpawnRequest) > str {
     if (req.target != null) { agent = req.target!.agent; }
     var lease = "";
     if (req.lease != null) { lease = req.lease!.id; }
-    return "{req.kind}|{req.host}|{req.model}|{req.role}|{lease}|{agent}|{req.parent}";
+    return "{req.kind.value}|{req.host}|{req.model}|{req.role.value}|{lease}|{agent}|{req.parent}";
 }
 
 magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
@@ -199,7 +199,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
     var ids = "";
     foreach (row in list.jobs) { ids = ids + row.id + ";"; }
     var wrote = "refused";
-    if (req.kind == "spawn") {
+    if (req.kind == magus\SpawnKind.spawn) {
         magus\job.put("smuggled", opts: {"criteria": "from a rule"});
         wrote = "written";
     }

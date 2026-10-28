@@ -116,16 +116,16 @@ Sign the file at path with key, the hex private key read through magus\secret.re
 
 ### verify
 
-Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is "ed25519".
+Report whether sigHex is a valid signature over data for the hex public key pubHex. alg is "ed25519".
 
-**Signature:** `crypto\verify(alg, data, sig_hex, pub_hex) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go)
+**Signature:** `crypto\verify(alg, data, sigHex, pubHex) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `alg`     | `string` |          |             |
 | `data`    | `string` |          |             |
-| `sig_hex` | `string` |          |             |
-| `pub_hex` | `string` |          |             |
+| `sigHex`  | `string` |          |             |
+| `pubHex`  | `string` |          |             |
 
 **Returns:** bool
 

@@ -1,10 +1,8 @@
 // No build target: each consumer's esbuild bundles src/ inline.
 
 import "magus";
-import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
 import "fs";
-import "os";
 
 import "proc";
 import "magus/spell/typescript";
@@ -45,7 +43,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
-    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
+    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
 }
 
 // test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.

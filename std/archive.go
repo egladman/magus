@@ -40,11 +40,11 @@ var Archive = Module{
 	Methods: []Method{
 		{
 			Name: "uncompress",
-			Doc:  "Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading path components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
+			Doc:  "Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts is an Options: strip drops N leading path components, maxSize caps the uncompressed bytes (default 10 GiB), threads sets the parallel decode workers (0 = auto).",
 			Args: []Arg{
 				{Name: "src", Type: TypeString},
 				{Name: "dest", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "UncompressResult"}},
 			Raises:  true,
@@ -52,11 +52,11 @@ var Archive = Module{
 		},
 		{
 			Name: "compress",
-			Doc:  "Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts keys: format (string, override format detection), threads (int, parallel encode workers; 0 or omitted = auto), level (int, compression level; -1 = format default), follow_symlinks (bool, default false), max_size (int, output byte cap, default 10 GiB).",
+			Doc:  "Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts is an Options: format overrides format detection, threads sets the parallel encode workers (0 = auto), level is the compression level (null = format default), followSymlinks archives what a link points at, maxSize caps the output bytes (default 10 GiB).",
 			Args: []Arg{
 				{Name: "src", Type: TypeString},
 				{Name: "dest", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "CompressResult"}},
 			Raises:  true,
@@ -64,10 +64,10 @@ var Archive = Module{
 		},
 		{
 			Name: "list",
-			Doc:  "List the archive at src without extracting it, as entries of {name, size, is_dir} sorted by name. Use it to check what an archive holds - that a release tarball carries the binary you expect, or how large an entry is - before paying to extract it. Symlinks and devices are skipped, matching uncompress. opts keys: threads (int, parallel decode workers; 0 or omitted = auto).",
+			Doc:  "List the archive at src without extracting it, as entries of {name, size, is_dir} sorted by name. Use it to check what an archive holds - that a release tarball carries the binary you expect, or how large an entry is - before paying to extract it. Symlinks and devices are skipped, matching uncompress. opts is an Options: threads sets the parallel decode workers (0 = auto).",
 			Args: []Arg{
 				{Name: "src", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[ArchiveEntry]"}},
 			Raises:  true,
@@ -75,11 +75,11 @@ var Archive = Module{
 		},
 		{
 			Name: "read_file",
-			Doc:  "Return the contents of the single entry named name inside the archive at src, without extracting anything to disk. Reading one manifest out of a release tarball is the usual reason. Raises when name is not in the archive, or when the entry exceeds max_size. opts keys: max_size (int, byte cap on the entry, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
+			Doc:  "Return the contents of the single entry named name inside the archive at src, without extracting anything to disk. Reading one manifest out of a release tarball is the usual reason. Raises when name is not in the archive, or when the entry exceeds maxSize. opts is an Options: maxSize caps the entry (default 10 GiB), threads sets the parallel decode workers (0 = auto).",
 			Args: []Arg{
 				{Name: "src", Type: TypeString},
 				{Name: "name", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
 			},
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
@@ -190,7 +190,7 @@ func isZip(hdr []byte, name string) bool {
 }
 
 // ArchiveList reports an archive's entries without extracting it.
-func ArchiveList(ctx context.Context, src string, opts map[string]any) ([]types.ArchiveEntry, error) {
+func ArchiveList(ctx context.Context, src string, opts types.ArchiveOptions) ([]types.ArchiveEntry, error) {
 	f, hdr, err := archiveOpenRead(ctx, "list", src)
 	if err != nil {
 		return nil, err
@@ -271,7 +271,7 @@ func sortArchiveEntries(entries []types.ArchiveEntry) {
 }
 
 // ArchiveReadFile returns one entry's contents without extracting the archive.
-func ArchiveReadFile(ctx context.Context, src, name string, opts map[string]any) (string, error) {
+func ArchiveReadFile(ctx context.Context, src, name string, opts types.ArchiveOptions) (string, error) {
 	f, hdr, err := archiveOpenRead(ctx, "read_file", src)
 	if err != nil {
 		return "", err
@@ -279,7 +279,7 @@ func ArchiveReadFile(ctx context.Context, src, name string, opts map[string]any)
 	defer f.Close()
 
 	threads := resolveThreads(opts, cache.LimiterFromContext(ctx))
-	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
+	maxSize := archiveMaxSize(opts)
 
 	if isZip(hdr, f.Name()) {
 		fi, serr := f.Stat()
@@ -338,7 +338,7 @@ func readCapped(r io.Reader, maxSize int64, name string) (string, error) {
 		return "", fmt.Errorf("archive.read_file %q: %w", name, err)
 	}
 	if n > maxSize {
-		return "", fmt.Errorf("archive.read_file %q: entry exceeds max_size (%d bytes)", name, maxSize)
+		return "", fmt.Errorf("archive.read_file %q: entry exceeds maxSize (%d bytes)", name, maxSize)
 	}
 	return buf.String(), nil
 }
@@ -377,10 +377,10 @@ func defaultArchiveThreads(lim *cache.Limiter) int {
 }
 
 // resolveThreads returns the effective thread count for an archive operation.
-// opts["threads"] > 0 overrides the auto count. The result is clamped to
+// opts.Threads > 0 overrides the auto count. The result is clamped to
 // [1, GOMAXPROCS] and, when a limiter is present, to [1, limiter.cap].
-func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
-	explicit := archiveOptInt(opts, "threads", 0)
+func resolveThreads(opts types.ArchiveOptions, lim *cache.Limiter) int {
+	explicit := opts.Threads
 	var n int
 	if explicit > 0 {
 		n = explicit
@@ -409,7 +409,7 @@ func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
 // in-flight stays within the budget (cap) rather than cap+threads-1. A weighted step holds
 // more than one slot, so giving back only one would deadlock the AcquireN on slots it pins
 // itself. The originals are reclaimed uncancellably once the threads are released.
-func archiveHoldThreads(ctx context.Context, opts map[string]any) (threads int, release func(), err error) {
+func archiveHoldThreads(ctx context.Context, opts types.ArchiveOptions) (threads int, release func(), err error) {
 	lim := cache.LimiterFromContext(ctx)
 	threads = resolveThreads(opts, lim)
 	if lim == nil {
@@ -432,15 +432,15 @@ func archiveHoldThreads(ctx context.Context, opts map[string]any) (threads int, 
 }
 
 // ArchiveUncompress extracts src into dest, skipping symlinks and non-regular
-// entries, and fails at max_size uncompressed bytes (10 GiB by default) rather than
+// entries, and fails at maxSize uncompressed bytes (10 GiB by default) rather than
 // filling the disk.
-func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (types.UncompressResult, error) {
+func ArchiveUncompress(ctx context.Context, src, dest string, opts types.ArchiveOptions) (types.UncompressResult, error) {
 	if types.Tracing(ctx) {
 		return types.UncompressResult{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
-	strip := archiveOptInt(opts, "strip", 0)
-	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
+	strip := opts.Strip
+	maxSize := archiveMaxSize(opts)
 
 	if p := sandbox.PolicyFromContext(ctx); p != nil {
 		if err := p.CheckRead(ctx, src); err != nil {
@@ -493,14 +493,14 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 // ArchiveCompress archives src to dest in the format dest's extension names, unless
 // the format option overrides it. Symlinks are not followed by default, so a link
 // inside src cannot pull files from outside it into the archive.
-func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any) (types.CompressResult, error) {
+func ArchiveCompress(ctx context.Context, src, dest string, opts types.ArchiveOptions) (types.CompressResult, error) {
 	if types.Tracing(ctx) {
 		return types.CompressResult{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
-	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
-	level := archiveOptInt(opts, "level", -1)
-	followSymlinks := archiveOptBool(opts, "follow_symlinks", false)
+	maxSize := archiveMaxSize(opts)
+	level := archiveLevel(opts)
+	followSymlinks := opts.FollowSymlinks
 
 	if p := sandbox.PolicyFromContext(ctx); p != nil {
 		if err := p.CheckRead(ctx, src); err != nil {
@@ -530,7 +530,7 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 	op.Set(archiveSubOpLabel("archive.compress", filepath.Base(dest), threads))
 	defer op.Set("")
 
-	format := archiveOptString(opts, "format", "")
+	format := opts.Format
 	if format == "" {
 		format = archiveFormatFromExt(dest)
 	}
@@ -1232,70 +1232,20 @@ func archiveSafePath(dest, name string) (string, error) {
 	return abs, nil
 }
 
-func archiveOptInt(m map[string]any, key string, def int) int {
-	if m == nil {
-		return def
+// archiveMaxSize is opts.MaxSize, or the 10 GiB default when it is zero.
+func archiveMaxSize(opts types.ArchiveOptions) int64 {
+	if opts.MaxSize <= 0 {
+		return archiveDefaultMaxSize
 	}
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	switch x := v.(type) {
-	case int:
-		return x
-	case int64:
-		return int(x)
-	case float64:
-		return int(x)
-	}
-	return def
+	return int64(opts.MaxSize)
 }
 
-func archiveOptInt64(m map[string]any, key string, def int64) int64 {
-	if m == nil {
-		return def
+// archiveLevel is opts.Level, or -1, the format's default, when it is null.
+func archiveLevel(opts types.ArchiveOptions) int {
+	if opts.Level == nil {
+		return -1
 	}
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	switch x := v.(type) {
-	case int:
-		return int64(x)
-	case int64:
-		return x
-	case float64:
-		return int64(x)
-	}
-	return def
-}
-
-func archiveOptBool(m map[string]any, key string, def bool) bool {
-	if m == nil {
-		return def
-	}
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	if b, ok := v.(bool); ok {
-		return b
-	}
-	return def
-}
-
-func archiveOptString(m map[string]any, key string, def string) string {
-	if m == nil {
-		return def
-	}
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return def
+	return *opts.Level
 }
 
 func archiveSubOpLabel(name, file string, threads int) string {

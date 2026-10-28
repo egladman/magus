@@ -47,6 +47,9 @@ var hookTemplates = []string{
 	"proofread-reply.buzz",
 	// Judges a .buzz file the agent already wrote, not a call, so it declares no coverage.
 	"magus-buzz-check.buzz",
+	// Samples free disk space and may start a reclaim chunk; it judges no call, so it too
+	// declares no coverage.
+	"magus-reclaim-disk.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
 	"opencode-plugin.ts",

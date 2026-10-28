@@ -25,4 +25,4 @@ export extern fun sha512File(path: str) > str !> any;
 export extern fun sha512Hex(data: str) > str;
 export extern fun sign(alg: SignAlgorithm, data: str, key: str) > str !> any;
 export extern fun signFile(alg: SignAlgorithm, path: str, key: str) > str !> any;
-export extern fun verify(alg: SignAlgorithm, data: str, sig_hex: str, pub_hex: str) > bool !> any;
+export extern fun verify(alg: SignAlgorithm, data: str, sigHex: str, pubHex: str) > bool !> any;

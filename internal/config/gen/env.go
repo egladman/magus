@@ -521,6 +521,34 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Go.CacheBudgetMB = n
 		}
 	}
+	if v := getenv("MAGUS_DISK_MIN_FREE_MB"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_DISK_MIN_FREE_MB: %w", err))
+		} else {
+			cfg.Disk.MinFreeMB = n
+		}
+	}
+	if v := getenv("MAGUS_DISK_CRITICAL_FREE_MB"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_DISK_CRITICAL_FREE_MB: %w", err))
+		} else {
+			cfg.Disk.CriticalFreeMB = n
+		}
+	}
+	if v := getenv("MAGUS_DISK_GROWTH_MB_PER_HOUR"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_DISK_GROWTH_MB_PER_HOUR: %w", err))
+		} else {
+			cfg.Disk.GrowthMBPerHour = n
+		}
+	}
+	if v := getenv("MAGUS_DISK_SAMPLE_EVERY"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_DISK_SAMPLE_EVERY: %w", err))
+		} else {
+			cfg.Disk.SampleEvery = d
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONCURRENCY: %w", err))

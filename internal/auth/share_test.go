@@ -14,17 +14,17 @@ func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	t.Parallel()
 	secret, tok, err := MintShare(types.GrantConsole, 10*time.Minute)
 	require.NoError(t, err)
-	kind, ok := credentialKind(secret)
+	kind, ok := credentialKind(secret.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, types.KindShare, kind)
 
 	now := time.Now()
-	assert.True(t, tok.Verify(secret, now))
+	assert.True(t, tok.Verify(secret.Reveal(), now))
 	other, _, err := MintShare(types.GrantConsole, 10*time.Minute)
 	require.NoError(t, err)
-	assert.False(t, tok.Verify(other, now), "another link's secret")
-	assert.False(t, tok.Verify(secret, tok.Expires.Add(time.Second)), "after expiry")
-	assert.False(t, ShareToken{}.Verify(secret, now), "the zero token verifies nothing")
+	assert.False(t, tok.Verify(other.Reveal(), now), "another link's secret")
+	assert.False(t, tok.Verify(secret.Reveal(), tok.Expires.Add(time.Second)), "after expiry")
+	assert.False(t, ShareToken{}.Verify(secret.Reveal(), now), "the zero token verifies nothing")
 	assert.Equal(t, types.Credential{Kind: types.KindShare, ID: tok.ID(), Grant: types.GrantViewer}, tok.Credential())
 }
 

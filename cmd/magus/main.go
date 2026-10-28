@@ -393,6 +393,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	//
 	// The config tier stays: usage text reads it (server.address in `server -h`),
 	// and reading magus.yaml writes nothing.
+	if sub == "self" {
+		// self update is the stale binary's remedy, so it runs where that binary cannot
+		// decode magus.yaml (MGS1040), help included.
+		return dispatchProfile{}
+	}
 	if wantsUsage(subArgs) {
 		return dispatchProfile{needsConfig: true}
 	}
@@ -414,7 +419,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// setting the environment had set. That was invisible locally, where the trust
 		// set is not what the yaml is consulted for, and fatal in CI.
 		return dispatchProfile{needsConfig: true}
-	case "completion", "self", "man":
+	case "completion", "man":
 		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
@@ -1073,15 +1078,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
-	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   "+outputFormatHelp)
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
 	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
-	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        detail (-v), plus live target output (-vv), plus tracing (-vvv)")
-	fmt.Fprintln(os.Stderr, "  --concurrency N      max parallel target runs (0 = config / MAGUS_CONCURRENCY / min(NumCPU,8))")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Pre-subcommand flags (must precede the subcommand):")
-	fmt.Fprintln(os.Stderr, "  --root <path>        workspace root (default: walk up to go.mod)")
-	fmt.Fprintln(os.Stderr, "  --config <path>      config file (default: search magus.yaml)")
+	printRootFlags(os.Stderr)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run `magus <subcommand> -h` for subcommand-specific flags.")
 	fmt.Fprintln(os.Stderr, "")

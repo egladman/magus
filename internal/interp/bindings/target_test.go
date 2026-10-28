@@ -1064,7 +1064,7 @@ import "magus";
 import "os";
 import "proc";
 
-export fun dep(ctx: magus\Context, _a: [str]) > void !> any { final c = proc\shell("printf x >> mark"); proc\exec(c.bin, c.args, "", {}); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { final c = proc\shell("printf x >> mark"); proc\exec(c.bin, c.args, "", null); }
 export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "top"))
@@ -1111,7 +1111,7 @@ import "os";
 import "proc";
 fun note(s: str) > void !> any {
    final c = proc\shell("printf '%s\n' " + s + " >> ran");
-   proc\exec(c.bin, c.args, "", {});
+   proc\exec(c.bin, c.args, "", null);
 }
 export fun go_build(ctx: magus\Context, _a: [str]) > void !> any { note("go-build"); }
 export fun image_build(ctx: magus\Context, _a: [str]) > void !> any { note("image-build"); }

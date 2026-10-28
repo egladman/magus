@@ -13,7 +13,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/fixture"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
@@ -71,26 +70,18 @@ func TestAgentGrantIsRefused(t *testing.T) {
 	}
 }
 
-func TestAgentWaiveIsRefused(t *testing.T) {
+func TestAgentWaiveIsRefusedAsAGrant(t *testing.T) {
 	for _, line := range []string{
-		"magus gate waive HEAD --reason ci-down",
-		"./magus gate waive --revoke HEAD",
-		"/usr/local/bin/magus -C /tmp gate waive abc1234 --reason x",
-		"cd /tmp && magus gate waive HEAD --reason x",
-		"env A=1 magus gate waive HEAD --reason x",
-		"bash -c 'magus gate waive HEAD --reason x'",
+		"magus job grant --commit HEAD push-ungated --reason ci-down",
+		"./magus job grant --commit HEAD --revoke push-ungated",
+		"bash -c 'magus job grant --commit abc1234 push-ungated --reason x'",
 	} {
-		d := denyAgentWaive(line, DialectBash)
-		assert.Equal(t, fmt.Sprintf("magus workspace: only a person runs `%s gate waive`; ask the person to type it.", hint.BinaryName()), d.Say, "%q", line)
-	}
-	granted, _ := grantRows()
-	ctx, _ := fleetFixture(t, granted)
-	for _, lease := range []string{"", granted.ID} {
-		v := Judge(ctx, Dependencies{}, Request{Input: "magus gate waive HEAD --reason ci-down", Lease: lease})
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWaiverIsAPersons)}, judgedAs(v), "under %q", lease)
-	}
-	for _, line := range []string{"magus gate", "echo magus gate waive HEAD", "magus job grant x hooks-off", "magus describe rules"} {
-		assert.False(t, denyAgentWaive(line, DialectBash).refused(), "%q", line)
+		granted, _ := grantRows()
+		ctx, _ := fleetFixture(t, granted)
+		for _, lease := range []string{"", granted.ID} {
+			v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: lease})
+			assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleGrantIsAPersons)}, judgedAs(v), "%q under %q", line, lease)
+		}
 	}
 }
 

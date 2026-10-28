@@ -40,7 +40,8 @@ const logLevelTrace slog.Level = slog.LevelDebug - 4
 var Log = Module{
 	Name: "log",
 	WASM: true,
-	Doc:  "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line.",
+	Doc:  "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line. Message text uses Buzz `{expr}` interpolation; pass structured fields as `attrs` so they stay queryable in the run log rather than baked into the string. `Logger` is the protocol for an injectable logger (same methods as the free functions): `import \"log\" as _` then `object<Logger>` to swap Std for Quiet without rewriting call sites.",
+
 	Methods: []Method{
 		{
 			Name:    "trace",
@@ -57,8 +58,9 @@ var Log = Module{
 			Impl:    LogDebug,
 		},
 		{
-			Name:    "info",
-			Doc:     "Log at info level (shown by default, hidden by -q).",
+			Name: "info",
+			Doc:  "Log at info level (shown by default, hidden by -q). Prefer `log\\info(\"pulled {ref}\", attrs: {\"digest\": d})` over stuffing fields into the message.",
+
 			Args:    []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}},
 			Returns: nil,
 			Impl:    LogInfo,

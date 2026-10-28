@@ -14,7 +14,7 @@ object Outcome {
 // child's output, so a failure is a verdict rather than an abort.
 fun buzz(args: [str]) > Outcome {
     try {
-        final result = magus\cmd("buzz", args: args, opts: {"quiet": true});
+        final result = magus\cmd("buzz", args: args, opts: magus\CommandOptions{ quiet = true });
         return Outcome{ ok = true, text = result.stdout };
     } catch (err: any) {
         return Outcome{ ok = false, text = "{err}" };

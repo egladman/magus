@@ -82,15 +82,46 @@ func literalWords(words []*syntax.Word) []string {
 }
 
 func literalWord(parts []syntax.WordPart) string {
+	return quoteRemoved(parts, false)
+}
+
+// quoteRemoved is literalWord with quote removal applied the way the shell applies it:
+// unquoted, a backslash escapes any character; inside double quotes, only $, `, ", \ and
+// a newline.
+func quoteRemoved(parts []syntax.WordPart, inDouble bool) string {
 	var b strings.Builder
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *syntax.Lit:
-			b.WriteString(p.Value)
+			b.WriteString(unescape(p.Value, inDouble))
 		case *syntax.SglQuoted:
 			b.WriteString(p.Value)
 		case *syntax.DblQuoted:
-			b.WriteString(literalWord(p.Parts))
+			b.WriteString(quoteRemoved(p.Parts, true))
+		}
+	}
+	return b.String()
+}
+
+func unescape(lit string, inDouble bool) string {
+	if !strings.Contains(lit, `\`) {
+		return lit
+	}
+	var b strings.Builder
+	for i := 0; i < len(lit); i++ {
+		if lit[i] != '\\' || i+1 == len(lit) {
+			b.WriteByte(lit[i])
+			continue
+		}
+		next := lit[i+1]
+		switch {
+		case next == '\n':
+			i++
+		case !inDouble || strings.IndexByte("$`\"\\", next) >= 0:
+			b.WriteByte(next)
+			i++
+		default:
+			b.WriteByte('\\')
 		}
 	}
 	return b.String()

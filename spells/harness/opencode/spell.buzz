@@ -29,7 +29,9 @@ export fun mgs_getSkills() > HarnessSkills {
 // The hooks the guard plugin would run were they wired through a config. With no config
 // path magus has no entries to hold them to, and says the check was skipped.
 export fun mgs_listHooks() > [HookCommand] {
-    return [buzzCheckHook(mgs_getName())];
+    // The plugin runs the disk hook on a root session's idle and holds its line for the
+    // next tool result, since no OpenCode event hands text to the model once a turn.
+    return [buzzCheckHook(mgs_getName()), reclaimDiskHook(mgs_getName(), event: "session.idle", say: "stdout")];
 }
 
 // Every OpenCode tool the guard should know, written by `magus agent harness install` to

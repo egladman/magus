@@ -1,10 +1,10 @@
 # shellcheck shell=sh
 # Helpers shared by every arm's provision.sh and probe.sh.
 #
-# An arm is a provisioning recipe applied to a fresh worktree of the fixture
+# An arm is a provisioning setup applied to a fresh worktree of the fixture
 # repo, plus a probe that proves the worktree is in that arm. Both take the
 # worktree as their first argument; provision also takes the magus binary, so
-# one recipe can pin two different builds of magus for an A/B of magus itself.
+# one setup can pin two different builds of magus for an A/B of magus itself.
 
 arm_die() {
     printf 'arm %s: FAILED: %s\n' "${ARM_NAME:-?}" "$*" >&2

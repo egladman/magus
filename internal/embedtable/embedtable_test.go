@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/oci"
 )
 
 // registry is enough of the distribution API for a push and a pull. Like GHCR, it

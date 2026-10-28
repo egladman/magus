@@ -57,7 +57,7 @@ magus graph export -o json  # the whole graph
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                       |
 | ---------- | -------: | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                             |
-| target     |     200+ | `magus query kind=target`     | `lint-rules`, `site-generate`, `buzz-test`                                                                                                                     |
+| target     |     200+ | `magus query kind=target`     | `lint-rules`, `buzz-test`, `site-generate`                                                                                                                     |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                     |
 | op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                                |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                                                                |
@@ -68,13 +68,13 @@ magus graph export -o json  # the whole graph
 | doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
 | dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                                                                       |
 | file       |     500+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                                                                      |
-| function   |    3000+ | `magus query kind=function`   | `apiBase`, `main`, `textProblems`                                                                                                                              |
+| function   |    3000+ | `magus query kind=function`   | `apiBase`, `main`, `main`                                                                                                                                      |
 | import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                           |
 | rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                         |
 | package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                              |
 | link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                                                             |
 | marker     |        4 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:skills`                                                                                                    |
-| figure     |      20+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `The only listener a second machine can reach` |
+| figure     |      30+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `The only listener a second machine can reach` |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------------------- |
@@ -89,6 +89,7 @@ magus graph export -o json  # the whole graph
 | libs/embed/train                                                            |      15 | `magus query project=libs/embed/train`                | `format`, `build`, `ci`                                       |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                                          |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `ci`                                       |
+| [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                                          |
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      11 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `ci`                             |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `ci`, `format`, `build`                                       |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                                        |

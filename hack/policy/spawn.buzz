@@ -27,7 +27,7 @@ final integrateRole = "integrate";
 // Spawn is what the rules read of one spawn, copied out of the request because a Buzz test
 // cannot build the host's SpawnRequest: constructing its Job fails on a nested default.
 export object Spawn {
-    kind: str,
+    kind: magus\SpawnKind,
     title: str,
     isolated: bool,
     model: str = "",
@@ -64,11 +64,11 @@ fun lineage(title: str) > Lineage? {
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
 export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
-    if (spawn.kind != "spawn") {
+    if (spawn.kind != magus\SpawnKind.spawn) {
         return magus\guard.allow();
     }
     final row = decideJobRow(spawn, rows: rows, unreadable: unreadable);
-    if (row.decision == "deny") {
+    if (row.decision == magus\GuardDecision.deny) {
         return row;
     }
     if (!spawn.isolated and changeRoles.indexOf(helpers\titleRole(spawn.title)) != null) {
@@ -112,8 +112,8 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "Neither `{line!.job}` nor `{line!.parent}/{line!.job}` is a row, so the guard has no lease "
             + "to bind this spawn's child to. " + remedy(spawn, line: line));
     }
-    if (["declared", "running", "exited"].indexOf(found!.state) == null) {
-        return magus\guard.deny("the row `{found!.id}` has ended ({found!.state}); fork a live one\n"
+    if ([magus\JobState.declared, magus\JobState.running, magus\JobState.exited].indexOf(found!.state) == null) {
+        return magus\guard.deny("the row `{found!.id}` has ended ({found!.state.value}); fork a live one\n"
             + "A child bound to an ended row is graded by nothing. " + remedy(spawn, line: line));
     }
     if (spawn.lease != "" and !descends(rows!, job: found!.id, ancestor: spawn.lease)) {
@@ -197,19 +197,19 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
 }
 
 fun request(title: str, isolated: bool) > Spawn {
-    return Spawn{ kind = "spawn", title = title, isolated = isolated, model = "opus" };
+    return Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated, model = "opus" };
 }
 
-final store = helpers\jobRows([
-    ["guard-command", "running"],
-    ["naming-advisory", "declared"],
-    ["changelog-fragments", "exited"],
-    ["v050-prep", "running"],
-    ["v050-prep/scout-callers", "declared", "v050-prep"],
-    ["drop-improve", "pass", "v050-prep"],
-    ["footprint", "no_return"],
-    ["elsewhere", "running"],
-]);
+final store = [
+    helpers\JobRow{ id = "guard-command", state = magus\JobState.running },
+    helpers\JobRow{ id = "naming-advisory", state = magus\JobState.declared },
+    helpers\JobRow{ id = "changelog-fragments", state = magus\JobState.exited },
+    helpers\JobRow{ id = "v050-prep", state = magus\JobState.running },
+    helpers\JobRow{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
+    helpers\JobRow{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
+    helpers\JobRow{ id = "footprint", state = magus\JobState.noReturn },
+    helpers\JobRow{ id = "elsewhere", state = magus\JobState.running },
+];
 
 // judged is decideSpawn with every denial held to the verdict shape.
 fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
@@ -219,13 +219,13 @@ fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdic
 test "a live row passes" {
     foreach (title in ["orchestrator/review naming-advisory", "orchestrator/feat guard-command", "orchestrator/docs changelog-fragments"]) {
         final v = judged(request(title, isolated: true), rows: store, unreadable: "");
-        std\assert(v.decision == "allow", message: title);
+        std\assert(v.decision == magus\GuardDecision.allow, message: title);
     }
 }
 
 test "a spawn with no lineage title is denied, naming the fork" {
-    final v = judged(Spawn{ kind = "spawn", title = "audit the store", isolated = true }, rows: store, unreadable: "");
-    std\assert(v.decision == "deny", message: "no title grammar");
+    final v = judged(Spawn{ kind = magus\SpawnKind.spawn, title = "audit the store", isolated = true }, rows: store, unreadable: "");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "no title grammar");
     std\assert(v.reason.indexOf("magus job fork <job> --model <tier or model> --write-paths <paths>") != null, message: "names the fork");
     std\assert(v.reason.indexOf("`orchestrator/<role> <job>`") != null, message: "names the retitle");
     std\assert(v.reason.indexOf("magus\\job.put(\"<job>\"") != null, message: "names the client tool write");
@@ -234,7 +234,7 @@ test "a spawn with no lineage title is denied, naming the fork" {
 
 test "a title naming a missing row is denied with the real command" {
     final v = judged(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
-    std\assert(v.decision == "deny", message: "missing row");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "missing row");
     std\assert(v.reason.indexOf("magus job fork nothing-here --parent v050-prep --model opus --read-only") != null, message: v.reason);
     std\assert(v.reason.indexOf("magus\\job.put(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
     std\assert(v.reason.indexOf("read_only = true") != null, message: "names the read-only field");
@@ -244,22 +244,22 @@ test "a title naming a missing row is denied with the real command" {
 test "an ended row is denied" {
     foreach (title in ["v050-prep/refactor drop-improve", "orchestrator/fix footprint"]) {
         final v = judged(request(title, isolated: true), rows: store, unreadable: "");
-        std\assert(v.decision == "deny", message: title);
+        std\assert(v.decision == magus\GuardDecision.deny, message: title);
         std\assert(v.reason.indexOf("has ended") != null, message: "says why");
     }
 }
 
 test "a nested id resolves under the title's parent" {
     final v = judged(request("v050-prep/scout scout-callers", isolated: false), rows: store, unreadable: "");
-    std\assert(v.decision == "allow", message: "v050-prep/scout-callers");
+    std\assert(v.decision == magus\GuardDecision.allow, message: "v050-prep/scout-callers");
 }
 
 test "a leased spawner hands out only its own tree" {
-    final mine = Spawn{ kind = "spawn", title = "v050-prep/scout scout-callers", isolated = false, lease = "v050-prep" };
-    std\assert(judged(mine, rows: store, unreadable: "").decision == "allow", message: "a child of the lease");
-    final other = Spawn{ kind = "spawn", title = "v050-prep/review elsewhere", isolated = false, lease = "v050-prep" };
+    final mine = Spawn{ kind = magus\SpawnKind.spawn, title = "v050-prep/scout scout-callers", isolated = false, lease = "v050-prep" };
+    std\assert(judged(mine, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a child of the lease");
+    final other = Spawn{ kind = magus\SpawnKind.spawn, title = "v050-prep/review elsewhere", isolated = false, lease = "v050-prep" };
     final v = judged(other, rows: store, unreadable: "");
-    std\assert(v.decision == "deny", message: "a row outside the lease");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "a row outside the lease");
     std\assert(v.reason.indexOf("--parent v050-prep") != null, message: "forks beneath the lease");
     std\assert(v.reason.indexOf("a child of `v050-prep`") != null, message: "says the fork is a child the store grades");
     final unleased = judged(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
@@ -268,45 +268,45 @@ test "a leased spawner hands out only its own tree" {
 
 test "an unreadable store advises and never denies" {
     final v = judged(request("orchestrator/review anything", isolated: false), rows: null, unreadable: "job store schema 10 is newer than 9");
-    std\assert(v.decision == "advise", message: "fails open");
+    std\assert(v.decision == magus\GuardDecision.advise, message: "fails open");
     std\assert(v.reason.indexOf("schema 10") != null, message: "names the cause");
-    std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == "deny", message: "isolation still denies");
+    std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == magus\GuardDecision.deny, message: "isolation still denies");
 }
 
 test "a code-changing spawn without its own checkout is denied" {
     foreach (title in ["orchestrator/feat guard-command", "v050-prep/fix naming-advisory", "orchestrator/docs changelog-fragments"]) {
         final v = judged(request(title, isolated: false), rows: store, unreadable: "");
-        std\assert(v.decision == "deny", message: title);
+        std\assert(v.decision == magus\GuardDecision.deny, message: title);
         std\assert(v.reason.indexOf("isolation: \"worktree\"") != null, message: "names the fix");
     }
 }
 
 test "an integrate spawn is refused for a row bound to another checkout, naming where to spawn it" {
     final rows = [
-        helpers\JobRow{ id = "land", state = "declared", checkoutRoot = "/w/other" },
-        helpers\JobRow{ id = "here", state = "declared", checkoutRoot = "/w/main" },
-        helpers\JobRow{ id = "unbound", state = "declared" },
+        helpers\JobRow{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        helpers\JobRow{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
+        helpers\JobRow{ id = "unbound", state = magus\JobState.declared },
     ];
     final at = fun (title: str) > Spawn {
-        return Spawn{ kind = "spawn", title = title, isolated = false, checkout = "/w/main" };
+        return Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = false, checkout = "/w/main" };
     };
     final denied = judged(at("orchestrator/integrate land"), rows: rows, unreadable: "");
-    std\assert(denied.decision == "deny", message: "bound elsewhere");
+    std\assert(denied.decision == magus\GuardDecision.deny, message: "bound elsewhere");
     std\assert(denied.reason.indexOf("`/w/other`") != null and denied.reason.indexOf("magus job fork land-here") != null, message: denied.reason);
-    std\assert(judged(at("orchestrator/integrate here"), rows: rows, unreadable: "").decision == "allow", message: "bound here");
-    std\assert(judged(at("orchestrator/integrate unbound"), rows: rows, unreadable: "").decision == "allow", message: "bound to none");
-    std\assert(judged(Spawn{ kind = "spawn", title = "orchestrator/integrate land", isolated = false }, rows: rows, unreadable: "").decision == "allow",
+    std\assert(judged(at("orchestrator/integrate here"), rows: rows, unreadable: "").decision == magus\GuardDecision.allow, message: "bound here");
+    std\assert(judged(at("orchestrator/integrate unbound"), rows: rows, unreadable: "").decision == magus\GuardDecision.allow, message: "bound to none");
+    std\assert(judged(Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/integrate land", isolated = false }, rows: rows, unreadable: "").decision == magus\GuardDecision.allow,
         message: "a spawn whose checkout is unread");
 }
 
 test "a thinking role, an isolated worker and a continue pass" {
-    std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == "allow", message: "a review");
-    std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == "allow", message: "isolated");
-    std\assert(judged(Spawn{ kind = "continue", title = "", isolated = false }, rows: store, unreadable: "").decision == "allow", message: "a continue");
+    std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a review");
+    std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "isolated");
+    std\assert(judged(Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false }, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue");
 }
 
 fun briefed(prompt: str) > Spawn {
-    return Spawn{ kind = "spawn", title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
+    return Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
 }
 
 test "a brief that tells the worker to build magus is denied, naming the script" {
@@ -316,18 +316,18 @@ test "a brief that tells the worker to build magus is denied, naming the script"
         "```sh\ngo build -o magus ./cmd/magus\n```",
     ]) {
         final v = judged(briefed(prompt), rows: store, unreadable: "");
-        std\assert(v.decision == "deny", message: prompt);
+        std\assert(v.decision == magus\GuardDecision.deny, message: prompt);
         std\assert(v.reason.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: "names the script");
         std\assert(v.reason.indexOf("one binary per base commit") != null, message: "says the orchestrator places it");
     }
     final unreadable = judged(briefed("Run `magus run go-build .` first."), rows: null, unreadable: "x");
-    std\assert(unreadable.decision == "deny", message: "an unreadable store does not excuse the brief");
+    std\assert(unreadable.decision == magus\GuardDecision.deny, message: "an unreadable store does not excuse the brief");
 }
 
 test "an integrate spawn shares the checkout and its brief may build magus" {
-    final integrate = Spawn{ kind = "spawn", title = "orchestrator/integrate guard-command", isolated = false, prompt = "Run `magus run go-build .` once the units land." };
+    final integrate = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/integrate guard-command", isolated = false, prompt = "Run `magus run go-build .` once the units land." };
     final v = judged(integrate, rows: store, unreadable: "");
-    std\assert(v.decision != "deny", message: v.reason);
+    std\assert(v.decision != magus\GuardDecision.deny, message: v.reason);
 }
 
 test "a brief that forbids the build or builds something else passes" {
@@ -337,15 +337,15 @@ test "a brief that forbids the build or builds something else passes" {
         "Run `go run ./cmd/magus-utils` and `./magus run buzz-test .`.",
         "",
     ]) {
-        std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == "allow", message: prompt);
+        std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: prompt);
     }
-    final continued = Spawn{ kind = "continue", title = "", isolated = false, prompt = "Run `magus run go-build .`" };
-    std\assert(judged(continued, rows: store, unreadable: "").decision == "allow", message: "a continue starts nothing");
+    final continued = Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false, prompt = "Run `magus run go-build .`" };
+    std\assert(judged(continued, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue starts nothing");
 }
 
 test "a spawn whose job builds its own binary may brief the build" {
     final prompt = "Run `magus run go-build .` first.";
-    final own = Spawn{ kind = "spawn", title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
-    std\assert(judged(own, rows: store, unreadable: "").decision == "allow", message: "its own build");
-    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == "deny", message: "the same brief for any other job");
+    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
+    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "its own build");
+    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "the same brief for any other job");
 }

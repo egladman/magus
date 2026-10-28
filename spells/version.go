@@ -153,7 +153,7 @@ func (k VersionKey) IsZero() bool { return k.Const == "" && k.UpTo == VersionNon
 // The note is never an error. Every degradation here is a case where magus can still
 // produce a CORRECT key by being more conservative than the author asked for, and
 // failing the run instead would break a build for a cache-key reason.
-func VersionToken(output string, key VersionKey) (token string, note string) {
+func VersionToken(output string, key VersionKey) (version string, note string) {
 	if key.Const != "" {
 		return key.Const, ""
 	}

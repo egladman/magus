@@ -117,10 +117,10 @@ command and its arguments, run with no shell in a candidate with the change's af
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured remote changes and the base are fetched from
 .TP
-\fB\-\-remote\-cache\-read\fR
+\fB\-\-[no\-]remote\-cache\-read\fR (default: off)
 Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand\-in token. Refused without runner credentials or a trusted key
 .TP
-\fB\-\-stdin\fR
+\fB\-\-[no\-]stdin\fR (default: off)
 Read the mergequeue.plan/v1 document from stdin; required
 .TP
 \fB\-\-target\fR \fItarget\fR (default: ci)
@@ -165,7 +165,7 @@ command and its arguments, run with no shell and the fact asked for appended, an
 \fB\-\-interval\fR \fIduration\fR (default: 10s)
 How often <source> is read while following it
 .TP
-\fB\-\-once\fR
+\fB\-\-[no\-]once\fR (default: off)
 Apply what <source> holds now and stop, rather than following it until it is complete
 .TP
 \fB\-\-provider\fR \fIprovider\fR
@@ -204,7 +204,7 @@ branch the change targets
 \fB\-\-change\fR \fIid\fR
 id of the change, as the provider names it (github: the pull request number)
 .TP
-\fB\-\-dismiss\fR
+\fB\-\-[no\-]dismiss\fR (default: off)
 Dismiss each approval that does not carry, naming what changed since it
 .TP
 \fB\-\-facts\fR \fIcommand\fR
@@ -342,7 +342,6 @@ magus queue reviews --provider github --base main --change 482 --dismiss
 \fBmagus\-session\fR(1),
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

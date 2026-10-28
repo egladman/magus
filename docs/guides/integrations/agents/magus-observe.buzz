@@ -135,5 +135,5 @@ fun main(args: [str]) > void {
         "--session", field(event, dotPath: sessionPath),
         "--transcript", field(event, dotPath: transcriptPath),
         "--event", "PreToolUse",
-    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
+    ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = reached}) catch void;
 }

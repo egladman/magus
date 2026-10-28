@@ -110,7 +110,7 @@ export fun main(args: [str]) > void !> any {
 export fun rename(symbol: str, newName: str, apply: bool) > Plan !> any {
     final r: magus\RefsResult = magus\refs(symbol);
     try {
-        checkIndex(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes);
+        checkIndex(r.answer.verdict.value, reason: r.answer.reason.value, stale: r.answer.staleIndexes);
     } catch (e: str) {
         throw "rename-symbol: {e}; rebuild it with `magus graph build`, then run this again";
     }
@@ -127,7 +127,7 @@ export fun rename(symbol: str, newName: str, apply: bool) > Plan !> any {
     // since the index was built, which the typed lookup above cannot see.
     var doc = "";
     try {
-        doc = magus\cmd("refs", args: argv, opts: {"quiet": true}).stdout;
+        doc = magus\cmd("refs", args: argv, opts: magus\CommandOptions{ quiet = true }).stdout;
     } catch (e) {
         final text = if (e is {str: any}) e["message"] ?? "{e}" else "{e}";
         throw "rename-symbol: {withoutWarnings(text)}";
@@ -192,7 +192,7 @@ test "an index that cannot answer is refused, not rebuilt" {
 // has nothing to resolve against.
 test "this repository's index resolves a known symbol to its definition" {
     final r: magus\RefsResult = magus\refs("FlagsParse");
-    if (indexRaised(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes) != "") {
+    if (indexRaised(r.answer.verdict.value, reason: r.answer.reason.value, stale: r.answer.staleIndexes) != "") {
         return;
     }
     assert\equal(r.defs[0].file, want: "std/flags.go", message: "FlagsParse is defined in std/flags.go");

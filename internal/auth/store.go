@@ -396,7 +396,7 @@ func (s *Store) removeExact(t Token) error {
 // Within minter (ErrExceedsGrant); a TTL outside (0, MaxTokenTTL] (ErrTokenLifetime); a name
 // that is invalid or looks like an id (ErrInvalidTokenRequest), or is taken (ErrTokenExists).
 // Nothing is clamped. Before writing it deletes every expired record, as List does.
-func (s *Store) Mint(minter types.Grant, req MintRequest) (secret string, rec Token, err error) {
+func (s *Store) Mint(minter types.Grant, req MintRequest) (secret types.Secret, rec Token, err error) {
 	st := s.state()
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -406,12 +406,12 @@ func (s *Store) Mint(minter types.Grant, req MintRequest) (secret string, rec To
 // MintCode stores a one-time exchange code for the token req describes, and returns the code.
 // The code is not a bearer anywhere: it lives ExchangeCodeTTL, and Redeem trades it once for
 // the token. It is checked against minter exactly as Mint checks the token it stands for.
-func (s *Store) MintCode(minter types.Grant, req MintRequest) (code string, rec Token, err error) {
+func (s *Store) MintCode(minter types.Grant, req MintRequest) (code types.Secret, rec Token, err error) {
 	st := s.state()
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := checkTTL(req.TTL); err != nil {
-		return "", Token{}, err
+		return types.Secret{}, Token{}, err
 	}
 	return s.mint(st, minter, req, types.KindExchange, ExchangeCodeTTL, req.TTL)
 }
@@ -425,41 +425,41 @@ func checkTTL(ttl time.Duration) error {
 }
 
 // mint writes one record. The caller holds st.mu.
-func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, kind types.CredentialKind, life, tokenTTL time.Duration) (string, Token, error) {
+func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, kind types.CredentialKind, life, tokenTTL time.Duration) (types.Secret, Token, error) {
 	switch {
 	case req.Grant.Validate() != nil:
-		return "", Token{}, invalidRequest("%v", req.Grant.Validate())
+		return types.Secret{}, Token{}, invalidRequest("%v", req.Grant.Validate())
 	case req.Grant.Tokens != types.LevelNone:
-		return "", Token{}, invalidRequest("tokens=%s is the operator's alone; no stored token holds it", req.Grant.Tokens)
+		return types.Secret{}, Token{}, invalidRequest("tokens=%s is the operator's alone; no stored token holds it", req.Grant.Tokens)
 	case !req.Grant.Within(minter):
-		return "", Token{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
+		return types.Secret{}, Token{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
 			"auth: a token may not be granted more than its minter holds: asked for %s, holds %s", req.Grant, grantOrNothing(minter))
 	case req.Grant == types.Grant{}:
-		return "", Token{}, invalidRequest("a token must grant something")
+		return types.Secret{}, Token{}, invalidRequest("a token must grant something")
 	}
 	if kind == types.KindStored {
 		if err := checkTTL(life); err != nil {
-			return "", Token{}, err
+			return types.Secret{}, Token{}, err
 		}
 	}
 	name := strings.TrimSpace(req.Name)
 	if name != "" {
 		if err := dropin.ValidName(name); err != nil {
-			return "", Token{}, invalidRequest("token %v", err)
+			return types.Secret{}, Token{}, invalidRequest("token %v", err)
 		}
 		if looksLikeID(name) {
-			return "", Token{}, invalidRequest("%q looks like a token id; a name may not", name)
+			return types.Secret{}, Token{}, invalidRequest("%q looks like a token id; a name may not", name)
 		}
 	}
 	if err := s.read(st); err != nil {
-		return "", Token{}, err
+		return types.Secret{}, Token{}, err
 	}
 	now := time.Now()
 	s.prune(st, now)
 
 	secret, err := mintSecret(kind)
 	if err != nil {
-		return "", Token{}, err
+		return types.Secret{}, Token{}, err
 	}
 	sum := digest(secret)
 	rec := Token{
@@ -482,9 +482,9 @@ func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, kind typ
 	}
 	st.sig = ""
 	if err != nil {
-		return "", Token{}, err
+		return types.Secret{}, Token{}, err
 	}
-	return secret, rec, nil
+	return types.NewSecret(secret), rec, nil
 }
 
 func defaultName(g types.Grant, n int) string {
@@ -525,31 +525,31 @@ func writeTokenRecord(dir string, t Token) error {
 // deleted before the token is minted, so of two callers racing with one code exactly one gets
 // a token. A code that is unknown, expired, or already redeemed is ErrTokenNotFound (coded
 // BearerRejected). The token takes the code's name when it is still free.
-func (s *Store) Redeem(code string) (secret string, rec Token, err error) {
+func (s *Store) Redeem(code string) (secret types.Secret, rec Token, err error) {
 	notFound := types.WrapDiagnostic(types.BearerRejected, ErrTokenNotFound, "auth: the link code is wrong, expired, or already used; open a fresh link")
 	if kind, ok := credentialKind(code); !ok || kind != types.KindExchange {
-		return "", Token{}, notFound
+		return types.Secret{}, Token{}, notFound
 	}
 	st := s.state()
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := s.read(st); err != nil {
-		return "", Token{}, err
+		return types.Secret{}, Token{}, err
 	}
 	match, ok := lookup(st.tokens, code, types.KindExchange, time.Now())
 	if !ok {
-		return "", Token{}, notFound
+		return types.Secret{}, Token{}, notFound
 	}
 	if err := s.removeExact(match); err != nil {
 		st.sig = ""
 		if errors.Is(err, errReplaced) {
-			return "", Token{}, notFound
+			return types.Secret{}, Token{}, notFound
 		}
-		return "", Token{}, err
+		return types.Secret{}, Token{}, err
 	}
 	st.sig = ""
 	if err := s.read(st); err != nil {
-		return "", Token{}, err
+		return types.Secret{}, Token{}, err
 	}
 	if slices.ContainsFunc(st.tokens, func(t Token) bool { return t.Name == match.Name }) {
 		match.Name = "" // taken since; the token gets the next free name

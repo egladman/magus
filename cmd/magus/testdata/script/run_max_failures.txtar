@@ -60,7 +60,7 @@ magus\project({
 });
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["ran.txt"]);
-    proc\exec("sleep", args: ["4"], dir: ".", opts: {});
+    proc\exec("sleep", args: ["4"], dir: ".", opts: proc\ExecOptions{});
     fs\writeFile("ran.txt", "ran\n");
 }
 -- c/magusfile.buzz --
@@ -72,6 +72,6 @@ magus\project({
 });
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["ran.txt"]);
-    proc\exec("sleep", args: ["4"], dir: ".", opts: {});
+    proc\exec("sleep", args: ["4"], dir: ".", opts: proc\ExecOptions{});
     fs\writeFile("ran.txt", "ran\n");
 }

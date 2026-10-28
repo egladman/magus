@@ -15,8 +15,8 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/go-playground/validator/v10"

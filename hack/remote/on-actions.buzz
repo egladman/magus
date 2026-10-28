@@ -50,7 +50,7 @@ export object Reply {
 }
 
 export fun call(cmd: str, args: [str]) > Reply !> any {
-    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     return Reply{ ok = res.ok, stdout = res.stdout, stderr = res.stderr };
 }
 

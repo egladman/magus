@@ -3,11 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 )
@@ -295,19 +298,35 @@ func recordFlagSet(name string, fs *flag.FlagSet) {
 // printOwnDefaults prints the flags fs declares beyond the global ones. Every command
 // accepts the globals and `magus -h` lists them once; repeating them under each command
 // buried its few own flags in about a thousand lines of help.
+//
+// It prints through cmdline.FlagHelp, the formatter behind the man page, so a bool reads
+// --[no-]name (default: on|off) in both. flag.PrintDefaults prints a single dash and
+// lifts a backquoted word out of the usage as the value's name.
 func printOwnDefaults(fs *flag.FlagSet) {
 	globals := globalFlagNames()
-	// nodisplayflags: this set only prints fs's own flags; fs is the set that parses.
-	own := flag.NewFlagSet(fs.Name(), flag.ContinueOnError)
-	own.SetOutput(fs.Output())
-	fs.VisitAll(func(f *flag.Flag) {
-		if globals[f.Name] {
-			return
+	printFlagHelp(fs.Output(), cmdline.FlagHelp(fs, func(name string) bool { return globals[name] }))
+}
+
+// printRootFlags prints the flags the command tree declares on the program itself.
+func printRootFlags(w io.Writer) {
+	// nodisplayflags: this set only prints the root's declared flags in the top-level
+	// help, which lists the display flags itself; it parses nothing.
+	fs := flag.NewFlagSet(commands.Root.Name, flag.ContinueOnError)
+	commands.Root.BindFlags(fs)
+	printFlagHelp(w, cmdline.FlagHelp(fs, nil))
+}
+
+func printFlagHelp(w io.Writer, flags []cmdline.Help) {
+	for _, h := range flags {
+		label := "  " + h.Name
+		if h.Value != "" {
+			label += " " + h.Value
 		}
-		own.Var(f.Value, f.Name, f.Usage)
-		own.Lookup(f.Name).DefValue = f.DefValue
-	})
-	own.PrintDefaults()
+		if h.Default != "" {
+			label += " (default: " + h.Default + ")"
+		}
+		fmt.Fprintf(w, "%s\n    \t%s\n", label, strings.ReplaceAll(h.Usage, "\n", "\n    \t"))
+	}
 }
 
 // globalFlagNames is the set every command gets for free: the config flags generated

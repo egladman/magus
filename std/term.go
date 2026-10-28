@@ -77,9 +77,9 @@ var Term = Module{
 			Args: []Arg{
 				{Name: "items", Type: TypeStringSlice},
 				{Name: "prompt", Type: TypeString, Optional: true},
-				{Name: "initial_filter", Type: TypeString, Optional: true},
+				{Name: "initialFilter", Type: TypeString, Optional: true},
 				{Name: "initial", Type: TypeInt, Optional: true},
-				{Name: "max_rows", Type: TypeInt, Optional: true},
+				{Name: "maxRows", Type: TypeInt, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeIndex}},
 			Raises:  true,
@@ -87,11 +87,11 @@ var Term = Module{
 		},
 		{
 			Name: "notify",
-			Doc:  "Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttl_ms defaults to 5000; a negative ttl_ms pins the notification until newer ones push it out.",
+			Doc:  "Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttlMs defaults to 5000; a negative ttlMs pins the notification until newer ones push it out.",
 			Args: []Arg{
 				{Name: "message", Type: TypeString},
 				{Name: "level", Type: TypeString, Enum: "LogLevel", Optional: true},
-				{Name: "ttl_ms", Type: TypeInt, Optional: true},
+				{Name: "ttlMs", Type: TypeInt, Optional: true},
 			},
 			Returns: nil,
 			Impl:    TermNotify,

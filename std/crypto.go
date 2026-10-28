@@ -107,8 +107,8 @@ var Crypto = Module{
 		},
 		{
 			Name:    "verify",
-			Doc:     "Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is \"ed25519\".",
-			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "sig_hex", Type: TypeString}, {Name: "pub_hex", Type: TypeString}},
+			Doc:     "Report whether sigHex is a valid signature over data for the hex public key pubHex. alg is \"ed25519\".",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "sigHex", Type: TypeString}, {Name: "pubHex", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
 			Raises:  true,
 			Impl:    CryptoVerify,

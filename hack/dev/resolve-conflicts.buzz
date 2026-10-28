@@ -351,7 +351,7 @@ export fun main(args: [str]) > void !> any {
         throw "resolve-conflicts: {file}: {e}";
     }
     final left = c.hunks.len() - choices.len();
-    final patch = diff\unified(before, b: after, from_label: file, to_label: "{file} resolved");
+    final patch = diff\unified(before, b: after, fromLabel: file, toLabel: "{file} resolved");
     if (parsed.values["--apply"] == null) {
         std\print("dry run: nothing changed; pass --apply to write");
     } else {

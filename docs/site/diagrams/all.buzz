@@ -13,6 +13,7 @@ import "site/diagrams/server-share" as _;
 import "site/diagrams/ci-pipeline" as _;
 import "site/diagrams/ci-providers" as _;
 import "site/diagrams/image-build" as _;
+import "site/diagrams/oci-assembly" as _;
 import "site/diagrams/dogfood" as _;
 import "site/diagrams/project-reference" as _;
 import "site/diagrams/volatility" as _;
@@ -33,6 +34,7 @@ import "site/diagrams/bootstrap" as _;
 import "site/diagrams/target-order" as _;
 import "site/diagrams/agent-orchestration" as _;
 import "site/diagrams/harness-layer" as _;
+import "site/diagrams/kustomize-architecture" as _;
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -49,6 +51,7 @@ export fun allFigures() > [figure\Figure] !> any {
         ciPipelineFigure(),
         ciProvidersFigure(),
         imageBuildFigure(),
+        ociAssemblyFigure(),
         dogfoodFigure(),
         projectReferenceFigure(),
         volatilityFigure(),
@@ -69,6 +72,7 @@ export fun allFigures() > [figure\Figure] !> any {
         targetOrderFigure(),
         agentOrchestrationFigure(),
         harnessLayerFigure(),
+        kustomizeArchitectureFigure(),
     ];
 }
 
@@ -302,7 +306,7 @@ test "a comment marker and a picture are replaced, an unrelated picture is not" 
 fun unknownMarkers(figures: [figure\Figure]) > [str] !> any {
     final known: mut {str: bool} = mut {<str: bool>};
     foreach (f in figures) { known[f.id] = true; }
-    final result: QueryResult = magus\query("kind=marker family=diagram", opts: {"limit": 10000});
+    final result: QueryResult = magus\query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
     final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
     foreach (n in result.nodes) {
         marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });

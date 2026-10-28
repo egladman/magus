@@ -585,7 +585,7 @@ func Summarize(fold Fold) []Summary {
 // the HOST's session id, so its invocation id is that id, and its start carries the
 // host's own label and session.
 //
-// Only the storage side lives here. Extraction is a per-host recipe magus does
+// Only the storage side lives here. Extraction is a per-host adapter magus does
 // not ship, and re-judging a command belongs beside the guard rules that judge
 // it, so both stay in the CLI.
 
@@ -593,7 +593,7 @@ func Summarize(fold Fold) []Summary {
 const KindAgentEvent = "agent_event"
 
 // The events a load accepts. They are magus's vocabulary rather than any host's:
-// a recipe maps its host's tool names onto these, the same division the guard
+// a loader maps its host's tool names onto these, the same division the guard
 // draws with hookToolCommand and its siblings.
 const (
 	EventShellCommand = "shell.command"
@@ -663,8 +663,8 @@ type AgentEvent struct {
 	Kind string `json:"event"`
 	// Ref is the host's id for the thing this event is about, and the dedup key
 	// together with Host, the session and Kind. Kind is part of the key because a
-	// hook.output shares its ref with the shell.command it judged: the recipe emits
-	// both from one host record. It is what makes a re-run of a recipe idempotent.
+	// hook.output shares its ref with the shell.command it judged: the loader emits
+	// both from one host record. It is what makes a re-run of a load idempotent.
 	Ref string `json:"ref"`
 	// AtMs is when the HOST saw the event, in unix milliseconds. The record's own Ts
 	// is when the load ran, which is a different fact and the wrong one to age against.
@@ -717,7 +717,7 @@ type LoadResult struct {
 // (session, host, kind, ref), and reports how many it wrote and how many it skipped.
 //
 // Loading the same stream twice is therefore a no-op, which is the property the
-// recipes are built on: a recipe re-reads whole transcript files rather than
+// loaders are built on: a loader re-reads whole transcript files rather than
 // tracking where it stopped, and the store is what makes that cheap instead of
 // duplicative.
 //

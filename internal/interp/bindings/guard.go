@@ -39,7 +39,7 @@ import (
 // those settings start from; see registerProfile.
 func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	guardMap := vm.NewMap()
-	registerVerdictMembers(obs, guardMap)
+	registerVerdictMembers(ctx, sess, obs, guardMap)
 	registerSpawnRule(ctx, sess, obs, guardMap)
 	registerCommandRule(ctx, sess, obs, guardMap)
 	registerWriteRule(ctx, sess, obs, guardMap)

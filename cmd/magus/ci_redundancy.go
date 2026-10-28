@@ -1,0 +1,462 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
+	internalci "github.com/egladman/magus/internal/ci"
+	"github.com/egladman/magus/internal/ci/annotate"
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
+)
+
+// gateMergeScanLimit bounds the history walk that looks for a merge commit
+// between the green gate and HEAD. A green gate older than this many commits
+// re-gates.
+const gateMergeScanLimit = 200
+
+// gatePoolProbeTimeout bounds the admission-server probe. The server is an
+// accelerant, never a capability gate: a probe that cannot answer in time
+// reads as idle and the gate runs.
+var gatePoolProbeTimeout = 2 * time.Second
+
+// gateRedundancy carries one ci invocation's gate identity between the
+// pre-run check and the post-run record: the branch, the commit, the input
+// fingerprint minted from the same per-step cache keys the run mints, and the
+// selection it covers. nil is the inert state (every method tolerates it),
+// so a caller can thread one unconditionally.
+type gateRedundancy struct {
+	m        *magus.Magus
+	root     string
+	drv      types.VCSDriver
+	target   string
+	ref      string
+	commit   string
+	fp       string
+	projects []string
+	charms   []string
+	// undeclared is the subset of projects nothing but an undeclared changed file
+	// selected; set by the affected path, empty on the `magus run ci` one, which
+	// names its own selection.
+	undeclared []string
+	// tier is what size narrowed the gate to; empty runs the full gate.
+	tier types.RiskTier
+}
+
+// gateFinding is one redundancy match: the green gate, and either an identical
+// fingerprint (no delta, identical true) or a delta that tiers trivial, as one
+// tier line per path.
+type gateFinding struct {
+	rec       sessions.GateRecord
+	identical bool
+	delta     []string
+}
+
+// isGateInvocation reports whether this invocation is THE gate: the ci target, run whole
+// rather than as a shard, and actually executing.
+//
+// The redundancy check and lock supersession (MGS3014) both key on it, and they have to
+// agree on what a gate is. One would otherwise defer a run the other would abort, on two
+// definitions that drifted.
+func isGateInvocation(target string, partial bool) bool {
+	return target == types.TargetCI && !partial && !globalCfg.DryRun
+}
+
+// prepareGateRedundancy computes the gate identity for a ci invocation, or
+// nil when the invocation is not one the check can vouch for: not the ci
+// target, a dry run, a shard or otherwise partial run, no VCS branch to key
+// on, or a selection whose cache keys cannot be computed. nil means the run
+// proceeds exactly as before this feature existed, with no output at all.
+func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, targets []types.Target, charms []string, partial bool) *gateRedundancy {
+	if !isGateInvocation(target, partial) {
+		return nil
+	}
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.VCS == nil || res.Source == types.VCSSourceDisabled {
+		return nil
+	}
+	meta, err := res.VCS.Metadata(ctx, m.Root())
+	if err != nil || meta.Ref == "" || meta.ID == "" {
+		return nil
+	}
+	steps := make([]internalci.GateStep, 0, len(targets))
+	projects := make([]string, 0, len(targets))
+	for _, t := range targets {
+		key, _, err := m.ComputeTargetKey(ctx, t.Path, t.Name, charms)
+		if err != nil {
+			return nil
+		}
+		steps = append(steps, internalci.GateStep{Project: t.Path, Target: t.Name, Key: key})
+		projects = append(projects, t.Path)
+	}
+	slices.Sort(projects)
+	sorted := slices.Clone(charms)
+	slices.Sort(sorted)
+	return &gateRedundancy{
+		m:        m,
+		root:     m.Root(),
+		drv:      res.VCS,
+		target:   target,
+		ref:      meta.Ref,
+		commit:   meta.ID,
+		fp:       internalci.GateFingerprint(steps),
+		projects: projects,
+		charms:   sorted,
+	}
+}
+
+// noteUndeclaredSeeds records which of this gate's projects were selected only through
+// files no project declares, for the record written after the run. Nil-safe, like every
+// other method here: the gate is inert on a non-ci or dry run.
+func (g *gateRedundancy) noteUndeclaredSeeds(projects []string) {
+	if g == nil {
+		return
+	}
+	g.undeclared = projects
+}
+
+// evaluate applies the redundancy decision before the gate runs. A nil error
+// means the gate RUNS: there is no skip-and-succeed state. A non-nil error is
+// the MGS3010 refusal, exiting 75; the refusal is also recorded in the session
+// store as a deferred gate record, so the decision is interrogable later. The
+// advisory case prints the identical finding to stderr and still returns nil.
+func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
+	if g == nil {
+		return nil
+	}
+	finding, redundant := g.finding(ctx, disabled)
+	// Probed for the message, not the decision: a refusal should say what the machine was
+	// doing. DecideGate does not read it.
+	pool := "not probed"
+	if redundant && !disabled {
+		_, pool = gatePoolProbe(ctx)
+	}
+	facts := internalci.GateFacts{
+		Redundant: redundant,
+		Forced:    disabled,
+		Nested:    spawn.CurrentLevel() > 0,
+	}
+	switch internalci.DecideGate(facts) {
+	case internalci.GateRefuse:
+		g.recordDeferral(ctx, finding.rec)
+		return gateRefusal{types.DiagnosticErrorf(types.RedundantGateDeferred,
+			"not running the %s gate on %s: it re-verifies a gate that already passed; pass --no-redundancy-check to run it anyway\n%s",
+			g.target, g.ref, fmt.Sprintf("%s\n  machine pool: %s", g.renderFinding(finding), pool))}
+	case internalci.GateAdvise:
+		slog.InfoContext(ctx, fmt.Sprintf("this %s gate re-verifies one that already passed; running anyway.\n%s\n  machine pool: %s",
+			g.target, g.renderFinding(finding), pool), attr.Notice(""), attr.Component("magus"))
+	}
+	return nil
+}
+
+// finding looks up the newest gate verdict for this branch and reports whether
+// this run would re-verify it: an identical input fingerprint, or a delta that
+// tiers trivial.
+func (g *gateRedundancy) finding(ctx context.Context, disabled bool) (gateFinding, bool) {
+	if disabled {
+		return gateFinding{}, false
+	}
+	dir, err := sessions.Dir(g.root)
+	if err != nil {
+		return gateFinding{}, false
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return gateFinding{}, false
+	}
+	rec, ok := sessions.LatestGate(fold, g.ref, g.target)
+	if !ok || rec.Outcome != sessions.OutcomePass || rec.Commit == "" {
+		return gateFinding{}, false
+	}
+	if rec.Fingerprint != "" && rec.Fingerprint == g.fp {
+		return gateFinding{rec: rec, identical: true}, true
+	}
+	if !slices.Equal(g.charms, rec.Charms) {
+		return gateFinding{}, false
+	}
+	for _, p := range g.projects {
+		if !slices.Contains(rec.Projects, p) {
+			return gateFinding{}, false
+		}
+	}
+	if g.commit != rec.Commit {
+		history, err := g.drv.History(ctx, g.root, types.HistoryQuery{Limit: gateMergeScanLimit})
+		if err != nil || !internalci.MergeFreeRange(history, rec.Commit) {
+			return gateFinding{}, false
+		}
+	}
+	rep, err := g.m.AssessChange(ctx, g.target, magus.AssessOptions{Base: rec.Commit})
+	if err != nil || rep.Tier != types.RiskTrivial {
+		return gateFinding{}, false
+	}
+	return gateFinding{rec: rec, delta: rep.Lines()}, true
+}
+
+// size tiers the change against base once the gate is going to run, and returns the
+// report when a gate smaller than full suffices. nil runs the full gate: an inert gate,
+// a forced run, a change that could not be assessed, or one that tiers full.
+func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *types.RiskReport {
+	if g == nil || forced {
+		return nil
+	}
+	rep, err := g.m.AssessChange(ctx, g.target, magus.AssessOptions{Base: base})
+	if err != nil {
+		slog.DebugContext(ctx, "change not assessed; running the full gate", attr.Error(err))
+		return nil
+	}
+	if rep.Tier == types.RiskFull {
+		return nil
+	}
+	g.tier = rep.Tier
+	return &rep
+}
+
+// renderSizing prints a sized gate in the redundancy refusal's shape: the decision and
+// its override, every changed path with its tier, and the commands that run instead.
+func renderSizing(target string, rep types.RiskReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
+	for _, line := range rep.Lines() {
+		fmt.Fprintf(&b, "  %s\n", line)
+	}
+	gate := "none"
+	if cmds := rep.Commands(); len(cmds) > 0 {
+		gate = strings.Join(cmds, " && ")
+	}
+	fmt.Fprintf(&b, "  gate: %s\n", gate)
+	for _, s := range rep.Gate {
+		if s.Op != "" {
+			fmt.Fprintf(&b, "  narrowed: %s in %s %s runs %d package(s): %s\n",
+				s.Op, strings.Join(s.Projects, " "), s.Target, len(s.Packages), strings.Join(s.Packages, " "))
+		}
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// renderFinding prints every input a reader needs to reconstruct the decision:
+// the matched green gate, and the delta with each file's tier, class and the
+// declaration or mechanism that decided it.
+func (g *gateRedundancy) renderFinding(f gateFinding) string {
+	var b strings.Builder
+	inv := f.rec.Inv
+	if inv == "" {
+		inv = "unrecorded"
+	}
+	fmt.Fprintf(&b, "  green gate: run %s, branch %s, commit %s, recorded %s (%s ago), fingerprint %s",
+		inv, f.rec.Ref, shortCommit(f.rec.Commit), f.rec.At.UTC().Format(time.RFC3339), gateAge(f.rec.At), shortFingerprint(f.rec.Fingerprint))
+	if n := len(f.rec.UndeclaredSeeds); n > 0 {
+		fmt.Fprintf(&b, "\n  that gate covered %d project(s) selected only by files nothing declares (%s): %s",
+			n, types.UndeclaredSeedingFile, strings.Join(f.rec.UndeclaredSeeds, ", "))
+	}
+	if f.identical {
+		fmt.Fprintf(&b, "\n  delta since that gate: none; this run's input fingerprint %s matches it exactly", shortFingerprint(g.fp))
+		return b.String()
+	}
+	if len(f.delta) == 0 {
+		b.WriteString("\n  delta since that gate: no changed paths")
+		return b.String()
+	}
+	b.WriteString("\n  delta since that gate, every file:")
+	for _, line := range f.delta {
+		b.WriteString("\n    " + line)
+	}
+	return b.String()
+}
+
+// record files the gate's verdict in the per-repository session store, so a
+// sibling worktree's next gate can see it. ctx should be the invocation
+// context, so the record joins to the run's journal by invocation id. An
+// interrupted or timed-out run records nothing: neither is a verdict on the
+// inputs. Store errors are logged, never returned: a store that can fail a
+// build is worse than none.
+
+// record persists this run's verdict, so a later gate on the same inputs can defer to it.
+//
+// A run that was CUT SHORT records nothing. Testing runErr alone is not enough to see
+// that: a cancelled run can return no error at all, because the targets it had already
+// dispatched report their own cancellation and the run itself then has nothing to add. A
+// gate killed at six seconds by a terminating shell took that path and recorded a PASS
+// over nine projects it never ran, and MGS3010 refused every later gate on that commit
+// on the strength of it.
+//
+// cutShort is read by the CALLER, at the instant the run returns, rather than here. The
+// invocation's context is cancelled asynchronously by the signal handler, so reading it
+// one call deeper widens the window in which a run that genuinely finished is mistaken
+// for one that did not.
+//
+// The residual window is the run's own last instant, and it is deliberately resolved
+// toward NOT recording: a dropped verdict costs one re-run, while a recorded verdict for
+// a run that did not happen makes MGS3010 refuse every later gate on that commit.
+func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool) {
+	if g == nil || cutShort || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
+		return
+	}
+	outcome := sessions.OutcomePass
+	if runErr != nil {
+		outcome = sessions.OutcomeFail
+	}
+	g.append(ctx, sessions.GateResult{
+		Target:          g.target,
+		Ref:             g.ref,
+		Commit:          g.commit,
+		Outcome:         outcome,
+		Fingerprint:     g.fp,
+		Projects:        g.projects,
+		Charms:          g.charms,
+		UndeclaredSeeds: g.undeclared,
+		Tier:            string(g.tier),
+		Inv:             journal.InvocationIDFromContext(ctx),
+	})
+}
+
+// recordDeferral persists the refusal itself, pointing at the green gate it
+// deferred to, so `magus session`'s store carries the decision and not only
+// the runs.
+func (g *gateRedundancy) recordDeferral(ctx context.Context, green sessions.GateRecord) {
+	g.append(ctx, sessions.GateResult{
+		Target:      g.target,
+		Ref:         g.ref,
+		Commit:      g.commit,
+		Outcome:     sessions.OutcomeDeferred,
+		Fingerprint: g.fp,
+		Projects:    g.projects,
+		Charms:      g.charms,
+		DeferredTo:  green.Commit,
+	})
+}
+
+func (g *gateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
+	dir, err := sessions.Dir(g.root)
+	if err != nil {
+		return
+	}
+	err = sessions.RecordGate(dir, rec, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: version})
+	if err != nil {
+		slog.With(attr.Component("gate redundancy")).DebugContext(ctx, "record not written",
+			slog.String("store", dir), attr.Error(err))
+	}
+}
+
+// planInheritance is the CI-shaped entry of the verdict-inheritance decision
+// for `magus affected ci --plan`. It fires only when the wired CI provider is
+// active (the github spell answers only under Actions) and names a green run
+// whose delta tiers trivial; every other path (no provider, no green run, a
+// merge in the range, a delta above trivial, gate_inherit false) returns nil,
+// and the plan proceeds with no output from this feature.
+//
+// The assessment runs HEAD's tree against the GREEN run's commit through
+// AssessChange, the same one the local redundancy check uses, so both features
+// share one definition of trivial. The annotation emitted on a hit is the run-page
+// half of the explicitness contract; the summary rides the plan output to the
+// workflow's report job.
+func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFinding {
+	if internalci.InheritOff(m.All()) {
+		return nil
+	}
+	ann := annotate.Detect()
+	src, ok := ann.(annotate.RunSource)
+	if !ok {
+		return nil
+	}
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.VCS == nil || res.Source == types.VCSSourceDisabled {
+		return nil
+	}
+	g := &gateRedundancy{m: m, root: m.Root(), drv: res.VCS}
+	probe := internalci.InheritProbe{
+		LastGreenRun: func(context.Context) (string, string, bool) {
+			green, ok := src.LastGreenRun()
+			return green.Run, green.Commit, ok
+		},
+		History: func(ctx context.Context) ([]types.Commit, error) {
+			return g.drv.History(ctx, g.root, types.HistoryQuery{Limit: gateMergeScanLimit})
+		},
+		Assess: func(ctx context.Context, green string) (types.RiskReport, error) {
+			return m.AssessChange(ctx, types.TargetCI, magus.AssessOptions{Base: green})
+		},
+	}
+	finding, ok := probe.Evaluate(ctx)
+	if !ok {
+		return nil
+	}
+	_ = ann.Annotate(annotate.Annotation{
+		Level:   annotate.LevelNotice,
+		Title:   "magus: CI verdict inherited",
+		Message: finding.AnnotationText(),
+	})
+	return &finding
+}
+
+// gatePoolProbe is swappable so a test can decide saturation without a
+// broker.
+var gatePoolProbe = gatePoolSaturated
+
+// gatePoolSaturated asks the broker whether a new run would be refused, and always says
+// what it saw, so the finding can print the capacity behind either answer. Every
+// failure (no socket, no answer) reads as idle: the broker is an arbiter, never a
+// capability gate for this advice.
+func gatePoolSaturated(ctx context.Context) (bool, string) {
+	ctx, cancel := context.WithTimeout(ctx, gatePoolProbeTimeout)
+	defer cancel()
+	st, err := broker.QueryStatus(ctx, broker.DefaultAddr())
+	if err != nil {
+		return false, "no broker answered; treated as idle"
+	}
+	m := &st.Capacity
+	desc := fmt.Sprintf("%s of %s slots held", strconv.Itoa(m.HeldSlots), strconv.Itoa(m.BudgetSlots))
+	if !internalci.PoolSaturated(m) {
+		return false, "idle: " + desc
+	}
+	return true, "saturated: " + desc
+}
+
+// gateRefusal states the process status the MGS3010 refusal asks for. Its own
+// type rather than sharing the machine gate's, for the reason that one and the
+// lock's do not share: two decisions that happen to agree on 75 must not move
+// together. It wraps, so errors.Is against the diagnostic code keeps matching.
+type gateRefusal struct{ error }
+
+func (gateRefusal) ExitCode() int { return 75 }
+
+func (e gateRefusal) Unwrap() error { return e.error }
+
+func shortCommit(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
+func shortFingerprint(fp string) string {
+	if fp == "" {
+		return "unrecorded"
+	}
+	if len(fp) > 12 {
+		return fp[:12]
+	}
+	return fp
+}
+
+// gateAge renders how long ago the green gate ran, at a resolution a reader
+// acts on: seconds under a minute, else minutes (and hours) with the zero
+// seconds trimmed.
+func gateAge(at time.Time) string {
+	d := time.Since(at)
+	if d < time.Minute {
+		return d.Round(time.Second).String()
+	}
+	return strings.TrimSuffix(d.Round(time.Minute).String(), "0s")
+}

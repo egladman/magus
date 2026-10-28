@@ -59,6 +59,7 @@ fs.chmod
 fs.copyDir
 fs.copyFile
 fs.dirname
+fs.diskUsage
 fs.exists
 fs.ext
 fs.glob
@@ -67,6 +68,7 @@ fs.isFile
 fs.join
 fs.listDir
 fs.mkdirAll
+fs.mode
 fs.readFile
 fs.readLines
 fs.readlink
@@ -76,9 +78,11 @@ fs.rename
 fs.scratchCheckoutDir
 fs.size
 fs.stat
+fs.stateDir
 fs.symlink
 fs.tempDir
 fs.tempFile
+fs.trimOldest
 fs.walk
 fs.watch
 fs.writeFile
@@ -91,6 +95,17 @@ http.post
 http.request
 http.server
 http.upload_chunked
+image.assemble
+image.assembleIndex
+image.attachReferrers
+image.goEnv
+image.open
+image.platform
+image.platforms
+image.pull
+image.push
+image.writeProvenance
+image.writeSbom
 log.at
 log.debug
 log.error

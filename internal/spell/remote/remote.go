@@ -38,7 +38,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -86,12 +86,10 @@ func Pinned(importPath string, pin digest.Digest) (Ref, error) {
 type Options struct {
 	CacheRoot string
 	Client    *http.Client
-	// Username and Password authenticate a pull from a private repository; see
-	// oci.Client.
-	Username string
-	Password string
-	// Connect, when set, supplies the registry client in place of Client, Username and
-	// Password. It is called only when a pull is needed, so a verified cache entry
+	// Credentials authenticate a pull from a private repository; see oci.Client.
+	Credentials oci.Credentials
+	// Connect, when set, supplies the registry client in place of Client and
+	// Credentials. It is called only when a pull is needed, so a verified cache entry
 	// resolves no secret.
 	Connect func(ctx context.Context) (*oci.Client, error)
 }
@@ -757,5 +755,5 @@ func (o Options) client(ctx context.Context) (*oci.Client, error) {
 	if o.Connect != nil {
 		return o.Connect(ctx)
 	}
-	return &oci.Client{HTTP: o.Client, Username: o.Username, Password: o.Password}, nil
+	return &oci.Client{HTTP: o.Client, Credentials: o.Credentials}, nil
 }

@@ -17,9 +17,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"os/exec"
-	"strings"
-	"time"
 
 	"connectrpc.com/connect"
 
@@ -27,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler"
@@ -53,7 +49,6 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -208,10 +203,6 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 	bridgeLog, shareLog := log.With(attr.Component("bridge")), log.With(attr.Component("share"))
-
-	if opts.Magus != nil {
-		go runGoCacheTrim(ctx, newGoCacheTrimmer(opts.Magus.Root(), opts.Config.Go.CacheBudgetMB), log.With(attr.Component("go-cache")))
-	}
 
 	// ONE job store for the server's own readers, the activity feed and the JobService
 	// below. Two stores over one file each take their own mutex, and the merge Update
@@ -920,103 +911,4 @@ func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, e
 		return types.ImportGraph{}, err
 	}
 	return kg.ImportGraph(), nil
-}
-
-const (
-	goCacheTrimInterval    = 10 * time.Minute
-	goCacheTrimWalkEntries = 5_000_000
-	goCacheTrimSource      = "daemon/go-cache"
-)
-
-// goCacheTrimmer decides whether the Go build cache is past go.cache_budget_mb and trims it.
-// Size, clean and record are fields so a test supplies a fake size and a fake cleaner.
-type goCacheTrimmer struct {
-	budgetMB int
-	size     func(ctx context.Context, limit int64) (int64, error)
-	clean    func(ctx context.Context) error
-	record   func(ctx context.Context, message string) error
-}
-
-// trim reports whether it cleaned the cache. A budget of zero or less does nothing.
-// The size is a floor: the measuring walk stops once it passes the budget.
-func (t goCacheTrimmer) trim(ctx context.Context) (bool, error) {
-	if t.budgetMB <= 0 {
-		return false, nil
-	}
-	limit := int64(t.budgetMB) << 20
-	bytes, err := t.size(ctx, limit)
-	if err != nil {
-		return false, fmt.Errorf("server: measure the go build cache: %w", err)
-	}
-	if bytes <= limit {
-		return false, nil
-	}
-	if err := t.clean(ctx); err != nil {
-		return false, fmt.Errorf("server: the go build cache is past its %d MB go.cache_budget_mb (at least %d MB) and `go clean -cache` failed: %w",
-			t.budgetMB, bytes>>20, err)
-	}
-	msg := fmt.Sprintf("the daemon ran `go clean -cache`: the go build cache passed the %d MB go.cache_budget_mb (at least %d MB)", t.budgetMB, bytes>>20)
-	if err := t.record(ctx, msg); err != nil {
-		return true, fmt.Errorf("server: trimmed the go build cache but could not record it: %w", err)
-	}
-	return true, nil
-}
-
-func newGoCacheTrimmer(root string, budgetMB int) goCacheTrimmer {
-	return goCacheTrimmer{
-		budgetMB: budgetMB,
-		size: func(ctx context.Context, limit int64) (int64, error) {
-			dir, err := doctor.GoEnvCache(ctx)
-			if err != nil {
-				return 0, err
-			}
-			size, err := doctor.MeasureCache(ctx, dir, limit, goCacheTrimWalkEntries)
-			return size.Bytes, err
-		},
-		clean: func(ctx context.Context) error {
-			cmd := exec.CommandContext(ctx, "go", "clean", "-cache")
-			cmd.Dir = root
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-			}
-			return nil
-		},
-		record: func(ctx context.Context, message string) error {
-			dir, err := sessions.Dir(root)
-			if err != nil {
-				return err
-			}
-			_, _, err = sessions.OpenRequest(dir, goCacheTrimSource, sessions.AttentionOpen{
-				Outcome:  string(types.OutcomeDiagnostic),
-				Severity: string(types.SeverityWarning),
-				Source:   goCacheTrimSource,
-				Message:  message,
-			}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root})
-			return err
-		},
-	}
-}
-
-// runGoCacheTrim trims at start and then every goCacheTrimInterval until ctx ends. A failed
-// pass is logged and the next tick tries again.
-func runGoCacheTrim(ctx context.Context, t goCacheTrimmer, log *slog.Logger) {
-	if t.budgetMB <= 0 {
-		log.InfoContext(ctx, "go.cache_budget_mb is 0: the daemon does not trim the go build cache")
-		return
-	}
-	tick := time.NewTicker(goCacheTrimInterval)
-	defer tick.Stop()
-	for {
-		trimmed, err := t.trim(ctx)
-		if err != nil {
-			log.ErrorContext(ctx, "go build cache trim", attr.Error(err))
-		} else if trimmed {
-			log.WarnContext(ctx, "trimmed the go build cache", slog.Int("budget_mb", t.budgetMB))
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
 }

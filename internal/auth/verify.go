@@ -35,13 +35,13 @@ func Verify(presented string) (types.Credential, bool) {
 	switch kind {
 	case types.KindOperator:
 		v := currentView()
-		if v.operator == "" {
+		if v.operatorSum == "" {
 			return types.Credential{}, false
 		}
-		if subtle.ConstantTimeCompare([]byte(digest(presented)), []byte(digest(v.operator))) != 1 {
+		if subtle.ConstantTimeCompare([]byte(digest(presented)), []byte(v.operatorSum)) != 1 {
 			return types.Credential{}, false
 		}
-		return operatorCredential(v.operator), true
+		return v.operator, true
 	case types.KindStored:
 		v := currentView()
 		if !v.storeOK {
@@ -59,15 +59,16 @@ func Verify(presented string) (types.Credential, bool) {
 // revalidateEvery bounds how long a view is trusted while nothing it stats has changed.
 var revalidateEvery = time.Second
 
-// view is what Verify reads: the operator token ("" when the file did not load) and the
-// stored tokens, as of the stat signature sig.
+// view is what Verify reads: the operator token's digest ("" when the file did not load) and
+// credential, and the stored tokens, as of the stat signature sig. It holds no plaintext.
 type view struct {
-	state    string
-	sig      string
-	loaded   time.Time
-	operator string
-	tokens   []Token
-	storeOK  bool
+	state       string
+	sig         string
+	loaded      time.Time
+	operatorSum string
+	operator    types.Credential
+	tokens      []Token
+	storeOK     bool
 }
 
 var (
@@ -95,7 +96,8 @@ func currentView() view {
 	// whose signature no longer matches, and the next call loads again.
 	v := view{state: state, sig: sig, loaded: time.Now()}
 	if tok, err := LoadOperator(); err == nil {
-		v.operator = tok
+		v.operatorSum = digest(tok.Reveal())
+		v.operator = operatorCredential(tok)
 	}
 	if store, err := LoadStore(filepath.Join(state, "tokens.d")); err == nil {
 		st := store.state()

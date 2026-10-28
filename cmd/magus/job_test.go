@@ -559,6 +559,41 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].DenyPaths})
 }
 
+// A retry names the id alone and forks the job again as it was declared; a spec flag
+// declares the job anew.
+func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
+	resetWorkspaceMemo(t)
+	repo, cacheDir := execRepositoryFixture(t)
+	root := repo.Root()
+	repo.WriteTree(map[string]string{"run.go": "package run\n"})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--check", "test .", "--write-paths", "run.go", "--criteria", "run"}))
+	_, err := job.Exit(t.Context(), store, "w", nil, nil)
+	require.NoError(t, err)
+
+	spec := func(r types.Job) types.Declaration {
+		d := job.RetryDeclaration(r)
+		d.Schema = types.Schema{}
+		return d
+	}
+	first, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	require.NoError(t, jobFork(t.Context(), root, []string{"w"}))
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, spec(first[0]), spec(rows[0]), "the retry keeps the declared spec")
+	assert.Equal(t, types.StateDeclared, rows[0].State, "the retry is a new attempt")
+
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--criteria", "anew"}))
+	rows, err = store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.Declaration{ID: "w", Criteria: "anew", ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
+}
+
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
 // refuses it even with a check, and the refusal teaches the script check a scout passes by.
 func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
@@ -1653,7 +1688,7 @@ magus\project({"spells": [go]});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     foreach (c in req.commands) {
-        if (req.role == "worker" and c.args.indexOf("go-build") != null) {
+        if (req.role == magus\AgentRole.worker and c.args.indexOf("go-build") != null) {
             return magus\guard.deny("a worker does not build magus");
         }
     }
@@ -1702,7 +1737,7 @@ const denyBuildFromElsewhereRule = `import "magus";
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     foreach (c in req.commands) {
-        if (req.role == "worker" and c.args.indexOf("go-build") != null and req.dir.indexOf("elsewhere") != null) {
+        if (req.role == magus\AgentRole.worker and c.args.indexOf("go-build") != null and req.dir.indexOf("elsewhere") != null) {
             return magus\guard.deny("judged from the wrong directory");
         }
     }
@@ -1756,7 +1791,7 @@ const denyBuildRule = `import "magus";
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     foreach (c in req.commands) {
-        if (req.role == "worker" and c.args.indexOf("go-build") != null) {
+        if (req.role == magus\AgentRole.worker and c.args.indexOf("go-build") != null) {
             return magus\guard.deny("builds are refused here");
         }
     }
@@ -1846,7 +1881,7 @@ import "magus/spell/go";
 magus\project({"spells": [go]});
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
-    if (req.role == "worker") {
+    if (req.role == magus\AgentRole.worker) {
         return magus\guard.deny("the hook binary is older than the tree\nrebuild it");
     }
     return magus\guard.allow();
@@ -2032,18 +2067,23 @@ func TestJobForkDryRunEmitsTheValidationForAStructuredFormat(t *testing.T) {
 	assert.Equal(t, types.JobCheckUnrunnable, v.Problems[0].Code)
 }
 
-// A fork made at a commit the forker's ./magus was not built at places no binary and names
-// the one build its checkout needs.
-func TestPrintJobWorktreeNamesTheCheckoutBootstrap(t *testing.T) {
-	row := types.Job{ID: "w", Worktree: &types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef"}}
-	var out bytes.Buffer
-	printJobWorktree(&out, row, job.CheckoutBootstrap("/w/c"))
-	assert.Contains(t, out.String(), "placed no magus: the forking checkout's was built at another commit")
-	assert.Contains(t, out.String(), "next: `./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w/c` builds one at 0123456789ab")
-
-	out.Reset()
-	printJobWorktree(&out, row, "")
-	assert.Contains(t, out.String(), "runs magus from PATH", "a forker on PATH needs no build")
+// The fork says which magus its checkout got, and that an adopted checkout is never removed.
+func TestPrintJobWorktreeSaysWhichMagusTheCheckoutGot(t *testing.T) {
+	made := types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef", Made: true, Binary: "/w/c/magus"}
+	for name, tc := range map[string]struct {
+		wt    types.JobWorktree
+		built bool
+		want  string
+	}{
+		"built from its own sources": {wt: made, built: true, want: "built /w/c/magus from the checkout's own sources"},
+		"a copy":                     {wt: made, want: "placed /w/c/magus, the magus the forking checkout runs"},
+		"a forker on PATH":           {wt: types.JobWorktree{Root: "/w/c", Made: true}, want: "runs magus from PATH"},
+		"adopted":                    {wt: types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef"}, want: "adopted for job w at 0123456789ab; its holder takes it there with `"},
+	} {
+		var out bytes.Buffer
+		printJobWorktree(&out, types.Job{ID: "w", Worktree: &tc.wt}, tc.built)
+		assert.Contains(t, out.String(), tc.want, name)
+	}
 }
 
 func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {

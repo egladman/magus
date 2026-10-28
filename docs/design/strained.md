@@ -64,6 +64,13 @@ The principle pages name debts of their own:
   allowlist, are the candidates, rolled out under
   [the stricter-rule rule](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#rolling-out-a-stricter-rule).
 
+- **Refusals that name their check-time rule** ([The checker catches it; the runtime is the backstop](principles/the-checker-catches-it.md)):
+  nothing grades whether a runtime refusal names the check-time rule that should
+  have caught it, or says why the checker cannot see that input. A lint over
+  refusal messages is the candidate, rolled out under the stricter-rule rule
+  above. The spell-contract and `proc\exec` refusals for environment variables in
+  argv are planned and not built.
+
 - **Thin packages** ([Abstract at the right layer, or not at all](principles/abstract-at-the-right-layer.md)):
   nothing fails a package that is one file and its test and exports one symbol.
   A conformance metric for it, ratcheted like `file-split`, is the candidate.

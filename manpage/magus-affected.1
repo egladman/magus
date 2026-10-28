@@ -50,13 +50,19 @@ Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per\-VCS buil
 \fB\-\-bisect\fR \fIstring\fR
 Drive VCS bisect to find the commit that broke <project>
 .TP
+\fB\-\-[no\-]cache\fR (default: on)
+Replay a cache hit; \-\-no\-cache forces a fresh run, which still refreshes the entry
+.TP
+\fB\-\-[no\-]default\-charms\fR (default: on)
+Apply magus.yaml default_charms; \-\-no\-default\-charms ignores them for this run
+.TP
 \fB\-\-depth\fR \fIint\fR
 With \-\-graph: cap displayed depth (0 = unlimited)
 .TP
-\fB\-\-detach\fR
+\fB\-\-[no\-]detach\fR (default: off)
 Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server
 .TP
-\fB\-\-detail\fR
+\fB\-\-[no\-]detail\fR (default: off)
 With \-\-plan: add per\-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to
 .TP
 \fB\-\-explain\fR \fIstring\fR
@@ -65,10 +71,10 @@ Show why <project> is in the affected set instead of executing
 \fB\-\-good\fR \fIstring\fR
 With \-\-bisect: known\-good commit SHA (auto\-detected from history when empty)
 .TP
-\fB\-\-graph\fR
+\fB\-\-[no\-]graph\fR (default: off)
 Render the dependency graph for the affected scope instead of executing
 .TP
-\fB\-\-impact\fR
+\fB\-\-[no\-]impact\fR (default: off)
 Report the blast radius of the changeset (read\-only; runs nothing)
 .TP
 \fB\-\-max\-parallel\-budget\fR \fIint\fR
@@ -77,19 +83,10 @@ With \-\-plan: cross\-shard concurrency cap; 0 = unlimited
 \fB\-\-max\-shards\fR \fIint\fR (default: 8)
 With \-\-plan: maximum CI shards (\-1 = unlimited)
 .TP
-\fB\-\-no\-cache\fR
-Force a fresh run even on a cache hit; still refreshes the entry
-.TP
-\fB\-\-no\-default\-charms\fR
-Ignore magus.yaml default_charms for this run
-.TP
-\fB\-\-no\-redundancy\-check\fR
-Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only
-.TP
-\fB\-\-null\fR
+\fB\-\-[no\-]null\fR (default: off)
 With \-\-stdin: expect NUL\-separated paths and double\-NUL between batches
 .TP
-\fB\-\-open\fR
+\fB\-\-[no\-]open\fR (default: off)
 Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 .TP
 \fB\-\-plan\fR \fIstring\fR
@@ -98,10 +95,13 @@ Emit a provider\-neutral JSON CI shard plan for the affected set
 \fB\-\-race\fR \fIstring\fR
 Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non\-determinism (MGS4003), at double the time.
 .TP
-\fB\-\-stdin\fR
+\fB\-\-[no\-]redundancy\-check\fR (default: on)
+Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); \-\-no\-redundancy\-check runs it in full. ci target only
+.TP
+\fB\-\-[no\-]stdin\fR (default: off)
 Read changed file paths from stdin instead of running a VCS diff
 .TP
-\fB\-\-step\fR
+\fB\-\-[no\-]step\fR (default: off)
 Pause before each subprocess for interactive stepping (needs a TTY; implies \-\-concurrency=1)
 .TP
 \fB\-\-target\fR \fIstring\fR (default: test)
@@ -110,7 +110,7 @@ With \-\-bisect: magus target to bisect
 \fB\-\-timeout\fR \fIduration\fR
 Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
 .TP
-\fB\-\-upstream\fR
+\fB\-\-[no\-]upstream\fR (default: off)
 With \-\-graph: show dependents instead of dependencies
 .RE
 .SH OPERANDS
@@ -236,7 +236,6 @@ magus affected --bisect ./apps/myapp
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

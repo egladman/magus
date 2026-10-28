@@ -462,7 +462,7 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     final _projects = magus\describe.project().projects;
     final _graph = magus\describe.graph().projects;
     final _index = magus\describe.graphMarkdown();
-    magus\insight({});
+    magus\insight();
     final _state = magus\describe.tool().lifecycle.state;
 }
 `
@@ -691,7 +691,7 @@ func TestRun_insightLensesAreShaped(t *testing.T) {
 			src := fmt.Sprintf(`
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus\log.info("{magus\insight({}).%s.len()}");
+    magus\log.info("{magus\insight().%s.len()}");
     magus\log.info("reached-the-end");
 }
 `, lens)

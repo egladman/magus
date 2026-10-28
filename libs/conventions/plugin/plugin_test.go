@@ -35,6 +35,7 @@ func TestPluginsRegister(t *testing.T) {
 		"namewords":     map[string]any{"suffixes": []any{"Of"}, "short-forms": []any{"Cfg"}},
 		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
 		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
+		"secretfields":  map[string]any{"words": []any{"Token"}, "hint": "see docs"},
 		"stderrprint": map[string]any{
 			"module": "example.com/m", "usage-pattern": "(?i)usage$", "usage-fields": []any{"Usage"},
 			"callee-packages": []any{"example.com/m"}, "display": []any{"example.com/m/tty"},

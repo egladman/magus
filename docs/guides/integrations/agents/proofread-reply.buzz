@@ -206,7 +206,7 @@ fun judge(bin: str, decisions: str, reply: str) > [Finding] {
         argv.append("{MINIMUM}");
     }
     final run = proc\exec(bin, args: argv,
-        opts: {"stdin": reply, "quiet": true, "allow_failure": true}) catch null;
+        opts: proc\ExecOptions{stdin = reply, quiet = true, allowFailure = true}) catch null;
     // Exit 1 is a deny finding, written to stdout like any other; 2 is a run that could not judge.
     if (run == null or (run!.code != 0 and run!.code != 1)) {
         return [<Finding>];

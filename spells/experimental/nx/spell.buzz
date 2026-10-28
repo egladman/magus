@@ -64,12 +64,12 @@ export fun list_projects(target: Target, req: ProjectQuery) > [Project] !> any {
         // default streams what it captures, so without it nx's JSON is echoed to the
         // console before any command has printed its own output.
         final listed = proc\exec("npx", args: ["--no-install", "nx", "show", "projects", "--json"], dir: r,
-            opts: {"quiet": true});
+            opts: proc\ExecOptions{quiet = true});
         final names = json\parse(listed.stdout);
 
         foreach (name in names as [str]) {
             final shown = proc\exec("npx", args: ["--no-install", "nx", "show", "project", name, "--json"], dir: r,
-                opts: {"quiet": true});
+                opts: proc\ExecOptions{quiet = true});
             final detail = json\parse(shown.stdout) as? {str: any};
             projects.append(Project{
                 path   = ((detail?["root"]) as? str) ?? "",

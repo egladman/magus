@@ -64,7 +64,6 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocPushUngated},
 	{doc: ruleDocHumanOnly},
 	{doc: ruleDocGrantIsAPersons},
-	{doc: ruleDocWaiverIsAPersons},
 	{doc: ruleDocInlineAlias},
 	{doc: ruleDocMagusTimeout},
 	{doc: ruleDocMergeSideCheckout},
@@ -347,7 +346,7 @@ var ruleDocPushUngated = types.RuleDoc{
 		"A session no job lease binds is the orchestrator. It used to be asked, and two pull requests went out with no local gate because the rule only asked, so it is now refused with the gate named: `magus status --wait`, then `magus affected ci`. Opening a pull request with `gh pr create` meets the same gate at the head commit. " +
 		"A session bound to a lease is a worker, and workers do not publish: its refusal also sends the commit to the orchestrator. " +
 		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD. " +
-		"A person who skips the gate on purpose types `magus gate waive <commit> --reason \"...\"`: a push or `gh pr create` of that commit, and of no other, then passes, and the verdict names who waived it, when and why. A revoked waiver covers nothing.",
+		"A person who skips the gate on purpose types `magus job grant --commit <commit> push-ungated --reason \"...\"`: a push or `gh pr create` of that commit, and of no other, then passes, and the verdict names who waived it, when and why. A revoked waiver covers nothing.",
 }
 
 var ruleDocHumanOnly = types.RuleDoc{
@@ -451,10 +450,12 @@ var ruleDocProcessSignal = types.RuleDoc{
 
 var ruleDocPolicyUnloaded = types.RuleDoc{
 	Name:    string(denyRulePolicyUnloaded),
-	Catches: "a push, merge, spawn or state-writing magus verb while the guard policy that judges it does not load",
+	Catches: "a call that changes state while the guard policy that judges it does not load",
 	Why: "Misconfiguration is an error: when neither the working tree nor its approved copy loads, the workspace rules that judge these calls are not running, and letting the call through would read as judged. " +
-		"It fires only when the last policy that did load in this cache registered the seam's rule; with no record there was never a rule to lose, and the call passes. " +
-		"Every other call still runs on the built-in rules, so the fix stays runnable. The verdict names the likeliest fix for the caller: a rebuild in a checkout of magus, a placed binary for a leased worker, an update elsewhere.",
+		"A push, merge, spawn or state-writing magus verb is refused when the last policy that did load in this cache registered the seam's rule; the verdict names the likeliest fix for the caller: a rebuild in a checkout of magus, a placed binary for a leased worker, an update elsewhere. " +
+		"When the policy fails on an error of its own, one no other binary fixes (a typo, or a rule a stricter Buzz checker now refuses), every other call that changes state is refused too, quoting the error, as long as the workspace registers or once registered a rule. " +
+		"Reads, `git status`, edits to the policy's own sources, writes outside any workspace, VCS recovery (`--abort` or `--continue`) and a rebuild of ./magus still run, so the fix stays runnable. " +
+		"With no rule recorded or declared there was never a rule to lose, and the call passes. A load failure a newer binary fixes is stale-binary's instead.",
 }
 
 var ruleDocRawTool = types.RuleDoc{
@@ -509,11 +510,15 @@ var ruleDocSiblingCheckout = types.RuleDoc{
 
 var ruleDocStaleBinary = types.RuleDoc{
 	Name:    string(denyRuleStaleBinary),
-	Catches: "a call that changes state while the magus judging it cannot load this tree's guard policy",
+	Catches: "a state-changing call while the judging magus cannot load the tree, or predates its load contract",
 	Why: "A magus older than the tree, or one answering for a checkout with no ./magus, cannot load the magusfile, so none of the workspace's rules run and a fresh worktree has no record of them to fall back on. The magusfile visibly registering a guard rule is enough to refuse. " +
 		"Edits, spawns, pushes, writing MCP tools and every command that changes state wait until a magus loads the tree. A line passes only when it proves read-only (every program reads, no redirect writes a file, nothing is computed by a substitution), is the fix (`./magus run go-build .`, the relink, the bootstrap over a ./magus that cannot load the tree, each alone on its line), or is a read-only scout recording its work (`magus job exec`, `magus job exit`, `magus buzz --record`). " +
 		"A call that puts back a file the load error names as an unresolved import (`git mv` onto it, `git restore` or `git checkout --` of it, or a write to it) also runs, with an advisory that says so; the bootstrap runs for that failure too. " +
-		"A leased worker is never told to build: there is one binary per base and the main session places it, so the worker's one fix is the placement it is served, `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead.",
+		"A leased worker is never told to build: there is one binary per base and the main session places it, so the worker's one fix is the placement it is served, `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead. " +
+		"The load contract is what a binary built before a change needs to load the tree after it: the host declarations, the API locks, the generated boundary bindings, and the Buzz checker and compiler. " +
+		"In a checkout of magus whose ./magus was built at a commit before a load-contract change HEAD carries, every call that changes state is refused until it is rebuilt; reads, VCS recovery and the rebuild run. A ./magus built from uncommitted changes may already carry the change, and the stale-sources notice speaks for it instead. " +
+		"A `git cherry-pick` or `git merge` that brings a load-contract change straight into a checkout of magus whose tree still loads is refused too: it lands through a dry run that applies the whole change in a scratch worktree, compiles ./cmd/magus, checks generator drift and loads the guard policy with the result, because a prefix of a series can leave a tree no binary builds from. " +
+		"While the tree does not load, the pick is the way out, and it runs.",
 }
 
 var ruleDocStageAll = types.RuleDoc{
@@ -638,14 +643,8 @@ var ruleDocGrantIsAPersons = types.RuleDoc{
 	Catches: "an agent running `magus job grant`, in any spelling and any role",
 	Why: "A grant is a person's one-time approval: `magus job grant <job> <rule> [--for <duration>]` lowers one rule to advice for one job's calls until the duration passes or the job ends, and `--revoke` ends it early. " +
 		"Every call the hook judges is an agent's, so a grant reaching it is not a person's, and it is refused whoever runs it, the root included. The job store also refuses a grant from a process carrying a lease, and no MCP tool exposes one. " +
-		"Only hooks-off is grantable; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when.",
-}
-
-var ruleDocWaiverIsAPersons = types.RuleDoc{
-	Name:    string(denyRuleWaiverIsAPersons),
-	Catches: "an agent running `magus gate waive`, in any spelling and any role",
-	Why: "A waiver is a person's say-so that one commit may go out with no passing local gate: `magus gate waive <commit> --reason \"...\"` records who typed it, when, the commit and the reason, and push-ungated then lets a push or `gh pr create` of that commit through, naming the waiver. `--revoke` ends it. " +
-		"Every call the hook judges is an agent's, so a waiver reaching it is not a person's, and it is refused whoever runs it, the root included. The waivers store also refuses a waiver from a process carrying a lease.",
+		"Only hooks-off is grantable to a job; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when. " +
+		"`magus job grant --commit <commit> push-ungated --reason \"...\"` is the one commit-scoped form: a person's waiver of the push gate for that commit alone, ended by `--revoke`. The store refuses it from a process carrying a lease, as it does a grant.",
 }
 
 var ruleDocLeaseRowUnknown = types.RuleDoc{

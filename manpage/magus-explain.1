@@ -23,10 +23,10 @@ changed are rebuilt; \-\-refresh forces a full rebuild.
 .SH OPTIONS
 .RS
 .TP
-\fB\-\-global\fR
+\fB\-\-[no\-]global\fR (default: off)
 Resolve across the workspaces registered in config (knowledge.workspaces)
 .TP
-\fB\-\-refresh\fR
+\fB\-\-[no\-]refresh\fR (default: off)
 Force a full graph rebuild before explaining
 .RE
 .SH EXAMPLES
@@ -74,7 +74,6 @@ magus explain build -o json
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

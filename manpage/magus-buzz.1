@@ -48,7 +48,10 @@ runs the same from any directory: magus buzz \-C "$ROOT" \-s hooks/guard.buzz.
 \fB\-C\fR \fIdir\fR
 Change to dir before anything else, as go \-C does, so script paths and imports resolve from it; lsp takes it only as the first flag
 .TP
-\fB\-\-check\fR
+\fB\-\-[no\-]autoload\fR (default: on)
+Execute the magusfile when the REPL starts; \-\-no\-autoload starts without it
+.TP
+\fB\-\-[no\-]check\fR (default: off)
 Parse and type\-check the named files without running them; report every diagnostic
 .TP
 \fB\-\-coverprofile\fR \fI-t\fR
@@ -57,16 +60,13 @@ Write an LCOV coverprofile for the file under \-t (requires `\-t`)
 \fB\-e\fR \fIcode\fR
 Execute code given on the command line instead of a file
 .TP
-\fB\-\-embedded\fR
+\fB\-\-[no\-]embedded\fR (default: off)
 Relax upstream strictness (top\-level statements, optional argument labels) to match the magusfile engine
 .TP
-\fB\-\-no\-autoload\fR
-Start the REPL without executing the magusfile
-.TP
-\fB\-\-profile\fR
+\fB\-\-[no\-]profile\fR (default: off)
 Print where compile and import time went, after the script runs
 .TP
-\fB\-\-record\fR \fImagus query output <ref>\fR
+\fB\-\-[no\-]record\fR (default: off)
 Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output <ref> reopens it)
 .TP
 \fB\-t\fR
@@ -163,7 +163,6 @@ magus buzz -C ~/src/app scripts/report.buzz
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

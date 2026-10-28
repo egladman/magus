@@ -26,7 +26,7 @@ import (
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	defs, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	require.Len(t, defs, 16)
+	require.Len(t, defs, 17)
 	for _, def := range defs {
 		skill, err := agentSkills.Render(def, types.SkillVariantFull)
 		require.NoError(t, err)

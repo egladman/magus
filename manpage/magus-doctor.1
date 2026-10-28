@@ -31,13 +31,13 @@ without running any, so the name can be looked up rather than provoked.
 .SH OPTIONS
 .RS
 .TP
-\fB\-\-fix\fR
+\fB\-\-[no\-]fix\fR (default: off)
 Run the remedy each finding names, where one exists (see \-\-dry\-run to list them first)
 .TP
-\fB\-\-list\fR
+\fB\-\-[no\-]list\fR (default: off)
 Print every check magus would run (name, subject, and MGS code) without running any of them
 .TP
-\fB\-\-probe\fR
+\fB\-\-[no\-]probe\fR (default: off)
 Run each declared tool\-readiness probe instead of only listing it (forks a process per gated tool)
 .RE
 .SH EXAMPLES
@@ -86,7 +86,6 @@ magus doctor -o json
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

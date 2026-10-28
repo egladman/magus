@@ -98,7 +98,7 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindgen.ObjectJobStatus(status), nil
+		return bindgen.ObjectJobStatus(status, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	ns.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		n, err := std.MagusClearJob(ctx)

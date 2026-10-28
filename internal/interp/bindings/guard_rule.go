@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -73,9 +74,11 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 
 // registerVerdictMembers binds the members every function rule builds its answer with:
 // allow/advise/deny, and once/count for state that lasts the calling session.
-func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
+func registerVerdictMembers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
+	// One per session, so a rule called on every hook reads the enum cases once.
+	enums := ffi.SessionEnums(ctx, sess, "magus")
 	guardMap.MapSet("allow", directVal(obs, "magus.guard.allow", func(context.Context, []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectGuardVerdict(types.GuardVerdict{Decision: types.GuardAllow}), nil
+		return bindgen.ObjectGuardVerdict(types.GuardVerdict{Decision: types.GuardAllow}, enums), nil
 	}))
 	for _, decision := range []types.GuardDecision{types.GuardAdvise, types.GuardDeny} {
 		member := string(decision)
@@ -91,7 +94,7 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 				}
 				verdict.Rule = rule
 			}
-			return bindgen.ObjectGuardVerdict(verdict), nil
+			return bindgen.ObjectGuardVerdict(verdict, enums), nil
 		}))
 	}
 	guardMap.MapSet("once", directVal(obs, "magus.guard.once", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
@@ -218,8 +221,11 @@ func decodeGuardVerdict(name string, v vm.Value) (types.GuardVerdict, error) {
 	}
 	var out types.GuardVerdict
 	if d, ok := fields.MapGet("decision"); ok && !d.IsNull() {
+		if backing, isEnum := d.EnumValue(); isEnum {
+			d = backing
+		}
 		if !d.IsString() {
-			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's decision is %s, not a str`, name, d.Kind())
+			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's decision is %s, not a GuardDecision`, name, d.Kind())
 		}
 		if err := out.Decision.UnmarshalText([]byte(d.AsString())); err != nil {
 			return types.GuardVerdict{}, fmt.Errorf(`%s: %w`, name, err)

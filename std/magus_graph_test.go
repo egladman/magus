@@ -66,7 +66,7 @@ func TestDirAndLayerRaiseTheirCodes(t *testing.T) {
 
 	_, err = MagusLayer(ctx, "service")
 	require.ErrorIs(t, err, types.LayerNotDeclared)
-	_, err = MagusDirs(ctx, "**", map[string]any{"layer": "service"})
+	_, err = MagusDirs(ctx, "**", types.DirsOptions{Layer: "service"})
 	require.ErrorIs(t, err, types.LayerNotDeclared, "a DirsOptions layer is held to the declarations too")
 }
 
@@ -74,7 +74,7 @@ func TestDirsAndLayerReadEveryProjectsDeclarations(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
-	dirs, err := MagusDirs(ctx, "internal/**", map[string]any{"layer": "handler", "language": "go", "depth": int64(0)})
+	dirs, err := MagusDirs(ctx, "internal/**", types.DirsOptions{Layer: "handler", Language: "go"})
 	require.NoError(t, err)
 	require.Len(t, dirs, 1)
 	assert.Equal(t, types.Dir{
@@ -113,11 +113,11 @@ func TestPathFiltersRelations(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
-	p, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", map[string]any{"relations": []any{"imports"}})
+	p, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", types.KnowledgePathOptions{Relations: []types.RelationID{types.RelationImports}})
 	require.NoError(t, err)
 	assert.True(t, p.Found)
 
-	none, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", map[string]any{"relations": []any{"depends_on"}})
+	none, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", types.KnowledgePathOptions{Relations: []types.RelationID{types.RelationDependsOn}})
 	require.NoError(t, err)
 	assert.False(t, none.Found, "no path of those relations is an answer")
 }
@@ -126,8 +126,8 @@ func TestNeighborhoodDecodesItsOptions(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
-	out, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{
-		"depth": int64(1), "relations": []any{"calls"}, "direction": "out", "collapse": []any{"internal/handler"},
+	out, err := MagusNeighborhood(ctx, "internal/httpx", types.KnowledgeNeighborhoodOptions{
+		Depth: 1, Relations: []types.RelationID{types.RelationCalls}, Direction: types.EdgeOut, Collapse: []string{"internal/handler"},
 	})
 	require.NoError(t, err)
 	// The node list is the walk's own rendering of the graph and the answer is asserted by its
@@ -150,52 +150,33 @@ func TestNeighborhoodDecodesItsOptions(t *testing.T) {
 	}, out)
 	assert.Equal(t, types.VerdictUnknown, out.Answer.Verdict, "calls lives beside the symbol layer, and no index was loaded")
 
-	declared, err := MagusNeighborhood(ctx, "target:.:mcp-tools-generate", map[string]any{"relations": []any{"depends_on"}})
+	declared, err := MagusNeighborhood(ctx, "target:.:mcp-tools-generate", types.KnowledgeNeighborhoodOptions{Relations: []types.RelationID{types.RelationDependsOn}})
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictAbsent, declared.Answer.Verdict, "a depends_on walk never needed an index")
 }
 
-// A typo in an option would otherwise answer a different question than the one asked.
-func TestDirLayerAndNeighborhoodOptionsAreStrict(t *testing.T) {
+// The members refuse what the generated option records cannot: a negative depth, a bad
+// glob, an empty or unresolvable name.
+func TestDirLayerAndNeighborhoodRefuseBadInput(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
 	for name, call := range map[string]func() error{
-		"unknown dirs key": func() error { _, err := MagusDirs(ctx, "**", map[string]any{"layr": "x"}); return err },
-		"negative depth":   func() error { _, err := MagusDirs(ctx, "**", map[string]any{"depth": int64(-1)}); return err },
-		"bad glob":         func() error { _, err := MagusDirs(ctx, "[", nil); return err },
-		"unknown relation": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"relations": []any{"import"}})
+		"negative depth": func() error { _, err := MagusDirs(ctx, "**", types.DirsOptions{Depth: -1}); return err },
+		"bad glob":       func() error { _, err := MagusDirs(ctx, "[", types.DirsOptions{}); return err },
+		"negative neighborhood depth": func() error {
+			_, err := MagusNeighborhood(ctx, "internal/httpx", types.KnowledgeNeighborhoodOptions{Depth: -1})
 			return err
 		},
-		"bad direction": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"direction": "up"})
+		"unresolvable focus": func() error {
+			_, err := MagusNeighborhood(ctx, "nonesuch-xyz", types.KnowledgeNeighborhoodOptions{})
 			return err
 		},
-		"collapse not a list": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"collapse": "internal"})
-			return err
-		},
-		"unresolvable focus": func() error { _, err := MagusNeighborhood(ctx, "nonesuch-xyz", nil); return err },
-		"unknown path option": func() error {
-			_, err := MagusPath(ctx, "a", "b", map[string]any{"relation": []any{"imports"}})
-			return err
-		},
-		"empty dir":          func() error { _, err := MagusDir(ctx, " "); return err },
-		"empty layer name":   func() error { _, err := MagusLayer(ctx, ""); return err },
-		"empty dirs glob":    func() error { _, err := MagusDirs(ctx, "", nil); return err },
-		"empty neighborhood": func() error { _, err := MagusNeighborhood(ctx, "", nil); return err },
-		"string depth": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"depth": "2"})
-			return err
-		},
-		"non-string layer": func() error { _, err := MagusDirs(ctx, "**", map[string]any{"layer": int64(1)}); return err },
-		"non-string collapse": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"collapse": []any{int64(1)}})
-			return err
-		},
-		"unknown neighborhood": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"dept": int64(1)})
+		"empty dir":        func() error { _, err := MagusDir(ctx, " "); return err },
+		"empty layer name": func() error { _, err := MagusLayer(ctx, ""); return err },
+		"empty dirs glob":  func() error { _, err := MagusDirs(ctx, "", types.DirsOptions{}); return err },
+		"empty neighborhood": func() error {
+			_, err := MagusNeighborhood(ctx, "", types.KnowledgeNeighborhoodOptions{})
 			return err
 		},
 	} {
@@ -226,7 +207,7 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 		_, err := MagusDir(eval, "internal/httpx")
 		require.NoError(t, err)
 	}
-	_, err := MagusDirs(eval, "internal/**", nil)
+	_, err := MagusDirs(eval, "internal/**", types.DirsOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, ws.builds, "four members in one evaluation")
 

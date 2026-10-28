@@ -263,7 +263,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 

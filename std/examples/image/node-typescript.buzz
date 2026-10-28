@@ -1,0 +1,78 @@
+// node-typescript: three layers, three targets, each building over the previous
+// target's layout. A source edit reruns compile and image_layout; image_dependencies
+// replays from the cache until package.json or pnpm-lock.yaml changes. That is a
+// layer cache, delivered by the graph.
+import "magus";
+import "std";
+import "fs";
+import "proc";
+import "image";
+
+final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+// Pinned by digest, so the pull is content-addressed and caches like any input.
+// Replace it with the digest you reviewed.
+final NODE = "gcr.io/distroless/nodejs22-debian12@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+export fun image_base(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["out/image/base/**"]);
+    final base = image\pull(NODE, platform: PLATFORM, layout: "out/image/base");
+    std\print("base {base.descriptor.digest.string()}");
+}
+
+// Production dependencies only, in their own tree. --ignore-scripts: no install script
+// runs on the host for a Linux image. A native addon needs its prebuilt Linux binary
+// (pnpm's supportedArchitectures) or a Linux build target.
+export fun dependencies(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["package.json", "pnpm-lock.yaml"]);
+    ctx.writesFiles(["out/prod/**"]);
+    fs\mkdirAll("out/prod");
+    fs\copyFile("package.json", dst: "out/prod/package.json");
+    fs\copyFile("pnpm-lock.yaml", dst: "out/prod/pnpm-lock.yaml");
+    _ = proc\exec("pnpm", args: ["install", "--prod", "--frozen-lockfile", "--ignore-scripts"], dir: "out/prod");
+}
+
+// tsconfig.json sets outDir to out/js.
+export fun compile(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["package.json", "pnpm-lock.yaml", "tsconfig.json", "src/**/*.ts"]);
+    ctx.writesFiles(["out/js/**"]);
+    _ = proc\exec("pnpm", args: ["install", "--frozen-lockfile"]);
+    _ = proc\exec("pnpm", args: ["exec", "tsc", "-p", "tsconfig.json"]);
+}
+
+export fun image_dependencies(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(image_base, dependencies);
+    ctx.readsFiles(["package.json", "pnpm-lock.yaml"]);
+    ctx.writesFiles(["out/image/dependencies/**"]);
+    image\assemble(image\Spec{
+        base = "out/image/base",
+        platform = PLATFORM,
+        trees = [image\Tree{
+            source = "out/prod/node_modules",
+            path = "/app/node_modules",
+            modes = image\ModePolicy.executableBit,
+            symlinks = image\SymlinkPolicy.keep,
+        }],
+    }, layout: "out/image/dependencies");
+}
+
+// The base's entrypoint is node, so cmd names the script and entrypoint, left null,
+// inherits.
+export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(image_dependencies, compile);
+    ctx.readsFiles(["package.json", "pnpm-lock.yaml", "tsconfig.json", "src/**/*.ts"]);
+    ctx.writesFiles(["out/image/app/**"]);
+    final layout = image\assemble(image\Spec{
+        base = "out/image/dependencies",
+        platform = PLATFORM,
+        trees = [image\Tree{ source = "out/js", path = "/app/dist", modes = image\ModePolicy.fixed, symlinks = image\SymlinkPolicy.refuse }],
+        files = [image\File{ source = "package.json", path = "/app/package.json", mode = fs\mode("0644") }],
+        config = image\Config{
+            user = "65532:65532",
+            env = {"NODE_ENV": "production"},
+            exposedPorts = ["3000/tcp"],
+            workingDir = "/app",
+            cmd = ["dist/server.js"],
+        },
+    }, layout: "out/image/app");
+    std\print("{layout.descriptor.digest.string()} {layout.path}");
+}

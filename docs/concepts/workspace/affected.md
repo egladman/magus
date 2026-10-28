@@ -72,7 +72,7 @@ matrix.
 How the pipeline clones the repository decides whether any of this works. affected
 needs a reachable merge base, and a checkout that cannot supply one degrades to a full
 build without failing. [CI checkout](../../guides/integrations/ci.md) covers the
-provider recipes, why a blobless partial clone is the right default, and how magus
+provider checkouts, why a blobless partial clone is the right default, and how magus
 deepens a shallow clone rather than silently rebuilding everything.
 
 ## Watch integration

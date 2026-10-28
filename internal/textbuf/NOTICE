@@ -1,0 +1,10 @@
+The sum tree, rope and anchor bias in this package follow the design of the
+sum_tree, rope and text crates of Zed (github.com/zed-industries/zed),
+copyright Zed Industries, Inc., licensed under the GNU General Public License
+v3.0 or later (GPL-3.0-or-later). This is a Go rewrite of that design, not a
+copy of its source; it is distributed under the same license, whose text is
+in LICENSE at the repository root.
+
+The anchors here differ from Zed's: they carry no insertion ids and leave no
+tombstones. Each bias keeps one tree of gaps between anchors, ordered by a
+dense key, and an anchor inside deleted text collapses to the deletion's edge.

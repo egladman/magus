@@ -30,7 +30,7 @@ fun parseSubject(message: str) > str {
 // detached HEAD names no branch.
 fun currentBranch() > str !> any {
     final ref = vcs\ref() catch vcs\cmd(["symbolic-ref", "--quiet", "--short", "HEAD"],
-        opts: {"quiet": true, "allow_failure": true}).stdout.trim();
+        opts: vcs\CommandOptions{ quiet = true, allowFailure = true }).stdout.trim();
     return ref ?? "";
 }
 

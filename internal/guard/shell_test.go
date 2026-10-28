@@ -1225,7 +1225,7 @@ func TestGuardKnownHoles(t *testing.T) {
 		},
 		{
 			"make target that shells out", "make test",
-			"the recipe is in a Makefile; only the make invocation is visible",
+			"the steps are in a Makefile; only the make invocation is visible",
 		},
 	}
 	for _, tt := range holes {

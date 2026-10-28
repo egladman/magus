@@ -62,7 +62,7 @@ var Path = Module{
 			},
 			Returns: []Ret{{Type: TypeBool}},
 			Raises:  true,
-			Impl:    PathMatch,
+			Impl:    PathMatches,
 		},
 		{
 			Name: "matches_any",
@@ -112,12 +112,12 @@ func PathClean(_ context.Context, path string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
-// PathMatch reports whether path matches a doublestar glob.
+// PathMatches reports whether path matches a doublestar glob.
 //
 // Slashes are normalized first: doublestar matches on forward slashes, so a
 // Windows-shaped path would never match a pattern written the way every
 // magusfile writes one.
-func PathMatch(_ context.Context, pattern, path string) (bool, error) {
+func PathMatches(_ context.Context, pattern, path string) (bool, error) {
 	ok, err := doublestar.Match(pattern, filepath.ToSlash(path))
 	if err != nil {
 		return false, fmt.Errorf("path.match %q: %w", pattern, err)
@@ -128,7 +128,7 @@ func PathMatch(_ context.Context, pattern, path string) (bool, error) {
 // PathMatchAny reports whether path matches any of the patterns.
 func PathMatchAny(ctx context.Context, patterns []string, path string) (bool, error) {
 	for _, pattern := range patterns {
-		ok, err := PathMatch(ctx, pattern, path)
+		ok, err := PathMatches(ctx, pattern, path)
 		if err != nil {
 			return false, err
 		}

@@ -1,0 +1,185 @@
+// Cost: grows with the number of worktrees: a git status and rev-list per worktree, one
+// lsof, and a du per removable worktree.
+//
+// Plans what this repository's git worktrees, merged agent branches and the Go build cache
+// can give back, largest first, and takes it only with --apply. The rules are
+// magus/reclaimdisk's, the module the reclaim hook runs a chunk of in the background: a
+// worktree holding uncommitted files, a commit no remote or base has, a live job, a working
+// process or a lock is kept, with every reason that holds.
+//
+//	magus buzz hack/dev/reclaim-disk-space.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]
+//
+// --apply runs `git worktree remove`, never with --force, on each removable worktree after
+// the guard (`magus shell`) passes that exact line, then deletes each agent branch nothing
+// needs; with --go-cache it also trims the Go build cache to go.cache_budget_mb by entry
+// age, never emptying it.
+namespace reclaimdiskspace;
+
+import "flags";
+import "fs";
+import "os";
+import "std";
+import "time";
+import "vcs";
+import "serialize";
+import "magus/reclaimdisk" as reclaim;
+
+import "assert";
+
+final SUMMARY = "free disk by removing finished worktrees and trimming the Go build cache";
+final SERVES = ["rule:worktree-remove -- --go-cache", "event:disk-low -- --go-cache"];
+
+final USAGE = "usage: magus buzz hack/dev/reclaim-disk-space.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]";
+final HELP = "cost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --go-cache also trims the shared Go build cache by entry age\n{USAGE}";
+
+fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: str, trimmed: str) > str !> any {
+    final rows = items.map(fun (i: int, it: reclaim\Item) > {str: any} => {
+        "kind": it.kind, "name": it.name, "class": it.class, "reasons": it.reasons, "keys": it.keys, "kib": it.kib,
+        "caches": it.caches.map(fun (j: int, c: reclaim\Cache) > {str: any} => {"path": c.path, "kind": c.kind, "kib": c.kib}),
+        "path": it.path, "branch": it.branch, "tip": it.tip, "result": it.result,
+    });
+    final t = reclaim\totals(items);
+    final by = mut {<str: any>};
+    foreach (k, v in t.keptBy) { by[k] = v; }
+    return serialize\jsonEncode(serialize\Boxed.init({"root": s.root, "base": s.base, "keep_recent": keepRecent, "applied": applied, "go_cache": trimmed,
+        "items": rows, "totals": {"worktrees": t.worktrees, "removable_worktrees": t.removableWorktrees, "removable_kib": t.removableKiB,
+            "branches": t.branches, "kept": t.kept, "kept_by": by}}));
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--go-cache", "--help"], valued: ["--keep-recent", "--base", "-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "reclaim-disk-space: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    if (vcs\name() != "git") {
+        throw "reclaim-disk-space: reads git worktrees, and this checkout is {vcs\name()}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "json") {
+        throw "reclaim-disk-space: -o takes text or json\n{USAGE}";
+    }
+    final keepRecent = parsed.values["--keep-recent"] ?? "2h";
+    final keepMs = time\parseDuration(keepRecent) catch -1.0;
+    if (keepMs < 0.0) {
+        throw "reclaim-disk-space: --keep-recent takes a duration such as 2h or 30m\n{USAGE}";
+    }
+    final applied = parsed.values["--apply"] != null;
+    final goCache = parsed.values["--go-cache"] != null;
+
+    final s = reclaim\survey(parsed.values["--base"] ?? vcs\base(), now: os\time(), keepRecent: keepMs, measure: true, deadline: 0.0);
+    final planned = reclaim\rank(s.items);
+    final items = if (applied) reclaim\apply(planned, root: s.root, deadline: 0.0) else planned;
+    var trimmed = "";
+    if (goCache and applied) {
+        trimmed = reclaim\trimGoCache(s.root, deadline: 0.0);
+    } else if (goCache) {
+        trimmed = "--apply trims the Go build cache to go.cache_budget_mb by entry age";
+    }
+    // -o json prints the plan document alone, so a reader can parse the whole of stdout.
+    if (format == "json") {
+        std\print(encode(s, items: items, applied: applied, keepRecent: keepRecent, trimmed: trimmed));
+        return;
+    }
+    std\print(reclaim\headline(items, applied: applied, trimmed: trimmed));
+    foreach (line in reclaim\render(items)) { std\print(line); }
+}
+
+export object Fixture {
+    main: str,
+    own: str,
+    now: double,
+    keepRecent: double,
+    observed: [reclaim\Observed],
+    want: {str: str},
+    leases: [reclaim\Lease],
+    cwds: [reclaim\Cwd],
+}
+
+fun fixture() > Fixture !> any {
+    final doc = serialize\jsonDecode(fs\readFile("hack/testdata/reclaim-disk-space.json"));
+    final observed = mut [<reclaim\Observed>];
+    final want = mut {<str: str>};
+    foreach (w in doc.q("worktrees").listValue()) {
+        var locked: str? = null;
+        if (w.q("locked").stringValue() != "" or w.q("locked_without_reason").booleanValue()) { locked = w.q("locked").stringValue(); }
+        final path = w.q("path").stringValue();
+        observed.append(reclaim\Observed{ path = path, branch = w.q("branch").stringValue(), dirty = w.q("dirty").integerValue(),
+            unique = w.q("unique").integerValue(), locked = locked,
+            touched = std\toDouble(doc.q("now").integerValue() - w.q("idle_minutes").integerValue() * 60000) });
+        want[path] = w.q("want").stringValue();
+    }
+    final leases = mut [<reclaim\Lease>];
+    foreach (j in doc.q("jobs").listValue()) {
+        leases.append(reclaim\Lease{ id = j.q("id").stringValue(), state = j.q("state").stringValue(), checkoutRoot = j.q("checkout_root").stringValue() });
+    }
+    final lsof = mut [<str>];
+    foreach (l in doc.q("lsof").listValue()) { lsof.append(l.stringValue()); }
+    return Fixture{ main = doc.q("main").stringValue(), own = doc.q("own").stringValue(), now = std\toDouble(doc.q("now").integerValue()),
+        keepRecent = time\parseDuration(doc.q("keep_recent").stringValue()), observed = observed, want = want, leases = leases,
+        cwds = reclaim\parseCwds(lsof.join("\n")) };
+}
+
+fun classified() > {str: reclaim\Item} !> any {
+    final f = fixture();
+    final leases = reclaim\liveLeases(f.leases);
+    final pids = reclaim\pidsByWorktree(f.cwds, paths: f.observed.map(fun (i: int, o: reclaim\Observed) > str => o.path));
+    final byPath = mut {<str: reclaim\Item>};
+    foreach (o in f.observed) {
+        byPath[o.path] = reclaim\classify(o, main: f.main, own: f.own, leases: leases, pids: pids, now: f.now, keepRecent: f.keepRecent, shown: o.path);
+    }
+    return byPath;
+}
+
+test "each fixture worktree gets the class its row expects" {
+    final f = fixture();
+    final got = classified();
+    foreach (path, want in f.want) {
+        assert\equal(got[path]!.class, want: want, message: "{path}: {got[path]!.reasons.join("; ")}");
+    }
+}
+
+test "a kept worktree names every reason that holds, not just the first" {
+    final got = classified();
+    assert\equal(got["/work/repo/.claude/worktrees/dirty"]!.reasons, want: ["3 uncommitted files"], message: "dirty");
+    assert\equal(got["/work/repo/.claude/worktrees/unique"]!.reasons, want: ["2 commits on no remote and not in the base"], message: "unique");
+    assert\equal(got["/work/repo/.claude/worktrees/leased"]!.reasons, want: ["live job reclaim-disk-space (running)"], message: "lease");
+    assert\equal(got["/work/repo/.claude/worktrees/own"]!.reasons, want: ["the caller's own checkout", "touched 5m ago, within --keep-recent"], message: "own");
+    assert\equal(got["/work/repo/.claude/worktrees/busy"]!.reasons, want: ["working directory of pid 4242"], message: "a process below the root");
+    assert\equal(got["/work/repo/.claude/worktrees/many"]!.keys, want: ["locked", "dirty", "unique", "lease", "recent"], message: "several");
+    assert\equal(got["/work/repo/.claude/worktrees/gone"]!.keys, want: ["gone"], message: "gone is not also recent");
+    assert\equal(got["/work/repo"]!.keys, want: ["main"], message: "main");
+}
+
+test "a finished job does not hold its checkout, and a path that merely shares a prefix is not inside" {
+    final got = classified();
+    assert\equal(got["/work/repo/.claude/worktrees/merged"]!.class, want: "removable", message: "merged");
+    assert\equal(got["/work/repo/.claude/worktrees/finished-job"]!.class, want: "removable", message: "a pass job releases its checkout");
+    assert\equal(got["/work/repo/.claude/worktrees/bus"]!.class, want: "removable", message: "pid 4242 works in busy, not bus");
+}
+
+test "a chunk of the fixture never takes a dirty, unpushed, leased or busy worktree" {
+    final items = classified().values();
+    final picked = reclaim\pickChunk(items, n: items.len()).map(fun (i: int, it: reclaim\Item) > str => it.path);
+    foreach (kept in ["/work/repo/.claude/worktrees/dirty", "/work/repo/.claude/worktrees/unique", "/work/repo/.claude/worktrees/many",
+                      "/work/repo/.claude/worktrees/leased", "/work/repo/.claude/worktrees/busy"]) {
+        assert\equal(picked.indexOf(kept), want: null, message: kept);
+    }
+    assert\equal(picked.len(), want: 3, message: "bus, merged and finished-job");
+}
+
+test "the plan ranks the largest reclaim first, unmeasured rows last, removable before kept" {
+    final ranked = reclaim\rank([
+        reclaim\Item{ kind = "worktree", name = "small", class = "removable", reasons = [<str>], kib = 10 },
+        reclaim\Item{ kind = "worktree", name = "kept", class = "keep", reasons = [<str>] },
+        reclaim\Item{ kind = "branch", name = "b", class = "removable", reasons = [<str>], kib = 0 },
+        reclaim\Item{ kind = "worktree", name = "big", class = "removable", reasons = [<str>], kib = 900000 },
+    ]);
+    assert\equal(ranked.map(fun (i: int, it: reclaim\Item) > str => it.name), want: ["big", "small", "b", "kept"], message: "order");
+    assert\equal(reclaim\size(900000), want: "878 MiB", message: "MiB");
+    assert\equal(reclaim\size(5452596), want: "5.2 GiB", message: "GiB");
+    assert\equal(reclaim\age(3.0 * 86400000.0), want: "3d", message: "days");
+}

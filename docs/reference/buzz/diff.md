@@ -16,17 +16,17 @@ Unified line diffs, for reporting what drifted rather than only that something d
 
 ### unified
 
-Return a unified diff of a and b, or "" when they are identical - so the result doubles as the check. from_label and to_label name the two sides in the +++/--- header (default "a" and "b"); pass the file path and something like "regenerated" to make a drift report read like a patch. context is the unchanged lines kept around each hunk, defaulting to 3 as git does.
+Return a unified diff of a and b, or "" when they are identical - so the result doubles as the check. fromLabel and toLabel name the two sides in the +++/--- header (default "a" and "b"); pass the file path and something like "regenerated" to make a drift report read like a patch. context is the unchanged lines kept around each hunk, defaulting to 3 as git does.
 
-**Signature:** `diff\unified(a, b, [from_label], [to_label], [context]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/diff.go)
+**Signature:** `diff\unified(a, b, [fromLabel], [toLabel], [context]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/diff.go)
 
-| Parameter    | Type     | Optional | Description |
-| ------------ | -------- | -------- | ----------- |
-| `a`          | `string` |          |             |
-| `b`          | `string` |          |             |
-| `from_label` | `string` | yes      |             |
-| `to_label`   | `string` | yes      |             |
-| `context`    | `int`    | yes      |             |
+| Parameter   | Type     | Optional | Description |
+| ----------- | -------- | -------- | ----------- |
+| `a`         | `string` |          |             |
+| `b`         | `string` |          |             |
+| `fromLabel` | `string` | yes      |             |
+| `toLabel`   | `string` | yes      |             |
+| `context`   | `int`    | yes      |             |
 
 **Returns:** string
 

@@ -17,7 +17,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // --check exits 0 on a warning, so lint grades the output itself.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["figure.buzz"]);
-    final res = magus\cmd("buzz", args: ["--check", "figure.buzz"], opts: {"quiet": true});
+    final res = magus\cmd("buzz", args: ["--check", "figure.buzz"], opts: magus\CommandOptions{quiet = true});
     final found = mut [<str>];
     foreach (line in res.stderr.split("\n")) {
         if (line.indexOf("[BZZ") != null) {

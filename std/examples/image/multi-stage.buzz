@@ -1,0 +1,54 @@
+// multi-stage, in ONE project: web compiles TypeScript, server embeds what web wrote
+// and compiles Go, image_layout places the server. Three stages, three targets; no
+// stage runs inside an image.
+//
+// Each later stage keys on the SOURCES of the stages before it, never on their outputs:
+// in one project, a target that lists another target's output in readsFiles trips
+// MGS4010 and never caches. Restating the sources is what makes an edit to a .ts file
+// rerun all three and an unrelated edit replay all three. When the stages belong to
+// different teams or toolchains, give each its own project instead; README.md shows
+// that shape, where a stage's declared output IS the next project's input.
+import "magus";
+import "std";
+import "fs";
+import "proc";
+import "image";
+
+final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+
+// Stage 1: tsconfig.json sets outDir to internal/web/static, which server embeds.
+export fun web(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["package.json", "pnpm-lock.yaml", "tsconfig.json", "web/**/*.ts"]);
+    ctx.writesFiles(["internal/web/static/**"]);
+    _ = proc\exec("pnpm", args: ["install", "--frozen-lockfile"]);
+    _ = proc\exec("pnpm", args: ["exec", "tsc", "-p", "tsconfig.json"]);
+}
+
+// Stage 2: go:embed reads internal/web/static, so web's sources are this stage's too.
+export fun server(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(web);
+    ctx.readsFiles(["package.json", "pnpm-lock.yaml", "tsconfig.json", "web/**/*.ts", "go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/linux-amd64/server"]);
+    final argv: mut [str] = mut [];
+    foreach (key, value in image\goEnv(PLATFORM)) {
+        argv.append("{key}={value}");
+    }
+    foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-o", "out/linux-amd64/server", "./cmd/server"]) {
+        argv.append(arg);
+    }
+    _ = proc\exec("env", args: argv);
+}
+
+// Stage 3: the image.
+export fun image_layout(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(server);
+    ctx.readsFiles(["package.json", "pnpm-lock.yaml", "tsconfig.json", "web/**/*.ts", "go.mod", "go.sum", "**/*.go"]);
+    ctx.writesFiles(["out/image/linux-amd64/**"]);
+    final layout = image\assemble(image\Spec{
+        scratch = true,
+        platform = PLATFORM,
+        files = [image\File{ source = "out/linux-amd64/server", path = "/server", mode = fs\mode("0755") }],
+        config = image\Config{ user = "65532:65532", exposedPorts = ["8080/tcp"], entrypoint = ["/server"] },
+    }, layout: "out/image/linux-amd64");
+    std\print("{layout.descriptor.digest.string()} {layout.path}");
+}

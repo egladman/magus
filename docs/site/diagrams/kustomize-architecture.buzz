@@ -1,0 +1,16 @@
+namespace kustomizeArchitecture;
+
+import "magus/figure";
+import "../libs/kustomize/kustomize" as kustomize;
+
+// The objects come from the dev overlay's own YAML, so an edit to a manifest moves the
+// figure and nobody redraws it.
+export fun kustomizeArchitectureFigure() > figure\Figure !> any {
+    return kustomize\figureOf(kustomize\build("../deploy/kustomize/overlays/dev"),
+        id: "kustomize-architecture",
+        title: "The magus daemon in the dev overlay",
+        eyebrow: "kustomize",
+        desc: "Read from deploy/kustomize/overlays/dev without the kustomize binary. One pod, "
+            + "one claim, no token: the default-deny policy shuts every port, and two "
+            + "egress policies open DNS and HTTPS back up.");
+}

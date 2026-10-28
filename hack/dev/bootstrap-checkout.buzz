@@ -319,7 +319,7 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
 export fun liveHost() > Host {
     return Host{
         git = fun (dir: str, args: [str]) > Ran !> any {
-            final r = vcs\cmd(args, opts: {"dir": dir, "quiet": true, "allow_failure": true});
+            final r = vcs\cmd(args, opts: vcs\CommandOptions{dir = dir, quiet = true, allowFailure = true});
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         magus = fun (dir: str, args: [str]) > Ran !> any {
@@ -327,7 +327,7 @@ export fun liveHost() > Host {
             if (!fs\isFile(bin)) {
                 return Ran{ stderr = "{bin} does not exist", code = 127 };
             }
-            final r = proc\exec(bin, args: args, dir: dir, opts: {"quiet": true, "allow_failure": true});
+            final r = proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         build = fun (dir: str) > str !> any {
@@ -341,7 +341,7 @@ export fun liveHost() > Host {
         },
         freshSkills = fun (dir: str) > str !> any {
             final root = fs\tempDir("fresh-skills-");
-            final r = proc\exec(fs\join(dir, name: "magus"), args: ["agent", "install", "--dir", root] + SKILL_DIRS, dir: dir, opts: {"quiet": true, "allow_failure": true});
+            final r = proc\exec(fs\join(dir, name: "magus"), args: ["agent", "install", "--dir", root] + SKILL_DIRS, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
             if (r.code != 0) {
                 throw "gate-ready: magus agent install into {root}: exit {r.code}: {r.stderr}{r.stdout}";
             }
@@ -351,7 +351,7 @@ export fun liveHost() > Host {
             fs\removeAll(path);
         },
         exec = fun (dir: str, argv: [str]) > Ran !> any {
-            final r = proc\exec("env", args: argv, dir: dir, opts: {"quiet": true, "allow_failure": true});
+            final r = proc\exec("env", args: argv, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         readFile = fun (path: str) > str !> any {
@@ -410,20 +410,20 @@ fun build(dir: str) > str !> any {
     if (vcs\name() != "git") {
         throw "bootstrap-checkout: builds in git checkouts, and this one is {vcs\name()}";
     }
-    final refused = dirtyRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: {"dir": dir, "quiet": true}).stdout);
+    final refused = dirtyRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout);
     if (refused != "") {
         throw refused;
     }
-    final head = vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
+    final head = vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout.trim();
     final trust = miseTrustArgv(dir, hasMise: hasMise(), hasConfig: fs\isFile(fs\join(dir, name: "mise.toml")));
     if (trust.len() > 0) {
         proc\exec("mise", args: trust, dir: dir);
     }
     final rewrote = compile(liveHost(), dir: dir);
     final bin = fs\join(dir, name: "magus");
-    final mismatch = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: {"quiet": true}).stdout, head: head);
+    final mismatch = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: proc\ExecOptions{quiet = true}).stdout, head: head);
     if (mismatch != "") {
-        final regenerated = regeneratedRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: {"dir": dir, "quiet": true}).stdout);
+        final regenerated = regeneratedRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout);
         if (regenerated != "" and mismatch.endsWith("uncommitted changes")) {
             if (rewrote != "") {
                 return "placed {bin} after its build failed and the bootstrap generators ran\n{regenerated}";

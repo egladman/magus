@@ -108,16 +108,16 @@ import "./hack/magusfile/commits" as conventional;
 export fun judge(req: CommandRequest) > GuardVerdict {
     final programs = parsePrograms(req);
     final held = sealed\decideSealed(programs, line: req.command, roots: sealed\rootsFromEnv());
-    if (held.decision != "allow") {
+    if (held.decision != magus\GuardDecision.allow) {
         return held;
     }
     var lease = "";
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    final integrator = req.role == "integrator";
+    final integrator = req.role == magus\AgentRole.integrator;
     final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
-        worker: !integrator and (req.role == "worker" or req.parent != "" or req.agent != ""));
+        worker: !integrator and (req.role == magus\AgentRole.worker or req.parent != "" or req.agent != ""));
     if (denial != "") {
         return magus\guard.deny(denial);
     }
@@ -125,7 +125,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return stale\hookBinary(req.workspace);
     };
     final write = stale\decideStateWrite(programs, bin: hook, onBase: stale\onBase(req.workspace));
-    if (write.decision != "allow") {
+    if (write.decision != magus\GuardDecision.allow) {
         return write;
     }
     var checkout: cadence\Checkout? = null;
@@ -149,7 +149,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic },
         reads: host\readsFrom(req.workspace, dir: req.dir));
-    if (decided.decision != "allow" or stale\rebuilds(programs)) {
+    if (decided.decision != magus\GuardDecision.allow or stale\rebuilds(programs)) {
         return decided;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
@@ -319,16 +319,16 @@ fun jobRows(jobs: [Job]) > [helpers\JobRow] {
 
 test "an integrate spawn for a row bound to another checkout is refused end to end and a matching checkout passes" {
     final rows = jobRows([
-        Job{ id = "land", state = "declared", checkoutRoot = "/w/other" },
-        Job{ id = "here", state = "declared", checkoutRoot = "/w/main" },
+        Job{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        Job{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
     ]);
     final facts = fun (title: str) > spawn\Spawn {
-        return spawnFacts(SpawnRequest{ kind = "spawn", description = title, checkout = "/w/main" });
+        return spawnFacts(SpawnRequest{ kind = magus\SpawnKind.spawn, description = title, checkout = "/w/main" });
     };
     final denied = spawn\decideSpawn(facts("orchestrator/integrate land"), rows: rows, unreadable: "");
-    std\assert(denied.decision == "deny" and denied.reason.indexOf("`/w/other`") != null, message: denied.decision + " " + denied.reason);
+    std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("`/w/other`") != null, message: denied.decision.value + " " + denied.reason);
     final allowed = spawn\decideSpawn(facts("orchestrator/integrate here"), rows: rows, unreadable: "");
-    std\assert(allowed.decision == "allow", message: allowed.reason);
+    std\assert(allowed.decision == magus\GuardDecision.allow, message: allowed.reason);
 }
 
 // errorText is a caught host error's message: a magus\* call throws a map, not a str.
@@ -386,24 +386,24 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // capture's text and whether the workspace holds a ./magus.
 export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing, reads: host\Reads) > GuardVerdict {
     final hostVerdict = host\decideHost(programs, reads: reads);
-    if (hostVerdict.decision != "allow") {
+    if (hostVerdict.decision != magus\GuardDecision.allow) {
         return hostVerdict;
     }
     final authority = branches\decideAuthority(programs, caller: publishing.pusher);
-    if (authority.decision != "allow") {
+    if (authority.decision != magus\GuardDecision.allow) {
         return authority;
     }
     final cadenceVerdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
-    if (cadenceVerdict.decision != "allow") {
+    if (cadenceVerdict.decision != magus\GuardDecision.allow) {
         return cadenceVerdict;
     }
     final names = branches\decideNames(programs, current: publishing.current, remote: publishing.remote,
         topic: publishing.topic, once: once);
-    if (names.decision == "deny") {
+    if (names.decision == magus\GuardDecision.deny) {
         return names;
     }
     final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once);
-    if (rest.decision == "allow") {
+    if (rest.decision == magus\GuardDecision.allow) {
         return names;
     }
     return rest;
@@ -413,18 +413,18 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
 // denials, the gh advisories, then the pull request text advisories.
 fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
     final github = gh\decideGitHub(programs, once: once, line: line);
-    if (github.decision == "deny") {
+    if (github.decision == magus\GuardDecision.deny) {
         return github;
     }
     final commit = subjects\decideCommit(programs, baseBranch: baseBranch);
     final pull = pullRequests\decidePullRequest(programs, line: line, files: files, diff: diff, judge: judge, once: once);
-    if (commit.decision == "deny" and pull.decision == "deny") {
+    if (commit.decision == magus\GuardDecision.deny and pull.decision == magus\GuardDecision.deny) {
         return magus\guard.deny(commit.reason + "\n\n" + pull.reason);
     }
-    if (commit.decision == "deny") {
+    if (commit.decision == magus\GuardDecision.deny) {
         return commit;
     }
-    if (pull.decision == "deny" or github.decision == "allow") {
+    if (pull.decision == magus\GuardDecision.deny or github.decision == magus\GuardDecision.allow) {
         return pull;
     }
     return github;
@@ -454,31 +454,31 @@ test "a commit and a pull request text denied together open with one verdict" {
         return true;
     };
     final both = decideText(line, baseBranch: "", line: "", files: {<str: str>}, diff: diff, judge: judge, once: once);
-    std\assert(both.decision == "deny", message: both.reason);
+    std\assert(both.decision == magus\GuardDecision.deny, message: both.reason);
     verdict\assertVerdict(both.reason, label: "a commit and a pull request together");
     std\assert(both.reason.indexOf("this pull request text breaks") != null, message: "both rationales are kept: " + both.reason);
 }
 
 test "a write into a run log is denied with the verdict a command's read gets" {
     final write = judgeWrite(WriteRequest{ workspace = "/w", path = ".magus/logs/abc.log", content = "x" });
-    std\assert(write.decision == "deny", message: write.decision);
+    std\assert(write.decision == magus\GuardDecision.deny, message: write.decision);
     verdict\assertVerdict(write.reason, label: "a write into a run log");
 }
 
 test "a push is refused to a subagent the host names, under no lease and unseen spawning" {
     final push = CommandInvocation{ program = "git", args = ["push", "origin", "HEAD:x"],
         vcs = VCSInvocation{ tool = "git", subcommand = "push", args = ["origin", "HEAD:x"] } };
-    final main = CommandRequest{ session = "s1", role = "root", commands = [push] };
-    std\assert(branches\decideAuthority(parsePrograms(main), caller: requestPusher(main)).decision == "allow", message: "the main session");
+    final main = CommandRequest{ session = "s1", role = magus\AgentRole.root, commands = [push] };
+    std\assert(branches\decideAuthority(parsePrograms(main), caller: requestPusher(main)).decision == magus\GuardDecision.allow, message: "the main session");
 
-    final unseen = CommandRequest{ session = "s1", role = "root", agent = "a534fcfe", commands = [push] };
+    final unseen = CommandRequest{ session = "s1", role = magus\AgentRole.root, agent = "a534fcfe", commands = [push] };
     final refused = branches\decideAuthority(parsePrograms(unseen), caller: requestPusher(unseen));
-    std\assert(refused.decision == "deny", message: "a subagent magus never saw spawned");
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "a subagent magus never saw spawned");
     std\assert(refused.reason.indexOf("subagent `a534fcfe`") != null, message: refused.reason);
 
-    final worker = CommandRequest{ session = "s1", role = "worker", lease = Job{ id = "guard-caller-identity" }, commands = [push] };
+    final worker = CommandRequest{ session = "s1", role = magus\AgentRole.worker, lease = Job{ id = "guard-caller-identity" }, commands = [push] };
     final leased = branches\decideAuthority(parsePrograms(worker), caller: requestPusher(worker));
-    std\assert(leased.decision == "deny", message: "a leased worker");
+    std\assert(leased.decision == magus\GuardDecision.deny, message: "a leased worker");
     std\assert(leased.reason.indexOf("lease guard-caller-identity") != null, message: leased.reason);
 }
 
@@ -487,13 +487,13 @@ test "the line judge refuses the sealed directory before any other rule, and lea
     final read = CommandRequest{ command = "cat {dir}/round5/cases.txtar",
         commands = [CommandInvocation{ program = "cat", args = ["{dir}/round5/cases.txtar"] }] };
     final refused = judge(read);
-    std\assert(refused.decision == "deny", message: "a cat of the sealed directory");
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "a cat of the sealed directory");
     verdict\assertVerdict(refused.reason, label: "a cat of the sealed directory");
     std\assert(refused.reason.indexOf("sealed until its round is scored") != null, message: refused.reason);
 
     final open = CommandRequest{ command = "cat {dir}/../labels/round4/scores.json",
         commands = [CommandInvocation{ program = "cat", args = ["{dir}/../labels/round4/scores.json"] }] };
-    std\assert(judge(open).decision == "allow", message: "the labels directory");
+    std\assert(judge(open).decision == magus\GuardDecision.allow, message: "the labels directory");
 }
 
 test "the main session's cat of a task capture outside the workspace is denied naming the capture's ref" {
@@ -504,16 +504,16 @@ test "the main session's cat of a task capture outside the workspace is denied n
     final capture = "{host}/claude-501/project/session/tasks/bi3m8xyic.output";
     fs\writeFile(capture, content: "[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n");
     final cat = CommandInvocation{ program = "cat", args = [capture] };
-    final req = CommandRequest{ session = "s1", role = "root", dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
+    final req = CommandRequest{ session = "s1", role = magus\AgentRole.root, dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
 
     fs\writeFile("{ws}/magus", content: "");
     final denied = judge(req);
-    std\assert(denied.decision == "deny", message: "a workspace holding ./magus: " + denied.decision + " " + denied.reason);
+    std\assert(denied.decision == magus\GuardDecision.deny, message: "a workspace holding ./magus: " + denied.decision + " " + denied.reason);
     std\assert(denied.reason.split("\n")[0].indexOf("`magus query output out1afa17d04e90`") != null, message: denied.reason);
 
     fs\remove("{ws}/magus");
     final allowed = judge(req);
-    std\assert(allowed.decision == "allow", message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
+    std\assert(allowed.decision == magus\GuardDecision.allow, message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
     fs\removeAll(ws);
     fs\removeAll(host);
 }

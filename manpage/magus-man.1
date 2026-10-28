@@ -12,7 +12,7 @@ Write the complete magus manpage set carried by this binary. The installer uses 
 \fB\-\-dir\fR \fIstring\fR
 Directory for section 1 man pages (default: the user manpath)
 .TP
-\fB\-\-dry\-run\fR
+\fB\-\-[no\-]dry\-run\fR (default: off)
 Print what would be written without touching the filesystem
 .RE
 .SH SUBCOMMANDS
@@ -55,7 +55,6 @@ magus man install --dir ~/.local/share/man/man1
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

@@ -22,16 +22,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Analyzer is the workspace's codebase-analytics interface: the VCS-history lenses plus the
-// ones that read the knowledge graph. Deliberately the narrow set the report needs rather
-// than the whole of *Magus: a wide interface here would re-couple std to the shape of the
-// package it cannot import.
-//
-// An ALIAS of types.InsightAnalyzer rather than a second declaration of the same method
-// set. The two were hand-kept copies, so a lens added to one compiled against the other
-// until the first caller tried to use it.
-type Analyzer = types.InsightAnalyzer
-
 // AnalyzerFromContext recovers the analytics interface from the workspace on ctx.
 //
 // Two distinct absences, and the caller wants to tell them apart: no workspace at all (a
@@ -39,11 +29,11 @@ type Analyzer = types.InsightAnalyzer
 // (a test double, or a provider-supplied workspace that models projects without git
 // history). Both report false here; the caller's message names the first, which is the one
 // a reader can act on.
-func AnalyzerFromContext(ctx context.Context) (Analyzer, bool) {
+func AnalyzerFromContext(ctx context.Context) (types.InsightAnalyzer, bool) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, false
 	}
-	a, ok := ws.(Analyzer)
+	a, ok := ws.(types.InsightAnalyzer)
 	return a, ok
 }

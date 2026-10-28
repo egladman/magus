@@ -1,0 +1,238 @@
+/// diskwatch is the cheap half of disk reclaiming, the part a hook runs on every turn: it
+/// samples the free space of the filesystem holding a workspace into a per-user store, at
+/// most once per disk.sample_every, and decides from the last two samples whether to start
+/// a reclaim chunk. It imports no magus module, so a hook that uses it never opens the
+/// workspace; the chunk itself lives in magus/reclaimdisk.
+///
+/// The store is $XDG_STATE_HOME/magus/disk/samples.jsonl, one DiskSample a line, and
+/// `magus doctor`'s disk-trend check reads it.
+namespace diskwatch;
+
+import "std";
+import "fs";
+import "time";
+import "encoding/json";
+
+import "assert";
+
+final GIB = 1073741824;
+final MIB = 1048576;
+final HOUR_MS = 3600000.0;
+
+/// The rate limit's floor: disk.sample_every takes nothing shorter, so a store touched
+/// within it is not due whatever the config says, and a hook checks that with one stat
+/// before it pays for reading the config.
+export final FLOOR_MS = 60000.0;
+
+/// A chunk that has not finished this long after it started is taken to have died, so the
+/// next sample may start another.
+export final CHUNK_WINDOW_MS = 600000.0;
+
+/// keepLines is how many samples compaction leaves: a day of samples at the one-minute floor.
+final keepLines = 1440;
+
+/// DiskSample is one line of the store, spelled as types.DiskSample is: at in Unix
+/// millis, action one of sample, started and reclaimed.
+export object DiskSample {
+    at: double,
+    path: str,
+    totalBytes: int = 0,
+    freeBytes: int = 0,
+    action: str = "sample",
+    detail: str = "",
+}
+
+/// Thresholds are the disk.* config in bytes and millis; a zero turns its trigger off.
+export object Thresholds {
+    minFreeBytes: int,
+    criticalFreeBytes: int,
+    growthBytesPerHour: int,
+    everyMs: double,
+}
+
+/// Decision is what one sample asks for: start a chunk, say a line, both or neither.
+export object Decision {
+    reclaim: bool,
+    critical: bool,
+    why: str,
+}
+
+/// storePath is the store's path, creating its directory.
+export fun storePath() > str !> any {
+    return fs\join(fs\stateDir("disk"), name: "samples.jsonl");
+}
+
+/// thresholds reads the disk section of `magus config view -o json`. A key the config does
+/// not carry is an error naming it, never a default: the binary that printed the config is
+/// the one that knows the defaults.
+export fun thresholds(config: str) > Thresholds !> any {
+    final disk = json\parse(config)["disk"];
+    if (disk == null) {
+        throw "diskwatch: the config has no disk section; the magus that printed it predates disk.*";
+    }
+    final every = time\parseDuration("{disk["sample_every"]}") catch -1.0;
+    if (every < 0.0) {
+        throw "diskwatch: disk.sample_every is not a duration: {disk["sample_every"]}";
+    }
+    return Thresholds{
+        minFreeBytes = std\toInt(disk["min_free_mb"]) * MIB,
+        criticalFreeBytes = std\toInt(disk["critical_free_mb"]) * MIB,
+        growthBytesPerHour = std\toInt(disk["growth_mb_per_hour"]) * MIB,
+        everyMs = every,
+    };
+}
+
+/// due is the rate limit: a store last written at lastMs is sampled again only once everyMs
+/// has passed, never sooner than FLOOR_MS, and never when everyMs is 0.
+export fun due(lastMs: double?, now: double, everyMs: double) > bool {
+    if (everyMs <= 0.0) { return false; }
+    if (lastMs == null) { return true; }
+    final wait = if (everyMs < FLOOR_MS) FLOOR_MS else everyMs;
+    return now - lastMs! >= wait;
+}
+
+fun gib(bytes: int) > str {
+    final tenths = bytes * 10 / GIB;
+    return "{tenths / 10}.{tenths % 10} GiB";
+}
+
+/// decide grades cur against the thresholds and prev, the last earlier sample of the same
+/// filesystem: below the floor or losing space faster than the growth rate starts a chunk,
+/// and below the critical floor says so whatever else holds.
+export fun decide(prev: DiskSample?, cur: DiskSample, t: Thresholds) > Decision {
+    final why = mut [<str>];
+    if (t.minFreeBytes > 0 and cur.freeBytes < t.minFreeBytes) {
+        why.append("{gib(cur.freeBytes)} free is below disk.min_free_mb");
+    }
+    if (prev -> p) {
+        final hours = (cur.at - p.at) / HOUR_MS;
+        if (t.growthBytesPerHour > 0 and hours > 0.0 and std\toDouble(p.freeBytes - cur.freeBytes) / hours > std\toDouble(t.growthBytesPerHour)) {
+            why.append("{gib(p.freeBytes - cur.freeBytes)} went in {std\toInt(hours * 60.0)}m, past disk.growth_mb_per_hour");
+        }
+    }
+    final critical = t.criticalFreeBytes > 0 and cur.freeBytes < t.criticalFreeBytes;
+    return Decision{ reclaim = why.len() > 0, critical = critical, why = why.join("; ") };
+}
+
+/// chunkRunning reports whether a chunk started within CHUNK_WINDOW_MS has not yet finished,
+/// so a sample never starts a second one beside it.
+export fun chunkRunning(samples: [DiskSample], now: double) > bool {
+    var started = -1.0;
+    foreach (s in samples) {
+        if (s.action == "started") { started = s.at; }
+        if (s.action == "reclaimed") { started = -1.0; }
+    }
+    return started >= 0.0 and now - started < CHUNK_WINDOW_MS;
+}
+
+/// lastOf is the newest sample of path, null when the store holds none.
+export fun lastOf(samples: [DiskSample], path: str) > DiskSample? {
+    var found: DiskSample? = null;
+    foreach (s in samples) {
+        if (s.path == path and s.totalBytes > 0) { found = s; }
+    }
+    return found;
+}
+
+/// line is what a hook prints for one sample: one line when it started a chunk or space is
+/// critical, null otherwise, so a quiet disk costs the session nothing to read.
+export fun line(d: Decision, cur: DiskSample, started: bool) > str? {
+    final free = "{gib(cur.freeBytes)} free of {gib(cur.totalBytes)} on {cur.path}";
+    if (d.critical) {
+        var doing = "nothing is reclaiming it, since disk.min_free_mb does not ask for it";
+        if (started) {
+            doing = "reclaiming a chunk in the background";
+        } else if (d.reclaim) {
+            doing = "a reclaim chunk is already running";
+        }
+        return "magus: disk space is critical, {free}; {doing}. Before more work, remove worktrees and builds you no longer need.";
+    }
+    if (started) {
+        return "magus: {free} ({d.why}); reclaiming one chunk in the background.";
+    }
+    return null;
+}
+
+export fun encode(s: DiskSample) > str !> any {
+    return json\stringify({"at": s.at, "path": s.path, "totalBytes": s.totalBytes, "freeBytes": s.freeBytes, "action": s.action, "detail": s.detail});
+}
+
+export fun decode(text: str) > DiskSample !> any {
+    final doc = json\parse(text);
+    return DiskSample{
+        at = std\toDouble(doc["at"]),
+        path = "{doc["path"]}",
+        totalBytes = std\toInt(doc["totalBytes"]),
+        freeBytes = std\toInt(doc["freeBytes"]),
+        action = "{doc["action"]}",
+        detail = "{doc["detail"] ?? ""}",
+    };
+}
+
+/// read decodes every line of the store at path; a missing store is empty.
+export fun read(path: str) > [DiskSample] !> any {
+    if (!fs\exists(path)) { return [<DiskSample>]; }
+    return fs\readLines(path).map(fun (index: int, text: str) > DiskSample !> any => decode(text));
+}
+
+/// append adds s to the store, then compacts it by rename once it holds twice keepLines.
+export fun append(path: str, s: DiskSample) > void !> any {
+    fs\appendFile(path, content: encode(s) + "\n");
+    final lines = fs\readLines(path);
+    if (lines.len() > keepLines * 2) {
+        final tmp = path + ".compact";
+        fs\writeLines(tmp, lines: lines.sub(lines.len() - keepLines));
+        fs\rename(tmp, dst: path);
+    }
+}
+
+fun thresholdsOf(minGiB: int, growthGiB: int) > Thresholds {
+    return Thresholds{ minFreeBytes = minGiB * GIB, criticalFreeBytes = 10 * GIB, growthBytesPerHour = growthGiB * GIB, everyMs = 600000.0 };
+}
+
+test "a store is sampled at most once per interval, never under the floor, never when off" {
+    assert\isTrue(due(null, now: 1000.0, everyMs: 600000.0), message: "an empty store is due");
+    assert\isFalse(due(0.0, now: 599999.0, everyMs: 600000.0), message: "within the interval");
+    assert\isTrue(due(0.0, now: 600000.0, everyMs: 600000.0), message: "at the interval");
+    assert\isFalse(due(0.0, now: 59000.0, everyMs: 1000.0), message: "a shorter interval waits for the floor");
+    assert\isFalse(due(null, now: 1000.0, everyMs: 0.0), message: "0 turns the hook off");
+}
+
+test "a chunk starts below the floor or on fast loss, and critical is said apart from it" {
+    final now = DiskSample{ at = 2.0 * HOUR_MS, path = "/w", totalBytes = 500 * GIB, freeBytes = 40 * GIB };
+    final low = decide(null, cur: now, t: thresholdsOf(50, growthGiB: 20));
+    assert\isTrue(low.reclaim, message: "40 GiB is under 50");
+    assert\isFalse(low.critical, message: "40 GiB is over 10");
+    final before = DiskSample{ at = HOUR_MS, path = "/w", totalBytes = 500 * GIB, freeBytes = 100 * GIB };
+    final fast = decide(before, cur: now, t: thresholdsOf(10, growthGiB: 20));
+    assert\equal(fast.why, want: "60.0 GiB went in 60m, past disk.growth_mb_per_hour", message: "60 GiB an hour is past 20");
+    final calm = decide(before, cur: now, t: thresholdsOf(10, growthGiB: 100));
+    assert\isFalse(calm.reclaim, message: "within both thresholds");
+    final dire = DiskSample{ at = 0.0, path = "/w", totalBytes = 500 * GIB, freeBytes = 5 * GIB };
+    assert\isTrue(decide(null, cur: dire, t: thresholdsOf(0, growthGiB: 0)).critical, message: "critical holds with reclaiming off");
+}
+
+test "one chunk at a time, and a chunk that died stops blocking the next" {
+    final s = fun (at: double, action: str) > DiskSample => DiskSample{ at = at, path = "/w", action = action };
+    assert\isTrue(chunkRunning([s(0.0, action: "started")], now: 1000.0), message: "running");
+    assert\isFalse(chunkRunning([s(0.0, action: "started"), s(10.0, action: "reclaimed")], now: 1000.0), message: "finished");
+    assert\isFalse(chunkRunning([s(0.0, action: "started")], now: CHUNK_WINDOW_MS), message: "died");
+}
+
+test "a quiet disk prints nothing; acting or critical prints one line" {
+    final cur = DiskSample{ at = 0.0, path = "/w", totalBytes = 500 * GIB, freeBytes = 40 * GIB };
+    assert\equal(line(Decision{ reclaim = false, critical = false, why = "" }, cur: cur, started: false), want: null, message: "quiet");
+    assert\equal(line(Decision{ reclaim = true, critical = false, why = "x" }, cur: cur, started: true),
+        want: "magus: 40.0 GiB free of 500.0 GiB on /w (x); reclaiming one chunk in the background.", message: "started");
+    final critical = line(Decision{ reclaim = false, critical = true, why = "" }, cur: cur, started: false) ?? "";
+    assert\isTrue(critical.indexOf("nothing is reclaiming it") != null, message: "critical with reclaiming off says so, not that a chunk runs");
+    final running = line(Decision{ reclaim = true, critical = true, why = "x" }, cur: cur, started: false) ?? "";
+    assert\isTrue(running.indexOf("already running") != null, message: "critical while a chunk runs");
+}
+
+test "a sample round-trips through its line" {
+    final s = DiskSample{ at = 12.0, path = "/w", totalBytes = 3, freeBytes = 2, action = "reclaimed", detail = "d" };
+    final back = decode(encode(s));
+    assert\equal(back.detail, want: "d", message: "detail");
+    assert\equal(back.freeBytes, want: 2, message: "freeBytes");
+}

@@ -3,5 +3,5 @@
 package std
 
 var nativeModules = []Module{
-	Archive, Fs, HTTP, Magus, Net, Os, Pipe, Proc, Term, Vcs,
+	Archive, Fs, HTTP, Image, Magus, Net, Os, Pipe, Proc, Term, Vcs,
 }

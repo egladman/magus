@@ -316,10 +316,10 @@ func TestEndCheckoutsKeepsACheckoutALiveJobIsHeldIn(t *testing.T) {
 	assert.DirExists(t, row.Worktree.Root)
 }
 
-// A job taken in a linked checkout its fork did not make: ending it by name tries that
-// checkout too, once nothing in it is work, and says what became of it without recording
-// a worktree on the row.
-func TestEndCheckoutsTriesTheLinkedCheckoutAnEndedJobWasTakenIn(t *testing.T) {
+// A host-made checkout a job was only taken in, and one a row records with Made unset (adopted,
+// or recorded before Made existed), stand after the job ends: ending, waiting on and deleting
+// the job never remove a checkout its fork did not make.
+func TestEndCheckoutsNeverRemovesACheckoutTheForkDidNotMake(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	s, repo := gitRepository(t, map[string]string{"a.txt": "a\n"})
@@ -327,28 +327,37 @@ func TestEndCheckoutsTriesTheLinkedCheckoutAnEndedJobWasTakenIn(t *testing.T) {
 	repo.Git("worktree", "add", "-q", "--detach", linked)
 	linked, err := filepath.EvalSymlinks(linked)
 	require.NoError(t, err)
-	seed(t, s, types.Job{ID: "w1", State: types.StateRunning, ReadOnly: true, CheckoutRoot: linked})
-	seed(t, s, types.Job{ID: "main", State: types.StateRunning, ReadOnly: true, CheckoutRoot: repo.Root()})
-	for _, id := range []string{"w1", "main"} {
+	adopted := types.JobWorktree{Root: linked, Source: repo.Root(), Base: repo.Head(), Created: 1}
+	seed(t, s, types.Job{ID: "taken", State: types.StateRunning, ReadOnly: true, CheckoutRoot: linked})
+	for _, id := range []string{"adopted", "deleted"} {
+		seed(t, s, types.Job{ID: id, State: types.StateDeclared, ReadOnly: true})
+		_, err := s.RecordWorktree(ctx, id, adopted)
+		require.NoError(t, err)
+	}
+	_, err = s.Update(ctx, "adopted", func(cur *types.Job) { cur.State = types.StateRunning })
+	require.NoError(t, err)
+	for _, id := range []string{"taken", "adopted"} {
 		_, err := Exit(ctx, s, id, nil, nil)
 		require.NoError(t, err)
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(linked, "MAGUS.md"), []byte("regenerated\n"), 0o644))
-	written := func(context.Context, string, []string) ([]string, error) { return []string{"MAGUS.md"}, nil }
 
-	changed, err := s.EndCheckouts(ctx, written)
+	changed, err := s.EndCheckouts(ctx, nil, "taken", "adopted")
 	require.NoError(t, err)
-	assert.Empty(t, changed, "a job this call did not end leaves its checkout alone")
+	require.Len(t, changed, 1, "a row recording no checkout records none on ending")
+	assert.Equal(t, "adopted", changed[0].ID)
+	assert.Equal(t, adoptedKept, changed[0].Worktree.Kept)
+	assert.Zero(t, changed[0].Worktree.Removed)
 
-	changed, err = s.EndCheckouts(ctx, written, "w1", "main")
+	changed, err = s.EndNamedCheckouts(ctx, nil, "taken", "adopted")
 	require.NoError(t, err)
-	require.Len(t, changed, 1, "the primary checkout is never a job's to remove")
-	assert.Equal(t, "w1", changed[0].ID)
-	assert.Equal(t, linked, changed[0].Worktree.Root)
-	assert.NoFileExists(t, filepath.Join(linked, "MAGUS.md"), "what magus wrote is restored first")
-	assert.Empty(t, changed[0].Worktree.Kept, "a checkout no fork made is removed once removing it loses nothing")
-	assert.NoDirExists(t, linked)
-	assert.Nil(t, storedRows(t, s)["w1"].Worktree, "no worktree is recorded for a checkout no fork made")
+	assert.Empty(t, changed, "a reason that has not changed is not recorded again")
+
+	dropped, err := s.Delete(ctx, "deleted", false)
+	require.NoError(t, err)
+	assert.Zero(t, dropped.Worktree.Removed, "deleting the row leaves the checkout")
+
+	assert.DirExists(t, linked)
+	assert.Nil(t, storedRows(t, s)["taken"].Worktree)
 }
 
 // A prune that ends a descendant only because its ancestor ends is refused until the

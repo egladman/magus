@@ -122,7 +122,7 @@ export fun tree(t: Trail, jobs: [magus\Job], all: bool, start: int) > JobTree {
     final depends = mut [<[str]>];
     foreach (id in order) {
         final j = byID[id]!;
-        nodes.append(JobBox{ id = id, state = j.state, model = j.model, paths = j.writePaths.len(), check = j.check?.target ?? "" });
+        nodes.append(JobBox{ id = id, state = j.state.value, model = j.model, paths = j.writePaths.len(), check = j.check?.target ?? "" });
         var parent = j.parent;
         if (parent == "" or keep[parent] != true) {
             parent = spawnedBy[id] ?? "";
@@ -268,7 +268,7 @@ fun fixture() > JobTree !> any {
         foreach (p in j["writePaths"] ?? []) { paths.append(p); }
         final target = j["check"] ?? "";
         jobs.append(magus\Job{
-            id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, model = j["model"] ?? "", state = j["state"] ?? "",
+            id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, model = j["model"] ?? "", state = magus\JobState(j["state"] ?? ""),
             writePaths = paths, created = std\toInt(j["created"] ?? 0),
             check = if (target != "") magus\LeaseCheck{ target = target, project = "." } else null,
         });

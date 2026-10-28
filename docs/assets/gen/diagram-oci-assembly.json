@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 6,
+    "imports": 0
+  },
+  "figure": "oci-assembly",
+  "findings": [],
+  "stamp": "sha256:6c16e6a552c718c2b74b9a0f29dc2a14e5b806af16572ba8e75e4be182f5c115"
+}

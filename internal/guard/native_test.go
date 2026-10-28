@@ -65,8 +65,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 		"pattern": "func HandleRequest", "path": "internal/api/handler.go",
 		"output_mode": "content", "-A": 20,
 	})})
-	assert.Equal(t, "deny", body.Decision, body.Reason)
-	assert.Equal(t, string(denyRuleGrepReader), body.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleGrepReader)}, judgedAs(body), body.Reason)
 	assert.Contains(t, body.Reason, "refs HandleRequest --definition --source")
 
 	glob := Judge(ctx, deps, Request{Input: envelope("Glob", map[string]any{"pattern": "**/handler.go", "path": "internal/api"})})

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/ward"
@@ -389,19 +391,48 @@ func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 	return false
 }
 
-// vcsRecoveryLine reports a git line that continues or aborts an interrupted cherry-pick,
-// merge, rebase or revert, or adds a worktree.
+// vcsRecoveryLine reports a git line that continues, skips or aborts an interrupted
+// cherry-pick, merge, rebase or revert, picks more commits, or adds a worktree.
 func vcsRecoveryLine(words []string) bool {
 	if len(words) < 3 || path.Base(words[0]) != "git" {
 		return false
 	}
+	if len(words) == 3 && (words[2] == "--abort" || words[2] == "--continue" || words[2] == "--skip") {
+		return slices.Contains([]string{"cherry-pick", "merge", "rebase", "revert"}, words[1])
+	}
 	switch words[1] {
-	case "cherry-pick", "merge", "rebase", "revert":
-		return len(words) == 3 && (words[2] == "--abort" || words[2] == "--continue")
+	case "cherry-pick":
+		// Finishing a series: the rest of its commits are what make the tree build again.
+		return !slices.ContainsFunc(words[2:], func(w string) bool {
+			return strings.HasPrefix(w, "-") && w != "-x" && w != "--no-edit"
+		})
 	case "worktree":
 		return words[2] == "add"
 	}
 	return false
+}
+
+// outsideAnyWorkspace reports a write that lands under no magus workspace: an agent's
+// memory, a scratchpad, a temp file. No guard policy judges such a path, so a policy that
+// does not load holds nothing back there.
+func outsideAnyWorkspace(path string, at location) bool {
+	target, placed := placePath(path, cmp.Or(at.dir, at.workspace), userHome())
+	if !placed {
+		return false
+	}
+	if rel, err := filepath.Rel(at.workspace, target); at.workspace == "" || err == nil && filepath.IsLocal(rel) {
+		return false
+	}
+	for dir := filepath.Dir(target); ; dir = filepath.Dir(dir) {
+		for _, marker := range []string{config.Filename, config.DottedFilename, "magusfile.buzz"} {
+			if _, err := os.Lstat(filepath.Join(dir, marker)); err == nil {
+				return false
+			}
+		}
+		if dir == filepath.Dir(dir) {
+			return true
+		}
+	}
 }
 
 // onlyEditorAssigns reports an environment prefix that sets nothing but the editor git
@@ -444,7 +475,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 // the call, the failures and the fallbacks behind the ref.
 func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
-	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
+	fix := binaryRemedy(own, root, call.lease, call.builds)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:
@@ -462,7 +493,9 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	why.WriteString("\nEdits, spawns, pushes and commands that change state wait until a magus loads the tree. " +
 		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. " +
 		"So does getting the tree back to one a binary can be built from, each alone on its line: " +
-		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`. " +
+		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort`, `--continue` or `--skip`, " +
+		"`git cherry-pick <commit>...` to finish a series, and `git worktree add`. " +
+		"So do writes outside any workspace, such as memory or a scratchpad. " +
 		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
@@ -483,13 +516,15 @@ func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 	return []types.NextStep{placementNext(rule, f.placeFor)}
 }
 
-// binaryRemedy is the fix for a binary that cannot load the tree, by who is asking. A
-// leased worker is never told to build: there is one binary per base, and the main
+// binaryRemedy is the fix for a binary that cannot load the tree at root, by who is asking.
+// A leased worker is never told to build: there is one binary per base, and the main
 // session builds it and places a copy in each worker checkout.
-func binaryRemedy(own, hasBinary bool, lease string, builds bool) binaryFix {
+func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	if builds {
 		lease = ""
 	}
+	hasBinary := hasMagusBinary(root)
+	bootstrap := config.SourceCommand(root, "", "", true)
 	switch {
 	case lease != "" && own && hasBinary:
 		return binaryFix{
@@ -511,14 +546,13 @@ func binaryRemedy(own, hasBinary bool, lease string, builds bool) binaryFix {
 	case own && hasBinary:
 		return binaryFix{
 			say: "rebuild ./magus with " + ownRebuild,
-			why: "If the rebuild cannot load the tree either, bootstrap over it, alone on its line: " +
-				"`" + ward.BootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
+			why: fmt.Sprintf("If the rebuild cannot load the tree either, bootstrap over it, alone on its line: `%s`. If the error names a magusfile line instead, fix that line.", bootstrap),
 		}
 	case own:
-		return binaryFix{say: "bootstrap ./magus with `" + ward.BootstrapCommand + "`"}
+		return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
 	}
 	return binaryFix{
-		say: "install a magus that loads this workspace with `magus self update`",
+		say: fmt.Sprintf("install a magus that loads this workspace with `%s`", config.ReleaseCommand(config.RequiredVersionAt(root))),
 		why: "If the error names a magusfile line instead, fix that line; `magus doctor` names the failure.",
 	}
 }

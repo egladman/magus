@@ -254,6 +254,7 @@ var guardGlueScripts = []string{
 	"magus-rehydrate.buzz",
 	"magus-session.buzz",
 	"cursor-hook.buzz",
+	"magus-reclaim-disk.buzz",
 }
 
 // guardGlueModules are files the ports import. They are not hooks, so the
@@ -1060,8 +1061,8 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				label: event, host: "cursor", event: string(raw),
 				stub: "#!/bin/sh\ncat > \"$GREP_INPUT_RECORD\"\nprintf no > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n",
 				env: map[string]string{
-					"GREP_INPUT_RECORD": record,
-					"GLUE_VERDICT": `{"decision":"advise","context":"use magus refs HandleRequest --definition --source"}`,
+					"GREP_INPUT_RECORD":     record,
+					"GLUE_VERDICT":          `{"decision":"advise","context":"use magus refs HandleRequest --definition --source"}`,
 					"CURSOR_HOOK_STATE_DIR": t.TempDir(),
 				},
 			})
@@ -1074,12 +1075,17 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				Cwd       string          `json:"cwd"`
 			}
 			require.NoError(t, json.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
-			assert.Equal(t, "Grep", payload.ToolName)
-			assert.Equal(t, "grep-session", payload.SessionID)
-			assert.Equal(t, ".", payload.Cwd)
 			want, err := json.Marshal(input)
 			require.NoError(t, err)
-			assert.JSONEq(t, string(want), string(payload.Input), "context and scope must survive the Cursor adapter")
+			gotInput := payload.Input
+			payload.Input = nil
+			assert.Equal(t, struct {
+				ToolName  string          `json:"tool_name"`
+				Input     json.RawMessage `json:"tool_input"`
+				SessionID string          `json:"session_id"`
+				Cwd       string          `json:"cwd"`
+			}{ToolName: "Grep", SessionID: "grep-session", Cwd: "."}, payload)
+			assert.JSONEq(t, string(want), string(gotInput), "context and scope must survive the Cursor adapter")
 			if event == "preToolUse" {
 				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
 			} else {

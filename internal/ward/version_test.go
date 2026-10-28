@@ -325,6 +325,28 @@ func TestExplainStaleBinary_NotesOnlyTheBranchItExplains(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(got.Error(), "Fix it:"), "the advice is stated once")
 }
 
+func TestPinnedRelease(t *testing.T) {
+	t.Parallel()
+	for constraint, want := range map[string]string{
+		"= 0.4.3":            "v0.4.3",
+		"0.4.3":              "v0.4.3",
+		"== v0.5.0-rc.1":     "v0.5.0-rc.1",
+		">= 0.4.3, < 0.5.0":  "v0.4.3",
+		">= 0.4.3, <= 0.4.9": "v0.4.3",
+		"~0.4.3":             "v0.4.3",
+		"^0.4.3":             "v0.4.3",
+		">= 0.4.4":           "",
+		"< 0.5.0":            "",
+		"> 0.4.3, < 0.5.0":   "",
+		">= 0.4.3 || 0.6.0":  "",
+		">= 0.5.0, < 0.4.0":  "",
+		"soon":               "",
+		"":                   "",
+	} {
+		assert.Equal(t, want, PinnedRelease(constraint), constraint)
+	}
+}
+
 // TestStaleBuildAdvice pins every rendering: the gap sentence names whichever fact is
 // unknown, and the fixes grow with what magus knows about the build and the tree.
 func TestStaleBuildAdvice(t *testing.T) {
@@ -376,6 +398,14 @@ func TestStaleBuildAdvice(t *testing.T) {
 		"a floor that does not parse": {
 			build: StaleBuild{Running: "v0.4.3", Floor: "soon"},
 			want:  "This magus is v0.4.3; the workspace needs soon, and the two cannot be compared.\n" + selfUpdate,
+		},
+		"an exact pin names its release": {
+			build: StaleBuild{Running: "v0.4.2", Floor: "= 0.4.3"},
+			want:  "This magus (v0.4.2) is older than the workspace needs (= 0.4.3).\n" + selfUpdate + " --version v0.4.3",
+		},
+		"an upper-bounded range names its lower bound": {
+			build: StaleBuild{Running: "v0.4.2", Floor: ">= 0.4.3, < 0.5.0"},
+			want:  "This magus (v0.4.2) is older than the workspace needs (>= 0.4.3, < 0.5.0).\n" + selfUpdate + " --version v0.4.3",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

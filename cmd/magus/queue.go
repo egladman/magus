@@ -191,7 +191,7 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 			bind(own)
 			fmt.Fprintln(e.stderr, "Usage: "+usage)
 			fmt.Fprintln(e.stderr, "\nFlags (magus's global flags apply too; see magus -h):")
-			own.PrintDefaults()
+			printOwnDefaults(own)
 			if verb == "apply" {
 				fmt.Fprint(e.stderr, "\n"+queueSourceUsage)
 			}
@@ -657,9 +657,9 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 // base's, pinned for the hooks: a candidate's own magus.yaml cannot widen it or turn
 // verification off.
 func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.CacheReadProxy, []string, error) {
-	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), os.Getenv("ACTIONS_RUNTIME_TOKEN")
+	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), magustypes.NewSecret(os.Getenv("ACTIONS_RUNTIME_TOKEN"))
 	switch {
-	case upstream == "" || token == "":
+	case upstream == "" || token.IsZero():
 		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read reads through the runner's cache service, and ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set; GitHub Actions gives them to an action, not a run: step, so export them to this step")
 	case remote.Insecure:
 		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.insecure turns that check off")

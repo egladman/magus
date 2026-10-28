@@ -125,7 +125,7 @@ export fun login(ctx: magus\Context, args: [str]) > void !> any {
         final user = magus\secret.read(reg.user_ref);
         final token = magus\secret.read(reg.token_ref);
         proc\exec("env", args: ["echo", "login", reg.host, "-u", user, "--password-stdin"],
-            dir: ".", opts: {"stdin": token});
+            dir: ".", opts: proc\ExecOptions{stdin = token});
         magus\log.info("login: " + reg.host + " authenticated as " + user);
     }
 }

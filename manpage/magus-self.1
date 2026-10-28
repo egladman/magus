@@ -18,13 +18,13 @@ To bootstrap a workspace, use: magus init
 \fB\-\-bin\-dir\fR \fIstring\fR
 Install into this directory instead of replacing in place
 .TP
-\fB\-\-check\fR
+\fB\-\-[no\-]check\fR (default: off)
 Print whether an update is available and exit without installing
 .TP
-\fB\-\-dry\-run\fR
+\fB\-\-[no\-]dry\-run\fR (default: off)
 Verify everything but do not replace the running binary
 .TP
-\fB\-\-force\fR
+\fB\-\-[no\-]force\fR (default: off)
 Allow downgrades and re\-installs of the current version
 .TP
 \fB\-\-version\fR \fIstring\fR
@@ -33,7 +33,7 @@ Install a specific release tag (e.g. v0.4.2)
 \fB\-y\fR
 Short for \-\-yes
 .TP
-\fB\-\-yes\fR
+\fB\-\-[no\-]yes\fR (default: off)
 Skip interactive confirmation
 .RE
 .SS self install\-shorthand options
@@ -42,7 +42,7 @@ Skip interactive confirmation
 \fB\-\-dir\fR \fIstring\fR
 Directory for the shorthand (default: the running binary's directory)
 .TP
-\fB\-\-force\fR
+\fB\-\-[no\-]force\fR (default: off)
 Replace an existing file at the shorthand path
 .RE
 .SH SUBCOMMANDS
@@ -91,7 +91,6 @@ magus self install-shorthand
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

@@ -8,9 +8,11 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // RegisterProc builds the "proc" module map and returns it.
@@ -23,8 +25,15 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 		cmd := ffi.String(bzArgs, 0)
 		args := ffi.StringSlice(bzArgs, 1)
 		dir := ffi.String(bzArgs, 2)
-		opts := ffi.AnyMap(bzArgs, 3)
-		ret0, err := std.OsExec(ctx, cmd, args, dir, opts)
+		var opts types.ExecOptions
+		if ffi.Present(bzArgs, 3) {
+			x, err := ffi.Object("proc\\exec", "opts", bzArgs, 3, decode.DecodeExecOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.ProcExec(ctx, cmd, args, dir, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -33,7 +42,7 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("shell", vm.DirectValue("proc.shell", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		line := ffi.String(bzArgs, 0)
 		shell := ffi.String(bzArgs, 1)
-		ret0, err := std.OsShell(ctx, line, shell)
+		ret0, err := std.ProcShell(ctx, line, shell)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -41,7 +50,7 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("which", vm.DirectValue("proc.which", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		cmd := ffi.String(bzArgs, 0)
-		ret0, err := std.OsWhich(ctx, cmd)
+		ret0, err := std.ProcWhich(ctx, cmd)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -50,13 +59,13 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("withSlots", vm.DirectValue("proc.withSlots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		n := ffi.Int(bzArgs, 0, 0)
 		callback := ffi.CallbackArg(sess, bzArgs, 1)
-		if err := std.OsWithSlots(ctx, n, callback); err != nil {
+		if err := std.ProcWithSlots(ctx, n, callback); err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("stdinIsTerminal", vm.DirectValue("proc.stdinIsTerminal", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.OsStdinIsTerminal(ctx)
+		ret0, err := std.ProcStdinIsTerminal(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

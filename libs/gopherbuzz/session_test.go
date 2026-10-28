@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -796,6 +798,100 @@ func TestSession_NestedRedeclarationStaysInItsCheck(t *testing.T) {
 	err := sess.Exec(ctx, "import \"shapes\";\nfun g(p: P) > int { return p.extra(); }\n")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "extra")
+}
+
+// Two modules may export objects of one name: magus and vcs both export
+// CommandOptions, archive and http both export Options. A qualified literal builds
+// its own module's record, whichever import ran last, and a bare one is still the
+// last import's.
+func TestSession_QualifiedObjectBuildsItsOwnModulesRecord(t *testing.T) {
+	const src = `import "%s";
+import "%s";
+import "archive";
+import "http";
+
+final m = magus\CommandOptions{};
+final v = vcs\CommandOptions{ tty = true };
+final a = archive\Options{ strip = 1 };
+final h = http\Options{};
+`
+	fields := func(t *testing.T, sess *Session, name string) map[string]string {
+		t.Helper()
+		view, ok := sess.GetGlobal(name).MapView()
+		require.True(t, ok, name)
+		got := map[string]string{}
+		for _, k := range view.MapKeys() {
+			v, _ := view.MapGet(k)
+			got[k] = v.String()
+		}
+		return got
+	}
+	decls := map[string]string{
+		"magus":   "export object CommandOptions { root: str = \"/\", quiet: bool = true }\nexport extern fun cmd(opts: CommandOptions? = null) > void;\n",
+		"vcs":     "export object CommandOptions { quiet: bool = false, tty: bool = false }\nexport extern fun cmd(opts: CommandOptions? = null) > void;\n",
+		"archive": "export object Options { strip: int = 0 }\n",
+		"http":    "export object Options { fail: bool = true }\n",
+	}
+	for _, order := range [][2]string{{"magus", "vcs"}, {"vcs", "magus"}} {
+		t.Run(order[0]+" first", func(t *testing.T) {
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer func() { _ = sess.Close() }()
+			for name, d := range decls {
+				sess.SetNativeModule(name, vm.NewMap())
+				sess.SetModuleDecls(name, d)
+			}
+			require.NoError(t, sess.Exec(ctx, fmt.Sprintf(src, order[0], order[1])))
+			assert.Equal(t, map[string]string{"root": "/", "quiet": "true"}, fields(t, sess, "m"))
+			assert.Equal(t, map[string]string{"quiet": "false", "tty": "true"}, fields(t, sess, "v"))
+			assert.Equal(t, map[string]string{"strip": "1"}, fields(t, sess, "a"))
+			assert.Equal(t, map[string]string{"fail": "true"}, fields(t, sess, "h"))
+		})
+	}
+}
+
+// An enum against a str is refused wherever it would be silently false: as a list's
+// indexOf needle and as an object field's value. Upstream rejects both as type mismatches.
+func TestSession_EnumAgainstAStrIsACheckError(t *testing.T) {
+	for name, tc := range map[string]struct{ src, want string }{
+		"indexOf needle": {`enum<str> E { a = "a" }
+final found = ["a"].indexOf(E.a);
+`, "indexOf between an enum and `str` is always false"},
+		"field value": {`enum<str> E { a = "a" }
+object O { k: E }
+final o = O{ k = "a" };
+`, "wrong property type: field O.k is E, got str"},
+		"list field value": {`enum<str> E { a = "a" }
+object O { ks: [E] }
+final o = O{ ks = ["a"] };
+`, "wrong property type: field O.ks is [E], got [str]"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer func() { _ = sess.Close() }()
+			require.ErrorContains(t, sess.Exec(ctx, tc.src), tc.want)
+		})
+	}
+}
+
+// `ns\E(v)` answers the case of a module's enum whose value is v, or null, as `E(v)` does
+// for a local one; calling it through the module used to raise "enumdef is not callable".
+func TestSession_QualifiedEnumFromValue(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	sess.SetNativeModule("states", vm.NewMap())
+	sess.SetModuleDecls("states", "export enum<str> State { declared = \"declared\", ended = \"ended\" }\n")
+	require.NoError(t, sess.Exec(ctx, `import "states";
+
+final found = states\State("declared");
+final missing = states\State("gone");
+`))
+	got, ok := sess.GetGlobal("found").EnumValue()
+	require.True(t, ok, "found is an enum case")
+	assert.Equal(t, "declared", got.AsString())
+	assert.True(t, sess.GetGlobal("missing").IsNull())
 }
 
 // hostShapedDecls is declaration source shaped like magus's generated bundles:
@@ -2709,4 +2805,202 @@ fun probe() > int {
 
 	folded := evalParity(t, `fun probe() > int { return 2 + 3 * 4; }`)
 	assert.Equal(t, int64(14), folded.AsInt(), "constant folding still applies off a branch")
+}
+
+// protocolPet execs a protocol and a conforming object, then returns the session and
+// a protocol-typed instance built inside Buzz, the shape a Go adapter receives.
+func protocolPet(t *testing.T) (*Session, vm.Value) {
+	t.Helper()
+	ctx := context.Background()
+	s := NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	require.NoError(t, s.Exec(ctx, `
+protocol Petlike {
+    mut fun rename(name: str) > void;
+    fun size() > int;
+    fun label(prefix: str, n: int) > str;
+}
+
+object<Petlike> Pet {
+    name: str,
+    mut fun rename(name: str) > void { this.name = name; }
+    fun size() > int => 4;
+    fun label(prefix: str, n: int) > str => "{prefix}{this.name}{n}";
+}
+
+fun make() > Petlike {
+    return mut Pet{ name = "bandit" };
+}`))
+	pet, err := s.CallValue(ctx, s.Globals()["make"], nil)
+	require.NoError(t, err, "make()")
+	return s, pet
+}
+
+func TestSessionCallMethod_ProtocolObject(t *testing.T) {
+	ctx := context.Background()
+	s, pet := protocolPet(t)
+
+	got, err := s.CallMethod(ctx, pet, "size", nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(4), got.AsInt())
+
+	got, err = s.CallMethod(ctx, pet, "label", []vm.Value{vm.StringValue("x-"), vm.IntValue(7)})
+	require.NoError(t, err)
+	assert.Equal(t, "x-bandit7", got.AsString())
+
+	// A mutating method changes the receiver the next call sees: this is the one
+	// instance, not a copy.
+	got, err = s.CallMethod(ctx, pet, "rename", []vm.Value{vm.StringValue("Chili")})
+	require.NoError(t, err)
+	assert.True(t, got.IsNull(), "a void method answers null")
+	got, err = s.CallMethod(ctx, pet, "label", []vm.Value{vm.StringValue(""), vm.IntValue(1)})
+	require.NoError(t, err)
+	assert.Equal(t, "Chili1", got.AsString())
+}
+
+func TestSessionCallMethod_FailsLoudly(t *testing.T) {
+	ctx := context.Background()
+	s, pet := protocolPet(t)
+
+	_, err := s.CallMethod(ctx, pet, "fly", nil)
+	require.ErrorContains(t, err, "unknown method fly", "a missing method is not Null")
+
+	_, err = s.CallMethod(ctx, pet, "label", []vm.Value{vm.StringValue("x")})
+	require.ErrorContains(t, err, "takes 2 argument(s), got 1", "too few arguments")
+
+	_, err = s.CallMethod(ctx, pet, "size", []vm.Value{vm.IntValue(1)})
+	require.ErrorContains(t, err, "takes 0 argument(s), got 1", "too many arguments")
+
+	_, err = s.CallMethod(ctx, vm.IntValue(3), "size", nil)
+	require.ErrorContains(t, err, "unknown method size", "a receiver with no such member")
+
+	// The failures above must not poison the session.
+	got, err := s.CallMethod(ctx, pet, "size", nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(4), got.AsInt())
+}
+
+func TestSessionCallMethod_BuiltinAndThrow(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	require.NoError(t, s.Exec(ctx, `
+object Boom {
+    fun go() > void !> str { throw "boom"; }
+}
+fun make() > Boom { return Boom{}; }
+fun words() > [str] { return ["a", "b"]; }`))
+
+	words, err := s.CallValue(ctx, s.Globals()["words"], nil)
+	require.NoError(t, err)
+	got, err := s.CallMethod(ctx, words, "len", nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), got.AsInt(), "a builtin method answers its result, not null")
+
+	boom, err := s.CallValue(ctx, s.Globals()["make"], nil)
+	require.NoError(t, err)
+	_, err = s.CallMethod(ctx, boom, "go", nil)
+	require.Error(t, err, "an uncaught throw surfaces to the caller")
+}
+
+// An entry's ../ import resolves beside the entry file, never against the working
+// directory: checked from a parent directory, ../../x once escaped the checkout and
+// typed another tree's copy of a module.
+func TestSession_RelativeImportResolvesBesideTheEntry(t *testing.T) {
+	root := t.TempDir()
+	work := filepath.Join(root, "work")
+	entryDir := filepath.Join(work, "a", "b")
+	require.NoError(t, os.MkdirAll(entryDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "lib.buzz"), []byte("export final which = \"cwd\";\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(work, "a", "lib.buzz"), []byte("export final which = \"entry\";\n"), 0o644))
+	t.Chdir(work)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	sess.SetIncludeDirs([]string{entryDir})
+	require.NoError(t, sess.Exec(ctx, "import \"../lib\";\nfinal got = which;\n"))
+	assert.Equal(t, "entry", sess.GetGlobal("got").String())
+}
+
+// A declaration source names another module's type through its own import, as
+// upstream resolves `fs\Path` only through the script's own globals. magus declares
+// a Path with other fields, so a qualified reference must reach the home module's.
+func TestDeclImports(t *testing.T) {
+	ctx := context.Background()
+	decls := map[string]string{
+		"fs":    `export object Path { abs: str = "" } export extern fun glob(p: str) > [Path];`,
+		"magus": `export object Path { rel: str = "" } export extern fun here() > Path;`,
+		"proc": `import "fs";
+export object ExecResult { cwd: fs\Path }
+export extern fun run(p: fs\Path) > str;
+export extern fun cwd() > fs\Path;
+export extern fun exec(c: str) > ExecResult;`,
+	}
+	compile := func(t *testing.T, decls map[string]string, src string) error {
+		t.Helper()
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		for _, name := range slices.Sorted(maps.Keys(decls)) {
+			sess.SetNativeModule(name, vm.NewMap())
+			sess.SetModuleDecls(name, decls[name])
+		}
+		_, err := sess.Compile(src)
+		return err
+	}
+
+	for _, tc := range []struct {
+		name, src, wantErr string
+	}{
+		{"a parameter takes the home type", `import "proc"; import "fs"; final _r = proc\run(fs\glob("x")[0]);`, ""},
+		{"a parameter refuses another type", `import "proc"; final _r = proc\run(1);`, `cannot pass int as argument "p" of type Path`},
+		{"a return is the home type", `import "proc"; final _r: int = proc\cwd().abs;`, `cannot assign str to int variable "_r"`},
+		{"a field is the home type", `import "proc"; import "magus"; final _s: str = proc\exec("x").cwd.abs;`, ""},
+		{"a field is not the same-named type", `import "magus"; import "proc"; final _s: str = proc\exec("x").cwd.rel;`, `object Path has no field or method "rel"`},
+		{"a return is not the same-named type", `import "proc"; import "magus"; final _s: str = proc\cwd().rel;`, `object Path has no field or method "rel"`},
+		{"the declarations' import binds nothing in the program", `import "proc"; final _p = fs\glob("x");`, string(UnimportedNamespace)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := compile(t, decls, tc.src)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+
+	t.Run("an unimported qualifier names the module", func(t *testing.T) {
+		err := compile(t, map[string]string{"proc": `export extern fun run(p: nope\Path) > str;`}, `import "proc";`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), string(UnimportedNamespace))
+		assert.Contains(t, err.Error(), `module proc: undefined type "nope\Path": no import binds nope in its declarations`)
+	})
+	t.Run("a type the home does not declare names the module", func(t *testing.T) {
+		err := compile(t, map[string]string{"fs": decls["fs"], "proc": `import "fs"; export extern fun run(p: fs\Nope) > str;`}, `import "proc";`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), string(UndefinedType))
+		assert.Contains(t, err.Error(), `module proc: undefined type "fs\Nope": fs declares no type Nope`)
+	})
+	t.Run("a cycle between two declaration modules is refused", func(t *testing.T) {
+		err := compile(t, map[string]string{
+			"a": `import "b"; export object A { b: b\B? = null } export extern fun f() > A;`,
+			"b": `import "a"; export object B { a: a\A? = null } export extern fun g() > B;`,
+		}, `import "a";`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), string(UnresolvedImport))
+		assert.Contains(t, err.Error(), "import cycle between declaration modules: a -> b -> a")
+	})
+	t.Run("a host declaration imports too", func(t *testing.T) {
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		sess.SetNativeModule("fs", vm.NewMap())
+		sess.SetModuleDecls("fs", decls["fs"])
+		sess.SetGlobal("host", vm.NewMap())
+		sess.DeclareModuleTypes("host", `import "fs"; export extern fun cwd() > fs\Path;`)
+		_, err := sess.Compile(`final _r: int = host\cwd().abs;`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `cannot assign str to int variable "_r"`)
+	})
 }

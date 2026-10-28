@@ -22,6 +22,15 @@ func TestFigureRegistersAtItsImportPath(t *testing.T) {
 		"only the authoring API, draw and the stamp's node line are exported; the layout and renderer stay private")
 }
 
+func TestDiskModulesRegisterWhereTheHookCanImportThem(t *testing.T) {
+	watch, ok := GetSource("diskwatch")
+	require.True(t, ok, "diskwatch is in std/lib.go's sourceBuiltin")
+	assert.Equal(t, "diskwatch", watch.ImportPath(), "a hook may import nothing under magus/")
+	reclaim, ok := GetSource("reclaimdisk")
+	require.True(t, ok, "reclaimdisk is in std/lib.go's sourceBuiltin")
+	assert.Equal(t, "magus/reclaimdisk", reclaim.ImportPath())
+}
+
 func TestModelTiersRegistersTheDefaultDeclaration(t *testing.T) {
 	got, ok := GetSource("modeltiers")
 	require.True(t, ok, "modeltiers is in std/lib.go's sourceBuiltin")

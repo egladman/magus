@@ -36,7 +36,7 @@ import (
 // probes are cached: rustup proxies through rust-toolchain files and its own settings,
 // and a script wrapper can read anything, so neither has an input list that could be
 // trusted.
-var probeInputs = map[string]probeRecipe{
+var probeInputs = map[string]probeSpec{
 	"node --version": {},
 	// pnpm switches to the version a manifest pins (manage-package-manager-versions),
 	// configured from any of these.
@@ -65,9 +65,9 @@ var probeInputs = map[string]probeRecipe{
 
 var pnpmInputs = []string{"package.json", "pnpm-workspace.yaml", ".npmrc"}
 
-// probeRecipe is what one probe's answer depends on besides the binary it runs and the
+// probeSpec is what one probe's answer depends on besides the binary it runs and the
 // variables probeEnvPrefixes names.
-type probeRecipe struct {
+type probeSpec struct {
 	// files are read in the probe's directory and every ancestor.
 	files []string
 	// pathBins are other binaries the probe may run, found on PATH.
@@ -115,9 +115,9 @@ var miseDirInputs = []string{
 const probeCacheFormat = "probe-cache/3"
 
 // lookupProbeSpec returns what decides probe's answer, and false for a probe never cached.
-func lookupProbeSpec(probe spells.Command) (probeRecipe, bool) {
-	recipe, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
-	return recipe, ok
+func lookupProbeSpec(probe spells.Command) (probeSpec, bool) {
+	spec, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
+	return spec, ok
 }
 
 // probeCacheKey returns the key a probe of tool in dir caches under, or false when
@@ -131,7 +131,7 @@ func lookupProbeSpec(probe spells.Command) (probeRecipe, bool) {
 // Every environment read under it is this process's, never the workspace's (WithEnv): a
 // probe forks with the process environment, so that is what decides the version it caches.
 func probeCacheKey(probe spells.Command, dir string) (string, bool) {
-	recipe, ok := lookupProbeSpec(probe)
+	spec, ok := lookupProbeSpec(probe)
 	if !ok || !filepath.IsAbs(dir) {
 		return "", false
 	}
@@ -156,17 +156,17 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 		return "", false
 	}
 	writeBinaryIdentity(&b, target)
-	writeEnv(&b, recipe)
-	names := recipe.files
+	writeEnv(&b, spec)
+	names := spec.files
 	switch base := filepath.Base(target); {
 	case base == "mise":
-		names = append(slices.Clone(recipe.files), miseDirInputs...)
+		names = append(slices.Clone(spec.files), miseDirInputs...)
 		names = append(names, miseEnvInputs()...)
 		writeMiseGlobals(&b)
 	case strings.Contains(base, "shim") || slices.Contains([]string{"asdf", "volta", "proto", "corepack", "rustup"}, base):
 		return "", false
 	}
-	for _, bin := range recipe.pathBins {
+	for _, bin := range spec.pathBins {
 		if path, err := exec.LookPath(bin); err == nil {
 			writePresentIdentity(&b, path)
 		}
@@ -180,7 +180,7 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 			break
 		}
 	}
-	if recipe.goToolchain {
+	if spec.goToolchain {
 		writeGoToolchain(&b, dir)
 	}
 	sum := sha256.Sum256([]byte(b.String()))
@@ -328,9 +328,9 @@ var probeEnvPrefixes = []string{
 }
 
 // writeEnv records the variables the cached tools read to decide their version.
-func writeEnv(b *strings.Builder, recipe probeRecipe) {
+func writeEnv(b *strings.Builder, spec probeSpec) {
 	prefixes := probeEnvPrefixes
-	if recipe.goToolchain {
+	if spec.goToolchain {
 		prefixes = append(slices.Clone(prefixes), goEnvInputs...)
 	}
 	env := os.Environ()

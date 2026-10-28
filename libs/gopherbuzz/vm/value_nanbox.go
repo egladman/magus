@@ -447,11 +447,12 @@ func (vm *VM) allocIterState(ptr *iterStateObj) Value { return alloc(vm, tagIter
 
 // allocEnumVal interns one case of def under def's owner, falling back to vm's while
 // def has none: the case lives in def's table, so it must last as long as def does.
+// A nil vm leaves a case of an unowned def unowned, as def is.
 func (vm *VM) allocEnumVal(def Value, ptr *enumValObj) Value {
 	gHeapMu.Lock()
 	o := gHeapOwner[uint64(def)&idxMaskHeap]
 	gHeapMu.Unlock()
-	if o == nil {
+	if o == nil && vm != nil {
 		o = vm.owner
 	}
 	return encodeHeap(tagEnumVal, gHeapAlloc(ptr, o))
