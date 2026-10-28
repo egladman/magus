@@ -5,7 +5,6 @@ import "magus";
 import "./lib/embed" as embed;
 import "../../../../hack/magusfile/drift" as drift;
 import "../../../../hack/magusfile/index" as index;
-import "os";
 
 import "proc";
 import "fs";

@@ -4,7 +4,6 @@ import "../hack/magusfile/advisories" as advisories;
 import "../hack/magusfile/toolchain-policy" as policy;
 import "../hack/magusfile/index" as index;
 import "fs";
-import "os";
 import "proc";
 import "std";
 import "project/../libs/textsearch";

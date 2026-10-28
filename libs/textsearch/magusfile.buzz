@@ -1,10 +1,8 @@
 // No build target: each consumer's esbuild bundles src/ inline.
 
 import "magus";
-import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
 import "fs";
-import "os";
 
 import "proc";
 import "magus/spell/typescript";

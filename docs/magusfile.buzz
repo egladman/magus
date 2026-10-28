@@ -10,7 +10,6 @@ import "fs";
 import "os";
 import "proc";
 import "vcs";
-import "http";
 import "project/../libs/gopherbuzz";
 import "project/../libs/textsearch";
 // Aliased: site/diagrams binds `kustomize` to the library module, and this name would shadow it.

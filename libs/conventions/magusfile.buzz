@@ -2,7 +2,6 @@
 // nothing in the magus module imports this module.
 
 import "magus";
-import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
 import "../../hack/magusfile/run-golangci" as golangci;
 
