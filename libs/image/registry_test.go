@@ -495,6 +495,22 @@ func (s *RegistrySuite) TestAssembleIndexKeepsAPlatformsReferrersAndPushSendsThe
 	s.True(listed, "and is listed under its subject's fallback tag")
 }
 
+func (s *RegistrySuite) TestOpenLayoutListsAnIndexsPlatformReferrers() {
+	t := s.T()
+	amd := assembleOne(t, s.root, amd64)
+	sbom, err := WriteSBOM(t.Context(), amd, filepath.Join(s.root, "sbom.spdx.json"))
+	s.Require().NoError(err)
+	attested, err := AttachReferrers(t.Context(), amd, []Document{sbom}, filepath.Join(s.root, "attested"))
+	s.Require().NoError(err)
+	idx, err := AssembleIndex(t.Context(), []string{attested.Path, assembleOne(t, s.root, linuxARM64)}, filepath.Join(s.root, "index"))
+	s.Require().NoError(err)
+
+	opened, err := OpenLayout(t.Context(), idx.Path, "")
+	s.Require().NoError(err)
+	s.Equal(idx.Descriptor.Digest, opened.Descriptor.Digest)
+	s.Equal(attested.Referrers, opened.Referrers)
+}
+
 func (s *RegistrySuite) TestPushMountsTheBaseLayersFromTheBaseRepository() {
 	t := s.T()
 	m := s.reg.publish(amd64, "base")

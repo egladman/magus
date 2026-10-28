@@ -56,7 +56,8 @@ func isNonDistributable(mt string) bool {
 
 // Layout is an OCI Image Layout on disk, opened at one image: an index.json entry that is
 // an image manifest or index with no subject. Referrers are the index.json entries whose
-// manifest names that image as its subject.
+// manifest names that image as its subject, or, for an index, one of the manifests it
+// lists.
 type Layout struct {
 	Path       string
 	Descriptor ocispec.Descriptor
@@ -111,12 +112,33 @@ func OpenLayout(ctx context.Context, path, name string) (Layout, error) {
 	if err != nil {
 		return Layout{}, fmt.Errorf("image.open: %w", err)
 	}
+	refers, err := l.referable(ctx)
+	if err != nil {
+		return Layout{}, fmt.Errorf("image.open: %w", err)
+	}
 	for _, d := range idx.Manifests {
-		if subjects[d.Digest] == l.Descriptor.Digest {
+		if s, ok := subjects[d.Digest]; ok && refers[s] {
 			l.Referrers = append(l.Referrers, d)
 		}
 	}
 	return l, nil
+}
+
+// referable is the set of digests a referrer of l's image may name as its subject: the
+// image, and each manifest it lists when it is an index.
+func (l Layout) referable(ctx context.Context) (map[digest.Digest]bool, error) {
+	refers := map[digest.Digest]bool{l.Descriptor.Digest: true}
+	if !isImageIndex(l.Descriptor.MediaType) {
+		return refers, nil
+	}
+	listed, err := l.index(ctx, l.Descriptor)
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range listed.Manifests {
+		refers[m.Digest] = true
+	}
+	return refers, nil
 }
 
 func readIndexJSON(path string) (ocispec.Index, error) {

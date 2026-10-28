@@ -149,9 +149,6 @@ func Push(ctx context.Context, c *oci.Client, layout string, repo oci.Reference,
 		}
 	}
 	l, err := OpenLayout(ctx, layout, "")
-	if err == nil {
-		l, err = withPlatformReferrers(ctx, l)
-	}
 	if err != nil {
 		return oci.Reference{}, fmt.Errorf("image.push: %w", err)
 	}
@@ -161,39 +158,6 @@ func Push(ctx context.Context, c *oci.Client, layout string, repo oci.Reference,
 	}
 	repo.Digest = l.Descriptor.Digest
 	return repo, nil
-}
-
-// withPlatformReferrers adds to l.Referrers the layout's referrers whose subject is a
-// manifest l's index lists: the per-platform ones AssembleIndex keeps.
-func withPlatformReferrers(ctx context.Context, l Layout) (Layout, error) {
-	if !isImageIndex(l.Descriptor.MediaType) {
-		return l, nil
-	}
-	listed, err := l.index(ctx, l.Descriptor)
-	if err != nil {
-		return l, err
-	}
-	platforms := map[digest.Digest]bool{}
-	for _, m := range listed.Manifests {
-		platforms[m.Digest] = true
-	}
-	idx, err := readIndexJSON(l.Path)
-	if err != nil {
-		return l, err
-	}
-	for _, d := range idx.Manifests {
-		if !isImageManifest(d.MediaType) {
-			continue
-		}
-		subject, err := l.subject(ctx, d)
-		if err != nil {
-			return l, err
-		}
-		if platforms[subject] {
-			l.Referrers = append(l.Referrers, d)
-		}
-	}
-	return l, nil
 }
 
 // mountSources maps each blob of l's image manifests to the repository a cross-repository
