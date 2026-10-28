@@ -54,6 +54,7 @@ export object Row {
     paused: bool = false,
     dependsOn: [str] = [],
     created: int = 0,
+    checkpoint: str = "",
     checkoutRoot: str = "",
     unresolvedRisks: [str] = [],
 }
@@ -64,11 +65,49 @@ export object Assessed {
     evidence: [str] = [],
 }
 
-// unproven is the tier source where no risk call reaches Buzz: anything unproven is full, so
-// every unsettled job is held for review. It names why, so the report does not read as a
-// measured tier.
-export fun unproven(id: str) > Assessed {
-    return Assessed{ tier = "full", evidence = ["{id}: full (this magus has no magus\\risk.assess, so no tier below full is proven)"] };
+// assess is id's proven tier: measure's report on the change in the job's own checkout since
+// the checkpoint it was handed. A row measure cannot reach, or a measure that raises, is full,
+// and its evidence says which, so an unmeasured job never reads as a measured tier.
+export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > RiskReport !> any) > Assessed {
+    final row = byId(jobs, id: id);
+    if (row == null) {
+        return Assessed{ tier = "full", evidence = ["{id}: full (no job row by that id, so nothing was measured)"] };
+    }
+    if (row!.checkoutRoot == "" or row!.checkpoint == "") {
+        return Assessed{ tier = "full", evidence = ["{id}: full (the row records no checkout or checkpoint to measure its change from)"] };
+    }
+    var report = RiskReport{};
+    try {
+        report = measure(row!);
+    } catch (e: any) {
+        return Assessed{ tier = "full", evidence = ["{id}: full (magus\\risk.assess raised: {e})"] };
+    }
+    final lines = mut [<str>];
+    foreach (e in report.evidence) {
+        lines.append(evidenceLine(e));
+    }
+    return Assessed{ tier = report.tier, evidence = lines };
+}
+
+// measured is assess's measure outside a test: the ci gate's tier for the job's change.
+export fun measured(row: Row) > RiskReport !> any {
+    return magus\risk.assess("ci", opts: RiskOptions{ base = row.checkpoint, checkout = row.checkoutRoot });
+}
+
+// evidenceLine renders e as `magus affected ci` prints it: `<path>: <tier> (<class>: <why>)`.
+fun evidenceLine(e: RiskEvidence) > str {
+    var subject = e.path;
+    if (subject == "") {
+        subject = "{e.project} {e.target}".trim();
+    }
+    var why = e.why;
+    if (e.class != "") {
+        why = "{e.class}: {why}";
+    }
+    if (subject == "") {
+        return "{e.tier} ({why})";
+    }
+    return "{subject}: {e.tier} ({why})";
 }
 
 // rows copies a job store's rows.
@@ -80,7 +119,7 @@ export fun rows(jobs: [Job]) > [Row] {
             risks = j.result!.unresolvedRisks;
         }
         found.append(Row{ id = j.id, state = j.state, parent = j.parent, paused = j.paused != 0, dependsOn = j.dependsOn,
-            created = j.created, checkoutRoot = j.checkoutRoot, unresolvedRisks = risks });
+            created = j.created, checkpoint = j.checkpoint, checkoutRoot = j.checkoutRoot, unresolvedRisks = risks });
     }
     return found;
 }
@@ -671,6 +710,25 @@ test "an unsettled job above the tolerance is held for review and one at or belo
     std\assert(decideHold("go-indexer", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.allow, message: "settled");
     final held = decideHold("late", m: issued, jobs: store, assess: fullTier);
     std\assert(held.reason.indexOf("x.go: full (unproven)") != null, message: "carries the evidence");
+}
+
+test "a job's tier is measured in its checkout from its checkpoint, and anything unmeasured is full" {
+    final measured = [Row{ id = "late", state = "pass", checkpoint = "abc", checkoutRoot = "/w/late" }, Row{ id = "bare", state = "pass" }];
+    final asked = mut [<str>];
+    final mechanical = fun (row: Row) > RiskReport !> any {
+        asked.append("{row.checkoutRoot}@{row.checkpoint}");
+        return RiskReport{ tier = "mechanical", evidence = [RiskEvidence{ path = "x.go", tier = "mechanical", class = "comment", why = "comments only" }] };
+    };
+    final got = assess("late", jobs: measured, measure: mechanical);
+    std\assert(got.tier == "mechanical" and asked.join(",") == "/w/late@abc", message: "measured in the job's checkout");
+    std\assert(got.evidence.join("\n") == "x.go: mechanical (comment: comments only)", message: "evidence as affected ci prints it");
+    std\assert(assess("bare", jobs: measured, measure: mechanical).tier == "full", message: "no checkout recorded");
+    std\assert(assess("gone", jobs: measured, measure: mechanical).tier == "full", message: "no row");
+    final raises = fun (row: Row) > RiskReport !> any {
+        throw "no workspace";
+    };
+    final raised = assess("late", jobs: measured, measure: raises);
+    std\assert(raised.tier == "full" and raised.evidence[0].indexOf("no workspace") != null, message: "a raise is full and says why");
 }
 
 test "merge, push, grant and deleting older work are reserved under a mandate" {

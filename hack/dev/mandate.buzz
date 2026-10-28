@@ -196,7 +196,7 @@ fun report(root: str) > void !> any {
         if (mandate\settled(r)) {
             integrated.append(r.id);
         } else if (r.state == "pass" or r.state == "exited" or r.state == "fail") {
-            final got = mandate\unproven(r.id);
+            final got = mandate\assess(r.id, jobs: jobs, measure: mandate\measured);
             held.append("{r.id}: {r.state}, tier {got.tier}; {got.evidence.join("; ")}");
         } else if (r.paused) {
             left.append("{r.id}: paused");

@@ -169,7 +169,33 @@ fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerd
     if (mandate\inForce(issued, now: now)) {
         jobs = mandate\rows((magus\job.list() catch JobList{}).jobs);
     }
-    return mandate\decideCommand(programs, line: req.command, m: issued, jobs: jobs, now: now, assess: mandate\unproven);
+    final store = jobs;
+    final assess = fun (id: str) > mandate\Assessed {
+        return mandate\assess(id, jobs: store, measure: mandate\measured);
+    };
+    return mandate\decideCommand(programs, line: req.command, m: issued, jobs: jobs, now: now, assess: assess);
+}
+
+// judgeStop is the stop rule the root magusfile registers: the mandate's idle-stop rule
+// (ADR 0019 section 5) over the job store, counting refusals per session.
+export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
+    if (req.workspace == "") {
+        return magus\guard.allow();
+    }
+    final list = magus\job.list() catch JobList{};
+    final blocked = mut [<str>];
+    foreach (b in list.blocked) {
+        blocked.append(b.job);
+    }
+    final count = fun (key: str) > int {
+        return magus\guard.count(key);
+    };
+    final now = mandate\now();
+    final file = fun (rows: [str]) > void {
+        mandate\fileAttention(req.workspace, rows: rows, now: now);
+    };
+    return mandate\decideStop(mandate\StopFacts{ role = req.role, stopHookActive = req.stopHookActive },
+        q: mandate\Queue{ jobs = mandate\rows(list.jobs), blocked = blocked }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
 }
 
 fun leaseWrites(req: CommandRequest) > [str] {
