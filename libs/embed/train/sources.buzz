@@ -257,7 +257,7 @@ export fun load() > Snapshot !> any {
 }
 
 // buildableGaps counts the gaps a build closes, and names each project whose language
-// nothing indexes: its files carry no symbols, which is the corpus as it stands, not a hole.
+// nothing indexes: its files carry no symbols, which is the inputs as they stand, not a hole.
 export fun buildableGaps(gaps: [magus\KnowledgeSymbolGap]) > int {
     var missing = 0;
     foreach (gap in gaps) {
