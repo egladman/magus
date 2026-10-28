@@ -52,15 +52,15 @@ for review.
 
 ### 1. The policy is this repository's Buzz, and magus ships two seams
 
-| Part                                                                             | Where                                                      | State   |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------- |
-| `magus\guard.stop(fun(req: StopRequest) > GuardVerdict)`: a workspace Stop rule  | Go host API, beside `magus\guard.command`                  | done    |
-| `magus\risk.assess(target, opts)`: the proven tier and its evidence for a change | Go host API over `Magus#AssessChange`                      | done    |
-| the mandate, the fork, hold and reserved-act rules                               | `hack/policy/mandate.buzz`, wired in `guard.buzz`          | done    |
-| holding on a proven tier rather than `full`                                      | `mandate\assess` over `magus\risk.assess`, in `guard.buzz` | done    |
-| the Stop rule wired                                                              | `judgeStop` in `guard.buzz`, set in `magusfile.buzz`       | done    |
-| issuing, revoking and reporting on a mandate                                     | `hack/dev/issue-mandate.buzz`, run by the person           | done    |
-| the guide's "Work a queued plan" row and "Before you step away" section          | `docs/guides/integrations/agents/long-running-sessions.md` | done    |
+| Part                                                                             | Where                                                      | State |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----- |
+| `magus\guard.stop(fun(req: StopRequest) > GuardVerdict)`: a workspace Stop rule  | Go host API, beside `magus\guard.command`                  | done  |
+| `magus\risk.assess(target, opts)`: the proven tier and its evidence for a change | Go host API over `Magus#AssessChange`                      | done  |
+| the mandate, the fork, hold and reserved-act rules                               | `hack/policy/mandate.buzz`, wired in `guard.buzz`          | done  |
+| holding on a proven tier rather than `full`                                      | `mandate\assess` over `magus\risk.assess`, in `guard.buzz` | done  |
+| the Stop rule wired                                                              | `judgeStop` in `guard.buzz`, set in `magusfile.buzz`       | done  |
+| issuing, revoking and reporting on a mandate                                     | `hack/dev/issue-mandate.buzz`, run by the person           | done  |
+| the guide's "Work a queued plan" row and "Before you step away" section          | `docs/guides/integrations/agents/long-running-sessions.md` | done  |
 
 Both seams are generic: a Stop rule judges any Stop event a repository has an opinion
 on, and the risk call answers any script that wants a tier. Neither names mandates. The
