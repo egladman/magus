@@ -66,15 +66,27 @@ Return the project path containing dir, or null when dir is inside no project. S
 
 ### raise
 
-Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == "ACME1001") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. opts.url is the page documenting the code, rendered as the `see:` line the CLI prints under its own diagnostics.
+Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == "WS1001") ... }`. code is a DiagnosticCode from magus\diagnosticCode, and it is checked again here against the prefix magus.yaml's diagnostics.prefix declares, so a raise from an imported spell carries the importing workspace's prefix or fails. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. The `see:` line under the message is opts.url when given, else the page diagnostics.docs names for the code, else none.
 
 **Signature:** `magus\raise(code, message, [opts])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
-| `code`    | `string`         |          |             |
+| `code`    | `map[string]any` |          |             |
 | `message` | `string`         |          |             |
 | `opts`    | `map[string]any` | yes      |             |
+
+### diagnosticCode
+
+Mint a workspace diagnostic code for magus\raise: {code, origin}. text is the prefix magus.yaml's diagnostics.prefix declares followed by four digits (WS1003). Raises on an MGS, BZZ or other built-in prefix, which only magus mints, on a prefix this workspace did not declare, on a malformed code, and on any code when no prefix is declared, naming the magus.yaml key.
+
+**Signature:** `magus\diagnosticCode(text) -> DiagnosticCode` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `text`    | `string` |          |             |
+
+**Returns:** map[string]any
 
 ### run
 
