@@ -48,8 +48,9 @@ The person always drives. Away mode carries out decisions already made and makes
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------- |
 | `magus\guard.stop(fun(req: StopRequest) > GuardVerdict)`: a workspace Stop rule  | Go host API, beside `magus\guard.command`                  | planned |
 | `magus\risk.assess(target, opts)`: the proven tier and its evidence for a change | Go host API over `Magus#AssessChange`                      | planned |
-| the contract, the Stop rule, the fork and reserved-act rules                     | `hack/policy/away.buzz`, wired in `guard.buzz`             | planned |
-| starting, ending and reporting on a window                                       | `hack/dev/away.buzz`, run by the person                    | planned |
+| the contract, the fork, parking and reserved-act rules                           | `hack/policy/away.buzz`, wired in `guard.buzz`             | done    |
+| the Stop rule wired, and parking on a proven tier rather than `full`             | `judgeStop` in `guard.buzz`, over the two seams above      | planned |
+| starting, ending and reporting on a window                                       | `hack/dev/away.buzz`, run by the person                    | done    |
 | the guide's "Work a queued plan" row and "Before you step away" section          | `docs/guides/integrations/agents/long-running-sessions.md` | done    |
 
 Both seams are generic: a Stop rule judges any Stop event a repository has an opinion
