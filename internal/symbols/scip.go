@@ -453,6 +453,22 @@ func twinKey(key, file string) string {
 	return key + " " + file
 }
 
+// TwinBase is the key whose occurrences key's are: for a platform twin's key
+// (`<key> <file>`) the key without its file, since the twins share their references, and
+// key itself otherwise. Every key ends in a descriptor's suffix and a file never does,
+// which is what tells the two apart.
+func TwinBase(key string) string {
+	i := strings.LastIndexByte(key, ' ')
+	if i < 0 || endsDescriptor(key) || !endsDescriptor(key[:i]) {
+		return key
+	}
+	return key[:i]
+}
+
+func endsDescriptor(s string) bool {
+	return s != "" && strings.ContainsRune("./#:!)]", rune(s[len(s)-1]))
+}
+
 // workspacePath rebases an indexer-relative document path onto the workspace by joining
 // it under the project's workspace-relative path, and reports whether the document lives
 // in the workspace at all.

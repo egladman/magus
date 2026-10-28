@@ -735,6 +735,22 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 		"the range holds Foo, so the site is editable")
 }
 
+func (s *magusSuite) TestAPlatformTwinReadsItsBaseKeysOccurrences() {
+	root := s.T().TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	s.Require().NoError(os.MkdirAll(filepath.Join(root, "pkg/a/pkg/a"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "pkg/a/pkg/a/a.go"), []byte("Foo\n"), 0o644))
+	writeSCIP(s.T(), goIndexPath(cacheDir, "pkg/a"))
+
+	projects, spells := goWorkspace("pkg/a")
+	foo, twin := "gomod example.com/a Foo#", "gomod example.com/a Foo# pkg/a/pkg/a/a_linux.go"
+	got := symbolsOccurrences(s.T().Context(), ingest(config.Config{}, root, cacheDir, projects, spells), []string{twin, foo})
+
+	s.Require().Len(got[twin].Files, 1, "never silently empty: the twin shares Foo's sites")
+	s.Equal(got[foo], got[twin])
+	s.Len(got, 2, "one read per key asked")
+}
+
 // TestVCSHistoryFormatKeysTheCache: a shape change is invisible to the rest of the key
 // (the same HEAD and window hash the same), so without the format version an old file would
 // match, decode with the renamed field absent, and hand every consumer a zero timestamp.

@@ -195,6 +195,22 @@ func (s *symbolsSuite) TestPlatformTwinsShareTheirReferences() {
 	s.Equal("main.go", syms[1].Refs[0].Path)
 }
 
+func (s *symbolsSuite) TestTwinBaseStripsATwinsFile() {
+	s.Equal("gomod example.com/foo run().", TwinBase("gomod example.com/foo run(). run_windows.go"))
+	s.Equal("gomod example.com/foo `example.com/foo/mem`/Total#", TwinBase("gomod example.com/foo `example.com/foo/mem`/Total# mem/total_linux.go"))
+}
+
+func (s *symbolsSuite) TestTwinBaseLeavesAKeyAlone() {
+	s.Equal("gomod example.com/foo run().", TwinBase("gomod example.com/foo run()."))
+	s.Equal("gomod github.com/a/b `github.com/a/b/x`/T#M().", TwinBase("gomod github.com/a/b `github.com/a/b/x`/T#M()."))
+	s.Equal("noSpace.", TwinBase("noSpace."))
+}
+
+func (s *symbolsSuite) TestATwinsKeyReadsBackToItsBase() {
+	syms := s.platformTwins()
+	s.Equal(syms[0].Key, TwinBase(syms[1].Key))
+}
+
 func (s *symbolsSuite) TestAPackageDefinedInEveryFileStaysOneSymbol() {
 	const pkg = "scip-go gomod example.com/foo v1 `example.com/foo`/"
 	doc := func(path string) *scip.Document {

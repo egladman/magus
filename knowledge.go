@@ -1642,8 +1642,13 @@ func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []strin
 	// one project is referenced from others, and a rewrite that stopped at the definition's
 	// own index would leave every cross-project call site untouched.
 	reads := make(map[string]SymbolOccurrenceRead, len(keys))
-	for _, key := range keys {
-		reads[key] = SymbolOccurrenceRead{}
+	// A platform twin's sites are its base key's: the index names the key, not the file.
+	asked := keys
+	keys = make([]string, 0, len(asked))
+	for _, key := range asked {
+		if base := symbols.TwinBase(key); !slices.Contains(keys, base) {
+			keys = append(keys, base)
+		}
 	}
 	for _, decl := range symbolIndexDeclarations(ctx, in) {
 		if ctx.Err() != nil {
@@ -1717,7 +1722,11 @@ func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []strin
 		read.Unreadable = slices.Clone(unreadable)
 		reads[key] = read
 	}
-	return reads
+	out := make(map[string]SymbolOccurrenceRead, len(asked))
+	for _, key := range asked {
+		out[key] = reads[symbols.TwinBase(key)]
+	}
+	return out
 }
 
 // mergeOccurrenceFiles folds entries sharing a path into one, concatenating and re-sorting
