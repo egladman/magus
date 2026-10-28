@@ -75,7 +75,7 @@ export fun nextAt(minutes: int, now: int, offset: int) > int {
 }
 
 fun localOffset() > int !> any {
-    final printed = proc\exec("date", args: ["+%z"], opts: {"quiet": true}).stdout;
+    final printed = proc\exec("date", args: ["+%z"], opts: proc\ExecOptions{ quiet = true }).stdout;
     if (parseOffset(printed) -> offset) {
         return offset;
     }
@@ -209,17 +209,17 @@ fun rowSections(jobs: [mandate\Row], terms: mandate\Mandate, blocked: [str], now
         }
         if (mandate\settled(r)) {
             integrated.append(r.id);
-        } else if (r.state == "pass" or r.state == "exited" or r.state == "fail") {
+        } else if (r.state == magus\JobState.pass or r.state == magus\JobState.exited or r.state == magus\JobState.fail) {
             final got = mandate\assess(r.id, jobs: jobs, measure: mandate\measured);
-            held.append("{r.id}: {r.state}, tier {got.tier}; {got.evidence.join("; ")}");
+            held.append("{r.id}: {r.state.value}, tier {got.tier}; {got.evidence.join("; ")}");
         } else if (r.paused) {
             left.append("{r.id}: paused");
         } else if (blocked.indexOf(r.id) != null) {
             left.append("{r.id}: blocked");
         } else if (now >= terms.ends) {
-            left.append("{r.id}: {r.state}, past the cap");
+            left.append("{r.id}: {r.state.value}, past the cap");
         } else {
-            left.append("{r.id}: {r.state}");
+            left.append("{r.id}: {r.state.value}");
         }
     }
     section("held for review, for you to read first", rows: held);
