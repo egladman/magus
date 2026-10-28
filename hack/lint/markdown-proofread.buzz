@@ -77,7 +77,7 @@ final HAND_WRITTEN = ["changes/unreleased/", "internal/agent/agents-section.md",
 final ALLOW = [
     // Products, languages, projects and companies.
     "Backblaze", "Buildkite", "Buzz", "Chrome", "CircleCI", "Claude", "Cloudflare", "Cursor",
-    "GitHub", "Go", "Jenkins", "Jujutsu", "Linux", "Mercurial", "MinIO", "Nx", "OpenTelemetry", "PatternFly", "Python",
+    "GitHub", "Go", "Jenkins", "Jujutsu", "Kubernetes", "Linux", "Mercurial", "MinIO", "Nx", "OpenTelemetry", "PatternFly", "Python",
     "Swift", "TypeScript", "Unix", "Windows",
     // Acronyms and initialisms.
     "ADR", "AI", "API", "CI", "CLI", "CSS", "CWD", "FAQ", "FFI", "HTTP", "ID", "IDs", "JIT", "JSON",

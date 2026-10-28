@@ -4,7 +4,7 @@ description: A kustomize base that runs the magus daemon under the restricted po
 tags: [kubernetes, kustomize, kubeconform, daemon, figure, security]
 ---
 
-# Run the daemon in a development cluster
+# Run the daemon on Kubernetes for development
 
 `deploy/kustomize/base` runs `magus server start --foreground` as one pod. It is
 for development: the daemon serves its console and MCP on loopback, and you reach
