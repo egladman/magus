@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "kustomize-architecture",
+  "findings": [],
+  "stamp": "sha256:830b83347e703a98b3140fa8711fc968df92d66915f987b0fe0fd60dcc7297e5"
+}

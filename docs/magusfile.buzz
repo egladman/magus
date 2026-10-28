@@ -13,6 +13,8 @@ import "vcs";
 import "http";
 import "project/../libs/gopherbuzz";
 import "project/../libs/textsearch";
+// Aliased: site/diagrams binds `kustomize` to the library module, and this name would shadow it.
+import "project/../libs/kustomize" as kustomizeproject;
 // Imported for proofread_build: the proofread rule pages render from the linked binary's catalog.
 import "project/../libs/proofread" as proofreadmod;
 import "project/.." as workspace;
@@ -34,9 +36,9 @@ import "magus/spell/markdown";
 magus\project({
     "tools": {"node": policy\node},
     "spells": [typescript, buzz],
-    // API docs read proto's descriptor and the render reads libs/figure;
-    // without these edges the reads are unordered (MGS4004).
-    "depends_on": ["..", "../proto", "../libs/figure"],
+    // API docs read proto's descriptor, the render reads libs/figure and the figures
+    // read libs/kustomize; without these edges the reads are unordered (MGS4004).
+    "depends_on": ["..", "../proto", "../libs/figure", "../libs/kustomize"],
     // Affected tracks this glob, not the import graph, so it names every input,
     // including the Go trees content-generate renders pages from.
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
@@ -513,8 +515,11 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
     ctx.needs(workspace\symbol_digest_generate, figure_engine_digest_generate);
+    // The kustomize figure draws only manifests kubeconform accepts.
+    ctx.needs(kustomizeproject\lint);
     ctx.readsFiles(["site/diagrams/*.buzz", "gen/figure-engine.sha256",
-        workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz")]);
+        workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"),
+        kustomizeproject\file("*.buzz"), workspace\file("deploy/kustomize/**/*.yaml")]);
     ctx.writesFiles(["assets/gen/diagram-*.svg", "assets/gen/diagram-*.json"]);
     final GENERATED = ["assets/gen"];
     final before = drift\hashes(GENERATED);
