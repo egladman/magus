@@ -517,10 +517,8 @@ func boundLease(root string) string {
 }
 
 // leasedBrokerClient is a broker client of the daemon's own for one lease's runs.
-func leasedBrokerClient(_ string) *broker.Client {
-	// TODO(runs-carry-their-lease): name the lease with that branch's broker client option
-	// once it lands here; until then the handshake names the daemon's own BAGGAGE lease.
-	return newBrokerClient(false)
+func leasedBrokerClient(lease string) *broker.Client {
+	return newBrokerClient(false, broker.WithLease(lease))
 }
 
 // noticeRunLease says when the daemon charges an adopted run to no lease: its checkout

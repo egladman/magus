@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -424,7 +423,7 @@ var (
 // the lease the process's checkout binds, and whether the process is a gate.
 func processBrokerClient() *broker.Client {
 	processBrokerOnce.Do(func() {
-		processBroker = newBrokerClient(true, broker.WithLease(processLease("")), broker.WithGate(gateArgv(os.Args[1:])))
+		processBroker = newBrokerClient(true, broker.WithLease(processLease(extractRootFlag(os.Args[1:]))), broker.WithGate(gateArgv(os.Args[1:])))
 	})
 	return processBroker
 }
@@ -448,18 +447,30 @@ func processLease(rootOverride string) string {
 	return lease
 }
 
-// gateArgv reports whether args run the ci composition: `affected ci` or `run ci`.
+// gateArgv reports whether args run the ci composition: `affected ci` or `run ci`. The
+// target is read with the command's own flags bound, so a flag value such as `-o json`
+// is never taken for it.
 func gateArgv(args []string) bool {
-	verb := slices.IndexFunc(args, func(a string) bool { return a == "affected" || a == "run" })
-	if verb < 0 {
+	sub, subArgs := peekSub(args)
+	var bind func(*flag.FlagSet)
+	switch sub {
+	case "run":
+		bind = func(fs *flag.FlagSet) { bindRunFlags(fs, nil) }
+	case "affected":
+		bind = func(fs *flag.FlagSet) { flaggen.BindAffected(fs) }
+	default:
 		return false
 	}
-	for _, a := range args[verb+1:] {
-		if !strings.HasPrefix(a, "-") {
-			return a == string(types.TargetCI)
-		}
+	raw, _, ok := splitTargetFromArgs(subArgs, bind)
+	if !ok {
+		return false
 	}
-	return false
+	_, name := parseTarget(raw)
+	t, err := types.ParseTarget(name)
+	if err != nil {
+		return false
+	}
+	return canonicalTarget(t.Name) == string(types.TargetCI)
 }
 
 // brokerUnits is `magus broker units [systemd|launchd]`: print the files a supervisor

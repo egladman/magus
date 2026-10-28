@@ -197,6 +197,14 @@ func (s *GateArgvSuite) TestAProjectNamedCIIsNoGate() {
 	s.False(gateArgv([]string{"run", "lint", "ci"}))
 }
 
+func (s *GateArgvSuite) TestAnOutputFlagValueIsNotTheTarget() {
+	s.True(gateArgv([]string{"run", "-o", "json", "ci"}))
+}
+
+func (s *GateArgvSuite) TestARootFlagValueIsNotTheVerb() {
+	s.False(gateArgv([]string{"--root", "run", "go-test", "."}))
+}
+
 func (s *GateArgvSuite) TestAVerbThatRunsNothingIsNoGate() {
 	s.False(gateArgv([]string{"status", "--wait"}))
 }
