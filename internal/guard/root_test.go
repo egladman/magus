@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
@@ -801,4 +802,47 @@ func judgeSpawn(ctx context.Context, t *testing.T, deps Dependencies, model stri
 	return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
 	})})
+}
+
+// RootGroundworkSuite judges a root whose bound spawn proves it hands out a live row.
+type RootGroundworkSuite struct {
+	suite.Suite
+	ctx  context.Context
+	deps Dependencies
+}
+
+func TestRootGroundworkSuite(t *testing.T) { suite.Run(t, new(RootGroundworkSuite)) }
+
+func (s *RootGroundworkSuite) SetupTest() {
+	s.ctx, _ = fleetFixture(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	s.deps = levelDeps(s.T(), types.GuardProfileLight)
+	hostGate(hookLocation(s.ctx, s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	s.Require().NotEqual(decisionDeny, judgeSpawn(s.ctx, s.T(), s.deps, "haiku").Decision)
+}
+
+func (s *RootGroundworkSuite) judge(line string) types.GuardJudgment {
+	return Judge(s.ctx, s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
+}
+
+// The root must reopen the acceptance evidence a worker names by ref.
+func (s *RootGroundworkSuite) TestRootReadsAnOutputRefWhileARowIsLive() {
+	s.NotEqual(string(denyRuleOrchestratorGroundwork), s.judge("./magus -C /w query output r1a2b3c4").Rule)
+}
+
+func (s *RootGroundworkSuite) TestRootReadsAnOutputRefWithIdentity() {
+	s.NotEqual(string(denyRuleOrchestratorGroundwork), s.judge("./magus query output --identity r1a2b3c4").Rule)
+}
+
+func (s *RootGroundworkSuite) TestRootReadsAnOutputRefWithProblems() {
+	s.NotEqual(string(denyRuleOrchestratorGroundwork), s.judge("./magus query output --problems r1a2b3c4").Rule)
+}
+
+func (s *RootGroundworkSuite) TestRootDiffReadWhileARowIsLiveIsStillGroundwork() {
+	v := s.judge("git show HEAD")
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
+}
+
+func (s *RootGroundworkSuite) TestRootOutputRefThatWritesAFileIsStillGroundwork() {
+	v := s.judge("./magus --tee out.log query output r1a2b3c4")
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
 }

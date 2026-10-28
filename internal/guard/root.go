@@ -298,10 +298,49 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 	if call.orchestration != "" {
 		call.work = mainWork(ctx, at, st, in.command)
 	}
+	// Checking a worker's acceptance evidence by its ref is the orchestrator's own job.
+	// Refused, the root relays the ref to a worker and never sees the evidence itself.
+	if call.work != "" && readsOutputRef(in.command) {
+		call.work = ""
+	}
 	if call.work != "" {
 		call.spawnBroken = spawnBroken(deps, who.Host)
 	}
 	return applyFindings(gate, verdict, mainFindings(deps.settingLookup, st, call), from)
+}
+
+// readsOutputRef reports a line that is one `magus query output <ref>` and nothing else: no
+// pipe, no second command, no `--`, and no flag but --identity, --problems or a global flag
+// other than --tee, which writes a file.
+func readsOutputRef(line string) bool {
+	cmds, ok := ParseCommands(line)
+	if !ok {
+		return false
+	}
+	cmds = slices.DeleteFunc(cmds, isCdInvocation)
+	if len(cmds) != 1 || !isMagusInvocation(cmds[0]) {
+		return false
+	}
+	words := magusSubcommandWords(cmds[0].Args)
+	if len(words) != 3 || !hint.QueryOutput.MatchedBy(words) {
+		return false
+	}
+	for _, a := range cmds[0].Args {
+		if a == "--" {
+			return false
+		}
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if name == "identity" || name == "problems" {
+			continue
+		}
+		if _, global := MagusFlagTakesValue(name); !global || name == "tee" {
+			return false
+		}
+	}
+	return true
 }
 
 // gradeMainWrite judges a write by a session's unleased main thread inside a checkout of
