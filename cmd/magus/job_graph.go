@@ -854,6 +854,10 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 			}
 			dir = filepath.Join(cacheDir, "job-graph")
 		}
+		dir, err := filepath.Abs(dir)
+		if err != nil {
+			return err
+		}
 		paths, err := writePlanSVGs(ctx, plan, figs, dir)
 		if err != nil {
 			return err
@@ -1104,7 +1108,7 @@ func (p *jobPlan) bundled(parts []planNode) planNode {
 	if len(parts) == 1 {
 		return parts[0]
 	}
-	name := fmt.Sprintf("%s and %d more", parts[0].Name, len(parts)-1)
+	name := fmt.Sprintf("%s +%d", parts[0].Name, len(parts)-1)
 	f := &planFigure{Title: name, Nodes: p.fit(nil, parts)}
 	f.Edges = p.between(f.Nodes)
 	for _, n := range parts {
