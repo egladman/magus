@@ -99,7 +99,7 @@ Each lens is a field on the report:
   exports the base and runs magus's in-process indexers (Go, Buzz, shell) over it with this
   workspace's configuration, as a library call that opens no second workspace and starts no
   run, so a count depends only on the base's bytes, today's policy and the indexer versions.
-  The measure is kept in the user cache per commit, policy and indexer versions, where every
+  The measure is kept in the user cache per commit, policy, indexer versions and magus build, where every
   checkout on the machine reuses it. `magus\conformance` only reads it, and a base with none
   is an error naming the step. A language only an external SCIP indexer reads has no base
   measure: each touched file of it is listed in `unmeasured` with its language and why, and

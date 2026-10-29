@@ -54,7 +54,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Conformance, he
 	if err != nil {
 		return types.ConformanceOutput{}, err
 	}
-	entry, err := m.conformanceEntry(commit, plan)
+	entry, err := m.conformanceEntry(ctx, commit, plan)
 	if err != nil {
 		return types.ConformanceOutput{}, err
 	}
@@ -81,7 +81,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Conformance, he
 
 // MeasureConformanceBase measures the merge base of base and HEAD with magus's in-process
 // indexers under this workspace's configuration, and keeps it in the user cache, which every
-// checkout on the machine shares, keyed by commit, policy and indexer versions. It returns the
+// checkout on the machine shares, keyed by commit, policy, indexer versions and magus build. It returns the
 // commit, and reuses a kept measure. It opens no workspace and starts no run.
 func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string, error) {
 	v, commit, err := m.conformanceBaseCommit(ctx, base)
@@ -99,7 +99,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", err
 	}
-	entry, err := m.conformanceEntry(commit, head)
+	entry, err := m.conformanceEntry(ctx, commit, head)
 	if err != nil {
 		return "", err
 	}
@@ -170,14 +170,15 @@ func readConformanceEntry(entry string) (types.ConformanceOutput, bool, error) {
 }
 
 // conformanceEntry is the cache file of commit's measure under this workspace's policy and
-// plan's indexers.
-func (m *Magus) conformanceEntry(commit string, plan baseIndexPlan) (string, error) {
+// plan's indexers, as measured by this magus build.
+func (m *Magus) conformanceEntry(ctx context.Context, commit string, plan baseIndexPlan) (string, error) {
 	policy, err := json.Marshal(m.cfg.Knowledge.Conformance)
 	if err != nil {
 		return "", fmt.Errorf("conformance: digest the policy: %w", err)
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00", baseMeasureVersion)
+	build := types.MagusBuildFromContext(ctx)
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00", baseMeasureVersion, build.Version, build.Commit)
 	h.Write(policy)
 	for _, ix := range plan.indexes {
 		fmt.Fprintf(h, "\x00%s\x00%s\x00%s", ix.project, ix.language, ix.ix.Version())
