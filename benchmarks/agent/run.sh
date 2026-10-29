@@ -22,10 +22,9 @@ usage:
          --magus-binary <path> [--dry-run] [--control golden|null]
   run.sh --manifest <file>
 
-A task is a directory under tasks/, run on a worktree of the fixture repo, or
-swebench:<instance_id>, run inside that SWE-bench instance's container for the
-host's own architecture (see swebench/lib.sh; --magus-binary must then be the
-linux build for it, and BENCH_EMULATE=1 is the only way to run amd64 elsewhere).
+A task is a directory under tasks/, run on a worktree of the fixture repo.
+SWE-bench instances (swebench:<instance_id>) are refused: their container steps
+are Go now (internal/container) and run.sh does not drive them.
 
 A manifest is a text file of run.sh flag lines; blank lines and lines starting
 with # are skipped. Each line is executed as its own run.sh invocation. A line
@@ -36,9 +35,8 @@ env:
   BENCH_FIXTURE_REPO    git repo each run worktree is cut from
   BENCH_RESULTS_DIR     where run directories are written
   BENCH_TIMEOUT_S       wall-clock cap per agent invocation (default 1800)
-  BENCH_EVAL_TIMEOUT_S  wall-clock cap for a swebench eval script (default 1800)
   BENCH_POLL_S          worktree dirty-poll interval (default 0.5)
-  BENCH_KEEP_WORKTREE   1 keeps the run worktree (or trial container) for inspection
+  BENCH_KEEP_WORKTREE   1 keeps the run worktree for inspection
   BENCH_PROBE_FAIL      honored only by the self-test arm; forces a probe failure
   RUNNER_AGENT          replaces runner/agent.sh (runner/fake-agent.sh for tests)
   BENCH_CLAUDE_BIN      the claude CLI runner/agent.sh launches (default: claude on PATH)
@@ -93,9 +91,6 @@ worktree_digest() {
 meta_get() {
     sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" "$1" | head -1
 }
-
-# shellcheck source=swebench/lib.sh disable=SC1091
-. "$HERE/swebench/lib.sh"
 
 run_one() {
     local arm=$1 task=$2 rep=$3 model=$4 effort=$5 magus_binary=$6 control=$7
@@ -355,40 +350,25 @@ main() {
     # A manifest line cannot expand $PWD, so this is what lets one say ../../magus.
     # A manifest is written once for every host, so {arch} stands for the container's
     # Go architecture (dist/linux-{arch}/magus) and is filled in here.
-    if [[ $task == swebench:* ]]; then
-        magus_binary=${magus_binary//\{arch\}/$(swebench_goarch)}
-    fi
+    # The container steps moved to Go (internal/container) and run.sh has no driver for them.
+    [[ $task != swebench:* ]] ||
+        die "$task: run.sh no longer runs swebench instances; their steps live in internal/container"
     if [[ $magus_binary != /* ]]; then
         local bin_dir
         bin_dir=$(cd "$(dirname "$magus_binary")" 2>/dev/null && pwd) ||
             die "--magus-binary $magus_binary: directory does not exist"
         magus_binary=$bin_dir/$(basename "$magus_binary")
     fi
-    local swebench=0
-    if [[ $task == swebench:* ]]; then
-        swebench=1
-        swebench_check_binary "$magus_binary"
-    fi
 
     if ((dry)); then
-        if ((swebench)); then
-            printf 'plan: source=swebench instance=%s arm=%s reps=%s model=%s effort=%s control=%s\n' \
-                "${task#swebench:}" "$arm" "$reps" "$model" "$effort" "${control:-none}"
-        else
-            printf 'plan: fixture=%s arm=%s task=%s reps=%s model=%s effort=%s control=%s\n' \
-                "$FIXTURE_REPO" "$arm" "$task" "$reps" "$model" "$effort" "${control:-none}"
-        fi
+        printf 'plan: fixture=%s arm=%s task=%s reps=%s model=%s effort=%s control=%s\n' \
+            "$FIXTURE_REPO" "$arm" "$task" "$reps" "$model" "$effort" "${control:-none}"
         printf 'plan: magus-binary=%s timeout=%ss results=%s\n' \
             "$magus_binary" "$TIMEOUT_S" "$RESULTS_DIR"
         local r
         for ((r = 1; r <= reps; r++)); do
-            if ((swebench)); then
-                printf 'plan: %s-swebench-%s-r%s-<utc-stamp>: trial image, trial container: seed, provision, probe, %s, diff; fresh container: apply, eval; swegrade\n' \
-                    "$arm" "${task#swebench:}" "$r" "${control:-agent}"
-            else
-                printf 'plan: %s-%s-r%s-<utc-stamp>: worktree, seed, provision, probe, %s, diff, check\n' \
-                    "$arm" "$task" "$r" "${control:-agent}"
-            fi
+            printf 'plan: %s-%s-r%s-<utc-stamp>: worktree, seed, provision, probe, %s, diff, check\n' \
+                "$arm" "$task" "$r" "${control:-agent}"
         done
         return
     fi
@@ -396,11 +376,7 @@ main() {
     mkdir -p "$RESULTS_DIR"
     local r
     for ((r = 1; r <= reps; r++)); do
-        if ((swebench)); then
-            swebench_run_one "$arm" "$task" "$r" "$model" "$effort" "$magus_binary" "$control"
-        else
-            run_one "$arm" "$task" "$r" "$model" "$effort" "$magus_binary" "$control"
-        fi
+        run_one "$arm" "$task" "$r" "$model" "$effort" "$magus_binary" "$control"
     done
 }
 

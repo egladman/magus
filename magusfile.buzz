@@ -2777,8 +2777,8 @@ fun publish_report(agent: str, results: str, provider: str) > void !> any {
     magus\log.info("benchmark report published to " + target);
 }
 
-// Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at
-// the path swebench/lib.sh reads it from. Undeclared like ./magus.
+// Builds swegrade, the grader a SWE-bench trial's eval log is piped through, into
+// benchmarks/agent/bin. Undeclared like ./magus.
 export fun swegrade_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["benchmarks/agent/cmd/swegrade/*.go", "internal/json/*.go", "go.mod", "go.sum"]);
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
