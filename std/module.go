@@ -57,10 +57,6 @@ const (
 	// key-value pairs.
 	TypeStringMapMap
 	TypeAnyMap
-	// TypeAnySlice is a list of values, typically objects crossing as maps.
-	// It is the list counterpart of TypeAnyMap: an Impl takes []any and
-	// decodes each element, rather than taking a bare any and asserting.
-	TypeAnySlice
 	TypeFunc
 	TypeAny
 	// TypeIndex is an int that names a position in a list. Buzz lists are
@@ -95,8 +91,6 @@ func (t TypeTag) GoType() string {
 		return "map[string]string"
 	case TypeAnyMap:
 		return "map[string]any"
-	case TypeAnySlice:
-		return "[]any"
 	case TypeFunc:
 		return "Callback"
 	case TypeAny:

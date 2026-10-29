@@ -163,7 +163,7 @@ func CodeURL(c DiagnosticCode) string { return DiagnosticDocs{}.URL(c) }
 // catalog first, so a program that never ran magus's startup still refuses MGS.
 func RegisterDiagnosticPrefix(prefix string) error {
 	if err := diagnostics.RegisterCatalog(DiagnosticOwnerMagus, allDiagnosticCodes); err != nil {
-		return fmt.Errorf("diagnostics: the MGS catalog: %w", err)
+		return fmt.Errorf("register the MGS catalog: %w", err)
 	}
 	if err := diagnostics.Register(prefix, DiagnosticOwnerWorkspace); err != nil {
 		return fmt.Errorf("diagnostics.prefix: %w", err)
@@ -178,14 +178,14 @@ func RegisterDiagnosticPrefix(prefix string) error {
 func WorkspaceDiagnosticCode(prefix, text string) (DiagnosticCode, error) {
 	c := DiagnosticCode(text)
 	if prefix == "" {
-		return "", fmt.Errorf("%q: this workspace declares no diagnostic prefix; set diagnostics.prefix in magus.yaml", text)
+		return "", fmt.Errorf("%q: this workspace declares no diagnostic prefix, which diagnostics.prefix in magus.yaml sets", text)
 	}
 	if err := RegisterDiagnosticPrefix(prefix); err != nil {
 		return "", err
 	}
 	got := diagnostics.Prefix(c)
 	if CodeOrigin(c) == DiagnosticOriginBuiltin {
-		return "", fmt.Errorf("%q is in the %s catalog magus ships, which only magus mints; use this workspace's prefix %s", text, got, prefix)
+		return "", fmt.Errorf("%q is in the %s catalog magus ships, which only magus mints, so use this workspace's prefix %s", text, got, prefix)
 	}
 	if got != prefix {
 		return "", fmt.Errorf("%q is not under this workspace's prefix %s (diagnostics.prefix in magus.yaml)", text, prefix)
@@ -1259,7 +1259,7 @@ func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
 // ErrorDiagnosticEvent is the event err's outermost coded error fires from unit, its docs page
 // included, and false when err carries no code.
 func ErrorDiagnosticEvent(err error, unit string) (DiagnosticEvent, bool) {
-	return diagnostics.EventOf(err, unit)
+	return diagnostics.ErrorEvent(err, unit)
 }
 
 // EmitDiagnostic records ev to the sink in ctx, or is a no-op when none is

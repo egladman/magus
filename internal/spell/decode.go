@@ -681,7 +681,7 @@ func validateClaim(spell spells.Descriptor, c spells.DiscoveredProject) error {
 			return fmt.Errorf("%s: spans %q: %w", c.Path, dir, err)
 		}
 		if c.Path != "." && !strings.HasPrefix(dir, c.Path+"/") {
-			return fmt.Errorf("%s: spans %q: a span is a directory inside the claim, which the tool's own boundary reaches; an ancestor or sibling is a dependsOn", c.Path, dir)
+			return fmt.Errorf("%s: spans %q: a span is a directory inside the claim, which the tool's own boundary reaches, and an ancestor or sibling is a dependsOn", c.Path, dir)
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.Targets)) {

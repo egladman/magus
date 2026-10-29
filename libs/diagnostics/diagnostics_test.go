@@ -85,16 +85,16 @@ func TestRegisterRefusesAMalformedPrefix(t *testing.T) {
 
 func TestEventOfCarriesTheCapturedURL(t *testing.T) {
 	err := fmt.Errorf("wrapped: %w", New(testURL).Errorf("TST0001", "boom"))
-	ev, ok := EventOf(err, "a:build")
+	ev, ok := ErrorEvent(err, "a:build")
 	want := Event{Code: "TST0001", Message: "boom", Unit: "a:build", URL: "https://example/docs/TST0001.md"}
 	if !ok || ev != want {
-		t.Errorf("EventOf = %+v, %v, want %+v", ev, ok, want)
+		t.Errorf("ErrorEvent = %+v, %v, want %+v", ev, ok, want)
 	}
 }
 
 func TestEventOfAnUncodedErrorIsNone(t *testing.T) {
-	if _, ok := EventOf(errors.New("plain"), "a:build"); ok {
-		t.Error("EventOf found a code in a plain error")
+	if _, ok := ErrorEvent(errors.New("plain"), "a:build"); ok {
+		t.Error("ErrorEvent found a code in a plain error")
 	}
 }
 

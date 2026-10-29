@@ -88,9 +88,12 @@ func (s *containerSuite) TestCreateRefusesAMissingLimit() {
 
 func (s *containerSuite) TestCreatePinsTheDigestAndSetsTheLimits() {
 	c := s.container()
-	s.Equal(c.Image.Pinned(), s.engine.created.Image)
-	s.Equal(int64(2e9), s.engine.created.HostConfig.NanoCPUs)
-	s.Equal(int64(4<<30), s.engine.created.HostConfig.Memory)
+	s.Equal(createRequest{
+		Image:      c.Image.Pinned(),
+		Cmd:        []string{"sleep", "infinity"},
+		WorkingDir: testbedDir,
+		HostConfig: hostConfig{NanoCPUs: 2e9, Memory: 4 << 30},
+	}, s.engine.created)
 	s.Equal("linux/arm64", s.engine.createdPlatform)
 	s.True(s.engine.started)
 }
@@ -224,23 +227,23 @@ func (s *containerSuite) TestSeedRefusesACheckoutWithoutARootModule() {
 }
 
 func (s *containerSuite) TestResolveImagePicksTheEngineBuildFromAnIndex() {
-	reg, ref := s.registry(indexOf(amd64, arm64), nil)
+	reg, ref := s.registry(imageIndex(amd64, arm64), nil)
 	img, err := resolveImage(context.Background(), reg, ref, arm64, false)
 	s.Require().NoError(err)
 	s.Equal(arm64.String(), img.Platform.String())
 	s.False(img.Emulated)
-	s.Equal(digest.FromBytes(indexOf(amd64, arm64)), img.Digest)
-	s.Equal(img.Ref.Registry+"/swebench/x@"+img.Digest.String(), img.Pinned())
+	s.Equal(digest.FromBytes(imageIndex(amd64, arm64)), img.Digest)
+	s.Equal(fmt.Sprintf("%s/swebench/x@%s", img.Ref.Registry, img.Digest), img.Pinned())
 }
 
 func (s *containerSuite) TestResolveImageRefusesAnAmd64OnlyImageOnArm64() {
-	reg, ref := s.registry(nil, configOf(amd64))
+	reg, ref := s.registry(nil, imageConfig(amd64))
 	_, err := resolveImage(context.Background(), reg, ref, arm64, false)
-	s.ErrorContains(err, "is built for linux/amd64 only and the engine runs linux/arm64; it would run emulated")
+	s.ErrorContains(err, "is built for linux/amd64 only and the engine runs linux/arm64, where it would run emulated")
 }
 
 func (s *containerSuite) TestResolveImageRunsAnAmd64OnlyImageEmulatedWhenAllowed() {
-	reg, ref := s.registry(nil, configOf(amd64))
+	reg, ref := s.registry(nil, imageConfig(amd64))
 	img, err := resolveImage(context.Background(), reg, ref, arm64, true)
 	s.Require().NoError(err)
 	s.Equal(amd64, img.Platform)
@@ -282,7 +285,7 @@ func (s *containerSuite) registry(index, config []byte) (*oci.Client, string) {
 	return &oci.Client{HTTP: srv.Client()}, strings.TrimPrefix(srv.URL, "https://") + "/swebench/x"
 }
 
-func indexOf(ps ...image.Platform) []byte {
+func imageIndex(ps ...image.Platform) []byte {
 	idx := ocispec.Index{MediaType: ocispec.MediaTypeImageIndex}
 	for i, p := range ps {
 		idx.Manifests = append(idx.Manifests, ocispec.Descriptor{
@@ -301,7 +304,7 @@ func indexOf(ps ...image.Platform) []byte {
 	return raw
 }
 
-func configOf(p image.Platform) []byte {
+func imageConfig(p image.Platform) []byte {
 	raw, err := json.Marshal(ocispec.Image{Platform: ocispec.Platform{OS: p.OS, Architecture: p.Architecture}})
 	if err != nil {
 		panic(err)

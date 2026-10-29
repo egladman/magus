@@ -149,7 +149,7 @@ func (w *walker) assign(a *syntax.Assign, fn *syntax.FuncDecl, variant string) {
 	}
 	w.info(sym, symbols.SymbolInfo{
 		DisplayName: name, Kind: int32(kind),
-		Signature: strings.TrimSpace(variant + " " + name), Documentation: docComment(def.stmt),
+		Signature: strings.TrimSpace(strings.Join([]string{variant, name}, " ")), Documentation: docComment(def.stmt),
 	})
 }
 

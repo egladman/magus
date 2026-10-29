@@ -1478,7 +1478,7 @@ func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
 
 	_, err := st.read()
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder)
-	s.ErrorContains(err, "job store "+path+" is at migration 3, newer than this magus knows (1): update magus")
+	s.ErrorContains(err, fmt.Sprintf("job store %s is at migration 3, newer than this magus knows (1): update magus", path))
 	_, err = st.Update(s.T().Context(), "b", func(cur *types.Job) { *cur = lease("b") })
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder, "a write refuses it too")
 	raw, err := os.ReadFile(path)

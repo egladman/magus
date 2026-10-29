@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/bmatcuk/doublestar/v4"
 
@@ -169,7 +172,7 @@ func ignoringSpells(asked []spells.Descriptor) map[string][]string {
 // prunedNotes is a finding per directory name some asked spells ignore and others do not,
 // naming where it was pruned.
 func prunedNotes(pruned, ignoredBy map[string][]string, asked []spells.Descriptor) []discoveryFinding {
-	var notes []discoveryFinding
+	notes := make([]discoveryFinding, 0, len(pruned))
 	for _, name := range slices.Sorted(maps.Keys(pruned)) {
 		by := ignoredBy[name]
 		var others []string
@@ -323,7 +326,7 @@ func (m *merger) attachMembers(answers []spellAnswer) {
 			if !ok {
 				owner = "."
 				m.formed["."] = &mergedProject{path: ".", names: map[string]string{}, targets: map[string][]discoveryStep{}}
-				orphans = append(orphans, a.Spell.Name+" at "+c.Path)
+				orphans = append(orphans, fmt.Sprintf("%s at %s", a.Spell.Name, c.Path))
 			}
 			if _, isMagusfile := m.magusfiles[owner]; isMagusfile {
 				m.magusfiles[owner] = append(m.magusfiles[owner], a.Spell.Name)
@@ -391,8 +394,8 @@ func (m *merger) noteMagusfileWins() {
 		m.notes = append(m.notes, discoveryFinding{
 			Path:   path.Join(dir, magusfileName),
 			What:   "discovered claims not rendered",
-			Why:    "spell " + strings.Join(claimed, ", ") + " claimed this directory, and its magusfile wins",
-			Settle: "bind them there: magus\\project({\"spells\": [" + strings.Join(claimed, ", ") + "]})",
+			Why:    fmt.Sprintf("spell %s claimed this directory, and its magusfile wins", strings.Join(claimed, ", ")),
+			Settle: fmt.Sprintf("bind them there: magus\\project({\"spells\": [%s]})", strings.Join(claimed, ", ")),
 		})
 	}
 }
@@ -404,7 +407,7 @@ func (m *merger) resolveNames() {
 			p.name = distinct[0]
 		}
 		if len(distinct) > 1 {
-			var said []string
+			said := make([]string, 0, len(p.names))
 			for _, s := range slices.Sorted(maps.Keys(p.names)) {
 				said = append(said, fmt.Sprintf("%s says %q", s, p.names[s]))
 			}
@@ -431,7 +434,7 @@ func (m *merger) resolveEdges() {
 			case !m.isProject(dep):
 				m.gaps = append(m.gaps, m.edgeGap(p.path, dep, "no project is there"))
 			case reaches(edges, dep, p.path):
-				m.gaps = append(m.gaps, m.edgeGap(p.path, dep, dep+" already reaches "+p.path+", so the edge would close a cycle"))
+				m.gaps = append(m.gaps, m.edgeGap(p.path, dep, fmt.Sprintf("%s already reaches %s, so the edge would close a cycle", dep, p.path)))
 			default:
 				edges[p.path] = append(edges[p.path], dep)
 			}
@@ -445,7 +448,7 @@ func (m *merger) resolveEdges() {
 				}
 				why := fmt.Sprintf("spell %s spans %s, which %s claims", s.spell, s.dir, nested)
 				if reaches(edges, nested, p.path) {
-					m.gaps = append(m.gaps, m.edgeGap(p.path, nested, why+", but "+nested+" already reaches "+p.path+", so the edge would close a cycle"))
+					m.gaps = append(m.gaps, m.edgeGap(p.path, nested, fmt.Sprintf("%s, but %s already reaches %s, so the edge would close a cycle", why, nested, p.path)))
 					continue
 				}
 				edges[p.path] = append(edges[p.path], nested)
@@ -559,8 +562,8 @@ func (m *merger) reportProject(dp discoveryProject, p *mergedProject, lines map[
 		if order := spellOrder(t.Steps); len(order) > 1 {
 			m.notes = append(m.notes, discoveryFinding{
 				Path:   dp.Path,
-				What:   t.Name + " runs " + strings.Join(order, " then "),
-				Why:    "several spells contribute " + t.Name + ", and they run in spell-name order",
+				What:   fmt.Sprintf("%s runs %s", t.Name, strings.Join(order, " then ")),
+				Why:    fmt.Sprintf("several spells contribute %s, and they run in spell-name order", t.Name),
 				Settle: fmt.Sprintf("reorder the calls at %s:%d", file, lines[t.Name]),
 			})
 		}
@@ -570,14 +573,14 @@ func (m *merger) reportProject(dp discoveryProject, p *mergedProject, lines map[
 		m.gaps = append(m.gaps, discoveryFinding{
 			Path:   dp.Path,
 			What:   "no lifecycle target",
-			Why:    "spell " + strings.Join(dp.Spells, ", ") + " formed the project and inferred none",
+			Why:    fmt.Sprintf("spell %s formed the project and inferred none", strings.Join(dp.Spells, ", ")),
 			Settle: "write the targets in " + file,
 		})
 	case !slices.ContainsFunc(dp.Targets, func(t discoveryTarget) bool { return t.Name == types.TargetCI }):
 		m.gaps = append(m.gaps, discoveryFinding{
 			Path:   dp.Path,
 			What:   "no ci",
-			Why:    "none of " + strings.Join(ciNeeds, ", ") + " was inferred",
+			Why:    fmt.Sprintf("none of %s was inferred", strings.Join(ciNeeds, ", ")),
 			Settle: "write ci in " + file,
 		})
 	}
@@ -585,7 +588,7 @@ func (m *merger) reportProject(dp discoveryProject, p *mergedProject, lines map[
 		m.gaps = append(m.gaps, discoveryFinding{
 			Path:   g.File,
 			What:   g.Why,
-			Why:    "spell " + p.gapBy[i] + " saw it and could not infer a target",
+			Why:    fmt.Sprintf("spell %s saw it and could not infer a target", p.gapBy[i]),
 			Settle: "a target in " + file,
 		})
 	}
@@ -691,9 +694,9 @@ func spellImports(names []string, handles map[string]string) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
 		if handles[name] == name {
-			out = append(out, fmt.Sprintf(`import "%s";`, spells.ModulePath(name)))
+			out = append(out, fmt.Sprintf(`import %q;`, spells.ModulePath(name)))
 		} else {
-			out = append(out, fmt.Sprintf(`import "%s" as %s;`, spells.ModulePath(name), handles[name]))
+			out = append(out, fmt.Sprintf(`import %q as %s;`, spells.ModulePath(name), handles[name]))
 		}
 	}
 	return out
@@ -756,13 +759,14 @@ func dependsOnPath(from, dep string) string {
 	return up + dep
 }
 
-var errNotBuzzString = errors.New("holds a quote, a backslash, a brace or a control character, which a Buzz string literal would interpret")
+var errNotBuzzString = errors.New("holds a quote, a backslash, a brace, an unprintable character or invalid UTF-8, which a Buzz string literal would interpret")
 
 // buzzString quotes s, refusing rather than escaping: braces interpolate in Buzz
-// strings, and no claim value has a reason to hold one.
+// strings, and no claim value has a reason to hold one. What passes the check is a
+// string strconv.Quote escapes nothing in.
 func buzzString(s string) (string, error) {
-	if strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 || r == 0x7f || strings.ContainsRune(`"\{}`, r) }) {
-		return "", fmt.Errorf("%q %w", s, errNotBuzzString)
+	if !utf8.ValidString(s) || strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsPrint(r) || strings.ContainsRune(`"\{}`, r) }) {
+		return "", fmt.Errorf("%q: %w", s, errNotBuzzString)
 	}
-	return `"` + s + `"`, nil
+	return strconv.Quote(s), nil
 }

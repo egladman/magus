@@ -567,9 +567,9 @@ func runUnitIndexer(ctx context.Context, spellName, language, dir, indexPath str
 	}
 	log := slog.With(attr.Component("symbols"))
 	for _, gap := range res.Gaps {
-		log.WarnContext(ctx, "the "+language+" symbol index leaves this out", slog.String("gap", gap))
+		log.WarnContext(ctx, fmt.Sprintf("the %s symbol index leaves this out", language), slog.String("gap", gap))
 	}
-	log.InfoContext(ctx, "updated the "+language+" symbol index",
+	log.InfoContext(ctx, fmt.Sprintf("updated the %s symbol index", language),
 		slog.String("dir", dir),
 		slog.Int("indexed", len(res.Indexed)),
 		slog.Int("dependents", len(res.Dependents)),

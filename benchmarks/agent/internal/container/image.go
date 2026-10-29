@@ -64,8 +64,8 @@ func resolveImage(ctx context.Context, reg *oci.Client, name string, engine imag
 		return pinnedImage{}, fmt.Errorf("container: %s has no build for %s or linux/amd64 (it has %s)", ref, engine, joinPlatforms(built))
 	}
 	if !allowEmulation {
-		return pinnedImage{}, fmt.Errorf("container: %s is built for %s only and the engine runs %s; it would run emulated, several times slower. "+
-			"Run it on a %s engine, or allow emulation explicitly so the result records emulated: true", ref, joinPlatforms(built), engine, amd64)
+		return pinnedImage{}, fmt.Errorf("container: %s is built for %s only and the engine runs %s, where it would run emulated and several times slower, "+
+			"so run it on a %s engine or allow emulation explicitly so the result records emulated: true", ref, joinPlatforms(built), engine, amd64)
 	}
 	img.Platform = built[i]
 	img.Emulated = true

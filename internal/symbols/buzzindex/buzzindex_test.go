@@ -91,16 +91,16 @@ func (s *buzzindexSuite) TestDefinitionCarriesItsBodyDocAndSignature() {
 			def = occ
 		}
 	}
-	s.Equal([]int32{1, 11, 16}, def.Range)
-	s.Equal([]int32{1, 0, 3, 1}, def.Enclosing)
+	s.Equal(symbols.Occurrence{Symbol: greetSymbol(), Range: []int32{1, 11, 16}, Roles: int32(scip.SymbolRole_Definition), Enclosing: []int32{1, 0, 3, 1}}, def)
 	var info symbols.SymbolInfo
 	for _, si := range doc.Symbols {
 		if si.Symbol == greetSymbol() {
 			info = si
 		}
 	}
-	s.Equal([]string{"greet says hello."}, info.Documentation)
-	s.Equal("fun greet(name: str) > str", info.Signature)
+	want := info // kind and relationships are asserted by the cases around this one
+	want.Documentation, want.Signature = []string{"greet says hello."}, "fun greet(name: str) > str"
+	s.Equal(want, info)
 }
 
 func (s *buzzindexSuite) TestReferenceResolvesIntoTheImportedFile() {

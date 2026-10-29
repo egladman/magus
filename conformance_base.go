@@ -63,8 +63,8 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Conformance, he
 		return types.ConformanceOutput{}, err
 	}
 	if !ok {
-		return types.ConformanceOutput{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration; "+
-			"magus\\conformanceBase measures it, and in this repository `magus run conformance-base .` runs that", commit)
+		return types.ConformanceOutput{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration, "+
+			"which magus\\conformanceBase measures and `magus run conformance-base .` runs here", commit)
 	}
 	judged := touched[:0:0]
 	for _, p := range touched {
@@ -136,12 +136,12 @@ func (m *Magus) conformanceBaseCommit(ctx context.Context, base string) (types.V
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
 		return nil, "", types.DiagnosticErrorf(types.VCSCapabilityMissing,
-			"conformance: version control is disabled, so base %q names no revision", base)
+			"version control is disabled, so base %q names no revision", base)
 	}
 	merger, ok := res.VCS.(types.TreeMerger)
 	if !ok {
 		return nil, "", types.DiagnosticErrorf(types.VCSCapabilityMissing,
-			"conformance: this version control finds no merge base, so base %q names no fork point", base)
+			"this version control finds no merge base, so base %q names no fork point", base)
 	}
 	commit, ok, err := merger.MergeBase(ctx, m.ws.Root, base, "HEAD")
 	if err != nil {
@@ -164,7 +164,7 @@ func readConformanceEntry(entry string) (types.ConformanceOutput, bool, error) {
 	}
 	var out types.ConformanceOutput
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return types.ConformanceOutput{}, false, fmt.Errorf("conformance: %s does not parse; delete it and measure the base again: %w", entry, err)
+		return types.ConformanceOutput{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
 	}
 	return out, true, nil
 }
@@ -179,7 +179,7 @@ func (m *Magus) conformanceEntry(ctx context.Context, commit string, plan baseIn
 	h := sha256.New()
 	build := types.MagusBuildFromContext(ctx)
 	fmt.Fprintf(h, "%s\x00%s\x00%s\x00", baseMeasureVersion, build.Version, build.Commit)
-	h.Write(policy)
+	fmt.Fprintf(h, "%s", policy)
 	for _, ix := range plan.indexes {
 		fmt.Fprintf(h, "\x00%s\x00%s\x00%s", ix.project, ix.language, ix.ix.Version())
 	}

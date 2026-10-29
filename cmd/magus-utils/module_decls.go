@@ -338,8 +338,6 @@ func buzzArgType(t std.TypeTag) (string, error) {
 		return "{str: str}", nil
 	case std.TypeAnyMap:
 		return "{str: any}", nil
-	case std.TypeAnySlice:
-		return "[any]", nil
 	case std.TypeFunc:
 		// A Buzz function type fixes its arity and parameter types, and a TypeFunc
 		// Arg carries neither; the host checks the callable when it is called.
@@ -438,8 +436,6 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "{<str: str>}", nil
 	case std.TypeAnyMap:
 		return "{<str: any>}", nil
-	case std.TypeAnySlice:
-		return "[<any>]", nil
 	case std.TypeAny:
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
 		// annotates cleanly.

@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -29,21 +29,6 @@ const engineAPIVersion = "v1.41"
 type engineClient struct {
 	http *http.Client
 	base string
-}
-
-// dial returns an engineClient for the socket at path. It connects lazily; Platform is the
-// first call that proves the socket answers.
-func dial(path string) (*engineClient, error) {
-	if path == "" {
-		return nil, errors.New("container: name the engine socket, for example /var/run/docker.sock")
-	}
-	dialer := &net.Dialer{}
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return dialer.DialContext(ctx, "unix", path)
-		},
-	}
-	return &engineClient{http: &http.Client{Transport: transport}, base: "http://engine"}, nil
 }
 
 // Platform is the engine's own os/architecture in Go's spelling, which is what an
@@ -125,11 +110,11 @@ func (e *engineClient) create(ctx context.Context, name string, platform image.P
 }
 
 func (e *engineClient) start(ctx context.Context, id string) error {
-	return e.call(ctx, http.MethodPost, "/containers/"+id+"/start", nil, nil, nil)
+	return e.call(ctx, http.MethodPost, path.Join("/containers", id, "start"), nil, nil, nil)
 }
 
 func (e *engineClient) kill(ctx context.Context, id string) error {
-	return e.call(ctx, http.MethodPost, "/containers/"+id+"/kill", nil, nil, nil)
+	return e.call(ctx, http.MethodPost, path.Join("/containers", id, "kill"), nil, nil, nil)
 }
 
 func (e *engineClient) remove(ctx context.Context, id string) error {
@@ -139,7 +124,7 @@ func (e *engineClient) remove(ctx context.Context, id string) error {
 
 // putArchive extracts a tar stream into dir inside the container.
 func (e *engineClient) putArchive(ctx context.Context, id, dir string, tarball []byte) error {
-	resp, err := e.do(ctx, http.MethodPut, "/containers/"+id+"/archive", url.Values{"path": {dir}}, bytes.NewReader(tarball))
+	resp, err := e.do(ctx, http.MethodPut, path.Join("/containers", id, "archive"), url.Values{"path": {dir}}, bytes.NewReader(tarball))
 	if err != nil {
 		return err
 	}
@@ -160,27 +145,27 @@ func (e *engineClient) exec(ctx context.Context, id, dir string, argv []string, 
 		ID string `json:"Id"`
 	}
 	req := execRequest{Cmd: argv, WorkingDir: dir, AttachStdout: true, AttachStderr: true}
-	if err := e.call(ctx, http.MethodPost, "/containers/"+id+"/exec", nil, req, &created); err != nil {
+	if err := e.call(ctx, http.MethodPost, path.Join("/containers", id, "exec"), nil, req, &created); err != nil {
 		return 0, err
 	}
 	body, err := json.Marshal(map[string]bool{"Detach": false, "Tty": false})
 	if err != nil {
 		return 0, err
 	}
-	resp, err := e.do(ctx, http.MethodPost, "/exec/"+created.ID+"/start", nil, bytes.NewReader(body))
+	resp, err := e.do(ctx, http.MethodPost, path.Join("/exec", created.ID, "start"), nil, bytes.NewReader(body))
 	if err != nil {
 		return 0, err
 	}
 	err = demux(resp.Body, stdout, stderr)
 	resp.Body.Close()
 	if err != nil {
-		return 0, fmt.Errorf("container: exec %s: %w", argv[0], err)
+		return 0, fmt.Errorf("exec %s: %w", argv[0], err)
 	}
 	var inspect struct {
 		Running  bool
 		ExitCode int
 	}
-	if err := e.call(ctx, http.MethodGet, "/exec/"+created.ID+"/json", nil, nil, &inspect); err != nil {
+	if err := e.call(ctx, http.MethodGet, path.Join("/exec", created.ID, "json"), nil, nil, &inspect); err != nil {
 		return 0, err
 	}
 	if inspect.Running {
@@ -217,7 +202,7 @@ func demux(r io.Reader, stdout, stderr io.Writer) error {
 	}
 }
 
-func (e *engineClient) call(ctx context.Context, method, path string, q url.Values, in, out any) error {
+func (e *engineClient) call(ctx context.Context, method, p string, q url.Values, in, out any) error {
 	var body io.Reader
 	if in != nil {
 		raw, err := json.Marshal(in)
@@ -226,7 +211,7 @@ func (e *engineClient) call(ctx context.Context, method, path string, q url.Valu
 		}
 		body = bytes.NewReader(raw)
 	}
-	resp, err := e.do(ctx, method, path, q, body)
+	resp, err := e.do(ctx, method, p, q, body)
 	if err != nil {
 		return err
 	}
@@ -235,15 +220,15 @@ func (e *engineClient) call(ctx context.Context, method, path string, q url.Valu
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("container: %s %s: decode: %w", method, path, err)
+		return fmt.Errorf("container: %s %s: decode: %w", method, p, err)
 	}
 	return nil
 }
 
 // do sends one request and turns a non-2xx status into an error carrying the engine's
 // own message.
-func (e *engineClient) do(ctx context.Context, method, path string, q url.Values, body io.Reader) (*http.Response, error) {
-	u := e.base + "/" + engineAPIVersion + path
+func (e *engineClient) do(ctx context.Context, method, p string, q url.Values, body io.Reader) (*http.Response, error) {
+	u := e.base + path.Join("/", engineAPIVersion, p)
 	if len(q) > 0 {
 		u += "?" + q.Encode()
 	}
@@ -259,7 +244,7 @@ func (e *engineClient) do(ctx context.Context, method, path string, q url.Values
 	}
 	resp, err := e.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("container: %s %s: %w", method, path, err)
+		return nil, fmt.Errorf("container: %s %s: %w", method, p, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		defer resp.Body.Close()
@@ -268,12 +253,12 @@ func (e *engineClient) do(ctx context.Context, method, path string, q url.Values
 		}
 		raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		if readErr != nil {
-			return nil, fmt.Errorf("container: %s %s: %s, and its body did not read: %w", method, path, resp.Status, readErr)
+			return nil, fmt.Errorf("container: %s %s: %s, and its body did not read: %w", method, p, resp.Status, readErr)
 		}
 		if json.Unmarshal(raw, &msg) != nil || msg.Message == "" {
 			msg.Message = strings.TrimSpace(string(raw))
 		}
-		return nil, fmt.Errorf("container: %s %s: %s: %s", method, path, resp.Status, msg.Message)
+		return nil, fmt.Errorf("container: %s %s: %s: %s", method, p, resp.Status, msg.Message)
 	}
 	return resp, nil
 }

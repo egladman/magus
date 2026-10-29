@@ -32,11 +32,6 @@ type instance struct {
 	limits limits
 }
 
-// pullPinned fetches img at its digest, for its platform.
-func pullPinned(ctx context.Context, e *engineClient, img pinnedImage) error {
-	return e.Pull(ctx, img.Pinned(), img.Platform)
-}
-
 // createInstance creates and starts a container named name from img, already pulled, under
 // lim. It idles until Remove, so every step runs in it through Exec.
 func createInstance(ctx context.Context, e *engineClient, name string, img pinnedImage, lim limits) (*instance, error) {

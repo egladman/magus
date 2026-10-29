@@ -24,8 +24,8 @@ var elfMachine = map[string]elf.Machine{"amd64": elf.EM_X86_64, "arm64": elf.EM_
 func copyMagus(ctx context.Context, c *instance, bin string) error {
 	arch := c.Image.Platform.Architecture
 	if err := checkELF(bin, elfMachine[arch]); err != nil {
-		return fmt.Errorf("container: %w; a %s container needs the linux/%s build of magus: "+
-			"`magus run release-build . -- linux %s`, then pass the magus from its tarball", err, c.Image.Platform, arch, arch)
+		return fmt.Errorf("copy magus: a %s container needs the linux/%s build of magus "+
+			"(`magus run release-build . -- linux %s`, then pass the magus from its tarball): %w", c.Image.Platform, arch, arch, err)
 	}
 	data, err := os.ReadFile(bin)
 	if err != nil {

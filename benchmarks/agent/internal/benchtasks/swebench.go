@@ -118,7 +118,7 @@ func writeSWEBench(ctx context.Context, g getter, out string) error {
 		return err
 	}
 	if sum != multilingualPin {
-		return fmt.Errorf("the table digests to %s, not the pinned %s: upstream changed it; review the change, then move multilingualPin", sum, multilingualPin)
+		return fmt.Errorf("the table digests to %s, not the pinned %s, so upstream changed it: review the change, then move multilingualPin", sum, multilingualPin)
 	}
 	tasks := make([]bench.Task, 0, len(raw))
 	for _, r := range raw {
@@ -182,7 +182,7 @@ func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, erro
 		if err != nil {
 			return nil, "", err
 		}
-		pages.Write(body)
+		fmt.Fprintf(pages, "%s", body)
 		var page rowsPage
 		if err := json.Unmarshal(body, &page); err != nil {
 			return nil, "", fmt.Errorf("rows at offset %d: %w", offset, err)

@@ -224,8 +224,10 @@ func (s *benchSuite) TestComparisonPairsByTaskNotByRep() {
 		records = append(records, syntheticRecord("full", "task-a", c.rep, 1, c.tokens, true))
 	}
 	row := s.analyze(records).Comparisons["total_billed_tokens"]
-	s.Equal(int64(1), row.Tasks)
-	s.Equal([]TaskDelta{{Task: "task-a", Treated: 210, Baseline: 200, Delta: 10}}, row.Deltas)
+	want := row // only the pairing is under test here
+	want.Tasks = 1
+	want.Deltas = []TaskDelta{{Task: "task-a", Treated: 210, Baseline: 200, Delta: 10}}
+	s.Equal(want, row)
 }
 
 // The 2026-09-10 pilot's shape: a large consistent difference over too few

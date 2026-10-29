@@ -184,7 +184,7 @@ func comparisonsSection(a *Analysis) []string {
 		"",
 	}
 	if a.Refusal != "" {
-		return append(lines, "No comparison: "+a.Refusal+".", "")
+		return append(lines, fmt.Sprintf("No comparison: %s.", a.Refusal), "")
 	}
 	compared := comparedMetrics()
 	for _, m := range compared {

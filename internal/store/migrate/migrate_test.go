@@ -59,7 +59,7 @@ func (s *migrateSuite) TestUpOneVersion() {
 	s.Equal(result{Store: "thing store", Path: st.Path, From: 0, To: 1, Entries: 3}, res)
 	s.Equal("{\"migration\":1,\"plan\":\"p\"}\n{\"id\":\"a\",\"run\":1}\n{\"id\":\"b\"}\n{\"id\":\"a\",\"run\":2}\n", s.contents(st),
 		"every line is migrated, superseded ones included, and the header carries the version")
-	s.Equal("migrated thing store "+st.Path+" from 0 to 1 (3 entries)", res.String())
+	s.Equal(fmt.Sprintf("migrated thing store %s from 0 to 1 (3 entries)", st.Path), res.String())
 }
 
 func (s *migrateSuite) TestUpSeveralVersionsInOrder() {
@@ -107,7 +107,7 @@ func (s *migrateSuite) TestNewerIsRefusedNamingBothVersions() {
 	var newer *NewerError
 	s.Require().ErrorAs(err, &newer)
 	s.Equal(NewerError{Store: "thing store", Path: st.Path, Found: 4, Known: 1}, *newer)
-	s.Equal("thing store "+st.Path+" is at migration 4, newer than this magus knows (1): update magus", err.Error())
+	s.Equal(fmt.Sprintf("thing store %s is at migration 4, newer than this magus knows (1): update magus", st.Path), err.Error())
 	s.Equal(body, s.contents(st))
 }
 
@@ -122,7 +122,7 @@ func (s *migrateSuite) TestAFailingMigrationLeavesTheOldFileIntact() {
 	}})
 
 	_, err := st.Apply()
-	s.Require().EqualError(err, "thing store: "+st.Path+": migration 2 (number the run): run is not a number")
+	s.Require().EqualError(err, fmt.Sprintf("thing store: %s: migration 2 (number the run): run is not a number", st.Path))
 	s.Equal(body, s.contents(st), "the first migration's work never reached the file")
 	entries, err := os.ReadDir(filepath.Dir(st.Path))
 	s.Require().NoError(err)
@@ -133,14 +133,14 @@ func (s *migrateSuite) TestAMigrationReturningNoEntryFails() {
 	st := s.store("{\"id\":\"a\"}\n", Migration{Name: "drop", Up: func(Entry) (Entry, error) { return nil, nil }})
 
 	_, err := st.Apply()
-	s.Require().EqualError(err, "thing store: "+st.Path+": migration 1 (drop): returned no entry")
+	s.Require().EqualError(err, fmt.Sprintf("thing store: %s: migration 1 (drop): returned no entry", st.Path))
 }
 
 func (s *migrateSuite) TestAMalformedLineNamesItsLine() {
 	st := s.store("{\"id\":\"a\"}\nnot json\n", renameMember("attempt", "run"))
 
 	_, err := st.Apply()
-	s.Require().ErrorContains(err, "thing store: "+st.Path+":2: ")
+	s.Require().ErrorContains(err, fmt.Sprintf("thing store: %s:2: ", st.Path))
 }
 
 func (s *migrateSuite) TestAnUnfinishedLastLineIsDroppedAndSaid() {

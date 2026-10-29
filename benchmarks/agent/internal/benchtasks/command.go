@@ -17,7 +17,7 @@ func command(ctx context.Context, dir string, env []string, name string, args ..
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return string(out), fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, lastLines(stderr.String(), 20))
+		return string(out), fmt.Errorf("%s %s (%s): %w", name, strings.Join(args, " "), lastLines(stderr.String(), 20), err)
 	}
 	return string(out), nil
 }

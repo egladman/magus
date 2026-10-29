@@ -84,8 +84,9 @@ func (s *discoverySuite) TestMixedRootIsOneProjectWithEverySpellBound() {
 	)
 	s.Require().Len(d.Projects, 1)
 	p := d.Projects[0]
-	s.Equal(".", p.Path)
-	s.Equal([]string{"bash", "go", "typescript"}, p.Spells)
+	want := p // the rendered source is asserted on its own below
+	want.Path, want.Spells = ".", []string{"bash", "go", "typescript"}
+	s.Equal(want, p)
 	s.Equal("magusfile.buzz", p.Magusfile())
 	s.Equal(`import "magus";
 

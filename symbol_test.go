@@ -462,7 +462,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	// The fixture indexer is an external SCIP command, which runs only where it is opted in.
-	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+spellName+"]\n")
+	w.Write("magus.yaml", fmt.Sprintf("spells:\n  symbol_indexers: [%s]\n", spellName))
 	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
@@ -821,7 +821,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
-	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+goSpell+", "+tsSpell+"]\n")
+	w.Write("magus.yaml", fmt.Sprintf("spells:\n  symbol_indexers: [%s, %s]\n", goSpell, tsSpell))
 	root := w.Root()
 	for dir, file := range map[string]string{"svc": "main.go", "web": "index.ts"} {
 		w.Write(dir+"/magusfile.buzz", "")
@@ -1202,7 +1202,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
-	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+spellName+"]\n")
+	w.Write("magus.yaml", fmt.Sprintf("spells:\n  symbol_indexers: [%s]\n", spellName))
 	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	original := []byte("package main\n\nfunc Tokenize() {}\n")

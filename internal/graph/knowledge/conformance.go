@@ -587,7 +587,6 @@ func cloneItem(grp []types.ConformanceItem) types.ConformanceItem {
 	return types.ConformanceItem{ID: strings.Join(ids, ", "), Source: grp[0].Source, Measure: grp[0].Measure}
 }
 
-
 // packageReach counts, per package directory other than own, the distinct nodes at the far
 // end of id's edges of relation rel whose file keep accepts: the files referencing id when
 // in is set, else the symbols id points at. It is how a metric asks whether code crosses

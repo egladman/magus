@@ -27,13 +27,21 @@ func main() {
 	stop()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "benchtasks: %v\n", err)
+		if errors.As(err, new(usageError)) {
+			fmt.Fprintln(os.Stderr, usage)
+		}
 		os.Exit(1)
 	}
 }
 
+// usageError is a command line naming no suite benchtasks knows; main prints usage after it.
+type usageError string
+
+func (e usageError) Error() string { return string(e) }
+
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("name a suite\n" + usage)
+		return usageError("name a suite")
 	}
 	switch args[0] {
 	case "swebench":
@@ -61,6 +69,6 @@ func run(ctx context.Context, args []string) error {
 		}
 		return benchtasks.WriteHistory(ctx, o)
 	default:
-		return fmt.Errorf("unknown suite %q\n%s", args[0], usage)
+		return usageError(fmt.Sprintf("unknown suite %q", args[0]))
 	}
 }

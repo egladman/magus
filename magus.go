@@ -471,7 +471,7 @@ func checkSymbolIndexerOptIns(optIns []string, projects []*types.Project) error 
 	var errs []error
 	for _, name := range optIns {
 		if !external[name] {
-			errs = append(errs, fmt.Errorf("magus.yaml %s lists %q, which names no spell with an external SCIP indexer; the spells that declare one: %s",
+			errs = append(errs, fmt.Errorf("magus.yaml %s lists %q, which names no spell with an external SCIP indexer (the spells that declare one: %s)",
 				symbols.OptInSetting, name, strings.Join(slices.Sorted(maps.Keys(external)), ", ")))
 		}
 	}

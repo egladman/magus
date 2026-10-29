@@ -304,9 +304,9 @@ type Event struct {
 	URL     string `json:"url,omitempty"     yaml:"url,omitempty"`
 }
 
-// EventOf is the event err's outermost coded error fires from unit, carrying its docs page,
+// ErrorEvent is the event err's outermost coded error fires from unit, carrying its docs page,
 // and false when err carries no code.
-func EventOf(err error, unit string) (Event, bool) {
+func ErrorEvent(err error, unit string) (Event, bool) {
 	var e *Error
 	if !errors.As(err, &e) {
 		return Event{}, false

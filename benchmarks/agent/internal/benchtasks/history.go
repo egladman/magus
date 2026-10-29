@@ -110,7 +110,7 @@ func writeHistory(ctx context.Context, o historyOptions) error {
 		return err
 	}
 	if got != o.want {
-		return fmt.Errorf("wrote %d tasks to %s but wanted %+v and found %+v among %d commits after %s; move --after earlier",
+		return fmt.Errorf("wrote %d tasks to %s but wanted %+v and found %+v among %d commits after %s, so move --after earlier",
 			len(tasks), o.out, o.want, got, len(commits), o.after)
 	}
 	return nil
@@ -404,12 +404,7 @@ func (m *miner) packages(files []string) []string {
 		if !strings.HasSuffix(f, ".go") {
 			continue
 		}
-		dir := path.Dir(f)
-		if dir == "." {
-			out = append(out, m.module)
-		} else {
-			out = append(out, m.module+"/"+dir)
-		}
+		out = append(out, path.Join(m.module, path.Dir(f)))
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
@@ -476,7 +471,7 @@ func (m *miner) testFiles(ctx context.Context, rev, dir string) (map[string]stri
 		if !strings.HasSuffix(n, "_test.go") {
 			continue
 		}
-		src, err := command(ctx, m.dir, nil, "git", "show", rev+":"+n)
+		src, err := command(ctx, m.dir, nil, "git", "show", fmt.Sprintf("%s:%s", rev, n))
 		if err != nil {
 			return nil, err
 		}
@@ -572,14 +567,15 @@ func (m *miner) interrogation(ctx context.Context, c commit, ch change, transiti
 		if len(items) < minAnswer || len(items) > maxAnswer {
 			continue
 		}
-		field, ask, idPrefix := "Imports", "import %s directly", "importers-of-"
+		field, ask, idPrefix := "Imports", fmt.Sprintf("import %s directly", target), "importers-of-"
 		if transitive {
-			field, ask, idPrefix = "Deps", "depend on %s, directly or through other packages, so that their build changes when it changes", "dependents-of-"
+			field, idPrefix = "Deps", "dependents-of-"
+			ask = fmt.Sprintf("depend on %s, directly or through other packages, so that their build changes when it changes", target)
 		}
 		t.ID = idPrefix + slug(strings.TrimPrefix(target, m.module+"/"))
-		t.Prompt = fmt.Sprintf("Which packages of module %s "+ask+"? Count only imports from non-test Go files, and leave out %[2]s itself. "+
-			"Write each import path on its own line to answer.txt at the repository root, and change nothing else.", m.module, target)
-		t.Answer = &bench.AnswerKey{Items: items, Oracle: "go list -e -json ./... (" + field + ")"}
+		t.Prompt = fmt.Sprintf("Which packages of module %s %s? Count only imports from non-test Go files, and leave out %s itself. "+
+			"Write each import path on its own line to answer.txt at the repository root, and change nothing else.", m.module, ask, target)
+		t.Answer = &bench.AnswerKey{Items: items, Oracle: fmt.Sprintf("go list -e -json ./... (%s)", field)}
 		return t, nil
 	}
 	return t, fmt.Errorf("no changed package has between %d and %d dependents", minAnswer, maxAnswer)

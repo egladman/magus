@@ -126,9 +126,9 @@ func (s *shindexSuite) TestFunctionDefinitionCarriesItsBodyAndDoc() {
 	s.Equal([]symbols.Occurrence{{Symbol: sym, Range: []int32{1, 0, 5}, Roles: int32(scip.SymbolRole_Definition), Enclosing: []int32{1, 0, 4, 1}}},
 		s.occurrences("lib.sh", sym))
 	info := s.info("lib.sh", sym)
-	s.Equal([]string{"greet prints a greeting."}, info.Documentation)
-	s.Equal("greet()", info.Signature)
-	s.Equal(int32(scip.SymbolInformation_Function), info.Kind)
+	want := info // only the doc, signature and kind are under test here
+	want.Documentation, want.Signature, want.Kind = []string{"greet prints a greeting."}, "greet()", int32(scip.SymbolInformation_Function)
+	s.Equal(want, info)
 }
 
 func (s *shindexSuite) TestCallResolvesIntoTheSourcedScript() {
@@ -148,8 +148,9 @@ func (s *shindexSuite) TestArithmeticNameResolvesToTheSourcedGlobal() {
 
 func (s *shindexSuite) TestReadonlyGlobalIsAConstant() {
 	info := s.info("lib.sh", varSymbol("lib.sh", "LIMIT"))
-	s.Equal(int32(scip.SymbolInformation_Constant), info.Kind)
-	s.Equal("readonly LIMIT", info.Signature)
+	want := info // only the kind and signature are under test here
+	want.Kind, want.Signature = int32(scip.SymbolInformation_Constant), "readonly LIMIT"
+	s.Equal(want, info)
 }
 
 func (s *shindexSuite) TestGlobalIsDefinedAtItsFirstAssignment() {

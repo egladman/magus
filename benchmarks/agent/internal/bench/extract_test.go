@@ -52,8 +52,9 @@ func (s *benchSuite) TestExtractCountsToolsAndReads() {
 func (s *benchSuite) TestExtractMeasuresTheReReadRate() {
 	_, _, _, rampantA1 := s.fixture()
 	s.True(almost(rampantA1.ReReadRate, 4.0/7.0, 7), "re-read rate = %v", rampantA1.ReReadRate)
-	s.Equal(int64(7), rampantA1.FileReads)
-	s.Equal(int64(3), rampantA1.DistinctFilesRead)
+	want := *rampantA1 // only the read counts are under test here
+	want.FileReads, want.DistinctFilesRead = 7, 3
+	s.Equal(want, *rampantA1)
 }
 
 func (s *benchSuite) TestExtractTellsZeroGuardEventsFromAbsentOnes() {

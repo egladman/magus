@@ -363,8 +363,10 @@ func (s *SymbolIndexersSuite) TestLoadsBesideSpellImports() {
 `), 0o644))
 	cfg, err := LoadFile(path, true)
 	s.Require().NoError(err)
-	s.Equal([]string{"typescript"}, cfg.Spells.SymbolIndexers)
-	s.Equal(map[string]SpellImport{"magus/spell/go": {Path: "spells/go"}}, cfg.Spells.Imports)
+	want := cfg.Spells // only the two keys the file sets are under test here
+	want.SymbolIndexers = []string{"typescript"}
+	want.Imports = map[string]SpellImport{"magus/spell/go": {Path: "spells/go"}}
+	s.Equal(want, cfg.Spells)
 }
 
 func (s *SymbolIndexersSuite) TestValidateRefusesADuplicate() {

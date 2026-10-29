@@ -55,7 +55,7 @@ func testFuncs(files map[string][]byte) (map[string]string, error) {
 	for recv, ms := range methods {
 		for _, runner := range runners[recv] {
 			for m, text := range ms {
-				out[runner+"/"+m] = text
+				out[fmt.Sprintf("%s/%s", runner, m)] = text
 			}
 		}
 	}
@@ -125,13 +125,13 @@ func changedTests(parent, fix map[string]string) []string {
 
 // runPattern is the -run pattern that selects every named test's top-level test.
 func runPattern(names []string) string {
-	var tops []string
+	tops := make([]string, 0, len(names))
 	for _, n := range names {
 		top, _, _ := strings.Cut(n, "/")
 		tops = append(tops, regexp.QuoteMeta(top))
 	}
 	slices.Sort(tops)
-	return "^(" + strings.Join(slices.Compact(tops), "|") + ")$"
+	return fmt.Sprintf("^(%s)$", strings.Join(slices.Compact(tops), "|"))
 }
 
 type testEvent struct {

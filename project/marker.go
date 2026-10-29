@@ -81,4 +81,3 @@ func CheckoutRoot(dir string) (string, bool) {
 		cur = parent
 	}
 }
-

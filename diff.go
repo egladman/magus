@@ -335,43 +335,6 @@ func (m *Magus) ConformanceOptions() (types.ConformanceOptions, error) {
 	return o, o.Validate()
 }
 
-// textBeforePatch rebuilds the text path had before patch from after, its text now: each hunk's
-// new lines give way to its old ones. A path the patch does not touch comes back as it is, and
-// existed is false when the patch added it. Line endings are kept only as far as the hunks
-// record them, so the answer serves a reader that parses the text, never one comparing bytes.
-func textBeforePatch(after, patch, path string) (before string, existed bool) {
-	files := changeset.Parse(patch)
-	i := slices.IndexFunc(files, func(f changeset.File) bool { return f.Path == path })
-	if i < 0 {
-		return after, true
-	}
-	if files[i].Status == changeset.StatusAdded {
-		return "", false
-	}
-	lines := strings.Split(after, "\n")
-	var out []string
-	next := 0
-	for _, h := range files[i].Hunks {
-		// A hunk adding nothing names the line before it.
-		at := h.NewStart - 1
-		if h.NewCount == 0 {
-			at = h.NewStart
-		}
-		at = min(max(at, next), len(lines))
-		out = append(out, lines[next:at]...)
-		for _, l := range h.Lines {
-			switch {
-			case l == "":
-				out = append(out, "")
-			case l[0] == ' ' || l[0] == '-':
-				out = append(out, l[1:])
-			}
-		}
-		next = min(at+h.NewCount, len(lines))
-	}
-	return strings.Join(append(out, lines[next:]...), "\n"), true
-}
-
 // pairRenames records, for each symbol a baseline classified as removed, the added symbol in the
 // same file that is it renamed: its ID and rendered signature with the old name swapped for the
 // new one. An ambiguous pairing is left out rather than guessed.
