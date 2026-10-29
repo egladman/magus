@@ -29,7 +29,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## scip-buzz
 
-Indexes the project's Buzz into the cache: magus injects MAGUS_SYMBOL_INDEX with the destination and runs the op from the project dir, which scip-buzz indexes. A project bound to another indexing spell too (go, typescript) keeps that index under `scip` and builds this one beside it as `scip-buzz`, so a missing scip-buzz never fails the other index. The workspace root is magus's own, so the paths in the index's symbols are the ones magus resolves files by.
+magus indexes the project's Buzz in process, one module file per unit, so the index runs no tool. A project bound to another indexing spell too (go, typescript) keeps that index under `scip` and builds this one beside it as `scip-buzz`, the op name every cached index and doc already uses.
 
-**Command:** `scip-buzz --output $MAGUS_SYMBOL_INDEX --workspace-root $MAGUS_WORKSPACE_ROOT`
+**Command:** none; this op composes the spell's other ops (see the intro).
 
