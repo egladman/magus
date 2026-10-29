@@ -61,8 +61,8 @@
 // deliberately avoids the MAGUS_* space, which is magus's own settings.
 //
 // The reply check is off until you turn it on: it runs the proofread-reply.buzz at the path
-// in __PROOFREAD_REPLY_BUZZ. With that unset, naming a file that does not exist, or with
-// no proofread binary, the check is silent.
+// in __PROOFREAD_REPLY_BUZZ. With that unset, or naming no file, it is off.
+// A proofread the script cannot run is shown as a toast.
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -333,18 +333,44 @@ export const MagusGuard: Plugin = async (ctx) => {
    * rejects a flag still runs and exits, so that case comes back as "" here, not
    * null - the caller distinguishes them.
    */
-  const runOnce = async (args: readonly string[], input: string): Promise<string | null> => {
+  const runOnce = async (args: readonly string[], input: string): Promise<string | null> =>
+    (await runCaptured(args, input))?.stdout ?? null;
+
+  /** runOnce with stderr kept, for a script whose stderr is a notice. */
+  const runCaptured = async (
+    args: readonly string[],
+    input: string,
+  ): Promise<{ stdout: string; stderr: string } | null> => {
     try {
       const proc = Bun.spawn([magus, ...args], {
         stdin: new TextEncoder().encode(input),
         stdout: "pipe",
-        stderr: "ignore",
+        stderr: "pipe",
       });
-      const stdout = await new Response(proc.stdout).text();
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
       await proc.exited;
-      return stdout;
+      return { stdout, stderr };
     } catch {
       return null;
+    }
+  };
+
+  /**
+   * Shows the person a line a script said on stderr. A hook reply here has
+   * no notice field, so it goes out as a toast and into OpenCode's log.
+   */
+  const notify = async (message: string): Promise<void> => {
+    const toast = await ctx.client.tui
+      .showToast({ body: { title: "magus", message, variant: "warning" } })
+      .catch((error: unknown) => ({ error }));
+    const logged = await ctx.client.app
+      .log({ body: { service: "magus", level: "warn", message } })
+      .catch((error: unknown) => ({ error }));
+    if (toast.error !== undefined && logged.error !== undefined) {
+      console.warn(`[magus] ${message}`);
     }
   };
 
@@ -562,10 +588,13 @@ export const MagusGuard: Plugin = async (ctx) => {
     if (script === null) return;
     const reply = await lastReply(id);
     if (reply === "") return;
-    const stdout = await runOnce(
+    const ran = await runCaptured(
       ["buzz", "-s", script, "--", "--agent-name", "opencode"],
       JSON.stringify({ last_assistant_message: reply, stop_hook_active: false }),
     );
+    // The script's stderr says it judged nothing; it holds that to once.
+    if (ran !== null && ran.stderr.trim() !== "") await notify(ran.stderr.trim());
+    const stdout = ran?.stdout ?? null;
     let prompt: unknown;
     try {
       prompt = JSON.parse(stdout ?? "").prompt;

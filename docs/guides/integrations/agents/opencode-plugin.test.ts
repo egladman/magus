@@ -42,7 +42,10 @@ type Canned = { schema_version: number; decision: string; reason?: string; conte
  * Returns the recorded calls. `reply` receiving null means "no such binary",
  * which is how the fail-open path is exercised.
  */
-function stubBun(reply: ((call: SpawnCall) => Canned | null) | null): SpawnCall[] {
+function stubBun(
+  reply: ((call: SpawnCall) => Canned | null) | null,
+  stderrOf: (call: SpawnCall) => string = () => "",
+): SpawnCall[] {
   const calls: SpawnCall[] = [];
   const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
     const stdin = opts.stdin ? new TextDecoder().decode(opts.stdin) : "";
@@ -56,6 +59,12 @@ function stubBun(reply: ((call: SpawnCall) => Canned | null) | null): SpawnCall[
       stdout: new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      }),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(stderrOf(call)));
           controller.close();
         },
       }),
@@ -91,6 +100,8 @@ type Sessions = {
   parents?: Record<string, string>;
   messages?: Record<string, Row[]>;
   prompts?: Array<{ id: string; text: string }>;
+  toasts?: string[];
+  logs?: string[];
 };
 
 /** The slice of OpenCode's PluginInput the plugin reads. */
@@ -98,6 +109,18 @@ function pluginInput(sessions: Sessions = {}) {
   return {
     directory: "/work",
     client: {
+      tui: {
+        showToast: async ({ body }: { body: { message: string } }) => {
+          sessions.toasts?.push(body.message);
+          return {};
+        },
+      },
+      app: {
+        log: async ({ body }: { body: { message: string } }) => {
+          sessions.logs?.push(body.message);
+          return {};
+        },
+      },
       session: {
         get: async ({ path }: { path: { id: string } }) => ({
           data: { id: path.id, parentID: sessions.parents?.[path.id] },
@@ -1040,6 +1063,31 @@ test("no findings, no reply, or a subagent means no follow-up", async () => {
     await h.event(idle("child"));
 
     assert.deepEqual(prompts, []);
+  });
+});
+
+test("a reply check that judged nothing reaches the person as a toast and OpenCode's log", async () => {
+  await withReplyScript(async () => {
+    const said = "proofread-reply judges no reply: no proofread is on PATH. Install proofread.";
+    stubBun(() => null, (call) => (isReplyCheck(call) ? `${said}\n` : ""));
+    const prompts: Array<{ id: string; text: string }> = [];
+    const toasts: string[] = [];
+    const logs: string[] = [];
+    const h = await hooks({ messages: { root: turn("Done.") }, prompts, toasts, logs });
+    await h.event(idle("root"));
+    assert.deepEqual(toasts, [said], "the person reads what the script said");
+    assert.deepEqual(logs, [said], "and OpenCode's own log keeps it");
+    assert.deepEqual(prompts, [], "a notice is not a follow-up the agent answers");
+  });
+});
+
+test("a reply check with nothing on stderr shows no toast", async () => {
+  await withReplyScript(async () => {
+    stubBun(() => findings);
+    const toasts: string[] = [];
+    const h = await hooks({ messages: { root: turn("Done.") }, prompts: [], toasts });
+    await h.event(idle("root"));
+    assert.deepEqual(toasts, []);
   });
 });
 
