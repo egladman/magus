@@ -645,9 +645,12 @@ func validateSandbox(sb spells.Sandbox) error {
 	return sandbox.CheckDeclaration(sb)
 }
 
-// validateDiscovered checks a decoded discover_projects answer; one bad claim fails it
-// whole. TODO: export it from the discovery merge, its first caller.
-func validateDiscovered(spell spells.Descriptor, claims []spells.DiscoveredProject) error {
+// ValidateDiscovered checks a decoded discover_projects answer; one bad claim fails it
+// whole. A bad claim is an unset or unknown role, a path that is not clean and
+// workspace-relative, a span outside the claim's directory, a target name outside [spells.DiscoveryTargets] (ci included), an
+// op key the spell does not declare, a second claim on one path, or a gap with no file
+// or reason.
+func ValidateDiscovered(spell spells.Descriptor, claims []spells.DiscoveredProject) error {
 	seen := map[string]bool{}
 	for _, c := range claims {
 		if err := validateClaim(spell, c); err != nil {
@@ -676,6 +679,9 @@ func validateClaim(spell spells.Descriptor, c spells.DiscoveredProject) error {
 	for _, dir := range c.Spans {
 		if err := validateDiscoveryPath(dir, false); err != nil {
 			return fmt.Errorf("%s: spans %q: %w", c.Path, dir, err)
+		}
+		if c.Path != "." && !strings.HasPrefix(dir, c.Path+"/") {
+			return fmt.Errorf("%s: spans %q: a span is a directory inside the claim, which the tool's own boundary reaches; an ancestor or sibling is a dependsOn", c.Path, dir)
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.Targets)) {

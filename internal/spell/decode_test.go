@@ -754,7 +754,7 @@ func (s *discoveredSuite) claim() spells.DiscoveredProject {
 }
 
 func (s *discoveredSuite) refuse(c spells.DiscoveredProject, want string) {
-	err := validateDiscovered(s.spell, []spells.DiscoveredProject{c})
+	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{c})
 	s.Require().Error(err)
 	s.Contains(err.Error(), `spell "go": discover_projects:`)
 	s.Contains(err.Error(), want)
@@ -779,18 +779,18 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
 }
 
 func (s *discoveredSuite) TestAcceptsARootProject() {
-	s.NoError(validateDiscovered(s.spell, []spells.DiscoveredProject{s.claim()}))
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim()}))
 }
 
 func (s *discoveredSuite) TestAcceptsAMemberWithNoTargets() {
 	member := spells.DiscoveredProject{Path: "scripts", Role: spells.DiscoveryRoleMember}
-	s.NoError(validateDiscovered(s.spell, []spells.DiscoveredProject{member}))
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{member}))
 }
 
 func (s *discoveredSuite) TestAcceptsAnOpInAnotherSpelling() {
 	c := s.claim()
 	c.Targets = map[string][]string{"build": {"go_build"}}
-	s.NoError(validateDiscovered(s.spell, []spells.DiscoveredProject{c}))
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{c}))
 }
 
 func (s *discoveredSuite) TestRefusesCI() {
@@ -871,6 +871,20 @@ func (s *discoveredSuite) TestRefusesTheRootAsASpan() {
 	s.refuse(c, `spans ".": names the workspace root`)
 }
 
+func (s *discoveredSuite) TestRefusesAnAncestorSpan() {
+	c := s.claim()
+	c.Path = "svc/api"
+	c.Spans = []string{"svc"}
+	s.refuse(c, `svc/api: spans "svc": a span is a directory inside the claim`)
+}
+
+func (s *discoveredSuite) TestAcceptsANestedSpan() {
+	c := s.claim()
+	c.Path = "svc"
+	c.Spans = []string{"svc/web"}
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{c}))
+}
+
 func (s *discoveredSuite) TestRefusesAGapWithNoReason() {
 	c := s.claim()
 	c.NotInferred = []spells.DiscoveryGap{{File: "Makefile", Why: " "}}
@@ -878,7 +892,7 @@ func (s *discoveredSuite) TestRefusesAGapWithNoReason() {
 }
 
 func (s *discoveredSuite) TestRefusesTwoClaimsOnOnePath() {
-	err := validateDiscovered(s.spell, []spells.DiscoveredProject{s.claim(), s.claim()})
+	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim(), s.claim()})
 	s.Require().Error(err)
 	s.Contains(err.Error(), `claims "." twice`)
 }
