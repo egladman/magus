@@ -436,6 +436,38 @@ func outsideAnyWorkspace(path string, at location) bool {
 	}
 }
 
+// checkpointReset reports a `git reset --keep|--merge <rev>` alone on
+// its line, where rev is a clean checkpoint a job row records.
+// A ./magus was placed at that revision, so it loads.
+// --hard stays the whole-tree rule's to refuse.
+func checkpointReset(ctx context.Context, command string, d Dialect, at location) bool {
+	call, ok := soleCall(command, d)
+	if !ok || len(call.Assigns) > 0 {
+		return false
+	}
+	words := literalWords(call.Args)
+	if len(words) != 4 || path.Base(words[0]) != "git" || words[1] != "reset" ||
+		(words[2] != "--keep" && words[2] != "--merge") || strings.HasPrefix(words[3], "-") {
+		return false
+	}
+	root := cmp.Or(at.dir, at.workspace)
+	if root == "" {
+		return false
+	}
+	resolved, err := gitNames(ctx, root, "rev-parse", "--verify", "--quiet", words[3]+"^{commit}")
+	if err != nil || len(resolved) != 1 {
+		return false
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(rows, func(r types.Job) bool {
+		rev, digest := types.ParseCheckpointToken(r.Checkpoint)
+		return digest == "" && len(rev) >= 7 && strings.HasPrefix(resolved[0], rev)
+	})
+}
+
 // onlyEditorAssigns reports an environment prefix that sets nothing but the editor git
 // opens for a continued pick's message.
 func onlyEditorAssigns(assigns []*syntax.Assign) bool {
@@ -466,7 +498,9 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	if in.mcpTool != "" {
 		call.what = fmt.Sprintf("this call to the magus %s tool", in.mcpTool)
 	}
-	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds, at)
+	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds, at) &&
+		!writesOnlyOutside(in.command, in.dialect, cmp.Or(at.dir, at.workspace), at.workspace, userHome()) &&
+		!checkpointReset(ctx, in.command, in.dialect, at)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
 		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
@@ -498,8 +532,8 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. " +
 		"So does getting the tree back to one a binary can be built from, each alone on its line: " +
 		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort`, `--continue` or `--skip`, " +
-		"`git cherry-pick <commit>...` to finish a series, and `git worktree add`. " +
-		"So do writes outside any workspace, such as memory or a scratchpad. " +
+		"`git cherry-pick <commit>...` to finish a series, `git worktree add`, and `git reset --keep <checkpoint>` to a revision a job row records as its checkpoint. " +
+		"So do writes outside any workspace, such as memory or a scratchpad, by a file write or a shell redirect. " +
 		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)

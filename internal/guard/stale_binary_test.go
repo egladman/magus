@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/testkit"
@@ -798,4 +799,88 @@ func (s *LineWorkspaceSuite) TestALineWithNoCallPlacesNone() {
 
 func (s *LineWorkspaceSuite) TestARelativeSessionPlacesNone() {
 	s.Empty(LineWorkspace("./magus run lint .", "relative"))
+}
+
+// LoadRecoverySuite judges the ways back while ./magus cannot load
+// a checkout that is a git repository with two commits.
+type LoadRecoverySuite struct {
+	suite.Suite
+	ctx        context.Context
+	deps       Dependencies
+	checkpoint string
+}
+
+func TestLoadRecoverySuite(t *testing.T) {
+	suite.Run(t, new(LoadRecoverySuite))
+}
+
+func (s *LoadRecoverySuite) SetupTest() {
+	ctx, cacheDir := spawnFixture(s.T())
+	repo := testkit.NewRepository(s.T(), nil)
+	s.checkpoint = repo.Head()
+	repo.Commit("breaks the load", map[string]string{"notes.txt": "x\n"})
+	ctx = WithLocation(ctx, cacheDir, repo.Root(), repo.Root())
+	ownCheckout(s.T(), ctx, true)
+	declareGuardRule(s.T(), repo.Root())
+	s.ctx = s.pin(ctx, s.checkpoint)
+	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+}
+
+// pin answers the job store with one row recording checkpoint.
+func (s *LoadRecoverySuite) pin(ctx context.Context, checkpoint string) context.Context {
+	row := types.Job{ID: "base", State: types.StateRunning, Registered: 1, Checkpoint: checkpoint}
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+}
+
+func (s *LoadRecoverySuite) judge(line string) types.GuardJudgment {
+	return Judge(s.ctx, s.deps, Request{Input: line, Host: "claude-code", Session: line})
+}
+
+func (s *LoadRecoverySuite) TestAnAbortPasses() {
+	for _, verb := range []string{"merge", "cherry-pick", "rebase"} {
+		v := s.judge(fmt.Sprintf("git %s --abort", verb))
+		s.NotEqual(decisionDeny, v.Decision, "%s: %s", verb, v.Reason)
+	}
+}
+
+func (s *LoadRecoverySuite) TestAKeepResetToACheckpointPasses() {
+	v := s.judge("git reset --keep " + s.checkpoint[:9])
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *LoadRecoverySuite) TestAMergeResetToACheckpointPasses() {
+	v := s.judge("git reset --merge " + s.checkpoint)
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *LoadRecoverySuite) TestAResetToARevisionNoRowRecordsIsDenied() {
+	s.Equal(decisionDeny, s.judge("git reset --keep HEAD").Decision)
+}
+
+func (s *LoadRecoverySuite) TestAResetToADirtyCheckpointIsDenied() {
+	s.ctx = s.pin(s.ctx, s.checkpoint+"+0123abcd")
+	s.Equal(decisionDeny, s.judge("git reset --keep "+s.checkpoint).Decision)
+}
+
+func (s *LoadRecoverySuite) TestASoftResetToACheckpointIsDenied() {
+	s.Equal(decisionDeny, s.judge("git reset --soft "+s.checkpoint).Decision)
+}
+
+func (s *LoadRecoverySuite) TestAChainedResetIsDenied() {
+	s.Equal(decisionDeny, s.judge(fmt.Sprintf("git reset --keep %s && touch x", s.checkpoint)).Decision)
+}
+
+func (s *LoadRecoverySuite) TestAnAppendOutsideEveryCheckoutPasses() {
+	memory := filepath.Join(s.T().TempDir(), "memory.md")
+	v := s.judge(fmt.Sprintf("cat >> %s <<'EOF'\nnote\nEOF", shellQuoted(memory)))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *LoadRecoverySuite) TestARedirectIntoTheCheckoutIsDenied() {
+	s.Equal(decisionDeny, s.judge("echo x > notes.txt").Decision)
+}
+
+func (s *LoadRecoverySuite) TestAWriteOutsideByAProgramThatWritesIsDenied() {
+	memory := filepath.Join(s.T().TempDir(), "memory.md")
+	s.Equal(decisionDeny, s.judge("touch "+shellQuoted(memory)).Decision)
 }
