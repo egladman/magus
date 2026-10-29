@@ -1529,7 +1529,7 @@ func TestMeasuredRunsWidth(t *testing.T) {
 	assert.Zero(t, all)
 }
 
-// TestMeasuredRunsWidthSaturation pins the ratchet a claim needs because a step runs Go
+// TestMeasuredRunsWidthSaturation pins the climb a claim needs because a step runs Go
 // only as wide as its slots: a run that kept 0.9 of its claim busy doubles the next
 // claim until a wider claim comes back unsaturated, and only unsaturated runs feed the
 // percentile.

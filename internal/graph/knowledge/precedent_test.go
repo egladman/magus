@@ -466,15 +466,12 @@ func TestPrecedentsFanoutNeverFollowsTheLiveDistribution(t *testing.T) {
 	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(12)}), types.PrecedentDepFanout, internal))
 }
 
-func TestPrecedentsFanoutEnforcesTheCommittedValueOverTheAnchor(t *testing.T) {
+func TestPrecedentsFanoutEnforcesTheLayersAnchorOverTheUnscopedOne(t *testing.T) {
 	t.Parallel()
 
 	f, all := fanoutCohort()
 	o := fanoutConformance(12)
-	o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{{
-		ConformanceKey: types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "internal"},
-		Value:          2,
-	}}}
+	o.Limits[types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "internal"}] = types.ConformanceLimit{Anchor: 2}
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 2},

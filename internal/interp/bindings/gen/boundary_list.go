@@ -48,18 +48,18 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Conformance", Zero: types.ConformanceOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceOutput(v.(types.ConformanceOutput), enums)
 	}},
-	{Name: "ConformanceCarry", Zero: types.ConformanceCarry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectConformanceCarry(v.(types.ConformanceCarry), enums)
+	{Name: "ConformanceCeiling", Zero: types.ConformanceCeiling{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceCeiling(v.(types.ConformanceCeiling), enums)
 	}},
 	{Name: "ConformanceItem", Zero: types.ConformanceItem{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceItem(v.(types.ConformanceItem)) }},
 	{Name: "ConformanceKey", Zero: types.ConformanceKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceKey(v.(types.ConformanceKey), enums)
 	}},
-	{Name: "ConformanceKnown", Zero: types.ConformanceKnown{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectConformanceKnown(v.(types.ConformanceKnown), enums)
-	}},
 	{Name: "ConformanceRow", Zero: types.ConformanceRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceRow(v.(types.ConformanceRow), enums)
+	}},
+	{Name: "ConformanceUnmeasured", Zero: types.ConformanceUnmeasured{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceUnmeasured(v.(types.ConformanceUnmeasured))
 	}},
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow), enums) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},

@@ -80,7 +80,7 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 		workspace.WithLimiter(lim),
 		metricsOpt,
 	)
-	// b carries root's lease (wsRegistry.brokerFor). A workspace whose broker setting is
+	// b carries root's lease (wsRegistry.leaseBroker). A workspace whose broker setting is
 	// off gets none, since Open refuses a client it would not use; a registry built
 	// without one (every test that does) leaves Open to its own.
 	if b != nil && cfg.Broker.Resolved() != types.BrokerOff {
@@ -98,7 +98,7 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 func (r *wsRegistry) load(e *wsEntry) {
 	e.once.Do(func() {
 		lease := r.leaseOf(e.root)
-		b, owned := r.brokerFor(lease)
+		b, owned := r.leaseBroker(lease)
 		m, err := r.open(e.root, r.lim, b, r.tel)
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -492,11 +492,11 @@ func (r *wsRegistry) rebind(root, lease string) {
 	r.drop(e)
 }
 
-// brokerFor is the client a workspace whose checkout binds lease runs under: the server's
+// leaseBroker is the client a workspace whose checkout binds lease runs under: the server's
 // own for none, else a new one naming lease, which owned says the caller closes.
 // TODO(runs-carry-their-lease): a gate the daemon runs wants the broker's gate flag, which
 // one client per workspace cannot carry; that needs an admitter per run.
-func (r *wsRegistry) brokerFor(lease string) (b *broker.Client, owned bool) {
+func (r *wsRegistry) leaseBroker(lease string) (b *broker.Client, owned bool) {
 	if r.broker == nil || lease == "" {
 		return r.broker, false
 	}

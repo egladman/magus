@@ -201,15 +201,12 @@ func mcpHTTPFailures(m MCP) []FieldFailure {
 	return []FieldFailure{{Field: "mcp.http", Tag: "mcp_enabled_required", Value: "true"}}
 }
 
-// conformanceFailures checks what no tag can: the ratchet path, the exclusions, and the
-// metric, population and scope keys of knowledge.conformance.checks. An unknown key is named,
-// since a check that is never read would pass without anyone noticing.
+// conformanceFailures checks what no tag can: the exclusions, and the metric, population and
+// scope keys of knowledge.conformance.checks. An unknown key is named, since a check that is
+// never read would pass without anyone noticing.
 func conformanceFailures(c ConformanceConfig) []FieldFailure {
 	const root = "knowledge.conformance"
 	var out []FieldFailure
-	if c.Ratchet != "" && !filepath.IsLocal(filepath.FromSlash(c.Ratchet)) {
-		out = append(out, FieldFailure{Field: root + ".ratchet", Tag: "conformance_ratchet_path", Value: c.Ratchet})
-	}
 	for i, pattern := range c.Exclude {
 		field := fmt.Sprintf("%s.exclude[%d]", root, i)
 		switch {
@@ -335,8 +332,6 @@ func humanReason(f FieldFailure) string {
 			key.WriteRune(r)
 		}
 		return fmt.Sprintf("must be greater than %s beside it (got %s)", key.String(), f.Value)
-	case "conformance_ratchet_path":
-		return fmt.Sprintf("must be a file inside the workspace, relative to magus.yaml (got %q)", f.Value)
 	case "conformance_exclude_glob":
 		return fmt.Sprintf("is not a valid glob, so it would exclude nothing (got %q)", f.Value)
 	case "conformance_metric":

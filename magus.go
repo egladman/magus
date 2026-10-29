@@ -1868,18 +1868,12 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
 		return string(b), err == nil
 	}
-	conformance, base, note, err := diffConformance(m.cfg.Knowledge.Conformance.Options(), cfg, in.patch, generated, in.read)
+	conformance, err := diffConformance(m.cfg.Knowledge.Conformance.Options(), cfg, generated)
 	if err != nil {
 		fail("knowledge.conformance could not be read", err)
 		return
 	}
-	if patchErr != nil && conformance.RatchetPath != "" {
-		base, note = nil, fmt.Sprintf("conformance: the patch could not be read, so what the change did to %s is unknown", conformance.RatchetPath)
-	}
-	if note != "" {
-		out.Notes = append(out.Notes, note)
-	}
-	in.conformance, in.ratchetBase = conformance, base
+	in.conformance = conformance
 	attachConformance(byPath, graph, in)
 }
 

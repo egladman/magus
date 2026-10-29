@@ -5,10 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path"
 	"slices"
 	"strings"
-
-	"github.com/egladman/magus/internal/json"
 )
 
 // ConformanceMetric names one measured code distribution. Every metric but file-split is a
@@ -88,16 +87,6 @@ const (
 	ConformancePopTest ConformancePopulation = "test"
 )
 
-// ConformanceSource is where an enforced value came from.
-type ConformanceSource string
-
-const (
-	// ConformanceFromRatchet is a value a person committed to the ratchet record.
-	ConformanceFromRatchet ConformanceSource = "ratchet"
-	// ConformanceFromAnchor is the configured anchor, enforced while nothing is committed.
-	ConformanceFromAnchor ConformanceSource = "anchor"
-)
-
 // ConformanceKey names one threshold. Scope is a layer or package directory for dep-fanout,
 // and empty otherwise.
 type ConformanceKey struct {
@@ -107,7 +96,7 @@ type ConformanceKey struct {
 }
 
 // ConformanceLimit is the configured policy for one key: the percentile a proposal measures
-// at, the shipped anchor no committed value may exceed, and, for a metric judging
+// at, the anchor every item is judged against, and, for a metric judging
 // packages by their importers, the fewest importers a package needs to be judged (zero
 // judges every package with one).
 type ConformanceLimit struct {
@@ -131,40 +120,32 @@ func (g ConformanceGates) Override(minCohort int, minShare float64) ConformanceG
 	return g
 }
 
-// ConformanceOptions is the conformance policy as the graph reads it: configuration plus the
-// committed ratchet record named by RatchetPath. Generated holds the workspace paths of
-// declared outputs, which no population counts.
+// ConformanceOptions is the conformance policy as the graph reads it, from configuration
+// alone: no record of counts is kept, since a change is judged against its base revision.
+// Generated holds the workspace paths of declared outputs, which no population counts.
 type ConformanceOptions struct {
-	Limits      map[ConformanceKey]ConformanceLimit
-	Ratchet     ConformanceRatchet
-	RatchetPath string
-	MinSample   int
-	Step        float64
-	Exclude     []string
-	Generated   map[string]bool
-	Gates       ConformanceGates
+	Limits    map[ConformanceKey]ConformanceLimit
+	MinSample int
+	Step      float64
+	Exclude   []string
+	Generated map[string]bool
+	Gates     ConformanceGates
 }
 
-// Effective is the value a check enforces for k, and where it came from: the committed
-// ratchet value, else the configured anchor. The key's own scope is consulted before the
-// unscoped key. A live percentile is never returned, since enforcing one lets the
-// threshold drift as the code grows. Zero and an empty source mean neither is configured.
-func (o ConformanceOptions) Effective(k ConformanceKey) (value int, src ConformanceSource) {
+// Effective is the value a check enforces for k: the configured anchor, the key's own scope
+// consulted before the unscoped key. A live percentile is never returned, since enforcing one
+// lets the threshold drift as the code grows. ok is false when no anchor is configured.
+func (o ConformanceOptions) Effective(k ConformanceKey) (value int, ok bool) {
 	for _, key := range conformanceKeyChain(k) {
-		if t, ok := o.committed(key); ok {
-			return t.Value, ConformanceFromRatchet
-		}
-		if l, ok := o.Limits[key]; ok {
-			return l.Anchor, ConformanceFromAnchor
+		if l, found := o.Limits[key]; found {
+			return l.Anchor, true
 		}
 	}
-	return 0, ""
+	return 0, false
 }
 
 // Validate refuses a misconfigured policy rather than clamping it: an unknown metric or
-// population, a committed value looser than its anchor or with no anchor to bound it, a
-// key committed twice, a ratchet schema other than 1, and out-of-range numbers. Ratchet
-// errors name RatchetPath:line. Every problem is reported, joined.
+// population, and out-of-range numbers. Every problem is reported, joined.
 func (o ConformanceOptions) Validate() error {
 	var errs []error
 	fail := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
@@ -205,107 +186,7 @@ func (o ConformanceOptions) Validate() error {
 			fail("limit %s: min_subject %d: want at least 0", conformanceKeyName(k), l.MinSubject)
 		}
 	}
-
-	r := o.Ratchet
-	if (o.RatchetPath != "" || r.Schema != 0 || len(r.Thresholds) > 0 || len(r.Known) > 0) && r.Schema != 1 {
-		fail("%s: schema %d: want 1", o.ratchetName(), r.Schema)
-	}
-	firstLine := map[ConformanceKey]int{}
-	for _, t := range r.Thresholds {
-		at, name := o.ratchetAt(t.Line), conformanceKeyName(t.ConformanceKey)
-		if err := checkConformanceKey(t.ConformanceKey); err != nil {
-			fail("%s: %s: %w", at, name, err)
-			continue
-		}
-		if line, dup := firstLine[t.ConformanceKey]; dup {
-			fail("%s: %s: committed twice, first at line %d", at, name, line)
-			continue
-		}
-		firstLine[t.ConformanceKey] = t.Line
-		if t.Value < 0 {
-			fail("%s: %s: value %d: want at least 0", at, name, t.Value)
-		}
-		limit, ok := o.anchor(t.ConformanceKey)
-		switch {
-		case !ok:
-			fail("%s: %s: no anchor is configured to bound the committed %d", at, name, t.Value)
-		case looser(t.Metric, t.Value, limit.Anchor):
-			fail("%s: %s: committed %d is looser than its anchor %d", at, name, t.Value, limit.Anchor)
-		}
-	}
-	listedAt := map[ConformanceMetric]map[string]int{}
-	for _, k := range r.Known {
-		at := o.ratchetAt(k.Line)
-		if err := checkConformanceMetric(k.Metric); err != nil {
-			fail("%s: known: %w", at, err)
-		}
-		if len(k.Items) == 0 {
-			fail("%s: known %s: no items", at, k.Metric)
-		}
-		if listedAt[k.Metric] == nil {
-			listedAt[k.Metric] = map[string]int{}
-		}
-		for _, item := range k.Items {
-			if line, dup := listedAt[k.Metric][item]; dup {
-				fail("%s: known %s: %s listed twice, first at line %d", at, k.Metric, item, line)
-				continue
-			}
-			listedAt[k.Metric][item] = k.Line
-		}
-		if k.Reason == "" {
-			fail("%s: known %s: no reason", at, k.Metric)
-		}
-		for _, item := range slices.Sorted(maps.Keys(k.Shapes)) {
-			switch {
-			case !slices.Contains(k.Items, item):
-				fail("%s: known %s: a shape for %s, which the entry does not list", at, k.Metric, item)
-			case k.Shapes[item] == "":
-				fail("%s: known %s: an empty shape for %s", at, k.Metric, item)
-			}
-		}
-	}
 	return errors.Join(errs...)
-}
-
-// looser reports whether committing value for m finds fewer items than its anchor would.
-func looser(m ConformanceMetric, value, anchor int) bool {
-	if m == ConformanceFileSplit {
-		return value < anchor
-	}
-	return value > anchor
-}
-
-func (o ConformanceOptions) committed(k ConformanceKey) (ConformanceThreshold, bool) {
-	for _, t := range o.Ratchet.Thresholds {
-		if t.ConformanceKey == k {
-			return t, true
-		}
-	}
-	return ConformanceThreshold{}, false
-}
-
-// anchor is the limit bounding k: its own scope's, else the unscoped key's.
-func (o ConformanceOptions) anchor(k ConformanceKey) (ConformanceLimit, bool) {
-	for _, key := range conformanceKeyChain(k) {
-		if l, ok := o.Limits[key]; ok {
-			return l, true
-		}
-	}
-	return ConformanceLimit{}, false
-}
-
-func (o ConformanceOptions) ratchetName() string {
-	if o.RatchetPath == "" {
-		return "conformance ratchet"
-	}
-	return o.RatchetPath
-}
-
-func (o ConformanceOptions) ratchetAt(line int) string {
-	if line == 0 {
-		return o.ratchetName()
-	}
-	return fmt.Sprintf("%s:%d", o.ratchetName(), line)
 }
 
 func conformanceKeyChain(k ConformanceKey) []ConformanceKey {
@@ -345,226 +226,31 @@ func compareConformanceKeys(a, b ConformanceKey) int {
 	return cmp.Or(cmp.Compare(a.Metric, b.Metric), cmp.Compare(a.Population, b.Population), cmp.Compare(a.Scope, b.Scope))
 }
 
-// ConformanceRatchet is the committed record of measured thresholds: what a person accepted
-// from a proposal, never something magus writes on its own. [ReadConformanceRatchet] gives
-// the file format.
-type ConformanceRatchet struct {
-	Schema     int
-	Measured   ConformanceProvenance
-	Thresholds []ConformanceThreshold
-	Known      []ConformanceKnown
-}
-
-// ConformanceProvenance is the revision and date the committed values were measured at.
-type ConformanceProvenance struct {
-	Rev  string `json:"rev"`
-	Date string `json:"date"`
-}
-
-// ConformanceThreshold is one committed value, with the sample size and percentile it was
-// measured at and why. Line is its 1-based line in the record, for naming file:line.
-type ConformanceThreshold struct {
-	ConformanceKey
-	Value      int     `json:"value"`
-	N          int     `json:"n"`
-	Percentile float64 `json:"percentile"`
-	Why        string  `json:"why,omitempty"`
-	Line       int     `json:"-"`
-}
-
-// ConformanceKnown is a worklist of items already past a metric's value and accepted for a
-// reason. A known item that no longer violates is stale and should be deleted. Shapes maps
-// a listed item to its fingerprint when it was listed, a symbol's body shape or a file's
-// set of body digests, which a rename or a move leaves unchanged: it is how the item is
-// recognized under a new ID. Line is its 1-based line in the record.
-type ConformanceKnown struct {
-	Metric ConformanceMetric `json:"metric"           yaml:"metric"`
-	Items  []string          `json:"items"            yaml:"items"`
-	Reason string            `json:"reason"           yaml:"reason"`
-	Shapes map[string]string `json:"shapes,omitempty" yaml:"shapes,omitempty"`
-	Line   int               `json:"-"                yaml:"-"                buzz:"-"`
-}
-
-const conformanceRowKinds = "schema, measured, threshold or known"
-
-// conformanceRow is one line of the ratchet record: a kind and the members that kind names.
-// Only the field for kind is set.
-type conformanceRow struct {
-	kind      string
-	schema    int
-	measured  ConformanceProvenance
-	threshold ConformanceThreshold
-	known     ConformanceKnown
-}
-
-// UnmarshalJSON decodes one line, strictly: a member the kind does not name, a repeated
-// member, a wrongly typed value and a missing required member are errors, with no
-// fallback reader for older shapes.
-func (c *conformanceRow) UnmarshalJSON(data []byte) error {
-	var members map[string]any
-	if err := json.Unmarshal(data, &members); err != nil {
-		return err
-	}
-	rawKind, ok := members["kind"]
-	if !ok {
-		return fmt.Errorf("no kind: want %s", conformanceRowKinds)
-	}
-	kind, _ := rawKind.(string)
-	var row conformanceRow
-	var required []string
-	var err error
-	switch kind {
-	case "schema":
-		w := struct {
-			Kind   string `json:"kind"`
-			Schema int    `json:"schema"`
-		}{}
-		required = []string{"schema"}
-		if err = json.UnmarshalStrict(data, &w); err == nil && w.Schema != 1 {
-			err = fmt.Errorf("schema %d: want 1", w.Schema)
-		}
-		row.schema = w.Schema
-	case "measured":
-		w := struct {
-			Kind string `json:"kind"`
-			ConformanceProvenance
-		}{}
-		required = []string{"rev", "date"}
-		err = json.UnmarshalStrict(data, &w)
-		row.measured = w.ConformanceProvenance
-	case "threshold":
-		w := struct {
-			Kind string `json:"kind"`
-			ConformanceThreshold
-		}{}
-		required = []string{"metric", "population", "value", "n", "percentile"}
-		if err = json.UnmarshalStrict(data, &w); err == nil {
-			err = checkConformanceKey(w.ConformanceKey)
-		}
-		row.threshold = w.ConformanceThreshold
-	case "known":
-		w := struct {
-			Kind string `json:"kind"`
-			ConformanceKnown
-		}{}
-		required = []string{"metric", "items", "reason"}
-		if err = json.UnmarshalStrict(data, &w); err == nil {
-			err = checkConformanceMetric(w.Metric)
-		}
-		row.known = w.ConformanceKnown
-	default:
-		return fmt.Errorf("kind %#v: want %s", rawKind, conformanceRowKinds)
-	}
-	if err != nil {
-		return fmt.Errorf("%s: %w", kind, err)
-	}
-	if missing := slices.DeleteFunc(required, func(name string) bool { _, ok := members[name]; return ok }); len(missing) > 0 {
-		return fmt.Errorf("%s: no %s", kind, strings.Join(missing, ", "))
-	}
-	row.kind = kind
-	*c = row
-	return nil
-}
-
-// ReadConformanceRatchet decodes a committed ratchet record in JSON Lines: one JSON object
-// per line, blank lines skipped. Each carries a kind and that kind's members:
-//
-//	{"kind":"schema","schema":1}
-//	{"kind":"measured","rev":"<rev>","date":"<date>"}
-//	{"kind":"threshold","metric":"file-lines","population":"source","scope":"<dir>","value":938,"n":1130,"percentile":95,"why":"<why>"}
-//	{"kind":"known","metric":"clone-tokens","reason":"<why>","items":["<item>"],"shapes":{"<item>":"<shape>"}}
-//
-// scope, why and shapes are optional, and a record names its schema and its measurement at
-// most once. An unknown kind, member, metric or population, a repeated member, a wrongly
-// typed value, a repeated line, and a key committed twice are errors naming path:line,
-// path being where data was read from.
-func ReadConformanceRatchet(path string, data []byte) (ConformanceRatchet, error) {
-	var r ConformanceRatchet
-	seen := conformanceSeen{thresholds: map[ConformanceKey]int{}}
-	lineAt := map[string]int{}
-	for i, text := range strings.Split(string(data), "\n") {
-		line := i + 1
-		text = strings.TrimSpace(text)
-		if text == "" {
-			continue
-		}
-		if first, dup := lineAt[text]; dup {
-			return ConformanceRatchet{}, fmt.Errorf("%s:%d: same line as line %d", path, line, first)
-		}
-		lineAt[text] = line
-
-		var row conformanceRow
-		err := row.UnmarshalJSON([]byte(text))
-		if err == nil {
-			err = r.add(row, line, &seen)
-		}
-		if err != nil {
-			return ConformanceRatchet{}, fmt.Errorf("%s:%d: %w", path, line, err)
-		}
-	}
-	if seen.schema == 0 {
-		return ConformanceRatchet{}, fmt.Errorf(`%s: ratchet has no schema line: want {"kind":"schema","schema":1}`, path)
-	}
-	return r, nil
-}
-
-// conformanceSeen is the line each once-only row of a record was first read at.
-type conformanceSeen struct {
-	schema, measured int
-	thresholds       map[ConformanceKey]int
-}
-
-// add files row, read from line, into r, refusing a second schema or measurement and a
-// key already committed.
-func (r *ConformanceRatchet) add(row conformanceRow, line int, seen *conformanceSeen) error {
-	switch row.kind {
-	case "schema":
-		if seen.schema != 0 {
-			return fmt.Errorf("schema row given twice, first at line %d", seen.schema)
-		}
-		seen.schema, r.Schema = line, row.schema
-	case "measured":
-		if seen.measured != 0 {
-			return fmt.Errorf("measured: given twice, first at line %d", seen.measured)
-		}
-		seen.measured, r.Measured = line, row.measured
-	case "threshold":
-		t := row.threshold
-		if first, dup := seen.thresholds[t.ConformanceKey]; dup {
-			return fmt.Errorf("threshold %s: committed twice, first at line %d", conformanceKeyName(t.ConformanceKey), first)
-		}
-		seen.thresholds[t.ConformanceKey] = line
-		t.Line = line
-		r.Thresholds = append(r.Thresholds, t)
-	case "known":
-		k := row.known
-		k.Line = line
-		r.Known = append(r.Known, k)
-	}
-	return nil
-}
-
-// ConformanceOutput is the conformance lens: one row per key, the known items no longer past
-// their value, and how many files Exclude hid, so a widened exclusion stays visible.
-// Carried are the known items followed through a rename or a move, each judged under its
-// new ID; Ambiguous are those not followed, because more than one candidate shares the
-// recorded shape or another known item claims the one that does. Shapes is the current fingerprint of each listed item that has one,
-// under its carried ID, for filling a record that lacks it.
+// ConformanceOutput is the conformance lens: one row per key, and how many files Exclude hid,
+// so a widened exclusion stays visible. Base and Ceilings are set when the caller names a base
+// revision: Base is the commit it resolved to, and Ceilings are the touched files whose count of
+// a checked metric's violations rose past their count there. Unmeasured are the touched files
+// only an external indexer reads, which hold no ceiling, each with why.
 type ConformanceOutput struct {
-	Definition string             `json:"definition" yaml:"definition"`
-	Rows       []ConformanceRow   `json:"rows"       yaml:"rows"`
-	Stale      []ConformanceKnown `json:"stale"      yaml:"stale"`
-	Carried    []ConformanceCarry `json:"carried"    yaml:"carried"`
-	Ambiguous  []ConformanceCarry `json:"ambiguous"  yaml:"ambiguous"`
-	Shapes     map[string]string  `json:"shapes"     yaml:"shapes"`
-	Excluded   int                `json:"excluded"   yaml:"excluded"`
-	Answer     KnowledgeAnswer    `json:"answer"     yaml:"answer"`
+	Definition string                  `json:"definition"           yaml:"definition"`
+	Rows       []ConformanceRow        `json:"rows"                 yaml:"rows"`
+	Excluded   int                     `json:"excluded"             yaml:"excluded"`
+	Answer     KnowledgeAnswer         `json:"answer"               yaml:"answer"`
+	Base       string                  `json:"base,omitempty"       yaml:"base,omitempty"`
+	Ceilings   []ConformanceCeiling    `json:"ceilings,omitempty"   yaml:"ceilings,omitempty"`
+	Unmeasured []ConformanceUnmeasured `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
+}
+
+// ConformanceUnmeasured is a touched file the base was not measured for: its language and why.
+type ConformanceUnmeasured struct {
+	File     string `json:"file"     yaml:"file"`
+	Language string `json:"language" yaml:"language"`
+	Reason   string `json:"reason"   yaml:"reason"`
 }
 
 // ConformanceRow is one key's distribution and verdict. Live is the configured percentile
-// measured today; Value and Source are what Effective enforces. Propose is zero, or a
-// tighter value to commit: it is never looser than Value. Known counts the accepted items
-// past Value; Violations are the rest.
+// measured today; Value is the anchor Effective enforces. Propose is zero, or a tighter anchor
+// to configure: it is never looser than Value. Violations are the items past Value.
 type ConformanceRow struct {
 	Key        ConformanceKey    `json:"key"        yaml:"key"`
 	N          int               `json:"n"          yaml:"n"`
@@ -574,11 +260,91 @@ type ConformanceRow struct {
 	P99        int               `json:"p99"        yaml:"p99"`
 	Live       int               `json:"live"       yaml:"live"`
 	Value      int               `json:"value"      yaml:"value"`
-	Anchor     int               `json:"anchor"     yaml:"anchor"`
 	Propose    int               `json:"propose"    yaml:"propose"`
-	Known      int               `json:"known"      yaml:"known"`
-	Source     ConformanceSource `json:"source"     yaml:"source"`
 	Violations []ConformanceItem `json:"violations" yaml:"violations"`
+}
+
+// Conformance is what a caller asks the conformance lens beyond the configured policy:
+// Checks are the metrics held to a conformance ceiling, and Base the revision a touched
+// file's count of their violations may not rise above. Neither is set to measure only.
+type Conformance struct {
+	Checks []ConformanceMetric `json:"checks" yaml:"checks"`
+	Base   string              `json:"base"   yaml:"base"`
+}
+
+// Validate refuses a Base with no Checks, which would compare nothing, and a check that
+// names no metric.
+func (c Conformance) Validate() error {
+	var errs []error
+	if c.Base != "" && len(c.Checks) == 0 {
+		errs = append(errs, fmt.Errorf("base %s: name the checks held to a conformance ceiling", c.Base))
+	}
+	for _, m := range c.Checks {
+		if err := checkConformanceMetric(m); err != nil {
+			errs = append(errs, fmt.Errorf("checks: %w", err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ConformanceCeiling is one touched file whose violations of Key rose past its count at the
+// base: Base and Head are the two counts, and Violations the head's items in the file.
+type ConformanceCeiling struct {
+	Key        ConformanceKey    `json:"key"        yaml:"key"`
+	File       string            `json:"file"       yaml:"file"`
+	Base       int               `json:"base"       yaml:"base"`
+	Head       int               `json:"head"       yaml:"head"`
+	Violations []ConformanceItem `json:"violations" yaml:"violations"`
+}
+
+// ConformanceCeilings is each file among touched whose count of violations of a key whose
+// metric is in checks is higher in head than in base, sorted by key, then file. A drop or a
+// file that holds as many as before passes. An item counts in every file it names: a clone
+// group in each member's file, and a dep-fanout package in every file directly inside it.
+func ConformanceCeilings(base, head ConformanceOutput, touched []string, checks []ConformanceMetric) []ConformanceCeiling {
+	before := conformanceRowsByKey(base)
+	var out []ConformanceCeiling
+	for _, row := range head.Rows {
+		if !slices.Contains(checks, row.Key.Metric) {
+			continue
+		}
+		for _, file := range touched {
+			now := conformanceItemsIn(row.Violations, row.Key.Metric, file)
+			was := len(conformanceItemsIn(before[row.Key], row.Key.Metric, file))
+			if len(now) > was {
+				out = append(out, ConformanceCeiling{Key: row.Key, File: file, Base: was, Head: len(now), Violations: now})
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b ConformanceCeiling) int {
+		return cmp.Or(compareConformanceKeys(a.Key, b.Key), cmp.Compare(a.File, b.File))
+	})
+	return out
+}
+
+func conformanceRowsByKey(out ConformanceOutput) map[ConformanceKey][]ConformanceItem {
+	byKey := make(map[ConformanceKey][]ConformanceItem, len(out.Rows))
+	for _, row := range out.Rows {
+		byKey[row.Key] = row.Violations
+	}
+	return byKey
+}
+
+// conformanceItemsIn is the items of metric m that name file.
+func conformanceItemsIn(items []ConformanceItem, m ConformanceMetric, file string) []ConformanceItem {
+	var out []ConformanceItem
+	for _, it := range items {
+		if slices.ContainsFunc(strings.Split(it.ID, ", "), func(member string) bool {
+			if m == ConformanceDepFanout {
+				return member == path.Dir(file)
+			}
+			name, _, _ := strings.Cut(member, "#")
+			return name == file
+		}) {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // ImportAliasReport is how a workspace's packages are imported under other names. Indexed
@@ -614,18 +380,8 @@ type AliasClash struct {
 	Ours      bool   `json:"ours"      yaml:"ours"`
 }
 
-// ConformanceCarry is a known item that matches no sample of its metric, From, and the
-// unlisted items past its value whose shape equals the one recorded for it, To. A carried
-// item has exactly one; an ambiguous one has more, or shares its one with another known
-// item.
-type ConformanceCarry struct {
-	Metric ConformanceMetric `json:"metric" yaml:"metric"`
-	From   string            `json:"from"   yaml:"from"`
-	To     []string          `json:"to"     yaml:"to"`
-}
-
-// ConformanceItem is one file, symbol, package or clone group past its row's value and not
-// known. Source is its path:line. Home is where it belongs, for a metric that names one: a
+// ConformanceItem is one file, symbol, package or clone group past its row's value. Source is
+// its path:line. Home is where it belongs, for a metric that names one: a
 // package directory, or for file-split the root file. Unshared marks a file-split sibling
 // that references nothing its root defines and defines nothing its root references. Rename
 // is the file a file-split sibling should be when its suffix after the root names more than

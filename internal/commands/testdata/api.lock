@@ -46,7 +46,6 @@ config knowledge.conformance.gates.max_findings
 config knowledge.conformance.gates.min_cohort
 config knowledge.conformance.gates.min_share
 config knowledge.conformance.min_sample
-config knowledge.conformance.ratchet
 config knowledge.conformance.step
 config knowledge.duplication.include_tests
 config knowledge.duplication.min_callees

@@ -124,7 +124,7 @@ func denyFailedGate(workspace string, red sessions.GateRecord) denial {
 	runs := make([]string, len(owed))
 	for i, f := range owed {
 		names[i] = fmt.Sprintf("`%s:%s`", f.Project, f.Target)
-		runs[i] = "`" + hint.Run.With(f.Target, f.Project) + "`"
+		runs[i] = fmt.Sprintf("`%s`", hint.Run.With(f.Target, f.Project))
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` failed on this branch %s ago (%s) on %s, and nothing changed since: run %s until it passes, then gate.",

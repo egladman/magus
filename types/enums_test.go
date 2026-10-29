@@ -31,13 +31,11 @@ func TestEnumConformanceSetsClose(t *testing.T) {
 		},
 		ConformanceMetric("").Values())
 	assert.Equal(t, []string{"source", "main", "test"}, ConformancePopulation("").Values())
-	assert.Equal(t, []string{"ratchet", "anchor"}, ConformanceSource("").Values())
 	assert.Equal(t,
-		[]bool{true, false, true, false, true, false},
+		[]bool{true, false, true, false},
 		[]bool{
 			ConformanceCloneTokens.Valid(), ConformanceMetric("clones").Valid(),
 			ConformancePopMain.Valid(), ConformancePopulation("vendor").Valid(),
-			ConformanceFromAnchor.Valid(), ConformanceSource("live").Valid(),
 		})
 	assert.Equal(t, "unset", ConformanceMetric("").String())
 }

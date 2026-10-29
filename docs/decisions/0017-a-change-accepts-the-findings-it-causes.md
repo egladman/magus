@@ -101,7 +101,7 @@ already has. The inventory, from `magus query "kind=symbol ..."` and `magus refs
 | `types.JobWaiver`                             | Code, Subject, Reason; `Waives` matches code and subject, a glob for two codes; `Waivable` limits which codes | job records (MGS3043, MGS3044, gate not run)                           |
 | proofread `Finding` and suppressions          | rule, span, reason required; unused is PRF1090                                                                | `libs/proofread`, a library that never imports magus                   |
 | target `advisory` and `advisory_reason`       | a whole target excused from a composite, with prose                                                           | magusfiles                                                             |
-| the conformance ratchet                       | a committed record of known violations, pruned by `format`                                                    | `hack/lint/code-stays-within-the-conformance-ratchet.buzz`             |
+| the conformance ceiling                       | each changed file's violation count at the base revision, measured on every run, never stored                 | `hack/lint/code-stays-within-the-conformance-ceiling.buzz`             |
 
 The first four are one idea under four names: something a check says about a place, with
 a rule and a message. `types.JobWaiver` is the waiver this record needs, already with a

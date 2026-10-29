@@ -547,7 +547,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
 			// audited. The record names the credential the bearer guard verified, never a
 			// caller-supplied field. Reads (ListTokens) are not recorded. See
-			// internal/handler/trailrpc for the pattern and the arch-test ratchet that keeps it
+			// internal/handler/trailrpc for the pattern and the arch test that keeps it
 			// honest.
 			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle,
 				trailrpc.WithSubject(tokenhandler.AuditSubject)))

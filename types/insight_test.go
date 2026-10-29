@@ -16,7 +16,7 @@ func TestInsightCarriesConformance(t *testing.T) {
 		Definition: ConformanceDefinition,
 		Rows: []ConformanceRow{{
 			Key:   ConformanceKey{Metric: ConformanceFileLines, Population: ConformancePopSource},
-			Value: 2200, Source: ConformanceFromAnchor, Propose: 938,
+			Value: 2200, Propose: 938,
 		}},
 		Answer: ClassifyAnswer(true, "", nil),
 	}
@@ -37,7 +37,7 @@ func TestInsightCarriesConformance(t *testing.T) {
 }
 
 // The lens's contract must not promise that a live percentile is enforced or that magus
-// edits the record.
+// edits the anchor.
 func TestConformanceDefinitionProposesOnly(t *testing.T) {
 	assert.Contains(t, ConformanceDefinition, "nothing here enforces a live percentile")
 	assert.Contains(t, ConformanceDefinition, "nothing here edits it")

@@ -1,0 +1,26 @@
+// The conformance ceiling policy the lint target holds a change to: which metrics may not
+// rise in a file the change touches. Counts come from the base revision on every run, so
+// nothing here records one, and lowering an anchor edits magus.yaml, never this file.
+namespace conformanceceiling;
+
+import "assert";
+
+// Conformance names the metrics held to a conformance ceiling. The rest stay advice,
+// printed and never failing: most of what they flag is a size or a shape chosen on purpose.
+export object Conformance {
+    checks: [str],
+
+    // holds reports whether metric is held to a ceiling.
+    fun holds(metric: str) > bool {
+        return this.checks.indexOf(metric) != null;
+    }
+}
+
+export final POLICY = Conformance{
+    checks = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout", "main-logic", "store-path-export", "file-split"],
+};
+
+test "a metric in checks is held and any other is advice" {
+    assert\equal(POLICY.holds("func-lines"), want: true, message: "held");
+    assert\equal(POLICY.holds("shared-reach"), want: false, message: "advice");
+}

@@ -23,7 +23,7 @@ linters:
     # every platform. This tree carries ~52 build-tagged files (io_uring, the stat and
     # topology variants, the unix/windows server detach pair), so that failure would be
     # both easy to introduce and slow to attribute. Zero findings when adopted: it is a
-    # ratchet, not a cleanup.
+    # guard, not a cleanup.
     - gocheckcompilerdirectives # //go: directives are well-formed and actually apply
 
     # --- HTTP safety ---
@@ -38,7 +38,7 @@ linters:
     # that proof go stale the moment someone adds one of those fields back to v.
     # musttag above catches a missing json tag on the way in; this catches the
     # marshal call itself losing the error-safety invariant its blank identifier
-    # depends on. Zero findings when adopted: it is a ratchet, not a cleanup.
+    # depends on. Zero findings when adopted: it is a guard, not a cleanup.
     - errchkjson
     - unconvert       # remove redundant type conversions
     - durationcheck   # catch time.Duration multiplication bugs
@@ -52,13 +52,13 @@ linters:
     # mistake legal - the slice grows past its n zero-valued elements instead of
     # filling them, so the result carries n silent zeros ahead of every real
     # value. makezero is the length half of what prealloc only checks the
-    # capacity half of. Zero findings when adopted: it is a ratchet, not a cleanup.
+    # capacity half of. Zero findings when adopted: it is a guard, not a cleanup.
     - makezero
     # A bidirectional override (U+202E and its family) reorders how a line RENDERS while
     # leaving the bytes the compiler reads untouched, so a reviewer and the toolchain can be
     # made to disagree about what a line says. Nothing in Go's own tooling reports one, and
     # this tree is read in review: a deception it failed to notice in its own source is one
-    # it would then render to somebody else. Zero findings when adopted: it is a ratchet, not
+    # it would then render to somebody else. Zero findings when adopted: it is a guard, not
     # a cleanup. The renderer half of this lives in internal/diff.SanitizeBidi, which is what
     # protects code magus DISPLAYS rather than code it ships.
     - bidichk
@@ -298,7 +298,7 @@ linters:
           # never exempts a slog message.
           slog: true
           hint: a message is the verdict, one next command and a ref; the rationale goes behind the ref
-          # A RATCHET: every file holding a finding on 2026-10-09 (173 findings in 54
+          # AN ALLOW LIST: every file holding a finding on 2026-10-09 (173 findings in 54
           # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
           # message-commands), exempt until the terse-output rewrites land. Delete an
           # entry once its file is clean; never add one.
@@ -806,7 +806,7 @@ linters:
     # project/insight.go's Complexity(), where it silently counted every interior
     # space as indentation and corrupted every FileHotspots score. staticcheck
     # found it; the preset threw the finding away. Measured after the fix: zero
-    # SA4011 findings tree-wide, so re-enabling it is a ratchet, not a cleanup.
+    # SA4011 findings tree-wide, so re-enabling it is a guard, not a cleanup.
     presets:
       - comments
       - common-false-positives
@@ -960,7 +960,7 @@ linters:
 # Formatting is gated HERE, not by the format target, because `gofmt -l` cannot fail: it
 # reports on stdout and exits 0, and magus reads an op's verdict from the exit code alone.
 # The format target keeps it as the local reporter (rw flips it to -w).
-# Zero findings when adopted: a ratchet, not a cleanup.
+# Zero findings when adopted: a guard, not a cleanup.
 formatters:
   enable:
     - gofmt

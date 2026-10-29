@@ -113,11 +113,11 @@ const (
 	DiagnosticOriginWorkspace DiagnosticOrigin = "workspace"
 )
 
-// OriginOf derives c's origin from its prefix. MGS is builtin whatever the registry holds,
+// CodeOrigin derives c's origin from its prefix. MGS is builtin whatever the registry holds,
 // since this package owns that catalog; any other prefix is builtin or the workspace's by
 // who registered it, and unknown when nobody did. Nothing stores an origin beside a code,
 // so a workspace cannot claim builtin by saying so.
-func OriginOf(c DiagnosticCode) DiagnosticOrigin {
+func CodeOrigin(c DiagnosticCode) DiagnosticOrigin {
 	if diagnostics.Prefix(c) == mgsPrefix {
 		return DiagnosticOriginBuiltin
 	}
@@ -184,7 +184,7 @@ func WorkspaceDiagnosticCode(prefix, text string) (DiagnosticCode, error) {
 		return "", err
 	}
 	got := diagnostics.Prefix(c)
-	if OriginOf(c) == DiagnosticOriginBuiltin {
+	if CodeOrigin(c) == DiagnosticOriginBuiltin {
 		return "", fmt.Errorf("%q is in the %s catalog magus ships, which only magus mints; use this workspace's prefix %s", text, got, prefix)
 	}
 	if got != prefix {
@@ -207,7 +207,7 @@ func IsDiagnosticCode(text string) bool {
 	if len(p) < 2 || len(digits) != 4 || strings.Trim(digits, "0123456789") != "" {
 		return false
 	}
-	return OriginOf(DiagnosticCode(text)) != DiagnosticOriginUnknown
+	return CodeOrigin(DiagnosticCode(text)) != DiagnosticOriginUnknown
 }
 
 // DiagnosticCodeRef is a code as it crosses into Buzz: the magus\DiagnosticCode object that
@@ -1256,9 +1256,9 @@ func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
 	return diagnostics.WithSink(ctx, s)
 }
 
-// DiagnosticEventOf is the event err's outermost coded error fires from unit, its docs page
+// ErrorDiagnosticEvent is the event err's outermost coded error fires from unit, its docs page
 // included, and false when err carries no code.
-func DiagnosticEventOf(err error, unit string) (DiagnosticEvent, bool) {
+func ErrorDiagnosticEvent(err error, unit string) (DiagnosticEvent, bool) {
 	return diagnostics.EventOf(err, unit)
 }
 

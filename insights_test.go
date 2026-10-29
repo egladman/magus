@@ -159,8 +159,8 @@ func TestDuplicationHistoryCountsFilesChangingTogether(t *testing.T) {
 
 // TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError pins both ends of the
 // lens: a workspace with no symbol index answers unknown with the lens's definition, never an
-// empty pass, and a ratchet record the configuration names but the tree lacks is an error
-// that names it, never a lens that quietly falls back to the anchors.
+// empty pass, and a policy it cannot honor is an error that names the key, never a lens that
+// quietly measures under a default.
 func TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// root\n"), 0o644))
@@ -181,9 +181,9 @@ func TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *t
 	assert.Equal(t, wantAnswer, out.Answer, "no index means unknown, never a pass")
 
 	cfg := config.Defaults()
-	cfg.Knowledge.Conformance.Ratchet = "hack/policy/conformance.jsonl"
+	cfg.Knowledge.Conformance.MinSample = 0
 	_, err = open(cfg).Conformance(t.Context())
-	assert.ErrorContains(t, err, "hack/policy/conformance.jsonl")
+	assert.ErrorContains(t, err, "min_sample 0")
 }
 
 // TestModelTierLensReportsWhatTheJobHistoryHolds pins the lens against the history file the

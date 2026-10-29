@@ -28,8 +28,10 @@ the good half is marketing.
 
 - [Benchmarks](../../benchmarks.md) publishes every run beside the environment
   that produced it, controls first.
-- A conformance threshold is a relative bound with a committed ratchet
-  ([`hack/policy/conformance.jsonl`](https://github.com/egladman/magus/blob/main/hack/policy/conformance.jsonl)), so a rule's floor is a number in the tree.
+- A conformance threshold is an anchor in `magus.yaml`, so a rule's floor is a
+  number in the tree. The conformance ceiling holds a changed file to the
+  violations it held at the base revision, measured there on every run: no
+  record of counts is committed, so none goes stale or needs pruning.
 - [A record of refusals](../refusals.md) names the measurement and its date
   beside each refusal.
 

@@ -351,8 +351,8 @@ func (m *miner) base(c commit, kind bench.TaskKind) bench.Task {
 // diffs splits the commit's diff into the reference change and the held-out tests.
 func (m *miner) diffs(ctx context.Context, c commit) (patch, tests string, err error) {
 	testSpecs := []string{":(glob)**/*_test.go", ":(glob)**/testdata/**"}
-	patch, err = command(ctx, m.dir, nil, "git", append([]string{"diff", "--binary", "--no-renames", c.parent, c.sha, "--", ".",
-		":(exclude,glob)**/*_test.go", ":(exclude,glob)**/testdata/**"})...)
+	patch, err = command(ctx, m.dir, nil, "git", "diff", "--binary", "--no-renames", c.parent, c.sha, "--", ".",
+		":(exclude,glob)**/*_test.go", ":(exclude,glob)**/testdata/**")
 	if err != nil {
 		return "", "", err
 	}

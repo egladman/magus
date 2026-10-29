@@ -1420,7 +1420,7 @@ func (s *jobSuite) migratingStore(body string, migrations ...migrate.Migration) 
 
 // renamed is a migration that renames one member of every row carrying it.
 func renamed(from, to string) migrate.Migration {
-	return migrate.Migration{Name: from + " to " + to, Up: func(e migrate.Entry) (migrate.Entry, error) {
+	return migrate.Migration{Name: fmt.Sprintf("%s to %s", from, to), Up: func(e migrate.Entry) (migrate.Entry, error) {
 		if v, ok := e[from]; ok {
 			delete(e, from)
 			e[to] = v
@@ -1432,7 +1432,7 @@ func renamed(from, to string) migrate.Migration {
 func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 	st, path, notices := s.migratingStore(`{"schema_version":13}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`,
 		renamed("goal", "criteria"))
-	notice := "job: migrated job store " + path + " from 0 to 1 (1 entries)\n"
+	notice := fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
 
 	f, err := st.read()
 	s.Require().NoError(err)

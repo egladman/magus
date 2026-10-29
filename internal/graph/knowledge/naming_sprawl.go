@@ -79,7 +79,7 @@ func (sprawlCheck) run(x *namingIndex) []finding {
 	if len(subjects) == 0 {
 		return nil
 	}
-	wide, src := x.change.Conformance.Effective(types.ConformanceKey{Metric: types.ConformanceTypeMethods, Population: types.ConformancePopSource})
+	wide, enforced := x.change.Conformance.Effective(types.ConformanceKey{Metric: types.ConformanceTypeMethods, Population: types.ConformancePopSource})
 	reported := map[string]finding{}
 	for _, f := range x.siblingFamilies(x.callables) {
 		kin := x.kin(f)
@@ -120,10 +120,10 @@ func (sprawlCheck) run(x *namingIndex) []finding {
 				score += sprawlStep
 				details = append(details, fmt.Sprintf("%d types carry it: %s", carriers, strings.Join(kinOwners(kin), ", ")))
 			}
-			if src != "" && methods > wide {
+			if enforced && methods > wide {
 				score += sprawlStep
-				details = append(details, fmt.Sprintf("`%s` has %d methods, past the %s of %d for type-methods source",
-					f.Owner, methods, thresholdSource(src), wide))
+				details = append(details, fmt.Sprintf("`%s` has %d methods, past the configured anchor of %d for type-methods source",
+					f.Owner, methods, wide))
 			}
 			key := fmt.Sprintf("%s\x00%s\x00%s\x00%s", f.Members[0].language, f.Members[0].scope, f.Stem, s.folded[f.Slot])
 			if prev, ok := reported[key]; ok && prev.subject <= s.id {

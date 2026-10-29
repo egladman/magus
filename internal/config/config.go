@@ -733,9 +733,9 @@ type Knowledge struct {
 	// will want MinShared higher, one of large functions may want MinScore lower.
 	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
 	// Conformance is the policy of the conformance lens and its checks: which code distributions are
-	// measured, the shipped anchor each is bounded by, and the committed ratchet record.
+	// measured and the anchor each is held to.
 	//
-	// cli:"-": magus.yaml ONLY. A ratchet is committed policy, so a per-run flag or one
+	// cli:"-": magus.yaml ONLY. An anchor is committed policy, so a per-run flag or one
 	// exported env var would loosen every check without a trace in any file.
 	Conformance ConformanceConfig `json:"conformance" yaml:"conformance" cli:"-"`
 	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
@@ -829,14 +829,11 @@ func (c DuplicationConfig) Options() types.DuplicationOptions {
 // A key written in a magus.yaml replaces the default for that whole field, as every
 // non-zero config value does: writing checks states all of them.
 type ConformanceConfig struct {
-	// Ratchet is the workspace-relative path of the committed record of measured
-	// thresholds. Empty enforces the anchors alone and records no proposals.
-	Ratchet string `json:"ratchet" yaml:"ratchet"`
 	// MinSample is how many measurements a population needs before a proposal is made
 	// from it; a smaller population keeps its anchor.
 	MinSample int `json:"min_sample" yaml:"min_sample" validate:"gte=1"`
-	// Step is the fraction a live percentile must fall below its committed value before a
-	// tighter one is proposed.
+	// Step is the fraction a live percentile must fall below its anchor before a tighter
+	// one is proposed.
 	Step float64 `json:"step" yaml:"step" validate:"gt=0,lt=1"`
 	// Exclude are workspace-relative globs of code kept out of every population, such as
 	// a vendored or upstream-shaped tree. Generated output is always out.
@@ -861,8 +858,7 @@ type ConformanceGatesConfig struct {
 type ConformanceLimitConfig struct {
 	// Percentile is the percentile of the live distribution a proposal measures at.
 	Percentile float64 `json:"percentile" yaml:"percentile"`
-	// Anchor is the ceiling no committed value may exceed, and the value enforced while
-	// nothing is committed.
+	// Anchor is the value enforced: an item past it is a violation.
 	Anchor int `json:"anchor" yaml:"anchor"`
 	// MinSubject is the fewest importers a package needs before alias-share or name-clash
 	// judges it; 0 judges every package with one. Other metrics ignore it.
@@ -875,7 +871,7 @@ type ConformanceLimitConfig struct {
 }
 
 // Options is the config as the graph package reads it, which cannot import this one.
-// Ratchet and Generated are the caller's to fill from files. A scope becomes its own key.
+// Generated is the caller's to fill. A scope becomes its own key.
 func (c ConformanceConfig) Options() types.ConformanceOptions {
 	limits := map[types.ConformanceKey]types.ConformanceLimit{}
 	for metric, pops := range c.Checks {
@@ -891,11 +887,10 @@ func (c ConformanceConfig) Options() types.ConformanceOptions {
 		}
 	}
 	return types.ConformanceOptions{
-		Limits:      limits,
-		RatchetPath: c.Ratchet,
-		MinSample:   c.MinSample,
-		Step:        c.Step,
-		Exclude:     slices.Clone(c.Exclude),
+		Limits:    limits,
+		MinSample: c.MinSample,
+		Step:      c.Step,
+		Exclude:   slices.Clone(c.Exclude),
 		Gates: types.ConformanceGates{
 			MinCohort:   c.Gates.MinCohort,
 			MinShare:    c.Gates.MinShare,

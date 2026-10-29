@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +22,7 @@ func TestMigrateSuite(t *testing.T) {
 
 // renameMember is a migration that renames one member of every entry carrying it.
 func renameMember(from, to string) Migration {
-	return Migration{Name: from + " to " + to, Up: func(e Entry) (Entry, error) {
+	return Migration{Name: fmt.Sprintf("%s to %s", from, to), Up: func(e Entry) (Entry, error) {
 		if v, ok := e[from]; ok {
 			delete(e, from)
 			e[to] = v
@@ -67,8 +68,7 @@ func (s *migrateSuite) TestUpSeveralVersionsInOrder() {
 
 	res, err := st.Apply()
 	s.Require().NoError(err)
-	s.Equal(1, res.From)
-	s.Equal(3, res.To)
+	s.Equal(result{Store: "thing store", Path: st.Path, From: 1, To: 3, Entries: 1}, res)
 	s.Equal("{\"migration\":3}\n{\"id\":\"a\",\"pass\":1}\n", s.contents(st), "only the migrations past 1 ran, in order")
 }
 
@@ -86,8 +86,7 @@ func (s *migrateSuite) TestAlreadyCurrentIsLeftAlone() {
 
 	res, err := st.Apply()
 	s.Require().NoError(err)
-	s.False(res.Migrated())
-	s.Equal(1, res.From)
+	s.Equal(result{Store: "thing store", Path: st.Path, From: 1, To: 1}, res, "not migrated")
 	s.Equal(body, s.contents(st), "not a byte moved")
 }
 

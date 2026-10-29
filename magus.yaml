@@ -115,12 +115,13 @@ knowledge:
     shared: notes
   vcs:
     enabled: true
-  # The anchors are magus's shipped defaults. This repository adds what names its own
+  # The anchors are magus's shipped defaults, tightened where this repository measured
+  # tighter: func-lines and the internal dep-fanout scope. It adds what names its own
   # layout: libs/gopherbuzz follows upstream Buzz, and cmd/magus is the one binary that
   # imports every package. Writing checks replaces the defaults whole, so every check is
-  # restated here.
+  # restated here. Which checks hold a change to its base's counts is the lint target's
+  # policy (hack/magusfile/conformance-ceiling.buzz).
   conformance:
-    ratchet: hack/policy/conformance.jsonl
     exclude: ["libs/gopherbuzz/**"]
     checks:
       # pairs with file-split: change both together
@@ -129,8 +130,8 @@ knowledge:
         main: { percentile: 95, anchor: 1500 }
         test: { percentile: 99, anchor: 1900 }
       func-lines:
-        source: { percentile: 99, anchor: 92 }
-        main: { percentile: 99, anchor: 140 }
+        source: { percentile: 95, anchor: 52 }
+        main: { percentile: 95, anchor: 75 }
         test: { percentile: 99, anchor: 73 }
       type-methods:
         source: { percentile: 95, anchor: 49 }
@@ -142,7 +143,7 @@ knowledge:
         source: { percentile: 50, anchor: 80 }
         main: { percentile: 50, anchor: 80 }
       dep-fanout:
-        source: { percentile: 95, anchor: 62, scopes: { cmd/magus: 89 } }
+        source: { percentile: 95, anchor: 62, scopes: { cmd/magus: 89, internal: 14 } }
       export-scope:
         source: { percentile: 0, anchor: 0 }
         main: { percentile: 0, anchor: 0 }

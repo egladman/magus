@@ -10,7 +10,6 @@ import "./hack/policy/commits" as wording;
 import "./hack/policy/pull_requests" as descriptions;
 import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
-import "./hack/magusfile/conformance-ratchet" as ratchet;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 import "./hack/policy/builtins" as agentbuiltins;
@@ -187,6 +186,7 @@ magus\project({
             "integrates": "regenerates every generated file",
         },
         "harness-drift": {"skip_cache": "plans with the running binary's harness planner, which no input glob can key"},
+        "conformance-base": {"skip_cache": "measures the base commit, which no input glob can key; the user cache keeps the measure per commit"},
         "index-generate": {
             "skip_cache": "output derives from the entire knowledge graph, which no input glob can key",
             "integrates": "regenerates the knowledge index",
@@ -2382,6 +2382,13 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 
+// Measures the change's base for the conformance ceiling rule, which only reads the measure.
+// The user cache keeps one per base commit and configuration, so this replays nothing itself.
+export fun conformance_base(ctx: magus\Context, args: [str]) > void !> any {
+    final commit = magus\conformanceBase(vcs\base());
+    magus\log.info("conformance base measured at {commit}");
+}
+
 // Holds the repository's non-Go files to conventions no off-the-shelf linter checks;
 // each rule is hack/lint/<rule>.buzz, and hack/lint/run.buzz reports drift between their
 // reads and this footprint. A tree glob stops at a nested project, hence the named paths.
@@ -2390,7 +2397,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     // the scheduler can order those writes before its reads (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
         testlayout\format, scipbuzz\format, xdg\format, cmdline\format,
-        proofreadlib\proofread_build);
+        proofreadlib\proofread_build, conformance_base);
     ctx.readsFiles(["hack/lint/*.buzz",
                     "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                     "hack/README.md",
@@ -2414,7 +2421,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "proto/magusfile.buzz", "docs/tour/*.buzz",
                     ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
                     ".gitattributes", "dprint-base.json",
-                    "mise.toml", "magus.yaml", "hack/policy/conformance.jsonl", "hack/lint/sdk-exports.jsonl",
+                    "mise.toml", "magus.yaml", "hack/lint/sdk-exports.jsonl",
                     "Dockerfile", "Dockerfile.static",
                     "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                     ".claude/skills/magus-skill-authoring/SKILL.md",
@@ -2623,8 +2630,7 @@ fun scopedTools(ctx: magus\Context, files: [str], goPackages: [str]) > [[str]] {
     }
     return tools;
 }
-// Regenerates, then formats Go, tidies `go.mod`, formats Markdown, and deletes from the
-// conformance ratchet what no longer violates.
+// Regenerates, then formats Go, tidies `go.mod` and formats Markdown.
 export fun format(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate);
     // Edited, not produced: gofmt amends authored code, which must stay off the replay path.
@@ -2639,9 +2645,6 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["*.md", "benchmarks/**/*.md", "tapes/**/*.md",
         "internal/agent/agents-section.md"], editsExistingSource: true);
     markdown["dprint"](ctx);
-    // After go-fmt, so the lens measures the formatted tree lint_rules then judges.
-    ctx.writesFiles(["hack/policy/conformance.jsonl"], editsExistingSource: true);
-    ratchet\run("hack/policy/conformance.jsonl");
 }
 
 // Runs the CI gates through their declared dependencies.

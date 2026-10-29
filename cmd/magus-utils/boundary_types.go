@@ -322,12 +322,12 @@ var boundaryTypes = []boundaryType{
 	{Name: "DuplicationHistory", Type: reflect.TypeFor[types.DuplicationHistory](), RuntimeObject: true},
 	{Name: "Duplication", Type: reflect.TypeFor[types.DuplicationOutput](), RuntimeObject: true},
 	// The conformance lens, leaf first: ConformanceRow carries a ConformanceKey and [ConformanceItem], and
-	// Conformance carries [ConformanceRow], [ConformanceKnown] and [ConformanceCarry]. InsightReport.conformance
-	// is a Conformance.
+	// Conformance carries [ConformanceRow], [ConformanceCeiling] and [ConformanceUnmeasured].
+	// InsightReport.conformance is a Conformance.
 	{Name: "ConformanceKey", Type: reflect.TypeFor[types.ConformanceKey](), RuntimeObject: true},
 	{Name: "ConformanceItem", Type: reflect.TypeFor[types.ConformanceItem](), RuntimeObject: true},
-	{Name: "ConformanceKnown", Type: reflect.TypeFor[types.ConformanceKnown](), RuntimeObject: true},
-	{Name: "ConformanceCarry", Type: reflect.TypeFor[types.ConformanceCarry](), RuntimeObject: true},
+	{Name: "ConformanceCeiling", Type: reflect.TypeFor[types.ConformanceCeiling](), RuntimeObject: true},
+	{Name: "ConformanceUnmeasured", Type: reflect.TypeFor[types.ConformanceUnmeasured](), RuntimeObject: true},
 	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
 	{Name: "Conformance", Type: reflect.TypeFor[types.ConformanceOutput](), RuntimeObject: true},
 	// The model-tier lens: InsightReport.modelTiers is a ModelTierOutput, a list of records.
@@ -778,11 +778,6 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "ConformancePopulation",
 		Type:  reflect.TypeFor[types.ConformancePopulation](),
 		Cases: []enumCase{{"none", ""}, {"source", "source"}, {"main", "main"}, {"test", "test"}},
-	},
-	{
-		Name:  "ConformanceSource",
-		Type:  reflect.TypeFor[types.ConformanceSource](),
-		Cases: []enumCase{{"none", ""}, {"ratchet", "ratchet"}, {"anchor", "anchor"}},
 	},
 	{
 		Name:  "ContextSource",

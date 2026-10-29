@@ -367,12 +367,44 @@ type conformanceReport struct {
 	Indexes []types.SymbolIndexStatus `json:"indexes"`
 }
 
+// ceilingWorkspace is the part of *magus.Magus that judges a change against its base revision.
+type ceilingWorkspace interface {
+	ConformanceCeilings(ctx context.Context, c types.Conformance, head types.ConformanceOutput) (types.ConformanceOutput, error)
+	MeasureConformanceBase(ctx context.Context, base string) (string, error)
+}
+
+// MagusConformanceBase backs magus\conformanceBase: it measures the merge base of base and HEAD
+// under this workspace's configuration and keeps the measure for magus\conformance, returning
+// the commit. Run it from a target, so the indexing is declared work.
+func MagusConformanceBase(ctx context.Context, base string) (string, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return "", errorNoWorkspace("conformanceBase")
+	}
+	cw, ok := ws.(ceilingWorkspace)
+	if !ok {
+		return "", errors.New("magus\\conformanceBase: this workspace cannot measure a base revision")
+	}
+	commit, err := cw.MeasureConformanceBase(ctx, base)
+	if err != nil {
+		return "", fmt.Errorf("magus\\conformanceBase: %w", err)
+	}
+	return commit, nil
+}
+
 // MagusConformance backs magus\conformance: the conformance lens over the merged symbol indexes under
 // knowledge.conformance, and each declared index's freshness, judged as judgedGraph describes.
-// Generated files are never counted. It reports and writes nothing: a person commits a
-// proposed value. A ratchet record that is missing, malformed or looser than its anchor is an
-// error. The answer is a ConformanceOutput with an indexes list, as a map.
-func MagusConformance(ctx context.Context) (map[string]any, error) {
+// Generated files are never counted. With a base it adds the ceilings checks crossed since
+// it (ConformanceCeilings). It writes nothing in the workspace. The answer is a
+// ConformanceOutput with an indexes list, as a map.
+func MagusConformance(ctx context.Context, checks []string, base string) (map[string]any, error) {
+	c := types.Conformance{Base: base}
+	for _, m := range checks {
+		c.Checks = append(c.Checks, types.ConformanceMetric(m))
+	}
+	if err := c.Validate(); err != nil {
+		return nil, fmt.Errorf("magus\\conformance: %w", err)
+	}
 	ig, err := judgedGraph(ctx, "conformance")
 	if err != nil {
 		return nil, err
@@ -382,11 +414,17 @@ func MagusConformance(ctx context.Context) (map[string]any, error) {
 		return nil, fmt.Errorf("magus\\conformance: %w", err)
 	}
 	opts.Generated = ig.generated
-	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("magus\\conformance: %w", err)
-	}
 	out := ig.kg.Conformance(opts)
 	out.Definition = types.ConformanceDefinition
+	if base != "" {
+		cw, ok := ig.ws.(ceilingWorkspace)
+		if !ok {
+			return nil, errors.New("magus\\conformance: this workspace cannot measure a base revision")
+		}
+		if out, err = cw.ConformanceCeilings(ctx, c, out); err != nil {
+			return nil, fmt.Errorf("magus\\conformance: %w", err)
+		}
+	}
 	return reportMap(conformanceReport{ConformanceOutput: out, Indexes: ig.indexes})
 }
 

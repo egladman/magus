@@ -164,12 +164,6 @@ export enum<str> ConformancePopulation {
     test = "test",
 }
 
-export enum<str> ConformanceSource {
-    none = "",
-    ratchet = "ratchet",
-    anchor = "anchor",
-}
-
 export enum<str> JobKind {
     check = "check",
     symbol = "symbol",
@@ -1006,35 +1000,32 @@ export object ConformanceRow {
     p99: int = 0,
     live: int = 0,
     value: int = 0,
-    anchor: int = 0,
     propose: int = 0,
-    known: int = 0,
-    source: ConformanceSource = ConformanceSource.none,
     violations: [ConformanceItem] = [],
 }
 
-export object ConformanceKnown {
-    metric: ConformanceMetric = ConformanceMetric.none,
-    items: [str] = [],
-    reason: str = "",
-    shapes: {str: str} = {},
+export object ConformanceCeiling {
+    key: ConformanceKey = ConformanceKey{},
+    file: str = "",
+    base: int = 0,
+    head: int = 0,
+    violations: [ConformanceItem] = [],
 }
 
-export object ConformanceCarry {
-    metric: ConformanceMetric = ConformanceMetric.none,
-    @"from": str = "",
-    to: [str] = [],
+export object ConformanceUnmeasured {
+    file: str = "",
+    language: str = "",
+    reason: str = "",
 }
 
 export object Conformance {
     definition: str = "",
     rows: [ConformanceRow] = [],
-    stale: [ConformanceKnown] = [],
-    carried: [ConformanceCarry] = [],
-    ambiguous: [ConformanceCarry] = [],
-    shapes: {str: str} = {},
     excluded: int = 0,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
+    base: str = "",
+    ceilings: [ConformanceCeiling] = [],
+    unmeasured: [ConformanceUnmeasured] = [],
 }
 
 export object ModelTierRecord {
@@ -2375,7 +2366,8 @@ export extern fun bustCache(projectPath: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
 export extern fun clean(args: [str], opts: CommandOptions? = null) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > ExecResult !> any;
-export extern fun conformance() > {str: any} !> any;
+export extern fun conformance(checks: [str] = [<str>], base: str = "") > {str: any} !> any;
+export extern fun conformanceBase(base: str) > str !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
 export extern fun diff(opts: DiffOptions? = null) > Diff !> any;

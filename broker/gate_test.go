@@ -71,7 +71,7 @@ func (s *AttributionSuite) TestAYoungerGateIsRefusedAtOnce() {
 		"only the oldest gate waits, so two gates never wait on each other")
 }
 
-func (s *AttributionSuite) TestAFeatureCheckIsRefusedTheRoomAGateWaitsFor() {
+func (s *AttributionSuite) TestAWaitingGateKeepsAFeatureCheckOutOfItsRoom() {
 	feature := s.client()
 	first := s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "go-test", Slots: 1, PID: 1})
 	second := s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "lint", Slots: 1, PID: 1})

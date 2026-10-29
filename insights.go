@@ -274,20 +274,15 @@ func duplicationHistory(group types.DuplicationGroup, scan []project.ScannedComm
 }
 
 // Conformance is the code-shape lens: how large and how coupled the workspace's code is, one row
-// per metric and population, judged against the value knowledge.conformance enforces (the
-// committed ratchet record, else the configured anchor). Like Duplication it reads the symbol
-// graph under the coverage verdict, so a half-indexed workspace answers unknown instead of
-// passing; unlike it, a configuration it cannot honor is an error, a ratchet record that is
-// missing, malformed or looser than its anchor included.
+// per metric and population, judged against the anchor knowledge.conformance configures. Like
+// Duplication it reads the symbol graph under the coverage verdict, so a half-indexed workspace
+// answers unknown instead of passing; unlike it, a configuration it cannot honor is an error.
 //
-// It proposes and never sets: a row's Propose is the tighter value a person may commit, and
-// nothing here reads a live percentile back as a limit or writes the record.
+// It proposes and never sets: a row's Propose is the tighter anchor a person may configure, and
+// nothing here reads a live percentile back as a limit.
 func (m *Magus) Conformance(ctx context.Context) (types.ConformanceOutput, error) {
 	opts, err := m.ConformanceOptions()
 	if err != nil {
-		return types.ConformanceOutput{}, fmt.Errorf("conformance: %w", err)
-	}
-	if err := opts.Validate(); err != nil {
 		return types.ConformanceOutput{}, fmt.Errorf("conformance: %w", err)
 	}
 	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})

@@ -620,7 +620,7 @@ func assembleRegistry(in Inputs) Shard {
 
 	for _, code := range in.Diagnostics {
 		attrs := map[string]string{"url": in.DiagnosticDocs.URL(code)}
-		if types.OriginOf(code) == types.DiagnosticOriginWorkspace {
+		if types.CodeOrigin(code) == types.DiagnosticOriginWorkspace {
 			attrs["origin"] = string(types.DiagnosticOriginWorkspace)
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{

@@ -11,7 +11,7 @@
 //     caller-supplied field, so a handler cannot forge who acted.
 //   - Classification is fail-CLOSED: a method whose verb this package does not recognize is treated as
 //     mutating and recorded, so a novel RPC is over-audited, never silently skipped. TestKnownVerbs
-//     (the arch ratchet) additionally fails CI if any mounted service grows a method with an unclassified
+//     (the arch test) additionally fails CI if any mounted service grows a method with an unclassified
 //     verb, forcing the author to place it in one bucket or the other.
 //
 // It is deliberately NARROW today: mounted only on TokenService (whose RevokeToken mutation lacked any
@@ -39,7 +39,7 @@ import (
 )
 
 // mutatingVerbs and readVerbs are the leading-word buckets every Connect method name falls into. They are
-// the single source of truth classify() and the arch ratchet share: a method whose leading word is in
+// the single source of truth classify() and the arch test share: a method whose leading word is in
 // neither is UNCLASSIFIED: recorded at runtime (fail-closed) and rejected by TestKnownVerbs at build.
 var (
 	mutatingVerbs = []string{"Clear", "Delete", "Put", "Revoke", "Rotate", "Run", "Sync", "Create", "Update", "Set", "Submit", "Remove", "Mint"}

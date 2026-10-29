@@ -211,11 +211,21 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.AnyMapVal(ret0), nil
 	}))
 	m.MapSet("conformance", vm.DirectValue("magus.conformance", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusConformance(ctx)
+		checks := ffi.StringSlice(bzArgs, 0)
+		base := ffi.String(bzArgs, 1)
+		ret0, err := std.MagusConformance(ctx, checks, base)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.AnyMapVal(ret0), nil
+	}))
+	m.MapSet("conformanceBase", vm.DirectValue("magus.conformanceBase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		base := ffi.String(bzArgs, 0)
+		ret0, err := std.MagusConformanceBase(ctx, base)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("symbols", vm.DirectValue("magus.symbols", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusSymbols(ctx)

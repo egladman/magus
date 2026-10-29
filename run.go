@@ -3232,7 +3232,7 @@ func diagEventFromError(projectPath, target string, err error) (types.Diagnostic
 	if target != "" {
 		unit += ":" + target
 	}
-	return types.DiagnosticEventOf(err, unit)
+	return types.ErrorDiagnosticEvent(err, unit)
 }
 
 // charmedTarget renders "target:charm,..." the way cache.reproTarget does for an

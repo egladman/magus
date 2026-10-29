@@ -40,13 +40,10 @@ type ConformanceChange struct {
 	Read func(path string) (string, bool)
 	// Conformance is knowledge.conformance as this run applies it. Its Gates are the silence gates and
 	// the report bar and cap, taken as given: a zero gate is zero, never a default. The
-	// threshold check judges subjects against its policy and is silent with no RatchetPath.
+	// threshold check judges subjects against its configured anchors.
 	Conformance types.ConformanceOptions
-	// RatchetBase is the ratchet record at the diff's base, nil when the base has none. The
-	// threshold check compares it with Conformance.Ratchet to see what the change moves.
-	RatchetBase *types.ConformanceRatchet
 	// Base is the knowledge graph at the diff's base, nil without a baseline. The threshold check
-	// reads a known item's measure there to say how far the change grew it.
+	// reads an item's measure there: one already past by as much is the base's, not the change's.
 	Base *Graph
 	// Touched holds the symbol IDs whose bodies the change edits and that are not Subjects.
 	Touched []string

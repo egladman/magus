@@ -53,9 +53,9 @@ in a new term at each layer.
 
 - The `file-split` conformance metric keeps a concept in one file until that
   file passes 1500 lines, so a package does not fan out into thin files early.
-- The `export-scope` and `dep-fanout` conformance metrics, ratcheted in
-  [`hack/policy/conformance.jsonl`](https://github.com/egladman/magus/blob/main/hack/policy/conformance.jsonl), flag an export nothing outside its package
-  uses and a package that imports too much.
+- The `export-scope` and `dep-fanout` conformance metrics, held to the conformance
+  ceiling (a changed file may not hold more violations than at its base), flag an
+  export nothing outside its package uses and a package that imports too much.
 - The [architecture review skill](https://github.com/egladman/magus/tree/main/internal/agent/skills/magus-architecture-review)
   names the too-thin shapes to check before proposing a boundary: a package
   imported only from inside its own subtree, a package with exactly one

@@ -241,11 +241,22 @@ var Magus = Module{
 		},
 		{
 			Name:    "conformance",
-			Doc:     "The conformance lens as data: {definition, rows, stale, excluded, answer, indexes}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, anchor, propose, known, source, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is what a check enforces, the committed ratchet value when source is ratchet and the configured anchor otherwise; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value that no known entry accepts, each {id, source, measure}. propose is zero, or a tighter value a person may commit to the ratchet record knowledge.conformance.ratchet names; it is never looser than value, and nothing enforces live. stale lists known entries that no longer violate; magus never writes the record, so a person or a workspace target deletes them, as `magus run format .` does in the magus repository. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a ratchet record that is missing, malformed or looser than its anchor.",
-			Args:    nil,
+			Doc:     "The conformance lens as data: {definition, rows, excluded, answer, indexes, base, ceilings, unmeasured}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, propose, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is the anchor knowledge.conformance configures; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value, each {id, source, measure}. propose is zero, or a tighter anchor a person may configure; it is never looser than value, and nothing enforces live. checks and base hold a change to a conformance ceiling: base is a revision, and ceilings are the files changed since it whose count of violations of a metric in checks rose past their count there, each {key, file, base, head, violations}; a drop is progress, and unmeasured lists each touched file only an external indexer reads, {file, language, reason}, which holds no ceiling. No count is stored in the workspace: it reads the base's measure magus\\conformanceBase kept in the user cache, and raises when none is kept or the base has no checks. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a policy it cannot honor or a base it cannot measure whole.",
+			Args: []Arg{
+				{Name: "checks", Type: TypeStringSlice, Optional: true},
+				{Name: "base", Type: TypeString, Optional: true},
+			},
 			Returns: []Ret{{Type: TypeAnyMap}},
 			Raises:  true,
 			Impl:    MagusConformance,
+		},
+		{
+			Name:    "conformanceBase",
+			Doc:     "Measures the merge base of base and HEAD for magus\\conformance's ceilings and returns the commit. It exports the base and runs magus's in-process Go, Buzz and shell indexers over it with this workspace's configuration, as a library call that opens no workspace and starts no run, then keeps the conformance lens in the user cache per commit, policy and indexer versions, which every checkout on the machine shares; a kept measure is reused. A language only an external indexer reads gets no base measure. Raises MGS1022 outside a workspace, and raises when the base cannot be resolved or an in-process indexer cannot read one of its sources.",
+			Args:    []Arg{{Name: "base", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
+			Impl:    MagusConformanceBase,
 		},
 		{
 			Name:    "symbols",
@@ -1545,7 +1556,7 @@ func MagusRaise(ctx context.Context, code types.DiagnosticCodeRef, message strin
 		return fmt.Errorf(`magus\raise: %w`, err)
 	}
 	if message == "" {
-		return fmt.Errorf(`magus\raise: %s needs a message, a code is an identifier, not a sentence`, c)
+		return fmt.Errorf(`magus\raise: %s needs a message, a code is an identifier, not a sentence`, string(c))
 	}
 	// Error's url is captured from the domain at construction, so a per-call domain is how
 	// the override or the workspace's page reaches the rendered error.
@@ -1573,7 +1584,7 @@ func MagusDiagnosticCode(ctx context.Context, text string) (types.DiagnosticCode
 	if err != nil {
 		return types.DiagnosticCodeRef{}, fmt.Errorf(`magus\diagnosticCode: %w`, err)
 	}
-	return types.DiagnosticCodeRef{Code: string(c), Origin: types.OriginOf(c)}, nil
+	return types.DiagnosticCodeRef{Code: string(c), Origin: types.CodeOrigin(c)}, nil
 }
 
 // workspaceDiagnostics is the diagnostics section of the magus.yaml of the workspace on ctx,

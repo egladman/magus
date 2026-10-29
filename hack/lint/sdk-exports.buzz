@@ -1,4 +1,4 @@
-// sdk-exports holds the root package, the public SDK, to a committed ratchet: every
+// sdk-exports holds the root package, the public SDK, to a committed allow list: every
 // exported name and method in api-go.lock needs a line in hack/lint/sdk-exports.jsonl saying
 // why it is exported, and a line naming something no longer exported is stale. The SDK is a
 // substrate that should shrink, so growing it takes a stated reason.
@@ -12,21 +12,21 @@ import "encoding/json";
 import "hack/lint/support" as support;
 
 final LOCK = "internal/commands/testdata/api-go.lock";
-final RATCHET = "hack/lint/sdk-exports.jsonl";
+final ALLOWED = "hack/lint/sdk-exports.jsonl";
 final PREFIX = "github.com/egladman/magus.";
 
 export fun reads() > [str] {
-    return [LOCK, RATCHET];
+    return [LOCK, ALLOWED];
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
     final lock = support\named(files, p: LOCK);
-    final ratchet = support\named(files, p: RATCHET);
-    if (lock == null or ratchet == null) {
-        return [Finding{ path = RATCHET, message = "the ratchet or the API lock was not handed in",
-            fix = "Restore " + LOCK + " and " + RATCHET + "." }];
+    final allowed = support\named(files, p: ALLOWED);
+    if (lock == null or allowed == null) {
+        return [Finding{ path = ALLOWED, message = "the allow list or the API lock was not handed in",
+            fix = "Restore " + LOCK + " and " + ALLOWED + "." }];
     }
-    return judge(exported(support\read(lock!)), ratchet: support\read(ratchet!));
+    return judge(exported(support\read(lock!)), allowed: support\read(allowed!));
 }
 
 // exported is the root package's top-level names and the methods of its types, as the lock
@@ -49,7 +49,7 @@ export fun exported(lock: str) > [str] {
     return names;
 }
 
-// reasons is each ratchet line's reason by name; the last line for a name wins.
+// reasons is each allow-list line's reason by name; the last line for a name wins.
 export fun reasons(src: str) > {str: str} !> any {
     final got = mut {<str: str>};
     foreach (line in src.split("\n")) {
@@ -64,26 +64,26 @@ export fun reasons(src: str) > {str: str} !> any {
     return got;
 }
 
-// judge is each finding for the exported names against the ratchet source.
-export fun judge(names: [str], ratchet: str) > [Finding] !> any {
+// judge is each finding for the exported names against the allow list.
+export fun judge(names: [str], allowed: str) > [Finding] !> any {
     final found = mut [<Finding>];
-    final have = reasons(ratchet);
+    final have = reasons(allowed);
     final seen = mut {<str: bool>};
     foreach (name in names) {
         seen[name] = true;
         final reason = have[name];
         if (reason == null) {
-            found.append(Finding{ path = RATCHET, message = "the root package exports " + name + ", which the SDK ratchet does not list",
-                fix = "Prefer not exporting it. If the SDK needs it, append a line with a name and a reason for" + name + " to " + RATCHET + "." });
+            found.append(Finding{ path = ALLOWED, message = "the root package exports " + name + ", which the SDK allow list leaves out",
+                fix = "Prefer not exporting it. If the SDK needs it, append a line with a name and a reason for" + name + " to " + ALLOWED + "." });
         } else if (reason!.trim() == "") {
-            found.append(Finding{ path = RATCHET, message = "the SDK ratchet lists " + name + " with no reason",
-                fix = "Give " + name + " a one-line reason in " + RATCHET + "." });
+            found.append(Finding{ path = ALLOWED, message = "the SDK allow list names " + name + " with no reason",
+                fix = "Give " + name + " a one-line reason in " + ALLOWED + "." });
         }
     }
     foreach (name in support\sorted(have.keys())) {
         if (seen[name] == null) {
-            found.append(Finding{ path = RATCHET, message = "the SDK ratchet lists " + name + ", which the root package no longer exports",
-                fix = "Delete its line from " + RATCHET + "." });
+            found.append(Finding{ path = ALLOWED, message = "the SDK allow list names " + name + ", which the root package no longer exports",
+                fix = "Delete its line from " + ALLOWED + "." });
         }
     }
     return found;
@@ -99,21 +99,21 @@ fun row(name: str, reason: str) > str !> any {
 }
 
 test "a listed name with a reason passes" {
-    assert\equal(support\messages(judge(["Open"], ratchet: row("Open", reason: "entry point"))), want: [<str>], message: "clean");
+    assert\equal(support\messages(judge(["Open"], allowed: row("Open", reason: "entry point"))), want: [<str>], message: "clean");
 }
 
-test "an export absent from the ratchet fails and names the remedy" {
-    final got = judge(["Magus.ModelRows"], ratchet: "");
+test "an export absent from the allow list fails and names the remedy" {
+    final got = judge(["Magus.ModelRows"], allowed: "");
     assert\equal(got.len(), want: 1, message: "one finding");
-    assert\equal(got[0].message, want: "the root package exports Magus.ModelRows, which the SDK ratchet does not list", message: "message");
+    assert\equal(got[0].message, want: "the root package exports Magus.ModelRows, which the SDK allow list leaves out", message: "message");
     assert\equal(got[0].fix.startsWith("Prefer not exporting it."), want: true, message: "remedy");
 }
 
 test "a blank reason fails and the last line for a name wins" {
-    assert\equal(judge(["Open"], ratchet: row("Open", reason: "")).len(), want: 1, message: "blank");
-    assert\equal(judge(["Open"], ratchet: row("Open", reason: "") + row("Open", reason: "why")).len(), want: 0, message: "last wins");
+    assert\equal(judge(["Open"], allowed: row("Open", reason: "")).len(), want: 1, message: "blank");
+    assert\equal(judge(["Open"], allowed: row("Open", reason: "") + row("Open", reason: "why")).len(), want: 0, message: "last wins");
 }
 
-test "a ratchet line for a removed export is stale" {
-    assert\equal(support\messages(judge([<str>], ratchet: row("Gone", reason: "x"))), want: ["the SDK ratchet lists Gone, which the root package no longer exports"], message: "stale");
+test "an allow-list line for a removed export is stale" {
+    assert\equal(support\messages(judge([<str>], allowed: row("Gone", reason: "x"))), want: ["the SDK allow list names Gone, which the root package no longer exports"], message: "stale");
 }

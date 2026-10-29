@@ -1477,7 +1477,7 @@ func diagnosticArgs(err error) []any {
 	if why := types.DiagnosticRationale(err); why != "" {
 		args = append(args, attr.Why(why))
 	}
-	if ev, ok := types.DiagnosticEventOf(err, ""); ok && types.OriginOf(ev.Code) == types.DiagnosticOriginWorkspace {
+	if ev, ok := types.ErrorDiagnosticEvent(err, ""); ok && types.CodeOrigin(ev.Code) == types.DiagnosticOriginWorkspace {
 		args = append(args, slog.String("origin", string(types.DiagnosticOriginWorkspace)))
 	}
 	return args

@@ -134,13 +134,13 @@ func TestDefaults_ConformanceIsValidAndFlagless(t *testing.T) {
 
 	field, ok := reflect.TypeOf(cfg.Knowledge).FieldByName("Conformance")
 	require.True(t, ok)
-	assert.Equal(t, "-", field.Tag.Get("cli"), "a ratchet is committed policy: no flag, no env var")
+	assert.Equal(t, "-", field.Tag.Get("cli"), "an anchor is committed policy: no flag, no env var")
 }
 
 func TestConformanceDefaults(t *testing.T) {
 	t.Parallel()
 	c := Defaults().Knowledge.Conformance
-	// The ratchet is opt-in and an exclusion names one workspace's layout, so neither ships.
+	// An exclusion names one workspace's layout, so none ships.
 	assert.Equal(t, ConformanceConfig{
 		MinSample: 30,
 		Step:      0.05,
@@ -196,7 +196,6 @@ func TestConformanceDefaultsAreNotShared(t *testing.T) {
 func TestConformanceOptions(t *testing.T) {
 	t.Parallel()
 	c := ConformanceConfig{
-		Ratchet:   "hack/policy/conformance.json",
 		MinSample: 12,
 		Step:      0.1,
 		Exclude:   []string{"vendor/**"},
@@ -218,11 +217,10 @@ func TestConformanceOptions(t *testing.T) {
 			scoped:    {Percentile: 95, Anchor: 89},
 			alias:     {Percentile: 95, Anchor: 100, MinSubject: 5},
 		},
-		RatchetPath: "hack/policy/conformance.json",
-		MinSample:   12,
-		Step:        0.1,
-		Exclude:     []string{"vendor/**"},
-		Gates:       types.ConformanceGates{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
+		MinSample: 12,
+		Step:      0.1,
+		Exclude:   []string{"vendor/**"},
+		Gates:     types.ConformanceGates{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
 	}
 	got := c.Options()
 	assert.Equal(t, want, got)
@@ -241,22 +239,15 @@ func TestConformanceScopedLimitKeepsTheAnchorTight(t *testing.T) {
 	c := Defaults().Knowledge.Conformance
 	c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}
 	o := c.Options()
-	o.RatchetPath = "hack/policy/conformance.json"
-	o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{
-		{ConformanceKey: scoped, Value: 89, N: 1, Why: "pin", Line: 4},
-	}}
 	require.NoError(t, o.Validate())
 
-	v, src := o.Effective(scoped)
+	v, ok := o.Effective(scoped)
+	assert.True(t, ok)
 	assert.Equal(t, 89, v)
-	assert.Equal(t, types.ConformanceFromRatchet, src)
 
-	v, src = o.Effective(other)
+	v, ok = o.Effective(other)
+	assert.True(t, ok)
 	assert.Equal(t, 62, v)
-	assert.Equal(t, types.ConformanceFromAnchor, src)
-
-	o.Ratchet.Thresholds[0].Value = 90
-	assert.ErrorContains(t, o.Validate(), "looser than its anchor 89")
 }
 
 func TestConformanceLoadsFromYAML(t *testing.T) {
@@ -264,7 +255,6 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
 	require.NoError(t, os.WriteFile(path, []byte(`knowledge:
   conformance:
-    ratchet: hack/policy/conformance.json
     min_sample: 10
     checks:
       dep-fanout:
@@ -278,7 +268,6 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
 	require.NoError(t, err)
 	c := cfg.Knowledge.Conformance
 	assert.Equal(t, ConformanceConfig{
-		Ratchet:   "hack/policy/conformance.json",
 		MinSample: 10,
 		Step:      0.05,
 		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},

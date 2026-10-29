@@ -9,6 +9,7 @@ ci.provider
 clean
 cmd
 conformance
+conformanceBase
 describe
 describe.charm
 describe.evaluatedProject

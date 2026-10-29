@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -401,7 +400,7 @@ func TestAttachConformanceAppliesTheBarAndCapItIsGiven(t *testing.T) {
 	}
 }
 
-// The threshold check runs only when a review hands it the policy and a ratchet path, so this
+// The threshold check runs only when a review hands it the policy, so this
 // is what keeps it reachable from `magus diff`.
 func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
 	ns := "gomod example.com/m `example.com/m/internal/trail`/"
@@ -421,7 +420,6 @@ func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
 	conformance.Limits = map[types.ConformanceKey]types.ConformanceLimit{
 		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 8},
 	}
-	conformance.RatchetPath, conformance.Ratchet = "conformance.jsonl", types.ConformanceRatchet{Schema: 1}
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 
 	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head,
@@ -435,7 +433,7 @@ func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
 	assert.Contains(t, names, "conformance-threshold")
 }
 
-func TestAttachConformanceReportsAKnownSymbolWhoseBodyGrew(t *testing.T) {
+func TestAttachConformanceReportsATouchedSymbolWhoseBodyGrew(t *testing.T) {
 	const file = "internal/trail/trail.go"
 	ns := "gomod example.com/m `example.com/m/internal/trail`/"
 	build := func(longEnd int) *knowledge.Graph {
@@ -463,10 +461,6 @@ func TestAttachConformanceReportsAKnownSymbolWhoseBodyGrew(t *testing.T) {
 	conformance.Limits = map[types.ConformanceKey]types.ConformanceLimit{
 		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 52},
 	}
-	conformance.RatchetPath = "conformance.jsonl"
-	conformance.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
-		Metric: types.ConformanceFuncLines, Items: []string{file + "#Long"}, Reason: "split pending",
-	}}}
 	out := types.Diff{Files: []types.DiffFile{{Path: file, Project: "."}}}
 
 	attachConformance(map[string]*types.DiffFile{file: &out.Files[0]}, head, conformanceInput{
@@ -483,76 +477,22 @@ func TestAttachConformanceReportsAKnownSymbolWhoseBodyGrew(t *testing.T) {
 	assert.Equal(t, []string{"`Long` measures 60 for func-lines source, up from 56 at the base, past the configured anchor of 52"}, got)
 }
 
-const ratchetHead = `{"kind":"schema","schema":1}
-{"kind":"measured","rev":"r","date":"d"}
-{"kind":"threshold","metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}
-`
-
-func ratchetConformance() types.ConformanceOptions {
-	o := shippedConformance()
-	o.RatchetPath = "conformance.jsonl"
-	return o
-}
-
-func readRatchet(text string) func(string) (string, bool) {
-	return func(path string) (string, bool) { return text, path == "conformance.jsonl" && text != "" }
-}
-
-func TestDiffConformanceReadsTheRatchetAndItsBase(t *testing.T) {
-	loosened := `diff --git a/conformance.jsonl b/conformance.jsonl
---- a/conformance.jsonl
-+++ b/conformance.jsonl
-@@ -1,3 +1,3 @@
- {"kind":"schema","schema":1}
- {"kind":"measured","rev":"r","date":"d"}
--{"kind":"threshold","metric":"func-lines","population":"source","value":70,"n":40,"percentile":99,"why":"w"}
-+{"kind":"threshold","metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}
-`
+func TestDiffConformanceAppliesTheReviewsGateOverrides(t *testing.T) {
 	generated := map[string]bool{"gen/x.go": true}
-	o, base, note, err := diffConformance(ratchetConformance(), diffConfig{minCohort: 7}, loosened, generated, readRatchet(ratchetHead))
+	o, err := diffConformance(shippedConformance(), diffConfig{minCohort: 7}, generated)
 
 	require.NoError(t, err)
-	assert.Empty(t, note)
-	assert.Equal(t, 80, o.Ratchet.Thresholds[0].Value)
-	require.NotNil(t, base)
-	assert.Equal(t, 70, base.Thresholds[0].Value, "the base is the record before the patch")
-	wantGates := shippedConformance().Gates
-	wantGates.MinCohort = 7
-	want := ratchetConformance()
-	want.Gates = wantGates
+	want := shippedConformance()
+	want.Gates.MinCohort = 7
 	want.Generated = generated
-	want.Ratchet = o.Ratchet
 	assert.Equal(t, want, o, "a review's override wins and an unset one keeps the configured gate")
-
-	_, base, _, err = diffConformance(ratchetConformance(), diffConfig{}, trailPatch, nil, readRatchet(ratchetHead))
-	require.NoError(t, err)
-	require.NotNil(t, base)
-	assert.Equal(t, 80, base.Thresholds[0].Value, "a patch that leaves the record alone has it as its base")
-
-	added := fmt.Sprintf(`diff --git a/conformance.jsonl b/conformance.jsonl
-new file mode 100644
---- /dev/null
-+++ b/conformance.jsonl
-@@ -0,0 +1,3 @@
-+%s
-`, strings.ReplaceAll(strings.TrimSuffix(ratchetHead, "\n"), "\n", "\n+"))
-	_, base, _, err = diffConformance(ratchetConformance(), diffConfig{}, added, nil, readRatchet(ratchetHead))
-	require.NoError(t, err)
-	assert.Nil(t, base, "a record the change adds has no base")
 }
 
-func TestDiffConformanceRefusesAMissingOrInvalidRecord(t *testing.T) {
-	_, _, _, err := diffConformance(ratchetConformance(), diffConfig{}, "", nil, readRatchet(""))
-	require.ErrorContains(t, err, "conformance.jsonl")
-
-	_, _, _, err = diffConformance(ratchetConformance(), diffConfig{}, "", nil, readRatchet(`{"kind":"schema","schema":2}`))
-	require.ErrorContains(t, err, "schema 2")
-
-	o, base, note, err := diffConformance(shippedConformance(), diffConfig{}, "", nil, readRatchet(""))
-	require.NoError(t, err, "no ratchet path configured reads nothing")
-	assert.Nil(t, base)
-	assert.Empty(t, note)
-	assert.Equal(t, shippedConformance().Gates, o.Gates)
+func TestDiffConformanceRefusesAnInvalidPolicy(t *testing.T) {
+	o := shippedConformance()
+	o.MinSample = 0
+	_, err := diffConformance(o, diffConfig{}, nil)
+	require.ErrorContains(t, err, "min_sample 0")
 }
 
 func TestPairRenames(t *testing.T) {

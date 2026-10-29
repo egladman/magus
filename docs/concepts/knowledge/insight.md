@@ -79,51 +79,31 @@ Each lens is a field on the report:
   a widened exclusion shows.
 
   Each row sets two values side by side. `live` is the configured percentile of the code
-  today. `value` is what a check enforces, and `source` says where it came from: `ratchet`
-  when a person committed it to the record `knowledge.conformance.ratchet` names, `anchor`
-  when nothing is committed and the configured bound applies. They differ on purpose.
-  Nothing enforces a live percentile, because a threshold that follows the code loosens
-  as the code grows. `violations` lists what sits past `value`, apart from the `known`
-  entries the record accepts; `stale` lists known entries that no longer violate. magus
-  never deletes them: a person does, or a target the workspace writes. In the magus
-  repository, `magus run format .` deletes them.
-
-  A known item follows its code through a rename or a move. A known line may record each
-  item's shape in `shapes`: a function's or type's body shape, which ignores names, or for
-  a file the set of its symbols' body digests. When a listed item matches nothing the
-  lens measured, and exactly one item past `value` that no known line lists has an equal
-  shape, the lens judges that item as the listed one and reports the pair in `carried`.
-  Two or more such items, or one that a second listed item also claims, carry nothing:
-  `ambiguous` reports them, the old item is stale and the new one is a violation, as if
-  no shape were recorded. Packages are never carried. In the magus repository,
-  `magus run format .` records missing shapes and re-keys carried items.
+  today. `value` is the anchor `knowledge.conformance.checks` configures, and a check
+  enforces it. They differ on purpose. Nothing enforces a live percentile, because a
+  threshold that follows the code loosens as the code grows. `violations` lists what sits
+  past `value`.
 
   `propose` is the lens's only suggestion: the live percentile, offered when at least
   `min_sample` items back it and it sits `step` below `value`. It is never looser than
-  `value`. The lens proposes and a person commits: you copy the proposed value, its
-  sample size and percentile into the record, and the commit is the review. Nothing here
-  edits the record or the configuration, and a committed value looser than its anchor,
-  or a record that is missing or malformed, is an error rather than a quiet fallback.
+  `value`. The lens proposes and a person configures: you copy the proposed value into
+  `magus.yaml`, and the commit is the review. Nothing here edits the configuration, and a
+  policy it cannot honor is an error rather than a quiet fallback.
 
-  The record is a JSON Lines file, one JSON object per line, so `grep threshold` and
-  `diff` read it. Blank lines are skipped, and JSON has no comments: a `threshold`'s
-  `why` member carries the reason. The path is workspace-relative, and
-  `hack/policy/conformance.jsonl` is the usual name.
-
-  ```text
-  {"kind":"schema","schema":1}
-  {"kind":"measured","rev":"<rev>","date":"<date>"}
-  {"kind":"threshold","metric":"<metric>","population":"<population>","scope":"<scope>","value":<value>,"n":<n>,"percentile":<percentile>,"why":"<why>"}
-  {"kind":"known","metric":"<metric>","reason":"<reason>","items":["<item>"],"shapes":{"<item>":"<shape>"}}
-  ```
-
-  `schema` is required and names the format version, 1. `scope`, `why` and `shapes` are
-  optional, and `scope` is absent when the key has none. A `known` line lists the
-  items it accepts in `items`, and a shape only for an item it lists. An unknown kind, member, metric or population, a
-  repeated member, a value of the wrong type, a missing required member, a repeated
-  line or a key committed twice is an error naming the file and line. The
-  tab-separated and single-document JSON formats before this one are refused the same
-  way; rewrite them as lines.
+  Asked for `checks` and a `base` revision, `magus\conformance(checks, base:)` also
+  returns `ceilings`: each file changed since the base whose count of violations of a
+  metric in `checks` rose past its count there, with both counts. This is the
+  conformance ceiling. A drop is progress, and a file that holds as many as before
+  passes, so violations that predate a change never fail it, and a file absent at the
+  base has a ceiling of 0. No count is stored in the workspace. `magus\conformanceBase(base)`
+  exports the base and runs magus's in-process indexers (Go, Buzz, shell) over it with this
+  workspace's configuration, as a library call that opens no second workspace and starts no
+  run, so a count depends only on the base's bytes, today's policy and the indexer versions.
+  The measure is kept in the user cache per commit, policy and indexer versions, where every
+  checkout on the machine reuses it. `magus\conformance` only reads it, and a base with none
+  is an error naming the step. A language only an external SCIP indexer reads has no base
+  measure: each touched file of it is listed in `unmeasured` with its language and why, and
+  holds no ceiling. A base source an in-process indexer cannot read is an error, never a pass.
 
 - `grouping`: what splitting work across workers cost in this workspace, read from the
   job outcomes in the history file, not git. Each job is `chained` (one worker whose

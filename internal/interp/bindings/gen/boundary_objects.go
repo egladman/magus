@@ -671,10 +671,7 @@ func ObjectConformanceRow(v types.ConformanceRow, enums ffi.EnumCases) vm.Value 
 	out.MapSet("p99", vm.IntValue(int64(v.P99)))
 	out.MapSet("live", vm.IntValue(int64(v.Live)))
 	out.MapSet("value", vm.IntValue(int64(v.Value)))
-	out.MapSet("anchor", vm.IntValue(int64(v.Anchor)))
 	out.MapSet("propose", vm.IntValue(int64(v.Propose)))
-	out.MapSet("known", vm.IntValue(int64(v.Known)))
-	out.MapSet("source", enums.Case("ConformanceSource", string(v.Source)))
 	itemsViolations := make([]vm.Value, len(v.Violations))
 	for indexViolations := range v.Violations {
 		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
@@ -683,32 +680,25 @@ func ObjectConformanceRow(v types.ConformanceRow, enums ffi.EnumCases) vm.Value 
 	return out
 }
 
-func ObjectConformanceKnown(v types.ConformanceKnown, enums ffi.EnumCases) vm.Value {
+func ObjectConformanceCeiling(v types.ConformanceCeiling, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("metric", enums.Case("ConformanceMetric", string(v.Metric)))
-	itemsItems := make([]vm.Value, len(v.Items))
-	for indexItems := range v.Items {
-		itemsItems[indexItems] = vm.StringValue(v.Items[indexItems])
+	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
+	out.MapSet("file", vm.StringValue(v.File))
+	out.MapSet("base", vm.IntValue(int64(v.Base)))
+	out.MapSet("head", vm.IntValue(int64(v.Head)))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
 	}
-	out.MapSet("items", vm.ListValue(itemsItems))
-	out.MapSet("reason", vm.StringValue(v.Reason))
-	mappedShapes := vm.NewMap()
-	for keyShapes, itemShapes := range v.Shapes {
-		mappedShapes.MapSet(keyShapes, vm.StringValue(itemShapes))
-	}
-	out.MapSet("shapes", mappedShapes)
+	out.MapSet("violations", vm.ListValue(itemsViolations))
 	return out
 }
 
-func ObjectConformanceCarry(v types.ConformanceCarry, enums ffi.EnumCases) vm.Value {
+func ObjectConformanceUnmeasured(v types.ConformanceUnmeasured) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("metric", enums.Case("ConformanceMetric", string(v.Metric)))
-	out.MapSet("from", vm.StringValue(v.From))
-	itemsTo := make([]vm.Value, len(v.To))
-	for indexTo := range v.To {
-		itemsTo[indexTo] = vm.StringValue(v.To[indexTo])
-	}
-	out.MapSet("to", vm.ListValue(itemsTo))
+	out.MapSet("file", vm.StringValue(v.File))
+	out.MapSet("language", vm.StringValue(v.Language))
+	out.MapSet("reason", vm.StringValue(v.Reason))
 	return out
 }
 
@@ -720,28 +710,19 @@ func ObjectConformanceOutput(v types.ConformanceOutput, enums ffi.EnumCases) vm.
 		itemsRows[indexRows] = ObjectConformanceRow(v.Rows[indexRows], enums)
 	}
 	out.MapSet("rows", vm.ListValue(itemsRows))
-	itemsStale := make([]vm.Value, len(v.Stale))
-	for indexStale := range v.Stale {
-		itemsStale[indexStale] = ObjectConformanceKnown(v.Stale[indexStale], enums)
-	}
-	out.MapSet("stale", vm.ListValue(itemsStale))
-	itemsCarried := make([]vm.Value, len(v.Carried))
-	for indexCarried := range v.Carried {
-		itemsCarried[indexCarried] = ObjectConformanceCarry(v.Carried[indexCarried], enums)
-	}
-	out.MapSet("carried", vm.ListValue(itemsCarried))
-	itemsAmbiguous := make([]vm.Value, len(v.Ambiguous))
-	for indexAmbiguous := range v.Ambiguous {
-		itemsAmbiguous[indexAmbiguous] = ObjectConformanceCarry(v.Ambiguous[indexAmbiguous], enums)
-	}
-	out.MapSet("ambiguous", vm.ListValue(itemsAmbiguous))
-	mappedShapes := vm.NewMap()
-	for keyShapes, itemShapes := range v.Shapes {
-		mappedShapes.MapSet(keyShapes, vm.StringValue(itemShapes))
-	}
-	out.MapSet("shapes", mappedShapes)
 	out.MapSet("excluded", vm.IntValue(int64(v.Excluded)))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
+	out.MapSet("base", vm.StringValue(v.Base))
+	itemsCeilings := make([]vm.Value, len(v.Ceilings))
+	for indexCeilings := range v.Ceilings {
+		itemsCeilings[indexCeilings] = ObjectConformanceCeiling(v.Ceilings[indexCeilings], enums)
+	}
+	out.MapSet("ceilings", vm.ListValue(itemsCeilings))
+	itemsUnmeasured := make([]vm.Value, len(v.Unmeasured))
+	for indexUnmeasured := range v.Unmeasured {
+		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Unmeasured[indexUnmeasured])
+	}
+	out.MapSet("unmeasured", vm.ListValue(itemsUnmeasured))
 	return out
 }
 

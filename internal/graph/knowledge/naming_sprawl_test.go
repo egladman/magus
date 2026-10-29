@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -166,9 +167,19 @@ func TestSprawlCheckNeverCountsGeneratedCode(t *testing.T) {
 	assert.Empty(t, got, "Hit and Miss are generated, so Error joins no family")
 }
 
-// The wide-type bonus reads the committed type-methods value, else the anchor, and nothing
-// when neither is configured: a thin family clears the bar only on an owner past it.
-func TestSprawlCheckWideTypeBonusFollowsTheRatchet(t *testing.T) {
+// WideTypeSuite pins the wide-type bonus: it reads the configured type-methods anchor, and
+// nothing when none is configured, so a thin family clears the bar only on an owner past it.
+type WideTypeSuite struct {
+	suite.Suite
+	g    *Graph
+	subj types.KnowledgeSymbol
+}
+
+func TestWideTypeSuite(t *testing.T) {
+	suite.Run(t, new(WideTypeSuite))
+}
+
+func (s *WideTypeSuite) SetupTest() {
 	syms := []types.KnowledgeSymbol{
 		sprawlMethod("store", "CheckRead", "path string"),
 		sprawlMethod("store", "CheckWrite", "path string, mode int"),
@@ -176,39 +187,35 @@ func TestSprawlCheckWideTypeBonusFollowsTheRatchet(t *testing.T) {
 		sprawlMethod("store", "Open", "path string"),
 		sprawlMethod("store", "Close", ""),
 	}
-	subj := syms[2]
-	g := namingGraph(t, syms)
-	key := types.ConformanceKey{Metric: types.ConformanceTypeMethods, Population: types.ConformancePopSource}
-	for _, tc := range []struct {
-		name      string
-		committed int
-		limited   bool
-		want      []string
-	}{
-		{name: "no value configured"},
-		{name: "the anchor of 49", limited: true},
-		{name: "a committed 4", limited: true, committed: 4, want: []string{
-			"members: CheckExec, CheckRead, CheckWrite",
-			"`store` has 5 methods, past the committed value of 4 for type-methods source",
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			o := testConformance()
-			if tc.limited {
-				o.Limits = map[types.ConformanceKey]types.ConformanceLimit{key: {Percentile: 95, Anchor: 49}}
-			}
-			if tc.committed > 0 {
-				o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: tc.committed}}}
-			}
-			got := g.ConformanceChecks(ConformanceChange{Conformance: o, Subjects: subjectIDs(subj), Introduced: introduced(subj)})
-			if tc.want == nil {
-				assert.Empty(t, got)
-				return
-			}
-			require.Len(t, got[symID(subj)], 1)
-			assert.Equal(t, tc.want, got[symID(subj)][0].Details)
-		})
+	s.subj = syms[2]
+	s.g = namingGraph(s.T(), syms)
+}
+
+// checks is what the sprawl check says of the subject with anchor configured, or none at 0.
+func (s *WideTypeSuite) checks(anchor int) map[string][]types.Check {
+	o := testConformance()
+	if anchor > 0 {
+		key := types.ConformanceKey{Metric: types.ConformanceTypeMethods, Population: types.ConformancePopSource}
+		o.Limits = map[types.ConformanceKey]types.ConformanceLimit{key: {Percentile: 95, Anchor: anchor}}
 	}
+	return s.g.ConformanceChecks(ConformanceChange{Conformance: o, Subjects: subjectIDs(s.subj), Introduced: introduced(s.subj)})
+}
+
+func (s *WideTypeSuite) TestNoAnchorConfiguredGivesNoBonus() {
+	s.Empty(s.checks(0))
+}
+
+func (s *WideTypeSuite) TestAnOwnerUnderTheAnchorGivesNoBonus() {
+	s.Empty(s.checks(49))
+}
+
+func (s *WideTypeSuite) TestAnOwnerPastTheAnchorClearsTheBar() {
+	got := s.checks(4)
+	s.Require().Len(got[symID(s.subj)], 1)
+	s.Equal([]string{
+		"members: CheckExec, CheckRead, CheckWrite",
+		"`store` has 5 methods, past the configured anchor of 4 for type-methods source",
+	}, got[symID(s.subj)][0].Details)
 }
 
 func TestSprawlCheckIsDeterministic(t *testing.T) {

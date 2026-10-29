@@ -401,9 +401,9 @@ func TestInsightReportCarriesConformanceAndItsMisconfiguration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "conformance", report.Conformance.Definition)
 
-	a.failConformance = errors.New("conformance: hack/policy/conformance.json: no such file")
+	a.failConformance = errors.New("conformance: min_sample 0: want at least 1")
 	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
-	assert.ErrorContains(t, err, "conformance.json")
+	assert.ErrorContains(t, err, "min_sample")
 }
 
 // ledgerWorkspace is a workspace that can back a job Store: it

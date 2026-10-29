@@ -64,14 +64,15 @@ const DuplicationDefinition = "Duplication ranks pairs of functions that call th
 const ConformanceDefinition = "Conformance measures how big and how coupled the workspace's code is, one row per " +
 	"metric and population: file lines, function lines, methods per type, top-level declarations per file, " +
 	"workspace imports per package, token count of bodies that share a shape, and exported symbols nothing " +
-	"outside their package uses. Each row gives the live percentiles, the value a check enforces (the " +
-	"committed ratchet value, else the configured anchor) and where that value came from, and the files, " +
-	"symbols or clone groups past it that no known entry accepts. Propose is the live percentile when it has " +
-	"fallen at least the configured step below the enforced value on a large enough sample, and never " +
-	"otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as " +
-	"the code grows. The lens proposes; a person commits the value to the ratchet record the row names, and " +
-	"nothing here edits it. Generated and excluded files belong to no population, and excluded counts the " +
-	"files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
+	"outside their package uses. Each row gives the live percentiles, the configured anchor a check " +
+	"enforces, and the files, symbols or clone groups past it. Propose is the live percentile when it has " +
+	"fallen at least the configured step below the anchor on a large enough sample, and never otherwise: " +
+	"nothing here enforces a live percentile, since a threshold that follows the code loosens as the code " +
+	"grows. The lens proposes; a person configures the anchor, and nothing here edits it. Asked for a base " +
+	"revision, it adds the conformance ceilings a change crossed: each changed file whose count of a checked " +
+	"metric's violations rose past its count at the base. No count is stored. Generated and excluded files " +
+	"belong to no population, and excluded counts the files the configured exclusions hid. An index that is " +
+	"missing or stale answers unknown, never a pass."
 
 // DuplicationOptions are the thresholds a pair must clear to be reported. Every one is a
 // noise filter, and each has a failure mode in both directions: too low and the list is

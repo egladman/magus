@@ -97,7 +97,7 @@ func couplingGraph(syms ...types.KnowledgeSymbol) *Graph {
 }
 
 // couplingOptions are this tree's live relative values as anchors, so the run.Exec shape
-// crosses them the way it crosses a committed ratchet.
+// crosses them the way it crosses a configured anchor.
 func couplingOptions() types.ConformanceOptions {
 	return types.ConformanceOptions{
 		Limits: map[types.ConformanceKey]types.ConformanceLimit{
@@ -178,8 +178,7 @@ func TestModeKnobs(t *testing.T) {
 	}
 }
 
-// The lens judges the run.Exec shape as one mode-knobs item, and a known entry that names a
-// function no longer past the rule is stale.
+// The lens judges the run.Exec shape as one mode-knobs item.
 func TestConformanceModeKnobsRow(t *testing.T) {
 	g := couplingGraph(execShape()...)
 	o := couplingOptions()
@@ -194,19 +193,6 @@ func TestConformanceModeKnobsRow(t *testing.T) {
 	})
 	assert.Equal(t, 3, findConformanceRow(t, out, types.ConformanceCallerSpread, types.ConformancePopSource, "").P99)
 	assert.Equal(t, 6, findConformanceRow(t, out, types.ConformanceSharedReach, types.ConformancePopSource, "").P99)
-
-	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
-		Metric: types.ConformanceModeKnobs, Items: []string{"internal/proc/run/exec.go#Exec", "internal/a/a.go#Gone"},
-		Reason: "one process primitive: TTY sizing is termcast's knob, CancelGrace the queue's", Line: 2,
-	}}}
-	out = g.Conformance(o)
-	knobs = findConformanceRow(t, out, types.ConformanceModeKnobs, types.ConformancePopSource, "")
-	assert.Empty(t, knobs.Violations)
-	assert.Equal(t, 1, knobs.Known)
-	assert.Equal(t, []types.ConformanceKnown{{
-		Metric: types.ConformanceModeKnobs, Items: []string{"internal/a/a.go#Gone"},
-		Reason: "one process primitive: TTY sizing is termcast's knob, CancelGrace the queue's", Line: 2,
-	}}, out.Stale)
 }
 
 func TestSharedLoopsAreDeterministic(t *testing.T) {

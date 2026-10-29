@@ -302,14 +302,6 @@ func TestValidate_Conformance(t *testing.T) {
 		edit func(*ConformanceConfig)
 		want FieldFailure
 	}{
-		"ratchet outside the workspace": {
-			edit: func(c *ConformanceConfig) { c.Ratchet = "../conformance.json" },
-			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "../conformance.json"},
-		},
-		"absolute ratchet": {
-			edit: func(c *ConformanceConfig) { c.Ratchet = "/etc/conformance.json" },
-			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "/etc/conformance.json"},
-		},
 		"empty exclude pattern": {
 			edit: func(c *ConformanceConfig) { c.Exclude = []string{""} },
 			want: FieldFailure{Field: "knowledge.conformance.exclude[0]", Tag: "required"},

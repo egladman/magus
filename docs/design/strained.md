@@ -73,7 +73,7 @@ The principle pages name debts of their own:
 
 - **Thin packages** ([Abstract at the right layer, or not at all](principles/abstract-at-the-right-layer.md)):
   nothing fails a package that is one file and its test and exports one symbol.
-  A conformance metric for it, ratcheted like `file-split`, is the candidate.
+  A conformance metric for it, held to the conformance ceiling like `file-split`, is the candidate.
 
 The line between automated and manual moves as a mechanism earns confidence.
 To move a row out of [Manual on purpose](judgment/manual-on-purpose.md), or a

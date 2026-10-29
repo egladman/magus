@@ -141,11 +141,11 @@ var allChecks = []checkDef{
 		run:      (*runner).checkBriefFormat,
 	},
 	{
-		Name:           "conformance-ratchet",
-		Doc:            "committed conformance thresholds the code now measures tighter than, and known entries that no longer violate",
+		Name:           "conformance-ceiling",
+		Doc:            "configured conformance anchors the code now measures tighter than",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkConformanceRatchet,
+		run:            (*runner).checkConformanceCeiling,
 	},
 	{
 		Name:           "unexplained-hotspots",

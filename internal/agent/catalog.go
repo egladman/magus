@@ -391,7 +391,7 @@ import (
 // `<parent>/integrate <job>` in the landing checkout, whose check is never the gate.
 //
 // 130: magus-workspace-rules teaches tightening a conformance threshold: commit the value
-// `magus doctor` proposes to the ratchet, and delete the known entries it names stale.
+// `magus doctor` proposes, and delete the known entries it names stale.
 //
 // 131: magus-multi-agent tells a worker never to exit its row while it waits on a reply.
 //
@@ -404,7 +404,7 @@ import (
 // 134: magus-sdk fakes a types role by embedding it; the types mocks are internal now.
 //
 // 135: magus-workspace-rules names knowledge.conformance, magus\conformance and the
-// conformance-ratchet doctor check; the conform spellings are gone.
+// doctor's conformance check; the conform spellings are gone.
 //
 // 136: magus-run and magus-multi-agent teach the fix loop: rerun only the failing tests
 // after a failed full run, one full run per wave, one affected ci at the end.
@@ -449,7 +449,10 @@ import (
 // form fits the 500-line guidance again.
 //
 // 149: magus-buzz-from-shell teaches rewriting shell scripts as idiomatic Buzz.
-const SkillVersion = 149
+//
+// 150: magus-workspace-rules teaches tightening a conformance anchor in magus.yaml; counts
+// come from the base revision, and the doctor check is conformance-ceiling.
+const SkillVersion = 150
 
 const skillLicense = "GPL-3.0-or-later"
 

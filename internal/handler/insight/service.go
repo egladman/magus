@@ -109,15 +109,9 @@ func conformanceToProto(o *types.ConformanceOutput) *insightv1.ConformanceOutput
 				P99:        int32(r.P99),
 				Live:       int32(r.Live),
 				Value:      int32(r.Value),
-				Anchor:     int32(r.Anchor),
 				Propose:    int32(r.Propose),
-				Known:      int32(r.Known),
-				Source:     string(r.Source),
 				Violations: mapSlice(r.Violations, conformanceItemToProto),
 			}
-		}),
-		Stale: mapSlice(o.Stale, func(k types.ConformanceKnown) *insightv1.ConformanceKnown {
-			return &insightv1.ConformanceKnown{Metric: string(k.Metric), Items: k.Items, Reason: k.Reason}
 		}),
 		Excluded: int32(o.Excluded),
 		Answer:   answerToProto(o.Answer),

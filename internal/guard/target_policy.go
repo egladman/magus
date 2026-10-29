@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"sync"
 
@@ -87,7 +88,7 @@ func withPolicyNote(text, note string) string {
 	if note == "" {
 		return text
 	}
-	return text + " " + note
+	return fmt.Sprintf("%s %s", text, note)
 }
 
 // runProjects are the projects r runs in: the ones it names, else the one its directory

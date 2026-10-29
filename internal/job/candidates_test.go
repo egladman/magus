@@ -65,7 +65,7 @@ func TestReferencedOutsideNamesTheTestAndRegistryOneHopOut(t *testing.T) {
 			return map[string]int{
 				"types/conformance.go":                4,
 				"cmd/magus-utils/boundary_types.go":   3,
-				"internal/doctor/ratchet_test.go":     1,
+				"internal/doctor/ceiling_test.go":     1,
 				"types/conformance_test.go":           9,
 				"internal/doctor/mocks_test.go":       2,
 				"internal/job/a.go":                   1,
@@ -82,7 +82,7 @@ func TestReferencedOutsideNamesTheTestAndRegistryOneHopOut(t *testing.T) {
 	assert.Equal(t, []ReferencedFile{
 		{File: "types/conformance_test.go", Count: 10, Uses: []string{"types/conformance.go", "cmd/magus/job.go#Fork"}},
 		{File: "cmd/magus/job_test.go", Count: 2, Uses: []string{"cmd/magus/job.go#Fork"}},
-		{File: "internal/doctor/ratchet_test.go", Count: 1, Uses: []string{"types/conformance.go"}},
+		{File: "internal/doctor/ceiling_test.go", Count: 1, Uses: []string{"types/conformance.go"}},
 		{File: "cmd/magus-utils/boundary_types.go", Count: 3, Uses: []string{"types/conformance.go"}},
 		{File: "internal/handler/insight/service.go", Count: 3, Uses: []string{"types/conformance.go"}},
 	}, got, "tests first, then by count; files the write paths cover and generated outputs are left out")

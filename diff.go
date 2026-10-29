@@ -238,10 +238,8 @@ type conformanceInput struct {
 	patch     string
 	generated map[string]bool
 	read      func(path string) (string, bool)
-	// conformance and ratchetBase are what diffConformance answers: the policy with its gates, and
-	// the ratchet record at the change's base.
+	// conformance is what diffConformance answers: the policy with its gates.
 	conformance types.ConformanceOptions
-	ratchetBase *types.ConformanceRatchet
 }
 
 // attachConformance runs the conformance checks over the symbols the change adds, renames or
@@ -297,7 +295,7 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 	}
 	found := head.ConformanceChecks(knowledge.ConformanceChange{
 		Subjects: subjects, Introduced: introduced, Generated: in.generated, Renamed: renamed,
-		Read: in.read, Conformance: in.conformance, RatchetBase: in.ratchetBase, Base: in.base, Touched: touched,
+		Read: in.read, Conformance: in.conformance, Base: in.base, Touched: touched,
 	})
 	for _, id := range slices.Sorted(maps.Keys(found)) {
 		def, ok := defs[id]
@@ -322,61 +320,19 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 }
 
 // diffConformance is knowledge.conformance as one review applies it: o with the review's gate
-// overrides, generated as its generated paths, and the ratchet record o.RatchetPath names, read
-// through read. base is that record before the change, rebuilt from patch: the head record when
-// the patch leaves the file alone, and nil when the patch adds it. A configured record that is
-// missing, does not parse or fails [types.ConformanceOptions.Validate] is an error. A base record
-// that does not parse is returned as note, and the change is then judged by its head alone.
-func diffConformance(o types.ConformanceOptions, cfg diffConfig, patch string, generated map[string]bool,
-	read func(path string) (string, bool),
-) (conformance types.ConformanceOptions, base *types.ConformanceRatchet, note string, err error) {
+// overrides and generated as its generated paths. A policy that fails
+// [types.ConformanceOptions.Validate] is an error.
+func diffConformance(o types.ConformanceOptions, cfg diffConfig, generated map[string]bool) (types.ConformanceOptions, error) {
 	o.Gates = o.Gates.Override(cfg.minCohort, cfg.minShare)
 	o.Generated = generated
-	o, head, err := loadConformance(o, read)
-	if err != nil || o.RatchetPath == "" {
-		return o, nil, "", err
-	}
-	before, existed := textBeforePatch(head, patch, o.RatchetPath)
-	if !existed {
-		return o, nil, "", nil
-	}
-	r, err := types.ReadConformanceRatchet(o.RatchetPath, []byte(before))
-	if err != nil {
-		return o, nil, fmt.Sprintf("conformance: the ratchet before this change does not parse, so what the change moved in it is not judged: %v",
-			err), nil
-	}
-	return o, &r, "", nil
+	return o, o.Validate()
 }
 
-// ConformanceOptions is the workspace's knowledge.conformance as the graph reads it, with the ratchet
-// record knowledge.conformance.ratchet names read from the working tree. Generated is left for the
-// caller. A configured record that is missing, does not parse or fails
-// [types.ConformanceOptions.Validate] is an error.
+// ConformanceOptions is the workspace's knowledge.conformance as the graph reads it, validated.
+// Generated is left for the caller.
 func (m *Magus) ConformanceOptions() (types.ConformanceOptions, error) {
-	o, _, err := loadConformance(m.cfg.Knowledge.Conformance.Options(), func(path string) (string, bool) {
-		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
-		return string(b), err == nil
-	})
-	return o, err
-}
-
-// loadConformance fills o.Ratchet from the record o.RatchetPath names, read through read, and
-// validates the result; head is the record's text. With no RatchetPath it reads nothing.
-func loadConformance(o types.ConformanceOptions, read func(path string) (string, bool)) (_ types.ConformanceOptions, head string, err error) {
-	if o.RatchetPath == "" {
-		return o, "", nil
-	}
-	head, ok := read(o.RatchetPath)
-	if !ok {
-		return o, "", fmt.Errorf("%s: knowledge.conformance.ratchet names it, and the tree has no such file", o.RatchetPath)
-	}
-	if o.Ratchet, err = types.ReadConformanceRatchet(o.RatchetPath, []byte(head)); err != nil {
-		return o, "", err
-	}
-	if verr := o.Validate(); verr != nil {
-		return o, "", verr
-	}
-	return o, head, nil
+	o := m.cfg.Knowledge.Conformance.Options()
+	return o, o.Validate()
 }
 
 // textBeforePatch rebuilds the text path had before patch from after, its text now: each hunk's

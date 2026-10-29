@@ -17,7 +17,7 @@ const (
 
 // couplingCheck is the mirror of a clone: a function shared by callers that do not share its
 // knobs. It reports a function the change adds, renames or re-signs that is over-shared
-// (sharedUse.overShared) and listed in no mode-knobs known entry. It also reports a
+// (sharedUse.overShared). It also reports a
 // re-signed function with two or more caller packages or caller files whose body branches
 // on a parameter, or that offers an option one caller alone uses: a branch only one caller
 // takes is a second function under one name. The index holds no base signature, so every knob of a re-signed
@@ -44,7 +44,6 @@ func (couplingCheck) run(x *namingIndex) []finding {
 	for _, u := range x.g.sharedUses(o, only) {
 		uses[u.ID] = u
 	}
-	known := conformanceKnownItems(o.Ratchet.Known)[types.ConformanceModeKnobs]
 	var ci *conformanceIndex
 	var out []finding
 	for _, s := range x.subjects {
@@ -54,9 +53,6 @@ func (couplingCheck) run(x *namingIndex) []finding {
 		}
 		u := uses[item]
 		if u.overShared(o) {
-			if known[item] {
-				continue
-			}
 			score := overSharedScore
 			if x.change.Introduced[s.id] {
 				score = overSharedIntroducedScore
@@ -89,18 +85,18 @@ func (couplingCheck) run(x *namingIndex) []finding {
 }
 
 func overSharedMessage(label string, u sharedUse) string {
-	return fmt.Sprintf("`%s` (%d lines) is shared by %d packages %s (%s), and %s. Share it only when its callers have the same failure semantics and policy knobs, so a bug in one is a bug in the other; otherwise give each caller its own copy with one line saying why, or record why it stays shared as a mode-knobs known entry",
+	return fmt.Sprintf("`%s` (%d lines) is shared by %d packages %s (%s), and %s. Share it only when its callers have the same failure semantics and policy knobs, so a bug in one is a bug in the other; otherwise give each caller its own copy with one line saying why",
 		label, u.Body, len(u.Callers), hopsApart(u.Spread), listed(u.Callers), knobPhrase(u.Knobs))
 }
 
-// couplingDetails names every caller, then each value the rule read and where it came from.
+// couplingDetails names every caller, then each configured anchor the rule read.
 func couplingDetails(o types.ConformanceOptions, u sharedUse) []string {
 	metrics := []types.ConformanceMetric{types.ConformanceSharedBody, types.ConformanceCallerSpread, types.ConformanceSharedReach}
 	details := make([]string, 0, 1+len(metrics))
 	details = append(details, "callers: "+strings.Join(u.Callers, ", "))
 	for _, m := range metrics {
-		v, src := o.Effective(couplingKey(m))
-		details = append(details, fmt.Sprintf("%s source: %d, the %s", m, v, thresholdSource(src)))
+		v, _ := o.Effective(couplingKey(m))
+		details = append(details, fmt.Sprintf("%s source: %d, the configured anchor", m, v))
 	}
 	return details
 }

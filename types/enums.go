@@ -242,9 +242,3 @@ var conformancePopulations = enum.Set[ConformancePopulation]{ConformancePopSourc
 func (v ConformancePopulation) Values() []string { return conformancePopulations.Strings() }
 func (v ConformancePopulation) Valid() bool      { return conformancePopulations.Valid(v) }
 func (v ConformancePopulation) String() string   { return enum.String(v) }
-
-var conformanceSources = enum.Set[ConformanceSource]{ConformanceFromRatchet, ConformanceFromAnchor}
-
-func (v ConformanceSource) Values() []string { return conformanceSources.Strings() }
-func (v ConformanceSource) Valid() bool      { return conformanceSources.Valid(v) }
-func (v ConformanceSource) String() string   { return enum.String(v) }
