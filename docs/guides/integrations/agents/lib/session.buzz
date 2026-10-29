@@ -61,15 +61,13 @@ export fun transcripts(dir: str) > [str] {
 }
 
 // repoRoot is the workspace the transcripts are scoped to: HOST_REPO_ROOT when set, else
-// what bin says the workspace is. When neither answers, it warns why
-// and returns "".
+// what bin says the workspace is. When bin cannot say, it warns why and
+// falls back to the magus.yaml above the working directory, "" when none.
 export fun repoRoot(bin: str) > str {
     final declared = env\get("HOST_REPO_ROOT") catch "";
     if (declared != "") { return declared; }
     if (bin == "" or !hook\isExecutable(bin)) {
-        warn("no runnable magus names the workspace, so nothing is loaded; set HOST_REPO_ROOT, or "
-            + hook\magusFix(hook\workspaceRoot()));
-        return "";
+        return walkedRoot("no runnable magus names the workspace. {hook\magusFix(hook\workspaceRoot())}");
     }
     final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: proc\ExecOptions{
         quiet = true,
@@ -77,10 +75,20 @@ export fun repoRoot(bin: str) > str {
     }) catch null;
     if (result == null or result!.code != 0) {
         final said = if (result != null) hook\firstLine(result!.stderr) else "it did not start";
-        warn("{bin} could not name the workspace, so nothing is loaded: {said}");
-        return "";
+        return walkedRoot("{bin} could not name the workspace: {said}.");
     }
     return hook\trimTrailingNewlines(result!.stdout);
+}
+
+// walkedRoot is the root the magus.yaml walk finds, said as a fallback.
+fun walkedRoot(why: str) > str {
+    final root = hook\workspaceRoot();
+    if (root == "") {
+        warn("{why} No magus.yaml is above this directory either.");
+        return "";
+    }
+    warn("{why} Scoping to {root}, the magus.yaml above this directory.");
+    return root;
 }
 
 test "wholeLines keeps only complete records" {
@@ -91,4 +99,8 @@ test "wholeLines keeps only complete records" {
 test "inScope takes the root and what is under it" {
     std\assert(inScope("/r", root: "/r") and inScope("/r/w", root: "/r"), message: "root and below");
     std\assert(!inScope("/rx", root: "/r"), message: "a sibling with the same prefix is out");
+}
+
+test "a workspace no magus can name falls back to the walk, said" {
+    std\assert(repoRoot("/nonexistent/magus") == hook\workspaceRoot(), message: "the magus.yaml above, not empty");
 }
