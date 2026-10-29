@@ -325,6 +325,12 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## scip
+
+External, so it runs only where magus.yaml lists typescript under spells.symbol_indexers. One index covers the .js beside the .ts; --infer-tsconfig indexes a plain JavaScript project too. scip-typescript is a PATH binary (install it with mise, not as a project dep) and writes to MAGUS_SYMBOL_INDEX, never the tree.
+
+**Command:** `scip-typescript index --infer-tsconfig --output $MAGUS_SYMBOL_INDEX`
+
 ## tsc
 
 **Command:** `pnpm exec tsc`

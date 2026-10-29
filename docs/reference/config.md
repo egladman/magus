@@ -163,6 +163,12 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `server.maintenance.sync_graph`        | `MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH`        | `--server-maintenance-sync-graph`        | duration                           |
 | `server.workspaces`                    | `MAGUS_SERVER_WORKSPACES`                    | _(env only)_                             | list _(comma-separated, env only)_ |
 
+## spells
+
+| Config key               | Environment variable           | Flag         | Type                               |
+| ------------------------ | ------------------------------ | ------------ | ---------------------------------- |
+| `spells.symbol_indexers` | `MAGUS_SPELLS_SYMBOL_INDEXERS` | _(env only)_ | list _(comma-separated, env only)_ |
+
 ## telemetry
 
 | Config key               | Environment variable           | Flag                       | Type   |

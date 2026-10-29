@@ -180,6 +180,12 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## scip
+
+External, so it runs only where magus.yaml lists python under spells.symbol_indexers. scip-python is a PATH binary (install it with mise, not as a project dep) and writes to MAGUS_SYMBOL_INDEX, never the tree.
+
+**Command:** `scip-python index . --output $MAGUS_SYMBOL_INDEX`
+
 ## uv-build
 
 build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.

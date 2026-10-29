@@ -171,3 +171,9 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## scip
+
+External, so it runs only where magus.yaml lists rust under spells.symbol_indexers. rust-analyzer's scip subcommand writes to MAGUS_SYMBOL_INDEX, never the tree.
+
+**Command:** `rust-analyzer scip . --output $MAGUS_SYMBOL_INDEX`
+

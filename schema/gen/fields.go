@@ -841,4 +841,13 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds exact names and prefix patterns such as MISE_* to the built-in env allowlist.",
 		Doc:      "Adds exact names and prefix patterns such as MISE_* to the built-in env allowlist. A prefix must be at least three characters and end in \"_\"",
 	},
+	{
+		GoPath:   "Spells.SymbolIndexers",
+		YamlPath: "spells.symbol_indexers",
+		EnvVar:   "MAGUS_SPELLS_SYMBOL_INDEXERS",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindStringSlice,
+		Usage:    "MAGUS_SPELLS_SYMBOL_INDEXERS: SymbolIndexers names the spells whose external SCIP indexer runs here, such as typescript for scip-typescript.",
+		Doc:      "Names the spells whose external SCIP indexer runs here, such as typescript for scip-typescript. One forks a tool the workspace installs and is slower than magus's in-process indexers, so unlisted, its language has no symbol index",
+	},
 }

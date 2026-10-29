@@ -100,6 +100,7 @@ config server.workspaces
 config shutdown_grace
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason
+config spells.symbol_indexers
 config stall_timeout
 config target_timeout
 config telemetry.enabled

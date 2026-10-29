@@ -427,6 +427,9 @@ Off (the default), best\-effort (landlock confines each child where the host has
 \fBMAGUS_SANDBOX_ENV_PASSTHROUGH\fR
 Adds exact names and prefix patterns such as MISE_* to the built\-in env allowlist. A prefix must be at least three characters and end in "_". Config file key: \fBsandbox.env.passthrough\fR.
 .TP
+\fBMAGUS_SPELLS_SYMBOL_INDEXERS\fR
+Names the spells whose external SCIP indexer runs here, such as typescript for scip\-typescript. One forks a tool the workspace installs and is slower than magus's in\-process indexers, so unlisted, its language has no symbol index. Config file key: \fBspells.symbol_indexers\fR.
+.TP
 \fBMAGUS_CACHE_SIGNING_KEY\fR
 Env\-only, no magus.yaml equivalent: the Ed25519 seed that signs remote\-cache writes (see `magus config cache\-key`); env\-only because a signing secret in a committed file is not a secret
 .TP

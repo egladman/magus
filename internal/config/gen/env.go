@@ -625,6 +625,16 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 		cfg.Sandbox.Env.Passthrough = out
 	}
+	if v := getenv("MAGUS_SPELLS_SYMBOL_INDEXERS"); v != "" {
+		parts := strings.Split(v, ",")
+		out := parts[:0]
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		cfg.Spells.SymbolIndexers = out
+	}
 	return errors.Join(errs...)
 }
 

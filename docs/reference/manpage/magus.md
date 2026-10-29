@@ -435,6 +435,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_SANDBOX_ENV_PASSTHROUGH**
 : Adds exact names and prefix patterns such as MISE_\* to the built-in env allowlist. A prefix must be at least three characters and end in "_". Config file key: **sandbox.env.passthrough**.
 
+**MAGUS_SPELLS_SYMBOL_INDEXERS**
+: Names the spells whose external SCIP indexer runs here, such as typescript for scip-typescript. One forks a tool the workspace installs and is slower than magus's in-process indexers, so unlisted, its language has no symbol index. Config file key: **spells.symbol_indexers**.
+
 **MAGUS_CACHE_SIGNING_KEY**
 : Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see \`magus config cache-key\`); env-only because a signing secret in a committed file is not a secret
 

@@ -27,6 +27,12 @@ Working directory and environment are NOT options: they ride the context, as `ba
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## shell-index
+
+magus indexes the scripts in process, one unit per file, so the index runs no tool. It rides under an op of its own so a project bound to another indexing spell keeps both.
+
+**Command:** none; this op composes the spell's other ops (see the intro).
+
 ## shellcheck
 
 One shellcheck invocation over every shell source. `sources` is the engine-side replacement for the `sh -c "find ... | xargs ..."` this op used to run: the runner expands the globs into a file list per project - the same walk that builds the cache key - honoring mgs_listIgnoreDirs above and the workspace's own ignore dirs, and appends the matches to argv. Batched (the default, sourcesEach unset) puts every match across as few `shellcheck` invocations as fit under the runner's ARG_MAX-safe limit; a glob set that matches nothing runs shellcheck zero times rather than failing (mirrors `xargs -r`).
