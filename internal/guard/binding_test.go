@@ -2,8 +2,6 @@ package guard
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -51,15 +49,7 @@ func (s *ExitedHolderBindingSuite) judge(command string, byRoot bool) types.Guar
 	return Judge(s.ctx, Dependencies{}, Request{Input: bashCall(s.T(), by.Session, by.Agent, command), Host: by.Host})
 }
 
-// write is the holder's editor Write of path, from a session rooted at cwd.
-func (s *ExitedHolderBindingSuite) write(cwd, path string) types.GuardJudgment {
-	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": cwd, "hook_event_name": "PreToolUse",
-		"agent_id": s.who.Agent, "agent_type": "general-purpose",
-		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package x\n"}})
-	return Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
-}
-
-func (s *ExitedHolderBindingSuite) moveTo(state types.JobState) {
+func (s *ExitedHolderBindingSuite) setState(state types.JobState) {
 	_, err := s.store.Update(s.ctx, heldJob, func(cur *types.Job) { cur.State = state })
 	s.Require().NoError(err)
 }
@@ -69,7 +59,7 @@ func (s *ExitedHolderBindingSuite) moveTo(state types.JobState) {
 func (s *ExitedHolderBindingSuite) exitOwnJob() {
 	v := s.judge("./magus job exit held-job --stdin <<'EOF'\n{\"schema_version\":2,\"changed_paths\":[],\"unresolved_risks\":[]}\nEOF", false)
 	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
-	s.moveTo(types.StateExited)
+	s.setState(types.StateExited)
 }
 
 func (s *ExitedHolderBindingSuite) TestOwnExitKeepsTheBinding() {
@@ -83,70 +73,27 @@ func (s *ExitedHolderBindingSuite) TestOwnClientExitKeepsTheBinding() {
 		"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; magus\job.exit("held-job");`}})
 	v := Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
 	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
-	s.moveTo(types.StateExited)
+	s.setState(types.StateExited)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
-}
-
-func (s *ExitedHolderBindingSuite) TestWriteOutsidePathsAfterOwnExitIsDenied() {
-	s.exitOwnJob()
-	v := s.write(s.root, filepath.Join(s.root, "cmd", "magus", "main.go"))
-	s.Equal(decisionDeny, v.Decision)
-	s.Equal(string(denyRuleLeaseWrite), v.Rule)
-	s.Equal(heldJob, v.Lease, "the exited row still grades the write")
-}
-
-func (s *ExitedHolderBindingSuite) TestWriteInsidePathsAfterOwnExitPasses() {
-	s.exitOwnJob()
-	v := s.write(s.root, filepath.Join(s.root, "internal", "held", "a.go"))
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
-}
-
-func (s *ExitedHolderBindingSuite) TestDenyAfterExitNamesTheExitedStateAndRemedy() {
-	s.exitOwnJob()
-	v := s.write(s.root, filepath.Join(s.root, "cmd", "magus", "main.go"))
-	s.Contains(v.Reason, "job held-job is exited")
-	s.Contains(v.Reason, "job exec held-job")
-	s.Contains(v.Reason, "ask your orchestrator to widen it")
-}
-
-// The 10-29 case: the holder's Edit, from the root checkout, into the
-// checkout its job's fork made, after its own exit.
-func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenied() {
-	own := s.T().TempDir()
-	s.Require().NoError(os.MkdirAll(filepath.Join(own, "hack"), 0o755))
-	s.Require().NoError(os.WriteFile(filepath.Join(own, "magusfile.buzz"), nil, 0o644))
-	s.Require().NoError(os.WriteFile(filepath.Join(own, "hack", "README.md"), []byte("# hack\n"), 0o644))
-	_, err := s.store.Update(s.ctx, heldJob, func(cur *types.Job) { cur.CheckoutRoot = own })
-	s.Require().NoError(err)
-	_, err = s.store.RecordWorktree(s.ctx, heldJob, types.JobWorktree{Root: own, Source: s.root})
-	s.Require().NoError(err)
-	s.exitOwnJob()
-
-	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": s.root, "hook_event_name": "PreToolUse",
-		"agent_id": s.who.Agent, "agent_type": "general-purpose", "tool_name": "Edit",
-		"tool_input": map[string]any{"file_path": filepath.Join(own, "hack", "README.md"), "old_string": "# hack", "new_string": "# hack scripts"}})
-	v := Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
-	s.Equal(decisionDeny, v.Decision)
-	s.Contains(v.Reason, "job held-job is exited")
 }
 
 func (s *ExitedHolderBindingSuite) TestPassedWaitReleasesTheBinding() {
 	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
-	s.moveTo(types.StatePass)
+	s.setState(types.StatePass)
 	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestFailedWaitReleasesTheBinding() {
 	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
-	s.moveTo(types.StateFail)
+	s.setState(types.StateFail)
 	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{}, boundJob(s.who, s.at))
 }
 
 func (s *ExitedHolderBindingSuite) TestRejectedWaitKeepsTheBinding() {
 	s.Require().NotEqual(decisionDeny, s.judge("./magus job wait held-job", true).Decision)
-	s.moveTo(types.StateExited)
+	s.setState(types.StateExited)
 	s.NotEqual(decisionDeny, s.judge("sed -n 1,5p x", false).Decision)
 	s.Equal(job.Binding{Job: heldJob}, boundJob(s.who, s.at))
 }

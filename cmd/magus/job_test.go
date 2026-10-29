@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
@@ -1077,6 +1078,10 @@ func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
 	row.WritePaths, row.Registered = []string{"a/**"}, time.Now().Unix()
 	root, _ := execFixture(t, row)
 	writeStdin(t, `{"schema_version":2,"changed_paths":["a/x.go"],"unresolved_risks":[]}`)
+
+	savedLog, savedGlobal := globalCfg.Log, global
+	t.Cleanup(func() { globalCfg.Log, global = savedLog, savedGlobal })
+	globalCfg.Log, global = config.Log{Format: "text"}, globalFlags{}
 
 	var out string
 	stderr := captureStderr(t, func() {
