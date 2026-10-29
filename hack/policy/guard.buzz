@@ -115,10 +115,9 @@ fun noForge(argv: [str]) > {str: str}? {
     return null;
 }
 
-// judge is the command rule the root magusfile registers. opens is the
-// pull request verb the delivery rule reads.
-export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
-    final programs = parsePrograms(req);
+// refusedEarly is the first refusal of the sealed, delivery and mandate rules,
+// or null when all three allow req.
+fun refusedEarly(req: CommandRequest, programs: [helpers\Program], opens: fun (argv: [str]) > {str: str}?) > GuardVerdict? {
     final held = sealed\decideSealed(programs, line: req.command, roots: sealed\rootsFromEnv());
     if (held.decision != magus\GuardDecision.allow) {
         return held;
@@ -134,6 +133,16 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
     final kept = mandateVerdict(req, programs: programs);
     if (kept.decision != magus\GuardDecision.allow) {
         return kept;
+    }
+    return null;
+}
+
+// judge is the command rule the root magusfile registers. opens is the
+// pull request verb the delivery rule reads.
+export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
+    final programs = parsePrograms(req);
+    if (refusedEarly(req, programs: programs, opens: opens) -> refused) {
+        return refused;
     }
     final denial = binariesDenial(req, programs: programs);
     if (denial != "") {
