@@ -1382,15 +1382,14 @@ func (x *ModelTierRecord) GetNotRetryable() int32 {
 }
 
 // ConformanceOutput is the code-shape lens: one row per metric and population, judged against the
-// value a check enforces. It reads the symbol graph, not git. It reports and proposes; a
-// person commits a proposed value to the ratchet record, and nothing here sets one. answer is
+// configured anchor a check enforces. It reads the symbol graph, not git. It reports and
+// proposes; a person configures a proposed anchor, and nothing here sets one. answer is
 // unknown, never a pass, when a symbol index is missing. excluded counts the files the
 // configured exclusions hid, so a widened exclusion stays visible.
 type ConformanceOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Definition    string                 `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
 	Rows          []*ConformanceRow      `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows,omitempty"`
-	Stale         []*ConformanceKnown    `protobuf:"bytes,3,rep,name=stale,proto3" json:"stale,omitempty"`
 	Excluded      int32                  `protobuf:"varint,4,opt,name=excluded,proto3" json:"excluded,omitempty"`
 	Answer        *v1alpha1.Answer       `protobuf:"bytes,5,opt,name=answer,proto3" json:"answer,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1437,13 +1436,6 @@ func (x *ConformanceOutput) GetDefinition() string {
 func (x *ConformanceOutput) GetRows() []*ConformanceRow {
 	if x != nil {
 		return x.Rows
-	}
-	return nil
-}
-
-func (x *ConformanceOutput) GetStale() []*ConformanceKnown {
-	if x != nil {
-		return x.Stale
 	}
 	return nil
 }
@@ -1526,10 +1518,8 @@ func (x *ConformanceKey) GetScope() string {
 }
 
 // ConformanceRow is one key's distribution and verdict. live is the configured percentile today;
-// value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped
-// bound no committed value may exceed. propose is zero, or a tighter value to commit; it is
-// never looser than value. known counts the accepted items past value, and violations are the
-// rest.
+// value is the configured anchor a check enforces. propose is zero, or a tighter anchor to
+// configure; it is never looser than value. violations are the items past value.
 type ConformanceRow struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           *ConformanceKey        `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -1540,10 +1530,7 @@ type ConformanceRow struct {
 	P99           int32                  `protobuf:"varint,6,opt,name=p99,proto3" json:"p99,omitempty"`
 	Live          int32                  `protobuf:"varint,7,opt,name=live,proto3" json:"live,omitempty"`
 	Value         int32                  `protobuf:"varint,8,opt,name=value,proto3" json:"value,omitempty"`
-	Anchor        int32                  `protobuf:"varint,9,opt,name=anchor,proto3" json:"anchor,omitempty"`
 	Propose       int32                  `protobuf:"varint,10,opt,name=propose,proto3" json:"propose,omitempty"`
-	Known         int32                  `protobuf:"varint,11,opt,name=known,proto3" json:"known,omitempty"`
-	Source        string                 `protobuf:"bytes,12,opt,name=source,proto3" json:"source,omitempty"`
 	Violations    []*ConformanceItem     `protobuf:"bytes,13,rep,name=violations,proto3" json:"violations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1635,32 +1622,11 @@ func (x *ConformanceRow) GetValue() int32 {
 	return 0
 }
 
-func (x *ConformanceRow) GetAnchor() int32 {
-	if x != nil {
-		return x.Anchor
-	}
-	return 0
-}
-
 func (x *ConformanceRow) GetPropose() int32 {
 	if x != nil {
 		return x.Propose
 	}
 	return 0
-}
-
-func (x *ConformanceRow) GetKnown() int32 {
-	if x != nil {
-		return x.Known
-	}
-	return 0
-}
-
-func (x *ConformanceRow) GetSource() string {
-	if x != nil {
-		return x.Source
-	}
-	return ""
 }
 
 func (x *ConformanceRow) GetViolations() []*ConformanceItem {
@@ -1670,7 +1636,7 @@ func (x *ConformanceRow) GetViolations() []*ConformanceItem {
 	return nil
 }
 
-// ConformanceItem is one file, symbol, package or clone group past its row's value and not known.
+// ConformanceItem is one file, symbol, package or clone group past its row's value.
 // source is its path:line.
 type ConformanceItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1730,68 +1696,6 @@ func (x *ConformanceItem) GetMeasure() int32 {
 		return x.Measure
 	}
 	return 0
-}
-
-// ConformanceKnown is a list of items already past a metric's value and accepted for a reason.
-// In ConformanceOutput.stale it names the entries that no longer violate and should be deleted.
-type ConformanceKnown struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metric        string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
-	Items         []string               `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ConformanceKnown) Reset() {
-	*x = ConformanceKnown{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[19]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConformanceKnown) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConformanceKnown) ProtoMessage() {}
-
-func (x *ConformanceKnown) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[19]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConformanceKnown.ProtoReflect.Descriptor instead.
-func (*ConformanceKnown) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *ConformanceKnown) GetMetric() string {
-	if x != nil {
-		return x.Metric
-	}
-	return ""
-}
-
-func (x *ConformanceKnown) GetItems() []string {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *ConformanceKnown) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
 }
 
 var File_magus_insight_v1alpha1_insight_proto protoreflect.FileDescriptor
@@ -1931,21 +1835,20 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\x10first_pass_lower\x18\x11 \x01(\x01R\x0efirstPassLower\x12#\n" +
 	"\rnot_retryable\x18\x12 \x01(\x05R\fnotRetryableB\x10\n" +
 	"\x0e_mean_cost_usdB\x10\n" +
-	"\x0e_median_tokens\"\x81\x02\n" +
+	"\x0e_median_tokens\"\xce\x01\n" +
 	"\x11ConformanceOutput\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
 	"definition\x12:\n" +
-	"\x04rows\x18\x02 \x03(\v2&.magus.insight.v1alpha1.ConformanceRowR\x04rows\x12>\n" +
-	"\x05stale\x18\x03 \x03(\v2(.magus.insight.v1alpha1.ConformanceKnownR\x05stale\x12\x1a\n" +
+	"\x04rows\x18\x02 \x03(\v2&.magus.insight.v1alpha1.ConformanceRowR\x04rows\x12\x1a\n" +
 	"\bexcluded\x18\x04 \x01(\x05R\bexcluded\x124\n" +
-	"\x06answer\x18\x05 \x01(\v2\x1c.magus.graph.v1alpha1.AnswerR\x06answer\"^\n" +
+	"\x06answer\x18\x05 \x01(\v2\x1c.magus.graph.v1alpha1.AnswerR\x06answerJ\x04\b\x03\x10\x04R\x05stale\"^\n" +
 	"\x0eConformanceKey\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x1e\n" +
 	"\n" +
 	"population\x18\x02 \x01(\tR\n" +
 	"population\x12\x14\n" +
-	"\x05scope\x18\x03 \x01(\tR\x05scope\"\xf3\x02\n" +
+	"\x05scope\x18\x03 \x01(\tR\x05scope\"\xd6\x02\n" +
 	"\x0eConformanceRow\x128\n" +
 	"\x03key\x18\x01 \x01(\v2&.magus.insight.v1alpha1.ConformanceKeyR\x03key\x12\f\n" +
 	"\x01n\x18\x02 \x01(\x05R\x01n\x12\x10\n" +
@@ -1954,23 +1857,17 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\x03p95\x18\x05 \x01(\x05R\x03p95\x12\x10\n" +
 	"\x03p99\x18\x06 \x01(\x05R\x03p99\x12\x12\n" +
 	"\x04live\x18\a \x01(\x05R\x04live\x12\x14\n" +
-	"\x05value\x18\b \x01(\x05R\x05value\x12\x16\n" +
-	"\x06anchor\x18\t \x01(\x05R\x06anchor\x12\x18\n" +
+	"\x05value\x18\b \x01(\x05R\x05value\x12\x18\n" +
 	"\apropose\x18\n" +
-	" \x01(\x05R\apropose\x12\x14\n" +
-	"\x05known\x18\v \x01(\x05R\x05known\x12\x16\n" +
-	"\x06source\x18\f \x01(\tR\x06source\x12G\n" +
+	" \x01(\x05R\apropose\x12G\n" +
 	"\n" +
 	"violations\x18\r \x03(\v2'.magus.insight.v1alpha1.ConformanceItemR\n" +
-	"violations\"S\n" +
+	"violationsJ\x04\b\t\x10\n" +
+	"J\x04\b\v\x10\fJ\x04\b\f\x10\rR\x06anchorR\x05knownR\x06source\"S\n" +
 	"\x0fConformanceItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x18\n" +
-	"\ameasure\x18\x03 \x01(\x05R\ameasure\"X\n" +
-	"\x10ConformanceKnown\x12\x16\n" +
-	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x14\n" +
-	"\x05items\x18\x02 \x03(\tR\x05items\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason2j\n" +
+	"\ameasure\x18\x03 \x01(\x05R\ameasure2j\n" +
 	"\x0eInsightService\x12X\n" +
 	"\n" +
 	"GetInsight\x12).magus.insight.v1alpha1.GetInsightRequest\x1a\x1f.magus.insight.v1alpha1.InsightB\xf3\x01\n" +
@@ -1988,7 +1885,7 @@ func file_magus_insight_v1alpha1_insight_proto_rawDescGZIP() []byte {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescData
 }
 
-var file_magus_insight_v1alpha1_insight_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_magus_insight_v1alpha1_insight_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_magus_insight_v1alpha1_insight_proto_goTypes = []any{
 	(*GetInsightRequest)(nil),     // 0: magus.insight.v1alpha1.GetInsightRequest
 	(*Insight)(nil),               // 1: magus.insight.v1alpha1.Insight
@@ -2009,9 +1906,8 @@ var file_magus_insight_v1alpha1_insight_proto_goTypes = []any{
 	(*ConformanceKey)(nil),        // 16: magus.insight.v1alpha1.ConformanceKey
 	(*ConformanceRow)(nil),        // 17: magus.insight.v1alpha1.ConformanceRow
 	(*ConformanceItem)(nil),       // 18: magus.insight.v1alpha1.ConformanceItem
-	(*ConformanceKnown)(nil),      // 19: magus.insight.v1alpha1.ConformanceKnown
-	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
-	(*v1alpha1.Answer)(nil),       // 21: magus.graph.v1alpha1.Answer
+	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
+	(*v1alpha1.Answer)(nil),       // 20: magus.graph.v1alpha1.Answer
 }
 var file_magus_insight_v1alpha1_insight_proto_depIdxs = []int32{
 	2,  // 0: magus.insight.v1alpha1.Insight.hotspots:type_name -> magus.insight.v1alpha1.HotspotOutput
@@ -2023,27 +1919,26 @@ var file_magus_insight_v1alpha1_insight_proto_depIdxs = []int32{
 	15, // 6: magus.insight.v1alpha1.Insight.conformance:type_name -> magus.insight.v1alpha1.ConformanceOutput
 	3,  // 7: magus.insight.v1alpha1.HotspotOutput.nodes:type_name -> magus.insight.v1alpha1.ProjectNode
 	4,  // 8: magus.insight.v1alpha1.HotspotOutput.files:type_name -> magus.insight.v1alpha1.FileHotspot
-	20, // 9: magus.insight.v1alpha1.ProjectNode.last_commit_time:type_name -> google.protobuf.Timestamp
-	20, // 10: magus.insight.v1alpha1.FileHotspot.last_commit_time:type_name -> google.protobuf.Timestamp
+	19, // 9: magus.insight.v1alpha1.ProjectNode.last_commit_time:type_name -> google.protobuf.Timestamp
+	19, // 10: magus.insight.v1alpha1.FileHotspot.last_commit_time:type_name -> google.protobuf.Timestamp
 	6,  // 11: magus.insight.v1alpha1.AffinityOutput.pairs:type_name -> magus.insight.v1alpha1.CoChange
 	8,  // 12: magus.insight.v1alpha1.OwnershipOutput.projects:type_name -> magus.insight.v1alpha1.Ownership
-	20, // 13: magus.insight.v1alpha1.Ownership.last_commit_time:type_name -> google.protobuf.Timestamp
+	19, // 13: magus.insight.v1alpha1.Ownership.last_commit_time:type_name -> google.protobuf.Timestamp
 	10, // 14: magus.insight.v1alpha1.TrendOutput.projects:type_name -> magus.insight.v1alpha1.Trend
 	12, // 15: magus.insight.v1alpha1.VolatilityReport.targets:type_name -> magus.insight.v1alpha1.VolatilityTarget
-	20, // 16: magus.insight.v1alpha1.VolatilityTarget.last_pass_time:type_name -> google.protobuf.Timestamp
+	19, // 16: magus.insight.v1alpha1.VolatilityTarget.last_pass_time:type_name -> google.protobuf.Timestamp
 	14, // 17: magus.insight.v1alpha1.ModelTierOutput.rows:type_name -> magus.insight.v1alpha1.ModelTierRecord
 	17, // 18: magus.insight.v1alpha1.ConformanceOutput.rows:type_name -> magus.insight.v1alpha1.ConformanceRow
-	19, // 19: magus.insight.v1alpha1.ConformanceOutput.stale:type_name -> magus.insight.v1alpha1.ConformanceKnown
-	21, // 20: magus.insight.v1alpha1.ConformanceOutput.answer:type_name -> magus.graph.v1alpha1.Answer
-	16, // 21: magus.insight.v1alpha1.ConformanceRow.key:type_name -> magus.insight.v1alpha1.ConformanceKey
-	18, // 22: magus.insight.v1alpha1.ConformanceRow.violations:type_name -> magus.insight.v1alpha1.ConformanceItem
-	0,  // 23: magus.insight.v1alpha1.InsightService.GetInsight:input_type -> magus.insight.v1alpha1.GetInsightRequest
-	1,  // 24: magus.insight.v1alpha1.InsightService.GetInsight:output_type -> magus.insight.v1alpha1.Insight
-	24, // [24:25] is the sub-list for method output_type
-	23, // [23:24] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	20, // 19: magus.insight.v1alpha1.ConformanceOutput.answer:type_name -> magus.graph.v1alpha1.Answer
+	16, // 20: magus.insight.v1alpha1.ConformanceRow.key:type_name -> magus.insight.v1alpha1.ConformanceKey
+	18, // 21: magus.insight.v1alpha1.ConformanceRow.violations:type_name -> magus.insight.v1alpha1.ConformanceItem
+	0,  // 22: magus.insight.v1alpha1.InsightService.GetInsight:input_type -> magus.insight.v1alpha1.GetInsightRequest
+	1,  // 23: magus.insight.v1alpha1.InsightService.GetInsight:output_type -> magus.insight.v1alpha1.Insight
+	23, // [23:24] is the sub-list for method output_type
+	22, // [22:23] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_magus_insight_v1alpha1_insight_proto_init() }
@@ -2058,7 +1953,7 @@ func file_magus_insight_v1alpha1_insight_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_insight_v1alpha1_insight_proto_rawDesc), len(file_magus_insight_v1alpha1_insight_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
