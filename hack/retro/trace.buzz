@@ -270,6 +270,316 @@ fun addUnique(list: mut [str], value: str) > void {
     }
 }
 
+// Ledger is what one pass over the records collects, mostly keyed by agent.
+object Ledger {
+    steps: mut [Step],
+    lastLease: mut {str: str},
+    lastJob: mut {str: str},
+    lastLeased: mut {str: Record},
+    exits: mut {str: Record},
+    exitJob: mut {str: str},
+    releases: mut {str: Record},
+    lastBefore: mut {str: Record},
+    continues: mut [Record],
+    unleased: mut {str: mut [Record]},
+    fold: mut [Record],
+    namelessPass: bool = false,
+
+    // flush writes the folded run of calls as one step and clears it.
+    fun flush() > void {
+        if (this.fold.len() > 0) {
+            final first = this.fold[0];
+            final scope = if (first.lease != "") "under lease {first.lease}" else "with no lease";
+            final span = if (this.fold.len() == 1) cite(first) else "events.jsonl:{first.line}..{this.fold[this.fold.len() - 1].line} from {first.request}";
+            this.steps.append(Step{ at = first.at, what = "{first.agent}: {this.fold.len()} more call(s) {scope}, {verdictText(first)}", cite = span, reopen = reopen(first) });
+        }
+        while (this.fold.len() > 0) {
+            this.fold.pop();
+        }
+    }
+
+    fun markNamelessPass() > void {
+        this.namelessPass = true;
+    }
+}
+
+// seedAnchor finds the agents and jobs the seed names and returns the
+// time the timeline ends.
+fun seedAnchor(seed: Seed, records: [Record], commit: CommitFacts?, byId: {str: JobFacts}, agents: mut [str], ids: mut [str], missing: mut [str]) > int !> str {
+    if (seed.kind == "job") {
+        if (byId[seed.value] == null) {
+            throw "trace: the job store holds no row {seed.value}";
+        }
+        addUnique(ids, value: seed.value);
+        return seed.at;
+    }
+    final hits = seedRecords(seed, records: records, commit: commit);
+    if (hits.len() == 0) {
+        if (seed.kind != "commit") {
+            throw "trace: no trail record in the window matches {seed.kind} {seed.value}; widen --since or name another --trail";
+        }
+        missing.append("the agent that made commit {commit!.short}: no trail record in the window runs git commit with its subject");
+        return seed.at;
+    }
+    final last = hits[hits.len() - 1];
+    addUnique(agents, value: last.agent);
+    addUnique(ids, value: last.lease);
+    if (last.agent == "") {
+        missing.append("which agent made {cite(last)}: the record names none, so it is the root's or a person's");
+    }
+    return if (seed.kind != "commit") last.at else seed.at;
+}
+
+// widenScope adds the leases the known agents ran under, then the agents
+// that ran under the known jobs.
+fun widenScope(within: [Record], agents: mut [str], ids: mut [str]) > void {
+    foreach (r in within) {
+        if (agents.indexOf(r.agent) != null) {
+            addUnique(ids, value: r.lease);
+        }
+    }
+    foreach (r in within) {
+        if (r.agent != "" and ids.indexOf(r.lease) != null) {
+            addUnique(agents, value: r.agent);
+        }
+    }
+}
+
+fun namedJob(r: Record, ids: [str]) > str {
+    var named = "";
+    foreach (id in ids) {
+        if (mentions(r.command + " " + r.message, id: id)) {
+            named = id;
+        }
+    }
+    return named;
+}
+
+fun leaseText(r: Record) > str {
+    return if (r.lease != "") "under lease {r.lease}" else "with no lease";
+}
+
+fun noteRelease(r: Record, prior: str, led: Ledger) > void {
+    final kept = led.lastLeased[r.agent]!;
+    if (led.releases[r.agent] == null) {
+        led.releases[r.agent] = r;
+        led.lastBefore[r.agent] = kept;
+    }
+    led.steps.append(fromRecord(r, what: "{r.agent}: calls stop carrying lease {prior}; the last that did is {cite(kept)} at {clock(kept.at)}: `{short(kept.command, n: 100)}`"));
+}
+
+fun noteLease(r: Record, led: Ledger) > void {
+    final prior = led.lastLease[r.agent] ?? "";
+    if (prior != r.lease) {
+        led.flush();
+        if (prior != "" and r.lease == "") {
+            noteRelease(r, prior: prior, led: led);
+        } else if (r.lease != "") {
+            final source = if (r.leaseFrom != "") r.leaseFrom else "not recorded";
+            led.steps.append(fromRecord(r, what: "{r.agent}: calls carry lease {r.lease} from here (lease_from {source})"));
+        }
+        led.lastLease[r.agent] = r.lease;
+    }
+    if (r.lease != "") {
+        led.lastLeased[r.agent] = r;
+        led.lastJob[r.agent] = r.lease;
+    }
+}
+
+fun noteExit(r: Record, named: str, isAgent: bool, led: Ledger) > void {
+    if (isAgent and r.preview != "guard: deny" and led.exits[r.agent] == null) {
+        led.exits[r.agent] = r;
+        led.exitJob[r.agent] = named;
+    }
+}
+
+// jobStep describes a call that runs a job verb on the named job, or
+// returns "" for any other call.
+fun jobStep(r: Record, named: str, isAgent: bool, led: Ledger) > str {
+    final verdict = verdictText(r);
+    if (runs(r.command, verb: "fork", id: named)) {
+        return "{who(r)} forks {named}, {verdict}";
+    }
+    if (runs(r.command, verb: "exec", id: named)) {
+        return "{who(r)} takes {named} (job exec) {leaseText(r)}, {verdict}";
+    }
+    if (runs(r.command, verb: "exit", id: named)) {
+        if (r.command.indexOf("--schema") != null) {
+            return "{who(r)} asks job exit for its schema (job exit {named} --schema) {leaseText(r)}, {verdict}";
+        }
+        noteExit(r, named: named, isAgent: isAgent, led: led);
+        return "{who(r)} exits {named} (job exit) {leaseText(r)}, {verdict}";
+    }
+    if (r.command.indexOf("job apply") != null) {
+        return "{who(r)} runs job apply naming {named} {leaseText(r)}, {verdict}";
+    }
+    if (runs(r.command, verb: "wait", id: named)) {
+        return "{who(r)} waits on {named} (job wait), {verdict}";
+    }
+    if (runs(r.command, verb: "rm", id: named)) {
+        return "{who(r)} removes {named} (job rm), {verdict}";
+    }
+    return "";
+}
+
+fun noteUnleased(r: Record, led: Ledger) > void {
+    if (r.lease != "" or led.lastLeased[r.agent] == null) {
+        return;
+    }
+    if (led.unleased[r.agent] == null) {
+        led.unleased[r.agent] = mut [<Record>];
+    }
+    led.unleased[r.agent]!.append(r);
+    if (r.preview == "guard: pass" and r.decidedBy == "") {
+        led.markNamelessPass();
+    }
+}
+
+// agentStep describes an agent's call that is no job verb, or returns ""
+// when it is not worth a step of its own.
+fun agentStep(r: Record, byId: {str: JobFacts}, led: Ledger) > str {
+    if (r.command.indexOf("git commit") != null) {
+        return "{r.agent} runs git commit \"{commitSubject(r.command)}\" {leaseText(r)}, {verdictText(r)}";
+    }
+    if (r.action == "file.write") {
+        noteUnleased(r, led: led);
+        return "{r.agent} writes {where(r.path, j: byId[led.lastJob[r.agent] ?? ""])} {leaseText(r)}, {verdictText(r)}";
+    }
+    if (r.preview == "guard: deny") {
+        return "{r.agent}: {r.action} {leaseText(r)}, {verdictText(r)}";
+    }
+    return "";
+}
+
+fun describe(r: Record, named: str, isAgent: bool, isContinue: bool, byId: {str: JobFacts}, led: Ledger) > str {
+    if (isContinue) {
+        led.continues.append(r);
+        final said = if (r.response == "") "the verdict carried no response" else verdictText(r);
+        return "root resumes {r.target} by {r.action}: \"{short(r.message, n: 160)}\"; {said}";
+    }
+    if (r.kind == "agent_spawn" and named != "") {
+        return "{who(r)} spawns a {r.action} worker whose prompt names {named}: \"{short(r.message, n: 120)}\"";
+    }
+    if (named != "") {
+        final step = jobStep(r, named: named, isAgent: isAgent, led: led);
+        if (step != "") {
+            return step;
+        }
+        if (!isAgent) {
+            return "{who(r)} names {named} in a {r.action}, {verdictText(r)}";
+        }
+    }
+    return agentStep(r, byId: byId, led: led);
+}
+
+// foldCall holds a call that earns no step, so a run of alike calls
+// becomes one.
+fun foldCall(r: Record, led: Ledger) > void {
+    if (led.fold.len() > 0 and (led.fold[0].agent != r.agent or led.fold[0].lease != r.lease or led.fold[0].preview != r.preview)) {
+        led.flush();
+    }
+    led.fold.append(r);
+}
+
+fun walk(within: [Record], byId: {str: JobFacts}, agents: [str], ids: [str], led: Ledger) > void {
+    foreach (r in within) {
+        final isAgent = r.agent != "" and agents.indexOf(r.agent) != null;
+        final isContinue = r.action == "agent.continue" and agents.indexOf(r.target) != null;
+        final named = namedJob(r, ids: ids);
+        if (!isAgent and !isContinue and named == "") {
+            continue;
+        }
+        if (isAgent) {
+            noteLease(r, led: led);
+        }
+        final what = describe(r, named: named, isAgent: isAgent, isContinue: isContinue, byId: byId, led: led);
+        if (what == "") {
+            foldCall(r, led: led);
+            continue;
+        }
+        led.flush();
+        led.steps.append(fromRecord(r, what: what));
+    }
+    led.flush();
+}
+
+fun forked(within: [Record], id: str) > bool {
+    foreach (r in within) {
+        if (runs(r.command, verb: "fork", id: id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun rowSteps(row: JobFacts, within: [Record], anchor: int, steps: mut [Step], missing: mut [str]) > void {
+    final id = row.id;
+    steps.append(fromRow(row, at: row.created * 1000, what: "row {id} created (job fork)"));
+    if (row.registered > 0) {
+        steps.append(fromRow(row, at: row.registered * 1000, what: "row {id} records a holder's base (job exec)"));
+    }
+    if (row.releasedAt > 0) {
+        steps.append(fromRow(row, at: row.releasedAt * 1000, what: "row {id} releases paths it no longer claims: {row.releasedPaths.join(", ")}"));
+    }
+    final after = if (row.updated * 1000 > anchor) " (after the event)" else "";
+    steps.append(fromRow(row, at: row.updated * 1000,
+        what: "row {id} last written{after}: state {row.state}, rework_rounds {row.reworkRounds}, widenings {row.widenings}"));
+    missing.append("{id}'s earlier states: the job store keeps only the latest row (updated {clock(row.updated * 1000)}), so an exit before a re-file shows only in the trail");
+    if (!forked(within, id: id)) {
+        missing.append("the fork of {id}: no trail record in the window runs job fork {id} (the row was created {clock(row.created * 1000)})");
+    }
+}
+
+fun allRowSteps(ids: [str], within: [Record], byId: {str: JobFacts}, anchor: int, steps: mut [Step], missing: mut [str]) > void {
+    foreach (id in ids) {
+        final j = byId[id];
+        if (j == null) {
+            missing.append("job {id}'s row: the store no longer holds it (removed, or pruned past jobs.retain)");
+            continue;
+        }
+        rowSteps(j!, within: within, anchor: anchor, steps: steps, missing: missing);
+    }
+}
+
+fun lineageGaps(agents: [str], led: Ledger, missing: mut [str]) > void {
+    foreach (a in agents) {
+        if (a == "") {
+            continue;
+        }
+        missing.append("which spawn started agent {a}: a spawn record holds the prompt, not the agent id the host gives the child");
+        if (led.releases[a] != null) {
+            missing.append("when {a}'s lease binding was released: the store deletes the binding file and records no event, so the release is read off the trail's lease field");
+        }
+    }
+    if (led.namelessPass) {
+        missing.append("which judge branch passed a write with no lease: the trail names decided_by only on a deny");
+    }
+    foreach (c in led.continues) {
+        if (c.response == "") {
+            missing.append("whether the root was told {c.target}'s job state when it resumed it at {clock(c.at)}: {cite(c)} carries no response");
+        }
+    }
+}
+
+fun commitStep(c: CommitFacts, ids: [str], byId: {str: JobFacts}, steps: mut [Step], missing: mut [str]) > void {
+    final outside = mut [<str>];
+    var job: JobFacts? = null;
+    foreach (id in ids) {
+        if (byId[id] != null) {
+            job = byId[id];
+        }
+    }
+    foreach (f in c.files) {
+        if (job != null and where(job!.checkout + "/" + f, j: job).endsWith("outside {job!.id}'s write paths")) {
+            outside.append(f);
+        }
+    }
+    final scope = if (job == null) "" else "; {outside.len()} outside {job!.id}'s write paths";
+    steps.append(Step{ at = c.at, what = "commit {c.short} \"{c.subject}\" lands {c.files.len()} file(s): {c.files.join(", ")}{scope}",
+        cite = "commit {c.sha}", reopen = "git show --stat {c.short}" });
+    missing.append("the sha a git commit produced: the trail records the command, not its result, so commit {c.short} is linked by its subject");
+}
+
 // trace walks records (oldest first) back from seed into one timeline.
 // jobs is every row the store holds; commit is set only for a commit seed.
 // It raises when the seed names nothing the records or rows hold.
@@ -281,290 +591,89 @@ export fun trace(seed: Seed, records: [Record], jobs: [JobFacts], commit: Commit
     final agents = mut [<str>];
     final ids = mut [<str>];
     final missing = mut [<str>];
-    var anchor = seed.at;
-    if (seed.kind == "job") {
-        if (byId[seed.value] == null) {
-            throw "trace: the job store holds no row {seed.value}";
-        }
-        addUnique(ids, value: seed.value);
-    } else {
-        final hits = seedRecords(seed, records: records, commit: commit);
-        if (hits.len() == 0) {
-            if (seed.kind != "commit") {
-                throw "trace: no trail record in the window matches {seed.kind} {seed.value}; widen --since or name another --trail";
-            }
-            missing.append("the agent that made commit {commit!.short}: no trail record in the window runs git commit with its subject");
-        } else {
-            final last = hits[hits.len() - 1];
-            if (seed.kind != "commit") {
-                anchor = last.at;
-            }
-            addUnique(agents, value: last.agent);
-            addUnique(ids, value: last.lease);
-            if (last.agent == "") {
-                missing.append("which agent made {cite(last)}: the record names none, so it is the root's or a person's");
-            }
-        }
-    }
+    final anchor = seedAnchor(seed, records: records, commit: commit, byId: byId, agents: agents, ids: ids, missing: missing);
     final within = mut [<Record>];
     foreach (r in records) {
         if (r.at <= anchor) {
             within.append(r);
         }
     }
-    foreach (r in within) {
-        if (agents.indexOf(r.agent) != null) {
-            addUnique(ids, value: r.lease);
-        }
-    }
-    foreach (r in within) {
-        if (r.agent != "" and ids.indexOf(r.lease) != null) {
-            addUnique(agents, value: r.agent);
-        }
-    }
-
-    final steps = mut [<Step>];
-    final lastLease = mut {<str: str>};
-    final lastJob = mut {<str: str>};
-    final lastLeased = mut {<str: Record>};
-    final exits = mut {<str: Record>};
-    final exitJob = mut {<str: str>};
-    final releases = mut {<str: Record>};
-    final lastBefore = mut {<str: Record>};
-    final continues = mut [<Record>];
-    final unleased = mut {<str: mut [Record]>};
-    final fold = mut [<Record>];
-    var namelessPass = false;
-
-    fun flush() > void {
-        if (fold.len() > 0) {
-            final first = fold[0];
-            final scope = if (first.lease != "") "under lease {first.lease}" else "with no lease";
-            final span = if (fold.len() == 1) cite(first) else "events.jsonl:{first.line}..{fold[fold.len() - 1].line} from {first.request}";
-            steps.append(Step{ at = first.at, what = "{first.agent}: {fold.len()} more call(s) {scope}, {verdictText(first)}", cite = span, reopen = reopen(first) });
-        }
-        while (fold.len() > 0) {
-            fold.pop();
-        }
-    }
-
-    foreach (r in within) {
-        final isAgent = r.agent != "" and agents.indexOf(r.agent) != null;
-        final isContinue = r.action == "agent.continue" and agents.indexOf(r.target) != null;
-        var named = "";
-        foreach (id in ids) {
-            if (mentions(r.command + " " + r.message, id: id)) {
-                named = id;
-            }
-        }
-        if (!isAgent and !isContinue and named == "") {
-            continue;
-        }
-        if (isAgent) {
-            final prior = lastLease[r.agent] ?? "";
-            if (prior != r.lease) {
-                flush();
-                if (prior != "" and r.lease == "") {
-                    final kept = lastLeased[r.agent]!;
-                    if (releases[r.agent] == null) {
-                        releases[r.agent] = r;
-                        lastBefore[r.agent] = kept;
-                    }
-                    steps.append(fromRecord(r, what: "{r.agent}: calls stop carrying lease {prior}; the last that did is {cite(kept)} at {clock(kept.at)}: `{short(kept.command, n: 100)}`"));
-                } else if (r.lease != "") {
-                    final source = if (r.leaseFrom != "") r.leaseFrom else "not recorded";
-                    steps.append(fromRecord(r, what: "{r.agent}: calls carry lease {r.lease} from here (lease_from {source})"));
-                }
-                lastLease[r.agent] = r.lease;
-            }
-            if (r.lease != "") {
-                lastLeased[r.agent] = r;
-                lastJob[r.agent] = r.lease;
-            }
-        }
-        final leaseText = if (r.lease != "") "under lease {r.lease}" else "with no lease";
-        var what = "";
-        if (isContinue) {
-            final said = if (r.response == "") "the verdict carried no response" else verdictText(r);
-            what = "root resumes {r.target} by {r.action}: \"{short(r.message, n: 160)}\"; {said}";
-            continues.append(r);
-        } else if (r.kind == "agent_spawn" and named != "") {
-            what = "{who(r)} spawns a {r.action} worker whose prompt names {named}: \"{short(r.message, n: 120)}\"";
-        } else if (named != "" and runs(r.command, verb: "fork", id: named)) {
-            what = "{who(r)} forks {named}, {verdictText(r)}";
-        } else if (named != "" and runs(r.command, verb: "exec", id: named)) {
-            what = "{who(r)} takes {named} (job exec) {leaseText}, {verdictText(r)}";
-        } else if (named != "" and runs(r.command, verb: "exit", id: named) and r.command.indexOf("--schema") != null) {
-            what = "{who(r)} asks job exit for its schema (job exit {named} --schema) {leaseText}, {verdictText(r)}";
-        } else if (named != "" and runs(r.command, verb: "exit", id: named)) {
-            what = "{who(r)} exits {named} (job exit) {leaseText}, {verdictText(r)}";
-            if (isAgent and r.preview != "guard: deny" and exits[r.agent] == null) {
-                exits[r.agent] = r;
-                exitJob[r.agent] = named;
-            }
-        } else if (named != "" and r.command.indexOf("job apply") != null) {
-            what = "{who(r)} runs job apply naming {named} {leaseText}, {verdictText(r)}";
-        } else if (named != "" and runs(r.command, verb: "wait", id: named)) {
-            what = "{who(r)} waits on {named} (job wait), {verdictText(r)}";
-        } else if (named != "" and runs(r.command, verb: "rm", id: named)) {
-            what = "{who(r)} removes {named} (job rm), {verdictText(r)}";
-        } else if (!isAgent) {
-            what = "{who(r)} names {named} in a {r.action}, {verdictText(r)}";
-        } else if (r.command.indexOf("git commit") != null) {
-            what = "{r.agent} runs git commit \"{commitSubject(r.command)}\" {leaseText}, {verdictText(r)}";
-        } else if (r.action == "file.write") {
-            final job = byId[lastJob[r.agent] ?? ""];
-            what = "{r.agent} writes {where(r.path, j: job)} {leaseText}, {verdictText(r)}";
-            if (r.lease == "" and lastLeased[r.agent] != null) {
-                if (unleased[r.agent] == null) {
-                    unleased[r.agent] = mut [<Record>];
-                }
-                unleased[r.agent]!.append(r);
-                if (r.preview == "guard: pass" and r.decidedBy == "") {
-                    namelessPass = true;
-                }
-            }
-        } else if (r.preview == "guard: deny") {
-            what = "{r.agent}: {r.action} {leaseText}, {verdictText(r)}";
-        }
-        if (what == "") {
-            if (fold.len() > 0 and (fold[0].agent != r.agent or fold[0].lease != r.lease or fold[0].preview != r.preview)) {
-                flush();
-            }
-            fold.append(r);
-            continue;
-        }
-        flush();
-        steps.append(fromRecord(r, what: what));
-    }
-    flush();
-
-    foreach (id in ids) {
-        final j = byId[id];
-        if (j == null) {
-            missing.append("job {id}'s row: the store no longer holds it (removed, or pruned past jobs.retain)");
-            continue;
-        }
-        final row = j!;
-        steps.append(fromRow(row, at: row.created * 1000, what: "row {id} created (job fork)"));
-        if (row.registered > 0) {
-            steps.append(fromRow(row, at: row.registered * 1000, what: "row {id} records a holder's base (job exec)"));
-        }
-        if (row.releasedAt > 0) {
-            steps.append(fromRow(row, at: row.releasedAt * 1000, what: "row {id} releases paths it no longer claims: {row.releasedPaths.join(", ")}"));
-        }
-        final after = if (row.updated * 1000 > anchor) " (after the event)" else "";
-        steps.append(fromRow(row, at: row.updated * 1000,
-            what: "row {id} last written{after}: state {row.state}, rework_rounds {row.reworkRounds}, widenings {row.widenings}"));
-        missing.append("{id}'s earlier states: the job store keeps only the latest row (updated {clock(row.updated * 1000)}), so an exit before a re-file shows only in the trail");
-        var forked = false;
-        foreach (r in within) {
-            if (runs(r.command, verb: "fork", id: id)) {
-                forked = true;
-            }
-        }
-        if (!forked) {
-            missing.append("the fork of {id}: no trail record in the window runs job fork {id} (the row was created {clock(row.created * 1000)})");
-        }
-    }
-    foreach (a in agents) {
-        if (a == "") {
-            continue;
-        }
-        missing.append("which spawn started agent {a}: a spawn record holds the prompt, not the agent id the host gives the child");
-        if (releases[a] != null) {
-            missing.append("when {a}'s lease binding was released: the store deletes the binding file and records no event, so the release is read off the trail's lease field");
-        }
-    }
-    if (namelessPass) {
-        missing.append("which judge branch passed a write with no lease: the trail names decided_by only on a deny");
-    }
-    foreach (c in continues) {
-        if (c.response == "") {
-            missing.append("whether the root was told {c.target}'s job state when it resumed it at {clock(c.at)}: {cite(c)} carries no response");
-        }
-    }
+    widenScope(within, agents: agents, ids: ids);
+    final led = mut Ledger{ steps = mut [<Step>], lastLease = mut {<str: str>}, lastJob = mut {<str: str>},
+        lastLeased = mut {<str: Record>}, exits = mut {<str: Record>}, exitJob = mut {<str: str>}, releases = mut {<str: Record>},
+        lastBefore = mut {<str: Record>}, continues = mut [<Record>], unleased = mut {<str: mut [Record]>}, fold = mut [<Record>] };
+    walk(within, byId: byId, agents: agents, ids: ids, led: led);
+    allRowSteps(ids, within: within, byId: byId, anchor: anchor, steps: led.steps, missing: missing);
+    lineageGaps(agents, led: led, missing: missing);
     if (commit != null) {
-        final c = commit!;
-        final outside = mut [<str>];
-        var job: JobFacts? = null;
-        foreach (id in ids) {
-            if (byId[id] != null) {
-                job = byId[id];
-            }
-        }
-        foreach (f in c.files) {
-            if (job != null and where(job!.checkout + "/" + f, j: job).endsWith("outside {job!.id}'s write paths")) {
-                outside.append(f);
-            }
-        }
-        final scope = if (job == null) "" else "; {outside.len()} outside {job!.id}'s write paths";
-        steps.append(Step{ at = c.at, what = "commit {c.short} \"{c.subject}\" lands {c.files.len()} file(s): {c.files.join(", ")}{scope}",
-            cite = "commit {c.sha}", reopen = "git show --stat {c.short}" });
-        missing.append("the sha a git commit produced: the trail records the command, not its result, so commit {c.short} is linked by its subject");
+        commitStep(commit!, ids: ids, byId: byId, steps: led.steps, missing: missing);
     }
     missing.append("whether a hook record is the host's own call or an envelope replayed on stdin: both are recorded with entry_point hook");
+    final ordered = led.steps.sort(fun (a: Step, b: Step) > bool => a.at < b.at);
+    return Trace{ anchor = anchor, agents = agents, jobs = ids, steps = ordered, missing = missing, chain = chain(agents, led: led) };
+}
 
-    final ordered = steps.sort(fun (a: Step, b: Step) > bool => a.at < b.at);
-    return Trace{ anchor = anchor, agents = agents, jobs = ids, steps = ordered, missing = missing,
-        chain = chain(agents, exits: exits, exitJob: exitJob, releases: releases, lastBefore: lastBefore, continues: continues, unleased: unleased) };
+fun releaseLine(a: str, e: Record, led: Ledger) > str {
+    final rel = led.releases[a];
+    if (rel == null) {
+        return "  release: not recorded: every call by {a} in the window carries the lease";
+    }
+    final kept = led.lastBefore[a]!;
+    final when = if (kept.at < e.at) "before the exit" else "after the exit";
+    return "  release: {when}, inferred from the lease field: the last leased call is {cite(kept)} at {clock(kept.at)}"
+        + " (`{short(kept.command, n: 80)}`), the first without it {cite(rel!)} at {clock(rel!.at)}";
+}
+
+fun resumeLine(e: Record, continues: [Record]) > str {
+    foreach (c in continues) {
+        if (c.target == e.agent and c.at >= e.at) {
+            return "  resumed by the root: {clock(c.at)} {cite(c)}";
+        }
+    }
+    return "  resumed by the root: not recorded: no continue to {e.agent} after the exit in the window";
+}
+
+fun writeLines(e: Record, led: Ledger) > [str] {
+    final writes = mut [<Record>];
+    foreach (w in led.unleased[e.agent] ?? mut [<Record>]) {
+        if (w.at >= e.at) {
+            writes.append(w);
+        }
+    }
+    if (writes.len() == 0) {
+        return ["  writes with no lease: none recorded after the exit"];
+    }
+    final paths = mut [<str>];
+    var passed = 0;
+    var denied = 0;
+    foreach (w in writes) {
+        addUnique(paths, value: w.path);
+        if (w.preview == "guard: pass" and w.decidedBy == "") {
+            passed = passed + 1;
+        } else if (w.preview == "guard: deny") {
+            denied = denied + 1;
+        }
+    }
+    return ["  writes with no lease: {writes.len()} call(s) on {paths.len()} file(s), {cite(writes[0])} first",
+        "  allow at the empty-lease path: {passed} passed naming no rule, {denied} denied"];
 }
 
 // chain lists what surrounds each agent's own exit. A link the trail lacks
 // prints as not recorded.
-fun chain(agents: [str], exits: {str: Record}, exitJob: {str: str}, releases: {str: Record}, lastBefore: {str: Record},
-    continues: [Record], unleased: {str: mut [Record]}) > [str] {
+fun chain(agents: [str], led: Ledger) > [str] {
     final found = mut [<str>];
     foreach (a in agents) {
-        if (exits[a] == null) {
+        if (led.exits[a] == null) {
             continue;
         }
-        final e = exits[a]!;
-        found.append("{a} on {exitJob[a] ?? ""}:");
+        final e = led.exits[a]!;
+        found.append("{a} on {led.exitJob[a] ?? ""}:");
         found.append("  exit: {clock(e.at)} {cite(e)}");
-        final rel = releases[a];
-        if (rel == null) {
-            found.append("  release: not recorded: every call by {a} in the window carries the lease");
-        } else {
-            final kept = lastBefore[a]!;
-            final when = if (kept.at < e.at) "before the exit" else "after the exit";
-            found.append("  release: {when}, inferred from the lease field: the last leased call is {cite(kept)} at {clock(kept.at)}"
-                + " (`{short(kept.command, n: 80)}`), the first without it {cite(rel!)} at {clock(rel!.at)}");
+        found.append(releaseLine(a, e: e, led: led));
+        found.append(resumeLine(e, continues: led.continues));
+        foreach (line in writeLines(e, led: led)) {
+            found.append(line);
         }
-        var resumed: Record? = null;
-        foreach (c in continues) {
-            if (resumed == null and c.target == e.agent and c.at >= e.at) {
-                resumed = c;
-            }
-        }
-        if (resumed != null) {
-            found.append("  resumed by the root: {clock(resumed!.at)} {cite(resumed!)}");
-        } else {
-            found.append("  resumed by the root: not recorded: no continue to {e.agent} after the exit in the window");
-        }
-        final writes = mut [<Record>];
-        foreach (w in unleased[e.agent] ?? mut [<Record>]) {
-            if (w.at >= e.at) {
-                writes.append(w);
-            }
-        }
-        if (writes.len() == 0) {
-            found.append("  writes with no lease: none recorded after the exit");
-            continue;
-        }
-        final paths = mut [<str>];
-        var passed = 0;
-        var denied = 0;
-        foreach (w in writes) {
-            addUnique(paths, value: w.path);
-            if (w.preview == "guard: pass" and w.decidedBy == "") {
-                passed = passed + 1;
-            } else if (w.preview == "guard: deny") {
-                denied = denied + 1;
-            }
-        }
-        found.append("  writes with no lease: {writes.len()} call(s) on {paths.len()} file(s), {cite(writes[0])} first");
-        found.append("  allow at the empty-lease path: {passed} passed naming no rule, {denied} denied");
     }
     return found;
 }
@@ -623,11 +732,20 @@ fun commitFacts(rev: str) > CommitFacts !> any {
     return CommitFacts{ sha = c.id, short = c.short, subject = c.subject, at = at, files = files };
 }
 
-export fun main(args: [str]) > void !> any {
+// Args is the command line once checked.
+object Args {
+    help: bool,
+    kind: str,
+    value: str,
+    atText: str,
+    lookback: int,
+    checkouts: [str],
+}
+
+fun parseArgs(args: [str]) > Args !> any {
     final parsed = flags\parse(args, switches: ["--help"], valued: ["--job", "--commit", "--record", "--path", "--at", "--since"], repeated: ["--trail"]);
     if (parsed.values["--help"] != null) {
-        std\print(HELP);
-        return;
+        return Args{ help = true, kind = "", value = "", atText = "", lookback = 0, checkouts = [<str>] };
     }
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "trace: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
@@ -642,43 +760,65 @@ export fun main(args: [str]) > void !> any {
         throw "trace: name exactly one event: --job, --commit, --record or --path\n{USAGE}";
     }
     final kind = given[0].sub(2);
-    final value = parsed.values[given[0]]!;
     if (kind == "path" and parsed.values["--at"] == null) {
         throw "trace: --path needs --at, the RFC3339 time to trace back from\n{USAGE}";
     }
-    final lookback = std\toInt(time\parseDuration(parsed.values["--since"] ?? "24h"));
     final trails = parsed.lists["--trail"] ?? [<str>];
-    final checkouts = if (trails.len() > 0) trails else [vcs\root()];
+    return Args{ help = false, kind = kind, value = parsed.values[given[0]]!, atText = parsed.values["--at"] ?? "",
+        lookback = std\toInt(time\parseDuration(parsed.values["--since"] ?? "24h")), checkouts = if (trails.len() > 0) trails else [vcs\root()] };
+}
 
+fun jobRows() > [JobFacts] !> any {
     final rows = mut [<JobFacts>];
     foreach (j in magus\job.list().jobs) {
         rows.append(facts(j));
     }
+    return rows;
+}
+
+// eventTime is the time the trace walks back from, unix ms.
+fun eventTime(a: Args, rows: [JobFacts], commit: CommitFacts?) > int !> any {
     var at = std\toInt(time\parse(RFC3339, value: time\nowIso()));
-    var commit: CommitFacts? = null;
-    if (kind == "job") {
+    if (a.kind == "job") {
         foreach (r in rows) {
-            if (r.id == value) {
+            if (r.id == a.value) {
                 at = (r.updated + 1) * 1000;
             }
         }
-    } else if (kind == "commit") {
-        commit = commitFacts(value);
+    } else if (a.kind == "commit") {
         at = commit!.at + 1000;
-    } else if (kind == "path") {
-        at = std\toInt(time\parse(RFC3339, value: parsed.values["--at"]!));
+    } else if (a.kind == "path") {
+        at = std\toInt(time\parse(RFC3339, value: a.atText));
     }
+    return at;
+}
+
+fun readTrails(checkouts: [str], start: int, end: int) > [Record] !> any {
     final records = mut [<Record>];
     foreach (c in checkouts) {
         final dir = fs\join(c, name: ".magus/activity");
-        foreach (r in loadTrail(fs\join(dir, name: "events.jsonl"), blobs: fs\join(dir, name: "blobs"), start: at - lookback, end: at)) {
+        foreach (r in loadTrail(fs\join(dir, name: "events.jsonl"), blobs: fs\join(dir, name: "blobs"), start: start, end: end)) {
             records.append(r);
         }
     }
-    final ordered = records.sort(fun (a: Record, b: Record) > bool => a.at < b.at);
-    final t = trace(Seed{ kind = kind, value = value, at = at }, records: ordered, jobs: rows, commit: commit);
-    final header = "read-only: traced {kind} {value} through {records.len()} trail record(s) from {checkouts.join(", ")} and {rows.len()} job row(s)";
+    return records;
+}
+
+export fun main(args: [str]) > void !> any {
+    final a = parseArgs(args);
+    if (a.help) {
+        std\print(HELP);
+        return;
+    }
+    final rows = jobRows();
+    final commit: CommitFacts? = if (a.kind == "commit") commitFacts(a.value) else null;
+    final at = eventTime(a, rows: rows, commit: commit);
+    final records = readTrails(a.checkouts, start: at - a.lookback, end: at);
+    final ordered = records.cloneMutable().sort(fun (x: Record, y: Record) > bool => x.at < y.at);
+    final t = trace(Seed{ kind = a.kind, value = a.value, at = at }, records: ordered, jobs: rows, commit: commit);
+    final header = "read-only: traced {a.kind} {a.value} through {records.len()} trail record(s) from {a.checkouts.join(", ")} and {rows.len()} job row(s)";
     foreach (line in render(t, header: header)) {
         std\print(line);
     }
 }
+
