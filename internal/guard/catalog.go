@@ -97,6 +97,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeasePaused},
 	{doc: ruleDocLeaseRebind},
 	{doc: ruleDocLeaseRowUnknown},
+	{doc: ruleDocEditUngraded},
 	{doc: ruleDocLeaseUndeclared},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
@@ -646,6 +647,14 @@ var ruleDocGrantIsAPersons = types.RuleDoc{
 		"Every call the hook judges is an agent's, so a grant reaching it is not a person's, and it is refused whoever runs it, the root included. The job store also refuses a grant from a process carrying a lease, and no MCP tool exposes one. " +
 		"Only hooks-off is grantable to a job; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when. " +
 		"`magus job grant --commit <commit> push-ungated --reason \"...\"` is the one commit-scoped form: a person's waiver of the push gate for that commit alone, ended by `--revoke`. The store refuses it from a process carrying a lease, as it does a grant.",
+}
+
+var ruleDocEditUngraded = types.RuleDoc{
+	Name:    string(denyRuleEditUngraded),
+	Catches: "a rewrite a magus process makes itself, as `refs --rename` or a Buzz fs write, that no lease grades",
+	Why: "Such a process knows no host session, so it acts under the lease its magus.lease BAGGAGE names, else the one job taken in its checkout with `magus job exec`. " +
+		"When several leases hold write paths in the checkout and none is named, or when the lease store does not read, nothing would grade the write, and passing it would make every lease boundary advice. " +
+		"Take the job in the checkout with `magus job exec <id>`, or name it: `BAGGAGE=magus.lease=<id> magus ...`.",
 }
 
 var ruleDocLeaseRowUnknown = types.RuleDoc{

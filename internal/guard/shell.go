@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
@@ -184,6 +185,9 @@ const (
 	denyRuleFocusRead       denyRuleName = "focus-read"
 	// A row carrying members this build does not declare; see internal/guard/row_unknown.go.
 	denyRuleLeaseRowUnknown denyRuleName = "lease-row-unknown"
+	// A whole-file rewrite a magus verb makes that no lease would grade;
+	// see judgeEdit.
+	denyRuleEditUngraded denyRuleName = "edit-ungraded"
 	// `magus job grant` reaching the hook; see internal/guard/grant.go.
 	denyRuleGrantIsAPersons denyRuleName = "grant-is-a-persons"
 	// The refusing arm of hook-wiring; see internal/guard/wiring.go.
@@ -638,13 +642,13 @@ func renamesSymbol(args []string) bool {
 		!slices.Contains(args, "--dry-run") && !slices.Contains(args, "-u")
 }
 
-// JudgeEdit judges a whole-file rewrite a magus verb makes itself, exactly as the host edit
+// judgeEdit judges a whole-file rewrite a magus verb makes itself, exactly as the host edit
 // hook judges the same edit. The verb's process knows no host session, so it acts under the
-// lease it resolves on its own: the checkout's binding, else its magus.lease BAGGAGE claim.
-// Resolving none while live leases hold write paths in the checkout at root is a deny: a
-// worker bound only by its session would otherwise be graded by nobody. dryRun judges as
-// [Request.DryRun] does, writing nothing.
-func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
+// lease it resolves on its own: its checkout record or magus.lease BAGGAGE claim, else the
+// one lease `job exec` took in the checkout at root. Several held there and none named is a
+// deny, and so is a lease store that does not read: a worker bound only by its session
+// would otherwise be graded by nobody. dryRun judges as [Request.DryRun] does.
+func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
 	envelope, _ := json.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
@@ -653,31 +657,35 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 			"new_string": string(after),
 		},
 	})
-	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun})
-	if v.Decision == decisionDeny || v.Lease != "" {
-		return v
-	}
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
+	ungraded := func(say, why string) types.GuardJudgment {
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny,
+			Rule: string(denyRuleEditUngraded), Reason: denial{Say: say, Why: why}.full()}
+	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		v.Decision, v.Context, v.Rule = decisionDeny, "", ""
-		v.Reason = denial{
-			Say: fmt.Sprintf("magus workspace: the lease store did not read (%v), so this edit is refused.", err),
-			Why: "An unread store hides the leases that would grade the edit.",
-		}.full()
-		return v
+		return ungraded(fmt.Sprintf("magus workspace: the lease store did not read (%v), so this edit is refused.", err),
+			"An unread store hides the leases that would grade the edit.")
 	}
 	var held []string
 	for _, row := range job.HeldIn(rows, at.workspace) {
 		held = append(held, row.ID)
 	}
-	if len(held) == 0 {
+	slices.Sort(held)
+	lease, from := job.RunLease(ctx, at.jobs())
+	if lease == "" && len(held) == 1 {
+		lease, from = held[0], types.LeaseSourceMarker
+	}
+	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun, Lease: lease})
+	if lease != "" && v.Lease == lease {
+		v.LeaseFrom = from
+	}
+	if v.Decision == decisionDeny || v.Lease != "" || len(held) == 0 {
 		return v
 	}
-	slices.Sort(held)
-	v.Decision, v.Context, v.Rule = decisionDeny, "", ""
+	v.Decision, v.Context, v.Rule = decisionDeny, "", string(denyRuleEditUngraded)
 	v.Reason = denial{
-		Say: fmt.Sprintf("magus workspace: lease %s holds write paths in this checkout, and this process names no lease; name yours: `%s=<id> magus ...`.",
+		Say: fmt.Sprintf("magus workspace: leases %s hold write paths in this checkout, and this process names no lease; name yours: `%s=<id> magus ...`.",
 			strings.Join(held, ", "), envHookLease),
 		Why: "Nothing would grade the edit. A magus process cannot see the host session its caller is bound by.",
 	}.full()
@@ -695,7 +703,7 @@ type EditGrade struct {
 
 // GradeEdit grades a whole-file rewrite of rel in ws
 // that a magus process makes itself.
-// It refuses a declared output, then asks JudgeEdit.
+// It refuses a declared output, then asks judgeEdit.
 // rule and reason are empty on a pass;
 // a declared output is refused with no rule.
 func GradeEdit(ctx context.Context, deps Dependencies, ws types.WorkspaceRepository, rel string, before, after []byte, o EditGrade) (rule, reason string) {
@@ -706,7 +714,7 @@ func GradeEdit(ctx context.Context, deps Dependencies, ws types.WorkspaceReposit
 	case reason != "":
 		return "", reason
 	}
-	v := JudgeEdit(ctx, deps, ws.Root(), rel, before, after, o.DryRun)
+	v := judgeEdit(ctx, deps, ws.Root(), rel, before, after, o.DryRun)
 	switch v.Decision {
 	case decisionDeny, decisionAsk:
 		return v.Rule, strings.TrimSpace(v.Reason)

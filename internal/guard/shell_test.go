@@ -2572,11 +2572,11 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 }
 
 // A rename's process names no session, so its writes are graded under the lease it claims,
-// and in a checkout where a lease is held, claiming none is refused rather than ungraded.
+// and in a checkout where one lease is held, claiming none is graded under that one.
 func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	edit := func(rel string) types.GuardJudgment {
-		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
+		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
@@ -2588,24 +2588,15 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Equal(t, graded{}, gradedAs(edit("internal/ledger/store.go")), "no lease held in this checkout")
-
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, Root: root})
-	_, err := store.Update(t.Context(), "lease-c", func(cur *types.Job) {
-		*cur = types.Job{ID: "lease-c", WritePaths: []string{"web/**"}, State: types.StateRunning, CheckoutRoot: root}
-	})
-	require.NoError(t, err)
-	unnamed := edit("docs/readme.md")
-	assert.Equal(t, graded{Denied: true}, gradedAs(unnamed))
-	assert.Contains(t, unnamed.Reason, "lease lease-c holds write paths in this checkout")
 }
 
 // `refs --rename --dry-run` grades each file as the rename would and leaves no activity line.
-func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
+func TestEditDryRunRecordsNothing(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	edit := func(rel string, dryRun bool) types.GuardJudgment {
-		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
+		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
 	}
 	// The two calls may straddle a second, and a lease-write reason says how long ago the
 	// owner was updated.
@@ -2675,6 +2666,44 @@ func (s *GradeEditSuite) TestASourceOutsideTheLeaseMeetsTheLeaseRule() {
 func (s *GradeEditSuite) TestASourceInsideTheLeasePasses() {
 	rule, reason := s.grade(s.workspace("internal/ledger/store.go", "source"), "internal/ledger/store.go", EditGrade{})
 	s.Empty(rule + reason)
+}
+
+func (s *GradeEditSuite) edit(rel string) types.GuardJudgment {
+	return judgeEdit(s.ctx, Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
+}
+
+// `magus job exec` binds the checkout, which names the lease with no BAGGAGE.
+func (s *GradeEditSuite) TestTheCheckoutBindingNamesTheLease() {
+	s.T().Setenv(trail.EnvBaggage, "")
+	bindCaller(s.T(), s.ctx, hookAttribution{}, "lease-a")
+	s.Equal(graded{false, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("internal/ledger/store.go")))
+	s.Equal(graded{true, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("cmd/magus/main.go")))
+}
+
+// holdHere records id as taken in this checkout, as `job exec` does.
+func (s *GradeEditSuite) holdHere(id string, paths ...string) {
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.ctx, Dependencies{}).cacheDir, Root: s.root})
+	_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
+		*cur = types.Job{ID: id, WritePaths: paths, State: types.StateRunning, CheckoutRoot: s.root}
+	})
+	s.Require().NoError(err)
+}
+
+func (s *GradeEditSuite) TestTheOneLeaseHeldHereGradesTheEdit() {
+	s.T().Setenv(trail.EnvBaggage, "")
+	s.holdHere("lease-c", "web/**")
+	v := s.edit("docs/readme.md")
+	s.Equal(graded{true, "lease-c", types.LeaseSourceMarker}, gradedAs(v))
+	s.Equal(string(denyRuleLeaseWrite), v.Rule)
+}
+
+func (s *GradeEditSuite) TestSeveralLeasesHeldHereAndNoneNamedIsDenied() {
+	s.T().Setenv(trail.EnvBaggage, "")
+	s.holdHere("lease-c", "web/**")
+	s.holdHere("lease-d", "docs/**")
+	v := s.edit("docs/readme.md")
+	s.Equal(string(denyRuleEditUngraded), v.Rule)
+	s.Contains(v.Reason, "leases lease-c, lease-d hold write paths in this checkout")
 }
 
 func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
