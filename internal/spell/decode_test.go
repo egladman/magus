@@ -760,6 +760,24 @@ func (s *discoveredSuite) refuse(c spells.DiscoveredProject, want string) {
 	s.Contains(err.Error(), want)
 }
 
+// A spell names the records through the magus/spell bundle, which a built-in loads as well.
+func (s *discoveredSuite) TestASpellNamesTheRecords() {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "discovering"; }
+fun claim(file: DiscoveryFile) > DiscoveredProject {
+    return DiscoveredProject{path = file.path, role = DiscoveryRole.project,
+        notInferred = [DiscoveryGap{file = file.path, why = "make rules: meaning unknown"}]};
+}
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    return [claim(req.files[0])];
+}
+`
+	spec, err := resolve(s.T(), src)
+	s.Require().NoError(err)
+	s.Equal("discovering", spec.Name)
+}
+
 func (s *discoveredSuite) TestAcceptsARootProject() {
 	s.NoError(validateDiscovered(s.spell, []spells.DiscoveredProject{s.claim()}))
 }

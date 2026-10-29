@@ -186,6 +186,19 @@ var ReleaseCycleSource string
 //go:embed gen/types/lifecycle.buzz
 var LifecycleSource string
 
+// The discover_projects records, leaves first: DiscoveryQuery.files is [DiscoveryFile] and
+// DiscoveredProject.notInferred is [DiscoveryGap].
+var (
+	//go:embed gen/types/discoveryfile.buzz
+	discoveryFileSource string
+	//go:embed gen/types/discoveryquery.buzz
+	discoveryQuerySource string
+	//go:embed gen/types/discoverygap.buzz
+	discoveryGapSource string
+	//go:embed gen/types/discoveredproject.buzz
+	discoveredProjectSource string
+)
+
 // The provider op records (types/provider_ops.go): what magus hands a provider op and what
 // the op returns. None references another, so their order in the bundle is free.
 //
@@ -346,6 +359,7 @@ var CharmModuleSource string
 // registration (modules.go) and the built-in loader (builtins.go), so the two can't drift
 // apart.
 var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource,
+	discoveryFileSource, discoveryQuerySource, discoveryGapSource, discoveredProjectSource,
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,
 	findReviewRequestSource, reviewDraftSource, publishReviewRequestSource, replyReviewRequestSource, reviewRefSource,
