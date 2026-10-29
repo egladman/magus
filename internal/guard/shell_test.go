@@ -2648,7 +2648,7 @@ func (s *GradeEditSuite) TestADeclaredOutputIsRefusedWithNoRule() {
 
 func (s *GradeEditSuite) TestATargetRunWritesItsDeclaredOutput() {
 	rule, reason := s.grade(s.workspace("cmd/magus/main.go", types.DiffRoleOutput), "cmd/magus/main.go", EditGrade{InRun: true})
-	s.Empty(rule + reason, "the lease would refuse it, and the run's output passes before it is asked")
+	s.Empty(rule+reason, "the lease would refuse it, and the run's output passes before it is asked")
 }
 
 func (s *GradeEditSuite) TestAnUnclassifiedPathIsRefusedEvenInARun() {
