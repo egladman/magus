@@ -269,7 +269,6 @@ magus\project({
         "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
         "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
         "pr-description": {"skip_cache": "judges the title and description its flags carry, which no file input holds"},
-        "git-hooks-install": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "git-hooks-remove": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
         "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
@@ -836,13 +835,7 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} shipped path(s)");
 }
 
-// Installs a shim in git's hooks directory for every hack/git-hooks/<hook>.buzz.
-// Without rw it only reports what it would change.
-export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
-    githooks\install(ctx, dir: "hack/git-hooks");
-}
-
-// Deletes the shims git_hooks_install wrote, and no hook anything else wrote.
+// Deletes the shims once installed from hack/git-hooks, and no other hook.
 export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
     githooks\remove(ctx, dir: "hack/git-hooks");
 }
