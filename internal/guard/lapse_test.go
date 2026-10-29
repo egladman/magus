@@ -147,7 +147,7 @@ func TestOldSettingsJSONIsNotRead(t *testing.T) {
 }
 
 // LapseDegradeSuite pins decision 127: past lapsesBeforeDegrade a subagent's
-// write in a live job's checkout stays denied, and other writes degrade.
+// write or command in a live job's checkout stays denied, and others degrade.
 type LapseDegradeSuite struct {
 	suite.Suite
 	ctx     context.Context
@@ -177,6 +177,40 @@ func (s *LapseDegradeSuite) lapsedWrite(agent, path string) types.GuardJudgment 
 	}
 	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
 	return lapseNow(s.ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+}
+
+// lapsedCommand lapses a Bash call running line from cwd, by agent or by the
+// root session when agent is "".
+func (s *LapseDegradeSuite) lapsedCommand(agent, cwd, line string) types.GuardJudgment {
+	env := map[string]any{"session_id": "s1", "cwd": cwd, "hook_event_name": "PreToolUse",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": line}}
+	if agent != "" {
+		env["agent_id"], env["agent_type"] = agent, "general-purpose"
+	}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	return lapseNow(s.ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInALeasedCheckout() {
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", s.own, "make build")
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesACommandOutsideEveryCheckout() {
+	scratch := s.T().TempDir()
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesTheRootSessionsCommandInALeasedCheckout() {
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedCommand("", s.own, "make build").Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedCommand("", s.own, "make build").Decision)
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInALeasedCheckout() {

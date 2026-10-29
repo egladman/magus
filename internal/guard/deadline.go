@@ -347,7 +347,7 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 // says why and what to check, the rest say only that the guard is still not judging. The
 // trail row records log's finished phases, the one underway, and the bound.
 //
-// A subagent's write in a live job's checkout is never degraded.
+// A subagent's write or command in a live job's checkout is never degraded.
 func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) types.GuardJudgment {
 	elapsed := time.Since(log.start)
 	pass := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
@@ -402,7 +402,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
 	case writesOutside:
 		verdict = applyRuleFailureNote(verdict, unjudgedOutsideNote(), advisoryUnfinished)
-	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes || lapsedInJobCheckout(ctx, base, who, isPath, input)):
+	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes || lapsedInJobCheckout(ctx, base, who, isPath, input, callDir)):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
@@ -423,14 +423,18 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	return verdict
 }
 
-// lapsedInJobCheckout reports a subagent's file write into a checkout a live
-// job's fork made. A lapse never degrades it: that write is the one a lease
-// boundary exists to grade.
-func lapsedInJobCheckout(ctx context.Context, base Dependencies, who hookAttribution, isPath bool, writePath string) bool {
-	if !isPath || who.Agent == "" {
+// lapsedInJobCheckout reports a subagent's file write, or a command run from
+// callDir, landing in a checkout a live job's fork made. A lapse never
+// degrades it: a lease boundary exists to grade exactly that call.
+func lapsedInJobCheckout(ctx context.Context, base Dependencies, who hookAttribution, isPath bool, input, callDir string) bool {
+	if who.Agent == "" {
 		return false
 	}
-	row, ok := jobCheckoutHolding(ctx, hookLocation(ctx, base), writePath)
+	where := callDir
+	if isPath {
+		where = input
+	}
+	row, ok := jobCheckoutHolding(ctx, hookLocation(ctx, base), where)
 	return ok && row.State.Live()
 }
 

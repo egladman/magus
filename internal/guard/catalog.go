@@ -914,7 +914,7 @@ var ruleDocEchoOnSuccess = types.RuleDoc{
 
 var ruleDocLeaseState = types.RuleDoc{
 	Name:    string(advisoryLeaseState),
-	Catches: "a leased write while its row reports a diverged base, a re-entered path, or a bad pattern",
+	Catches: "a leased write on a diverged base, re-entered path or bad pattern; a continue to a returned job",
 }
 
 var ruleDocTimedMagus = types.RuleDoc{

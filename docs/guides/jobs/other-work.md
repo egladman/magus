@@ -189,6 +189,10 @@ EOF
 exited release-1.3/notes, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait release-1.3/notes`
 ```
 
+The holder stays bound to the item's write paths after exiting, as the note exit
+prints on stderr says. A write outside them is denied until the release owner widens
+the item or a wait ends it.
+
 The board says both items came back, and nothing more:
 
 <!-- golden: job_people_release.txtar ls-exited.out -->

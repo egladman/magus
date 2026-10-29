@@ -199,6 +199,10 @@ $ magus job exit refactor/pricing --stdin < result.json
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
 ```
 
+Exiting does not let go of the job. On stderr, exit adds that she stays bound to its
+write paths, so the guard denies a write outside them until whoever forked the job
+widens it or a wait ends it.
+
 The tax half turns out not to be needed yet. She takes it in `../shop-tax` and
 gives it back with no result:
 
