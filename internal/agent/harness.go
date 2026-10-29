@@ -110,6 +110,42 @@ func ShortestForegroundMax(harnesses []HarnessDescriptor) (time.Duration, bool) 
 	return shortest, shortest > 0
 }
 
+// HarnessChannel is one place a host's hook reply can put text, as types.Limits.Channels
+// names it.
+type HarnessChannel string
+
+const (
+	// ChannelAgent reaches the agent alone: Claude Code's additionalContext, Cursor's
+	// agent_message.
+	ChannelAgent HarnessChannel = "agent"
+	// ChannelUser reaches the person alone: a systemMessage, Cursor's user_message.
+	ChannelUser HarnessChannel = "user"
+	// ChannelBoth reaches both: a deny reason, a thrown tool error.
+	ChannelBoth HarnessChannel = "both"
+)
+
+// ParseHarnessChannels reads a harness's declared channels. An empty set, a repeat or a
+// name outside agent, user and both is an error, since a reply routed on a guess reaches
+// the wrong reader.
+func ParseHarnessChannels(names []string) ([]HarnessChannel, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("declares no channels: set limits.channels to the ones its hook replies reach, from %s, %s and %s",
+			ChannelAgent, ChannelUser, ChannelBoth)
+	}
+	out := make([]HarnessChannel, 0, len(names))
+	for _, name := range names {
+		c := HarnessChannel(name)
+		if c != ChannelAgent && c != ChannelUser && c != ChannelBoth {
+			return nil, fmt.Errorf("declares the unknown channel %q: the channels are %s, %s and %s", name, ChannelAgent, ChannelUser, ChannelBoth)
+		}
+		if slices.Contains(out, c) {
+			return nil, fmt.Errorf("declares the channel %s twice", name)
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 // HarnessDisplay is opaque metadata for host UIs. The core validates no
 // provider identity or presentation convention.
 type HarnessDisplay struct {

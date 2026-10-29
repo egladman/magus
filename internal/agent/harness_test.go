@@ -78,6 +78,27 @@ func requireCurrent(t *testing.T, root, id string) {
 	assert.Empty(t, plan.Merge)
 }
 
+func TestParseHarnessChannelsReadsEachDeclaredChannel(t *testing.T) {
+	got, err := ParseHarnessChannels([]string{"agent", "user", "both"})
+	require.NoError(t, err)
+	assert.Equal(t, []HarnessChannel{ChannelAgent, ChannelUser, ChannelBoth}, got)
+}
+
+func TestParseHarnessChannelsRefusesAnEmptySet(t *testing.T) {
+	_, err := ParseHarnessChannels(nil)
+	require.ErrorContains(t, err, "declares no channels")
+}
+
+func TestParseHarnessChannelsRefusesAnUnknownChannel(t *testing.T) {
+	_, err := ParseHarnessChannels([]string{"agent", "pager"})
+	require.ErrorContains(t, err, `unknown channel "pager"`)
+}
+
+func TestParseHarnessChannelsRefusesARepeat(t *testing.T) {
+	_, err := ParseHarnessChannels([]string{"both", "both"})
+	require.ErrorContains(t, err, "twice")
+}
+
 func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)

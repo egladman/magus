@@ -2379,6 +2379,36 @@ func (s *hookAudienceSuite) TestASubagentStopBlockNamesItsOwnEvent() {
 	s.Equal("SubagentStop", reply["hookSpecificOutput"].(map[string]any)["hookEventName"])
 }
 
+func (s *hookAudienceSuite) TestAHostWithNoAgentChannelGetsTheVerdictLineAlone() {
+	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
+	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"both"}}, true, deny)
+	s.Equal("a text search the graph answers", got.Reason)
+}
+
+func (s *hookAudienceSuite) TestAHostWithAnAgentChannelKeepsTheWholeReason() {
+	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
+	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"agent", "user", "both"}}, true, deny)
+	s.Equal(audienceReason, got.Reason)
+}
+
+func (s *hookAudienceSuite) TestLimitsWithNoChannelsLeaveTheReasonWhole() {
+	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
+	s.Equal(audienceReason, routeDeny(s.T().Context(), types.Limits{}, true, deny).Reason)
+}
+
+func (s *hookAudienceSuite) TestAnAdviseIsNeverCut() {
+	advise := types.GuardJudgment{Decision: "advise", Context: audienceReason}
+	s.Equal(advise, routeDeny(s.T().Context(), types.Limits{Channels: []string{"both"}}, true, advise))
+}
+
+func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
+	reply := s.render("codex", `{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":false}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	s.Equal(audienceReason, reply["reason"])
+	s.NotContains(reply, "hookSpecificOutput")
+	s.Require().NoError(glueLoadSchema(s.T(), "codex/stop.command.output.schema.json").Validate(reply))
+}
+
 func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
 	verdict, err := json.Marshal(types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: audienceReason})
 	s.Require().NoError(err)

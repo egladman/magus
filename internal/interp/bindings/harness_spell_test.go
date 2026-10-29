@@ -295,16 +295,16 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 
 // TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a
 // command past its timeout, and whose wiring sets the hook timeout the guard reports
-// against, and that every other shipped harness declares no limits.
+// against, and the reply channels each host declares.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
 	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true,
-		PayloadFields: []string{"prompt_id", "effort", "scratchpad_dir"}},
+		PayloadFields: []string{"prompt_id", "effort", "scratchpad_dir"}, Channels: []string{"agent", "user", "both"}},
 		loadShippedHarness(t, "claude-code").Limits)
 	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true,
-		PayloadFields: []string{"cursor_version", "conversation_id", "generation_id", "workspace_roots"}},
+		PayloadFields: []string{"cursor_version", "conversation_id", "generation_id", "workspace_roots"}, Channels: []string{"agent", "user"}},
 		loadShippedHarness(t, "cursor").Limits)
-	assert.Equal(t, types.Limits{PayloadFields: []string{"turn_id"}}, loadShippedHarness(t, "codex").Limits)
-	assert.Zero(t, loadShippedHarness(t, "opencode").Limits)
+	assert.Equal(t, types.Limits{PayloadFields: []string{"turn_id"}, Channels: []string{"agent", "user", "both"}}, loadShippedHarness(t, "codex").Limits)
+	assert.Equal(t, types.Limits{Channels: []string{"both"}}, loadShippedHarness(t, "opencode").Limits)
 }
 
 // TestNoTwoShippedHarnessesClaimOnePayloadField holds the payload fingerprints
@@ -317,6 +317,26 @@ func TestNoTwoShippedHarnessesClaimOnePayloadField(t *testing.T) {
 			owner[f] = id
 		}
 	}
+}
+
+const channelsHook = "export fun mgs_listHooks() > [HookCommand] { return [HookCommand{event = \"PreToolUse\", script = \"magus-command\"}]; }\n"
+
+// A harness that wires a hook and declares no channels is refused: nothing would say who
+// reads its replies.
+func TestAHookedHarnessWithNoChannelsIsRefused(t *testing.T) {
+	id := harnessSource(t, "no-channels-test", channelsHook)
+	_, _, ok, err := loadHarnessFromSpell(context.Background(), id)
+	require.Error(t, err)
+	assert.False(t, ok)
+	assert.Contains(t, err.Error(), "declares no channels")
+}
+
+func TestAHarnessWithAnUnknownChannelIsRefused(t *testing.T) {
+	id := harnessSource(t, "odd-channel-test", channelsHook+
+		"export fun mgs_getLimits() > Limits { return Limits{channels = [\"agent\", \"pager\"]}; }\n")
+	_, _, _, err := loadHarnessFromSpell(context.Background(), id)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown channel "pager"`)
 }
 
 func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {

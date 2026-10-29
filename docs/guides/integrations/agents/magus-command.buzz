@@ -172,7 +172,8 @@ final ASK_BLOCKED = `{{else if eq .decision "ask"}}{"systemMessage":{{toJson (pr
 final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}{{end}}`;
 
 // A deny's first line is the verdict and reaches the person too; the rest of the reason
-// (next step, details ref) goes to additionalContext, which reaches the agent alone.
+// (next step, details ref) goes to additionalContext, which reaches the agent alone. A host
+// whose harness declares no agent channel is sent the verdict line alone by `magus shell`.
 final DENY_HEAD = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"additionalContext":{{toJson .}}{{end}}}}`;
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 
@@ -181,6 +182,8 @@ final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .dec
 // lets the stop through. Spliced through STOP_EVENT_SLOT: Stop and SubagentStop share it.
 final STOP_EVENT_SLOT = "__MAGUS_STOP_EVENT__";
 final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
+// Codex's Stop reply takes no hookSpecificOutput, so its block carries the whole reason.
+final STOP_REPLY_CODEX = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
 
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
@@ -564,6 +567,7 @@ fun main(args: [str]) > void {
         capabilities.append("--renders-ask");
     } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
         response = STOP_REPLY.replace(STOP_EVENT_SLOT, with: eventName);
+        if (codex) { response = STOP_REPLY_CODEX; }
     } else if (response == "") {
         response = DENY_HEAD + askBranch(event, codex: codex, rule: promptRule, command: commandLine)
             + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;

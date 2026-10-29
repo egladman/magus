@@ -267,6 +267,8 @@ export fun mgs_listTools() > HarnessTools {
 // (https://code.claude.com/docs/en/hooks, read 2026-10-29).
 final PAYLOAD_FIELDS = ["prompt_id", "effort", "scratchpad_dir"];
 
+// Channels, per code.claude.com/docs/en/hooks: additionalContext reaches the agent alone, a
+// systemMessage the person alone, and a deny reason both.
 export fun mgs_getLimits() > Limits {
     return Limits{
         foregroundDefaultMs = FOREGROUND_DEFAULT_MS,
@@ -275,6 +277,7 @@ export fun mgs_getLimits() > Limits {
         resumesOnBackgroundFrom = RESUMES_ON_BACKGROUND_FROM,
         observesSkillLoads = true,
         payloadFields = PAYLOAD_FIELDS,
+        channels = ["agent", "user", "both"],
     };
 }
 

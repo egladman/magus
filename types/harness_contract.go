@@ -237,6 +237,9 @@ type Setting struct {
 // PayloadFields are top-level hook payload fields only this host
 // sends, per its docs. A payload with another host's field and none
 // of these was sent by that other host.
+//
+// Channels are where the host's hook replies can put text: "agent" (the agent alone),
+// "user" (the person alone), "both". A host with no "agent" gets each deny as one line.
 type Limits struct {
 	ForegroundDefaultMs     int64    `json:"foreground_default_ms,omitempty"`
 	ForegroundMaxMs         int64    `json:"foreground_max_ms,omitempty"`
@@ -244,6 +247,7 @@ type Limits struct {
 	ResumesOnBackgroundFrom string   `json:"resumes_on_background_from,omitempty"`
 	ObservesSkillLoads      bool     `json:"observes_skill_loads,omitempty"`
 	PayloadFields           []string `json:"payload_fields,omitempty"`
+	Channels                []string `json:"channels,omitempty"`
 }
 
 // ShippedAgent is one subagent magus ships, as mgs_renderAgents receives it. Model is the
