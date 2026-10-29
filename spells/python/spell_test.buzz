@@ -1,4 +1,5 @@
 import "std";
+import "magus/spell";
 import "./spell" as python;
 
 fun marker(path: str, content: str) > DiscoveryFile {
