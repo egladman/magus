@@ -842,6 +842,16 @@ func linesSuffix(lines []int) string {
 
 // refsRenameCommand is `magus refs <symbol> --rename <new>`: glue between the graph, the
 // occurrence read, the guard and internal/edit, which owns what a write may do.
+// renameCandidates is the retrieval matches for ref plus ref itself when it is an exact
+// symbol id: retrieval ranks by text, so it can omit the id it was handed.
+func renameCandidates(g *knowledge.Graph, ref string) []types.KnowledgeMatch {
+	matches := g.Resolve(ref, 0)
+	if refs, ok := g.Refs(ref); ok && refs.Symbol == ref {
+		matches = append(matches, types.KnowledgeMatch{ID: ref, Kind: types.KindSymbol, Label: refs.Label})
+	}
+	return matches
+}
+
 func refsRenameCommand(ctx context.Context, root string, opts output.Options, g *knowledge.Graph, ref, to string, dryRun bool) error {
 	out := types.KnowledgeRenameOutput{
 		Definition:    types.KnowledgeRenameDefinition,
@@ -863,7 +873,7 @@ func refsRenameCommand(ctx context.Context, root string, opts output.Options, g 
 		return exit.Reported(exit.Failure)
 	}
 
-	id, err := edit.ResolveRenameSymbol(ref, g.Resolve(ref, 0), func(id string) bool {
+	id, err := edit.ResolveRenameSymbol(ref, renameCandidates(g, ref), func(id string) bool {
 		refs, ok := g.Refs(id)
 		return ok && len(refs.Defs) > 0
 	})

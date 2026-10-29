@@ -246,7 +246,7 @@ func TestSymbolGapsNamesALanguageNothingIndexes(t *testing.T) {
 
 	got := symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 	require.Len(t, got, 1, "the built go index is no gap")
-	assert.Equal(t, "web (no symbol index for typescript)", got[0].Describe())
+	assert.Equal(t, "web (typescript index has no indexer)", got[0].Describe())
 }
 
 // A knowledge.symbols entry is its project's whole index set, so the project's spells'

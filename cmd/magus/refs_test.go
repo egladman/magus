@@ -58,6 +58,23 @@ func TestRefsSymbolRefusesANameSeveralDefinitionsCarry(t *testing.T) {
 	assert.Equal(t, hintID, got, "the one workspace definition wins over a dependency's symbol of that name")
 }
 
+// Retrieval ranks by text, so an exact symbol id can fall outside g.Resolve's matches;
+// `refs <id> --rename` was refused for an id `refs <id>` listed.
+func TestRenameCandidatesIncludeAnExactSymbolID(t *testing.T) {
+	const id = "symbol:gomod x `x/internal/edit`/checkUnchanged()."
+	g := knowledge.NewGraph()
+	g.Merge([]types.KnowledgeNode{
+		{ID: id, Kind: types.KindSymbol, Label: "checkUnchanged"},
+		{ID: "file:edit.go", Kind: types.KindFile, Label: "edit.go"},
+	}, []types.KnowledgeEdge{{Source: "file:edit.go", Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1}})
+
+	ids := []string{}
+	for _, m := range renameCandidates(g, id) {
+		ids = append(ids, m.ID)
+	}
+	assert.Contains(t, ids, id)
+}
+
 // A project with a Go and a Buzz index judges them apart, and a rename is refused only for
 // an index that could hold the symbol's sites. `refs probeTimeoutFrom --rename` was refused
 // for "project . changed after its index was built" when only the Buzz index was behind.

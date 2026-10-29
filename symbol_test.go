@@ -732,8 +732,8 @@ func (s *magusSuite) TestALanguageNothingIndexesIsAnUnindexableGap() {
 	decls := []knowledge.SymbolIndexDeclaration{{Project: "web", Dir: "/ws/web", Language: "typescript"}}
 	gaps := probeSymbolIndexes(decls, func(string) bool { return true })
 	s.Equal([]types.KnowledgeSymbolGap{{
-		Project: types.NewProjectRef("web", "/ws/web"), State: types.SymbolIndexNotBuilt,
-		Detail: "no symbol index for typescript", Unindexable: true,
+		Project: types.NewProjectRef("web", "/ws/web"), Language: "typescript", State: types.SymbolIndexNotBuilt,
+		Detail: "has no indexer", Unindexable: true,
 	}}, gaps)
 	s.False(gaps[0].Buildable(), "no build makes an index nothing produces")
 }
