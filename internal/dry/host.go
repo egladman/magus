@@ -528,7 +528,11 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// Empty for the reason precedents is.
 	m.MapSet("conformance", shaped("magus.conformance", map[string]vm.Value{
 		"definition": vm.StringValue(""), "rows": empty, "stale": empty, "excluded": vm.IntValue(0),
-		"answer": vm.NewMap(), "indexes": empty,
+		"answer": vm.NewMap(), "indexes": empty, "base": vm.StringValue(""), "ceilings": empty, "unmeasured": empty,
+	}))
+	// A preview exports and indexes no base, so it names no commit.
+	m.MapSet("conformanceBase", function("magus.conformanceBase", func(context.Context, []vm.Value) (vm.Value, error) {
+		return vm.StringValue(""), nil
 	}))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or

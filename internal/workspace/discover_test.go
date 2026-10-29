@@ -274,7 +274,7 @@ func (s *discoverySuite) TestANameABuzzStringCannotHoldFailsTheMerge() {
 	golang := s.goRoot()
 	golang.Name = "{x}"
 	_, err := mergeDiscovery(s.asked(), []spellAnswer{{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}}, nil)
-	s.ErrorContains(err, `discovery: .: name: "{x}" holds a quote`)
+	s.ErrorContains(err, `discovery: .: name: "{x}": holds a quote`)
 }
 
 func (s *discoverySuite) write(root string, files map[string]string) {
