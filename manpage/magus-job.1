@@ -93,6 +93,9 @@ The working state this job is handed, as magus vcs checkpoint \-o name prints it
 \fB\-\-criteria\fR \fIstring\fR
 What this job is for and what done means, as prose; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
 .TP
+\fB\-\-delivery\fR \fIstring\fR
+How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
+.TP
 \fB\-\-deny\-paths\fR \fIstring\fR
 A path this job may not write, carved out of its write paths; repeatable or comma\-separated
 .TP

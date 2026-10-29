@@ -372,6 +372,8 @@ func changedFields(prev, next types.Job) []string {
 	add("follows", prev.Follows != next.Follows)
 	add("fresh_reason", prev.FreshReason != next.FreshReason)
 	add("brief_format", prev.BriefFormat != next.BriefFormat)
+	add("delivery", prev.Delivery != next.Delivery)
+	add("parent_head", prev.ParentHead != next.ParentHead)
 	add("validation", prev.Validation != next.Validation)
 	add("goals", !goalsEqual(prev.Goals, next.Goals))
 	add("deviations", !slices.Equal(prev.Deviations, next.Deviations))

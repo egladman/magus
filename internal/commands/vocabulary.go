@@ -60,6 +60,7 @@ var vocabulary = []concept{
 	{Flag: "criteria"},
 	{Flag: "debounce"},
 	{Flag: "definition"},
+	{Flag: "delivery"},
 	{Flag: "deny-paths"},
 	{Flag: "depends-on"},
 	{Flag: "depth"},

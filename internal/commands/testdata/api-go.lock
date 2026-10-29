@@ -1447,6 +1447,7 @@ github.com/egladman/magus/types.Declaration.Checkout field string "json:\"checko
 github.com/egladman/magus/types.Declaration.Checkpoint field string "json:\"checkpoint,omitempty\""
 github.com/egladman/magus/types.Declaration.Claim field []JobClaimRequest "json:\"claim,omitempty\""
 github.com/egladman/magus/types.Declaration.Criteria field string "json:\"criteria,omitempty\""
+github.com/egladman/magus/types.Declaration.Delivery field string "json:\"delivery,omitempty\""
 github.com/egladman/magus/types.Declaration.DenyPaths field []string "json:\"deny_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.Declaration.DependsOn field []string "json:\"depends_on,omitempty\" schema:\"leaseid\""
 github.com/egladman/magus/types.Declaration.Deviations field []Deviation "json:\"deviations,omitempty\""
@@ -1465,6 +1466,7 @@ github.com/egladman/magus/types.Declaration.MaxAttempts field int "json:\"max_at
 github.com/egladman/magus/types.Declaration.MaxClaims field int "json:\"max_claims,omitempty\""
 github.com/egladman/magus/types.Declaration.Model field string "json:\"model,omitempty\""
 github.com/egladman/magus/types.Declaration.Parent field string "json:\"parent,omitempty\" schema:\"leaseid\""
+github.com/egladman/magus/types.Declaration.ParentHead field string "json:\"parent_head,omitempty\""
 github.com/egladman/magus/types.Declaration.Problems method func() JobProblems
 github.com/egladman/magus/types.Declaration.ReadOnly field bool "json:\"read_only,omitempty\""
 github.com/egladman/magus/types.Declaration.ReadPaths field []string "json:\"read_paths,omitempty\" schema:\"writepath\""
@@ -1493,6 +1495,9 @@ github.com/egladman/magus/types.DelegableFetch const DelegableClass = "fetch"
 github.com/egladman/magus/types.DelegableRead const DelegableClass = "read"
 github.com/egladman/magus/types.DelegableRun const DelegableClass = "run"
 github.com/egladman/magus/types.DelegableSearch const DelegableClass = "search"
+github.com/egladman/magus/types.DeliveryFold const untyped string = "fold"
+github.com/egladman/magus/types.DeliverySeparate const untyped string = "separate"
+github.com/egladman/magus/types.DeliveryStacked const untyped string = "stacked"
 github.com/egladman/magus/types.DepGraphRepository type interface
 github.com/egladman/magus/types.DepGraphRepository.BlastRadius imethod func() map[string]int
 github.com/egladman/magus/types.DepGraphRepository.NCCD imethod func() float64
@@ -2729,6 +2734,7 @@ github.com/egladman/magus/types.Job.Clone method func() Job
 github.com/egladman/magus/types.Job.Created field int64 "json:\"created\" yaml:\"created\""
 github.com/egladman/magus/types.Job.Criteria field string "json:\"criteria,omitempty\" yaml:\"criteria,omitempty\""
 github.com/egladman/magus/types.Job.Deadline field int64 "json:\"deadline,omitempty\" yaml:\"deadline,omitempty\""
+github.com/egladman/magus/types.Job.Delivery field string "json:\"delivery,omitempty\" yaml:\"delivery,omitempty\""
 github.com/egladman/magus/types.Job.DenyPaths field []string "json:\"deny_paths,omitempty\" yaml:\"deny_paths,omitempty\""
 github.com/egladman/magus/types.Job.DependsOn field []string "json:\"depends_on,omitempty\" yaml:\"depends_on,omitempty\""
 github.com/egladman/magus/types.Job.Deviations field []Deviation "json:\"deviations,omitempty\" yaml:\"deviations,omitempty\""
@@ -2754,6 +2760,7 @@ github.com/egladman/magus/types.Job.Model field string "json:\"model,omitempty\"
 github.com/egladman/magus/types.Job.ModelTier field *JobModelTier "json:\"model_tier,omitempty\" yaml:\"model_tier,omitempty\""
 github.com/egladman/magus/types.Job.Overdue method func(now int64) bool
 github.com/egladman/magus/types.Job.Parent field string "json:\"parent,omitempty\" yaml:\"parent,omitempty\""
+github.com/egladman/magus/types.Job.ParentHead field string "json:\"parent_head,omitempty\" yaml:\"parent_head,omitempty\""
 github.com/egladman/magus/types.Job.PauseReason field string "json:\"pause_reason,omitempty\" yaml:\"pause_reason,omitempty\""
 github.com/egladman/magus/types.Job.Paused field int64 "json:\"paused,omitzero\" yaml:\"paused,omitempty\""
 github.com/egladman/magus/types.Job.PausedAt method func(now int64) bool
@@ -2820,6 +2827,7 @@ github.com/egladman/magus/types.JobClaimRequest type struct
 github.com/egladman/magus/types.JobClaimRequest.Because field string "json:\"because,omitempty\" schema:\"nonblank\""
 github.com/egladman/magus/types.JobClaimRequest.Callers field string "json:\"callers,omitempty\" schema:\"nonblank\""
 github.com/egladman/magus/types.JobClaimRequest.Path field string "json:\"path,omitempty\" schema:\"writepath\""
+github.com/egladman/magus/types.JobDeliveries func() []string
 github.com/egladman/magus/types.JobDenial type struct
 github.com/egladman/magus/types.JobDenial.Action field string "json:\"action,omitempty\"      yaml:\"action,omitempty\""
 github.com/egladman/magus/types.JobDenial.Reason field string "json:\"reason,omitempty\"      yaml:\"reason,omitempty\""

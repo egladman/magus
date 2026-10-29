@@ -164,6 +164,9 @@ func (b Terms) String() string {
 	if t := b.Lease.ModelTier; t != nil {
 		fmt.Fprintf(&s, "model tier: %s\nskills: %s\n", t, t.Skills)
 	}
+	if b.Lease.Delivery != "" {
+		fmt.Fprintf(&s, "delivery: %s\n", deliveryLine(b.Lease))
+	}
 
 	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
 	writeBlock(&s, "criteria", b.Lease.Criteria)
@@ -217,6 +220,15 @@ func (b Terms) String() string {
 	writeBlock(&s, "the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
 	return s.String()
+}
+
+// deliveryLine says how row's work is delivered, and onto which branch when
+// it is stacked.
+func deliveryLine(row types.Job) string {
+	if row.Delivery == types.DeliveryStacked {
+		return fmt.Sprintf("%s on %s", row.Delivery, row.ParentHead)
+	}
+	return row.Delivery
 }
 
 // interfaceLines is one entry per symbol goal: what the job must leave behind, as the

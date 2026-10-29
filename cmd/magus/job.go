@@ -1054,7 +1054,7 @@ func (e evidenceFlag) Set(value string) error {
 // job piped in are the same declaration.
 type forkFlags struct {
 	criteria, parent, check, model, checkpoint string
-	timeout, checkout, briefFormat             string
+	timeout, checkout, briefFormat, delivery   string
 	writePaths, readPaths, denyPaths           listFlag
 	dependsOn                                  listFlag
 	readOnly                                   bool
@@ -1076,7 +1076,8 @@ func (f forkFlags) row(id string) types.Declaration {
 		Check:       f.declaredCheck(),
 		Model:       f.model,
 		BriefFormat: types.BriefFormat(f.briefFormat),
-		ReadOnly:    f.readOnly,
+		Delivery:    f.delivery,
+		ReadOnly:   f.readOnly,
 		Timeout:     f.timeout,
 		Checkout:    f.checkout,
 	}
@@ -1134,6 +1135,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&declared.check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
 		fs.StringVar(&declared.model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 		fs.StringVar(&declared.briefFormat, "brief-format", "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
+		fs.StringVar(&declared.delivery, "delivery", "", deliveryDoc)
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
 		cmdline.NegatedBoolVar(fs, &schema, "schema")
 		cmdline.NegatedBoolVar(fs, &stdin, "stdin")
@@ -1273,6 +1275,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if row, err = retriedDeclaration(ctx, store, row); err != nil {
 			return err
 		}
+	}
+	if row, err = stackedHead(ctx, root, row); err != nil {
+		return exit.Usagef("magus job fork: %s", err)
 	}
 	switch {
 	case len(row.Integrates) > 0:
@@ -1467,7 +1472,39 @@ func jobFork(ctx context.Context, root string, args []string) error {
 
 // forkSpecFlags are the job fork flags that declare the spec, which a --stdin record carries
 // instead and a fork by id alone takes from the stored job.
-var forkSpecFlags = []string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "read-only"}
+var forkSpecFlags = []string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "delivery", "read-only"}
+
+// deliveryDoc is --delivery's help, equal to the command registry's.
+const deliveryDoc = "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)"
+
+// stackedHead fills a stacked row's parent_head with this checkout's
+// branch. A checkout on no branch has no head to stack on.
+func stackedHead(ctx context.Context, root string, row types.Declaration) (types.Declaration, error) {
+	if row.Delivery != types.DeliveryStacked || row.ParentHead != "" {
+		return row, nil
+	}
+	refuse := func(why string) error {
+		return fmt.Errorf("%s is stacked, and %s, so its pull request has no base: name parent_head in the record", row.ID, why)
+	}
+	if root == "" {
+		return row, refuse("no workspace was found")
+	}
+	opts := types.VCSOptions{Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef}
+	res, err := vcs.Resolve(ctx, root, "", opts)
+	if err != nil {
+		return row, refuse(err.Error())
+	}
+	meta, err := res.VCS.Metadata(ctx, root)
+	switch {
+	case err != nil:
+		return row, refuse(err.Error())
+	case meta.Ref == "":
+		return row, refuse(root + " is on no branch")
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("%s is stacked on %s, the branch this checkout is on", row.ID, meta.Ref), attr.Notice("note"))
+	row.ParentHead = meta.Ref
+	return row, nil
+}
 
 // retriedDeclaration is the stored spec of the job row names, for a fork naming its id and no
 // spec flag, with row's checkout when --checkout gave one; row as it is when no job has that id.
@@ -2822,6 +2859,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	graph := newJobGraph(root, true)
 	for i := range records {
+		if records[i], err = stackedHead(ctx, root, records[i]); err != nil {
+			return exit.Usagef("magus job apply: %s", err)
+		}
 		var notes []string
 		records[i], notes = extendedFootprint(ctx, store, graph, root, records[i], jobWS)
 		for _, n := range notes {

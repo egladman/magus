@@ -109,6 +109,13 @@
       "enum": ["", "markdown", "buzz"],
       "description": "BriefFormat is the format a brief to this job's worker takes; empty defers to magus.yaml's agents.brief_format. See [Job.BriefFormat]."
     },
+    "delivery": {
+      "type": "string",
+      "description": "Delivery and ParentHead: see [Job.Delivery]."
+    },
+    "parent_head": {
+      "type": "string"
+    },
     "follows": {
       "type": "string",
       "pattern": "^[./0-9a-z-]+$",

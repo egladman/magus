@@ -311,6 +311,8 @@ const (
 	FlagJobForkCheckpoint = "checkpoint"
 	// job fork: --criteria
 	FlagJobForkCriteria = "criteria"
+	// job fork: --delivery
+	FlagJobForkDelivery = "delivery"
 	// job fork: --deny-paths
 	FlagJobForkDenyPaths = "deny-paths"
 	// job fork: --depends-on
@@ -1496,6 +1498,7 @@ type JobForkFlags struct {
 	Check       string        // --check
 	Model       string        // --model
 	BriefFormat string        // --brief-format
+	Delivery    string        // --delivery
 	ReadOnly    bool          // --[no-]read-only
 	Checkout    string        // --checkout
 	Fix         bool          // --[no-]fix
@@ -1515,6 +1518,7 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
 	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 	fs.StringVar(&f.BriefFormat, FlagJobForkBriefFormat, "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
+	fs.StringVar(&f.Delivery, FlagJobForkDelivery, "", "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)")
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
 	cmdline.NegatedBoolVar(fs, &f.ReadOnly, FlagJobForkReadOnly)
 	fs.StringVar(&f.Checkout, FlagJobForkCheckout, "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")

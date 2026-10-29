@@ -2119,3 +2119,42 @@ func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {
 		assert.Error(t, err, raw)
 	}
 }
+
+type forkDeliverySuite struct {
+	suite.Suite
+}
+
+func TestForkDelivery(t *testing.T) { suite.Run(t, new(forkDeliverySuite)) }
+
+func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
+	row := forkFlags{criteria: "c", delivery: types.DeliveryFold}.row("adj/store")
+	s.Require().NoError(row.Validate())
+	s.Equal(types.DeliveryFold, row.Delivery)
+}
+
+func (s *forkDeliverySuite) TestAStackedForkRecordsThisCheckoutsBranch() {
+	r := testkit.NewRepository(s.T(), nil)
+	r.Git("switch", "-q", "-c", "feat/parent")
+	row, err := stackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked})
+	s.Require().NoError(err)
+	s.Equal("feat/parent", row.ParentHead)
+}
+
+func (s *forkDeliverySuite) TestAStackedForkKeepsTheHeadTheRecordNames() {
+	row, err := stackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliveryStacked, ParentHead: "feat/named"})
+	s.Require().NoError(err)
+	s.Equal("feat/named", row.ParentHead)
+}
+
+func (s *forkDeliverySuite) TestAStackedForkOnNoBranchIsRefused() {
+	r := testkit.NewRepository(s.T(), nil)
+	r.Git("switch", "-q", "--detach")
+	_, err := stackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked})
+	s.Require().ErrorContains(err, "is on no branch")
+}
+
+func (s *forkDeliverySuite) TestAnUnstackedForkReadsNoBranch() {
+	row, err := stackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliverySeparate})
+	s.Require().NoError(err)
+	s.Empty(row.ParentHead)
+}

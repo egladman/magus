@@ -1554,6 +1554,8 @@ export object Job {
     model: str = "",
     modelTier: JobModelTier? = null,
     briefFormat: BriefFormat = BriefFormat.none,
+    delivery: str = "",
+    parentHead: str = "",
     follows: str = "",
     freshReason: str = "",
     reworkRounds: int = 0,

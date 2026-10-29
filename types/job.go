@@ -807,6 +807,11 @@ type Job struct {
 	// BriefFormat is the format a brief to this row's worker takes, over the workspace's
 	// agents.brief_format. Empty defers to magus.yaml.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
+	// Delivery is how the person chose to deliver this job's work, one of
+	// JobDeliveries; empty means nobody chose. Workspace policy judges it.
+	Delivery string `json:"delivery,omitempty" yaml:"delivery,omitempty"`
+	// ParentHead is the branch a stacked job's pull request is based on.
+	ParentHead string `json:"parent_head,omitempty" yaml:"parent_head,omitempty"`
 	// Follows is the job this one continues: follow-up work on what that job's worker wrote.
 	// FreshReason says why that worker's context is wrong for this job, which lets a fresh
 	// spawn pass while that worker is still warm (see the guard's spawn-warm-worker).
@@ -1135,6 +1140,9 @@ type Declaration struct {
 	// BriefFormat is the format a brief to this job's worker takes; empty defers to
 	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
 	BriefFormat BriefFormat `json:"brief_format,omitempty"`
+	// Delivery and ParentHead: see [Job.Delivery].
+	Delivery   string `json:"delivery,omitempty"`
+	ParentHead string `json:"parent_head,omitempty"`
 	// Follows and FreshReason name the job this one continues and why its worker is not
 	// resumed for it. See [Job.Follows].
 	Follows     string `json:"follows,omitempty" schema:"leaseid"`
@@ -1380,6 +1388,14 @@ func (r Declaration) Problems() JobProblems {
 	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
 			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(r.BriefFormat.Values(), ", ")))
+	}
+	if r.Delivery != "" && !slices.Contains(JobDeliveries(), r.Delivery) {
+		invalid("delivery", fmt.Sprintf("delivery %q is not a delivery", r.Delivery),
+			"use one of "+strings.Join(JobDeliveries(), ", "))
+	}
+	if r.ParentHead != "" && r.Delivery != DeliveryStacked {
+		invalid("parent_head", "parent_head is the base of a stacked job's pull request, and this job is not stacked",
+			"drop parent_head, or set delivery to "+DeliveryStacked)
 	}
 	if r.Weight != nil && !ValidJobWeight(*r.Weight) {
 		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
@@ -1772,6 +1788,21 @@ func (r Declaration) check() (LeaseCheck, bool, JobProblems) {
 	return LeaseCheck{}, false, nil
 }
 
+// The deliveries a person picks for a job's work.
+const (
+	// DeliveryFold folds the work into the parent's pull request.
+	DeliveryFold = "fold"
+	// DeliverySeparate opens its own pull request against the base branch.
+	DeliverySeparate = "separate"
+	// DeliveryStacked opens a pull request based on the parent's head.
+	DeliveryStacked = "stacked"
+)
+
+// JobDeliveries is the closed set [Job.Delivery] takes.
+func JobDeliveries() []string {
+	return []string{DeliveryFold, DeliverySeparate, DeliveryStacked}
+}
+
 // JobStateVocabulary is the closed set of job states, as an error quotes it. Shared by
 // Declaration.Validate and job.PutMerge, the two places a caller-supplied state is
 // checked against the set.
@@ -1803,6 +1834,8 @@ func (r Declaration) Apply(u *Job) {
 		u.Weight = *r.Weight
 	}
 	u.BriefFormat = r.BriefFormat
+	u.Delivery = r.Delivery
+	u.ParentHead = strings.TrimSpace(r.ParentHead)
 	u.Follows = strings.TrimSpace(r.Follows)
 	u.FreshReason = strings.TrimSpace(r.FreshReason)
 	// Validate refused an unparsable check before the row reached a store, so the problems
