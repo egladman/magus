@@ -6,23 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"testing"
-
-	"github.com/stretchr/testify/suite"
 )
-
-type TaskSuite struct {
-	suite.Suite
-	dir string
-}
-
-func TestTaskSuite(t *testing.T) {
-	suite.Run(t, new(TaskSuite))
-}
-
-func (s *TaskSuite) SetupTest() {
-	s.dir = s.T().TempDir()
-}
 
 func bugfixTask(id string) Task {
 	return Task{
@@ -43,7 +27,7 @@ func bugfixTask(id string) Task {
 	}
 }
 
-func (s *TaskSuite) TestSealSetsTheDigestOfTheRecordWithoutItsSHA() {
+func (s *benchSuite) TestSealSetsTheDigestOfTheRecordWithoutItsSHA() {
 	t := bugfixTask("fix-cache-key-race")
 	s.Require().NoError(t.Seal())
 	s.True(strings.HasPrefix(t.SHA, "sha256:"))
@@ -52,7 +36,7 @@ func (s *TaskSuite) TestSealSetsTheDigestOfTheRecordWithoutItsSHA() {
 	s.Equal(t.SHA, again)
 }
 
-func (s *TaskSuite) TestDigestChangesWhenThePromptIsReworded() {
+func (s *benchSuite) TestDigestChangesWhenThePromptIsReworded() {
 	a := bugfixTask("fix-cache-key-race")
 	b := a
 	b.Prompt += "."
@@ -63,7 +47,7 @@ func (s *TaskSuite) TestDigestChangesWhenThePromptIsReworded() {
 	s.NotEqual(da, db)
 }
 
-func (s *TaskSuite) TestValidateNamesEveryMissingFieldForTheKind() {
+func (s *benchSuite) TestValidateNamesEveryMissingFieldForTheKind() {
 	t := bugfixTask("fix-cache-key-race")
 	t.TestPatch = ""
 	t.FailToPass = nil
@@ -75,7 +59,7 @@ func (s *TaskSuite) TestValidateNamesEveryMissingFieldForTheKind() {
 	s.ErrorContains(err, `tag ""`)
 }
 
-func (s *TaskSuite) TestValidateWantsAnAnswerKeyForInterrogation() {
+func (s *benchSuite) TestValidateWantsAnAnswerKeyForInterrogation() {
 	t := bugfixTask("who-imports-guard")
 	t.Kind = TaskInterrogation
 	s.ErrorContains(t.Validate(), "answer.items is empty")
@@ -83,14 +67,14 @@ func (s *TaskSuite) TestValidateWantsAnAnswerKeyForInterrogation() {
 	s.NoError(t.Validate())
 }
 
-func (s *TaskSuite) TestValidateRefusesAnUnknownKind() {
+func (s *benchSuite) TestValidateRefusesAnUnknownKind() {
 	t := bugfixTask("x")
 	t.Kind = "refactor"
 	s.ErrorContains(t.Validate(), `kind "refactor"`)
 }
 
-func (s *TaskSuite) TestWriteThenLoadReturnsTheTasksInIDOrder() {
-	path := filepath.Join(s.dir, "history-go.jsonl")
+func (s *benchSuite) TestWriteThenLoadReturnsTheTasksInIDOrder() {
+	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("b"), bugfixTask("a")}))
 	got, err := LoadTasks(path)
 	s.Require().NoError(err)
@@ -100,14 +84,14 @@ func (s *TaskSuite) TestWriteThenLoadReturnsTheTasksInIDOrder() {
 	s.NotEmpty(got[0].SHA)
 }
 
-func (s *TaskSuite) TestWriteRefusesARepeatedID() {
-	path := filepath.Join(s.dir, "history-go.jsonl")
+func (s *benchSuite) TestWriteRefusesARepeatedID() {
+	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
 	s.ErrorContains(WriteTasks(path, []Task{bugfixTask("a"), bugfixTask("a")}), `task "a" appears twice`)
 	s.NoFileExists(path)
 }
 
-func (s *TaskSuite) TestLoadRefusesARecordEditedAfterItWasSealed() {
-	path := filepath.Join(s.dir, "history-go.jsonl")
+func (s *benchSuite) TestLoadRefusesARecordEditedAfterItWasSealed() {
+	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("a")}))
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -117,8 +101,8 @@ func (s *TaskSuite) TestLoadRefusesARecordEditedAfterItWasSealed() {
 	s.ErrorContains(err, "but digests to")
 }
 
-func (s *TaskSuite) TestLoadRefusesARepeatedID() {
-	path := filepath.Join(s.dir, "history-go.jsonl")
+func (s *benchSuite) TestLoadRefusesARepeatedID() {
+	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("a")}))
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -127,8 +111,8 @@ func (s *TaskSuite) TestLoadRefusesARepeatedID() {
 	s.ErrorContains(err, `task "a" repeats line 1`)
 }
 
-func (s *TaskSuite) TestLoadRefusesAnUnfinishedLastLine() {
-	path := filepath.Join(s.dir, "history-go.jsonl")
+func (s *benchSuite) TestLoadRefusesAnUnfinishedLastLine() {
+	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("a")}))
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
 	s.Require().NoError(err)
@@ -139,15 +123,15 @@ func (s *TaskSuite) TestLoadRefusesAnUnfinishedLastLine() {
 	s.ErrorContains(err, "no newline closes")
 }
 
-func (s *TaskSuite) TestLoadRefusesAnEmptyFile() {
-	path := filepath.Join(s.dir, "history-go.jsonl")
+func (s *benchSuite) TestLoadRefusesAnEmptyFile() {
+	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
 	s.Require().NoError(os.WriteFile(path, nil, 0o644))
 	_, err := LoadTasks(path)
 	s.ErrorContains(err, "holds no tasks")
 }
 
-func (s *TaskSuite) TestCutCloneHoldsNothingPastTheBaseCommit() {
-	source := filepath.Join(s.dir, "source")
+func (s *benchSuite) TestCutCloneHoldsNothingPastTheBaseCommit() {
+	source := filepath.Join(s.T().TempDir(),"source")
 	s.gitIn(source, "init", "--quiet", "--initial-branch=main")
 	var commits []string
 	for _, msg := range []string{"one", "two", "three"} {
@@ -158,7 +142,7 @@ func (s *TaskSuite) TestCutCloneHoldsNothingPastTheBaseCommit() {
 	}
 	s.gitIn(source, "tag", "v1", commits[2])
 
-	dest := filepath.Join(s.dir, "trial")
+	dest := filepath.Join(s.T().TempDir(),"trial")
 	t := bugfixTask("x")
 	t.BaseCommit = commits[1]
 	s.Require().NoError(t.CutClone(context.Background(), source, dest))
@@ -172,7 +156,7 @@ func (s *TaskSuite) TestCutCloneHoldsNothingPastTheBaseCommit() {
 	s.Error(exec.Command("git", "-C", dest, "cat-file", "-e", commits[2]).Run())
 }
 
-func (s *TaskSuite) gitIn(dir string, args ...string) string {
+func (s *benchSuite) gitIn(dir string, args ...string) string {
 	s.Require().NoError(os.MkdirAll(dir, 0o755))
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
