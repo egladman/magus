@@ -3,6 +3,8 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -113,6 +115,34 @@ func validateUnsupportedRow(id string, row types.HookBinding, seen map[types.Hoo
 	}
 	seen[row.Point] = true
 	return nil
+}
+
+// InstalledHosts are the harnesses whose tool rows are installed under root,
+// sorted. It is the registry a hook can read without loading the workspace:
+// install writes a host file only for a harness the workspace loads.
+func InstalledHosts(root string) []string {
+	matches, _ := filepath.Glob(filepath.Join(root, filepath.FromSlash(toolRowsGlob)))
+	var hosts []string
+	for _, m := range matches {
+		body, err := os.ReadFile(m)
+		if host := strings.TrimSpace(string(body)); err == nil && host != "" && !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+	slices.Sort(hosts)
+	return hosts
+}
+
+// CheckHostInstalled refuses a host that none of installed names. With
+// nothing installed there is no registry to hold host to, and the missing
+// tool rows are reported where they are read.
+func CheckHostInstalled(installed []string, host string) error {
+	if len(installed) == 0 || slices.Contains(installed, host) {
+		return nil
+	}
+	return fmt.Errorf("--agent-name %q names no harness installed here; installed: %s. "+
+		"Fix the hook entry's --agent-name, or install that harness with `magus agent harness install`",
+		host, strings.Join(installed, ", "))
 }
 
 // citesSource refuses a reason with no https URL. A not-verified reason

@@ -25,3 +25,6 @@
   records each read through `magus-observe.buzz`. A new root session's brief rides its first
   tool result.
 - **Cursor records the path a read reached**, as the other hosts do.
+- **`magus shell` refuses an `--agent-name` no installed harness names.** Where any
+  harness's tool rows are installed, a call whose hook entry names another host is denied,
+  listing the installed ones, instead of judged without its host's facts.

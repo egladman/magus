@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -144,6 +146,38 @@ func (s *hookBindingsSuite) TestAnUnknownPointOnAHookIsRefused() {
 	d := bindsEveryPoint()
 	d.Hooks[1].Points = []types.HookPoint{"read"}
 	s.ErrorContains(validateHookBindings(d), `hooks[1]: unknown hook point "read"; one of shell, edit, stop`)
+}
+
+func (s *hookBindingsSuite) installHost(root, dir, host string) {
+	path := filepath.Join(root, dir, "magus", "tools", types.ToolHostFile)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(os.WriteFile(path, []byte(host+"\n"), 0o644))
+}
+
+func (s *hookBindingsSuite) TestInstalledHostsAreTheHostFilesUnderTheRoot() {
+	root := s.T().TempDir()
+	s.installHost(root, ".cursor", "cursor")
+	s.installHost(root, ".claude", "claude-code")
+	s.installHost(root, ".claude-copy", "claude-code")
+	s.Equal([]string{"claude-code", "cursor"}, InstalledHosts(root))
+}
+
+func (s *hookBindingsSuite) TestNoInstalledHostIsAnEmptyRegistry() {
+	s.Empty(InstalledHosts(s.T().TempDir()))
+}
+
+func (s *hookBindingsSuite) TestAnInstalledHostPasses() {
+	s.NoError(CheckHostInstalled([]string{"claude-code", "cursor"}, "cursor"))
+}
+
+func (s *hookBindingsSuite) TestAHostNoInstalledHarnessNamesIsRefusedListingTheInstalled() {
+	s.EqualError(CheckHostInstalled([]string{"claude-code", "cursor"}, "cursr"),
+		`--agent-name "cursr" names no harness installed here; installed: claude-code, cursor. `+
+			"Fix the hook entry's --agent-name, or install that harness with `magus agent harness install`")
+}
+
+func (s *hookBindingsSuite) TestWithNothingInstalledNoHostIsRefused() {
+	s.NoError(CheckHostInstalled(nil, "cursor"))
 }
 
 func (s *hookBindingsSuite) TestAnUnknownPointInARowIsRefused() {

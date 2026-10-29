@@ -244,7 +244,24 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		CallBackground: sf.CallBackground,
 		CallTimeout:    time.Duration(sf.CallTimeoutMs) * time.Millisecond,
 	}
-	applyHostFacts(ctx, &req)
+	// A misnamed host is refused, never judged as another.
+	// --observe and --message carry no verdict, so they log it.
+	if refusal := applyHostFacts(ctx, &req); refusal != nil {
+		if sf.Observe || sf.Message {
+			slog.WarnContext(ctx, "the hook entry names no installed harness",
+				attr.Error(refusal), attr.Notice(""), attr.Component("magus shell"))
+		} else {
+			verdict := types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion,
+				Decision:      "deny",
+				Reason:        fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.", refusal.Error()),
+			}
+			if err := writeGuardVerdict(out, opts, verdict); err != nil {
+				return err
+			}
+			return verdictExit(errOut, opts, verdict)
+		}
+	}
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
 	ctx = guard.BeginJudgment(ctx, guardCacheDir(""), req)
@@ -517,25 +534,30 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 // applyHostFacts fills req from the tool rows installed for its host, whose limits file
 // install writes from the host's harness spell, so the glue names only the host and the
 // hook never loads the workspace for them. Without the files the gap is logged.
-func applyHostFacts(ctx context.Context, req *guard.Request) {
+// The error refuses a host no installed harness names.
+func applyHostFacts(ctx context.Context, req *guard.Request) error {
 	if strings.TrimSpace(req.Host) == "" {
-		return
+		return nil
 	}
 	root, err := guardRoot("")
 	if err != nil {
 		root = ""
+	}
+	if err := agent.CheckHostInstalled(agent.InstalledHosts(root), req.Host); err != nil {
+		return err
 	}
 	req.Tools = agent.FindToolRows(root, req.Host)
 	limits, err := req.Tools.Limits()
 	if err != nil {
 		slog.WarnContext(ctx, "the guard judges without the host's limits and skill-load capability",
 			attr.Error(err), attr.Notice(""), attr.Component("magus shell"))
-		return
+		return nil
 	}
 	req.ObservesSkillLoads = limits.ObservesSkillLoads
 	req.HostForegroundDefault = time.Duration(limits.ForegroundDefaultMs) * time.Millisecond
 	req.HostForegroundMax = time.Duration(limits.ForegroundMaxMs) * time.Millisecond
 	req.HostResumesOnBackgroundFrom = limits.ResumesOnBackgroundFrom
+	return nil
 }
 
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,

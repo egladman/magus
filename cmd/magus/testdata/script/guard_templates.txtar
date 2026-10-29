@@ -97,6 +97,13 @@ stdin pretooluse-command-codex.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
 ! stdout .
 
+# An entry naming a harness no tool rows here were installed for is refused, listing
+# the installed ones, rather than judged without its host's facts.
+stdin pretooluse-command-codex.json
+! exec magus shell -o json --agent-name cursr
+stdout '"decision": "deny"'
+stdout 'names no harness installed here; installed: codex, cursor, testscript'
+
 # --- magus-command.buzz: a host's Read tool, restated as the line it stands for ---
 #
 # The Read tool never reaches a shell, so magus restates the whole event it receives: a
@@ -1810,6 +1817,24 @@ blind
 -- .cursor/magus/tools/host --
 cursor
 -- .cursor/magus/tools/limits --
+{"observes_skill_loads":true}
+-- .codex/magus/tools/version --
+1
+-- .codex/magus/tools/host --
+codex
+-- .codex/magus/tools/limits --
+{}
+-- push-ws/.codex/magus/tools/version --
+1
+-- push-ws/.codex/magus/tools/host --
+codex
+-- push-ws/.codex/magus/tools/limits --
+{}
+-- push-ws/.cursor/magus/tools/version --
+1
+-- push-ws/.cursor/magus/tools/host --
+cursor
+-- push-ws/.cursor/magus/tools/limits --
 {"observes_skill_loads":true}
 -- notes-ws/.cursor/magus/tools/version --
 1
