@@ -1077,7 +1077,7 @@ func (f forkFlags) row(id string) types.Declaration {
 		Model:       f.model,
 		BriefFormat: types.BriefFormat(f.briefFormat),
 		Delivery:    f.delivery,
-		ReadOnly:   f.readOnly,
+		ReadOnly:    f.readOnly,
 		Timeout:     f.timeout,
 		Checkout:    f.checkout,
 	}
