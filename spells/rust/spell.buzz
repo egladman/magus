@@ -351,132 +351,158 @@ fun parseManifest(file: DiscoveryFile) > obj{ doc: {str: any}?, gap: str? } {
     return .{ doc = null, gap = null };
 }
 
+// CargoScan is what discover_projects read of the query: every .rs file, each [package]
+// dir, the manifests that parsed and the claims for those that did not.
+object CargoScan {
+    rsFiles: mut {str: bool},
+    crates: mut {str: bool},
+    parsed: mut [Crate],
+    claims: mut [DiscoveredProject],
+}
+
+// cargoScan parses each Cargo.toml and keeps every other file as a .rs source.
+fun cargoScan(req: DiscoveryQuery) > CargoScan {
+    final scan = CargoScan{rsFiles = mut {}, crates = mut {}, parsed = mut [], claims = mut []};
+    foreach (file in req.files) {
+        if (file.path != "Cargo.toml" and !file.path.endsWith("/Cargo.toml")) {
+            scan.rsFiles[file.path] = true;
+            continue;
+        }
+        final dir = dirOf(file.path);
+        final manifest = parseManifest(file);
+        if (manifest.doc -> doc) {
+            scan.parsed.append(Crate{ dir = dir, file = file.path, doc = doc });
+            if (doc["package"] as? {str: any} != null) {
+                scan.crates[dir] = true;
+            }
+        } else {
+            scan.claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.project,
+                notInferred = [DiscoveryGap{ file = file.path, why = manifest.gap! }]});
+        }
+    }
+    return scan;
+}
+
+// cargoWorkspaces is every parsed manifest's [workspace] table.
+fun cargoWorkspaces(parsed: [Crate]) > [CargoWorkspace] {
+    final workspaces = mut [<CargoWorkspace>];
+    foreach (crate in parsed) {
+        if (crate.doc["workspace"] as? {str: any} -> table) {
+            workspaces.append(CargoWorkspace{dir = crate.dir, file = crate.file, members = pathList(table["members"]),
+                exclude = pathList(table["exclude"]), defaultMembers = pathList(table["default-members"]),
+                dependencies = tableOf(table["dependencies"])});
+        }
+    }
+    return workspaces;
+}
+
+// CrateWorkspace is the workspace a crate belongs to, and the nearest one above it.
+object CrateWorkspace {
+    own: CargoWorkspace? = null,
+    ancestor: CargoWorkspace? = null,
+}
+
+// crateWorkspace finds crate's workspace: the one its package names, else the nearest one
+// above it that includes it.
+fun crateWorkspace(crate: Crate, pkg: {str: any}?, workspaces: [CargoWorkspace]) > CrateWorkspace {
+    var own: CargoWorkspace? = null;
+    var ancestor: CargoWorkspace? = null;
+    final explicit = tableOf(pkg)["workspace"] as? str;
+    foreach (ws in workspaces) {
+        if (explicit -> rel) {
+            if (ws.dir == joinDir(crate.dir, rel: rel)) {
+                own = ws;
+            }
+        } else if (relativeTo(ws.dir, dir: crate.dir) != null and (ancestor == null or ws.dir.len() > ancestor!.dir.len())) {
+            ancestor = ws;
+        }
+    }
+    if (explicit == null and ancestor != null and inWorkspace(ancestor!, dir: crate.dir)) {
+        own = ancestor;
+    }
+    return CrateWorkspace{own = own, ancestor = ancestor};
+}
+
+// virtualClaim claims a manifest with no [package]: a virtual workspace depends on its member
+// crates and runs no target, and one that is no workspace either is a gap.
+fun virtualClaim(crate: Crate, own: CargoWorkspace?, crates: {str: bool}, gaps: mut [DiscoveryGap]) > DiscoveredProject {
+    if (own -> ws) {
+        gaps.append(DiscoveryGap{ file = crate.file, why = "virtual workspace manifest: its members are projects with their own targets, so none runs cargo across the workspace here" });
+        final members = mut [<str>];
+        foreach (dir, _ in crates) {
+            if (dir != crate.dir and inWorkspace(ws, dir: dir)) {
+                members.append(dir);
+            }
+        }
+        members.sort(fun (left: str, right: str) > bool => left < right);
+        return DiscoveredProject{path = crate.dir, role = DiscoveryRole.project, dependsOn = members, notInferred = gaps};
+    }
+    return DiscoveredProject{path = crate.dir, role = DiscoveryRole.project,
+        notInferred = [DiscoveryGap{ file = crate.file, why = "neither [package] nor [workspace]: not a cargo manifest" }]};
+}
+
+// crateDeps is every crate dir crate's path dependencies resolve to, with a gap for each that
+// does not.
+fun crateDeps(crate: Crate, own: CargoWorkspace?, crates: {str: bool}, gaps: mut [DiscoveryGap]) > [str] {
+    final deps = mut [<str>];
+    foreach (table in dependencyTables(crate.doc)) {
+        foreach (name, spec in table.deps) {
+            final resolved = pathDependency(crate, ws: own, table: table.label, name: name, spec: spec, crates: crates);
+            if (resolved.gap -> why) {
+                gaps.append(DiscoveryGap{ file = crate.file, why = why });
+            }
+            if (resolved.dir -> dir) {
+                if (dir != crate.dir and deps.indexOf(dir) == null) {
+                    deps.append(dir);
+                }
+            }
+        }
+    }
+    deps.sort(fun (left: str, right: str) > bool => left < right);
+    return deps;
+}
+
+// crateClaim claims one parsed manifest.
+fun crateClaim(crate: Crate, scan: CargoScan, workspaces: [CargoWorkspace]) > DiscoveredProject {
+    final pkg = crate.doc["package"] as? {str: any};
+    final at = crateWorkspace(crate, pkg: pkg, workspaces: workspaces);
+    final gaps = mut [<DiscoveryGap>];
+    final spans = mut [<str>];
+    if (at.own -> ws) {
+        if (ws.dir == crate.dir) {
+            foreach (gap in workspaceGaps(ws, crates: scan.crates, doc: crate.doc)) {
+                gaps.append(gap);
+            }
+            foreach (member in ws.defaultMembers) {
+                final dir = joinDir(ws.dir, rel: member);
+                if (dir != crate.dir and spans.indexOf(dir) == null) {
+                    spans.append(dir);
+                }
+            }
+        }
+    }
+    if (pkg == null) {
+        return virtualClaim(crate, own: at.own, crates: scan.crates, gaps: gaps);
+    }
+    foreach (gap in crateGaps(crate, ws: at.own, ancestor: at.ancestor, rsFiles: scan.rsFiles)) {
+        gaps.append(gap);
+    }
+    final deps = crateDeps(crate, own: at.own, crates: scan.crates, gaps: gaps);
+    spans.sort(fun (left: str, right: str) > bool => left < right);
+    return claim(crate.dir, name: (pkg!["name"] as? str) ?? "", dependsOn: deps, spans: spans, gaps: gaps);
+}
+
 // discover_projects claims every Cargo.toml with a [package] as a project, with
 // cargo-build, cargo-test and cargo-clippy as its build, test and lint, depending on the
 // crates its path dependencies (and inherited workspace path dependencies) point at. A
 // virtual workspace manifest is claimed with no targets: running cargo across its
 // members there would repeat each member's own targets.
 export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
-    final rsFiles = mut {<str: bool>};
-    final crates = mut {<str: bool>};
-    final parsed = mut [<Crate>];
-    final claims = mut [<DiscoveredProject>];
-    foreach (file in req.files) {
-        if (file.path != "Cargo.toml" and !file.path.endsWith("/Cargo.toml")) {
-            rsFiles[file.path] = true;
-            continue;
-        }
-        final dir = dirOf(file.path);
-        final manifest = parseManifest(file);
-        if (manifest.doc -> doc) {
-            parsed.append(Crate{ dir = dir, file = file.path, doc = doc });
-            if (doc["package"] as? {str: any} != null) {
-                crates[dir] = true;
-            }
-        } else {
-            claims.append(DiscoveredProject{
-                path = dir,
-                role = DiscoveryRole.project,
-                notInferred = [DiscoveryGap{ file = file.path, why = manifest.gap! }],
-            });
-        }
+    final scan = cargoScan(req);
+    final workspaces = cargoWorkspaces(scan.parsed);
+    foreach (crate in scan.parsed) {
+        scan.claims.append(crateClaim(crate, scan: scan, workspaces: workspaces));
     }
-
-    final workspaces = mut [<CargoWorkspace>];
-    foreach (crate in parsed) {
-        if (crate.doc["workspace"] as? {str: any} -> table) {
-            workspaces.append(CargoWorkspace{
-                dir = crate.dir,
-                file = crate.file,
-                members = pathList(table["members"]),
-                exclude = pathList(table["exclude"]),
-                defaultMembers = pathList(table["default-members"]),
-                dependencies = tableOf(table["dependencies"]),
-            });
-        }
-    }
-
-    foreach (crate in parsed) {
-        final pkg = crate.doc["package"] as? {str: any};
-        var own: CargoWorkspace? = null;
-        var ancestor: CargoWorkspace? = null;
-        final explicit = tableOf(pkg)["workspace"] as? str;
-        foreach (ws in workspaces) {
-            if (explicit -> rel) {
-                if (ws.dir == joinDir(crate.dir, rel: rel)) {
-                    own = ws;
-                }
-            } else if (relativeTo(ws.dir, dir: crate.dir) != null and (ancestor == null or ws.dir.len() > ancestor!.dir.len())) {
-                ancestor = ws;
-            }
-        }
-        if (explicit == null and ancestor != null and inWorkspace(ancestor!, dir: crate.dir)) {
-            own = ancestor;
-        }
-
-        final gaps = mut [<DiscoveryGap>];
-        final spans = mut [<str>];
-        if (own -> ws) {
-            if (ws.dir == crate.dir) {
-                foreach (gap in workspaceGaps(ws, crates: crates, doc: crate.doc)) {
-                    gaps.append(gap);
-                }
-                foreach (member in ws.defaultMembers) {
-                    final dir = joinDir(ws.dir, rel: member);
-                    if (dir != crate.dir and spans.indexOf(dir) == null) {
-                        spans.append(dir);
-                    }
-                }
-            }
-        }
-
-        if (pkg == null) {
-            if (own == null) {
-                claims.append(DiscoveredProject{
-                    path = crate.dir,
-                    role = DiscoveryRole.project,
-                    notInferred = [DiscoveryGap{ file = crate.file, why = "neither [package] nor [workspace]: not a cargo manifest" }],
-                });
-                continue;
-            }
-            gaps.append(DiscoveryGap{ file = crate.file, why = "virtual workspace manifest: its members are projects with their own targets, so none runs cargo across the workspace here" });
-            final members = mut [<str>];
-            foreach (dir, _ in crates) {
-                if (dir != crate.dir and inWorkspace(own!, dir: dir)) {
-                    members.append(dir);
-                }
-            }
-            members.sort(fun (left: str, right: str) > bool => left < right);
-            claims.append(DiscoveredProject{
-                path = crate.dir,
-                role = DiscoveryRole.project,
-                dependsOn = members,
-                notInferred = gaps,
-            });
-            continue;
-        }
-
-        foreach (gap in crateGaps(crate, ws: own, ancestor: ancestor, rsFiles: rsFiles)) {
-            gaps.append(gap);
-        }
-        final deps = mut [<str>];
-        foreach (table in dependencyTables(crate.doc)) {
-            foreach (name, spec in table.deps) {
-                final resolved = pathDependency(crate, ws: own, table: table.label, name: name, spec: spec, crates: crates);
-                if (resolved.gap -> why) {
-                    gaps.append(DiscoveryGap{ file = crate.file, why = why });
-                }
-                if (resolved.dir -> dir) {
-                    if (dir != crate.dir and deps.indexOf(dir) == null) {
-                        deps.append(dir);
-                    }
-                }
-            }
-        }
-        deps.sort(fun (left: str, right: str) > bool => left < right);
-        spans.sort(fun (left: str, right: str) > bool => left < right);
-        claims.append(claim(crate.dir, name: (pkg!["name"] as? str) ?? "", dependsOn: deps, spans: spans, gaps: gaps));
-    }
-    claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
-    return claims;
+    scan.claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
+    return scan.claims;
 }
