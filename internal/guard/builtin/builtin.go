@@ -309,6 +309,7 @@ var defaults = map[string]decision{
 	"cache-dir-write":       Deny,
 	"claimed-declaration":   Deny,
 	"credential-verb":       Deny,
+	"edit-ungraded":         Deny,
 	"focus-read":            Deny,
 	"heredoc-write":         Deny,
 	"hook-wiring-write":     Deny,
