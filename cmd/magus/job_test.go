@@ -1071,7 +1071,7 @@ func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
 }
 
 // Filing a result leaves the row exited and the holder bound, and exit says
-// so on stderr: stdout stays the record the guides compare.
+// so as a notice: stdout stays the record the guides compare.
 func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
 	row := leaseRow("held", "")
 	row.WritePaths, row.Registered = []string{"a/**"}, time.Now().Unix()

@@ -1999,7 +1999,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 		} else {
 			fmt.Printf("exited %s, recorded %s, with its result filed. Whoever forked it verifies with `%s`\n",
 				stored.ID, stored.State, hint.JobWait.With(stored.ID))
-			fmt.Fprintln(os.Stderr, exitedBindingNote)
+			slog.InfoContext(ctx, exitedBindingNote, attr.Notice("note"))
 		}
 	default:
 		err = emitFormatted(opts, stored)
@@ -2012,7 +2012,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 }
 
 // exitedBindingNote tells an exited holder the guard still grades its writes
-// by the job's paths. Stderr, so stdout stays the record.
+// by the job's paths. A notice, so stdout stays the record.
 const exitedBindingNote = "You stay bound to its write paths: a write outside them is denied until your orchestrator widens the job."
 
 // abandonJobs ends every named job as no_return (see [job.Abandon]), printing one line per

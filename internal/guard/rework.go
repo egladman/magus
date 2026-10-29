@@ -55,8 +55,8 @@ func adviseContinueHandedBack(ctx context.Context, at location, facts hint.Gate,
 	}
 	if row.State.Terminal() {
 		return advice{
-			Say: fmt.Sprintf("magus workspace: job %s is %s, so this worker holds no write paths; fork a new job for more work.", row.ID, row.State),
-			Why: "An ended job grades nothing, so the worker's writes in its checkout are denied.",
+			Say: fmt.Sprintf("magus workspace: job %s is %s; fork a new job for more work.", row.ID, row.State),
+			Why: "An ended job grades nothing and the worker holds no write paths, so its writes in its checkout are denied.",
 		}
 	}
 	return advice{
