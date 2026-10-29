@@ -619,13 +619,109 @@ test("every other tool reaches magus whole, its file path spelled the way magus 
     { tool: "read", callID: "o2" },
     { args: { filePath: "README.md", limit: 40 } },
   );
-  assert.equal(calls.length, 2, "nothing is left unseen");
+  assert.equal(calls.length, 3, "nothing is left unseen, and the read is recorded first");
   assert.equal(sent(calls[0]).tool_name, "todowrite");
-  assert.deepEqual(sent(calls[1]).tool_input, {
+  assert.deepEqual(sent(calls[2]).tool_input, {
     filePath: "README.md",
     limit: 40,
     file_path: "README.md",
   });
+});
+
+const glue = (script: string): string[] => [
+  "buzz",
+  "-C",
+  "/work",
+  "-s",
+  `docs/guides/integrations/agents/${script}.buzz`,
+  "--",
+  "--agent-name",
+  "opencode",
+];
+
+test("a read is recorded through magus-observe.buzz before it is judged", async () => {
+  const calls = stubBun(() => pass);
+  const h = await hooks();
+  await h["tool.execute.before"](
+    { tool: "read", callID: "r1", sessionID: "s1" },
+    { args: { filePath: "go.mod" } },
+  );
+  assert.deepEqual(calls[0].argv, glue("magus-observe"));
+  assert.deepEqual(JSON.parse(calls[0].stdin), {
+    session_id: "s1",
+    tool_input: { file_path: "go.mod" },
+    cwd: "/work",
+  });
+  assert.equal(sent(calls[1]).tool_name, "read", "the read is still judged");
+});
+
+test("a written .buzz file that fails its check says why in the tool result", async () => {
+  const blocked = { decision: "block", reason: "`magus buzz --check a.buzz` failed" };
+  const calls = stubBun((call) => (call.argv[0] === "buzz" ? (blocked as unknown as Canned) : null));
+  const h = await hooks();
+
+  const result = { output: "wrote a.buzz" };
+  await h["tool.execute.after"](
+    { tool: "write", callID: "w1", args: { filePath: "a.buzz" } },
+    result,
+  );
+  assert.deepEqual(calls[0].argv, glue("magus-buzz-check"));
+  assert.deepEqual(JSON.parse(calls[0].stdin), {
+    tool_name: "write",
+    tool_input: { file_path: "a.buzz" },
+    cwd: "/work",
+  });
+  assert.equal(
+    result.output,
+    "wrote a.buzz\n\n[magus buzz check] `magus buzz --check a.buzz` failed",
+  );
+
+  const patch = { output: "patched" };
+  const patchText = "*** Begin Patch\n*** Update File: hack/b.buzz\n*** End Patch";
+  await h["tool.execute.after"]({ tool: "apply_patch", callID: "w2", args: { patchText } }, patch);
+  assert.deepEqual(JSON.parse(calls[1].stdin).tool_input, { patch: patchText });
+
+  await h["tool.execute.after"](
+    { tool: "edit", callID: "w3", args: { filePath: "main.go" } },
+    { output: "edited" },
+  );
+  assert.equal(calls.length, 2, "a write to no .buzz file runs no check");
+});
+
+test("a new root session's brief reaches its first tool result, and a child's gets none", async () => {
+  const brief = "lease: job harness-bindings";
+  const calls: SpawnCall[] = [];
+  const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
+    const call = { bin: spawned[0], argv: spawned.slice(1), stdin: new TextDecoder().decode(opts.stdin) };
+    calls.push(call);
+    const body = call.argv[0] === "session" ? `${brief}\n` : "";
+    return {
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      }),
+      exited: Promise.resolve(0),
+    };
+  };
+  (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+  const h = await hooks();
+
+  await h.event({
+    event: { type: "session.created", properties: { info: { id: "kid", parentID: "root" } } },
+  });
+  assert.equal(calls.length, 0, "a subagent is briefed by its spawn");
+
+  await h.event({ event: { type: "session.created", properties: { info: { id: "root" } } } });
+  assert.deepEqual(calls[0].argv, ["session", "--brief"]);
+
+  const first = { output: "ran" };
+  await h["tool.execute.after"]({ tool: "bash", callID: "c1", sessionID: "root" }, first);
+  assert.equal(first.output, `ran\n\n${brief}`);
+  const second = { output: "ran" };
+  await h["tool.execute.after"]({ tool: "bash", callID: "c2", sessionID: "root" }, second);
+  assert.equal(second.output, "ran", "the brief is said once");
 });
 
 test("a deny on an MCP call throws, and an advise rides in the result's content", async () => {
@@ -1043,3 +1139,41 @@ test("a tree with no magus.yaml falls back to the nearest magusfile", async () =
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a deny on a root session's stop goes back as one follow-up prompt", async () => {
+  await withoutReplyScript(async () => {
+    const stop = { schema_version: 1, decision: "deny", reason: "a background task still runs" };
+    const isStop = (call: SpawnCall): boolean => call.stdin.includes('"hook_event_name":"Stop"');
+    const calls = stubBun((call) => (isStop(call) ? stop : pass));
+    const prompts: Array<{ id: string; text: string }> = [];
+    const h = await hooks({ prompts });
+
+    await h.event(idle("root"));
+    const stops = () => calls.filter((call) => isStop(call));
+    assert.deepEqual(stops()[0].argv, ["shell", "--agent-name", "opencode", "--renders-ask", "-o", "json"]);
+    assert.deepEqual(JSON.parse(stops()[0].stdin), {
+      hook_event_name: "Stop",
+      session_id: "root",
+      stop_hook_active: false,
+      cwd: "/work",
+    });
+    assert.deepEqual(prompts, [{ id: "root", text: "[magus guard] a background task still runs" }]);
+
+    await h.event(idle("root"));
+    assert.equal(JSON.parse(stops()[1].stdin).stop_hook_active, true, "the guard sees its own follow-up");
+  });
+});
+
+test("an advise on a stop is the person's notice and sends nothing back", async () => {
+  await withoutReplyScript(async () => {
+    stubBun((call) => (call.stdin.includes('"Stop"') ? advise : pass));
+    const prompts: Array<{ id: string; text: string }> = [];
+    const h = await hooks({ prompts });
+    const warnings = await withWarnings(async () => {
+      await h.event(idle("root"));
+    });
+    assert.deepEqual(warnings, ["[magus guard] that file is generated"]);
+    assert.deepEqual(prompts, []);
+  });
+});
+

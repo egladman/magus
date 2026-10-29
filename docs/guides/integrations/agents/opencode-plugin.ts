@@ -34,6 +34,10 @@
 // __PROOFREAD_REPLY_BUZZ at a copy of proofread-reply.buzz, the reply that ends a turn is
 // proofread, with the findings sent back as a follow-up prompt.
 //
+// It runs what other hosts wire as hooks. A root session's idle is its stop:
+// the guard answers it, and a deny goes back as a follow-up. A root session's
+// brief, and a .buzz file's check after an edit, ride the next tool result.
+//
 // An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
 // the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
 // harness writes each backend's push verb (`git push`, `hg push`, `sl push`, `jj git push`),
@@ -246,6 +250,34 @@ function replyScript(): string | null {
 /** The disk hook, workspace-relative, as `magus describe harness` wires it on every host. */
 const RECLAIM_DISK_SCRIPT = "docs/guides/integrations/agents/magus-reclaim-disk.buzz";
 
+/** The glue the other hosts run after a file write, workspace-relative. */
+const BUZZ_CHECK_SCRIPT = "docs/guides/integrations/agents/magus-buzz-check.buzz";
+
+/** The glue the other hosts run on a read, workspace-relative. */
+const OBSERVE_SCRIPT = "docs/guides/integrations/agents/magus-observe.buzz";
+
+/** The tools that write a file, after which a .buzz path is checked. */
+const WRITE_TOOLS = ["edit", "write", "apply_patch"];
+
+/** A brief over this is dropped, as cursor-hook.buzz drops one. */
+const SESSION_BRIEF_MAX_BYTES = 16384;
+
+/**
+ * Appends a note to the result the model reads next. An MCP result carries
+ * `content` parts and no `output`. False when the result has room for neither.
+ */
+function appendNote(result: { output?: string; content?: unknown }, note: string): boolean {
+  if (Array.isArray(result.content)) {
+    result.content.push({ type: "text", text: note });
+    return true;
+  }
+  if (typeof result.output === "string") {
+    result.output = `${result.output}\n\n${note}`;
+    return true;
+  }
+  return false;
+}
+
 /** The session a call acts in: the root's id, plus the child's when a subagent made it. */
 type Who = { session?: string; agent?: string };
 
@@ -285,6 +317,9 @@ export const MagusGuard: Plugin = async (ctx) => {
   // OpenCode raises no event whose output reaches the model once a turn, so the line waits
   // here for the next tool result, the same channel an advisory takes.
   let diskNote: string | null = null;
+
+  // A new root session's brief, held for the next tool result like diskNote.
+  let briefNote: string | null = null;
 
   /**
    * Runs one `magus shell` invocation and returns its raw stdout, or null when the
@@ -560,6 +595,90 @@ export const MagusGuard: Plugin = async (ctx) => {
     if (said !== null && said.trim() !== "") diskNote = said.trim();
   };
 
+  /** Runs one glue script the other hosts wire as a hook, handing it event. */
+  const runGlue = (script: string, event: unknown): Promise<string | null> =>
+    runOnce(
+      ["buzz", "-C", ctx.directory, "-s", script, "--", "--agent-name", "opencode"],
+      JSON.stringify(event),
+    );
+
+  /** Records the path a read reached. It judges nothing and prints nothing. */
+  const observe = async (who: Who, path: string): Promise<void> => {
+    await runGlue(OBSERVE_SCRIPT, {
+      session_id: who.session,
+      tool_input: { file_path: path },
+      cwd: ctx.directory,
+    });
+  };
+
+  /** The reason a written .buzz file fails its check, or "" when it passes. */
+  const buzzCheck = async (tool: string, args: unknown): Promise<string> => {
+    const path = argString(args, ["filePath", "file_path", "path"]);
+    const patch = argString(args, ["patchText"]);
+    const touches = path !== "" ? path.endsWith(".buzz") : patch.includes(".buzz");
+    if (!touches) return "";
+    const input = path !== "" ? { file_path: path } : { patch };
+    const said = await runGlue(BUZZ_CHECK_SCRIPT, {
+      tool_name: tool,
+      tool_input: input,
+      cwd: ctx.directory,
+    });
+    try {
+      const reply = JSON.parse(said ?? "") as { decision?: unknown; reason?: unknown };
+      if (reply.decision === "block" && typeof reply.reason === "string") return reply.reason;
+    } catch {
+      // A pass prints nothing.
+    }
+    return "";
+  };
+
+  /** Holds a new root session's brief for the next tool result. */
+  const holdBrief = async (): Promise<void> => {
+    const said = await runOnce(["session", "--brief"], "");
+    const brief = said?.trim() ?? "";
+    if (brief === "") return;
+    if (brief.length > SESSION_BRIEF_MAX_BYTES) {
+      console.warn(
+        `[magus guard] session --brief was ${brief.length} bytes, over ` +
+          `${SESSION_BRIEF_MAX_BYTES}; dropping it`,
+      );
+      return;
+    }
+    briefNote = brief;
+  };
+
+  /**
+   * Answers a root session's stop. A follow-up prompt is how a plugin keeps a
+   * session working, so a deny goes back as one. True when one was sent.
+   */
+  const guardStop = async (id: string, followed: boolean): Promise<boolean> => {
+    const body = JSON.stringify({
+      hook_event_name: "Stop",
+      session_id: id,
+      stop_hook_active: followed,
+      cwd: ctx.directory,
+    });
+    const verdict = await judge(shellArgs, body);
+    if (verdict?.decision === "advise") {
+      console.warn(`[magus guard] ${verdict.context}`);
+      return false;
+    }
+    if (verdict?.decision !== "deny") return false;
+    const prompt = `[magus guard] ${verdict.reason}`;
+    followUps.set(id, prompt);
+    try {
+      await ctx.client.session.promptAsync({
+        path: { id },
+        body: { parts: [{ type: "text", text: prompt }] },
+      });
+      return true;
+    } catch (error) {
+      followUps.delete(id);
+      console.warn(`[magus guard] could not send the stop refusal back: ${String(error)}`);
+      return false;
+    }
+  };
+
   return {
     "tool.execute.before": async (input, output) => {
       const who = await whoIs(input.sessionID);
@@ -613,6 +732,7 @@ export const MagusGuard: Plugin = async (ctx) => {
       // call no rule can read (unjudged-tool) rather than letting it run unseen. OpenCode
       // spells a file filePath; magus reads file_path.
       const filePath = argString(output.args, ["filePath"]);
+      if (input.tool === "read" && filePath !== "") await observe(who, filePath);
       const args =
         filePath === ""
           ? output.args
@@ -677,15 +797,11 @@ export const MagusGuard: Plugin = async (ctx) => {
       // The hook types a result as text, but an MCP result carries `content` parts and no
       // `output`: a string set there is dropped, a part pushed there reaches the model.
       const result = output as { output?: string; content?: unknown; metadata?: unknown };
-      if (diskNote !== null) {
-        const note = `[magus disk] ${diskNote}`;
-        if (Array.isArray(result.content)) {
-          result.content.push({ type: "text", text: note });
-          diskNote = null;
-        } else if (typeof result.output === "string") {
-          result.output = `${result.output}\n\n${note}`;
-          diskNote = null;
-        }
+      if (briefNote !== null && appendNote(result, briefNote)) briefNote = null;
+      if (diskNote !== null && appendNote(result, `[magus disk] ${diskNote}`)) diskNote = null;
+      if (WRITE_TOOLS.includes(input.tool)) {
+        const failed = await buzzCheck(input.tool, input.args);
+        if (failed !== "") appendNote(result, `[magus buzz check] ${failed}`);
       }
       const held = pending.get(input.callID);
       if (held !== undefined) {
@@ -742,7 +858,9 @@ export const MagusGuard: Plugin = async (ctx) => {
 
     event: async ({ event }) => {
       if (event.type === "session.created" || event.type === "session.updated") {
-        parents.set(event.properties.info.id, event.properties.info.parentID ?? null);
+        const parent = event.properties.info.parentID ?? null;
+        parents.set(event.properties.info.id, parent);
+        if (event.type === "session.created" && parent === null) await holdBrief();
         return;
       }
       if (event.type !== "session.idle") return;
@@ -755,8 +873,11 @@ export const MagusGuard: Plugin = async (ctx) => {
       // OpenCode has no session-end event; session.idle is the proxy. The checkpoint
       // records where the work stands so whoever comes back reads `magus session`
       // rather than reconstructing it. It judges nothing and its output is ignored.
+      // Read before checkReply consumes it: this idle ends a turn we prompted.
+      const followed = followUps.has(id);
       await runOnce(["session", "checkpoint", "--agent-name", "opencode"], "");
       await sampleDisk();
+      if (await guardStop(id, followed)) return;
       await checkReply(id);
     },
   };

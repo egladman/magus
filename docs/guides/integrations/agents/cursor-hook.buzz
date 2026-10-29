@@ -31,7 +31,8 @@
 //
 // Grep, Glob, and Read never reach beforeShellExecution. They are restated as
 // the shell commands the guard already judges, and gated on preToolUse, because
-// a deny has to land before the tool runs.
+// a deny has to land before the tool runs. A Read is also recorded as the
+// path it reached, as magus-observe.buzz records one on the other hosts.
 //
 // A Task call reaches preToolUse like any other tool, and is gated there as the spawn it
 // is: the brief and the subagent type go to `magus shell` in the envelope it recognizes a
@@ -704,6 +705,20 @@ fun readSession(event: any?) > str {
     return firstField(event, keys: ["session_id", "conversation_id"]);
 }
 
+// observe records the path a Read reached and reads nothing back. It judges
+// nothing, so a binary too old for --observe costs the record, never the read.
+fun observe(scope: Scope, path: str) > void {
+    proc\exec(scope.bin, args: [
+        "shell", "--observe", AGENT_NAME, scope.agent,
+        "--session", scope.session, "--transcript", scope.transcript,
+        "--event", "preToolUse",
+    ], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = path,
+    }) catch void;
+}
+
 fun gateTool(scope: Scope, event: any?) > str {
     final tool = hook\field(event, dotPath: "tool_name");
     if (tool == "Task") {
@@ -713,6 +728,7 @@ fun gateTool(scope: Scope, event: any?) > str {
     }
     if (tool == "Shell") { return gateShell(scope, event: event); }
     final path = toolPath(event);
+    if (tool == "Read" and path != "") { observe(scope, path: path); }
     if (tool == "Read" and skillRead(path)) {
         final load = envelope(scope, event: event, tool: "Read", input: {"file_path": path});
         return gateCall(scope, event: event, payload: load, asPath: false, family: "failed-skill");
