@@ -263,6 +263,10 @@ export fun mgs_listTools() > HarnessTools {
     return HarnessTools{dir = claude_tools_dir(), rows = claude_tools()};
 }
 
+// Common hook input fields no other host sends
+// (https://code.claude.com/docs/en/hooks, read 2026-10-29).
+final PAYLOAD_FIELDS = ["prompt_id", "effort", "scratchpad_dir"];
+
 export fun mgs_getLimits() > Limits {
     return Limits{
         foregroundDefaultMs = FOREGROUND_DEFAULT_MS,
@@ -270,6 +274,7 @@ export fun mgs_getLimits() > Limits {
         hookTimeoutMs = HOOK_TIMEOUT_S * 1000,
         resumesOnBackgroundFrom = RESUMES_ON_BACKGROUND_FROM,
         observesSkillLoads = true,
+        payloadFields = PAYLOAD_FIELDS,
     };
 }
 

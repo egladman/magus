@@ -293,11 +293,25 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 // command past its timeout, and whose wiring sets the hook timeout the guard reports
 // against, and that every other shipped harness declares no limits.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
-	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true},
+	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true,
+		PayloadFields: []string{"prompt_id", "effort", "scratchpad_dir"}},
 		loadShippedHarness(t, "claude-code").Limits)
-	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true}, loadShippedHarness(t, "cursor").Limits)
-	for _, id := range []string{"codex", "opencode"} {
-		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
+	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true,
+		PayloadFields: []string{"cursor_version", "conversation_id", "generation_id", "workspace_roots"}},
+		loadShippedHarness(t, "cursor").Limits)
+	assert.Equal(t, types.Limits{PayloadFields: []string{"turn_id"}}, loadShippedHarness(t, "codex").Limits)
+	assert.Zero(t, loadShippedHarness(t, "opencode").Limits)
+}
+
+// TestNoTwoShippedHarnessesClaimOnePayloadField holds the payload fingerprints
+// to their meaning: a field two hosts send names neither.
+func TestNoTwoShippedHarnessesClaimOnePayloadField(t *testing.T) {
+	owner := map[string]string{}
+	for _, id := range shippedHarnessIDs(t) {
+		for _, f := range loadShippedHarness(t, id).Limits.PayloadFields {
+			assert.Empty(t, owner[f], "%s and %s both claim payload field %s", owner[f], id, f)
+			owner[f] = id
+		}
 	}
 }
 

@@ -3570,6 +3570,7 @@ github.com/egladman/magus/types.Limits.ForegroundDefaultMs field int64 "json:\"f
 github.com/egladman/magus/types.Limits.ForegroundMaxMs field int64 "json:\"foreground_max_ms,omitempty\""
 github.com/egladman/magus/types.Limits.HookTimeoutMs field int64 "json:\"hook_timeout_ms,omitempty\""
 github.com/egladman/magus/types.Limits.ObservesSkillLoads field bool "json:\"observes_skill_loads,omitempty\""
+github.com/egladman/magus/types.Limits.PayloadFields field []string "json:\"payload_fields,omitempty\""
 github.com/egladman/magus/types.Limits.ResumesOnBackgroundFrom field string "json:\"resumes_on_background_from,omitempty\""
 github.com/egladman/magus/types.ListenerHTTP const ListenerKind = "http"
 github.com/egladman/magus/types.ListenerKind type string

@@ -103,6 +103,15 @@ stdin pretooluse-command-codex.json
 ! exec magus shell -o json --agent-name cursr
 stdout '"decision": "deny"'
 stdout 'names no harness installed here; installed: codex, cursor, testscript'
+stdout '"run": "magus agent harness install --id cursr"'
+
+# A payload carrying a field only one installed host sends, and none of the named host's
+# own, came from that host: the entry is refused, naming both.
+stdin codex-shaped.json
+! exec magus shell -o json --agent-name testscript
+stdout '"decision": "deny"'
+stdout '--agent-name names testscript, but the payload carries turn_id, a field only codex sends'
+stdout '"run": "magus describe harness"'
 
 # --- magus-command.buzz: a host's Read tool, restated as the line it stands for ---
 #
@@ -1823,7 +1832,9 @@ cursor
 -- .codex/magus/tools/host --
 codex
 -- .codex/magus/tools/limits --
-{}
+{"payload_fields":["turn_id"]}
+-- codex-shaped.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "turn_id": "t1", "tool_name": "Bash", "tool_input": {"command": "ls"}}
 -- push-ws/.codex/magus/tools/version --
 1
 -- push-ws/.codex/magus/tools/host --

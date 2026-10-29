@@ -121,6 +121,12 @@ export fun mgs_listHooks() > [HookCommand] {
     return codex_hooks().map(fun (index: int, h: CodexHook) > HookCommand => h.hook);
 }
 
+// Codex declares no wait limits. turn_id rides its tool and stop events, and
+// no other host sends it (https://learn.chatgpt.com/docs/hooks, read 2026-10-29).
+export fun mgs_getLimits() > Limits {
+    return Limits{payloadFields = ["turn_id"]};
+}
+
 export fun mgs_listUnsupportedHooks() > [HookBinding] {
     return [
         unsupportedHook(HookPoint.attach, reason: "a hook answers with text only (systemMessage, additionalContext); "

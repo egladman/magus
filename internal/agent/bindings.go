@@ -1,14 +1,17 @@
 package agent
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -91,7 +94,7 @@ func validateHookBindings(d HarnessDescriptor) error {
 			return fmt.Errorf("unsupported_hooks[%d]: %w", i, err)
 		}
 	}
-	return nil
+	return validatePayloadFields(d.Limits.PayloadFields)
 }
 
 func validateUnsupportedRow(id string, row types.HookBinding, seen map[types.HookPoint]bool) error {
@@ -118,31 +121,92 @@ func validateUnsupportedRow(id string, row types.HookBinding, seen map[types.Hoo
 }
 
 // InstalledHosts are the harnesses whose tool rows are installed under root,
-// sorted. It is the registry a hook can read without loading the workspace:
-// install writes a host file only for a harness the workspace loads.
-func InstalledHosts(root string) []string {
+// each with the limits install wrote beside them. It is the registry a hook
+// reads without loading the workspace: install writes a host file only for a
+// harness the workspace loads. Limits that do not read are zero, and are
+// reported where the named host's are read.
+func InstalledHosts(root string) map[string]types.Limits {
 	matches, _ := filepath.Glob(filepath.Join(root, filepath.FromSlash(toolRowsGlob)))
-	var hosts []string
+	hosts := map[string]types.Limits{}
 	for _, m := range matches {
 		body, err := os.ReadFile(m)
-		if host := strings.TrimSpace(string(body)); err == nil && host != "" && !slices.Contains(hosts, host) {
-			hosts = append(hosts, host)
+		host := strings.TrimSpace(string(body))
+		if err != nil || host == "" {
+			continue
 		}
+		var limits types.Limits
+		if raw, err := os.ReadFile(filepath.Join(filepath.Dir(m), types.ToolLimitsFile)); err == nil {
+			_ = json.Unmarshal(bytes.TrimSpace(raw), &limits)
+		}
+		hosts[host] = limits
 	}
-	slices.Sort(hosts)
 	return hosts
 }
 
 // CheckHostInstalled refuses a host that none of installed names. With
 // nothing installed there is no registry to hold host to, and the missing
 // tool rows are reported where they are read.
-func CheckHostInstalled(installed []string, host string) error {
-	if len(installed) == 0 || slices.Contains(installed, host) {
+func CheckHostInstalled(installed map[string]types.Limits, host string) error {
+	if _, ok := installed[host]; ok || len(installed) == 0 {
 		return nil
 	}
 	return fmt.Errorf("--agent-name %q names no harness installed here; installed: %s. "+
-		"Fix the hook entry's --agent-name, or install that harness with `magus agent harness install`",
-		host, strings.Join(installed, ", "))
+		"Fix the hook entry's --agent-name, or install that harness's tool rows",
+		host, strings.Join(slices.Sorted(maps.Keys(installed)), ", "))
+}
+
+// CheckHostPayload refuses a payload that carries a field only another
+// installed harness sends and none of host's own: the hook entry names the
+// wrong harness. A payload that is not a JSON object carries no fields.
+func CheckHostPayload(installed map[string]types.Limits, host, payload string) error {
+	fields := payloadFields(payload)
+	if len(fields) == 0 || slices.ContainsFunc(installed[host].PayloadFields, func(f string) bool { return fields[f] }) {
+		return nil
+	}
+	for _, other := range slices.Sorted(maps.Keys(installed)) {
+		if other == host {
+			continue
+		}
+		for _, f := range installed[other].PayloadFields {
+			if fields[f] {
+				return fmt.Errorf("--agent-name names %s, but the payload carries %s, "+
+					"a field only %s sends; fix the hook entry's --agent-name to %s",
+					host, f, other, other)
+			}
+		}
+	}
+	return nil
+}
+
+// payloadFields are the top-level members of payload, nil unless it is a
+// JSON object.
+func payloadFields(payload string) map[string]bool {
+	trimmed := strings.TrimSpace(payload)
+	if !strings.HasPrefix(trimmed, "{") {
+		return nil
+	}
+	var members map[string]json.RawMessage
+	if json.Unmarshal([]byte(trimmed), &members) != nil {
+		return nil
+	}
+	fields := make(map[string]bool, len(members))
+	for name := range members {
+		fields[name] = true
+	}
+	return fields
+}
+
+// validatePayloadFields refuses an empty or repeated payload field.
+func validatePayloadFields(fields []string) error {
+	for i, f := range fields {
+		if strings.TrimSpace(f) == "" {
+			return fmt.Errorf("limits.payload_fields[%d] is empty", i)
+		}
+		if slices.Index(fields, f) != i {
+			return fmt.Errorf("limits.payload_fields names %q twice", f)
+		}
+	}
+	return nil
 }
 
 // citesSource refuses a reason with no https URL. A not-verified reason

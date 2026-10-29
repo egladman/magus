@@ -148,18 +148,29 @@ func (s *hookBindingsSuite) TestAnUnknownPointOnAHookIsRefused() {
 	s.ErrorContains(validateHookBindings(d), `hooks[1]: unknown hook point "read"; one of shell, edit, stop`)
 }
 
-func (s *hookBindingsSuite) installHost(root, dir, host string) {
-	path := filepath.Join(root, dir, "magus", "tools", types.ToolHostFile)
-	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	s.Require().NoError(os.WriteFile(path, []byte(host+"\n"), 0o644))
+func (s *hookBindingsSuite) installHost(root, dir, host, limits string) {
+	tools := filepath.Join(root, dir, "magus", "tools")
+	s.Require().NoError(os.MkdirAll(tools, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(tools, types.ToolHostFile), []byte(host+"\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(tools, types.ToolLimitsFile), []byte(limits+"\n"), 0o644))
 }
 
-func (s *hookBindingsSuite) TestInstalledHostsAreTheHostFilesUnderTheRoot() {
+// twoHosts is a registry of two hosts, each with its own payload field.
+func twoHosts() map[string]types.Limits {
+	return map[string]types.Limits{
+		"alpha": {PayloadFields: []string{"alpha_version"}},
+		"beta":  {PayloadFields: []string{"beta_turn"}},
+	}
+}
+
+func (s *hookBindingsSuite) TestInstalledHostsAreTheHostFilesUnderTheRootWithTheirLimits() {
 	root := s.T().TempDir()
-	s.installHost(root, ".cursor", "cursor")
-	s.installHost(root, ".claude", "claude-code")
-	s.installHost(root, ".claude-copy", "claude-code")
-	s.Equal([]string{"claude-code", "cursor"}, InstalledHosts(root))
+	s.installHost(root, ".beta", "beta", `{"payload_fields":["beta_turn"]}`)
+	s.installHost(root, ".alpha", "alpha", `{"observes_skill_loads":true}`)
+	s.Equal(map[string]types.Limits{
+		"alpha": {ObservesSkillLoads: true},
+		"beta":  {PayloadFields: []string{"beta_turn"}},
+	}, InstalledHosts(root))
 }
 
 func (s *hookBindingsSuite) TestNoInstalledHostIsAnEmptyRegistry() {
@@ -167,17 +178,47 @@ func (s *hookBindingsSuite) TestNoInstalledHostIsAnEmptyRegistry() {
 }
 
 func (s *hookBindingsSuite) TestAnInstalledHostPasses() {
-	s.NoError(CheckHostInstalled([]string{"claude-code", "cursor"}, "cursor"))
+	s.NoError(CheckHostInstalled(twoHosts(), "beta"))
 }
 
 func (s *hookBindingsSuite) TestAHostNoInstalledHarnessNamesIsRefusedListingTheInstalled() {
-	s.EqualError(CheckHostInstalled([]string{"claude-code", "cursor"}, "cursr"),
-		`--agent-name "cursr" names no harness installed here; installed: claude-code, cursor. `+
-			"Fix the hook entry's --agent-name, or install that harness with `magus agent harness install`")
+	s.EqualError(CheckHostInstalled(twoHosts(), "bet"),
+		`--agent-name "bet" names no harness installed here; installed: alpha, beta. `+
+			"Fix the hook entry's --agent-name, or install that harness's tool rows")
 }
 
 func (s *hookBindingsSuite) TestWithNothingInstalledNoHostIsRefused() {
-	s.NoError(CheckHostInstalled(nil, "cursor"))
+	s.NoError(CheckHostInstalled(nil, "beta"))
+}
+
+func (s *hookBindingsSuite) TestAPayloadCarryingOnlyAnotherHostsFieldIsRefusedNamingBoth() {
+	s.EqualError(CheckHostPayload(twoHosts(), "alpha", `{"beta_turn":"t1","session_id":"s1"}`),
+		"--agent-name names alpha, but the payload carries beta_turn, a field only beta sends; "+
+			"fix the hook entry's --agent-name to beta")
+}
+
+func (s *hookBindingsSuite) TestAPayloadCarryingTheNamedHostsOwnFieldPasses() {
+	s.NoError(CheckHostPayload(twoHosts(), "alpha", `{"alpha_version":"1","beta_turn":"t1"}`))
+}
+
+func (s *hookBindingsSuite) TestAPayloadCarryingNoHostsFieldPasses() {
+	s.NoError(CheckHostPayload(twoHosts(), "alpha", `{"session_id":"s1","tool_name":"Bash"}`))
+}
+
+func (s *hookBindingsSuite) TestAPayloadThatIsNotAnObjectCarriesNoFields() {
+	s.NoError(CheckHostPayload(twoHosts(), "alpha", "git status beta_turn"))
+}
+
+func (s *hookBindingsSuite) TestAnEmptyPayloadFieldIsRefused() {
+	d := bindsEveryPoint()
+	d.Limits.PayloadFields = []string{"turn_id", " "}
+	s.EqualError(validateHookBindings(d), "limits.payload_fields[1] is empty")
+}
+
+func (s *hookBindingsSuite) TestARepeatedPayloadFieldIsRefused() {
+	d := bindsEveryPoint()
+	d.Limits.PayloadFields = []string{"turn_id", "turn_id"}
+	s.EqualError(validateHookBindings(d), `limits.payload_fields names "turn_id" twice`)
 }
 
 func (s *hookBindingsSuite) TestAnUnknownPointInARowIsRefused() {

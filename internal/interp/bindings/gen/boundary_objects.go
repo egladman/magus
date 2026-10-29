@@ -5514,6 +5514,11 @@ func ObjectLimits(v types.Limits) vm.Value {
 	out.MapSet("hookTimeoutMs", vm.IntValue(int64(v.HookTimeoutMs)))
 	out.MapSet("resumesOnBackgroundFrom", vm.StringValue(v.ResumesOnBackgroundFrom))
 	out.MapSet("observesSkillLoads", vm.BoolValue(v.ObservesSkillLoads))
+	itemsPayloadFields := make([]vm.Value, len(v.PayloadFields))
+	for indexPayloadFields := range v.PayloadFields {
+		itemsPayloadFields[indexPayloadFields] = vm.StringValue(v.PayloadFields[indexPayloadFields])
+	}
+	out.MapSet("payloadFields", vm.ListValue(itemsPayloadFields))
 	return out
 }
 

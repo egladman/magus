@@ -27,4 +27,9 @@
 - **Cursor records the path a read reached**, as the other hosts do.
 - **`magus shell` refuses an `--agent-name` no installed harness names.** Where any
   harness's tool rows are installed, a call whose hook entry names another host is denied,
-  listing the installed ones, instead of judged without its host's facts.
+  listing the installed ones, instead of judged without its host's facts. The deny's next
+  step is `magus agent harness install --id <name>`.
+- **A harness declares the payload fields only its host sends** (`payload_fields` in
+  `mgs_getLimits`, each cited from the host's docs). A hook payload carrying another
+  installed host's field and none of the named host's own is denied, naming both; the next
+  step is `magus describe harness`, whose entries each name their own host.

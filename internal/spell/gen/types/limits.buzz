@@ -11,4 +11,5 @@ export object Limits {
     hookTimeoutMs: int = 0,
     resumesOnBackgroundFrom: str = "",
     observesSkillLoads: bool = false,
+    payloadFields: [str] = [],
 }

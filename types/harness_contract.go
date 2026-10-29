@@ -233,12 +233,17 @@ type Setting struct {
 //
 // ObservesSkillLoads is true when the host's hook wiring sees it load a skill, so a rule
 // may require one before an act; without it those rules stand down.
+//
+// PayloadFields are top-level hook payload fields only this host
+// sends, per its docs. A payload with another host's field and none
+// of these was sent by that other host.
 type Limits struct {
-	ForegroundDefaultMs     int64  `json:"foreground_default_ms,omitempty"`
-	ForegroundMaxMs         int64  `json:"foreground_max_ms,omitempty"`
-	HookTimeoutMs           int64  `json:"hook_timeout_ms,omitempty"`
-	ResumesOnBackgroundFrom string `json:"resumes_on_background_from,omitempty"`
-	ObservesSkillLoads      bool   `json:"observes_skill_loads,omitempty"`
+	ForegroundDefaultMs     int64    `json:"foreground_default_ms,omitempty"`
+	ForegroundMaxMs         int64    `json:"foreground_max_ms,omitempty"`
+	HookTimeoutMs           int64    `json:"hook_timeout_ms,omitempty"`
+	ResumesOnBackgroundFrom string   `json:"resumes_on_background_from,omitempty"`
+	ObservesSkillLoads      bool     `json:"observes_skill_loads,omitempty"`
+	PayloadFields           []string `json:"payload_fields,omitempty"`
 }
 
 // ShippedAgent is one subagent magus ships, as mgs_renderAgents receives it. Model is the

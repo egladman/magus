@@ -171,9 +171,12 @@ export fun mgs_getSkills() > HarnessSkills {
 }
 
 // Cursor loads a skill by reading its SKILL.md, and the preToolUse matcher covers Read, so
-// every load reaches the guard.
+// every load reaches the guard. PAYLOAD_FIELDS are common hook input fields
+// no other host sends (https://cursor.com/docs/agent/hooks, read 2026-10-29).
+final PAYLOAD_FIELDS = ["cursor_version", "conversation_id", "generation_id", "workspace_roots"];
+
 export fun mgs_getLimits() > Limits {
-    return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true};
+    return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true, payloadFields = PAYLOAD_FIELDS};
 }
 
 // Every Cursor tool the guard should know whose input's shape does not say what it does; a
