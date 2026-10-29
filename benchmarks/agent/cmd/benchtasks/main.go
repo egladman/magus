@@ -6,9 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"strings"
+
+	"github.com/egladman/magus/benchmarks/agent/internal/benchtasks"
 )
 
 const usage = `usage:
@@ -45,45 +45,22 @@ func run(ctx context.Context, args []string) error {
 		if *out == "" {
 			return errors.New("swebench: -o is required")
 		}
-		return writeSWEBench(ctx, httpGetter{}, *out)
+		return benchtasks.WriteSWEBench(ctx, *out)
 	case "history":
 		fs := flag.NewFlagSet("history", flag.ContinueOnError)
-		var o historyOptions
-		fs.StringVar(&o.repo, "repo", "", "repository to mine")
-		fs.StringVar(&o.ref, "ref", "", "branch whose first-parent history is walked, newest first")
-		fs.StringVar(&o.after, "after", "", "the model's training cutoff, YYYY-MM-DD; only commits after it are mined")
-		fs.StringVar(&o.out, "o", "", "task file to write")
-		fs.IntVar(&o.want.bugfix, "bugfix", 20, "bugfix tasks to keep")
-		fs.IntVar(&o.want.interrogation, "interrogation", 6, "interrogation tasks to keep")
-		fs.IntVar(&o.want.regeneration, "regeneration", 4, "regeneration tasks to keep")
+		var o benchtasks.HistoryOptions
+		fs.StringVar(&o.Repo, "repo", "", "repository to mine")
+		fs.StringVar(&o.Ref, "ref", "", "branch whose first-parent history is walked, newest first")
+		fs.StringVar(&o.After, "after", "", "the model's training cutoff, YYYY-MM-DD; only commits after it are mined")
+		fs.StringVar(&o.Out, "o", "", "task file to write")
+		fs.IntVar(&o.Bugfix, "bugfix", 20, "bugfix tasks to keep")
+		fs.IntVar(&o.Interrogation, "interrogation", 6, "interrogation tasks to keep")
+		fs.IntVar(&o.Regeneration, "regeneration", 4, "regeneration tasks to keep")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		return writeHistory(ctx, o)
+		return benchtasks.WriteHistory(ctx, o)
 	default:
 		return fmt.Errorf("unknown suite %q\n%s", args[0], usage)
 	}
-}
-
-// command runs name in dir and returns its stdout; a failure carries stderr. A nil env
-// inherits the process environment.
-func command(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	cmd.Env = env
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return string(out), fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, lastLines(stderr.String(), 20))
-	}
-	return string(out), nil
-}
-
-func lastLines(s string, n int) string {
-	lines := strings.Split(strings.TrimSpace(s), "\n")
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	return strings.Join(lines, "\n")
 }

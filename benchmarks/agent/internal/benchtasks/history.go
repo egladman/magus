@@ -1,4 +1,4 @@
-package main
+package benchtasks
 
 import (
 	"context"
@@ -28,6 +28,24 @@ const (
 	// for a list an agent writes out.
 	minAnswer, maxAnswer = 3, 60
 )
+
+// HistoryOptions says which history WriteHistory mines and how many tasks of each kind it
+// keeps. After is the model's training cutoff, YYYY-MM-DD; only commits after it are mined.
+type HistoryOptions struct {
+	Repo, Ref, After, Out               string
+	Bugfix, Interrogation, Regeneration int
+}
+
+// WriteHistory mines the first-parent commits on o.Ref after o.After for bugfix,
+// interrogation and regeneration tasks, keeping a commit only when its tests behave at the
+// parent and at the fix, and replaces the task file o.Out with them. It writes what it
+// found and fails naming any kind it found too few of.
+func WriteHistory(ctx context.Context, o HistoryOptions) error {
+	return writeHistory(ctx, historyOptions{
+		repo: o.Repo, ref: o.Ref, after: o.After, out: o.Out,
+		want: counts{bugfix: o.Bugfix, interrogation: o.Interrogation, regeneration: o.Regeneration},
+	})
+}
 
 type historyOptions struct {
 	repo, ref, after, out string

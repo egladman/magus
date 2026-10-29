@@ -1,4 +1,4 @@
-package main
+package benchtasks
 
 import (
 	"bytes"
@@ -100,6 +100,13 @@ type multilingualRow struct {
 	EvalScript       string   `json:"eval_script"`
 	LogParser        string   `json:"log_parser"`
 	Version          string   `json:"version"`
+}
+
+// WriteSWEBench fetches SWE-bench Multilingual, keeps the rows of its five Go repositories
+// and replaces the task file out with them. It refuses rows that do not digest to the pin
+// compiled in, and a dataset card whose license is not MIT.
+func WriteSWEBench(ctx context.Context, out string) error {
+	return writeSWEBench(ctx, httpGetter{}, out)
 }
 
 func writeSWEBench(ctx context.Context, g getter, out string) error {
