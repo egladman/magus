@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -96,7 +97,7 @@ func writeHistory(ctx context.Context, o historyOptions) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	if err := (bench.Task{ID: "benchtasks-scratch", BaseCommit: tip}).CutClone(ctx, o.repo, dir); err != nil {
+	if err := cutScratch(ctx, o.repo, tip, dir); err != nil {
 		return err
 	}
 	m := &miner{dir: dir, env: testEnv(os.Environ()), log: os.Stderr}
@@ -113,6 +114,16 @@ func writeHistory(ctx context.Context, o historyOptions) error {
 			len(tasks), o.out, o.want, got, len(commits), o.after)
 	}
 	return nil
+}
+
+// cutScratch cuts dir at sha. git runs inside dir, so a relative repo such as "." would
+// name dir itself and the fetch would find no such commit.
+func cutScratch(ctx context.Context, repo, sha, dir string) error {
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		return err
+	}
+	return (bench.Task{ID: "benchtasks-scratch", BaseCommit: sha}).CutClone(ctx, abs, dir)
 }
 
 func firstParentCommits(ctx context.Context, repo, tip, after string) ([]commit, error) {
