@@ -173,11 +173,7 @@ func checkCardLicense(ctx context.Context, g getter) error {
 // instance_id order and the digest of the pages, checking each repository contributes the
 // count the card lists.
 func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, error) {
-	type keyed struct {
-		id  string
-		raw json.RawMessage
-	}
-	var kept []keyed
+	var kept []keyedRow
 	perRepo := map[string]int{}
 	pages := sha256.New()
 	total, seen := -1, 0
@@ -195,23 +191,8 @@ func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, erro
 			return nil, "", fmt.Errorf("rows at offset %d: a partial or empty page before row %d of %d", offset, seen, page.NumRowsTotal)
 		}
 		total = page.NumRowsTotal
-		for _, r := range page.Rows {
-			seen++
-			var head struct {
-				InstanceID string `json:"instance_id"`
-				Repo       string `json:"repo"`
-			}
-			if err := json.Unmarshal(r.Row, &head); err != nil {
-				return nil, "", fmt.Errorf("row %d: %w", seen, err)
-			}
-			if _, ok := goRepos[head.Repo]; !ok {
-				continue
-			}
-			if len(r.TruncatedCells) > 0 {
-				return nil, "", fmt.Errorf("%s: the rows API truncated %v", head.InstanceID, r.TruncatedCells)
-			}
-			perRepo[head.Repo]++
-			kept = append(kept, keyed{head.InstanceID, bytes.Clone(r.Row)})
+		if kept, err = keepGoRows(page, &seen, perRepo, kept); err != nil {
+			return nil, "", err
 		}
 	}
 	if seen != total {
@@ -222,12 +203,41 @@ func fetchGoRows(ctx context.Context, g getter) ([]json.RawMessage, string, erro
 			return nil, "", fmt.Errorf("%s has %d rows, the dataset card lists %d", repo, perRepo[repo], want)
 		}
 	}
-	slices.SortFunc(kept, func(a, b keyed) int { return strings.Compare(a.id, b.id) })
+	slices.SortFunc(kept, func(a, b keyedRow) int { return strings.Compare(a.id, b.id) })
 	raw := make([]json.RawMessage, len(kept))
 	for i, k := range kept {
 		raw[i] = k.raw
 	}
 	return raw, "sha256:" + hex.EncodeToString(pages.Sum(nil)), nil
+}
+
+type keyedRow struct {
+	id  string
+	raw json.RawMessage
+}
+
+// keepGoRows appends page's rows of a Go repository to kept, counting every row it reads
+// in seen and each kept one under its repository.
+func keepGoRows(page rowsPage, seen *int, perRepo map[string]int, kept []keyedRow) ([]keyedRow, error) {
+	for _, r := range page.Rows {
+		*seen++
+		var head struct {
+			InstanceID string `json:"instance_id"`
+			Repo       string `json:"repo"`
+		}
+		if err := json.Unmarshal(r.Row, &head); err != nil {
+			return nil, fmt.Errorf("row %d: %w", *seen, err)
+		}
+		if _, ok := goRepos[head.Repo]; !ok {
+			continue
+		}
+		if len(r.TruncatedCells) > 0 {
+			return nil, fmt.Errorf("%s: the rows API truncated %v", head.InstanceID, r.TruncatedCells)
+		}
+		perRepo[head.Repo]++
+		kept = append(kept, keyedRow{head.InstanceID, bytes.Clone(r.Row)})
+	}
+	return kept, nil
 }
 
 func multilingualTask(raw json.RawMessage) (bench.Task, error) {

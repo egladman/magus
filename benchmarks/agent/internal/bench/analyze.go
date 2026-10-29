@@ -105,7 +105,7 @@ func wilsonInterval(successes, graded int) [2]*float64 {
 }
 
 // passAtK is the unbiased pass@k of c passes in n graded runs,
-// 1 - C(n-c, k)/C(n, k), as the product of (n-c-i)/(n-i) over i < k so no
+// `1 - C(n-c, k)/C(n, k)`, as the product of (n-c-i)/(n-i) over i < k so no
 // binomial is formed.
 func passAtK(n, c, k int) float64 {
 	miss := 1.0
