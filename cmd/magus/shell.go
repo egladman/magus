@@ -766,10 +766,9 @@ const guardDenyExitCode = 2
 // glue that reads only the status must stop, and one that renders the host's prompt reads
 // the decision off stdout.
 //
-// The reason reaches stderr only when stdout does not already carry it as prose,
-// i.e. every format but text. The guard templates read the verdict off stdout and
-// one discards stderr outright, so an unconditional copy printed a kilobyte-plus
-// reason twice to an audience with a context budget.
+// Stderr gets the reason's first line, and only when stdout does not already carry it as
+// prose, i.e. every format but text. A host shows a blocking hook's stderr to the person
+// and the agent alike, so it gets the verdict alone; stdout carries the rest.
 func enforceVerdict(opts output.Options, verdict types.GuardJudgment) error {
 	return verdictExit(os.Stderr, opts, verdict)
 }
@@ -779,7 +778,8 @@ func verdictExit(errOut io.Writer, opts output.Options, verdict types.GuardJudgm
 		return nil
 	}
 	if opts.Format != outputText {
-		fmt.Fprintln(errOut, verdict.Reason)
+		headline, _, _ := strings.Cut(verdict.Reason, "\n")
+		fmt.Fprintln(errOut, headline)
 	}
 	return exit.Reported(guardDenyExitCode)
 }

@@ -541,7 +541,7 @@ func TestHostResumes(t *testing.T) {
 
 // stopEachTask is a subagent's refused stop: the tasks to stop, then why the stop is not let
 // through.
-const stopEachTask = "magus workspace: stop each background task before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s."
+const stopEachTask = "magus workspace: this stop is refused while background tasks still run\nStop each one before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s."
 
 // A subagent whose only live task is a run it bounded with `magus job exec --timeout` stops
 // to wait for it, on any host version: the stop stands, and its job stays bound for the turn

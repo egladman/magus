@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"text/template"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -856,6 +857,16 @@ func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
 	assert.Contains(t, captureStderr(t, func() {
 		_ = enforceVerdict(output.Options{Format: outputJSON}, deny)
 	}), "because", "a structured format renders no prose, so stderr carries it")
+}
+
+// TestGuardDenyStderrIsOneLine pins the person's view of a blocking hook: the verdict line
+// alone, with the next step and the details ref left to stdout.
+func TestGuardDenyStderrIsOneLine(t *testing.T) {
+	deny := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny",
+		Reason: "a text search the graph answers\nnothing ran (2 commands)\ndetails: ./magus query output grd1"}
+	assert.Equal(t, "a text search the graph answers\n", captureStderr(t, func() {
+		_ = enforceVerdict(output.Options{Format: outputJSON}, deny)
+	}))
 }
 
 // TestReadGuardInputRefusesAnOversizePayload: a truncated payload is exactly the "not the
@@ -2301,4 +2312,81 @@ func (s *JudgedBySuite) TestAnAdviseNamesItsJudge() {
 func (s *JudgedBySuite) TestAPassCarriesNoText() {
 	got := judgedBy(types.GuardJudgment{Decision: "pass"}, "Judged by /c/magus.")
 	s.Equal(types.GuardJudgment{Decision: "pass"}, got)
+}
+
+// hookAudienceSuite pins decision 110 per host: a deny shows the person its first line, and
+// the agent gets the rest through the host's agent-only channel.
+type hookAudienceSuite struct {
+	suite.Suite
+}
+
+func TestHookAudienceSuite(t *testing.T) {
+	suite.Run(t, new(hookAudienceSuite))
+}
+
+const audienceReason = "a text search the graph answers\nnothing ran (2 commands)\ndetails: ./magus query output grd1"
+
+// render runs the Claude Code / Codex glue on event and renders its template on verdict.
+func (s *hookAudienceSuite) render(host, event string, verdict map[string]any) map[string]any {
+	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: host, host: host, event: event, codex: host == "codex"})
+	tmpl, err := template.New(host).Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
+	s.Require().NoError(err)
+	var out strings.Builder
+	s.Require().NoError(tmpl.Execute(&out, verdict))
+	reply, ok := glueDecode(s.T(), host, out.String()).(map[string]any)
+	s.Require().True(ok, out.String())
+	return reply
+}
+
+func (s *hookAudienceSuite) TestClaudeCodeDenyShowsOneLineAndHandsTheAgentTheRest() {
+	reply := s.render("claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("a text search the graph answers", out["permissionDecisionReason"])
+	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
+}
+
+func (s *hookAudienceSuite) TestCodexDenyShowsOneLineAndHandsTheAgentTheRest() {
+	reply := s.render("codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("a text search the graph answers", out["permissionDecisionReason"])
+	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["codex"]).Validate(reply))
+}
+
+func (s *hookAudienceSuite) TestAOneLineDenyCarriesNoAgentContext() {
+	reply := s.render("claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
+		map[string]any{"decision": "deny", "reason": "no"})
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("no", out["permissionDecisionReason"])
+	s.NotContains(out, "additionalContext")
+}
+
+func (s *hookAudienceSuite) TestAStopBlockShowsOneLineAndHandsTheAgentTheRest() {
+	reply := s.render("claude-code", `{"hook_event_name":"Stop","session_id":"s","stop_hook_active":false}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	s.Equal("block", reply["decision"])
+	s.Equal("a text search the graph answers", reply["reason"])
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("Stop", out["hookEventName"])
+	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
+}
+
+func (s *hookAudienceSuite) TestASubagentStopBlockNamesItsOwnEvent() {
+	reply := s.render("claude-code", `{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":false}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	s.Equal("SubagentStop", reply["hookSpecificOutput"].(map[string]any)["hookEventName"])
+}
+
+func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
+	verdict, err := json.Marshal(types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: audienceReason})
+	s.Require().NoError(err)
+	s.T().Setenv("GLUE_VERDICT", string(verdict))
+	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,
+		event: `{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":"git stash","cwd":"/tmp"}`})
+	reply, ok := glueDecode(s.T(), "cursor", body).(map[string]any)
+	s.Require().True(ok, body)
+	s.Equal("a text search the graph answers", reply["user_message"])
+	s.Equal(audienceReason, reply["agent_message"])
 }

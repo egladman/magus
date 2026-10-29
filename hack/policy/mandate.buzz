@@ -608,8 +608,10 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
     if (ready.len() == 0) {
         return magus\guard.allow();
     }
-    final reason = "{ready.join(", ")} can be worked and no worker is running to wake this session; spawn a worker on {ready[0]}\n"
-        + "`./magus describe job {ready[0]}` prints its terms. To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
+    // The first line is all the person sees; the rest reaches the agent alone.
+    final reason = "this stop is refused: rows wait to be worked and no worker runs to wake this session\n"
+        + "ready: {ready.join(", ")}. Spawn a worker on {ready[0]}; `./magus describe job {ready[0]}` prints its terms.\n"
+        + "To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
     if (!inForce(m, now: now)) {
         if (facts.stopHookActive) {
             return magus\guard.allow();
@@ -755,6 +757,7 @@ test "an idle root stop is refused once with no mandate and every time under one
     final once = decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, m: null, now: 2000, count: none, file: skip);
     std\assert(once.decision == magus\GuardDecision.deny, message: "first stop");
     std\assert(once.reason.indexOf("naming-lint") != null, message: "names the row");
+    std\assert(once.reason.split("\n")[0].indexOf("`") == null, message: "the line the person sees carries no command");
     std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "second stop");
     std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: q, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.deny, message: "under a mandate");
     std\assert(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: q, m: issued, now: 6000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "past the end");

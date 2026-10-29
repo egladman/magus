@@ -165,13 +165,14 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 }
 
 // refuseLeftStop refuses a subagent's stop over tasks still running, naming each with the
-// call that stops it and the one wait a subagent has for its own run.
+// call that stops it and the one wait a subagent has for its own run. The first line is
+// the one a host shows the person.
 func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
 	return types.GuardJudgment{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionDeny,
 		Rule:          string(denyRuleBackgroundLeft),
-		Reason: fmt.Sprintf("magus workspace: stop each background task before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
+		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each one before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
 			stoppableTasks(tasks, now), why),
 	}
 }
