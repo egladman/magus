@@ -28,15 +28,15 @@
 // legend strip, connector and label rules. The title face, the Pico font variables, the
 // header band, the budgets and the layout are this module's own.
 //
-// Two palettes, one geometry: Theme.page emits `var(--magus-diagram-*)` so an SVG inlined
-// into a docs page follows the site's theme toggle; Theme.light and Theme.dark bake hex
-// for a standalone file loaded through <img>, which can never read the page's CSS.
+// Attributes hold only concrete values: a var() there is invalid SVG.
+// Theme.page adds a <style> block that repaints role classes
+// from the page's `--magus-diagram-*` properties.
 namespace figure;
 
 import "std";
 import "assert";
 import "magus";
-
+import "encoding/xml";
 
 // escapeSvg makes s safe as SVG text or as a double-quoted attribute value.
 fun escapeSvg(s: str) > str {
@@ -75,14 +75,11 @@ final LabelGap = 10;
 // The least a label's mask keeps from any stroke or box: the design system's 6px floor.
 final LabelClear = 6;
 
-// Palette carries the nine semantic roles every diagram draws from. Values are whatever the
-// SVG `fill`/`stroke` attributes accept, so a palette is either resolved hex or CSS vars.
-//
-// Treatments the skill writes as a role at an opacity (zones at ink 2%, input at muted 10%,
-// security at accent 5%) are painted with fill-opacity and stroke-opacity over these same
-// roles rather than stored as extra fields: an rgba literal cannot be derived from a var(),
-// and the attribute keeps both palettes and the site's theme toggle in step for free.
+// Palette carries the nine semantic roles every diagram draws from, as hex.
+// A role at an opacity is painted with fill-opacity over the role itself, so a
+// themed figure's tints follow the page. A themed palette writes role classes.
 object Palette {
+    themed: bool = false,
     paper: str = "",        // page ground, and the opaque mask under every node
     fill: str = "",         // default node fill
     ink: str = "",          // primary text
@@ -94,22 +91,91 @@ object Palette {
     link: str = "",         // external and over-the-wire connectors
 }
 
-// cssVarPalette drives the diagram from custom properties defined in site.css, which map
-// onto Pico's own variables. Only valid for an SVG inlined into the page; an <img>-loaded
-// SVG resolves these against nothing and falls back to the hardcoded light values.
-fun cssVarPalette() > Palette {
+// pagePalette paints light hex and writes role classes. Inlined into a page,
+// themeStyle repaints them from site.css or the console's tokens.css.
+fun pagePalette() > Palette {
     final l = lightPalette();
     return Palette{
-        paper      = "var(--magus-diagram-paper, " + l.paper + ")",
-        fill       = "var(--magus-diagram-fill, " + l.fill + ")",
-        ink        = "var(--magus-diagram-ink, " + l.ink + ")",
-        muted      = "var(--magus-diagram-muted, " + l.muted + ")",
-        soft       = "var(--magus-diagram-soft, " + l.soft + ")",
-        rule       = "var(--magus-diagram-rule, " + l.rule + ")",
-        accent     = "var(--magus-diagram-accent, " + l.accent + ")",
-        accentTint = "var(--magus-diagram-accent-tint, " + l.accentTint + ")",
-        link       = "var(--magus-diagram-link, " + l.link + ")",
+        themed = true,
+        paper = l.paper, fill = l.fill, ink = l.ink, muted = l.muted, soft = l.soft,
+        rule = l.rule, accent = l.accent, accentTint = l.accentTint, link = l.link,
     };
+}
+
+// Paint names a palette role; token is its `--magus-diagram-*` suffix.
+enum<str> Paint { paper, fill, ink, muted, soft, rule, accent, accentTint, link }
+
+enum<str> Face { sans, mono }
+
+fun token(r: Paint) > str {
+    if (r == Paint.accentTint) { return "accent-tint"; }
+    return r.value;
+}
+
+fun colorOf(p: Palette, r: Paint) > str {
+    if (r == Paint.paper) { return p.paper; }
+    if (r == Paint.fill) { return p.fill; }
+    if (r == Paint.ink) { return p.ink; }
+    if (r == Paint.muted) { return p.muted; }
+    if (r == Paint.soft) { return p.soft; }
+    if (r == Paint.rule) { return p.rule; }
+    if (r == Paint.accent) { return p.accent; }
+    if (r == Paint.accentTint) { return p.accentTint; }
+    return p.link;
+}
+
+final Paints = [
+    Paint.paper, Paint.fill, Paint.ink, Paint.muted, Paint.soft,
+    Paint.rule, Paint.accent, Paint.accentTint, Paint.link,
+];
+
+// paint writes fill, stroke and font-family with concrete values every renderer
+// reads. A themed palette adds one class per role for themeStyle to repaint.
+fun paint(p: Palette, s: Style, fill: Paint? = null, stroke: Paint? = null, face: Face? = null) > str {
+    var attrs = "";
+    final classes: mut [str] = mut [<str>];
+    if (fill -> f) {
+        attrs = attrs + " fill=\"{colorOf(p, r: f)}\"";
+        classes.append("magus-fill-{token(f)}");
+    }
+    if (stroke -> k) {
+        attrs = attrs + " stroke=\"{colorOf(p, r: k)}\"";
+        classes.append("magus-stroke-{token(k)}");
+    }
+    if (face -> ff) {
+        var family = s.fontFamily;
+        if (ff == Face.mono) { family = s.monoFamily; }
+        attrs = attrs + " font-family=\"{family}\"";
+        classes.append("magus-{ff.value}");
+    }
+    if (p.themed and classes.len() > 0) {
+        attrs = attrs + " class=\"" + classes.join(" ") + "\"";
+    }
+    return attrs;
+}
+
+// themeStyle is a themed figure's style sheet, where var() is valid. An unset
+// property falls back to light hex, or dark under a dark scheme. Inlined, it
+// applies page-wide, so each rule is scoped to the root class.
+fun themeStyle(p: Palette, s: Style) > str {
+    if (!p.themed) { return ""; }
+    final l = lightPalette();
+    final d = darkPalette();
+    final light: mut [str] = mut [<str>];
+    final dark: mut [str] = mut [<str>];
+    final rules: mut [str] = mut [<str>];
+    foreach (r in Paints) {
+        final t = token(r);
+        light.append("--magus-figure-{t}:var(--magus-diagram-{t},{colorOf(l, r: r)})");
+        dark.append("--magus-figure-{t}:var(--magus-diagram-{t},{colorOf(d, r: r)})");
+        rules.append(".magus-diagram .magus-fill-{t}\{fill:var(--magus-figure-{t})\}");
+        rules.append(".magus-diagram .magus-stroke-{t}\{stroke:var(--magus-figure-{t})\}");
+    }
+    rules.append(".magus-diagram .magus-sans\{font-family:var(--pico-font-family,{s.fontFamily})\}");
+    rules.append(".magus-diagram .magus-mono\{font-family:var(--pico-font-family-monospace,{s.monoFamily})\}");
+    return "<style>.magus-diagram\{" + light.join(";") + "\}"
+        + "@media (prefers-color-scheme: dark)\{.magus-diagram\{" + dark.join(";") + "\}\}"
+        + rules.join("") + "</style>";
 }
 
 // lightPalette and darkPalette are diagram-design's own skin, for the standalone .svg pair
@@ -152,8 +218,8 @@ fun darkPalette() > Palette {
 // resolves in the IMPORTER's scope, so it compiles here and fails the moment another
 // project imports this file.
 object Style {
-    fontFamily: str = "var(--pico-font-family, sans-serif)",           // titles and node names
-    monoFamily: str = "var(--pico-font-family-monospace, monospace)",  // tags, sublabels, eyebrows, legend
+    fontFamily: str = "sans-serif",     // titles and node names
+    monoFamily: str = "monospace",      // tags, sublabels, eyebrows, legend
 
     titleSize: int = 20,
     titleWeight: int = 600,
@@ -1026,27 +1092,27 @@ fun appendHops(parts: mut [str], leg: [int], hops: [[int]]) > void {
 // nodePaint and nodeStroke implement the role-to-treatment table. Roles the table does not
 // name fall back to the default treatment rather than failing: validate is where an
 // unknown role should be caught, not the painter.
-fun nodePaint(role: Role, p: Palette) > str {
-    if (role == Role.input) { return " fill=\"{p.muted}\" fill-opacity=\"0.1\" stroke=\"{p.soft}\""; }
+fun nodePaint(role: Role, p: Palette, s: Style) > str {
+    if (role == Role.input) { return paint(p, s: s, fill: Paint.muted, stroke: Paint.soft) + " fill-opacity=\"0.1\""; }
     if (role == Role.security) {
-        return " fill=\"{p.accent}\" fill-opacity=\"0.05\" stroke=\"{p.accent}\" stroke-opacity=\"0.5\"";
+        return paint(p, s: s, fill: Paint.accent, stroke: Paint.accent) + " fill-opacity=\"0.05\" stroke-opacity=\"0.5\"";
     }
-    var fill = p.fill;
-    if (role == Role.focal) { fill = p.accentTint; }
-    if (role == Role.store or role == Role.external) { fill = p.paper; }
-    return " fill=\"{fill}\" stroke=\"" + nodeStroke(role, p) + "\"";
+    var fill = Paint.fill;
+    if (role == Role.focal) { fill = Paint.accentTint; }
+    if (role == Role.store or role == Role.external) { fill = Paint.paper; }
+    return paint(p, s: s, fill: fill, stroke: nodeStroke(role));
 }
 
-fun nodeStroke(role: Role, p: Palette) > str {
-    if (role == Role.focal or role == Role.security) { return p.accent; }
-    if (role == Role.external or role == Role.optional or role == Role.input) { return p.soft; }
-    return p.rule;
+fun nodeStroke(role: Role) > Paint {
+    if (role == Role.focal or role == Role.security) { return Paint.accent; }
+    if (role == Role.external or role == Role.optional or role == Role.input) { return Paint.soft; }
+    return Paint.rule;
 }
 
-fun edgeStroke(kind: str, p: Palette) > str {
-    if (kind == "accent") { return p.accent; }
-    if (kind == "link") { return p.link; }
-    return p.muted;
+fun edgeStroke(kind: str) > Paint {
+    if (kind == "accent") { return Paint.accent; }
+    if (kind == "link") { return Paint.link; }
+    return Paint.muted;
 }
 
 // renderSvg paints the diagram and throws a joined validation report when any rule is
@@ -1077,8 +1143,9 @@ fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
         + " aria-labelledby=\"{d.id}-title {d.id}-desc\" class=\"magus-diagram\">");
     parts.append("<title id=\"{d.id}-title\">" + escapeSvg(d.title) + "</title>");
     parts.append("<desc id=\"{d.id}-desc\">" + escapeSvg(d.desc) + "</desc>");
+    parts.append(themeStyle(p, s: s));
     parts.append(renderMarkers(d, p, s));
-    parts.append("<rect width=\"100%\" height=\"100%\" fill=\"{p.paper}\"/>");
+    parts.append("<rect width=\"100%\" height=\"100%\"" + paint(p, s: s, fill: Paint.paper) + "/>");
     parts.append(renderHeader(d, p, s));
     parts.append("<g transform=\"translate(0,{pad})\">");
     foreach (z in d.zones) { parts.append(renderZone(z, p, s)); }
@@ -1120,7 +1187,7 @@ fun renderMarkers(d: Diagram, p: Palette, s: Style) > str {
     foreach (k in ["default", "accent", "link"]) {
         parts.append("<marker id=\"{d.id}-arrow-{k}\" markerWidth=\"{s.arrowWidth}\" markerHeight=\"{s.arrowHeight}\""
             + " refX=\"{s.arrowWidth - 1}\" refY=\"{half}\" orient=\"auto\">"
-            + "<polygon points=\"0 0, {s.arrowWidth} {half}, 0 {s.arrowHeight}\" fill=\"" + edgeStroke(k, p) + "\"/></marker>");
+            + "<polygon points=\"0 0, {s.arrowWidth} {half}, 0 {s.arrowHeight}\"" + paint(p, s: s, fill: edgeStroke(k)) + "/></marker>");
     }
     parts.append("</defs>");
     return parts.join("");
@@ -1129,13 +1196,13 @@ fun renderMarkers(d: Diagram, p: Palette, s: Style) > str {
 fun renderHeader(d: Diagram, p: Palette, s: Style) > str {
     var svg = "";
     if (d.eyebrow != "") {
-        svg = svg + "<text x=\"{s.margin}\" y=\"32\" fill=\"{p.soft}\" font-size=\"{s.eyebrowSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
+        svg = svg + "<text x=\"{s.margin}\" y=\"32\"" + paint(p, s: s, fill: Paint.soft, face: Face.mono)
+            + " font-size=\"{s.eyebrowSize}\" style=\"font-variant-ligatures:none\""
             + " letter-spacing=\"{s.eyebrowTracking}\">" + escapeSvg(d.eyebrow.upper()) + "</text>";
     }
     if (d.title != "") {
-        svg = svg + "<text x=\"{s.margin}\" y=\"60\" fill=\"{p.ink}\" font-size=\"{s.titleSize}\" font-weight=\"{s.titleWeight}\""
-            + " font-family=\"{s.fontFamily}\">"
+        svg = svg + "<text x=\"{s.margin}\" y=\"60\"" + paint(p, s: s, fill: Paint.ink, face: Face.sans)
+            + " font-size=\"{s.titleSize}\" font-weight=\"{s.titleWeight}\">"
             + escapeSvg(d.title) + "</text>";
     }
     return svg;
@@ -1148,13 +1215,14 @@ fun renderZone(z: ZoneRect, p: Palette, s: Style) > str {
         return renderSecurity(Node{ label = z.label, role = Role.security, x = z.x, y = z.y, w = z.w, h = z.h }, p: p, s: s);
     }
     final rect = "<rect x=\"{z.x}\" y=\"{z.y}\" width=\"{z.w}\" height=\"{z.h}\" rx=\"{s.zoneRadius}\""
-        + " fill=\"{p.ink}\" fill-opacity=\"0.02\" stroke=\"{p.ink}\" stroke-opacity=\"0.1\" stroke-width=\"{s.hairlineWidth}\"/>";
+        + paint(p, s: s, fill: Paint.ink, stroke: Paint.ink)
+        + " fill-opacity=\"0.02\" stroke-opacity=\"0.1\" stroke-width=\"{s.hairlineWidth}\"/>";
     if (z.label == "") { return rect; }
     final cx = z.x + z.w / 2;
     final w = snap(z.label.len() * 6 + 12);
-    return rect + "<rect x=\"{cx - w / 2}\" y=\"{z.y + 4}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
-        + "<text x=\"{cx}\" y=\"{z.y + 13}\" fill=\"{p.soft}\" font-size=\"{s.zoneLabelSize}\""
-        + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+    return rect + "<rect x=\"{cx - w / 2}\" y=\"{z.y + 4}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\"" + paint(p, s: s, fill: Paint.paper) + "/>"
+        + "<text x=\"{cx}\" y=\"{z.y + 13}\"" + paint(p, s: s, fill: Paint.soft, face: Face.mono) + " font-size=\"{s.zoneLabelSize}\""
+        + " style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
         + " letter-spacing=\"{s.zoneLabelTracking}\">" + escapeSvg(z.label.upper()) + "</text>";
 }
 
@@ -1165,10 +1233,10 @@ fun renderDecision(n: Node, p: Palette, s: Style) > str {
     final cx = n.x + n.w / 2;
     final cy = n.y + n.h / 2;
     final pts = "{cx},{n.y} {n.x + n.w},{cy} {cx},{n.y + n.h} {n.x},{cy}";
-    return "<polygon points=\"" + pts + "\" fill=\"{p.paper}\"/>"
-        + "<polygon points=\"" + pts + "\"" + nodePaint(Role.default, p) + " stroke-width=\"{s.strokeWidth}\"/>"
-        + "<text x=\"{cx}\" y=\"{cy + 4}\" fill=\"{p.ink}\" font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\""
-        + " font-family=\"{s.fontFamily}\" text-anchor=\"middle\">"
+    return "<polygon points=\"" + pts + "\"" + paint(p, s: s, fill: Paint.paper) + "/>"
+        + "<polygon points=\"" + pts + "\"" + nodePaint(Role.default, p: p, s: s) + " stroke-width=\"{s.strokeWidth}\"/>"
+        + "<text x=\"{cx}\" y=\"{cy + 4}\"" + paint(p, s: s, fill: Paint.ink, face: Face.sans)
+        + " font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\" text-anchor=\"middle\">"
         + escapeSvg(n.label) + "</text>";
 }
 
@@ -1179,11 +1247,11 @@ fun renderSecurity(n: Node, p: Palette, s: Style) > str {
     final cx = n.x + n.w / 2;
     final w = snap(n.label.len() * 6 + 12);
     var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.zoneRadius}\""
-        + nodePaint(Role.security, p) + " stroke-width=\"{s.strokeWidth}\" stroke-dasharray=\"{s.securityDash}\"/>";
+        + nodePaint(Role.security, p: p, s: s) + " stroke-width=\"{s.strokeWidth}\" stroke-dasharray=\"{s.securityDash}\"/>";
     if (n.label != "") {
-        svg = svg + "<rect x=\"{cx - w / 2}\" y=\"{n.y - 6}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
-            + "<text x=\"{cx}\" y=\"{n.y + 3}\" fill=\"{p.accent}\" font-size=\"{s.zoneLabelSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+        svg = svg + "<rect x=\"{cx - w / 2}\" y=\"{n.y - 6}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\"" + paint(p, s: s, fill: Paint.paper) + "/>"
+            + "<text x=\"{cx}\" y=\"{n.y + 3}\"" + paint(p, s: s, fill: Paint.accent, face: Face.mono) + " font-size=\"{s.zoneLabelSize}\""
+            + " style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
             + " letter-spacing=\"{s.zoneLabelTracking}\">" + escapeSvg(n.label.upper()) + "</text>";
     }
     return svg;
@@ -1217,18 +1285,18 @@ fun renderNodeBody(n: Node, p: Palette, s: Style) > str {
     if (n.role == Role.security) { return renderSecurity(n, p, s); }
     // An opaque mask under the styled box stops a connector routed behind the node from
     // showing through a translucent fill such as accentTint.
-    var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.nodeRadius}\" fill=\"{p.paper}\"/>";
+    var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.nodeRadius}\"" + paint(p, s: s, fill: Paint.paper) + "/>";
     var dash = "";
     if (n.role == Role.optional) { dash = " stroke-dasharray=\"{s.optionalDash}\""; }
     svg = svg + "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.nodeRadius}\""
-        + nodePaint(n.role, p) + " stroke-width=\"{s.strokeWidth}\"" + dash + "/>";
+        + nodePaint(n.role, p: p, s: s) + " stroke-width=\"{s.strokeWidth}\"" + dash + "/>";
 
     if (n.tag != "") {
         final tw = snap(n.tag.len() * 6 + 12);
         svg = svg + "<rect x=\"{n.x + s.nodePadding}\" y=\"{n.y + s.nodePadding}\" width=\"{tw}\" height=\"12\" rx=\"{s.chipRadius}\""
-            + " fill=\"none\" stroke=\"" + nodeStroke(n.role, p) + "\" stroke-width=\"{s.hairlineWidth}\"/>"
-            + "<text x=\"{n.x + s.nodePadding + tw / 2}\" y=\"{n.y + 17}\" fill=\"{p.soft}\" font-size=\"{s.tagSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+            + " fill=\"none\"" + paint(p, s: s, stroke: nodeStroke(n.role)) + " stroke-width=\"{s.hairlineWidth}\"/>"
+            + "<text x=\"{n.x + s.nodePadding + tw / 2}\" y=\"{n.y + 17}\"" + paint(p, s: s, fill: Paint.soft, face: Face.mono)
+            + " font-size=\"{s.tagSize}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
             + " letter-spacing=\"{s.tagTracking}\">" + escapeSvg(n.tag.upper()) + "</text>";
     }
 
@@ -1241,12 +1309,12 @@ fun renderNodeBody(n: Node, p: Palette, s: Style) > str {
     } else {
         if (n.sub == "") { ny = n.y + n.h / 2 + 4; }
     }
-    svg = svg + "<text x=\"{cx}\" y=\"{ny}\" fill=\"{p.ink}\" font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\""
-        + " font-family=\"{s.fontFamily}\" text-anchor=\"middle\">"
+    svg = svg + "<text x=\"{cx}\" y=\"{ny}\"" + paint(p, s: s, fill: Paint.ink, face: Face.sans)
+        + " font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\" text-anchor=\"middle\">"
         + escapeSvg(n.label) + "</text>";
     if (n.sub != "") {
-        svg = svg + "<text x=\"{cx}\" y=\"{ny + 16}\" fill=\"{p.soft}\" font-size=\"{s.subSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\">"
+        svg = svg + "<text x=\"{cx}\" y=\"{ny + 16}\"" + paint(p, s: s, fill: Paint.soft, face: Face.mono)
+            + " font-size=\"{s.subSize}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\">"
             + escapeSvg(n.sub) + "</text>";
     }
     return svg;
@@ -1277,7 +1345,7 @@ fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style, id: str, hops: [[int]]
         }
     }
     return "<path data-edge=\"" + escapeSvg(e.src) + "->" + escapeSvg(e.dst) + "\" id=\"" + id + "\" d=\"" + route + "\""
-        + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"{s.strokeWidth}\"" + dash
+        + " fill=\"none\"" + paint(p, s: s, stroke: edgeStroke(e.kind)) + " stroke-width=\"{s.strokeWidth}\"" + dash
         + " marker-end=\"url(#{d.id}-arrow-{e.kind})\"/>";
 }
 
@@ -1338,9 +1406,9 @@ fun renderEdgeLabel(e: Edge, p: Palette, s: Style, at: [int]) > str {
     final cx = at[0];
     final cy = at[1];
     final w = at[2];
-    return "<rect x=\"{cx - w / 2}\" y=\"{cy - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
-        + "<text x=\"{cx}\" y=\"{cy + 1}\" fill=\"{p.soft}\" font-size=\"{s.edgeLabelSize}\""
-        + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+    return "<rect x=\"{cx - w / 2}\" y=\"{cy - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\"" + paint(p, s: s, fill: Paint.paper) + "/>"
+        + "<text x=\"{cx}\" y=\"{cy + 1}\"" + paint(p, s: s, fill: Paint.soft, face: Face.mono) + " font-size=\"{s.edgeLabelSize}\""
+        + " style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
         + " letter-spacing=\"{s.edgeLabelTracking}\">" + escapeSvg(e.label.upper()) + "</text>";
 }
 
@@ -1473,17 +1541,17 @@ fun renderLegend(d: Diagram, p: Palette, s: Style) > str {
     final y = d.height - s.margin;
     final parts: mut [str] = mut [
         "<line x1=\"{s.margin}\" y1=\"{top}\" x2=\"{d.width - s.margin}\" y2=\"{top}\""
-            + " stroke=\"{p.rule}\" stroke-width=\"{s.hairlineWidth}\"/>",
-        "<text x=\"{s.margin}\" y=\"{top + 14}\" fill=\"{p.muted}\" font-size=\"{s.legendSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
+            + paint(p, s: s, stroke: Paint.rule) + " stroke-width=\"{s.hairlineWidth}\"/>",
+        "<text x=\"{s.margin}\" y=\"{top + 14}\"" + paint(p, s: s, fill: Paint.muted, face: Face.mono)
+            + " font-size=\"{s.legendSize}\" style=\"font-variant-ligatures:none\""
             + " letter-spacing=\"{s.legendTracking}\">LEGEND</text>",
     ];
     var x = s.margin;
     foreach (item in d.legend) {
         parts.append("<rect x=\"{x}\" y=\"{y - 8}\" width=\"{s.legendSwatch}\" height=\"{s.legendSwatch}\" rx=\"{s.chipRadius}\""
-            + nodePaint(item.role, p) + " stroke-width=\"{s.hairlineWidth}\"/>"
-            + "<text x=\"{x + 18}\" y=\"{y + 1}\" fill=\"{p.soft}\" font-size=\"{s.legendSize}\""
-            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
+            + nodePaint(item.role, p: p, s: s) + " stroke-width=\"{s.hairlineWidth}\"/>"
+            + "<text x=\"{x + 18}\" y=\"{y + 1}\"" + paint(p, s: s, fill: Paint.soft, face: Face.mono)
+            + " font-size=\"{s.legendSize}\" style=\"font-variant-ligatures:none\""
             + " letter-spacing=\"{s.legendTracking}\">" + escapeSvg(item.label.upper()) + "</text>");
         x = x + s.legendPitch;
     }
@@ -1635,15 +1703,15 @@ test "the default Style renders the pre-Style bytes" {
         + `<marker id="t-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">`
         + `<polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>`
         + `<rect width="100%" height="100%" fill="#f5f5f5"/>`
-        + `<text x="32" y="60" fill="#2d3142" font-size="20" font-weight="600" font-family="var(--pico-font-family, sans-serif)">Two boxes</text>`
+        + `<text x="32" y="60" fill="#2d3142" font-family="sans-serif" font-size="20" font-weight="600">Two boxes</text>`
         + `<g transform="translate(0,40)">`
         + `<path data-edge="a->b" id="t-edge-a-b" d="M 192 140 L 288 140" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#t-arrow-default)"/>`
         + `<g data-node="a"><rect x="32" y="112" width="160" height="56" rx="6" fill="#f5f5f5"/>`
         + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="#e6e6e8" stroke-width="1.2"/>`
-        + `<text x="112" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">A</text></g>`
+        + `<text x="112" y="144" fill="#2d3142" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle">A</text></g>`
         + `<g data-node="b"><rect x="288" y="112" width="160" height="56" rx="6" fill="#f5f5f5"/>`
         + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="#e6e6e8" stroke-width="1.2"/>`
-        + `<text x="368" y="144" fill="#2d3142" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">B</text></g>`
+        + `<text x="368" y="144" fill="#2d3142" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle">B</text></g>`
         + `</g></svg>`;
     assert\equal(renderSvg(twoBox(), p: lightPalette()) catch "threw", want, message: "twoBox at the shipped defaults");
     assert\equal(renderSvg(twoBox(), p: lightPalette(), s: defaultStyle()) catch "threw", want,
@@ -1741,7 +1809,7 @@ test "input and security paint the skill's treatments" {
     };
     assert\equal(validate(d).len(), want: 0, message: "a node wholly inside a boundary is not an overlap");
     final svg = renderSvg(d, p: lightPalette()) catch "threw";
-    std\assert(svg.indexOf("fill=\"#4f5d75\" fill-opacity=\"0.1\" stroke=\"#5f6780\"") != null, message: "input is muted at 10%");
+    std\assert(svg.indexOf("fill=\"#4f5d75\" stroke=\"#5f6780\" fill-opacity=\"0.1\"") != null, message: "input is muted at 10%");
     std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "security is dashed accent at half");
     std\assert(svg.indexOf(">TRUSTED</text>") != null, message: "the boundary label is painted");
     std\assert((svg.indexOf("data-node=\"trust\"") ?? 0) < (svg.indexOf("data-edge=") ?? 0), message: "the boundary paints under the connector");
@@ -1817,9 +1885,9 @@ test "zones paint a solid hairline wash and stop at three" {
     final z = ZoneRect{ label = "core", x = 16, y = 80, w = 448, h = 120 };
     final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
     final svg = renderSvg(d, p: lightPalette()) catch "threw";
-    std\assert(svg.indexOf("fill=\"#2d3142\" fill-opacity=\"0.02\" stroke=\"#2d3142\" stroke-opacity=\"0.1\" stroke-width=\"0.8\"/>") != null,
+    std\assert(svg.indexOf("fill=\"#2d3142\" stroke=\"#2d3142\" fill-opacity=\"0.02\" stroke-opacity=\"0.1\" stroke-width=\"0.8\"/>") != null,
         message: "ink wash, ink hairline, no dash");
-    std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#5f6780\" font-size=\"7\"") != null, message: "label centred, 7px, soft");
+    std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#5f6780\" font-family=\"monospace\" font-size=\"7\"") != null, message: "label centred, 7px, soft");
     final four = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, zones = [z, z, z, z] };
     assert\equal(validate(four).len(), want: 1, message: "a fourth zone is a finding");
 }
@@ -6801,7 +6869,7 @@ export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str {
     final named: str? = theme.value;
     if (named == null) { throw "figure {quote(f.id)}: draw takes theme: Theme.<case>, not a string"; }
     final d = laidOut(f);
-    var p = cssVarPalette();
+    var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
     if (theme == Theme.dark) { p = darkPalette(); }
     return renderSvg(d, p: p, s: Style{ anchorHref = anchorHref });
@@ -7687,8 +7755,48 @@ test "draw paints each theme" {
     final f = serverHttp(handlers()) catch of("x");
     final page = draw(f, theme: Theme.page) catch "threw";
     final dark = draw(f, theme: Theme.dark) catch "threw";
-    std\assert(page.indexOf("var(--magus-diagram-") != null, message: "page follows the site's variables");
-    std\assert(dark.indexOf("var(--magus-diagram-") == null and dark.startsWith("<svg"), message: "dark bakes hex");
+    std\assert(page.indexOf("<style>") != null and page.indexOf("var(--magus-diagram-ink,#2d3142)") != null,
+        message: "page follows the site's variables");
+    std\assert(page.indexOf("class=\"magus-fill-ink magus-sans\"") != null, message: "page tags each role");
+    std\assert(page.indexOf("var(--magus-diagram-ink,#f5f5f5)") != null, message: "page falls back to dark under a dark scheme");
+    std\assert(dark.indexOf("<style>") == null and dark.indexOf("magus-fill-") == null and dark.startsWith("<svg"),
+        message: "dark bakes hex");
+}
+
+// varAttrs names every attribute under node whose value holds a var(), which
+// strict renderers (ImageMagick, Android) refuse.
+fun varAttrs(node: any) > [str] {
+    final found: mut [str] = mut [<str>];
+    if (node is str) { return found; }
+    final el: {str: any} = node;
+    final attrs: [str] = el["attrs"];
+    var i = 0;
+    while (i + 1 < attrs.len()) {
+        if (attrs[i + 1].indexOf("var(") != null) { found.append("<{el["tag"]}> {attrs[i]}"); }
+        i = i + 2;
+    }
+    final children: [any] = el["children"];
+    foreach (c in children) {
+        foreach (name in varAttrs(c)) { found.append(name); }
+    }
+    return found;
+}
+
+test "every theme writes well-formed XML with no var() in an attribute" {
+    final a = external("a", look: Look.focal);
+    final b = external("b", look: Look.store);
+    final flows = of("t", title: "T").unscoped(why: "a process")
+        .actor(a).actor(b).flowAcross(a, dst: b, label: "calls", stroke: Stroke.external)
+        .legend(Look.focal, label: "hot").legend(Look.store, label: "kept");
+    final figures = [serverHttp(handlers()) catch of("x"), flows];
+    foreach (f in figures) {
+        foreach (theme in [Theme.page, Theme.light, Theme.dark]) {
+            final svg = draw(f, theme: theme) catch "threw";
+            final tree = xml\parse(svg) catch null;
+            std\assert(tree != null, message: "{f.id} {theme.value}: not well-formed XML");
+            assert\equal(varAttrs(tree).join(", "), want: "", message: "{f.id} {theme.value}: var() in an attribute");
+        }
+    }
 }
 
 test "a Figure written as data draws the bytes its builders draw" {
