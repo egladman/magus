@@ -32,6 +32,18 @@ export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
     return [<Prompt>];
 }
 
+// The mod rides beside the claude-code harness, which binds Claude Code's
+// hooks, so it binds none of its own.
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    final rows = mut [<HookBinding>];
+    foreach (point in [HookPoint.shell, HookPoint.edit, HookPoint.stop, HookPoint.subagentStop, HookPoint.spawn,
+                       HookPoint.sessionStart, HookPoint.compact, HookPoint.mcp, HookPoint.attach]) {
+        rows.append(HookBinding{point = point, status = BindingStatus.unsupported,
+            reason = "the mod wires settings only; spells/harness/claude-code binds Claude Code's hooks"});
+    }
+    return rows;
+}
+
 export fun mgs_listSettings() > [Setting] {
     return [
         Setting{path = SETTINGS_PATH, key = ["extraKnownMarketplaces", "magus"], value = {"source": {"source": "github", "repo": "egladman/magus"}}},

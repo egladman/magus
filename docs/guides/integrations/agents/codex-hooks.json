@@ -79,6 +79,16 @@
     ],
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the session"
+          }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {
@@ -90,6 +100,15 @@
       }
     ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus guard: checking the stop"
+          }
+        ]
+      },
       {
         "hooks": [
           {

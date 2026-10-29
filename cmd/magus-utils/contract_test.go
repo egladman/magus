@@ -21,17 +21,18 @@ func TestReadHarnessContract(t *testing.T) {
 		assert.Equal(t, fn.Name == "mgs_getHarnessConfig" || fn.Name == "mgs_renderPrompts", fn.Required, "%s: required on every harness", fn.Name)
 	}
 	assert.Equal(t, map[string]string{
-		"mgs_getHarnessConfig": "() > HarnessConfig",
-		"mgs_getSkills":        "() > HarnessSkills",
-		"mgs_listEntries":      "() > [ManagedEntries]",
-		"mgs_listHooks":        "() > [HookCommand]",
-		"mgs_getMcp":           "() > McpServer",
-		"mgs_listTools":        "() > HarnessTools",
-		"mgs_getLimits":        "() > Limits",
-		"mgs_listModels":       "() > [ModelRow]",
-		"mgs_listSettings":     "() > [Setting]",
-		"mgs_renderAgents":     "(agents: [ShippedAgent]) > [AgentFile]",
-		"mgs_renderPrompts":    "(humanOnly: {str: str}) > [Prompt]",
+		"mgs_getHarnessConfig":     "() > HarnessConfig",
+		"mgs_getSkills":            "() > HarnessSkills",
+		"mgs_listEntries":          "() > [ManagedEntries]",
+		"mgs_listHooks":            "() > [HookCommand]",
+		"mgs_listUnsupportedHooks": "() > [HookBinding]",
+		"mgs_getMcp":               "() > McpServer",
+		"mgs_listTools":            "() > HarnessTools",
+		"mgs_getLimits":            "() > Limits",
+		"mgs_listModels":           "() > [ModelRow]",
+		"mgs_listSettings":         "() > [Setting]",
+		"mgs_renderAgents":         "(agents: [ShippedAgent]) > [AgentFile]",
+		"mgs_renderPrompts":        "(humanOnly: {str: str}) > [Prompt]",
 	}, signatures)
 }
 

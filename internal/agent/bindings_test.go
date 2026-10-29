@@ -94,14 +94,14 @@ func (s *hookBindingsSuite) TestANotVerifiedReasonMustNameWhat() {
 func (s *hookBindingsSuite) TestABoundRowInTheUnsupportedListIsRefused() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Status = types.Bound
-	s.EqualError(validateHookBindings(d), `unsupported_hooks[0]: attach is "bound": this list holds `+
+	s.EqualError(validateHookBindings(d), `unsupported_hooks[0]: attach is bound: this list holds `+
 		`Unsupported rows only, and a Bound point is one a hook lists`)
 }
 
 func (s *hookBindingsSuite) TestARowWithNoStatusIsRefused() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Status = ""
-	s.ErrorContains(validateHookBindings(d), `attach is "": this list holds Unsupported rows only`)
+	s.ErrorContains(validateHookBindings(d), `attach is unset: this list holds Unsupported rows only`)
 }
 
 func (s *hookBindingsSuite) TestASecondRowForOnePointIsRefused() {

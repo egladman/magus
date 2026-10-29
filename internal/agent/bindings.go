@@ -97,7 +97,7 @@ func validateUnsupportedRow(id string, row types.HookBinding, seen map[types.Hoo
 	case seen[row.Point]:
 		return fmt.Errorf("a second row for %s", row.Point)
 	case row.Status != types.Unsupported:
-		return fmt.Errorf("%s is %q: this list holds Unsupported rows only, "+
+		return fmt.Errorf("%s is %s: this list holds Unsupported rows only, "+
 			"and a Bound point is one a hook lists", row.Point, row.Status)
 	case row.Harness != "" && row.Harness != id:
 		return fmt.Errorf("%s names harness %q, not %q", row.Point, row.Harness, id)

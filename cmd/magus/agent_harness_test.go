@@ -313,7 +313,7 @@ grep -count=1 'proofread-reply.buzz' .claude/settings.json
 grep -count=1 'proofread-reply.buzz' .codex/hooks.json
 grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
 grep -count=1 'collaborationspawn_agent' .codex/hooks.json
-grep -count=2 'magus-rehydrate.buzz' .codex/hooks.json
+grep -count=3 'magus-rehydrate.buzz' .codex/hooks.json
 exec magus describe harness claude-code
 stdout '^claude-code harness: current$'
 exec magus describe harness codex

@@ -28,10 +28,39 @@ export fun mgs_getSkills() > HarnessSkills {
 
 // The hooks the guard plugin would run were they wired through a config. With no config
 // path magus has no entries to hold them to, and says the check was skipped.
+//
+// Each event is the plugin's own handler. A script named "opencode-plugin" is
+// work the plugin does itself; any other is glue it runs.
 export fun mgs_listHooks() > [HookCommand] {
-    // The plugin runs the disk hook on a root session's idle and holds its line for the
-    // next tool result, since no OpenCode event hands text to the model once a turn.
-    return [buzzCheckHook(mgs_getName()), reclaimDiskHook(mgs_getName(), event: "session.idle", say: "stdout")];
+    final plugin = "opencode-plugin";
+    final named = ["--agent-name", mgs_getName()];
+    final check = buzzCheckHook(mgs_getName());
+    return [
+        HookCommand{event = "tool.execute.before", matcher = "bash|edit|write|apply_patch|task|<server>_<tool>",
+            script = plugin, flags = named, points = [HookPoint.shell, HookPoint.edit, HookPoint.mcp, HookPoint.spawn]},
+        HookCommand{event = "tool.execute.before", matcher = "read", script = "magus-observe", flags = named},
+        HookCommand{event = "tool.execute.after", matcher = "task", script = plugin, flags = named, points = [HookPoint.spawn]},
+        HookCommand{event = "tool.execute.after", matcher = "edit|write|apply_patch", script = check.script,
+            flags = check.flags, timeoutS = check.timeoutS},
+        // The brief rides the session's first tool result.
+        HookCommand{event = "session.created", script = plugin, flags = named, points = [HookPoint.sessionStart]},
+        // A root session's idle is its stop: a deny goes back as a follow-up.
+        HookCommand{event = "session.idle", script = plugin, flags = named, points = [HookPoint.stop]},
+        HookCommand{event = "chat.message", script = plugin, flags = named},
+        // The disk hook's line waits for the next tool result, since no
+        // OpenCode event hands text to the model once a turn.
+        reclaimDiskHook(mgs_getName(), event: "session.idle", say: "stdout"),
+    ];
+}
+
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [
+        unsupportedHook(HookPoint.subagentStop, reason: "not verified: that a child session's idle carries "
+            + "the context it leaves; session.idle names only the session (opencode.ai/docs/plugins)"),
+        unsupportedHook(HookPoint.compact, reason: "experimental.session.compacting only feeds the summarizer "
+            + "(opencode.ai/docs/plugins); opencode-plugin.ts records why the brief stays out of it"),
+        attachUnverified(),
+    ];
 }
 
 // Every OpenCode tool the guard should know, written by `magus agent harness install` to

@@ -77,6 +77,17 @@ fun cursor_matcher(event: str) > str {
     return "";
 }
 
+// cursor_points are the hook points the port answers on event.
+fun cursor_points(event: str) > [HookPoint] {
+    if (event == "sessionStart") { return [HookPoint.sessionStart]; }
+    if (event == "beforeShellExecution") { return [HookPoint.shell]; }
+    if (event == "beforeMCPExecution") { return [HookPoint.mcp]; }
+    if (event == "preToolUse") { return [HookPoint.shell, HookPoint.edit, HookPoint.spawn]; }
+    if (event == "preCompact") { return [HookPoint.compact]; }
+    if (event == "subagentStart") { return [HookPoint.spawn]; }
+    return [<HookPoint>];
+}
+
 fun cursor_buzz_check_hook() > HookCommand {
     final check = buzzCheckHook(mgs_getName());
     return HookCommand{event = "postToolUse", matcher = WRITE_MATCHER, script = check.script, flags = check.flags, timeoutS = check.timeoutS};
@@ -85,7 +96,8 @@ fun cursor_buzz_check_hook() > HookCommand {
 fun cursor_hooks() > [HookCommand] {
     final hooks = mut [<HookCommand>];
     foreach (event in cursor_event_names()) {
-        hooks.append(HookCommand{event = event, matcher = cursor_matcher(event), script = "cursor-hook", flags = cursor_guard_flags(), timeoutS = HOOK_TIMEOUT_S});
+        hooks.append(HookCommand{event = event, matcher = cursor_matcher(event), script = "cursor-hook", flags = cursor_guard_flags(),
+            timeoutS = HOOK_TIMEOUT_S, points = cursor_points(event)});
     }
     hooks.append(cursor_buzz_check_hook());
     // Cursor reads a beforeSubmitPrompt hook's stdout as its JSON verdict, so the disk
@@ -96,6 +108,18 @@ fun cursor_hooks() > [HookCommand] {
 
 export fun mgs_listHooks() > [HookCommand] {
     return cursor_hooks();
+}
+
+// Cursor raises stop and subagentStop (testdata/hosts/cursor/SOURCES.md),
+// but no reply shape for either is vendored or probed yet.
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [
+        unsupportedHook(HookPoint.stop, reason: "not verified: that a Cursor stop hook reply returns the agent "
+            + "to work; testdata/hosts/cursor vendors no stop output schema"),
+        unsupportedHook(HookPoint.subagentStop, reason: "not verified: that Cursor's subagentStop payload "
+            + "names the child's transcript; testdata/hosts/cursor vendors no subagentStop schema"),
+        attachUnverified(),
+    ];
 }
 
 // A timed-out gating hook must block the call: otherwise retrying a slow guard

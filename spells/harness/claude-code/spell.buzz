@@ -69,9 +69,12 @@ fun claude_named() > [str] {
     return ["--agent-name", mgs_getName()];
 }
 
-fun claude_hook(event: str, matcher: str, script: str, flags: [str]) > HookCommand {
-    return HookCommand{event = event, matcher = matcher, script = script, flags = flags, timeoutS = HOOK_TIMEOUT_S};
+fun claude_hook(event: str, matcher: str, script: str, flags: [str], points: [HookPoint]) > HookCommand {
+    return HookCommand{event = event, matcher = matcher, script = script, flags = flags, timeoutS = HOOK_TIMEOUT_S, points = points};
 }
+
+// A recorder binds no hook point: it judges and briefs nothing.
+final RECORDS = [<HookPoint>];
 
 fun claude_buzz_check_hook() > HookCommand {
     final check = buzzCheckHook(mgs_getName());
@@ -83,25 +86,27 @@ fun claude_hooks() > [HookCommand] {
     return [
         // magus restates a read as the `cat` or `sed -n` line it stands for and a search as
         // its rg or find line, so the read and search rules hold whichever tool performs them.
-        claude_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: claude_named()),
+        claude_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: claude_named(),
+            points: [HookPoint.shell, HookPoint.edit, HookPoint.mcp, HookPoint.spawn]),
         // The observer records the path a read reached; it judges nothing.
-        claude_hook("PreToolUse", matcher: "Read", script: "magus-observe", flags: claude_named()),
-        claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_named()),
+        claude_hook("PreToolUse", matcher: "Read", script: "magus-observe", flags: claude_named(), points: RECORDS),
+        claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_named(), points: [HookPoint.spawn]),
         claude_buzz_check_hook(),
         // PATH's first entry becomes the root for the agent's own Bash tool commands, through
         // CLAUDE_ENV_FILE, the file Claude Code sources before each one; it never reaches a
         // hook command (code.claude.com/docs/en/hooks, "Persist environment variables").
-        claude_hook("SessionStart", matcher: SESSION_PATH_MATCHER, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]),
-        claude_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: [<str>]),
+        claude_hook("SessionStart", matcher: SESSION_PATH_MATCHER, script: "magus-session",
+            flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""], points: [HookPoint.sessionStart]),
+        claude_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: [<str>], points: [HookPoint.compact]),
         // The guard reads the session's transcript for background tasks left running.
-        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_named()),
-        claude_hook("Stop", matcher: "", script: "magus-checkpoint", flags: claude_named()),
+        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_named(), points: [HookPoint.stop]),
+        claude_hook("Stop", matcher: "", script: "magus-checkpoint", flags: claude_named(), points: RECORDS),
         // A subagent's stop carries the path of its own transcript, whose last usage record
         // is the context a later continue to it would resume.
-        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_named()),
+        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_named(), points: [HookPoint.subagentStop]),
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing: it records the topics a later rule reads.
-        claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_named()),
+        claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_named(), points: RECORDS),
         // Claude Code adds a UserPromptSubmit hook's stdout to the turn's context, so the one
         // line the disk hook prints reaches the agent before it starts on the request.
         reclaimDiskHook(mgs_getName(), event: "UserPromptSubmit", say: "stdout"),
@@ -110,6 +115,10 @@ fun claude_hooks() > [HookCommand] {
 
 export fun mgs_listHooks() > [HookCommand] {
     return claude_hooks();
+}
+
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [attachUnverified()];
 }
 
 fun claude_command(hook: HookCommand) > str {

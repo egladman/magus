@@ -55,48 +55,74 @@ object CodexHook {
     status: str,
 }
 
-fun codex_hook(event: str, matcher: str, script: str, flags: [str], status: str) > CodexHook {
-    return CodexHook{hook = HookCommand{event = event, matcher = matcher, script = script, flags = flags}, status = status};
+fun codex_hook(event: str, matcher: str, script: str, flags: [str], status: str, points: [HookPoint]) > CodexHook {
+    return CodexHook{hook = HookCommand{event = event, matcher = matcher, script = script, flags = flags, points = points}, status = status};
 }
+
+// A recorder binds no hook point: it judges and briefs nothing.
+final RECORDS = [<HookPoint>];
+
+// The session starts that are not a compaction.
+final SESSION_START_MATCHER = "startup|resume|clear";
 
 // The disk hook rides UserPromptSubmit, whose plain stdout Codex adds to the turn as context.
 fun codex_reclaim_hook() > CodexHook {
     final disk = reclaimDiskHook(mgs_getName(), event: "UserPromptSubmit", say: "stdout");
-    return codex_hook(disk.event, matcher: "", script: disk.script, flags: disk.flags, status: "magus: sampling free disk space");
+    return codex_hook(disk.event, matcher: "", script: disk.script, flags: disk.flags, status: "magus: sampling free disk space", points: RECORDS);
 }
 
 fun codex_hooks() > [CodexHook] {
     final check = buzzCheckHook(mgs_getName());
     return [
-        codex_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking the call"),
+        codex_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking the call",
+            points: [HookPoint.shell, HookPoint.edit, HookPoint.mcp, HookPoint.spawn]),
         // Judges nothing. The finished spawn is how magus learns the child's name: a v2
         // spawn answers with its task_name path, a v1 spawn with the agent id.
-        codex_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent"),
-        codex_hook("PostToolUse", matcher: "apply_patch", script: check.script, flags: check.flags, status: "magus: checking the Buzz it wrote"),
+        codex_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent",
+            points: [HookPoint.spawn]),
+        codex_hook("PostToolUse", matcher: "apply_patch", script: check.script, flags: check.flags, status: "magus: checking the Buzz it wrote", points: RECORDS),
         // The v2 spawn message is encrypted, so nothing the parent wrote can carry a brief
         // to the child. This hook's context is the child's first instruction. The second
         // entry names the child by the id its own calls carry, which magus joins to the
         // spawn just before it.
-        codex_hook("SubagentStart", matcher: "", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: briefing the subagent"),
-        codex_hook("SubagentStart", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: joining the subagent to its spawn"),
+        codex_hook("SubagentStart", matcher: "", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: briefing the subagent",
+            points: [HookPoint.spawn]),
+        codex_hook("SubagentStart", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: joining the subagent to its spawn",
+            points: [HookPoint.spawn]),
         // Judges nothing. The payload names the child's transcript, whose last token_count
         // record is the context size a later continuation reads.
-        codex_hook("SubagentStop", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent's context"),
+        codex_hook("SubagentStop", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent's context",
+            points: [HookPoint.subagentStop]),
         // Raised just before Codex's own approval prompt. The shared template answers it
         // from the verdict: allow for a push a gate covers, no decision for an ungated one
         // (the person decides), deny for a leased worker.
-        codex_hook("PermissionRequest", matcher: "Bash", script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking approval"),
-        codex_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: restating this checkout's rules"),
-        codex_hook("Stop", matcher: "", script: "magus-checkpoint", flags: ["--agent-name", mgs_getName()], status: "magus: recording where the work stands"),
+        codex_hook("PermissionRequest", matcher: "Bash", script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking approval",
+            points: [HookPoint.shell]),
+        // SessionStart replies with additionalContext, so a new session reads
+        // the brief first (testdata/hosts/codex/session-start.*.schema.json).
+        codex_hook("SessionStart", matcher: SESSION_START_MATCHER, script: "magus-rehydrate", flags: codex_rehydrate_flags(),
+            status: "magus: briefing the session", points: [HookPoint.sessionStart]),
+        codex_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: restating this checkout's rules",
+            points: [HookPoint.compact]),
+        // A Stop reply of decision block sends the agent back to work
+        // (testdata/hosts/codex/stop.command.output.schema.json).
+        codex_hook("Stop", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking the stop",
+            points: [HookPoint.stop]),
+        codex_hook("Stop", matcher: "", script: "magus-checkpoint", flags: ["--agent-name", mgs_getName()], status: "magus: recording where the work stands",
+            points: RECORDS),
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing. Codex ignores a matcher on this event.
-        codex_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: noting the request"),
+        codex_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: noting the request", points: RECORDS),
         codex_reclaim_hook(),
     ];
 }
 
 export fun mgs_listHooks() > [HookCommand] {
     return codex_hooks().map(fun (index: int, h: CodexHook) > HookCommand => h.hook);
+}
+
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [attachUnverified()];
 }
 
 fun codex_command(hook: HookCommand) > str {
