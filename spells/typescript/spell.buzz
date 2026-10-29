@@ -659,8 +659,8 @@ fun ownerOf(file: str, packages: [NodePackage]) > str? {
     return best;
 }
 
-fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: [str]} !> any {
-    final targets = mut {<str: [str]>};
+// lintFormatTargets wires the linters and formatters pkg depends on.
+fun lintFormatTargets(pkg: NodePackage, targets: mut {str: [str]}) > void {
     final lint = mut [<str>];
     final format = mut [<str>];
     if (hasDependency(pkg, name: "eslint")) {
@@ -679,9 +679,12 @@ fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: 
     if (format.len() > 0) {
         targets["format"] = format;
     }
+}
 
-    final tsconfig = joinPath(pkg.dir, rel: "tsconfig.json");
-    if (owned.indexOf(tsconfig) != null) {
+// buildTarget wires tsc-build when pkg holds tsconfig.json, with a gap for each tsconfig
+// variant or bundler config no op runs.
+fun buildTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps: mut [DiscoveryGap]) > void {
+    if (owned.indexOf(joinPath(pkg.dir, rel: "tsconfig.json")) != null) {
         targets["build"] = ["tsc-build"];
     } else {
         foreach (file in owned) {
@@ -700,10 +703,13 @@ fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: 
             }
         }
     }
+}
 
+// testTarget wires vitest or node --test, and gaps a test runner no op runs.
+fun testTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps: mut [DiscoveryGap]) > void !> any {
     if (hasDependency(pkg, name: "vitest")) {
         targets["test"] = ["vitest"];
-        return targets;
+        return;
     }
     var unwired = false;
     foreach (runner in UNWIRED_TEST_RUNNERS) {
@@ -713,7 +719,7 @@ fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: 
         }
     }
     if (unwired) {
-        return targets;
+        return;
     }
     var nodeTests = false;
     var tsTests: str? = null;
@@ -730,23 +736,34 @@ fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: 
     } else if (tsTests -> file) {
         gaps.append(gap(file, why: "a test file with no vitest dependency and no name node --test finds by default, so no test was wired"));
     }
+}
+
+fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: [str]} !> any {
+    final targets = mut {<str: [str]>};
+    lintFormatTargets(pkg, targets: targets);
+    buildTarget(pkg, owned: owned, targets: targets, gaps: gaps);
+    testTarget(pkg, owned: owned, targets: targets, gaps: gaps);
     return targets;
 }
 
-// discover_projects claims one project per package.json. Workspace globs from
-// pnpm-workspace.yaml or package.json workspaces decide which packages link by name.
-// Every package.json script is reported, never wired: its meaning is the project's.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
-    final packages = mut [<NodePackage>];
-    final gapsByFile = mut {<str: [DiscoveryGap]>};
-    final workspaces = mut [<NodeWorkspace>];
-    final workspaceGaps = mut [<DiscoveryGap>];
-    final pnpmRoots = mut {<str: bool>};
+// NodeScan is what discover_projects read of the query: every package, each one's parse
+// gaps, the workspaces that link them, and the gaps a workspace file carries.
+object NodeScan {
+    packages: mut [NodePackage],
+    gapsByFile: mut {str: [DiscoveryGap]},
+    workspaces: mut [NodeWorkspace],
+    workspaceGaps: mut [DiscoveryGap],
+}
 
+// nodeScan parses each pnpm-workspace.yaml, then each package.json and the workspaces field
+// pnpm does not own.
+fun nodeScan(req: DiscoveryQuery) > NodeScan !> any {
+    final scan = NodeScan{packages = mut [], gapsByFile = mut {}, workspaces = mut [], workspaceGaps = mut []};
+    final pnpmRoots = mut {<str: bool>};
     foreach (file in req.files) {
         if (baseOf(file.path) == "pnpm-workspace.yaml") {
-            if (parsePnpmWorkspace(file, gaps: workspaceGaps) -> ws) {
-                workspaces.append(ws);
+            if (parsePnpmWorkspace(file, gaps: scan.workspaceGaps) -> ws) {
+                scan.workspaces.append(ws);
                 pnpmRoots[ws.root] = true;
             }
         }
@@ -762,65 +779,74 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
                 gaps.append(gap(pkg.file, why: "workspaces: pnpm reads its members from pnpm-workspace.yaml, so this field was ignored"));
             }
         } else if (workspaceOf(pkg, gaps: gaps) -> ws) {
-            workspaces.append(ws);
+            scan.workspaces.append(ws);
         }
-        packages.append(pkg);
-        gapsByFile[pkg.file] = gaps;
+        scan.packages.append(pkg);
+        scan.gapsByFile[pkg.file] = gaps;
     }
+    return scan;
+}
 
-    foreach (ws in workspaces) {
+// unmatchedGlobs gaps each workspace glob that matches no package.json.
+fun unmatchedGlobs(scan: NodeScan) > void !> any {
+    foreach (ws in scan.workspaces) {
         foreach (raw in ws.patterns) {
             if (raw.startsWith("!")) {
                 continue;
             }
             var matched = false;
-            foreach (pkg in packages) {
+            foreach (pkg in scan.packages) {
                 if (pkg.dir != ws.root and isUnder(ws.root, file: pkg.dir)
                     and path\matches(normalizePattern(raw), path: relativeTo(ws.root, file: pkg.dir))) {
                     matched = true;
                 }
             }
             if (!matched) {
-                workspaceGaps.append(gap(ws.file, why: "workspace glob {raw} matches no package.json"));
+                scan.workspaceGaps.append(gap(ws.file, why: "workspace glob {raw} matches no package.json"));
             }
         }
     }
+}
 
+// nodeClaim claims one package with the files it owns.
+fun nodeClaim(pkg: NodePackage, scan: NodeScan, owned: [str]) > DiscoveredProject !> any {
+    final gaps = scan.gapsByFile[pkg.file]!.cloneMutable();
+    final ws = owningWorkspace(pkg, workspaces: scan.workspaces);
+    final deps = dependsOn(pkg, ws: ws, packages: scan.packages, gaps: gaps);
+    final targets = targetsOf(pkg, owned: owned, gaps: gaps);
+    foreach (script in sortedKeys(asMap(pkg.manifest["scripts"]))) {
+        gaps.append(gap(pkg.file, why: "scripts.{script}: meaning unknown, so it was not wired; a package.json script never runs as a target"));
+    }
+    if (targets.len() == 0) {
+        gaps.append(gap(pkg.file, why: "no tsconfig.json, test runner, linter or formatter found, so no target was wired"));
+    }
+    foreach (wsGap in scan.workspaceGaps) {
+        if (dirOf(wsGap.file) == pkg.dir) {
+            gaps.append(wsGap);
+        }
+    }
+    return DiscoveredProject{path = pkg.dir, role = DiscoveryRole.project, name = pkg.name, dependsOn = deps,
+        targets = targets, notInferred = gaps};
+}
+
+// discover_projects claims one project per package.json. Workspace globs from
+// pnpm-workspace.yaml or package.json workspaces decide which packages link by name.
+// Every package.json script is reported, never wired: its meaning is the project's.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    final scan = nodeScan(req);
+    unmatchedGlobs(scan);
     final owned = mut {<str: mut [str]>};
     foreach (file in req.files) {
-        if (ownerOf(file.path, packages: packages) -> dir) {
+        if (ownerOf(file.path, packages: scan.packages) -> dir) {
             if (owned[dir] == null) {
                 owned[dir] = mut [<str>];
             }
             owned[dir]!.append(file.path);
         }
     }
-
     final claims = mut [<DiscoveredProject>];
-    foreach (pkg in packages) {
-        final gaps = gapsByFile[pkg.file]!.cloneMutable();
-        final ws = owningWorkspace(pkg, workspaces: workspaces);
-        final deps = dependsOn(pkg, ws: ws, packages: packages, gaps: gaps);
-        final targets = targetsOf(pkg, owned: owned[pkg.dir] ?? [<str>], gaps: gaps);
-        foreach (script in sortedKeys(asMap(pkg.manifest["scripts"]))) {
-            gaps.append(gap(pkg.file, why: "scripts.{script}: meaning unknown, so it was not wired; a package.json script never runs as a target"));
-        }
-        if (targets.len() == 0) {
-            gaps.append(gap(pkg.file, why: "no tsconfig.json, test runner, linter or formatter found, so no target was wired"));
-        }
-        foreach (wsGap in workspaceGaps) {
-            if (dirOf(wsGap.file) == pkg.dir) {
-                gaps.append(wsGap);
-            }
-        }
-        claims.append(DiscoveredProject{
-            path = pkg.dir,
-            role = DiscoveryRole.project,
-            name = pkg.name,
-            dependsOn = deps,
-            targets = targets,
-            notInferred = gaps,
-        });
+    foreach (pkg in scan.packages) {
+        claims.append(nodeClaim(pkg, scan: scan, owned: owned[pkg.dir] ?? [<str>]));
     }
     claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
     return claims;
