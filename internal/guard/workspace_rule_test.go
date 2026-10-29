@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // errStaleLoad is what a ./magus older than the tree reports: it cannot load the working tree,
@@ -170,7 +171,7 @@ func TestLoadFailureOfATypoRefusesChangesNamingTheError(t *testing.T) {
 	push := Judge(ctx, deps, Request{Input: "git push", Host: "claude-code", Session: "s1"})
 	stored := shortDeny(t, cacheDir, push, denyRulePolicyUnloaded,
 		"`git push` waits for this workspace's guard policy to load; rebuild ./magus with `./magus run go-build .`.")
-	d := unloadedDenial(judgedCall{seam: seamCommand, verb: "`git push`"}, failures, true, hookLocation(ctx, deps).workspace)
+	d := unloadedDenial(judgedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true, hookLocation(ctx, deps).workspace)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %spolicy-unloaded/", d.full(), ruleDocsBase), stored)
 	assert.Contains(t, stored, "\nThe likeliest cause is a ./magus older than the tree.\n")
 
@@ -382,14 +383,6 @@ func TestJudgingBinaryNoteForAWorkerAsksTheMainSession(t *testing.T) {
 	assert.Empty(t, judgingBinaryNote(Dependencies{}, at, stale, ""))
 }
 
-// No record means no rule was ever seen to protect: a workspace whose policy never loaded
-// here is not held to one.
-func TestLoadFailureWithoutARecordPasses(t *testing.T) {
-	ctx, _ := spawnFixture(t)
-	v := Judge(ctx, unloadedDeps(), Request{Input: "gh pr merge 412 --admin", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(v))
-}
-
 // A record that registered no command rule protects no command.
 func TestLoadFailureOfAnUnregisteredSeamPasses(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
@@ -398,29 +391,73 @@ func TestLoadFailureOfAnUnregisteredSeamPasses(t *testing.T) {
 	assert.Equal(t, decisionAdvise, v.Decision)
 }
 
-// A rule that loaded and then raised stays fail-open with its notice: only a policy that
-// cannot be read at all is the misconfiguration.
-func TestLoadFailureOfOneRuleStaysOpen(t *testing.T) {
-	raises := (&commandRuleProbe{err: errors.New("magus\\guard.command: the rule raised: boom")}).rule()
-	cases := []struct {
-		name string
-		deps Dependencies
-	}{
-		{"the working tree's rule raises", Dependencies{CommandRule: raises}},
-		{"the approved rule raises under a broken working tree", Dependencies{
-			LoadFailure:         errStaleLoad,
-			ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return raises, nil },
-		}},
+// JudgedShortSuite pins what a call meets while a workspace rule judges nothing: a gated
+// verb is denied naming why, and any other call runs with the note.
+type JudgedShortSuite struct {
+	suite.Suite
+}
+
+func TestJudgedShortSuite(t *testing.T) { suite.Run(t, new(JudgedShortSuite)) }
+
+const raisedSay = "waits until the workspace magus\\guard.command rule stops raising; fix the error it names: "
+
+func raisingCommandRule() workspace.CommandRule {
+	return (&commandRuleProbe{err: errors.New("magus\\guard.command: the rule raised: boom")}).rule()
+}
+
+func (s *JudgedShortSuite) judgeRecorded(deps Dependencies, line string) (types.GuardJudgment, string) {
+	ctx, cacheDir := spawnFixture(s.T())
+	recordLoadedPolicy(s.T(), cacheDir)
+	return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1"}), cacheDir
+}
+
+// stored asserts v is a deny under policy-unloaded and returns the verdict behind its ref.
+func (s *JudgedShortSuite) stored(cacheDir string, v types.GuardJudgment) string {
+	s.Require().Equal(decisionDeny, v.Decision, v.Context)
+	s.Equal(string(denyRulePolicyUnloaded), v.Rule)
+	ref := verdictRef.FindString(v.Reason)
+	s.Require().NotEmpty(ref, v.Reason)
+	blob, err := trail.ReadBlob(cacheDir, ref)
+	s.Require().NoError(err)
+	return string(blob)
+}
+
+func (s *JudgedShortSuite) TestAWorkingTreeRuleThatRaisesDeniesAMerge() {
+	v, cacheDir := s.judgeRecorded(Dependencies{CommandRule: raisingCommandRule()}, "gh pr merge 412 --admin")
+	s.Contains(s.stored(cacheDir, v), "`gh pr merge` "+raisedSay+"worktree: the rule failed: magus\\guard.command: the rule raised: boom")
+}
+
+func (s *JudgedShortSuite) TestAnApprovedRuleThatRaisesUnderABrokenTreeDeniesAPush() {
+	raises := raisingCommandRule()
+	deps := Dependencies{
+		LoadFailure:         errStaleLoad,
+		ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return raises, nil },
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cacheDir := spawnFixture(t)
-			recordLoadedPolicy(t, cacheDir)
-			v := Judge(ctx, tc.deps, Request{Input: "gh pr merge 412 --admin", Host: "claude-code", Session: "s1"})
-			assert.Equal(t, decisionAdvise, v.Decision)
-			assert.Contains(t, v.Context, "the rule raised: boom")
-		})
-	}
+	v, cacheDir := s.judgeRecorded(deps, "git push origin HEAD:topic")
+	s.Contains(s.stored(cacheDir, v), "`git push` "+raisedSay+"approved: the rule failed:")
+}
+
+func (s *JudgedShortSuite) TestARuleThatRaisesDeniesACommit() {
+	v, cacheDir := s.judgeRecorded(Dependencies{CommandRule: raisingCommandRule()}, "git commit -m 'trim a fragment'")
+	s.Contains(s.stored(cacheDir, v), "`git commit` "+raisedSay)
+}
+
+func (s *JudgedShortSuite) TestARuleThatRaisesPassesAReadWithTheNote() {
+	v, _ := s.judgeRecorded(Dependencies{CommandRule: raisingCommandRule()}, "ls -la")
+	s.Equal(decisionAdvise, v.Decision)
+	s.Contains(v.Context, "the rule raised: boom")
+}
+
+func (s *JudgedShortSuite) TestALoadFailureWithNoRecordDeniesAGatedVerb() {
+	ctx, cacheDir := spawnFixture(s.T())
+	v := Judge(ctx, unloadedDeps(), Request{Input: "gh pr merge 412 --admin", Host: "claude-code", Session: "s1"})
+	s.Contains(s.stored(cacheDir, v), "No policy of this workspace is on record as loading here, so nothing says it has no magus\\guard.command rule")
+}
+
+func (s *JudgedShortSuite) TestALoadFailureWithNoRecordPassesOtherCommandsWithTheNote() {
+	ctx, _ := spawnFixture(s.T())
+	v := Judge(ctx, unloadedDeps(), Request{Input: "ls -la", Host: "claude-code", Session: "s1"})
+	s.Equal(verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(v))
 }
 
 // A spawn is gated; a continuation of a child already running is not.

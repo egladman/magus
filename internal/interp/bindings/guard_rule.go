@@ -198,7 +198,8 @@ func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gat
 func callFunctionRule(ctx context.Context, sess *buzz.Session, rule vm.Value, member string, req vm.Value, facts hint.Gate) (verdict types.GuardVerdict, err error) {
 	name := `magus\guard.` + member
 	// Workspace code runs on every call the guard judges; an interpreter fault inside it
-	// must fail open like any other broken rule rather than take the hook process down.
+	// must reach the guard as an error, as a raise does, rather than take the hook process
+	// down. The guard denies the gated verbs while a rule raises.
 	defer func() {
 		if r := recover(); r != nil {
 			verdict, err = types.GuardVerdict{}, fmt.Errorf(`%s: the rule faulted the interpreter: %v`, name, r)
