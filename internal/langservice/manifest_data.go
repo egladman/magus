@@ -27,6 +27,13 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "buzz",
+		Doc:  "Buzz source read as data, through the parser magus runs.",
+		Methods: []Method{
+			{Name: "parse", Doc: "Parse the Buzz file at path into {path, error, functions, statements, tests}. It never raises: a file that cannot be read or parsed comes back with error set and empty lists. Functions holds every fun, method and function literal with its extent, its !> error type and the lines of the throw statements it owns; statements holds the top-level statements; tests holds the test blocks. Lines are 1-based. embedded parses the way a magusfile's imports load.", Sig: "buzz\\parse(path, [embedded]) -> BuzzFile"},
+		},
+	},
+	{
 		Name: "charm",
 		Doc:  "Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).",
 		Methods: []Method{

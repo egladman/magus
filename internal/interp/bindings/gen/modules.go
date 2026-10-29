@@ -15,6 +15,7 @@ import "github.com/egladman/magus/internal/interp/bindings/ffi"
 var Modules = ffi.Set{
 	"archive":  {Register: RegisterArchive},
 	"base64":   {Register: RegisterBase64, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/base64"},
+	"buzz":     {Register: RegisterBuzz},
 	"charm":    {Register: RegisterCharm, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"crypto":   {Register: RegisterCrypto, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"csv":      {Register: RegisterCsv, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/csv"},

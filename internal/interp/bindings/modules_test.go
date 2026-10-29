@@ -1099,6 +1099,32 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	}
 }
 
+// TestBuzzParseReadsAsTypedRecord calls buzz\parse from Buzz. The record's
+// fields type-check through its mirror, and a parse failure reads as a value.
+func TestBuzzParseReadsAsTypedRecord(t *testing.T) {
+	dir := t.TempDir()
+	sample := filepath.Join(dir, "sample.buzz")
+	require.NoError(t, os.WriteFile(sample, []byte("fun f() > void !> str {\n    throw \"x\";\n}\n"), 0o600))
+	broken := filepath.Join(dir, "broken.buzz")
+	require.NoError(t, os.WriteFile(broken, []byte("fun ( {\n"), 0o600))
+	writeMagusfile(t, dir, fmt.Sprintf(`
+import "magus";
+import "fs";
+import "buzz";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final file: buzz\BuzzFile = buzz\parse(%q);
+    final fn = file.functions[0];
+    final bad = buzz\parse(%q);
+    final failed = if (bad.error != "") "error" else "none";
+    fs\writeFile("out", content: "{fn.name} {fn.line}-{fn.endLine} {fn.errorType} {fn.throws[0]} {failed}");
+}
+`, sample, broken))
+	require.NoError(t, runTargetIn(t, dir, "build"))
+	got, err := os.ReadFile(filepath.Join(dir, "out"))
+	require.NoError(t, err)
+	assert.Equal(t, "f 1-3 str 2 error", string(got))
+}
+
 func TestRunAndParse(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")

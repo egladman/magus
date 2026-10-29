@@ -50,6 +50,65 @@ func ObjectArchiveEntry(v types.ArchiveEntry) vm.Value {
 	return out
 }
 
+func ObjectBuzzFunction(v types.BuzzFunction) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("objectName", vm.StringValue(v.ObjectName))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	out.MapSet("errorType", vm.StringValue(v.ErrorType))
+	itemsThrows := make([]vm.Value, len(v.Throws))
+	for indexThrows := range v.Throws {
+		itemsThrows[indexThrows] = vm.IntValue(int64(v.Throws[indexThrows]))
+	}
+	out.MapSet("throws", vm.ListValue(itemsThrows))
+	return out
+}
+
+func ObjectBuzzStatement(v types.BuzzStatement) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", vm.StringValue(v.Kind))
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	return out
+}
+
+func ObjectBuzzTest(v types.BuzzTest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	itemsThrows := make([]vm.Value, len(v.Throws))
+	for indexThrows := range v.Throws {
+		itemsThrows[indexThrows] = vm.IntValue(int64(v.Throws[indexThrows]))
+	}
+	out.MapSet("throws", vm.ListValue(itemsThrows))
+	return out
+}
+
+func ObjectBuzzFile(v types.BuzzFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("error", vm.StringValue(v.Error))
+	itemsFunctions := make([]vm.Value, len(v.Functions))
+	for indexFunctions := range v.Functions {
+		itemsFunctions[indexFunctions] = ObjectBuzzFunction(v.Functions[indexFunctions])
+	}
+	out.MapSet("functions", vm.ListValue(itemsFunctions))
+	itemsStatements := make([]vm.Value, len(v.Statements))
+	for indexStatements := range v.Statements {
+		itemsStatements[indexStatements] = ObjectBuzzStatement(v.Statements[indexStatements])
+	}
+	out.MapSet("statements", vm.ListValue(itemsStatements))
+	itemsTests := make([]vm.Value, len(v.Tests))
+	for indexTests := range v.Tests {
+		itemsTests[indexTests] = ObjectBuzzTest(v.Tests[indexTests])
+	}
+	out.MapSet("tests", vm.ListValue(itemsTests))
+	return out
+}
+
 func ObjectPatchOp(v spells.PatchOp, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("op", enums.Case("PatchOpKind", string(v.Op)))
