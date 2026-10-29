@@ -313,6 +313,7 @@ var modules = []Module{
 		Methods: []Method{
 			{Name: "to_html", Doc: "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md -> index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).", Sig: "markdown\\toHtml(source) -> string"},
 			{Name: "frontmatter", Doc: "Parse the leading YAML frontmatter block (a \"---\" fenced header at the top of the document) and return it as a JSON object string; decode with serialize.jsonDecode. Returns \"{}\" when no frontmatter is present.", Sig: "markdown\\frontmatter(source) -> string"},
+			{Name: "sections", Doc: "List the headings of a Markdown file as entries of {anchor, level, start_line, end_line, body_end_line, digest}. Anchors are the ids to_html renders, so a repeated heading carries goldmark's -1 suffix and a fenced # line is no heading. Lines are 1-based file lines (frontmatter counted); end_line closes the section with its sub-sections, body_end_line closes its own text, and digest hashes the lines start_line through end_line.", Sig: "markdown\\sections(source) -> [MarkdownSection]"},
 			{Name: "strip_frontmatter", Doc: "Return the Markdown body with any leading YAML frontmatter block removed (the source unchanged when none is present).", Sig: "markdown\\stripFrontmatter(source) -> string"},
 		},
 	},

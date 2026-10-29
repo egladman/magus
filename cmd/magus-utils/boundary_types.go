@@ -153,6 +153,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "TrimReport", Type: reflect.TypeFor[types.TrimReport](), RuntimeObject: true},
 	{Name: "UncompressResult", Type: reflect.TypeFor[types.UncompressResult](), RuntimeObject: true},
 	{Name: "ArchiveEntry", Type: reflect.TypeFor[types.ArchiveEntry](), RuntimeObject: true},
+	{Name: "MarkdownSection", Type: reflect.TypeFor[types.MarkdownSection](), RuntimeObject: true},
 	{Name: "CompressResult", Type: reflect.TypeFor[types.CompressResult](), RuntimeObject: true},
 	{Name: "Response", Module: "http", Type: reflect.TypeFor[types.HTTPResponse](), RuntimeObject: true},
 	{Name: "TermSize", Type: reflect.TypeFor[types.TermSize](), RuntimeObject: true},

@@ -41,7 +41,20 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 24
+const KnowledgeSchemaVersion = 25
+
+// MarkdownSection mirrors one element of markdown.sections' result. It
+// holds a heading's anchor and level, its 1-based file lines counting the
+// frontmatter, and a digest of its extent. EndLine closes the section with
+// its sub-sections; BodyEndLine closes its own text.
+type MarkdownSection struct {
+	Anchor      string
+	Level       int
+	StartLine   int `buzz:"start_line"`
+	EndLine     int `buzz:"end_line"`
+	BodyEndLine int `buzz:"body_end_line"`
+	Digest      string
+}
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index

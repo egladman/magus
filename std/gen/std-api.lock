@@ -113,6 +113,7 @@ log.info
 log.trace
 log.warn
 markdown.frontmatter
+markdown.sections
 markdown.stripFrontmatter
 markdown.toHtml
 math.clamp

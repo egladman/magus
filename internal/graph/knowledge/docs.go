@@ -3,6 +3,8 @@ package knowledge
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path"
@@ -202,14 +204,22 @@ func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGr
 			id    string
 		}
 		stack := []frame{{level: 0, id: dID}}
-		for _, h := range headings {
+		extents := sectionExtents([]byte(body), headings, bodyLine)
+		for i, h := range headings {
 			sID := docSectionID(rel, h.anchor)
+			attrs := map[string]string{attrAnchor: h.anchor, attrLevel: strconv.Itoa(h.level)}
+			if x := extents[i]; x.StartLine > 0 {
+				attrs[attrStartLine] = strconv.Itoa(x.StartLine)
+				attrs[attrEndLine] = strconv.Itoa(x.EndLine)
+				attrs[attrBodyEndLine] = strconv.Itoa(x.BodyEndLine)
+				attrs[attrDigest] = x.Digest
+			}
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{
 				ID:     sID,
 				Kind:   types.KindDocSection,
 				Label:  h.text,
 				Source: fmt.Sprintf("%s#%s", rel, h.anchor),
-				Attrs:  map[string]string{attrAnchor: h.anchor, attrLevel: strconv.Itoa(h.level)},
+				Attrs:  attrs,
 			})
 			for len(stack) > 0 && stack[len(stack)-1].level >= h.level {
 				stack = stack[:len(stack)-1]
@@ -285,6 +295,72 @@ type docHeading struct {
 func docHeadings(body []byte) []docHeading {
 	h, _ := parseDocBody(body)
 	return h
+}
+
+// The docsection attrs beyond anchor and level: 1-based file lines and a
+// digest. Lines count the frontmatter so they match what a reader sees.
+const (
+	attrStartLine   = "start_line"
+	attrEndLine     = "end_line"
+	attrBodyEndLine = "body_end_line"
+	attrDigest      = "digest"
+)
+
+// DocSections returns the sections of a markdown file. Anchors come from
+// the graph's goldmark pass. A fenced "#" is no heading, and a repeated
+// heading gets goldmark's suffix.
+func DocSections(source string) []types.MarkdownSection {
+	body := docs.StripFrontmatter(source)
+	heads, _ := parseDocBody([]byte(body))
+	offset := strings.Count(source[:len(source)-len(body)], "\n")
+	out := []types.MarkdownSection{}
+	for _, s := range sectionExtents([]byte(body), heads, offset) {
+		if s.StartLine > 0 {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// sectionExtents returns one section per heading. A heading with no text
+// has no lines, so its StartLine stays 0.
+func sectionExtents(body []byte, heads []docHeading, lineOffset int) []types.MarkdownSection {
+	newlines := newlineOffsets(body)
+	// trimmed is the end of the last non-blank byte before limit.
+	// Trailing blank lines belong to no section.
+	trimmed := func(limit int) int { return len(bytes.TrimRight(body[:limit], " \t\r\n")) }
+	lineOf := func(end int) int {
+		n, _ := slices.BinarySearch(newlines, end-1)
+		return n + 1 + lineOffset
+	}
+	out := make([]types.MarkdownSection, len(heads))
+	for i, h := range heads {
+		out[i] = types.MarkdownSection{Anchor: h.anchor, Level: h.level}
+		if h.start < 0 {
+			continue
+		}
+		bodyLimit, endLimit := len(body), len(body)
+		seenNext := false
+		for _, n := range heads[i+1:] {
+			if n.start < 0 {
+				continue
+			}
+			if !seenNext {
+				bodyLimit, seenNext = n.start, true
+			}
+			if n.level <= h.level {
+				endLimit = n.start
+				break
+			}
+		}
+		end := trimmed(endLimit)
+		sum := sha256.Sum256(body[h.start:end])
+		out[i].StartLine = lineOf(h.start + 1)
+		out[i].BodyEndLine = lineOf(trimmed(bodyLimit))
+		out[i].EndLine = lineOf(end)
+		out[i].Digest = hex.EncodeToString(sum[:])
+	}
+	return out
 }
 
 // headingSpan returns where h's lines start and where the text after them starts, or -1, -1

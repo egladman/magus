@@ -563,6 +563,7 @@ github.com/egladman/magus/std.MagusWaitJob func(ctx context.Context, id string, 
 github.com/egladman/magus/std.MagusWhere func(ctx context.Context, dir string) (string, error)
 github.com/egladman/magus/std.Markdown var Module
 github.com/egladman/magus/std.MarkdownFrontmatter func(_ context.Context, source string) (string, error)
+github.com/egladman/magus/std.MarkdownSections func(_ context.Context, source string) ([]github.com/egladman/magus/types.MarkdownSection, error)
 github.com/egladman/magus/std.MarkdownStripFrontmatter func(_ context.Context, source string) (string, error)
 github.com/egladman/magus/std.MarkdownToHTML func(_ context.Context, source string) (string, error)
 github.com/egladman/magus/std.Math var Module
@@ -3405,7 +3406,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 24
+github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 25
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.Changed field []string "json:\"changed,omitempty\"       yaml:\"changed,omitempty\""
 github.com/egladman/magus/types.KnowledgeStaleIndex.ChangedCount field int "json:\"changed_count,omitzero\"  yaml:\"changed_count,omitempty\""
@@ -3704,6 +3705,13 @@ github.com/egladman/magus/types.ManagedEntries type struct
 github.com/egladman/magus/types.ManagedEntries.Entries field []map[string]any "json:\"entries\""
 github.com/egladman/magus/types.ManagedEntries.Path field []string "json:\"path\""
 github.com/egladman/magus/types.ManifestScriptDelegation const DiagnosticCode = "MGS1049"
+github.com/egladman/magus/types.MarkdownSection type struct
+github.com/egladman/magus/types.MarkdownSection.Anchor field string
+github.com/egladman/magus/types.MarkdownSection.BodyEndLine field int "buzz:\"body_end_line\""
+github.com/egladman/magus/types.MarkdownSection.Digest field string
+github.com/egladman/magus/types.MarkdownSection.EndLine field int "buzz:\"end_line\""
+github.com/egladman/magus/types.MarkdownSection.Level field int
+github.com/egladman/magus/types.MarkdownSection.StartLine field int "buzz:\"start_line\""
 github.com/egladman/magus/types.MarkerBlock const MarkerVerb = "block"
 github.com/egladman/magus/types.MarkerCalls const MarkerFamily = "calls"
 github.com/egladman/magus/types.MarkerDiagram const MarkerFamily = "diagram"

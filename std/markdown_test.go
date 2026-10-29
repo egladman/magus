@@ -26,6 +26,21 @@ func TestMarkdownToHTMLHeadingID(t *testing.T) {
 	assert.Contains(t, html, `id="charm-vs-target"`, "auto heading id missing:\n%s", html)
 }
 
+func TestMarkdownSectionsMatchRenderedIDs(t *testing.T) {
+	src := "# Setup\n\n```sh\n# not a heading\n```\n\n## Setup\nbody\n"
+	got, err := MarkdownSections(context.Background(), src)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	html := renderMD(t, src)
+	for i, want := range []string{"setup", "setup-1"} {
+		assert.Equal(t, want, got[i].Anchor)
+		assert.Contains(t, html, `id="`+want+`"`)
+	}
+	assert.Equal(t, 1, got[0].StartLine)
+	assert.Equal(t, 8, got[0].EndLine)
+	assert.Equal(t, 5, got[0].BodyEndLine)
+}
+
 func TestMarkdownToHTMLLinkRewrite(t *testing.T) {
 	html := renderMD(t, "[t](targets.md) [r](magusfile/README.md#x) [e](https://example.com/a.md)")
 	assert.Contains(t, html, `href="targets.html"`, "relative .md not rewritten:\n%s", html)

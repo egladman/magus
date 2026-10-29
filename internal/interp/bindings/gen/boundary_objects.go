@@ -1835,6 +1835,17 @@ func ObjectDriftResult(v types.DriftResult) vm.Value {
 	return out
 }
 
+func ObjectMarkdownSection(v types.MarkdownSection) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("anchor", vm.StringValue(v.Anchor))
+	out.MapSet("level", vm.IntValue(int64(v.Level)))
+	out.MapSet("start_line", vm.IntValue(int64(v.StartLine)))
+	out.MapSet("end_line", vm.IntValue(int64(v.EndLine)))
+	out.MapSet("body_end_line", vm.IntValue(int64(v.BodyEndLine)))
+	out.MapSet("digest", vm.StringValue(v.Digest))
+	return out
+}
+
 func ObjectPipeRecord(v types.PipeRecord) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("schema", vm.IntValue(int64(v.Schema)))
