@@ -5,14 +5,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // RootSuite pins the one-workspace rule: a magusfile marks a PROJECT, only magus.yaml
@@ -109,8 +108,12 @@ func (s *RootSuite) TestRootingAtTheCheckoutWarnsAndNamesInit() {
 }
 
 func (s *RootSuite) TestNoMagusFileAndNoCheckoutIsNoWorkspaceRoot() {
-	for d := filepath.Dir(s.w.Root()); d != filepath.Dir(d); d = filepath.Dir(d) {
-		if dirHasMarker(d, slices.Concat([]string{workspaceMarker}, projectMarkers, vcs.Markers())) {
+	above := filepath.Dir(s.w.Root())
+	if d, ok := project.CheckoutRoot(above); ok {
+		s.T().Skipf("%s, above the temp dir, roots a checkout, so the walk cannot run out", d)
+	}
+	for d := above; d != filepath.Dir(d); d = filepath.Dir(d) {
+		if dirHasMarker(d, append([]string{workspaceMarker}, projectMarkers...)) {
 			s.T().Skipf("%s, above the temp dir, carries a marker, so the walk cannot run out", d)
 		}
 	}

@@ -11,8 +11,8 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // workspaceMarker is the ONE file that declares a workspace root.
@@ -82,7 +82,8 @@ func FindRoot(dir string) (string, error) {
 		return "", err
 	}
 
-	var contiguous, checkout string
+	start := cur
+	var contiguous string
 	runBroken := false
 	for {
 		// Nearest wins: return the moment a declaration is found.
@@ -96,9 +97,6 @@ func FindRoot(dir string) (string, error) {
 				runBroken = true
 			}
 		}
-		if checkout == "" && dirHasMarker(cur, vcs.Markers()) {
-			checkout = cur
-		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
 			break
@@ -109,7 +107,7 @@ func FindRoot(dir string) (string, error) {
 	if contiguous != "" {
 		return contiguous, nil
 	}
-	if checkout != "" {
+	if checkout, ok := project.CheckoutRoot(start); ok {
 		if _, warned := vcsRootWarned.LoadOrStore(checkout, true); !warned {
 			slog.With(attr.Component("magus")).WarnContext(context.Background(),
 				"no magus.yaml or magusfile found, so the workspace root is the VCS checkout; run the fix to write them",
