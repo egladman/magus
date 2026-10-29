@@ -74,7 +74,8 @@ var inboundTypes = []inboundType{
 	{Name: "QueueReviews", Zero: queuetypes.Reviews{}, Encode: func(v any) vm.Value { return ObjectQueueReviews(v.(queuetypes.Reviews)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeQueueReviews(v) }},
 	{Name: "HarnessConfig", Zero: types.HarnessConfig{}, Encode: func(v any) vm.Value { return ObjectHarnessConfig(v.(types.HarnessConfig)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessConfig(v) }},
 	{Name: "HarnessSkills", Zero: types.HarnessSkills{}, Encode: func(v any) vm.Value { return ObjectHarnessSkills(v.(types.HarnessSkills), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessSkills(v) }},
-	{Name: "HookCommand", Zero: types.HookCommand{}, Encode: func(v any) vm.Value { return ObjectHookCommand(v.(types.HookCommand)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHookCommand(v) }},
+	{Name: "HookCommand", Zero: types.HookCommand{}, Encode: func(v any) vm.Value { return ObjectHookCommand(v.(types.HookCommand), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHookCommand(v) }},
+	{Name: "HookBinding", Zero: types.HookBinding{}, Encode: func(v any) vm.Value { return ObjectHookBinding(v.(types.HookBinding), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHookBinding(v) }},
 	{Name: "ManagedEntries", Zero: types.ManagedEntries{}, Encode: func(v any) vm.Value { return ObjectManagedEntries(v.(types.ManagedEntries)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeManagedEntries(v) }},
 	{Name: "McpServer", Zero: types.McpServer{}, Encode: func(v any) vm.Value { return ObjectMcpServer(v.(types.McpServer), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMcpServer(v) }},
 	{Name: "Price", Zero: types.Price{}, Encode: func(v any) vm.Value { return ObjectPrice(v.(types.Price)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodePrice(v) }},
@@ -125,11 +126,13 @@ var inboundTypes = []inboundType{
 
 var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.ImageArchitecture]():  {"", "amd64", "arm64"},
+	reflect.TypeFor[types.BindingStatus]():      {"", "bound", "unsupported"},
 	reflect.TypeFor[spells.DiagnosticFormat]():  {"", "gnu"},
 	reflect.TypeFor[types.DiagnosticOrigin]():   {"", "builtin", "workspace"},
 	reflect.TypeFor[spells.DiscoveryRole]():     {"", "project", "member"},
 	reflect.TypeFor[types.EdgeDirection]():      {"", "out", "in"},
 	reflect.TypeFor[spells.External]():          {"", "reads-external", "mutates-external"},
+	reflect.TypeFor[types.HookPoint]():          {"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"},
 	reflect.TypeFor[types.McpTransport]():       {"", "stdio", "http"},
 	reflect.TypeFor[types.ImageModePolicy]():    {"", "fixed", "executable-bit"},
 	reflect.TypeFor[types.ImageOS]():            {"", "linux"},

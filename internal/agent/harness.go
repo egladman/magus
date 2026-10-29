@@ -77,8 +77,10 @@ type HarnessDescriptor struct {
 	Skills         types.HarnessSkills    `json:"skills"`
 	ManagedEntries []types.ManagedEntries `json:"managed_entries,omitempty"`
 	// Hooks are what the managed entries run, as data. Verify checks each appears in them.
-	Hooks    []types.HookCommand `json:"hooks,omitempty"`
-	MCP      *types.McpServer    `json:"mcp,omitempty"`
+	Hooks []types.HookCommand `json:"hooks,omitempty"`
+	// UnsupportedHooks are the points no hook binds, each with its reason.
+	UnsupportedHooks []types.HookBinding `json:"unsupported_hooks,omitempty"`
+	MCP              *types.McpServer    `json:"mcp,omitempty"`
 	Prompts  []types.Prompt      `json:"prompts,omitempty"`
 	Agents   []types.AgentFile   `json:"agents,omitempty"`
 	Settings []types.Setting     `json:"settings,omitempty"`
@@ -309,6 +311,9 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 		if h.Event == "" || h.Script == "" {
 			return fmt.Errorf("hooks[%d]: a hook names its event and its script", i)
 		}
+	}
+	if err := validateHookBindings(d); err != nil {
+		return err
 	}
 	if err := validateHarnessMCP(d.MCP); err != nil {
 		return err

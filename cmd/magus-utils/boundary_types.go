@@ -378,6 +378,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "HarnessConfig", Type: reflect.TypeFor[types.HarnessConfig]()},
 	{Name: "HarnessSkills", Type: reflect.TypeFor[types.HarnessSkills]()},
 	{Name: "HookCommand", Type: reflect.TypeFor[types.HookCommand]()},
+	{Name: "HookBinding", Type: reflect.TypeFor[types.HookBinding]()},
 	{Name: "ManagedEntries", Type: reflect.TypeFor[types.ManagedEntries]()},
 	{Name: "McpServer", Type: reflect.TypeFor[types.McpServer]()},
 	{Name: "Price", Type: reflect.TypeFor[types.Price]()},
@@ -660,6 +661,18 @@ var boundaryEnums = []boundaryEnum{
 		Type: reflect.TypeFor[types.ToolCapability](),
 		Cases: []enumCase{{"none", ""}, {"runs", "runs"}, {"reads", "reads"}, {"writes", "writes"}, {"spawns", "spawns"},
 			{"network", "network"}, {"inert", "inert"}},
+	},
+	{
+		Name: "HookPoint",
+		Type: reflect.TypeFor[types.HookPoint](),
+		Cases: []enumCase{{"none", ""}, {"shell", "shell"}, {"edit", "edit"}, {"stop", "stop"},
+			{"subagentStop", "subagent-stop"}, {"spawn", "spawn"}, {"sessionStart", "session-start"},
+			{"compact", "compact"}, {"mcp", "mcp"}, {"attach", "attach"}},
+	},
+	{
+		Name:  "BindingStatus",
+		Type:  reflect.TypeFor[types.BindingStatus](),
+		Cases: []enumCase{{"none", ""}, {"bound", "bound"}, {"unsupported", "unsupported"}},
 	},
 	{
 		Name:  "McpTransport",

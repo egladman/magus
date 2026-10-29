@@ -73,6 +73,9 @@ type harnessContract struct {
 	// The hooks the entries run, as data. magus checks each one appears in the entries,
 	// so a hook declared here and missing from the rendered JSON is drift.
 	Hooks []types.HookCommand `mgs:"mgs_listHooks"`
+	// The hook points no listed hook binds, each with why the host cannot. The
+	// bound points come from Hooks.
+	UnsupportedHooks []types.HookBinding `mgs:"mgs_listUnsupportedHooks"`
 	// The MCP setup guidance describe prints. magus never writes host MCP client config.
 	MCP types.McpServer `mgs:"mgs_getMcp"`
 	// The host's own tools and what each can do. A tool no row names is one the guard

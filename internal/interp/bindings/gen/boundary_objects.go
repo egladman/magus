@@ -5359,7 +5359,7 @@ func ObjectHarnessSkills(v types.HarnessSkills, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectHookCommand(v types.HookCommand) vm.Value {
+func ObjectHookCommand(v types.HookCommand, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("event", vm.StringValue(v.Event))
 	out.MapSet("matcher", vm.StringValue(v.Matcher))
@@ -5370,6 +5370,21 @@ func ObjectHookCommand(v types.HookCommand) vm.Value {
 	}
 	out.MapSet("flags", vm.ListValue(itemsFlags))
 	out.MapSet("timeoutS", vm.IntValue(int64(v.TimeoutS)))
+	itemsPoints := make([]vm.Value, len(v.Points))
+	for indexPoints := range v.Points {
+		itemsPoints[indexPoints] = enums.Case("HookPoint", string(v.Points[indexPoints]))
+	}
+	out.MapSet("points", vm.ListValue(itemsPoints))
+	return out
+}
+
+func ObjectHookBinding(v types.HookBinding, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("harness", vm.StringValue(v.Harness))
+	out.MapSet("point", enums.Case("HookPoint", string(v.Point)))
+	out.MapSet("status", enums.Case("BindingStatus", string(v.Status)))
+	out.MapSet("adapter", vm.StringValue(v.Adapter))
+	out.MapSet("reason", vm.StringValue(v.Reason))
 	return out
 }
 

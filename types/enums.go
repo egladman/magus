@@ -176,7 +176,22 @@ func (v ToolCapability) String() string   { return enum.String(v) }
 // ToolCapabilities is every capability, each the name of one file in a tool rows directory.
 func ToolCapabilities() []ToolCapability { return slices.Clone(toolCapabilities) }
 
-var mcpTransports = enum.Set[McpTransport]{McpStdio, McpHTTP}
+var hookPoints = enum.Set[HookPoint]{
+	HookPointShell, HookPointEdit, HookPointStop, HookPointSubagentStop, HookPointSpawn,
+	HookPointSessionStart, HookPointCompact, HookPointMCP, HookPointAttach,
+}
+
+func (v HookPoint) Values() []string { return hookPoints.Strings() }
+func (v HookPoint) Valid() bool      { return hookPoints.Valid(v) }
+func (v HookPoint) String() string   { return enum.String(v) }
+
+var bindingStatuses = enum.Set[BindingStatus]{Bound, Unsupported}
+
+func (v BindingStatus) Values() []string { return bindingStatuses.Strings() }
+func (v BindingStatus) Valid() bool      { return bindingStatuses.Valid(v) }
+func (v BindingStatus) String() string   { return enum.String(v) }
+
+var mcpTransports =enum.Set[McpTransport]{McpStdio, McpHTTP}
 
 func (v McpTransport) Values() []string { return mcpTransports.Strings() }
 func (v McpTransport) Valid() bool      { return mcpTransports.Valid(v) }

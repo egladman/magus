@@ -5,10 +5,24 @@
 // see internal/spell/target.go and host_types.go). Edit the Go struct and rerun
 // `go generate`, never this file.
 
+export enum<str> HookPoint {
+    none = "",
+    shell = "shell",
+    edit = "edit",
+    stop = "stop",
+    subagentStop = "subagent-stop",
+    spawn = "spawn",
+    sessionStart = "session-start",
+    compact = "compact",
+    mcp = "mcp",
+    attach = "attach",
+}
+
 export object HookCommand {
     event: str = "",
     matcher: str = "",
     script: str = "",
     flags: [str] = [],
     timeoutS: int = 0,
+    points: [HookPoint] = [],
 }

@@ -89,12 +89,15 @@ type HarnessSkills struct {
 // argv the script takes after `--`, and how long the host waits on it. A spell renders
 // each into its host's JSON through magus/harness, and magus checks every one appears in
 // the managed entries. An empty Matcher is an event that takes none.
+//
+// Points are the hook points this hook binds; a recorder binds none.
 type HookCommand struct {
-	Event    string   `json:"event"`
-	Matcher  string   `json:"matcher,omitempty"`
-	Script   string   `json:"script"`
-	Flags    []string `json:"flags,omitempty"`
-	TimeoutS int      `json:"timeout_s,omitempty"`
+	Event    string      `json:"event"`
+	Matcher  string      `json:"matcher,omitempty"`
+	Script   string      `json:"script"`
+	Flags    []string    `json:"flags,omitempty"`
+	TimeoutS int         `json:"timeout_s,omitempty"`
+	Points   []HookPoint `json:"points,omitempty"`
 }
 
 // ManagedEntries declares exact host-config fragments to merge under the object keys Path

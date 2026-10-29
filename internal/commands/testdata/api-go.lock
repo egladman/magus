@@ -908,6 +908,10 @@ github.com/egladman/magus/types.BeforeKey func(p *Project, target string, lookup
 github.com/egladman/magus/types.BespokePhaseFragmentName const DiagnosticCode = "MGS1003"
 github.com/egladman/magus/types.Binding type struct
 github.com/egladman/magus/types.Binding.Name field string
+github.com/egladman/magus/types.BindingStatus type string
+github.com/egladman/magus/types.BindingStatus.String method func() string
+github.com/egladman/magus/types.BindingStatus.Valid method func() bool
+github.com/egladman/magus/types.BindingStatus.Values method func() []string
 github.com/egladman/magus/types.BisectOptions type struct
 github.com/egladman/magus/types.BisectOptions.Bad field string
 github.com/egladman/magus/types.BisectOptions.Good field string
@@ -917,6 +921,7 @@ github.com/egladman/magus/types.Bisector type interface
 github.com/egladman/magus/types.Bisector.Bisect imethod func(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 github.com/egladman/magus/types.BodyDigest func(lines [][]byte, start int, end int) (digest string, ok bool)
 github.com/egladman/magus/types.BodyShape func(lines [][]byte, start int, end int, language string) (digest string, tokens int, ok bool)
+github.com/egladman/magus/types.Bound const BindingStatus = "bound"
 github.com/egladman/magus/types.BranchChange type struct
 github.com/egladman/magus/types.BranchChange.Local field bool "json:\"local,omitempty\""
 github.com/egladman/magus/types.BranchChange.Paths field []string "json:\"paths\""
@@ -2431,13 +2436,34 @@ github.com/egladman/magus/types.HistoryQuery.Limit field int
 github.com/egladman/magus/types.HistoryQuery.Paths field []string
 github.com/egladman/magus/types.HolderServer const JobHolder = "server"
 github.com/egladman/magus/types.HolderSession const JobHolder = "session"
+github.com/egladman/magus/types.HookBinding type struct
+github.com/egladman/magus/types.HookBinding.Adapter field string "json:\"adapter,omitempty\""
+github.com/egladman/magus/types.HookBinding.Harness field string "json:\"harness,omitempty\""
+github.com/egladman/magus/types.HookBinding.Point field HookPoint "json:\"point\""
+github.com/egladman/magus/types.HookBinding.Reason field string "json:\"reason,omitempty\""
+github.com/egladman/magus/types.HookBinding.Status field BindingStatus "json:\"status\""
 github.com/egladman/magus/types.HookCommand type struct
 github.com/egladman/magus/types.HookCommand.Event field string "json:\"event\""
 github.com/egladman/magus/types.HookCommand.Flags field []string "json:\"flags,omitempty\""
 github.com/egladman/magus/types.HookCommand.Matcher field string "json:\"matcher,omitempty\""
+github.com/egladman/magus/types.HookCommand.Points field []HookPoint "json:\"points,omitempty\""
 github.com/egladman/magus/types.HookCommand.Script field string "json:\"script\""
 github.com/egladman/magus/types.HookCommand.TimeoutS field int "json:\"timeout_s,omitempty\""
 github.com/egladman/magus/types.HookHostUnnamed const DiagnosticCode = "MGS3024"
+github.com/egladman/magus/types.HookPoint type string
+github.com/egladman/magus/types.HookPoint.String method func() string
+github.com/egladman/magus/types.HookPoint.Valid method func() bool
+github.com/egladman/magus/types.HookPoint.Values method func() []string
+github.com/egladman/magus/types.HookPointAttach const HookPoint = "attach"
+github.com/egladman/magus/types.HookPointCompact const HookPoint = "compact"
+github.com/egladman/magus/types.HookPointEdit const HookPoint = "edit"
+github.com/egladman/magus/types.HookPointMCP const HookPoint = "mcp"
+github.com/egladman/magus/types.HookPointSessionStart const HookPoint = "session-start"
+github.com/egladman/magus/types.HookPointShell const HookPoint = "shell"
+github.com/egladman/magus/types.HookPointSpawn const HookPoint = "spawn"
+github.com/egladman/magus/types.HookPointStop const HookPoint = "stop"
+github.com/egladman/magus/types.HookPointSubagentStop const HookPoint = "subagent-stop"
+github.com/egladman/magus/types.HookPoints func() []HookPoint
 github.com/egladman/magus/types.HostNotAllowed const DiagnosticCode = "MGS9007"
 github.com/egladman/magus/types.HotspotDefinition const untyped string = "Hotspots are files (or projects) where edit frequency meets complexity - the prime refactoring targets: code both churned often and hard to understand."
 github.com/egladman/magus/types.HotspotOutput type struct
@@ -5437,6 +5463,7 @@ github.com/egladman/magus/types.UnregisteredDepError.Error method(ptr) func() st
 github.com/egladman/magus/types.UnregisteredDepError.Is method(ptr) func(target error) bool
 github.com/egladman/magus/types.UnregisteredDepError.Missing field []UnregisteredDep
 github.com/egladman/magus/types.UnresolvableBuzzImport const DiagnosticCode = "MGS7001"
+github.com/egladman/magus/types.Unsupported const BindingStatus = "unsupported"
 github.com/egladman/magus/types.UpdateRef type struct
 github.com/egladman/magus/types.UpdateRef.Except field []string "json:\"except,omitempty\" yaml:\"except,omitempty\""
 github.com/egladman/magus/types.UpdateRef.Glob field string "json:\"glob\" yaml:\"glob\""

@@ -303,6 +303,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkGuardWiring() },
 	},
 	{
+		Name:           hookBindingsCheck,
+		Doc:            "whether every wired harness binds each hook point, or says why its host cannot",
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkHookBindings() },
+	},
+	{
 		Name:           "checkpoint-wiring",
 		Doc:            "whether a wired agent host records where the work stood when a session stopped",
 		Evidence:       types.EvidenceMeasured,

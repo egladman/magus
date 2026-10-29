@@ -272,6 +272,7 @@ var (
 //go:generate go run ../../cmd/magus-utils types -type HarnessConfig -out gen/types/harnessconfig.buzz
 //go:generate go run ../../cmd/magus-utils types -type HarnessSkills -out gen/types/harnessskills.buzz
 //go:generate go run ../../cmd/magus-utils types -type HookCommand -out gen/types/hookcommand.buzz
+//go:generate go run ../../cmd/magus-utils types -type HookBinding -out gen/types/hookbinding.buzz
 //go:generate go run ../../cmd/magus-utils types -type ManagedEntries -out gen/types/managedentries.buzz
 //go:generate go run ../../cmd/magus-utils types -type McpServer -out gen/types/mcpserver.buzz
 //go:generate go run ../../cmd/magus-utils types -type Price -out gen/types/price.buzz
@@ -291,6 +292,8 @@ var (
 	harnessSkillsSource string
 	//go:embed gen/types/hookcommand.buzz
 	hookCommandSource string
+	//go:embed gen/types/hookbinding.buzz
+	hookBindingSource string
 	//go:embed gen/types/managedentries.buzz
 	managedEntriesSource string
 	//go:embed gen/types/mcpserver.buzz
@@ -364,6 +367,6 @@ var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, Pa
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,
 	findReviewRequestSource, reviewDraftSource, publishReviewRequestSource, replyReviewRequestSource, reviewRefSource,
 	reviewTargetSource, reviewCommentSource, projectQuerySource,
-	harnessConfigSource, harnessSkillsSource, hookCommandSource, managedEntriesSource, mcpServerSource,
+	harnessConfigSource, harnessSkillsSource, hookCommandSource, hookBindingSource, managedEntriesSource, mcpServerSource,
 	priceSource, priceStepSource, modelRowSource, harnessToolSource, harnessToolsSource,
 	agentFileSource, promptSource, settingSource, limitsSource, shippedAgentSource}, "\n")

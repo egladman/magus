@@ -2272,6 +2272,58 @@ func (r *runner) checkGuardWiring() types.Check {
 	return checkGuardWiring(r.runContext(), r.ws.Root(), guardProbeBudget, wired...)
 }
 
+// checkHookBindings reads each wired harness's binding table, the one
+// agent.HookBindings builds, and fails on a point it neither binds nor
+// explains.
+func (r *runner) checkHookBindings() types.Check {
+	wired, err := workspace.WiredHarnesses(r.ws)
+	if err != nil {
+		return unknownWiring(hookBindingsCheck, err)
+	}
+	return checkHookBindings(r.runContext(), r.ws.Root(), wired...)
+}
+
+const hookBindingsCheck = "harness-hook-bindings"
+
+func checkHookBindings(ctx context.Context, root string, wiredNames ...string) types.Check {
+	ctx = agent.ContextWithWiredHarnesses(ctx, wiredNames)
+	ids, err := agent.KnownHarnesses(ctx, wiredNames...)
+	if err != nil {
+		return types.Check{Name: hookBindingsCheck, Status: types.CheckFail,
+			Message: "could not load harness descriptors", Details: []string{err.Error()}}
+	}
+	var problems, rows []string
+	for _, id := range ids {
+		d, _, err := agent.LoadHarness(ctx, root, id)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
+			continue
+		}
+		table, err := agent.HookBindings(d)
+		if err != nil {
+			problems = append(problems, strings.Split(err.Error(), "\n")...)
+		}
+		for _, b := range table {
+			if b.Status == types.Unsupported {
+				rows = append(rows, fmt.Sprintf("%s %s: unsupported, %s", id, b.Point, b.Reason))
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return types.Check{Name: hookBindingsCheck, Status: types.CheckFail,
+			Message: fmt.Sprintf("%d hook point(s) have no binding a harness can stand behind", len(problems)),
+			Details: problems}
+	}
+	if len(ids) == 0 {
+		return types.Check{Name: hookBindingsCheck, Status: types.CheckOK,
+			Message: "no harness is wired, so no hook point is owed a binding"}
+	}
+	return types.Check{Name: hookBindingsCheck, Status: types.CheckOK,
+		Message: fmt.Sprintf("%d harness(es) bind or explain every hook point; %d point(s) unsupported",
+			len(ids), len(rows)),
+		Details: rows}
+}
+
 // HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
 // hook, which is what a caller outside doctor needs to say whether a checkout's
 // rules are enforced by anything. It reads the same two markers the guard-wiring

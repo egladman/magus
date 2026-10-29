@@ -90,6 +90,7 @@ var inboundTypes = []string{
 	"HarnessConfig",
 	"HarnessSkills",
 	"HookCommand",
+	"HookBinding",
 	"ManagedEntries",
 	"McpServer",
 	"Price",

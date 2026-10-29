@@ -60,6 +60,9 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	if d.Hooks, _, err = callHarness[[]types.HookCommand](ctx, drv, "mgs_listHooks"); err != nil {
 		return fail(err)
 	}
+	if d.UnsupportedHooks, _, err = callHarness[[]types.HookBinding](ctx, drv, "mgs_listUnsupportedHooks"); err != nil {
+		return fail(err)
+	}
 	if d.MCP, err = callHarnessOptional[types.McpServer](ctx, drv, "mgs_getMcp"); err != nil {
 		return fail(err)
 	}

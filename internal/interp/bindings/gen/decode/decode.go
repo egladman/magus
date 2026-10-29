@@ -3392,8 +3392,75 @@ func decodeHookCommand(v vm.Value, path string) (types.HookCommand, error) {
 				return out, err
 			}
 			out.TimeoutS = int(nTimeoutS)
+		case "points":
+			listPoints, err := decodeList(item, path+".points", "[HookPoint]")
+			if err != nil {
+				return out, err
+			}
+			if len(listPoints) > 0 {
+				itemsPoints := make([]types.HookPoint, len(listPoints))
+				for indexPoints, itemPoints := range listPoints {
+					sPointsItem, err := decodeEnum(itemPoints, fmt.Sprintf("%s[%d]", path+".points", indexPoints), "HookPoint", enumHookPointValues)
+					if err != nil {
+						return out, err
+					}
+					itemsPoints[indexPoints] = types.HookPoint(sPointsItem)
+				}
+				out.Points = itemsPoints
+			}
 		default:
 			return out, unknownMember(path, "HookCommand", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHookBinding decodes a Buzz HookBinding, an object instance or a map, into a types.HookBinding.
+func DecodeHookBinding(v vm.Value) (types.HookBinding, error) {
+	return decodeHookBinding(v, "hookBinding")
+}
+
+func decodeHookBinding(v vm.Value, path string) (types.HookBinding, error) {
+	var out types.HookBinding
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HookBinding", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "harness":
+			sHarness, err := decodeString(item, path+".harness")
+			if err != nil {
+				return out, err
+			}
+			out.Harness = sHarness
+		case "point":
+			sPoint, err := decodeEnum(item, path+".point", "HookPoint", enumHookPointValues)
+			if err != nil {
+				return out, err
+			}
+			out.Point = types.HookPoint(sPoint)
+		case "status":
+			sStatus, err := decodeEnum(item, path+".status", "BindingStatus", enumBindingStatusValues)
+			if err != nil {
+				return out, err
+			}
+			out.Status = types.BindingStatus(sStatus)
+		case "adapter":
+			sAdapter, err := decodeString(item, path+".adapter")
+			if err != nil {
+				return out, err
+			}
+			out.Adapter = sAdapter
+		case "reason":
+			sReason, err := decodeString(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		default:
+			return out, unknownMember(path, "HookBinding", key)
 		}
 	}
 	return out, nil
@@ -6075,11 +6142,13 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 }
 
 var enumArchitectureValues = []string{"", "amd64", "arm64"}
+var enumBindingStatusValues = []string{"", "bound", "unsupported"}
 var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumDiagnosticOriginValues = []string{"", "builtin", "workspace"}
 var enumDiscoveryRoleValues = []string{"", "project", "member"}
 var enumEdgeDirectionValues = []string{"", "out", "in"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
+var enumHookPointValues = []string{"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}
 var enumModePolicyValues = []string{"", "fixed", "executable-bit"}
 var enumOSValues = []string{"", "linux"}

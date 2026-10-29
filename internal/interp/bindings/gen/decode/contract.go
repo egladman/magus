@@ -58,6 +58,7 @@ var HarnessFuncs = []ContractFunc{
 	{Name: "mgs_getSkills", Field: "Skills", Returns: "HarnessSkills", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSkills(v) }},
 	{Name: "mgs_listEntries", Field: "Entries", Returns: "[ManagedEntries]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncEntries(v) }},
 	{Name: "mgs_listHooks", Field: "Hooks", Returns: "[HookCommand]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncHooks(v) }},
+	{Name: "mgs_listUnsupportedHooks", Field: "UnsupportedHooks", Returns: "[HookBinding]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncUnsupportedHooks(v) }},
 	{Name: "mgs_getMcp", Field: "MCP", Returns: "McpServer", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncMCP(v) }},
 	{Name: "mgs_listTools", Field: "Tools", Returns: "HarnessTools", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncTools(v) }},
 	{Name: "mgs_getLimits", Field: "Limits", Returns: "Limits", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncLimits(v) }},
@@ -377,6 +378,26 @@ func decodeHarnessFuncHooks(v vm.Value) ([]types.HookCommand, error) {
 			itemsHooks[indexHooks] = xHooksItem
 		}
 		out = itemsHooks
+	}
+	return out, nil
+}
+
+func decodeHarnessFuncUnsupportedHooks(v vm.Value) ([]types.HookBinding, error) {
+	var out []types.HookBinding
+	listUnsupportedHooks, err := decodeList(v, "mgs_listUnsupportedHooks", "[HookBinding]")
+	if err != nil {
+		return out, err
+	}
+	if len(listUnsupportedHooks) > 0 {
+		itemsUnsupportedHooks := make([]types.HookBinding, len(listUnsupportedHooks))
+		for indexUnsupportedHooks, itemUnsupportedHooks := range listUnsupportedHooks {
+			xUnsupportedHooksItem, err := decodeHookBinding(itemUnsupportedHooks, fmt.Sprintf("%s[%d]", "mgs_listUnsupportedHooks", indexUnsupportedHooks))
+			if err != nil {
+				return out, err
+			}
+			itemsUnsupportedHooks[indexUnsupportedHooks] = xUnsupportedHooksItem
+		}
+		out = itemsUnsupportedHooks
 	}
 	return out, nil
 }
