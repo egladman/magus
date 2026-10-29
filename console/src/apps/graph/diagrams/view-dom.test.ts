@@ -12,7 +12,7 @@ import type { DiagramNode } from "./api";
 const FIXTURE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 280" width="480" height="280" role="img"' +
   ' aria-labelledby="t-title t-desc" class="magus-diagram"><title id="t-title">Fixture</title>' +
-  '<desc id="t-desc"></desc><rect width="100%" height="100%" fill="var(--magus-diagram-paper, #f5f5f5)"/>' +
+  '<desc id="t-desc"></desc><rect width="100%" height="100%" fill="#f5f5f5"/>' +
   '<g transform="translate(0,0)">' +
   '<path data-edge="a->b" d="M 192 140 L 288 140" fill="none" stroke="#4f5d75"/>' +
   '<path data-edge="d->b" d="M 368 76 L 368 112" fill="none" stroke="#4f5d75"/>' +

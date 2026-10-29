@@ -332,8 +332,9 @@ is a step rounder, same tiers.
 
 ### Diagram figures (`--magus-diagram-*`)
 
-magus/figure paints an inlined figure with `var(--magus-diagram-<role>, <light hex>)`. The block at
-the end of `tokens.css` maps all nine roles (paper, fill, ink, muted, soft, rule, accent,
+magus/figure writes only concrete values in SVG attributes, because `var()` is invalid there.
+Theming goes through a `<style>` block whose role classes read `var(--magus-diagram-<role>, <hex>)`.
+The block at the end of `tokens.css` maps all nine roles (paper, fill, ink, muted, soft, rule, accent,
 accent-tint, link) onto theme-aware slots, so a figure follows the console's light and dark themes
 with no per-theme copy. `apps/graph/diagrams/view-dom.test.ts` fails if a role goes missing.
 
