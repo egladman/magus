@@ -569,12 +569,8 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	got := r.checkSelfStalingOutputs(nil)
-	assert.Equal(t, types.CheckOK, got.Status)
-	assert.True(t,
-		strings.Contains(got.Message, "skipped") ||
-			strings.Contains(got.Message, "no VCS") ||
-			strings.Contains(got.Message, "no commit"),
-		"expected a skip, got %q", got.Message)
+	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a skip is counted unknown, never a pass")
+	assert.Contains(t, got.Message, "skipped")
 }
 
 type detectingWorkspace struct{ types.WorkspaceReader }
@@ -652,7 +648,8 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a check with nothing to enumerate did not run, so it is no pass")
+	assert.Contains(t, got.Message, "skipped")
 }
 
 // TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs is MGS1029: the expansion

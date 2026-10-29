@@ -1240,16 +1240,16 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Ch
 
 	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no VCS to enumerate committed files with"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no VCS to enumerate committed files with; skipped"}
 	}
 	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
 	// per candidate: the check has no candidate set until it has the file list.
 	files, err := res.VCS.TrackedFiles(r.runContext(), r.root, []string{"."})
 	if errors.Is(err, types.ErrVCSUnsupported) {
-		return types.Check{Name: name, Status: types.CheckOK, Message: res.Name + " cannot report tracked files"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: res.Name + " cannot report tracked files; skipped"}
 	}
 	if err != nil {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "could not list tracked files: " + err.Error()}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "could not list tracked files; skipped: " + err.Error()}
 	}
 
 	var globs []types.Glob
@@ -2559,14 +2559,17 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 
 	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no VCS resolved; nothing to check"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no VCS resolved; skipped"}
 	}
 	meta, err := res.VCS.Metadata(r.runContext(), r.root)
-	if err != nil || meta.ID == "" {
+	if err != nil {
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "could not read the current commit; skipped: " + err.Error()}
+	}
+	if meta.ID == "" {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no commit yet; nothing to check"}
 	}
 
-	var details []string
+	var details, unlisted []string
 	scanned := 0
 	for _, p := range projects {
 		rels := declaredOutputFiles(p)
@@ -2578,6 +2581,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 			return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
 		}
 		if err != nil {
+			unlisted = append(unlisted, fmt.Sprintf("%s: could not list tracked outputs: %v", types.ProjectDisplayName(p.Path, p.Name, p.Dir), err))
 			continue
 		}
 		for _, rel := range tracked {
@@ -2591,6 +2595,10 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 			details = append(details, fmt.Sprintf("%s: %s is committed and records this repository's own HEAD commit",
 				types.ProjectDisplayName(p.Path, p.Name, p.Dir), rel))
 		}
+	}
+	if len(details) == 0 && len(unlisted) > 0 {
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+			Message: fmt.Sprintf("%d project(s) could not list their tracked outputs; skipped", len(unlisted)), Details: unlisted}
 	}
 	if len(details) == 0 {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no committed output records the current commit"}
