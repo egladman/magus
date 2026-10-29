@@ -229,12 +229,17 @@ var (
 
 var goldenBuiltins = map[string]spells.Descriptor{
 	"bash": {
-		Name:       "bash",
-		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
-		IgnoreDirs: []string{"node_modules", "worktrees"},
+		Name:               "bash",
+		Needs:              []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
+		Language:           "shell",
+		LanguageExtensions: []string{".sh", ".bash"},
+		IgnoreDirs:         []string{"node_modules", "worktrees"},
 		Ops: map[string]spells.Op{
 			"shellcheck": {Command: spells.Command{Bin: "shellcheck", Sources: []string{"**/*.sh", "**/*.bash"}}},
+			// The in-process shell indexer runs no command, so its synthesized op carries none.
+			"shell-index": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}},
 		},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatShellScript, Op: "shell-index"},
 	},
 	"buf": {
 		Name:               "buf",
@@ -452,8 +457,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "python",
 		Needs: []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		Tools: map[string]spells.Tool{
-			"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"},
+			"python3":     {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"},
+			"scip-python": {Observe: spells.Command{Bin: "scip-python", Args: []string{"--version"}}},
 		},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipPython},
 		Language:           "python",
 		LanguageExtensions: []string{".py"},
 		Syntax: &spells.Syntax{
@@ -489,6 +496,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipPython)},
 		},
 		ScriptRunners: []spells.Command{
 			{Bin: "poe"},
@@ -501,8 +509,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "rust",
 		Needs: []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		Tools: map[string]spells.Tool{
-			"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
+			"rustc":         {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
+			"rust-analyzer": {Observe: spells.Command{Bin: "rust-analyzer", Args: []string{"--version"}}},
 		},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenRustAnalyzer},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
 		Syntax: &spells.Syntax{
@@ -532,6 +542,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
+			"scip":       {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenRustAnalyzer)},
 		},
 	},
 	"typescript": {
@@ -546,7 +557,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"tsc": {Probe: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--version"}},
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
+			"scip-typescript": {Observe: spells.Command{Bin: "scip-typescript", Args: []string{"--version"}}},
 		},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipTypescript},
 		Language:           "typescript",
 		LanguageExtensions: []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"},
 		Syntax: &spells.Syntax{
@@ -601,6 +614,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"dev-server": {Kind: "service", Command: goldenDevServerCommand, Service: &spells.Service{
 				Command: goldenDevServerCommand,
 			}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipTypescript)},
 		},
 		ScriptRunners: []spells.Command{
 			{Bin: "npm", Args: []string{"run"}}, {Bin: "npm", Args: []string{"run-script"}},
@@ -613,6 +627,19 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			{Bin: "bun", Args: []string{"run"}},
 		},
 	},
+}
+
+// The opt-in external SCIP indexers, each as its spell declares it and as the op magus
+// synthesizes from it.
+var (
+	goldenScipPython     = spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}
+	goldenRustAnalyzer   = spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}
+	goldenScipTypescript = spells.Command{Bin: "scip-typescript", Args: []string{"index", "--infer-tsconfig", "--output", "$MAGUS_SYMBOL_INDEX"}}
+)
+
+func quiet(c spells.Command) spells.Command {
+	c.Capture, c.Quiet = true, true
+	return c
 }
 
 // installOp is the op Decode synthesizes from a spell's manifest installs: the first

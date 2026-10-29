@@ -2,6 +2,16 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "bash"; }
 
+export fun mgs_getLanguage() > Language {
+    return Language{name = "shell", extensions = [".sh", ".bash"]};
+}
+
+// magus indexes the scripts in process, one unit per file, so the index runs no tool. It
+// rides under an op of its own so a project bound to another indexing spell keeps both.
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{format = SymbolFormat.shellScript, op = "shell-index"};
+}
+
 export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.sh"}, Path{value = "**/*.bash"}, Path{value = ".shellcheckrc"}];
 }

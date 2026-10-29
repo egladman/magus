@@ -213,12 +213,14 @@ func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
 			assert.Equalf(t, spells.OpKindSymbolIndex, d.Ops[ops[name]].Kind, "%s registers its indexer under the op it names", name)
 		}
 	}
-	assert.Equal(t, map[string]string{"buzz": "scip-buzz", "go": "scip"}, ops)
+	assert.Equal(t, map[string]string{
+		"bash": "shell-index", "buzz": "scip-buzz", "go": "scip", "python": "scip", "rust": "scip", "typescript": "scip",
+	}, ops)
 	assert.Equal(t, "scip.pack", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
 }
 
-// Every shipped indexer (the in-process Go indexer's `go list`, scip-buzz) reaches the
-// runner through the synthesized op, so each one is quiet on success.
+// Every shipped indexer (the in-process indexers, scip-buzz and the opt-in SCIP
+// commands) reaches the runner through the synthesized op, so each one is quiet on success.
 func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 	bins := map[string]string{}
 	for name, d := range Builtins() {
@@ -230,7 +232,9 @@ func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 		bins[name] = command.Bin
 		assert.Truef(t, command.Capture && command.Quiet, "%s: its indexer prints nothing on success", name)
 	}
-	assert.Equal(t, map[string]string{"buzz": "scip-buzz", "go": "go"}, bins)
+	assert.Equal(t, map[string]string{
+		"bash": "", "buzz": "scip-buzz", "go": "go", "python": "scip-python", "rust": "rust-analyzer", "typescript": "scip-typescript",
+	}, bins)
 }
 
 // The tools an indexer runs besides its binary decode onto the indexer, and each must be a
@@ -895,4 +899,31 @@ func (s *discoveredSuite) TestRefusesTwoClaimsOnOnePath() {
 	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim(), s.claim()})
 	s.Require().Error(err)
 	s.Contains(err.Error(), `claims "." twice`)
+}
+
+func (s *discoveredSuite) TestInProcessIndexerNeedsNoCommand() {
+	m, err := describe(Contract{Name: "bash", SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatShellScript, Op: "shell-index"}})
+	s.Require().NoError(err)
+	s.Equal(spells.Op{Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}}, m.Ops["shell-index"])
+}
+
+func (s *discoveredSuite) TestInProcessIndexerRefusesACommand() {
+	_, err := describe(Contract{Name: "buzz", SymbolIndexer: &spells.SymbolIndexer{
+		Format: spells.SymbolFormatBuzzModule, Command: spells.Command{Bin: "scip-buzz"},
+	}})
+	s.EqualError(err, `spell "buzz": symbol indexer: format buzz-module runs no command, drop command`)
+}
+
+func (s *discoveredSuite) TestInProcessIndexerRefusesUses() {
+	_, err := describe(Contract{Name: "bash", SymbolIndexer: &spells.SymbolIndexer{
+		Format: spells.SymbolFormatShellScript, Uses: []string{"bash"},
+	}})
+	s.EqualError(err, `spell "bash": symbol indexer: format shell-script runs no tool, drop uses`)
+}
+
+func (s *discoveredSuite) TestInProcessIndexerRefusesEnvs() {
+	_, err := describe(Contract{Name: "buzz", SymbolIndexer: &spells.SymbolIndexer{
+		Format: spells.SymbolFormatBuzzModule, Envs: []map[string]string{{"GOOS": "linux"}},
+	}})
+	s.EqualError(err, `spell "buzz": symbol indexer: format buzz-module reads one build of the files, drop envs`)
 }
