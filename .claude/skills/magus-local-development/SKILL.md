@@ -132,7 +132,7 @@ magus buzz hack/retro/denials.buzz -- [--trail <checkout>]... [--since <duration
 ```
 
 - It counts mechanical faults by kind: `empty-fix`, `fix-not-runnable`, `why-acts`,
-  `why-command`, `say-over-cap`, `why-over-cap` and `duplicate-say`. Fix the rule text for each.
+  `why-command`, `say-over-cap`, `why-over-cap` and `duplicate-say`. Fix the guard rule's text for each.
 - Judge each `worklist` denial here. `say` states the problem in one line. `why` explains it
   and never restates `say` or carries the next step. `fix` is a step you can run as written that
   clears the `say`.
