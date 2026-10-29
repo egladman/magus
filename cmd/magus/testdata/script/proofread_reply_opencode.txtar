@@ -30,19 +30,25 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name openc
 ! stdout .
 ! stderr .
 
-# A missing proofread, one that fails, and an envelope with no reply are all silent.
+# A missing proofread, and one that fails, judged nothing, so the hook says so once per
+# session, naming the binary. OpenCode has no channel for a notice beside the prompt, which
+# would start another turn, so the line goes to stderr and stdout stays empty. Each case
+# gets its own notice directory: an envelope with no session id shares one marker.
+env TMPDIR=$WORK/n-missing
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/idle.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
 ! stdout .
-! stderr .
+stderr 'proofread-reply judges no reply: .*nonexistent-proofread is not an executable file'
 
+env TMPDIR=$WORK/n-failing
 env __PROOFREAD_BIN=$WORK/failing-proofread
 stdin $WORK/idle.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
 ! stdout .
-! stderr .
+stderr 'failing-proofread exited 2: proofread: cannot judge'
 
+# An envelope with no reply has nothing to judge, so it is silent.
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/idle-empty.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode

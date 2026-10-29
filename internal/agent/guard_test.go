@@ -478,34 +478,18 @@ var failOpenArmRe = regexp.MustCompile(`stdout === null` +
 // last is a fail-open arm.
 var failOpenRetryRe = regexp.MustCompile(`runOnce\(|judge\(guard, extra: `)
 
-// failOpenNoticeRe matches an arm SAYING it did not judge the call: a console
-// warning, or the fallback a Buzz template hands envOr for one of the
-// __MAGUS_*_RESPONSE envelopes. That fallback is a CALL, because the
-// PermissionRequest hook has no context field to carry prose and takes the same
-// notice by another route.
-var failOpenNoticeRe = regexp.MustCompile(`console\.warn|unguarded\(\)|text: UNAVAILABLE_TEXT`)
+// failOpenNoticeRe matches an arm that refuses the call and tells the person
+// why, per decision 114a. A recorder's arm tells the person no record was
+// written.
+var failOpenNoticeRe = regexp.MustCompile(`unjudgedReply\(|refusal\(|denyBoth\(|unjudged\(|unrecordedNotice\(`)
 
 // failOpenComputedNoticeRe matches an arm that BUILDS its notice from what it observed
 // rather than printing a canned string. The evidence is the point: which binary went
 // silent, its version, what it printed.
 var failOpenComputedNoticeRe = regexp.MustCompile(`failureNotice\(guard\b`)
 
-// failOpenSilentByDesign records the verdict-carrying templates whose fail-open
-// arms deliberately announce NOTHING, and where that decision is written down.
-//
-// An exemption rather than a fix, because the decision is recorded with its
-// tradeoff named and pinned by an executed case: cmd/magus/testdata/script/
-// guard_templates.txtar asserts the path template's silence under a missing
-// magus, on the grounds that an empty response there already means
-// allow for most hosts and an announcement on every file edit was judged the
-// worse noise. Overturning that is a decision for whoever made it; leaving it
-// undeclared here is what this table refuses.
-var failOpenSilentByDesign = map[string]string{
-	"magus-path.buzz": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
-}
-
 // TestFailOpenArmsAnnounceThemselves is a design principle's enforcement point: a
-// template that cannot judge a call must SAY so.
+// template that cannot judge a call must refuse it and SAY so.
 //
 // Silence and a clean session are the same observation. Every other gate here
 // checks what a template does with a verdict it received; this one checks the
@@ -537,10 +521,6 @@ func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
 				continue
 			}
 			arms++
-			if why, exempt := failOpenSilentByDesign[name]; exempt {
-				t.Logf("%s: fail-open arm at line %d is silent by design (%s)", name, i+1, why)
-				continue
-			}
 			assertFailOpenNotice(t, name, block, i+1)
 		}
 		assert.NotZero(t, arms,
@@ -573,9 +553,8 @@ func assertFailOpenNotice(t *testing.T, name string, block []string, line int) {
 	}
 	assert.Fail(t, "fail-open arm says nothing",
 		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
-			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
-			"announces itself (see magus-command.buzz's UNAVAILABLE_TEXT). Add a notice,\n"+
-			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
+			"A guard that stopped enforcing looks exactly like a clean session, so every such arm\n"+
+			"refuses the call and tells the person (see magus-command.buzz's unjudgedReply).",
 		name, line)
 }
 

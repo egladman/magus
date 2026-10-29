@@ -871,20 +871,28 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claud
 ! stdout .
 ! stderr .
 
-# A missing proofread, one that fails, and an envelope with no reply are all silent and
-# exit 0: the hook fires on every turn, and none of them is worth a note.
+# A proofread that is missing, or that fails, judged nothing, and the person is told: one
+# systemMessage per session naming the binary and its fix. The reply is never blocked.
+env TMPDIR=$WORK/n-proofread-missing
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
-! stdout .
-! stderr .
+stdout '"systemMessage":"proofread-reply judges no reply: .*nonexistent-proofread is not an executable file'
+! stdout '"decision"'
 
-env __PROOFREAD_BIN=$WORK/failing-proofread
+# Once per session: the next turn of the same session is not told again.
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
-! stderr .
 
+env TMPDIR=$WORK/n-proofread-failing
+env __PROOFREAD_BIN=$WORK/failing-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
+stdout '"systemMessage":"proofread-reply judges no reply: .*failing-proofread exited 2: proofread: cannot judge'
+! stdout '"decision"'
+
+# An envelope with no reply has nothing to judge, so it is silent and exits 0.
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/stop-event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
@@ -919,60 +927,86 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name $HOST
 stderr 'no reply shape for host'
 env __PROOFREAD_BIN=
 
-# --- fail-open: a missing magus must degrade the way each template promises ---
+# --- fail-closed: a missing magus refuses what it cannot judge, and says so ---
+#
+# Decision 114a: a call no magus judged is refused unless it is a read, and the person is
+# told how to get a magus on every such call. A recorder enforces nothing, so it records
+# nothing and says so once per session. One notice directory per case keeps each case's
+# once-per-session marker its own.
 
 env __MAGUS_BIN=$WORK/nonexistent-magus
 
-# The observer stays silent and exits 0 when magus is absent. Unlike a guard, it
-# enforces nothing, so an announcement per read would report only that an optional
-# record was skipped.
+# A recorder says once per session that it wrote nothing. A host with no notice channel
+# this file can name gets it on stderr; stdout, the host's reply, stays empty.
+env TMPDIR=$WORK/n-observe
+stdin observe-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
+! stdout .
+stderr 'magus-observe.buzz recorded nothing: no runnable magus was found'
+
+# The notice is one per session across every recorder, not one per read.
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
-
-# A message is as silent: the guard's unavailable notice would reach the model as context
-# on every turn, and nothing about the message itself was ever going to be enforced.
-stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout .
-! stderr .
-
-# The two lifecycle wrappers degrade the same way and for the same reason: neither
-# enforces anything, so a notice would interrupt the end of every session, or open every
-# compacted one, to report that an optional record was not written.
 stdin $WORK/stop-event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
+# A message is recorded, never judged, so it is told the same way and nothing else.
+env TMPDIR=$WORK/n-message
+stdin $WORK/prompt-architecture.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+stderr 'magus-command.buzz recorded nothing'
+
+# On Claude Code the person reads it as a systemMessage.
+env TMPDIR=$WORK/n-checkpoint
+stdin $WORK/stop-event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz -- --agent-name claude-code
+stdout '^\{"systemMessage":"magus-checkpoint.buzz recorded nothing: no runnable magus was found'
+! stderr .
+
+# The rehydrate brief's json reply carries the notice. Plain stdout is the model's
+# context, so plain mode says it on stderr.
+env TMPDIR=$WORK/n-rehydrate-json
+stdin $WORK/session-start.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --format json
+stdout '"systemMessage":"magus-rehydrate.buzz recorded nothing'
+env TMPDIR=$WORK/n-rehydrate
 stdin $WORK/session-start.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz
 ! stdout .
-! stderr .
+stderr 'magus-rehydrate.buzz recorded nothing'
 
-# The command template announces itself. An unguarded session you know about beats
-# one you do not.
+# A call that may change state is refused, and the person reads why and how to get magus.
+env TMPDIR=$WORK/n-command
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
+stdout '"permissionDecision":"deny"'
+stdout '"systemMessage":"magus guard could not judge this call: no magus binary was found'
+stdout 'Install magus'
 
-# The path template stays silent by default: for most hosts an empty response means
-# allow. That is the deliberate trade - this template can now DENY, so failing open here
-# means an unavailable guard lets a notes write through, and announcing it on every file
-# edit was judged the worse noise. __MAGUS_FAILED_RESPONSE is the opt-in for a host that
-# would rather hear about it.
+# A read changes nothing, so it passes, and the person is still told.
+stdin observe-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout 'permissionDecision'
+stdout '"systemMessage":"magus guard could not judge this call'
+
+# Every call the path template sees is a write, so it is refused.
 stdin advise-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
-! stdout .
+stdout '"permissionDecision":"deny"'
+stdout 'could not judge this write: no magus binary was found'
 
-# Cursor allows explicitly, because Cursor fails open on a hook crash anyway and
-# pretending otherwise would give false assurance.
+# Cursor shows the person a message only with a refusal, so it refuses.
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-stdout '"permission":"allow"'
+stdout '"permission":"deny"'
+stdout '"user_message":"magus guard could not judge this call: no magus binary was found'
 
-# --- found, but cannot judge: the notice carries its own evidence -------------
+# --- found, but cannot judge: the refusal carries its own evidence ------------
 #
 # The case that actually occurs - a stale binary on PATH outlives a missing one - and
 # the one whose notice used to name two suspects while checking neither. One of them,
@@ -982,13 +1016,11 @@ stdout '"permission":"allow"'
 env __MAGUS_BIN=$WORK/stale-magus
 chmod 0755 $WORK/stale-magus
 
-# One notice directory per case below, because the notice is now held to one firing per
-# session and every fixture here carries the same session id. Sharing one directory would
-# make each case assert on whether the case above it had already spoken.
 env TMPDIR=$WORK/n-stale-command
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
+stdout '"permissionDecision":"deny"'
+stdout 'could not judge this call'
 stdout 'stale-magus'
 stdout 'v0.0.1-stale'
 stdout 'unknown subcommand'
@@ -997,14 +1029,14 @@ stdout 'unknown subcommand'
 # staleness. Reporting it as the error would hand back the least useful of the two lines.
 ! stdout 'WARN'
 
-# Cursor's template is self-contained, so it carries the same evidence or none at all.
+# Cursor's template is self-contained, so its refusal carries the same evidence.
 env TMPDIR=$WORK/n-stale-cursor
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-stdout '"permission":"allow"'
-stderr 'stale-magus'
-stderr 'v0.0.1-stale'
-stderr 'unknown subcommand'
+stdout '"permission":"deny"'
+stdout 'stale-magus'
+stdout 'v0.0.1-stale'
+stdout 'unknown subcommand'
 
 # A host that set its own response still gets exactly that: the evidence is the DEFAULT,
 # not something the template forces on a host that made another choice.
@@ -1016,46 +1048,33 @@ stdout 'host-chose-this'
 ! stdout 'stale-magus'
 env __MAGUS_FAILED_RESPONSE=
 
-# --- the notice is said once per session -------------------------------------
+# --- every unjudged call is refused and said, never once per session ---------
 #
-# These notices report a broken installation. That is a fact for the person and carries
-# nothing an agent can act on, so a repeat is noise: measured at 2,741 unavailable and 653
-# could-not-judge firings over recent sessions, 99% of them same-session repeats.
-
-# A second call in the SAME session says nothing at all, and the verdict still fails open.
-env TMPDIR=$WORK/n-once
+# A refusal is the one reply the caller cannot see past, so the second call in a session
+# carries its reason exactly as the first did.
+env TMPDIR=$WORK/n-every
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
+stdout 'could not judge this call'
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout .
+stdout 'could not judge this call'
 
-# A DIFFERENT session is owed the fact once, or the first session of the day would
-# silence every session after it.
-stdin deny-command-s2.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
-
-# The families are independent: a spent could-not-judge marker must not silence the
-# missing-binary notice, which reports a different broken installation.
 env __MAGUS_BIN=$WORK/does-not-exist
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus is not on PATH'
+stdout 'no magus binary was found'
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout .
+stdout 'no magus binary was found'
 env __MAGUS_BIN=$WORK/stale-magus
 
-# Cursor holds its own notices the same way, on the stderr channel it uses.
-env TMPDIR=$WORK/n-once-cursor
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-stderr 'magus guard is NOT running'
+stdout 'could not judge this call'
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-! stderr 'magus guard is NOT running'
+stdout 'could not judge this call'
 
 # --- a DENY never goes quiet, whatever any marker says -----------------------
 #

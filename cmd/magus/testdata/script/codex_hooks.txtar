@@ -67,24 +67,30 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # --- a notice in the dialect of the event ----------------------------------------------
 
 # With no magus to ask, the notice has to parse as the event's own reply. PreToolUse's
-# envelope on a post-call event is one the host marks failed.
+# envelope on a post-call event is one the host marks failed. The call already ran, so
+# the person is told and nothing is refused.
 env __MAGUS_BIN=$WORK/nonexistent-magus
 stdin $WORK/spawn-v2-post.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"hookEventName":"PostToolUse"'
-stdout 'magus guard is NOT running'
+stdout '"systemMessage":"magus guard could not judge this call'
 ! stdout 'PreToolUse'
+! stdout 'permissionDecision'
 
-# SubagentStop's reply carries no hookSpecificOutput, so the notice goes to the person.
+# SubagentStop's reply carries no hookSpecificOutput, so the notice is a systemMessage the
+# person reads, never stderr at exit 0, which lands only in the debug log.
 stdin $WORK/subagent-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout 'hookSpecificOutput'
-stderr 'magus guard is NOT running'
+stdout '"systemMessage":"magus guard could not judge this call'
+! stderr .
 
-# A pre-call spawn keeps the PreToolUse envelope.
+# A pre-call spawn keeps the PreToolUse envelope, and is refused: a spawn starts work
+# that may change state.
 stdin $WORK/spawn-v2-pre.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"hookEventName":"PreToolUse"'
+stdout '"permissionDecision":"deny"'
 env __MAGUS_BIN=
 
 -- brief-ws/magusfile.buzz --
