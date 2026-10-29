@@ -52,7 +52,7 @@ var (
 // 5 items and nothing else, rampant 3 of them and 2 strays.
 const answerTask = "task-b"
 
-var fixtureAnswers = map[string]AnswerCounts{
+var fixtureAnswers = map[string]answerCounts{
 	"full":    {TP: 4, FP: 0, FN: 1},
 	"rampant": {TP: 3, FP: 2, FN: 2},
 }

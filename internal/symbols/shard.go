@@ -58,11 +58,11 @@ type SymbolInfo struct {
 	Kind          int32
 	Documentation []string
 	Signature     string
-	Relationships []Relationship
+	Relationships []symbolRelationship
 }
 
-// Relationship mirrors scip.Relationship.
-type Relationship struct {
+// symbolRelationship mirrors scip.Relationship.
+type symbolRelationship struct {
 	Symbol         string
 	Implementation bool
 	Reference      bool

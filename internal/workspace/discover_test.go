@@ -58,17 +58,17 @@ func (s *discoverySuite) bashMember(dir string) spells.DiscoveredProject {
 }
 
 // merge asks every spell in the suite and merges answers, with no magusfile present.
-func (s *discoverySuite) merge(answers ...SpellAnswer) Discovery {
-	d, err := MergeDiscovery(s.asked(), answers, nil)
+func (s *discoverySuite) merge(answers ...spellAnswer) discoveryResult {
+	d, err := mergeDiscovery(s.asked(), answers, nil)
 	s.Require().NoError(err)
 	return d
 }
 
-func (s *discoverySuite) asked() DiscoveryInput {
-	return DiscoveryInput{Queries: map[string]spells.DiscoveryQuery{"go": {}, "typescript": {}, "bash": {}}}
+func (s *discoverySuite) asked() discoveryInput {
+	return discoveryInput{Queries: map[string]spells.DiscoveryQuery{"go": {}, "typescript": {}, "bash": {}}}
 }
 
-func (s *discoverySuite) findings(fs []DiscoveryFinding) []string {
+func (s *discoverySuite) findings(fs []discoveryFinding) []string {
 	out := make([]string, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, f.String())
@@ -78,9 +78,9 @@ func (s *discoverySuite) findings(fs []DiscoveryFinding) []string {
 
 func (s *discoverySuite) TestMixedRootIsOneProjectWithEverySpellBound() {
 	d := s.merge(
-		SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt(".")}},
-		SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}},
-		SpellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("scripts")}},
+		spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt(".")}},
+		spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}},
+		spellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("scripts")}},
 	)
 	s.Require().Len(d.Projects, 1)
 	p := d.Projects[0]
@@ -122,9 +122,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 func (s *discoverySuite) TestSameNamedTargetsReportTheirOrderAndTheLineThatChangesIt() {
 	d := s.merge(
-		SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt(".")}},
-		SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}},
-		SpellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("scripts")}},
+		spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt(".")}},
+		spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}},
+		spellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("scripts")}},
 	)
 	s.Equal([]string{
 		".: lint runs bash then go then typescript (several spells contribute lint, and they run in spell-name order); settle: reorder the calls at magusfile.buzz:11",
@@ -138,7 +138,7 @@ func (s *discoverySuite) TestDisagreeingNamesFallBackToThePath() {
 	golang.Name = "github.com/x/y"
 	ts := s.tsAt(".")
 	ts.Name = "@x/web"
-	d := s.merge(SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}, SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{ts}})
+	d := s.merge(spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}, spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{ts}})
 	s.Require().Len(d.Projects, 1)
 	s.Empty(d.Projects[0].Name)
 	s.NotContains(d.Projects[0].Source, `"name"`)
@@ -148,7 +148,7 @@ func (s *discoverySuite) TestDisagreeingNamesFallBackToThePath() {
 func (s *discoverySuite) TestOneNameIsRendered() {
 	golang := s.goRoot()
 	golang.Name = "api"
-	d := s.merge(SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}})
+	d := s.merge(spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}})
 	s.Equal("api", d.Projects[0].Name)
 	s.Contains(d.Projects[0].Source, `    "name": "api",`)
 }
@@ -156,7 +156,7 @@ func (s *discoverySuite) TestOneNameIsRendered() {
 func (s *discoverySuite) TestASpanOverANestedProjectBecomesADependency() {
 	golang := s.goRoot()
 	golang.Spans = []string{"web"}
-	d := s.merge(SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}, SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt("web")}})
+	d := s.merge(spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}, spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt("web")}})
 	s.Require().Len(d.Projects, 2)
 	s.Equal([]string{"web"}, d.Projects[0].DependsOn)
 	s.Contains(d.Projects[0].Source, `    "depends_on": ["web"],`)
@@ -167,7 +167,7 @@ func (s *discoverySuite) TestASpanOverANestedProjectBecomesADependency() {
 func (s *discoverySuite) TestASpanNobodyClaimsAddsNoEdge() {
 	golang := s.goRoot()
 	golang.Spans = []string{"web"}
-	d := s.merge(SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}})
+	d := s.merge(spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}})
 	s.Empty(d.Projects[0].DependsOn)
 	s.Empty(d.Notes)
 }
@@ -177,7 +177,7 @@ func (s *discoverySuite) TestASpanThatWouldCloseACycleIsDroppedAndReported() {
 	golang.Spans = []string{"web"}
 	web := s.tsAt("web")
 	web.DependsOn = []string{"."}
-	d := s.merge(SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}, SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{web}})
+	d := s.merge(spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}, spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{web}})
 	s.Empty(d.Projects[0].DependsOn)
 	s.Equal([]string{"."}, d.Projects[1].DependsOn)
 	s.Contains(d.Projects[1].Source, `    "depends_on": [".."],`)
@@ -189,13 +189,13 @@ func (s *discoverySuite) TestASpanThatWouldCloseACycleIsDroppedAndReported() {
 func (s *discoverySuite) TestADependencyOnNoProjectIsReported() {
 	golang := s.goRoot()
 	golang.DependsOn = []string{"libs/proto"}
-	d := s.merge(SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}})
+	d := s.merge(spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}})
 	s.Empty(d.Projects[0].DependsOn)
 	s.Equal([]string{".: no depends_on libs/proto (no project is there); settle: an explicit depends_on in magusfile.buzz"}, s.findings(d.Gaps))
 }
 
 func (s *discoverySuite) TestANestedDependencyIsDotRelative() {
-	d := s.merge(SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{
+	d := s.merge(spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{
 		{Path: "libs/a", Role: spells.DiscoveryRoleProject, DependsOn: []string{"libs/b"}, Targets: map[string][]string{"build": {"go-build"}}},
 		{Path: "libs/b", Role: spells.DiscoveryRoleProject, Targets: map[string][]string{"build": {"go-build"}}},
 	}})
@@ -203,13 +203,13 @@ func (s *discoverySuite) TestANestedDependencyIsDotRelative() {
 }
 
 func (s *discoverySuite) TestAProjectWithNoTargetIsAGap() {
-	d := s.merge(SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{{Path: "web", Role: spells.DiscoveryRoleProject}}})
+	d := s.merge(spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{{Path: "web", Role: spells.DiscoveryRoleProject}}})
 	s.Require().Len(d.Projects, 1)
 	s.Equal([]string{"web: no lifecycle target (spell typescript formed the project and inferred none); settle: write the targets in web/magusfile.buzz"}, s.findings(d.Gaps))
 }
 
 func (s *discoverySuite) TestAProjectWithNoCITargetIsAGap() {
-	d := s.merge(SpellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{{Path: ".", Role: spells.DiscoveryRoleProject, Targets: map[string][]string{"format": {"shellcheck"}}}}})
+	d := s.merge(spellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{{Path: ".", Role: spells.DiscoveryRoleProject, Targets: map[string][]string{"format": {"shellcheck"}}}}})
 	s.NotContains(d.Projects[0].Source, "export fun ci")
 	s.Equal([]string{".: no ci (none of lint, build, test was inferred); settle: write ci in magusfile.buzz"}, s.findings(d.Gaps))
 }
@@ -217,12 +217,12 @@ func (s *discoverySuite) TestAProjectWithNoCITargetIsAGap() {
 func (s *discoverySuite) TestNotInferredIsAGapNamingTheFile() {
 	ts := s.tsAt("web")
 	ts.NotInferred = []spells.DiscoveryGap{{File: "web/package.json", Why: "scripts.dev: meaning unknown"}}
-	d := s.merge(SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{ts}})
+	d := s.merge(spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{ts}})
 	s.Equal([]string{"web/package.json: scripts.dev: meaning unknown (spell typescript saw it and could not infer a target); settle: a target in web/magusfile.buzz"}, s.findings(d.Gaps))
 }
 
 func (s *discoverySuite) TestAMagusfileWins() {
-	d, err := MergeDiscovery(s.asked(), []SpellAnswer{
+	d, err := mergeDiscovery(s.asked(), []spellAnswer{
 		{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}},
 		{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("scripts")}},
 	}, []string{"."})
@@ -232,7 +232,7 @@ func (s *discoverySuite) TestAMagusfileWins() {
 }
 
 func (s *discoverySuite) TestAMemberWithNoOwnerFormsTheRoot() {
-	d := s.merge(SpellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("scripts")}})
+	d := s.merge(spellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("scripts")}})
 	s.Require().Len(d.Projects, 1)
 	s.Equal(".", d.Projects[0].Path)
 	s.Contains(s.findings(d.Notes), ".: root project formed (no project owns the member claims of bash at scripts); settle: a magusfile in the directory that should own them")
@@ -240,9 +240,9 @@ func (s *discoverySuite) TestAMemberWithNoOwnerFormsTheRoot() {
 
 func (s *discoverySuite) TestAMemberAttachesToTheLongestPrefix() {
 	d := s.merge(
-		SpellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}},
-		SpellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt("web")}},
-		SpellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("web/scripts")}},
+		spellAnswer{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}},
+		spellAnswer{Spell: s.typescript, Claims: []spells.DiscoveredProject{s.tsAt("web")}},
+		spellAnswer{Spell: s.bash, Claims: []spells.DiscoveredProject{s.bashMember("web/scripts")}},
 	)
 	s.Equal([]string{"go"}, d.Projects[0].Spells)
 	s.Equal([]string{"bash", "typescript"}, d.Projects[1].Spells)
@@ -250,8 +250,8 @@ func (s *discoverySuite) TestAMemberAttachesToTheLongestPrefix() {
 
 func (s *discoverySuite) TestAnAliasedSpellHandle() {
 	tool := spells.Descriptor{Name: "my-tool", Ops: map[string]spells.Op{"run": {}}}
-	in := DiscoveryInput{Queries: map[string]spells.DiscoveryQuery{"my-tool": {}}}
-	d, err := MergeDiscovery(in, []SpellAnswer{{Spell: tool, Claims: []spells.DiscoveredProject{{Path: ".", Role: spells.DiscoveryRoleProject, Targets: map[string][]string{"build": {"run"}}}}}}, nil)
+	in := discoveryInput{Queries: map[string]spells.DiscoveryQuery{"my-tool": {}}}
+	d, err := mergeDiscovery(in, []spellAnswer{{Spell: tool, Claims: []spells.DiscoveredProject{{Path: ".", Role: spells.DiscoveryRoleProject, Targets: map[string][]string{"build": {"run"}}}}}}, nil)
 	s.Require().NoError(err)
 	s.Contains(d.Projects[0].Source, `import "magus/spell/my-tool" as my_tool_spell;`)
 	s.Contains(d.Projects[0].Source, `my_tool_spell["run"](ctx);`)
@@ -260,19 +260,19 @@ func (s *discoverySuite) TestAnAliasedSpellHandle() {
 func (s *discoverySuite) TestABadClaimFailsTheMerge() {
 	golang := s.goRoot()
 	golang.Targets = map[string][]string{"build": {"cargo-build"}}
-	_, err := MergeDiscovery(s.asked(), []SpellAnswer{{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}}, nil)
+	_, err := mergeDiscovery(s.asked(), []spellAnswer{{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}}, nil)
 	s.ErrorContains(err, `spell "go": discover_projects: .: target "build": op "cargo-build" is not one the spell declares`)
 }
 
 func (s *discoverySuite) TestAnAnswerFromASpellNotAskedFailsTheMerge() {
-	_, err := MergeDiscovery(DiscoveryInput{}, []SpellAnswer{{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}}}, nil)
+	_, err := mergeDiscovery(discoveryInput{}, []spellAnswer{{Spell: s.golang, Claims: []spells.DiscoveredProject{s.goRoot()}}}, nil)
 	s.ErrorContains(err, `spell "go" answered, but it was not asked`)
 }
 
 func (s *discoverySuite) TestANameABuzzStringCannotHoldFailsTheMerge() {
 	golang := s.goRoot()
 	golang.Name = "{x}"
-	_, err := MergeDiscovery(s.asked(), []SpellAnswer{{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}}, nil)
+	_, err := mergeDiscovery(s.asked(), []spellAnswer{{Spell: s.golang, Claims: []spells.DiscoveredProject{golang}}}, nil)
 	s.ErrorContains(err, `discovery: .: name: "{x}" holds a quote`)
 }
 
@@ -287,7 +287,7 @@ func (s *discoverySuite) write(root string, files map[string]string) {
 func (s *discoverySuite) TestCollectPassesMarkerContentAndSourcePathsOnly() {
 	root := s.T().TempDir()
 	s.write(root, map[string]string{"go.mod": "module x\n", "web/go.mod": "module y\n", "main.go": "package main\n", "README.md": "x"})
-	in, err := CollectDiscovery(root, []spells.Descriptor{s.golang})
+	in, err := collectDiscovery(root, []spells.Descriptor{s.golang})
 	s.Require().NoError(err)
 	files := in.Queries["go"].Files
 	s.Require().Len(files, 3)
@@ -306,7 +306,7 @@ func (s *discoverySuite) TestCollectReadsADoubleStarMarkerAtAnyDepth() {
 	s.write(root, map[string]string{"apps/web/package.json": `{"name": "web"}`})
 	ts := s.typescript
 	ts.Needs = []string{"**/package.json"}
-	in, err := CollectDiscovery(root, []spells.Descriptor{ts})
+	in, err := collectDiscovery(root, []spells.Descriptor{ts})
 	s.Require().NoError(err)
 	files := in.Queries["typescript"].Files
 	s.Require().Len(files, 1)
@@ -317,7 +317,7 @@ func (s *discoverySuite) TestCollectReadsADoubleStarMarkerAtAnyDepth() {
 func (s *discoverySuite) TestCollectNotesADirectoryOneSpellIgnoresAndAnotherDoesNot() {
 	root := s.T().TempDir()
 	s.write(root, map[string]string{"vendor/x/package.json": "{}", "package.json": "{}"})
-	in, err := CollectDiscovery(root, []spells.Descriptor{s.golang, s.typescript})
+	in, err := collectDiscovery(root, []spells.Descriptor{s.golang, s.typescript})
 	s.Require().NoError(err)
 	s.Equal([]string{"package.json"}, []string{in.Queries["typescript"].Files[0].Path})
 	s.Len(in.Queries["typescript"].Files, 1)
@@ -326,8 +326,8 @@ func (s *discoverySuite) TestCollectNotesADirectoryOneSpellIgnoresAndAnotherDoes
 
 func (s *discoverySuite) TestCollectNotesReachTheMerge() {
 	in := s.asked()
-	in.Notes = []DiscoveryFinding{{Path: "vendor", What: "not collected", Why: "w", Settle: "s"}}
-	d, err := MergeDiscovery(in, nil, nil)
+	in.Notes = []discoveryFinding{{Path: "vendor", What: "not collected", Why: "w", Settle: "s"}}
+	d, err := mergeDiscovery(in, nil, nil)
 	s.Require().NoError(err)
 	s.Equal([]string{"vendor: not collected (w); settle: s"}, s.findings(d.Notes))
 }

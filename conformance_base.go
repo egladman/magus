@@ -271,28 +271,38 @@ func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIn
 	}
 }
 
+// indexBase writes b's index of tree to pack and reads its symbols back. A file the index
+// leaves out fails it, naming the file.
+func indexBase(ctx context.Context, tree, pack string, b baseIndex) ([]types.KnowledgeSymbol, error) {
+	if err := os.MkdirAll(filepath.Dir(pack), 0o700); err != nil {
+		return nil, err
+	}
+	var res symbols.UpdateResult
+	res, err := symbols.UpdatePack(ctx, pack, b.ix)
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Gaps) > 0 {
+		return nil, fmt.Errorf("cannot read %s", strings.Join(res.Gaps, ", "))
+	}
+	idx, err := symbols.ReadIndex(pack, true)
+	if err != nil {
+		return nil, err
+	}
+	parsed := symbols.ParseDecoded(ctx, idx, b.project, b.language)
+	symbols.FingerprintBodies(tree, parsed)
+	return parsed, nil
+}
+
 // measureTree indexes tree with plan's in-process indexers and measures it under this
 // workspace's policy. A source an indexer cannot read fails, naming it.
 func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan) (types.ConformanceOutput, error) {
 	syms := map[string][]types.KnowledgeSymbol{}
 	for i, b := range plan.indexes {
-		pack := filepath.Join(tree, ".magus", "conformance", fmt.Sprintf("%d.pack", i))
-		if err := os.MkdirAll(filepath.Dir(pack), 0o700); err != nil {
-			return types.ConformanceOutput{}, err
-		}
-		res, err := symbols.UpdatePack(ctx, pack, b.ix)
+		parsed, err := indexBase(ctx, tree, filepath.Join(tree, ".magus", "conformance", fmt.Sprintf("%d.pack", i)), b)
 		if err != nil {
 			return types.ConformanceOutput{}, fmt.Errorf("%s %s index: %w", b.project, b.language, err)
 		}
-		if len(res.Gaps) > 0 {
-			return types.ConformanceOutput{}, fmt.Errorf("%s %s index cannot read %s", b.project, b.language, strings.Join(res.Gaps, ", "))
-		}
-		idx, err := symbols.ReadIndex(pack, true)
-		if err != nil {
-			return types.ConformanceOutput{}, fmt.Errorf("%s %s index: %w", b.project, b.language, err)
-		}
-		parsed := symbols.ParseDecoded(ctx, idx, b.project, b.language)
-		symbols.FingerprintBodies(tree, parsed)
 		syms[b.project] = append(syms[b.project], parsed...)
 	}
 	graph, err := m.TargetGraph(ctx)

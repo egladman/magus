@@ -107,11 +107,11 @@ type shippedSpells struct {
 	sourceOnly map[string]string // directory -> why it is not a built-in
 }
 
-// SourceOnly is every top-level shipped spell that is not a built-in, by directory, with
+// sourceOnlySpells is every top-level shipped spell that is not a built-in, by directory, with
 // the import that kept it out. A spell that drops out of the built-ins by importing a
 // host module lands here instead of vanishing, so an unknown-spell error and a test can
 // name it.
-func SourceOnly() map[string]string { return maps.Clone(shipped().sourceOnly) }
+func sourceOnlySpells() map[string]string { return maps.Clone(shipped().sourceOnly) }
 
 var shipped = sync.OnceValue(loadShipped)
 

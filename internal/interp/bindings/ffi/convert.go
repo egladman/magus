@@ -144,8 +144,8 @@ func Any(args []vm.Value, n int) any {
 	return valToAny(args[n])
 }
 
-// AnySlice reads arg n as []any, nil if absent or not a list.
-func AnySlice(args []vm.Value, n int) []any {
+// anySlice reads arg n as []any, nil if absent or not a list.
+func anySlice(args []vm.Value, n int) []any {
 	v := Any(args, n)
 	if v == nil {
 		return nil

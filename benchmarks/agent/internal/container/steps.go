@@ -12,16 +12,16 @@ import (
 	"time"
 )
 
-// MagusPath is where CopyMagus puts the binary, on every image's PATH.
-const MagusPath = "/usr/local/bin/magus"
+// magusPath is where copyMagus puts the binary, on every image's PATH.
+const magusPath = "/usr/local/bin/magus"
 
 // elfMachine is the ELF machine each container architecture runs.
 var elfMachine = map[string]elf.Machine{"amd64": elf.EM_X86_64, "arm64": elf.EM_AARCH64}
 
-// CopyMagus copies the magus binary at bin into the container at MagusPath. It
+// copyMagus copies the magus binary at bin into the container at magusPath. It
 // refuses anything but a linux ELF for the container's architecture: a host build
 // copied in would fail only when the agent first ran it, minutes into the trial.
-func CopyMagus(ctx context.Context, c *Container, bin string) error {
+func copyMagus(ctx context.Context, c *instance, bin string) error {
 	arch := c.Image.Platform.Architecture
 	if err := checkELF(bin, elfMachine[arch]); err != nil {
 		return fmt.Errorf("container: %w; a %s container needs the linux/%s build of magus: "+
@@ -31,7 +31,7 @@ func CopyMagus(ctx context.Context, c *Container, bin string) error {
 	if err != nil {
 		return err
 	}
-	return c.WriteFile(ctx, MagusPath, data, 0o755)
+	return c.WriteFile(ctx, magusPath, data, 0o755)
 }
 
 func checkELF(bin string, want elf.Machine) error {
@@ -46,8 +46,8 @@ func checkELF(bin string, want elf.Machine) error {
 	return nil
 }
 
-// ErrPatchFailed is ApplyPatch's answer when no rung of the ladder applies the patch.
-var ErrPatchFailed = errors.New("container: no rung of the apply ladder applied the patch")
+// errPatchFailed is applyPatch's answer when no rung of the ladder applies the patch.
+var errPatchFailed = errors.New("container: no rung of the apply ladder applied the patch")
 
 // applyLadder is the reference harness's swebench.harness.constants.GIT_APPLY_CMDS.
 var applyLadder = [][]string{
@@ -57,17 +57,17 @@ var applyLadder = [][]string{
 	{"patch", "--batch", "--forward", "--fuzz=5", "-p1", "-i"},
 }
 
-// patchPath is where ApplyPatch stages a patch, outside the checkout so it never
+// patchPath is where applyPatch stages a patch, outside the checkout so it never
 // appears in a diff.
 const patchPath = "/tmp/magus-bench/agent.patch"
 
-// ApplyPatch applies patch to Testbed the way the reference harness does, trying each
+// applyPatch applies patch to testbedDir the way the reference harness does, trying each
 // rung of its ladder in turn, and writes the harness's markers and every rung's
 // output to log, which is the log the grader reads. It returns the rung that applied,
-// joined by spaces, or ErrPatchFailed. An empty patch applies nothing and returns "",
+// joined by spaces, or errPatchFailed. An empty patch applies nothing and returns "",
 // which is the null control.
-func ApplyPatch(ctx context.Context, c *Container, patch []byte, log io.Writer) (string, error) {
-	if err := c.run(ctx, []string{"git", "config", "--global", "--add", "safe.directory", Testbed}, log); err != nil {
+func applyPatch(ctx context.Context, c *instance, patch []byte, log io.Writer) (string, error) {
+	if err := c.run(ctx, []string{"git", "config", "--global", "--add", "safe.directory", testbedDir}, log); err != nil {
 		return "", err
 	}
 	if len(patch) == 0 {
@@ -99,45 +99,45 @@ func ApplyPatch(ctx context.Context, c *Container, patch []byte, log io.Writer) 
 		}
 	}
 	fmt.Fprintln(log, ">>>>> Patch Apply Failed")
-	return "", ErrPatchFailed
+	return "", errPatchFailed
 }
 
-// Eval is what running a task's eval script produced. ExitCode is meaningless when
+// evalResult is what running a task's eval script produced. ExitCode is meaningless when
 // TimedOut is set.
-type Eval struct {
+type evalResult struct {
 	ExitCode int  `json:"eval_exit"`
 	TimedOut bool `json:"eval_timed_out"`
 }
 
 const evalPath = "/tmp/magus-bench/eval.sh"
 
-// RunEval runs a task's eval script with bash in Testbed, copying its output to log.
+// runEval runs a task's eval script with bash in testbedDir, copying its output to log.
 // The script runs directly, never through magus run: a cache hit or a narrowed
 // target would change what is graded. When timeout passes, the container is killed
 // and log gets the harness's timeout marker; the container is then unusable.
-func RunEval(ctx context.Context, c *Container, script []byte, timeout time.Duration, log io.Writer) (Eval, error) {
+func runEval(ctx context.Context, c *instance, script []byte, timeout time.Duration, log io.Writer) (evalResult, error) {
 	if timeout <= 0 {
-		return Eval{}, fmt.Errorf("container: eval in %s: set a timeout", c.Name)
+		return evalResult{}, fmt.Errorf("container: eval in %s: set a timeout", c.Name)
 	}
 	if err := c.WriteFile(ctx, evalPath, script, 0o755); err != nil {
-		return Eval{}, err
+		return evalResult{}, err
 	}
 	evalCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	code, err := c.Exec(evalCtx, []string{"bash", evalPath}, log, log)
 	if err != nil && ctx.Err() == nil && errors.Is(evalCtx.Err(), context.DeadlineExceeded) {
 		fmt.Fprintln(log, "\n>>>>> Tests Timed Out")
-		return Eval{TimedOut: true}, c.engine.kill(ctx, c.id)
+		return evalResult{TimedOut: true}, c.engine.kill(ctx, c.id)
 	}
 	if err != nil {
-		return Eval{}, err
+		return evalResult{}, err
 	}
-	return Eval{ExitCode: code}, nil
+	return evalResult{ExitCode: code}, nil
 }
 
-// Diff is every change to Testbed's tracked and untracked files, as a patch
-// ApplyPatch takes. Paths the seed excluded are not in it.
-func Diff(ctx context.Context, c *Container) ([]byte, error) {
+// collectDiff is every change to testbedDir's tracked and untracked files, as a patch
+// applyPatch takes. Paths the seed excluded are not in it.
+func collectDiff(ctx context.Context, c *instance) ([]byte, error) {
 	var stderr bytes.Buffer
 	if err := c.run(ctx, []string{"git", "add", "--all", "--intent-to-add"}, &stderr); err != nil {
 		return nil, fmt.Errorf("%w: %s", err, stderr.Bytes())

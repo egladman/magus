@@ -15,10 +15,10 @@ import (
 	"github.com/egladman/magus/libs/oci"
 )
 
-// Image is a task image pinned to the digest its tag named when it was resolved, and
+// pinnedImage is a task image pinned to the digest its tag named when it was resolved, and
 // the platform a trial runs it as. The JSON fields are the ones a result entry
 // records.
-type Image struct {
+type pinnedImage struct {
 	Ref      oci.Reference  `json:"image"`
 	Digest   digest.Digest  `json:"image_digest"`
 	Platform image.Platform `json:"platform"`
@@ -28,11 +28,11 @@ type Image struct {
 }
 
 // Pinned is the reference a pull and a create address: the repository at Digest.
-func (i Image) Pinned() string {
+func (i pinnedImage) Pinned() string {
 	return oci.Reference{Registry: i.Ref.Registry, Repository: i.Ref.Repository, Digest: i.Digest}.String()
 }
 
-// ResolveImage pins name, as a task row writes it (swebench/sweb.eval.x86_64.<id> or
+// resolveImage pins name, as a task row writes it (swebench/sweb.eval.x86_64.<id> or
 // with a registry and tag), to a digest through reg, and picks the platform to run it
 // as on an engine whose own platform is engine.
 //
@@ -40,20 +40,20 @@ func (i Image) Pinned() string {
 // docker CLI reads them; Ref records the full reference either way. An image with no
 // build for engine is refused unless allowEmulation is set, and then runs as the
 // image's linux/amd64 build with Emulated set.
-func ResolveImage(ctx context.Context, reg *oci.Client, name string, engine image.Platform, allowEmulation bool) (Image, error) {
+func resolveImage(ctx context.Context, reg *oci.Client, name string, engine image.Platform, allowEmulation bool) (pinnedImage, error) {
 	ref, err := oci.ParseReference(qualify(name))
 	if err != nil {
-		return Image{}, err
+		return pinnedImage{}, err
 	}
 	m, err := reg.Resolve(ctx, ref)
 	if err != nil {
-		return Image{}, err
+		return pinnedImage{}, err
 	}
 	built, err := platforms(ctx, reg, ref, m)
 	if err != nil {
-		return Image{}, err
+		return pinnedImage{}, err
 	}
-	img := Image{Ref: ref, Digest: m.Digest}
+	img := pinnedImage{Ref: ref, Digest: m.Digest}
 	if i := slices.IndexFunc(built, engine.Matches); i >= 0 {
 		img.Platform = built[i]
 		return img, nil
@@ -61,10 +61,10 @@ func ResolveImage(ctx context.Context, reg *oci.Client, name string, engine imag
 	amd64 := image.Platform{OS: "linux", Architecture: "amd64"}
 	i := slices.IndexFunc(built, amd64.Matches)
 	if i < 0 {
-		return Image{}, fmt.Errorf("container: %s has no build for %s or linux/amd64 (it has %s)", ref, engine, joinPlatforms(built))
+		return pinnedImage{}, fmt.Errorf("container: %s has no build for %s or linux/amd64 (it has %s)", ref, engine, joinPlatforms(built))
 	}
 	if !allowEmulation {
-		return Image{}, fmt.Errorf("container: %s is built for %s only and the engine runs %s; it would run emulated, several times slower. "+
+		return pinnedImage{}, fmt.Errorf("container: %s is built for %s only and the engine runs %s; it would run emulated, several times slower. "+
 			"Run it on a %s engine, or allow emulation explicitly so the result records emulated: true", ref, joinPlatforms(built), engine, amd64)
 	}
 	img.Platform = built[i]

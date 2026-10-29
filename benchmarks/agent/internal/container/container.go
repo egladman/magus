@@ -11,64 +11,64 @@ import (
 	"strings"
 )
 
-// Testbed is where every SWE-bench image holds the task's checkout.
-const Testbed = "/testbed"
+// testbedDir is where every SWE-bench image holds the task's checkout.
+const testbedDir = "/testbed"
 
-// Limits are the resources a trial container gets. Both are required: a trial left
+// limits are the resources a trial container gets. Both are required: a trial left
 // to the engine's defaults gets whatever the machine has, and its wall time compares
 // with nothing.
-type Limits struct {
+type limits struct {
 	CPUs        float64 `json:"cpus"`
 	MemoryBytes int64   `json:"memory_bytes"`
 }
 
-// Container is one running trial or grading container. Its methods are safe for
+// instance is one running trial or grading container. Its methods are safe for
 // concurrent use; Remove ends it.
-type Container struct {
-	engine *Engine
+type instance struct {
+	engine *engineClient
 	id     string
 	Name   string
-	Image  Image
-	Limits Limits
+	Image  pinnedImage
+	limits limits
 }
 
-// Pull fetches img at its digest, for its platform.
-func Pull(ctx context.Context, e *Engine, img Image) error {
+// pullPinned fetches img at its digest, for its platform.
+func pullPinned(ctx context.Context, e *engineClient, img pinnedImage) error {
 	return e.Pull(ctx, img.Pinned(), img.Platform)
 }
 
-// Create creates and starts a container named name from img, already pulled, under
+// createInstance creates and starts a container named name from img, already pulled, under
 // lim. It idles until Remove, so every step runs in it through Exec.
-func Create(ctx context.Context, e *Engine, name string, img Image, lim Limits) (*Container, error) {
+func createInstance(ctx context.Context, e *engineClient, name string, img pinnedImage, lim limits) (*instance, error) {
 	if lim.CPUs <= 0 || lim.MemoryBytes <= 0 {
 		return nil, fmt.Errorf("container: %s: set both a CPU and a memory limit, got %g CPUs and %d bytes", name, lim.CPUs, lim.MemoryBytes)
 	}
 	id, err := e.create(ctx, name, img.Platform, createRequest{
 		Image:      img.Pinned(),
 		Cmd:        []string{"sleep", "infinity"},
-		WorkingDir: Testbed,
+		WorkingDir: testbedDir,
 		HostConfig: hostConfig{NanoCPUs: int64(lim.CPUs * 1e9), Memory: lim.MemoryBytes},
 	})
 	if err != nil {
 		return nil, err
 	}
-	c := &Container{engine: e, id: id, Name: name, Image: img, Limits: lim}
+	c := &instance{engine: e, id: id, Name: name, Image: img, limits: lim}
 	if err := e.start(ctx, id); err != nil {
 		return nil, errors.Join(err, c.Remove(context.WithoutCancel(ctx)))
 	}
 	return c, nil
 }
 
-// Exec runs argv in Testbed and returns its exit code; a non-zero code is not an
+// Exec runs argv in testbedDir and returns its exit code; a non-zero code is not an
 // error. stdout and stderr may be the same writer, which then holds both streams in
 // the order the process wrote them.
-func (c *Container) Exec(ctx context.Context, argv []string, stdout, stderr io.Writer) (int, error) {
-	return c.engine.exec(ctx, c.id, Testbed, argv, stdout, stderr)
+func (c *instance) Exec(ctx context.Context, argv []string, stdout, stderr io.Writer) (int, error) {
+	return c.engine.exec(ctx, c.id, testbedDir, argv, stdout, stderr)
 }
 
 // WriteFile writes data to the absolute path name with mode perm, creating missing
 // parent directories.
-func (c *Container) WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
+func (c *instance) WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
 	if !strings.HasPrefix(name, "/") {
 		return fmt.Errorf("container: write %s: the path must be absolute", name)
 	}
@@ -88,12 +88,12 @@ func (c *Container) WriteFile(ctx context.Context, name string, data []byte, per
 }
 
 // Remove kills and deletes the container with its anonymous volumes.
-func (c *Container) Remove(ctx context.Context) error {
+func (c *instance) Remove(ctx context.Context) error {
 	return c.engine.remove(ctx, c.id)
 }
 
 // run is Exec for a step whose non-zero exit is a failure.
-func (c *Container) run(ctx context.Context, argv []string, out io.Writer) error {
+func (c *instance) run(ctx context.Context, argv []string, out io.Writer) error {
 	code, err := c.Exec(ctx, argv, out, out)
 	if err != nil {
 		return err

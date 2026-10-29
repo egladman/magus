@@ -3,7 +3,7 @@
 // Report (statistics to markdown). Each stage only reads artifacts, so a
 // scored run is analyzed as often as wanted without re-running an agent. The
 // record types here are the file formats: metrics.jsonl carries one ScoredRun
-// or ControlRun per line, analysis.json one Analysis.
+// or controlRun per line, analysis.json one Analysis.
 package bench
 
 // The two setups the paired comparison names. A record's arm stays a plain
@@ -53,9 +53,9 @@ type InvariantViolations struct {
 	TestsDeleted []string `json:"tests_deleted"`
 }
 
-// ControlRun is a golden or null control: identity, kind and check verdict,
+// controlRun is a golden or null control: identity, kind and check verdict,
 // no agent.
-type ControlRun struct {
+type controlRun struct {
 	RunID      string  `json:"run_id"`
 	Arm        string  `json:"arm"`
 	Task       string  `json:"task"`
@@ -112,12 +112,12 @@ type ScoredRun struct {
 	ExitReason   *string  `json:"exit_reason"   bench:"optional"`
 	Control      *string  `json:"control"       bench:"optional"`
 	// Answer is set only for an interrogation task, whose grader writes answer.json.
-	Answer *AnswerCounts `json:"answer" bench:"optional"`
+	Answer *answerCounts `json:"answer" bench:"optional"`
 }
 
-// AnswerCounts grade an interrogation answer against its key: TP key items
+// answerCounts grade an interrogation answer against its key: TP key items
 // named, FP items named that the key lacks, FN key items missed.
-type AnswerCounts struct {
+type answerCounts struct {
 	TP int64 `json:"tp"`
 	FP int64 `json:"fp"`
 	FN int64 `json:"fn"`
@@ -139,7 +139,7 @@ type AnswerScore struct {
 // RunRecord is one line of metrics.jsonl: exactly one of the two is set.
 type RunRecord struct {
 	Scored  *ScoredRun
-	Control *ControlRun
+	Control *controlRun
 }
 
 // Spread is median and IQR beside the mean; a mean alone hides the spread
@@ -234,9 +234,9 @@ type ControlCount struct {
 	RunIDs []string `json:"run_ids"`
 }
 
-// ControlCell says whether one task's check discriminates: golden must pass,
+// controlCell says whether one task's check discriminates: golden must pass,
 // null must fail.
-type ControlCell struct {
+type controlCell struct {
 	Golden        ControlCount `json:"golden"`
 	Null          ControlCount `json:"null"`
 	Discriminates bool         `json:"discriminates"`
@@ -282,7 +282,7 @@ type Analysis struct {
 	Arms                 []string               `json:"arms"`
 	Tasks                []string               `json:"tasks"`
 	Models               []string               `json:"models"`
-	Controls             map[string]ControlCell `json:"controls"`
+	Controls             map[string]controlCell `json:"controls"`
 	Cells                map[string]CellStats   `json:"cells"`
 	ArmSummaries         map[string]ArmSummary  `json:"arm_summary"`
 	Refusal              string                 `json:"refusal"`

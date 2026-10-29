@@ -79,7 +79,7 @@ func syntheticRecord(arm, task string, rep int64, dollars float64, tokens int64,
 }
 
 func controlRecord(kind string, success bool) RunRecord {
-	return RunRecord{Control: &ControlRun{
+	return RunRecord{Control: &controlRun{
 		RunID: "rampant-task-a-r1-" + kind, Arm: "rampant", Task: "task-a", Rep: 1, Model: "claude-opus-5",
 		Control: kind, CheckExit: int64p(map[bool]int64{true: 0, false: 1}[success]), Success: boolp(success),
 	}}
@@ -308,9 +308,9 @@ func (s *benchSuite) TestRefusalIgnoresArmsOutsideTheComparison() {
 
 func (s *benchSuite) TestAnswersReportPrecisionAndRecall() {
 	run := syntheticRecord("full", "task-a", 1, 1, 1, true).Scored
-	run.Answer = &AnswerCounts{TP: 4, FP: 0, FN: 1}
+	run.Answer = &answerCounts{TP: 4, FP: 0, FN: 1}
 	other := syntheticRecord("full", "task-a", 2, 1, 1, true).Scored
-	other.Answer = &AnswerCounts{TP: 2, FP: 2, FN: 0}
+	other.Answer = &answerCounts{TP: 2, FP: 2, FN: 0}
 	score := answerScore([]*ScoredRun{run, other})
 	s.Equal(int64(2), score.Runs)
 	s.InDelta(6.0/8, *score.Precision, 1e-15)
@@ -320,7 +320,7 @@ func (s *benchSuite) TestAnswersReportPrecisionAndRecall() {
 
 func (s *benchSuite) TestAnswerPrecisionIsNilWhenNothingWasNamed() {
 	run := syntheticRecord("full", "task-a", 1, 1, 1, true).Scored
-	run.Answer = &AnswerCounts{FN: 3}
+	run.Answer = &answerCounts{FN: 3}
 	score := answerScore([]*ScoredRun{run})
 	s.Nil(score.Precision)
 	s.Equal(0.0, *score.Recall)

@@ -17,23 +17,23 @@ import (
 	"github.com/egladman/magus/libs/image"
 )
 
-// engineAPIVersion is the oldest Engine API that serves every endpoint used here,
+// engineAPIVersion is the oldest engineClient API that serves every endpoint used here,
 // pinned so a newer daemon answers in the shape this client decodes.
 const engineAPIVersion = "v1.41"
 
-// Engine speaks the Docker Engine API over a unix socket. Docker Desktop, podman's
+// engineClient speaks the Docker engineClient API over a unix socket. Docker Desktop, podman's
 // service, Colima and OrbStack all serve it. It is safe for concurrent use.
 //
-// magus has no Engine-API client yet (ADR 0003 E is on hold), so this one lives with
+// magus has no engineClient-API client yet (ADR 0003 E is on hold), so this one lives with
 // the benchmark until magus grows one; it never shells out to a docker CLI.
-type Engine struct {
+type engineClient struct {
 	http *http.Client
 	base string
 }
 
-// Dial returns an Engine for the socket at path. It connects lazily; Platform is the
+// dial returns an engineClient for the socket at path. It connects lazily; Platform is the
 // first call that proves the socket answers.
-func Dial(path string) (*Engine, error) {
+func dial(path string) (*engineClient, error) {
 	if path == "" {
 		return nil, errors.New("container: name the engine socket, for example /var/run/docker.sock")
 	}
@@ -43,12 +43,12 @@ func Dial(path string) (*Engine, error) {
 			return dialer.DialContext(ctx, "unix", path)
 		},
 	}
-	return &Engine{http: &http.Client{Transport: transport}, base: "http://engine"}, nil
+	return &engineClient{http: &http.Client{Transport: transport}, base: "http://engine"}, nil
 }
 
 // Platform is the engine's own os/architecture in Go's spelling, which is what an
 // image must match to run without emulation.
-func (e *Engine) Platform(ctx context.Context) (image.Platform, error) {
+func (e *engineClient) Platform(ctx context.Context) (image.Platform, error) {
 	var info struct {
 		OSType       string
 		Architecture string
@@ -72,7 +72,7 @@ var goArch = map[string]string{
 // Pull fetches ref, which must pin a digest, for platform. The engine streams
 // progress as JSON objects and reports a failure as one of them with the HTTP
 // status still 200, so every object is read.
-func (e *Engine) Pull(ctx context.Context, ref string, platform image.Platform) error {
+func (e *engineClient) Pull(ctx context.Context, ref string, platform image.Platform) error {
 	if !strings.Contains(ref, "@sha256:") {
 		return fmt.Errorf("container: pull %s: name a digest, a tag can move", ref)
 	}
@@ -100,7 +100,7 @@ func (e *Engine) Pull(ctx context.Context, ref string, platform image.Platform) 
 	}
 }
 
-// createRequest is the subset of the Engine API's container config this package sets.
+// createRequest is the subset of the engineClient API's container config this package sets.
 type createRequest struct {
 	Image      string     `json:"Image"`
 	Cmd        []string   `json:"Cmd"`
@@ -113,7 +113,7 @@ type hostConfig struct {
 	Memory   int64 `json:"Memory"`
 }
 
-func (e *Engine) create(ctx context.Context, name string, platform image.Platform, req createRequest) (string, error) {
+func (e *engineClient) create(ctx context.Context, name string, platform image.Platform, req createRequest) (string, error) {
 	q := url.Values{"name": {name}, "platform": {platform.String()}}
 	var out struct {
 		ID string `json:"Id"`
@@ -124,21 +124,21 @@ func (e *Engine) create(ctx context.Context, name string, platform image.Platfor
 	return out.ID, nil
 }
 
-func (e *Engine) start(ctx context.Context, id string) error {
+func (e *engineClient) start(ctx context.Context, id string) error {
 	return e.call(ctx, http.MethodPost, "/containers/"+id+"/start", nil, nil, nil)
 }
 
-func (e *Engine) kill(ctx context.Context, id string) error {
+func (e *engineClient) kill(ctx context.Context, id string) error {
 	return e.call(ctx, http.MethodPost, "/containers/"+id+"/kill", nil, nil, nil)
 }
 
-func (e *Engine) remove(ctx context.Context, id string) error {
+func (e *engineClient) remove(ctx context.Context, id string) error {
 	q := url.Values{"force": {"true"}, "v": {"true"}}
 	return e.call(ctx, http.MethodDelete, "/containers/"+id, q, nil, nil)
 }
 
 // putArchive extracts a tar stream into dir inside the container.
-func (e *Engine) putArchive(ctx context.Context, id, dir string, tarball []byte) error {
+func (e *engineClient) putArchive(ctx context.Context, id, dir string, tarball []byte) error {
 	resp, err := e.do(ctx, http.MethodPut, "/containers/"+id+"/archive", url.Values{"path": {dir}}, bytes.NewReader(tarball))
 	if err != nil {
 		return err
@@ -155,7 +155,7 @@ type execRequest struct {
 
 // exec runs argv in the container, copying its two streams into stdout and stderr,
 // and returns its exit code. The error is only for a failure to run it at all.
-func (e *Engine) exec(ctx context.Context, id, dir string, argv []string, stdout, stderr io.Writer) (int, error) {
+func (e *engineClient) exec(ctx context.Context, id, dir string, argv []string, stdout, stderr io.Writer) (int, error) {
 	var created struct {
 		ID string `json:"Id"`
 	}
@@ -189,7 +189,7 @@ func (e *Engine) exec(ctx context.Context, id, dir string, argv []string, stdout
 	return inspect.ExitCode, nil
 }
 
-// demux reads the Engine API's multiplexed stream: frames of an 8-byte header (stream
+// demux reads the engineClient API's multiplexed stream: frames of an 8-byte header (stream
 // id, three zero bytes, a big-endian uint32 length) and that many bytes of payload.
 // Stream 1 is stdout and 2 is stderr.
 func demux(r io.Reader, stdout, stderr io.Writer) error {
@@ -217,7 +217,7 @@ func demux(r io.Reader, stdout, stderr io.Writer) error {
 	}
 }
 
-func (e *Engine) call(ctx context.Context, method, path string, q url.Values, in, out any) error {
+func (e *engineClient) call(ctx context.Context, method, path string, q url.Values, in, out any) error {
 	var body io.Reader
 	if in != nil {
 		raw, err := json.Marshal(in)
@@ -242,7 +242,7 @@ func (e *Engine) call(ctx context.Context, method, path string, q url.Values, in
 
 // do sends one request and turns a non-2xx status into an error carrying the engine's
 // own message.
-func (e *Engine) do(ctx context.Context, method, path string, q url.Values, body io.Reader) (*http.Response, error) {
+func (e *engineClient) do(ctx context.Context, method, path string, q url.Values, body io.Reader) (*http.Response, error) {
 	u := e.base + "/" + engineAPIVersion + path
 	if len(q) > 0 {
 		u += "?" + q.Encode()

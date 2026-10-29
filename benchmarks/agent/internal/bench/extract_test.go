@@ -309,8 +309,8 @@ func (s *benchSuite) TestExtractRefusesAnUnknownControlKind() {
 
 func (s *benchSuite) TestExtractReadsAnswerCountsForAnInterrogationTask() {
 	_, byID, _ := fixtureRecords(s.T())
-	s.Equal(&AnswerCounts{TP: 4, FP: 0, FN: 1}, scoredRecord(s.T(), byID, "full", answerTask, 1).Answer)
-	s.Equal(&AnswerCounts{TP: 3, FP: 2, FN: 2}, scoredRecord(s.T(), byID, "rampant", answerTask, 2).Answer)
+	s.Equal(&answerCounts{TP: 4, FP: 0, FN: 1}, scoredRecord(s.T(), byID, "full", answerTask, 1).Answer)
+	s.Equal(&answerCounts{TP: 3, FP: 2, FN: 2}, scoredRecord(s.T(), byID, "rampant", answerTask, 2).Answer)
 }
 
 func (s *benchSuite) TestExtractLeavesAnswerNilWithoutAnswerJSON() {

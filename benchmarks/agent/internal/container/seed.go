@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// goModuleMagusfile is the one magusfile Seed writes beside every go.mod. It is not
+// goModuleMagusfile is the one magusfile seedModules writes beside every go.mod. It is not
 // tailored to any repository, so both arms of every task see the same projection.
 const goModuleMagusfile = `import "magus";
 import "magus/spell/go";
@@ -24,8 +24,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build, t
 
 const seedMagusYAML = "telemetry:\n  enabled: false\n"
 
-// seedExcludes keep everything Seed and an arm's provisioning add out of git status,
-// so the agent starts from a clean tree and Diff carries only the agent's edits.
+// seedExcludes keep everything seedModules and an arm's provisioning add out of git status,
+// so the agent starts from a clean tree and collectDiff carries only the agent's edits.
 const seedExcludes = `/magus.yaml
 magusfile.buzz
 .magus/
@@ -35,17 +35,17 @@ magusfile.buzz
 /MAGUS.md
 `
 
-// Seed makes the checkout at Testbed a magus workspace with one Go project per
-// module, and returns the module directories, relative to Testbed. It is the one
+// seedModules makes the checkout at testbedDir a magus workspace with one Go project per
+// module, and returns the module directories, relative to testbedDir. It is the one
 // step that brings a foreign repository into magus; the Go workspace provider
 // (decision 107) replaces its body, so callers depend only on this signature.
 //
 // Modules are the tracked go.mod files outside vendor and testdata trees, which the
 // go command ignores too. A checkout with no root go.mod is refused: the workspace
 // root must be a project.
-func Seed(ctx context.Context, c *Container) ([]string, error) {
+func seedModules(ctx context.Context, c *instance) ([]string, error) {
 	var log bytes.Buffer
-	if err := c.run(ctx, []string{"git", "config", "--global", "--add", "safe.directory", Testbed}, &log); err != nil {
+	if err := c.run(ctx, []string{"git", "config", "--global", "--add", "safe.directory", testbedDir}, &log); err != nil {
 		return nil, fmt.Errorf("%w: %s", err, log.Bytes())
 	}
 	var listed, stderr bytes.Buffer
@@ -58,13 +58,13 @@ func Seed(ctx context.Context, c *Container) ([]string, error) {
 	}
 	modules := goModules(listed.String())
 	if !slices.Contains(modules, ".") {
-		return nil, fmt.Errorf("container: %s has no go.mod at its root, so it has no root project to seed", Testbed)
+		return nil, fmt.Errorf("container: %s has no go.mod at its root, so it has no root project to seed", testbedDir)
 	}
-	if err := c.WriteFile(ctx, Testbed+"/magus.yaml", []byte(seedMagusYAML), 0o644); err != nil {
+	if err := c.WriteFile(ctx, testbedDir+"/magus.yaml", []byte(seedMagusYAML), 0o644); err != nil {
 		return nil, err
 	}
 	for _, dir := range modules {
-		if err := c.WriteFile(ctx, path.Join(Testbed, dir, "magusfile.buzz"), []byte(goModuleMagusfile), 0o644); err != nil {
+		if err := c.WriteFile(ctx, path.Join(testbedDir, dir, "magusfile.buzz"), []byte(goModuleMagusfile), 0o644); err != nil {
 			return nil, err
 		}
 	}

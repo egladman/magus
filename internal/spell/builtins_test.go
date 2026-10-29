@@ -593,8 +593,8 @@ func (s *discoveredSuite) TestBuiltinParseModulesArePure() {
 // A shipped spell that stops compiling as a built-in fails here by name, rather than
 // leaving every magusfile that imports it to report an unknown spell.
 func (s *discoveredSuite) TestSourceOnlyShippedSpellsAreTheOnesThatImportAHostModule() {
-	s.Equal([]string{"endoflife-date", "onepassword", "system-keychain"}, slices.Sorted(maps.Keys(SourceOnly())))
-	s.Contains(SourceOnly()["endoflife-date"], `imports "http"`)
+	s.Equal([]string{"endoflife-date", "onepassword", "system-keychain"}, slices.Sorted(maps.Keys(sourceOnlySpells())))
+	s.Contains(sourceOnlySpells()["endoflife-date"], `imports "http"`)
 }
 
 func (s *discoveredSuite) TestDiscoverySpellsAreBuiltins() {

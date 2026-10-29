@@ -18,40 +18,39 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
-// MagusfileName is the file a discovered project's source is written to, in its directory.
-const MagusfileName = "magusfile.buzz"
+// magusfileName is the file a discovered project's source is written to, in its directory.
+const magusfileName = "magusfile.buzz"
 
-// DiscoveryInput is what [CollectDiscovery] read, passed whole to [MergeDiscovery] so the
+// discoveryInput is what [collectDiscovery] read, passed whole to [mergeDiscovery] so the
 // walk's notes reach the report.
-type DiscoveryInput struct {
+type discoveryInput struct {
 	// Queries holds one query per asked spell, keyed by spell name.
 	Queries map[string]spells.DiscoveryQuery
 	// Notes are the walk's rule-resolved choices: directories pruned for some spells
 	// and not others.
-	Notes []DiscoveryFinding
+	Notes []discoveryFinding
 }
 
-// SpellAnswer is one spell's decoded discover_projects answer.
-type SpellAnswer struct {
+// spellAnswer is one spell's decoded discover_projects answer.
+type spellAnswer struct {
 	Spell  spells.Descriptor
 	Claims []spells.DiscoveredProject
 }
 
-// Discovery is the merged projection: one project per claimed directory, and the report.
-type Discovery struct {
+// discoveryResult is the merged projection: one project per claimed directory, and the report.
+type discoveryResult struct {
 	// Projects is sorted by path. A directory that already has a magusfile is never one.
-	Projects []DiscoveryProject
+	Projects []discoveryProject
 	// Notes are disagreements a rule resolved; each names the line that overrides it.
-	Notes []DiscoveryFinding
+	Notes []discoveryFinding
 	// Gaps are what discovery could not decide or wire; each names the setting that does.
-	Gaps []DiscoveryFinding
+	Gaps []discoveryFinding
 }
 
-// DiscoveryProject is one directory's merged claims and the magusfile they render to.
-type DiscoveryProject struct {
+// discoveryProject is one directory's merged claims and the magusfile they render to.
+type discoveryProject struct {
 	Path string
 	// Name is empty when the path names the project, including when spells disagree.
 	Name string
@@ -60,30 +59,30 @@ type DiscoveryProject struct {
 	// DependsOn holds workspace-relative project paths, sorted.
 	DependsOn []string
 	// Targets is in phase order ([spells.DiscoveryTargets]), then ci when composed.
-	Targets []DiscoveryTarget
+	Targets []discoveryTarget
 	// Source is the rendered magusfile.buzz.
 	Source string
 }
 
 // Magusfile is the workspace-relative path Source is written to.
-func (p DiscoveryProject) Magusfile() string { return path.Join(p.Path, MagusfileName) }
+func (p discoveryProject) Magusfile() string { return path.Join(p.Path, magusfileName) }
 
-// DiscoveryTarget is one lifecycle target. Steps run in order; ci has none and needs
+// discoveryTarget is one lifecycle target. Steps run in order; ci has none and needs
 // Needs instead.
-type DiscoveryTarget struct {
+type discoveryTarget struct {
 	Name  string
-	Steps []DiscoveryStep
+	Steps []discoveryStep
 	Needs []string
 }
 
-// DiscoveryStep is one spell op a target calls.
-type DiscoveryStep struct {
+// discoveryStep is one spell op a target calls.
+type discoveryStep struct {
 	Spell string
 	Op    string
 }
 
-// DiscoveryFinding is one report line.
-type DiscoveryFinding struct {
+// discoveryFinding is one report line.
+type discoveryFinding struct {
 	// Path is the file or directory the finding is about.
 	Path   string
 	What   string
@@ -92,11 +91,11 @@ type DiscoveryFinding struct {
 }
 
 // String is the report line: `<path>: <what> (<why>); settle: <settle>`.
-func (f DiscoveryFinding) String() string {
+func (f discoveryFinding) String() string {
 	return fmt.Sprintf("%s: %s (%s); settle: %s", f.Path, f.What, f.Why, f.Settle)
 }
 
-// CollectDiscovery walks root once and builds each asked spell's query: every file a
+// collectDiscovery walks root once and builds each asked spell's query: every file a
 // spell's required globs match, with markers' content read. It prunes dot directories,
 // the fixed ignore set, secondary checkouts and the union of every asked spell's ignore
 // dirs; a pruned directory that some asked spells ignore and others do not is noted.
@@ -104,7 +103,7 @@ func (f DiscoveryFinding) String() string {
 // A glob is matched against the path from every directory down, because each directory
 // is a candidate project root: "Cargo.toml" and "**/Cargo.toml" both match a/Cargo.toml.
 // Content is read, at any depth, for a glob whose basename has no wildcard.
-func CollectDiscovery(root string, asked []spells.Descriptor) (DiscoveryInput, error) {
+func collectDiscovery(root string, asked []spells.Descriptor) (discoveryInput, error) {
 	ignoredBy := map[string][]string{}
 	for _, s := range asked {
 		for _, dir := range s.IgnoreDirs {
@@ -129,7 +128,7 @@ func CollectDiscovery(root string, asked []spells.Descriptor) (DiscoveryInput, e
 				}
 				return fs.SkipDir
 			}
-			if project.IsIgnoreDir(name) || vcs.IsSecondaryCheckout(abs) {
+			if project.SkipsWalkDir(name, abs) {
 				return fs.SkipDir
 			}
 			return nil
@@ -149,9 +148,9 @@ func CollectDiscovery(root string, asked []spells.Descriptor) (DiscoveryInput, e
 		return nil
 	})
 	if err != nil {
-		return DiscoveryInput{}, fmt.Errorf("discovery: walk %s: %w", root, err)
+		return discoveryInput{}, fmt.Errorf("discovery: walk %s: %w", root, err)
 	}
-	in := DiscoveryInput{Queries: map[string]spells.DiscoveryQuery{}}
+	in := discoveryInput{Queries: map[string]spells.DiscoveryQuery{}}
 	for _, s := range asked {
 		got := files[s.Name]
 		slices.SortFunc(got, func(a, b spells.DiscoveryFile) int { return strings.Compare(a.Path, b.Path) })
@@ -165,7 +164,7 @@ func CollectDiscovery(root string, asked []spells.Descriptor) (DiscoveryInput, e
 				others = append(others, s.Name)
 			}
 		}
-		in.Notes = append(in.Notes, DiscoveryFinding{
+		in.Notes = append(in.Notes, discoveryFinding{
 			Path:   strings.Join(pruned[name], ", "),
 			What:   "not collected",
 			Why:    fmt.Sprintf("spell %s ignores %s, so %s never saw a claim inside", strings.Join(by, ", "), name, strings.Join(others, ", ")),
@@ -221,7 +220,7 @@ func matchFromAnyDir(glob, rel string) bool {
 
 func hasGlobMeta(s string) bool { return strings.ContainsAny(s, `*?[{\`) }
 
-// MergeDiscovery validates each answer against its spell, merges the claims per
+// mergeDiscovery validates each answer against its spell, merges the claims per
 // directory, and renders each project's magusfile. magusfileDirs are the directories
 // that already hold one: a magusfile wins, so claims there are dropped and noted.
 //
@@ -229,7 +228,7 @@ func hasGlobMeta(s string) bool { return strings.ContainsAny(s, `*?[{\`) }
 // spell that was not asked, a value the renderer cannot write as a Buzz string) fails
 // the merge. Every disagreement between spells is reported, as a note when a rule
 // resolved it and as a gap when nothing could.
-func MergeDiscovery(in DiscoveryInput, answers []SpellAnswer, magusfileDirs []string) (Discovery, error) {
+func mergeDiscovery(in discoveryInput, answers []spellAnswer, magusfileDirs []string) (discoveryResult, error) {
 	m := merger{
 		formed:     map[string]*mergedProject{},
 		magusfiles: map[string][]string{},
@@ -238,13 +237,13 @@ func MergeDiscovery(in DiscoveryInput, answers []SpellAnswer, magusfileDirs []st
 	for _, dir := range magusfileDirs {
 		m.magusfiles[dir] = nil
 	}
-	sorted := slices.SortedFunc(slices.Values(answers), func(a, b SpellAnswer) int { return strings.Compare(a.Spell.Name, b.Spell.Name) })
+	sorted := slices.SortedFunc(slices.Values(answers), func(a, b spellAnswer) int { return strings.Compare(a.Spell.Name, b.Spell.Name) })
 	for _, a := range sorted {
 		if _, ok := in.Queries[a.Spell.Name]; !ok {
-			return Discovery{}, fmt.Errorf("discovery: spell %q answered, but it was not asked", a.Spell.Name)
+			return discoveryResult{}, fmt.Errorf("discovery: spell %q answered, but it was not asked", a.Spell.Name)
 		}
 		if err := spell.ValidateDiscovered(a.Spell, a.Claims); err != nil {
-			return Discovery{}, err
+			return discoveryResult{}, err
 		}
 	}
 	m.form(sorted)
@@ -261,7 +260,7 @@ type mergedProject struct {
 	names   map[string]string
 	deps    []string
 	spans   []span
-	targets map[string][]DiscoveryStep
+	targets map[string][]discoveryStep
 	gaps    []spells.DiscoveryGap
 	gapBy   []string
 	name    string
@@ -275,11 +274,11 @@ type merger struct {
 	formed map[string]*mergedProject
 	// magusfiles maps each directory holding a magusfile to the spells that claimed it.
 	magusfiles map[string][]string
-	notes      []DiscoveryFinding
-	gaps       []DiscoveryFinding
+	notes      []discoveryFinding
+	gaps       []discoveryFinding
 }
 
-func (m *merger) form(answers []SpellAnswer) {
+func (m *merger) form(answers []spellAnswer) {
 	for _, a := range answers {
 		for _, c := range a.Claims {
 			if c.Role != spells.DiscoveryRoleProject {
@@ -291,7 +290,7 @@ func (m *merger) form(answers []SpellAnswer) {
 			}
 			p := m.formed[c.Path]
 			if p == nil {
-				p = &mergedProject{path: c.Path, names: map[string]string{}, targets: map[string][]DiscoveryStep{}}
+				p = &mergedProject{path: c.Path, names: map[string]string{}, targets: map[string][]discoveryStep{}}
 				m.formed[c.Path] = p
 			}
 			p.add(a.Spell.Name, c)
@@ -299,7 +298,7 @@ func (m *merger) form(answers []SpellAnswer) {
 	}
 }
 
-func (m *merger) attachMembers(answers []SpellAnswer) {
+func (m *merger) attachMembers(answers []spellAnswer) {
 	var orphans []string
 	for _, a := range answers {
 		for _, c := range a.Claims {
@@ -309,7 +308,7 @@ func (m *merger) attachMembers(answers []SpellAnswer) {
 			owner, ok := m.owner(c.Path)
 			if !ok {
 				owner = "."
-				m.formed["."] = &mergedProject{path: ".", names: map[string]string{}, targets: map[string][]DiscoveryStep{}}
+				m.formed["."] = &mergedProject{path: ".", names: map[string]string{}, targets: map[string][]discoveryStep{}}
 				orphans = append(orphans, a.Spell.Name+" at "+c.Path)
 			}
 			if _, isMagusfile := m.magusfiles[owner]; isMagusfile {
@@ -320,7 +319,7 @@ func (m *merger) attachMembers(answers []SpellAnswer) {
 		}
 	}
 	if len(orphans) > 0 {
-		m.notes = append(m.notes, DiscoveryFinding{
+		m.notes = append(m.notes, discoveryFinding{
 			Path:   ".",
 			What:   "root project formed",
 			Why:    "no project owns the member claims of " + strings.Join(orphans, ", "),
@@ -357,7 +356,7 @@ func (p *mergedProject) add(spellName string, c spells.DiscoveredProject) {
 	}
 	for name, ops := range c.Targets {
 		for _, op := range ops {
-			step := DiscoveryStep{Spell: spellName, Op: types.Normalize(op)}
+			step := discoveryStep{Spell: spellName, Op: types.Normalize(op)}
 			if !slices.Contains(p.targets[name], step) {
 				p.targets[name] = append(p.targets[name], step)
 			}
@@ -375,8 +374,8 @@ func (m *merger) noteMagusfileWins() {
 		if len(claimed) == 0 {
 			continue
 		}
-		m.notes = append(m.notes, DiscoveryFinding{
-			Path:   path.Join(dir, MagusfileName),
+		m.notes = append(m.notes, discoveryFinding{
+			Path:   path.Join(dir, magusfileName),
 			What:   "discovered claims not rendered",
 			Why:    "spell " + strings.Join(claimed, ", ") + " claimed this directory, and its magusfile wins",
 			Settle: "bind them there: magus\\project({\"spells\": [" + strings.Join(claimed, ", ") + "]})",
@@ -395,11 +394,11 @@ func (m *merger) resolveNames() {
 			for _, s := range slices.Sorted(maps.Keys(p.names)) {
 				said = append(said, fmt.Sprintf("%s says %q", s, p.names[s]))
 			}
-			m.notes = append(m.notes, DiscoveryFinding{
+			m.notes = append(m.notes, discoveryFinding{
 				Path:   p.path,
 				What:   "named by its path",
 				Why:    "spells disagree on the name: " + strings.Join(said, ", "),
-				Settle: fmt.Sprintf("magus\\project({\"name\": ...}) in %s", path.Join(p.path, MagusfileName)),
+				Settle: fmt.Sprintf("magus\\project({\"name\": ...}) in %s", path.Join(p.path, magusfileName)),
 			})
 		}
 	}
@@ -436,11 +435,11 @@ func (m *merger) resolveEdges() {
 					continue
 				}
 				edges[p.path] = append(edges[p.path], nested)
-				m.notes = append(m.notes, DiscoveryFinding{
+				m.notes = append(m.notes, discoveryFinding{
 					Path:   p.path,
 					What:   "depends on " + nested,
 					Why:    why,
-					Settle: "depends_on in " + path.Join(p.path, MagusfileName),
+					Settle: "depends_on in " + path.Join(p.path, magusfileName),
 				})
 			}
 		}
@@ -450,12 +449,12 @@ func (m *merger) resolveEdges() {
 	}
 }
 
-func (m *merger) edgeGap(from, to, why string) DiscoveryFinding {
-	return DiscoveryFinding{
+func (m *merger) edgeGap(from, to, why string) discoveryFinding {
+	return discoveryFinding{
 		Path:   from,
 		What:   "no depends_on " + to,
 		Why:    why,
-		Settle: "an explicit depends_on in " + path.Join(from, MagusfileName),
+		Settle: "an explicit depends_on in " + path.Join(from, magusfileName),
 	}
 }
 
@@ -507,29 +506,29 @@ func (m *merger) sortedProjects() []*mergedProject {
 // ciNeeds is the starter magusfile's ci: lint, build and test, whichever exist.
 var ciNeeds = []string{"lint", "build", "test"}
 
-func (m *merger) render() (Discovery, error) {
-	d := Discovery{}
+func (m *merger) render() (discoveryResult, error) {
+	d := discoveryResult{}
 	for _, p := range m.sortedProjects() {
 		slices.Sort(p.spells)
-		dp := DiscoveryProject{Path: p.path, Name: p.name, Spells: p.spells, DependsOn: p.deps}
+		dp := discoveryProject{Path: p.path, Name: p.name, Spells: p.spells, DependsOn: p.deps}
 		var needs []string
 		for _, name := range spells.DiscoveryTargets() {
 			steps := p.targets[name]
 			if len(steps) == 0 {
 				continue
 			}
-			slices.SortStableFunc(steps, func(a, b DiscoveryStep) int { return strings.Compare(a.Spell, b.Spell) })
-			dp.Targets = append(dp.Targets, DiscoveryTarget{Name: name, Steps: steps})
+			slices.SortStableFunc(steps, func(a, b discoveryStep) int { return strings.Compare(a.Spell, b.Spell) })
+			dp.Targets = append(dp.Targets, discoveryTarget{Name: name, Steps: steps})
 			if slices.Contains(ciNeeds, name) {
 				needs = append(needs, name)
 			}
 		}
 		if len(needs) > 0 {
-			dp.Targets = append(dp.Targets, DiscoveryTarget{Name: types.TargetCI, Needs: needs})
+			dp.Targets = append(dp.Targets, discoveryTarget{Name: types.TargetCI, Needs: needs})
 		}
 		source, lines, err := renderMagusfile(dp)
 		if err != nil {
-			return Discovery{}, err
+			return discoveryResult{}, err
 		}
 		dp.Source = source
 		d.Projects = append(d.Projects, dp)
@@ -540,11 +539,11 @@ func (m *merger) render() (Discovery, error) {
 	return d, nil
 }
 
-func (m *merger) reportProject(dp DiscoveryProject, p *mergedProject, lines map[string]int) {
+func (m *merger) reportProject(dp discoveryProject, p *mergedProject, lines map[string]int) {
 	file := dp.Magusfile()
 	for _, t := range dp.Targets {
 		if order := spellOrder(t.Steps); len(order) > 1 {
-			m.notes = append(m.notes, DiscoveryFinding{
+			m.notes = append(m.notes, discoveryFinding{
 				Path:   dp.Path,
 				What:   t.Name + " runs " + strings.Join(order, " then "),
 				Why:    "several spells contribute " + t.Name + ", and they run in spell-name order",
@@ -554,14 +553,14 @@ func (m *merger) reportProject(dp DiscoveryProject, p *mergedProject, lines map[
 	}
 	switch {
 	case len(dp.Targets) == 0:
-		m.gaps = append(m.gaps, DiscoveryFinding{
+		m.gaps = append(m.gaps, discoveryFinding{
 			Path:   dp.Path,
 			What:   "no lifecycle target",
 			Why:    "spell " + strings.Join(dp.Spells, ", ") + " formed the project and inferred none",
 			Settle: "write the targets in " + file,
 		})
-	case !slices.ContainsFunc(dp.Targets, func(t DiscoveryTarget) bool { return t.Name == types.TargetCI }):
-		m.gaps = append(m.gaps, DiscoveryFinding{
+	case !slices.ContainsFunc(dp.Targets, func(t discoveryTarget) bool { return t.Name == types.TargetCI }):
+		m.gaps = append(m.gaps, discoveryFinding{
 			Path:   dp.Path,
 			What:   "no ci",
 			Why:    "none of " + strings.Join(ciNeeds, ", ") + " was inferred",
@@ -569,7 +568,7 @@ func (m *merger) reportProject(dp DiscoveryProject, p *mergedProject, lines map[
 		})
 	}
 	for i, g := range p.gaps {
-		m.gaps = append(m.gaps, DiscoveryFinding{
+		m.gaps = append(m.gaps, discoveryFinding{
 			Path:   g.File,
 			What:   g.Why,
 			Why:    "spell " + p.gapBy[i] + " saw it and could not infer a target",
@@ -578,7 +577,7 @@ func (m *merger) reportProject(dp DiscoveryProject, p *mergedProject, lines map[
 	}
 }
 
-func spellOrder(steps []DiscoveryStep) []string {
+func spellOrder(steps []discoveryStep) []string {
 	var out []string
 	for _, s := range steps {
 		if !slices.Contains(out, s.Spell) {
@@ -595,7 +594,7 @@ var (
 
 // renderMagusfile writes p as Buzz source and returns the 1-based line each target's
 // function starts on.
-func renderMagusfile(p DiscoveryProject) (string, map[string]int, error) {
+func renderMagusfile(p discoveryProject) (string, map[string]int, error) {
 	var b strings.Builder
 	line := 1
 	emit := func(format string, args ...any) {
@@ -660,7 +659,7 @@ func renderMagusfile(p DiscoveryProject) (string, map[string]int, error) {
 
 // spellHandles names each spell's import binding. A spell name that is not an
 // identifier, or that a target function or the magus module would shadow, is aliased.
-func spellHandles(p DiscoveryProject) map[string]string {
+func spellHandles(p discoveryProject) map[string]string {
 	taken := map[string]bool{"magus": true, "ctx": true, "args": true}
 	for _, t := range p.Targets {
 		taken[t.Name] = true

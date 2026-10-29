@@ -520,19 +520,19 @@ func readCheckExit(runDir string) *int64 {
 
 // readAnswer reads answer.json, the counts an interrogation task's grader
 // writes. Absent means the task is not one, never a zero score.
-func readAnswer(runDir string) (counts AnswerCounts, graded bool, err error) {
+func readAnswer(runDir string) (counts answerCounts, graded bool, err error) {
 	raw, err := os.ReadFile(filepath.Join(runDir, "answer.json"))
 	if errors.Is(err, os.ErrNotExist) {
-		return AnswerCounts{}, false, nil
+		return answerCounts{}, false, nil
 	}
 	if err != nil {
-		return AnswerCounts{}, false, err
+		return answerCounts{}, false, err
 	}
 	if err := json.Unmarshal(raw, &counts); err != nil {
-		return AnswerCounts{}, false, fmt.Errorf("%s: answer.json: %w", runDir, err)
+		return answerCounts{}, false, fmt.Errorf("%s: answer.json: %w", runDir, err)
 	}
 	if counts.TP < 0 || counts.FP < 0 || counts.FN < 0 {
-		return AnswerCounts{}, false, fmt.Errorf("%s: answer.json has a negative count", runDir)
+		return answerCounts{}, false, fmt.Errorf("%s: answer.json has a negative count", runDir)
 	}
 	return counts, true, nil
 }
@@ -616,7 +616,7 @@ func extractRun(runDir string, table pricing.Table) (RunRecord, error) {
 		if control != controlGolden && control != controlNull {
 			return RunRecord{}, fmt.Errorf("%s: meta.json control %q is not golden or null", runDir, control)
 		}
-		c := &ControlRun{}
+		c := &controlRun{}
 		if err := json.Unmarshal(raw, c); err != nil {
 			return RunRecord{}, fmt.Errorf("%s: meta.json: %w", runDir, err)
 		}

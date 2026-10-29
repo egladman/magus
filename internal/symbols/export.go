@@ -243,7 +243,7 @@ func DocumentFromSCIP(doc *scip.Document) Document {
 			Documentation: si.Documentation, Signature: si.GetSignatureDocumentation().GetText(),
 		}
 		for _, r := range si.Relationships {
-			info.Relationships = append(info.Relationships, Relationship{
+			info.Relationships = append(info.Relationships, symbolRelationship{
 				Symbol: r.Symbol, Implementation: r.IsImplementation, Reference: r.IsReference,
 				TypeDefinition: r.IsTypeDefinition, Definition: r.IsDefinition,
 			})

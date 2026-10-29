@@ -256,7 +256,7 @@ func RecordsJSONL(records []RunRecord) ([]byte, error) {
 // a field tagged bench:"optional" is the exception, declared where it lives.
 var (
 	scoredFields  = requiredJSONFields(reflect.TypeFor[ScoredRun]())
-	controlFields = requiredJSONFields(reflect.TypeFor[ControlRun]())
+	controlFields = requiredJSONFields(reflect.TypeFor[controlRun]())
 )
 
 func requiredJSONFields(t reflect.Type) []string {
@@ -293,7 +293,7 @@ func runFromJSON(line []byte) (RunRecord, error) {
 		}
 	}
 	if isControl {
-		var c ControlRun
+		var c controlRun
 		if err := json.Unmarshal(line, &c); err != nil {
 			return RunRecord{}, err
 		}
@@ -710,19 +710,19 @@ func runIDs(runs []*ScoredRun, keep func(*ScoredRun) bool) []string {
 // because a check that accepts an untouched tree would grade every arm at
 // 100%. A task with no control of one kind is reported as unverified rather
 // than assumed.
-func controlSummary(controls []*ControlRun, tasks []string) map[string]ControlCell {
-	out := map[string]ControlCell{}
+func controlSummary(controls []*controlRun, tasks []string) map[string]controlCell {
+	out := map[string]controlCell{}
 	for _, task := range tasks {
 		golden := controlCount(controls, task, controlGolden)
 		null := controlCount(controls, task, controlNull)
 		goldenAllPass := golden.N > 0 && golden.Passes == golden.N
 		nullAllFail := null.N > 0 && null.Passes == 0
-		out[task] = ControlCell{Golden: golden, Null: null, Discriminates: goldenAllPass && nullAllFail}
+		out[task] = controlCell{Golden: golden, Null: null, Discriminates: goldenAllPass && nullAllFail}
 	}
 	return out
 }
 
-func controlCount(controls []*ControlRun, task, kind string) ControlCount {
+func controlCount(controls []*controlRun, task, kind string) ControlCount {
 	var successes []*bool
 	ids := []string{} // serialized; see runIDs
 	for _, run := range controls {
@@ -739,7 +739,7 @@ func controlCount(controls []*ControlRun, task, kind string) ControlCount {
 // seed drives every sampled randomization test, so the same records and seed
 // give identical output, and record order does not matter.
 func Analyze(records []RunRecord, seed uint64) (*Analysis, error) {
-	var controls []*ControlRun
+	var controls []*controlRun
 	var runs []*ScoredRun
 	for _, record := range records {
 		if record.Control != nil {

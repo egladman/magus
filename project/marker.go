@@ -3,6 +3,8 @@ package project
 import (
 	"slices"
 	"strings"
+
+	"github.com/egladman/magus/vcs"
 )
 
 // IgnoreDirs lists non-dot directory names skipped by discovery and watch
@@ -51,3 +53,13 @@ func IsIgnoreDir(name string) bool {
 	}
 	return slices.Contains(IgnoreDirs, name)
 }
+
+// SkipsWalkDir reports whether a discovery walk skips the directory at path, named name: an
+// ignored name, or a second checkout of the repository a project walk would index twice.
+func SkipsWalkDir(name, path string) bool {
+	return IsIgnoreDir(name) || vcs.IsSecondaryCheckout(path)
+}
+
+// CheckoutMarkers is every directory entry that marks a version-control checkout's root, so
+// a workspace walk can stop at a checkout without depending on the drivers.
+func CheckoutMarkers() []string { return vcs.Markers() }
