@@ -134,7 +134,7 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.RelationID]():         {"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"},
 	reflect.TypeFor[spells.SandboxAccess]():     {"", "ro", "rx", "rw", "rwx"},
 	reflect.TypeFor[types.SkillForm]():          {"", "both", "short", "full"},
-	reflect.TypeFor[spells.SymbolFormat]():      {"", "scip", "go-packages"},
+	reflect.TypeFor[spells.SymbolFormat]():      {"", "scip", "go-packages", "buzz-module", "shell-script"},
 	reflect.TypeFor[types.ImageSymlinkPolicy](): {"", "refuse", "keep", "follow"},
 	reflect.TypeFor[types.ToolCapability]():     {"", "runs", "reads", "writes", "spawns", "network", "inert"},
 	reflect.TypeFor[types.ImageVariant]():       {"", "v1", "v2", "v3", "v8"},

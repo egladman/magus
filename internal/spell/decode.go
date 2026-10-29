@@ -603,6 +603,19 @@ func validateSymbolIndexer(spellName string, si *spells.SymbolIndexer) error {
 		}
 		si.Op = types.Normalize(si.Op)
 	}
+	// The Buzz and shell indexers read the project's files in process and run nothing, so a
+	// command, a tool or a build overlay beside them would be declared and never honored.
+	if si.Format == spells.SymbolFormatBuzzModule || si.Format == spells.SymbolFormatShellScript {
+		switch {
+		case si.Command.Bin != "" || len(si.Command.Args) > 0:
+			return fmt.Errorf("symbol indexer: format %s runs no command, drop command", si.Format)
+		case len(si.Uses) > 0:
+			return fmt.Errorf("symbol indexer: format %s runs no tool, drop uses", si.Format)
+		case len(si.Envs) > 0:
+			return fmt.Errorf("symbol indexer: format %s reads one build of the files, drop envs", si.Format)
+		}
+		return nil
+	}
 	if err := validateCommand(spellName, cmp.Or(si.Op, spells.DefaultSymbolIndexOp), si.Command); err != nil {
 		return err
 	}

@@ -614,7 +614,7 @@ var boundaryEnums = []boundaryEnum{
 	{
 		Name:  "SymbolFormat",
 		Type:  reflect.TypeFor[spells.SymbolFormat](),
-		Cases: []enumCase{{"none", ""}, {"scip", "scip"}, {"goPackages", "go-packages"}},
+		Cases: []enumCase{{"none", ""}, {"scip", "scip"}, {"goPackages", "go-packages"}, {"buzzModule", "buzz-module"}, {"shellScript", "shell-script"}},
 	},
 	{
 		Name:  "External",
