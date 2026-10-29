@@ -2606,6 +2606,36 @@ func hookLocationAt(deps Dependencies, dir string) location {
 		policies: policiesAt(context.Background(), deps, root)}
 }
 
+// LineWorkspace is the root of the workspace every call on a bash line runs in, the line
+// starting in cwd: a `cd` moves later calls, and so do a magus call's -C and --root. It is
+// "" when cwd is relative, the line does not parse or runs no call, a call's directory
+// cannot be read off the line, or two calls land in different workspaces.
+func LineWorkspace(command, cwd string) string {
+	if !filepath.IsAbs(cwd) {
+		return ""
+	}
+	calls, ok := locateCalls(command, DialectBash, cwd, func(hint.Invocation) bool { return true }, false)
+	if !ok || len(calls) == 0 {
+		return ""
+	}
+	var root string
+	for _, c := range calls {
+		dir, placed := c.at.dir, !c.unfollowed && c.at.known && filepath.IsAbs(c.at.dir)
+		if isMagusInvocation(c.inv) {
+			dir, placed = magusCallDir(c)
+		}
+		if !placed {
+			return ""
+		}
+		found, err := workspace.FindRoot(dir)
+		if err != nil || (root != "" && !samePath(found, root)) {
+			return ""
+		}
+		root = found
+	}
+	return root
+}
+
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host
 // reported its tool call runs in. A host runs its hooks from wherever it likes, and the
 // process cwd is then the orchestrator's tree rather than the worker's: the binding

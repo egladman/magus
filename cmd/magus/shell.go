@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -31,6 +33,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // magus shell is the guard with one door.
@@ -203,10 +206,17 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		}
 		return verdictExit(errOut, opts, verdict)
 	}
+	var judge, judgeRoot string
 	if sf.Transport != "" {
-		if handled, err := delegateToCheckout(ctx, input, out, errOut); handled {
+		handled, declined, err := delegateToCheckout(ctx, input, out, errOut)
+		if handled {
 			return err
 		}
+		judge, judgeRoot = declined.note, unloadableCheckout(ctx, declined.root)
+	}
+	if by := os.Getenv(delegatedEnv); by != "" {
+		self, _ := runningBinaryPath()
+		judge = fmt.Sprintf("Judged by %s, this checkout's own ./magus, which %s handed the call to.", self, by)
 	}
 	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
 	window := terminalWindow()
@@ -247,12 +257,19 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// long they take.
 	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
 		// The hook ignores --root and loads no workspace up front: the one it judges in is
-		// wherever the host runs it.
-		deps := guardDependencies(ctx, "")
+		// wherever the host runs it, or a checkout whose own ./magus was passed over and whose
+		// tree this binary cannot load, so its stale-binary rule refuses what changes state.
+		deps := guardDependencies(ctx, judgeRoot)
+		if judgeRoot != "" {
+			if cache, err := deps.CacheDir(judgeRoot); err == nil {
+				ctx = guard.WithLocation(ctx, cache, judgeRoot, judgeRoot)
+			}
+		}
 		stopJudge := traceFromContext(ctx).phase("guard.judge")
 		defer stopJudge()
 		return guard.Judge(ctx, deps, req)
 	})
+	verdict = judgedBy(verdict, judge)
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly
 	// because its whole output is one verdict. They bound a run's progress chatter
 	// everywhere else; here there is no progress, so suppressing the verdict is the only
@@ -797,6 +814,8 @@ const delegatedEnv = "__MAGUS_DELEGATED_BY"
 type hookEvent struct {
 	Cwd       string `json:"cwd"`
 	ToolInput struct {
+		Command      string `json:"command"`
+		Cmd          string `json:"cmd"`
 		Workdir      string `json:"workdir"`
 		FilePath     string `json:"file_path"`
 		Path         string `json:"path"`
@@ -805,8 +824,8 @@ type hookEvent struct {
 }
 
 // callDir is the directory a host event's call lands in: the file a write names, else the
-// shell tool's workdir, else the session's cwd. "" when the input is a bare command or names
-// none.
+// workspace a shell line's calls all run in, else the shell tool's workdir, else the
+// session's cwd. "" when the input is a bare command or names none.
 func callDir(input string) string {
 	if !strings.HasPrefix(strings.TrimSpace(input), "{") {
 		return ""
@@ -826,10 +845,14 @@ func callDir(input string) string {
 			return filepath.Dir(at(p))
 		}
 	}
+	dir := ev.Cwd
 	if ev.ToolInput.Workdir != "" {
-		return at(ev.ToolInput.Workdir)
+		dir = at(ev.ToolInput.Workdir)
 	}
-	return ev.Cwd
+	if root := guard.LineWorkspace(cmp.Or(ev.ToolInput.Command, ev.ToolInput.Cmd), dir); root != "" {
+		return root
+	}
+	return dir
 }
 
 // checkoutBinary is the ./magus of the workspace dir lies in, when it is executable and is
@@ -865,26 +888,41 @@ func checkoutBinary(dir, running string) string {
 }
 
 // delegateToCheckout hands a hook call to the ./magus of the checkout it lands in when that
-// is not this binary, which may predate or postdate that tree. false means this binary
-// judges, including when the delegate will not start, which is logged.
-func delegateToCheckout(ctx context.Context, input string, out, errOut io.Writer) (bool, error) {
+// was built at its HEAD or later, since a branch extending types or bindings loads only in
+// its own build. The delegate runs here, so this session's policy still applies. On handled
+// false this binary judges, and declined says why the checkout's ./magus did not.
+func delegateToCheckout(ctx context.Context, input string, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if os.Getenv(delegatedEnv) != "" {
-		return false, nil
+		return false, checkoutDecline{}, nil
 	}
 	running, err := runningBinaryPath()
 	if err != nil {
 		slog.WarnContext(ctx, "this binary's own path is unknown, so it judges the call instead of handing it on",
 			attr.Error(err), attr.Component("magus shell"))
-		return false, nil
+		return false, checkoutDecline{}, nil
 	}
 	own := checkoutBinary(callDir(input), running)
 	if own == "" {
-		return false, nil
+		return false, checkoutDecline{}, nil
+	}
+	decline := func(why string) checkoutDecline {
+		d := checkoutDecline{root: filepath.Dir(own), note: fmt.Sprintf("Judged by %s, not by %s: %s.", running, own, why)}
+		slog.WarnContext(ctx, d.note, attr.Component("magus shell"))
+		return d
+	}
+	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
+	// directory, which is the binary handing the call over.
+	env := append(os.Environ(), delegatedEnv+"="+running, bootstrapExecSentinelVar+"=1")
+	if behind := checkoutBinaryBehind(ctx, own, env); behind != "" {
+		if line := guard.BootstrapLine(filepath.Dir(own)); line != "" {
+			behind += fmt.Sprintf(". A ./magus at HEAD judges here once the main session places one, or the bootstrap builds it, alone on its line: `%s`", line)
+		}
+		return false, decline(behind), nil
 	}
 	cmd := &exec.Cmd{
 		Path:   own,
 		Args:   slices.Concat([]string{own}, os.Args[1:]),
-		Env:    append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running)),
+		Env:    env,
 		Stdin:  strings.NewReader(input),
 		Stdout: out,
 		Stderr: errOut,
@@ -898,11 +936,75 @@ func delegateToCheckout(ctx context.Context, input string, out, errOut io.Writer
 	var exited *exec.ExitError
 	switch {
 	case err == nil:
-		return true, nil
+		return true, checkoutDecline{}, nil
 	case errors.As(err, &exited):
-		return true, exit.Reported(exited.ExitCode())
+		return true, checkoutDecline{}, exit.Reported(exited.ExitCode())
 	}
-	slog.WarnContext(ctx, "the checkout's own ./magus did not start, so this binary judges the call instead",
-		attr.Error(err), attr.Component("magus shell"))
-	return false, nil
+	return false, decline(fmt.Sprintf("it did not start: %v", err)), nil
+}
+
+// checkoutDecline is a checkout whose own ./magus was passed over, and the note saying so.
+type checkoutDecline struct{ root, note string }
+
+// unloadableCheckout is root when this binary cannot load its guard policy, "" otherwise.
+// The load costs a judgment only after its checkout's ./magus was passed over.
+func unloadableCheckout(ctx context.Context, root string) string {
+	if root == "" {
+		return ""
+	}
+	if _, err := loadGuardRules(ctx, root); err == nil {
+		return ""
+	}
+	return root
+}
+
+// checkoutBinaryBehind says why own, a checkout's ./magus, was not built at that checkout's
+// HEAD or a commit after it, "" when it was. The binary is asked for its own stamp, run
+// with env.
+func checkoutBinaryBehind(ctx context.Context, own string, env []string) string {
+	root := filepath.Dir(own)
+	var stamp bytes.Buffer
+	probe := exec.CommandContext(ctx, own, "version", "--client", "-o", "template={{.commit}}")
+	probe.Dir, probe.Env, probe.Stdout = root, env, &stamp
+	if err := probe.Run(); err != nil {
+		return fmt.Sprintf("`%s version` failed: %v", own, err)
+	}
+	built := strings.TrimSpace(stamp.String())
+	if built == "" || built == unknownVersion {
+		return "it carries no commit stamp"
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return fmt.Sprintf("no version control answered in %s to place its commit %s (%v)", root, shortCommit(built), err)
+	}
+	head, err := res.VCS.FindCommit(ctx, root, "")
+	if err != nil {
+		return fmt.Sprintf("the checkout's HEAD could not be read to place its commit %s: %v", shortCommit(built), err)
+	}
+	if head.ID == built {
+		return ""
+	}
+	after, err := res.VCS.IsAncestor(ctx, root, head.ID, built)
+	switch {
+	case err != nil:
+		return fmt.Sprintf("it was built at %s, which could not be placed against HEAD %s: %v", shortCommit(built), shortCommit(head.ID), err)
+	case !after:
+		return fmt.Sprintf("it was built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(built), shortCommit(head.ID))
+	}
+	return ""
+}
+
+// judgedBy appends note, which says which binary judged, to the verdict's text. A pass
+// carries no text to append to.
+func judgedBy(verdict types.GuardJudgment, note string) types.GuardJudgment {
+	if note == "" {
+		return verdict
+	}
+	switch verdict.Decision {
+	case "deny", "ask":
+		verdict.Reason = strings.TrimSpace(verdict.Reason + "\n" + note)
+	case "advise":
+		verdict.Context = strings.TrimSpace(verdict.Context + "\n" + note)
+	}
+	return verdict
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/config"
@@ -751,4 +752,50 @@ func TestStaleBinaryDenialNamesThePolicyFallback(t *testing.T) {
 
 	d := staleBinaryDenial(call, unloadReason{Cause: unloadStale}, nil, false, t.TempDir())
 	assert.True(t, strings.HasSuffix(d.Why, "\n"+policyUnreadNote), d.Why)
+}
+
+// LineWorkspaceSuite places shell lines run from a session checkout against a job checkout.
+type LineWorkspaceSuite struct {
+	suite.Suite
+	session, job string
+}
+
+func TestLineWorkspaceSuite(t *testing.T) {
+	suite.Run(t, new(LineWorkspaceSuite))
+}
+
+func (s *LineWorkspaceSuite) SetupTest() {
+	s.session = testkit.NewWorkspace(s.T()).Root()
+	s.job = testkit.NewWorkspace(s.T()).Root()
+	for _, root := range []string{s.session, s.job} {
+		s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	}
+}
+
+func (s *LineWorkspaceSuite) TestACdMovesTheLineIntoTheJobCheckout() {
+	s.Equal(s.job, LineWorkspace(fmt.Sprintf("cd %s && ./magus run lint . && git status", s.job), s.session))
+}
+
+func (s *LineWorkspaceSuite) TestARootFlagMovesAMagusCall() {
+	s.Equal(s.job, LineWorkspace("magus --root "+s.job+" run lint .", s.session))
+}
+
+func (s *LineWorkspaceSuite) TestALineThatStaysIsTheSessionCheckout() {
+	s.Equal(s.session, LineWorkspace("./magus run lint .", s.session))
+}
+
+func (s *LineWorkspaceSuite) TestCallsInTwoCheckoutsPlaceNone() {
+	s.Empty(LineWorkspace(fmt.Sprintf("git status && cd %s && ./magus run lint .", s.job), s.session))
+}
+
+func (s *LineWorkspaceSuite) TestACdInsideAConditionalPlacesNone() {
+	s.Empty(LineWorkspace(fmt.Sprintf("if true; then cd %s; fi; ./magus run lint .", s.job), s.session))
+}
+
+func (s *LineWorkspaceSuite) TestALineWithNoCallPlacesNone() {
+	s.Empty(LineWorkspace("cd "+s.job, s.session))
+}
+
+func (s *LineWorkspaceSuite) TestARelativeSessionPlacesNone() {
+	s.Empty(LineWorkspace("./magus run lint .", "relative"))
 }

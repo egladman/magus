@@ -564,6 +564,15 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	}
 }
 
+// BootstrapLine is the line that builds a ./magus at the HEAD of root, a checkout of magus
+// itself, "" for any other workspace.
+func BootstrapLine(root string) string {
+	if !ownSourceRoot(root) {
+		return ""
+	}
+	return config.SourceCommand(root, "", "", true)
+}
+
 // placementScript copies the main checkout's ./magus into a worker's checkout.
 const placementScript = "hack/dev/bootstrap-worktree.buzz"
 

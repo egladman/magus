@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
@@ -2163,37 +2164,139 @@ func TestCallDirIsWhereTheCallLands(t *testing.T) {
 	assert.Empty(t, callDir("git status"), "a bare command names no place")
 }
 
-// checkout is a workspace holding an executable ./magus that prints say and exits code.
-func checkout(t *testing.T, say string, code int) string {
+// placeStub writes an executable ./magus into root that reports stamp as its commit and
+// answers any other call with say and code.
+func placeStub(t *testing.T, root, stamp, say string, code int) string {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	script := fmt.Sprintf("#!/bin/sh\ncat >/dev/null\nprintf '%%s' '%s'\nexit %d\n", say, code)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(script), 0o755))
-	return root
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ncat >/dev/null\nprintf '%%s' '%s'\nexit %d\n", stamp, say, code)
+	own := filepath.Join(root, "magus")
+	require.NoError(t, os.WriteFile(own, []byte(script), 0o755))
+	return own
 }
 
 func TestCheckoutBinaryIsAnotherBinaryOnly(t *testing.T) {
-	root := checkout(t, "", 0)
-	own := filepath.Join(root, "magus")
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	own := placeStub(t, root, "", "", 0)
 	assert.Equal(t, own, checkoutBinary(filepath.Join(root, "new", "dir"), "/usr/local/bin/magus"), "a directory not made yet")
 	assert.Empty(t, checkoutBinary(root, own), "the running binary judges its own checkout")
 	assert.Empty(t, checkoutBinary(t.TempDir(), "/usr/local/bin/magus"), "no workspace")
 }
 
-// A call landing in another checkout is judged by that checkout's ./magus, whose verdict
-// and exit status are this call's; a call it already judged is not handed on again.
-func TestDelegateToCheckoutHandsTheCallToItsOwnBinary(t *testing.T) {
-	root := checkout(t, `{"decision":"deny"}`, 2)
-	input := fmt.Sprintf(`{"cwd":"/elsewhere","tool_input":{"file_path":%q}}`, filepath.Join(root, "x.go"))
-	var out, errOut bytes.Buffer
-	handled, err := delegateToCheckout(context.Background(), input, &out, &errOut)
-	assert.True(t, handled)
-	assert.Equal(t, 2, exit.Code(err))
-	assert.Equal(t, `{"decision":"deny"}`, out.String())
+// DelegateToCheckoutSuite hands hook calls from a session elsewhere to a job checkout's
+// own ./magus, a stub that denies with exit 2.
+type DelegateToCheckoutSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+}
 
-	t.Setenv(delegatedEnv, "/other/magus")
-	handled, err = delegateToCheckout(context.Background(), input, &out, &errOut)
-	assert.False(t, handled)
-	assert.NoError(t, err)
+func TestDelegateToCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(DelegateToCheckoutSuite))
+}
+
+func (s *DelegateToCheckoutSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+}
+
+// line is a Bash call from a session in another directory that runs magus in the checkout.
+func (s *DelegateToCheckoutSuite) line() string {
+	return fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"cd %s && ./magus run lint ."}}`, s.T().TempDir(), s.repo.Root())
+}
+
+func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined, out string, err error) {
+	var stdout, stderr bytes.Buffer
+	handled, decline, err := delegateToCheckout(context.Background(), input, &stdout, &stderr)
+	return handled, decline.note, stdout.String(), err
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	input := fmt.Sprintf(`{"cwd":"/elsewhere","tool_input":{"file_path":%q}}`, filepath.Join(s.repo.Root(), "x.go"))
+	handled, declined, out, err := s.delegate(input)
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"deny"}`, out)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesALineThatCdsIntoTheCheckout() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	handled, declined, out, err := s.delegate(s.line())
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"deny"}`, out)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildAfterHeadJudges() {
+	base := s.repo.Head()
+	ahead := s.repo.Commit("ahead", nil)
+	s.repo.Git("checkout", "-q", base)
+	placeStub(s.T(), s.repo.Root(), ahead, `{"decision":"deny"}`, 2)
+	handled, declined, _, _ := s.delegate(s.line())
+	s.True(handled)
+	s.Empty(declined)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildBehindHeadLeavesTheCallHere() {
+	behind := s.repo.Head()
+	head := s.repo.Commit("moved on", nil)
+	placeStub(s.T(), s.repo.Root(), behind, `{"decision":"deny"}`, 2)
+	handled, declined, out, err := s.delegate(s.line())
+	s.False(handled)
+	s.NoError(err)
+	s.Empty(out)
+	s.Contains(declined, fmt.Sprintf("built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(behind), shortCommit(head)))
+}
+
+func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildLeavesTheCallHere() {
+	placeStub(s.T(), s.repo.Root(), unknownVersion, `{"decision":"deny"}`, 2)
+	handled, declined, _, _ := s.delegate(s.line())
+	s.False(handled)
+	s.Contains(declined, "it carries no commit stamp")
+}
+
+func (s *DelegateToCheckoutSuite) TestACallAlreadyHandedOnIsJudgedHere() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.T().Setenv(delegatedEnv, "/other/magus")
+	handled, declined, _, err := s.delegate(s.line())
+	s.False(handled)
+	s.Empty(declined)
+	s.NoError(err)
+}
+
+func (s *DelegateToCheckoutSuite) TestALineThatStaysInTheSessionIsJudgedHere() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	input := fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"./magus run lint ."}}`, s.T().TempDir())
+	handled, declined, _, _ := s.delegate(input)
+	s.False(handled)
+	s.Empty(declined)
+}
+
+func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {
+	s.Equal(s.repo.Root(), callDir(s.line()))
+}
+
+// JudgedBySuite pins what a verdict says about the binary that judged it.
+type JudgedBySuite struct {
+	suite.Suite
+}
+
+func TestJudgedBySuite(t *testing.T) {
+	suite.Run(t, new(JudgedBySuite))
+}
+
+func (s *JudgedBySuite) TestADenyNamesItsJudge() {
+	got := judgedBy(types.GuardJudgment{Decision: "deny", Reason: "no"}, "Judged by /c/magus.")
+	s.Equal("no\nJudged by /c/magus.", got.Reason)
+}
+
+func (s *JudgedBySuite) TestAnAdviseNamesItsJudge() {
+	got := judgedBy(types.GuardJudgment{Decision: "advise", Context: "see"}, "Judged by /c/magus.")
+	s.Equal("see\nJudged by /c/magus.", got.Context)
+}
+
+func (s *JudgedBySuite) TestAPassCarriesNoText() {
+	got := judgedBy(types.GuardJudgment{Decision: "pass"}, "Judged by /c/magus.")
+	s.Equal(types.GuardJudgment{Decision: "pass"}, got)
 }
