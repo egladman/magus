@@ -38,9 +38,9 @@ finds it: the plans doc, a task, the harness memory.
 
 ## 3. One source of truth, drift-gated
 
-- The installed skills are generated: embedded in the binary, stamped with
-  each skill's own content digest, the stamp format and the knowledge schema
-  version, graded by `magus doctor`'s agent-skills check. A change to one skill
+- The installed skills are generated and embedded in the binary. Each copy
+  carries its skill's content digest, the stamp format and the schema version.
+  `magus doctor`'s agent-skills check grades them. A change to one skill
   restamps only that skill's copies. Never hand-edit an installed copy; edit
   internal/agent/skills/ and re-run `magus agent install <dest-dir> --force`
   (here: .claude/skills).
