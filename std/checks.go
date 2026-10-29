@@ -27,23 +27,14 @@ type EditJudge struct {
 type editJudgeKey struct{}
 
 // WithEditJudge returns ctx carrying j for the fs writers.
-// Without one they ask the workspace on ctx for its judge.
-// A ctx with a sandbox policy and neither refuses every content write:
+// A ctx with a sandbox policy and no judge refuses every content write:
 // a door that confines a script grades it too.
 func WithEditJudge(ctx context.Context, j EditJudge) context.Context {
 	return context.WithValue(ctx, editJudgeKey{}, j)
 }
 
-// findWorkspaceRoot is workspace.FindRoot, installed by the root package:
-// importing it here closes a cycle through internal/spell's tests.
-var findWorkspaceRoot func(dir string) (string, error)
-
-// SetWorkspaceRootFinder installs the root discovery the fs writers use
-// to ask only a file's own workspace for its edit judge.
-// The root magus package calls it in its init.
-func SetWorkspaceRootFinder(f func(dir string) (string, error)) { findWorkspaceRoot = f }
-
-func editJudgeFromContext(ctx context.Context) (EditJudge, bool) {
+// EditJudgeFromContext is the judge WithEditJudge put on ctx.
+func EditJudgeFromContext(ctx context.Context) (EditJudge, bool) {
 	j, ok := ctx.Value(editJudgeKey{}).(EditJudge)
 	return j, ok
 }

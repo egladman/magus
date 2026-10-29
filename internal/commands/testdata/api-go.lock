@@ -396,6 +396,10 @@ github.com/egladman/magus/std.Diff var Module
 github.com/egladman/magus/std.DiffEqual func(_ context.Context, a string, b string) (bool, error)
 github.com/egladman/magus/std.DiffStat func(_ context.Context, a string, b string) (string, error)
 github.com/egladman/magus/std.DiffUnified func(_ context.Context, a string, b string, fromLabel string, toLabel string, contextLines int) (string, error)
+github.com/egladman/magus/std.EditJudge type struct
+github.com/egladman/magus/std.EditJudge.Covers field func(ctx context.Context, path string) bool
+github.com/egladman/magus/std.EditJudge.Grade field func(ctx context.Context, path string, before []byte, after []byte) error
+github.com/egladman/magus/std.EditJudgeFromContext func(ctx context.Context) (EditJudge, bool)
 github.com/egladman/magus/std.EffectiveCurrentWorkingDirectory func(ctx context.Context) (string, error)
 github.com/egladman/magus/std.Env var Module
 github.com/egladman/magus/std.EnvExpand func(ctx context.Context, s string) (string, error)
@@ -762,6 +766,7 @@ github.com/egladman/magus/std.VCSTags func(ctx context.Context, pattern string) 
 github.com/egladman/magus/std.ValidateModule func(m Module) error
 github.com/egladman/magus/std.Vcs var Module
 github.com/egladman/magus/std.WithCurrentWorkingDirectory func(ctx context.Context, dir string) context.Context
+github.com/egladman/magus/std.WithEditJudge func(ctx context.Context, j EditJudge) context.Context
 github.com/egladman/magus/types.Ack type struct
 github.com/egladman/magus/types.Ack.OK field bool
 github.com/egladman/magus/types.ActiveDispatch type struct

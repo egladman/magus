@@ -33,6 +33,16 @@ func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (type
 
 func (m *Magus) judge(ctx context.Context, req guard.Request) (types.GuardJudgment, error) {
 	req.Lease = types.JobLeaseFromContext(ctx)
+	deps, err := m.guardDependencies(ctx)
+	if err != nil {
+		return types.GuardJudgment{}, err
+	}
+	return guard.Judge(ctx, deps, req), nil
+}
+
+// guardDependencies is what the guard judges this workspace with.
+// The error is its guard rules failing to load.
+func (m *Magus) guardDependencies(ctx context.Context) (guard.Dependencies, error) {
 	deps, _ := guard.NewDependencies(ctx, guard.Wiring{
 		Root:          m.Root(),
 		Config:        m.cfg,
@@ -51,10 +61,10 @@ func (m *Magus) judge(ctx context.Context, req guard.Request) (types.GuardJudgme
 		},
 	})
 	if deps.LoadFailure != nil {
-		return types.GuardJudgment{}, deps.LoadFailure
+		return guard.Dependencies{}, deps.LoadFailure
 	}
 	deps.ModelTiers = func() *types.ModelTierSet { return m.ModelTiers(ctx) }
-	return guard.Judge(ctx, deps, req), nil
+	return deps, nil
 }
 
 // ownRoot reports whether root names this workspace, "" being the caller's own.

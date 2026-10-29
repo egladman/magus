@@ -23,14 +23,13 @@ exec magus job fork wave/b --criteria 'change B' --write-paths 'run.go#B' --chec
 exec magus job exec wave/b
 
 # The destination is argv, which the hook's static scan cannot read.
-env BAGGAGE=magus.lease=wave/b
+# Each checkout's `job exec` binding names its lease.
 ! exec magus buzz $WORK/edit.buzz run.go $WORK/run_a.go
 stderr 'refused by the guard \[claimed-declaration\]'
 stderr 'a declaration lease wave/a claims'
 cmp run.go $WORK/run.go
 
 cd ../ana
-env BAGGAGE=magus.lease=wave/a
 exec magus buzz $WORK/edit.buzz run.go $WORK/run_a.go
 cmp run.go $WORK/run_a.go
 

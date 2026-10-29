@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -32,8 +31,6 @@ import (
 // on must therefore call this first in main, before any configuration, logging or
 // connection is set up, or its children start it again in their place.
 func MaybeLaunchSandbox() { sandbox.MaybeLaunch() }
-
-func init() { std.SetWorkspaceRootFinder(workspace.FindRoot) }
 
 // jobPlace places this workspace's job store and checkout record. A user state dir that
 // will not resolve is left empty: the store reports it, which the sandbox meets by
@@ -184,7 +181,7 @@ func (m *Magus) editJudge() std.EditJudge {
 			if !ok {
 				return fmt.Errorf("fs write %s: refused: it left the workspace while being judged", path)
 			}
-			once.Do(func() { deps, depsErr = m.editGuardDependencies(ctx) })
+			once.Do(func() { deps, depsErr = m.guardDependencies(ctx) })
 			if depsErr != nil {
 				return fmt.Errorf("fs write %s: refused: the guard rules that grade it did not load: %w", r, depsErr)
 			}
@@ -199,37 +196,6 @@ func (m *Magus) editJudge() std.EditJudge {
 			return fmt.Errorf("fs write %s: refused by the guard [%s]: %s", r, rule, reason)
 		},
 	}
-}
-
-// EditJudge is the judge a script's fs writes meet
-// when its door attached the workspace but no judge.
-func (w internals) EditJudge() std.EditJudge { return w.editJudge() }
-
-// editGuardDependencies wires the guard for this workspace.
-// TODO: Magus.judge builds the same wiring; make it call this.
-func (m *Magus) editGuardDependencies(ctx context.Context) (guard.Dependencies, error) {
-	deps, _ := guard.NewDependencies(ctx, guard.Wiring{
-		Root:          m.Root(),
-		Config:        m.cfg,
-		BinaryVersion: m.version,
-		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
-			if m.ownRoot(root) {
-				return m, nil
-			}
-			return Inspect(ctx, root, m.processOptions()...)
-		},
-		CacheDir: func(root string) (string, error) {
-			if m.ownRoot(root) {
-				return m.CacheDir(), nil
-			}
-			return ResolveCacheDir(root, m.processOptions()...)
-		},
-	})
-	if deps.LoadFailure != nil {
-		return guard.Dependencies{}, deps.LoadFailure
-	}
-	deps.ModelTiers = func() *types.ModelTierSet { return m.ModelTiers(ctx) }
-	return deps, nil
 }
 
 // canonical is path absolute with symlinks resolved, "" when unresolvable.

@@ -164,6 +164,8 @@ func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
 			e.Setenv("MAGUS_SERVER_ENABLED", "false")
 			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The merge's fs writes are judged, which opens the workspace.
+			e.Setenv("XDG_CACHE_HOME", filepath.Join(e.WorkDir, ".cache"))
 			return nil
 		},
 	})
@@ -265,6 +267,8 @@ func TestShippedHarnessEntriesRetireWhenRewritten(t *testing.T) {
 			e.Setenv("MAGUS_SERVER_ENABLED", "false")
 			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The merge's fs writes are judged, which opens the workspace.
+			e.Setenv("XDG_CACHE_HOME", filepath.Join(e.WorkDir, ".cache"))
 			for _, id := range []string{"claude-code", "codex", "cursor"} {
 				spell := filepath.Join("spells", "harness", id, "spell.buzz")
 				body, err := os.ReadFile(filepath.Join("..", "..", spell))

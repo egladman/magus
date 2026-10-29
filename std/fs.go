@@ -778,10 +778,7 @@ func checkEdit(ctx context.Context, path string, after func(before []byte) ([]by
 	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
-	j, ok := editJudgeFromContext(ctx)
-	if !ok {
-		j, ok = workspaceEditJudge(ctx, path)
-	}
+	j, ok := EditJudgeFromContext(ctx)
 	switch {
 	case !ok && sandbox.PolicyFromContext(ctx) != nil:
 		return fmt.Errorf("fs write %q: refused: this context carries a sandbox policy and no edit judge, so nothing grades the write", path)
@@ -797,36 +794,6 @@ func checkEdit(ctx context.Context, path string, after func(before []byte) ([]by
 		return err
 	}
 	return j.Grade(ctx, path, before, next)
-}
-
-// editJudger is a workspace that grades writes to its own files.
-type editJudger interface{ EditJudge() EditJudge }
-
-// workspaceEditJudge is the judge of the workspace on ctx,
-// for a door that opens it lazily and installs no judge.
-// A path outside the workspace root is not asked about:
-// asking would open the workspace for a temp file.
-func workspaceEditJudge(ctx context.Context, path string) (EditJudge, bool) {
-	if findWorkspaceRoot == nil {
-		return EditJudge{}, false
-	}
-	cwd, _ := CurrentWorkingDirectoryFromContext(ctx)
-	root, err := findWorkspaceRoot(cwd)
-	if err != nil {
-		return EditJudge{}, false
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return EditJudge{}, false
-	}
-	if rel, err := filepath.Rel(root, abs); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return EditJudge{}, false
-	}
-	w, ok := types.WorkspaceFromContext(ctx).(editJudger)
-	if !ok {
-		return EditJudge{}, false
-	}
-	return w.EditJudge(), true
 }
 
 // replacing is a checkEdit after for a write of content.

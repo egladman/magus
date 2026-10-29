@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -26,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -76,11 +78,15 @@ type lazyWorkspaceContext struct {
 	once      sync.Once
 	workspace types.WorkspaceRepository
 	trailBase string
+	// judge is the one ApplySandbox installs, set once attached.
+	judge    std.EditJudge
+	judgeErr error
 }
 
 var (
 	workspaceContextKey = contextKeyReadBy(func(ctx context.Context) { types.WorkspaceFromContext(ctx) })
 	trailContextKey     = contextKeyReadBy(func(ctx context.Context) { trail.BaseFromContext(ctx) })
+	editJudgeContextKey = contextKeyReadBy(func(ctx context.Context) { std.EditJudgeFromContext(ctx) })
 )
 
 func newLazyWorkspaceContext(parent context.Context, root string) *lazyWorkspaceContext {
@@ -101,8 +107,44 @@ func (c *lazyWorkspaceContext) Value(key any) any {
 			return nil
 		}
 		return c.trailBase
+	case editJudgeContextKey:
+		return c.editJudge()
 	}
 	return c.Context.Value(key)
+}
+
+// editJudge defers the open to the first write into the workspace,
+// so a write to a temp or env file opens nothing.
+// A workspace that fails to open refuses the write.
+func (c *lazyWorkspaceContext) editJudge() std.EditJudge {
+	return std.EditJudge{
+		Covers: func(ctx context.Context, path string) bool {
+			root, err := workspace.FindRoot(c.root)
+			if err != nil || !inDir(root, path) {
+				return false
+			}
+			c.once.Do(c.attach)
+			return c.judge.Covers == nil || c.judge.Covers(ctx, path)
+		},
+		Grade: func(ctx context.Context, path string, before, after []byte) error {
+			c.once.Do(c.attach)
+			if c.judge.Grade == nil {
+				return fmt.Errorf("fs write %s: refused: the workspace that grades it did not open: %w", path,
+					cmp.Or(c.judgeErr, errors.New("it attached no edit judge")))
+			}
+			return c.judge.Grade(ctx, path, before, after)
+		},
+	}
+}
+
+// inDir reports whether path, made absolute, lies under dir.
+func inDir(dir, path string) bool {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(dir, abs)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // attach opens against the parent context, so the open cannot re-enter Value and
@@ -110,6 +152,7 @@ func (c *lazyWorkspaceContext) Value(key any) any {
 func (c *lazyWorkspaceContext) attach() {
 	m, err := buzzLoadWorkspace(c.Context, c.root)
 	if err != nil {
+		c.judgeErr = err
 		warnWorkspaceNotAttached(err)
 		return
 	}
@@ -118,6 +161,13 @@ func (c *lazyWorkspaceContext) attach() {
 	}
 	c.workspace = viewInternals(m)
 	c.trailBase = m.CacheDir()
+	// The judge the eager door gets, the sandbox being off here.
+	sctx, err := m.ApplySandbox(c.Context)
+	if err != nil {
+		c.judgeErr = err
+		return
+	}
+	c.judge, _ = std.EditJudgeFromContext(sctx)
 }
 
 // keyRecorder is a context that records the last key looked up in it.
