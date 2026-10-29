@@ -65,6 +65,8 @@
 {"name":"Magus.ConcurrencyNudge","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.Conformance","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ConformanceOptions","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ConformanceCeilings","reason":"the conformance lens magus\\conformance reads through the std workspace interface"}
+{"name":"Magus.MeasureConformanceBase","reason":"the base measure magus\\conformanceBase runs through the std workspace interface"}
 {"name":"Magus.Context","reason":"workspace accessor a Go program uses to call the graph doors in std without running a target"}
 {"name":"Magus.ContextWithSecrets","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
 {"name":"Magus.CurrentRevision","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}

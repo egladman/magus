@@ -74,7 +74,7 @@ export fun judge(names: [str], allowed: str) > [Finding] !> any {
         final reason = have[name];
         if (reason == null) {
             found.append(Finding{ path = ALLOWED, message = "the root package exports " + name + ", which the SDK allow list leaves out",
-                fix = "Prefer not exporting it. If the SDK needs it, append a line with a name and a reason for" + name + " to " + ALLOWED + "." });
+                fix = "Prefer not exporting it. If the SDK needs it, append a line with a name and a reason for " + name + " to " + ALLOWED + "." });
         } else if (reason!.trim() == "") {
             found.append(Finding{ path = ALLOWED, message = "the SDK allow list names " + name + " with no reason",
                 fix = "Give " + name + " a one-line reason in " + ALLOWED + "." });

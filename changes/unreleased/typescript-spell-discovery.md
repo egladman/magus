@@ -9,4 +9,4 @@
   dependency edges: a `workspace:` range, a `file:` or `link:` path, and under npm or yarn a
   plain range naming a member. Every `scripts` entry is reported as a gap and never run, as
   are a bundler config, a test runner with no op (jest, mocha, ...), a `workspace:` range
-  naming no member, a plain range pnpm will not link, and a workspace glob matching nothing.
+  naming no member, a plain range pnpm does not link, and a workspace glob matching nothing.
