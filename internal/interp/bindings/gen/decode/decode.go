@@ -1594,6 +1594,135 @@ func decodeProvidedProject(v vm.Value, path string) (spells.ProvidedProject, err
 	return out, nil
 }
 
+// DecodeDiscoveryGap decodes a Buzz DiscoveryGap, an object instance or a map, into a spells.DiscoveryGap.
+func DecodeDiscoveryGap(v vm.Value) (spells.DiscoveryGap, error) {
+	return decodeDiscoveryGap(v, "discoveryGap")
+}
+
+func decodeDiscoveryGap(v vm.Value, path string) (spells.DiscoveryGap, error) {
+	var out spells.DiscoveryGap
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "DiscoveryGap", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "file":
+			sFile, err := decodeString(item, path+".file")
+			if err != nil {
+				return out, err
+			}
+			out.File = sFile
+		case "why":
+			sWhy, err := decodeString(item, path+".why")
+			if err != nil {
+				return out, err
+			}
+			out.Why = sWhy
+		default:
+			return out, unknownMember(path, "DiscoveryGap", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeDiscoveredProject decodes a Buzz DiscoveredProject, an object instance or a map, into a spells.DiscoveredProject.
+func DecodeDiscoveredProject(v vm.Value) (spells.DiscoveredProject, error) {
+	return decodeDiscoveredProject(v, "discoveredProject")
+}
+
+func decodeDiscoveredProject(v vm.Value, path string) (spells.DiscoveredProject, error) {
+	var out spells.DiscoveredProject
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "DiscoveredProject", v)
+	}
+	hasPath := false
+	hasRole := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			hasPath = true
+			sPath, err := decodeString(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "role":
+			hasRole = true
+			sRole, err := decodeEnum(item, path+".role", "DiscoveryRole", enumDiscoveryRoleValues)
+			if err != nil {
+				return out, err
+			}
+			out.Role = spells.DiscoveryRole(sRole)
+		case "name":
+			sName, err := decodeString(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "dependsOn":
+			strsDependsOn, err := decodeStringList(item, path+".dependsOn")
+			if err != nil {
+				return out, err
+			}
+			out.DependsOn = strsDependsOn
+		case "targets":
+			entriesTargets, err := decodeMap(item, path+".targets", "{str: [str]}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesTargets.MapKeys(); len(keys) > 0 {
+				mappedTargets := make(map[string][]string, len(keys))
+				for _, keyTargets := range keys {
+					elemTargets, _ := entriesTargets.MapGet(keyTargets)
+					var valueTargets []string
+					strsTargetsValue, err := decodeStringList(elemTargets, fmt.Sprintf("%s[%q]", path+".targets", keyTargets))
+					if err != nil {
+						return out, err
+					}
+					valueTargets = strsTargetsValue
+					mappedTargets[keyTargets] = valueTargets
+				}
+				out.Targets = mappedTargets
+			}
+		case "spans":
+			strsSpans, err := decodeStringList(item, path+".spans")
+			if err != nil {
+				return out, err
+			}
+			out.Spans = strsSpans
+		case "notInferred":
+			listNotInferred, err := decodeList(item, path+".notInferred", "[DiscoveryGap]")
+			if err != nil {
+				return out, err
+			}
+			if len(listNotInferred) > 0 {
+				itemsNotInferred := make([]spells.DiscoveryGap, len(listNotInferred))
+				for indexNotInferred, itemNotInferred := range listNotInferred {
+					xNotInferredItem, err := decodeDiscoveryGap(itemNotInferred, fmt.Sprintf("%s[%d]", path+".notInferred", indexNotInferred))
+					if err != nil {
+						return out, err
+					}
+					itemsNotInferred[indexNotInferred] = xNotInferredItem
+				}
+				out.NotInferred = itemsNotInferred
+			}
+		default:
+			return out, unknownMember(path, "DiscoveredProject", key)
+		}
+	}
+	if !hasPath {
+		return out, missingMember(path, "DiscoveredProject", "path")
+	}
+	if !hasRole {
+		return out, missingMember(path, "DiscoveredProject", "role")
+	}
+	return out, nil
+}
+
 // DecodePerson decodes a Buzz Person, an object instance or a map, into a types.Person.
 func DecodePerson(v vm.Value) (types.Person, error) {
 	return decodePerson(v, "person")
@@ -5544,6 +5673,7 @@ var ProviderFuncs = []ContractFunc{
 	{Name: "reply_review", Returns: "Ack", Params: "target: Target, req: ReplyReviewRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderReplyReview(v) }},
 	{Name: "review_threads", Returns: "[ReviewComment]", Params: "target: Target, req: ReviewRef", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderReviewThreads(v) }},
 	{Name: "list_projects", Returns: "[Project]", Params: "target: Target, req: ProjectQuery", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderListProjects(v) }},
+	{Name: "discover_projects", Returns: "[DiscoveredProject]", Params: "target: Target, req: DiscoveryQuery", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderDiscoverProjects(v) }},
 }
 
 // QueueFuncs is every op a merge queue provider script may export, one row per queue
@@ -5774,6 +5904,26 @@ func decodeProviderListProjects(v vm.Value) ([]spells.ProvidedProject, error) {
 	return out, nil
 }
 
+func decodeProviderDiscoverProjects(v vm.Value) ([]spells.DiscoveredProject, error) {
+	var out []spells.DiscoveredProject
+	listDiscoverProjects, err := decodeList(v, "discover_projects", "[DiscoveredProject]")
+	if err != nil {
+		return out, err
+	}
+	if len(listDiscoverProjects) > 0 {
+		itemsDiscoverProjects := make([]spells.DiscoveredProject, len(listDiscoverProjects))
+		for indexDiscoverProjects, itemDiscoverProjects := range listDiscoverProjects {
+			xDiscoverProjectsItem, err := decodeDiscoveredProject(itemDiscoverProjects, fmt.Sprintf("%s[%d]", "discover_projects", indexDiscoverProjects))
+			if err != nil {
+				return out, err
+			}
+			itemsDiscoverProjects[indexDiscoverProjects] = xDiscoverProjectsItem
+		}
+		out = itemsDiscoverProjects
+	}
+	return out, nil
+}
+
 func decodeProviderQueueDescribe(v vm.Value) (queuetypes.DescribeResult, error) {
 	var out queuetypes.DescribeResult
 	xQueueDescribe, err := decodeQueueDescribeResult(v, "describe")
@@ -5927,6 +6077,7 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 var enumArchitectureValues = []string{"", "amd64", "arm64"}
 var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumDiagnosticOriginValues = []string{"", "builtin", "workspace"}
+var enumDiscoveryRoleValues = []string{"", "project", "member"}
 var enumEdgeDirectionValues = []string{"", "out", "in"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}
