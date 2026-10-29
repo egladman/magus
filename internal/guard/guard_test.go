@@ -436,7 +436,12 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			}
 			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input), Lease: tc.lease})
 			assert.Equal(t, tc.decision, v.Decision, v.Reason)
-			if tc.decision != decisionPass {
+			switch {
+			case tc.corruptStore:
+				// The shared-checkout check reads the same store and fails open too, so its
+				// advice leads and the policy's is added to it.
+				assert.Contains(t, v.Context, "the lease store did not read")
+			case tc.decision != decisionPass:
 				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule}, v.Rule, "the policy decided, not a built-in")
 			}
 			if tc.reason != "" {

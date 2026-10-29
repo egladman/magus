@@ -236,12 +236,34 @@ type writeGrade struct {
 // the two ways to be wrong, blocking a human in their own checkout is the one that must
 // not happen.
 //
-// Every uncertainty fails OPEN with at most an advisory: no job store, no live leases, a file
-// that will not parse, a path outside every magus checkout. A rule the guard cannot evaluate
-// must not block a tool call. A lease's write into a DIFFERENT magus checkout is not an
+// Every uncertainty fails OPEN with an advisory that says so: a cache that did not resolve,
+// a store that will not parse. A rule the guard cannot evaluate must not
+// block a tool call, and must not pass it silently either. A path outside every magus
+// checkout is no uncertainty: nothing there is anyone's to grade. A lease's write into a DIFFERENT magus checkout is not an
 // uncertainty, and is denied; see denyOtherCheckout.
 func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, writePath string) writeGrade {
 	return gradeLeasedEdit(ctx, deps, actingLease, writePath, writeFields{})
+}
+
+// adviseUnresolvedCache is the grade of a write whose workspace cache did not resolve:
+// with no store to read, no lease boundary was checked, and the advisory says so. A write
+// outside every magus workspace, or a relative path no workspace can be found from, has
+// nothing to check and gets nothing.
+func adviseUnresolvedCache(deps Dependencies, writePath string) writeGrade {
+	if !filepath.IsAbs(writePath) {
+		return writeGrade{}
+	}
+	root, err := workspace.FindRoot(filepath.Dir(writePath))
+	if err != nil {
+		return writeGrade{}
+	}
+	_, err = deps.cacheDir(root)
+	if err == nil {
+		return writeGrade{}
+	}
+	return writeGrade{Decision: decisionAdvise,
+		Context: fmt.Sprintf("magus workspace: no lease boundary was checked, as the cache of the workspace at %s did not resolve (%v).", root, err),
+		Why:     "The guard fails open when it has no job store to read, so a write outside a lease's paths would pass unnoticed."}
 }
 
 // gradeLeasedEdit is gradeLeasedWrite for a write whose payload says what it changes. A
@@ -258,7 +280,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	}
 	location := hookLocation(ctx, deps)
 	if location.cacheDir == "" {
-		return writeGrade{}
+		return adviseUnresolvedCache(deps, writePath)
 	}
 	if d := denyUnknownRowMembers(ctx, deps, actingLease, ""); d.refused() {
 		return writeGrade{Decision: decisionDeny, Reason: d.Say, Why: d.Why, Rule: string(denyRuleLeaseRowUnknown)}

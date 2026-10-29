@@ -457,7 +457,8 @@ var ruleDocPolicyUnloaded = types.RuleDoc{
 		"A push, merge, spawn or state-writing magus verb is refused when the last policy that did load in this cache registered the seam's rule; the verdict names the likeliest fix for the caller: a rebuild in a checkout of magus, a placed binary for a leased worker, an update elsewhere. " +
 		"When the policy fails on an error of its own, one no other binary fixes (a typo, or a rule a stricter Buzz checker now refuses), every other call that changes state is refused too, quoting the error, as long as the workspace registers or once registered a rule. " +
 		"Reads, `git status`, edits to the policy's own sources, writes outside any workspace, VCS recovery (`--abort` or `--continue`) and a rebuild of ./magus still run, so the fix stays runnable. " +
-		"With no rule recorded or declared there was never a rule to lose, and the call passes. A load failure a newer binary fixes is stale-binary's instead.",
+		"A gated verb (a commit, a push, a pull request created or merged) is refused while a command rule for its seam raises, quoting the raise, and while no policy record says whether the workspace declares one: a missing record cannot tell a rule never declared from one that stopped loading. " +
+		"A load failure a newer binary fixes is stale-binary's instead.",
 }
 
 var ruleDocRawTool = types.RuleDoc{

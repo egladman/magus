@@ -337,6 +337,23 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	assert.Contains(t, got.Context, `magus\job`, "the advisory must name the tool that re-declares the plan")
 }
 
+func TestGradeLeasedWriteSaysAnUnresolvedCache(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	deps := Dependencies{CacheDir: func(string) (string, error) { return "", fmt.Errorf("no state dir") }}
+
+	got := gradeLeasedWrite(context.Background(), deps, "lease-b", filepath.Join(root, "store.go"))
+	require.Equal(t, "advise", got.Decision)
+	assert.Contains(t, got.Context, "no lease boundary was checked")
+	assert.Contains(t, got.Context, "no state dir")
+}
+
+func TestGradeLeasedWriteOutsideEveryWorkspaceSaysNothing(t *testing.T) {
+	deps := Dependencies{CacheDir: func(string) (string, error) { return "", fmt.Errorf("no state dir") }}
+
+	assert.Equal(t, writeGrade{}, adviseUnresolvedCache(deps, filepath.Join(string(filepath.Separator), "nowhere", "store.go")))
+}
+
 // TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
 // more here than in types.pathsIntersect, which over-reports on purpose: this answer blocks
 // a write, and a guard that blocks legitimate edits is one agents learn to route around.

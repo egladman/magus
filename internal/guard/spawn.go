@@ -65,7 +65,11 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return advice{} // an unreadable plan is the guard's standing fail-open
+		return advice{
+			Say: fmt.Sprintf("magus workspace: the lease store did not read (%v), so nothing checked this checkout for live leases.", err),
+			Why: "The spawn goes ahead because the guard fails open on a store it cannot read, and an unchecked shared checkout looks exactly like an empty one. " +
+				"A worktree of its own keeps the new worker clear of any lease the store would have shown.",
+		}
 	}
 	held := job.HeldIn(rows, at.workspace)
 	if len(held) == 0 {
