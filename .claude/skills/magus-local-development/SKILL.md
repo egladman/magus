@@ -119,3 +119,22 @@ magus buzz hack/retro/tests.buzz -- --symbol <name> [--symbol <name>]... [--prof
   refuses a profile with no block for a file in scope.
 - The layer is a signal, not a verdict. Judge each `worklist` line through magus-test-design.
 - List each `not recorded:` line in the review as a gap.
+
+<!-- rule: denial-parts-sit-in-their-fields; added: 2026-10-29; origin: agent, unreviewed;
+     evidence: hack/retro/denials.buzz and its tests, landed by integrate-wave-f;
+     retire-when: magus lints say, why and fix of every rule at build time -->
+## 10. Each denial part sits in its field
+
+Before changing a guard rule's text, or when reviewing denials, run `hack/retro/denials.buzz`:
+
+```sh
+magus buzz hack/retro/denials.buzz -- [--trail <checkout>]... [--since <duration>] [--per-rule <n>] [--jsonl]
+```
+
+- It counts mechanical faults by kind: `empty-fix`, `fix-not-runnable`, `why-acts`,
+  `why-command`, `say-over-cap`, `why-over-cap` and `duplicate-say`. Fix the rule text for each.
+- Judge each `worklist` denial here. `say` states the problem in one line. `why` explains it
+  and never restates `say` or carries the next step. `fix` is a step you can run as written that
+  clears the `say`.
+- `--trail` defaults to this checkout. Point it at the root worktree to read its trail.
+- List each `not recorded:` line in the review as a gap.

@@ -17,7 +17,7 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `lint-rules` target |
 | `policy/` | this repository's guard rules | `magus guard`, through the root magusfile |
 | `docs/` | the committed screenshots' capture | a person refreshing them |
-| `retro/` | retros built from the audit records and the graph: `trace.buzz`, `tests.buzz` | a person or an agent starting a retro or judging tests |
+| `retro/` | retros built from the audit records and the graph: `trace.buzz`, `tests.buzz`, `denials.buzz` | a person or an agent starting a retro, judging tests or reviewing denial text |
 | `testdata/`, `testdata-upstream/` | the fixtures the scripts' tests read | the tests |
 
 A script's name starts with what running it does. `ls`, `show`, `count`, `diff`,
@@ -67,6 +67,7 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | see which processes the OS killed under memory pressure | `hack/dev/show-memory-kills.buzz` |
 | start a retro: trace a commit, trail record, job, or path and time back through the guard trail and job store, with each line's record and every link no record holds | `hack/retro/trace.buzz -- (--commit <rev> \| --record <ref> \| --job <id> \| --path <file> --at <time>) --trail <checkout>` |
 | see which tests reach a symbol, file or package by directed calls, their layer signals, the statements the coverage profile says never ran, and a worklist to judge through magus-test-design | `hack/retro/tests.buzz -- (--symbol <name>... \| --file <path> \| --package <dir>) [--profile <coverage profile>]` |
+| check that each guard denial's say, why and fix sit in their fields: mechanical faults by kind, and a worklist to judge through magus-local-development | `hack/retro/denials.buzz -- [--trail <checkout>]... [--since <duration>] [--per-rule <n>] [--limit <n>] [--jsonl]` |
 | review a change with its callers, callees and tests | `hack/dev/show-review-context.buzz` |
 | find the code, file or doc section a term names, then open it a layer at a time | `hack/dev/show-code-context.buzz` |
 | compare two trees | `hack/dev/diff-dirs.buzz` |
