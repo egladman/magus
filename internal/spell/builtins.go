@@ -111,7 +111,8 @@ var shipped = sync.OnceValue(loadShipped)
 // loadShipped compiles every shipped spell that is a built-in and resolves its mgs_
 // functions into a spells.Descriptor.
 //
-// A built-in is a spell whose source compiles against the spell type modules alone. One
+// A built-in is a spell whose source compiles against the spell type modules and
+// builtinParseModules alone. One
 // that imports a host module (endoflife-date imports http) fails in that session with
 // BZZ2001 and ships as source only: `magus spell pull` copies it into a workspace, which
 // loads it with the host modules. Nothing lists which spell is which.
@@ -176,8 +177,34 @@ func (e hostImportError) Error() string {
 
 func (e hostImportError) Unwrap() error { return e.err }
 
-// compileBuiltin runs src in a session offering only the spell type modules, with no
-// file imports, and resolves it. An import of anything else is a hostImportError.
+// builtinParseModules are the host modules a built-in spell may import, by import path to
+// registry name: the ones its discover_projects parses the go.mod, package.json or
+// Cargo.toml it is handed with. Each computes over its arguments alone.
+var builtinParseModules = map[string]string{
+	"path":          "path",
+	"encoding/json": "json",
+	"encoding/yaml": "yaml",
+	"encoding/toml": "toml",
+}
+
+// declareParseModules types builtinParseModules for the checker and binds each as an
+// empty module. Loading a built-in calls only its mgs_ functions, which use none of them;
+// discover_projects runs in a session that binds the real modules. internal/spell cannot
+// bind those itself: the registry imports std, whose tests import this package.
+func declareParseModules(sess *buzz.Session) {
+	for importPath, name := range builtinParseModules {
+		if decls, ok := ModuleDecls(name); ok {
+			sess.SetModuleDecls(importPath, decls)
+		}
+		if _, ok := sess.NativeModule(importPath); !ok {
+			sess.SetNativeModule(importPath, vm.NewMap())
+		}
+	}
+}
+
+// compileBuiltin runs src in a session offering the spell type modules and
+// builtinParseModules, with no file imports, and resolves it. An import of anything else
+// is a hostImportError.
 func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithoutFileImports(), buzz.WithParseCache(parsecache.Shared()))
 	defer func() { _ = sess.Close() }()
@@ -185,6 +212,7 @@ func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) 
 	sess.SetModuleDecls(CharmModulePath, CharmModuleSource)
 	sess.SetModuleDecls(HarnessModulePath, HarnessModuleSource)
 	sess.SetModuleDecls(LintModulePath, LintModuleSource)
+	declareParseModules(sess)
 	var unresolved string
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		if unresolved == "" {

@@ -1,10 +1,12 @@
 package spell
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -576,4 +578,21 @@ func TestDeclareMagusTypesDropsUnimplementedExterns(t *testing.T) {
 fun kept(opts: magus\DirsOptions) > str { return opts.language; }`))
 	err := sess.Exec(t.Context(), `fun dropped() > any { return magus\affected(); }`)
 	assert.ErrorContains(t, err, `module magus has no member "affected"`)
+}
+
+// A built-in may import a host module only when it computes over its arguments alone.
+func (s *discoveredSuite) TestBuiltinParseModulesArePure() {
+	for importPath, name := range builtinParseModules {
+		reg, ok := bindgen.Modules[name]
+		s.Require().Truef(ok, "%s is a host module", name)
+		s.Truef(reg.Capabilities.Has(ffi.WASM), "%s computes over its arguments alone", name)
+		s.Equal(importPath, cmp.Or(reg.Path, name))
+	}
+}
+
+func (s *discoveredSuite) TestDiscoverySpellsAreBuiltins() {
+	for _, name := range []string{"buf", "go", "python", "rust", "typescript"} {
+		_, ok := Builtins()[name]
+		s.Truef(ok, "%s is a built-in", name)
+	}
 }
