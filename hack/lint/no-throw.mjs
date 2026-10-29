@@ -6,7 +6,8 @@
 //
 //	node hack/lint/no-throw.mjs <root> < paths
 //
-// typescript resolves from console/node_modules, which `magus run install console` fills.
+// typescript resolves from libs/textsearch/node_modules, which
+// `magus run install libs/textsearch` fills.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -16,9 +17,9 @@ const workspace = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const loadCompiler = () => {
   try {
-    return { ts: createRequire(join(workspace, "console", "package.json"))("typescript") };
+    return { ts: createRequire(join(workspace, "libs", "textsearch", "package.json"))("typescript") };
   } catch (err) {
-    return { error: `cannot load typescript from console/node_modules (${err.message}): run \`magus run install console\`` };
+    return { error: `cannot load typescript from libs/textsearch/node_modules (${err.message}): run \`magus run install libs/textsearch\`` };
   }
 };
 

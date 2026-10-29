@@ -61,6 +61,7 @@ import "project/libs/testlayout";
 import "project/libs/scipbuzz";
 import "project/libs/xdg";
 import "project/libs/cmdline";
+import "project/libs/textsearch";
 
 // Declaring trusted keys is what enables the cache; the insecure arm ignores them all.
 // This reads raw env while the engine reads parsed config, so the two can disagree.
@@ -2271,8 +2272,9 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // embedded engine, and holds their merged line coverage above a floor. Not the buzz
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    // hack/lint/run.buzz's tests run the binary proofread-build links.
-    ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate);
+    // hack/lint/run.buzz's tests run the binary proofread-build links, and
+    // no-throw's run TypeScript from libs/textsearch/node_modules.
+    ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate, textsearch\install);
     ctx.readsFiles(["spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/lint/*.mjs", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml"]);
@@ -2390,7 +2392,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     // the scheduler can order those writes before its reads (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
         testlayout\format, scipbuzz\format, xdg\format, cmdline\format,
-        proofreadlib\proofread_build, conformance_base);
+        proofreadlib\proofread_build, conformance_base, textsearch\install);
     ctx.readsFiles(["hack/lint/*.buzz",
                     "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                     "hack/README.md",
