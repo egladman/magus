@@ -1,0 +1,684 @@
+// Cost: reads the guard trail, the job store and one git show; writes nothing.
+//
+// Traces one event back through the audit records into one timeline. Each line
+// cites its record and the command that reopens it. A link no record holds
+// prints as `not recorded: <what>`, itself a finding.
+// It reads the trail file because magus\trail.read drops the request ref.
+namespace trace;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "path";
+import "std";
+import "time";
+import "vcs";
+
+final USAGE = "usage: magus buzz hack/retro/trace.buzz -- (--job <id> | --commit <rev> | --record <ref> | --path <file> --at <RFC3339>) [--trail <checkout>]... [--since <duration>]";
+final HELP = "cost: reads the guard trail of each --trail checkout, the job store and, for --commit, one git show; writes nothing\n{USAGE}\n"
+    + "--trail defaults to this checkout; repeat it to read several. --since is how far back from the event the trail is read (default 24h).";
+
+final RFC3339 = "2006-01-02T15:04:05Z07:00";
+
+// Record is one trail line plus the request blob fields a trace reads.
+// line is 1-based in events.jsonl; at is unix milliseconds.
+export object Record {
+    line: int,
+    at: int,
+    kind: str,
+    action: str,
+    agent: str,
+    lease: str,
+    leaseFrom: str,
+    preview: str,
+    decidedBy: str,
+    request: str,
+    response: str,
+    verdict: str,
+    command: str = "",
+    path: str = "",
+    target: str = "",
+    message: str = "",
+    blob: bool = false,
+}
+
+// JobFacts is what a trace reads of one job row. Times are unix seconds.
+export object JobFacts {
+    id: str,
+    state: str,
+    checkout: str,
+    writePaths: [str],
+    created: int,
+    registered: int,
+    updated: int,
+    reworkRounds: int,
+    widenings: int,
+    releasedPaths: [str],
+    releasedAt: int,
+}
+
+// CommitFacts is the commit a --commit trace starts from; at is unix ms.
+export object CommitFacts {
+    sha: str,
+    short: str,
+    subject: str,
+    at: int,
+    files: [str],
+}
+
+export object Seed {
+    kind: str,
+    value: str,
+    at: int,
+}
+
+// Step is one timeline line; at is unix milliseconds.
+export object Step {
+    at: int,
+    what: str,
+    cite: str,
+    reopen: str,
+}
+
+export object Trace {
+    anchor: int,
+    agents: [str],
+    jobs: [str],
+    steps: [Step],
+    missing: [str],
+    chain: [str],
+}
+
+fun field(doc: any, key: str) > str {
+    final v = doc[key];
+    if (v == null) {
+        return "";
+    }
+    return "{v}";
+}
+
+// parseRecord reads one trail line and, when blobs keeps it, its request blob.
+export fun parseRecord(text: str, line: int, blobs: str) > Record !> any {
+    final doc = json\parse(text);
+    final r = mut Record{
+        line = line, at = std\toInt(doc["ts"] ?? 0), kind = field(doc, key: "kind"), action = field(doc, key: "action"),
+        agent = field(doc, key: "agent"), lease = field(doc, key: "lease"), leaseFrom = field(doc, key: "lease_from"),
+        preview = field(doc, key: "preview"), decidedBy = field(doc, key: "decided_by"), request = field(doc, key: "request_ref"),
+        response = field(doc, key: "response_ref"), verdict = field(doc, key: "verdict_ref"),
+    };
+    final file = fs\join(blobs, name: r.request);
+    if (r.request == "" or !fs\exists(file)) {
+        return r;
+    }
+    final blob = json\parse(fs\readFile(file)) catch null;
+    if (blob == null) {
+        return r;
+    }
+    r.blob = true;
+    r.command = field(blob, key: "command");
+    r.path = field(blob, key: "path");
+    r.target = field(blob, key: "target");
+    r.message = field(blob, key: "context");
+    return r;
+}
+
+// loadTrail reads the records stamped inside [start, end], unix ms.
+// A missing trail raises: an empty trace would read as nothing happening.
+export fun loadTrail(events: str, blobs: str, start: int, end: int) > [Record] !> any {
+    if (!fs\exists(events)) {
+        throw "trace: no guard trail at {events}; name the checkout that holds it with --trail";
+    }
+    final found = mut [<Record>];
+    var line = 0;
+    foreach (text in fs\readFile(events).split("\n")) {
+        line = line + 1;
+        if (!text.startsWith("\{\"ts\":")) {
+            continue;
+        }
+        // Read the time off the prefix; out-of-window lines stay undecoded.
+        final comma = text.indexOf(",") ?? 0;
+        final at = std\parseInt(text.sub(6, len: comma - 6)) ?? 0;
+        if (at < start or at > end) {
+            continue;
+        }
+        found.append(parseRecord(text, line: line, blobs: blobs));
+    }
+    return found;
+}
+
+fun clock(ms: int) > str {
+    return time\format("01-02 15:04:05", unixMillis: std\toDouble(ms)) catch "{ms}";
+}
+
+fun short(text: str, n: int) > str {
+    final flat = text.replace("\n", with: " ");
+    return if (flat.len() > n) flat.sub(0, len: n) + "..." else flat;
+}
+
+fun idChar(c: str) > bool {
+    return (c >= "a" and c <= "z") or (c >= "0" and c <= "9") or c == "-" or c == "/" or c == "_";
+}
+
+// mentions reports whether text names job id as a whole word.
+export fun mentions(text: str, id: str) > bool {
+    var offset = 0;
+    while (true) {
+        final at = text.indexOf(id, from: offset);
+        if (at == null) {
+            return false;
+        }
+        final before = if (at! == 0) " " else text.sub(at! - 1, len: 1);
+        final end = at! + id.len();
+        final after = if (end >= text.len()) " " else text.sub(end, len: 1);
+        if (!idChar(before) and !idChar(after)) {
+            return true;
+        }
+        offset = at! + 1;
+    }
+}
+
+fun runs(command: str, verb: str, id: str) > bool {
+    return command.indexOf("job {verb} ") != null and mentions(command, id: id);
+}
+
+fun cite(r: Record) > str {
+    return "events.jsonl:{r.line} {r.request}";
+}
+
+fun reopen(r: Record) > str {
+    if (r.verdict != "") {
+        return "./magus query output {r.request}; ./magus query output {r.verdict}";
+    }
+    return "./magus query output {r.request}";
+}
+
+fun fromRecord(r: Record, what: str) > Step {
+    return Step{ at = r.at, what = what, cite = cite(r), reopen = reopen(r) };
+}
+
+fun fromRow(j: JobFacts, at: int, what: str) > Step {
+    return Step{ at = at, what = what, cite = "job row {j.id} (updated {j.updated})", reopen = "./magus describe job {j.id}" };
+}
+
+fun who(r: Record) > str {
+    return if (r.agent == "") "root" else r.agent;
+}
+
+fun verdictText(r: Record) > str {
+    if (r.preview == "guard: deny") {
+        return "guard denies" + (if (r.decidedBy != "") " ({r.decidedBy})" else "");
+    }
+    if (r.preview == "guard: pass") {
+        return if (r.decidedBy != "") "guard passes ({r.decidedBy})" else "guard passes, naming no rule";
+    }
+    return if (r.preview != "") r.preview else "no verdict recorded";
+}
+
+// where places absolute path p against job j's checkout and write paths.
+// A symbol claim (path#symbol) covers its whole file.
+export fun where(p: str, j: JobFacts?) > str {
+    if (j == null) {
+        return p;
+    }
+    final root = j!.checkout + "/";
+    if (j!.checkout == "" or !p.startsWith(root)) {
+        return "{p}, outside {j!.id}'s checkout";
+    }
+    final rel = p.sub(root.len());
+    foreach (w in j!.writePaths) {
+        final hash = w.indexOf("#");
+        final file = if (hash == null) w else w.sub(0, len: hash!);
+        if (file == rel or (path\matches(file, path: rel) catch false)) {
+            return "{rel}, inside {j!.id}'s write paths";
+        }
+    }
+    return "{rel}, outside {j!.id}'s write paths";
+}
+
+fun commitSubject(command: str) > str {
+    final at = command.indexOf("-m \"");
+    if (at == null) {
+        return "";
+    }
+    final rest = command.sub(at! + 4);
+    final end = rest.indexOf("\"") ?? rest.len();
+    return rest.sub(0, len: end);
+}
+
+fun seedRecords(seed: Seed, records: [Record], commit: CommitFacts?) > [Record] {
+    final found = mut [<Record>];
+    foreach (r in records) {
+        if (r.at > seed.at) {
+            continue;
+        }
+        if (seed.kind == "record" and (r.request == seed.value or r.verdict == seed.value)) {
+            found.append(r);
+        } else if (seed.kind == "path" and r.action == "file.write" and (r.path == seed.value or r.path.endsWith("/" + seed.value))) {
+            found.append(r);
+        } else if (seed.kind == "commit" and commit != null and r.command.indexOf("git commit") != null
+            and r.command.indexOf(commit!.subject) != null and r.preview != "guard: deny") {
+            found.append(r);
+        }
+    }
+    return found;
+}
+
+fun addUnique(list: mut [str], value: str) > void {
+    if (value != "" and list.indexOf(value) == null) {
+        list.append(value);
+    }
+}
+
+// trace walks records (oldest first) back from seed into one timeline.
+// jobs is every row the store holds; commit is set only for a commit seed.
+// It raises when the seed names nothing the records or rows hold.
+export fun trace(seed: Seed, records: [Record], jobs: [JobFacts], commit: CommitFacts?) > Trace !> str {
+    final byId = mut {<str: JobFacts>};
+    foreach (j in jobs) {
+        byId[j.id] = j;
+    }
+    final agents = mut [<str>];
+    final ids = mut [<str>];
+    final missing = mut [<str>];
+    var anchor = seed.at;
+    if (seed.kind == "job") {
+        if (byId[seed.value] == null) {
+            throw "trace: the job store holds no row {seed.value}";
+        }
+        addUnique(ids, value: seed.value);
+    } else {
+        final hits = seedRecords(seed, records: records, commit: commit);
+        if (hits.len() == 0) {
+            if (seed.kind != "commit") {
+                throw "trace: no trail record in the window matches {seed.kind} {seed.value}; widen --since or name another --trail";
+            }
+            missing.append("the agent that made commit {commit!.short}: no trail record in the window runs git commit with its subject");
+        } else {
+            final last = hits[hits.len() - 1];
+            if (seed.kind != "commit") {
+                anchor = last.at;
+            }
+            addUnique(agents, value: last.agent);
+            addUnique(ids, value: last.lease);
+            if (last.agent == "") {
+                missing.append("which agent made {cite(last)}: the record names none, so it is the root's or a person's");
+            }
+        }
+    }
+    final within = mut [<Record>];
+    foreach (r in records) {
+        if (r.at <= anchor) {
+            within.append(r);
+        }
+    }
+    foreach (r in within) {
+        if (agents.indexOf(r.agent) != null) {
+            addUnique(ids, value: r.lease);
+        }
+    }
+    foreach (r in within) {
+        if (r.agent != "" and ids.indexOf(r.lease) != null) {
+            addUnique(agents, value: r.agent);
+        }
+    }
+
+    final steps = mut [<Step>];
+    final lastLease = mut {<str: str>};
+    final lastJob = mut {<str: str>};
+    final lastLeased = mut {<str: Record>};
+    final exits = mut {<str: Record>};
+    final exitJob = mut {<str: str>};
+    final releases = mut {<str: Record>};
+    final lastBefore = mut {<str: Record>};
+    final continues = mut [<Record>];
+    final unleased = mut {<str: mut [Record]>};
+    final fold = mut [<Record>];
+    var namelessPass = false;
+
+    fun flush() > void {
+        if (fold.len() > 0) {
+            final first = fold[0];
+            final scope = if (first.lease != "") "under lease {first.lease}" else "with no lease";
+            final span = if (fold.len() == 1) cite(first) else "events.jsonl:{first.line}..{fold[fold.len() - 1].line} from {first.request}";
+            steps.append(Step{ at = first.at, what = "{first.agent}: {fold.len()} more call(s) {scope}, {verdictText(first)}", cite = span, reopen = reopen(first) });
+        }
+        while (fold.len() > 0) {
+            fold.pop();
+        }
+    }
+
+    foreach (r in within) {
+        final isAgent = r.agent != "" and agents.indexOf(r.agent) != null;
+        final isContinue = r.action == "agent.continue" and agents.indexOf(r.target) != null;
+        var named = "";
+        foreach (id in ids) {
+            if (mentions(r.command + " " + r.message, id: id)) {
+                named = id;
+            }
+        }
+        if (!isAgent and !isContinue and named == "") {
+            continue;
+        }
+        if (isAgent) {
+            final prior = lastLease[r.agent] ?? "";
+            if (prior != r.lease) {
+                flush();
+                if (prior != "" and r.lease == "") {
+                    final kept = lastLeased[r.agent]!;
+                    if (releases[r.agent] == null) {
+                        releases[r.agent] = r;
+                        lastBefore[r.agent] = kept;
+                    }
+                    steps.append(fromRecord(r, what: "{r.agent}: calls stop carrying lease {prior}; the last that did is {cite(kept)} at {clock(kept.at)}: `{short(kept.command, n: 100)}`"));
+                } else if (r.lease != "") {
+                    final source = if (r.leaseFrom != "") r.leaseFrom else "not recorded";
+                    steps.append(fromRecord(r, what: "{r.agent}: calls carry lease {r.lease} from here (lease_from {source})"));
+                }
+                lastLease[r.agent] = r.lease;
+            }
+            if (r.lease != "") {
+                lastLeased[r.agent] = r;
+                lastJob[r.agent] = r.lease;
+            }
+        }
+        final leaseText = if (r.lease != "") "under lease {r.lease}" else "with no lease";
+        var what = "";
+        if (isContinue) {
+            final said = if (r.response == "") "the verdict carried no response" else verdictText(r);
+            what = "root resumes {r.target} by {r.action}: \"{short(r.message, n: 160)}\"; {said}";
+            continues.append(r);
+        } else if (r.kind == "agent_spawn" and named != "") {
+            what = "{who(r)} spawns a {r.action} worker whose prompt names {named}: \"{short(r.message, n: 120)}\"";
+        } else if (named != "" and runs(r.command, verb: "fork", id: named)) {
+            what = "{who(r)} forks {named}, {verdictText(r)}";
+        } else if (named != "" and runs(r.command, verb: "exec", id: named)) {
+            what = "{who(r)} takes {named} (job exec) {leaseText}, {verdictText(r)}";
+        } else if (named != "" and runs(r.command, verb: "exit", id: named) and r.command.indexOf("--schema") != null) {
+            what = "{who(r)} asks job exit for its schema (job exit {named} --schema) {leaseText}, {verdictText(r)}";
+        } else if (named != "" and runs(r.command, verb: "exit", id: named)) {
+            what = "{who(r)} exits {named} (job exit) {leaseText}, {verdictText(r)}";
+            if (isAgent and r.preview != "guard: deny" and exits[r.agent] == null) {
+                exits[r.agent] = r;
+                exitJob[r.agent] = named;
+            }
+        } else if (named != "" and r.command.indexOf("job apply") != null) {
+            what = "{who(r)} runs job apply naming {named} {leaseText}, {verdictText(r)}";
+        } else if (named != "" and runs(r.command, verb: "wait", id: named)) {
+            what = "{who(r)} waits on {named} (job wait), {verdictText(r)}";
+        } else if (named != "" and runs(r.command, verb: "rm", id: named)) {
+            what = "{who(r)} removes {named} (job rm), {verdictText(r)}";
+        } else if (!isAgent) {
+            what = "{who(r)} names {named} in a {r.action}, {verdictText(r)}";
+        } else if (r.command.indexOf("git commit") != null) {
+            what = "{r.agent} runs git commit \"{commitSubject(r.command)}\" {leaseText}, {verdictText(r)}";
+        } else if (r.action == "file.write") {
+            final job = byId[lastJob[r.agent] ?? ""];
+            what = "{r.agent} writes {where(r.path, j: job)} {leaseText}, {verdictText(r)}";
+            if (r.lease == "" and lastLeased[r.agent] != null) {
+                if (unleased[r.agent] == null) {
+                    unleased[r.agent] = mut [<Record>];
+                }
+                unleased[r.agent]!.append(r);
+                if (r.preview == "guard: pass" and r.decidedBy == "") {
+                    namelessPass = true;
+                }
+            }
+        } else if (r.preview == "guard: deny") {
+            what = "{r.agent}: {r.action} {leaseText}, {verdictText(r)}";
+        }
+        if (what == "") {
+            if (fold.len() > 0 and (fold[0].agent != r.agent or fold[0].lease != r.lease or fold[0].preview != r.preview)) {
+                flush();
+            }
+            fold.append(r);
+            continue;
+        }
+        flush();
+        steps.append(fromRecord(r, what: what));
+    }
+    flush();
+
+    foreach (id in ids) {
+        final j = byId[id];
+        if (j == null) {
+            missing.append("job {id}'s row: the store no longer holds it (removed, or pruned past jobs.retain)");
+            continue;
+        }
+        final row = j!;
+        steps.append(fromRow(row, at: row.created * 1000, what: "row {id} created (job fork)"));
+        if (row.registered > 0) {
+            steps.append(fromRow(row, at: row.registered * 1000, what: "row {id} records a holder's base (job exec)"));
+        }
+        if (row.releasedAt > 0) {
+            steps.append(fromRow(row, at: row.releasedAt * 1000, what: "row {id} releases paths it no longer claims: {row.releasedPaths.join(", ")}"));
+        }
+        final after = if (row.updated * 1000 > anchor) " (after the event)" else "";
+        steps.append(fromRow(row, at: row.updated * 1000,
+            what: "row {id} last written{after}: state {row.state}, rework_rounds {row.reworkRounds}, widenings {row.widenings}"));
+        missing.append("{id}'s earlier states: the job store keeps only the latest row (updated {clock(row.updated * 1000)}), so an exit before a re-file shows only in the trail");
+        var forked = false;
+        foreach (r in within) {
+            if (runs(r.command, verb: "fork", id: id)) {
+                forked = true;
+            }
+        }
+        if (!forked) {
+            missing.append("the fork of {id}: no trail record in the window runs job fork {id} (the row was created {clock(row.created * 1000)})");
+        }
+    }
+    foreach (a in agents) {
+        if (a == "") {
+            continue;
+        }
+        missing.append("which spawn started agent {a}: a spawn record holds the prompt, not the agent id the host gives the child");
+        if (releases[a] != null) {
+            missing.append("when {a}'s lease binding was released: the store deletes the binding file and records no event, so the release is read off the trail's lease field");
+        }
+    }
+    if (namelessPass) {
+        missing.append("which judge branch passed a write with no lease: the trail names decided_by only on a deny");
+    }
+    foreach (c in continues) {
+        if (c.response == "") {
+            missing.append("whether the root was told {c.target}'s job state when it resumed it at {clock(c.at)}: {cite(c)} carries no response");
+        }
+    }
+    if (commit != null) {
+        final c = commit!;
+        final outside = mut [<str>];
+        var job: JobFacts? = null;
+        foreach (id in ids) {
+            if (byId[id] != null) {
+                job = byId[id];
+            }
+        }
+        foreach (f in c.files) {
+            if (job != null and where(job!.checkout + "/" + f, j: job).endsWith("outside {job!.id}'s write paths")) {
+                outside.append(f);
+            }
+        }
+        final scope = if (job == null) "" else "; {outside.len()} outside {job!.id}'s write paths";
+        steps.append(Step{ at = c.at, what = "commit {c.short} \"{c.subject}\" lands {c.files.len()} file(s): {c.files.join(", ")}{scope}",
+            cite = "commit {c.sha}", reopen = "git show --stat {c.short}" });
+        missing.append("the sha a git commit produced: the trail records the command, not its result, so commit {c.short} is linked by its subject");
+    }
+    missing.append("whether a hook record is the host's own call or an envelope replayed on stdin: both are recorded with entry_point hook");
+
+    final ordered = steps.sort(fun (a: Step, b: Step) > bool => a.at < b.at);
+    return Trace{ anchor = anchor, agents = agents, jobs = ids, steps = ordered, missing = missing,
+        chain = chain(agents, exits: exits, exitJob: exitJob, releases: releases, lastBefore: lastBefore, continues: continues, unleased: unleased) };
+}
+
+// chain lists what surrounds each agent's own exit. A link the trail lacks
+// prints as not recorded.
+fun chain(agents: [str], exits: {str: Record}, exitJob: {str: str}, releases: {str: Record}, lastBefore: {str: Record},
+    continues: [Record], unleased: {str: mut [Record]}) > [str] {
+    final found = mut [<str>];
+    foreach (a in agents) {
+        if (exits[a] == null) {
+            continue;
+        }
+        final e = exits[a]!;
+        found.append("{a} on {exitJob[a] ?? ""}:");
+        found.append("  exit: {clock(e.at)} {cite(e)}");
+        final rel = releases[a];
+        if (rel == null) {
+            found.append("  release: not recorded: every call by {a} in the window carries the lease");
+        } else {
+            final kept = lastBefore[a]!;
+            final when = if (kept.at < e.at) "before the exit" else "after the exit";
+            found.append("  release: {when}, inferred from the lease field: the last leased call is {cite(kept)} at {clock(kept.at)}"
+                + " (`{short(kept.command, n: 80)}`), the first without it {cite(rel!)} at {clock(rel!.at)}");
+        }
+        var resumed: Record? = null;
+        foreach (c in continues) {
+            if (resumed == null and c.target == e.agent and c.at >= e.at) {
+                resumed = c;
+            }
+        }
+        if (resumed != null) {
+            found.append("  resumed by the root: {clock(resumed!.at)} {cite(resumed!)}");
+        } else {
+            found.append("  resumed by the root: not recorded: no continue to {e.agent} after the exit in the window");
+        }
+        final writes = mut [<Record>];
+        foreach (w in unleased[e.agent] ?? mut [<Record>]) {
+            if (w.at >= e.at) {
+                writes.append(w);
+            }
+        }
+        if (writes.len() == 0) {
+            found.append("  writes with no lease: none recorded after the exit");
+            continue;
+        }
+        final paths = mut [<str>];
+        var passed = 0;
+        var denied = 0;
+        foreach (w in writes) {
+            addUnique(paths, value: w.path);
+            if (w.preview == "guard: pass" and w.decidedBy == "") {
+                passed = passed + 1;
+            } else if (w.preview == "guard: deny") {
+                denied = denied + 1;
+            }
+        }
+        found.append("  writes with no lease: {writes.len()} call(s) on {paths.len()} file(s), {cite(writes[0])} first");
+        found.append("  allow at the empty-lease path: {passed} passed naming no rule, {denied} denied");
+    }
+    return found;
+}
+
+export fun render(t: Trace, header: str) > [str] {
+    final lines = mut [header];
+    final agents = if (t.agents.len() > 0) t.agents.join(", ") else "none";
+    final jobs = if (t.jobs.len() > 0) t.jobs.join(", ") else "none";
+    lines.append("event at {clock(t.anchor)} UTC; agents: {agents}; jobs: {jobs}");
+    lines.append("");
+    lines.append("timeline, oldest first (UTC); each line: what [record] reopen");
+    foreach (s in t.steps) {
+        lines.append("  {clock(s.at)}  {s.what}  [{s.cite}]  {s.reopen}");
+    }
+    if (t.chain.len() > 0) {
+        lines.append("");
+        lines.append("lease chain");
+        foreach (c in t.chain) {
+            lines.append("  {c}");
+        }
+    }
+    lines.append("");
+    lines.append("not recorded");
+    foreach (m in t.missing) {
+        lines.append("  not recorded: {m}");
+    }
+    return lines;
+}
+
+fun facts(j: magus\Job) > JobFacts {
+    final released = mut [<str>];
+    var at = 0;
+    foreach (r in j.releases) {
+        released.append(r.path);
+        if (r.releasedAt > at) {
+            at = r.releasedAt;
+        }
+    }
+    final checkout = if (j.worktree != null and j.worktree!.root != "") j.worktree!.root else j.checkoutRoot;
+    return JobFacts{
+        id = j.id, state = j.state.value, checkout = checkout, writePaths = j.writePaths, created = j.created,
+        registered = j.registered, updated = j.updated, reworkRounds = j.reworkRounds, widenings = j.widenings,
+        releasedPaths = released, releasedAt = at,
+    };
+}
+
+fun commitFacts(rev: str) > CommitFacts !> any {
+    final c = vcs\commit(rev);
+    final files = mut [<str>];
+    foreach (f in vcs\cmd(["show", "--name-only", "--format=", c.id], opts: vcs\CommandOptions{ quiet = true }).stdout.split("\n")) {
+        if (f.trim() != "") {
+            files.append(f.trim());
+        }
+    }
+    final at = std\toInt(time\parse(RFC3339, value: c.date));
+    return CommitFacts{ sha = c.id, short = c.short, subject = c.subject, at = at, files = files };
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--job", "--commit", "--record", "--path", "--at", "--since"], repeated: ["--trail"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "trace: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final given = mut [<str>];
+    foreach (k in ["--job", "--commit", "--record", "--path"]) {
+        if (parsed.values[k] != null) {
+            given.append(k);
+        }
+    }
+    if (given.len() != 1) {
+        throw "trace: name exactly one event: --job, --commit, --record or --path\n{USAGE}";
+    }
+    final kind = given[0].sub(2);
+    final value = parsed.values[given[0]]!;
+    if (kind == "path" and parsed.values["--at"] == null) {
+        throw "trace: --path needs --at, the RFC3339 time to trace back from\n{USAGE}";
+    }
+    final lookback = std\toInt(time\parseDuration(parsed.values["--since"] ?? "24h"));
+    final trails = parsed.lists["--trail"] ?? [<str>];
+    final checkouts = if (trails.len() > 0) trails else [vcs\root()];
+
+    final rows = mut [<JobFacts>];
+    foreach (j in magus\job.list().jobs) {
+        rows.append(facts(j));
+    }
+    var at = std\toInt(time\parse(RFC3339, value: time\nowIso()));
+    var commit: CommitFacts? = null;
+    if (kind == "job") {
+        foreach (r in rows) {
+            if (r.id == value) {
+                at = (r.updated + 1) * 1000;
+            }
+        }
+    } else if (kind == "commit") {
+        commit = commitFacts(value);
+        at = commit!.at + 1000;
+    } else if (kind == "path") {
+        at = std\toInt(time\parse(RFC3339, value: parsed.values["--at"]!));
+    }
+    final records = mut [<Record>];
+    foreach (c in checkouts) {
+        final dir = fs\join(c, name: ".magus/activity");
+        foreach (r in loadTrail(fs\join(dir, name: "events.jsonl"), blobs: fs\join(dir, name: "blobs"), start: at - lookback, end: at)) {
+            records.append(r);
+        }
+    }
+    final ordered = records.sort(fun (a: Record, b: Record) > bool => a.at < b.at);
+    final t = trace(Seed{ kind = kind, value = value, at = at }, records: ordered, jobs: rows, commit: commit);
+    final header = "read-only: traced {kind} {value} through {records.len()} trail record(s) from {checkouts.join(", ")} and {rows.len()} job row(s)";
+    foreach (line in render(t, header: header)) {
+        std\print(line);
+    }
+}

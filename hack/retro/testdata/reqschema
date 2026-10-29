@@ -1,0 +1,1 @@
+{"tool":"shell.command","command":"cd /w/demo && ./magus job exit demo-job --schema"}

@@ -84,3 +84,20 @@ The shipped skills name nothing under `hack/`; these do.
   local Podman container.
 - Before writing a one-off script from nothing, look in `hack/README.md`, which indexes the tested
   scripts by task.
+
+<!-- rule: a-retro-starts-from-the-trace; added: 2026-10-29; origin: agent, unreviewed;
+     evidence: plans/oci-dx-pr625-2026-10-27/DECISIONS.md decision 126.1 and reports/lease-after-exit-retro.md, whose hand-built timeline the script reproduces;
+     retire-when: magus itself prints a cited timeline for an event -->
+## 8. A retro starts from the trace
+
+The first step of any retro is `hack/retro/trace.buzz`, not memory. Name one event: a commit,
+a trail record id, a job id, or a path and a time.
+
+```sh
+magus buzz hack/retro/trace.buzz -- --commit <rev> --trail <checkout holding .magus/activity>
+```
+
+- Every line cites its record and the command that reopens it.
+- Each `not recorded:` line is a link no record holds. List it in the retro as a finding.
+- `--trail` names the checkout whose `.magus/activity` holds the trail. That is usually the root
+  worktree, not the job's checkout. Repeat it to read several.

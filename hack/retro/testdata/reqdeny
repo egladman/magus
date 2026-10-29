@@ -1,0 +1,1 @@
+{"tool":"shell.command","command":"grep -r x ."}

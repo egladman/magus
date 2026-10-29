@@ -1,0 +1,1 @@
+{"tool":"shell.command","command":"cd /w/demo && git commit -q -m \"fix the docs\""}

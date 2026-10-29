@@ -17,6 +17,7 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `lint-rules` target |
 | `policy/` | this repository's guard rules | `magus guard`, through the root magusfile |
 | `docs/` | the committed screenshots' capture | a person refreshing them |
+| `retro/` | retros built from the audit records: `trace.buzz` | a person or an agent starting a retro |
 | `testdata/`, `testdata-upstream/` | the fixtures the scripts' tests read | the tests |
 
 A script's name starts with what running it does. `ls`, `show`, `count`, `diff`,
@@ -64,6 +65,7 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | see what the guard refused, and mark the verdicts | `hack/dev/count-refusals.buzz`, `hack/dev/show-feedback.buzz`, `hack/dev/mark-feedback.buzz`, `hack/dev/count-feedback.buzz` |
 | check the hooks still block what they should | `hack/dev/check-guard-blocks.buzz` |
 | see which processes the OS killed under memory pressure | `hack/dev/show-memory-kills.buzz` |
+| start a retro: trace a commit, trail record, job, or path and time back through the guard trail and job store, with each line's record and every link no record holds | `hack/retro/trace.buzz -- (--commit <rev> \| --record <ref> \| --job <id> \| --path <file> --at <time>) --trail <checkout>` |
 | review a change with its callers, callees and tests | `hack/dev/show-review-context.buzz` |
 | find the code, file or doc section a term names, then open it a layer at a time | `hack/dev/show-code-context.buzz` |
 | compare two trees | `hack/dev/diff-dirs.buzz` |
