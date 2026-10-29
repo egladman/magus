@@ -3083,3 +3083,106 @@ test "committedReader reads the staged text and the text at HEAD" {
     std\assert(outside.unreadable == "" and outside.files.len() == 0, message: "outside a work tree: {outside.unreadable}");
     fs\removeAll(dir);
 }
+
+// The delivery rule (decisions 93-94): a job's work reaches review the way the
+// person recorded on its row. The forge's own spell says which command opens a
+// pull request, and the magusfile hands its verb in: no spell is imported here.
+
+// Delivered is what the delivery rule reads of the job a session holds, copied
+// out of the request because a Buzz test cannot build the host's Job.
+export object Delivered {
+    id: str,
+    delivery: str = "",
+    parentHead: str = "",
+}
+
+// decideDelivery refuses a pull request the held job's delivery forbids: any
+// on a fold row or a row naming none, and a stacked row's off its parent head.
+export fun decideDelivery(programs: [helpers\Program], lease: Delivered?, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
+    if (lease == null) {
+        return magus\guard.allow();
+    }
+    final row = lease!;
+    foreach (p in programs) {
+        final opened = opens([p.name] + p.args);
+        if (opened == null) {
+            continue;
+        }
+        final denial = deliveryDenial(row, opened: opened!);
+        if (denial != "") {
+            return magus\guard.deny(denial);
+        }
+    }
+    return magus\guard.allow();
+}
+
+fun deliveryDenial(row: Delivered, opened: {str: str}) > str {
+    if (row.delivery == "") {
+        return "job {row.id} records no delivery, so it opens no pull request\n"
+            + "How a job's work is delivered is the person's choice: fold, separate or stacked. "
+            + "Ask them, then record it on the row with `magus job apply` and a delivery field.";
+    }
+    if (row.delivery == "fold") {
+        return "job {row.id} folds into its parent's pull request, so it opens none of its own\n"
+            + "Commit on the job's branch and exit; the parent's integrator merges it.";
+    }
+    final base = opened["base"] ?? "";
+    if (row.delivery == "stacked" and base != row.parentHead) {
+        var named = "the default branch";
+        if (base != "") {
+            named = base;
+        }
+        return "job {row.id} is stacked on {row.parentHead}; its pull request's base is {named}\n"
+            + "Open it with `gh pr create --base {row.parentHead}`.";
+    }
+    return "";
+}
+
+// ghOpens stands in for a forge spell's verb: `gh pr create` and its --base.
+fun ghOpens(argv: [str]) > {str: str}? {
+    if (argv.len() < 3 or argv[0] != "gh" or argv[1] != "pr" or argv[2] != "create") {
+        return null;
+    }
+    return {"base": helpers\flagValue(argv, long: "--base", short: "-B") ?? ""};
+}
+
+fun held(delivery: str, parentHead: str) > Delivered {
+    return Delivered{ id = "child", delivery = delivery, parentHead = parentHead };
+}
+
+fun opensWith(delivery: str, parentHead: str, argv: [str]) > GuardVerdict {
+    return verdict\checked(decideDelivery(helpers\request([argv]), lease: held(delivery, parentHead: parentHead), opens: ghOpens), label: delivery);
+}
+
+test "a fold row opens no pull request" {
+    final v = opensWith("fold", parentHead: "", argv: ["gh", "pr", "create", "--title", "t"]);
+    std\assert(v.decision == magus\GuardDecision.deny, message: "fold refuses");
+    std\assert(v.reason.indexOf("folds into its parent") != null, message: v.reason);
+}
+
+test "a row naming no delivery is refused, never given a default" {
+    final v = opensWith("", parentHead: "", argv: ["gh", "pr", "create"]);
+    std\assert(v.decision == magus\GuardDecision.deny, message: "no delivery refuses");
+    std\assert(v.reason.indexOf("records no delivery") != null, message: v.reason);
+}
+
+test "a stacked row's pull request is based on its parent's head" {
+    std\assert(opensWith("stacked", parentHead: "feat/p", argv: ["gh", "pr", "create", "--base", "feat/p"]).decision == magus\GuardDecision.allow, message: "on the parent head");
+    final off = opensWith("stacked", parentHead: "feat/p", argv: ["gh", "pr", "create", "--base", "main"]);
+    std\assert(off.decision == magus\GuardDecision.deny, message: "off the parent head");
+    std\assert(off.reason.indexOf("--base feat/p") != null, message: off.reason);
+    final unnamed = opensWith("stacked", parentHead: "feat/p", argv: ["gh", "pr", "create"]);
+    std\assert(unnamed.reason.indexOf("the default branch") != null, message: unnamed.reason);
+}
+
+test "a separate row opens its own pull request" {
+    std\assert(opensWith("separate", parentHead: "", argv: ["gh", "pr", "create"]).decision == magus\GuardDecision.allow, message: "separate");
+}
+
+test "a session holding no job, a forge without a verb, and other commands pass" {
+    final pr = helpers\request([["gh", "pr", "create"]]);
+    std\assert(decideDelivery(pr, lease: null, opens: ghOpens).decision == magus\GuardDecision.allow, message: "no job");
+    final none = fun (argv: [str]) > {str: str}? => null;
+    std\assert(decideDelivery(pr, lease: held("fold", parentHead: ""), opens: none).decision == magus\GuardDecision.allow, message: "no verb");
+    std\assert(opensWith("fold", parentHead: "", argv: ["gh", "pr", "edit", "3"]).decision == magus\GuardDecision.allow, message: "an edit opens none");
+}

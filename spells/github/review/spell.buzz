@@ -6,7 +6,8 @@
 //
 // It carries the review contract (spells/review.go) - find_review, review_threads,
 // publish_review, reply_review. magus knows nothing about GitHub: it calls four reserved names
-// and reads what comes back.
+// and reads what comes back. pull_request_open is the pull request verb
+// a workspace's own policy reads.
 //
 // # Why this is a second GitHub spell
 //
@@ -317,7 +318,7 @@ export fun publish_review(target: Target, req: PublishReviewRequest) > Ack !> an
     }
     final payload = reviewBody(req.summary, verdict: req.verdict, drafts: req.drafts);
     final url = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/reviews";
-    final res = http\post(url, serialize\jsonEncode(payload), headers: headers());
+    final res = http\post(url, body: serialize\jsonEncode(payload), headers: headers());
     if (res["status"] != 200 and res["status"] != 201) {
         throw "github-review: publish failed: HTTP {res["status"]}: {res["body"]}";
     }
@@ -390,8 +391,96 @@ export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any {
         return Ack{ ok = false };
     }
     final url = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/comments/" + req.thread + "/replies";
-    final res = http\post(url, serialize\jsonEncode({"body": req.body}), headers: headers());
+    final res = http\post(url, body: serialize\jsonEncode({"body": req.body}), headers: headers());
     return Ack{ ok = res["status"] == 200 or res["status"] == 201 };
+}
+
+final pullsEndpoint = $"(^|/)repos/[^/]+/[^/]+/pulls$";
+final apiValueFlags = ["-X", "--method", "-H", "--header", "-q", "--jq", "-t", "--template",
+    "--hostname", "--cache", "-p", "--preview", "--input"];
+final apiFieldFlags = ["-f", "--raw-field", "-F", "--field"];
+
+// pull_request_open is the pull request argv opens, by its "base" and "head"
+// branches: `gh pr create`, or a `gh api` POST to a repository's pulls. A map,
+// so a caller reads it without importing this spell; null when argv opens none.
+// An empty base is the default branch.
+export fun pull_request_open(argv: [str]) > {str: str}? {
+    if (argv.len() < 3 or argv[0].split("/")[argv[0].split("/").len() - 1] != "gh") {
+        return null;
+    }
+    final args = argv.sub(2);
+    if (argv[1] == "pr" and args[0] == "create") {
+        return {
+            "base": flagValue(args, long: "--base", short: "-B") ?? "",
+            "head": flagValue(args, long: "--head", short: "-H") ?? "",
+        };
+    }
+    if (argv[1] != "api") {
+        return null;
+    }
+    final method = flagValue(args, long: "--method", short: "-X") ?? "POST";
+    var endpoint = "";
+    var base = "";
+    var head = "";
+    var skip = false;
+    var field = false;
+    foreach (arg in args) {
+        if (skip) {
+            skip = false;
+            if (field and arg.startsWith("base=")) {
+                base = arg.sub(5);
+            } else if (field and arg.startsWith("head=")) {
+                head = arg.sub(5);
+            }
+        } else if (apiFieldFlags.indexOf(arg) != null) {
+            skip = true;
+            field = true;
+        } else if (apiValueFlags.indexOf(arg) != null) {
+            skip = true;
+            field = false;
+        } else if (!arg.startsWith("-") and endpoint == "") {
+            endpoint = arg;
+        }
+    }
+    if (method.upper() != "POST" or pullsEndpoint.match(endpoint) == null) {
+        return null;
+    }
+    return {"base": base, "head": head};
+}
+
+// flagValue is the value args give a flag spelled long or short, or null.
+fun flagValue(args: [str], long: str, short: str) > str? {
+    foreach (i, arg in args) {
+        if ((arg == long or arg == short) and i + 1 < args.len()) {
+            return args[i + 1];
+        }
+        if (arg.startsWith(long + "=")) {
+            return arg.sub(long.len() + 1);
+        }
+    }
+    return null;
+}
+
+test "gh pr create opens a pull request on the base and head it names" {
+    final opened = pull_request_open(["gh", "pr", "create", "--base", "feat/parent", "-H", "feat/child", "--title", "t"]);
+    assert\equal(opened!["base"], want: "feat/parent", message: "--base");
+    assert\equal(opened!["head"], want: "feat/child", message: "-H");
+    assert\equal(pull_request_open(["gh", "pr", "create", "--base=main"])!["base"], want: "main", message: "--base=");
+    assert\equal(pull_request_open(["/usr/bin/gh", "pr", "create"])!["base"], want: "", message: "no base is the default branch");
+}
+
+test "a POST to a repository's pulls opens one, and a read does not" {
+    final opened = pull_request_open(["gh", "api", "repos/acme/acme/pulls", "-f", "base=feat/parent", "-f", "head=feat/child", "-f", "title=t"]);
+    assert\equal(opened!["base"], want: "feat/parent", message: "base field");
+    assert\equal(opened!["head"], want: "feat/child", message: "head field");
+    assert\equal(pull_request_open(["gh", "api", "-X", "GET", "repos/acme/acme/pulls", "-f", "state=open"]), want: null, message: "a listing");
+    assert\equal(pull_request_open(["gh", "api", "repos/acme/acme/pulls/3/comments", "-f", "body=x"]), want: null, message: "a comment");
+}
+
+test "other commands open no pull request" {
+    assert\equal(pull_request_open(["gh", "pr", "edit", "3", "--base", "main"]), want: null, message: "an edit");
+    assert\equal(pull_request_open(["glab", "mr", "create"]), want: null, message: "another forge");
+    assert\equal(pull_request_open(["gh", "pr"]), want: null, message: "too short");
 }
 
 test "slug reads every remote spelling and rejects a foreign host" {
