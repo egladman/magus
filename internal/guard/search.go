@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -207,13 +208,14 @@ func isNamedFile(dir, p string) bool {
 }
 
 // indexedExtensions are the file extensions of every language a spell in the catalog
-// declares a symbol indexer for: the files refs can answer for. Buzz is source no indexer
-// reads, so a search of Buzz files is text to refs, which would answer with a symbol of
-// another language that shares the name. An unwired catalog indexes nothing.
+// declares a symbol indexer for that runs in this workspace: the files refs can answer
+// for. An external SCIP indexer the workspace's magus.yaml does not opt in builds no
+// index, so a search of its files is text to refs. An unwired catalog indexes nothing.
 func indexedExtensions(deps Dependencies) map[string]bool {
+	optIns := workspaceSpellsConfig(deps.scope.root)
 	out := map[string]bool{}
 	for _, s := range deps.spells() {
-		if s == nil || s.SymbolIndexer() == nil {
+		if s == nil || !optIns.RunsSymbolIndexer(s.Name(), s.SymbolIndexer()) {
 			continue
 		}
 		for _, ext := range s.LanguageExtensions() {
@@ -221,6 +223,20 @@ func indexedExtensions(deps Dependencies) map[string]bool {
 		}
 	}
 	return out
+}
+
+// workspaceSpellsConfig is the spells section root's own magus.yaml declares. A root that
+// is unknown or whose config does not load opts nothing in, which can only send fewer
+// searches to refs: the one direction a guard that could not read its input may err in.
+func workspaceSpellsConfig(root string) config.SpellsConfig {
+	if root == "" {
+		return config.SpellsConfig{}
+	}
+	cfg, err := config.LoadWorkspaceOnly(root)
+	if err != nil {
+		return config.SpellsConfig{}
+	}
+	return cfg.Spells
 }
 
 // nonCodeDirs are directories whose contents no symbol index describes.

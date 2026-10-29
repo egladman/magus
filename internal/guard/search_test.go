@@ -670,15 +670,21 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 	}
 }
 
-// The files refs answers for are the languages a spell declares a symbol indexer for, read
-// from the catalog rather than a list in the guard: Go, TypeScript and Buzz here.
+// The files refs answers for are the languages a spell declares a symbol indexer for that
+// runs here, read from the catalog rather than a list in the guard. TypeScript's is an
+// external SCIP indexer, so its files count only where magus.yaml opts it in.
 func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
 	exts := indexedExtensions(Dependencies{Spells: spellCatalog})
 	assert.True(t, exts[".go"], "%v", exts)
-	assert.False(t, exts[".ts"], "the typescript spell declares no symbol index: %v", exts)
-	assert.True(t, exts[".buzz"], "the buzz spell declares scip-buzz")
+	assert.False(t, exts[".ts"], "scip-typescript runs only when opted in: %v", exts)
+	assert.True(t, exts[".buzz"], "the buzz spell indexes in process")
 	assert.False(t, exts[".md"])
 	assert.Empty(t, indexedExtensions(Dependencies{}))
+
+	optedIn := testkit.NewWorkspace(t)
+	optedIn.Write("magus.yaml", "spells:\n  symbol_indexers: [typescript]\n")
+	exts = indexedExtensions(Dependencies{Spells: spellCatalog, scope: workspaceScope{root: optedIn.Root()}})
+	assert.True(t, exts[".ts"], "a workspace that opts typescript in indexes its files: %v", exts)
 
 	root := recordedSearchTree(t)
 	deps := Dependencies{
