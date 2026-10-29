@@ -39,6 +39,17 @@ import (
 // sits with the other unambiguous markers so the rule reads as one rule.
 var builtin = []types.VCSDriver{jjVCS{}, hgVCS{}, saplingVCS{}, gitVCS{}}
 
+// Markers is every directory entry a built-in driver claims a checkout by (.jj, .hg, .sl,
+// .git), in the order Resolve tries them. A caller that only needs to find a checkout's
+// root reads these rather than resolve a driver.
+func Markers() []string {
+	var out []string
+	for _, d := range builtin {
+		out = append(out, d.Claims()...)
+	}
+	return out
+}
+
 // IsSecondaryCheckout reports whether dir is a second checkout of a repository
 // under any supported VCS (a git linked worktree, an `hg share`, a jj secondary
 // workspace). Discovery skips such dirs so a repo's projects and spells are not

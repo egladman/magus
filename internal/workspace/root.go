@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // workspaceMarker is the ONE file that declares a workspace root.
@@ -36,10 +37,6 @@ const workspaceMarker = "magus.yaml"
 // Only magus's own files belong here. A language's manifest (go.mod, package.json)
 // is a spell's knowledge, and `magus init` asks the spells for it.
 var projectMarkers = []string{"magusfiles", "magusfile.buzz"}
-
-// vcsMarkers copy the claims of the vcs package's built-in drivers, which it keeps
-// unexported; the root walk needs only their names, not a resolved driver.
-var vcsMarkers = []string{".jj", ".hg", ".sl", ".git"}
 
 // vcsRootWarned keeps the VCS-root fallback to one warning per root per process:
 // FindRoot runs several times in one command.
@@ -99,7 +96,7 @@ func FindRoot(dir string) (string, error) {
 				runBroken = true
 			}
 		}
-		if checkout == "" && dirHasMarker(cur, vcsMarkers) {
+		if checkout == "" && dirHasMarker(cur, vcs.Markers()) {
 			checkout = cur
 		}
 		parent := filepath.Dir(cur)
