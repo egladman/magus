@@ -19,7 +19,7 @@ Two origins, and the difference is the whole point of the table:
 
 | file | origin | url | read | sha256 | license |
 | --- | --- | --- | --- | --- | --- |
-| `claude-code/settings.schema.json` | published | `https://www.schemastore.org/claude-code-settings.json` | 2026-09-10 | `6d4a6e3c7adedffce8079ccaef0a4bab5f5718b054421b4475c788a0ae4bedfe` | Apache-2.0 (SchemaStore) |
+| `claude-code/settings.schema.json` | published | `https://www.schemastore.org/claude-code-settings.json` | 2026-10-29 | `f26f028ad94a1e2a28e9dad1f80832ab196a8e080bd3a7d7a32e6428a15e0611` | Apache-2.0 (SchemaStore) |
 | `claude-code/hook-output.schema.json` | derived | `https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk` | 2026-09-10 | `7b928f72b0f43ba6ac978512791df374cb5f2d7fa9cd69df313c1357fc8e9b9d` | ours |
 | `codex/hooks.schema.json` | published | `https://www.schemastore.org/codex-hooks.json` | 2026-09-10 | `3833ef241453facf45f941caff9e246d74eb8c85d7796d2e099dbebb8fe8ed37` | Apache-2.0 (SchemaStore) |
 | `codex/pre-tool-use.command.output.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/pre-tool-use.command.output.schema.json` | 2026-09-10 | `e684f81c63fbb5972892f6a848b49fec68c8ce137931651093d2dd1da56a1dd6` | Apache-2.0 (openai/codex) |
@@ -159,9 +159,8 @@ These are the pages the table was settled against, each fetched 2026-10-29.
 | OpenCode | `https://raw.githubusercontent.com/anomalyco/opencode/v1.18.30/packages/opencode/src/session/tools.ts` | `tool.execute.after` fires after every tool's `execute` returns, the task tool's included |
 | OpenCode | `https://raw.githubusercontent.com/anomalyco/opencode/v1.18.30/packages/opencode/src/session/compaction.ts` | `experimental.session.compacting` fires before the summary; the compacted event publishes after it |
 
-The `published` rows were re-fetched the same day. Every Codex row matches its digest. The Claude Code settings
-schema does not: SchemaStore now serves `f26f028ad94a1e2a28e9dad1f80832ab196a8e080bd3a7d7a32e6428a15e0611`, and the
-vendored copy, still at the digest above, is due a `fetch` with its row's date and digest.
+The `published` rows were re-fetched the same day. Every Codex row matched its digest; the Claude Code settings
+schema had moved, and was re-vendored with its row's date and digest.
 
 ## Upstream artifacts
 
