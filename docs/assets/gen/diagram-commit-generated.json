@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 9,
+    "flow": 0,
     "imports": 0
   },
   "figure": "commit-generated",
   "findings": [],
-  "stamp": "sha256:bae70b8bd4473eaf7079e96edb920d24e9cf79e3171cf2742ec7464a0df23de6"
+  "stamp": "sha256:dca181054d80ed5eb673f767d328b324577c0bed59e43f6dc8ec0535169d8990"
 }

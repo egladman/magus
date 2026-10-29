@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 3,
-    "imports": 4
+    "flow": 0,
+    "imports": 0
   },
   "figure": "server-http",
   "findings": [],
-  "stamp": "sha256:7ef9b43201a927b3d3e1af3aaa1aeb745b07ac2af8db6f81a4087444e85ecf06"
+  "stamp": "sha256:c6f4623cc6e23e0010d6cc2d88d5e1fb359c67aecb63e90277825c612b976cf2"
 }

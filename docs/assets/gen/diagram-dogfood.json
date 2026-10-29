@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 4,
+    "flow": 0,
     "imports": 0
   },
   "figure": "dogfood",
   "findings": [],
-  "stamp": "sha256:ea5e364dea051974ac299c975a71b3082fd262c1633771eaf6d74563606710c3"
+  "stamp": "sha256:c98d32f9f840f66e84d50bbccc05bf41709969462f13297dfb2837a4bd0129c2"
 }

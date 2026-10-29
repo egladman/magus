@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 5,
-    "imports": 2
+    "flow": 0,
+    "imports": 0
   },
   "figure": "diagram-pipeline",
   "findings": [],
-  "stamp": "sha256:0764e6b336d74aa88362474ecefb609c96d53e2877e749e7e198f1c474d5e077"
+  "stamp": "sha256:d61f559b719030d9c767f2b20121d63f5f727fb20e3e251d913b032c11b41f24"
 }

@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 6,
+    "flow": 0,
     "imports": 0
   },
   "figure": "ci-pipeline",
   "findings": [],
-  "stamp": "sha256:59a666519a6ff853360b45b94163077362641616597257b9e0204de03a7f7a35"
+  "stamp": "sha256:3b204a95cdd4d439c9cd474adc06632fdc81a0544e97649992d7dd7ee195d5de"
 }

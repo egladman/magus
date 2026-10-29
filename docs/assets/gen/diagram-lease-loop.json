@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 9,
+    "flow": 0,
     "imports": 0
   },
   "figure": "lease-loop",
   "findings": [],
-  "stamp": "sha256:b706095a97120b733e434bfe14353ebff0a5dbb94c773894d3c172ebe1492f4d"
+  "stamp": "sha256:aa3cfecf23e3d508724c9756356733fd31d0d32c3cd9e04fd649cb9e1914f184"
 }

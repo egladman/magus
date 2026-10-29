@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 5,
-    "imports": 4
+    "flow": 0,
+    "imports": 0
   },
   "figure": "guard-path",
   "findings": [],
-  "stamp": "sha256:b7594a6ea733bd6c11fbe1e9c2cefea4f10c28e06aef9796ec9292da238444f1"
+  "stamp": "sha256:ef31cc60ea17e94fb0797d5ba5048b7302576f3f7d90e39e517181f968a2a3bc"
 }
