@@ -31,6 +31,7 @@ COPY libs/cmdline/go.mod libs/cmdline/
 COPY libs/diagnostics/go.mod libs/diagnostics/
 COPY libs/embed/go.mod libs/embed/
 COPY libs/gopherbuzz/go.mod libs/gopherbuzz/
+COPY libs/scipbuzz/go.mod libs/scipbuzz/
 COPY libs/xdg/go.mod libs/xdg/
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
