@@ -10,12 +10,15 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// notVerified opens the reason of a point nobody has checked the host for.
+// notVerified opens the reason of a point the host's docs did not settle.
 const notVerified = "not verified: "
 
-// docCite is a slash-joined path or URL in a reason: where the host's
-// documentation, or a vendored schema of it, says the hook is absent.
-var docCite = regexp.MustCompile(`[\w.-]+/[\w./#:-]+`)
+// docURL is the page of the host's docs, or of its source, a reason rests on.
+// A vendored copy does not count: it goes stale while it still cites.
+var docURL = regexp.MustCompile(`https://[^\s()]+`)
+
+// checkedOn is the ISO date a not-verified reason says its URL was read.
+var checkedOn = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
 
 // HookBindings is d's binding table, one row per hook point in HookPoints
 // order. A point a hook lists is Bound; any other takes its row from
@@ -104,19 +107,23 @@ func validateUnsupportedRow(id string, row types.HookBinding, seen map[types.Hoo
 	case row.Adapter != "":
 		return fmt.Errorf("%s names adapter %q, but nothing runs at an unsupported point",
 			row.Point, row.Adapter)
-	case !citesSource(row.Reason):
-		return fmt.Errorf("%s gives the reason %q, which cites nothing; cite the host's docs, "+
-			"or say %q and what is unchecked", row.Point, row.Reason, notVerified+"<what>")
+	}
+	if err := citesSource(row.Reason); err != nil {
+		return fmt.Errorf("%s gives the reason %q, %w", row.Point, row.Reason, err)
 	}
 	seen[row.Point] = true
 	return nil
 }
 
-// citesSource reports whether a reason cites the host's docs or says
-// plainly that nobody checked.
-func citesSource(reason string) bool {
-	if rest, ok := strings.CutPrefix(reason, notVerified); ok {
-		return strings.TrimSpace(rest) != ""
+// citesSource refuses a reason with no https URL. A not-verified reason
+// also owes the date its URL was read.
+func citesSource(reason string) error {
+	if !docURL.MatchString(reason) {
+		return fmt.Errorf("which cites no https URL; cite the host's docs page, or say %q",
+			notVerified+"<url checked> <YYYY-MM-DD> <what is unsettled>")
 	}
-	return docCite.MatchString(reason)
+	if strings.HasPrefix(reason, notVerified) && !checkedOn.MatchString(reason) {
+		return errors.New("which names no date; say when the URL was read, as YYYY-MM-DD")
+	}
+	return nil
 }

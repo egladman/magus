@@ -118,7 +118,10 @@ export fun mgs_listHooks() > [HookCommand] {
 }
 
 export fun mgs_listUnsupportedHooks() > [HookBinding] {
-    return [attachUnverified()];
+    return [
+        unsupportedHook(HookPoint.attach, reason: "a hook answers with text only (additionalContext, systemMessage); "
+            + "no output field carries an image or a file (https://code.claude.com/docs/en/hooks)"),
+    ];
 }
 
 fun claude_command(hook: HookCommand) > str {

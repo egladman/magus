@@ -671,6 +671,25 @@ exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'deny'
 
+# stop and subagentStop reach the workspace's magus\guard.stop as the stops they are. A
+# deny comes back as followup_message, which Cursor sends as the next message; a pass
+# answers {}. Cursor resumes a subagent only when it completed, so another status is not
+# asked about at all.
+cd $WORK/stop-ws
+stdin $WORK/cursor-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"followup_message":"\[magus guard\] Stop left its work open'
+stdin $WORK/cursor-stop-followed.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '^\{\}$'
+stdin $WORK/cursor-subagent-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"followup_message":"\[magus guard\] SubagentStop left its work open'
+stdin $WORK/cursor-subagent-stop-error.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '^\{\}$'
+cd $WORK
+
 # --- magus-observe.buzz: the verdict-free one ----------------------------
 #
 # It declares no guard coverage, so the contract gate above owes it no case and
@@ -1682,6 +1701,27 @@ not json at all
 {"hook_event_name": "sessionEnd", "session_id": "c1", "reason": "completed", "transcript_path": "/tmp/t.jsonl"}
 -- cursor-subagent.json --
 {"hook_event_name": "subagentStart", "conversation_id": "child", "parent_conversation_id": "c1", "subagent_type": "explore", "task": "lease: L-1\nfind every caller"}
+-- stop-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the guard's view of a stop matters here",
+});
+magus\guard.stop(fun (req: StopRequest) > GuardVerdict {
+    if (req.stopHookActive) {
+        return magus\guard.allow();
+    }
+    return magus\guard.deny("{req.event} left its work open");
+});
+-- cursor-stop.json --
+{"hook_event_name": "stop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "status": "completed", "loop_count": 0}
+-- cursor-stop-followed.json --
+{"hook_event_name": "stop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "status": "completed", "loop_count": 1}
+-- cursor-subagent-stop.json --
+{"hook_event_name": "subagentStop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "subagent_type": "explore", "status": "completed", "loop_count": 0, "agent_transcript_path": "/tmp/child.jsonl"}
+-- cursor-subagent-stop-error.json --
+{"hook_event_name": "subagentStop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "subagent_type": "explore", "status": "error", "loop_count": 0}
 -- cursor-pre-shell-pass.json --
 {"hook_event_name": "preToolUse", "conversation_id": "c1", "session_id": "c1", "tool_name": "Shell", "tool_use_id": "s-pass", "tool_input": {"command": "ls -la", "cwd": "", "timeout": 30000}, "cwd": ""}
 -- cursor-pre-shell-deny.json --

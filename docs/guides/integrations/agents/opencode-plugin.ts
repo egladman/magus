@@ -679,6 +679,48 @@ export const MagusGuard: Plugin = async (ctx) => {
     }
   };
 
+  // Children of a backgrounded task, each true once a refusal was sent
+  // to it. Their task call returns at once, so a child's idle ends it.
+  const background = new Map<string, boolean>();
+
+  /**
+   * Asks the guard about a subagent's end: a deny's reason, else "".
+   * An advise goes to the console, since no reply can carry it.
+   */
+  const guardSubagentStop = async (who: Who, child: string, followed = false): Promise<string> => {
+    const body = JSON.stringify({
+      hook_event_name: "SubagentStop",
+      session_id: who.session,
+      agent_id: child,
+      stop_hook_active: followed,
+      cwd: ctx.directory,
+    });
+    const verdict = await judge(shellArgs, body);
+    if (verdict?.decision === "advise") console.warn(`[magus guard] ${verdict.context}`);
+    return verdict?.decision === "deny" ? verdict.reason : "";
+  };
+
+  /**
+   * A backgrounded child went idle. A deny is prompted back to the
+   * child, which resumes it as a refused stop does elsewhere.
+   */
+  const backgroundChildIdle = async (child: string): Promise<void> => {
+    const reason = await guardSubagentStop(await whoIs(child), child, background.get(child));
+    if (reason === "") {
+      background.delete(child);
+      return;
+    }
+    background.set(child, true);
+    try {
+      await ctx.client.session.promptAsync({
+        path: { id: child },
+        body: { parts: [{ type: "text", text: `[magus guard] ${reason}` }] },
+      });
+    } catch (error) {
+      console.warn(`[magus guard] could not send the subagent stop refusal back: ${String(error)}`);
+    }
+  };
+
   return {
     "tool.execute.before": async (input, output) => {
       const who = await whoIs(input.sessionID);
@@ -822,7 +864,8 @@ export const MagusGuard: Plugin = async (ctx) => {
       // The finished spawn names the child, which is how magus ties the child's calls to
       // the job it was spawned for. The child's session is already known to be this one's.
       if (input.tool !== "task") return;
-      const child = (result.metadata as { sessionId?: unknown } | undefined)?.sessionId;
+      const metadata = result.metadata as { sessionId?: unknown; background?: unknown } | undefined;
+      const child = metadata?.sessionId;
       if (typeof child !== "string" || child === "") return;
       parents.set(child, input.sessionID);
       const who = await whoIs(input.sessionID);
@@ -830,6 +873,18 @@ export const MagusGuard: Plugin = async (ctx) => {
         shellArgs,
         envelope("PostToolUse", who, input.tool, input.args, { agent_id: child }),
       );
+
+      // A foreground task returns when its child finishes: this is the
+      // child's stop. A deny rides the parent's result, with the task_id
+      // that resumes the child.
+      if (metadata?.background === true) {
+        background.set(child, false);
+        return;
+      }
+      const reason = await guardSubagentStop(who, child);
+      if (reason !== "") {
+        appendNote(result, `[magus guard] ${reason}\n\nResume the subagent with task_id ${child}.`);
+      }
     },
 
     // NO experimental.session.compacting handler, deliberately, and this comment is the
@@ -851,10 +906,9 @@ export const MagusGuard: Plugin = async (ctx) => {
     // can reason about, and magus's job is to stay out of the model's way rather than to
     // shape what it remembers on whichever host happens to allow it.
     //
-    // The cost is real and is accepted: the session.compacted event fires after a
-    // compaction, but the bus is read-only and this plugin does not subscribe to it, so a
-    // compacted OpenCode session gets no brief. It can still ask, and `magus session --brief`
-    // prints the same state on demand, which is the command every host shares.
+    // A compacted root still gets the brief, as on Cursor. session.compacted
+    // fires once the summary is written. The brief rides the next tool
+    // result, after the summary.
 
     event: async ({ event }) => {
       if (event.type === "session.created" || event.type === "session.updated") {
@@ -863,11 +917,19 @@ export const MagusGuard: Plugin = async (ctx) => {
         if (event.type === "session.created" && parent === null) await holdBrief();
         return;
       }
+      if (event.type === "session.compacted") {
+        if ((await parentOf(event.properties.sessionID)) === null) await holdBrief();
+        return;
+      }
       if (event.type !== "session.idle") return;
 
       // A subagent goes idle too, once per spawn. Its work is reported by the spawn that
       // finished, and a checkpoint or a reply check per child would drown the root's.
       const id = event.properties.sessionID;
+      if (background.has(id)) {
+        await backgroundChildIdle(id);
+        return;
+      }
       if ((await parentOf(id)) !== null) return;
 
       // OpenCode has no session-end event; session.idle is the proxy. The checkpoint

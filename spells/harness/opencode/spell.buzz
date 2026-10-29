@@ -39,13 +39,18 @@ export fun mgs_listHooks() > [HookCommand] {
         HookCommand{event = "tool.execute.before", matcher = "bash|edit|write|apply_patch|task|<server>_<tool>",
             script = plugin, flags = named, points = [HookPoint.shell, HookPoint.edit, HookPoint.mcp, HookPoint.spawn]},
         HookCommand{event = "tool.execute.before", matcher = "read", script = "magus-observe", flags = named},
-        HookCommand{event = "tool.execute.after", matcher = "task", script = plugin, flags = named, points = [HookPoint.spawn]},
+        // A foreground task returns when its child finishes, so its after-hook
+        // is the child's stop; a backgrounded child's own idle is.
+        HookCommand{event = "tool.execute.after", matcher = "task", script = plugin, flags = named,
+            points = [HookPoint.spawn, HookPoint.subagentStop]},
         HookCommand{event = "tool.execute.after", matcher = "edit|write|apply_patch", script = check.script,
             flags = check.flags, timeoutS = check.timeoutS},
         // The brief rides the session's first tool result.
         HookCommand{event = "session.created", script = plugin, flags = named, points = [HookPoint.sessionStart]},
         // A root session's idle is its stop: a deny goes back as a follow-up.
         HookCommand{event = "session.idle", script = plugin, flags = named, points = [HookPoint.stop]},
+        // Fires once the summary is written. The brief rides the next result.
+        HookCommand{event = "session.compacted", script = plugin, flags = named, points = [HookPoint.compact]},
         HookCommand{event = "chat.message", script = plugin, flags = named},
         // The disk hook's line waits for the next tool result, since no
         // OpenCode event hands text to the model once a turn.
@@ -55,11 +60,8 @@ export fun mgs_listHooks() > [HookCommand] {
 
 export fun mgs_listUnsupportedHooks() > [HookBinding] {
     return [
-        unsupportedHook(HookPoint.subagentStop, reason: "not verified: that a child session's idle carries "
-            + "the context it leaves; session.idle names only the session (opencode.ai/docs/plugins)"),
-        unsupportedHook(HookPoint.compact, reason: "experimental.session.compacting only feeds the summarizer "
-            + "(opencode.ai/docs/plugins); opencode-plugin.ts records why the brief stays out of it"),
-        attachUnverified(),
+        unsupportedHook(HookPoint.attach, reason: "not verified: https://unpkg.com/@opencode-ai/sdk@1.18.30/dist/gen/types.gen.d.ts "
+            + "2026-10-29: a completed tool part carries attachments (FilePart), but no page says an SVG one renders inline"),
     ];
 }
 

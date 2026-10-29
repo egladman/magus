@@ -39,7 +39,8 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
     foreach (point in [HookPoint.shell, HookPoint.edit, HookPoint.stop, HookPoint.subagentStop, HookPoint.spawn,
                        HookPoint.sessionStart, HookPoint.compact, HookPoint.mcp, HookPoint.attach]) {
         rows.append(HookBinding{point = point, status = BindingStatus.unsupported,
-            reason = "the mod wires settings only; spells/harness/claude-code binds Claude Code's hooks"});
+            reason = "the mod wires the extraKnownMarketplaces and enabledPlugins settings only "
+                + "(https://code.claude.com/docs/en/settings); spells/harness/claude-code binds Claude Code's hooks"});
     }
     return rows;
 }

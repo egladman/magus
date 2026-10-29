@@ -745,7 +745,38 @@ fun gateTool(scope: Scope, event: any?) > str {
     return gateCall(scope, event: event, payload: call, asPath: false, family: "failed-call");
 }
 
+// stopPayload restates a stop in the envelope magus reads a stop by. Cursor
+// counts the follow-ups it already sent in loop_count, so a nonzero one is a
+// stop the guard sent back before.
+fun stopPayload(scope: Scope, event: any?, eventName: str) > str {
+    final body = mut {<str: any>};
+    body["hook_event_name"] = if (eventName == "stop") "Stop" else "SubagentStop";
+    body["session_id"] = scope.session;
+    body["transcript_path"] = scope.transcript;
+    body["stop_hook_active"] = count(event, key: "loop_count") > 0.0;
+    body["cwd"] = firstField(event, keys: ["cwd"]);
+    final child = hook\field(event, dotPath: "agent_transcript_path");
+    if (child != "") { body["agent_transcript_path"] = child; }
+    return json\stringify(body) catch "";
+}
+
+// gateStop answers stop and subagentStop. A deny is the follow-up Cursor sends
+// as the next message. An advise has no field on a stop reply, so it goes to
+// stderr, which Cursor's hook log shows.
+fun gateStop(scope: Scope, event: any?, eventName: str) > str {
+    // Cursor resumes a subagent on a follow-up only when it completed.
+    if (eventName == "subagentStop" and hook\field(event, dotPath: "status") != "completed") { return EMPTY; }
+    final payload = stopPayload(scope, event: event, eventName: eventName);
+    if (payload == "") { return EMPTY; }
+    final v = verdict(scope, payload: payload, asPath: false, ask: false, family: "failed-stop");
+    if (v == null) { return EMPTY; }
+    if (v!.decision == "advise") { warn(v!.context); }
+    if (v!.decision != "deny") { return EMPTY; }
+    return json\stringify({"followup_message": "[magus guard] {v!.reason}"}) catch EMPTY;
+}
+
 fun dispatch(event: any?, eventName: str, scope: Scope) > str {
+    if (eventName == "stop" or eventName == "subagentStop") { return gateStop(scope, event: event, eventName: eventName); }
     if (eventName == "sessionStart") {
         prune();
         return sessionStartReply(scope.bin);

@@ -15,6 +15,8 @@ func TestHookBindingsSuite(t *testing.T) {
 	suite.Run(t, new(hookBindingsSuite))
 }
 
+const attachUnchecked = "not verified: https://host.example/docs/hooks 2026-10-29: inline SVG"
+
 // bindsEveryPoint binds each point but attach through one hook, and
 // explains attach.
 func bindsEveryPoint() HarnessDescriptor {
@@ -26,7 +28,7 @@ func bindsEveryPoint() HarnessDescriptor {
 			{Event: "Pre", Script: "magus-observe"},
 		},
 		UnsupportedHooks: []types.HookBinding{
-			{Point: types.HookPointAttach, Status: types.Unsupported, Reason: "not verified: inline SVG"},
+			{Point: types.HookPointAttach, Status: types.Unsupported, Reason: attachUnchecked},
 		},
 	}
 }
@@ -43,7 +45,7 @@ func (s *hookBindingsSuite) TestABoundPointNamesTheScriptsThatBindIt() {
 	s.Equal(types.HookBinding{Harness: "host", Point: types.HookPointStop, Status: types.Bound,
 		Adapter: "magus-command, magus-checkpoint"}, table[2])
 	s.Equal(types.HookBinding{Harness: "host", Point: types.HookPointAttach, Status: types.Unsupported,
-		Reason: "not verified: inline SVG"}, table[len(table)-1])
+		Reason: attachUnchecked}, table[len(table)-1])
 }
 
 func (s *hookBindingsSuite) TestAPointWithNoRowIsAGap() {
@@ -60,7 +62,7 @@ func (s *hookBindingsSuite) TestAPointWithNoRowIsAGap() {
 func (s *hookBindingsSuite) TestAnUnsupportedRowAHookBindsIsStale() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks = append(d.UnsupportedHooks, types.HookBinding{Point: types.HookPointShell,
-		Status: types.Unsupported, Reason: "not verified: shell"})
+		Status: types.Unsupported, Reason: attachUnchecked})
 	table, err := HookBindings(d)
 	s.Require().Error(err)
 	s.Equal("host: mgs_listUnsupportedHooks says shell is unsupported, but magus-command binds it; drop the row",
@@ -72,23 +74,38 @@ func (s *hookBindingsSuite) TestValidRowsLoad() {
 	s.NoError(validateHookBindings(bindsEveryPoint()))
 }
 
-func (s *hookBindingsSuite) TestAReasonCitingADocLoads() {
+func (s *hookBindingsSuite) TestAReasonCitingADocURLLoads() {
+	d := bindsEveryPoint()
+	d.UnsupportedHooks[0].Reason = "no hook output carries an image (https://host.example/docs/hooks)"
+	s.NoError(validateHookBindings(d))
+}
+
+func (s *hookBindingsSuite) TestAReasonCitingAVendoredFileIsRefused() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Reason = "the host has no such event (testdata/hosts/codex/hooks.schema.json)"
-	s.NoError(validateHookBindings(d))
+	s.ErrorContains(validateHookBindings(d), "which cites no https URL")
 }
 
 func (s *hookBindingsSuite) TestAReasonCitingNothingIsRefused() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Reason = "the host cannot"
 	s.EqualError(validateHookBindings(d), `unsupported_hooks[0]: attach gives the reason "the host cannot", `+
-		`which cites nothing; cite the host's docs, or say "not verified: <what>" and what is unchecked`)
+		`which cites no https URL; cite the host's docs page, or say `+
+		`"not verified: <url checked> <YYYY-MM-DD> <what is unsettled>"`)
 }
 
-func (s *hookBindingsSuite) TestANotVerifiedReasonMustNameWhat() {
+func (s *hookBindingsSuite) TestANotVerifiedReasonMustNameTheURLChecked() {
 	d := bindsEveryPoint()
-	d.UnsupportedHooks[0].Reason = "not verified: "
-	s.ErrorContains(validateHookBindings(d), "cites nothing")
+	d.UnsupportedHooks[0].Reason = "not verified: 2026-10-29 inline SVG"
+	s.ErrorContains(validateHookBindings(d), "which cites no https URL")
+}
+
+func (s *hookBindingsSuite) TestANotVerifiedReasonMustNameTheDateRead() {
+	d := bindsEveryPoint()
+	d.UnsupportedHooks[0].Reason = "not verified: https://host.example/docs/hooks inline SVG"
+	s.EqualError(validateHookBindings(d), `unsupported_hooks[0]: attach gives the reason `+
+		`"not verified: https://host.example/docs/hooks inline SVG", `+
+		`which names no date; say when the URL was read, as YYYY-MM-DD`)
 }
 
 func (s *hookBindingsSuite) TestABoundRowInTheUnsupportedListIsRefused() {

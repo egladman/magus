@@ -94,15 +94,10 @@ export fun reclaimDiskHook(host: str, event: str, say: str) > HookCommand {
 }
 
 // unsupportedHook is the row for a point the host offers no hook for. reason
-// cites the host's docs, or opens "not verified: " and names what is unchecked.
+// cites the https URL of the host's docs page that says so. Where the page
+// does not settle it, reason opens "not verified: " and names the URL
+// checked, the YYYY-MM-DD it was read and what is unsettled. Anything else
+// fails the harness's load.
 export fun unsupportedHook(point: HookPoint, reason: str) > HookBinding {
     return HookBinding{point = point, status = BindingStatus.unsupported, reason = reason};
-}
-
-// attachUnverified is every host's attach row until an inline SVG is seen to
-// render there: the plan figures did not (decision 135).
-export fun attachUnverified() > HookBinding {
-    return unsupportedHook(HookPoint.attach,
-        reason: "not verified: that the host shows an SVG magus writes inline; "
-            + "re-check once libs/figure output renders standalone");
 }

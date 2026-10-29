@@ -777,10 +777,11 @@ test("a spawn is judged by its prompt, and the finished one names the child", as
     { tool: "task", callID: "t1", sessionID: "root", args: spawnArgs },
     { output: "done", metadata: { sessionId: "child", parentSessionId: "root" } },
   );
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(sent(calls[1]).hook_event_name, "PostToolUse");
   assert.deepEqual(sent(calls[1]).tool_response, { agent_id: "child" });
   assert.deepEqual(sent(calls[1]).tool_input, spawnArgs);
+  assert.equal(sent(calls[2]).hook_event_name, "SubagentStop", "the finished child's stop");
 });
 
 test("a spawn with no prompt is not judged, and a denied spawn throws", async () => {
@@ -1177,3 +1178,91 @@ test("an advise on a stop is the person's notice and sends nothing back", async 
   });
 });
 
+
+const isSubagentStop = (call: SpawnCall): boolean => call.stdin.includes('"hook_event_name":"SubagentStop"');
+
+test("a foreground task's end is its child's stop, and a deny rides the parent's result", async () => {
+  const stop = { schema_version: 1, decision: "deny", reason: "the child left its job open" };
+  const calls = stubBun((call) => (isSubagentStop(call) ? stop : pass));
+  const h = await hooks();
+  const result = { output: "done", metadata: { sessionId: "child", parentSessionId: "root" } };
+  await h["tool.execute.after"]({ tool: "task", callID: "t1", sessionID: "root", args: spawnArgs }, result);
+
+  assert.deepEqual(JSON.parse(calls.filter(isSubagentStop)[0].stdin), {
+    hook_event_name: "SubagentStop",
+    session_id: "root",
+    agent_id: "child",
+    stop_hook_active: false,
+    cwd: "/work",
+  });
+  assert.equal(
+    result.output,
+    "done\n\n[magus guard] the child left its job open\n\nResume the subagent with task_id child.",
+  );
+});
+
+test("a passed child's stop leaves the parent's result alone", async () => {
+  stubBun(() => pass);
+  const h = await hooks();
+  const result = { output: "done", metadata: { sessionId: "child" } };
+  await h["tool.execute.after"]({ tool: "task", callID: "t1", sessionID: "root", args: spawnArgs }, result);
+  assert.equal(result.output, "done");
+});
+
+test("a backgrounded child's stop is its idle, and a deny is prompted back to the child", async () => {
+  await withoutReplyScript(async () => {
+    const stop = { schema_version: 1, decision: "deny", reason: "the child left its job open" };
+    const calls = stubBun((call) => {
+      if (!isSubagentStop(call)) return pass;
+      return JSON.parse(call.stdin).stop_hook_active ? pass : stop;
+    });
+    const prompts: Array<{ id: string; text: string }> = [];
+    const h = await hooks({ prompts });
+    const result = { output: "started", metadata: { sessionId: "child", background: true } };
+    await h["tool.execute.after"]({ tool: "task", callID: "t1", sessionID: "root", args: spawnArgs }, result);
+    assert.equal(calls.filter(isSubagentStop).length, 0, "a backgrounded task has not finished");
+    assert.equal(result.output, "started");
+
+    await h.event(idle("child"));
+    const first = JSON.parse(calls.filter(isSubagentStop)[0].stdin);
+    assert.deepEqual([first.session_id, first.agent_id, first.stop_hook_active], ["root", "child", false]);
+    assert.deepEqual(prompts, [{ id: "child", text: "[magus guard] the child left its job open" }]);
+
+    await h.event(idle("child"));
+    assert.equal(JSON.parse(calls.filter(isSubagentStop)[1].stdin).stop_hook_active, true, "the guard sees its own follow-up");
+    assert.equal(prompts.length, 1, "a pass sends nothing back");
+
+    await h.event(idle("child"));
+    assert.equal(calls.filter(isSubagentStop).length, 2, "a child the guard let go is done");
+  });
+});
+
+test("a compacted root session's brief reaches its next tool result, and a child's gets none", async () => {
+  const brief = "lease: job bindings-correct";
+  const calls: SpawnCall[] = [];
+  const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
+    const call = { bin: spawned[0], argv: spawned.slice(1), stdin: new TextDecoder().decode(opts.stdin) };
+    calls.push(call);
+    const body = call.argv[0] === "session" ? `${brief}\n` : "";
+    return {
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      }),
+      exited: Promise.resolve(0),
+    };
+  };
+  (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+  const h = await hooks({ parents: { kid: "root" } });
+
+  await h.event({ event: { type: "session.compacted", properties: { sessionID: "kid" } } });
+  assert.equal(calls.length, 0, "a subagent is briefed by its spawn");
+
+  await h.event({ event: { type: "session.compacted", properties: { sessionID: "root" } } });
+  assert.deepEqual(calls[0].argv, ["session", "--brief"]);
+  const next = { output: "ran" };
+  await h["tool.execute.after"]({ tool: "bash", callID: "c1", sessionID: "root" }, next);
+  assert.equal(next.output, `ran\n\n${brief}`);
+});

@@ -68,6 +68,10 @@ fun cursor_event_names() > [str] {
         "sessionEnd",
         // The person's message, recorded for the topics it raises and always let through.
         "beforeSubmitPrompt",
+        // A deny goes back as followup_message, the next message,
+        // which resumes the agent (https://cursor.com/docs/agent/hooks).
+        "stop",
+        "subagentStop",
     ];
 }
 
@@ -85,6 +89,8 @@ fun cursor_points(event: str) > [HookPoint] {
     if (event == "preToolUse") { return [HookPoint.shell, HookPoint.edit, HookPoint.spawn]; }
     if (event == "preCompact") { return [HookPoint.compact]; }
     if (event == "subagentStart") { return [HookPoint.spawn]; }
+    if (event == "stop") { return [HookPoint.stop]; }
+    if (event == "subagentStop") { return [HookPoint.subagentStop]; }
     return [<HookPoint>];
 }
 
@@ -110,15 +116,10 @@ export fun mgs_listHooks() > [HookCommand] {
     return cursor_hooks();
 }
 
-// Cursor raises stop and subagentStop (testdata/hosts/cursor/SOURCES.md),
-// but no reply shape for either is vendored or probed yet.
 export fun mgs_listUnsupportedHooks() > [HookBinding] {
     return [
-        unsupportedHook(HookPoint.stop, reason: "not verified: that a Cursor stop hook reply returns the agent "
-            + "to work; testdata/hosts/cursor vendors no stop output schema"),
-        unsupportedHook(HookPoint.subagentStop, reason: "not verified: that Cursor's subagentStop payload "
-            + "names the child's transcript; testdata/hosts/cursor vendors no subagentStop schema"),
-        attachUnverified(),
+        unsupportedHook(HookPoint.attach, reason: "no hook accepts or returns an image or a file inline; "
+            + "attachments arrive by path and replies carry text (https://cursor.com/docs/agent/hooks)"),
     ];
 }
 
@@ -280,8 +281,9 @@ test "guard command is the shipped Cursor Buzz port, not a shell script" {
 
 test "the entries cover every Cursor event magus uses, one guard entry each" {
     final names = cursor_event_names();
-    assert\equal(names.len(), 10, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt");
-    assert\isTrue(names.indexOf("stop") == null, "the reply check is opt-in, never shipped");
+    assert\equal(names.len(), 12, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt, stop, subagentStop");
+    assert\equal(cursor_points("stop")[0].value, "stop", "the guard answers the stop");
+    assert\equal(cursor_points("subagentStop")[0].value, "subagent-stop", "and the subagent's");
     final entries = cursor_entries();
     assert\equal(entries.len(), names.len(), "one managed block per event");
     foreach (i, block in entries) {
