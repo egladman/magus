@@ -2274,7 +2274,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // hack/lint/run.buzz's tests run the binary proofread-build links.
     ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate);
     ctx.readsFiles(["spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
-        "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/lint/*.mjs", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml"]);
     ctx.writesFiles(["coverage/buzz/*.lcov", "coverage/buzz/coverage.txt"]);
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
@@ -2414,7 +2414,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "proto/magusfile.buzz", "docs/tour/*.buzz",
                     ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
                     ".gitattributes", "dprint-base.json",
-                    "mise.toml", "magus.yaml", "hack/lint/sdk-exports.jsonl",
+                    "mise.toml", "magus.yaml", "hack/lint/sdk-exports.jsonl", "hack/lint/no-throw.jsonl",
                     "Dockerfile", "Dockerfile.static",
                     "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                     ".claude/skills/magus-skill-authoring/SKILL.md",
@@ -2447,6 +2447,8 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/cmdline/**/*.go", "libs/embed/**/*.go", "libs/embed/train/**/*.go",
                     "console/**/*.ts", "docs/**/*.ts",
                     "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
+                    "docs/guides/integrations/agents/**/*.tsx",
+                    "**/*.js", "console/**/*.js", "docs/**/*.js",
                     "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
                     "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                     "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
