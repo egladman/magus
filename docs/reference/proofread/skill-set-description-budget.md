@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A per-skill budget passes a set that grows one skill at a time, yet the host loads every description of the set into every session. The budget is the words of every short and full description of the skills magus ships, back-references included, counted when the rule landed. It is a ratchet: a skill added or a description grown advises until another description is cut to make room.
+A per-skill budget passes a set that grows one skill at a time, yet the host loads every description of the set into every session. The budget is the words of every short and full description of the skills magus ships, back-references included, counted when the rule landed. It only tightens: a skill added or a description grown advises until another description is cut to make room.
 
 ## Default decision
 

@@ -57,7 +57,7 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ### ConformanceItem
 
-ConformanceItem is one file, symbol, package or clone group past its row's value and not known. source is its path:line.
+ConformanceItem is one file, symbol, package or clone group past its row's value. source is its path:line.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
@@ -83,23 +83,9 @@ Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
-### ConformanceKnown
-
-ConformanceKnown is a list of items already past a metric's value and accepted for a reason. In ConformanceOutput.stale it names the entries that no longer violate and should be deleted.
-
-Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
-
-| Field    | Type            | # | Description |
-| -------- | --------------- | - | ----------- |
-| `metric` | string          | 1 |             |
-| `items`  | repeated string | 2 |             |
-| `reason` | string          | 3 |             |
-
-Used by: [GetInsight (response)](insight.md#getinsight).
-
 ### ConformanceOutput
 
-ConformanceOutput is the code-shape lens: one row per metric and population, judged against the value a check enforces. It reads the symbol graph, not git. It reports and proposes; a person commits a proposed value to the ratchet record, and nothing here sets one. answer is unknown, never a pass, when a symbol index is missing. excluded counts the files the configured exclusions hid, so a widened exclusion stays visible.
+ConformanceOutput is the code-shape lens: one row per metric and population, judged against the configured anchor a check enforces. It reads the symbol graph, not git. It reports and proposes; a person configures a proposed anchor, and nothing here sets one. answer is unknown, never a pass, when a symbol index is missing. excluded counts the files the configured exclusions hid, so a widened exclusion stays visible.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
@@ -107,15 +93,16 @@ Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/
 | ------------ | ---------------------------------------------- | - | ----------- |
 | `definition` | string                                         | 1 |             |
 | `rows`       | [repeated ConformanceRow](#conformancerow)     | 2 |             |
-| `stale`      | [repeated ConformanceKnown](#conformanceknown) | 3 |             |
 | `excluded`   | int32                                          | 4 |             |
 | `answer`     | [Answer](../../graph/v1alpha1/graph.md#answer) | 5 |             |
+
+_Reserved: 3; `stale`._
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
 ### ConformanceRow
 
-ConformanceRow is one key's distribution and verdict. live is the configured percentile today; value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped bound no committed value may exceed. propose is zero, or a tighter value to commit; it is never looser than value. known counts the accepted items past value, and violations are the rest.
+ConformanceRow is one key's distribution and verdict. live is the configured percentile today; value is the configured anchor a check enforces. propose is zero, or a tighter anchor to configure; it is never looser than value. violations are the items past value.
 
 Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto).
 
@@ -129,11 +116,10 @@ Source: [insight.proto](https://github.com/egladman/magus/blob/main/proto/magus/
 | `p99`        | int32                                        | 6  |             |
 | `live`       | int32                                        | 7  |             |
 | `value`      | int32                                        | 8  |             |
-| `anchor`     | int32                                        | 9  |             |
 | `propose`    | int32                                        | 10 |             |
-| `known`      | int32                                        | 11 |             |
-| `source`     | string                                       | 12 |             |
 | `violations` | [repeated ConformanceItem](#conformanceitem) | 13 |             |
+
+_Reserved: 9, 11, 12; `anchor`, `known`, `source`._
 
 Used by: [GetInsight (response)](insight.md#getinsight).
 
