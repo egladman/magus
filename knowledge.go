@@ -1820,11 +1820,7 @@ func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration, installed func
 				Project:     types.NewProjectRef(decl.Project, decl.Dir),
 				Language:    decl.Language,
 				State:       types.SymbolIndexNotBuilt,
-<<<<<<< HEAD
 				Detail:      cmp.Or(decl.Detail, "no symbol index for "+decl.Language),
-=======
-				Detail:      "has no indexer",
->>>>>>> de93877a3 (resolve an exact symbol id in refs --rename; tag the unindexable gap with its language)
 				Unindexable: true,
 			})
 			continue
