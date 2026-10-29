@@ -122,7 +122,7 @@ var shipped = sync.OnceValue(loadShipped)
 // builtinParseModules alone. One
 // that imports a host module (endoflife-date imports http) fails in that session with
 // BZZ2001 and ships as source only: `magus spell pull` copies it into a workspace, which
-// loads it with the host modules. SourceOnly lists each with the import that kept it out.
+// loads it with the host modules. sourceOnlySpells lists each with the import that kept it out.
 //
 // Only a top-level directory is a candidate. A top-level directory with no spell.buzz
 // holds nested spells (harness/cursor), which are providers a workspace wires by import

@@ -6,32 +6,22 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+const checkConformanceCeilingName = "conformance-ceiling"
+
 // checkConformanceCeiling reports the configured anchors the code now measures tighter than.
 // An anchor raised past the code moves no subject, so `magus diff` is silent about it and the
 // slack shows here. Per-file counts need no upkeep: a change is held to its base revision's.
 // Advice, never a failure.
 func (r *runner) checkConformanceCeiling(_ []*types.Project) types.Check {
-	const name = "conformance-ceiling"
-
-	unmeasured := func(why string) types.Check {
-		return types.Check{
-			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
-			Message:  "conformance anchors were not measured: " + why,
-			Details:  []string{"build the symbol index with `magus graph build`, then run doctor again"},
-		}
-	}
-
 	analyzer, ok := r.ws.(types.InsightAnalyzer)
 	if !ok {
-		return unmeasured("this workspace exposes no conformance lens")
+		return conformanceUnmeasured("this workspace exposes no conformance lens")
 	}
 	out, err := analyzer.Conformance(r.runContext())
 	if err != nil {
 		// A misconfiguration is a failure rather than a quiet pass.
 		return types.Check{
-			Name:     name,
+			Name:     checkConformanceCeilingName,
 			Status:   types.CheckFail,
 			Evidence: types.EvidenceUnknown,
 			Message:  "conformance anchors could not be measured",
@@ -43,9 +33,24 @@ func (r *runner) checkConformanceCeiling(_ []*types.Project) types.Check {
 		if out.Answer.Reason != "" {
 			why = string(out.Answer.Reason)
 		}
-		return unmeasured(why)
+		return conformanceUnmeasured(why)
 	}
+	return r.conformanceProposals(out)
+}
 
+// conformanceUnmeasured is the check when no anchor could be measured, saying why.
+func conformanceUnmeasured(why string) types.Check {
+	return types.Check{
+		Name:     checkConformanceCeilingName,
+		Status:   types.CheckOK,
+		Evidence: types.EvidenceUnknown,
+		Message:  "conformance anchors were not measured: " + why,
+		Details:  []string{"build the symbol index with `magus graph build`, then run doctor again"},
+	}
+}
+
+// conformanceProposals is the check over out's rows: advice naming each anchor that can tighten.
+func (r *runner) conformanceProposals(out types.ConformanceOutput) types.Check {
 	checks := r.opts.cfg.Knowledge.Conformance.Checks
 	var details []string
 	for _, row := range out.Rows {
@@ -55,14 +60,14 @@ func (r *runner) checkConformanceCeiling(_ []*types.Project) types.Check {
 	}
 	if len(details) == 0 {
 		return types.Check{
-			Name:     name,
+			Name:     checkConformanceCeilingName,
 			Status:   types.CheckOK,
 			Evidence: types.EvidenceMeasured,
 			Message:  "no conformance anchor is looser than the code measures",
 		}
 	}
 	return types.Check{
-		Name:     name,
+		Name:     checkConformanceCeilingName,
 		Status:   types.CheckAdvice,
 		Evidence: types.EvidenceMeasured,
 		Message:  fmt.Sprintf("%d conformance anchor(s) can tighten", len(details)),

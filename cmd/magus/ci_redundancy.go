@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -277,30 +278,31 @@ func renderSizing(target string, rep types.RiskReport) string {
 // the matched green gate, and the delta with each file's tier, class and the
 // declaration or mechanism that decided it.
 func (g *gateRedundancy) renderFinding(f gateFinding) string {
-	var b strings.Builder
-	inv := f.rec.Inv
-	if inv == "" {
-		inv = "unrecorded"
+	return renderGreenGate(f.rec) + g.renderDelta(f)
+}
+
+// renderGreenGate is the matched green gate's line, and the projects it covered that only
+// undeclared files selected.
+func renderGreenGate(rec sessions.GateRecord) string {
+	inv := cmp.Or(rec.Inv, "unrecorded")
+	out := fmt.Sprintf("  green gate: run %s, branch %s, commit %s, recorded %s (%s ago), fingerprint %s",
+		inv, rec.Ref, shortCommit(rec.Commit), rec.At.UTC().Format(time.RFC3339), gateAge(rec.At), shortFingerprint(rec.Fingerprint))
+	if n := len(rec.UndeclaredSeeds); n > 0 {
+		out += fmt.Sprintf("\n  that gate covered %d project(s) selected only by files nothing declares (%s): %s",
+			n, types.UndeclaredSeedingFile, strings.Join(rec.UndeclaredSeeds, ", "))
 	}
-	fmt.Fprintf(&b, "  green gate: run %s, branch %s, commit %s, recorded %s (%s ago), fingerprint %s",
-		inv, f.rec.Ref, shortCommit(f.rec.Commit), f.rec.At.UTC().Format(time.RFC3339), gateAge(f.rec.At), shortFingerprint(f.rec.Fingerprint))
-	if n := len(f.rec.UndeclaredSeeds); n > 0 {
-		fmt.Fprintf(&b, "\n  that gate covered %d project(s) selected only by files nothing declares (%s): %s",
-			n, types.UndeclaredSeedingFile, strings.Join(f.rec.UndeclaredSeeds, ", "))
+	return out
+}
+
+// renderDelta is what changed since the matched gate, each file with its tier and class.
+func (g *gateRedundancy) renderDelta(f gateFinding) string {
+	switch {
+	case f.identical:
+		return fmt.Sprintf("\n  delta since that gate: none; this run's input fingerprint %s matches it exactly", shortFingerprint(g.fp))
+	case len(f.delta) == 0:
+		return "\n  delta since that gate: no changed paths"
 	}
-	if f.identical {
-		fmt.Fprintf(&b, "\n  delta since that gate: none; this run's input fingerprint %s matches it exactly", shortFingerprint(g.fp))
-		return b.String()
-	}
-	if len(f.delta) == 0 {
-		b.WriteString("\n  delta since that gate: no changed paths")
-		return b.String()
-	}
-	b.WriteString("\n  delta since that gate, every file:")
-	for _, line := range f.delta {
-		b.WriteString("\n    " + line)
-	}
-	return b.String()
+	return "\n  delta since that gate, every file:\n    " + strings.Join(f.delta, "\n    ")
 }
 
 // record files the gate's verdict in the per-repository session store, so a

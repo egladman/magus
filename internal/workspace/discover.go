@@ -104,12 +104,7 @@ func (f discoveryFinding) String() string {
 // is a candidate project root: "Cargo.toml" and "**/Cargo.toml" both match a/Cargo.toml.
 // Content is read, at any depth, for a glob whose basename has no wildcard.
 func collectDiscovery(root string, asked []spells.Descriptor) (discoveryInput, error) {
-	ignoredBy := map[string][]string{}
-	for _, s := range asked {
-		for _, dir := range s.IgnoreDirs {
-			ignoredBy[dir] = append(ignoredBy[dir], s.Name)
-		}
-	}
+	ignoredBy := ignoringSpells(asked)
 	files := map[string][]spells.DiscoveryFile{}
 	pruned := map[string][]string{}
 	err := filepath.WalkDir(root, func(abs string, d fs.DirEntry, err error) error {
@@ -156,6 +151,25 @@ func collectDiscovery(root string, asked []spells.Descriptor) (discoveryInput, e
 		slices.SortFunc(got, func(a, b spells.DiscoveryFile) int { return strings.Compare(a.Path, b.Path) })
 		in.Queries[s.Name] = spells.DiscoveryQuery{Root: root, Files: got}
 	}
+	in.Notes = prunedNotes(pruned, ignoredBy, asked)
+	return in, nil
+}
+
+// ignoringSpells is, per directory name, the asked spells that ignore it.
+func ignoringSpells(asked []spells.Descriptor) map[string][]string {
+	ignoredBy := map[string][]string{}
+	for _, s := range asked {
+		for _, dir := range s.IgnoreDirs {
+			ignoredBy[dir] = append(ignoredBy[dir], s.Name)
+		}
+	}
+	return ignoredBy
+}
+
+// prunedNotes is a finding per directory name some asked spells ignore and others do not,
+// naming where it was pruned.
+func prunedNotes(pruned, ignoredBy map[string][]string, asked []spells.Descriptor) []discoveryFinding {
+	var notes []discoveryFinding
 	for _, name := range slices.Sorted(maps.Keys(pruned)) {
 		by := ignoredBy[name]
 		var others []string
@@ -164,14 +178,14 @@ func collectDiscovery(root string, asked []spells.Descriptor) (discoveryInput, e
 				others = append(others, s.Name)
 			}
 		}
-		in.Notes = append(in.Notes, discoveryFinding{
+		notes = append(notes, discoveryFinding{
 			Path:   strings.Join(pruned[name], ", "),
 			What:   "not collected",
 			Why:    fmt.Sprintf("spell %s ignores %s, so %s never saw a claim inside", strings.Join(by, ", "), name, strings.Join(others, ", ")),
 			Settle: "a magusfile in that directory; a magusfile wins",
 		})
 	}
-	return in, nil
+	return notes
 }
 
 func collectFile(abs, rel string, globs []string) (spells.DiscoveryFile, bool, error) {
@@ -607,12 +621,8 @@ func renderMagusfile(p discoveryProject) (string, map[string]int, error) {
 
 	emit(`import "magus";`)
 	emit("")
-	for _, name := range p.Spells {
-		if handles[name] == name {
-			emit(`import "%s";`, spells.ModulePath(name))
-		} else {
-			emit(`import "%s" as %s;`, spells.ModulePath(name), handles[name])
-		}
+	for _, imp := range spellImports(p.Spells, handles) {
+		emit("%s", imp)
 	}
 	emit("")
 	emit("magus\\project({")
@@ -625,13 +635,9 @@ func renderMagusfile(p discoveryProject) (string, map[string]int, error) {
 		emit(`    "name": %s,`, name)
 	}
 	if len(p.DependsOn) > 0 {
-		deps := make([]string, 0, len(p.DependsOn))
-		for _, dep := range p.DependsOn {
-			lit, err := buzzString(dependsOnPath(p.Path, dep))
-			if err != nil {
-				return "", nil, fmt.Errorf("discovery: %s: depends_on: %w", p.Path, err)
-			}
-			deps = append(deps, lit)
+		deps, err := dependsOnLiterals(p)
+		if err != nil {
+			return "", nil, err
 		}
 		emit(`    "depends_on": [%s],`, strings.Join(deps, ", "))
 	}
@@ -655,6 +661,32 @@ func renderMagusfile(p discoveryProject) (string, map[string]int, error) {
 		emit("}")
 	}
 	return b.String(), lines, nil
+}
+
+// spellImports is the import line of each spell, under its handle when that is not its name.
+func spellImports(names []string, handles map[string]string) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if handles[name] == name {
+			out = append(out, fmt.Sprintf(`import "%s";`, spells.ModulePath(name)))
+		} else {
+			out = append(out, fmt.Sprintf(`import "%s" as %s;`, spells.ModulePath(name), handles[name]))
+		}
+	}
+	return out
+}
+
+// dependsOnLiterals is each of p's dependencies as a Buzz string literal of its path.
+func dependsOnLiterals(p discoveryProject) ([]string, error) {
+	deps := make([]string, 0, len(p.DependsOn))
+	for _, dep := range p.DependsOn {
+		lit, err := buzzString(dependsOnPath(p.Path, dep))
+		if err != nil {
+			return nil, fmt.Errorf("discovery: %s: depends_on: %w", p.Path, err)
+		}
+		deps = append(deps, lit)
+	}
+	return deps, nil
 }
 
 // spellHandles names each spell's import binding. A spell name that is not an
