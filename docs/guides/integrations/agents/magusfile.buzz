@@ -31,7 +31,7 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["
 
 // The schema directory, not its files: drift\expand walks it, so new schemas are covered.
 fun generatedOutputs() > [str] {
-    return ["guard-templates.md", "../../../../testdata/hosts/cursor/gen"];
+    return ["guard-templates.md", "README.md", "../../../../testdata/hosts/cursor/gen"];
 }
 
 // Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
@@ -42,23 +42,48 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     final before = drift\hashes(generatedOutputs());
 
     ctx.needs(cursor_schemas_generate, index_generate);
-    ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz"]);
-    ctx.writesFiles(["guard-templates.md"]);
+    ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz",
+                    "../../../../spells/harness/*/spell.buzz", "../../../../internal/spell/harness.buzz"]);
+    ctx.writesFiles(["guard-templates.md", "README.md"]);
     final tmpl = fs\readFile("guard-templates.md.tmpl");
     final files = mut {<str: str>};
     foreach (name in embed\embedNames(tmpl)) {
         files[name] = fs\readFile(name);
     }
     final rendered = embed\render(tmpl, files: files);
+    // A spell imported here is a handle, not its functions, so a script
+    // at the root calls each harness spell's lists.
+    final row = fun (alias: str, id: str, hooks: str) > str
+        => "bindings\\Harness\{id = \"{id}\", hooks = {hooks}, "
+            + "unsupported = {alias}\\mgs_listUnsupportedHooks()\}";
+    final listed = fun (alias: str, id: str) > str => row(alias, id: id, hooks: "{alias}\\mgs_listHooks()");
+    final script = "import \"io\"; import \"magus/spell\"; "
+        + "import \"docs/guides/integrations/agents/lib/bindings\" as bindings; "
+        + "import \"spells/harness/claude-code/spell\" as claudeCode; "
+        + "import \"spells/harness/claude-code-mod/spell\" as claudeCodeMod; "
+        + "import \"spells/harness/codex/spell\" as codex; "
+        + "import \"spells/harness/cursor/spell\" as cursor; "
+        + "import \"spells/harness/opencode/spell\" as opencode; "
+        + "fun main(args: [str]) > void !> any \{ io\\stdout.write(bindings\\page(["
+        + [listed("claudeCode", id: "claude-code"), row("claudeCodeMod", id: "claude-code-mod", hooks: "[<HookCommand>]"),
+           listed("codex", id: "codex"), listed("cursor", id: "cursor"), listed("opencode", id: "opencode")].join(", ")
+        + "])); \}";
+    final matrix = magus\cmd("buzz", args: ["-e", script],
+        opts: magus\CommandOptions{dir = "../../../..", quiet = true}).stdout;
 
     if (ctx.hasCharm("rw")) {
         fs\writeFile("guard-templates.md", content: rendered);
+        fs\writeFile("README.md", content: matrix);
         return;
     }
 
     // Compared, never written: writing here would edit the tree under judgment (MGS1035).
     if ((fs\readFile("guard-templates.md") catch "") != rendered) {
         throw "[MGS4006] generate: guard-templates.md does not match its template; re-run "
+            + "`magus run generate:rw docs/guides/integrations/agents` and commit it";
+    }
+    if ((fs\readFile("README.md") catch "") != matrix) {
+        throw "[MGS4006] generate: README.md does not match the harness spells' hook bindings; re-run "
             + "`magus run generate:rw docs/guides/integrations/agents` and commit it";
     }
     final changed = drift\changedSince(before, generatedOutputs());

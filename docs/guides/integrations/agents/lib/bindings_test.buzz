@@ -1,0 +1,41 @@
+import "assert";
+import "magus/spell";
+import "bindings";
+
+fun host() > bindings\Harness {
+    return bindings\Harness{
+        id = "host",
+        hooks = [
+            HookCommand{event = "Pre", script = "magus-command", points = [HookPoint.shell, HookPoint.edit]},
+            HookCommand{event = "Stop", script = "magus-command", points = [HookPoint.stop]},
+            HookCommand{event = "Stop", script = "magus-checkpoint", points = [HookPoint.stop]},
+        ],
+        unsupported = [HookBinding{point = HookPoint.attach, status = BindingStatus.unsupported, reason = "not verified: x"}],
+    };
+}
+
+test "a bound cell names each script that binds the point, once" {
+    assert\equal(bindings\cell(host(), point: HookPoint.shell), "`magus-command`", "one hook");
+    assert\equal(bindings\cell(host(), point: HookPoint.stop), "`magus-command, magus-checkpoint`", "two scripts");
+    assert\equal(bindings\cell(host(), point: HookPoint.attach), "unsupported", "the row's point");
+}
+
+test "a point with neither a hook nor a row raises" {
+    final said = bindings\cell(host(), point: HookPoint.mcp) catch "raised";
+    assert\equal(said, "raised", "doctor fails the same gap");
+}
+
+test "the table pads every column to its widest cell" {
+    final other = bindings\Harness{id = "other", hooks = [
+        HookCommand{event = "Pre", script = "x", points = bindings\POINTS},
+    ], unsupported = [<HookBinding>]};
+    final lines = (bindings\table([other]) catch "").split("\n");
+    assert\equal(lines.len(), 11, "the header, the rule and a row per point");
+    assert\equal(lines[0], "| hook point      | other |", "the header");
+    assert\equal(lines[1], "| --------------- | ----- |", "the rule");
+    assert\equal(lines[5], "| `subagent-stop` | `x`   |", "a padded row");
+}
+
+test "each unsupported point is listed with its reason" {
+    assert\equal(bindings\reasons([host()]), "- host, `attach`: not verified: x", "one row");
+}
