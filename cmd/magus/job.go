@@ -234,7 +234,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
 			slog.WarnContext(ctx, "the workspace did not load, so no model tier was assigned and no tier limit was checked; a row written now carries no tier until its model changes",
-				attr.Notice("unchecked"), attr.Error(err))
+				attr.Unchecked(), attr.Error(err))
 			return job.NewStore(loc), nil
 		}
 		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(ctx), m.ModelTierMatrix()
@@ -324,7 +324,7 @@ func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row t
 	if deps.LoadFailure != nil {
 		why := fmt.Sprintf("the workspace's rules did not load: %s", deps.LoadFailure)
 		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", row.Check, why),
-			attr.Notice("unchecked"))
+			attr.Unchecked())
 		return job.CheckVerdict{Deferred: why}
 	}
 	dir := job.WorkingCheckout(root, row)

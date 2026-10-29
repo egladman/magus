@@ -268,7 +268,7 @@ func parseBuzzProjectOptions(ctx context.Context, v vm.Value) ([]workspace.Proje
 			// binds cleanly, then silently adds nothing to run. Warn (not error). A pure
 			// in-VM cache backend is bound through magus.cache.remote, not here.
 			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok && contributesNothing(sp) {
-				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", "spell", name)
+				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", slog.String("spell", name), attr.Unchecked())
 			}
 			if name == magusfileSpellName {
 				return nil, magusfileNotASpellError("listing it in \"spells\"")

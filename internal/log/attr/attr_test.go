@@ -31,3 +31,9 @@ func TestAttrKeysAndKinds(t *testing.T) {
 	assert.Equal(t, 90*time.Second, Elapsed(90*time.Second).Value.Duration())
 	assert.Equal(t, HintLabel, Hint().Value.String())
 }
+
+func TestUncheckedIsANotice(t *testing.T) {
+	a := Unchecked()
+	assert.Equal(t, NoticeKey, a.Key)
+	assert.Equal(t, UncheckedLabel, a.Value.String())
+}

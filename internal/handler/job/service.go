@@ -134,7 +134,7 @@ func (s *Service) report(ctx context.Context) types.JobList {
 	}
 	staleAfter, err := s.store.StaleAfter()
 	if err != nil {
-		slog.WarnContext(ctx, "reading jobs.stale_after failed; no row is flagged stale",
+		slog.WarnContext(ctx, "reading jobs.stale_after failed; no row is flagged stale", attr.Unchecked(),
 			attr.Error(err))
 	}
 	list, err := s.store.InWorkspace(s.jobWorkspace(ctx)).Report(ctx, time.Now().Unix(), staleAfter)

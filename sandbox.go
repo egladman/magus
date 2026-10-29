@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
@@ -126,7 +127,7 @@ func warnKernelUnavailable(ctx context.Context) {
 		}
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
 			"kernel landlock unavailable; children run under magus's binding checks and env allowlist only"),
-			"reason", reason)
+			slog.String("reason", reason), attr.Unchecked())
 	})
 }
 

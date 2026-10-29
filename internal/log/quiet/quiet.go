@@ -15,8 +15,9 @@ import (
 const waitFloor = time.Minute
 
 // Wrap returns h filtered for a quiet display. Below a warning, or below h's level, only
-// an [attr.Hint], a wait h takes, and an info record carrying [attr.Next] pass, the last
-// as its command alone. A wait ([attr.Elapsed]) under a minute is dropped, and every
+// an [attr.Hint], an [attr.Unchecked], a wait h takes, and an info record carrying
+// [attr.Next] pass, the last as its command alone. An unchecked record passes at any
+// level from info up, even one h drops: a check that did not run is never routine. A wait ([attr.Elapsed]) under a minute is dropped, and every
 // [attr.Why] is dropped unless keepWhy.
 //
 // Wrap a display, never a capture: a run log keeps both the reasoning and the short
@@ -31,7 +32,7 @@ type handler struct {
 }
 
 func (h handler) Enabled(ctx context.Context, l slog.Level) bool {
-	return l == slog.LevelInfo || h.next.Enabled(ctx, l)
+	return l >= slog.LevelInfo || h.next.Enabled(ctx, l)
 }
 
 func (h handler) Handle(ctx context.Context, r slog.Record) error {
@@ -58,7 +59,7 @@ func (h handler) Handle(ctx context.Context, r slog.Record) error {
 	}
 	if r.Level < slog.LevelWarn || !h.next.Enabled(ctx, r.Level) {
 		switch {
-		case notice == attr.HintLabel, result, waits && h.next.Enabled(ctx, r.Level):
+		case notice == attr.HintLabel, notice == attr.UncheckedLabel, result, waits && h.next.Enabled(ctx, r.Level):
 		case next != "" && r.Level < slog.LevelWarn:
 			r = commandOnly(r, next)
 		default:

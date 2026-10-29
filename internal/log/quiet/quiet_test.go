@@ -108,8 +108,8 @@ func TestWrapDropsInfoAtAnInfoLevel(t *testing.T) {
 	assert.Equal(t, "level=INFO msg=\"magus console open\" notice=console\n", buf.String())
 }
 
-// Info passes Enabled so a hint or a next command can reach Handle; every other level
-// stays the inner handler's call.
+// Info and up pass Enabled so a hint, a next command or an unchecked record can reach
+// Handle; below info stays the inner handler's call.
 func TestWrapEnabledFloorsAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})
@@ -117,8 +117,26 @@ func TestWrapEnabledFloorsAtInfo(t *testing.T) {
 	ctx := context.Background()
 	require.False(t, h.Enabled(ctx, slog.LevelDebug))
 	require.True(t, h.Enabled(ctx, slog.LevelInfo))
-	require.False(t, h.Enabled(ctx, slog.LevelWarn))
+	require.True(t, h.Enabled(ctx, slog.LevelWarn))
 	require.True(t, h.WithAttrs(nil).WithGroup("g").Enabled(ctx, slog.LevelInfo))
+}
+
+// -s raises the level to error; a fail-open warning still reaches the display.
+func TestWrapKeepsAnUncheckedWarningBelowLevel(t *testing.T) {
+	var buf bytes.Buffer
+	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})
+	l := slog.New(Wrap(inner, false))
+	l.WarnContext(context.Background(), "job store unreadable", attr.Unchecked(), attr.Why("x"))
+	l.WarnContext(context.Background(), "index stale")
+	assert.Equal(t, "level=WARN msg=\"job store unreadable\" notice=unchecked\n", buf.String())
 }
 
 func TestWrapBelowLevel(t *testing.T) {
