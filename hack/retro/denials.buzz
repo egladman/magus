@@ -1,0 +1,616 @@
+// Cost: reads the rule catalog, internal/guard, hack/policy and the trail.
+// It writes nothing.
+//
+// Checks that each denial part sits in its field. A pattern flags what it
+// can; the rest goes to a worklist a model judges. magus calls no model.
+// A text no record holds prints as `not recorded: <what>`.
+namespace denials;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "std";
+import "time";
+import "vcs";
+
+final USAGE = "usage: magus buzz hack/retro/denials.buzz -- [--trail <checkout>]... [--since <duration>] [--per-rule <n>] [--limit <n>] [--jsonl]";
+final HELP = "cost: one `magus describe rules`, a read of internal/guard and hack/policy, and a read of each --trail checkout's guard trail and verdict blobs; writes nothing\n{USAGE}\n"
+    + "--trail defaults to this checkout; repeat it to read several. --since bounds how far back the trail is read (default: all of it).\n"
+    + "--per-rule caps the worklist at the newest n distinct firings of each rule (default 1). --limit caps the fault lines printed per kind (default 10); the counts cover every fault.\n"
+    + "--jsonl prints one JSON object per denial, its faults included, instead of the report.";
+
+// SAY_CAP is hack/policy/verdict.buzz's verdictRunes.
+export final SAY_CAP = 160;
+export final WHY_CAP = 600;
+
+// WHY_CUES tell the reader to act, which belongs in fix.
+export final WHY_CUES = ["fix:", "next:", "then `", "run `", "rerun", "rebuild", "load skill(", "instead: `", "try `", "use `"];
+
+// COMMANDS start a runnable step, besides a ./ path and a Tool( call.
+export final COMMANDS = [
+    "magus", "git", "gh", "go", "cd", "sed", "grep", "rg", "cat", "rm", "ls", "mise", "pnpm", "npm", "jj", "hg", "sl",
+    "lsof", "kill", "make",
+];
+
+// Denial is one denial text. site is file:line; at is unix ms.
+// count is how many trail firings share this rule and say.
+export object Denial {
+    rule: str,
+    origin: str,
+    site: str,
+    say: str,
+    why: str,
+    fix: [str],
+    count: int = 1,
+    at: int = 0,
+}
+
+export object Fault {
+    kind: str,
+    rule: str,
+    site: str,
+    detail: str,
+}
+
+export object Collected {
+    denials: [Denial],
+    missing: [str],
+}
+
+// Hit is one denied trail line; line is 1-based, at is unix ms.
+export object Hit {
+    line: int,
+    at: int,
+    ref: str,
+}
+
+fun lineAt(text: str, offset: int) > int {
+    return text.sub(0, len: offset).split("\n").len();
+}
+
+fun operand(raw: str) > str {
+    var o = raw.trim();
+    if (o.startsWith("+")) {
+        o = o.sub(1).trim();
+    }
+    if (o.endsWith("+")) {
+        o = o.sub(0, len: o.len() - 1).trim();
+    }
+    return if (o == "") "" else "\{{o}}";
+}
+
+// literals reads one argument expression, up to a `)`, `,` or `;` at depth 0.
+// Literal text is kept; any other operand is written as `{operand}`.
+fun literals(text: str, offset: int) > str {
+    final parts = mut [<str>];
+    var rawStart = offset;
+    var depth = 0;
+    var i = offset;
+    while (i < text.len()) {
+        final c = text.sub(i, len: 1);
+        if (c == "\"") {
+            // A literal inside a call is an argument, part of that operand.
+            final nested = depth > 0;
+            final lit = mut [<str>];
+            var braces = 0;
+            final open = i;
+            i = i + 1;
+            while (i < text.len()) {
+                final d = text.sub(i, len: 1);
+                if (d == "\\" and i + 1 < text.len()) {
+                    final e = text.sub(i + 1, len: 1);
+                    lit.append(if (e == "n") "\n" else if (e == "t") "\t" else e);
+                    i = i + 2;
+                    continue;
+                }
+                if (d == "\"" and braces == 0) {
+                    break;
+                }
+                if (d == "\{") {
+                    braces = braces + 1;
+                } else if (d == "}") {
+                    braces = braces - 1;
+                }
+                lit.append(d);
+                i = i + 1;
+            }
+            i = i + 1;
+            if (!nested) {
+                parts.append(operand(text.sub(rawStart, len: open - rawStart)));
+                parts.append(lit.join(""));
+                rawStart = i;
+            }
+            continue;
+        }
+        if (c == "(" or c == "[" or c == "\{") {
+            depth = depth + 1;
+        } else if (c == ")" or c == "]" or c == "}") {
+            if (depth == 0) {
+                break;
+            }
+            depth = depth - 1;
+        } else if ((c == "," or c == ";") and depth == 0) {
+            break;
+        }
+        i = i + 1;
+    }
+    parts.append(operand(text.sub(rawStart, len: i - rawStart)));
+    return parts.join("");
+}
+
+fun lastAt(before: str, marker: str) > int {
+    final parts = before.split(marker);
+    if (parts.len() < 2) {
+        return -1;
+    }
+    return before.len() - parts[parts.len() - 1].len();
+}
+
+// inTest reports whether offset sits in a top-level test block.
+fun inTest(text: str, offset: int) > bool {
+    final before = text.sub(0, len: offset);
+    final test = lastAt(before, marker: "\ntest \"");
+    final fn = lastAt(before, marker: "\nfun ");
+    final exported = lastAt(before, marker: "\nexport fun ");
+    return test > fn and test > exported;
+}
+
+fun splitSay(text: str) > [str] {
+    final at = text.indexOf("\n");
+    if (at == null) {
+        return [text, ""];
+    }
+    return [text.sub(0, len: at!), text.sub(at! + 1).trim()];
+}
+
+fun ruleOpt(text: str, offset: int) > str? {
+    final close = text.indexOf(";", from: offset) ?? text.len();
+    final call = text.sub(offset, len: close - offset);
+    final at = call.indexOf("\"rule\": \"");
+    if (at == null) {
+        return null;
+    }
+    final rest = call.sub(at! + 9);
+    return rest.sub(0, len: rest.indexOf("\"") ?? rest.len());
+}
+
+// policyDenials reads each magus\guard.deny call of one policy file outside
+// its tests. A bare identifier argument reads that name's final in the file.
+export fun policyDenials(file: str, text: str) > Collected {
+    final found = mut [<Denial>];
+    final missing = mut [<str>];
+    final call = "magus\\guard.deny(";
+    final names = file.split("/");
+    final base = names[names.len() - 1].replace(".buzz", with: "");
+    var offset = 0;
+    while (true) {
+        final at = text.indexOf(call, from: offset);
+        if (at == null) {
+            break;
+        }
+        offset = at! + call.len();
+        if (inTest(text, offset: at!)) {
+            continue;
+        }
+        final site = "{file}:{lineAt(text, offset: at!)}";
+        var arg = literals(text, offset: offset);
+        final bare = arg.indexOf("}") == arg.len() - 1 and arg.indexOf(" ") == null and arg.indexOf("(") == null;
+        if (arg.startsWith("\{") and bare) {
+            final name = arg.sub(1, len: arg.len() - 2);
+            final decl = text.indexOf("final {name} = ");
+            if (decl == null) {
+                missing.append("{site}: the text of `{name}`, declared outside this file or not as a final");
+                continue;
+            }
+            arg = literals(text, offset: decl! + "final {name} = ".len());
+        }
+        if (arg.startsWith("\{") and arg.indexOf("\n") == null) {
+            missing.append("{site}: the text, built at run time by {short(arg, n: 80)}");
+            continue;
+        }
+        final parts = splitSay(arg);
+        final rule = ruleOpt(text, offset: offset) ?? "policy/{base}";
+        found.append(Denial{ rule = rule, origin = "policy", site = site, say = parts[0], why = parts[1], fix = [<str>] });
+    }
+    return Collected{ denials = found, missing = missing };
+}
+
+// catalogSites maps each catalogued rule name to its catalog.go row,
+// through the denyRuleName constants of the files given.
+export fun catalogSites(files: {str: str}) > {str: str} {
+    final names = mut {<str: str>};
+    foreach (_, text in files) {
+        foreach (line in text.split("\n")) {
+            final at = line.indexOf("denyRuleName = \"");
+            if (at == null) {
+                continue;
+            }
+            final rest = line.sub(at! + 16);
+            names[line.sub(0, len: at!).trim()] = rest.sub(0, len: rest.indexOf("\"") ?? rest.len());
+        }
+    }
+    final sites = mut {<str: str>};
+    foreach (file, text in files) {
+        foreach (n, line in text.split("\n")) {
+            final open = line.indexOf("string(");
+            if (line.indexOf("Name:") == null or open == null) {
+                continue;
+            }
+            final ident = line.sub(open! + 7, len: (line.indexOf(")") ?? line.len()) - open! - 7);
+            if (names[ident] -> name) {
+                sites[name] = "{file}:{n + 1}";
+            }
+        }
+    }
+    return sites;
+}
+
+// fromVerdict splits a stored guard verdict into the verdict line, the
+// rationale before `next:` or `see:`, and each next command.
+// The nothing-ran note is dropped; see: names the rule.
+export fun fromVerdict(text: str, site: str, at: int) > Denial {
+    final lines = text.split("\n");
+    final why = mut [<str>];
+    final fix = mut [<str>];
+    var rule = "workspace";
+    var inNext = false;
+    var i = 1;
+    while (i < lines.len()) {
+        final line = lines[i];
+        i = i + 1;
+        if (line.startsWith("see: ")) {
+            final parts = line.trim().split("/");
+            rule = if (parts[parts.len() - 1] == "") parts[parts.len() - 2] else parts[parts.len() - 1];
+            continue;
+        }
+        if (line == "next:") {
+            inNext = true;
+            continue;
+        }
+        if (inNext) {
+            if (line.startsWith("      ")) {
+                continue;
+            }
+            if (line.startsWith("  ")) {
+                fix.append(line.trim());
+                continue;
+            }
+            inNext = false;
+        }
+        if (line.startsWith("nothing ran") and why.len() == 0) {
+            continue;
+        }
+        why.append(line);
+    }
+    return Denial{ rule = rule, origin = "trail", site = site, say = lines[0], why = why.join("\n").trim(), fix = fix, at = at };
+}
+
+// trailHits reads the denied calls stamped at or after start, unix ms.
+export fun trailHits(events: str, start: int) > [Hit] !> any {
+    final found = mut [<Hit>];
+    foreach (n, text in fs\readFile(events).split("\n")) {
+        if (text.indexOf("\"preview\":\"guard: deny\"") == null) {
+            continue;
+        }
+        final doc = json\parse(text);
+        final at = std\toInt(doc["ts"] ?? 0);
+        if (at >= start) {
+            found.append(Hit{ line = n + 1, at = at, ref = "{doc["verdict_ref"] ?? ""}" });
+        }
+    }
+    return found;
+}
+
+// fromTrail keeps one denial per rule and say, carrying the newest firing.
+// verdicts maps a ref to its stored text; a ref it lacks is not recorded.
+export fun fromTrail(hits: [Hit], verdicts: {str: str}, file: str) > Collected {
+    final byKey = mut {<str: Denial>};
+    final order = mut [<str>];
+    final missing = mut [<str>];
+    var unref = 0;
+    var unread = 0;
+    foreach (h in hits) {
+        if (h.ref == "") {
+            unref = unref + 1;
+            continue;
+        }
+        final text = verdicts[h.ref];
+        if (text == null) {
+            unread = unread + 1;
+            continue;
+        }
+        final d = fromVerdict(text!, site: "{file}:{h.line} {h.ref}", at: h.at);
+        final key = "{d.rule}\n{d.say}";
+        if (byKey[key] -> seen) {
+            final newer = d.at >= seen.at;
+            byKey[key] = Denial{
+                rule = seen.rule, origin = seen.origin, say = seen.say, count = seen.count + 1,
+                site = if (newer) d.site else seen.site, why = if (newer) d.why else seen.why,
+                fix = if (newer) d.fix else seen.fix, at = if (newer) d.at else seen.at,
+            };
+        } else {
+            byKey[key] = d;
+            order.append(key);
+        }
+    }
+    if (unref > 0) {
+        missing.append("{file}: the text of {unref} denied call(s): the line carries no verdict_ref");
+    }
+    if (unread > 0) {
+        missing.append("{file}: the text of {unread} denied call(s): no verdict blob holds their ref");
+    }
+    final found = mut [<Denial>];
+    foreach (key in order) {
+        found.append(byKey[key]!);
+    }
+    return Collected{ denials = found, missing = missing };
+}
+
+export fun runnable(step: str) > bool {
+    final word = step.trim().split(" ")[0];
+    if (word.startsWith("./") or word.startsWith("/") or COMMANDS.indexOf(word) != null) {
+        return true;
+    }
+    final paren = word.indexOf("(");
+    if (paren == null or paren! == 0) {
+        return false;
+    }
+    final first = word.sub(0, len: 1);
+    return first.upper() == first and first.lower() != first;
+}
+
+fun backticked(text: str) > [str] {
+    final spans = mut [<str>];
+    final parts = text.split("`");
+    var i = 1;
+    while (i < parts.len() - 1) {
+        spans.append(parts[i]);
+        i = i + 2;
+    }
+    return spans;
+}
+
+fun short(text: str, n: int) > str {
+    final flat = text.replace("\n", with: " ");
+    return if (flat.len() > n) flat.sub(0, len: n) + "..." else flat;
+}
+
+export final KINDS = ["empty-fix", "fix-not-runnable", "why-acts", "why-command", "say-over-cap", "why-over-cap", "duplicate-say"];
+
+// faults flags what a pattern can judge, one Fault per kind in KINDS.
+export fun faults(denials: [Denial]) > [Fault] {
+    final found = mut [<Fault>];
+    final rulesBySay = mut {<str: [str]>};
+    foreach (d in denials) {
+        if (d.fix.len() == 0) {
+            found.append(Fault{ kind = "empty-fix", rule = d.rule, site = d.site, detail = "no next step: {short(d.say, n: 80)}" });
+        } else if (d.fix.filter(fun (index: int, step: str) > bool => runnable(step)).len() == 0) {
+            found.append(Fault{ kind = "fix-not-runnable", rule = d.rule, site = d.site, detail = "no step starts with a command: {short(d.fix[0], n: 80)}" });
+        }
+        final lower = d.why.lower();
+        foreach (cue in WHY_CUES) {
+            if (lower.indexOf(cue) != null) {
+                found.append(Fault{ kind = "why-acts", rule = d.rule, site = d.site, detail = "why says `{cue}`" });
+                break;
+            }
+        }
+        foreach (span in backticked(d.why)) {
+            if (runnable(span)) {
+                found.append(Fault{ kind = "why-command", rule = d.rule, site = d.site, detail = "why carries `{short(span, n: 60)}`" });
+                break;
+            }
+        }
+        if (d.say.utf8Len() > SAY_CAP) {
+            found.append(Fault{ kind = "say-over-cap", rule = d.rule, site = d.site, detail = "say runs {d.say.utf8Len()} runes against {SAY_CAP}" });
+        }
+        if (d.why.utf8Len() > WHY_CAP) {
+            found.append(Fault{ kind = "why-over-cap", rule = d.rule, site = d.site, detail = "why runs {d.why.utf8Len()} runes against {WHY_CAP}" });
+        }
+        final rules = (rulesBySay[d.say] ?? [<str>]).cloneMutable();
+        if (rules.indexOf(d.rule) == null) {
+            rules.append(d.rule);
+            rulesBySay[d.say] = rules;
+        }
+    }
+    final reported = mut {<str: bool>};
+    foreach (d in denials) {
+        final rules = rulesBySay[d.say] ?? [<str>];
+        if (rules.len() > 1 and !(reported[d.say] ?? false)) {
+            reported[d.say] = true;
+            found.append(Fault{ kind = "duplicate-say", rule = d.rule, site = d.site, detail = "say shared by {rules.join(", ")}: {short(d.say, n: 80)}" });
+        }
+    }
+    return found;
+}
+
+// worklist keeps every policy denial and the newest perRule of each rule's
+// distinct trail firings.
+export fun worklist(denials: [Denial], perRule: int) > [Denial] {
+    final newest = denials.cloneMutable();
+    newest.sort(fun (a: Denial, b: Denial) > bool => a.at > b.at);
+    final kept = mut {<str: int>};
+    final found = mut [<Denial>];
+    foreach (d in newest) {
+        final n = kept[d.rule] ?? 0;
+        if (d.origin == "trail" and n >= perRule) {
+            continue;
+        }
+        kept[d.rule] = n + 1;
+        found.append(d);
+    }
+    return found;
+}
+
+export final RUBRIC = [
+    "say states the problem in one line; flag a say that explains why, or that tells the reader what to do",
+    "why explains the problem; flag a why that restates say, or that carries the next step, which belongs in fix",
+    "fix is the step to run; flag a fix too vague to run as written, or one that does not clear the say",
+    "flag a part in the wrong field even when every part is present",
+];
+
+fun shown(count: int, limit: int) > str {
+    return if (count > limit) ", first {limit}" else "";
+}
+
+export fun render(found: [Fault], work: [Denial], missing: [str], header: str, limit: int) > [str] {
+    final lines = mut [header, "", "mechanical faults by kind"];
+    foreach (kind in KINDS) {
+        lines.append("  {kind}: {found.filter(fun (index: int, f: Fault) > bool => f.kind == kind).len()}");
+    }
+    foreach (kind in KINDS) {
+        final of = found.filter(fun (index: int, f: Fault) > bool => f.kind == kind);
+        if (of.len() == 0) {
+            continue;
+        }
+        lines.append("");
+        lines.append("{kind}, {of.len()} fault(s){shown(of.len(), limit: limit)}");
+        foreach (i, f in of) {
+            if (i >= limit) {
+                break;
+            }
+            lines.append("  {f.rule} [{f.site}]: {f.detail}");
+        }
+    }
+    lines.append("");
+    lines.append("worklist: {work.len()} denial(s) for a model to judge through the magus-local-development skill");
+    lines.append("rubric");
+    foreach (r in RUBRIC) {
+        lines.append("  - {r}");
+    }
+    foreach (i, d in work) {
+        lines.append("  [w{i + 1}] {d.rule} ({d.origin}, {d.count} firing(s)) [{d.site}]");
+        lines.append("      say: {short(d.say, n: 240)}");
+        final why = if (d.why == "") "(none)" else short(d.why, n: 400);
+        final fix = if (d.fix.len() == 0) "(none)" else d.fix.join(" | ");
+        lines.append("      why: {why}");
+        lines.append("      fix: {fix}");
+    }
+    lines.append("");
+    lines.append("not recorded");
+    foreach (m in missing) {
+        lines.append("  not recorded: {m}");
+    }
+    return lines;
+}
+
+export fun record(d: Denial, found: [Fault]) > str !> any {
+    final kinds = mut [<str>];
+    foreach (f in found) {
+        if (f.site == d.site and f.rule == d.rule) {
+            kinds.append(f.kind);
+        }
+    }
+    return json\stringify({
+        "rule": d.rule, "origin": d.origin, "source": d.site, "say": d.say, "why": d.why, "fix": d.fix, "count": d.count, "faults": kinds,
+    });
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help", "--jsonl"], valued: ["--since", "--per-rule", "--limit"], repeated: ["--trail"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "denials: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final perRule = std\parseInt(parsed.values["--per-rule"] ?? "1") ?? 1;
+    final limit = std\parseInt(parsed.values["--limit"] ?? "10") ?? 10;
+    final root = vcs\root();
+    final trails = parsed.lists["--trail"] ?? [<str>];
+    final checkouts = if (trails.len() > 0) trails else [root];
+    var start = 0;
+    if (parsed.values["--since"] -> since) {
+        final now = std\toInt(time\parse("2006-01-02T15:04:05Z07:00", value: time\nowIso()));
+        start = now - std\toInt(time\parseDuration(since));
+    }
+
+    final missing = mut [<str>];
+    final all = mut [<Denial>];
+
+    final goFiles = mut {<str: str>};
+    foreach (p in fs\glob(fs\join(root, name: "internal/guard/*.go"))) {
+        if (!p.value.endsWith("_test.go")) {
+            goFiles["internal/guard/{fs\basename(p.value)}"] = fs\readFile(p.value);
+        }
+    }
+    final sites = catalogSites(goFiles);
+    final described = magus\cmd("describe", args: ["rules", "-o", "json"], opts: magus\CommandOptions{ quiet = true });
+    final catalog: [any] = json\parse(described.stdout);
+    final denying = mut [<str>];
+    foreach (row in catalog) {
+        if ("{row["decision"]}" == "deny" or "{row["workspace"] ?? ""}" == "deny") {
+            denying.append("{row["name"]}");
+        }
+    }
+
+    var policyCount = 0;
+    foreach (p in fs\glob(fs\join(root, name: "hack/policy/*.buzz"))) {
+        final got = policyDenials("hack/policy/{fs\basename(p.value)}", text: fs\readFile(p.value));
+        policyCount = policyCount + got.denials.len();
+        foreach (d in got.denials) {
+            all.append(d);
+        }
+        foreach (m in got.missing) {
+            missing.append(m);
+        }
+    }
+
+    var firings = 0;
+    var trailCount = 0;
+    foreach (c in checkouts) {
+        final dir = fs\join(c, name: ".magus/activity");
+        final events = fs\join(dir, name: "events.jsonl");
+        if (!fs\exists(events)) {
+            missing.append("every firing in {c}: no guard trail at {events}; name the checkout that holds it with --trail");
+            continue;
+        }
+        final hits = trailHits(events, start: start);
+        final verdicts = mut {<str: str>};
+        foreach (h in hits) {
+            final blob = fs\join(dir, name: "blobs/{h.ref}");
+            if (h.ref != "" and fs\exists(blob)) {
+                verdicts[h.ref] = fs\readFile(blob);
+            }
+        }
+        final got = fromTrail(hits, verdicts: verdicts, file: events);
+        firings = firings + hits.len();
+        trailCount = trailCount + got.denials.len();
+        foreach (d in got.denials) {
+            final row = sites[d.rule];
+            all.append(if (row != null) Denial{
+                rule = d.rule, origin = d.origin, site = "{d.site} {row!}", say = d.say, why = d.why, fix = d.fix, count = d.count, at = d.at,
+            } else d);
+        }
+        foreach (m in got.missing) {
+            missing.append(m);
+        }
+    }
+
+    final fired = mut {<str: bool>};
+    foreach (d in all) {
+        fired[d.rule] = true;
+    }
+    final silent = denying.filter(fun (index: int, name: str) > bool => !(fired[name] ?? false));
+    if (silent.len() > 0) {
+        missing.append("say, why and fix of {silent.len()} denying catalogued rule(s) the trail read never saw fire; the catalog keeps catches and the page, not the verdict: {silent.join(", ")}");
+    }
+    final unnamed = all.filter(fun (index: int, d: Denial) > bool => d.origin == "trail" and d.rule == "workspace").len();
+    if (unnamed > 0) {
+        missing.append("the rule of {unnamed} workspace denial(s) from the trail: a stored workspace verdict carries no see: line");
+    }
+    missing.append("a fix field for policy denials: magus\\guard.deny takes the text and \{rule} alone, so a policy's next step lives in its prose");
+
+    final found = faults(all);
+    if (parsed.values["--jsonl"] != null) {
+        foreach (d in all) {
+            std\print(record(d, found: found));
+        }
+        return;
+    }
+    final header = "read-only: {all.len()} denial text(s): {policyCount} policy site(s) and {trailCount} distinct of {firings} trail firing(s) from {checkouts.join(", ")}; {denying.len()} catalogued rule(s) deny";
+    foreach (line in render(found, work: worklist(all, perRule: perRule), missing: missing, header: header, limit: limit)) {
+        std\print(line);
+    }
+}
