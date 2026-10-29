@@ -346,105 +346,104 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
     };
 }
 
-// discover_projects claims one project per Go module: go.work's use list when the root
-// holds one, else every go.mod outside the dirs ./... skips. It reads no .go content,
-// so whatever only content shows (build tags, go:generate) is reported per module.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
-    final mods = mut {<str: DiscoveryFile>};
-    final goDirs = mut {<str: str>};
-    final cgoFiles = mut {<str: str>};
-    final orphanGaps = mut [<DiscoveryGap>];
-    var work: DiscoveryFile? = null;
+// GoScan is what discover_projects read of the query: each go.mod by directory, the first
+// .go and C file per directory, the root go.work, the modules that form projects and
+// whether go.work selected them, and the gaps no module owns yet.
+object GoScan {
+    mods: mut {str: DiscoveryFile},
+    goDirs: mut {str: str},
+    cgoFiles: mut {str: str},
+    gaps: mut [DiscoveryGap],
+    work: DiscoveryFile? = null,
+    selected: mut [str],
+    workspaceMode: bool = false,
+    dirByModule: mut {str: str},
+    workReplaces: mut {str: str},
+}
+
+// goScan sorts the query's files into a scan.
+fun goScan(req: DiscoveryQuery) > mut GoScan {
+    final scan = mut GoScan{mods = mut {}, goDirs = mut {}, cgoFiles = mut {}, gaps = mut [], selected = mut [],
+        dirByModule = mut {}, workReplaces = mut {}};
     foreach (file in req.files) {
         final base = goBase(file.path);
         final dir = goDir(file.path);
         if (base == "go.mod") {
-            mods[dir] = file;
+            scan.mods[dir] = file;
         } else if (base == "go.work" and dir == ".") {
-            work = file;
+            scan.work = file;
         } else if (base == "go.work") {
-            orphanGaps.append(DiscoveryGap{file = file.path, why = "go.work below the root: only the root's use list is read"});
+            scan.gaps.append(DiscoveryGap{file = file.path, why = "go.work below the root: only the root's use list is read"});
         } else if (base.endsWith(".go")) {
-            goDirs[dir] = goDirs[dir] ?? file.path;
-        } else if ((base.endsWith(".c") or base.endsWith(".S")) and cgoFiles[dir] == null) {
-            cgoFiles[dir] = file.path;
+            scan.goDirs[dir] = scan.goDirs[dir] ?? file.path;
+        } else if ((base.endsWith(".c") or base.endsWith(".S")) and scan.cgoFiles[dir] == null) {
+            scan.cgoFiles[dir] = file.path;
         }
     }
+    return scan;
+}
 
-    final selected = mut [<str>];
-    var workspaceMode = false;
-    if (work -> found) {
+// goWorkUses selects go.work's use list, when the root holds one whose content was passed.
+fun goWorkUses(scan: mut GoScan) > void !> any {
+    if (scan.work -> found) {
         if (found.content -> content) {
-            workspaceMode = true;
+            scan.workspaceMode = true;
             foreach (use in goDirectives(content).filter(fun (i: int, d: GoDirective) > bool => d.verb == "use")) {
                 final dir = path\clean(use.args[0]);
                 if (dir == ".." or dir.startsWith("../") or path\isAbs(dir)) {
-                    orphanGaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} leaves the workspace root"});
-                } else if (mods[dir] == null) {
-                    orphanGaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} names a dir with no go.mod"});
-                } else if (selected.indexOf(dir) == null) {
-                    selected.append(dir);
+                    scan.gaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} leaves the workspace root"});
+                } else if (scan.mods[dir] == null) {
+                    scan.gaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} names a dir with no go.mod"});
+                } else if (scan.selected.indexOf(dir) == null) {
+                    scan.selected.append(dir);
                 }
             }
         } else {
-            orphanGaps.append(DiscoveryGap{file = "go.work", why = "content not passed, so every go.mod is read instead of its use list"});
+            scan.gaps.append(DiscoveryGap{file = "go.work", why = "content not passed, so every go.mod is read instead of its use list"});
         }
     }
-    foreach (dir in goSortedKeys(mods)) {
+}
+
+// goSelect picks the modules that form projects: go.work's use list, else every go.mod
+// outside the dirs ./... skips.
+fun goSelect(scan: mut GoScan) > void !> any {
+    goWorkUses(scan);
+    foreach (dir in goSortedKeys(scan.mods)) {
         final skipped = goSkippedSegment(dir);
-        if (workspaceMode) {
-            if (selected.indexOf(dir) == null) {
-                orphanGaps.append(DiscoveryGap{file = mods[dir]!.path, why = "not in go.work's use list, so workspace mode ignores it"});
+        if (scan.workspaceMode) {
+            if (scan.selected.indexOf(dir) == null) {
+                scan.gaps.append(DiscoveryGap{file = scan.mods[dir]!.path, why = "not in go.work's use list, so workspace mode ignores it"});
             }
         } else if (skipped -> segment) {
-            orphanGaps.append(DiscoveryGap{file = mods[dir]!.path, why = "under {segment}, which ./... skips, so it forms no project"});
+            scan.gaps.append(DiscoveryGap{file = scan.mods[dir]!.path, why = "under {segment}, which ./... skips, so it forms no project"});
         } else {
-            selected.append(dir);
+            scan.selected.append(dir);
         }
     }
-    selected.sort(fun (a: str, b: str) > bool => a < b);
-
-    final parsed = mut {<str: GoModule>};
-    final dirByModule = mut {<str: str>};
-    foreach (dir in selected) {
-        final module = goModule(mods[dir]!);
-        parsed[dir] = module;
-        if (module.path != "") {
-            dirByModule[module.path] = dir;
-        }
-    }
-    final workReplaces = mut {<str: str>};
-    if (workspaceMode) {
-        foreach (r in goReplaces(goDirectives(work!.content!))) {
+    scan.selected.sort(fun (a: str, b: str) > bool => a < b);
+    if (scan.workspaceMode) {
+        foreach (r in goReplaces(goDirectives(scan.work!.content!))) {
             if (goIsLocal(r.to)) {
-                workReplaces[r.old] = path\clean(r.to);
+                scan.workReplaces[r.old] = path\clean(r.to);
             }
         }
     }
+}
 
-    final claims = mut [<DiscoveredProject>];
-    foreach (dir in selected) {
-        claims.append(goClaim(dir, module: parsed[dir]!, modDirs: goSortedKeys(mods), selected: selected,
-            dirByModule: dirByModule, workReplaces: workReplaces, workspaceMode: workspaceMode,
-            goDirs: goDirs, cgoFiles: cgoFiles));
-    }
-
-    if (goDirs.len() > 0 and mods.len() == 0) {
-        orphanGaps.append(DiscoveryGap{file = goDirs[goSortedKeys(goDirs)[0]]!, why = "Go sources with no go.mod: GOPATH mode forms no project"});
-    }
-    if (orphanGaps.len() == 0) {
+// goOrphans hands each gap no module owned to the claim whose module holds its file, or to a
+// member claim at the root when no module formed: the contract carries a gap only on a claim.
+fun goOrphans(claims: [DiscoveredProject], scan: GoScan) > [DiscoveredProject] {
+    if (scan.gaps.len() == 0) {
         return claims;
     }
-    // The contract carries a gap only on a claim, so a gap no module owns rides a
-    // member claim at the root rather than going unreported.
     if (claims.len() == 0) {
-        return [DiscoveredProject{path = ".", role = DiscoveryRole.member, notInferred = orphanGaps}];
+        return [DiscoveredProject{path = ".", role = DiscoveryRole.member, notInferred = scan.gaps}];
     }
     final owned = mut [<DiscoveredProject>];
     foreach (claim in claims) {
         final gaps = claim.notInferred.cloneMutable();
-        foreach (gap in orphanGaps) {
-            if (goOwner(gap.file, dirs: selected) == claim.path) {
+        foreach (gap in scan.gaps) {
+            if (goOwner(gap.file, dirs: scan.selected) == claim.path) {
                 gaps.append(gap);
             }
         }
@@ -452,6 +451,30 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
             dependsOn = claim.dependsOn, targets = claim.targets, spans = claim.spans, notInferred = gaps});
     }
     return owned;
+}
+
+// discover_projects claims one project per Go module: go.work's use list when the root
+// holds one, else every go.mod outside the dirs ./... skips. It reads no .go content,
+// so whatever only content shows (build tags, go:generate) is reported per module.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    final scan = goScan(req);
+    goSelect(scan);
+    final parsed = mut {<str: GoModule>};
+    foreach (dir in scan.selected) {
+        final module = goModule(scan.mods[dir]!);
+        parsed[dir] = module;
+        if (module.path != "") {
+            scan.dirByModule[module.path] = dir;
+        }
+    }
+    final claims = mut [<DiscoveredProject>];
+    foreach (dir in scan.selected) {
+        claims.append(goClaim(dir, module: parsed[dir]!, scan: scan));
+    }
+    if (scan.goDirs.len() > 0 and scan.mods.len() == 0) {
+        scan.gaps.append(DiscoveryGap{file = scan.goDirs[goSortedKeys(scan.goDirs)[0]]!, why = "Go sources with no go.mod: GOPATH mode forms no project"});
+    }
+    return goOrphans(claims, scan: scan);
 }
 
 object GoDirective {
@@ -622,19 +645,10 @@ fun goRelative(dir: str, file: str) > str {
     return file.sub(dir.len() + 1, len: file.len() - dir.len() - 1);
 }
 
-fun goClaim(dir: str, module: GoModule, modDirs: [str], selected: [str], dirByModule: {str: str},
-        workReplaces: {str: str}, workspaceMode: bool, goDirs: {str: str}, cgoFiles: {str: str}) > DiscoveredProject !> any {
-    final gaps = mut [<DiscoveryGap>];
-    final deps = mut [<str>];
-    if (!module.readable) {
-        gaps.append(DiscoveryGap{file = module.file, why = "content not passed, so its name and dependencies are not read"});
-    } else if (module.path == "") {
-        gaps.append(DiscoveryGap{file = module.file, why = "no module directive, so the name derives from the path"});
-    }
-
-    final replaced = mut {<str: bool>};
+// goReplaceDeps draws a dependency for each local replace in dir's module that names a
+// selected module, and a gap for one that cannot.
+fun goReplaceDeps(dir: str, module: GoModule, scan: GoScan, deps: mut [str], gaps: mut [DiscoveryGap]) > void !> any {
     foreach (r in module.replaces) {
-        replaced[r.old] = true;
         if (!goIsLocal(r.to)) {
             continue;
         }
@@ -645,18 +659,27 @@ fun goClaim(dir: str, module: GoModule, modDirs: [str], selected: [str], dirByMo
         final to = path\clean(if (dir == ".") r.to else "{dir}/{r.to}");
         if (to == ".." or to.startsWith("../")) {
             gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} leaves the workspace root"});
-        } else if (selected.indexOf(to) == null) {
+        } else if (scan.selected.indexOf(to) == null) {
             gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} names {to}, which forms no Go project here"});
         } else if (to != dir and deps.indexOf(to) == null) {
             deps.append(to);
         }
     }
+}
+
+// goRequireDeps draws a dependency for each require that resolves to a selected module: in
+// workspace mode through go.work, else only with a local replace, which is a gap without.
+fun goRequireDeps(dir: str, module: GoModule, scan: GoScan, deps: mut [str], gaps: mut [DiscoveryGap]) > void {
+    final replaced = mut {<str: bool>};
+    foreach (r in module.replaces) {
+        replaced[r.old] = true;
+    }
     foreach (req in module.requires) {
-        final local = dirByModule[req];
-        if (workspaceMode) {
-            final via = workReplaces[req] ?? local;
+        final local = scan.dirByModule[req];
+        if (scan.workspaceMode) {
+            final via = scan.workReplaces[req] ?? local;
             if (via -> upstream) {
-                if (upstream != dir and selected.indexOf(upstream) != null and deps.indexOf(upstream) == null) {
+                if (upstream != dir and scan.selected.indexOf(upstream) != null and deps.indexOf(upstream) == null) {
                     deps.append(upstream);
                 }
             }
@@ -666,25 +689,44 @@ fun goClaim(dir: str, module: GoModule, modDirs: [str], selected: [str], dirByMo
             }
         }
     }
-    deps.sort(fun (a: str, b: str) > bool => a < b);
-    foreach (ignored in module.ignores) {
-        gaps.append(DiscoveryGap{file = module.file, why = "ignore {ignored}: ./... skips it, and spans do not apply it"});
-    }
+}
 
+// goSpans is each directory of .go files dir's module compiles, beside a gap for each one of
+// C or .S sources that needs cgo.
+fun goSpans(dir: str, scan: GoScan, gaps: mut [DiscoveryGap]) > [str] {
+    final modDirs = goSortedKeys(scan.mods);
     final spans = mut [<str>];
-    foreach (goDir in goSortedKeys(goDirs)) {
+    foreach (goDir in goSortedKeys(scan.goDirs)) {
         if (goDir != dir and goModuleOwner(goDir, modDirs: modDirs) == dir and goSkippedSegment(goRelative(dir, file: goDir)) == null) {
             spans.append(goDir);
         }
     }
-    foreach (cgoDir in goSortedKeys(cgoFiles)) {
+    foreach (cgoDir in goSortedKeys(scan.cgoFiles)) {
         if (goModuleOwner(cgoDir, modDirs: modDirs) == dir and goSkippedSegment(goRelative(dir, file: cgoDir)) == null) {
-            gaps.append(DiscoveryGap{file = cgoFiles[cgoDir]!, why = "C or .S sources need cgo: a C toolchain and CGO_ENABLED=1 are not checked"});
+            gaps.append(DiscoveryGap{file = scan.cgoFiles[cgoDir]!, why = "C or .S sources need cgo: a C toolchain and CGO_ENABLED=1 are not checked"});
         }
     }
+    return spans;
+}
+
+fun goClaim(dir: str, module: GoModule, scan: GoScan) > DiscoveredProject !> any {
+    final gaps = mut [<DiscoveryGap>];
+    final deps = mut [<str>];
+    if (!module.readable) {
+        gaps.append(DiscoveryGap{file = module.file, why = "content not passed, so its name and dependencies are not read"});
+    } else if (module.path == "") {
+        gaps.append(DiscoveryGap{file = module.file, why = "no module directive, so the name derives from the path"});
+    }
+    goReplaceDeps(dir, module: module, scan: scan, deps: deps, gaps: gaps);
+    goRequireDeps(dir, module: module, scan: scan, deps: deps, gaps: gaps);
+    deps.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (ignored in module.ignores) {
+        gaps.append(DiscoveryGap{file = module.file, why = "ignore {ignored}: ./... skips it, and spans do not apply it"});
+    }
+    final spans = goSpans(dir, scan: scan, gaps: gaps);
 
     final targets = mut {"test": ["go-test"], "lint": ["go-vet"]};
-    if (goDirs[dir] != null) {
+    if (scan.goDirs[dir] != null) {
         targets["build"] = ["go-build"];
     } else {
         gaps.append(DiscoveryGap{file = module.file, why = "build not wired: go-build builds the module dir's own package, and it holds no .go file"});
@@ -694,13 +736,6 @@ fun goClaim(dir: str, module: GoModule, modDirs: [str], selected: [str], dirByMo
     gaps.append(DiscoveryGap{file = module.file, why = "go:generate drift is not checked: no generate target is wired, so committed output is trusted"});
     gaps.append(DiscoveryGap{file = module.file, why = "lint runs go-vet only: a golangci-lint config is outside this spell's globs"});
 
-    return DiscoveredProject{
-        path = dir,
-        role = DiscoveryRole.project,
-        name = module.path,
-        dependsOn = deps,
-        targets = targets,
-        spans = spans,
-        notInferred = gaps,
-    };
+    return DiscoveredProject{path = dir, role = DiscoveryRole.project, name = module.path, dependsOn = deps,
+        targets = targets, spans = spans, notInferred = gaps};
 }
