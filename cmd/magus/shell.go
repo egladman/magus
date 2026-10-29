@@ -912,7 +912,7 @@ func delegateToCheckout(ctx context.Context, input string, out, errOut io.Writer
 	}
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
 	// directory, which is the binary handing the call over.
-	env := append(os.Environ(), delegatedEnv+"="+running, bootstrapExecSentinelVar+"=1")
+	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), bootstrapExecSentinelVar+"=1")
 	if behind := checkoutBinaryBehind(ctx, own, env); behind != "" {
 		if line := guard.BootstrapLine(filepath.Dir(own)); line != "" {
 			behind += fmt.Sprintf(". A ./magus at HEAD judges here once the main session places one, or the bootstrap builds it, alone on its line: `%s`", line)
@@ -1002,9 +1002,9 @@ func judgedBy(verdict types.GuardJudgment, note string) types.GuardJudgment {
 	}
 	switch verdict.Decision {
 	case "deny", "ask":
-		verdict.Reason = strings.TrimSpace(verdict.Reason + "\n" + note)
+		verdict.Reason = strings.TrimSpace(strings.Join([]string{verdict.Reason, note}, "\n"))
 	case "advise":
-		verdict.Context = strings.TrimSpace(verdict.Context + "\n" + note)
+		verdict.Context = strings.TrimSpace(strings.Join([]string{verdict.Context, note}, "\n"))
 	}
 	return verdict
 }

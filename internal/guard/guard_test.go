@@ -692,14 +692,15 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		assert.NotContains(t, write("b.go", "package a\n\n// again\n").Context, rule, "once per session")
 
 		long := strings.Repeat("w ", 25) + "w."
-		v = write("c.go", "package a\n\nfunc f() {\n\t// "+long+"\n\tg()\n}\n")
+		longComment := fmt.Sprintf("package a\n\nfunc f() {\n\t// %s\n\tg()\n}\n", long)
+		v = write("c.go", longComment)
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceWriteRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "a sentence of 26 words, over the limit of 25")
-		v = write("d.buzz", "// "+long+" "+long+"\nfun f() > void {}\n")
+		v = write("d.buzz", fmt.Sprintf("// %s %s\nfun f() > void {}\n", long, long))
 		assert.Equal(t, decisionDeny, v.Decision, "a Buzz doc comment: %s", v.Reason)
 
 		repo := testkit.NewRepository(t, map[string]string{"README.md": "# a\n"})
-		require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.go"), []byte("package a\n\nfunc f() {\n\t// "+long+"\n\tg()\n}\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.go"), []byte(longComment), 0o644))
 		repo.Git("add", "a.go")
 		v = shellIn(t, "trim-key", repo.Root())(`git commit -m "trim the key"`)
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), v.Reason)

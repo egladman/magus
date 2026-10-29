@@ -413,8 +413,7 @@ func (s *JudgedShortSuite) judgeRecorded(deps Dependencies, line string) (types.
 
 // stored asserts v is a deny under policy-unloaded and returns the verdict behind its ref.
 func (s *JudgedShortSuite) stored(cacheDir string, v types.GuardJudgment) string {
-	s.Require().Equal(decisionDeny, v.Decision, v.Context)
-	s.Equal(string(denyRulePolicyUnloaded), v.Rule)
+	s.Require().Equal(verdictWithRule(decisionDeny, string(denyRulePolicyUnloaded)), unworded(v), v.Context)
 	ref := verdictRef.FindString(v.Reason)
 	s.Require().NotEmpty(ref, v.Reason)
 	blob, err := trail.ReadBlob(cacheDir, ref)

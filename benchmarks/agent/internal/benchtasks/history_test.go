@@ -84,7 +84,7 @@ func (s *historySuite) TestHistoryNamesEveryMissingFlag() {
 	s.ErrorContains(writeHistory(context.Background(), historyOptions{repo: "."}), "--after, --ref, -o required")
 }
 
-func (s *historySuite) TestCutScratchCutsAtANonTipCommitOfARelativeRepo() {
+func (s *historySuite) TestCutScratchCutsAtANonTipCommitOfARelativeRepository() {
 	repo := s.T().TempDir()
 	s.git(repo, "init", "--quiet", "--initial-branch=main")
 	var shas []string

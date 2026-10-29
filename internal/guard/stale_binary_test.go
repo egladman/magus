@@ -777,7 +777,7 @@ func (s *LineWorkspaceSuite) TestACdMovesTheLineIntoTheJobCheckout() {
 }
 
 func (s *LineWorkspaceSuite) TestARootFlagMovesAMagusCall() {
-	s.Equal(s.job, LineWorkspace("magus --root "+s.job+" run lint .", s.session))
+	s.Equal(s.job, LineWorkspace(fmt.Sprintf("magus --root %s run lint .", s.job), s.session))
 }
 
 func (s *LineWorkspaceSuite) TestALineThatStaysIsTheSessionCheckout() {
