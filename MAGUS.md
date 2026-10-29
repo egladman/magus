@@ -165,7 +165,7 @@ magus graph export -o json  # the whole graph
 | `graph-generate`               | Exports the knowledge and target graphs the browser Graph Explorer loads; with cd it also publishes the knowledge graph.                                                                                                               |
 | `advice-test`                  | Runs the PR advisors' `test "..." {}` blocks under a plain `magus buzz -t`, from each script's own directory so their bare `import "advice"` resolves.                                                                                 |
 | `harness-drift`                | Fails when a committed host config file lacks what its wired harness spell renders, naming each file and the command that merges it.                                                                                                   |
-| `swegrade-build`               | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.                                                                                                              |
+| `swegrade-build`               | Builds swegrade, the grader a SWE-bench trial's eval log is piped through, into benchmarks/agent/bin.                                                                                                                                  |
 | `compress-cgo-test`            | Runs internal/compress's tests under the cgo tags, which the ordinary test target cannot reach.                                                                                                                                        |
 
 ## Project: libs/embed
