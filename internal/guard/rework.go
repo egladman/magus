@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -16,20 +17,51 @@ import (
 // spawn the spawner could not hand a job out in (see [spawnedAgent.UntrustedJob]), a job
 // still taken, and a dry run. It never changes the verdict.
 func recordRework(ctx context.Context, at location, facts hint.Gate, addressed string) {
-	if at.cacheDir == "" || addressed == "" || isDryRun(ctx) {
+	if isDryRun(ctx) {
 		return
+	}
+	if row, ok := handedBackRow(ctx, at, facts, addressed); ok {
+		_ = job.NewStore(at.jobs()).RecordRework(ctx, row.ID)
+	}
+}
+
+// handedBackRow is the row addressed's spawn title names when it has exited or
+// ended; false when nothing attributes one.
+func handedBackRow(ctx context.Context, at location, facts hint.Gate, addressed string) (types.Job, bool) {
+	if at.cacheDir == "" || addressed == "" {
+		return types.Job{}, false
 	}
 	rec, ok := readSpawnedAgent(facts, resolveAgentID(facts, addressed))
 	if !ok || rec.UntrustedJob != "" {
-		return
+		return types.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return
+		return types.Job{}, false
 	}
 	row, ok := spawnTitleRow(rows, rec.Description)
 	if !ok || (row.State != types.StateExited && !row.State.Terminal()) {
-		return
+		return types.Job{}, false
 	}
-	_ = job.NewStore(at.jobs()).RecordRework(ctx, row.ID)
+	return row, true
+}
+
+// adviseContinueHandedBack tells the root the worker it continues handed its
+// job back. It never denies, so the root keeps its own call.
+func adviseContinueHandedBack(ctx context.Context, at location, facts hint.Gate, addressed string) advice {
+	row, ok := handedBackRow(ctx, at, facts, addressed)
+	if !ok {
+		return advice{}
+	}
+	if row.State.Terminal() {
+		return advice{
+			Say: fmt.Sprintf("magus workspace: job %s is %s, so this worker holds no write paths; fork a new job for more work.", row.ID, row.State),
+			Why: "An ended job grades nothing, so the worker's writes in its checkout are denied.",
+		}
+	}
+	return advice{
+		Say: fmt.Sprintf("magus workspace: job %s is exited; widen it yourself with `%s`, or the worker re-takes it with `%s`.",
+			row.ID, hint.JobApply, hint.JobExec.With(row.ID)),
+		Why: "The worker stays bound to the exited job's write paths, and a write outside them is denied.",
+	}
 }

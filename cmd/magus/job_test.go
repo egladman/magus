@@ -1070,6 +1070,23 @@ func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
 	assert.Equal(t, []types.JobState{types.StateNoReturn, types.StateRunning}, []types.JobState{rows[0].State, rows[1].State})
 }
 
+// Filing a result leaves the row exited and the holder bound, and exit says
+// so on stderr: stdout stays the record the guides compare.
+func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
+	row := leaseRow("held", "")
+	row.WritePaths, row.Registered = []string{"a/**"}, time.Now().Unix()
+	root, _ := execFixture(t, row)
+	writeStdin(t, `{"schema_version":2,"changed_paths":["a/x.go"],"unresolved_risks":[]}`)
+
+	var out string
+	stderr := captureStderr(t, func() {
+		out = captureStdout(t, func() { require.NoError(t, jobExit(t.Context(), root, []string{"held", "--stdin"})) })
+	})
+	assert.True(t, strings.HasPrefix(out, "exited held, recorded exited, with its result filed."), out)
+	assert.NotContains(t, out, exitedBindingNote)
+	assert.Contains(t, stderr, exitedBindingNote)
+}
+
 // Apply prints the spec diff, writes nothing under --dry-run, and keeps the job's state
 // either way.
 func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {

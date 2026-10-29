@@ -196,6 +196,10 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
 		}
 	}
+	if env.IsContinue && verdict.Decision != decisionDeny {
+		note := adviseContinueHandedBack(ctx, at, facts, env.Target).Say
+		verdict = applyRuleFailureNote(verdict, note, hint.MarkerKind(advisoryLeaseState))
+	}
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
 	if verdict.Decision == decisionDeny && verdict.Rule != "" {
@@ -729,13 +733,9 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	}
 }
 
-// releaseOnEnd unbinds the caller from each job command ends, through `magus job exit`,
-// `job wait` or `job rm`, that its record names. Like bindOnExec it runs only on a command
-// the guard lets through.
-//
-// Released before the command runs, as bindOnExec binds: the hook sees no result. A
-// command that then fails leaves the caller unbound, which the orchestrator it now reads
-// as can undo with one `magus job exec`.
+// releaseOnEnd unbinds the caller from each job `job wait` or `job rm` ends,
+// before the command runs. An exited row still grades its holder's writes,
+// so `job exit` keeps the binding.
 func releaseOnEnd(at location, who hookAttribution, command string) {
 	if who.caller().Identified() && at.workspace == "" {
 		return
@@ -746,11 +746,12 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 	}
 	var store *job.Store
 	for _, c := range cmds {
-		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h") || magusFlag(c.Args, "help") {
+		// A help, schema or dry-run read ends nothing.
+		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h", "help", "schema", "dry-run") {
 			continue
 		}
 		words := magusSubcommandWords(c.Args)
-		for _, verb := range []hint.Command{hint.JobExit, hint.JobWait, hint.JobRm} {
+		for _, verb := range []hint.Command{hint.JobWait, hint.JobRm} {
 			if !verb.MatchedBy(words) {
 				continue
 			}

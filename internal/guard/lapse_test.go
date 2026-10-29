@@ -11,9 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -142,4 +144,59 @@ func TestOldSettingsJSONIsNotRead(t *testing.T) {
 	require.ErrorContains(t, err, "preserve it")
 	assert.Nil(t, settings)
 	assert.Nil(t, recalledSettings(dir))
+}
+
+// LapseDegradeSuite pins decision 127: past lapsesBeforeDegrade a subagent's
+// write in a live job's checkout stays denied, and other writes degrade.
+type LapseDegradeSuite struct {
+	suite.Suite
+	ctx     context.Context
+	session string
+	own     string
+}
+
+func TestLapseDegradeSuite(t *testing.T) {
+	suite.Run(t, new(LapseDegradeSuite))
+}
+
+func (s *LapseDegradeSuite) SetupTest() {
+	s.ctx, s.session = fleetFixture(s.T())
+	s.own = s.T().TempDir()
+	row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning, Registered: 1,
+		CheckoutRoot: s.own, Worktree: &types.JobWorktree{Root: s.own, Source: s.session}}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+}
+
+// lapsedWrite lapses an editor Write of path by agent, or by the root
+// session when agent is "".
+func (s *LapseDegradeSuite) lapsedWrite(agent, path string) types.GuardJudgment {
+	env := map[string]any{"session_id": "s1", "cwd": s.session, "hook_event_name": "PreToolUse",
+		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package std\n"}}
+	if agent != "" {
+		env["agent_id"], env["agent_type"] = agent, "general-purpose"
+	}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	return lapseNow(s.ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInALeasedCheckout() {
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedWrite("a1b2c3", filepath.Join(s.own, "std", "module.go"))
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesAWriteOutsideEveryCheckout() {
+	scratch := s.T().TempDir()
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesTheRootSessionsWriteInALeasedCheckout() {
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
 }

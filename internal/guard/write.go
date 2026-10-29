@@ -285,6 +285,11 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	if d := denyUnknownRowMembers(ctx, deps, actingLease, ""); d.refused() {
 		return writeGrade{Decision: decisionDeny, Reason: d.Say, Why: d.Why, Rule: string(denyRuleLeaseRowUnknown)}
 	}
+	if actingLease == "" && deps.caller.Agent != "" {
+		if g := denyUnboundJobCheckout(ctx, location, writePath); g.Decision != "" {
+			return g
+		}
+	}
 	// The store's paths are relative to the checkout a lease was taken in, which for a
 	// worker isolated in its own worktree is not the checkout its hooks resolve, or, for a
 	// write inside it, the checkout the lease's fork made. A write outside that checkout has
@@ -617,6 +622,9 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
 	}
+	if me.State == types.StateExited {
+		return denyExitedWrite(me, rel)
+	}
 	g, stop := claim(rel)
 	if g.Decision != "" {
 		return g
@@ -633,6 +641,19 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
 			leaseActorWhy,
 			revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel),
+	}.full()}
+}
+
+// denyExitedWrite refuses a write outside an exited lease's paths. Its result
+// is filed, so magus claims nothing for it.
+func denyExitedWrite(me types.Job, rel string) writeGrade {
+	return writeGrade{Decision: decisionDeny, Reason: denial{
+		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and job %s is exited; `%s` re-takes it, then "+
+			leaseActorClause(fmt.Sprintf("widen it with `%s`", hint.JobApply)),
+			rel, me.ID, strings.Join(me.WritePaths, ", "), me.ID, hint.JobExec.With(me.ID)),
+		Why: fmt.Sprintf("You stay bound to lease %s after `%s`: its write paths still grade your writes until a wait ends it. "+
+			"`%s` shows what the job holds.\n"+leaseActorWhy,
+			me.ID, hint.JobExit.With(me.ID), hint.DescribeJob.With(me.ID)),
 	}.full()}
 }
 
@@ -997,6 +1018,48 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 		Say: fmt.Sprintf("magus workspace: %s is in another checkout than lease %s's; write %s in %s.", writePath, lease, filepath.Base(writePath), checkout),
 		Why: fmt.Sprintf("%s is in %s, and the lease's write paths name files in the checkout it was taken in.", writePath, other),
 	}.full()}
+}
+
+// denyUnboundJobCheckout refuses a subagent holding no job a write into a
+// checkout a job's fork made. That checkout is the job's, and an unbound
+// write there is graded by nothing.
+func denyUnboundJobCheckout(ctx context.Context, at location, writePath string) writeGrade {
+	row, ok := jobCheckoutHolding(ctx, at, writePath)
+	if !ok {
+		return writeGrade{}
+	}
+	say := fmt.Sprintf("magus workspace: %s is in the checkout job %s's fork made, and you hold no job; run `%s`, then retry this write.",
+		writePath, row.ID, hint.JobExec.With(row.ID))
+	if row.State.Terminal() {
+		say = fmt.Sprintf("magus workspace: %s is in the checkout job %s's fork made, and that job is %s; %s",
+			writePath, row.ID, row.State, leaseActorClause("fork a job for this write"))
+	}
+	return writeGrade{Decision: decisionDeny, Reason: denial{
+		Say: say,
+		Why: fmt.Sprintf("%s holds job %s's work, and a write by an agent bound to no job is checked against no write paths. "+
+			"A person and the root session write there freely; a subagent writes there under the job.", row.Worktree.Root, row.ID),
+	}.full()}
+}
+
+// jobCheckoutHolding is the row whose standing fork-made checkout holds
+// writePath, whatever its state.
+func jobCheckoutHolding(ctx context.Context, at location, writePath string) (types.Job, bool) {
+	if !filepath.IsAbs(writePath) {
+		return types.Job{}, false
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return types.Job{}, false
+	}
+	for _, row := range rows {
+		if !row.Worktree.Standing() {
+			continue
+		}
+		if _, in := workspaceRelative(row.Worktree.Root, writePath); in {
+			return row, true
+		}
+	}
+	return types.Job{}, false
 }
 
 // findMagusCheckout is the nearest directory at or above dir holding a magusfile, "" when

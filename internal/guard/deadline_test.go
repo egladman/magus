@@ -276,7 +276,8 @@ func TestDryRunLapseIsNotGraded(t *testing.T) {
 // that names the phase that stalled once and then only says the guard is still not judging,
 // and a judgment that answers in time starts the count over. The judgment here is slow
 // rather than stuck, the shape a loaded machine gives every phase.
-func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
+// Decision 127 keeps a write in a job's checkout denied; see LapseDegradeSuite.
+func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	req := Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"}
 	slowLoad := func(ctx context.Context) types.GuardJudgment {

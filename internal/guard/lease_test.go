@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -2350,97 +2349,6 @@ func TestATombstonedBindingAllowsTheFixItNames(t *testing.T) {
 	} {
 		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host})
 		assert.NotEqual(t, string(denyRuleLeaseUndeclared), v.Rule, "%s: %s", name, v.Reason)
-	}
-}
-
-// A caller whose job ends is unbound from then on: a binding nothing released graded it
-// under a row it had finished with, so its next fork was refused as outside that row's
-// tree, and once the row was removed every shell line it ran was refused as acting under
-// an undeclared lease. The holder ends its job itself through exit or rm, in any shape a
-// shell line or a client script takes; a wait is its orchestrator's, so the holder's own
-// next call releases a row the wait moved to pass or fail. A rejected wait leaves the row
-// exited, which still holds its holder.
-func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
-	moves := func(state types.JobState) func(*testing.T, *job.Store, string) {
-		return func(t *testing.T, s *job.Store, id string) {
-			_, err := s.Update(t.Context(), id, func(cur *types.Job) { cur.State = state })
-			require.NoError(t, err)
-		}
-	}
-	exited, passed, failed := moves(types.StateExited), moves(types.StatePass), moves(types.StateFail)
-	removed := func(t *testing.T, s *job.Store, id string) {
-		_, err := s.Delete(t.Context(), id, true)
-		require.NoError(t, err)
-	}
-	const result = `{"schema_version":1,"summary":"done"}`
-	client := func(script string) func(*testing.T, hookAttribution) string {
-		return func(t *testing.T, who hookAttribution) string {
-			env := map[string]any{"session_id": who.Session, "cwd": "/Users/dev/repo", "hook_event_name": "PreToolUse",
-				"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; ` + script}}
-			if who.Agent != "" {
-				env["agent_id"], env["agent_type"] = who.Agent, "general-purpose"
-			}
-			return hookJSON(t, env)
-		}
-	}
-	shell := func(command string) func(*testing.T, hookAttribution) string {
-		return func(t *testing.T, who hookAttribution) string { return bashCall(t, who.Session, who.Agent, command) }
-	}
-	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
-	unbound, stillHeld := job.Binding{}, job.Binding{Job: held.ID}
-	for _, tc := range []struct {
-		name string
-		call func(*testing.T, hookAttribution) string
-		ends func(*testing.T, *job.Store, string)
-		// byOrchestrator runs call from the holder's root session rather than the holder.
-		byOrchestrator bool
-		want           job.Binding
-	}{
-		{"exit", shell("magus job exit held-job"), exited, false, unbound},
-		{"exit with a heredoc", shell("./magus job exit held-job --stdin <<'EOF'\n" + result + "\nEOF"), exited, false, unbound},
-		{"exit with stdin first", shell("./magus job exit --stdin held-job <<EOF\n" + result + "\nEOF"), exited, false, unbound},
-		{"exit after cd", shell("cd /Users/dev/repo && ./magus job exit held-job"), exited, false, unbound},
-		{"exit then echo", shell("./magus job exit held-job ; echo filed"), exited, false, unbound},
-		{"exit under global flags", shell("./magus -s --root . job exit held-job"), exited, false, unbound},
-		{"exit with an env prefix", shell("BAGGAGE=magus.lease=held-job ./magus job exit held-job"), exited, false, unbound},
-		{"exit through bash -c", shell(`bash -c "./magus job exit held-job"`), exited, false, unbound},
-		{"rm", shell("magus job rm held-job --force"), removed, false, unbound},
-		{"client exit", client(`magus\job.exit("held-job");`), exited, false, unbound},
-		{"client exit with a result", client(`magus\job.exit("held-job", result: {"schema_version": 1, "summary": "done"});`), exited, false, unbound},
-		{"client nested exit", client(`magus\cmd("job", ["exit", "held-job"]);`), exited, false, unbound},
-		{"wait reaching pass", shell("./magus job wait held-job"), passed, true, unbound},
-		{"wait reaching fail", shell("./magus job wait held-job"), failed, true, unbound},
-		{"client wait reaching pass", client(`magus\job.wait("held-job");`), passed, true, unbound},
-		{"a rejected wait", shell("./magus job wait held-job"), exited, true, stillHeld},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, _ := fleetFixture(t, held)
-			at := hookLocation(ctx, Dependencies{})
-			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
-			bindCaller(t, ctx, who, held.ID)
-			judge := func(command string) types.GuardJudgment {
-				return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
-			}
-
-			by := who
-			if tc.byOrchestrator {
-				by.Agent = ""
-			}
-			v := Judge(ctx, Dependencies{}, Request{Input: tc.call(t, by), Host: by.Host})
-			require.NotEqual(t, decisionDeny, v.Decision, "ending the job: %s", v.Reason)
-			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
-			tc.ends(t, store, held.ID)
-
-			fork := judge("magus job fork next-job --parent other --read-only")
-			assert.Equal(t, tc.want == stillHeld, fork.Decision == decisionDeny, "a fork outside the job's tree: %s", fork.Reason)
-			assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")
-			assert.Equal(t, tc.want, boundJob(who, at), "the holder's binding")
-			rows, err := store.List()
-			require.NoError(t, err)
-			if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == held.ID }); i >= 0 {
-				assert.Equal(t, held.WritePaths, rows[i].WritePaths, "releasing leaves the row's record alone")
-			}
-		})
 	}
 }
 
