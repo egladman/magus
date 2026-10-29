@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
@@ -236,18 +237,23 @@ func (a rulesAnswer) approvedAnswered() bool {
 
 // denyShort turns a into a deny when its judgment fell short of what call needs: a phase
 // ran out of time (denyLapse), no side of the policy loaded (denyUnloaded), or a rule
-// raised (denyRaised). call is built only then, so the pass path pays nothing for it.
+// raised (denyRaised). A commit of a tree that does not load is denied
+// too (denyUnloadableCommit). call is built only then, so the pass
+// path pays nothing for it.
 // Reports whether it denied; each deny names the failures itself.
 func (a *rulesAnswer) denyShort(call func() judgedCall, at location) bool {
+	call = sync.OnceValue(call)
 	switch {
 	case a.lapse != nil:
 		return denyLapse(a, call())
 	case a.unloaded:
-		return denyUnloaded(a, call(), at)
+		if denyUnloaded(a, call(), at) {
+			return true
+		}
 	case len(a.raised) > 0:
 		return denyRaised(a, call())
 	}
-	return false
+	return a.loadFailure != nil && denyUnloadableCommit(a, call(), at)
 }
 
 // denyRaised turns asked into a deny when a command rule raised and the call is a gated
