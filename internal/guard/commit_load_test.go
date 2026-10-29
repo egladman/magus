@@ -57,6 +57,27 @@ func (s *UnloadableCommitSuite) TestAJJCommitWaitsForTheLoad() {
 	shortDeny(s.T(), s.cacheDir, s.judge("jj commit -m x"), denyRulePolicyUnloaded, commitSay("jj commit"))
 }
 
+func (s *UnloadableCommitSuite) TestACherryPickContinueWaitsForTheLoad() {
+	shortDeny(s.T(), s.cacheDir, s.judge("git cherry-pick --continue"), denyRulePolicyUnloaded, commitSay("git cherry-pick --continue"))
+}
+
+func (s *UnloadableCommitSuite) TestAMergeContinueWaitsForTheLoad() {
+	shortDeny(s.T(), s.cacheDir, s.judge("git merge --continue"), denyRulePolicyUnloaded, commitSay("git merge --continue"))
+}
+
+func (s *UnloadableCommitSuite) TestARebaseContinueWaitsForTheLoad() {
+	shortDeny(s.T(), s.cacheDir, s.judge("git rebase --continue"), denyRulePolicyUnloaded, commitSay("git rebase --continue"))
+}
+
+func (s *UnloadableCommitSuite) TestARevertContinueWaitsForTheLoad() {
+	shortDeny(s.T(), s.cacheDir, s.judge("git revert --continue"), denyRulePolicyUnloaded, commitSay("git revert --continue"))
+}
+
+func (s *UnloadableCommitSuite) TestAnAbortPasses() {
+	v := s.judge("git cherry-pick --abort")
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
 func (s *UnloadableCommitSuite) TestAnEditStandsOnTheApprovedRule() {
 	v := s.judge("touch notes.txt")
 	s.NotEqual(decisionDeny, v.Decision, v.Reason)

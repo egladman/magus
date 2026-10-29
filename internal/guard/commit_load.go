@@ -4,26 +4,48 @@ import (
 	"cmp"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
-// denyUnloadableCommit denies a commit in at's checkout while its
-// working tree's magusfile does not load. The commit carries the
-// failure into the approved sources, and then no side loads at all.
+// denyUnloadableCommit denies a commit, or a continue that commits,
+// in at's checkout while its working tree's magusfile does not load.
+// The commit carries the failure into the approved sources, and then
+// no side loads at all.
 func denyUnloadableCommit(asked *rulesAnswer, call judgedCall, at location) bool {
 	if asked.loadFailure == nil || call.seam != seamCommand || asked.answer.Decision == types.GuardDeny {
 		return false
 	}
-	verb := commitVerb(call.command, call.dialect)
+	verb := cmp.Or(commitVerb(call.command, call.dialect), continueVerb(call.command, call.dialect))
 	if verb == "" || !commitsHere(call, at) {
 		return false
 	}
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: unloadableCommitDenial(verb, asked.loadFailure).full()}
 	asked.rule, asked.by = denyRulePolicyUnloaded, decidedByBuiltin
 	return true
+}
+
+// continueVerb names, in backticks, the first git call on command that
+// continues an interrupted pick or merge, or a rebase or revert. It is
+// "" for none. Continuing commits the working tree.
+func continueVerb(command string, d Dialect) string {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok {
+		return ""
+	}
+	for _, c := range cmds {
+		if c.Name != "git" {
+			continue
+		}
+		sub, rest := vcsSubcommand(c)
+		if slices.Contains([]string{"cherry-pick", "merge", "rebase", "revert"}, sub) && slices.Contains(rest, "--continue") {
+			return fmt.Sprintf("`git %s --continue`", sub)
+		}
+	}
+	return ""
 }
 
 // commitsHere reports a commit whose checkout is at's workspace, the
