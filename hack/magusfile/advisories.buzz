@@ -85,6 +85,24 @@ test "semver takes npm range syntax directly, so nothing needs deriving" {
     assert\isFalse(semver\satisfies("9.9.9", constraint: "<0.0.0"), message: "no patch published");
 }
 
+// registryFailure names a failed `pnpm view` of pkg, or is "" when it ran. A blocking
+// advisory whose fix cannot be looked up fails the step: deferring it would pass it unjudged.
+fun registryFailure(pkg: str, code: int, stderr: str) > str {
+    if (code == 0) {
+        return "";
+    }
+    return "audit: registry unreachable: `pnpm view {pkg} time --json` exited {code}: {stderr.trim()}; "
+        + "a blocking advisory on {pkg} cannot be judged without it, so retry once the registry answers";
+}
+
+test "a registry that does not answer fails the audit with the pnpm view error" {
+    assert\equal(registryFailure("nanoid", code: 0, stderr: ""), want: "", message: "a lookup that ran");
+    final failed = registryFailure("nanoid", code: 1, stderr: "ERR_PNPM_FETCH_404  GET https://registry/nanoid\n");
+    assert\isTrue(failed.indexOf("registry unreachable") != null, message: failed);
+    assert\isTrue(failed.indexOf("exited 1: ERR_PNPM_FETCH_404  GET https://registry/nanoid;") != null, message: failed);
+    assert\isTrue(failed.indexOf("cooling period") == null, message: "never the cooling-period reason");
+}
+
 // hasInstallablePatch reports whether any published version of pkg satisfies the
 // advisory's patched range AND is old enough to clear the cooling period - that is,
 // whether a fix could land today.
@@ -99,8 +117,9 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
     }
     final res = proc\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
         opts: proc\ExecOptions{allowFailure = true});
-    if (res.code != 0) {
-        return false; // registry unreachable: defer rather than fail on a network blip
+    final unreachable = registryFailure(pkg, code: res.code, stderr: res.stderr);
+    if (unreachable != "") {
+        throw unreachable;
     }
 
     final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
