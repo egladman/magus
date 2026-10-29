@@ -322,12 +322,9 @@ fun pathSourceGaps(gaps: mut [DiscoveryGap], deps: mut [str], file: str, dir: st
     }
 }
 
-fun pyprojectClaim(dir: str, file: str, doc: {str: any}, locks: [str], projects: [LocalProject], spans: [str]) > DiscoveredProject {
-    final names = declaredNames(doc);
+// pyTargets is the ops doc's declared tools wire, with a gap for each one it cannot.
+fun pyTargets(doc: {str: any}, names: [str], file: str, gaps: mut [DiscoveryGap]) > {str: [str]} {
     final targets = mut {<str: [str]>};
-    final gaps = mut [<DiscoveryGap>];
-    final deps = mut [<str>];
-
     if (names.indexOf("ruff") != null or tableAt(doc, keys: ["tool", "ruff"]) != null) {
         targets["lint"] = ["ruff-check"];
         targets["format"] = ["ruff-format"];
@@ -347,6 +344,26 @@ fun pyprojectClaim(dir: str, file: str, doc: {str: any}, locks: [str], projects:
             gaps.append(DiscoveryGap{file = file, why = "{tool} is declared and no python spell op runs it"});
         }
     }
+    return targets;
+}
+
+// pySourceGaps draws a dependency or a gap for each [tool.uv.sources] and poetry path source.
+fun pySourceGaps(doc: {str: any}, file: str, dir: str, projects: [LocalProject], deps: mut [str], gaps: mut [DiscoveryGap]) > void {
+    foreach (keys in [["tool", "uv", "sources"], ["tool", "poetry", "dependencies"]]) {
+        if (tableAt(doc, keys: keys) -> table) {
+            foreach (key in sortedKeys(table)) {
+                if ((table[key] as? {str: any}) -> source) {
+                    pathSourceGaps(gaps, deps: deps, file: file, dir: dir, name: key, source: source, projects: projects);
+                }
+            }
+        }
+    }
+}
+
+fun pyprojectClaim(dir: str, file: str, doc: {str: any}, locks: [str], projects: [LocalProject], spans: [str]) > DiscoveredProject {
+    final gaps = mut [<DiscoveryGap>];
+    final deps = mut [<str>];
+    final targets = pyTargets(doc, names: declaredNames(doc), file: file, gaps: gaps);
     if (locks.indexOf("uv.lock") == null) {
         foreach (lock in locks) {
             gaps.append(DiscoveryGap{file = joinRelative(dir, rel: lock)!, why = "the ops run through uv, which does not read {lock}"});
@@ -359,20 +376,7 @@ fun pyprojectClaim(dir: str, file: str, doc: {str: any}, locks: [str], projects:
             taskGaps(gaps, file: file, table: tableAt(envs, keys: [env, "scripts"]), label: "[tool.hatch.envs.{env}.scripts]", runner: "hatch run");
         }
     }
-    if (tableAt(doc, keys: ["tool", "uv", "sources"]) -> sources) {
-        foreach (key in sortedKeys(sources)) {
-            if ((sources[key] as? {str: any}) -> source) {
-                pathSourceGaps(gaps, deps: deps, file: file, dir: dir, name: key, source: source, projects: projects);
-            }
-        }
-    }
-    if (tableAt(doc, keys: ["tool", "poetry", "dependencies"]) -> poetry) {
-        foreach (key in sortedKeys(poetry)) {
-            if ((poetry[key] as? {str: any}) -> source) {
-                pathSourceGaps(gaps, deps: deps, file: file, dir: dir, name: key, source: source, projects: projects);
-            }
-        }
-    }
+    pySourceGaps(doc, file: file, dir: dir, projects: projects, deps: deps, gaps: gaps);
     foreach (spec in directReferences(doc)) {
         gaps.append(DiscoveryGap{file = file, why = "{spec}: a direct reference is not resolved to a project"});
     }
@@ -381,7 +385,6 @@ fun pyprojectClaim(dir: str, file: str, doc: {str: any}, locks: [str], projects:
     return DiscoveredProject{path = dir, role = DiscoveryRole.project, name = name, dependsOn = deps, targets = targets, spans = spans,
         notInferred = gaps};
 }
-
 // directReferences is every PEP 508 "name @ url" requirement: a file or VCS URL may
 // name a sibling project, and the spell does not resolve URLs.
 fun directReferences(doc: {str: any}) > [str] {
@@ -436,70 +439,54 @@ fun spansOf(dir: str, pyFiles: [str]) > [str] {
 final markers = ["pyproject.toml", "setup.py", "setup.cfg"];
 final lockFiles = ["Pipfile.lock", "poetry.lock", "uv.lock"];
 
-// discover_projects claims a project in every directory holding pyproject.toml,
-// setup.py or setup.cfg. Python sources, requirements files and a Pipfile outside
-// every such directory join their owning project as members, each with a gap naming
-// what is missing. It throws when core omits a pyproject.toml's content.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
-    final markersByDir = mut {<str: [str]>};
-    final locksByDir = mut {<str: [str]>};
-    final pyprojects = mut {<str: {str: any}?>};
-    final parseErrors = mut {<str: str>};
-    final pyFiles = mut [<str>];
-    final loose = mut [<str>];
+// PyScan is what discover_projects read of the query: each directory's markers and lock
+// files, each pyproject.toml parsed or why it would not, and the .py and requirements files.
+object PyScan {
+    markersByDir: mut {str: [str]},
+    locksByDir: mut {str: [str]},
+    pyprojects: mut {str: {str: any}?},
+    parseErrors: mut {str: str},
+    pyFiles: mut [str],
+    loose: mut [str],
+}
 
+// pyScan sorts the query's files into a scan. It throws when core omits a pyproject.toml's
+// content.
+fun pyScan(req: DiscoveryQuery) > PyScan !> any {
+    final scan = PyScan{markersByDir = mut {}, locksByDir = mut {}, pyprojects = mut {}, parseErrors = mut {}, pyFiles = mut [], loose = mut []};
     foreach (file in req.files) {
         final base = baseOf(file.path);
         final dir = dirOf(file.path);
         if (markers.indexOf(base) != null) {
-            final found = markersByDir[dir] ?? [];
-            markersByDir[dir] = found + [file.path];
+            scan.markersByDir[dir] = (scan.markersByDir[dir] ?? []) + [file.path];
         }
         if (lockFiles.indexOf(base) != null) {
-            final found = locksByDir[dir] ?? [];
-            locksByDir[dir] = found + [base];
+            scan.locksByDir[dir] = (scan.locksByDir[dir] ?? []) + [base];
         }
         if (base == "pyproject.toml") {
             if (file.content == null) {
                 throw "discover_projects: {file.path} arrived without content, though pyproject.toml is a literal glob";
             }
             try {
-                pyprojects[dir] = toml\parse(file.content!) as? {str: any};
+                scan.pyprojects[dir] = toml\parse(file.content!) as? {str: any};
             } catch (err: any) {
-                pyprojects[dir] = null;
-                parseErrors[dir] = "{err}";
+                scan.pyprojects[dir] = null;
+                scan.parseErrors[dir] = "{err}";
             }
         } else if (base.endsWith(".py") and base != "setup.py") {
-            pyFiles.append(file.path);
+            scan.pyFiles.append(file.path);
         }
         if (base == "Pipfile" or base == "requirements.txt" or (base.startsWith("requirements-") and base.endsWith(".txt"))) {
-            loose.append(file.path);
+            scan.loose.append(file.path);
         }
     }
+    return scan;
+}
 
-    final dirs = sortedKeys(markersByDir);
-    final local = mut [<LocalProject>];
-    foreach (dir in dirs) {
-        final name = ((tableAt(pyprojects[dir] ?? {}, keys: ["project"])?["name"]) as? str) ?? "";
-        local.append(LocalProject{dir = dir, name = requirementName(name)});
-    }
-
-    final claims = mut [<DiscoveredProject>];
-    foreach (dir in dirs) {
-        final file = joinRelative(dir, rel: "pyproject.toml")!;
-        final spans = spansOf(dir, pyFiles: pyFiles);
-        if (parseErrors[dir] -> err) {
-            claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.project, spans = spans,
-                notInferred = [DiscoveryGap{file = file, why = "not valid TOML, so nothing is inferred: {err}"}]});
-        } else if (pyprojects[dir] -> doc) {
-            claims.append(pyprojectClaim(dir, file: file, doc: doc, locks: locksByDir[dir] ?? [], projects: local, spans: spans));
-        } else {
-            claims.append(legacyClaim(dir, files: markersByDir[dir]!, spans: spans));
-        }
-    }
-
+// pyOrphans is a member claim per directory of .py and requirements files no project owns.
+fun pyOrphans(scan: PyScan, dirs: [str]) > [DiscoveredProject] {
     final orphans = mut {<str: [DiscoveryGap]>};
-    foreach (file in pyFiles + loose) {
+    foreach (file in scan.pyFiles + scan.loose) {
         var owned = false;
         foreach (dir in dirs) {
             if (isUnder(file, dir: dir)) {
@@ -511,12 +498,44 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
         }
         final dir = dirOf(file);
         final gaps = orphans[dir] ?? [];
-        if (gaps.len() == 0 or loose.indexOf(file) != null) {
+        if (gaps.len() == 0 or scan.loose.indexOf(file) != null) {
             orphans[dir] = gaps + [DiscoveryGap{file = file, why = "no pyproject.toml, setup.py or setup.cfg owns it, so no python target is inferred"}];
         }
     }
+    final claims = mut [<DiscoveredProject>];
     foreach (dir in sortedKeys(orphans)) {
         claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.member, notInferred = orphans[dir]!});
+    }
+    return claims;
+}
+
+// discover_projects claims a project in every directory holding pyproject.toml,
+// setup.py or setup.cfg. Python sources, requirements files and a Pipfile outside
+// every such directory join their owning project as members, each with a gap naming
+// what is missing. It throws when core omits a pyproject.toml's content.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    final scan = pyScan(req);
+    final dirs = sortedKeys(scan.markersByDir);
+    final local = mut [<LocalProject>];
+    foreach (dir in dirs) {
+        final name = ((tableAt(scan.pyprojects[dir] ?? {}, keys: ["project"])?["name"]) as? str) ?? "";
+        local.append(LocalProject{dir = dir, name = requirementName(name)});
+    }
+    final claims = mut [<DiscoveredProject>];
+    foreach (dir in dirs) {
+        final file = joinRelative(dir, rel: "pyproject.toml")!;
+        final spans = spansOf(dir, pyFiles: scan.pyFiles);
+        if (scan.parseErrors[dir] -> err) {
+            claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.project, spans = spans,
+                notInferred = [DiscoveryGap{file = file, why = "not valid TOML, so nothing is inferred: {err}"}]});
+        } else if (scan.pyprojects[dir] -> doc) {
+            claims.append(pyprojectClaim(dir, file: file, doc: doc, locks: scan.locksByDir[dir] ?? [], projects: local, spans: spans));
+        } else {
+            claims.append(legacyClaim(dir, files: scan.markersByDir[dir]!, spans: spans));
+        }
+    }
+    foreach (claim in pyOrphans(scan, dirs: dirs)) {
+        claims.append(claim);
     }
     return claims;
 }
