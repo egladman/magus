@@ -859,7 +859,7 @@ func TestAdviseAgentSourceWrite(t *testing.T) {
 	} {
 		got := adviseAgentSourceWrite(".", rel)
 		assert.Contains(t, got.Say, "magus-skill-authoring", rel)
-		assert.Contains(t, got.Why, "SkillVersion", rel)
+		assert.Contains(t, got.Why, "a passage lands in one form, both, or neither", rel)
 	}
 
 	assert.Empty(t, adviseAgentSourceWrite(".", "internal/handler/mcp/diff.go"), "one handler is not the registry")

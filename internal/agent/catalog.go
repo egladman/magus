@@ -37,422 +37,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// SkillVersion changes when the installed skill contract changes. It is part
-// of the generated provenance and lets verification explain stale installs.
-//
-// 37: a --simple install also writes each skill's always-full <name>-full twin
-// (see fullTwinSuffix), and both entries carry a cross-reference in their
-// description. The content digest cannot catch this on its own: it hashes the
-// SOURCE bodies, which did not change, while what an install writes did.
-//
-// 38: magus-commit-composition, restructuring an unpushed branch into reviewable
-// commits from project ownership, declared outputs and blast radius.
-//
-// 39: `magus graph verify` is gone; the installed copies are graded by `magus
-// doctor`'s agent skills check, which every skill that named the old verb now
-// points at.
-//
-// 40: magus-multi-agent learns two lease failure modes observed
-// in the field: a worker's actual base can differ from the handed checkpoint
-// (verify it, or materialize and re-record), and a lease whose environment
-// cannot execute magus gets ROOT-DEFERRED validation up front.
-//
-// 41: the vocabulary drops "unit" for a row of the ledger, in the skill, the
-// ledger table, and the tools it names.
-// 42: the lease runtime reaches the skills: magus-multi-agent
-// teaches ledger register, environment enrollment and the guard's
-// deny/advise split, attention events for a blocked worker, and the session
-// audit of what a lease ran; both it and magus-vcs-hygiene read
-// `magus diff --impact` before landing.
-//
-// 43: the session CLI family (`magus session`, `session attention`, `session
-// dispose`, `session hook`, `session notify`) replaces the sessions/attention/
-// notify/hook top-level verbs in the skill text; there are no compat aliases.
-//
-// 44: enrollment moves to the W3C channels: a worker exports
-// BAGGAGE=magus.lease=<id>, plus TRACEPARENT and magus.spawner when its host
-// has them. The magus-specific environment variable it replaces is gone.
-// 45: the concept is a LEASE (the ledger row, the `--lease` flag, the BAGGAGE
-// member magus.lease), and magus-delegate-multi-agent is renamed
-// magus-multi-agent. Nothing answers to the old names.
-//
-// 46: verification instructions become proof obligations wherever the evidence
-// is cheap. A gate you added is shown FAILING before its green counts
-// (magus-run). Drift is proven by a second regenerate rather than by reading
-// the diff (magus-vcs-hygiene). Fan-out waits on the collision check REPORTING
-// the write sets disjoint and the root reopens a lease's evidence itself
-// (magus-multi-agent). Every audit finding carries the command that
-// reproduces it (magus-context-audit).
-//
-// 47: magus-multi-agent names `magus graph build` as the prerequisite for its
-// central evidence command: in a fresh worktree `magus refs --occurrences`
-// answers "unknown, not absent" rather than reporting the edit sites, and the
-// partition is then built on a silence.
-//
-// 48: magus-query teaches the doc-section layer: every markdown heading is a
-// `docsection` node, so prose is retrieved with `magus query kind=docsection`
-// (a `path#anchor` pointer to one passage) instead of reading the whole file.
-//
-// 49: the query grammar teaches operators: kind=spell (match), kind!=op
-// (exclude), id=~regex (regex), with the `:`/`-kind:op` spelling kept as a
-// compat alias. `=` reads as a match over a structured graph, and `!=` removes
-// the flag collision the dash negation carried.
-//
-// 50: the memory journal skill, then still named for the agent-industry idiom,
-// gains the `elimination` record: a hypothesis an
-// investigation killed, carrying the why plus an `excerpt` of the evidence that
-// killed it. The excerpt is required because an output ref resolves only from the
-// checkout that minted it, which leaves the ref beside it a best-effort handle.
-// 51: that same skill teaches what `put` writes: the fields the caller
-// sends, keeping the rest, so refreshing a status does not drop the body. Clearing
-// a field or changing a type is a delete and a create, and `allow_missing: false`
-// (CLI `--amend`) says the entry is meant to exist.
-//
-// 52: that skill is magus-memory again, and the agent-industry name it carried is
-// gone from everything a reader meets. The word is jargon and this
-// store predates it: it is a repository's memory, which is what the command has
-// always been called. Pre-1.0, so the old directory is not carried: install
-// removes it.
-//
-// 53: the SHORT/FULL axis answers to one word per end everywhere: the constants,
-// the `skill-variant:` stamp value, `--skill-form`, and the published pages. An
-// installed file's stamp changes from `simple` to `short`, so every tree grades
-// stale until it is reinstalled.
-//
-// 54: magus-vcs-hygiene teaches how to get back to a recorded state, which nothing
-// in the installed skills said. A checkpoint holds a revision and a patch DIGEST, so it
-// can say whether a tree is the same one and can never give uncommitted work back;
-// the skill now says that, says to commit before parking, and gives the inspect-out-
-// of-place and restore-per-file commands instead of the whole-tree ones the guard
-// denies. Its DESCRIPTION now names all four backends magus drives, because a
-// description is what a host matches on to decide whether to load a skill at all, and
-// naming only git meant the safety skill never loaded in an hg, sl or jj repository.
-//
-// 55: magus-test-design's body gets the blank lines markdownlint wants around a heading
-// and a fence. A template action on its own line reads as a paragraph, so `{{if .Full}}`
-// flush against a heading left it with nothing above it. The skill has never passed lint
-// since it landed; the gate had not completed in between to say so.
-//
-// 56: magus-architecture-review gains "Say when not to build it". It already applied
-// that test to a graph kind, which earns its place only by answering a question the
-// others cannot; nothing applied it to a mechanism that ACTS.
-//
-// 57: magus-multi-agent says what a lease's validation is FOR. The field declared a
-// narrow target and enforced nothing, so seven fanned-out workers each ran the whole
-// pipeline concurrently; the guard now denies the gate under a lease that declared
-// something narrower, and the skill is where a worker learns why before it is refused.
-//
-// 58: magus-query says every result names its own next step, and that following it is
-// optional. The breadcrumb is a field on the result now, so a reader that never meets
-// the text still meets the suggestion.
-// 59: magus-run stops naming the tail_log tool, which is gone. It was a second door
-// onto the bytes magus\output already returns, keyed by project instead of by ref.
-//
-// 60: magus-buzz-write says `magus` is a host module and the import is what makes the
-// namespace exist. It used to read as "also available in a script", from when the
-// namespace was a session global an import never had to name.
-//
-// 61: magus-run names where a ref comes from when none is in hand: the run that
-// minted it, and `magus session`. Version 59 sent readers to a `magus tail` verb
-// that was removed in v0.4.0.
-//
-// 62: magus-run says a backgrounded run's capture is magus output and meets the
-// same filter rule, with `-o jsonl --tee <file>` as the spelling that makes it a
-// contract.
-//
-// 63: magus-docs-lookup names the doc-section query as the in-workspace route,
-// ahead of the published-site index it used to open with. Measured over 1,907
-// session transcripts: the section query ran 11 times ever while agents read a
-// markdown file under docs/ 964 times, and this skill is what routed them there.
-//
-// 64: magus-multi-agent says owned_paths opens reads too, and that a
-// worker needing to read what it must not write gets a `focus` on its row rather
-// than a wider owned_paths. Measured over 204 session transcripts: reads left the
-// units the session actually wrote to about a fifth of the time, and widening the
-// write paths to open a read is the move that puts two workers on one file.
-//
-// 65: magus-multi-agent renders the worker prompt with `magus ledger brief` and grades
-// the report with `magus ledger accept` instead of demanding four facts in prose, and
-// carries a coalescing rule: partition by write set, then merge what the write sets
-// allow, because a worker's fixed context load is paid whatever the diff's size.
-//
-// 66: magus-multi-agent says delegate. The agent-industry word it replaces is gone;
-// this tool is written for a person first.
-//
-// 67: magus-multi-agent follows the ledger's grading contract onto its new shape.
-// `magus ledger accept` now reads the report from --stdin only and exits 1 for a
-// rejection or 2 for one that will not decode; it derives pass or fail from the
-// stored attempt behind the report's output ref, since the report carries no
-// `passed` field for a worker to assert. A bound worker's own write door is four
-// things: register its base, shrink its own owned_paths, end its own row, or
-// declare a child inside its own boundary; everything else belongs to the unbound
-// orchestrator, and the skill says so plainly instead of pointing a worker at the
-// magus_ledger tool as a way to widen. It also teaches the guard facts the lease
-// runtime gained alongside this: guard wiring is denied under any bound lease, a
-// verdict carries the lease it graded against, a served next is pre-authorized,
-// and `magus ledger register` and `magus session hints` are named as the
-// terminal doors they are.
-//
-// 68: magus-multi-agent says a worker hands out part of its OWN lease rather than
-// delegating, which is the skill's own vocabulary, and states `magus ledger accept`'s
-// refusal as cmd/magus/ledger.go enforces it: any checkout bound to a lease is refused,
-// not only one bound to the row being graded.
-//
-// 69: magus-multi-agent names a lease's boundary write_paths, read_paths and deny_paths and
-// its model `model`, which is how magus now spells them everywhere; the old names are
-// accepted on input for one release and nowhere emitted.
-//
-// 70: magus-workspace-rules makes the recurring guard-feedback loop actionable:
-// a person or unbound orchestrator may explicitly refresh only the Magus-owned
-// host hook entries, while the rule engine, installed skills, memory,
-// and repository instructions remain outside that write set.
-//
-// 78: magus-workspace-rules states the self-improvement loop as a checklist that
-// stops at the first failing line, names who acts on each destination, and ends in
-// proof: show the rule in the file the agent LOADS, then re-run the command the
-// evidence cites. A change that does not move that verdict changed nothing, and
-// the loop it replaced ended before anyone could notice.
-//
-// 79: skill bodies resolve their cross-links instead of retyping them. CLI paths,
-// MCP tool names, sibling skill names and Buzz host calls now go through the
-// registries that define them, so a rename fails the install rather than shipping
-// prose that names something gone. A cited MGS code gains its docs URL, whose
-// category segment the digits do not imply.
-//
-// 80: `magus agent improve` is retired. Its read half is doctor's
-// recurring-guard-denials check, where every other workspace verdict already lives, and
-// its --apply half duplicated `magus agent harness apply` call for call.
-// magus-workspace-rules routes to both.
-// 81: internal/spellruntime is internal/spell. magus-sdk named the old path when
-// explaining what an SDK caller may and may not import.
-//
-// 82: `magus session hook` is `magus shell`, with no alias. The verdict was never
-// session-scoped, and one command now answers a person typing at a prompt and a host's
-// pre-tool-use hook: an operand for the first, stdin for the second, one evaluator
-// behind both. magus-context-audit piped its candidate command into the old path.
-//
-// 83: magus-multi-agent has the root declare a shared API's names before any job
-// forks, solo changes included, and grades the declaration with the symbol gates that
-// exist: `present` for new names, `absent` for a predictable second copy, `unreferenced`
-// for a replaced helper. It also drops the fan-out and depth caps: a job tree grows as wide
-// and as deep as its partition supports, bounded only by the magus.yaml `jobs:` limits, and
-// teaches `--timeout`, the real-edit check at wait, and releasing a stale job's paths.
-//
-// 84: magus-multi-agent gives each worker its own worktree wherever a write path touches
-// workspace configuration, which `magus job fork` now refuses outright while another live
-// job holds the checkout. It also teaches `magus job exec --session`, since a lease binds
-// per session rather than per checkout, and the once-per-session spawn advisory that
-// reports the union of the write paths already held here.
-//
-// 85: magus-multi-agent makes "how is it going" a READ. Asking a worker costs it the turn
-// it was in and answers with its account of itself; the console link, `magus job watch` and
-// `magus describe job --gates` answer from the filesystem, the guard's trail and recorded
-// evidence, none of which the worker can make quiet. It also states what a contested path
-// means, since a file two live leases cover is attributed to neither.
-//
-// 86: magus-buzz-write and magus-buzz-review teach `magus buzz --check`, which
-// type-checks without running. Review had no way to PROVE a strict-mode finding and
-// said to read for it; running a file whose job is a side effect was never a check of
-// it, and was the only thing standing in for one.
-//
-// 87: magus-multi-agent no longer says magus transitions nothing. Every read of the job
-// store ends a live job it can prove dead (an ended ancestor, a vanished checkout, an
-// untaken job past jobs.stale_after), so a worktree is removed only once its job is done.
-// 88: magus-run's plan pipe runs the plan's shards with `magus run --stdin`; the ci-shard
-// target it named is gone.
-//
-// 89: magus-multi-agent drops `magus job exec --session`. The guard binds whoever runs
-// exec, keyed on the host's session and subagent ids, and a worker its spawn title
-// attributed needs no exec at all.
-//
-// 90: magus-multi-agent declares goals in the job record's `goals`, since the --gate-*
-// flags are gone and a writing job with neither a check nor a goal is refused. It grades
-// `unreferenced` while the old definition still exists, because once it is gone the
-// graph cannot count what names it and the goal fails.
-// 91: magus-multi-agent drops `--gates` from `magus describe job`. The read it named is
-// unconditional now: describe job always prints where each goal stands, graded against
-// the evidence magus holds, alongside the terms it already printed.
-//
-// 92: `magus agent harness apply` and `remove` are gone. magus-workspace-rules sends an
-// adapted harness through `magus describe harness`, which prints the host config and the
-// merge command a person runs; magus never writes host config.
-//
-// 93: the AGENTS.md block links the root MAGUS.md through a `{{routing-index}}` line
-// that `magus agent install` renders only when the workspace declares MAGUS.md as an
-// output, instead of asserting a committed MAGUS.md unconditionally.
-//
-// 94: magus-memory is gone with the memory store. magus-commit-composition,
-// magus-context-audit and magus-workspace-rules point at the harness's own memory
-// where they pointed at the store; the evidence a rule cites is an output ref, a trail
-// timestamp or a graph query.
-//
-// 95: the per-verb MCP tools magus\ already covers are gone. Skills name `client`
-// and the member (`magus\query`, `magus\run`, ...). `{{tool}}` resolves a bare
-// tool name, and `{{buzz}}` resolves a top-level method.
-//
-// 96: where, run_affected, affected_plan, and affected_explain fold into client
-// (`magus\where`, `magus\affected`, `magus\cmd`). config_get is config
-// and console_present is console. The blast radius member is magus\impact.
-// 97: the MCP client does not offer magus\cmd. A magusfile and `magus buzz` still do.
-//
-// 98: `magus agent harness apply` and `remove` are gone; magus-workspace-rules sends a
-// forked harness through `magus describe harness`. magus-run says a direct `client`
-// call is bounded at 10 minutes and names `magus affected list`. magus-query pages
-// with limit and offset, and insight names a `magus buzz` fallback where it has no
-// CLI verb.
-//
-// 99: magus-buzz-write's examples import encoding/json, list with fs\listDir and raise
-// from an exported main, and it points at hack/README.md. magus-run names hack/on-actions
-// and hack/on-linux for proving a command on Linux without a pull request.
-//
-// 100: magus-multi-agent teaches `magus job edit` for widening or revoking a job's write
-// paths; magus-vcs-hygiene says vcs\ref() is null when no name points at the revision;
-// magus-workspace-rules forks a harness spell with `magus spell pull`.
-// 101: magus-architecture-review's insight fence is followed by a blank line, which
-// markdownlint requires.
-//
-// 102: magus-diagram ships: figures with flow, claims, scope, composition and drift.
-// 103: magus-diagram teaches magus/figure: boxes from Dir records, groups by layer or dirs set, edges from the graph.
-// 104: magus-diagram passes title, eyebrow, desc and direction to figure\of and paints with figure\draw.
-//
-// 105: magus-multi-agent moves a live job's boundary and goals with `magus job apply -f`;
-// `magus job edit` is gone.
-//
-// 106: magus-buzz-write is renamed magus-buzz-lang and rebuilt around examples: one
-// reference script, a table of the mistakes TypeScript, Go and Python habits produce
-// with the diagnostic each shows, every built-in method, and the check-fix-run loop.
-// Its examples no longer call main() themselves, which ran it twice.
-//
-// 107: magus-multi-agent teaches the fork job fork accepts: file and glob write paths,
-// `<file>#<declaration>` claims, the --check form, fork before spawn with the description
-// `<parent>/<role> <job>`; its description asks to be loaded before the first subagent
-// spawn, and rules the guard enforces are cut to one line. magus-buzz-lang calls magus
-// through the typed magus\describe.<noun> methods.
-//
-// 108: magus-multi-agent asks a plan's claims to cite the output ref of a run;
-// magus-buzz-lang points at its built-in methods table in prose rather than an anchor.
-// 109: headings across the skills read in sentence case, as the repo's Markdown rules
-// now require.
-// 110: prose across the skills writes a colon, semicolon, comma or parentheses where it
-// had a spaced hyphen for a dash.
-// 111: skill prose keeps to the writing rules: present tense, no filler, and list items
-// written as sentences or code-span names instead of bold labels.
-// 112: the short form of every skill is terse, at most 25 words a sentence and 60 a
-// paragraph; examples and history moved to the full form.
-// 113: a skill says "rule" only for what magus enforces and calls the rest instructions;
-// magus-workspace-rules says guard.builtins grades the compiled guard rules.
-// 114: the skills name what each part of magus is (console apps, guard inputs, host
-// modules, the exported API) instead of one catch-all noun.
-// 115: magus-docs-lookup is renamed magus-upstream-docs, so its name says the docs are
-// magus's own rather than the workspace's, and says the published site follows main.
-// magus-upstream-source is new: the last-resort read of magus's code at the binary's
-// commit, which `magus version -o json` now reports in full.
-// 116: economy-first spawns, the magus-scout agent, reference.md files and contents lists.
-//
-// 117: magus-architecture-review gathers its evidence from the graph: one command per
-// architecture question, a cited command behind every structural claim, an import-cycle
-// script over magus\importGraph, and the lenses that only look like answers.
-// magus-multi-agent forks a scout --read-only, passes one only through a script check,
-// and reads the outputs a fork says are regenerated outside its write paths.
-//
-// 118: magus-change-summary drops its `--prompt` section, because magus diff no longer has
-// that flag.
-//
-// 119: magus-multi-agent tells a worker to run its check in the foreground with a timeout
-// that covers it and never end its turn while a run is pending.
-//
-// 120: magus-sdk teaches testing code that uses the SDK (role fakes, testkit workspaces and
-// isolation, a one-method Run interface, register.Spell) and corrects WithRegisteredSpell to
-// WithSpell and the nested-module tag statement.
-//
-// 121: magus-test-design and magus-context-audit state their claims as verbs, and the
-// descriptions of magus-diagram, magus-context-audit and magus-run shorten their lead
-// sentence and name what not to use them for.
-//
-// 124: magus-multi-agent teaches signature goals, `breaks` and deletion candidates, and
-// cuts its repetition to fit the 500-line skill cap.
-//
-// 125: magus-multi-agent teaches the workspace's declared model tiers, what a row records of
-// its tier, and that `job fork --model` takes a tier or a model.
-//
-// 126: magus-multi-agent says the root does no groundwork from its first call, which
-// orchestrator-groundwork enforces by role.
-//
-// 127: magus-multi-agent teaches that a retry is a fork of the same id, read from the
-// previous attempt `describe job` prints, that an attempt not retryable names what
-// changes first, and that a goal applied after an exit needs the check run again, which
-// `job wait` prints.
-//
-// 128: magus-multi-agent says the root coordinates and never builds: the checkout's
-// integrator, a job whose check is the gate, cherry-picks, builds, regenerates and commits;
-// and that a prose scout's no_return names it ungraded, never abandoned.
-//
-// 129: magus-multi-agent names the integrator by role: a subagent spawned
-// `<parent>/integrate <job>` in the landing checkout, whose check is never the gate.
-//
-// 130: magus-workspace-rules teaches tightening a conformance threshold: commit the value
-// `magus doctor` proposes, and delete the known entries it names stale.
-//
-// 131: magus-multi-agent tells a worker never to exit its row while it waits on a reply.
-//
-// 132: magus-diagram says a figure receipt carries the figure id, the stamp, the claim
-// counts and the findings, and no index digest.
-//
-// 133: magus-sdk describes the SDK as it stands: a deterministic substrate around an agent
-// loop, never a runtime or a model router.
-//
-// 134: magus-sdk fakes a types role by embedding it; the types mocks are internal now.
-//
-// 135: magus-workspace-rules names knowledge.conformance, magus\conformance and the
-// doctor's conformance check; the conform spellings are gone.
-//
-// 136: magus-run and magus-multi-agent teach the fix loop: rerun only the failing tests
-// after a failed full run, one full run per wave, one affected ci at the end.
-//
-// 137: magus-multi-agent forks a worker's worktree with job fork --checkout; it and
-// magus-run split their over-long fix-loop sentences.
-//
-// 138: the short form of every skill but magus-multi-agent and magus-sdk is compressed
-// further: grammar words dropped, tables written as lists, and each passage both forms
-// carry split into a full and a short arm. Those two keep 137's text, whose rewrites the
-// compression predates. magus-multi-agent's reference.md carries short arms too, which no
-// install renders while Render keeps references full.
-//
-// 139: magus-multi-agent and magus-sdk move their rationale into full-only blocks, so
-// their short forms are compressed too.
-//
-// 140: magus-multi-agent says the root waits for the build budget and a worker never
-// does: a worker whose check finds the budget full commits, reports and stops.
-//
-// 141: magus-query says free text is ranked by BM25F, a partial match is labeled,
-// and each match says why it ranked; magus-multi-agent fits 500 lines again.
-//
-// 142: magus-multi-agent checks a record with `magus job fork --stdin --dry-run` before
-// forking, and teaches the claim breadth bounds (MGS3043), the outputs a fork refuses to
-// leave unregenerated (MGS3044) and the deviations for both.
-//
-// 143: magus-vcs-hygiene teaches the commit message: read the repository's recent
-// subjects and write in their shape, imposing no style of its own.
-//
-// 144: magus-multi-agent says what a spawn brief leaves out; magus-change-summary teaches
-// `magus diff --rev` and `--patch -` instead of the bare `-`.
-//
-// 145: magus-multi-agent says the root's role is the live lease: it may take one row with
-// `magus job exec` and returns to orchestrating on `magus job exit`.
-//
-// 146: magus-multi-agent teaches resume-first: follow-up work goes to the warm worker that
-// wrote the code, and `follows` and `fresh_reason` on a job record.
-//
-// 147: magus-multi-agent says a prose scout that files a result passes, ending "returned".
-//
-// 148: magus-multi-agent moves its integrate checklist into reference.md so the full
-// form fits the 500-line guidance again.
-//
-// 149: magus-buzz-from-shell teaches rewriting shell scripts as idiomatic Buzz.
-//
-// 150: magus-workspace-rules teaches tightening a conformance anchor in magus.yaml; counts
-// come from the base revision, and the doctor check is conformance-ceiling.
-const SkillVersion = 150
+// skillStampFormat versions the stamp line's shape, never skill content: each
+// installed copy is graded by its own skill-content digest.
+const skillStampFormat = 1
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -1156,12 +743,9 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form types.SkillF
 	return written, changed, nil
 }
 
-// checkInstalledNotNewer refuses to overwrite the skill at path when its stamp names an
-// agent-skill-version or knowledge-schema-version newer than this binary's: an older
-// install would teach agents last release's verbs over the newer ones. Those two numbers
-// are the stamp's whole ordering. It carries no build identity, since the installed copies
-// are often tracked and a per-build stamp would change them on every rebuild. A missing or
-// unstamped file is not refused.
+// checkInstalledNotNewer refuses to overwrite a copy whose stamp format or
+// schema is newer than this binary's. A digest has no order, so content is
+// never compared here. A missing or unstamped file is not refused.
 func (c *Catalog) checkInstalledNotNewer(path string) error {
 	body, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -1170,20 +754,15 @@ func (c *Catalog) checkInstalledNotNewer(path string) error {
 	if err != nil {
 		return fmt.Errorf("agent install: read %s: %w", path, err)
 	}
-	m := footerVersionRe.FindSubmatch(body)
-	if m == nil {
+	format, schemaVersion := stampNumber(stampFormatRe, body), stampNumber(schemaVersionRe, body)
+	if format <= skillStampFormat && schemaVersion <= c.schemaVersion {
 		return nil
 	}
-	skillVersion, _ := strconv.Atoi(string(m[1]))
-	schemaVersion, _ := strconv.Atoi(string(m[2]))
-	if skillVersion <= SkillVersion && schemaVersion <= c.schemaVersion {
-		return nil
-	}
-	return fmt.Errorf("agent install: %s was installed by a newer magus (agent-skill-version %d, knowledge-schema-version %d) than this binary "+
-		"(agent-skill-version %d, knowledge-schema-version %d), and replacing it would undo what the newer one wrote: "+
+	return fmt.Errorf("agent install: %s was installed by a newer magus (skill-stamp-format %d, knowledge-schema-version %d) than this binary "+
+		"(skill-stamp-format %d, knowledge-schema-version %d), and replacing it would undo what the newer one wrote: "+
 		"update this binary (`%s` for a release, or bring a checkout of magus up to date and rebuild it), "+
 		"or rerun this command with a magus at least that new",
-		path, skillVersion, schemaVersion, SkillVersion, c.schemaVersion, hint.SelfUpdate)
+		path, format, schemaVersion, skillStampFormat, c.schemaVersion, hint.SelfUpdate)
 }
 
 // StaleSkillDirs returns the installed skill directories under <dir>/<dest> that
@@ -1260,7 +839,7 @@ func (c *Catalog) agentsSectionBegin() string {
 	// "re-run to update" would be a lie now: re-running install PRINTS this block,
 	// it does not rewrite the file. The one line a puzzled reader looks at has to
 	// name the step magus cannot do for them.
-	return fmt.Sprintf("<!-- magus:skills:begin generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; do not edit; magus never writes this file, so re-run `magus agent install` and replace this block to update -->", SkillVersion, c.schemaVersion, c.contentDigest)
+	return fmt.Sprintf("<!-- magus:skills:begin generated by: magus agent install; skill-stamp-format: %d; knowledge-schema-version: %d; skill-content: %s; do not edit; magus never writes this file, so re-run `magus agent install` and replace this block to update -->", skillStampFormat, c.schemaVersion, c.contentDigest)
 }
 
 const agentsSectionEnd = "<!-- magus:skills:end -->"
@@ -1295,11 +874,11 @@ func (c *Catalog) AgentsBlock(routingIndex bool) string {
 }
 
 func (c *Catalog) provenance(name string, v types.SkillVariant) string {
-	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n  skill-variant: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.SkillDigest(name), v)
+	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  skill-stamp-format: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n  skill-variant: %s\n", skillLicense, skillStampFormat, c.schemaVersion, c.SkillDigest(name), v)
 }
 
 func (c *Catalog) footer(name string, v types.SkillVariant) string {
-	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; skill-variant: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.SkillDigest(name), v)
+	return fmt.Sprintf("\n<!-- generated by: magus agent install; skill-stamp-format: %d; knowledge-schema-version: %d; skill-content: %s; skill-variant: %s; do not edit, re-run to update -->\n", skillStampFormat, c.schemaVersion, c.SkillDigest(name), v)
 }
 
 // StampSkill injects provenance frontmatter and appends a generated-by footer.
@@ -1381,8 +960,11 @@ func (c *Catalog) skillSourceFiles() ([]string, error) {
 	return paths, nil
 }
 
-var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-schema-version: (\d+)`)
-var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|` + unreadableDigest + `)`)
+var (
+	stampFormatRe   = regexp.MustCompile(`skill-stamp-format: (\d+)`)
+	schemaVersionRe = regexp.MustCompile(`knowledge-schema-version: (\d+)`)
+	footerDigestRe  = regexp.MustCompile(`skill-content: ([0-9a-f]+|` + unreadableDigest + `)`)
+)
 
 // ReinstallCommand is the ONE remedy for a skill install location CheckStatuses
 // grades stale or missing: every location it discovers comes from a harness
@@ -1538,15 +1120,9 @@ func HarnessSkillDirs(ctx context.Context, root string, wired ...string) ([]stri
 // a per-skill digest that shortcut goes blind: a stale magus-run reads as current
 // when magus-query happens not to have changed.
 //
-// Every problem found is collected rather than returned on the first one. This
-// used to return as soon as ANY installed skill turned up one offense (an
-// unreadable file, a name outside the descriptor's form, a missing skill), which
-// meant an alphabetically-earlier, cosmetic finding silently hid a later skill's
-// real version/schema mismatch: the operator saw "magus-aaa is not part of the
-// form" and never learned that magus-query was 50 releases behind. Collecting
-// lets every offender surface in one Status, and sortReasons keeps a
-// version/schema mismatch first among them, since that is the one reason that
-// must never go unseen.
+// Every problem found is collected, not just the first. A cosmetic finding on
+// an earlier name must not hide a later skill's stale stamp. sortReasons keeps
+// a stamp mismatch first.
 func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 	reinstall := ReinstallHint(location.ID)
 	dest := location.Path
@@ -1611,7 +1187,7 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 		reasons = append(reasons, fmt.Sprintf("missing %s; re-run: %s", name, reinstall))
 	}
 	if len(reasons) == 0 {
-		return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
+		return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (stamp format %d, schema v%d)", skillStampFormat, c.schemaVersion)}
 	}
 	sortReasons(reasons)
 	return Status{
@@ -1634,18 +1210,18 @@ func leftoverReason(abs, rel string, readError error) string {
 	return fmt.Sprintf("cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", readError, rel)
 }
 
-// sortReasons orders gradeDest's collected reasons so a version/schema mismatch
-// (gradeStamp's "stale (skill vX/schema vY; ...)" wording) is never buried
+// sortReasons orders gradeDest's collected reasons so a stamp this magus cannot
+// read at its schema (gradeStamp's "stale stamp (...)" wording) is never buried
 // behind a lesser finding like an unreadable file or an orphaned name. Stable,
 // so reasons that are equally severe keep the order they were found in.
 func sortReasons(reasons []string) {
 	sort.SliceStable(reasons, func(i, j int) bool {
-		return isVersionMismatch(reasons[i]) && !isVersionMismatch(reasons[j])
+		return isStampMismatch(reasons[i]) && !isStampMismatch(reasons[j])
 	})
 }
 
-func isVersionMismatch(reason string) bool {
-	return strings.Contains(reason, "stale (skill v")
+func isStampMismatch(reason string) bool {
+	return strings.Contains(reason, "stale stamp (")
 }
 
 // installedSkillNames lists the magus skill directories under path, sorted. One
@@ -1699,19 +1275,29 @@ func baseSkillName(dir string) string {
 	return strings.TrimSuffix(dir, fullTwinSuffix)
 }
 
+// gradeStamp judges one copy by its own stamp. The format and schema decide
+// whether the line can be read. The skill-content digest decides currency.
 func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Status {
-	m := footerVersionRe.FindStringSubmatch(body)
-	if m == nil {
-		return Status{Location: location, Installed: true, Stale: true, Detail: "installed skill has no version stamp; re-run: " + reinstall}
+	stale := func(detail string) Status {
+		return Status{Location: location, Installed: true, Stale: true, Detail: detail + "; re-run: " + reinstall}
 	}
-	skillVersion, _ := strconv.Atoi(m[1])
-	schemaVersion, _ := strconv.Atoi(m[2])
-	if skillVersion < SkillVersion || schemaVersion < c.schemaVersion {
-		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("stale (skill v%d/schema v%d; binary v%d/schema v%d); re-run: %s", skillVersion, schemaVersion, SkillVersion, c.schemaVersion, reinstall)}
+	format := stampNumber(stampFormatRe, []byte(body))
+	if format < 0 {
+		return stale("installed skill has no skill-stamp-format, so this magus cannot read its stamp")
+	}
+	if format != skillStampFormat {
+		return stale(fmt.Sprintf("stale stamp (format %d; this magus reads format %d)", format, skillStampFormat))
+	}
+	schemaVersion := stampNumber(schemaVersionRe, []byte(body))
+	if schemaVersion < 0 {
+		return stale("installed skill has no knowledge-schema-version")
+	}
+	if schemaVersion < c.schemaVersion {
+		return stale(fmt.Sprintf("stale stamp (schema v%d; binary schema v%d)", schemaVersion, c.schemaVersion))
 	}
 	d := footerDigestRe.FindStringSubmatch(body)
 	if d == nil {
-		return Status{Location: location, Installed: true, Stale: true, Detail: "installed by a magus that predates the content fingerprint; re-run: " + reinstall}
+		return stale("installed skill has no skill-content digest")
 	}
 	// unreadableDigest marks a hash this binary (or the one that stamped the
 	// installed file) could not compute; it is a failure, not a content value, so
@@ -1719,12 +1305,25 @@ func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Statu
 	// that both failed to hash their sources would produce equal "unreadable"
 	// digests and grade the pair current, each vouching for content it never read.
 	if d[1] == unreadableDigest || wantDigest == unreadableDigest {
-		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content fingerprint unreadable (installed %s, binary %s); re-run: %s", d[1], wantDigest, reinstall)}
+		return stale(fmt.Sprintf("content fingerprint unreadable (installed %s, binary %s)", d[1], wantDigest))
 	}
 	if d[1] != wantDigest {
-		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s); re-run: %s", d[1], wantDigest, reinstall)}
+		return stale(fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s)", d[1], wantDigest))
 	}
-	return Status{Location: location, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d, content %s)", skillVersion, schemaVersion, wantDigest)}
+	return Status{Location: location, Installed: true, Detail: fmt.Sprintf("up to date (schema v%d, content %s)", schemaVersion, wantDigest)}
+}
+
+// stampNumber is the number re captures from a stamp, or -1 when absent.
+func stampNumber(re *regexp.Regexp, body []byte) int {
+	m := re.FindSubmatch(body)
+	if m == nil {
+		return -1
+	}
+	n, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
 // Section returns the provider-neutral always-on AGENTS.md guidance as embedded, with the

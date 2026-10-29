@@ -39,8 +39,9 @@ finds it: the plans doc, a task, the harness memory.
 ## 3. One source of truth, drift-gated
 
 - The installed skills are generated: embedded in the binary, stamped with
-  agentSkillVersion + knowledge schema version, graded by `magus doctor`'s
-  agent-skills check. Never hand-edit an installed copy; edit
+  each skill's own content digest, the stamp format and the knowledge schema
+  version, graded by `magus doctor`'s agent-skills check. A change to one skill
+  restamps only that skill's copies. Never hand-edit an installed copy; edit
   internal/agent/skills/ and re-run `magus agent install <dest-dir> --force`
   (here: .claude/skills).
 - Every destination receives identical bytes (a test asserts it). magus is
@@ -48,8 +49,6 @@ finds it: the plans doc, a task, the harness memory.
   event shapes, config dialects) is documentation over neutral mechanisms:
   explicit install destinations, the agent hook verdict, --from-json
   extraction, -o template rendering. Never a per-host code path.
-- Any change to skill content or the MCP tools it documents bumps
-  agentSkillVersion with a changelog line.
 - Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the live
   tools. A skill that mentions this repo's specifics is a bug.
 

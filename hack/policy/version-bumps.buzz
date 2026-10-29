@@ -1,8 +1,7 @@
-// The version-bump rule: a branch bumps each schema or format counter once. Every bump
-// restamps what the counter stamps (agent-skill-version restamps every installed skill copy)
-// and invalidates every store written at the old value, so a second bump on one branch costs
-// every reader again and buys nothing the first bump did not: no one outside the branch ever
-// read the value in between.
+// The version-bump rule: a branch bumps each schema or format counter once.
+// Every bump restamps what the counter stamps and invalidates every store
+// written at the old value. A second bump on one branch costs every reader
+// again. No one outside the branch read the value in between.
 namespace agentpolicy\versions;
 
 import "std";
@@ -20,7 +19,7 @@ export object Counter {
 // counters are the hand-maintained version counters, each found by the line in file that
 // starts with declaration. A counter missing here is not guarded.
 export final counters = [
-    Counter{ name = "agent-skill-version", file = "internal/agent/catalog.go", declaration = "const SkillVersion = " },
+    Counter{ name = "skill-stamp-format", file = "internal/agent/catalog.go", declaration = "const skillStampFormat = " },
     Counter{ name = "guard-template-version", file = "internal/agent/guard.go", declaration = "const GuardTemplateVersion = " },
     Counter{ name = "guard-schema-version", file = "internal/agent/guard.go", declaration = "const GuardSchemaVersion = " },
     Counter{ name = "agent-session-schema-version", file = "internal/agent/session.go", declaration = "const SessionSchemaVersion = " },
@@ -182,37 +181,37 @@ fun fakeBase(files: {str: str}) > fun (path: str) > str? !> str {
 final skillFile = "internal/agent/catalog.go";
 
 fun skill(value: str) > str {
-    return "package agent\n\nconst SkillVersion = {value}\n\nfunc x() \{\}\n";
+    return "package agent\n\nconst skillStampFormat = {value}\n\nfunc x() \{\}\n";
 }
 
 test "the first bump on a branch is allowed" {
-    final edit = Edit{ rel = skillFile, oldText = "const SkillVersion = 147", newText = "const SkillVersion = 148" };
-    final v = decide(edit, current: fakeFiles({skillFile: skill("147")}), base: fakeBase({skillFile: skill("147")}));
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 1", newText = "const skillStampFormat = 2" };
+    final v = decide(edit, current: fakeFiles({skillFile: skill("1")}), base: fakeBase({skillFile: skill("1")}));
     std\assert(v == null, message: "first bump");
 }
 
 test "a second bump on a branch is denied naming the counter, the base value and the branch value" {
-    final edit = Edit{ rel = skillFile, oldText = "const SkillVersion = 148", newText = "const SkillVersion = 149" };
-    final v = decide(edit, current: fakeFiles({skillFile: skill("148")}), base: fakeBase({skillFile: skill("147")}));
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 3" };
+    final v = decide(edit, current: fakeFiles({skillFile: skill("2")}), base: fakeBase({skillFile: skill("1")}));
     std\assert(v != null and v!.decision == magus\GuardDecision.deny, message: "second bump denied");
     final reason = v!.reason;
-    std\assert(reason.indexOf("agent-skill-version") != null and reason.indexOf("from 147 to 148") != null, message: reason);
+    std\assert(reason.indexOf("skill-stamp-format") != null and reason.indexOf("from 1 to 2") != null, message: reason);
     std\assert(reason.indexOf("a branch bumps a version once") != null, message: reason);
     verdict\assertVerdict(reason, label: "second bump");
 }
 
 test "a whole-file write that bumps again is denied, and one that keeps the value is allowed" {
-    final files = fakeFiles({skillFile: skill("148")});
-    final base = fakeBase({skillFile: skill("147")});
-    final bumped = decide(Edit{ rel = skillFile, content = skill("149") }, current: files, base: base);
+    final files = fakeFiles({skillFile: skill("2")});
+    final base = fakeBase({skillFile: skill("1")});
+    final bumped = decide(Edit{ rel = skillFile, content = skill("3") }, current: files, base: base);
     std\assert(bumped != null and bumped!.decision == magus\GuardDecision.deny, message: "write bumps again");
-    final kept = decide(Edit{ rel = skillFile, content = skill("148") + "// more\n" }, current: files, base: base);
+    final kept = decide(Edit{ rel = skillFile, content = skill("2") + "// more\n" }, current: files, base: base);
     std\assert(kept == null, message: "write keeps the value");
 }
 
 test "an edit back to the base value is allowed" {
-    final edit = Edit{ rel = skillFile, oldText = "const SkillVersion = 148", newText = "const SkillVersion = 147" };
-    std\assert(decide(edit, current: fakeFiles({skillFile: skill("148")}), base: fakeBase({skillFile: skill("147")})) == null, message: "revert");
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 1" };
+    std\assert(decide(edit, current: fakeFiles({skillFile: skill("2")}), base: fakeBase({skillFile: skill("1")})) == null, message: "revert");
 }
 
 test "an unrelated edit is never judged, and never reads the base" {
@@ -220,8 +219,8 @@ test "an unrelated edit is never judged, and never reads the base" {
         throw "the base was read";
     };
     final other = Edit{ rel = skillFile, oldText = "func x() \{\}", newText = "func y() \{\}" };
-    std\assert(decide(other, current: fakeFiles({skillFile: skill("148")}), base: base) == null, message: "same file, other line");
-    final elsewhere = Edit{ rel = "README.md", content = "const SkillVersion = 200\n" };
+    std\assert(decide(other, current: fakeFiles({skillFile: skill("2")}), base: base) == null, message: "same file, other line");
+    final elsewhere = Edit{ rel = "README.md", content = "const skillStampFormat = 200\n" };
     std\assert(decide(elsewhere, current: fakeFiles({}), base: base) == null, message: "file with no counter");
 }
 
@@ -240,8 +239,8 @@ test "an unreadable base advises instead of judging" {
     final base = fun (path: str) > str? !> str {
         throw "no base";
     };
-    final edit = Edit{ rel = skillFile, oldText = "const SkillVersion = 148", newText = "const SkillVersion = 149" };
-    final v = decide(edit, current: fakeFiles({skillFile: skill("148")}), base: base);
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 3" };
+    final v = decide(edit, current: fakeFiles({skillFile: skill("2")}), base: base);
     std\assert(v != null and v!.decision == magus\GuardDecision.advise, message: "advised");
 }
 

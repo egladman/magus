@@ -1179,11 +1179,10 @@ var agentSources = []string{
 // adviseAgentSourceWrite routes an edit to one of the agentSources through the method
 // that maintains them, or returns "" for every other path.
 //
-// The gap it closes is the one the authoring method itself names: both failures here are
+// The gap it closes is the one the authoring method itself names, and it is
 // silent. A skill body is a text/template rendered per form, so a passage added
 // outside a branch changes both and a passage added inside one changes neither, and
-// nothing about the file says so. A content change without a SkillVersion bump leaves
-// every install reporting itself up to date while carrying the previous bytes.
+// nothing about the file says so.
 func adviseAgentSourceWrite(root, path string) advice {
 	rel, ok := workspaceRelativeFile(root, path)
 	if !ok || !magusOwnSourceTree() {
@@ -1197,7 +1196,7 @@ func adviseAgentSourceWrite(root, path string) advice {
 	return advice{
 		Say: fmt.Sprintf("magus workspace: load the magus-skill-authoring skill before editing %s: it holds the method these sources are maintained by.", rel),
 		Why: fmt.Sprintf("%s is a SOURCE of what agents are taught, and the skill is hand-authored, committed beside the installed skills. "+
-			"Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n"+
+			"Getting it wrong here is silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in.\n"+
 			"Verify against a freshly built binary rather than against the docs. That is the method's first rule, and it is there because the registry once advertised a dry run that regenerated files.", rel),
 	}
 }
