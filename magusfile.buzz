@@ -2274,7 +2274,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // hack/lint/run.buzz's tests run the binary proofread-build links.
     ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate);
     ctx.readsFiles(["spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
-        "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml"]);
     ctx.writesFiles(["coverage/buzz/*.lcov", "coverage/buzz/coverage.txt"]);
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
@@ -2301,7 +2301,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // The mode follows the caller: a script a person or workflow runs is run bare, so it is
     // gated strict, and a magusfile import parses embedded, where strict would reject legal
     // constructs.
-    foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci"]) {
+    foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci", "hack/retro"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
             cover_module(mod.value, [], magus\CommandOptions{});
         }
