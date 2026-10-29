@@ -500,9 +500,19 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
 	})
 
+	// judged is a workspace holding the built proofread, which a commit message is denied
+	// without.
+	judged := func(t *testing.T) string {
+		t.Helper()
+		ws := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
+		require.NoError(t, os.Symlink(filepath.Join(root, "libs", "proofread"), filepath.Join(ws, "libs", "proofread")))
+		return ws
+	}
+
 	covered["commit-subject"] = true
 	t.Run("commit-subject", func(t *testing.T) {
-		run := shellIn(t, "trim-key", "")
+		run := shellIn(t, "trim-key", judged(t))
 		for _, line := range []string{
 			`git -c user.name=x commit -q -m "URL-parse the port; keep the key"`,
 			`hg -R . --config ui.username=x commit -m "trim a fragment" -y`,
@@ -542,7 +552,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	})
 
 	t.Run("commit-subject on the base branch", func(t *testing.T) {
-		run := shellIn(t, "main", "")
+		run := shellIn(t, "main", judged(t))
 		for _, line := range []string{
 			`git commit -m "fix(cache): keep the key stable across runs"`,
 			`jj describe -m "feat: add a commit-msg hook"`,

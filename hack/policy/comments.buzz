@@ -325,23 +325,31 @@ export object CssFinding {
 // cssJudgeRunner returns a judge that runs the built libs/proofread/cmd/proofread as
 // `proofread stylesheet` over a stylesheet's text, under this repository's decisions table,
 // which turns the house comment rules on. A judge that is missing, stale or did not run
-// returns null: the write then meets the generic advice rather than a block on a tool it
-// cannot run.
-export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding]? {
+// returns one "judge" finding naming why and the build, which decideCss denies on.
+export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding] {
     final dir = workspace + "/" + proofread\home;
-    return fun (css: str) > [CssFinding]? {
-        if (proofread\whyStale(dir) != "") {
-            return null;
+    return fun (css: str) > [CssFinding] {
+        final stale = proofread\whyStale(dir);
+        if (stale != "") {
+            return [unrun("proofread cannot run: {stale}")];
         }
-        final run = proc\exec("{dir}/{proofread\binary}",
+        final bin = "{dir}/{proofread\binary}";
+        final run = proc\exec(bin,
             args: ["stylesheet", "--stdin", "--decisions", workspace + "/" + decisions\DECISIONS_FILE],
             opts: proc\ExecOptions{stdin = css, quiet = true, allowFailure = true}) catch null;
         // Exit 1 is a deny finding, written to stdout like any other.
-        if (run == null or (run!.code != 0 and run!.code != 1)) {
-            return null;
+        if (run == null) {
+            return [unrun("proofread did not run: {bin} did not start")];
+        }
+        if (run!.code != 0 and run!.code != 1) {
+            return [unrun("proofread did not run: {bin} exited {run!.code}: {run!.stderr.trim()}")];
         }
         return parseCssFindings(run!.stdout);
     };
+}
+
+fun unrun(why: str) > CssFinding {
+    return CssFinding{ rule = "judge", line = 0, message = "{why}; run `{proofread\build}`, then retry" };
 }
 
 // parseCssFindings reads proofread's findings, whose source is `stdin:<line>`.
@@ -407,9 +415,9 @@ export fun longestAddedCssComment(before: str, after: str) > int {
 
 // decideCss judges a write to a stylesheet that adds a comment as a Go write is judged: a
 // comment over twice the largest budget is refused, and a comment proofread reports,
-// on a line the write added, is advised with what it says. A write the judge cannot read,
-// or finds nothing in, meets the once-per-session advice.
-export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]?) > GuardVerdict {
+// on a line the write added, is advised with what it says. A judge that could not run
+// denies, naming why; one that finds nothing leaves the once-per-session advice.
+export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]) > GuardVerdict {
     final added = addedLines(before, after: after);
     if (added == "" or !hasComment(added)) {
         return magus\guard.allow();
@@ -420,25 +428,29 @@ export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > 
             + "The write is to {path}. " + cssStyle + "\n\nCut it to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
     }
     final found = judge(after);
-    if (found != null) {
-        final had = mut {<str: bool>};
-        foreach (line in before.split("\n")) {
-            had[line.trim()] = true;
+    foreach (f in found) {
+        if (f.rule == "judge") {
+            return magus\guard.deny("the CSS comment judge could not run: {f.message}\n"
+                + "The write to {path} adds a comment, and no rule judged it.");
         }
-        final lines = after.split("\n");
-        final reasons = mut [<str>];
-        foreach (f in found!) {
-            if (f.line < 1 or f.line > lines.len()) {
-                continue;
-            }
-            if (had[lines[f.line - 1].trim()] ?? false) {
-                continue;
-            }
-            reasons.append("{path}:{f.line}: {f.message} [{f.rule}]");
+    }
+    final had = mut {<str: bool>};
+    foreach (line in before.split("\n")) {
+        had[line.trim()] = true;
+    }
+    final lines = after.split("\n");
+    final reasons = mut [<str>];
+    foreach (f in found) {
+        if (f.line < 1 or f.line > lines.len()) {
+            continue;
         }
-        if (reasons.len() > 0) {
-            return magus\guard.advise(cssStyle + "\n\n" + reasons.join("\n") + "\n\nCut each to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
+        if (had[lines[f.line - 1].trim()] ?? false) {
+            continue;
         }
+        reasons.append("{path}:{f.line}: {f.message} [{f.rule}]");
+    }
+    if (reasons.len() > 0) {
+        return magus\guard.advise(cssStyle + "\n\n" + reasons.join("\n") + "\n\nCut each to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
     }
     if (once("code-comments")) {
         return magus\guard.advise(commentAdvice);
@@ -447,7 +459,7 @@ export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > 
 }
 
 // decideWrite grades a write: a stylesheet by decideCss, any other file by decideComments.
-export fun decideWrite(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]?) > GuardVerdict {
+export fun decideWrite(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]) > GuardVerdict {
     if (fileExtension(path) == ".css") {
         return decideCss(path, before: before, after: after, once: once, judge: judge);
     }
@@ -612,12 +624,12 @@ test "an edit that leaves an old long comment alone passes; growing one is grade
     std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == magus\GuardDecision.allow, message: "an old package comment is not the write's");
 }
 
-fun noJudge() > fun (css: str) > [CssFinding]? {
-    return fun (css: str) > [CssFinding]? { return null; };
+fun noJudge() > fun (css: str) > [CssFinding] {
+    return fun (css: str) > [CssFinding] { return [<CssFinding>]; };
 }
 
-fun judgeSays(rule: str, line: int) > fun (css: str) > [CssFinding]? {
-    return fun (css: str) > [CssFinding]? {
+fun judgeSays(rule: str, line: int) > fun (css: str) > [CssFinding] {
+    return fun (css: str) > [CssFinding] {
         return [CssFinding{ rule = rule, line = line, message = "Drop 'simply': state the fact." }];
     };
 }
@@ -640,8 +652,16 @@ test "a stylesheet write is judged by proofread on the lines it adds" {
     std\assert(v.reason.indexOf("same prose rules as Go ones") != null, message: "states the rule");
     final kept = decideWrite("a.css", before: after, after: after + ".c \{ color: pink; }\n", once: spent(), judge: judgeSays("filler", line: 3));
     std\assert(kept.decision == magus\GuardDecision.allow, message: "a finding on a comment the write did not add");
-    final unread = decideWrite("a.css", before: "", after: after, once: helpers\counter(), judge: noJudge());
-    std\assert(unread.decision == magus\GuardDecision.advise and unread.reason.indexOf("Skill(") == null and unread.reason.indexOf("keep only the comments") != null, message: "a judge that cannot run falls back to the generic advice once");
+    final clean = decideWrite("a.css", before: "", after: after, once: helpers\counter(), judge: noJudge());
+    std\assert(clean.decision == magus\GuardDecision.advise and clean.reason.indexOf("Skill(") == null and clean.reason.indexOf("keep only the comments") != null, message: "a judge that finds nothing leaves the generic advice once");
+}
+
+test "a stylesheet write the judge cannot run on is denied, naming why and the build" {
+    final stale = fun (css: str) > [CssFinding] => [unrun("proofread cannot run: it is older than its sources")];
+    final v = decideWrite("a.css", before: "", after: "/* Simply put. */\n.b \{ color: blue; }\n", once: helpers\counter(), judge: stale);
+    std\assert(v.decision == magus\GuardDecision.deny, message: "{v.decision}: {v.reason}");
+    std\assert(v.reason.indexOf("older than its sources") != null and v.reason.indexOf("run `{proofread\build}`") != null, message: v.reason);
+    std\assert(decideWrite("a.css", before: "", after: ".b \{ color: blue; }\n", once: helpers\counter(), judge: stale).decision == magus\GuardDecision.allow, message: "a write with no comment needs no judge");
 }
 
 test "a stylesheet comment over twice the largest budget is refused" {

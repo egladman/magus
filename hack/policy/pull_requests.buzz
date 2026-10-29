@@ -1648,7 +1648,7 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
     foreach (p in programs) {
         foreach (message in subjects\recordedMessages(p)) {
             final found = judgeText(Text{ kind = commitKind, body = message }, facts: fun () > Facts => unknownFacts(),
-                judge: advisingWhenUnrun(judge), cited: cited);
+                judge: judge, cited: cited);
             foreach (problem in found.denies) {
                 if (problems.indexOf(problem) == null) {
                     problems.append(problem);
@@ -1708,25 +1708,6 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
             + teaching(advised, advice: true), opts: {"rule": ruleName(advised)});
     }
     return magus\guard.allow();
-}
-
-// advisingWhenUnrun wraps judge for a commit message: a judge that is missing, stale or did not
-// run (its "judge" finding) is advice there, not a denial. A commit is made in every fresh
-// checkout before anyone has linked proofread, and a pull request is not; the rest of the
-// rule, which needs no binary, still denies.
-fun advisingWhenUnrun(judge: fun (text: str, kind: str) > [Judged]) > fun (text: str, kind: str) > [Judged] {
-    return fun (text: str, kind: str) > [Judged] {
-        final found = mut [<Judged>];
-        foreach (f in judge(text, kind: kind)) {
-            if (f.rule == "judge") {
-                found.append(Judged{ rule = f.rule, line = f.line, message = f.message, matched = f.matched,
-                    decision = "advise", url = f.url });
-            } else {
-                found.append(f);
-            }
-        }
-        return found;
-    };
 }
 
 // anyReview reports whether one of kinds is a text a review posts.
@@ -2157,12 +2138,12 @@ test "a commit message's advise finding is graded by proofread and allowed here"
     std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("[grade]") != null, message: "{denied.decision} {denied.reason}");
 }
 
-test "a judge that did not run is advice for a commit message and a denial for a pull request" {
+test "a judge that did not run denies a commit message and a pull request, naming the build" {
     final unrun = Judged{ rule = "judge", line = 0, message = "proofread cannot run: it is not built; run `build`, then retry" };
     final c = decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
-    std\assert(c.decision == magus\GuardDecision.advise, message: "{c.decision} {c.reason}");
-    std\assert(c.reason.indexOf("proofread cannot run") != null, message: c.reason);
+    std\assert(c.decision == magus\GuardDecision.deny, message: "{c.decision} {c.reason}");
+    std\assert(c.reason.indexOf("proofread cannot run") != null and c.reason.indexOf("run `build`") != null, message: c.reason);
     final p = decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
     std\assert(p.decision == magus\GuardDecision.deny, message: "{p.decision} {p.reason}");
