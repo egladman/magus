@@ -298,13 +298,13 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 // against, and the reply channels each host declares.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
 	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true,
-		PayloadFields: []string{"prompt_id", "effort", "scratchpad_dir"}, Channels: []string{"agent", "user", "both"}},
+		PayloadFields: []string{"prompt_id", "effort", "scratchpad_dir"}, Channels: []string{"display", "capture", "notice"}},
 		loadShippedHarness(t, "claude-code").Limits)
 	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true,
-		PayloadFields: []string{"cursor_version", "conversation_id", "generation_id", "workspace_roots"}, Channels: []string{"agent", "user"}},
+		PayloadFields: []string{"cursor_version", "conversation_id", "generation_id", "workspace_roots"}, Channels: []string{"capture", "notice"}},
 		loadShippedHarness(t, "cursor").Limits)
-	assert.Equal(t, types.Limits{PayloadFields: []string{"turn_id"}, Channels: []string{"agent", "user", "both"}}, loadShippedHarness(t, "codex").Limits)
-	assert.Equal(t, types.Limits{Channels: []string{"both"}}, loadShippedHarness(t, "opencode").Limits)
+	assert.Equal(t, types.Limits{PayloadFields: []string{"turn_id"}, Channels: []string{"display", "capture", "notice"}}, loadShippedHarness(t, "codex").Limits)
+	assert.Equal(t, types.Limits{Channels: []string{"display"}}, loadShippedHarness(t, "opencode").Limits)
 }
 
 // TestNoTwoShippedHarnessesClaimOnePayloadField holds the payload fingerprints
@@ -333,7 +333,7 @@ func TestAHookedHarnessWithNoChannelsIsRefused(t *testing.T) {
 
 func TestAHarnessWithAnUnknownChannelIsRefused(t *testing.T) {
 	id := harnessSource(t, "odd-channel-test", channelsHook+
-		"export fun mgs_getLimits() > Limits { return Limits{channels = [\"agent\", \"pager\"]}; }\n")
+		"export fun mgs_getLimits() > Limits { return Limits{channels = [\"capture\", \"pager\"]}; }\n")
 	_, _, _, err := loadHarnessFromSpell(context.Background(), id)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown channel "pager"`)

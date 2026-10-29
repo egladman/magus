@@ -171,9 +171,9 @@ final ASK_BLOCKED = `{{else if eq .decision "ask"}}{"systemMessage":{{toJson (pr
 // grows, and a copy older than the growth must not read the new verdict as a pass.
 final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}{{end}}`;
 
-// A deny's first line is the verdict and reaches the person too; the rest of the reason
-// (next step, details ref) goes to additionalContext, which reaches the agent alone. A host
-// whose harness declares no agent channel is sent the verdict line alone by `magus shell`.
+// A deny's first line is the verdict, for the display both readers see; the rest (next step,
+// details ref) goes to additionalContext, the capture only the agent reads. A host whose
+// harness declares no capture channel is sent the verdict line alone by `magus shell`.
 final DENY_HEAD = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"additionalContext":{{toJson .}}{{end}}}}`;
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 

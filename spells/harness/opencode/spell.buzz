@@ -68,7 +68,7 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 // The plugin throws a deny as the tool's error, which the agent and the person both read,
 // so a deny arrives as its one line.
 export fun mgs_getLimits() > Limits {
-    return Limits{channels = ["both"]};
+    return Limits{channels = ["display"]};
 }
 
 // Every OpenCode tool the guard should know, written by `magus agent harness install` to

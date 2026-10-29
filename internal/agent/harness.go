@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -111,32 +112,36 @@ func ShortestForegroundMax(harnesses []HarnessDescriptor) (time.Duration, bool) 
 }
 
 // HarnessChannel is one place a host's hook reply can put text, as types.Limits.Channels
-// names it.
+// names it. The names are the logger's: a display shows a record's message and drops its
+// why (internal/log/quiet), a capture keeps the whole record, and a notice is a line
+// addressed to the person (attr.Notice). Routing is decided where the reply is written,
+// as quiet.Wrap decides it at the display.
 type HarnessChannel string
 
 const (
-	// ChannelAgent reaches the agent alone: Claude Code's additionalContext, Cursor's
-	// agent_message.
-	ChannelAgent HarnessChannel = "agent"
-	// ChannelUser reaches the person alone: a systemMessage, Cursor's user_message.
-	ChannelUser HarnessChannel = "user"
-	// ChannelBoth reaches both: a deny reason, a thrown tool error.
-	ChannelBoth HarnessChannel = "both"
+	// ChannelDisplay is read by the person and the agent alike: a deny reason, a thrown
+	// tool error. It gets a deny's verdict line.
+	ChannelDisplay HarnessChannel = "display"
+	// ChannelCapture is read by the agent alone: Claude Code's additionalContext, Cursor's
+	// agent_message. It gets the whole deny.
+	ChannelCapture HarnessChannel = "capture"
+	// ChannelNotice is read by the person alone: a systemMessage, Cursor's user_message.
+	ChannelNotice HarnessChannel = attr.NoticeKey
 )
 
 // ParseHarnessChannels reads a harness's declared channels. An empty set, a repeat or a
-// name outside agent, user and both is an error, since a reply routed on a guess reaches
-// the wrong reader.
+// name outside display, capture and notice is an error, since a reply routed on a guess
+// reaches the wrong reader.
 func ParseHarnessChannels(names []string) ([]HarnessChannel, error) {
 	if len(names) == 0 {
 		return nil, fmt.Errorf("declares no channels: set limits.channels to the ones its hook replies reach, from %s, %s and %s",
-			ChannelAgent, ChannelUser, ChannelBoth)
+			ChannelDisplay, ChannelCapture, ChannelNotice)
 	}
 	out := make([]HarnessChannel, 0, len(names))
 	for _, name := range names {
 		c := HarnessChannel(name)
-		if c != ChannelAgent && c != ChannelUser && c != ChannelBoth {
-			return nil, fmt.Errorf("declares the unknown channel %q: the channels are %s, %s and %s", name, ChannelAgent, ChannelUser, ChannelBoth)
+		if c != ChannelDisplay && c != ChannelCapture && c != ChannelNotice {
+			return nil, fmt.Errorf("declares the unknown channel %q: the channels are %s, %s and %s", name, ChannelDisplay, ChannelCapture, ChannelNotice)
 		}
 		if slices.Contains(out, c) {
 			return nil, fmt.Errorf("declares the channel %s twice", name)

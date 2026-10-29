@@ -177,7 +177,7 @@ final PAYLOAD_FIELDS = ["cursor_version", "conversation_id", "generation_id", "w
 
 // A deny's agent_message reaches the agent and its user_message the person.
 export fun mgs_getLimits() > Limits {
-    return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true, payloadFields = PAYLOAD_FIELDS, channels = ["agent", "user"]};
+    return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true, payloadFields = PAYLOAD_FIELDS, channels = ["capture", "notice"]};
 }
 
 // Every Cursor tool the guard should know whose input's shape does not say what it does; a

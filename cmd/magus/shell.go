@@ -581,9 +581,9 @@ func applyHostFacts(ctx context.Context, req *guard.Request) (types.Limits, bool
 	return limits, true, nil
 }
 
-// routeDeny cuts a deny's reason to its verdict line for a host whose harness declares no
-// agent channel, since there all a reply carries reaches the person too. Limits that name
-// no usable channel leave the reason whole and say so.
+// routeDeny is quiet.Wrap's decision for a hook reply: a host whose harness declares no
+// capture channel gets a deny's verdict line alone, since there all a reply carries reaches
+// the person too. Limits that name no usable channel leave the reason whole and say so.
 func routeDeny(ctx context.Context, limits types.Limits, known bool, verdict types.GuardJudgment) types.GuardJudgment {
 	if !known || verdict.Decision != "deny" {
 		return verdict
@@ -594,7 +594,7 @@ func routeDeny(ctx context.Context, limits types.Limits, known bool, verdict typ
 			attr.Error(err), attr.Notice(""), attr.Component("magus shell"))
 		return verdict
 	}
-	if !slices.Contains(channels, agent.ChannelAgent) {
+	if !slices.Contains(channels, agent.ChannelCapture) {
 		verdict.Reason, _, _ = strings.Cut(verdict.Reason, "\n")
 	}
 	return verdict

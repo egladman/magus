@@ -238,8 +238,9 @@ type Setting struct {
 // sends, per its docs. A payload with another host's field and none
 // of these was sent by that other host.
 //
-// Channels are where the host's hook replies can put text: "agent" (the agent alone),
-// "user" (the person alone), "both". A host with no "agent" gets each deny as one line.
+// Channels are where the host's hook replies can put text, in the logger's words: "display"
+// (both read it), "capture" (the agent alone), "notice" (the person alone). A host with no
+// "capture" gets each deny as one line.
 type Limits struct {
 	ForegroundDefaultMs     int64    `json:"foreground_default_ms,omitempty"`
 	ForegroundMaxMs         int64    `json:"foreground_max_ms,omitempty"`

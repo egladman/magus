@@ -2381,13 +2381,13 @@ func (s *hookAudienceSuite) TestASubagentStopBlockNamesItsOwnEvent() {
 
 func (s *hookAudienceSuite) TestAHostWithNoAgentChannelGetsTheVerdictLineAlone() {
 	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
-	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"both"}}, true, deny)
+	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"display"}}, true, deny)
 	s.Equal("a text search the graph answers", got.Reason)
 }
 
 func (s *hookAudienceSuite) TestAHostWithAnAgentChannelKeepsTheWholeReason() {
 	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
-	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"agent", "user", "both"}}, true, deny)
+	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"display", "capture", "notice"}}, true, deny)
 	s.Equal(audienceReason, got.Reason)
 }
 
@@ -2398,7 +2398,7 @@ func (s *hookAudienceSuite) TestLimitsWithNoChannelsLeaveTheReasonWhole() {
 
 func (s *hookAudienceSuite) TestAnAdviseIsNeverCut() {
 	advise := types.GuardJudgment{Decision: "advise", Context: audienceReason}
-	s.Equal(advise, routeDeny(s.T().Context(), types.Limits{Channels: []string{"both"}}, true, advise))
+	s.Equal(advise, routeDeny(s.T().Context(), types.Limits{Channels: []string{"display"}}, true, advise))
 }
 
 func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {

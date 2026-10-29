@@ -191,7 +191,7 @@ export fun mgs_getSkills() > HarnessSkills {
 // A PreToolUse reply's additionalContext reaches the agent alone, a systemMessage the person
 // alone, and a deny reason both. A Stop reply takes no hookSpecificOutput.
 export fun mgs_getLimits() > Limits {
-    return Limits{channels = ["agent", "user", "both"]};
+    return Limits{channels = ["display", "capture", "notice"]};
 }
 
 // Every Codex tool the guard should know whose input's shape does not say what it does. A

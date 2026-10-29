@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -79,9 +80,14 @@ func requireCurrent(t *testing.T, root, id string) {
 }
 
 func TestParseHarnessChannelsReadsEachDeclaredChannel(t *testing.T) {
-	got, err := ParseHarnessChannels([]string{"agent", "user", "both"})
+	got, err := ParseHarnessChannels([]string{"display", "capture", "notice"})
 	require.NoError(t, err)
-	assert.Equal(t, []HarnessChannel{ChannelAgent, ChannelUser, ChannelBoth}, got)
+	assert.Equal(t, []HarnessChannel{ChannelDisplay, ChannelCapture, ChannelNotice}, got)
+}
+
+// The person-only channel is the logger's own notice key, so the two cannot drift apart.
+func TestTheNoticeChannelIsTheLoggersNoticeKey(t *testing.T) {
+	assert.Equal(t, attr.NoticeKey, string(ChannelNotice))
 }
 
 func TestParseHarnessChannelsRefusesAnEmptySet(t *testing.T) {
@@ -90,12 +96,12 @@ func TestParseHarnessChannelsRefusesAnEmptySet(t *testing.T) {
 }
 
 func TestParseHarnessChannelsRefusesAnUnknownChannel(t *testing.T) {
-	_, err := ParseHarnessChannels([]string{"agent", "pager"})
+	_, err := ParseHarnessChannels([]string{"capture", "pager"})
 	require.ErrorContains(t, err, `unknown channel "pager"`)
 }
 
 func TestParseHarnessChannelsRefusesARepeat(t *testing.T) {
-	_, err := ParseHarnessChannels([]string{"both", "both"})
+	_, err := ParseHarnessChannels([]string{"display", "display"})
 	require.ErrorContains(t, err, "twice")
 }
 
