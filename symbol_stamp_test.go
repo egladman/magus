@@ -40,6 +40,8 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	// The fixture indexer is an external SCIP command, which runs only where it is opted in.
+	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+spellName+"]\n")
 	root := w.Root()
 	src = filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))

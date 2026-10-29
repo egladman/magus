@@ -472,9 +472,18 @@ func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, f
 // knowledge.symbols entry is left out, since its entries are its whole index set.
 func unindexedLanguages(in symbolIngestInputs, decls []resolvedSymbolIndex, dirByPath map[string]string) []knowledge.SymbolIndexDeclaration {
 	langBySpell := map[string]string{}
+	// The gap of a language whose spell declares an external indexer the workspace has
+	// not opted in names the setting that runs it.
+	hintBySpell := map[string]string{}
 	for _, sp := range in.spells {
-		if sp.SymbolFormat == "" {
+		switch {
+		case sp.SymbolFormat == "":
 			langBySpell[sp.Name] = sp.Language
+		case !in.cfg.Spells.RunsSymbolIndexer(sp.Name, spellIndexer(sp.Name)):
+			langBySpell[sp.Name] = sp.Language
+			if si := spellIndexer(sp.Name); si != nil {
+				hintBySpell[sp.Name] = symbols.OptInHint(sp.Language, sp.Name, si.Command.Bin)
+			}
 		}
 	}
 	type projectLanguage struct{ project, language string }
@@ -500,7 +509,7 @@ func unindexedLanguages(in symbolIngestInputs, decls []resolvedSymbolIndex, dirB
 				continue
 			}
 			covered[key] = true
-			out = append(out, knowledge.SymbolIndexDeclaration{Project: p.Path, Dir: dirByPath[p.Path], Language: key.language})
+			out = append(out, knowledge.SymbolIndexDeclaration{Project: p.Path, Dir: dirByPath[p.Path], Language: key.language, Detail: hintBySpell[name]})
 		}
 	}
 	return out
@@ -1810,7 +1819,7 @@ func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration, installed func
 			out = append(out, types.KnowledgeSymbolGap{
 				Project:     types.NewProjectRef(decl.Project, decl.Dir),
 				State:       types.SymbolIndexNotBuilt,
-				Detail:      "no symbol index for " + decl.Language,
+				Detail:      cmp.Or(decl.Detail, "no symbol index for "+decl.Language),
 				Unindexable: true,
 			})
 			continue
@@ -1965,7 +1974,7 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			bound = []string{p.Spell}
 		}
 		for _, name := range bound {
-			if !capable[name] {
+			if !capable[name] || !in.cfg.Spells.RunsSymbolIndexer(name, spellIndexer(name)) {
 				continue
 			}
 			indexer := spellIndexer(name)

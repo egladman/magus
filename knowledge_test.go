@@ -356,6 +356,11 @@ func registerIndexer(t *testing.T, name, language, op, bin string) types.Spell {
 	return types.Spell{Name: name, Language: language, SymbolFormat: "scip"}
 }
 
+// optIn is a workspace config that runs the external SCIP indexers of the spells named.
+func optIn(names ...string) config.Config {
+	return config.Config{Spells: config.SpellsConfig{SymbolIndexers: names}}
+}
+
 // Ingestion reads the index the run writes: the op the spell declares, and the default
 // for one that declares none, whatever the spell is called. A third-party indexer was
 // read from scip-<name>.scip while its run wrote index.scip, so its symbols never arrived.
@@ -372,7 +377,7 @@ func TestSymbolIndexDeclarationsReadTheOpTheSpellDeclares(t *testing.T) {
 		{Path: ".", Spells: []string{"zzz-third-party", "zzz-also-default", "zzz-own-op"}},
 	}}
 
-	decls := symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
+	decls := symbolIndexDeclarations(t.Context(), ingest(optIn("zzz-third-party", "zzz-also-default", "zzz-own-op"), root, cacheDir, projects, spells))
 
 	assert.Equal(t, []resolvedSymbolIndex{
 		{project: ".", op: "scip", bin: "scip-kotlin", path: symbols.IndexPath(cacheDir, ".", "scip"), language: "kotlin"},
@@ -395,7 +400,7 @@ func TestSymbolIndexDeclarationRecordsKeyVerdictsByOp(t *testing.T) {
 		{project: ".", op: "scip-alt"}: {Op: "scip-alt", Language: "go", Freshness: types.SymbolIndexStale},
 	}
 
-	recs := symbolIndexDeclarationRecords(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells), freshness)
+	recs := symbolIndexDeclarationRecords(t.Context(), ingest(optIn("zzz-go-a", "zzz-go-b"), root, filepath.Join(root, ".magus"), projects, spells), freshness)
 
 	require.Len(t, recs, 2)
 	assert.Equal(t, []string{"scip", "scip-alt"}, []string{recs[0].Op, recs[1].Op})
@@ -444,6 +449,29 @@ func TestSymbolIndexTimesReadsOnlyDeclaredIndexes(t *testing.T) {
 	times := symbolIndexTimes(symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
 
 	assert.Equal(t, map[string]time.Time{"pkg/a": built}, normalizeTimes(times))
+}
+
+func (s *magusSuite) TestAnExternalIndexerNotOptedInIsNotIngested() {
+	t := s.T()
+	root := t.TempDir()
+	spells := []types.Spell{registerIndexer(t, "zzz-ts", "typescript", "", "scip-typescript")}
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: ".", Spells: []string{"zzz-ts"}}}}
+
+	s.Empty(symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells)))
+	s.Len(symbolIndexDeclarations(t.Context(), ingest(optIn("zzz-ts"), root, filepath.Join(root, ".magus"), projects, spells)), 1)
+}
+
+func (s *magusSuite) TestAnExternalIndexerNotOptedInNamesTheSettingInItsGap() {
+	t := s.T()
+	root := t.TempDir()
+	spells := []types.Spell{registerIndexer(t, "zzz-ts", "typescript", "", "scip-typescript")}
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: ".", Spells: []string{"zzz-ts"}}}}
+
+	gaps := symbolGaps(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
+
+	s.Require().Len(gaps, 1)
+	s.True(gaps[0].Unindexable)
+	s.Equal("no symbol index for typescript: scip-typescript is an external SCIP indexer and runs only when opted in; add zzz-ts to spells.symbol_indexers in magus.yaml", gaps[0].Detail)
 }
 
 func normalizeTimes(in map[string]time.Time) map[string]time.Time {

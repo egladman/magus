@@ -315,10 +315,10 @@ func TestSymbolStatusCache(t *testing.T) {
 func TestSymbolRunError(t *testing.T) {
 	base := errors.New("exit status 127")
 
-	withHint := symbolRunError(types.NewProjectRef("docs", "/ws/docs"), "buzz", base)
+	withHint := symbolRunError(types.NewProjectRef("docs", "/ws/docs"), "typescript", base)
 	assert.ErrorIs(t, withHint, base, "wraps the cause")
 	assert.Contains(t, withHint.Error(), "docs", "names the project")
-	assert.Contains(t, withHint.Error(), "scip-buzz", "adds the actionable indexer hint")
+	assert.Contains(t, withHint.Error(), "scip-typescript", "adds the actionable indexer hint")
 
 	// The workspace-root project reads as its repo name, never the bare ".".
 	root := symbolRunError(types.NewProjectRef(".", "/ws/magus"), "go", base)
@@ -461,10 +461,12 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	// The fixture indexer is an external SCIP command, which runs only where it is opted in.
+	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+spellName+"]\n")
 	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
-	skill := filepath.Join(root, ".claude", "skills", "magus-query", "SKILL.md")
+	skill :=filepath.Join(root, ".claude", "skills", "magus-query", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
 	require.NoError(t, os.WriteFile(skill, []byte("# query\n"), 0o644))
 
@@ -570,7 +572,7 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	ps := []*types.Project{p}
 	toolVersions, err := m.toolVersionsByProject(ctx, ps)
 	require.NoError(t, err)
-	step := m.symbolIndexStep(p, spells.DefaultSymbolIndexOp, toolVersions[p.Path], m.probeObservations(ctx, ps, indexesDriven(projectIndexes(p)))[p.Path])
+	step := m.symbolIndexStep(p, spells.DefaultSymbolIndexOp, toolVersions[p.Path], m.probeObservations(ctx, ps, indexesDriven(projectIndexes(p, m.cfg.Spells)))[p.Path])
 	probeKey, _, err := m.cache.StepKey(ctx, &step)
 	require.NoError(t, err)
 
@@ -858,7 +860,7 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	forked := map[string]int{}
 	goList := spells.Command{Bin: "go", Args: []string{"list", "./..."}}
 	sp := spells.NewSpell("go",
-		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goList, Uses: []string{"go"}}),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages, Command: goList, Uses: []string{"go"}}),
 		spells.WithOps(map[string]spells.Op{
 			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: goList},
 			"govulncheck":               {Command: spells.Command{Bin: "govulncheck"}},
@@ -890,7 +892,7 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	m := &Magus{ws: &types.Workspace{Root: root}}
 	var idxs []projectIndex
 	for _, p := range ps {
-		idxs = append(idxs, projectIndexes(p)...)
+		idxs = append(idxs, projectIndexes(p, config.SpellsConfig{})...)
 	}
 
 	got := m.probeObservations(t.Context(), ps, indexesDriven(idxs))

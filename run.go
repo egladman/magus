@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -597,8 +598,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// claim that can only over-invalidate.
 	// Each indexing spell's op keys on its own spell's sources, so binding the buzz spell
 	// beside go leaves the Go index's key where it was.
-	if indexesSymbols(p, target) {
-		if indexed := symbolIndexSources(p, target); len(indexed) > 0 {
+	if indexesSymbols(p, target, m.cfg.Spells) {
+		if indexed := symbolIndexSources(p, target, m.cfg.Spells); len(indexed) > 0 {
 			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
 			if p.Path != "." {
 				step.Sources = append(step.Sources, magusfileGlobs(".")...)
@@ -642,7 +643,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// The index is the op's one output, at one path under the root in every checkout, so the
 	// shared store replays it into a fresh one. Outside the workspace it cannot be an output,
 	// so it is a stamp: an entry replays only while the index is the one its run wrote.
-	if indexesSymbols(p, target) {
+	if indexesSymbols(p, target, m.cfg.Spells) {
 		index := symbols.IndexPath(m.CacheDir(), p.Path, target)
 		step.Outputs, step.RequiredOutputs, step.ForeignOutputs = nil, nil, nil
 		if rel, err := filepath.Rel(step.WorkspaceRoot, index); err == nil && filepath.IsLocal(rel) {
@@ -952,7 +953,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if keysTools(p, target) {
 		keyTools = toolVersions[p.Path]
 	}
-	applyRunKeying(&step, p, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
+	applyRunKeying(&step, p, m.cfg.Spells, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
 	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
@@ -1057,8 +1058,8 @@ func (m *Magus) readsCharm(p *types.Project, target, charm string) bool {
 // indexer is its own binary, keyed through the observation its spell declares for it, and
 // of the spell's other tools only those the indexer declares it uses (go for scip-go,
 // never golangci-lint or tsc) key it, through observationsForTarget.
-func applyRunKeying(step *cache.Step, p *types.Project, toolVersions, observations, charms []string) {
-	if indexesSymbols(p, step.Target) {
+func applyRunKeying(step *cache.Step, p *types.Project, cfg config.SpellsConfig, toolVersions, observations, charms []string) {
+	if indexesSymbols(p, step.Target, cfg) {
 		toolVersions = nil
 	}
 	step.ToolVersions = toolVersions
@@ -2059,7 +2060,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 			toolVersions = byProject[p.Path]
 		}
-		applyRunKeying(&step, p, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
+		applyRunKeying(&step, p, m.cfg.Spells, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
 		return step, nil
 	}
 	newStep := func(p *types.Project, target string) (cache.Step, error) {

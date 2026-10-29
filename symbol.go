@@ -434,10 +434,10 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 // reporting cannot disagree. Two spells running under one op (go and python both declare
 // none, so both run under the default) share that op's index, and the first one's
 // language names it.
-func projectIndexes(p *types.Project) []projectIndex {
+func projectIndexes(p *types.Project, cfg config.SpellsConfig) []projectIndex {
 	var out []projectIndex
 	for _, sp := range p.ResolvedSpells {
-		op := sp.SymbolIndexOp()
+		op := runningIndexOp(sp, cfg)
 		if op == "" || slices.ContainsFunc(out, func(idx projectIndex) bool { return idx.op == op }) {
 			continue
 		}
@@ -446,9 +446,20 @@ func projectIndexes(p *types.Project) []projectIndex {
 	return out
 }
 
-// indexesSymbols reports whether target is one of p's indexer ops.
-func indexesSymbols(p *types.Project, target string) bool {
-	return target != "" && slices.ContainsFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.SymbolIndexOp() == target })
+// indexesSymbols reports whether target is one of p's indexer ops that runs here.
+func indexesSymbols(p *types.Project, target string, cfg config.SpellsConfig) bool {
+	return target != "" && slices.ContainsFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return runningIndexOp(s, cfg) == target })
+}
+
+// runningIndexOp is the op sp's symbol indexer runs under, or "" when sp declares none or
+// its indexer is an external SCIP command spells.symbol_indexers does not list. Every
+// question of which indexes exist goes through it, so an indexer the workspace has not
+// opted in is never built, keyed or reported as stale.
+func runningIndexOp(sp *spells.Spell, cfg config.SpellsConfig) string {
+	if !cfg.RunsSymbolIndexer(sp.Name(), sp.SymbolIndexer()) {
+		return ""
+	}
+	return sp.SymbolIndexOp()
 }
 
 // workspaceIndexes returns every symbol index the workspace's projects declare, so a
@@ -458,7 +469,7 @@ func (m *Magus) workspaceIndexes() []projectIndex {
 	ps := m.All()
 	out := make([]projectIndex, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, projectIndexes(p)...)
+		out = append(out, projectIndexes(p, m.cfg.Spells)...)
 	}
 	return out
 }
@@ -531,16 +542,16 @@ func (m *Magus) SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus
 // out-of-date. Charmless because ReindexSymbols runs the op with no RunOptions.
 func (m *Magus) symbolIndexStep(p *types.Project, op string, toolVersions []string, observations map[string]string) cache.Step {
 	step := m.buildStep(p, op)
-	applyRunKeying(&step, p, toolVersions, observationsForTarget(p, op, observations), nil)
+	applyRunKeying(&step, p, m.cfg.Spells, toolVersions, observationsForTarget(p, op, observations), nil)
 	return step
 }
 
 // symbolIndexSources is the source globs of each of p's spells whose indexer runs as op,
 // rooted at p: what buildStep keys that op on.
-func symbolIndexSources(p *types.Project, op string) []types.Glob {
+func symbolIndexSources(p *types.Project, op string, cfg config.SpellsConfig) []types.Glob {
 	var out []types.Glob
 	for _, s := range p.ResolvedSpells {
-		if s.SymbolIndexOp() != op {
+		if runningIndexOp(s, cfg) != op {
 			continue
 		}
 		// A spell whose globs do not parse contributed none to the project either.

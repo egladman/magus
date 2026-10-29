@@ -934,7 +934,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 	keyed := func(target string, charms ...string) cache.Step {
 		step := m.buildStep(p, target)
-		applyRunKeying(&step, p, nil, nil, charms)
+		applyRunKeying(&step, p, config.SpellsConfig{}, nil, nil, charms)
 		return step
 	}
 	assert.True(t, keyed("generate").VerifyOutputs, "the check form compares its outputs")
@@ -964,7 +964,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	require.NotNil(t, p, "root project")
 
 	step := m.buildStep(p, "generate")
-	applyRunKeying(&step, p, nil, nil, nil)
+	applyRunKeying(&step, p, config.SpellsConfig{}, nil, nil, nil)
 	assert.True(t, step.VerifyOutputs)
 }
 
@@ -2367,7 +2367,7 @@ func TestObservationsForTarget(t *testing.T) {
 // arrived first, and the key would lose an input with nothing to notice.
 func TestApplyRunKeyingCarriesObservations(t *testing.T) {
 	step := cache.Step{Target: "go-build", Observations: []string{"schema-rev=a1b2c3"}}
-	applyRunKeying(&step, &types.Project{Path: "."}, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
+	applyRunKeying(&step, &types.Project{Path: "."}, config.SpellsConfig{}, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
 
 	assert.Equal(t, cache.Step{
 		Target:       "go-build",
@@ -2385,14 +2385,30 @@ func TestApplyRunKeyingDropsToolVersionsForAnIndexerOp(t *testing.T) {
 		Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: spells.Command{Bin: "scip-buzz"},
 	}))
 	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
+	optedIn := config.SpellsConfig{SymbolIndexers: []string{"buzz"}}
 
 	indexer := cache.Step{Target: "scip-buzz"}
-	applyRunKeying(&indexer, p, []string{"buzz:buzz:1.0"}, nil, nil)
+	applyRunKeying(&indexer, p, optedIn, []string{"buzz:buzz:1.0"}, nil, nil)
 	assert.Empty(t, indexer.ToolVersions)
 
 	other := cache.Step{Target: "build"}
-	applyRunKeying(&other, p, []string{"buzz:buzz:1.0"}, nil, nil)
+	applyRunKeying(&other, p, optedIn, []string{"buzz:buzz:1.0"}, nil, nil)
 	assert.Equal(t, []string{"buzz:buzz:1.0"}, other.ToolVersions)
+}
+
+// An external SCIP indexer the workspace has not opted in is no index at all: its op keys
+// like any other target, so nothing builds, keys or reports it.
+func (s *magusSuite) TestAnIndexerNotOptedInIsAnOrdinaryOp() {
+	sp := spells.NewSpell("typescript", spells.WithSymbolIndexer(&spells.SymbolIndexer{
+		Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-typescript"},
+	}))
+	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
+
+	s.Empty(projectIndexes(p, config.SpellsConfig{}))
+	s.False(indexesSymbols(p, spells.DefaultSymbolIndexOp, config.SpellsConfig{}))
+	optedIn := config.SpellsConfig{SymbolIndexers: []string{"typescript"}}
+	s.Len(projectIndexes(p, optedIn), 1)
+	s.True(indexesSymbols(p, spells.DefaultSymbolIndexOp, optedIn))
 }
 
 // TestTargetDrivenEnvKeys pins the two ways an op's EnvKeys reach a target's key: composed
