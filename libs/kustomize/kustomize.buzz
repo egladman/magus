@@ -15,6 +15,7 @@ namespace kustomize;
 
 import "std";
 import "fs";
+import "vcs";
 import "env";
 import "encoding/yaml";
 import "magus/figure";
@@ -1199,14 +1200,19 @@ fun maps(value: any) > [{str: any}] {
     return lists(value).map(fun (i: int, v: any) > {str: any} => (v as? {str: any}) ?? {<str: any>});
 }
 
-// ---- tests over testdata and the committed overlay; run from libs/kustomize ----
+// ---- tests over testdata and the committed overlay ----
+
+// An importer runs these tests from its own cwd, so paths hang off the root.
+fun testdataDir() > str !> any {
+    return fs\join(vcs\root(), name: "libs/kustomize/testdata");
+}
 
 // staged copies testdata files into a fresh directory, kustomization first.
 fun staged(kustomization: str, files: [str]) > str !> any {
     final dir = fs\tempDir("kustomize-test-");
-    fs\copyFile(fs\join("testdata", name: kustomization), dst: fs\join(dir, name: "kustomization.yaml"));
+    fs\copyFile(fs\join(testdataDir(), name: kustomization), dst: fs\join(dir, name: "kustomization.yaml"));
     foreach (name in files) {
-        fs\copyFile(fs\join("testdata", name: name), dst: fs\join(dir, name: name));
+        fs\copyFile(fs\join(testdataDir(), name: name), dst: fs\join(dir, name: name));
     }
     return dir;
 }
@@ -1259,7 +1265,7 @@ test "a field the reader does not know raises naming it" {
 }
 
 test "the dev overlay builds the paranoid base into magus-dev" {
-    final objects = build("../../deploy/kustomize/overlays/dev") catch [<Resource>];
+    final objects = build(fs\join(vcs\root(), name: "deploy/kustomize/overlays/dev")) catch [<Resource>];
     std\assert(objects.len() == 9, message: "nine objects, got {objects.len()}");
     foreach (r in objects) {
         std\assert(r.kind() == "Namespace" or r.ns() == "magus-dev", message: "{r.id()} outside magus-dev");
@@ -1286,7 +1292,7 @@ fun edgeLabels(f: figure\Figure) > [str] !> any {
 }
 
 test "the dev overlay draws one edge per relation" {
-    final f = figureOf(build("../../deploy/kustomize/overlays/dev") catch [<Resource>], id: "t", title: "dev") catch figure\of("empty");
+    final f = figureOf(build(fs\join(vcs\root(), name: "deploy/kustomize/overlays/dev")) catch [<Resource>], id: "t", title: "dev") catch figure\of("empty");
     final labels = edgeLabels(f) catch [<str>];
     std\assert(labels.join("|") == "allow 443|allow 53|deny all|mounts|mounts|runs as|selects", message: "{labels}");
     std\assert(f.unscopedWhy != "", message: "the figure says why it draws no directory");
