@@ -2298,7 +2298,7 @@ a place in a queue.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|rm|prune|pause|resume> [flags]",
+	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume> [flags]",
 	Children: []cmdline.Command{
 		{
 			Name:  "fork",
@@ -2402,6 +2402,18 @@ shows what it is doing.`,
 			Usage: "magus job watch <job>",
 		},
 		{Name: "run", Short: "Submit one of the server's own jobs and return"},
+		{
+			Name:  "graph",
+			Short: "Draw the live plan, one figure per group of jobs",
+			Description: "Draw the live jobs: a box per job tagged with its state and holder, an edge per fork, merge " +
+				"and declared dependency. A plan larger than one figure holds splits into an overview, one box per " +
+				"group of jobs, and a figure per group, each inside magus/figure's budgets. -o svg writes each figure " +
+				"to <id>.svg in --dir and prints one path per line, overview first; the same plan writes the same bytes.",
+			Flags: []cmdline.Flag{
+				{Name: "dir", Kind: cmdline.String, Doc: "Directory for the SVG files (default: job-graph/ in the workspace cache dir)"},
+			},
+			Usage: "magus job graph [-o svg] [--dir <dir>] [flags]",
+		},
 		{
 			Name:  "rm",
 			Short: "Remove one job from the plan",

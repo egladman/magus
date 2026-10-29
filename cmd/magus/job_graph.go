@@ -3,24 +3,34 @@ package main
 import (
 	"cmp"
 	"context"
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/figure"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -782,4 +792,491 @@ func gradesSymbols(rows []types.Job, id string) bool {
 		}
 	}
 	return false
+}
+
+// jobGraphCommand is `magus job graph`: the live plan as figures that fit
+// magus/figure's budgets. -o svg writes them and prints each path.
+func jobGraphCommand(ctx context.Context, root string, args []string) error {
+	var gf *flaggen.JobGraphFlags
+	pos, err := commandParse("job graph", args, func(fs *flag.FlagSet) {
+		gf = flaggen.BindJobGraph(fs)
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus job graph [-o svg] [--dir <dir>] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Draw the live jobs as a plan: one box per job, an edge per fork,")
+			fmt.Fprintln(os.Stderr, "merge and declared dependency, each box tagged with its state and")
+			fmt.Fprintln(os.Stderr, "naming its holder. A plan larger than one figure holds splits into an")
+			fmt.Fprintln(os.Stderr, "overview, one box per group of jobs, and a figure per group.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Without -o it prints each figure's boxes and edges. -o svg writes")
+			fmt.Fprintln(os.Stderr, "each figure to <id>.svg in --dir and prints one path per line,")
+			fmt.Fprintln(os.Stderr, "the overview first. The same plan writes the same bytes.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Example:")
+			fmt.Fprintln(os.Stderr, "  magus job graph -o svg --dir /tmp/plan")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			printOwnDefaults(fs)
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return exit.Usagef("magus job graph: takes no arguments (got %q)", pos[0])
+	}
+	opts, err := output.Parse(global.output, outputSVG)
+	if err != nil {
+		return exit.Usagef("magus job graph: %s", err)
+	}
+	if gf.Dir != "" && opts.Format != outputSVG {
+		return exit.Usagef("magus job graph: --dir names where -o svg writes; add -o svg")
+	}
+	root = resolveRootOrEmpty(root)
+	store, err := openJobs(ctx, root, jobOpen{})
+	if err != nil {
+		return err
+	}
+	list, err := store.Report(ctx, time.Now().Unix(), globalCfg.Jobs.StaleAfter)
+	if err != nil {
+		return err
+	}
+	list, _ = withoutEnded(list)
+	plan := newJobPlan(list.Jobs)
+	figs := plan.figures()
+	switch opts.Format {
+	case outputSVG:
+		dir := gf.Dir
+		if dir == "" {
+			cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+			if err != nil {
+				return err
+			}
+			dir = filepath.Join(cacheDir, "job-graph")
+		}
+		paths, err := writePlanSVGs(ctx, plan, figs, dir)
+		if err != nil {
+			return err
+		}
+		return emitNames(os.Stdout, paths)
+	case outputName:
+		ids := make([]string, len(figs))
+		for i, f := range figs {
+			ids[i] = f.ID
+		}
+		return emitNames(os.Stdout, ids)
+	case outputText:
+		plan.print(os.Stdout, figs)
+		return nil
+	default:
+		return emitFormatted(opts, figs)
+	}
+}
+
+// outputSVG is `magus job graph`'s own -o format.
+const outputSVG output.Format = "svg"
+
+// The budgets magus/figure holds one figure to.
+const (
+	planMaxNodes = 9
+	planMaxEdges = 12
+)
+
+// planEdgeKind is what joins two jobs. Where several kinds join
+// two boxes, the first in planEdgeKinds is drawn.
+type planEdgeKind string
+
+const (
+	planForked planEdgeKind = "forked"
+	planMerges planEdgeKind = "merges"
+	planAfter  planEdgeKind = "after"
+)
+
+var planEdgeKinds = []planEdgeKind{planForked, planMerges, planAfter}
+
+// planEdge runs from the forking, merging or depended-on job.
+type planEdge struct {
+	Src  string       `json:"src"`
+	Dst  string       `json:"dst"`
+	Kind planEdgeKind `json:"kind"`
+}
+
+// planNode is one box: a job, or a group a figure of its own draws.
+type planNode struct {
+	Name  string      `json:"name"`
+	Job   string      `json:"job,omitempty"`
+	Group *planFigure `json:"-"`
+	Draws string      `json:"figure,omitempty"`
+}
+
+// planFigure is one figure of the plan. Jobs counts its groups' jobs.
+type planFigure struct {
+	ID    string     `json:"id"`
+	Title string     `json:"title"`
+	Jobs  []string   `json:"jobs"`
+	Nodes []planNode `json:"nodes"`
+	Edges []planEdge `json:"edges"`
+}
+
+// jobPlan is the job rows as a forest. A job hangs from its fork
+// parent, else from the first integrator that merges it.
+type jobPlan struct {
+	byID     map[string]types.Job
+	order    []string
+	children map[string][]string
+	roots    []string
+	edges    []planEdge
+}
+
+func newJobPlan(rows []types.Job) *jobPlan {
+	rows = slices.Clone(rows)
+	slices.SortStableFunc(rows, func(a, b types.Job) int {
+		return cmp.Or(cmp.Compare(a.Created, b.Created), cmp.Compare(a.ID, b.ID))
+	})
+	p := &jobPlan{byID: map[string]types.Job{}, children: map[string][]string{}}
+	for _, r := range rows {
+		if _, dup := p.byID[r.ID]; !dup {
+			p.byID[r.ID] = r
+			p.order = append(p.order, r.ID)
+		}
+	}
+	seen := map[planEdge]bool{}
+	add := func(e planEdge) {
+		_, src := p.byID[e.Src]
+		_, dst := p.byID[e.Dst]
+		if src && dst && e.Src != e.Dst && !seen[e] {
+			seen[e] = true
+			p.edges = append(p.edges, e)
+		}
+	}
+	for _, id := range p.order {
+		r := p.byID[id]
+		add(planEdge{Src: r.Parent, Dst: id, Kind: planForked})
+		for _, merged := range r.Integrates {
+			add(planEdge{Src: id, Dst: merged, Kind: planMerges})
+		}
+		for _, dep := range r.DependsOn {
+			add(planEdge{Src: dep, Dst: id, Kind: planAfter})
+		}
+	}
+	parent := map[string]string{}
+	reaches := func(from, to string) bool {
+		for at := from; at != ""; at = parent[at] {
+			if at == to {
+				return true
+			}
+		}
+		return false
+	}
+	for _, kind := range []planEdgeKind{planForked, planMerges} {
+		for _, e := range p.edges {
+			if e.Kind == kind && parent[e.Dst] == "" && !reaches(e.Src, e.Dst) {
+				parent[e.Dst] = e.Src
+			}
+		}
+	}
+	for _, id := range p.order {
+		if up := parent[id]; up != "" {
+			p.children[up] = append(p.children[up], id)
+		} else {
+			p.roots = append(p.roots, id)
+		}
+	}
+	return p
+}
+
+func (p *jobPlan) subtree(id string) []string {
+	out := []string{id}
+	for _, c := range p.children[id] {
+		out = append(out, p.subtree(c)...)
+	}
+	return out
+}
+
+// figures is the plan split to fit the budgets, the overview first.
+// A group's figure follows the figure that draws it as a box.
+func (p *jobPlan) figures() []*planFigure {
+	title := fmt.Sprintf("Job plan: %d %s", len(p.order), plural(len(p.order), "job", "jobs"))
+	var out []*planFigure
+	taken := map[string]int{}
+	var walk func(f *planFigure, id string)
+	walk = func(f *planFigure, id string) {
+		taken[id]++
+		if n := taken[id]; n > 1 {
+			id = fmt.Sprintf("%s-%d", id, n)
+		}
+		f.ID = id
+		out = append(out, f)
+		for _, n := range f.Nodes {
+			if n.Group != nil {
+				walk(n.Group, "plan-"+planSlug(n.Name))
+			}
+		}
+	}
+	walk(p.group(title, p.roots), "plan")
+	for _, f := range out {
+		for i, n := range f.Nodes {
+			if n.Group != nil {
+				f.Nodes[i].Draws = n.Group.ID
+			}
+		}
+	}
+	return out
+}
+
+// group draws the subtrees under tops: every job when they fit, else
+// the top job and a box per child subtree, bundled by fit.
+func (p *jobPlan) group(title string, tops []string) *planFigure {
+	var jobs []string
+	for _, t := range tops {
+		jobs = append(jobs, p.subtree(t)...)
+	}
+	f := &planFigure{Title: title, Jobs: jobs}
+	flat := make([]planNode, len(jobs))
+	for i, id := range jobs {
+		flat[i] = planNode{Name: id, Job: id}
+	}
+	if edges := p.between(flat); len(flat) <= planMaxNodes && len(edges) <= planMaxEdges {
+		f.Nodes, f.Edges = flat, edges
+		return f
+	}
+	var head []planNode
+	rest := tops
+	if len(tops) == 1 {
+		head = []planNode{{Name: tops[0], Job: tops[0]}}
+		rest = p.children[tops[0]]
+	}
+	parts := make([]planNode, len(rest))
+	for i, t := range rest {
+		parts[i] = p.box(t)
+	}
+	f.Nodes = p.fit(head, parts)
+	f.Edges = p.between(f.Nodes)
+	return f
+}
+
+// box is the subtree under id as one box.
+func (p *jobPlan) box(id string) planNode {
+	if len(p.children[id]) == 0 {
+		return planNode{Name: id, Job: id}
+	}
+	n := len(p.subtree(id))
+	return planNode{Name: id, Group: p.group(fmt.Sprintf("%s: %d jobs", id, n), []string{id})}
+}
+
+// fit is head then parts, folding the tail of parts into bundles when
+// they overflow. It takes the fewest bundles that each fit whole, and
+// more while the edges overflow. A bundle's figure fits it the same way.
+func (p *jobPlan) fit(head, parts []planNode) []planNode {
+	nodes := append(slices.Clone(head), parts...)
+	if len(nodes) <= planMaxNodes && len(p.between(nodes)) <= planMaxEdges {
+		return nodes
+	}
+	room := planMaxNodes - len(head)
+	least := max(1, min(room, ceilDiv(len(parts)-room, planMaxNodes-1)))
+	if len(head) == 0 {
+		least = max(least, 2)
+	}
+	for bundles := least; bundles <= room; bundles++ {
+		loose := room - bundles
+		if loose >= len(parts) {
+			continue
+		}
+		nodes = append(slices.Clone(head), parts[:loose]...)
+		for chunk := range slices.Chunk(parts[loose:], ceilDiv(len(parts)-loose, bundles)) {
+			nodes = append(nodes, p.bundled(chunk))
+		}
+		if len(p.between(nodes)) <= planMaxEdges {
+			break
+		}
+	}
+	return nodes
+}
+
+func ceilDiv(a, b int) int {
+	if a <= 0 {
+		return 0
+	}
+	return (a + b - 1) / b
+}
+
+func (p *jobPlan) bundled(parts []planNode) planNode {
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	name := fmt.Sprintf("%s and %d more", parts[0].Name, len(parts)-1)
+	f := &planFigure{Title: name, Nodes: p.fit(nil, parts)}
+	f.Edges = p.between(f.Nodes)
+	for _, n := range parts {
+		f.Jobs = append(f.Jobs, n.jobs()...)
+	}
+	return planNode{Name: name, Group: f}
+}
+
+func (n planNode) jobs() []string {
+	if n.Group != nil {
+		return n.Group.Jobs
+	}
+	return []string{n.Job}
+}
+
+// between is the plan's edges among nodes, one per ordered pair. An
+// edge with an end in no box belongs to a figure further up.
+func (p *jobPlan) between(nodes []planNode) []planEdge {
+	at := map[string]string{}
+	for _, n := range nodes {
+		for _, id := range n.jobs() {
+			at[id] = n.Name
+		}
+	}
+	type pair struct{ src, dst string }
+	kinds := map[pair]planEdgeKind{}
+	var order []pair
+	for _, e := range p.edges {
+		k := pair{at[e.Src], at[e.Dst]}
+		if k.src == "" || k.dst == "" || k.src == k.dst {
+			continue
+		}
+		have, ok := kinds[k]
+		if !ok {
+			order = append(order, k)
+		}
+		if !ok || slices.Index(planEdgeKinds, e.Kind) < slices.Index(planEdgeKinds, have) {
+			kinds[k] = e.Kind
+		}
+	}
+	out := make([]planEdge, len(order))
+	for i, k := range order {
+		out[i] = planEdge{Src: k.src, Dst: k.dst, Kind: kinds[k]}
+	}
+	return out
+}
+
+func planSlug(name string) string {
+	slug := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		}
+		return '-'
+	}, name)
+	for strings.Contains(slug, "--") {
+		slug = strings.ReplaceAll(slug, "--", "-")
+	}
+	return strings.Trim(slug, "-")
+}
+
+func planUnfinished(state types.JobState) bool {
+	return state == types.StateDeclared || state == types.StateRunning
+}
+
+// figureRecord is f as a magus/figure record. A group's box links to
+// the file writePlanSVGs writes its figure to.
+func (p *jobPlan) figureRecord(f *planFigure) figure.Figure {
+	plain, optional := figure.Look("plain"), figure.Look("optional")
+	solid, dashed := figure.Stroke("plain"), figure.Stroke("optional")
+	rec := figure.Figure{
+		ID:          f.ID,
+		Title:       f.Title,
+		Eyebrow:     "job plan",
+		Desc:        "A box is a job with its state and holder, or a group another figure draws. A solid edge is a fork or a merge, a dashed one a dependency.",
+		Direction:   figure.Direction("down"),
+		UnscopedWhy: "a plan's jobs are units of work, not directories",
+	}
+	actors := map[string]figure.Actor{}
+	anyOpen := false
+	for _, n := range f.Nodes {
+		a := figure.Actor{Name: n.Name, Look: &plain}
+		open := 0
+		for _, id := range n.jobs() {
+			if planUnfinished(p.byID[id].State) {
+				open++
+			}
+		}
+		if n.Group != nil {
+			a.Sub = fmt.Sprintf("%d jobs, %d unfinished", len(n.Group.Jobs), open)
+			a.Tag = "group"
+			a.Link = n.Draws + ".svg"
+		} else {
+			a.Sub = jobHolderCell(p.byID[n.Job])
+			a.Tag = orDash(string(p.byID[n.Job].State))
+		}
+		if open > 0 {
+			a.Look = &optional
+			anyOpen = true
+		}
+		actors[n.Name] = a
+		rec.Boxes = append(rec.Boxes, figure.Box{Actor: &a})
+	}
+	for _, e := range f.Edges {
+		src, dst := actors[e.Src], actors[e.Dst]
+		fl := figure.Flow{Src: figure.End{Actor: &src}, Dst: figure.End{Actor: &dst}, Stroke: &solid}
+		switch e.Kind {
+		case planMerges:
+			fl.Label = "merges"
+		case planAfter:
+			fl.Label, fl.Stroke = "after", &dashed
+		}
+		rec.Flows = append(rec.Flows, fl)
+	}
+	if anyOpen {
+		rec.Legends = append(rec.Legends, figure.Legend{Look: optional, Label: "not finished"})
+	}
+	return rec
+}
+
+// drawPlanFigure paints rec in a session of its own, as Draw needs.
+func drawPlanFigure(ctx context.Context, rec figure.Figure) (string, error) {
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+	buzzstd.RegisterWithOutput(sess, io.Discard)
+	bindings.RegisterMagusRecordTypes(sess)
+	sess.SetModuleDecls("magus/figure", figure.Source)
+	return figure.Draw(ctx, sess, rec, "")
+}
+
+// writePlanSVGs writes each figure to dir as <id>.svg. It draws every
+// figure before writing any, so a refusal writes nothing.
+func writePlanSVGs(ctx context.Context, p *jobPlan, figs []*planFigure, dir string) ([]string, error) {
+	svgs := make([]string, len(figs))
+	for i, f := range figs {
+		svg, err := drawPlanFigure(ctx, p.figureRecord(f))
+		if err != nil {
+			return nil, fmt.Errorf("magus job graph: draw %s: %w", f.ID, err)
+		}
+		svgs[i] = svg
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("magus job graph: %w", err)
+	}
+	paths := make([]string, len(figs))
+	for i, f := range figs {
+		paths[i] = filepath.Join(dir, f.ID+".svg")
+		if err := os.WriteFile(paths[i], []byte(svgs[i]), 0o644); err != nil {
+			return nil, fmt.Errorf("magus job graph: %w", err)
+		}
+	}
+	return paths, nil
+}
+
+func (p *jobPlan) print(out io.Writer, figs []*planFigure) {
+	for i, f := range figs {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintf(out, "%s: %s\n", f.ID, f.Title)
+		for _, n := range f.Nodes {
+			if n.Group != nil {
+				fmt.Fprintf(out, "  %s: %d jobs in %s\n", n.Name, len(n.Group.Jobs), n.Draws)
+				continue
+			}
+			row := p.byID[n.Job]
+			fmt.Fprintf(out, "  %s: %s, %s\n", n.Name, orDash(string(row.State)), jobHolderCell(row))
+		}
+		for _, e := range f.Edges {
+			fmt.Fprintf(out, "  %s -> %s (%s)\n", e.Src, e.Dst, e.Kind)
+		}
+	}
 }

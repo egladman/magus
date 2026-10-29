@@ -343,6 +343,8 @@ const (
 	FlagJobGrantReason = "reason"
 	// job grant: --revoke
 	FlagJobGrantRevoke = "revoke"
+	// job graph: --dir
+	FlagJobGraphDir = "dir"
 	// job pause: --reason
 	FlagJobPauseReason = "reason"
 	// job pause: --until
@@ -1591,6 +1593,18 @@ func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobWaitStdin)
 	fs.BoolVar(&f.Integration, FlagJobWaitIntegration, false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
 	cmdline.NegatedBoolVar(fs, &f.Integration, FlagJobWaitIntegration)
+	return &f
+}
+
+// JobGraphFlags are the flags declared for `magus job graph`.
+type JobGraphFlags struct {
+	Dir string // --dir
+}
+
+// BindJobGraph registers `magus job graph`'s flags on fs and returns the destination.
+func BindJobGraph(fs *flag.FlagSet) *JobGraphFlags {
+	var f JobGraphFlags
+	fs.StringVar(&f.Dir, FlagJobGraphDir, "", "Directory for the SVG files (default: job-graph/ in the workspace cache dir)")
 	return &f
 }
 

@@ -3,7 +3,7 @@
 magus\-job \- Fork a job, take it, return it with its result, and verify that result
 .SH SYNOPSIS
 .B magus
-.RI "job <fork|apply|exec|exit|wait|watch|run|rm|prune|pause|resume> [flags]"
+.RI "job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume> [flags]"
 .SH DESCRIPTION
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read paths, plus the one check
@@ -171,6 +171,12 @@ Print the JSON schema a result must satisfy, and exit
 \fB\-\-[no\-]stdin\fR (default: off)
 Read the result from stdin instead of from the job, for one that was never filed
 .RE
+.SS job graph options
+.RS
+.TP
+\fB\-\-dir\fR \fIstring\fR
+Directory for the SVG files (default: job\-graph/ in the workspace cache dir)
+.RE
 .SS job rm options
 .RS
 .TP
@@ -230,6 +236,9 @@ Follow what a job's holder is doing, until interrupted
 .TP
 \fBrun\fR
 Submit one of the server's own jobs and return
+.TP
+\fBgraph\fR
+Draw the live plan, one figure per group of jobs
 .TP
 \fBrm\fR
 Remove one job from the plan
