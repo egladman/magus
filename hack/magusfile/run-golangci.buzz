@@ -115,13 +115,21 @@ export fun issuesIn(report: str, root: str, files: [str]) > [str] !> any {
     return kept;
 }
 
-// issuesAt runs the custom build over packages of the module at dir, lintLib's linters when
-// it is a lib, and returns [issuesIn] files. dir and files are workspace-relative.
+// reportArgs is the argument list issuesAt runs. The default text writer also
+// prints to stdout, so it goes to stderr and stdout stays the JSON report.
+export fun reportArgs(root: str, dir: str, packages: [str]) > [str] {
+    return ["run", "--config", root + "/.golangci.yml", "--output.json.path", "stdout",
+        "--output.text.path", "stderr", "--path-mode", "abs", "--issues-exit-code", "0"]
+        + (if (dir != ".") libArgs(dir) else [<str>]) + packages;
+}
+
+// issuesAt runs the custom build over packages of the module at dir, with
+// lintLib's linters for a lib, and returns [issuesIn] files. Paths are
+// workspace-relative.
 export fun issuesAt(dir: str, packages: [str], files: [str]) > [str] !> any {
     final root = magus\describe.project().workspace;
     final bin = binary();
-    final args = ["run", "--config", root + "/.golangci.yml", "--output.json.path", "stdout",
-        "--path-mode", "abs", "--issues-exit-code", "0"] + (if (dir != ".") libArgs(dir) else [<str>]) + packages;
+    final args = reportArgs(root, dir: dir, packages: packages);
     var printed = "";
     os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, fun () > void !> any {
         printed = proc\exec(bin, args, root + "/" + dir, opts: proc\ExecOptions{quiet = true}).stdout;
@@ -144,4 +152,13 @@ test "only the issues at the files are kept" {
     final report = "\{\"Issues\":[" + mine + "," + theirs + "]\}";
     assert\equal(issuesIn(report, root: "/w", files: ["internal/job/a.go"]), want: ["internal/job/a.go:3: mine (revive)"], message: "one inside, one outside");
     assert\equal(issuesIn(`{"Issues":null}`, root: "/w", files: ["a.go"]).len(), want: 0, message: "a clean run");
+}
+
+test "the text report goes to stderr so stdout stays JSON" {
+    final args = reportArgs("/w", dir: ".", packages: ["./a"]);
+    final at = args.indexOf("--output.text.path");
+    assert\equal(at != null, want: true, message: "the text writer is routed");
+    assert\equal(args[(at ?? 0) + 1], want: "stderr", message: "the text writer prints to stderr");
+    final json = args.indexOf("--output.json.path");
+    assert\equal(args[(json ?? 0) + 1], want: "stdout", message: "the JSON report owns stdout");
 }
