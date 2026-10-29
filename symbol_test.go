@@ -675,6 +675,7 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 	}
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+goSpell+", "+buzzSpell+"]\n")
 	root := w.Root()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
 	reg := NewWorkspaceRegistry()
@@ -820,6 +821,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+goSpell+", "+tsSpell+"]\n")
 	root := w.Root()
 	for dir, file := range map[string]string{"svc": "main.go", "web": "index.ts"} {
 		w.Write(dir+"/magusfile.buzz", "")
@@ -1200,6 +1202,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+spellName+"]\n")
 	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	original := []byte("package main\n\nfunc Tokenize() {}\n")
