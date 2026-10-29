@@ -15,10 +15,13 @@ type Indexer struct {
 	URL      string // install / source page
 }
 
-// indexers maps a canonical language to the external SCIP indexer a built-in spell runs.
-// Go is indexed in process (goindex), so it has none to install.
+// indexers maps a canonical language to the external SCIP indexer a built-in spell runs
+// once the workspace opts it in. Go, Buzz and shell are indexed in process, so they have
+// none to install.
 var indexers = map[string]Indexer{
-	"buzz": {Language: "buzz", Tool: "scip-buzz", URL: "https://github.com/egladman/magus/tree/main/libs/scipbuzz"},
+	"typescript": {Language: "typescript", Tool: "scip-typescript", URL: "https://github.com/sourcegraph/scip-typescript"},
+	"python":     {Language: "python", Tool: "scip-python", URL: "https://github.com/sourcegraph/scip-python"},
+	"rust":       {Language: "rust", Tool: "rust-analyzer", URL: "https://github.com/rust-lang/rust-analyzer"},
 }
 
 // MissingIndexerHint is the fix for an index never built because its indexer, bin as the

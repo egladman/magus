@@ -10,16 +10,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/scip-code/scip/bindings/go/scip"
-	"google.golang.org/protobuf/proto"
 )
 
-// Version is this indexer's version, reported in Metadata.ToolInfo and by
-// `scip-buzz --version`.
+// Version is this indexer's version, reported in Metadata.ToolInfo.
 const Version = "0.1.0"
 
 // Options configures Index.
@@ -114,18 +111,6 @@ func newIndexer(opts Options) (*indexer, error) {
 		return nil, fmt.Errorf("scipbuzz: project root %s is outside workspace root %s", project, workspace)
 	}
 	return ix, nil
-}
-
-// Write encodes idx in the SCIP protobuf wire format.
-func Write(w io.Writer, idx *scip.Index) error {
-	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(idx)
-	if err != nil {
-		return fmt.Errorf("scipbuzz: encode index: %w", err)
-	}
-	if _, err := w.Write(data); err != nil {
-		return fmt.Errorf("scipbuzz: write index: %w", err)
-	}
-	return nil
 }
 
 // indexer holds what one Project, and so one Index call, has read.

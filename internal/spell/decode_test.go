@@ -219,8 +219,8 @@ func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
 	assert.Equal(t, "scip.pack", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
 }
 
-// Every shipped indexer (the in-process indexers, scip-buzz and the opt-in SCIP
-// commands) reaches the runner through the synthesized op, so each one is quiet on success.
+// Every shipped indexer (the in-process indexers and the opt-in SCIP commands) reaches
+// the runner through the synthesized op, so each one is quiet on success.
 func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 	bins := map[string]string{}
 	for name, d := range Builtins() {
@@ -233,7 +233,7 @@ func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 		assert.Truef(t, command.Capture && command.Quiet, "%s: its indexer prints nothing on success", name)
 	}
 	assert.Equal(t, map[string]string{
-		"bash": "", "buzz": "scip-buzz", "go": "go", "python": "scip-python", "rust": "rust-analyzer", "typescript": "scip-typescript",
+		"bash": "", "buzz": "", "go": "go", "python": "scip-python", "rust": "rust-analyzer", "typescript": "scip-typescript",
 	}, bins)
 }
 
