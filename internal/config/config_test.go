@@ -352,8 +352,13 @@ func (s *SymbolIndexersSuite) TestExternalIndexerWaitsForTheOptIn() {
 }
 
 func (s *SymbolIndexersSuite) TestInProcessGoIndexerNeedsNoOptIn() {
-	si := &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "go", Args: []string{"list", "./..."}}}
+	si := &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages, Command: spells.Command{Bin: "go", Args: []string{"./..."}}}
 	s.True(SpellsConfig{}.RunsSymbolIndexer("go", si))
+}
+
+func (s *SymbolIndexersSuite) TestInProcessBuzzIndexerNeedsNoOptIn() {
+	si := &spells.SymbolIndexer{Format: spells.SymbolFormatBuzzModule}
+	s.True(SpellsConfig{}.RunsSymbolIndexer("buzz", si))
 }
 
 func (s *SymbolIndexersSuite) TestNoIndexerNeverRuns() {

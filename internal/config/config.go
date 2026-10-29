@@ -345,7 +345,7 @@ func (s SpellsConfig) RunsSymbolIndexer(name string, si *spells.SymbolIndexer) b
 	if si == nil {
 		return false
 	}
-	if _, inProcess := spells.InProcessGoPatterns(si.Command); inProcess || si.Format != spells.SymbolFormatSCIP {
+	if si.Format != spells.SymbolFormatSCIP {
 		return true
 	}
 	return slices.Contains(s.SymbolIndexers, name)
