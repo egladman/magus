@@ -951,9 +951,9 @@ func TestParityMetadataReportsRevisionAndDirt(t *testing.T) {
 	})
 }
 
-// Ref is Metadata's Ref without the rest, so it must agree with Metadata on the value AND
-// on failing: hack/git-hooks/commit-msg.buzz catches vcs\ref raising on git's unborn
-// branch, and a Ref that answered there would skip that fallback.
+// Ref is Metadata's Ref without the rest, so it must agree with Metadata on the
+// value AND on failing. Callers catch vcs\ref raising on git's unborn branch.
+// A Ref that answered there would skip their fallback.
 func TestParityRefAgreesWithMetadata(t *testing.T) {
 	agree := func(t *testing.T, b parityBackend, dir, state string) string {
 		t.Helper()

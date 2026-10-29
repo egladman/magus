@@ -418,7 +418,7 @@ test "a body, a second -m and an attribution are denied" {
     std\assert(askReason(["jj", "commit", "-m", "trim a fragment\n\nGenerated with a tool"]).indexOf("an attribution") != null, message: "in the message");
 }
 
-test "a commit on the base branch takes the conventional subject the commit-msg hook requires" {
+test "a commit on the base branch takes the conventional subject" {
     final onBase = fun (call: [str]) > GuardVerdict {
         return judged(helpers\vcsRequest([call]), baseBranch: "main");
     };

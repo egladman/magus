@@ -189,10 +189,8 @@ nothing. The rules they enforce:
 - The shim sets `BUZZ_INCLUDE_PATH` to the project directory, so a hook imports workspace
   Buzz by its project-relative path.
 
-The magus repository's own
-[`commit-msg.buzz`](https://github.com/egladman/magus/blob/main/hack/git-hooks/commit-msg.buzz)
-is the worked example: it refuses a commit made directly on the base branch whose subject
-is not a conventional commit, by the rule CI applies to pull request titles.
+The magus repository installs no hook of its own. Its commit subject rule lives in the
+guard, which judges only an agent's commit, so no git hook runs on a person's commit.
 
 Two limits worth knowing. A hook runs only where someone installed it and did not pass
 `--no-verify`, so anything that must hold belongs in CI as well. And `magus server start`

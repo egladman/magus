@@ -666,10 +666,10 @@ folds the fragments into its manifest. `changes/README.md` has the format, and
 group fails the check.
 
 Your branch's own commits are squashed away, so they keep the lowercase
-imperative style with no prefix. `magus run git-hooks-install .` installs this
-repository's git hooks from `hack/git-hooks/`; its `commit-msg` hook applies the
-title rule only to commits made directly on `main`. `magus run git-hooks-remove .`
-takes them out again. To add a hook, see
+imperative style with no prefix. The guard judges an agent's commit subject, and
+applies the title rule only to commits made directly on `main`. No git hook runs
+on your own commit. `magus run git-hooks-remove:rw .` deletes the `commit-msg`
+shim an earlier checkout installed. To add a hook, see
 [Your own hooks, in Buzz](https://eli.gladman.cc/magus/guides/integrations/git/#your-own-hooks-in-buzz).
 
 ## Workflow targets, not inline logic

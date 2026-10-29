@@ -16,7 +16,6 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `magusfile/` | modules with no `main` | magusfiles and CI, through targets |
 | `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `lint-rules` target |
 | `policy/` | this repository's guard rules | `magus guard`, through the root magusfile |
-| `git-hooks/` | git hooks | git, once the root `git-hooks-install` target installs them |
 | `docs/` | the committed screenshots' capture | a person refreshing them |
 | `testdata/`, `testdata-upstream/` | the fixtures the scripts' tests read | the tests |
 

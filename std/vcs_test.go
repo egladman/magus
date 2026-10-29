@@ -310,8 +310,8 @@ func canonical(t *testing.T, dir string) string {
 	return resolved
 }
 
-// A repository's first commit is made on an unborn branch, and hack/git-hooks/commit-msg.buzz
-// falls back to symbolic-ref only because vcs\ref raises there.
+// A repository's first commit is made on an unborn branch.
+// vcs\ref raises there.
 func TestVcsRefRaisesOnAnUnbornBranch(t *testing.T) {
 	repo := testkit.NewRepository(t, nil)
 	repo.Git("update-ref", "-d", "refs/heads/main")
