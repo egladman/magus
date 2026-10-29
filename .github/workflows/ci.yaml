@@ -693,8 +693,8 @@ jobs:
       # a signature compared across two different environments moves for reasons the author
       # did not write.
       #
-      # continue-on-error: an index that fails leaves the advisors reporting less, which is
-      # what they do on any workspace with no index, and never fails a pull request.
+      # continue-on-error: an index that fails leaves the advisors reporting less, and never
+      # fails a pull request. The step after it says so on the run.
       - name: Index this tree and the merge base
         id: baseline
         continue-on-error: true
@@ -708,6 +708,13 @@ jobs:
           magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
             --tee "$RUNNER_TEMP/base-graph.json" -q > /dev/null
           echo "path=$RUNNER_TEMP/base-graph.json" >> "$GITHUB_OUTPUT"
+
+      - name: Report an index that failed
+        if: steps.baseline.outcome == 'failure'
+        run: |
+          msg="the symbol index of this tree or its merge base failed, so the exported-api and other symbol advisors judged nothing; see the step above"
+          echo "::error title=advisors ran without an index::${msg}"
+          echo "**advisors ran without an index:** ${msg}" >> "$GITHUB_STEP_SUMMARY"
 
       # Every advisor, each silent unless it has something to say. They live in the
       # action so other workspaces get them with one `uses:` line; turn one off by name

@@ -70,6 +70,9 @@ final QUEUE_STATUS = "merge-queue";
 // HYGIENE is pr.yaml's job: the title check and the changelog fragment lint.
 final HYGIENE = "pr hygiene";
 final GREEN = ["SUCCESS", "SKIPPED", "NEUTRAL"];
+// REQUIRED are the checks a merge needs, which never skip on purpose: one skipped by an
+// if: on a failed or empty plan judged nothing, so it fails.
+final REQUIRED = ["ci gate", HYGIENE];
 // A run that never got to judge the change; rerunning it is safe.
 final TRANSIENT = ["CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"];
 // Steps that prepare the runner before any of the change's own work: a job that failed
@@ -487,10 +490,19 @@ export fun intent(p: Pull, open: [Pull]) > bool {
     return false;
 }
 
+// failing lists the checks that did not pass. A skip passes only beside a check that
+// succeeded, and never for a REQUIRED one.
 fun failing(checks: [Check]) > [Check] {
+    var judged = false;
+    foreach (c in checks) {
+        if (c.conclusion == "SUCCESS") {
+            judged = true;
+        }
+    }
     final acc = mut[<Check>];
     foreach (c in checks) {
-        if (GREEN.indexOf(c.conclusion) == null and c.conclusion != "PENDING") {
+        final skippedUnjudged = c.conclusion == "SKIPPED" and (!judged or REQUIRED.indexOf(c.name) != null);
+        if (skippedUnjudged or (GREEN.indexOf(c.conclusion) == null and c.conclusion != "PENDING")) {
             acc.append(c);
         }
     }
@@ -3376,6 +3388,11 @@ test "the checks on the head decide running, green, red-inherited and red" {
     expect([green("t"), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
     expect([failed("magus shard 0: ."), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
     expect([green("t"), Check{ name = "u", conclusion = "SKIPPED" }], facts: Facts{}, want: "green");
+    final gateSkipped = expect([green("magus plan"), Check{ name = "ci gate", conclusion = "SKIPPED", run = "11" }], facts: Facts{}, want: "red");
+    assert\equal(gateSkipped.newChecks, want: ["ci gate"], message: "a required check skipped judged nothing");
+    final allSkipped = expect([Check{ name = "magus shard 0: .", conclusion = "SKIPPED" }, Check{ name = "docs figures", conclusion = "SKIPPED" }],
+        facts: Facts{}, want: "red");
+    assert\equal(allSkipped.newChecks.len(), want: 2, message: "skips with nothing that succeeded never read green");
 
     final inherited = expect([green("t"), failed("magus shard 0: ."), failed("ci gate")],
         facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] }, want: "red-inherited");
