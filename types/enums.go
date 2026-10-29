@@ -191,7 +191,7 @@ func (v BindingStatus) Values() []string { return bindingStatuses.Strings() }
 func (v BindingStatus) Valid() bool      { return bindingStatuses.Valid(v) }
 func (v BindingStatus) String() string   { return enum.String(v) }
 
-var mcpTransports =enum.Set[McpTransport]{McpStdio, McpHTTP}
+var mcpTransports = enum.Set[McpTransport]{McpStdio, McpHTTP}
 
 func (v McpTransport) Values() []string { return mcpTransports.Strings() }
 func (v McpTransport) Valid() bool      { return mcpTransports.Valid(v) }

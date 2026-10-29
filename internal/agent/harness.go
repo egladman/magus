@@ -81,9 +81,9 @@ type HarnessDescriptor struct {
 	// UnsupportedHooks are the points no hook binds, each with its reason.
 	UnsupportedHooks []types.HookBinding `json:"unsupported_hooks,omitempty"`
 	MCP              *types.McpServer    `json:"mcp,omitempty"`
-	Prompts  []types.Prompt      `json:"prompts,omitempty"`
-	Agents   []types.AgentFile   `json:"agents,omitempty"`
-	Settings []types.Setting     `json:"settings,omitempty"`
+	Prompts          []types.Prompt      `json:"prompts,omitempty"`
+	Agents           []types.AgentFile   `json:"agents,omitempty"`
+	Settings         []types.Setting     `json:"settings,omitempty"`
 	// Limits reaches the hook through the limits file install writes beside the tool rows.
 	Limits types.Limits `json:"limits,omitzero"`
 	// Tools is the host's tool table, nil for a harness that declares none.
