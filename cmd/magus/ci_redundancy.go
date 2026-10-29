@@ -284,14 +284,18 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 // renderGreenGate is the matched green gate's line, and the projects it covered that only
 // undeclared files selected.
 func renderGreenGate(rec sessions.GateRecord) string {
-	inv := cmp.Or(rec.Inv, "unrecorded")
 	out := fmt.Sprintf("  green gate: run %s, branch %s, commit %s, recorded %s (%s ago), fingerprint %s",
-		inv, rec.Ref, shortCommit(rec.Commit), rec.At.UTC().Format(time.RFC3339), gateAge(rec.At), shortFingerprint(rec.Fingerprint))
-	if n := len(rec.UndeclaredSeeds); n > 0 {
-		out += fmt.Sprintf("\n  that gate covered %d project(s) selected only by files nothing declares (%s): %s",
-			n, types.UndeclaredSeedingFile, strings.Join(rec.UndeclaredSeeds, ", "))
+		cmp.Or(rec.Inv, "unrecorded"), rec.Ref, shortCommit(rec.Commit), rec.At.UTC().Format(time.RFC3339), gateAge(rec.At), shortFingerprint(rec.Fingerprint))
+	return out + undeclaredSeeds(rec.UndeclaredSeeds)
+}
+
+// undeclaredSeeds names the projects a gate covered that only undeclared files selected.
+func undeclaredSeeds(seeds []string) string {
+	if len(seeds) == 0 {
+		return ""
 	}
-	return out
+	return fmt.Sprintf("\n  that gate covered %d project(s) selected only by files nothing declares (%s): %s",
+		len(seeds), types.UndeclaredSeedingFile, strings.Join(seeds, ", "))
 }
 
 // renderDelta is what changed since the matched gate, each file with its tier and class.

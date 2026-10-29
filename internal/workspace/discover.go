@@ -625,35 +625,25 @@ func renderMagusfile(p discoveryProject) (string, map[string]int, error) {
 		emit("%s", imp)
 	}
 	emit("")
-	emit("magus\\project({")
-	emit(`    "spells": [%s],`, strings.Join(mapNames(p.Spells, handles), ", "))
-	if p.Name != "" {
-		name, err := buzzString(p.Name)
-		if err != nil {
-			return "", nil, fmt.Errorf("discovery: %s: name: %w", p.Path, err)
-		}
-		emit(`    "name": %s,`, name)
+	block, err := projectBlock(p, handles)
+	if err != nil {
+		return "", nil, err
 	}
-	if len(p.DependsOn) > 0 {
-		deps, err := dependsOnLiterals(p)
-		if err != nil {
-			return "", nil, err
-		}
-		emit(`    "depends_on": [%s],`, strings.Join(deps, ", "))
+	for _, l := range block {
+		emit("%s", l)
 	}
-	emit("});")
 
 	lines := map[string]int{}
 	for _, t := range p.Targets {
 		emit("")
 		lines[t.Name] = line
 		emit("export fun %s(ctx: magus\\Context, args: [str]) > void {", t.Name)
-		for _, s := range t.Steps {
-			op, err := buzzString(s.Op)
-			if err != nil {
-				return "", nil, fmt.Errorf("discovery: %s: %s: op: %w", p.Path, t.Name, err)
-			}
-			emit("    %s[%s](ctx);", handles[s.Spell], op)
+		steps, err := targetSteps(p.Path, t, handles)
+		if err != nil {
+			return "", nil, err
+		}
+		for _, step := range steps {
+			emit("%s", step)
 		}
 		if len(t.Needs) > 0 {
 			emit("    ctx.needs(%s);", strings.Join(t.Needs, ", "))
@@ -661,6 +651,39 @@ func renderMagusfile(p discoveryProject) (string, map[string]int, error) {
 		emit("}")
 	}
 	return b.String(), lines, nil
+}
+
+// projectBlock is p's magus\project declaration, one line per element.
+func projectBlock(p discoveryProject, handles map[string]string) ([]string, error) {
+	out := []string{"magus\\project({", fmt.Sprintf(`    "spells": [%s],`, strings.Join(mapNames(p.Spells, handles), ", "))}
+	if p.Name != "" {
+		name, err := buzzString(p.Name)
+		if err != nil {
+			return nil, fmt.Errorf("discovery: %s: name: %w", p.Path, err)
+		}
+		out = append(out, fmt.Sprintf(`    "name": %s,`, name))
+	}
+	if len(p.DependsOn) > 0 {
+		deps, err := dependsOnLiterals(p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, fmt.Sprintf(`    "depends_on": [%s],`, strings.Join(deps, ", ")))
+	}
+	return append(out, "});"), nil
+}
+
+// targetSteps is the body line calling each of t's ops through its spell's handle.
+func targetSteps(project string, t discoveryTarget, handles map[string]string) ([]string, error) {
+	out := make([]string, 0, len(t.Steps))
+	for _, s := range t.Steps {
+		op, err := buzzString(s.Op)
+		if err != nil {
+			return nil, fmt.Errorf("discovery: %s: %s: op: %w", project, t.Name, err)
+		}
+		out = append(out, fmt.Sprintf("    %s[%s](ctx);", handles[s.Spell], op))
+	}
+	return out, nil
 }
 
 // spellImports is the import line of each spell, under its handle when that is not its name.
