@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|apply|exec|exit|wait|watch|run|rm|prune|pause|resume\> [flags]
+**magus** job \<fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume\> [flags]
 
 ## Description
 
@@ -103,6 +103,9 @@ them and magus describe job prints one job's terms.
 **--criteria** *string*
 : What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares
 
+**--delivery** *string*
+: How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
+
 **--deny-paths** *string*
 : A path this job may not write, carved out of its write paths; repeatable or comma-separated
 
@@ -174,6 +177,11 @@ them and magus describe job prints one job's terms.
 **--[no-]stdin** (default: off)
 : Read the result from stdin instead of from the job, for one that was never filed
 
+### job graph options
+
+**--dir** *string*
+: Directory for the SVG files (default: job-graph/ in the workspace cache dir)
+
 ### job rm options
 
 **--[no-]force** (default: off)
@@ -228,6 +236,9 @@ them and magus describe job prints one job's terms.
 
 **run**
 : Submit one of the server's own jobs and return
+
+**graph**
+: Draw the live plan, one figure per group of jobs
 
 **rm**
 : Remove one job from the plan

@@ -203,11 +203,28 @@ The precedents the workspace's merged symbol indexes establish, the rows `Graph.
 
 ### conformance
 
-The conformance lens as data: {definition, rows, stale, excluded, answer, indexes}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, anchor, propose, known, source, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is what a check enforces, the committed ratchet value when source is ratchet and the configured anchor otherwise; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value that no known entry accepts, each {id, source, measure}. propose is zero, or a tighter value a person may commit to the ratchet record knowledge.conformance.ratchet names; it is never looser than value, and nothing enforces live. stale lists known entries that no longer violate; magus never writes the record, so a person or a workspace target deletes them, as `magus run format .` does in the magus repository. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a ratchet record that is missing, malformed or looser than its anchor.
+The conformance lens as data: {definition, rows, excluded, answer, indexes, base, ceilings, unmeasured}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, propose, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is the anchor knowledge.conformance configures; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value, each {id, source, measure}. propose is zero, or a tighter anchor a person may configure; it is never looser than value, and nothing enforces live. checks and base hold a change to a conformance ceiling: base is a revision, and ceilings are the files changed since it whose count of violations of a metric in checks rose past their count there, each {key, file, base, head, violations}; a drop is progress, and unmeasured lists each touched file only an external indexer reads, {file, language, reason}, which holds no ceiling. No count is stored in the workspace: it reads the base's measure magus\conformanceBase kept in the user cache, and raises when none is kept or the base has no checks. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a policy it cannot honor or a base it cannot measure whole.
 
-**Signature:** `magus\conformance() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go)
+**Signature:** `magus\conformance([checks], [base]) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go)
+
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `checks`  | `[]string` | yes      |             |
+| `base`    | `string`   | yes      |             |
 
 **Returns:** map[string]any
+
+### conformanceBase
+
+Measures the merge base of base and HEAD for magus\conformance's ceilings and returns the commit. It exports the base and runs magus's in-process Go, Buzz and shell indexers over it with this workspace's configuration, as a library call that opens no workspace and starts no run, then keeps the conformance lens in the user cache per commit, policy and indexer versions, which every checkout on the machine shares; a kept measure is reused. A language only an external indexer reads gets no base measure. Raises MGS1022 outside a workspace, and raises when the base cannot be resolved or an in-process indexer cannot read one of its sources.
+
+**Signature:** `magus\conformanceBase(base) -> string` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `base`    | `string` |          |             |
+
+**Returns:** string
 
 ### symbols
 

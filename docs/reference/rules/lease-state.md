@@ -1,16 +1,16 @@
 ---
-title: "lease-state: a leased write while its row reports a diverged base, a re-entered path, or a bad pattern"
-description: "An advisory by default: it explains, and blocks nothing, on a leased write while its row reports a diverged base, a re-entered path, or a bad pattern."
+title: "lease-state: a leased write on a diverged base, re-entered path or bad pattern; a continue to a returned job"
+description: "An advisory by default: it explains, and blocks nothing, on a leased write on a diverged base, re-entered path or bad pattern; a continue to a returned job."
 tags: [guard, rules, lease-state, advise]
 ---
 
 # lease-state
 
-An advisory by default: it explains, and blocks nothing, on a leased write while its row reports a diverged base, a re-entered path, or a bad pattern.
+An advisory by default: it explains, and blocks nothing, on a leased write on a diverged base, re-entered path or bad pattern; a continue to a returned job.
 
 ## What it catches
 
-A leased write while its row reports a diverged base, a re-entered path, or a bad pattern.
+A leased write on a diverged base, re-entered path or bad pattern; a continue to a returned job.
 
 ## Default and override
 
