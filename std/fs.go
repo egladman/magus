@@ -439,6 +439,9 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 	if err := checkSchemaDowngrade(ctx, path); err != nil {
 		return err
 	}
+	if err := checkEdit(ctx, path, replacing([]byte(content))); err != nil {
+		return err
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("fs.write_file %q: %w", path, err)
 	}
@@ -569,6 +572,9 @@ func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
 	if err := checkSchemaDowngrade(ctx, path); err != nil {
 		return err
 	}
+	if err := checkEdit(ctx, path, replacing([]byte(content))); err != nil {
+		return err
+	}
 	// 0644, matching write_file, so an atomically written file is not readable by a
 	// narrower set of users than a plain one.
 	if err := file.WriteFileAtomic(path, []byte(content), 0o644); err != nil {
@@ -657,6 +663,9 @@ func FsCopyFile(ctx context.Context, src, dst string) error {
 	if err := checkWrite(ctx, dst); err != nil {
 		return err
 	}
+	if err := checkEdit(ctx, dst, copying(src)); err != nil {
+		return err
+	}
 	if err := copyFile(src, dst); err != nil {
 		return fmt.Errorf("fs.copy_file %q -> %q: %w", src, dst, err)
 	}
@@ -697,6 +706,9 @@ func FsCopyDir(ctx context.Context, src, dst string) error {
 			return err
 		}
 		if err := checkWrite(ctx, target); err != nil {
+			return err
+		}
+		if err := checkEdit(ctx, target, copying(path)); err != nil {
 			return err
 		}
 		return copyFile(path, target)
@@ -757,6 +769,74 @@ func checkWrite(ctx context.Context, path string) error {
 		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
 	}
 	return nil
+}
+
+// checkEdit asks the edit judge on ctx about a write
+// that leaves the existing file path holding after(before).
+// A policy with no judge refuses: nothing would grade the write.
+func checkEdit(ctx context.Context, path string, after func(before []byte) ([]byte, error)) error {
+	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	j, ok := editJudgeFromContext(ctx)
+	if !ok {
+		j, ok = workspaceEditJudge(ctx, path)
+	}
+	switch {
+	case !ok && sandbox.PolicyFromContext(ctx) != nil:
+		return fmt.Errorf("fs write %q: refused: this context carries a sandbox policy and no edit judge, so nothing grades the write", path)
+	case !ok, !j.Covers(ctx, path):
+		return nil
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("fs write %q: reading it for the edit judge: %w", path, err)
+	}
+	next, err := after(before)
+	if err != nil {
+		return err
+	}
+	return j.Grade(ctx, path, before, next)
+}
+
+// editJudger is a workspace that grades writes to its own files.
+type editJudger interface{ EditJudge() EditJudge }
+
+// workspaceEditJudge is the judge of the workspace on ctx,
+// for a door that opens it lazily and installs no judge.
+// A path outside the workspace root is not asked about:
+// asking would open the workspace for a temp file.
+func workspaceEditJudge(ctx context.Context, path string) (EditJudge, bool) {
+	if findWorkspaceRoot == nil {
+		return EditJudge{}, false
+	}
+	cwd, _ := CurrentWorkingDirectoryFromContext(ctx)
+	root, err := findWorkspaceRoot(cwd)
+	if err != nil {
+		return EditJudge{}, false
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return EditJudge{}, false
+	}
+	if rel, err := filepath.Rel(root, abs); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return EditJudge{}, false
+	}
+	w, ok := types.WorkspaceFromContext(ctx).(editJudger)
+	if !ok {
+		return EditJudge{}, false
+	}
+	return w.EditJudge(), true
+}
+
+// replacing is a checkEdit after for a write of content.
+func replacing(content []byte) func([]byte) ([]byte, error) {
+	return func([]byte) ([]byte, error) { return content, nil }
+}
+
+// copying is a checkEdit after for a copy of src.
+func copying(src string) func([]byte) ([]byte, error) {
+	return func([]byte) ([]byte, error) { return os.ReadFile(src) }
 }
 
 // schemaStampWindow bounds the read the downgrade guard makes. Every stamp the
@@ -943,6 +1023,10 @@ func FsAppendFile(ctx context.Context, path, content string) error {
 	}
 	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	appended := func(before []byte) ([]byte, error) { return slices.Concat(before, []byte(content)), nil }
+	if err := checkEdit(ctx, path, appended); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)

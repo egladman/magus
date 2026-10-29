@@ -660,7 +660,12 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return v // an unreadable plan is the guard's standing fail-open
+		v.Decision, v.Context, v.Rule = decisionDeny, "", ""
+		v.Reason = denial{
+			Say: fmt.Sprintf("magus workspace: the lease store did not read (%v), so this edit is refused.", err),
+			Why: "An unread store hides the leases that would grade the edit.",
+		}.full()
+		return v
 	}
 	var held []string
 	for _, row := range job.HeldIn(rows, at.workspace) {
@@ -677,6 +682,62 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 		Why: "Nothing would grade the edit. A magus process cannot see the host session its caller is bound by.",
 	}.full()
 	return v
+}
+
+// EditGrade says how GradeEdit grades one rewrite.
+type EditGrade struct {
+	// DryRun judges as [Request.DryRun] does.
+	DryRun bool
+	// InRun passes a declared output:
+	// a target run is how one gets made.
+	InRun bool
+}
+
+// GradeEdit grades a whole-file rewrite of rel in ws
+// that a magus process makes itself.
+// It refuses a declared output, then asks JudgeEdit.
+// rule and reason are empty on a pass;
+// a declared output is refused with no rule.
+func GradeEdit(ctx context.Context, deps Dependencies, ws types.WorkspaceRepository, rel string, before, after []byte, o EditGrade) (rule, reason string) {
+	output, reason := declaredOutput(ctx, ws, rel)
+	switch {
+	case output && o.InRun:
+		return "", ""
+	case reason != "":
+		return "", reason
+	}
+	v := JudgeEdit(ctx, deps, ws.Root(), rel, before, after, o.DryRun)
+	switch v.Decision {
+	case decisionDeny, decisionAsk:
+		return v.Rule, strings.TrimSpace(v.Reason)
+	}
+	return "", ""
+}
+
+// declaredOutput reports a path the workspace declares as an output,
+// with the reason a hand edit of it is refused.
+// A failed classification refuses too:
+// an unknown role is no license to hand-edit.
+func declaredOutput(ctx context.Context, ws types.WorkspaceRepository, path string) (bool, string) {
+	const unclassified = "could not classify it against the workspace's declarations"
+	entries, err := ws.ClassifyFiles(ctx, []string{path})
+	switch {
+	case err != nil:
+		return false, fmt.Sprintf("%s: %v", unclassified, err)
+	case len(entries) != 1:
+		return false, fmt.Sprintf("%s: it gave %d answers, not 1", unclassified, len(entries))
+	}
+	e := entries[0]
+	if e.Role != types.DiffRoleOutput {
+		return false, ""
+	}
+	var by []string
+	for _, c := range e.Claims {
+		if c.Role == types.DiffRoleOutput {
+			by = append(by, strings.TrimSuffix(fmt.Sprintf("%s:%s", c.Project, c.Target), ":"))
+		}
+	}
+	return true, fmt.Sprintf("a declared output of %s: change its source and regenerate it", strings.Join(by, ", "))
 }
 
 // graphReadOnly reports a pipeline stage whose every magus invocation is a graph read.

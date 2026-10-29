@@ -989,50 +989,18 @@ func buzzImporters(g *knowledge.Graph) func(file string) []string {
 	return func(file string) []string { return byTarget[file] }
 }
 
-// renameGrade refuses a declared output, then asks the guard about each rewritten file
-// exactly as a host edit hook would (see [guard.JudgeEdit] for which lease that is), so the
-// lease and claimed-declaration verdicts cannot differ between the two. The edit replaces
-// the whole file, which is what lets the guard place every changed line in its declaration.
-// Under a dry run the guard records nothing, so a preview leaves no trace.
+// renameGrade grades each rewritten file through [guard.GradeEdit],
+// the grader a Buzz fs write meets too,
+// so the two cannot differ on a lease or claim verdict.
+// Under a dry run the guard records nothing.
 //
-// rootOverride is the --root ws was loaded with, as typed: ws.Root() can be another
-// spelling of the same workspace (symlinks resolved), which the memoized load would read
-// as a second one.
+// rootOverride is the --root ws was loaded with, as typed:
+// ws.Root() can be another spelling of the same workspace,
+// which the memoized load would read as a second one.
 func renameGrade(ctx context.Context, ws types.WorkspaceRepository, rootOverride string, dryRun bool) func(string, []byte, []byte) (string, string) {
 	deps := guardDependencies(ctx, rootOverride)
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointCLI)
 	return func(rel string, before, after []byte) (string, string) {
-		if reason := declaredOutputRefusal(ctx, ws, rel); reason != "" {
-			return "", reason
-		}
-		v := guard.JudgeEdit(ctx, deps, ws.Root(), rel, before, after, dryRun)
-		switch v.Decision {
-		case "deny", "ask":
-			return v.Rule, strings.TrimSpace(v.Reason)
-		}
-		return "", ""
+		return guard.GradeEdit(ctx, deps, ws, rel, before, after, guard.EditGrade{DryRun: dryRun})
 	}
-}
-
-// declaredOutputRefusal refuses a path the workspace declares as a target's output. A
-// classification failure refuses too: an unknown role is not a license to hand-edit.
-func declaredOutputRefusal(ctx context.Context, ws types.WorkspaceRepository, path string) string {
-	entries, err := ws.ClassifyFiles(ctx, []string{path})
-	switch {
-	case err != nil:
-		return fmt.Sprintf("could not classify it against the workspace's declarations: %v", err)
-	case len(entries) != 1:
-		return fmt.Sprintf("classifying it against the workspace's declarations gave %d answers, not 1", len(entries))
-	}
-	e := entries[0]
-	if e.Role != types.DiffRoleOutput {
-		return ""
-	}
-	var by []string
-	for _, c := range e.Claims {
-		if c.Role == types.DiffRoleOutput {
-			by = append(by, strings.TrimSuffix(fmt.Sprintf("%s:%s", c.Project, c.Target), ":"))
-		}
-	}
-	return fmt.Sprintf("a declared output of %s: change its source and regenerate it", strings.Join(by, ", "))
 }

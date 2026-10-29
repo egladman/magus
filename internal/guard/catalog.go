@@ -299,7 +299,8 @@ var ruleDocInterpreterScript = types.RuleDoc{
 		"Untouched: --version, -V and --help, `python -m`, `node file.js`, `perl file.pl`, bash and sh, `magus run` and `magus buzz`. " +
 		"A script file is judged by its program too: a node, perl or ruby file that substitutes and writes back a path in the workspace, and a write that leaves one, get this verdict; a program whose every named path lies outside the workspace is untouched. " +
 		"A Buzz program is held to the line it would be typed as: every proc\\exec and proc\\shell a `magus buzz -e` body, stdin heredoc or `magus buzz <script>` file starts, spelled from literals, is judged as that command, so `proc\\exec(\"go\", args: [\"test\", \"./...\"])` meets raw-tool the way `go test ./...` does. " +
-		"That is the guard reading a hooked agent call, not a limit on Buzz: the proc module and the interpreter run anything, and a script run outside the harness is never judged.",
+		"That is the guard reading a hooked agent call, not a limit on Buzz: the proc module runs anything, and a command a script starts outside the harness is never judged. " +
+		"A file write is judged at the hook when its destination is spelled from literals, and at the write in every case, a computed destination included: fs\\writeFile, writeFileAtomic, writeLines, appendFile and the copy methods grade a rewrite of an existing workspace file the way `refs --rename` grades its edits: a declared output is refused, and the lease, claim and policy verdicts are the Edit tool's.",
 }
 
 var ruleDocConflictRewrite = types.RuleDoc{

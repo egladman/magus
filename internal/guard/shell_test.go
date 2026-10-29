@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
@@ -21,7 +23,9 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestEvaluateBashGuard(t *testing.T) {
@@ -2617,4 +2621,65 @@ func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
 		assert.Equal(t, withoutAge(withoutVerdictRef(edit(rel, false))), withoutAge(preview), rel)
 	}
 	assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), 2, "the rename itself is recorded")
+}
+
+type GradeEditSuite struct {
+	suite.Suite
+	ctx  context.Context
+	root string
+}
+
+func TestGradeEdit(t *testing.T) { suite.Run(t, new(GradeEditSuite)) }
+
+func (s *GradeEditSuite) SetupTest() {
+	s.ctx, s.root = fleetFixture(s.T(), fixture.FleetLeases()...)
+	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+}
+
+// workspace classifies rel as role.
+func (s *GradeEditSuite) workspace(rel, role string) *typestest.MockWorkspaceRepository {
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	entry := types.FileEntry{Path: rel, Role: role, Claims: []types.FileClaim{{Role: role, Project: ".", Target: "gen"}}}
+	ws.EXPECT().ClassifyFiles(mock.Anything, []string{rel}).Return([]types.FileEntry{entry}, nil)
+	ws.EXPECT().Root().Return(s.root).Maybe()
+	return ws
+}
+
+func (s *GradeEditSuite) grade(ws types.WorkspaceRepository, rel string, o EditGrade) (string, string) {
+	return GradeEdit(s.ctx, Dependencies{}, ws, rel, []byte("package x\n"), []byte("package y\n"), o)
+}
+
+func (s *GradeEditSuite) TestADeclaredOutputIsRefusedWithNoRule() {
+	rule, reason := s.grade(s.workspace("internal/ledger/store.go", types.DiffRoleOutput), "internal/ledger/store.go", EditGrade{})
+	s.Empty(rule)
+	s.Equal("a declared output of .:gen: change its source and regenerate it", reason)
+}
+
+func (s *GradeEditSuite) TestATargetRunWritesItsDeclaredOutput() {
+	rule, reason := s.grade(s.workspace("cmd/magus/main.go", types.DiffRoleOutput), "cmd/magus/main.go", EditGrade{InRun: true})
+	s.Empty(rule + reason, "the lease would refuse it, and the run's output passes before it is asked")
+}
+
+func (s *GradeEditSuite) TestAnUnclassifiedPathIsRefusedEvenInARun() {
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().ClassifyFiles(mock.Anything, []string{"a.go"}).Return(nil, errors.New("no graph"))
+	_, reason := s.grade(ws, "a.go", EditGrade{InRun: true})
+	s.Equal("could not classify it against the workspace's declarations: no graph", reason)
+}
+
+func (s *GradeEditSuite) TestASourceOutsideTheLeaseMeetsTheLeaseRule() {
+	rule, reason := s.grade(s.workspace("cmd/magus/main.go", "source"), "cmd/magus/main.go", EditGrade{})
+	s.Equal(string(denyRuleLeaseWrite), rule, reason)
+}
+
+func (s *GradeEditSuite) TestASourceInsideTheLeasePasses() {
+	rule, reason := s.grade(s.workspace("internal/ledger/store.go", "source"), "internal/ledger/store.go", EditGrade{})
+	s.Empty(rule + reason)
+}
+
+func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
+	s.T().Setenv(trail.EnvBaggage, "")
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Err: errors.New("store locked")})
+	_, reason := s.grade(s.workspace("docs/readme.md", "source"), "docs/readme.md", EditGrade{})
+	s.Contains(reason, "store locked")
 }
