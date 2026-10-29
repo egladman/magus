@@ -2433,8 +2433,8 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 }
 
 // checkAgentSkills grades the INSTALLED agent skills against the running binary. An
-// upgrade that bumps the skill or knowledge-schema version leaves every checkout's copy
-// behind, and a stale skill does not fail loudly; it quietly teaches an agent last
+// upgrade changing a skill or the knowledge schema leaves every checkout's copy
+// behind. A stale skill does not fail loudly; it quietly teaches an agent last
 // release's verbs.
 //
 // AGENTS.md is graded too but can only ever be ADVICE: magus does not write that file, so
