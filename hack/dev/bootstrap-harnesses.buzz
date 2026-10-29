@@ -33,12 +33,23 @@ fun dirtyGuarded() > [str] !> any {
     return paths;
 }
 
-fun harnessIds(id: str?) > [str] !> any {
-    if (id != null) {
-        return [id!];
-    }
+// loadedHarnesses are the ids of the harnesses this workspace loads.
+// A harness is a spell anyone registers, so there is no list to keep.
+fun loadedHarnesses() > [str] !> any {
     final names = magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim();
     return if (names == "") [<str>] else names.split("\n");
+}
+
+// pickHarnesses is every loaded harness, or the one --id names. An id no
+// loaded harness has is refused, listing the ones there are.
+export fun pickHarnesses(id: str?, loaded: [str]) > [str] !> any {
+    if (id == null) {
+        return loaded;
+    }
+    if (loaded.indexOf(id!) == null) {
+        throw "harness-sync: --id {id!} names no harness this workspace loads; one of {loaded.join(", ")}";
+    }
+    return [id!];
 }
 
 // applyPlan writes what plan says each file lacks under root and returns one line per file it changed.
@@ -77,15 +88,16 @@ export fun main(args: [str]) > void !> any {
         throw "harness-sync: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     refuseDirty(dirtyGuarded());
-    final install = mut ["harness", "install"];
     final id = parsed.values["--id"];
+    final ids = pickHarnesses(id, loaded: loadedHarnesses());
+    final install = mut ["harness", "install"];
     if (id != null) {
         install.append("--id");
         install.append(id!);
     }
     magus\cmd("agent", args: install, opts: magus\CommandOptions{ quiet = true });
     final lines = mut [<str>];
-    foreach (each in harnessIds(id)) {
+    foreach (each in ids) {
         foreach (line in applyPlan(magus\describe.harness(each), root: ".")) {
             lines.append(line);
         }
@@ -106,6 +118,18 @@ test "a dirty spell path is refused, naming the files" {
     }
     assert\isTrue(said.indexOf("spells/harness/codex/spell.buzz, hack/policy/guard.buzz differ from HEAD") != null, message: said);
     refuseDirty([<str>]);
+}
+
+test "an --id no loaded harness has is refused, listing the loaded ones" {
+    var said = "";
+    try {
+        pickHarnesses("cursr", loaded: ["claude-code", "cursor"]);
+    } catch (e: str) {
+        said = e;
+    }
+    assert\equal(said, want: "harness-sync: --id cursr names no harness this workspace loads; one of claude-code, cursor", message: said);
+    assert\equal(pickHarnesses("cursor", loaded: ["claude-code", "cursor"]), want: ["cursor"], message: "a loaded id");
+    assert\equal(pickHarnesses(null, loaded: ["claude-code", "cursor"]), want: ["claude-code", "cursor"], message: "every one");
 }
 
 test "a fragment is merged into an existing file and a content file is written whole" {
