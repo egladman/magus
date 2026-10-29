@@ -1279,7 +1279,7 @@ func baseSkillName(dir string) string {
 // whether the line can be read. The skill-content digest decides currency.
 func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Status {
 	stale := func(detail string) Status {
-		return Status{Location: location, Installed: true, Stale: true, Detail: detail + "; re-run: " + reinstall}
+		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("%s; re-run: %s", detail, reinstall)}
 	}
 	format := stampNumber(stampFormatRe, []byte(body))
 	if format < 0 {

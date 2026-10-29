@@ -1294,8 +1294,10 @@ func (s *deliverySuite) TestAParentHeadOffAStackedJobIsRefused() {
 func (s *deliverySuite) TestApplyCarriesDeliveryAndTheParentHead() {
 	var row Job
 	Declaration{ID: "worker", Delivery: DeliveryStacked, ParentHead: " feat/a "}.Apply(&row)
-	s.Equal(DeliveryStacked, row.Delivery)
-	s.Equal("feat/a", row.ParentHead)
+	var want Job
+	Declaration{ID: "worker"}.Apply(&want)
+	want.Delivery, want.ParentHead = DeliveryStacked, "feat/a"
+	s.Equal(want, row)
 
 	Declaration{ID: "worker"}.ApplySpec(&row)
 	s.Empty(row.Delivery, "a spec naming no delivery clears it")

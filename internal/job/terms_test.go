@@ -41,9 +41,9 @@ func (s *termsDeliverySuite) TestARowWithNoDeliveryPrintsNoLine() {
 func (s *termsDeliverySuite) TestARetryKeepsTheDeliveryAndTheParentHead() {
 	row := briefRow()
 	row.Delivery, row.ParentHead = types.DeliveryStacked, "feat/parent"
-	retried := RetryDeclaration(row)
-	s.Equal(types.DeliveryStacked, retried.Delivery)
-	s.Equal("feat/parent", retried.ParentHead)
+	want := RetryDeclaration(briefRow())
+	want.Delivery, want.ParentHead = types.DeliveryStacked, "feat/parent"
+	s.Equal(want, RetryDeclaration(row))
 }
 
 func briefRow() types.Job {

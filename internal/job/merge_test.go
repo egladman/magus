@@ -181,8 +181,7 @@ func TestPutDelivery(t *testing.T) {
 
 func (s *putDeliverySuite) TestAPutSetsTheDeliveryAndParentHead() {
 	got := applyPut(s.T(), types.JobPut{Delivery: new(types.DeliveryStacked), ParentHead: new("feat/p")}, types.Job{ID: "u1"})
-	s.Equal(types.DeliveryStacked, got.Delivery)
-	s.Equal("feat/p", got.ParentHead)
+	s.Equal(types.Job{ID: "u1", Delivery: types.DeliveryStacked, ParentHead: "feat/p"}, got)
 }
 
 func (s *putDeliverySuite) TestAnUnknownDeliveryIsRefused() {
