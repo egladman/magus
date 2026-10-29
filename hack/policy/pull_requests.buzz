@@ -48,6 +48,7 @@ import "encoding/json";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/commits" as subjects;
+import "./hack/policy/comments" as comments;
 import "./hack/policy/proofread" as decisions;
 import "./hack/magusfile/commits" as conventional;
 import "./hack/magusfile/changelog" as entries;
@@ -2807,4 +2808,278 @@ fun calibration() > [Fixture] {
                 + "A test pins each changed rule beside git's global options (`-C`, `-c`, `--git-dir`, `--no-pager`).",
         },
     ];
+}
+
+// Committed is one file a commit records. before is its text at HEAD, "" when
+// the commit adds it; after is its text as committed.
+export object Committed {
+    path: str,
+    before: str,
+    after: str,
+}
+
+// CommitRead is the files a commit records, or why they could not be read.
+export object CommitRead {
+    files: [Committed],
+    unreadable: str = "",
+}
+
+// The git commit flags that take the next argument as their value.
+final commitValueLongs = ["--message", "--file", "--author", "--date", "--template", "--reuse-message",
+    "--reedit-message", "--fixup", "--squash", "--trailer", "--cleanup", "--pathspec-from-file"];
+final commitValueShorts = "mFcCt";
+
+// commitsAll reports whether a git commit's args record the tracked changes
+// left unstaged too: -a, --all, or an a in a cluster of short flags.
+export fun commitsAll(args: [str]) > bool {
+    var skip = false;
+    foreach (arg in args) {
+        if (skip) {
+            skip = false;
+            continue;
+        }
+        if (arg == "--") {
+            return false;
+        }
+        if (arg == "--all") {
+            return true;
+        }
+        if (commitValueLongs.indexOf(arg) != null) {
+            skip = true;
+            continue;
+        }
+        if (!arg.startsWith("-") or arg.startsWith("--")) {
+            continue;
+        }
+        var k = 1;
+        while (k < arg.len()) {
+            final c = arg.sub(k, len: 1);
+            if (c == "a") {
+                return true;
+            }
+            if (commitValueShorts.indexOf(c) != null) {
+                skip = k == arg.len() - 1;
+                break;
+            }
+            k = k + 1;
+        }
+    }
+    return false;
+}
+
+// commitCall is p's git commit call, or null for any other program. Only git
+// is read: it is the one backend whose index the reader knows.
+fun commitCall(p: helpers\Program) > helpers\VcsCall? {
+    if (p.vcs -> call) {
+        if (call.tool == "git" and call.subcommand == "commit" and call.args.indexOf("--help") == null
+            and call.args.indexOf("-h") == null and call.args.indexOf("--dry-run") == null) {
+            return call;
+        }
+    }
+    return null;
+}
+
+// decideCommitComments holds a git commit to the comment limits the write rule
+// keeps, over the text the commit adds. A commit read cannot read is denied.
+export fun decideCommitComments(programs: [helpers\Program], read: fun (all: bool) > CommitRead) > GuardVerdict {
+    final found = mut [<str>];
+    foreach (p in programs) {
+        final call = commitCall(p);
+        if (call == null) {
+            continue;
+        }
+        final got = read(commitsAll(call!.args));
+        if (got.unreadable != "") {
+            return magus\guard.deny(verdict\opening("the comment check cannot read what this commit records", problem: got.unreadable)
+                + "\nEvery comment a commit adds is held to the house limits, and no rule judged this one's.");
+        }
+        foreach (f in got.files) {
+            foreach (problem in comments\commentProblems(f.path, before: f.before, after: f.after)) {
+                found.append(problem);
+            }
+        }
+    }
+    if (found.len() == 0) {
+        return magus\guard.allow();
+    }
+    return magus\guard.deny(verdict\opening("this commit adds a comment that breaks the house style", problem: found[0]) + "\n"
+        + comments\houseRules() + "\n\n" + found.join("\n")
+        + "\n\nCut each in the working tree, stage it, and commit again. Only the text the commit adds is graded.");
+}
+
+// gitIn runs git in dir. Its stdout comes back as the one file's after text,
+// or unreadable says why git did not run.
+fun gitIn(dir: str, args: [str]) > CommitRead {
+    final run = vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true, allowFailure = true }) catch null;
+    if (run == null) {
+        return CommitRead{ files = [<Committed>], unreadable = "`git {args.join(" ")}` did not start" };
+    }
+    if (run!.code != 0) {
+        return CommitRead{ files = [<Committed>], unreadable = "`git {args.join(" ")}` exited {run!.code}: {run!.stderr.trim()}" };
+    }
+    return CommitRead{ files = [Committed{ path = "", before = "", after = run!.stdout }] };
+}
+
+// committedFile reads the file one `git diff --name-status` row names. It has
+// no file when the row names none this rule grades. root is set for `-a`,
+// which commits the working tree's text.
+fun committedFile(dir: str, row: str, root: str) > CommitRead {
+    final cols = row.split("\t");
+    final path = cols[cols.len() - 1];
+    if (cols.len() < 2 or !comments\gradesComments(path) or generated(path)) {
+        return CommitRead{ files = [<Committed>] };
+    }
+    var before = "";
+    if (!cols[0].startsWith("A")) {
+        final was = gitIn(dir, args: ["show", "HEAD:{cols[1]}"]);
+        if (was.unreadable != "") {
+            return was;
+        }
+        before = was.files[0].after;
+    }
+    if (root != "") {
+        final read = fs\readFile(root + "/" + path) catch null;
+        if (read == null) {
+            return CommitRead{ files = [<Committed>], unreadable = "{root}/{path} cannot be read" };
+        }
+        return CommitRead{ files = [Committed{ path = path, before = before, after = read! }] };
+    }
+    final now = gitIn(dir, args: ["show", ":{path}"]);
+    if (now.unreadable != "") {
+        return now;
+    }
+    return CommitRead{ files = [Committed{ path = path, before = before, after = now.files[0].after }] };
+}
+
+// committedReader reads what a git commit in dir records. That is the staged
+// files, or every changed tracked file for `commit -a`. A file in no graded
+// language, or under a gen/ directory, is left out. Outside a work tree the
+// commit records nothing, since git refuses it.
+export fun committedReader(dir: str) > fun (all: bool) > CommitRead {
+    return fun (all: bool) > CommitRead {
+        if (!(fs\exists(dir) catch false)) {
+            return CommitRead{ files = [<Committed>], unreadable = "the commit's directory {dir} does not exist" };
+        }
+        final inside = vcs\cmd(["rev-parse", "--is-inside-work-tree"], opts: vcs\CommandOptions{ dir = dir, quiet = true, allowFailure = true }) catch null;
+        if (inside == null or inside!.code != 0) {
+            return CommitRead{ files = [<Committed>] };
+        }
+        final listing = if (all) ["diff", "HEAD", "--name-status", "-M", "--diff-filter=AMR"]
+            else ["diff", "--cached", "--name-status", "-M", "--diff-filter=AMR"];
+        final listed = gitIn(dir, args: listing);
+        if (listed.unreadable != "") {
+            return listed;
+        }
+        var root = "";
+        if (all) {
+            final top = gitIn(dir, args: ["rev-parse", "--show-toplevel"]);
+            if (top.unreadable != "") {
+                return top;
+            }
+            root = top.files[0].after.trim();
+        }
+        final files = mut [<Committed>];
+        foreach (row in listed.files[0].after.split("\n")) {
+            final one = committedFile(dir, row: row, root: root);
+            if (one.unreadable != "") {
+                return one;
+            }
+            foreach (f in one.files) {
+                files.append(f);
+            }
+        }
+        return CommitRead{ files = files };
+    };
+}
+
+
+fun committing(files: [Committed]) > fun (all: bool) > CommitRead {
+    return fun (all: bool) > CommitRead {
+        return CommitRead{ files = files };
+    };
+}
+
+fun commitWith(files: [Committed]) > GuardVerdict {
+    return decideCommitComments(commit("trim the key"), read: committing(files));
+}
+
+test "a commit that adds a long comment is refused, quoting the sentence" {
+    final long = "w ".repeat(25) + "w.";
+    final after = "package p\n\nfunc f() \{\n\t// " + long + "\n\tx()\n}\n";
+    final v = commitWith([Committed{ path = "internal/a.go", before = "", after = after }]);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
+    verdict\assertVerdict(v.reason, label: "a long comment in a commit");
+    std\assert(v.reason.indexOf("internal/a.go:4: comment inside a body, a sentence of 26 words, over the limit of 25: \"" + long + "\"") != null, message: v.reason);
+    std\assert(v.reason.indexOf("Limits on the text a write adds") != null, message: "states the limits");
+}
+
+test "a commit beside a long legacy comment passes" {
+    final legacy = "package p\n\nfunc f() \{\n\t// " + "w ".repeat(40) + "w.\n\tx()\n}\n";
+    final v = commitWith([Committed{ path = "a.go", before = legacy, after = legacy + "\nfunc g() \{}\n" }]);
+    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+}
+
+test "a commit of Buzz and TypeScript is graded, and another language is not" {
+    final doc = "// " + "w ".repeat(30) + "w.\n";
+    final buzz = commitWith([Committed{ path = "hack/a.buzz", before = "", after = doc + "export fun f() > void \{}\n" }]);
+    std\assert(buzz.reason.indexOf("hack/a.buzz:1: doc comment on an exported declaration") != null, message: buzz.reason);
+    final ts = commitWith([Committed{ path = "src/a.ts", before = "", after = doc + "export function f() \{}\n" }]);
+    std\assert(ts.reason.indexOf("src/a.ts:1: doc comment on an exported declaration") != null, message: ts.reason);
+    std\assert(commitWith([Committed{ path = "a.py", before = "", after = "# " + "w ".repeat(40) }]).decision == magus\GuardDecision.allow, message: "python");
+}
+
+test "a commit whose files cannot be read is refused, naming why" {
+    final broken = fun (all: bool) > CommitRead {
+        return CommitRead{ files = [<Committed>], unreadable = "`git diff --cached` exited 128: not a git repository" };
+    };
+    final v = decideCommitComments(commit("trim the key"), read: broken);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
+    verdict\assertVerdict(v.reason, label: "an unread commit");
+    std\assert(v.reason.indexOf("exited 128: not a git repository") != null, message: v.reason);
+}
+
+test "only a git commit is read, and -a reads the tracked changes too" {
+    final asked = mut [<bool>];
+    final read = fun (all: bool) > CommitRead {
+        asked.append(all);
+        return CommitRead{ files = [<Committed>] };
+    };
+    decideCommitComments(helpers\vcsRequest([["git", "status"], ["hg", "commit", "-m", "x"], ["git", "commit", "--help"]]), read: read);
+    std\assert(asked.len() == 0, message: "read {asked.len()} times");
+    decideCommitComments(helpers\vcsRequest([["git", "commit", "-am", "trim the key"]]), read: read);
+    decideCommitComments(helpers\vcsRequest([["git", "commit", "-m", "-a is no flag here"]]), read: read);
+    decideCommitComments(helpers\vcsRequest([["git", "commit", "--all", "-m", "x"]]), read: read);
+    decideCommitComments(helpers\vcsRequest([["git", "commit", "-qm", "-a"]]), read: read);
+    std\assert(asked.len() == 4 and asked[0] and !asked[1] and asked[2] and !asked[3], message: "{asked}");
+}
+
+test "committedReader reads the staged text and the text at HEAD" {
+    final dir = fs\tempDir("committed-reader") catch "";
+    std\assert(dir != "", message: "a temp dir");
+    final git = fun (args: [str]) > void {
+        vcs\cmd(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] + args,
+            opts: vcs\CommandOptions{ dir = dir, quiet = true }) catch null;
+    };
+    git(["init", "-q"]);
+    fs\writeFile("{dir}/a.go", content: "package a\n");
+    fs\writeFile("{dir}/notes.md", content: "# notes\n");
+    git(["add", "a.go", "notes.md"]);
+    git(["commit", "-q", "-m", "seed"]);
+    fs\writeFile("{dir}/a.go", content: "package a\n\n// F is staged.\nfunc F() \{}\n");
+    fs\writeFile("{dir}/b.go", content: "package a\n");
+    git(["add", "a.go", "b.go"]);
+    fs\writeFile("{dir}/a.go", content: "package a\n\n// F is not staged.\nfunc F() \{}\n");
+    final staged = committedReader(dir)(false);
+    std\assert(staged.unreadable == "", message: staged.unreadable);
+    std\assert(staged.files.len() == 2, message: "{staged.files.len()} files");
+    std\assert(staged.files[0].path == "a.go" and staged.files[0].before.trim() == "package a" and staged.files[0].after.indexOf("F is staged.") != null, message: staged.files[0].after);
+    std\assert(staged.files[1].path == "b.go" and staged.files[1].before == "", message: staged.files[1].path);
+    final all = committedReader(dir)(true);
+    std\assert(all.unreadable == "" and all.files[0].after.indexOf("F is not staged.") != null, message: "-a reads the working tree: {all.unreadable}");
+    final missing = committedReader("{dir}/gone")(false);
+    std\assert(missing.unreadable.indexOf("does not exist") != null, message: "a dir that is gone: {missing.unreadable}");
+    fs\removeAll("{dir}/.git");
+    final outside = committedReader(dir)(false);
+    std\assert(outside.unreadable == "" and outside.files.len() == 0, message: "outside a work tree: {outside.unreadable}");
+    fs\removeAll(dir);
 }

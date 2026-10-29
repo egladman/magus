@@ -143,6 +143,10 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     final once = fun (key: str) > bool {
         return magus\guard.once(key);
     };
+    final commented = pullRequests\decideCommitComments(programs, read: pullRequests\committedReader(req.dir));
+    if (commented.decision != magus\GuardDecision.allow) {
+        return commented;
+    }
     final pusher = requestPusher(req);
     final topic = fun () > branches\Topic {
         return branchTopic(req.dir);
