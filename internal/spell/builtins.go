@@ -102,9 +102,16 @@ func BuiltinOps() map[string][]string {
 
 // shippedSpells is what loading spells.Shipped() found.
 type shippedSpells struct {
-	builtins map[string]spells.Descriptor
-	dirs     map[string]string // built-in name -> its directory
+	builtins   map[string]spells.Descriptor
+	dirs       map[string]string // built-in name -> its directory
+	sourceOnly map[string]string // directory -> why it is not a built-in
 }
+
+// SourceOnly is every top-level shipped spell that is not a built-in, by directory, with
+// the import that kept it out. A spell that drops out of the built-ins by importing a
+// host module lands here instead of vanishing, so an unknown-spell error and a test can
+// name it.
+func SourceOnly() map[string]string { return maps.Clone(shipped().sourceOnly) }
 
 var shipped = sync.OnceValue(loadShipped)
 
@@ -115,7 +122,7 @@ var shipped = sync.OnceValue(loadShipped)
 // builtinParseModules alone. One
 // that imports a host module (endoflife-date imports http) fails in that session with
 // BZZ2001 and ships as source only: `magus spell pull` copies it into a workspace, which
-// loads it with the host modules. Nothing lists which spell is which.
+// loads it with the host modules. SourceOnly lists each with the import that kept it out.
 //
 // Only a top-level directory is a candidate. A top-level directory with no spell.buzz
 // holds nested spells (harness/cursor), which are providers a workspace wires by import
@@ -134,7 +141,7 @@ func loadShipped() shippedSpells {
 	// provider-carrying ctx ever drive this path.
 	ctx := withBuiltinResolve(context.Background())
 	p := providerFromContext(ctx)
-	out := shippedSpells{builtins: map[string]spells.Descriptor{}, dirs: map[string]string{}}
+	out := shippedSpells{builtins: map[string]spells.Descriptor{}, dirs: map[string]string{}, sourceOnly: map[string]string{}}
 	for _, e := range entries {
 		dir := e.Name()
 		src, err := fs.ReadFile(spells.Shipped(), dir+"/spell.buzz")
@@ -146,7 +153,8 @@ func loadShipped() shippedSpells {
 		}
 		start := time.Now()
 		spec, err := compileBuiltin(ctx, string(src))
-		if errors.As(err, new(hostImportError)) {
+		if hostErr := new(hostImportError); errors.As(err, hostErr) {
+			out.sourceOnly[dir] = fmt.Sprintf("imports %q, a host module a built-in cannot", hostErr.module)
 			continue
 		}
 		if err != nil {
