@@ -762,6 +762,30 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		assert.Equal(t, decisionAdvise, judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
 	})
 
+	// The rule reads the counter at the merge base with origin/main, so the workspace is a
+	// repository whose branch already bumped it once.
+	covered["version-bump-once"] = true
+	t.Run("version-bump-once", func(t *testing.T) {
+		testkit.Isolate(t)
+		const catalog = "internal/agent/catalog.go"
+		repo := testkit.NewRepository(t, map[string]string{catalog: "package agent\n\nconst SkillVersion = 147\n"})
+		repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
+		repo.Git("switch", "-q", "-c", "bump-skills")
+		repo.Commit("bump the skill version", map[string]string{catalog: "package agent\n\nconst SkillVersion = 148\n"})
+		ws := repo.Root()
+		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
+		edit := func(newText string) types.GuardJudgment {
+			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit",
+				"tool_input": map[string]any{"file_path": filepath.Join(ws, catalog), "old_string": "const SkillVersion = 148", "new_string": newText},
+			})})
+		}
+		v := edit("const SkillVersion = 149")
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"version-bump-once"), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "this branch already bumped agent-skill-version from 147 to 148")
+		assert.NotEqual(t, decisionDeny, edit("const SkillVersion = 147").Decision, "back to the base value is allowed")
+	})
+
 	source, err := os.ReadFile(filepath.Join(root, "hack", "policy", "guard.buzz"))
 	require.NoError(t, err)
 	listed := policyRule.FindAllStringSubmatch(string(source), -1)
