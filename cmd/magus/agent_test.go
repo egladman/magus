@@ -348,7 +348,7 @@ func TestStampSkillInjectsProvenanceInsideFrontmatter(t *testing.T) {
 	assert.Contains(t, out, "\n---\nbody\n", "closing --- and body follow the provenance")
 	fmStart := strings.Index(out, "---")
 	fmEnd := strings.Index(out[fmStart+3:], "\n---")
-	assert.Contains(t, out[:fmStart+3+fmEnd], "agent-skill-version:", "version metadata is within the frontmatter")
+	assert.Contains(t, out[:fmStart+3+fmEnd], "skill-stamp-format:", "version metadata is within the frontmatter")
 }
 
 func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
