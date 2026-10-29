@@ -1701,11 +1701,11 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
     }
     if (problems.len() > 0) {
         return magus\guard.deny(verdict\opening(opening(denied, advice: false), problem: problems[0]) + "\n  - "
-            + problems.join("\n  - ") + "\n" + teaching(denied, advice: false), {"rule": ruleName(denied)});
+            + problems.join("\n  - ") + "\n" + teaching(denied, advice: false), opts: {"rule": ruleName(denied)});
     }
     if (advice.len() > 0 and once(key)) {
         return magus\guard.advise(opening(advised, advice: true) + "\n  - " + advice.join("\n  - ") + "\n"
-            + teaching(advised, advice: true), {"rule": ruleName(advised)});
+            + teaching(advised, advice: true), opts: {"rule": ruleName(advised)});
     }
     return magus\guard.allow();
 }
