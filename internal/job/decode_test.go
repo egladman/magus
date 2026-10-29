@@ -432,6 +432,8 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = "30m"
 		case "brief_format":
 			value = "buzz"
+		case "delivery":
+			value = types.DeliveryStacked
 		case "check":
 			value = "test internal/job"
 		case "validation":

@@ -14,6 +14,9 @@ type JobPut struct {
 	Model      *string `json:"model,omitempty"`
 	// BriefFormat sets the row's brief format; empty clears it back to magus.yaml's.
 	BriefFormat *BriefFormat `json:"brief_format,omitempty"`
+	// Delivery and ParentHead: see [Job.Delivery].
+	Delivery   *string `json:"delivery,omitempty"`
+	ParentHead *string `json:"parent_head,omitempty"`
 	// Follows and FreshReason set the row's link to the job it continues; see [Job.Follows].
 	Follows     *string `json:"follows,omitempty"`
 	FreshReason *string `json:"fresh_reason,omitempty"`
