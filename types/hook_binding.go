@@ -28,8 +28,8 @@ type BindingStatus string
 
 const (
 	Bound BindingStatus = "bound"
-	// Unsupported carries a reason citing the host's docs, or
-	// "not verified: <what>".
+	// Unsupported carries a reason citing a fetched URL of the host's
+	// docs, or "not verified: <url> <YYYY-MM-DD>".
 	Unsupported BindingStatus = "unsupported"
 )
 
