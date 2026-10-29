@@ -2244,7 +2244,7 @@ func (s *DelegateToCheckoutSuite) TestABuildBehindHeadLeavesTheCallHere() {
 	placeStub(s.T(), s.repo.Root(), behind, `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.line())
 	s.False(handled)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Empty(out)
 	s.Contains(declined, fmt.Sprintf("built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(behind), shortCommit(head)))
 }
