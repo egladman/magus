@@ -1,0 +1,9 @@
+//go:build e2e
+
+package pkg
+
+import "testing"
+
+func TestFlowEndToEnd(t *testing.T) {
+	Serve(t)
+}

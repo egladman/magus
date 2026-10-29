@@ -1,0 +1,25 @@
+package pkg
+
+import (
+	"testing"
+
+	"example.com/demo/gen/typestest"
+)
+
+func TestAllowPasses(t *testing.T) {
+	dir := fixture(t)
+	if !Allow("lease", dir) {
+		t.Fatal("want allow")
+	}
+}
+
+func TestInnerWithMock(t *testing.T) {
+	m := typestest.NewStore(t)
+	if !Inner(m.Path()) {
+		t.Error("want true")
+	}
+}
+
+func fixture(t *testing.T) string {
+	return t.TempDir()
+}

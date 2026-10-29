@@ -101,3 +101,21 @@ magus buzz hack/retro/trace.buzz -- --commit <rev> --trail <checkout holding .ma
 - Each `not recorded:` line is a link no record holds. List it in the retro as a finding.
 - `--trail` names the checkout whose `.magus/activity` holds the trail. That is usually the root
   worktree, not the job's checkout. Repeat it to read several.
+
+<!-- rule: which-tests-reach-a-code-path; added: 2026-10-29; origin: agent, unreviewed;
+     evidence: plans/oci-dx-pr625-2026-10-27/DECISIONS.md decision 128 and reports/test-layers.md, whose findings A and C the script reproduces;
+     retire-when: magus itself reports test reach, layer and uncovered blocks per symbol -->
+## 9. Which tests reach a code path, and at which layer
+
+Before judging a symbol's tests, run `hack/retro/tests.buzz` on it, a file, or a package:
+
+```sh
+magus buzz hack/retro/tests.buzz -- --symbol <name> [--symbol <name>]... [--profile <coverage profile>]
+```
+
+- Reach walks `calls` edges toward the symbol only. Never count `magus path` as reach: it walks
+  edges both ways and credits a test of a shared callee.
+- It reads `.magus/coverage.hand.out`, which only an unnarrowed `./magus run test .` writes. It
+  refuses a profile with no block for a file in scope.
+- The layer is a signal, not a verdict. Judge each `worklist` line through magus-test-design.
+- List each `not recorded:` line in the review as a gap.
