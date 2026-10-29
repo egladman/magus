@@ -27,6 +27,9 @@ import (
 // noBaseIndex is why a touched file of an externally indexed language has no ceiling.
 const noBaseIndex = "no in-process index; ceiling not applied"
 
+// baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
+const baseMeasureVersion = "2"
+
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count
 // there. It reads the measure MeasureConformanceBase kept and never measures one itself; a base
@@ -174,6 +177,7 @@ func (m *Magus) conformanceEntry(commit string, plan baseIndexPlan) (string, err
 		return "", fmt.Errorf("conformance: digest the policy: %w", err)
 	}
 	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00", baseMeasureVersion)
 	h.Write(policy)
 	for _, ix := range plan.indexes {
 		fmt.Fprintf(h, "\x00%s\x00%s\x00%s", ix.project, ix.language, ix.ix.Version())
@@ -310,7 +314,10 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 		return types.ConformanceOutput{}, err
 	}
 	g := knowledge.NewGraph()
-	for _, sh := range knowledge.AssembleShards(knowledge.Inputs{Graph: graph, Symbols: syms}) {
+	// The tree walk gives every file its node and line count, as the head graph's does, so a
+	// file no index defines a symbol in is measured too.
+	in := knowledge.Inputs{Graph: graph, Symbols: syms, Root: tree, Tree: knowledge.WalkTree(tree)}
+	for _, sh := range knowledge.AssembleShards(in) {
 		g.Merge(sh.Nodes, sh.Edges)
 	}
 	opts, err := m.ConformanceOptions()
