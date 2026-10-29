@@ -110,12 +110,26 @@ import "./hack/policy/mandate" as mandate;
 import "./hack/policy/version-bumps" as versions;
 import "./hack/magusfile/commits" as conventional;
 
-// judge is the command rule the root magusfile registers.
-export fun judge(req: CommandRequest) > GuardVerdict {
+// noForge is a verb that recognizes no command as opening a pull request.
+fun noForge(argv: [str]) > {str: str}? {
+    return null;
+}
+
+// judge is the command rule the root magusfile registers. opens is the
+// pull request verb the delivery rule reads.
+export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
     final programs = parsePrograms(req);
     final held = sealed\decideSealed(programs, line: req.command, roots: sealed\rootsFromEnv());
     if (held.decision != magus\GuardDecision.allow) {
         return held;
+    }
+    var lease: pullRequests\Delivered? = null;
+    if (req.lease -> row) {
+        lease = pullRequests\Delivered{ id = row.id, delivery = row.delivery, parentHead = row.parentHead };
+    }
+    final delivered = pullRequests\decideDelivery(programs, lease: lease, opens: opens);
+    if (delivered.decision != magus\GuardDecision.allow) {
+        return delivered;
     }
     final kept = mandateVerdict(req, programs: programs);
     if (kept.decision != magus\GuardDecision.allow) {
@@ -551,14 +565,14 @@ test "the line judge refuses the sealed directory before any other rule, and lea
     final dir = sealed\sealedDir(sealed\rootsFromEnv());
     final read = CommandRequest{ command = "cat {dir}/round5/cases.txtar",
         commands = [CommandInvocation{ program = "cat", args = ["{dir}/round5/cases.txtar"] }] };
-    final refused = judge(read);
+    final refused = judge(read, opens: noForge);
     std\assert(refused.decision == magus\GuardDecision.deny, message: "a cat of the sealed directory");
     verdict\assertVerdict(refused.reason, label: "a cat of the sealed directory");
     std\assert(refused.reason.indexOf("sealed until its round is scored") != null, message: refused.reason);
 
     final open = CommandRequest{ command = "cat {dir}/../labels/round4/scores.json",
         commands = [CommandInvocation{ program = "cat", args = ["{dir}/../labels/round4/scores.json"] }] };
-    std\assert(judge(open).decision == magus\GuardDecision.allow, message: "the labels directory");
+    std\assert(judge(open, opens: noForge).decision == magus\GuardDecision.allow, message: "the labels directory");
 }
 
 test "the main session's cat of a task capture outside the workspace is denied naming the capture's ref" {
@@ -572,12 +586,12 @@ test "the main session's cat of a task capture outside the workspace is denied n
     final req = CommandRequest{ session = "s1", role = magus\AgentRole.root, dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
 
     fs\writeFile("{ws}/magus", content: "");
-    final denied = judge(req);
+    final denied = judge(req, opens: noForge);
     std\assert(denied.decision == magus\GuardDecision.deny, message: "a workspace holding ./magus: " + denied.decision + " " + denied.reason);
     std\assert(denied.reason.split("\n")[0].indexOf("`magus query output out1afa17d04e90`") != null, message: denied.reason);
 
     fs\remove("{ws}/magus");
-    final allowed = judge(req);
+    final allowed = judge(req, opens: noForge);
     std\assert(allowed.decision == magus\GuardDecision.allow, message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
     fs\removeAll(ws);
     fs\removeAll(host);

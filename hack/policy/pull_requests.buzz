@@ -3085,8 +3085,8 @@ test "committedReader reads the staged text and the text at HEAD" {
 }
 
 // The delivery rule (decisions 93-94): a job's work reaches review the way the
-// person recorded on its row. The forge's own spell says which command opens a
-// pull request, and the magusfile hands its verb in: no spell is imported here.
+// person recorded on its row. The magusfile hands in the verb that says which
+// command opens a pull request.
 
 // Delivered is what the delivery rule reads of the job a session holds, copied
 // out of the request because a Buzz test cannot build the host's Job.
@@ -3094,6 +3094,18 @@ export object Delivered {
     id: str,
     delivery: str = "",
     parentHead: str = "",
+}
+
+// pullRequestOpened is the pull request argv opens by its "base", read from
+// COMMANDS, null when it opens none. It stands in for the forge spell's verb,
+// which a magusfile cannot reach until the review contract carries it.
+export fun pullRequestOpened(argv: [str]) > {str: str}? {
+    final p = helpers\request([argv])[0];
+    final c = matchCommand(p);
+    if (c == null or c!.kind != descriptionKind or c!.command[c!.command.len() - 1] != "create") {
+        return null;
+    }
+    return {"base": last(flagValues(p.args, flags: c!.base)) ?? ""};
 }
 
 // decideDelivery refuses a pull request the held job's delivery forbids: any
@@ -3138,12 +3150,12 @@ fun deliveryDenial(row: Delivered, opened: {str: str}) > str {
     return "";
 }
 
-// ghOpens stands in for a forge spell's verb: `gh pr create` and its --base.
-fun ghOpens(argv: [str]) > {str: str}? {
-    if (argv.len() < 3 or argv[0] != "gh" or argv[1] != "pr" or argv[2] != "create") {
-        return null;
-    }
-    return {"base": helpers\flagValue(argv, long: "--base", short: "-B") ?? ""};
+test "a create command opens a pull request on its base, and an edit opens none" {
+    std\assert(pullRequestOpened(["gh", "pr", "create", "-B", "feat/p", "-t", "x"])!["base"] == "feat/p", message: "gh -B");
+    std\assert(pullRequestOpened(["gh", "pr", "create"])!["base"] == "", message: "no base is the default branch");
+    std\assert(pullRequestOpened(["glab", "mr", "create", "--target-branch", "feat/p"])!["base"] == "feat/p", message: "glab");
+    std\assert(pullRequestOpened(["gh", "pr", "edit", "3", "--base", "main"]) == null, message: "an edit");
+    std\assert(pullRequestOpened(["gh", "issue", "create"]) == null, message: "an issue");
 }
 
 fun held(delivery: str, parentHead: str) > Delivered {
@@ -3151,7 +3163,7 @@ fun held(delivery: str, parentHead: str) > Delivered {
 }
 
 fun opensWith(delivery: str, parentHead: str, argv: [str]) > GuardVerdict {
-    return verdict\checked(decideDelivery(helpers\request([argv]), lease: held(delivery, parentHead: parentHead), opens: ghOpens), label: delivery);
+    return verdict\checked(decideDelivery(helpers\request([argv]), lease: held(delivery, parentHead: parentHead), opens: pullRequestOpened), label: delivery);
 }
 
 test "a fold row opens no pull request" {
@@ -3181,7 +3193,7 @@ test "a separate row opens its own pull request" {
 
 test "a session holding no job, a forge without a verb, and other commands pass" {
     final pr = helpers\request([["gh", "pr", "create"]]);
-    std\assert(decideDelivery(pr, lease: null, opens: ghOpens).decision == magus\GuardDecision.allow, message: "no job");
+    std\assert(decideDelivery(pr, lease: null, opens: pullRequestOpened).decision == magus\GuardDecision.allow, message: "no job");
     final none = fun (argv: [str]) > {str: str}? => null;
     std\assert(decideDelivery(pr, lease: held("fold", parentHead: ""), opens: none).decision == magus\GuardDecision.allow, message: "no verb");
     std\assert(opensWith("fold", parentHead: "", argv: ["gh", "pr", "edit", "3"]).decision == magus\GuardDecision.allow, message: "an edit opens none");

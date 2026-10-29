@@ -16,7 +16,7 @@ import "./hack/policy/builtins" as agentbuiltins;
 import "./hack/policy/proofread" as decisions;
 magus\guard.builtins(agentbuiltins\BUILTINS);
 magus\guard.profile("strict");
-magus\guard.command(agentpolicy\judge);
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict => agentpolicy\judge(req, opens: descriptions\pullRequestOpened));
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);
 magus\guard.stop(agentpolicy\judgeStop);
