@@ -611,7 +611,9 @@ stdout '"additional_context":"COUNTED-ADVICE"'
 stdin cursor-post-read-counted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
-grep -count=5 '^shell ' $WORK/calls.log
+# The Read is also recorded as the path it reached, the one `shell --observe` call.
+grep -count=6 '^shell ' $WORK/calls.log
+grep -count=1 '^shell --observe ' $WORK/calls.log
 
 # A Read of a SKILL.md is how Cursor loads a skill, so it goes to magus as the Read it
 # is, which magus records as the load, rather than as the `cat` the other reads become.
@@ -633,7 +635,8 @@ grep '"tool_input":\{"' $WORK/calls.log.stdin
 stdin cursor-post-mcp-counted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
-grep -count=7 '^shell ' $WORK/calls.log
+grep -count=9 '^shell ' $WORK/calls.log
+grep -count=2 '^shell --observe ' $WORK/calls.log
 
 # preCompact marks the conversation, and the next after-call reply carries the brief
 # with the call's own advice. Only the next: the mark is spent.
