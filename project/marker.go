@@ -60,6 +60,3 @@ func SkipsWalkDir(name, path string) bool {
 	return IsIgnoreDir(name) || vcs.IsSecondaryCheckout(path)
 }
 
-// CheckoutMarkers is every directory entry that marks a version-control checkout's root, so
-// a workspace walk can stop at a checkout without depending on the drivers.
-func CheckoutMarkers() []string { return vcs.Markers() }

@@ -11,8 +11,8 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // workspaceMarker is the ONE file that declares a workspace root.
@@ -96,7 +96,7 @@ func FindRoot(dir string) (string, error) {
 				runBroken = true
 			}
 		}
-		if checkout == "" && dirHasMarker(cur, project.CheckoutMarkers()) {
+		if checkout == "" && dirHasMarker(cur, vcs.Markers()) {
 			checkout = cur
 		}
 		parent := filepath.Dir(cur)
