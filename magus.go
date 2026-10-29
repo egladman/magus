@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -41,6 +42,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -439,7 +441,41 @@ func (m *Magus) load(ctx context.Context) error {
 		return err
 	}
 	m.autobindMagusfileSpell()
+	if err := checkSymbolIndexerOptIns(m.cfg.Spells.SymbolIndexers, m.All()); err != nil {
+		return err
+	}
 	return m.spellShadows()
+}
+
+// checkSymbolIndexerOptIns refuses a spells.symbol_indexers entry that names no spell
+// with an external SCIP indexer, built in or bound by a project. A misspelled entry would
+// otherwise opt nothing in, and the language would keep reporting no index with no word
+// about why.
+func checkSymbolIndexerOptIns(optIns []string, projects []*types.Project) error {
+	if len(optIns) == 0 {
+		return nil
+	}
+	external := map[string]bool{}
+	for name, d := range spell.Builtins() {
+		if d.SymbolIndexer != nil && d.SymbolIndexer.Format == spells.SymbolFormatSCIP {
+			external[name] = true
+		}
+	}
+	for _, p := range projects {
+		for _, sp := range p.ResolvedSpells {
+			if si := sp.SymbolIndexer(); si != nil && si.Format == spells.SymbolFormatSCIP {
+				external[sp.Name()] = true
+			}
+		}
+	}
+	var errs []error
+	for _, name := range optIns {
+		if !external[name] {
+			errs = append(errs, fmt.Errorf("magus.yaml %s lists %q, which names no spell with an external SCIP indexer; the spells that declare one: %s",
+				symbols.OptInSetting, name, strings.Join(slices.Sorted(maps.Keys(external)), ", ")))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // refuseHumanOnlyInGate errors when a project's `ci`, or a target its ctx.needs chain

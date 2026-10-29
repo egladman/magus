@@ -1855,3 +1855,20 @@ func Example_aProgramThatIsItsOwnHarness() {
 	// ran api:build: ok, cache hit false, builds so far 1
 	// ran api:build: ok, cache hit true, builds so far 1
 }
+
+func (s *magusSuite) TestSymbolIndexerOptInNamesAShippedIndexer() {
+	s.NoError(checkSymbolIndexerOptIns([]string{"typescript", "python"}, nil))
+}
+
+func (s *magusSuite) TestSymbolIndexerOptInRefusesAMisspelling() {
+	err := checkSymbolIndexerOptIns([]string{"typscript"}, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `magus.yaml spells.symbol_indexers lists "typscript", which names no spell with an external SCIP indexer`)
+	s.Contains(err.Error(), "python, rust, typescript")
+}
+
+func (s *magusSuite) TestSymbolIndexerOptInRefusesAnInProcessIndexer() {
+	err := checkSymbolIndexerOptIns([]string{"go"}, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `lists "go"`)
+}
