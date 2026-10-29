@@ -460,7 +460,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"python3":     {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"},
 			"scip-python": {Observe: spells.Command{Bin: "scip-python", Args: []string{"--version"}}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipPython},
+		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipPython},
 		Language:           "python",
 		LanguageExtensions: []string{".py"},
 		Syntax: &spells.Syntax{
@@ -512,7 +512,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"rustc":         {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
 			"rust-analyzer": {Observe: spells.Command{Bin: "rust-analyzer", Args: []string{"--version"}}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenRustAnalyzer},
+		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenRustAnalyzer},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
 		Syntax: &spells.Syntax{
@@ -559,7 +559,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"scip-typescript": {Observe: spells.Command{Bin: "scip-typescript", Args: []string{"--version"}}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipTypescript},
+		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipTypescript},
 		Language:           "typescript",
 		LanguageExtensions: []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"},
 		Syntax: &spells.Syntax{

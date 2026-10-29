@@ -74,7 +74,7 @@ func (s *benchSuite) TestValidateRefusesAnUnknownKind() {
 }
 
 func (s *benchSuite) TestWriteThenLoadReturnsTheTasksInIDOrder() {
-	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
+	path := filepath.Join(s.T().TempDir(), "history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("b"), bugfixTask("a")}))
 	got, err := LoadTasks(path)
 	s.Require().NoError(err)
@@ -85,13 +85,13 @@ func (s *benchSuite) TestWriteThenLoadReturnsTheTasksInIDOrder() {
 }
 
 func (s *benchSuite) TestWriteRefusesARepeatedID() {
-	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
+	path := filepath.Join(s.T().TempDir(), "history-go.jsonl")
 	s.ErrorContains(WriteTasks(path, []Task{bugfixTask("a"), bugfixTask("a")}), `task "a" appears twice`)
 	s.NoFileExists(path)
 }
 
 func (s *benchSuite) TestLoadRefusesARecordEditedAfterItWasSealed() {
-	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
+	path := filepath.Join(s.T().TempDir(), "history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("a")}))
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -102,7 +102,7 @@ func (s *benchSuite) TestLoadRefusesARecordEditedAfterItWasSealed() {
 }
 
 func (s *benchSuite) TestLoadRefusesARepeatedID() {
-	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
+	path := filepath.Join(s.T().TempDir(), "history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("a")}))
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -112,7 +112,7 @@ func (s *benchSuite) TestLoadRefusesARepeatedID() {
 }
 
 func (s *benchSuite) TestLoadRefusesAnUnfinishedLastLine() {
-	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
+	path := filepath.Join(s.T().TempDir(), "history-go.jsonl")
 	s.Require().NoError(WriteTasks(path, []Task{bugfixTask("a")}))
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
 	s.Require().NoError(err)
@@ -124,14 +124,14 @@ func (s *benchSuite) TestLoadRefusesAnUnfinishedLastLine() {
 }
 
 func (s *benchSuite) TestLoadRefusesAnEmptyFile() {
-	path := filepath.Join(s.T().TempDir(),"history-go.jsonl")
+	path := filepath.Join(s.T().TempDir(), "history-go.jsonl")
 	s.Require().NoError(os.WriteFile(path, nil, 0o644))
 	_, err := LoadTasks(path)
 	s.ErrorContains(err, "holds no tasks")
 }
 
 func (s *benchSuite) TestCutCloneHoldsNothingPastTheBaseCommit() {
-	source := filepath.Join(s.T().TempDir(),"source")
+	source := filepath.Join(s.T().TempDir(), "source")
 	s.gitIn(source, "init", "--quiet", "--initial-branch=main")
 	var commits []string
 	for _, msg := range []string{"one", "two", "three"} {
@@ -142,7 +142,7 @@ func (s *benchSuite) TestCutCloneHoldsNothingPastTheBaseCommit() {
 	}
 	s.gitIn(source, "tag", "v1", commits[2])
 
-	dest := filepath.Join(s.T().TempDir(),"trial")
+	dest := filepath.Join(s.T().TempDir(), "trial")
 	t := bugfixTask("x")
 	t.BaseCommit = commits[1]
 	s.Require().NoError(t.CutClone(context.Background(), source, dest))
