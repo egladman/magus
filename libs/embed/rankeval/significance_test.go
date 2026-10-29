@@ -116,8 +116,11 @@ func (s *rankevalSuite) TestPairedRandomizationDeterministic() {
 	_, p1 := PairedRandomization(twelveA, twelveB, 1_000, 42)
 	_, p2 := PairedRandomization(twelveA, twelveB, 1_000, 42)
 	_, p3 := PairedRandomization(twelveA, twelveB, 1_000, 43)
+	_, exact := PairedRandomization(twelveA, twelveB, 1<<12, 0)
 	assert.Equal(t, p1, p2)
-	assert.NotEqual(t, p1, p3)
+	// Two seeds can draw the same hit count, so another seed is held to the exact p
+	// within sampling error rather than to a different answer.
+	assert.InDelta(t, exact, p3, 0.02)
 
 	same := []float64{0.3, 0.6, 0.9}
 	mean, p := PairedRandomization(same, same, 1_000, 1)
