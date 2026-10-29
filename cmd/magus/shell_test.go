@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
@@ -2419,4 +2420,83 @@ func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
 	s.Require().True(ok, body)
 	s.Equal("a text search the graph answers", reply["user_message"])
 	s.Equal(audienceReason, reply["agent_message"])
+}
+
+// unjudgedHookSuite pins decision 114a: a call no magus judged fails closed, and the
+// person is told how to get a magus on every such call.
+type unjudgedHookSuite struct {
+	suite.Suite
+}
+
+func TestUnjudgedHookSuite(t *testing.T) {
+	suite.Run(t, new(unjudgedHookSuite))
+}
+
+// glueBrokenMagus stands in for a magus that runs but cannot judge.
+const glueBrokenMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'cannot load this tree' >&2\nexit 3\n"
+
+func (s *unjudgedHookSuite) reply(name, host, event string) map[string]any {
+	body, _ := runGlue(s.T(), name, glueArrangement{label: host, host: host, event: event, stub: glueBrokenMagus, codex: host == "codex"})
+	reply, ok := glueDecode(s.T(), host, body).(map[string]any)
+	s.Require().True(ok, body)
+	return reply
+}
+
+func (s *unjudgedHookSuite) TestClaudeCodeRefusesACallThatMayChangeState() {
+	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("deny", out["permissionDecision"])
+	s.Contains(out["permissionDecisionReason"], "cannot load this tree")
+	s.Contains(reply["systemMessage"], "Rebuild or update", "the person reads the fix")
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestClaudeCodeLetsAReadPassAndStillTellsThePerson() {
+	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`)
+	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
+	s.Contains(reply["systemMessage"], "could not judge this call")
+}
+
+func (s *unjudgedHookSuite) TestTheSecondCallInASessionIsToldToo() {
+	event := `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"ls"}}`
+	s.reply("magus-command.buzz", "claude-code", event)
+	reply := s.reply("magus-command.buzz", "claude-code", event)
+	s.Contains(reply["systemMessage"], "could not judge this call")
+}
+
+func (s *unjudgedHookSuite) TestCodexRefusalFitsItsSchema() {
+	reply := s.reply("magus-command.buzz", "codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["codex"]).Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestCodexPermissionRequestKeepsThePromptAndTellsThePerson() {
+	reply := s.reply("magus-command.buzz", "codex", `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push"}}`)
+	s.NotContains(reply["hookSpecificOutput"], "decision")
+	s.Contains(reply["systemMessage"], "could not judge this call")
+	s.Require().NoError(glueLoadSchema(s.T(), "codex/permission-request.command.output.schema.json").Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestAStopTellsThePersonRatherThanStderr() {
+	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"Stop","session_id":"s","stop_hook_active":false}`)
+	s.Contains(reply["systemMessage"], "could not judge this call")
+	s.NotContains(reply, "decision")
+}
+
+func (s *unjudgedHookSuite) TestAPathWriteIsRefused() {
+	reply := s.reply("magus-path.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Write","tool_input":{"file_path":"README.md"}}`)
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+}
+
+func (s *unjudgedHookSuite) TestCursorRefusesAndShowsThePersonTheFix() {
+	reply := s.reply("cursor-hook.buzz", "cursor", `{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":"git stash","cwd":"/tmp"}`)
+	s.Equal("deny", reply["permission"])
+	s.Contains(reply["user_message"], "Rebuild or update")
+}
+
+// The hook carries a copy of the bootstrap, since with no magus it cannot ask one.
+func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
+	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
+	s.Require().NoError(err)
+	s.Contains(string(body), fmt.Sprintf("final BOOTSTRAP = %q;", ward.BootstrapCommand))
 }

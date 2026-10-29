@@ -290,32 +290,28 @@ test("a pass is silent and blocks nothing", async () => {
   assert.deepEqual(warnings, []);
 });
 
-test("an unrunnable magus fails OPEN, loudly", async () => {
+test("an unrunnable magus refuses every call and says how to get one", async () => {
   stubBun(null);
   const h = await hooks();
-  const warnings = await withWarnings(async () => {
-    // Must not throw: throwing is OpenCode's only way to stop a call, so a guard
-    // that threw when magus was missing would make every session unusable.
-    await h["tool.execute.before"](
-      { tool: "bash", callID: "c1" },
-      { args: { command: "git stash" } },
+  for (const [tool, args] of [
+    ["bash", { command: "git stash" }],
+    ["read", { filePath: "/work/README.md" }],
+  ] as const) {
+    await assert.rejects(
+      h["tool.execute.before"]({ tool, callID: "c1" }, { args }),
+      /could not judge this call: .* could not be run; refused\.\nInstall magus/,
+      `${tool} is refused: the thrown error is the only line the person reads`,
     );
-  });
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /UNGUARDED/);
+  }
 });
 
-test("a verdict from an unknown schema is ignored rather than obeyed", async () => {
+test("a verdict from an unknown schema is refused rather than obeyed", async () => {
   stubBun(() => ({ ...deny, schema_version: 99 }));
   const h = await hooks();
-  const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"](
-      { tool: "bash", callID: "c1" },
-      { args: { command: "git stash" } },
-    );
-  });
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /schema 99/);
+  await assert.rejects(
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
+    /verdict schema 99/,
+  );
 });
 
 const ask: Canned = {

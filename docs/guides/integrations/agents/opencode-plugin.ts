@@ -84,6 +84,14 @@ type Verdict =
 /** What a verdict means for the call: stop it with the reason, or let it run holding a context. */
 type Decided = { block: true; reason: string } | { block: false; context: string };
 
+/** No magus judged the call; `why` names the binary and what went wrong. */
+type Unjudged = { decision: "unjudged"; why: string };
+
+/** How to get a magus that runs, for whoever reads a refused call. */
+const MAGUS_FIX =
+  "Install magus (https://eli.gladman.cc/magus/guides/setup/), build it from source " +
+  "(https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path.";
+
 /** A verdict envelope before its decision is trusted: another process's stdout. */
 type Envelope = { schema_version: number; decision: unknown } & Record<string, unknown>;
 
@@ -301,13 +309,6 @@ export const MagusGuard: Plugin = async (ctx) => {
   // fails to recognize the config key that arms the rule and returns pass.
   const magus = process.env.__MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
-  // Said once per session. This plugin instance lives as long as the session does, so a
-  // flag here IS the session and needs no marker on disk, unlike the Buzz templates whose
-  // process ends with each tool call. The notice reports a broken installation: a fact
-  // for the person, with nothing in it a model can act on, so a repeat is noise.
-  // Measured over recent sessions: 99% of these firings were same-session repeats.
-  let saidUnguarded = false;
-
   // Advisories waiting for the call they belong to, keyed by callID. An advise is
   // produced BEFORE a call and delivered AFTER it, because tool.execute.after is the
   // only hook that can rewrite what the model reads, and judging a second time there
@@ -348,13 +349,8 @@ export const MagusGuard: Plugin = async (ctx) => {
   };
 
   /**
-   * Runs one guard query. Returns null when no verdict could be obtained, which
-   * every caller treats as allow.
-   *
-   * Failing OPEN is deliberate. Throwing is OpenCode's only way to stop a call,
-   * so a guard that threw whenever magus was missing would block every tool
-   * call and make the session unusable - worse than no guard. The failure is
-   * logged rather than swallowed, so an unguarded session stays visible.
+   * Runs one guard query. Returns an Unjudged when no verdict came back, which
+   * `apply` refuses. The thrown error is the one line the person reads.
    *
    * The thing being judged goes in on STDIN, never in argv. `magus shell` takes
    * no positional arguments at all, and that is not an incidental preference:
@@ -375,21 +371,14 @@ export const MagusGuard: Plugin = async (ctx) => {
    * agent-host-attribution-not-captured) and ported here so this plugin degrades
    * the same way.
    */
-  const judge = async (args: readonly string[], input: string): Promise<Verdict | null> => {
-    const unguarded = () => {
-      if (saidUnguarded) return;
-      saidUnguarded = true;
-      console.warn(
-        `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
-          "Install magus, or set __MAGUS_BIN to its path.",
-      );
-    };
+  const judge = async (args: readonly string[], input: string): Promise<Verdict | Unjudged> => {
+    const unjudged = (why: string): Unjudged => ({
+      decision: "unjudged",
+      why: `magus guard could not judge this call: ${why}`,
+    });
 
     let stdout = await runOnce(args, input);
-    if (stdout === null) {
-      unguarded();
-      return null;
-    }
+    if (stdout === null) return unjudged(`${magus} could not be run`);
     if (stdout.trim() === "") {
       // --renders-ask, --session and --agent go too: a binary that rejects any predates them.
       const withoutValued = (list: readonly string[], flag: string): string[] => {
@@ -400,29 +389,21 @@ export const MagusGuard: Plugin = async (ctx) => {
         .reduce((list, flag) => withoutValued(list, flag), [...args])
         .filter((arg) => arg !== "--renders-ask");
       stdout = await runOnce(withoutName, input);
-      if (stdout === null) {
-        unguarded();
-        return null;
-      }
+      if (stdout === null) return unjudged(`${magus} could not be run`);
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(stdout);
     } catch {
-      console.warn("[magus guard] verdict was not JSON; allowing");
-      return null;
+      return unjudged(`${magus} answered something that is not JSON`);
     }
-    if (!isEnvelope(parsed)) {
-      console.warn("[magus guard] unrecognized verdict shape; allowing");
-      return null;
-    }
+    if (!isEnvelope(parsed)) return unjudged(`${magus} answered an unrecognized verdict shape`);
     if (parsed.schema_version !== SUPPORTED_SCHEMA) {
-      console.warn(
-        `[magus guard] verdict schema ${parsed.schema_version} differs from the expected ` +
-          `${SUPPORTED_SCHEMA}; allowing. Update this plugin from the magus docs.`,
+      return unjudged(
+        `${magus} answered verdict schema ${parsed.schema_version}, not ${SUPPORTED_SCHEMA}; ` +
+          "update this plugin from the magus docs",
       );
-      return null;
     }
     return toVerdict(parsed);
   };
@@ -497,9 +478,10 @@ export const MagusGuard: Plugin = async (ctx) => {
    * Judges a verdict without throwing: a block carries the reason the model reads, an allow
    * carries an advise's context for the caller to hold until the call lands, "" otherwise.
    */
-  const decide = (verdict: Verdict | null, promptable: boolean): Decided => {
-    if (verdict === null) return { block: false, context: "" };
+  const decide = (verdict: Verdict | Unjudged, promptable: boolean): Decided => {
     switch (verdict.decision) {
+      case "unjudged":
+        return { block: true, reason: `[magus guard] ${verdict.why}; refused.\n${MAGUS_FIX}` };
       case "deny":
         return { block: true, reason: `[magus guard] ${verdict.reason}` };
       case "ask":
@@ -526,7 +508,7 @@ export const MagusGuard: Plugin = async (ctx) => {
    * `args` to mutate, so a rejection is the only way to stop a call. Returns an advise's
    * context, or "" when there is none.
    */
-  const apply = (verdict: Verdict | null, promptable: boolean): string => {
+  const apply = (verdict: Verdict | Unjudged, promptable: boolean): string => {
     const decided = decide(verdict, promptable);
     if (decided.block) {
       // platform contract: opencode tool.execute.before
@@ -681,11 +663,15 @@ export const MagusGuard: Plugin = async (ctx) => {
       cwd: ctx.directory,
     });
     const verdict = await judge(shellArgs, body);
-    if (verdict?.decision === "advise") {
+    if (verdict.decision === "unjudged") {
+      console.warn(`[magus guard] ${verdict.why}\n${MAGUS_FIX}`);
+      return false;
+    }
+    if (verdict.decision === "advise") {
       console.warn(`[magus guard] ${verdict.context}`);
       return false;
     }
-    if (verdict?.decision !== "deny") return false;
+    if (verdict.decision !== "deny") return false;
     const prompt = `[magus guard] ${verdict.reason}`;
     followUps.set(id, prompt);
     try {
@@ -718,8 +704,9 @@ export const MagusGuard: Plugin = async (ctx) => {
       cwd: ctx.directory,
     });
     const verdict = await judge(shellArgs, body);
-    if (verdict?.decision === "advise") console.warn(`[magus guard] ${verdict.context}`);
-    return verdict?.decision === "deny" ? verdict.reason : "";
+    if (verdict.decision === "unjudged") console.warn(`[magus guard] ${verdict.why}\n${MAGUS_FIX}`);
+    if (verdict.decision === "advise") console.warn(`[magus guard] ${verdict.context}`);
+    return verdict.decision === "deny" ? verdict.reason : "";
   };
 
   /**
@@ -843,7 +830,7 @@ export const MagusGuard: Plugin = async (ctx) => {
       const key = promptKey(command);
       if (key === null || !asksBefore(loadedConfig, key)) return;
       const verdict = await judge(inThread(shellArgs, await whoIs(input.sessionID)), command);
-      switch (verdict?.decision) {
+      switch (verdict.decision) {
         case "pass":
         case "advise":
           output.status = "allow";
@@ -853,6 +840,8 @@ export const MagusGuard: Plugin = async (ctx) => {
           return;
         case "deny":
           output.status = "deny";
+          return;
+        case "unjudged":
           return;
       }
     },

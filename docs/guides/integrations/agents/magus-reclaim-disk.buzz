@@ -101,10 +101,16 @@ fun main(args: [str]) > void {
     // The cheap path every turn takes: one stat, and nothing else, inside the floor.
     if (!diskwatch\due(lastWrite(store), now: now, everyMs: diskwatch\FLOOR_MS)) { return; }
 
-    // An absent magus is SILENT: there is no config to read thresholds from, and a hook
-    // that guessed them would act on numbers nobody set.
+    // An absent magus samples nothing: guessed thresholds are numbers
+    // nobody set.
     final bin = hook\resolveBin(cwd: cwd);
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
+    if (bin == "" or !hook\isExecutable(bin)) {
+        final host = if (a.say == "stderr") "" else a.agentName;
+        final doc = json\parse(event) catch null;
+        io\stdout.write(hook\unrecordedNotice(bin, session: hook\field(doc, dotPath: "session_id"),
+            host: host, file: "magus-reclaim-disk.buzz", root: hook\workspaceRootAt(cwd))) catch void;
+        return;
+    }
 
     var said: str? = null;
     try {

@@ -258,6 +258,47 @@ fun buildsMagus(root: str) > bool {
     return mod.startsWith("module github.com/egladman/magus\n");
 }
 
+// BOOTSTRAP is ward.BootstrapCommand: a hook with no magus cannot ask for it.
+// cmd/magus/shell_test.go pins the copy.
+final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
+final SETUP_URL = "https://eli.gladman.cc/magus/guides/setup/";
+
+// magusFix says how to get a runnable magus for root. A checkout of
+// magus gets the bootstrap, anywhere else the install page.
+export fun magusFix(root: str) > str {
+    if (root != "" and buildsMagus(root)) {
+        return "Build ./magus in {root}: `{BOOTSTRAP}`.";
+    }
+    return "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path.";
+}
+
+final REFUSAL_FALLBACK = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not judge this call"}}`;
+
+// refusal is the Claude Code PreToolUse deny of a call no magus judged. The
+// display gets the verdict, the agent the fix, and the person both.
+export fun refusal(verdict: str, fix: str) > str {
+    return json\stringify({"systemMessage": "{verdict}\n{fix}", "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "{verdict}; refused, since this call may change state.",
+        "additionalContext": fix,
+    }}) catch REFUSAL_FALLBACK;
+}
+
+// unrecordedNotice is the reply of a recorder hook that has no runnable bin,
+// said once per session across every recorder. Claude Code and Codex get a
+// systemMessage; another host gets stderr and "".
+export fun unrecordedNotice(bin: str, session: str, host: str, file: str, root: str) > str {
+    if (bin != "" and isExecutable(bin)) { return ""; }
+    if (!noticeOnce(session, family: "unrecorded", file: file)) { return ""; }
+    final text = "{file} recorded nothing: no runnable magus was found. {magusFix(root)}";
+    if (host == "claude-code" or host == "codex") {
+        return json\stringify({"systemMessage": text}) catch "";
+    }
+    io\stderr.write("{text}\n") catch void;
+    return "";
+}
+
 // describeBin names bin and, when it is a link, where the link points.
 fun describeBin(bin: str) > str {
     final target = fs\readlink(bin) catch "";
@@ -369,6 +410,16 @@ test "a ./magus that cannot run is said once per session, and only then" {
     std\assert(noticeOnce(named, family: "bin-not-executable", file: "test.buzz"), message: "a caller that names no file stays silent");
     fs\removeAll(root);
     fs\removeAll(bare);
+}
+
+test "the fix for a missing magus is the bootstrap in a checkout of magus, else the install page" {
+    final root = fs\tempDir("hook-fix-");
+    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
+    std\assert(magusFix(root).indexOf(BOOTSTRAP) != null, message: magusFix(root));
+    fs\writeFile("{root}/go.mod", content: "module example.com/other\n");
+    std\assert(magusFix(root).indexOf(SETUP_URL) != null, message: magusFix(root));
+    std\assert(magusFix("").indexOf(SETUP_URL) != null, message: "no root");
+    fs\removeAll(root);
 }
 
 test "a worktree under another checkout never climbs into it" {

@@ -17,9 +17,9 @@
 // That rule ADVISES rather than blocks. magus denies only what cannot be undone;
 // a hand-edited generated file is wasteful, not destructive, since regenerating
 // erases it. So it explains that the edit will be overwritten and lets the agent
-// correct itself, rather than treating it as unable to learn. Every file-write rule
-// says nothing on any uncertainty, no magus, no workspace, an unclaimed
-// path, because an advisory fired on a guess trains the reader to ignore it.
+// correct itself, rather than treating it as unable to learn. An unclaimed
+// path gets no advisory: one fired on a guess trains the reader to ignore it.
+// No magus to ask refuses the write.
 //
 // HOST_RESPONSE renders BOTH arms even though the rules shipping today only
 // advise. That is deliberate, and it is why the arm predates any rule that fires it.
@@ -48,8 +48,7 @@
 //   __MAGUS_BIN      the binary, when it is not on PATH
 //   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found
 //   __MAGUS_FAILED_RESPONSE  the same, for a magus found but unable to judge
-//   __MAGUS_UNREADABLE_RESPONSE  what to print when the write never arrived, the one
-//                    case here that denies rather than failing open
+//   __MAGUS_UNREADABLE_RESPONSE  what to print when the write never arrived
 //
 // NOTHING here may raise. Claude Code reads hook exit 2 as a BLOCK whose message
 // comes from stderr, so an uncaught Buzz error would refuse a write with a stack
@@ -82,8 +81,7 @@ final ASK_CODEX = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEve
 // A decision this file does not know is refused, never allowed; see magus-command.buzz.
 final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}{{end}}`;
 
-// The one arm here that does not fail open; see magus-command.buzz. The call never
-// arrived, so no rule was offered it.
+// The call never arrived, so no rule was offered it.
 final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this write from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}`;
 
 final DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}`;
@@ -168,11 +166,10 @@ fun main(args: [str]) > void {
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
     final bin = hook\resolveBin(cwd: cwd, session: hook\field(event, dotPath: sessionPath), file: "magus-path.buzz");
+    final fix = hook\magusFix(hook\workspaceRootAt(cwd));
     if (bin == "" or !hook\isExecutable(bin)) {
-        // Prints nothing by default: for most hosts an empty response means "allow".
-        // Set __MAGUS_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
-        final unavailable = env\get("__MAGUS_UNAVAILABLE_RESPONSE") catch "";
-        if (unavailable != "") { io\stdout.write(unavailable) catch void; }
+        io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: hook\refusal(
+            "magus guard could not judge this write: no magus binary was found", fix: fix))) catch void;
         return;
     }
 
@@ -230,12 +227,13 @@ fun main(args: [str]) > void {
     }
 
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
-    // telling them apart matters. Kept identical here so neither template grows a behavior
-    // the other lacks. The difference is only that this one has no default message,
-    // because for most hosts an empty response to a file-write hook already means "allow".
+    // telling them apart matters. Every call here is a write, so it is refused.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        final failed = env\get("__MAGUS_FAILED_RESPONSE") catch "";
-        if (failed != "") { io\stdout.write(failed) catch void; }
+        var why = "it printed no error";
+        if (result != null and hook\firstLine(result!.stderr) != "") { why = hook\firstLine(result!.stderr); }
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
+            "magus guard could not judge this write: {bin} said: {why}",
+            fix: "Rebuild or update {bin}. {fix}"))) catch void;
         return;
     }
     io\stdout.write(hook\trimTrailingNewlines(result!.stdout)) catch void;

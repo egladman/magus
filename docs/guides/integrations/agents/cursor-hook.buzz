@@ -90,7 +90,7 @@ final ALLOW = `{"permission":"allow"}`;
 final SUBMIT_CONTINUE = `{"continue":true}`;
 final EMPTY = `{}`;
 
-final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
+final UNAVAILABLE_TEXT = "magus guard could not judge this call: no magus binary was found";
 final UNREADABLE = "magus guard is NOT running for this call: the hook event on stdin was not JSON, so its deny and advise rules were not applied. Check the Cursor hook configuration and version.";
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
@@ -168,10 +168,6 @@ fun readArgs(args: [str]) > Entry {
     return Entry{
         agent = parsed!.values[AGENT_NAME] ?? "",
     };
-}
-
-fun unavailableNotice(text: str) > str {
-    return hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: text);
 }
 
 fun denyBoth(message: str) > str {
@@ -452,9 +448,16 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
         }
     }
     if (why == "") { why = "it printed no error"; }
-    return "magus guard is NOT running: {guard.bin} ({version}) could not judge this call, "
-        + "so its deny and advise rules are unenforced. It said: {why}. "
-        + "Rebuild or update THAT binary to restore the guard.";
+    return "magus guard could not judge this call: {guard.bin} ({version}) said: {why}";
+}
+
+// UNJUDGED is the decision this file gives a call no magus judged. Cursor
+// shows the person a message only with a refusal, so every gating event
+// refuses it, reads included.
+final UNJUDGED = "unjudged";
+
+fun unjudged(why: str, fix: str) > Verdict {
+    return Verdict{ decision = UNJUDGED, reason = "{why}\n{fix}", context = "" };
 }
 
 final UNKNOWN_FLAG = "flag provided but not defined";
@@ -467,22 +470,24 @@ fun rejectedFlag(result: proc\ExecResult?) > bool {
         and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
 }
 
-// judged returns magus's answer, or "" when the binary could not give one. Each attempt
-// drops flags an older binary may reject, newest first, and runs only after the one
-// before it was refused for such a flag.
-fun judged(guard: Guard, attempts: [[str]], family: str, session: str) > str {
+// judged returns magus's verdict, or an unjudged one naming why it gave none.
+// Each attempt drops flags an older binary may reject, newest first, and runs
+// only after the one before it was refused for such a flag.
+fun judged(guard: Guard, attempts: [[str]]) > Verdict {
     var result: proc\ExecResult? = null;
     foreach (extra in attempts) {
         result = judge(guard, extra: extra);
         if (!rejectedFlag(result)) { break; }
     }
+    final fix = "Rebuild or update {guard.bin}. {hook\magusFix(hook\workspaceRoot())}";
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        if (hook\noticeOnce(session, family: family, file: "cursor-hook.buzz")) {
-            io\stderr.write(failureNotice(guard, failed: result) + "\n") catch void;
-        }
-        return "";
+        return unjudged(failureNotice(guard, failed: result), fix: fix);
     }
-    return hook\trimTrailingNewlines(result!.stdout);
+    final got = parseVerdict(hook\trimTrailingNewlines(result!.stdout));
+    if (got == null) {
+        return unjudged("magus guard could not judge this call: {guard.bin} answered something that is not a verdict", fix: fix);
+    }
+    return got!;
 }
 
 fun parseVerdict(stdout: str) > Verdict? {
@@ -506,20 +511,14 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
     return extra;
 }
 
-// verdict asks magus about one call, or returns null when it could not answer. ask is
-// whether the reply can put an ask in front of the person, which only a gating event can.
-fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, family: str) > Verdict? {
+// verdict asks magus about one call. ask is whether the reply can put an ask
+// in front of the person, which only a gating event can.
+fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool) > Verdict {
     final guard = Guard{ bin = scope.bin, payload = payload };
     final attributed = shellArgs(scope, asPath: asPath, ask: ask);
     final bare = mut ["-o", "json"];
     if (asPath) { bare.append("--path"); }
-    final answer = judged(guard, attempts: [attributed, bare], family: family, session: scope.session);
-    if (answer == "") { return null; }
-    final got = parseVerdict(answer);
-    if (got == null and hook\noticeOnce(scope.session, family: "unreadable-verdict", file: "cursor-hook.buzz")) {
-        io\stderr.write("magus guard is NOT running for this call: {scope.bin} answered something that is not a verdict, so its deny and advise rules were not applied. Update that binary.\n") catch void;
-    }
-    return got;
+    return judged(guard, attempts: [attributed, bare]);
 }
 
 fun askReply(reason: str) > str {
@@ -550,13 +549,22 @@ fun blockedAsk(reason: str, command: str) > str {
 // gateReply renders a verdict for a gating event. An ask is a prompt where
 // the event shows one, else a deny. Pass and advise allow: advice waits for
 // the after-call event. An unknown decision is refused, never consent.
+// A deny shows the person its first line. A blocked ask keeps its whole text:
+// its last line says what the person must do.
 fun gateReply(v: Verdict, eventName: str, command: str) > str {
-    if (v.decision == "deny") { return denyBoth(v.reason); }
+    if (v.decision == "deny") {
+        return json\stringify({
+            "permission": "deny",
+            "user_message": hook\firstLine(v.reason),
+            "agent_message": v.reason,
+        }) catch denyBoth(v.reason);
+    }
     if (v.decision == "ask") {
         if (rendersPrompt(eventName)) { return askReply(v.reason); }
         return blockedAsk(v.reason, command: command);
     }
     if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
+    if (v.decision == UNJUDGED) { return denyBoth(v.reason); }
     return json\stringify({
         "permission": "deny",
         "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
@@ -574,12 +582,11 @@ fun fileVerdict(scope: Scope, event: any?, v: Verdict) > void {
     remember("verdict", parts: [scope.session, id, hook\field(event, dotPath: "tool_name")], value: context);
 }
 
-fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: true, family: family);
-    if (v == null) { return ALLOW; }
-    fileVerdict(scope, event: event, v: v!);
+fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool) > str {
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: true);
+    fileVerdict(scope, event: event, v: v);
     final command = firstField(event, keys: ["command", "tool_input.command"]);
-    return gateReply(v!, eventName: readEventName(event), command: command);
+    return gateReply(v, eventName: readEventName(event), command: command);
 }
 
 // gateShell judges a shell command on preToolUse. The line beforeShellExecution will see
@@ -588,23 +595,25 @@ fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool, family: str)
 fun gateShell(scope: Scope, event: any?) > str {
     final command = hook\field(event, dotPath: "tool_input.command");
     if (command == "") { return ALLOW; }
-    final v = verdict(scope, payload: command, asPath: false, ask: true, family: "failed-command");
-    if (v == null) { return ALLOW; }
-    fileVerdict(scope, event: event, v: v!);
-    if (v!.decision == "ask") {
-        remember("ask", parts: [scope.session, command], value: v!.reason);
+    final v = verdict(scope, payload: command, asPath: false, ask: true);
+    fileVerdict(scope, event: event, v: v);
+    if (v.decision == "ask") {
+        remember("ask", parts: [scope.session, command], value: v.reason);
         return ALLOW;
     }
-    if (v!.decision == "pass" or v!.decision == "advise") {
+    if (v.decision == "pass" or v.decision == "advise") {
         remember("shell", parts: [scope.session, command], value: "");
     }
-    return gateReply(v!, eventName: "preToolUse", command: command);
+    return gateReply(v, eventName: "preToolUse", command: command);
 }
 
-fun advice(scope: Scope, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: false, family: family);
-    if (v == null or v!.decision != "advise") { return ""; }
-    return v!.context;
+// advice is what the agent is owed after a call. An unjudged call says why,
+// since nothing after a call reaches the person.
+fun advice(scope: Scope, payload: str, asPath: bool) > str {
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: false);
+    if (v.decision == UNJUDGED) { return v.reason; }
+    if (v.decision != "advise") { return ""; }
+    return v.context;
 }
 
 fun rendersPrompt(eventName: str) > bool {
@@ -653,12 +662,11 @@ fun gateMcp(scope: Scope, event: any?) > str {
     if (payload == "") {
         return denyBoth("magus guard: beforeMCPExecution missing mcp_server_name or tool_name; refusing rather than guessing");
     }
-    final v = verdict(scope, payload: payload, asPath: false, ask: true, family: "failed-mcp");
-    if (v == null) { return ALLOW; }
+    final v = verdict(scope, payload: payload, asPath: false, ask: true);
     var context = "";
-    if (v!.decision == "advise") { context = v!.context; }
+    if (v.decision == "advise") { context = v.context; }
     remember("mcp", parts: mcpKey(scope, tool: hook\field(event, dotPath: "tool_name"), event: event), value: context);
-    return gateReply(v!, eventName: "beforeMCPExecution", command: "");
+    return gateReply(v, eventName: "beforeMCPExecution", command: "");
 }
 
 // brief is the capped `magus session --brief`, or "" when there is none or it is over
@@ -724,13 +732,13 @@ fun afterCall(scope: Scope, event: any?) > str {
         if (held != null) { return held!; }
     }
     final command = hook\field(event, dotPath: "tool_input.command");
-    if (command != "") { return advice(scope, payload: command, asPath: false, family: "failed-command"); }
+    if (command != "") { return advice(scope, payload: command, asPath: false); }
     final search = searchPayload(scope, event: event);
-    if (search != "") { return advice(scope, payload: search, asPath: false, family: "failed-search"); }
+    if (search != "") { return advice(scope, payload: search, asPath: false); }
     final terms = linkTerms(event);
     if (terms != "") { return linkBias(scope.bin, terms: terms); }
     final writePath = toolPath(event);
-    if (writePath != "") { return advice(scope, payload: writePath, asPath: true, family: "failed-path"); }
+    if (writePath != "") { return advice(scope, payload: writePath, asPath: true); }
     return "";
 }
 
@@ -858,25 +866,25 @@ fun gateTool(scope: Scope, event: any?) > str {
     if (tool == "Task") {
         final spawn = taskPayload(scope, event: event);
         if (spawn == "") { return ALLOW; }
-        return gateCall(scope, event: event, payload: spawn, asPath: false, family: "failed-spawn");
+        return gateCall(scope, event: event, payload: spawn, asPath: false);
     }
     if (tool == "Shell") { return gateShell(scope, event: event); }
     final path = toolPath(event);
     if (tool == "Read" and path != "") { observe(scope, path: path); }
     if (tool == "Read" and skillRead(path)) {
         final load = envelope(scope, event: event, tool: "Read", input: {"file_path": path});
-        return gateCall(scope, event: event, payload: load, asPath: false, family: "failed-skill");
+        return gateCall(scope, event: event, payload: load, asPath: false);
     }
     final search = searchPayload(scope, event: event);
-    if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false, family: "failed-search"); }
-    if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path"); }
+    if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false); }
+    if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true); }
     // beforeMCPExecution judges an MCP call, with the server name this event lacks.
     if (tool.startsWith(MCP_TOOL_PREFIX)) { return ALLOW; }
     // Every other call goes to magus whole: it passes a tool its table knows touches
     // nothing, and names one no rule can read rather than letting it run unseen.
     final input = hook\dig(event, dotPath: "tool_input") ?? {<str: any>};
     final call = envelope(scope, event: event, tool: tool, input: input);
-    return gateCall(scope, event: event, payload: call, asPath: false, family: "failed-call");
+    return gateCall(scope, event: event, payload: call, asPath: false);
 }
 
 // stopPayload restates a stop in the envelope magus reads a stop by. Cursor
@@ -902,11 +910,11 @@ fun gateStop(scope: Scope, event: any?, eventName: str) > str {
     if (eventName == "subagentStop" and hook\field(event, dotPath: "status") != "completed") { return EMPTY; }
     final payload = stopPayload(scope, event: event, eventName: eventName);
     if (payload == "") { return EMPTY; }
-    final v = verdict(scope, payload: payload, asPath: false, ask: false, family: "failed-stop");
-    if (v == null) { return EMPTY; }
-    if (v!.decision == "advise") { warn(v!.context); }
-    if (v!.decision != "deny") { return EMPTY; }
-    return json\stringify({"followup_message": "[magus guard] {v!.reason}"}) catch EMPTY;
+    final v = verdict(scope, payload: payload, asPath: false, ask: false);
+    if (v.decision == UNJUDGED) { warn(v.reason); }
+    if (v.decision == "advise") { warn(v.context); }
+    if (v.decision != "deny") { return EMPTY; }
+    return json\stringify({"followup_message": "[magus guard] {v.reason}"}) catch EMPTY;
 }
 
 fun dispatch(event: any?, eventName: str, scope: Scope) > str {
@@ -938,7 +946,7 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
         final asked = recall("ask", parts: [scope.session, command]);
         if (asked != null) { return askReply(asked!); }
         if (recall("shell", parts: [scope.session, command]) != null) { return ALLOW; }
-        return gateCall(scope, event: event, payload: command, asPath: false, family: "failed-command");
+        return gateCall(scope, event: event, payload: command, asPath: false);
     }
     if (eventName == "preToolUse") { return gateTool(scope, event: event); }
     if (eventName == "postToolUse" or eventName == "postToolUseFailure") { return afterCallReply(scope, event: event); }
@@ -964,10 +972,14 @@ fun main(args: [str]) > void {
     }
     final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"), session: readSession(event), file: "cursor-hook.buzz");
     if (bin == "" or !hook\isExecutable(bin)) {
-        if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
-            io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;
+        final text = "{UNAVAILABLE_TEXT}\n{hook\magusFix(hook\workspaceRoot())}";
+        if (gates(eventName)) {
+            io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: denyBoth(text))) catch void;
+            return;
         }
-        if (gates(eventName)) { io\stdout.write(ALLOW) catch void; }
+        if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
+            io\stderr.write(text + "\n") catch void;
+        }
         if (eventName == "beforeSubmitPrompt") { io\stdout.write(SUBMIT_CONTINUE) catch void; }
         return;
     }
@@ -978,4 +990,13 @@ fun main(args: [str]) > void {
         transcript = hook\field(event, dotPath: "transcript_path"),
     };
     io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
+}
+
+test "a call no magus could judge is refused, and the person reads why" {
+    final v = judged(Guard{ bin = "/nonexistent/magus", payload = "ls" }, attempts: [["-o", "json"]]);
+    std\assert(v.decision == UNJUDGED, message: v.decision);
+    std\assert(v.reason.indexOf("/nonexistent/magus") != null, message: v.reason);
+    final reply: {str: any} = json\parse(gateReply(v, eventName: "preToolUse", command: "")) catch {<str: any>};
+    std\assert(reply["permission"] == "deny", message: "{reply}");
+    std\assert(reply["user_message"] == v.reason, message: "the person reads the whole fix");
 }

@@ -61,15 +61,25 @@ export fun transcripts(dir: str) > [str] {
 }
 
 // repoRoot is the workspace the transcripts are scoped to: HOST_REPO_ROOT when set, else
-// what bin says the workspace is, "" when neither answers.
+// what bin says the workspace is. When neither answers, it warns why
+// and returns "".
 export fun repoRoot(bin: str) > str {
     final declared = env\get("HOST_REPO_ROOT") catch "";
-    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    if (declared != "") { return declared; }
+    if (bin == "" or !hook\isExecutable(bin)) {
+        warn("no runnable magus names the workspace, so nothing is loaded; set HOST_REPO_ROOT, or "
+            + hook\magusFix(hook\workspaceRoot()));
+        return "";
+    }
     final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: proc\ExecOptions{
         quiet = true,
         allowFailure = true,
     }) catch null;
-    if (result == null or result!.code != 0) { return ""; }
+    if (result == null or result!.code != 0) {
+        final said = if (result != null) hook\firstLine(result!.stderr) else "it did not start";
+        warn("{bin} could not name the workspace, so nothing is loaded: {said}");
+        return "";
+    }
     return hook\trimTrailingNewlines(result!.stdout);
 }
 

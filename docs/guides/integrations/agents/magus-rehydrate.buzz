@@ -101,11 +101,14 @@ fun main(args: [str]) > void {
     if (cwd != "") { root = hook\workspaceRootAt(cwd); }
     if (root == "") { root = hook\workspaceRoot(); }
 
-    // An absent magus is SILENT, where an absent guard is loud. Nothing here is
-    // unenforced (there is no rule), so announcing it would open every compacted
-    // session with a report that an optional context block was not written.
     final bin = hook\resolveBin(cwd: cwd);
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
+    if (bin == "" or !hook\isExecutable(bin)) {
+        // Only the json reply carries a systemMessage.
+        final host = if (format == "json") "claude-code" else "";
+        io\stdout.write(hook\unrecordedNotice(bin, session: hook\field(event, dotPath: "session_id"),
+            host: host, file: "magus-rehydrate.buzz", root: root)) catch void;
+        return;
+    }
 
     // Captured rather than streamed, because the json arm has to wrap it. stderr is
     // discarded by `quiet`: a magus too old for `session --brief` prints its usage

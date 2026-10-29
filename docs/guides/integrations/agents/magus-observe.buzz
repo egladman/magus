@@ -14,9 +14,9 @@
 // because only it knows which of your host's tools look.
 //
 // Contract: reads the host's event as JSON on stdin, selects the path, and feeds
-// it to `magus shell --observe`. It prints NOTHING and always exits 0; see the
-// note on that below, which is load-bearing rather than tidy. Override any of
-// the variables below:
+// it to `magus shell --observe`. It always exits 0; see the note on that below.
+// It prints only the once-per-session notice that no magus could record.
+// Override any of the variables below:
 //
 //   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
@@ -42,7 +42,7 @@
 // EVERY call that can fail is caught, deliberately.
 //
 // An unparsable event, a missing binary, a flag the binary does not know: each one
-// must end as silence and exit 0. A PreToolUse hook's exit status is not advisory on
+// must exit 0. A PreToolUse hook's exit status is not advisory on
 // every host. Claude Code reads exit 2 as "block this tool call" and takes the message
 // from stderr, so an uncaught error here could stop the agent from reading anything at
 // all. An optional record must never be able to do that.
@@ -102,18 +102,16 @@ fun main(args: [str]) > void {
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
 
-    // An absent observer is SILENT, where an absent guard is loud.
-    //
-    // The guard templates announce themselves when magus cannot be found, because an
-    // unenforced deny rule is a safety fact the reader needs. Nothing is unenforced
-    // here, there is no rule, so the same announcement would be a per-read interruption
-    // reporting that an optional record was not written.
     final raw = io\stdin.readAll() catch "";
     final event = json\parse(raw) catch null;
     // The event's cwd, for the reason magus-command.buzz's Guard gives.
     final cwd = field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
     final bin = hook\resolveBin(cwd: cwd);
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
+    if (bin == "" or !hook\isExecutable(bin)) {
+        io\stdout.write(hook\unrecordedNotice(bin, session: field(event, dotPath: sessionPath),
+            host: agentName, file: "magus-observe.buzz", root: hook\workspaceRootAt(cwd))) catch void;
+        return;
+    }
 
     // The path is extracted rather than forwarding the whole event, because a payload
     // magus does not recognize as an envelope is judged as the literal text it is, and

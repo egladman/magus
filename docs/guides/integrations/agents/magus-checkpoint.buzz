@@ -18,7 +18,8 @@
 // Contract: pipes your host's event, unread, into `magus session checkpoint`.
 // magus takes the two pointers only a host knows out of the envelope and ignores
 // the rest; nothing in the payload becomes the note, because a note is a sentence
-// a person writes. It prints NOTHING and always exits 0. Override:
+// a person writes. It always exits 0, and prints only the once-per-session
+// notice that no magus could record. Override:
 //
 //   __MAGUS_BIN   path to the binary, when it is not on PATH
 //
@@ -85,15 +86,17 @@ fun main(args: [str]) > void {
     }
 
     final event = io\stdin.readAll() catch "";
+    final doc = json\parse(event) catch null;
     // The event's cwd names the tree whose state is recorded, for the reason
     // magus-command.buzz's Guard gives.
-    final cwd = hook\field(json\parse(event) catch null, dotPath: "cwd");
+    final cwd = hook\field(doc, dotPath: "cwd");
 
-    // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
-    // unenforced, because there is no rule, so announcing it would interrupt the end of
-    // every session to report that an optional record was not written.
     final bin = hook\resolveBin(cwd: cwd);
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
+    if (bin == "" or !hook\isExecutable(bin)) {
+        io\stdout.write(hook\unrecordedNotice(bin, session: hook\field(doc, dotPath: "session_id"),
+            host: agentName, file: "magus-checkpoint.buzz", root: hook\workspaceRootAt(cwd))) catch void;
+        return;
+    }
 
     // Both streams are discarded by `quiet`: a magus too old for `session checkpoint`
     // prints its usage, and that would otherwise reach the host as this hook's response
