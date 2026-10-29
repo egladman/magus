@@ -466,7 +466,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
-	skill :=filepath.Join(root, ".claude", "skills", "magus-query", "SKILL.md")
+	skill := filepath.Join(root, ".claude", "skills", "magus-query", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
 	require.NoError(t, os.WriteFile(skill, []byte("# query\n"), 0o644))
 

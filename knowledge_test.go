@@ -1435,7 +1435,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	cfg := optIn(goSpell, buzzSpell)
 	cacheDir := resolveCacheDir(root, cfg)
 	const (
-		parsePull ="scip-buzz buzz . . `hack/ci/pull-requests.buzz`/parsePull()."
+		parsePull = "scip-buzz buzz . . `hack/ci/pull-requests.buzz`/parsePull()."
 		run       = "scip-buzz buzz . . `hack/ci/run.buzz`/run()."
 		goMain    = "scip-go gomod example.com/m v1 `example.com/m`/Main()."
 	)
