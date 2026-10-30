@@ -563,6 +563,25 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedLeavesARealDenyAlone() {
 	s.False(lapsed)
 }
 
+func (s *JudgeBudgetSuite) TestJudgeLapsedKeepsARuleDenyPastALapsedPhase() {
+	ctx, _, _ := writeFixture(s.T())
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	release := make(chan struct{})
+	defer close(release)
+	stalls := func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		<-release
+		return types.TargetPolicyIndex{}, false
+	}
+	// The policy read lapses first; the verdict is still reset's own rule.
+	line := "./magus run test . && git reset --hard origin/main"
+	v, lapsed := JudgeLapsed(ctx, Dependencies{TargetPolicies: stalls}, Request{Input: line, DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.NotEqual(string(advisoryUnfinished), v.Rule)
+	s.NotContains(v.Reason, "did not finish grading")
+	s.False(lapsed)
+}
+
 func (s *JudgeBudgetSuite) TestTrailNamesBuiltinRulesAndNotices() {
 	ctx, cacheDir := spawnFixture(s.T())
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"})

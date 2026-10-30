@@ -180,12 +180,12 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 	return v, err
 }
 
-// JudgeLapsed is [Judge], and whether a phase of the judgment ran out of time.
-// A deny from a lapsed judgment may describe the clock and not the call.
+// JudgeLapsed is [Judge], and whether its deny describes the clock and not the
+// call. A rule's own deny stays a deny when some other phase ran out of time.
 func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.GuardJudgment, bool) {
 	log := &phaseLog{start: time.Now()}
 	v := Judge(context.WithValue(ctx, phaseLogKey{}, log), deps, req)
-	return v, log.anyLapsed()
+	return v, v.Decision == decisionDeny && strings.Contains(v.Reason, lapseGradingLead)
 }
 
 // JudgeWithin runs judge, a hook judgment for req, and answers by the hook's deadline on
@@ -586,11 +586,6 @@ func (l *phaseLog) lapsed(name string) bool {
 	return ok
 }
 
-// anyLapsed reports whether any recorded phase ran out of time.
-func (l *phaseLog) anyLapsed() bool {
-	return slices.ContainsFunc(l.finished(), func(p trail.Phase) bool { return p.Lapsed })
-}
-
 // lapsedPhase is the first recorded phase named name that ran out of time.
 func (l *phaseLog) lapsedPhase(name string) (trail.Phase, bool) {
 	if l == nil {
@@ -696,13 +691,17 @@ func roundBudget(d time.Duration) time.Duration {
 	return d.Round(time.Millisecond)
 }
 
+// lapseGradingLead opens the only deny a dry run reaches for lack of time.
+// JudgeLapsed reads it to tell that deny from a rule's.
+const lapseGradingLead = "magus did not finish grading"
+
 // lapseReason is the deny for a call that changes state when a phase of its judgment ran out
 // of time. dryRun words it for a person grading the call ahead of time: not graded.
 func lapseReason(call judgedCall, l ruleLapse, dryRun bool) string {
 	if dryRun {
-		return fmt.Sprintf("magus did not finish grading %s: %s, so it is not graded. "+
+		return fmt.Sprintf("%s %s: %s, so it is not graded. "+
 			"A dry run is bounded at %s and a hook at %s, so a hook would deny the call as well.",
-			call.what, l.what(), dryRunBudget, hookBudget)
+			lapseGradingLead, call.what, l.what(), dryRunBudget, hookBudget)
 	}
 	return fmt.Sprintf("magus ran out of time judging %s: %s. "+
 		"A call that changes state is denied rather than let through unjudged; retry it. "+
