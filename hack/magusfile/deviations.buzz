@@ -275,10 +275,11 @@ export fun codeClimate(text: str) > Findings {
         if (rule == "" or path == "") {
             return Findings{ error = "a Code Climate record without check_name or location.path" };
         }
-        final lines = location?["lines"] as? {str: any};
+        final positions = location?["positions"] as? {str: any};
+        final begin = positions?["begin"] as? {str: any};
         found.append(lint\Finding{
             path = path,
-            line = std\toInt(lines?["begin"] ?? 0),
+            line = std\toInt(begin?["line"] ?? 0),
             rule = rule,
             message = (doc?["description"] as? str) ?? "",
         });
@@ -426,7 +427,7 @@ test "a subject is matched exactly, never as a glob" {
 }
 
 test "codeClimate reads buf's record" {
-    final got = codeClimate(`[\{"description":"gone","check_name":"FIELD_NO_DELETE","fingerprint":"x","severity":"minor","location":\{"path":"a.proto","lines":\{"begin":3\}\}\}]`);
+    final got = codeClimate(`[\{"description":"gone","check_name":"FIELD_NO_DELETE","fingerprint":"x","location":\{"path":"a.proto","positions":\{"begin":\{"line":3,"column":1\},"end":\{"line":4,"column":2\}\}\},"severity":"minor"\}]`);
     assert\equal(got.error, want: "", message: "no error");
     assert\equal(got.findings[0].rule, want: "FIELD_NO_DELETE", message: "rule");
     assert\equal(got.findings[0].path, want: "a.proto", message: "path");
