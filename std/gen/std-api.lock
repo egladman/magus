@@ -2,6 +2,7 @@ archive.compress
 archive.list
 archive.readFile
 archive.uncompress
+buzz.parse
 charm.after
 charm.afterFunc
 charm.append

@@ -349,7 +349,9 @@ github.com/egladman/magus/std.Arg.Object field string
 github.com/egladman/magus/std.Arg.Optional field bool
 github.com/egladman/magus/std.Arg.Type field TypeTag
 github.com/egladman/magus/std.Arg.Variadic field bool
+github.com/egladman/magus/std.Buzz var Module
 github.com/egladman/magus/std.BuzzMethodName func(m Method) string
+github.com/egladman/magus/std.BuzzParse func(ctx context.Context, path string, embedded bool) (github.com/egladman/magus/types.BuzzFile, error)
 github.com/egladman/magus/std.BuzzSignature func(mod Module, m Method) string
 github.com/egladman/magus/std.BuzzStdlibEquiv func(module string, method string) (string, bool)
 github.com/egladman/magus/std.Callback type interface
@@ -987,7 +989,30 @@ github.com/egladman/magus/types.BundleRange.Head field string
 github.com/egladman/magus/types.Bundler type interface
 github.com/egladman/magus/types.Bundler.Bundle imethod func(ctx context.Context, root string, file string, r BundleRange) error
 github.com/egladman/magus/types.Bundler.Unbundle imethod func(ctx context.Context, root string, file string) error
+github.com/egladman/magus/types.BuzzFile type struct
+github.com/egladman/magus/types.BuzzFile.Error field string
+github.com/egladman/magus/types.BuzzFile.Functions field []BuzzFunction
+github.com/egladman/magus/types.BuzzFile.Path field string
+github.com/egladman/magus/types.BuzzFile.Statements field []BuzzStatement
+github.com/egladman/magus/types.BuzzFile.Tests field []BuzzTest
+github.com/egladman/magus/types.BuzzFunction type struct
+github.com/egladman/magus/types.BuzzFunction.EndLine field int
+github.com/egladman/magus/types.BuzzFunction.ErrorType field string
+github.com/egladman/magus/types.BuzzFunction.Line field int
+github.com/egladman/magus/types.BuzzFunction.Name field string
+github.com/egladman/magus/types.BuzzFunction.ObjectName field string
+github.com/egladman/magus/types.BuzzFunction.Throws field []int
 github.com/egladman/magus/types.BuzzObject type map[string]any
+github.com/egladman/magus/types.BuzzStatement type struct
+github.com/egladman/magus/types.BuzzStatement.EndLine field int
+github.com/egladman/magus/types.BuzzStatement.Kind field string
+github.com/egladman/magus/types.BuzzStatement.Line field int
+github.com/egladman/magus/types.BuzzStatement.Name field string
+github.com/egladman/magus/types.BuzzTest type struct
+github.com/egladman/magus/types.BuzzTest.EndLine field int
+github.com/egladman/magus/types.BuzzTest.Line field int
+github.com/egladman/magus/types.BuzzTest.Name field string
+github.com/egladman/magus/types.BuzzTest.Throws field []int
 github.com/egladman/magus/types.CIAnnotation type struct
 github.com/egladman/magus/types.CIAnnotation.Code field string
 github.com/egladman/magus/types.CIAnnotation.Col field int

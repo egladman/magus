@@ -40,6 +40,7 @@ func TestExcludedModules(t *testing.T) {
 		"os", "fs", "vcs", "archive", "http", // process / filesystem / network
 		"net", "proc", "term", // same three categories, added later
 		"image",       // writes layouts to disk and pushes to a registry
+		"buzz",        // reads a Buzz file from disk
 		"lcov",        // reads a coverage file from disk
 		"pipe",        // reads and writes the process's own stdio
 		"diskwatch",   // samples free disk space into a per-user store
