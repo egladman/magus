@@ -122,12 +122,13 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## mcp
 
-| Config key          | Environment variable      | Flag                  | Type              |
-| ------------------- | ------------------------- | --------------------- | ----------------- |
-| `mcp.address`       | `MAGUS_MCP_ADDRESS`       | `--mcp-address`       | string            |
-| `mcp.enabled`       | `MAGUS_MCP_ENABLED`       | _(env only)_          | bool _(env only)_ |
-| `mcp.http`          | `MAGUS_MCP_HTTP`          | _(env only)_          | bool _(env only)_ |
-| `mcp.insecure_bind` | `MAGUS_MCP_INSECURE_BIND` | `--mcp-insecure-bind` | bool              |
+| Config key            | Environment variable        | Flag                  | Type                               |
+| --------------------- | --------------------------- | --------------------- | ---------------------------------- |
+| `mcp.address`         | `MAGUS_MCP_ADDRESS`         | `--mcp-address`       | string                             |
+| `mcp.allowed_origins` | `MAGUS_MCP_ALLOWED_ORIGINS` | _(env only)_          | list _(comma-separated, env only)_ |
+| `mcp.enabled`         | `MAGUS_MCP_ENABLED`         | _(env only)_          | bool _(env only)_                  |
+| `mcp.http`            | `MAGUS_MCP_HTTP`            | _(env only)_          | bool _(env only)_                  |
+| `mcp.insecure_bind`   | `MAGUS_MCP_INSECURE_BIND`   | `--mcp-insecure-bind` | bool                               |
 
 ## report
 

@@ -273,6 +273,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_MCP_INSECURE_BIND**
 : Permits a non-loopback Address. That listener serves bearer tokens over plaintext HTTP, so without it the server refuses to start rather than warn. Config file key: **mcp.insecure_bind**.
 
+**MAGUS_MCP_ALLOWED_ORIGINS**
+: Lists exact scheme://host origins, past loopback, trusted with the console routes and a graph. Empty trusts no hosted page. An inexact entry stops the server. Config file key: **mcp.allowed_origins**.
+
 **MAGUS_CONSOLE_ENABLED**
 : When false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up). Config file key: **console.enabled**.
 

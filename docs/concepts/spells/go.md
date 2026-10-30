@@ -71,11 +71,11 @@ export fun clean(ctx: magus\Context, args: [str]) > void {
 
 ## go-fmt
 
-**Command:** `gofmt -l .`
+**Command:** `gofmt -d`
 
 ### rw
 
-Replaces `-l` with `-w`.
+Replaces `-d` with `-w`.
 
 <details class="charm-patch">
 <summary>JSON Patch</summary>
@@ -96,7 +96,7 @@ Replaces `-l` with `-w`.
 
 <!-- magus-run-recorder -->
 ```buzz
-// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// go-fmt fails on misformatted files; the rw charm rewrites them in place.
 // `magus run format` checks, `magus run format:rw` applies gofmt.
 import "magus";
 import "magus/spell/go";
