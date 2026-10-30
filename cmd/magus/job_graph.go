@@ -900,7 +900,9 @@ func drawPlanFigure(ctx context.Context, rec figure.Figure) (string, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	buzzstd.RegisterWithOutput(sess, io.Discard)
-	bindings.RegisterMagusRecordTypes(sess)
+	if err := bindings.RegisterMagusRecordTypes(sess); err != nil {
+		return "", err
+	}
 	sess.SetModuleDecls("magus/figure", figure.Source)
 	svg, err := figure.Draw(ctx, sess, rec, "")
 	if err != nil {
