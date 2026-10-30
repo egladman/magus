@@ -262,6 +262,16 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.MCP.InsecureBind = b
 		}
 	}
+	if v := getenv("MAGUS_MCP_ALLOWED_ORIGINS"); v != "" {
+		parts := strings.Split(v, ",")
+		out := parts[:0]
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		cfg.MCP.AllowedOrigins = out
+	}
 	if v := getenv("MAGUS_CONSOLE_ENABLED"); v != "" {
 		if b, err := parseBoolEnv(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_ENABLED: %w", err))

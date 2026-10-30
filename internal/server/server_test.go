@@ -322,10 +322,74 @@ func TestServeHealthRoutesCORS(t *testing.T) {
 	}
 }
 
-// TestServeConsoleHostedOriginCORS proves the hosted PWA Origin
-// (https://eli.gladman.cc) can clear rebind and get a CORS preflight answer on
-// /api/, while any other Origin is refused there.
-func TestServeConsoleHostedOriginCORS(t *testing.T) {
+// TestServeRefusesAnInexactAllowedOrigin: an entry no browser can send would
+// read as trust and grant none, so it stops the server.
+func TestServeRefusesAnInexactAllowedOrigin(t *testing.T) {
+	testkit.Isolate(t)
+	root := fixtureWorkspace(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err)
+	opts := mcp.Options{
+		Magus:    m,
+		Version:  "test",
+		HTTPAddr: netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), freePort(t)),
+	}
+	opts.Config.MCP.AllowedOrigins = []string{"https://site.example/magus/"}
+
+	err = New(opts).Serve(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mcp.allowed_origins")
+}
+
+// TestServeConsoleDefaultTrustsNoHostedOrigin: with mcp.allowed_origins empty,
+// the site this project happens to be hosted on is a stranger like any other.
+func TestServeConsoleDefaultTrustsNoHostedOrigin(t *testing.T) {
+	testkit.Isolate(t)
+	root := fixtureWorkspace(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err)
+	port := freePort(t)
+	d := New(mcp.Options{
+		Magus:    m,
+		Version:  "test",
+		HTTPAddr: netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port),
+		HealthRoutes: map[string]http.Handler{
+			"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		},
+	})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/graph", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "https://eli.gladman.cc")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("server did not shut down")
+	}
+}
+
+// TestServeConsoleAllowedOriginCORS proves an origin in mcp.allowed_origins can
+// clear rebind and get a CORS preflight answer on /api/, while any other Origin
+// is refused there.
+func TestServeConsoleAllowedOriginCORS(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
@@ -338,14 +402,17 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	port := freePort(t)
 	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
 
-	d := New(mcp.Options{
+	const siteOrigin = "https://site.example"
+	opts := mcp.Options{
 		Magus:    m,
 		Version:  "test",
 		HTTPAddr: addr,
 		HealthRoutes: map[string]http.Handler{
 			"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		},
-	})
+	}
+	opts.Config.MCP.AllowedOrigins = []string{siteOrigin}
+	d := New(opts)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- d.Serve(ctx) }()
@@ -353,7 +420,6 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
 
-	const siteOrigin = "https://eli.gladman.cc"
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	// OPTIONS /api/v1/graph from the hosted origin: rebind admits the Origin,

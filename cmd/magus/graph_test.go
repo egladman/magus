@@ -142,6 +142,42 @@ func TestStripUnreproducibleDropsGitHistory(t *testing.T) {
 
 // ---- graph export --open ----
 
+type ExplorerOriginSuite struct{ suite.Suite }
+
+func TestExplorerOriginSuite(t *testing.T) {
+	suite.Run(t, new(ExplorerOriginSuite))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesTheDefaultExplorerWithAnEmptyList() {
+	err := checkExplorerOrigin(defaultExploreURL, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "mcp.allowed_origins")
+}
+
+func (s *ExplorerOriginSuite) TestPassesAnOriginTheListNames() {
+	s.NoError(checkExplorerOrigin(defaultExploreURL, []string{"https://eli.gladman.cc"}))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesAnotherSchemeOfAListedOrigin() {
+	s.Error(checkExplorerOrigin("http://site.example/graph/", []string{"https://site.example"}))
+}
+
+func (s *ExplorerOriginSuite) TestPassesLocalhost() {
+	s.NoError(checkExplorerOrigin("http://localhost:9999/graph/", nil))
+}
+
+func (s *ExplorerOriginSuite) TestPassesALoopbackIP() {
+	s.NoError(checkExplorerOrigin("http://127.0.0.1:9999/graph/", nil))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesANameThatOnlyStartsLikeLoopback() {
+	s.Error(checkExplorerOrigin("http://localhost.evil.example/graph/", nil))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesARelativeBase() {
+	s.Error(checkExplorerOrigin("graph/", nil))
+}
+
 // TestOpenViaBrowserEnv exercises the $BROWSER convention parsing: unset falls through
 // (error), a bogus command errors, and a real command (with or without %s) launches.
 func TestOpenViaBrowserEnv(t *testing.T) {

@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
@@ -18,18 +19,21 @@ import (
 // static map is needed for them. extra holds an optional concrete non-loopback
 // bind host that the operator has deliberately configured (zero = not set).
 // Non-IP hostnames like "localhost" live in names.
+// origins pass the Origin check and never the Host check:
+// a page is trusted, its name is not.
 type AllowedSet struct {
-	extra netip.Addr
-	names map[string]struct{} // lowercase
+	extra   netip.Addr
+	names   map[string]struct{} // lowercase
+	origins map[string]struct{} // exact scheme://host[:port]
 }
 
 // GuardRebind rejects requests that a browser could forge via DNS rebinding.
 // It validates two headers on every request it wraps:
 //
 //   - Host (always present): the parsed hostname must be in allowed.
-//   - Origin (browser-only): if present, the parsed hostname must be in allowed.
-//     Absent Origin is allowed — non-browser clients (a CLI, a desktop app,
-//     curl) do not send it.
+//   - Origin (browser-only): if present, it must be an exact allowed origin
+//     or name an allowed host. Absent Origin is allowed: non-browser clients
+//     (a CLI, a desktop app, curl) do not send it.
 //
 // The server wraps its console routes in it. /mcp and the health routes
 // (/livez, /readyz, /healthz) are mounted outside it: /mcp trusts its bearer
@@ -40,12 +44,9 @@ func GuardRebind(format rpcerr.Format, allowed AllowedSet, next http.Handler) ht
 			format.Write(w, r, hostNotAllowed)
 			return
 		}
-		if orig := r.Header.Get("Origin"); orig != "" {
-			u, err := url.Parse(orig)
-			if err != nil || !isAllowedHost(u.Host, allowed) {
-				format.Write(w, r, hostNotAllowed)
-				return
-			}
+		if orig := r.Header.Get("Origin"); orig != "" && !isAllowedOrigin(orig, allowed) {
+			format.Write(w, r, hostNotAllowed)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -54,27 +55,42 @@ func GuardRebind(format rpcerr.Format, allowed AllowedSet, next http.Handler) ht
 var hostNotAllowed = rpcerr.Error{
 	Code:    connect.CodePermissionDenied,
 	Reason:  types.HostNotAllowed,
-	Message: "the server serves only loopback hosts and the configured console origin; this request named another host in its Host or Origin header",
+	Message: "the server serves only loopback hosts and the origins in mcp.allowed_origins; this request named another host in its Host or Origin header",
 }
 
-// Allow returns a copy of a that additionally accepts the given hostname, for a
-// deliberately trusted cross-origin caller such as the hosted site the dashboard is served
-// from. The receiver is not mutated (its names map is copied), so widening one route's
-// accept-list never leaks into the shared set the other loopback routes use. An empty or
-// port-only host is ignored.
-func (a AllowedSet) Allow(host string) AllowedSet {
-	host = strings.ToLower(strings.TrimSpace(host))
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
+// AllowOrigin returns a copy of a that also accepts origin in the Origin
+// header, or the error [ExactOrigin] gives. The receiver is not mutated, so
+// widening one route never leaks into the set other routes share.
+func (a AllowedSet) AllowOrigin(origin string) (AllowedSet, error) {
+	exact, err := ExactOrigin(origin)
+	if err != nil {
+		return AllowedSet{}, err
 	}
-	names := make(map[string]struct{}, len(a.names)+1)
-	for k := range a.names {
-		names[k] = struct{}{}
+	origins := make(map[string]struct{}, len(a.origins)+1)
+	for k := range a.origins {
+		origins[k] = struct{}{}
 	}
-	if host != "" {
-		names[host] = struct{}{}
+	origins[exact] = struct{}{}
+	return AllowedSet{extra: a.extra, names: a.names, origins: origins}, nil
+}
+
+// ExactOrigin returns s when it is what a browser sends as an Origin: a
+// lowercase http or https scheme://host[:port] and nothing more. An entry no
+// browser can send would trust nothing while reading as if it did.
+func ExactOrigin(s string) (string, error) {
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || s != strings.ToLower(u.Scheme+"://"+u.Host) {
+		return "", fmt.Errorf("httpx: origin: %q is not an exact http or https scheme://host origin", s)
 	}
-	return AllowedSet{extra: a.extra, names: names}
+	return s, nil
+}
+
+func isAllowedOrigin(origin string, allowed AllowedSet) bool {
+	if _, ok := allowed.origins[origin]; ok {
+		return true
+	}
+	u, err := url.Parse(origin)
+	return err == nil && isAllowedHost(u.Host, allowed)
 }
 
 // AllowedHosts builds the AllowedSet for GuardRebind from the server's

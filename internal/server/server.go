@@ -16,7 +16,6 @@ import (
 	"maps"
 	"net/http"
 	"net/netip"
-	"net/url"
 
 	"connectrpc.com/connect"
 
@@ -700,8 +699,9 @@ func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]typ
 	f.server.Handle(pattern, wrap(g))
 }
 
-// consoleWrap is the wrap every console route takes: rebind first, so a forged Host or an
-// Origin other than loopback and the hosted site is refused, then CORS for those origins.
+// consoleWrap is the wrap every console route takes: rebind, then CORS.
+// Rebind refuses a forged Host and any Origin past loopback and
+// mcp.allowed_origins.
 func (f *frame) consoleWrap(format rpcerr.Format) func(http.Handler) http.Handler {
 	return func(g http.Handler) http.Handler {
 		return httpx.GuardRebind(format, f.siteAllowed, f.cors(g))
@@ -796,27 +796,23 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	}
 	f.socketRoute("/mcp", rpcerr.FormatJSON, mcpNeeds, cappedMCP)
 
-	// CORS allows the hosted explorer origin plus the two loopback origins derived from
-	// the server port. Built here (not only inside the console block) so /livez and
-	// /readyz get the same allow-list even when the console mount is disabled: a browser
-	// client (the console PWA) needs to read them cross-origin, but they stay otherwise
-	// unguarded (no rebind check, no bearer token), so an orchestrator can still probe them
-	// freely. CORSAllow itself only ever reflects an allow-listed Origin, never "*", so this
-	// widens readability, not who may write.
-	siteOrigin := mcp.SiteOrigin
+	// Built outside the console block so /livez and /readyz stay readable
+	// from a browser with the console mount off. The static shell keeps
+	// f.allowed.
 	port := addr.Port()
-	f.cors = httpx.CORSAllow(
-		siteOrigin,
+	origins := []string{
 		fmt.Sprintf("http://localhost:%d", port),
 		fmt.Sprintf("http://127.0.0.1:%d", port),
-	)
-	// siteAllowed widens the DNS-rebind accept-list for console browser routes so the
-	// hosted PWA Origin (eli.gladman.cc) is not 403'd before CORS can answer. The static
-	// console shell keeps the loopback-only set.
-	f.siteAllowed = f.allowed
-	if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
-		f.siteAllowed = f.allowed.Allow(u.Host)
 	}
+	f.siteAllowed = f.allowed
+	for _, origin := range s.opts.Config.MCP.AllowedOrigins {
+		f.siteAllowed, err = f.siteAllowed.AllowOrigin(origin)
+		if err != nil {
+			return nil, fmt.Errorf("server: mcp.allowed_origins: %w", err)
+		}
+		origins = append(origins, origin)
+	}
+	f.cors = httpx.CORSAllow(origins...)
 	for path, h := range s.opts.HealthRoutes {
 		httpServer.Handle(path, f.cors(h))
 	}

@@ -70,6 +70,7 @@ config log.silent
 config log.stream
 config max_failures
 config mcp.address
+config mcp.allowed_origins
 config mcp.enabled
 config mcp.http
 config mcp.insecure_bind

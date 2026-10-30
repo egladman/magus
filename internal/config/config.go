@@ -632,6 +632,10 @@ type MCP struct {
 	// InsecureBind permits a non-loopback Address. That listener serves bearer tokens over
 	// plaintext HTTP, so without it the server refuses to start rather than warn.
 	InsecureBind bool `json:"insecure_bind" yaml:"insecure_bind"`
+	// AllowedOrigins lists exact scheme://host origins, past loopback, trusted
+	// with the console routes and a graph. Empty trusts no hosted page.
+	// An inexact entry stops the server.
+	AllowedOrigins []string `json:"allowed_origins" yaml:"allowed_origins"`
 }
 
 // HTTPEnabled reports whether the server mounts /mcp on its HTTP listener.

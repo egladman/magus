@@ -356,6 +356,15 @@ var Fields = []fieldtype.Field{
 		Doc:      "Permits a non-loopback Address. That listener serves bearer tokens over plaintext HTTP, so without it the server refuses to start rather than warn",
 	},
 	{
+		GoPath:   "MCP.AllowedOrigins",
+		YamlPath: "mcp.allowed_origins",
+		EnvVar:   "MAGUS_MCP_ALLOWED_ORIGINS",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindStringSlice,
+		Usage:    "MAGUS_MCP_ALLOWED_ORIGINS: AllowedOrigins lists exact scheme://host origins, past loopback, trusted with the console routes and a graph.",
+		Doc:      "Lists exact scheme://host origins, past loopback, trusted with the console routes and a graph. Empty trusts no hosted page. An inexact entry stops the server",
+	},
+	{
 		GoPath:   "Console.Enabled",
 		YamlPath: "console.enabled",
 		EnvVar:   "MAGUS_CONSOLE_ENABLED",

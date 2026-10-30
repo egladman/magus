@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/exec"
@@ -909,6 +910,9 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 				attr.Why("--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh."))
 			return exit.Reported(exit.Usage)
 		}
+		if err := explorerAllowed(ctx, base, printOnly); err != nil {
+			return err
+		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
 	}
 
@@ -927,6 +931,9 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	}
 	if follow {
 		return graphOpenFollow(ctx, root, printOnly, useTargets)
+	}
+	if err := explorerAllowed(ctx, base, printOnly); err != nil {
+		return err
 	}
 
 	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.
@@ -974,6 +981,46 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 		return exit.Reported(exit.Failure)
 	}
 	return nil
+}
+
+// explorerAllowed refuses to open a page mcp.allowed_origins does not name. The
+// page receives the graph, so opening it is a trust decision. --print opens
+// nothing, so it passes.
+func explorerAllowed(ctx context.Context, base string, printOnly bool) error {
+	if printOnly {
+		return nil
+	}
+	err := checkExplorerOrigin(base, globalCfg.MCP.AllowedOrigins)
+	if err == nil {
+		return nil
+	}
+	slog.ErrorContext(ctx, err.Error(), attr.Notice("magus graph export --open"),
+		attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, pass --url a loopback mirror, or use --print for the link alone."))
+	return exit.Reported(exit.Failure)
+}
+
+// checkExplorerOrigin passes a loopback base and an origin named in allowed.
+func checkExplorerOrigin(base string, allowed []string) error {
+	origin, err := httpx.ParseOrigin(base)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(allowed, origin) || isLoopbackOrigin(origin) {
+		return nil
+	}
+	return fmt.Errorf("the graph explorer at %s is not in mcp.allowed_origins", origin)
+}
+
+func isLoopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if u.Hostname() == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(u.Hostname())
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 // graphOpenTargets opens the workspace's target dependency graph in the hosted
@@ -1219,9 +1266,8 @@ func liveBridgeReachable(ctx context.Context) bool {
 // There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.
 //
-// The link carries a one-time code in the URL fragment (which browsers do not transmit in HTTP
-// requests), never a token: the page trades it once, within a minute, for a console=write token
-// living console.LinkTokenLifetime, so the opener's argv holds nothing worth stealing.
+// The link's fragment carries a one-time code, never a token. The page trades
+// it within seconds, so the opener's argv holds nothing worth stealing.
 func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets bool) error {
 	hostPort := mcpAddrString()
 
