@@ -298,7 +298,11 @@ only when the project's `.codex` layer is trusted, the same trust that loads its
 hooks. Where no prompt can happen (no rules file, `permission_mode` of
 `bypassPermissions` or `dontAsk`, or a push written as anything but a plain
 `git push`, `hg push`, `sl push` or `jj git push` command), the guard refuses the push and names the person's own
-terminal. One open Codex bug ignores a prompt rule under `danger-full-access` with
+terminal. `systemMessage` carries that to the person, and the deny reason tells the agent
+to relay it verbatim if they saw nothing. Not verified against a client: what a prompt rule
+does under `approval_policy = "never"`, which a hook cannot read, and any way to answer a
+prompt from another device. The `ask` end-to-end scenarios in `internal/hoste2e` run the
+first. One open Codex bug ignores a prompt rule under `danger-full-access` with
 granular rules, [openai/codex#25312](https://github.com/openai/codex/issues/25312).
 The template refuses a session whose hook input reports `bypassPermissions`, but
 nothing here has confirmed that full access reports that mode, so do not run pushes

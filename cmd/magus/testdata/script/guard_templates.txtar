@@ -1119,6 +1119,38 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdout '"permissionDecision":"ask"'
 stdout 'Approving runs it once'
 
+# case: command/ask
+# acceptEdits still prompts: only a mode that never prompts turns the ask into a deny.
+stdin $WORK/bench-command-accept-edits.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"ask"'
+
+# case: command/ask
+# bypassPermissions never prompts, so the ask is a deny, never a run. systemMessage is what
+# the person reads: why this host cannot ask, and the command to type.
+stdin $WORK/bench-command-bypass.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout '"systemMessage":'
+stdout 'It needs your approval, and this session runs in permission_mode bypassPermissions, which never prompts'
+stdout 'Run it from your own terminal: magus run bench \.'
+stdout 'relay this one to them verbatim'
+! stdout '"permissionDecision":"ask"'
+
+# case: command/ask
+stdin $WORK/bench-command-dont-ask.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'permission_mode dontAsk, which never prompts'
+! stdout '"permissionDecision":"ask"'
+
+# case: command/ask
+# A command with quotes in it stays one JSON string in both texts.
+stdin $WORK/bench-command-quoted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'Run it from your own terminal: magus run bench \. -- \\"a b\\"'
+
 # case: command/deny
 # A caller that does not claim --renders-ask never receives an ask. A hook installed before
 # the decision existed renders one as nothing, and its host reads nothing as allow, so magus
@@ -1152,6 +1184,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdout '"permissionDecision":"deny"'
 stdout 'own terminal'
 stdout 'magus describe harness codex'
+stdout '"systemMessage":'
 ! stdout '"permissionDecision":"ask"'
 
 mkdir .codex/rules
@@ -1319,6 +1352,44 @@ stdin $WORK/cursor-bench.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"ask"'
 stdout 'Approving runs it once'
+
+# case: command/ask
+# preToolUse cannot render an ask, so it hands the shell's over: it allows, and the very
+# next event renders the prompt from the filed reason.
+chmod 0755 $WORK/refusing-magus
+chmod 0755 $WORK/asking-magus
+env CURSOR_HOOK_STATE_DIR=$WORK/cursor-ask-state
+stdin $WORK/cursor-pre-bench.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '^\{"permission":"allow"\}$'
+exists $WORK/cursor-ask-state
+stdin $WORK/cursor-bench-after-pre.json
+env __MAGUS_BIN=$WORK/refusing-magus
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"ask"'
+stdout 'Approving runs it once'
+env __MAGUS_BIN=
+
+# case: command/ask
+# Any other ask on preToolUse is a deny, and user_message tells the person why. No rule asks
+# about a write today, so a stand-in magus answers ask.
+env __MAGUS_BIN=$WORK/asking-magus
+stdin $WORK/cursor-pre-write-ask.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"deny"'
+stdout '"user_message":"stand-in reason'
+stdout 'Cursor shows its approval prompt only for a shell command or an MCP call'
+stdout 'relay this one to them verbatim'
+! stdout '"permission":"ask"'
+
+# case: command/ask
+# beforeMCPExecution does render it.
+stdin $WORK/cursor-mcp-ask.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"ask"'
+stdout '"user_message":"stand-in reason'
+env __MAGUS_BIN=
+env CURSOR_HOOK_STATE_DIR=
 cd $WORK
 
 -- push-ws/magusfile.buzz --
@@ -1410,6 +1481,28 @@ magus run bench .
 {"hook_event_name": "PreToolUse", "session_id": "s1", "turn_id": "t1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
 -- bench-command-bypass.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "bypassPermissions", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-accept-edits.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "acceptEdits", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-dont-ask.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "dontAsk", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-quoted.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "bypassPermissions", "tool_name": "Bash", "tool_input": {"command": "magus run bench . -- \"a b\""}}
+-- cursor-pre-bench.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c9", "tool_name": "Shell", "tool_use_id": "u9", "tool_input": {"command": "magus run bench ."}, "cwd": "."}
+-- cursor-bench-after-pre.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c9", "command": "magus run bench .", "cwd": ".", "sandbox": false}
+-- cursor-pre-write-ask.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c9", "tool_name": "Write", "tool_use_id": "u10", "tool_input": {"file_path": "notes/a.md"}}
+-- cursor-mcp-ask.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c9", "mcp_server_name": "magus", "tool_name": "client", "tool_input": {"script": "1"}, "cwd": "."}
+-- asking-magus --
+#!/bin/sh
+cat >/dev/null
+echo '{"decision":"ask","reason":"stand-in reason"}'
+-- refusing-magus --
+#!/bin/sh
+echo 'beforeShellExecution judged a call preToolUse filed' >&2
+exit 1
 -- bench-command-flag.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus run -s bench ."}}
 -- bench-approval.json --

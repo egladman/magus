@@ -201,12 +201,24 @@ transforms nothing a host sends, on this host or any other. `beforeShellExecutio
 judged, and allows it; it judges only a command `preToolUse` never saw, which keeps
 it as the fallback.
 
-A push at a commit no passing gate covers gets the verdict `ask`, and
-`preToolUse` answers `permission: "ask"`: Cursor shows you the reason,
-which names the commit and the gate state, and approving publishes it. A push the
-gate covers is allowed without a prompt. A session bound to a job lease is denied,
-because workers do not publish. Any decision the script does not know is denied,
-never allowed.
+A run of a `human_only` target gets the verdict `ask`. Cursor documents `ask` on
+`preToolUse` as accepted by its schema and not enforced, so that event files the
+verdict and allows the line, and `beforeShellExecution` answers `permission: "ask"`
+from the file. Cursor shows you the reason, and approving runs it. `beforeMCPExecution`
+renders an ask the same way. A push at a commit no passing gate covers is denied. A
+session bound to a job lease is denied, because workers do not publish. Any decision
+the script does not know is denied, never allowed.
+
+Any other `ask` on `preToolUse` (a write, a search, another tool) cannot prompt, so
+it is a deny. `user_message` shows you what happened, why Cursor cannot ask, and the
+command to run in your own terminal. `agent_message` tells the agent the same, and to
+relay it verbatim if you did not see it.
+
+Not verified against a client: what Cursor does with `permission: "ask"` under
+`--force`, auto-run or an allowlist, whether the desktop and CLI both show
+`user_message`, and any way to answer from a phone. Cloud agents defer
+`beforeMCPExecution`, so nothing here promises a prompt there. The `ask` end-to-end
+scenarios in `internal/hoste2e` run the first of these.
 
 The `matcher` values are a regex (Cursor's own validator: outside `""` and `"*"`
 the string must compile). One entry per event is enough: the script is the same
@@ -273,6 +285,11 @@ sources:
 // already gives a command empty stdin, and magus does not rewrite what a host sends.
 // beforeShellExecution then lets the line through unjudged; it judges only a command
 // preToolUse never saw.
+//
+// Only beforeShellExecution and beforeMCPExecution render an ask: Cursor
+// documents it on preToolUse as accepted and not enforced. preToolUse
+// files a shell ask for beforeShellExecution and turns any other ask into
+// a deny, with user_message telling the person why.
 //
 // Grep, Glob, and Read never reach beforeShellExecution. They are restated as
 // the shell commands the guard already judges, and gated on preToolUse, because
@@ -762,17 +779,39 @@ fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, family: str) > 
     return got;
 }
 
-// gateReply renders a verdict for a gating event. An ask is Cursor's own approval
-// prompt. Pass and advise both allow, because a gating event has no context field; the
-// advice waits for the after-call event. A decision this file does not know is refused,
-// so a copy older than the guard contract cannot read a new verdict as consent.
-fun gateReply(v: Verdict) > str {
-    if (v.decision == "deny" or v.decision == "ask") {
-        return json\stringify({
-            "permission": v.decision,
-            "user_message": v.reason,
-            "agent_message": v.reason,
-        }) catch ALLOW;
+fun askReply(reason: str) > str {
+    return json\stringify({
+        "permission": "ask",
+        "user_message": reason,
+        "agent_message": reason,
+    }) catch denyBoth(reason);
+}
+
+// blockedAsk is the deny standing in for a prompt preToolUse cannot show.
+fun blockedAsk(reason: str, command: str) > str {
+    final blocker = "Cursor shows its approval prompt only for a shell command or an MCP call";
+    var yours = "Do this one yourself; it has no command line to copy.";
+    var theirs = "Ask them to do it themselves.";
+    if (command != "") {
+        yours = "Run it from your own terminal: {command}";
+        theirs = "Ask them to run it from their own terminal: {command}";
+    }
+    return json\stringify({
+        "permission": "deny",
+        "user_message": "{reason}\n\nmagus stopped this call. It needs your approval, and {blocker}. {yours}",
+        "agent_message": "{reason}\n\nThis call needs the approval of the person you work for, and {blocker}. {theirs} "
+            + "If they saw no such message, relay this one to them verbatim.",
+    }) catch denyBoth(reason);
+}
+
+// gateReply renders a verdict for a gating event. An ask is a prompt where
+// the event shows one, else a deny. Pass and advise allow: advice waits for
+// the after-call event. An unknown decision is refused, never consent.
+fun gateReply(v: Verdict, eventName: str, command: str) > str {
+    if (v.decision == "deny") { return denyBoth(v.reason); }
+    if (v.decision == "ask") {
+        if (rendersPrompt(eventName)) { return askReply(v.reason); }
+        return blockedAsk(v.reason, command: command);
     }
     if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
     return json\stringify({
@@ -796,11 +835,13 @@ fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool, family: str)
     final v = verdict(scope, payload: payload, asPath: asPath, ask: true, family: family);
     if (v == null) { return ALLOW; }
     fileVerdict(scope, event: event, v: v!);
-    return gateReply(v!);
+    final command = firstField(event, keys: ["command", "tool_input.command"]);
+    return gateReply(v!, eventName: readEventName(event), command: command);
 }
 
 // gateShell judges a shell command on preToolUse. The line beforeShellExecution will see
-// is marked as judged.
+// is marked as judged. An ask is filed for that event to render as the
+// prompt. A record it cannot write leaves that event to judge the call.
 fun gateShell(scope: Scope, event: any?) > str {
     final command = hook\field(event, dotPath: "tool_input.command");
     if (command == "") { return ALLOW; }
@@ -808,20 +849,23 @@ fun gateShell(scope: Scope, event: any?) > str {
     if (v == null) { return ALLOW; }
     fileVerdict(scope, event: event, v: v!);
     if (v!.decision == "ask") {
-        // A person who approves it is not asked twice: the approved command reaches
-        // beforeShellExecution as typed.
-        remember("shell", parts: [scope.session, command], value: "");
+        remember("ask", parts: [scope.session, command], value: v!.reason);
+        return ALLOW;
     }
     if (v!.decision == "pass" or v!.decision == "advise") {
         remember("shell", parts: [scope.session, command], value: "");
     }
-    return gateReply(v!);
+    return gateReply(v!, eventName: "preToolUse", command: command);
 }
 
 fun advice(scope: Scope, payload: str, asPath: bool, family: str) > str {
     final v = verdict(scope, payload: payload, asPath: asPath, ask: false, family: family);
     if (v == null or v!.decision != "advise") { return ""; }
     return v!.context;
+}
+
+fun rendersPrompt(eventName: str) > bool {
+    return eventName == "beforeShellExecution" or eventName == "beforeMCPExecution";
 }
 
 fun gates(eventName: str) > bool {
@@ -871,7 +915,7 @@ fun gateMcp(scope: Scope, event: any?) > str {
     var context = "";
     if (v!.decision == "advise") { context = v!.context; }
     remember("mcp", parts: mcpKey(scope, tool: hook\field(event, dotPath: "tool_name"), event: event), value: context);
-    return gateReply(v!);
+    return gateReply(v!, eventName: "beforeMCPExecution", command: "");
 }
 
 // brief is the capped `magus session --brief`, or "" when there is none or it is over
@@ -1148,6 +1192,8 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
     if (eventName == "beforeMCPExecution") { return gateMcp(scope, event: event); }
     if (eventName == "beforeShellExecution") {
         final command = hook\field(event, dotPath: "command");
+        final asked = recall("ask", parts: [scope.session, command]);
+        if (asked != null) { return askReply(asked!); }
         if (recall("shell", parts: [scope.session, command]) != null) { return ALLOW; }
         return gateCall(scope, event: event, payload: command, asPath: false, family: "failed-command");
     }

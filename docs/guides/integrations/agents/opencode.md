@@ -961,6 +961,15 @@ is running read-only magus commands.
 
 ## Coverage and limits
 
+- **An ask is OpenCode's own prompt, where one can happen.** The prompt comes from the
+  `permission.bash` entries the harness writes; a plugin can only throw. A call those
+  entries do not reach is refused, and the only channel for that refusal is the tool error,
+  which the model reads. The plugin does not show the person a separate notice, and the
+  refusal asks the agent to tell them. Not verified against a client: that the plugin's
+  `permission.ask` hook, which OpenCode's plugin page does not list, keeps working past
+  1.18.30, and that a remote client answering through
+  `POST /session/:id/permissions/:permissionID` is served a prompt this hook raised.
+
 - No `mgs_listEntries` is merged: OpenCode has no hook config, so the spell
   writes the agent files and the push permission, and the plugin is the only hook.
   The plugin wires `tool.execute.before` and `.after`, `permission.ask`,

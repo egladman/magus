@@ -235,9 +235,12 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // (.codex/rules/magus.rules, a prefix_rule with decision "prompt" on each push verb and
 // on each run of a human_only target), and the PermissionRequest event Codex raises
 // before that prompt reaches this same file, which answers allow for a call the guard
-// passes, leaves an ask to the person, and denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
-// permission_mode that never asks, a call no rule matches) the ask renders as a deny that
-// names the person's own terminal.
+// passes, leaves an ask to the person, and denies a leased worker's.
+//
+// An ask is the host's own prompt, never the model's question tool.
+// Where no prompt can happen it renders as a deny, never an allow.
+// promptBlocker names those cells. systemMessage tells the person why
+// and what to type at their terminal.
 // magus-guard-template: 35
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
@@ -278,10 +281,12 @@ final ASK_CODEX_PROMPTS = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{
 // A backtick string DOES interpolate: a `{...}` run is evaluated when its contents parse as
 // a Buzz expression, and stays literal only when they do not. Go template braces do not
 // parse, which is the only reason these render verbatim, and a `{name}` fragment would not.
-// So a template is spliced through this placeholder rather than concatenated around an
-// open `{{`, which would swallow its own closing backtick.
-final BLOCKER_SLOT = "__MAGUS_ASK_BLOCKER__";
-final ASK_CODEX_BLOCKED = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason "\n\nThis call needs the approval of the person you work for, and __MAGUS_ASK_BLOCKER__. Ask them to run it from their own terminal.")}}}}`;
+// So a template is spliced through placeholders rather than
+// concatenated around an open `{{`, which would swallow its closing
+// backtick. Each takes a quoted literal: the text can quote a command.
+final PERSON_SLOT = "__MAGUS_ASK_PERSON__";
+final AGENT_SLOT = "__MAGUS_ASK_AGENT__";
+final ASK_BLOCKED = `{{else if eq .decision "ask"}}{"systemMessage":{{toJson (print .reason __MAGUS_ASK_PERSON__)}},"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason __MAGUS_ASK_AGENT__)}}}}`;
 
 // A decision this file does not know is refused, never allowed: the guard contract
 // grows, and a copy older than the growth must not read the new verdict as a pass.
@@ -380,13 +385,14 @@ fun codexRuleMissing(event: any?, rule: str) > str {
     return "no .codex/rules/magus.rules carries the prompt rule for this call, which magus describe harness codex prints";
 }
 
-// codexPromptBlocker states why Codex will not put this call in front of the person,
-// and "" when its own approval prompt will.
-fun codexPromptBlocker(event: any?, rule: str?) > str {
+// promptBlocker states why the host will not put this call in front of
+// the person, and "" when its own approval prompt will.
+fun promptBlocker(event: any?, codex: bool, rule: str?) > str {
     final mode = hook\field(event, dotPath: "permission_mode");
     if (mode == "bypassPermissions" or mode == "dontAsk") {
-        return "this Codex session runs in permission_mode {mode}, which never prompts";
+        return "this session runs in permission_mode {mode}, which never prompts";
     }
+    if (!codex) { return ""; }
     if (rule == null) {
         return "no Codex approval rule matches this call, only a plain git push, hg push, sl push or jj git push command, or a plain magus run of a human-only target";
     }
@@ -557,13 +563,32 @@ fun noticeReply(eventName: str, text: str) > str {
 // askBranch picks the ask arm for the host that sent this event. Only a reply this
 // file assembled may claim --renders-ask; see the header for why Codex never receives
 // permissionDecision "ask".
-fun askBranch(event: any?, codex: bool, rule: str?) > str {
+fun askBranch(event: any?, codex: bool, rule: str?, command: str) > str {
     final declared = env\get("HOST_ASK_BRANCH") catch "";
     if (declared != "") { return declared; }
-    if (!codex) { return ASK_CLAUDE; }
-    final blocker = codexPromptBlocker(event, rule: rule);
-    if (blocker == "") { return ASK_CODEX_PROMPTS; }
-    return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT, with: blocker);
+    final blocker = promptBlocker(event, codex: codex, rule: rule);
+    if (blocker == "") {
+        if (codex) { return ASK_CODEX_PROMPTS; }
+        return ASK_CLAUDE;
+    }
+    return blockedAsk(blocker, command: command);
+}
+
+// blockedAsk is the deny that stands in for a prompt that cannot happen.
+// The verdict's reason leads both texts: it names the target or commit.
+fun blockedAsk(blocker: str, command: str) > str {
+    var yours = "Do this one yourself; it has no command line to copy.";
+    var theirs = "Ask them to do it themselves.";
+    if (command != "") {
+        yours = "Run it from your own terminal: {command}";
+        theirs = "Ask them to run it from their own terminal: {command}";
+    }
+    final person = "\n\nmagus stopped this call. It needs your approval, and {blocker}. {yours}";
+    final agent = "\n\nThis call needs the approval of the person you work for, and {blocker}. {theirs} "
+        + "If they saw no such message, relay this one to them verbatim.";
+    return ASK_BLOCKED
+        .replace(PERSON_SLOT, with: json\stringify(person) catch `""`)
+        .replace(AGENT_SLOT, with: json\stringify(agent) catch `""`);
 }
 
 // adviseBranch is the advise arm.
@@ -628,7 +653,11 @@ fun main(args: [str]) > void {
     final toolName = hook\field(event, dotPath: toolPath);
 
     var promptRule: str? = null;
-    if (shellCall) { promptRule = codexPromptRule(hook\field(event, dotPath: commandPath)); }
+    var commandLine = "";
+    if (shellCall) {
+        commandLine = hook\field(event, dotPath: commandPath);
+        promptRule = codexPromptRule(commandLine);
+    }
 
     // Codex is the host the entry names, never one the event's shape suggests: see
     // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
@@ -643,7 +672,7 @@ fun main(args: [str]) > void {
     } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
         response = STOP_REPLY;
     } else if (response == "") {
-        response = DENY_HEAD + askBranch(event, codex: codex, rule: promptRule)
+        response = DENY_HEAD + askBranch(event, codex: codex, rule: promptRule, command: commandLine)
             + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         capabilities.append("--renders-ask");
     }
