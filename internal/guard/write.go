@@ -253,7 +253,7 @@ func addsDeviationLine(path string, f writeFields) bool {
 // so any write to a ledger counts as adding, except a remove. A merge or a
 // revert names no target: it replays lines a commit holds.
 func denyDeviationCommand(callDir, line string, d Dialect) string {
-	if target := deviationWriteTarget(line, d); target != "" {
+	if target := deviationLineTarget(line, d, callDir); target != "" {
 		return deviationDenial(target)
 	}
 	for _, program := range inlineBuzzPrograms(line, d) {
@@ -282,10 +282,26 @@ func denyDeviationCommand(callDir, line string, d Dialect) string {
 		case scriptBuzz:
 			target = buzzDeviationWrite(body)
 		case scriptShell:
-			target = deviationWriteTarget(body, DialectBash)
+			target = deviationLineTarget(body, DialectBash, callDir)
 		}
 		if target != "" {
 			return deviationDenial(target)
+		}
+	}
+	return ""
+}
+
+// deviationLineTarget is the first ledger the line writes or patches. A patch
+// the guard cannot read names no ledger: refusing it would charge every `git
+// diff | git apply` a session runs.
+func deviationLineTarget(line string, d Dialect, dir string) string {
+	if target := deviationWriteTarget(line, d); target != "" {
+		return target
+	}
+	writes, _ := patchWrites(line, 0, d, dir, userHome())
+	for _, w := range writes {
+		if isDeviationLedger(w.word) {
+			return w.word
 		}
 	}
 	return ""

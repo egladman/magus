@@ -103,6 +103,65 @@ func (s *deviationAuthorSuite) TestARemoveDoesNotExcuseAWriteOnTheSameLine() {
 	s.NotEmpty(denyDeviationCommand("", `rm a.deviations.jsonl; echo x > a.deviations.jsonl`, DialectBash))
 }
 
+func (s *deviationAuthorSuite) ledgerPatch() (dir, file string) {
+	dir = s.T().TempDir()
+	file = filepath.Join(dir, "line.diff")
+	s.Require().NoError(os.WriteFile(file, []byte(gitDiffOf("proto/a.deviations.jsonl")), 0o644))
+	return dir, file
+}
+
+func (s *deviationAuthorSuite) TestAnUnleasedPatchOfALedgerIsRefused() {
+	dir, file := s.ledgerPatch()
+	for _, line := range []string{
+		"git apply " + file,
+		"git apply line.diff",
+		"git apply < line.diff",
+		"cat " + file + " | git apply",
+		"patch -p1 -i " + file,
+		"sh -c 'git apply " + file + "'",
+	} {
+		s.Contains(denyDeviationCommand(dir, line, DialectBash), "a.deviations.jsonl", line)
+	}
+}
+
+func (s *deviationAuthorSuite) TestAHeredocPatchOfALedgerIsRefused() {
+	line := "git apply <<'EOF'\n" + gitDiffOf("a.deviations.jsonl") + "EOF"
+	s.NotEmpty(denyDeviationCommand("", line, DialectBash))
+}
+
+func (s *deviationAuthorSuite) TestAPatchNamingALedgerAsItsOutputIsRefused() {
+	dir, file := s.ledgerPatch()
+	s.NotEmpty(denyDeviationCommand(dir, "patch -o a.deviations.jsonl -i "+file, DialectBash))
+}
+
+func (s *deviationAuthorSuite) TestCheckingALedgerPatchReads() {
+	dir, file := s.ledgerPatch()
+	s.Empty(denyDeviationCommand(dir, "git apply --check "+file, DialectBash))
+}
+
+func (s *deviationAuthorSuite) TestAPatchOfAnotherFilePasses() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "other.diff"), []byte(gitDiffOf("notes.md")), 0o644))
+	s.Empty(denyDeviationCommand(dir, "git apply other.diff", DialectBash))
+}
+
+func (s *deviationAuthorSuite) TestAPipedPatchNamesNoLedger() {
+	s.Empty(denyDeviationCommand("", "git diff abc def | git apply", DialectBash))
+}
+
+func (s *deviationAuthorSuite) TestAShellScriptPatchingALedgerIsRefused() {
+	dir, file := s.ledgerPatch()
+	script := filepath.Join(dir, "add.sh")
+	s.Require().NoError(os.WriteFile(script, []byte("#!/bin/sh\ngit apply "+file+"\n"), 0o755))
+	s.NotEmpty(denyDeviationCommand(dir, "sh add.sh", DialectBash))
+}
+
+func (s *deviationAuthorSuite) TestAPatchReachesTheRuleWithNoLease() {
+	_, file := s.ledgerPatch()
+	v := judgeShellLine(s.T().Context(), Dependencies{}, location{}, "", "git apply "+file, DialectBash)
+	s.Equal(denyRuleDeviationAuthor, v.Rule.Name)
+}
+
 func (s *deviationAuthorSuite) TestInlineBuzzWritesAreRefused() {
 	for _, program := range []string{
 		`fs\writeFile("a.deviations.jsonl", content: "x");`,
