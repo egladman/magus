@@ -86,21 +86,22 @@ fixes the steps that have a right answer and leaves the plan to the model.
 
 ## The layers
 
-Harnesses come in layers, and each does what the one below it cannot:
+Harnesses come in layers, listed here from the top, and each does what the one
+below it cannot:
 
-1. The model proposes the next action.
-2. The [inner harness](../../glossary/inner-harness.md) is the agent loop:
-   Claude Code, Codex, Cursor or OpenCode. It owns the turns, the tools, the
-   prompt and what reaches the model.
-3. The [outer harness](../../glossary/outer-harness.md) is magus:
+1. The person sits on top and directs; the harnesses serve them. They write the
+   guard rules, fork the jobs, pick the model tier and review what lands
+   ([Human in the loop](human-in-the-loop.md)).
+2. The [outer harness](../../glossary/outer-harness.md) is magus:
    deterministic scaffolding at points a person chose. The guard, job leases
    and the job store sit around any loop and never inside one
    ([The outer harness stays outside](../judgment/the-outer-harness-stays-outside.md)).
    It answers from magus's workspace model: the project graph, each target's
    inputs and outputs, and the cache.
-4. The person sits on top. They write the guard rules, fork the jobs, pick the
-   model tier and review what lands
-   ([Human in the loop](human-in-the-loop.md)).
+3. The [inner harness](../../glossary/inner-harness.md) is the agent loop:
+   Claude Code, Codex, Cursor or OpenCode. It owns the turns, the tools, the
+   prompt and what reaches the model.
+4. The model proposes the next action.
 
 <!--diagram:harness-pyramid-->
 
@@ -115,7 +116,8 @@ against declared outputs, leases and VCS state, whichever inner harness made it.
 ## Records, not a loop over loops
 
 Two inner harnesses can work under one outer harness at the same time, on the
-same repository. They never talk to each other, and they do not need to. Each
+same repository, with the person above both. They never talk to each other, and
+they do not need to. The person writes the guard rules and forks the rows; each
 one takes a job row with `magus job exec`, reads its terms with
 `magus describe job`, sends every call through the guard and files its result
 with `magus job exit`. The row, the verdicts and the graph are records any loop

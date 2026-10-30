@@ -20,11 +20,11 @@ two apart.
 - Is: code and reviewed text that answer or decide the same way every time.
 - Is not: the model, the agent loop that reads a tool call and runs it, an
   agent framework, or a prompt.
-- Layers, from the bottom up: the model, which proposes; the
-  [inner harness](inner-harness.md), the host's agent loop (Claude Code, Codex,
-  Cursor, OpenCode), which executes what the model proposes; the
-  [outer harness](outer-harness.md) magus supplies, which reads magus's
-  deterministic workspace model; and the person on top
+- Layers, from the top down: the person, who directs and whom the harnesses
+  serve; the [outer harness](outer-harness.md) magus supplies, which reads
+  magus's deterministic workspace model; the [inner harness](inner-harness.md),
+  the host's agent loop (Claude Code, Codex, Cursor, OpenCode), which executes
+  what the model proposes; and the model, which proposes
   ([The model proposes, the harness executes](../design/principles/the-model-proposes-the-harness-executes.md)).
 
 ## Elsewhere

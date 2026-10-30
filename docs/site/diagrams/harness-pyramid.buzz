@@ -36,10 +36,12 @@ export fun harnessStackFigure() > figure\Figure !> any {
     return figure\of("harness-stack",
             title: "Two inner harnesses, one outer harness, shared records",
             eyebrow: "design",
-            desc: "A person forks job rows into the job store. Claude Code and Codex each take a "
-                + "row with magus job exec and return it with magus job exit, and send every call "
-                + "through the guard, which reads the row and the workspace graph. The two loops "
-                + "never talk to each other; the records are what they share.",
+            desc: "Top to bottom: the person, the outer harness, the inner harnesses. The person "
+                + "writes the guard rules and forks job rows into the job store. Claude Code and "
+                + "Codex each take a row with magus job exec and return it with magus job exit, "
+                + "and send every call through the guard, which reads the row and the workspace "
+                + "graph and answers with a verdict. The two loops never talk to each other; the "
+                + "records are what they share.",
             direction: figure\Direction.down)
         .actor(person)
         .actor(claude)
@@ -48,13 +50,14 @@ export fun harnessStackFigure() > figure\Figure !> any {
         .box(store, label: "Job store", sub: "jobs.jsonl", look: figure\Look.store)
         .box(graph, label: "Workspace graph", sub: "inputs, outputs, deps")
         .edgesFromGraph()
+        .flowIn(person, dst: guard, label: "rules")
         .flowIn(person, dst: store, label: "forks jobs")
-        .flowIn(claude, dst: guard, label: "every call")
-        .flowIn(codex, dst: guard, label: "every call")
-        .flowIn(claude, dst: store, label: "exec, exit")
-        .flowIn(codex, dst: store, label: "exec, exit")
-        .rank(actors: [claude, codex])
-        .zone("inner harnesses", actors: [claude, codex])
+        .flowOut(guard, dst: claude, label: "verdicts")
+        .flowOut(guard, dst: codex, label: "verdicts")
+        .flowOut(store, dst: claude, label: "exec, exit")
+        .flowOut(store, dst: codex, label: "exec, exit")
+        .rank(dirs: [guard, graph])
+        .rank(actors: [claude, codex])        .zone("inner harnesses", actors: [claude, codex])
         .zone("outer harness: magus", dirs: [guard, store, graph])
         .legend(figure\Look.focal, label: "the one enforcer")
         .legend(figure\Look.store, label: "the shared rows")

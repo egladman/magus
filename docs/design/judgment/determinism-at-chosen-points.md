@@ -37,8 +37,8 @@ overfits to it and has to be tuned again for the next model or the next host.
 magus steers away from that on purpose. One guard, one lease store and one
 graph serve every host magus wires.
 
-The layers are the model, the host's agent loop (the inner harness), the
-harness magus supplies (the outer harness) and the person on top
+The layers, from the top, are the person, the harness magus supplies (the outer
+harness), the host's agent loop (the inner harness) and the model
 ([The model proposes, the harness executes](../principles/the-model-proposes-the-harness-executes.md#the-layers)).
 The two harnesses are the layers most often merged under one name. magus keeps
 them apart: the host owns the loop, and magus owns what the loop can ask and
