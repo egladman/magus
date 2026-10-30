@@ -102,7 +102,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
 stdin pretooluse-command-codex.json
 ! exec magus shell -o json --agent-name cursr
 stdout '"decision": "deny"'
-stdout 'names no harness installed here; installed: codex, cursor, testscript'
+stdout 'names no harness installed here, installed: codex, cursor, testscript'
 stdout '"run": "magus agent harness install --id cursr"'
 
 # A payload carrying a field only one installed host sends, and none of the named host's
