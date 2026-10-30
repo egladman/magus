@@ -58,7 +58,7 @@ Four facts shape the answer.
 
 magus already reads tool findings as records: a spell declares
 `Tool.diagnostics = DiagnosticFormat.gnu` and magus parses file, line, severity and
-message ([Declaring how a tool reports findings](../guides/authoring-spells.md#declaring-how-a-tool-reports-findings)).
+message, in a parser nothing called and a later amendment deleted.
 The GNU shape carries no rule id, so no finding has an identity to accept. buf 1.58.0,
 the version on this machine, offers `--error-format` values `text`, `json`, `msvs`,
 `junit`, `github-actions` and `gitlab-code-quality`. The last is the Code Climate JSON
@@ -512,12 +512,21 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
   one generic op option, `allowFailure`, and no `compares-base` or parser.
 - **Scans are not built.** `advisories.buzz` keeps its policy and "no allowlist to rot"
   still describes it. Only `readBase` moved.
+- **A permitted gate gets its own run result**, Eli's ruling, so `-o json` does not read
+  `pass`. It stays green on the session axis: the push gate and a job's owed check compare
+  against the pass outcome, and a permit that read as red there would recreate the failure
+  this record removes.
 - **The allowlist statement reversed.** The breaking-changes guide no longer says there is
   no allowlist file to maintain.
 - **A guard rule was added**, `deviation-author`, reversing the alternative above. It binds
   a root session too. It covers adding a line, not deleting one, since the gate asks for
   that. A merge, a revert and a checkout pass, because they replay lines a commit already
-  holds. It is a seatbelt: a computed path, a patch or an unhooked process gets past it.
+  holds. Eli's ruling: the rule is a seatbelt, and a person's merge is the check. A computed
+  path, a patch or a process no hook sees gets past it, and nothing records who wrote a
+  line. The rule's own text leaves this list out, so a refusal does not name the way round.
+- **An unreadable base fails.** `proto` `ci` used to skip `buf-breaking` with an info line
+  when `<base>:proto/buf.yaml` could not be read, which made an unfetched base a silent
+  pass. It now fails naming the base.
 - **Provenance:** this was checked against
   [Verdicts are provenance-blind](../design/principles/verdicts-are-provenance-blind.md).
   The conflict was not real, since a permitted finding is disposition, and that page's
@@ -528,7 +537,10 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
 | `allowFailure` on a captured op | built |
 | ledger module, `permitAdded`, two-way check, blank reason and malformed line errors | built |
 | `bufBreaking` captures, `gha` dropped, `proto` `ci` uses the ledger | built |
-| `deviation-author` guard rule | built, not yet a catalog row |
-| a `permitted` run result in `-o json`, the console and history | not built |
+| `deviation-author` guard rule and its catalog row | built |
+| a `permitted` result on the journal, `run.target.result` and the event stream; never cached | built |
+| the call that lets a target record a permit, so `proto` `ci` reports `permitted` | not built |
+| a distinct `permitted` state on the wire and in the console | not built; both read as unspecified, never as passed |
+| `permitted` in session history | not built; a permit is green there, as a replay is |
 | deleting `Tool.Diagnostics` and `DiagnosticFormat` | not built |
 | scan acceptance, CI annotation on a line | not built, by decision |

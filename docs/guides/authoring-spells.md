@@ -216,34 +216,6 @@ import "magus";
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 ```
 
-### Declaring how a tool reports findings
-
-`diagnostics` names the convention a binary prints its findings in, so magus reads them
-as records (file, line, severity, message) rather than scraping prose.
-`DiagnosticFormat.gnu` is the GNU Coding Standards shape,
-`[program:]file:line[:column]: severity: message`. hadolint spells it `-f gnu` and
-shellcheck `--format=gcc`; gcc and ruff emit the same skeleton.
-
-magus implements the standard once and tools opt in, so it carries no per-tool patterns
-to rot. It also never rewrites argv: put the flag in the op's own args, beside the
-declaration.
-
-```buzz
-fun hadolint(target: Target) > Command {
-    return Command{bin = "hadolint", args = ["-f", "gnu", "Dockerfile"]};
-}
-
-export fun mgs_getTools() > {str: Tool} {
-    return {"hadolint": Tool{
-        probe       = Command{bin = "hadolint", args = ["--version"]},
-        diagnostics = DiagnosticFormat.gnu,
-    }};
-}
-```
-
-Declare nothing and the output stays prose: a mis-parsed line claims a file and a line
-that do not exist.
-
 ## A toolchain spell
 
 An operation is a function from a `Target` to a `Command`. magus runs it, caches it, and
