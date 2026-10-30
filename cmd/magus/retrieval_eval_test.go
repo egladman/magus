@@ -86,9 +86,12 @@ func TestRetrievalEval(t *testing.T) {
 	r.symbols, err = loadWorkspaceGraph(ctx, m, cfg, false, false, true)
 	require.NoError(t, err)
 	r.known = make(map[string]string)
+	indexed := false
 	for _, n := range r.symbols.Nodes() {
 		r.known[n.ID] = n.Source
+		indexed = indexed || n.Kind == types.KindSymbol
 	}
+	require.True(t, indexed, "the graph holds no symbol index, so every read would score empty: run `magus graph build`")
 
 	bySet := map[rankeval.EvalSet][]rankeval.Judgment{rankeval.SetAgentAgreement: agreement}
 	absent := map[rankeval.EvalSet]string{
