@@ -177,10 +177,9 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	}
 }
 
-// TestServeMountsTheDiffThreadRoute proves /api/v1/diff/thread is mounted behind the bearer
-// guard rather than falling through to the /api/ not-found handler: a caller with no token is
-// refused, and the operator reaches the thread handler itself, which answers a request with no
-// conversation id in its own words.
+// TestServeMountsTheDiffThreadRoute proves the thread route sits behind the
+// bearer guard, not the /api/ fallback. No token is refused. A console token
+// reaches the handler, which answers a missing id in its own words.
 func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
@@ -206,8 +205,7 @@ func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
-	operator, err := auth.LoadOperator()
-	require.NoError(t, err)
+	console := mintConsoleToken(t)
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	get := func(token string) (int, string) {
@@ -228,7 +226,7 @@ func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 
 	code, _ := get("")
 	assert.Equal(t, http.StatusUnauthorized, code, "no token")
-	code, body := get(operator.Reveal())
+	code, body := get(console.Reveal())
 	assert.Equal(t, http.StatusBadRequest, code, "the thread handler answers, not the /api/ fallback")
 	assert.Contains(t, body, "thread requires an id parameter")
 
@@ -386,6 +384,64 @@ func TestServeConsoleDefaultTrustsNoHostedOrigin(t *testing.T) {
 	}
 }
 
+// mintConsoleToken mints a console token, the one a browser route takes. The
+// daemon under test must already have minted the operator token.
+func mintConsoleToken(t *testing.T) types.Secret {
+	t.Helper()
+	dir, err := auth.StoreDir()
+	require.NoError(t, err)
+	store, err := auth.LoadStore(dir)
+	require.NoError(t, err)
+	secret, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "console", Grant: types.GrantConsole, TTL: time.Hour})
+	require.NoError(t, err)
+	return secret
+}
+
+// The daemon refuses the operator token on console routes, and keeps taking it
+// where the CLI calls over TCP and where no other token reaches.
+func TestServeConsoleRoutesRefuseTheOperatorToken(t *testing.T) {
+	testkit.Isolate(t)
+	root := fixtureWorkspace(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err)
+	port := freePort(t)
+	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
+	d := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: addr, HealthRoutes: map[string]http.Handler{
+		"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+	}})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+	operator, err := auth.LoadOperator()
+	require.NoError(t, err)
+	status := func(path string) int {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+operator.Reveal())
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode
+	}
+
+	assert.Equal(t, http.StatusForbidden, status("/api/v1/graph"))
+	assert.Equal(t, http.StatusForbidden, status("/api/v1/diff/thread"))
+	for path := range operatorAPIs {
+		assert.NotEqual(t, http.StatusForbidden, status(path), path)
+	}
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("server did not shut down")
+	}
+}
+
 // TestServeConsoleAllowedOriginCORS proves an origin in mcp.allowed_origins can
 // clear rebind and get a CORS preflight answer on /api/, while any other Origin
 // is refused there.
@@ -448,8 +504,7 @@ func TestServeConsoleAllowedOriginCORS(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
 
-	cli, err := auth.LoadOperator()
-	require.NoError(t, err)
+	cli := mintConsoleToken(t)
 
 	// Authenticated GET with the hosted Origin must not be 403 from rebind.
 	req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/graph", nil)
@@ -988,8 +1043,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
-	cli, err := auth.LoadOperator()
-	require.NoError(t, err)
+	cli := mintConsoleToken(t)
 
 	call := func(method, path, token, contentType, body string) (int, []byte) {
 		t.Helper()
@@ -1115,13 +1169,19 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	unloadedBase := fmt.Sprintf("http://127.0.0.1:%d", unloadedPort)
 	waitReady(t, unloadedBase+"/readyz")
 
-	cli, err := auth.LoadOperator()
+	cli := mintConsoleToken(t)
+
+	operator, err := auth.LoadOperator()
 	require.NoError(t, err)
 
 	for _, name := range services {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/%s/Probe", unloadedBase, name), strings.NewReader("{}"))
 		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+cli.Reveal())
+		token := cli
+		if name == "magus.token.v1alpha1.TokenService" {
+			token = operator
+		}
+		req.Header.Set("Authorization", "Bearer "+token.Reveal())
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)

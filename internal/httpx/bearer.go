@@ -48,7 +48,7 @@ func BearerGuard(format rpcerr.Format, verify Verifier, need types.Need, next ht
 	if err := need.Validate(); err != nil {
 		return nil, fmt.Errorf("httpx: %w", err)
 	}
-	return guard(format, verify, func(*http.Request) types.Need { return need }, headerToken, nil, next), nil
+	return guard(format, verify, func(*http.Request) types.Need { return need }, headerToken, guardOptions{}, next), nil
 }
 
 // BearerGuardWithQueryToken is [BearerGuard] that also accepts the token from a `?token=`
@@ -58,7 +58,7 @@ func BearerGuardWithQueryToken(format rpcerr.Format, verify Verifier, need types
 	if err := need.Validate(); err != nil {
 		return nil, fmt.Errorf("httpx: %w", err)
 	}
-	return guard(format, verify, func(*http.Request) types.Need { return need }, presentedToken, nil, next), nil
+	return guard(format, verify, func(*http.Request) types.Need { return need }, presentedToken, guardOptions{}, next), nil
 }
 
 // ProcedureGuard is [BearerGuard] for a Connect service, holding each procedure to its own
@@ -74,13 +74,22 @@ func ProcedureGuard(format rpcerr.Format, verify Verifier, needs map[string]type
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return guard(format, verify, needOf, headerToken, o.limit, next), nil
+	return guard(format, verify, needOf, headerToken, o, next), nil
 }
 
 // GuardOption customizes [ProcedureGuard].
 type GuardOption func(*guardOptions)
 
-type guardOptions struct{ limit *FailureLimiter }
+type guardOptions struct {
+	limit          *FailureLimiter
+	refuseOperator bool
+}
+
+// WithoutOperator answers 403 to the operator token, except on a route only it
+// reaches. A browser route never needs a credential that also reaches /mcp.
+func WithoutOperator() GuardOption {
+	return func(o *guardOptions) { o.refuseOperator = true }
+}
 
 // WithFailureLimit throttles each caller's refused requests through l: once its failures
 // are spent it is answered 429 with Retry-After. A request whose token verifies is never
@@ -106,7 +115,8 @@ func stricter(a, b types.Need) bool {
 // refusals spend no more. A presented token is still verified then, so a valid one is never
 // limited; that stays cheap only with a verifier that answers from memory, as auth.Verify
 // does.
-func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) types.Need, extract func(*http.Request) (string, bool), limit *FailureLimiter, next http.Handler) http.Handler {
+func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) types.Need, extract func(*http.Request) (string, bool), o guardOptions, next http.Handler) http.Handler {
+	limit := o.limit
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key, wait, exhausted := "", time.Duration(0), false
 		if limit != nil {
@@ -136,6 +146,10 @@ func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) typ
 		}
 		if !cred.Grant.Allows(need) {
 			format.Write(w, r, grantBelow(need, cred.Grant))
+			return
+		}
+		if o.refuseOperator && cred.Kind == types.KindOperator && need.Scope != types.ScopeTokens {
+			format.Write(w, r, operatorRefused)
 			return
 		}
 		ctx, cancel := context.WithCancel(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), cred), types.EntryPointRPC))
@@ -176,6 +190,9 @@ func reverify(ctx context.Context, cancel context.CancelFunc, verify Verifier, p
 		}
 	}
 }
+
+var operatorRefused = rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.GrantInsufficient,
+	Message: "this console route refuses the operator token, which also reaches /mcp and token management; a console token reaches it: magus config console token create"}
 
 // grantBelow is the 403 for a valid credential below the need. It names the need, and names a
 // mint only where a mint can reach it: nothing a person can mint reaches token management.
