@@ -379,15 +379,23 @@ func OpenRequest(dir, sourceID string, open AttentionOpen, start InvocationStart
 	if slices.ContainsFunc(AttentionQueue(fold), func(req AttentionRequest) bool { return req.ID == open.Request }) {
 		return open.Request, false, nil
 	}
-	start.Command = "session notify"
-	w, err := Open(dir, NewID(), start)
-	if err != nil {
-		return open.Request, false, err
-	}
-	if err := w.Append(KindAttentionOpen, open); err != nil {
+	if err := AppendRequest(dir, sourceID, open, start); err != nil {
 		return open.Request, false, err
 	}
 	return open.Request, true, nil
+}
+
+// AppendRequest is [OpenRequest] without its dedupe, which folds the whole
+// store: for a hook's caller that already knows the block is new. A repeat
+// collapses in the fold.
+func AppendRequest(dir, sourceID string, open AttentionOpen, start InvocationStart) error {
+	open.Request = RequestID(sourceID, open)
+	start.Command = "session notify"
+	w, err := Open(dir, NewID(), start)
+	if err != nil {
+		return err
+	}
+	return w.Append(KindAttentionOpen, open)
 }
 
 // DisposeRequest closes the request ref names under dir and returns it as the store now
