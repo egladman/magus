@@ -29,6 +29,7 @@ import type {
 } from "./state";
 import { AGENT_WINDOW_MS } from "./state";
 import { SCENARIO_CATALOG, WORKSPACE_ROOT, scenarioInsight } from "../../desktop/demo-scenario";
+import { demoToolsView } from "../tools/demo";
 
 const CAPACITY = 8;
 const TICK_MS = 1000;
@@ -887,6 +888,12 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     });
   }
 
+  // A live connect reads these once, so the demo sets them once.
+  store.set({
+    observingSince: t0 - 92 * 60 * 1000,
+    config: { defaultCharms: ["rw"], concurrency: CAPACITY, sandbox: true },
+    tools: demoToolsView(t0),
+  });
   publish();
   const timer = window.setInterval(publish, TICK_MS);
   // The log preview streams on its own faster tick, pushing only the logLines slice so the

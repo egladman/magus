@@ -9,6 +9,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { appSegments } from "../../scripts/app-stubs.mjs";
+import { createStore } from "../lib/store";
+import { startDemo } from "./dashboard/demo";
+import { initialState } from "./dashboard/state";
 import { APPS } from "./index";
 import { isWholeMotion } from "./manifest";
 
@@ -86,5 +89,71 @@ test("each glyph carries the motion its manifest names", () => {
     const marked = [...app.glyph.matchAll(/data-motion="([^"]+)"/g)].map((m) => m[1]);
     const want = app.motion && !isWholeMotion(app.motion) ? [app.motion] : [];
     assert.deepEqual(marked, want, `${app.id}: glyph motion markers`);
+  }
+});
+
+// A server-only app goes here, keyed by id or id/mode, with the reason.
+const DEMO_OPT_OUT: Readonly<Record<string, string>> = {};
+
+function demoSources(): { name: string; file: string }[] {
+  return APPS.flatMap((app) => {
+    if (app.load.kind === "shell") return [];
+    return [
+      { name: app.id, file: join(APPS_DIR, app.id, "main.ts") },
+      ...Object.keys(app.modes ?? {}).map((seg) => ({
+        name: `${app.id}/${seg}`,
+        file: join(APPS_DIR, app.id, seg, "main.ts"),
+      })),
+    ];
+  });
+}
+
+test("every app and mode with a bundle opens a demo or says why not", () => {
+  const sources = demoSources();
+  for (const { name, file } of sources) {
+    if (name in DEMO_OPT_OUT) continue;
+    assert.ok(existsSync(file), `${name}: no ${file}`);
+    assert.ok(
+      /\bwantsDemo\(/.test(readFileSync(file, "utf8")),
+      `${name}: ${file} never asks wantsDemo; add a demo or list it in DEMO_OPT_OUT`,
+    );
+  }
+  for (const name of Object.keys(DEMO_OPT_OUT)) {
+    assert.ok(
+      sources.some((s) => s.name === name),
+      `DEMO_OPT_OUT names ${name}, which is not an app or mode`,
+    );
+  }
+});
+
+test("demo fixtures reach for no network", () => {
+  const files = readdirSync(APPS_DIR, { recursive: true, encoding: "utf8" }).filter((p) =>
+    /(^|\/)demo\.ts$/.test(p),
+  );
+  assert.ok(files.length > 0, "no demo.ts under " + APPS_DIR);
+  for (const f of files) {
+    const code = readFileSync(join(APPS_DIR, f), "utf8").replace(/\/\/.*$/gm, "");
+    assert.ok(
+      !/\b(fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon)\b/.test(code),
+      `${f} names a network API`,
+    );
+  }
+});
+
+test("the dashboard demo fills every field the live feed does", () => {
+  const host = globalThis as { window?: unknown };
+  const had = host.window;
+  host.window = globalThis;
+  const store = createStore(initialState());
+  const handle = startDemo(store);
+  try {
+    for (const [key, value] of Object.entries(store.get())) {
+      if (key === "liveHost") continue; // null on purpose: no host to link to
+      const unset = value === null || (Array.isArray(value) && value.length === 0);
+      assert.ok(!unset, `the dashboard demo leaves ${key} empty, so its tile shows nothing`);
+    }
+  } finally {
+    handle.stop();
+    host.window = had;
   }
 });

@@ -3,7 +3,7 @@
 // request, lays out later lens changes in the page without a round trip.
 
 import { reportFailure } from "../../../lib/notifications";
-import { adoptServerOrigin, parseHash, resolveServerHost } from "../../../lib/server";
+import { adoptServerOrigin, parseHash, resolveServerHost, wantsDemo } from "../../../lib/server";
 import { subscribeDefaultHost } from "../../../lib/settings";
 import type { AppInstance } from "../../../desktop/standalone";
 import { h } from "../../../desktop/view";
@@ -13,8 +13,10 @@ import {
   renderDiagram,
   type DiagramEntry,
   type DiagramFailure,
+  type DiagramRead,
   type RenderedDiagram,
 } from "./api";
+import { demoDiagramList, renderDemoDiagram } from "./demo";
 import { decodeFigureLink } from "./figure-link";
 import { attachFigure, readEdges, neighbours, type FigureController } from "./interact";
 import { attachFlow, type Flow } from "./flow";
@@ -300,6 +302,7 @@ const READ_NOTICE: Record<DiagramFailure["kind"], { tone: NoticeTone; title: str
 export function activate(host: HTMLElement): AppInstance {
   adoptServerOrigin();
   let serverHost = resolveServerHost(parseHash()) ?? "";
+  const demo = wantsDemo(parseHash());
   const refs = build(host);
   let entries: DiagramEntry[] = [];
   let figure: FigureState = { kind: "empty" };
@@ -333,8 +336,8 @@ export function activate(host: HTMLElement): AppInstance {
     const has = controller !== null;
     for (const b of [refs.fit, refs.zoomIn, refs.zoomOut, refs.focusNode]) b.disabled = !has;
     refs.clearFocus.disabled = !has || controller?.focused() == null;
-    const served = linkPayload === null && entries.length > 0;
-    refs.picker.disabled = !served;
+    const served = !demo && linkPayload === null && entries.length > 0;
+    refs.picker.disabled = !(served || (demo && entries.length > 0));
     refs.scope.disabled = !served;
     refs.focus.disabled = !served;
     refs.depth.disabled = !served;
@@ -438,7 +441,9 @@ export function activate(host: HTMLElement): AppInstance {
     // A figure already on screen stays (dimmed, busy) while the next one draws; only a frame with
     // nothing in it gets the spinner.
     if (controller === null) showState(stateView("loading", "Drawing the figure"));
-    const read = await renderDiagram({ host: serverHost, signal: ac.signal }, id, lens);
+    const read = demo
+      ? readDemo(renderDemoDiagram(id))
+      : await renderDiagram({ host: serverHost, signal: ac.signal }, id, lens);
     if (stale || current !== ac) return;
     refs.frame.removeAttribute("aria-busy");
     if (read.kind === "aborted") return;
@@ -539,7 +544,7 @@ export function activate(host: HTMLElement): AppInstance {
   };
 
   const loadList = async (): Promise<void> => {
-    if (!serverHost) {
+    if (!demo && !serverHost) {
       showState(
         stateView(
           "empty",
@@ -551,7 +556,9 @@ export function activate(host: HTMLElement): AppInstance {
       return;
     }
     showState(stateView("loading", "Loading the figures"));
-    const read = await listDiagrams({ host: serverHost });
+    const read: DiagramRead<DiagramEntry[]> = demo
+      ? { kind: "ok", value: demoDiagramList() }
+      : await listDiagrams({ host: serverHost });
     if (stale) return;
     if (read.kind === "aborted") return;
     if (read.kind !== "ok") {
@@ -714,7 +721,7 @@ export function activate(host: HTMLElement): AppInstance {
   else void loadList();
 
   const unsubscribeHost = subscribeDefaultHost(() => {
-    if (linkPayload !== null) return; // a link needs no server
+    if (demo || linkPayload !== null) return; // neither needs a server
     if (figure.kind === "shown") return; // a figure being read keeps the server it came from
     serverHost = resolveServerHost(parseHash()) ?? "";
     void loadList();
@@ -731,6 +738,10 @@ export function activate(host: HTMLElement): AppInstance {
       unsubscribeHost();
     },
   };
+}
+
+function readDemo(r: Result<RenderedDiagram>): DiagramRead<RenderedDiagram> {
+  return r.error ? { kind: "absent", detail: r.error.message } : { kind: "ok", value: r.value };
 }
 
 // cutNodes is the base's node rows for the boxes a re-layout actually drew, in figure order.
