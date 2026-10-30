@@ -38,7 +38,7 @@ magus ls jobs
 In the docs:
 
 - [2026-10-23: a job pauses, and leans by weight](../decisions/0001-bounded-concurrency-with-recursive-invocation.md#2026-10-23-a-job-pauses-and-leans-by-weight)
-- [2026-10-24: the waiver is named deviation, and the job record's is renamed now](../decisions/0017-a-change-accepts-the-findings-it-causes.md#2026-10-24-the-waiver-is-named-deviation-and-the-job-records-is-renamed-now)
+- [2026-10-24: the waiver is named deviation, and the job record's is renamed now](../decisions/0021-a-change-accepts-the-findings-it-causes.md#2026-10-24-the-waiver-is-named-deviation-and-the-job-records-is-renamed-now)
 - [Asking where a job stands](../guides/integrations/agents/leases.md#asking-where-a-job-stands)
 - [The job store is one jobs.jsonl per repository](../guides/integrations/agents/orchestration.md#the-job-store-is-one-jobsjsonl-per-repository)
 - [Which tier a job gets](../guides/jobs/model-tiers.md#which-tier-a-job-gets)

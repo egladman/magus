@@ -1,13 +1,13 @@
 ---
-title: "ADR 0017: a change accepts the findings it causes"
-order: 17
+title: "ADR 0021: a change accepts the findings it causes"
+order: 21
 description: A deliberate protobuf rename fails buf-breaking and has no sanctioned way through the gate. This record proposes a per-project ledger of accepted findings, read by the target runner, in which an entry counts only while the change that adds it is not yet in the base. It names one target, one op and each finding it accepts, carries a reason, passes the gate green with the acceptance printed, and needs no cleanup after merge.
 tags: [adr, decision, ci, gates, compatibility, buf, breaking-changes]
 status: proposed (reopened 2026-10-24 to reuse what exists)
 date: 2026-10-24
 ---
 
-# ADR 0017: a change accepts the findings it causes
+# ADR 0021: a change accepts the findings it causes
 
 ## Context
 
