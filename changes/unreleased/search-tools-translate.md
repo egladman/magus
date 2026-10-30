@@ -1,1 +1,6 @@
-The symbol-search and search-translation guard rules now treat awk, gawk, mawk, `sed -n`, `perl -ne` and ack text searches of the tree like grep: a pattern the graph answers is denied with the translated `magus refs` or `magus query` command. Filters of command output, substitutions and in-place edits are not searches.
+### Changed
+
+- **The search guard rules read awk, `sed -n`, `perl -ne` and ack searches like
+  grep.** A pattern the graph answers is denied with the translated `magus refs`
+  or `magus query` command. Filters of command output, substitutions and in-place
+  edits are not searches.
