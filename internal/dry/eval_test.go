@@ -200,7 +200,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
     else { docker["docker-build"]({"args": ["--load"]}); }
 }
 `
-	detail := func(r Result) string {
+	detail := func(r dryResult) string {
 		var b strings.Builder
 		for _, op := range r.Trace {
 			b.WriteString(op.Detail)

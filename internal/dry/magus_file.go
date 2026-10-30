@@ -26,9 +26,9 @@ type Graph struct {
 	Diag     *Diag     `json:"diag"`
 }
 
-// Result is the ordered plan for one target: the dependency closure in run
+// dryResult is the ordered plan for one target: the dependency closure in run
 // order, then the host operations each target's body would perform.
-type Result struct {
+type dryResult struct {
 	OK     bool     `json:"ok"`
 	Order  []string `json:"order"`
 	Trace  []Op     `json:"trace"`
@@ -163,7 +163,7 @@ func Execs(ctx context.Context, src string) (execs []Op, diag *Diag) {
 	return execs, nil
 }
 
-// Diagnostics type-checks src as a magusfile and returns every diagnostic to
+// diagnostics type-checks src as a magusfile and returns every diagnostic to
 // surface in the editor: a single parse error, or otherwise every type error the
 // checker found, sorted by position. It reuses LoadMagusfile's browser-safe host
 // setup so a magusfile's spell and module imports resolve and don't read as
@@ -171,7 +171,7 @@ func Execs(ctx context.Context, src string) (execs []Op, diag *Diag) {
 // top-level code (so their globals and types reach the checker); a fresh session is
 // created per call, so that execution never leaks across keystrokes. This is the
 // live-linting counterpart to LoadMagusfile's structural load.
-func Diagnostics(ctx context.Context, src string) []Diag {
+func diagnostics(ctx context.Context, src string) []Diag {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	if err := installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps()); err != nil {
@@ -196,10 +196,10 @@ func Diagnostics(ctx context.Context, src string) []Diag {
 // its dependency closure in run order, followed by the concatenated host-op
 // trace of each target in that order. charms is the active charm set (from a
 // `run t:charm` invocation), so charm-gated branches (has_charm) resolve.
-func Run(ctx context.Context, src, targetKey string, charms []string) Result {
+func Run(ctx context.Context, src, targetKey string, charms []string) dryResult {
 	tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, charms, builtinCatalog{}.BuiltinOps())
 	if diag != nil {
-		return Result{Output: tr.out.String(), Diag: diag}
+		return dryResult{Output: tr.out.String(), Diag: diag}
 	}
 	if isSpellBuf {
 		return dryRunSpell(ops, targetKey, tr.out.String(), charms)
@@ -213,7 +213,7 @@ func Run(ctx context.Context, src, targetKey string, charms []string) Result {
 		known[t.key] = true
 	}
 	if !known[targetKey] {
-		return Result{Output: tr.out.String(), Diag: &Diag{Msg: "unknown target: " + targetKey}}
+		return dryResult{Output: tr.out.String(), Diag: &Diag{Msg: "unknown target: " + targetKey}}
 	}
 
 	order := tr.topoOrder(targetKey)
@@ -221,5 +221,5 @@ func Run(ctx context.Context, src, targetKey string, charms []string) Result {
 	for _, t := range order {
 		trace = append(trace, tr.opsByTarget[t]...)
 	}
-	return Result{OK: true, Order: order, Trace: trace, Output: tr.out.String()}
+	return dryResult{OK: true, Order: order, Trace: trace, Output: tr.out.String()}
 }

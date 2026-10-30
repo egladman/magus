@@ -161,7 +161,7 @@ func keySet(m vm.Value) map[string]bool {
 // the wrong type from a host call and the playground reported success; a Run button
 // that validates less than the language does teaches worse than none.
 func TestPlaygroundChecksHostCallTypes(t *testing.T) {
-	run := func(body string) Result {
+	run := func(body string) dryResult {
 		src := fmt.Sprintf("import \"magus\";\n%s\nexport fun work(ctx: magus\\Context, args: [str]) > void {}\n", body)
 		return Run(context.Background(), src, "work", nil)
 	}
@@ -177,7 +177,7 @@ func TestPlaygroundChecksHostCallTypes(t *testing.T) {
 
 // traceDetail concatenates the Detail of every op in a Result's trace, so a test
 // can assert a stubbed host member ran without caring about op ordering.
-func traceDetail(r Result) string {
+func traceDetail(r dryResult) string {
 	var b strings.Builder
 	for _, op := range r.Trace {
 		b.WriteString(op.Detail)

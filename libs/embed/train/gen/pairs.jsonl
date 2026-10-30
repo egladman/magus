@@ -11356,8 +11356,8 @@
 {"doc_ref":"cmd/magus/session_load_next.go:42-78","query_ref":"cmd/magus/session_load_next.go:33-41","source":"go-doc-decl","split":"holdout"}
 {"doc_ref":"cmd/magus/session_load_next.go:82-92","query_ref":"cmd/magus/session_load_next.go:80-81","source":"go-doc-decl","split":"holdout"}
 {"doc_ref":"cmd/magus/session_load_next.go:96-107","query_ref":"cmd/magus/session_load_next.go:94-95","source":"go-doc-decl","split":"holdout"}
-{"doc_ref":"cmd/magus/session_prompt_cache.go:25-35","query_ref":"cmd/magus/session_prompt_cache.go:15-24","source":"go-doc-decl","split":"holdout"}
-{"doc_ref":"cmd/magus/session_prompt_cache.go:43-68","query_ref":"cmd/magus/session_prompt_cache.go:37-42","source":"go-doc-decl","split":"holdout"}
+{"doc_ref":"cmd/magus/session_prompt.go:25-35","query_ref":"cmd/magus/session_prompt.go:15-24","source":"go-doc-decl","split":"holdout"}
+{"doc_ref":"cmd/magus/session_prompt.go:43-68","query_ref":"cmd/magus/session_prompt.go:37-42","source":"go-doc-decl","split":"holdout"}
 {"doc_ref":"cmd/magus/shell.go:1006-1037","query_ref":"cmd/magus/shell.go:1003-1005","source":"go-doc-decl","split":"holdout"}
 {"doc_ref":"cmd/magus/shell.go:1041-1052","query_ref":"cmd/magus/shell.go:1039-1040","source":"go-doc-decl","split":"holdout"}
 {"doc_ref":"cmd/magus/shell.go:115-117","query_ref":"cmd/magus/shell.go:107-114","source":"go-doc-decl","split":"holdout"}

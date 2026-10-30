@@ -157,7 +157,7 @@ func wardDetail(d *types.DiagnosticError) string {
 // An unknown op name, an undecodable command, or a charm patch that fails to apply is
 // a diagnostic, the last two so the sandbox refuses exactly what the engine would
 // rather than showing a wrong command.
-func dryRunSpell(ops []spellOp, opName, output string, charms []string) Result {
+func dryRunSpell(ops []spellOp, opName, output string, charms []string) dryResult {
 	var op *spellOp
 	for i := range ops {
 		if ops[i].name == opName {
@@ -170,23 +170,23 @@ func dryRunSpell(ops []spellOp, opName, output string, charms []string) Result {
 		for i := range ops {
 			names[i] = ops[i].name
 		}
-		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("unknown op %s (one of: %s)", opName, strings.Join(names, ", "))}}
+		return dryResult{Output: output, Diag: &Diag{Msg: fmt.Sprintf("unknown op %s (one of: %s)", opName, strings.Join(names, ", "))}}
 	}
 	if op.decodeErr != nil {
-		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, op.decodeErr.Error())}}
+		return dryResult{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, op.decodeErr.Error())}}
 	}
 	// The dry run passes no call-site args, so a NeedsArgs op is always refused, as
 	// runCommand refuses it before anything spawns.
 	if op.cmd.NeedsArgs != "" {
-		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, op.cmd.NeedsArgs)}}
+		return dryResult{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, op.cmd.NeedsArgs)}}
 	}
 	detail, err := op.renderCommand(charms)
 	if err != nil {
-		return Result{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, err.Error())}}
+		return dryResult{Output: output, Diag: &Diag{Msg: fmt.Sprintf("%s: %s", op.name, err.Error())}}
 	}
 	trace := []Op{{Target: op.name, Kind: op.kind, Name: op.name, Detail: detail}}
 	for _, w := range op.wards {
 		trace = append(trace, Op{Target: op.name, Kind: "ward", Name: string(w.Code), Detail: wardDetail(w)})
 	}
-	return Result{OK: true, Order: []string{op.name}, Trace: trace, Output: output}
+	return dryResult{OK: true, Order: []string{op.name}, Trace: trace, Output: output}
 }

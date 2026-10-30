@@ -463,8 +463,8 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/session_hints_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/session_load_next.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/session_load_next_test.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/session_prompt_cache.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/session_prompt_cache_test.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/session_prompt.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/session_prompt_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/session_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/shell.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/shell_test.go"}
