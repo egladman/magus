@@ -70,6 +70,7 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | check that each guard denial's say, why and fix sit in their fields: mechanical faults by kind, and a worklist to judge through magus-local-development | `hack/retro/denials.buzz -- [--trail <checkout>]... [--since <duration>] [--per-rule <n>] [--limit <n>] [--jsonl]` |
 | review a change with its callers, callees and tests | `hack/dev/show-review-context.buzz` |
 | find the code, file or doc section a term names, then open it a layer at a time | `hack/dev/show-code-context.buzz` |
+| read a dependency's docs and its source at the locked version | `hack/dev/show-dependency.buzz` |
 | compare two trees | `hack/dev/diff-dirs.buzz` |
 
 ## dev/
@@ -108,6 +109,7 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | `magus buzz hack/dev/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]` | read-only: two trees compared file by file, declared outputs left out | grows with tree size |
 | `magus buzz hack/dev/show-review-context.buzz -- [--rev <base>...<head> \| --patch <file\|-> \| --from <diff.json\|->] [--baseline <graph.json>] [--budget <n>] [--lens architecture\|code\|all] [-o json]` | read-only: a change's per-symbol review context (callers, callees, tests, the path to the API, cited diagnostics) and what it does to projects, dependencies and vocabulary | needs the code index; about six graph reads per carded symbol |
 | `magus buzz hack/dev/show-code-context.buzz -- --query <terms> [--depth 1-4] [--kind <kind>] [--file <path>] [--grep <text>] [--limit <n>] [--expand <n>] [--context <n>] [--block-lines <n>] [--neighbors <n>] [--width <n>] [-o text\|json\|yaml\|jsonl\|name]` | read-only: the symbols, files and doc sections a term names through the search module (`spells/code/search`), ranked as path:line; `--depth` 2 to 4 open the first `--expand` matches to their line in context, their whole declaration or doc section from the index's recorded extent, then callers, callees, tests, references, owning project and docs. Every list is capped and counts what it cut; a stale or missing index answers unknown, never empty | two graph queries and a describe file; a file read per opened match, and four graph reads each at `--depth 4` |
+| `magus buzz hack/dev/show-dependency.buzz -- --package <name> [--manager gomod\|npm] [--fetch]` | read-only in the tree: a package's docs ranked, and its local source directory at the version the lock pins, with the integrity check against `go.sum` or `pnpm-lock.yaml`. `--fetch` downloads an absent source into the module cache or this script's state directory and refuses one the lock does not match. Never builds, runs or indexes it | one graph read and a go env; `--fetch` downloads one module or tarball |
 | `magus buzz hack/dev/host-schemas.buzz -- verify \| fetch` | named before the verb rule: `verify` reports the vendored agent-host schemas that moved upstream, `fetch` rewrites them | network |
 
 A pull request's patch reads the same way: `gh pr diff <n> | magus buzz hack/dev/show-review-context.buzz -- --patch -`.
@@ -163,6 +165,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
 | `hack/magusfile/conformance-ceiling.buzz` | the conformance ceiling policy: which metrics a changed file may not hold more violations of than it held at the base revision |
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
+| `hack/magusfile/deviations.buzz` | a gate's ledger of the findings a person permitted |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
 | `hack/magusfile/image.buzz` | magus's own container images: the static and dynamic variants, their pinned distroless bases, and the OCI layout image-build assembles |

@@ -1,11 +1,13 @@
 package render
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestExplainText: the readable card folds edge direction into a natural-language
@@ -39,6 +41,37 @@ func TestExplainText(t *testing.T) {
 	assert.NotContains(t, got, "<--")
 	assert.NotContains(t, got, "-->")
 	assert.NotContains(t, got, "out edges")
+}
+
+type packageNextSuite struct {
+	suite.Suite
+}
+
+func TestPackageNextSuite(t *testing.T) { suite.Run(t, new(packageNextSuite)) }
+
+func packageNode(manager string) types.KnowledgeNode {
+	return types.KnowledgeNode{ID: "package:x", Kind: types.KindPackage, Label: "a.dev/m", Attrs: map[string]string{"manager": manager}}
+}
+
+func (s *packageNextSuite) TestAGoModuleNamesGoDoc() {
+	s.Contains(ExplainText(types.KnowledgeExplainOutput{Node: packageNode("gomod")}), "next: go doc a.dev/m\n")
+}
+
+func (s *packageNextSuite) TestAnNpmPackageHasNoGoDoc() {
+	s.NotContains(ExplainText(types.KnowledgeExplainOutput{Node: packageNode("npm")}), "go doc")
+}
+
+func (s *packageNextSuite) TestTheScriptIsNamedOnlyWhereItExists() {
+	s.T().Chdir(s.T().TempDir())
+	s.NotContains(ExplainText(types.KnowledgeExplainOutput{Node: packageNode("gomod")}), showDependency)
+
+	s.Require().NoError(os.MkdirAll("hack/dev", 0o755))
+	s.Require().NoError(os.WriteFile(showDependency, nil, 0o644))
+	s.Contains(ExplainText(types.KnowledgeExplainOutput{Node: packageNode("gomod")}), "next: magus buzz "+showDependency+" -- --package a.dev/m\n")
+}
+
+func (s *packageNextSuite) TestAnotherKindHasNoNext() {
+	s.NotContains(ExplainText(types.KnowledgeExplainOutput{Node: types.KnowledgeNode{ID: "file:a", Kind: types.KindFile}}), "next:")
 }
 
 // No build closes a gap in a language nothing indexes, so the miss offers none.

@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 
@@ -103,6 +104,9 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 	for _, u := range packageDocs(out) {
 		fmt.Fprintf(&b, "docs: %s\n", u)
 	}
+	for _, step := range packageNext(n) {
+		fmt.Fprintf(&b, "next: %s\n", step)
+	}
 	if out.BlastRadius > 0 {
 		reach := "nodes reach"
 		if out.BlastRadius == 1 {
@@ -154,6 +158,25 @@ func writePublicAPI(b *strings.Builder, out types.KnowledgeExplainOutput) {
 		}
 		fmt.Fprintf(b, "%sused by %d\n", row, s.UsedBy)
 	}
+}
+
+// showDependency is this repository's script, named only where it exists.
+const showDependency = "hack/dev/show-dependency.buzz"
+
+// packageNext is how to read a package past its card.
+// Dependencies are not indexed.
+func packageNext(n types.KnowledgeNode) []string {
+	if n.Kind != types.KindPackage {
+		return nil
+	}
+	var steps []string
+	if n.Attrs["manager"] == "gomod" {
+		steps = append(steps, "go doc "+n.Label)
+	}
+	if _, err := os.Stat(showDependency); err == nil {
+		steps = append(steps, fmt.Sprintf("magus buzz %s -- --package %s", showDependency, n.Label))
+	}
+	return steps
 }
 
 // packageDocs is one docs URL per version a package node pins across the workspace:
