@@ -183,8 +183,8 @@ func (s *hookBindingsSuite) TestAnInstalledHostPasses() {
 
 func (s *hookBindingsSuite) TestAHostNoInstalledHarnessNamesIsRefusedListingTheInstalled() {
 	s.EqualError(CheckHostInstalled(twoHosts(), "bet"),
-		`--agent-name "bet" names no harness installed here, installed: alpha, beta. `+
-			"Fix the hook entry's --agent-name, or install that harness's tool rows")
+		`--agent-name "bet" names no harness installed here, installed: alpha, beta: `+
+			"fix the hook entry's --agent-name, or install that harness's tool rows")
 }
 
 func (s *hookBindingsSuite) TestWithNothingInstalledNoHostIsRefused() {

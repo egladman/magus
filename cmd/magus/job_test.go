@@ -162,7 +162,7 @@ func TestPrintJobTreeCodesTheReadOnlyRows(t *testing.T) {
 	list.ReadOnly = []types.JobReadOnly{{Job: "newer", Lacks: []string{"leases-v9"}}}
 	printJobTree(&out, list)
 	got := out.String()
-	assert.Contains(t, got, "["+string(types.StoreRecordsNewer)+"] read-only:")
+	assert.Contains(t, got, "["+string(types.StoreRecordsNewer)+"] read-only jobs")
 	assert.Contains(t, got, "  newer: requires leases-v9")
 }
 

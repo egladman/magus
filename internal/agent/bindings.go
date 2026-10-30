@@ -150,8 +150,8 @@ func CheckHostInstalled(installed map[string]types.Limits, host string) error {
 	if _, ok := installed[host]; ok || len(installed) == 0 {
 		return nil
 	}
-	return fmt.Errorf("--agent-name %q names no harness installed here, installed: %s. "+
-		"Fix the hook entry's --agent-name, or install that harness's tool rows",
+	return fmt.Errorf("--agent-name %q names no harness installed here, installed: %s: "+
+		"fix the hook entry's --agent-name, or install that harness's tool rows",
 		host, strings.Join(slices.Sorted(maps.Keys(installed)), ", "))
 }
 
