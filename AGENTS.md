@@ -68,6 +68,10 @@ magus builds itself. Learn the layout from the graph (`magus ls`, `magus explain
 saying it, delete it here.
 
 - Scripts by task: [hack/README.md](hack/README.md#by-task).
+- A hand-written skill lives in `.agents/skills/<name>`, which Codex, Cursor and
+  OpenCode read. Claude Code reads only `.claude/skills`, so `.claude/skills/<name>`
+  is a tracked symlink to it. Add both, plus a `.gitignore` negation for each
+  without a trailing slash. Never copy a skill between the two.
 
 ## Binary
 

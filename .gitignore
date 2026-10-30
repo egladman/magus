@@ -135,15 +135,27 @@ coverage.cmd.out
 # workspace's own rules (internal/agent.LocalSkillName, held by TestLocalSkillNameIsReserved),
 # so install and verify leave it alone by construction - but only if it is committed does it
 # survive a fresh clone or a new worktree.
-.agents/skills/
+#
+# The source of each lives in .agents/skills, which Codex, Cursor and OpenCode read. Claude
+# Code does not read that directory, so .claude/skills/<name> is a tracked symlink to it.
+# The negations below carry no trailing slash: git sees a symlink as a file, so a slash
+# would not match it. hack/lint/local-skills-reach-every-host.buzz fails when a hand-written
+# skill lacks either half.
 .opencode/skills/
+.agents/skills/*
+!.agents/skills/magus-skill-authoring
+!.agents/skills/magus-local-development
+!.agents/skills/idiomatic-adrs
+!.agents/skills/idiomatic-pr-descriptions
+!.agents/skills/babysit-pull-requests
+!.agents/skills/chestertons-fence
 .claude/skills/*
-!.claude/skills/magus-skill-authoring/
-!.claude/skills/magus-local-development/
-!.claude/skills/idiomatic-adrs/
-!.claude/skills/idiomatic-pr-descriptions/
-!.claude/skills/babysit-pull-requests/
-!.claude/skills/chestertons-fence/
+!.claude/skills/magus-skill-authoring
+!.claude/skills/magus-local-development
+!.claude/skills/idiomatic-adrs
+!.claude/skills/idiomatic-pr-descriptions
+!.claude/skills/babysit-pull-requests
+!.claude/skills/chestertons-fence
 
 # launch.json pins one machine's dev-server command and port, so it stays per developer.
 #
