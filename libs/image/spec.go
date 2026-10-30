@@ -52,7 +52,9 @@ type Tree struct {
 	Source string
 	Path   string // "/" places the contents at the root
 	// Include and Exclude are doublestar patterns over each file's path relative to
-	// Source. Empty Include takes every file; Exclude wins over Include.
+	// Source. A pattern matching a directory covers every file below it. Empty
+	// Include takes every file; Exclude wins over Include. A tree that places
+	// no file is refused.
 	Include, Exclude []string
 	ModePolicy       ModePolicy
 	Symlinks         SymlinkPolicy
@@ -98,6 +100,7 @@ const (
 	ModePolicyFixed ModePolicy = "fixed"
 	// ModePolicyExecutableBit places a file whose host owner-execute bit is set at
 	// ModeExecutable and any other at ModeFile; that bit is in the cache key already.
+	// A tree none of whose files has the bit is refused.
 	ModePolicyExecutableBit ModePolicy = "executable-bit"
 )
 
@@ -313,7 +316,7 @@ func checkEnvKey(k string) error {
 // It looks up each entry's ancestors in a set: comparing sorted neighbors misses
 // "/app" and "/app/x" when "/app-b" sorts between them.
 func checkPlacements(entries []entry) error {
-	kinds := make(map[string]entryKind, len(entries))
+	kinds := make(map[string]EntryKind, len(entries))
 	for _, e := range entries {
 		if err := checkWhiteout(e.path); err != nil {
 			return fmt.Errorf("image.assemble: %w", err)
@@ -325,7 +328,7 @@ func checkPlacements(entries []entry) error {
 	}
 	for _, e := range entries {
 		for dir := path.Dir(e.path); dir != "/"; dir = path.Dir(dir) {
-			if k, ok := kinds[dir]; ok && k != kindDirectory {
+			if k, ok := kinds[dir]; ok && k != EntryDirectory {
 				return fmt.Errorf("image.assemble: %s is below %s, which is not a directory", e.path, dir)
 			}
 		}

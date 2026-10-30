@@ -27,6 +27,18 @@ Write the Image Manifest spec describes as a layout at layout: the base's layers
 
 **Returns:** map[string]any
 
+### layout
+
+List every entry the new layer of spec holds, in added.entries: path, kind, mode, owner, size, mtime and the Spec item that placed it. It is the list assemble writes, read from the spec's host files without writing; there are no digests yet, and the base is never opened. A dry run of assemble returns the same.
+
+**Signature:** `image\layout(spec) -> Layout` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `spec`    | `map[string]any` |          |             |
+
+**Returns:** map[string]any
+
 ### assembleIndex
 
 Write one Image Index over single-platform layouts as a layout at layout. Never touches the network.

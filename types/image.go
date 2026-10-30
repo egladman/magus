@@ -165,17 +165,45 @@ type ImageDescriptor struct {
 	Annotations  map[string]string
 }
 
-// ImageAddedLayer is the receipt of the layer an assemble wrote.
+// ImageEntryKind is the kind of one tar entry.
+type ImageEntryKind string
+
+const (
+	ImageEntryKindNone      ImageEntryKind = ""
+	ImageEntryKindFile      ImageEntryKind = "file"
+	ImageEntryKindSymlink   ImageEntryKind = "symlink"
+	ImageEntryKindDirectory ImageEntryKind = "directory"
+)
+
+// ImageEntry is one tar entry of the new layer, as its header is written.
+// Origin names the Spec item that placed it, such as "files[0]" or
+// "trees[1] etc/ssl/ca.pem". A directory scratch adds is "parent".
+type ImageEntry struct {
+	Path    string // absolute; the tar name drops the leading slash
+	Kind    ImageEntryKind
+	Mode    string // four octal digits, as fs\mode reads them
+	UID     int    `buzz:"uid"`
+	GID     int    `buzz:"gid"`
+	Size    int    // 0 except for a file
+	Target  string // a symlink's
+	ModTime string // RFC 3339; always the Unix epoch
+	Origin  string
+}
+
+// ImageAddedLayer is the layer an assemble wrote. Under image\layout and a dry
+// run it is the layer one would write, with no Descriptor or DiffID yet.
 type ImageAddedLayer struct {
 	Descriptor  ImageDescriptor
 	DiffID      ImageDigest
+	Entries     []ImageEntry
 	Files       int
 	Symlinks    int
 	Directories int
 }
 
-// ImageLayout is an OCI Image Layout on disk. Platform, Config, Layers and Created are
-// set when the image is one manifest; Added only by assemble.
+// ImageLayout is an OCI Image Layout on disk. Platform, Config, Layers and
+// Created are set when the image is one manifest. Added is set only by
+// assemble and layout, and layout sets nothing but Platform and Added.
 type ImageLayout struct {
 	Path       string
 	Descriptor ImageDescriptor

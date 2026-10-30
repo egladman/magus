@@ -84,9 +84,13 @@ image\assemble(image\Spec{
   refused: an omitted platform is an error, never linux/amd64.
 - `fs\mode` takes octal (`"0755"`) or ls notation (`"rwxr-xr-x"`); mode 0 is refused.
 - A `Tree` places the **contents** of `source` at `path`. Include and exclude filter
-  files only; a bad pattern is refused up front. `modePolicy` is `fixed` (0644) or
-  `executableBit` (0755 when the host owner-execute bit is set); there is no
-  "keep host mode", which depends on the umask.
+  files; a pattern that matches a directory, such as `exclude = ["etc/ssl"]`, covers
+  every file below it. A bad pattern is refused up front, and a tree whose filters
+  leave no file is refused with its patterns named. `*` stops at a slash, so
+  `**/*.conf` reaches nested files and `*.conf` does not. `modePolicy` is `fixed`
+  (0644) or `executableBit` (0755 when the host owner-execute bit is set); a tree
+  where no file has that bit is refused, since every file would ship 0644. There is
+  no "keep host mode", which depends on the umask.
 - `Config` follows the image-spec config field for field. A null field inherits the
   base's value and an empty list clears it; `env` and `labels` merge by key.
 - On scratch, parents no entry places are written as root 0755. Over a base none are:
@@ -102,6 +106,25 @@ image\assemble(image\Spec{
 - A path whose name starts with `.wh.` is refused, from a `File` or a `Tree` alike: in a
   layer it is a whiteout, which deletes the base's path of that name.
 - Every path resolves against the magusfile's directory and goes through the sandbox.
+
+## See what an image contains before you build it
+
+`image\layout(spec)` lists every entry of the new layer before anything is written:
+path, kind, mode, owner, size, mtime and the Spec item that placed it.
+
+```buzz
+final plan = image\layout(spec);
+foreach (e in plan.added!.entries) {
+    std\print("{e.mode} {e.uid}:{e.gid} {e.path} <- {e.origin}");
+}
+```
+
+It is the list `image\assemble` writes, not a second computation, so `assemble`'s
+`added.entries` is the same list with digests beside it. It reads the spec's host
+files and never opens the base. Over a base, no parent directories appear: the
+base or the unpacker supplies them. `magus run <target> --dry-run` returns the same
+value from `image\assemble`. A tree an upstream target has not written yet fails
+the dry run, naming the missing source.
 
 ## Registries
 

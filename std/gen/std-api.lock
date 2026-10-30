@@ -100,6 +100,7 @@ image.assemble
 image.assembleIndex
 image.attachReferrers
 image.goEnv
+image.layout
 image.open
 image.parsePlatform
 image.parsePlatforms

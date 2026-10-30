@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -75,7 +76,12 @@ func TestAssembleIsDeterministic(t *testing.T) {
 	b, err := Assemble(t.Context(), spec, filepath.Join(root, "b"))
 	require.NoError(t, err)
 	assert.Equal(t, a.Descriptor.Digest, b.Descriptor.Digest)
-	want := Layer{Descriptor: b.Added.Descriptor, DiffID: b.Added.DiffID, Files: 1, Directories: 2}
+	epoch := time.Unix(0, 0)
+	want := Layer{Descriptor: b.Added.Descriptor, DiffID: b.Added.DiffID, Files: 1, Directories: 2, Entries: []Entry{
+		{Path: "/usr", Kind: EntryDirectory, Mode: ModeDirectory, ModTime: epoch, Origin: "parent"},
+		{Path: "/usr/bin", Kind: EntryDirectory, Mode: ModeDirectory, ModTime: epoch, Origin: "parent"},
+		{Path: "/usr/bin/app", Kind: EntryFile, Mode: ModeExecutable, Size: 6, ModTime: epoch, Origin: "files[0]"},
+	}}
 	require.NotNil(t, a.Added)
 	assert.Equal(t, want, *a.Added, "scratch gets /usr and /usr/bin")
 }

@@ -5,6 +5,7 @@ package std
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -82,6 +83,108 @@ func (s *stdSuite) TestOpenRefusesANameTheLayoutDoesNotHold() {
 
 	_, err = ImageOpen(s.T().Context(), got.Path, "registry.example/team/app:v1")
 	s.Require().Error(err)
+}
+
+func (s *stdSuite) appSpec() types.ImageSpec {
+	src := filepath.Join(s.T().TempDir(), "app")
+	s.Require().NoError(os.WriteFile(src, []byte("binary"), 0o755))
+	return types.ImageSpec{Scratch: true, Platform: linuxAMD64,
+		Files: []types.ImageFile{{Source: src, Path: "/usr/bin/app", Mode: 0o755, UID: 65532, GID: 65532}}}
+}
+
+func (s *stdSuite) TestLayoutListsEveryEntryWithNoDigest() {
+	got, err := ImageLayout(s.T().Context(), s.appSpec())
+	s.Require().NoError(err)
+	epoch := "1970-01-01T00:00:00Z"
+	s.Equal(types.ImageLayout{Platform: &linuxAMD64, Added: &types.ImageAddedLayer{
+		Entries: []types.ImageEntry{
+			{Path: "/usr", Kind: types.ImageEntryKindDirectory, Mode: "0755", ModTime: epoch, Origin: "parent"},
+			{Path: "/usr/bin", Kind: types.ImageEntryKindDirectory, Mode: "0755", ModTime: epoch, Origin: "parent"},
+			{Path: "/usr/bin/app", Kind: types.ImageEntryKindFile, Mode: "0755", UID: 65532, GID: 65532, Size: 6, ModTime: epoch, Origin: "files[0]"},
+		},
+		Files: 1, Directories: 2,
+	}}, got)
+}
+
+func (s *stdSuite) TestAssembleUnderADryRunReturnsTheLayoutAndWritesNothing() {
+	spec := s.appSpec()
+	want, err := ImageLayout(s.T().Context(), spec)
+	s.Require().NoError(err)
+	dest := filepath.Join(s.T().TempDir(), "out")
+	got, err := ImageAssemble(types.WithTrace(s.T().Context()), spec, dest)
+	s.Require().NoError(err)
+	s.Equal(want, got)
+	s.NoDirExists(dest)
+}
+
+func (s *stdSuite) TestAssembleReceiptCarriesTheEntriesLayoutListed() {
+	spec := s.appSpec()
+	listed, err := ImageLayout(s.T().Context(), spec)
+	s.Require().NoError(err)
+	got, err := ImageAssemble(s.T().Context(), spec, filepath.Join(s.T().TempDir(), "out"))
+	s.Require().NoError(err)
+	s.Require().NotNil(got.Added)
+	s.Equal(listed.Added.Entries, got.Added.Entries)
+	s.NotEmpty(got.Added.DiffID.Encoded, "only assemble has digests")
+}
+
+// The two specs of std/examples/image/distroless.buzz, over the files its
+// rootfs and build targets write.
+func (s *stdSuite) TestLayoutOfTheDistrolessExample() {
+	root := s.T().TempDir()
+	for name, content := range map[string]string{
+		"rootfs/etc/passwd":        "root:x:0:0:root:/root:/sbin/nologin\nnonroot:x:65532:65532:nonroot:/home/nonroot:/sbin/nologin\n",
+		"rootfs/etc/group":         "root:x:0:\nnonroot:x:65532:\n",
+		"rootfs/etc/nsswitch.conf": "hosts: files dns\n",
+		"linux-amd64/app":          "app",
+	} {
+		p := filepath.Join(root, name)
+		s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+		s.Require().NoError(os.WriteFile(p, []byte(content), 0o644))
+	}
+	epoch := "1970-01-01T00:00:00Z"
+	rootfs, err := ImageLayout(s.T().Context(), types.ImageSpec{Scratch: true, Platform: linuxAMD64,
+		Trees: []types.ImageTree{{Source: filepath.Join(root, "rootfs"), Path: "/", ModePolicy: types.ImageModePolicyFixed, Symlinks: types.ImageSymlinkPolicyRefuse}},
+		Directories: []types.ImageDirectory{
+			{Path: "/tmp", Mode: 0o1777},
+			{Path: "/home/nonroot", Mode: 0o700, UID: 65532, GID: 65532},
+		}})
+	s.Require().NoError(err)
+	s.Require().NotNil(rootfs.Added)
+	file := func(p string, size int) types.ImageEntry {
+		return types.ImageEntry{Path: p, Kind: types.ImageEntryKindFile, Mode: "0644", Size: size, ModTime: epoch, Origin: "trees[0] " + p[1:]}
+	}
+	dir := func(p, mode, origin string, owner int) types.ImageEntry {
+		return types.ImageEntry{Path: p, Kind: types.ImageEntryKindDirectory, Mode: mode, UID: owner, GID: owner, ModTime: epoch, Origin: origin}
+	}
+	s.Equal([]types.ImageEntry{
+		dir("/etc", "0755", "parent", 0),
+		file("/etc/group", 27),
+		file("/etc/nsswitch.conf", 17),
+		file("/etc/passwd", 94),
+		dir("/home", "0755", "parent", 0),
+		dir("/home/nonroot", "0700", "directories[1]", 65532),
+		dir("/tmp", "1777", "directories[0]", 0),
+	}, rootfs.Added.Entries)
+
+	app, err := ImageLayout(s.T().Context(), types.ImageSpec{Base: filepath.Join(root, "image", "rootfs"), Platform: linuxAMD64,
+		Files: []types.ImageFile{{Source: filepath.Join(root, "linux-amd64", "app"), Path: "/usr/local/bin/app", Mode: 0o755}}})
+	s.Require().NoError(err)
+	s.Require().NotNil(app.Added)
+	s.Equal([]types.ImageEntry{
+		{Path: "/usr/local/bin/app", Kind: types.ImageEntryKindFile, Mode: "0755", Size: 3, ModTime: epoch, Origin: "files[0]"},
+	}, app.Added.Entries, "over a base, no parent is listed")
+	for _, e := range slices.Concat(rootfs.Added.Entries, app.Added.Entries) {
+		s.T().Logf("%-9s %s %d:%d %5d %s %-20s <- %s", e.Kind, e.Mode, e.UID, e.GID, e.Size, e.ModTime, e.Path, e.Origin)
+	}
+}
+
+func (s *stdSuite) TestAssembleUnderADryRunNamesAMissingTreeSource() {
+	missing := filepath.Join(s.T().TempDir(), "out", "rootfs")
+	_, err := ImageAssemble(types.WithTrace(s.T().Context()), types.ImageSpec{Scratch: true, Platform: linuxAMD64,
+		Trees: []types.ImageTree{{Source: missing, Path: "/", ModePolicy: types.ImageModePolicyFixed, Symlinks: types.ImageSymlinkPolicyRefuse}}},
+		filepath.Join(s.T().TempDir(), "image"))
+	s.Require().ErrorContains(err, "trees[0] "+missing)
 }
 
 func TestFsModeParsesOctalAndRwx(t *testing.T) {

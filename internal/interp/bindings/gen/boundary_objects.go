@@ -235,10 +235,29 @@ func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
+func ObjectImageEntry(v types.ImageEntry, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("kind", enums.Case("EntryKind", string(v.Kind)))
+	out.MapSet("mode", vm.StringValue(v.Mode))
+	out.MapSet("uid", vm.IntValue(int64(v.UID)))
+	out.MapSet("gid", vm.IntValue(int64(v.GID)))
+	out.MapSet("size", vm.IntValue(int64(v.Size)))
+	out.MapSet("target", vm.StringValue(v.Target))
+	out.MapSet("modTime", vm.StringValue(v.ModTime))
+	out.MapSet("origin", vm.StringValue(v.Origin))
+	return out
+}
+
 func ObjectImageAddedLayer(v types.ImageAddedLayer, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
 	out.MapSet("diffID", ObjectImageDigest(v.DiffID, enums))
+	itemsEntries := make([]vm.Value, len(v.Entries))
+	for indexEntries := range v.Entries {
+		itemsEntries[indexEntries] = ObjectImageEntry(v.Entries[indexEntries], enums)
+	}
+	out.MapSet("entries", vm.ListValue(itemsEntries))
 	out.MapSet("files", vm.IntValue(int64(v.Files)))
 	out.MapSet("symlinks", vm.IntValue(int64(v.Symlinks)))
 	out.MapSet("directories", vm.IntValue(int64(v.Directories)))

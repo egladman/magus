@@ -121,7 +121,7 @@ func baseName(root ocispec.Descriptor, manifest digest.Digest) string {
 }
 
 func assembleInto(ctx context.Context, st *staging, spec Spec, base *baseImage, entries []entry) (Manifest, error) {
-	var layers []ocispec.Descriptor
+	layers := []ocispec.Descriptor{} // image-spec types layers as an array, never null
 	var baseConfig *ocispec.Image
 	var baseConfigRaw []byte
 	annotations := maps.Clone(spec.Annotations)
@@ -177,14 +177,14 @@ func addLayer(ctx context.Context, st *staging, entries []entry) (Layer, error) 
 	if err != nil {
 		return Layer{}, err
 	}
-	added := Layer{Descriptor: desc, DiffID: blob.diffID}
+	added := Layer{Descriptor: desc, DiffID: blob.diffID, Entries: listEntries(entries)}
 	for _, e := range entries {
 		switch e.kind {
-		case kindFile:
+		case EntryFile:
 			added.Files++
-		case kindSymlink:
+		case EntrySymlink:
 			added.Symlinks++
-		case kindDirectory:
+		case EntryDirectory:
 			added.Directories++
 		}
 	}

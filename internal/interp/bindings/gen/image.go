@@ -34,6 +34,17 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectImageLayout(ret0, enums), nil
 	}))
+	m.MapSet("layout", vm.DirectValue("image.layout", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		spec, err := ffi.Object("image\\layout", "spec", bzArgs, 0, decode.DecodeImageSpec)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.ImageLayout(ctx, spec)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImageLayout(ret0, enums), nil
+	}))
 	m.MapSet("assembleIndex", vm.DirectValue("image.assembleIndex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		layouts := ffi.StringSlice(bzArgs, 0)
 		layout := ffi.String(bzArgs, 1)

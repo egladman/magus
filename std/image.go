@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -31,6 +32,14 @@ var Image = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageAssemble,
+		},
+		{
+			Name:    "layout",
+			Doc:     "List every entry the new layer of spec holds, in added.entries: path, kind, mode, owner, size, mtime and the Spec item that placed it. It is the list assemble writes, read from the spec's host files without writing; there are no digests yet, and the base is never opened. A dry run of assemble returns the same.",
+			Args:    []Arg{{Name: "spec", Type: TypeAnyMap, Object: "Spec"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
+			Raises:  true,
+			Impl:    ImageLayout,
 		},
 		{
 			Name:    "assemble_index",
@@ -125,10 +134,11 @@ var Image = Module{
 	},
 }
 
-// ImageAssemble writes the image spec describes as a layout at dest.
+// ImageAssemble writes the image spec describes as a layout at dest. A dry run
+// writes nothing and returns what ImageLayout returns.
 func ImageAssemble(ctx context.Context, spec types.ImageSpec, dest string) (types.ImageLayout, error) {
 	if types.Tracing(ctx) {
-		return types.ImageLayout{}, nil
+		return ImageLayout(ctx, spec)
 	}
 	s, err := imageSpec(ctx, spec)
 	if err != nil {
@@ -143,6 +153,25 @@ func ImageAssemble(ctx context.Context, spec types.ImageSpec, dest string) (type
 		return types.ImageLayout{}, err
 	}
 	return manifestToTypes(l), nil
+}
+
+// ImageLayout lists every entry the new layer of spec holds, from the list
+// assemble writes. It reads the spec's host files, never the base, and writes
+// nothing, so it runs the same under a dry run.
+func ImageLayout(ctx context.Context, spec types.ImageSpec) (types.ImageLayout, error) {
+	s, err := imageSpec(ctx, spec)
+	if err != nil {
+		return types.ImageLayout{}, fmt.Errorf("image.layout: %w", err)
+	}
+	if err := imageCheck(ctx, imageReads(s), nil); err != nil {
+		return types.ImageLayout{}, fmt.Errorf("image.layout: %w", err)
+	}
+	entries, err := image.Entries(ctx, s)
+	if err != nil {
+		return types.ImageLayout{}, err
+	}
+	p := platformToTypes(s.Platform)
+	return types.ImageLayout{Platform: &p, Added: listedToTypes(entries)}, nil
 }
 
 // ImageAssembleIndex writes one Image Index over layouts at dest.
@@ -511,9 +540,41 @@ func manifestToTypes(m image.Manifest) types.ImageLayout {
 		out.Added = &types.ImageAddedLayer{
 			Descriptor:  descriptorToTypes(m.Added.Descriptor),
 			DiffID:      digestToTypes(m.Added.DiffID),
+			Entries:     entriesToTypes(m.Added.Entries),
 			Files:       m.Added.Files,
 			Symlinks:    m.Added.Symlinks,
 			Directories: m.Added.Directories,
+		}
+	}
+	return out
+}
+
+// listedToTypes is the layer entries would make, before it has a digest; nil
+// when there are none, as Assemble adds no layer then.
+func listedToTypes(entries []image.Entry) *types.ImageAddedLayer {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := &types.ImageAddedLayer{Entries: entriesToTypes(entries)}
+	for _, e := range entries {
+		switch e.Kind {
+		case image.EntryFile:
+			out.Files++
+		case image.EntrySymlink:
+			out.Symlinks++
+		case image.EntryDirectory:
+			out.Directories++
+		}
+	}
+	return out
+}
+
+func entriesToTypes(entries []image.Entry) []types.ImageEntry {
+	out := make([]types.ImageEntry, len(entries))
+	for i, e := range entries {
+		out[i] = types.ImageEntry{
+			Path: e.Path, Kind: types.ImageEntryKind(e.Kind), Mode: e.Mode.String(), UID: e.UID, GID: e.GID,
+			Size: int(e.Size), Target: e.Target, ModTime: e.ModTime.UTC().Format(time.RFC3339), Origin: e.Origin,
 		}
 	}
 	return out

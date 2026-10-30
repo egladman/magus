@@ -401,6 +401,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Digest", Type: reflect.TypeFor[types.ImageDigest](), RuntimeObject: true,
 		Methods: "fun string() > str {\n        if (this.algorithm == \"\" and this.encoded == \"\") {\n            return \"\";\n        }\n        return \"{this.algorithm}:{this.encoded}\";\n    }"},
 	{Name: "Descriptor", Type: reflect.TypeFor[types.ImageDescriptor](), RuntimeObject: true},
+	{Name: "Entry", Type: reflect.TypeFor[types.ImageEntry](), RuntimeObject: true},
 	{Name: "AddedLayer", Type: reflect.TypeFor[types.ImageAddedLayer](), RuntimeObject: true},
 	{Name: "Layout", Type: reflect.TypeFor[types.ImageLayout](), RuntimeObject: true},
 	{Name: "File", Type: reflect.TypeFor[types.ImageFile]()},
@@ -746,6 +747,11 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "SymlinkPolicy",
 		Type:  reflect.TypeFor[types.ImageSymlinkPolicy](),
 		Cases: []enumCase{{"none", ""}, {"refuse", "refuse"}, {"keep", "keep"}, {"follow", "follow"}},
+	},
+	{
+		Name:  "EntryKind",
+		Type:  reflect.TypeFor[types.ImageEntryKind](),
+		Cases: []enumCase{{"none", ""}, {"file", "file"}, {"symlink", "symlink"}, {"directory", "directory"}},
 	},
 	{
 		Name:  "GroupingVerdict",

@@ -196,7 +196,7 @@ func tarArchive(t *testing.T, files map[string]string) []byte {
 	for name, content := range files {
 		p := filepath.Join(dir, strings.ReplaceAll(name, "/", "_"))
 		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-		entries = append(entries, entry{path: "/" + name, kind: kindFile, source: p, mode: ModeFile})
+		entries = append(entries, entry{path: "/" + name, kind: EntryFile, source: p, size: int64(len(content)), mode: ModeFile})
 	}
 	var buf bytes.Buffer
 	_, err := writeLayer(t.Context(), &buf, entries, maxLayerBytes)

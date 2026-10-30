@@ -480,6 +480,7 @@ github.com/egladman/magus/std.ImageAssemble func(ctx context.Context, spec githu
 github.com/egladman/magus/std.ImageAssembleIndex func(ctx context.Context, layouts []string, dest string) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImageAttachReferrers func(ctx context.Context, subject string, documents []github.com/egladman/magus/types.ImageDocument, dest string) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImageGoEnv func(_ context.Context, platform github.com/egladman/magus/types.ImagePlatform) (map[string]string, error)
+github.com/egladman/magus/std.ImageLayout func(ctx context.Context, spec github.com/egladman/magus/types.ImageSpec) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImageOpen func(ctx context.Context, path string, name string) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImageParsePlatform func(_ context.Context, spec string) (github.com/egladman/magus/types.ImagePlatform, error)
 github.com/egladman/magus/std.ImageParsePlatforms func(_ context.Context, specs []string) ([]github.com/egladman/magus/types.ImagePlatform, error)
@@ -2507,6 +2508,7 @@ github.com/egladman/magus/types.ImageAddedLayer type struct
 github.com/egladman/magus/types.ImageAddedLayer.Descriptor field ImageDescriptor
 github.com/egladman/magus/types.ImageAddedLayer.DiffID field ImageDigest
 github.com/egladman/magus/types.ImageAddedLayer.Directories field int
+github.com/egladman/magus/types.ImageAddedLayer.Entries field []ImageEntry
 github.com/egladman/magus/types.ImageAddedLayer.Files field int
 github.com/egladman/magus/types.ImageAddedLayer.Symlinks field int
 github.com/egladman/magus/types.ImageArchitecture type string
@@ -2546,6 +2548,21 @@ github.com/egladman/magus/types.ImageDirectory.UID field int "buzz:\"uid\""
 github.com/egladman/magus/types.ImageDocument type struct
 github.com/egladman/magus/types.ImageDocument.Descriptor field ImageDescriptor
 github.com/egladman/magus/types.ImageDocument.Path field string
+github.com/egladman/magus/types.ImageEntry type struct
+github.com/egladman/magus/types.ImageEntry.GID field int "buzz:\"gid\""
+github.com/egladman/magus/types.ImageEntry.Kind field ImageEntryKind
+github.com/egladman/magus/types.ImageEntry.ModTime field string
+github.com/egladman/magus/types.ImageEntry.Mode field string
+github.com/egladman/magus/types.ImageEntry.Origin field string
+github.com/egladman/magus/types.ImageEntry.Path field string
+github.com/egladman/magus/types.ImageEntry.Size field int
+github.com/egladman/magus/types.ImageEntry.Target field string
+github.com/egladman/magus/types.ImageEntry.UID field int "buzz:\"uid\""
+github.com/egladman/magus/types.ImageEntryKind type string
+github.com/egladman/magus/types.ImageEntryKindDirectory const ImageEntryKind = "directory"
+github.com/egladman/magus/types.ImageEntryKindFile const ImageEntryKind = "file"
+github.com/egladman/magus/types.ImageEntryKindNone const ImageEntryKind = ""
+github.com/egladman/magus/types.ImageEntryKindSymlink const ImageEntryKind = "symlink"
 github.com/egladman/magus/types.ImageFile type struct
 github.com/egladman/magus/types.ImageFile.GID field int "buzz:\"gid\""
 github.com/egladman/magus/types.ImageFile.Mode field int

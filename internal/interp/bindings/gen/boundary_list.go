@@ -119,6 +119,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgeEdgeRef(v.(types.KnowledgeEdgeRef), enums)
 	}},
 	{Name: "Empty", Zero: types.Empty{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEmpty(v.(types.Empty)) }},
+	{Name: "Entry", Zero: types.ImageEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageEntry(v.(types.ImageEntry), enums) }},
 	{Name: "EvaluatedProject", Zero: types.EvaluatedProject{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectEvaluatedProject(v.(types.EvaluatedProject), enums)
 	}},
