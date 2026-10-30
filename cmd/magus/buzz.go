@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/report"
@@ -448,7 +450,7 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	if err != nil {
 		return fmt.Errorf("magus buzz: --record: no output store here: %w", err)
 	}
-	lease, _, err := checkoutLease(ctx, root)
+	lease, err := recordLease(ctx, root, name)
 	if err != nil {
 		return fmt.Errorf("magus buzz: --record: %w", err)
 	}
@@ -474,6 +476,57 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	}
 	_, err = fmt.Fprintln(os.Stderr, "ref  "+stored.Ref)
 	return err
+}
+
+// recordLease is the lease a recorded run of script acts under.
+func recordLease(ctx context.Context, root, script string) (string, error) {
+	here, err := resolvedDir(root)
+	if err != nil {
+		return "", err
+	}
+	lease, _, err := checkoutLease(ctx, here)
+	if err != nil || lease != "" {
+		return lease, err
+	}
+	rows, err := readJobRows(ctx, here)
+	if err != nil {
+		return "", err
+	}
+	return scriptCheckHolder(rows, here, script), nil
+}
+
+// scriptCheckHolder names the one live row here whose goal checks script.
+// A CLI process cannot see the host session a hook bound its worker by.
+// Two such rows leave it empty: the run cannot say whose it was.
+func scriptCheckHolder(rows []types.Job, root, script string) string {
+	here, err := resolvedDir(root)
+	if err != nil {
+		return ""
+	}
+	holder := ""
+	for _, row := range rows {
+		there, err := resolvedDir(row.CheckoutRoot)
+		if err != nil || there != here || !job.Editing(row) || !slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool {
+			return g.Check.Script != "" && path.Clean(g.Check.Script) == path.Clean(script)
+		}) {
+			continue
+		}
+		if holder != "" {
+			return ""
+		}
+		holder = row.ID
+	}
+	return holder
+}
+
+// resolvedDir is dir absolute with symlinks followed: exec records the
+// resolved checkout, and a shell's cwd may name it through a link.
+func resolvedDir(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(abs)
 }
 
 // buzzCoverPath returns a stable, slash-separated path for LCOV SF: records.

@@ -1295,6 +1295,30 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	s.Equal(lease, d.Lease)
 }
 
+func scriptCheckRow(id, root, script string) types.Job {
+	return types.Job{ID: id, State: types.StateRunning, CheckoutRoot: root, Check: &types.LeaseCheck{Script: script}}
+}
+
+func (s *BuzzRecordSuite) TestHolderIsTheOneRowCheckingTheScriptHere() {
+	rows := []types.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "other.buzz")}
+	s.Equal("a", scriptCheckHolder(rows, s.root, "./p.buzz"))
+}
+
+func (s *BuzzRecordSuite) TestTwoRowsCheckingTheScriptNameNoHolder() {
+	rows := []types.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "p.buzz")}
+	s.Empty(scriptCheckHolder(rows, s.root, "p.buzz"))
+}
+
+func (s *BuzzRecordSuite) TestARowInAnotherCheckoutIsNoHolder() {
+	s.Empty(scriptCheckHolder([]types.Job{scriptCheckRow("a", s.T().TempDir(), "p.buzz")}, s.root, "p.buzz"))
+}
+
+func (s *BuzzRecordSuite) TestAnExitedRowIsNoHolder() {
+	row := scriptCheckRow("a", s.root, "p.buzz")
+	row.State = types.StateExited
+	s.Empty(scriptCheckHolder([]types.Job{row}, s.root, "p.buzz"))
+}
+
 func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {
 	s.T().Setenv("MAGUS_LOG_SILENT", "true")
 	r, w, err := os.Pipe()
