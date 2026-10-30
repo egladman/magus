@@ -415,3 +415,7 @@ tags/waivers/
 # waiver-is-a-persons rule into grant-is-a-persons. Both pages are generated, so they retire.
 reference/manpage/magus-gate/
 reference/rules/waiver-is-a-persons/
+# MGS4009 was deleted with the drift notice's gofmt probe. It was the commit tag's second
+# carrier, and a one-page tag gets no index.
+reference/codes/race/MGS4009/
+tags/commit/
