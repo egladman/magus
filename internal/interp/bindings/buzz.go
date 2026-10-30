@@ -87,11 +87,8 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		}
 		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
 	}
-	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
-	// and any spell a plugin registers at runtime) aren't compiled built-ins, so the
-	// loop above doesn't reach them; expose each under the same import idiom. The
-	// handle carries only the name; magus.project resolves the spec by name from the
-	// host registry.
+	// A host-registered spell is no compiled built-in, so the loop misses it.
+	// The handle carries only the name: magus.project resolves the spec.
 	for _, sp := range project.DefaultSpellRegistry().All() {
 		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
 			continue
