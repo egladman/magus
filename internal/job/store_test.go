@@ -691,8 +691,8 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 
 	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
-	assert.ErrorContains(t, err, fmt.Sprintf(`job: future requires "never-implemented", which this magus (schema %d) lacks,`+
-		` so it will not write that row: update magus, or run the command with the magus that wrote it`, types.JobSchemaVersion))
+	assert.ErrorContains(t, err, fmt.Sprintf(`future requires "never-implemented", which this magus (schema %d) lacks: update magus`,
+		types.JobSchemaVersion))
 	_, err = s.Delete(t.Context(), "future", true)
 	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
 

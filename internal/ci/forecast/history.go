@@ -965,7 +965,7 @@ type UnsupportedVersionError struct {
 
 func (e *UnsupportedVersionError) Error() string {
 	return types.FormatDiagnostic(types.StoreRecordsNewer, fmt.Sprintf(
-		"forecast: history version %d in %q was written by a newer magus (this build reads up to %d) and is left alone",
+		"history version %d in %q was written by a newer magus (this build reads up to %d) and is left alone",
 		e.Have, e.Path, e.Max))
 }
 

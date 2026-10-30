@@ -337,8 +337,7 @@ func readOnly(row types.Job) error {
 	if lacks == nil {
 		return nil
 	}
-	return types.DiagnosticErrorf(types.StoreRecordsNewer, "job: %s requires %s, which this magus (schema %d) lacks, so it will not write that row:"+
-		" update magus, or run the command with the magus that wrote it",
+	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s requires %s, which this magus (schema %d) lacks: update magus",
 		row.ID, quoteAll(lacks), types.JobSchemaVersion)
 }
 
@@ -1355,12 +1354,12 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 	for _, line := range read.Lines {
 		var row types.Job
 		if err := json.Unmarshal(line.Text, &row); err != nil {
-			return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "job: %s:%d: %v", s.path, line.N, err)
+			return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		if row.ID == "" {
 			var header jobsFile
 			if err := json.Unmarshal(line.Text, &header); err != nil {
-				return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "job: %s:%d: %v", s.path, line.N, err)
+				return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 			}
 			f.Schema, f.Migration, f.Retained, log.header = header.Schema, header.Migration, header.Retained, line.Text
 			continue
